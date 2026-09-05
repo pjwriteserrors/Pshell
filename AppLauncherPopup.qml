@@ -28,6 +28,7 @@ Item {
 	property color danger: "#d95c5c"
 
 	property string searchText: ""
+	property bool previewMode: false
 	property var usageMap: ({})
 	property var aiModels: []
 	property string selectedAiModel: ""
@@ -164,7 +165,7 @@ Item {
 			command: "ollama",
 			name: "Ollama",
 			description: "Manage installed and running models",
-			icon: "/home/lu/.config/quickshell/main/ollama-symbolic.png"
+			icon: `${Quickshell.shellDir}/ollama-symbolic.png`
 		}
 	]
 
@@ -199,7 +200,7 @@ Item {
 		case "view-list-symbolic":
 			return "/usr/share/icons/Adwaita/symbolic/actions/view-list-symbolic.svg";
 		case "ollama":
-			return "/home/lu/.config/quickshell/main/ollama-symbolic.png";
+			return `${Quickshell.shellDir}/ollama-symbolic.png`;
 		default:
 			return "/usr/share/icons/Adwaita/symbolic/actions/system-search-symbolic.svg";
 		}
@@ -2149,7 +2150,7 @@ Item {
 		case "chats":
 			return "/usr/share/icons/Adwaita/symbolic/actions/view-list-symbolic.svg";
 		case "ollama":
-			return "/home/lu/.config/quickshell/main/ollama-symbolic.png";
+			return `${Quickshell.shellDir}/ollama-symbolic.png`;
 		}
 		const iconName = String(command?.icon || "");
 		if (iconName.startsWith("/")) return iconName;
@@ -2289,6 +2290,7 @@ Item {
 	FileView {
 		id: usageFile
 		path: root.usageFilePath
+		printErrors: false
 		onLoaded: root.parseUsageJson(text())
 		onLoadFailed: root.usageMap = ({})
 	}
@@ -2596,6 +2598,7 @@ Item {
 	}
 
 	Component.onCompleted: {
+		if (root.previewMode) return;
 		root.refreshAiModels();
 		Qt.callLater(root.primePrimarySelection);
 		ollamaVersionProcess.running = true;
@@ -2608,2016 +2611,8 @@ Item {
 
 		Column {
 			anchors.fill: parent
-			anchors.margins: 12
+			anchors.margins: 24
 			spacing: 12
-
-			GridView {
-				id: appList
-
-				readonly property int columns: 5
-
-				width: parent.width
-				height: parent.height - searchBox.height - 12
-				visible: !root.inCommandMode
-				clip: true
-				cellWidth: Math.floor(width / columns)
-				cellHeight: 100
-				model: root.filteredApps
-				currentIndex: model.length > 0 ? 0 : -1
-				boundsBehavior: Flickable.StopAtBounds
-
-				ScrollBar.vertical: ScrollBar {
-					policy: ScrollBar.AsNeeded
-				}
-
-				delegate: Item {
-					id: appTile
-
-					required property DesktopEntry modelData
-					required property int index
-					readonly property bool selected: appList.currentIndex === index
-
-					width: appList.cellWidth
-					height: appList.cellHeight
-
-					ThemedRectangle {
-						anchors.fill: parent
-						anchors.margins: 4
-						radius: ThemeEngine.radiusMedium
-						// Hovering a tile also selects it (see HoverLayer.onEntered
-						// below), so drive the background off `selected` alone. Keying
-						// it off containsMouse too made the tile flash the lighter hover
-						// colour for one frame before settling on the selected colour.
-						color: appTile.selected
-							? Qt.alpha(root.barColor, 0.24)
-							: "transparent"
-						border.width: appTile.selected ? 1 : 0
-						border.color: Qt.alpha(root.barColor, 0.6)
-
-						Behavior on color {
-							CAnim {}
-						}
-
-						Column {
-							anchors.centerIn: parent
-							spacing: 8
-							width: parent.width - 16
-
-							Image {
-								anchors.horizontalCenter: parent.horizontalCenter
-								width: 40
-								height: 40
-								source: root.iconSource(appTile.modelData)
-								sourceSize: Qt.size(width, height)
-								fillMode: Image.PreserveAspectFit
-								smooth: true
-								mipmap: true
-							}
-
-							Text {
-								width: parent.width
-								horizontalAlignment: Text.AlignHCenter
-								color: root.foreground
-								font.pixelSize: 11
-								font.weight: appTile.selected ? Font.DemiBold : Font.Medium
-								elide: Text.ElideRight
-								maximumLineCount: 1
-								text: appTile.modelData.name || appTile.modelData.id || "App"
-							}
-						}
-
-						HoverLayer {
-							id: tileHover
-							tint: root.foreground
-							showHover: false
-							rippleEnabled: false
-							onEntered: appList.currentIndex = appTile.index
-							onClicked: root.launchApp(appTile.modelData)
-						}
-					}
-				}
-			}
-
-			ListView {
-				id: commandList
-				width: parent.width
-				height: parent.height - searchBox.height - 12
-				visible: root.inCommandMode
-					&& !root.inCalculatorMode
-					&& !root.inAiMode
-					&& !root.inChatMode
-					&& !root.inOllamaMode
-					&& !root.inFileMode
-				clip: true
-				spacing: 6
-				model: root.filteredCommands
-				currentIndex: model.length > 0 ? 0 : -1
-				boundsBehavior: Flickable.StopAtBounds
-
-				delegate: ThemedRectangle {
-					id: commandRow
-
-					required property var modelData
-					required property int index
-
-					width: commandList.width
-					height: 54
-					radius: ThemeEngine.radiusMedium
-					color: commandList.currentIndex === index
-						? root.secondaryBoxStrongColor
-						: (commandMouse.containsMouse ? root.secondaryBoxColor : "transparent")
-
-					MouseArea {
-						id: commandMouse
-						anchors.fill: parent
-						hoverEnabled: true
-						cursorShape: Qt.PointingHandCursor
-						onEntered: commandList.currentIndex = parent.index
-						onClicked: root.launchCommand(parent.modelData)
-					}
-
-					QQCImpl.IconImage {
-						anchors.left: parent.left
-						anchors.leftMargin: 10
-						anchors.verticalCenter: parent.verticalCenter
-						width: 22
-						height: 22
-						source: root.commandIconSource(commandRow.modelData)
-						sourceSize: Qt.size(width, height)
-						color: root.foreground
-					}
-
-					Column {
-						anchors.left: parent.left
-						anchors.leftMargin: 42
-						anchors.right: parent.right
-						anchors.rightMargin: 10
-						anchors.verticalCenter: parent.verticalCenter
-						spacing: 2
-
-						Text {
-							width: parent.width
-							color: root.foreground
-							font.pixelSize: 13
-							font.weight: Font.Medium
-							elide: Text.ElideRight
-							text: `>${commandRow.modelData.command || commandRow.modelData.id || "command"}`
-						}
-
-						Text {
-							width: parent.width
-							color: Qt.alpha(root.foreground, 0.58)
-							font.pixelSize: 11
-							elide: Text.ElideRight
-							text: `${commandRow.modelData.name || "Command"} · ${commandRow.modelData.description || ""}`
-						}
-					}
-				}
-
-				ScrollBar.vertical: ScrollBar {
-					policy: ScrollBar.AsNeeded
-				}
-			}
-
-			Item {
-				id: calculatorPanel
-				width: parent.width
-				height: parent.height - searchBox.height - 12
-				visible: root.inCalculatorMode
-
-				MouseArea {
-					anchors.fill: parent
-					enabled: root.calculatorEvaluation.valid
-					cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-					onClicked: root.launchCommand(root.calculatorCommand())
-				}
-
-				Column {
-					width: parent.width
-					anchors.centerIn: parent
-					spacing: 12
-
-					Text {
-						width: parent.width
-						color: Qt.alpha(root.foreground, 0.58)
-						text: root.calculatorExpression
-						visible: text !== ""
-						horizontalAlignment: Text.AlignHCenter
-						elide: Text.ElideRight
-						font.pixelSize: 16
-						font.weight: Font.Medium
-					}
-
-					Text {
-						width: parent.width
-						color: root.calculatorEvaluation.valid ? root.foreground : Qt.alpha(root.foreground, 0.68)
-						text: root.calculatorEvaluation.valid ? root.calculatorEvaluation.result : "Calculator"
-						horizontalAlignment: Text.AlignHCenter
-						elide: Text.ElideMiddle
-						font.pixelSize: 58
-						font.weight: Font.DemiBold
-						fontSizeMode: Text.Fit
-						minimumPixelSize: 24
-					}
-
-					Text {
-						width: parent.width
-						color: root.calculatorEvaluation.valid ? Qt.alpha(root.foreground, 0.58) : root.danger
-						text: root.calculatorEvaluation.valid ? "Press Enter to copy" : root.calculatorEvaluation.message
-						horizontalAlignment: Text.AlignHCenter
-						wrapMode: Text.WordWrap
-						font.pixelSize: 13
-						font.weight: Font.Medium
-					}
-				}
-			}
-
-			Item {
-				id: filePanel
-				width: parent.width
-				height: parent.height - searchBox.height - 12
-				visible: root.inFileMode
-
-				Column {
-					anchors.fill: parent
-					spacing: 8
-
-					ThemedRectangle {
-						id: fileHeader
-						width: parent.width
-						height: 36
-						radius: ThemeEngine.radiusMedium
-						color: root.secondaryInsetColor
-
-						ThemedRectangle {
-							id: fileUpButton
-							anchors.left: parent.left
-							anchors.leftMargin: 5
-							anchors.verticalCenter: parent.verticalCenter
-							width: 26
-							height: 26
-							radius: ThemeEngine.radiusMedium
-							color: fileUpMouse.containsMouse ? root.secondaryBoxStrongColor : "transparent"
-
-							MouseArea {
-								id: fileUpMouse
-								anchors.fill: parent
-								hoverEnabled: true
-								cursorShape: Qt.PointingHandCursor
-								onClicked: root.fileBrowserDirectory = root.attachmentParentDirectory(root.fileBrowserDirectory)
-							}
-
-							Text {
-								anchors.centerIn: parent
-								color: root.foreground
-								text: "↑"
-								font.pixelSize: 16
-								font.weight: Font.DemiBold
-							}
-
-							ToolTip.visible: fileUpMouse.containsMouse
-							ToolTip.delay: 500
-							ToolTip.text: "Parent folder"
-						}
-
-						Text {
-							anchors.left: fileUpButton.right
-							anchors.leftMargin: 8
-							anchors.right: fileOpenCurrentButton.left
-							anchors.rightMargin: 8
-							anchors.verticalCenter: parent.verticalCenter
-							color: root.foreground
-							text: root.fileBrowserDirectory
-							elide: Text.ElideMiddle
-							font.pixelSize: 12
-							font.weight: Font.DemiBold
-						}
-
-						ThemedRectangle {
-							id: fileOpenCurrentButton
-							anchors.right: parent.right
-							anchors.rightMargin: 5
-							anchors.verticalCenter: parent.verticalCenter
-							width: 26
-							height: 26
-							radius: ThemeEngine.radiusMedium
-							color: fileOpenCurrentMouse.containsMouse ? root.secondaryBoxStrongColor : "transparent"
-
-							MouseArea {
-								id: fileOpenCurrentMouse
-								anchors.fill: parent
-								hoverEnabled: true
-								cursorShape: Qt.PointingHandCursor
-								onClicked: root.openPathWithDefaultApp(root.fileBrowserDirectory)
-							}
-
-							QQCImpl.IconImage {
-								anchors.centerIn: parent
-								width: 16
-								height: 16
-								source: root.folderOpenIconPath
-								sourceSize: Qt.size(width, height)
-								color: root.foreground
-							}
-
-							ToolTip.visible: fileOpenCurrentMouse.containsMouse
-							ToolTip.delay: 500
-							ToolTip.text: "Open folder"
-						}
-					}
-
-					Row {
-						id: fileShortcutRow
-						width: parent.width
-						height: 26
-						spacing: 6
-
-						Repeater {
-							model: [
-								{ name: "Home", path: Quickshell.env("HOME") },
-								{ name: "Downloads", path: `${Quickshell.env("HOME")}/Downloads` },
-								{ name: "Documents", path: `${Quickshell.env("HOME")}/Documents` },
-								{ name: "Pictures", path: `${Quickshell.env("HOME")}/Pictures` }
-							]
-
-							delegate: ThemedRectangle {
-								id: fileShortcut
-
-								required property var modelData
-
-								width: fileShortcutText.implicitWidth + 20
-								height: 26
-								radius: ThemeEngine.radiusMedium
-								color: root.fileBrowserDirectory === String(modelData.path)
-									? root.secondaryBoxStrongColor
-									: (fileShortcutMouse.containsMouse ? root.secondaryBoxColor : "transparent")
-
-								MouseArea {
-									id: fileShortcutMouse
-									anchors.fill: parent
-									hoverEnabled: true
-									cursorShape: Qt.PointingHandCursor
-									onClicked: root.fileBrowserDirectory = String(fileShortcut.modelData.path)
-								}
-
-								Text {
-									id: fileShortcutText
-									anchors.centerIn: parent
-									color: root.foreground
-									text: String(fileShortcut.modelData.name)
-									font.pixelSize: 10
-									font.weight: Font.Medium
-								}
-							}
-						}
-
-						Text {
-							anchors.verticalCenter: parent.verticalCenter
-							width: Math.max(0, parent.width - x)
-							color: Qt.alpha(root.foreground, 0.5)
-							text: root.fileBrowserSearchQuery === ""
-								? `${root.fileBrowserEntries.length} items`
-								: `${root.filteredFileBrowserEntries.length} matches`
-							horizontalAlignment: Text.AlignRight
-							elide: Text.ElideLeft
-							font.pixelSize: 9
-							font.weight: Font.Medium
-						}
-					}
-
-					ThemedRectangle {
-						width: parent.width
-						height: parent.height - fileHeader.height - fileShortcutRow.height - parent.spacing * 2
-						radius: ThemeEngine.radiusMedium
-						color: root.background
-						border.width: 1
-						border.color: Qt.alpha(root.barColor, 0.18)
-
-						ListView {
-							id: fileBrowserList
-							anchors.fill: parent
-							anchors.margins: 6
-							clip: true
-							spacing: 4
-							model: root.filteredFileBrowserEntries
-							currentIndex: model.length > 0 ? 0 : -1
-							boundsBehavior: Flickable.StopAtBounds
-
-							delegate: ThemedRectangle {
-								id: fileRow
-
-								required property var modelData
-								required property int index
-								readonly property var file: modelData || ({})
-
-								width: fileBrowserList.width
-								height: 44
-								radius: ThemeEngine.radiusMedium
-								color: fileBrowserList.currentIndex === index
-									? root.secondaryBoxStrongColor
-									: (fileMouse.containsMouse ? root.secondaryBoxColor : "transparent")
-
-								MouseArea {
-									id: fileMouse
-									anchors.fill: parent
-									hoverEnabled: true
-									cursorShape: Qt.PointingHandCursor
-									onEntered: fileBrowserList.currentIndex = fileRow.index
-									onClicked: root.openFileBrowserEntry(fileRow.file)
-								}
-
-								Image {
-									visible: Boolean(fileRow.file.isImage)
-									anchors.left: parent.left
-									anchors.leftMargin: 7
-									anchors.verticalCenter: parent.verticalCenter
-									width: 30
-									height: 30
-									source: fileRow.file.isImage
-										? root.resolveMarkdownImageSource(fileRow.file.path)
-										: ""
-									fillMode: Image.PreserveAspectCrop
-									smooth: true
-									cache: true
-									asynchronous: true
-								}
-
-								QQCImpl.IconImage {
-									visible: !fileRow.file.isImage
-									anchors.left: parent.left
-									anchors.leftMargin: 10
-									anchors.verticalCenter: parent.verticalCenter
-									width: 20
-									height: 20
-									source: fileRow.file.isDir ? root.folderIconPath : root.attachmentIconPath
-									sourceSize: Qt.size(width, height)
-									color: root.foreground
-								}
-
-								Column {
-									anchors.left: parent.left
-									anchors.leftMargin: 45
-									anchors.right: fileFolderOpenButton.left
-									anchors.rightMargin: 8
-									anchors.verticalCenter: parent.verticalCenter
-									spacing: 1
-
-									Text {
-										width: parent.width
-										color: root.foreground
-										text: String(fileRow.file.name || "")
-										elide: Text.ElideMiddle
-										font.pixelSize: 12
-										font.weight: Font.Medium
-									}
-
-									Text {
-										width: parent.width
-										color: Qt.alpha(root.foreground, 0.5)
-										text: fileRow.file.isDir
-											? "Folder"
-											: `${fileRow.file.suffix || "file"} · ${root.formatAttachmentSize(fileRow.file.size)}`
-										elide: Text.ElideRight
-										font.pixelSize: 9
-									}
-								}
-
-								ThemedRectangle {
-									id: fileFolderOpenButton
-									anchors.right: parent.right
-									anchors.rightMargin: 7
-									anchors.verticalCenter: parent.verticalCenter
-									width: 26
-									height: 26
-									radius: ThemeEngine.radiusMedium
-									z: 2
-									visible: Boolean(fileRow.file.isDir)
-									color: fileFolderOpenMouse.containsMouse ? root.secondaryBoxStrongColor : "transparent"
-
-									MouseArea {
-										id: fileFolderOpenMouse
-										anchors.fill: parent
-										hoverEnabled: true
-										cursorShape: Qt.PointingHandCursor
-										onClicked: root.openPathWithDefaultApp(fileRow.file.path)
-									}
-
-									QQCImpl.IconImage {
-										anchors.centerIn: parent
-										width: 16
-										height: 16
-										source: root.folderOpenIconPath
-										sourceSize: Qt.size(width, height)
-										color: root.foreground
-									}
-
-									ToolTip.visible: fileFolderOpenMouse.containsMouse
-									ToolTip.delay: 500
-									ToolTip.text: "Open folder"
-								}
-							}
-
-							ScrollBar.vertical: ScrollBar {
-								policy: ScrollBar.AsNeeded
-							}
-						}
-
-						Text {
-							anchors.centerIn: parent
-							width: parent.width - 40
-							visible: fileBrowserList.count === 0
-							color: Qt.alpha(root.foreground, 0.5)
-							text: root.fileBrowserDirectoryLoading
-								? "Loading..."
-								: (root.fileBrowserDirectoryError !== ""
-									? root.fileBrowserDirectoryError
-									: (root.fileBrowserSearchQuery === "" ? "This folder is empty" : "No matching files"))
-							horizontalAlignment: Text.AlignHCenter
-							wrapMode: Text.WordWrap
-							font.pixelSize: 12
-							font.weight: Font.Medium
-						}
-					}
-				}
-			}
-
-			Item {
-				id: aiPanel
-				width: parent.width
-				height: parent.height - searchBox.height - 12
-				visible: root.inAiMode
-
-				Column {
-					anchors.fill: parent
-					spacing: 10
-
-					Row {
-						width: parent.width
-						height: 28
-						spacing: 8
-
-						Text {
-							width: parent.width - newChatButton.width - parent.spacing
-							anchors.verticalCenter: parent.verticalCenter
-							color: root.foreground
-							text: "Chats"
-							elide: Text.ElideRight
-							font.pixelSize: 15
-							font.weight: Font.DemiBold
-						}
-
-						ThemedRectangle {
-							id: newChatButton
-							anchors.verticalCenter: parent.verticalCenter
-							width: 92
-							height: 24
-							radius: ThemeEngine.radiusMedium
-							color: newChatMouse.containsMouse ? root.secondaryBoxStrongColor : root.secondaryBoxColor
-
-							MouseArea {
-								id: newChatMouse
-								anchors.fill: parent
-								hoverEnabled: true
-								cursorShape: Qt.PointingHandCursor
-								onClicked: root.startNewChat()
-							}
-
-							Text {
-								anchors.left: parent.left
-								anchors.leftMargin: 9
-								anchors.verticalCenter: parent.verticalCenter
-								color: root.foreground
-								text: "+"
-								font.pixelSize: 16
-								font.weight: Font.DemiBold
-							}
-
-							Text {
-								anchors.left: parent.left
-								anchors.leftMargin: 28
-								anchors.verticalCenter: parent.verticalCenter
-								color: root.foreground
-								text: "New chat"
-								font.pixelSize: 11
-								font.weight: Font.DemiBold
-							}
-						}
-					}
-
-					ThemedRectangle {
-						width: parent.width
-						height: parent.height - 38 - (aiPanelError.visible ? aiPanelError.implicitHeight + 10 : 0)
-						radius: ThemeEngine.radiusMedium
-						color: root.background
-						border.width: 1
-						border.color: Qt.alpha(root.barColor, 0.18)
-
-						ListView {
-							id: pastChatList
-							anchors.fill: parent
-							anchors.margins: 6
-							clip: true
-							spacing: 4
-							model: root.filteredAiChats
-							boundsBehavior: Flickable.StopAtBounds
-
-							delegate: ThemedRectangle {
-								id: pastChatRow
-
-								required property var modelData
-								required property int index
-								readonly property bool selected: String(modelData.id || "") === root.activeChatId
-
-								width: pastChatList.width
-								height: 52
-								radius: ThemeEngine.radiusMedium
-								color: selected
-									? root.secondaryBoxStrongColor
-									: (pastChatMouse.containsMouse ? root.secondaryBoxColor : "transparent")
-
-								MouseArea {
-									id: pastChatMouse
-									anchors.fill: parent
-									hoverEnabled: true
-									cursorShape: Qt.PointingHandCursor
-									onClicked: root.openPastChat(pastChatRow.modelData)
-								}
-
-								Column {
-									anchors.left: parent.left
-									anchors.leftMargin: 10
-									anchors.right: deleteChatButton.left
-									anchors.rightMargin: 10
-									anchors.verticalCenter: parent.verticalCenter
-									spacing: 2
-
-									Text {
-										width: parent.width
-										color: root.foreground
-										text: pastChatRow.modelData.title || "Untitled chat"
-										elide: Text.ElideRight
-										font.pixelSize: 12
-										font.weight: Font.Medium
-									}
-
-									Text {
-										width: parent.width
-										color: Qt.alpha(root.foreground, 0.5)
-										text: `${pastChatRow.modelData.model || "Unknown model"} · ${root.formatChatTime(pastChatRow.modelData.updatedAt)}`
-										elide: Text.ElideRight
-										font.pixelSize: 10
-									}
-								}
-
-								ThemedRectangle {
-									id: deleteChatButton
-									anchors.right: parent.right
-									anchors.rightMargin: 8
-									anchors.verticalCenter: parent.verticalCenter
-									width: 26
-									height: 26
-									radius: ThemeEngine.radiusMedium
-									z: 2
-									color: deleteChatMouse.containsMouse ? root.secondaryBoxStrongColor : "transparent"
-									opacity: root.aiStreaming && String(pastChatRow.modelData.id || "") === root.aiStreamingChatId ? 0.4 : 1
-
-									MouseArea {
-										id: deleteChatMouse
-										anchors.fill: parent
-										hoverEnabled: true
-										cursorShape: Qt.PointingHandCursor
-										enabled: !(root.aiStreaming && String(pastChatRow.modelData.id || "") === root.aiStreamingChatId)
-										onClicked: root.deleteChat(pastChatRow.modelData)
-									}
-
-									Text {
-										anchors.centerIn: parent
-										color: root.foreground
-										text: "󰆴"
-										font.family: "CaskaydiaCove Nerd Font"
-										font.pixelSize: 15
-									}
-								}
-							}
-						}
-
-						Text {
-							anchors.centerIn: parent
-							width: parent.width - 40
-							visible: root.filteredAiChats.length === 0
-							color: Qt.alpha(root.foreground, 0.5)
-							text: root.chatsSearchQuery === "" ? "No saved chats" : "No matching chats"
-							horizontalAlignment: Text.AlignHCenter
-							font.pixelSize: 12
-							font.weight: Font.Medium
-						}
-					}
-
-					Text {
-						id: aiPanelError
-						width: parent.width
-						visible: root.aiError !== ""
-						color: root.danger
-						text: root.aiError
-						horizontalAlignment: Text.AlignHCenter
-						font.pixelSize: 11
-						font.weight: Font.Medium
-					}
-				}
-			}
-
-			Item {
-				id: ollamaPanel
-				width: parent.width
-				height: parent.height - searchBox.height - 12
-				visible: root.inOllamaMode
-
-				Row {
-					id: ollamaTitleRow
-					anchors.left: parent.left
-					anchors.right: parent.right
-					anchors.top: parent.top
-					height: 26
-					spacing: 8
-
-					Text {
-						width: parent.width - ollamaRefreshButton.width - parent.spacing
-						anchors.verticalCenter: parent.verticalCenter
-						color: root.foreground
-						text: "Ollama models"
-						elide: Text.ElideRight
-						font.pixelSize: 15
-						font.weight: Font.DemiBold
-					}
-
-					ThemedRectangle {
-						id: ollamaRefreshButton
-						anchors.verticalCenter: parent.verticalCenter
-						width: 26
-						height: 26
-						radius: ThemeEngine.radiusMedium
-						color: ollamaRefreshMouse.containsMouse ? root.secondaryBoxStrongColor : "transparent"
-
-						MouseArea {
-							id: ollamaRefreshMouse
-							anchors.fill: parent
-							hoverEnabled: true
-							cursorShape: Qt.PointingHandCursor
-							onClicked: root.refreshOllamaOverview()
-						}
-
-						Text {
-							anchors.centerIn: parent
-							color: root.foreground
-							text: "↻"
-							font.pixelSize: 16
-							font.weight: Font.DemiBold
-						}
-
-						ToolTip.visible: ollamaRefreshMouse.containsMouse
-						ToolTip.delay: 500
-						ToolTip.text: "Refresh models"
-					}
-				}
-
-				ThemedRectangle {
-					id: ollamaPullBox
-					anchors.left: parent.left
-					anchors.right: parent.right
-					anchors.top: ollamaTitleRow.bottom
-					anchors.topMargin: 8
-					height: root.ollamaPulling ? 76 : 42
-					radius: ThemeEngine.radiusMedium
-					color: root.secondaryInsetColor
-
-					Behavior on height {
-						NumberAnimation {
-							duration: ThemeEngine.duration(120)
-							easing.type: ThemeEngine.standardEasing
-						}
-					}
-
-					TextField {
-						id: ollamaPullField
-						anchors.left: parent.left
-						anchors.leftMargin: 8
-						anchors.right: ollamaPullButton.left
-						anchors.rightMargin: 8
-						anchors.top: parent.top
-						anchors.topMargin: 7
-						height: 28
-						text: root.ollamaPullModel
-						color: root.foreground
-						placeholderText: "Model to pull, for example qwen3:4b"
-						placeholderTextColor: Qt.alpha(root.foreground, 0.45)
-						selectedTextColor: root.foreground
-						selectionColor: Qt.alpha(root.barColor, 0.3)
-						font.pixelSize: 11
-						leftPadding: 9
-						rightPadding: 9
-						enabled: !root.ollamaPulling
-						onTextChanged: root.ollamaPullModel = text
-						onAccepted: root.startOllamaPull(text)
-
-						background: ThemedRectangle {
-							radius: ThemeEngine.radiusMedium
-							color: root.secondaryBoxColor
-							border.width: ollamaPullField.activeFocus ? 1 : 0
-							border.color: Qt.alpha(root.barColor, 0.7)
-						}
-					}
-
-					ThemedRectangle {
-						id: ollamaPullButton
-						anchors.right: parent.right
-						anchors.rightMargin: 8
-						anchors.top: parent.top
-						anchors.topMargin: 7
-						width: 58
-						height: 28
-						radius: ThemeEngine.radiusMedium
-						opacity: root.ollamaPullModel.trim() !== "" && !root.ollamaPulling ? 1 : 0.45
-						color: ollamaPullMouse.containsMouse ? root.secondaryBoxStrongColor : root.secondaryBoxColor
-
-						MouseArea {
-							id: ollamaPullMouse
-							anchors.fill: parent
-							enabled: root.ollamaPullModel.trim() !== "" && !root.ollamaPulling
-							hoverEnabled: true
-							cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-							onClicked: root.startOllamaPull(root.ollamaPullModel)
-						}
-
-						Text {
-							anchors.centerIn: parent
-							color: root.foreground
-							text: "Pull"
-							font.pixelSize: 11
-							font.weight: Font.DemiBold
-						}
-					}
-
-					Item {
-						anchors.left: parent.left
-						anchors.leftMargin: 8
-						anchors.right: parent.right
-						anchors.rightMargin: 8
-						anchors.top: ollamaPullField.bottom
-						anchors.topMargin: 6
-						height: 26
-						visible: root.ollamaPulling
-
-						Text {
-							anchors.left: parent.left
-							anchors.right: ollamaPullDetails.left
-							anchors.rightMargin: 8
-							anchors.top: parent.top
-							color: Qt.alpha(root.foreground, 0.68)
-							text: root.ollamaPullStatus
-							elide: Text.ElideRight
-							font.pixelSize: 9
-							font.weight: Font.Medium
-						}
-
-						Text {
-							id: ollamaPullDetails
-							anchors.right: parent.right
-							anchors.top: parent.top
-							color: Qt.alpha(root.foreground, 0.52)
-							text: [
-								root.ollamaPullTotal > 0 ? `${Math.round(root.ollamaPullProgress * 100)}%` : "",
-								root.formatTransferRate(root.ollamaPullSpeed),
-								root.formatDuration(root.ollamaPullEtaSeconds) !== ""
-									? `${root.formatDuration(root.ollamaPullEtaSeconds)} left`
-									: ""
-							].filter(value => value !== "").join(" · ")
-							font.pixelSize: 9
-							font.weight: Font.Medium
-						}
-
-						ThemedRectangle {
-							anchors.left: parent.left
-							anchors.right: parent.right
-							anchors.bottom: parent.bottom
-							height: 5
-							radius: ThemeEngine.radiusMedium
-							color: root.secondaryBoxStrongColor
-
-							ThemedRectangle {
-								width: parent.width * root.ollamaPullProgress
-								height: parent.height
-								radius: parent.radius
-								color: root.barColor
-							}
-						}
-					}
-				}
-
-				ThemedRectangle {
-					id: ollamaRunningBox
-					anchors.left: parent.left
-					anchors.right: parent.right
-					anchors.top: ollamaPullBox.bottom
-					anchors.topMargin: 8
-					height: 38
-					radius: ThemeEngine.radiusMedium
-					color: root.secondaryInsetColor
-
-					Text {
-						anchors.left: parent.left
-						anchors.leftMargin: 10
-						anchors.verticalCenter: parent.verticalCenter
-						color: root.foreground
-						text: "Running"
-						font.pixelSize: 11
-						font.weight: Font.DemiBold
-					}
-
-					Text {
-						anchors.left: parent.left
-						anchors.leftMargin: 70
-						anchors.right: parent.right
-						anchors.rightMargin: 10
-						anchors.verticalCenter: parent.verticalCenter
-						color: Qt.alpha(root.foreground, 0.58)
-						text: root.ollamaRunningSummary()
-						elide: Text.ElideRight
-						font.pixelSize: 10
-						font.weight: Font.Medium
-					}
-				}
-
-				ThemedRectangle {
-					id: ollamaInstalledBox
-					anchors.left: parent.left
-					anchors.right: parent.right
-					anchors.top: ollamaRunningBox.bottom
-					anchors.topMargin: 8
-					anchors.bottom: ollamaManagerErrorText.top
-					anchors.bottomMargin: ollamaManagerErrorText.visible ? 6 : 0
-					radius: ThemeEngine.radiusMedium
-					color: root.background
-					border.width: 1
-					border.color: Qt.alpha(root.barColor, 0.18)
-
-					Text {
-						anchors.left: parent.left
-						anchors.leftMargin: 10
-						anchors.top: parent.top
-						anchors.topMargin: 7
-						color: root.foreground
-						text: `Installed · ${root.aiModels.length}`
-						font.pixelSize: 11
-						font.weight: Font.DemiBold
-					}
-
-					ListView {
-						id: ollamaInstalledList
-						anchors.left: parent.left
-						anchors.right: parent.right
-						anchors.top: parent.top
-						anchors.topMargin: 27
-						anchors.bottom: parent.bottom
-						anchors.margins: 6
-						clip: true
-						spacing: 4
-						model: root.aiModels
-						boundsBehavior: Flickable.StopAtBounds
-
-						delegate: ThemedRectangle {
-							id: ollamaModelRow
-
-							required property var modelData
-							required property int index
-							readonly property string modelName: String(modelData?.name || modelData?.model || "")
-							readonly property bool running: root.isOllamaModelRunning(modelName)
-							readonly property bool removing: root.ollamaRemovingModel === modelName
-
-							width: ollamaInstalledList.width
-							height: 48
-							radius: ThemeEngine.radiusMedium
-							color: ollamaModelMouse.containsMouse ? root.secondaryBoxColor : "transparent"
-
-							MouseArea {
-								id: ollamaModelMouse
-								anchors.fill: parent
-								hoverEnabled: true
-								acceptedButtons: Qt.NoButton
-							}
-
-							Column {
-								anchors.left: parent.left
-								anchors.leftMargin: 9
-								anchors.right: ollamaModelChatButton.left
-								anchors.rightMargin: 10
-								anchors.verticalCenter: parent.verticalCenter
-								spacing: 2
-
-								Text {
-									width: parent.width
-									color: root.foreground
-									text: ollamaModelRow.modelName
-									elide: Text.ElideRight
-									font.pixelSize: 11
-									font.weight: Font.DemiBold
-								}
-
-								Text {
-									width: parent.width
-									color: Qt.alpha(root.foreground, 0.5)
-									text: [
-										ollamaModelRow.running ? "Running" : "",
-										String(ollamaModelRow.modelData?.details?.parameter_size || ""),
-										String(ollamaModelRow.modelData?.details?.quantization_level || ""),
-										root.formatModelSize(ollamaModelRow.modelData?.size)
-									].filter(value => value !== "").join(" · ")
-									elide: Text.ElideRight
-									font.pixelSize: 9
-									font.weight: Font.Medium
-								}
-							}
-
-							ThemedRectangle {
-								id: ollamaModelChatButton
-								anchors.right: ollamaModelRemoveButton.left
-								anchors.rightMargin: 5
-								anchors.verticalCenter: parent.verticalCenter
-								width: 52
-								height: 26
-								radius: ThemeEngine.radiusMedium
-								opacity: root.aiStreaming ? 0.45 : 1
-								color: ollamaModelChatMouse.containsMouse ? root.secondaryBoxStrongColor : root.secondaryBoxColor
-
-								MouseArea {
-									id: ollamaModelChatMouse
-									anchors.fill: parent
-									enabled: !root.aiStreaming
-									hoverEnabled: true
-									cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-									onClicked: root.startNewChatWithModel(ollamaModelRow.modelName)
-								}
-
-								Text {
-									anchors.centerIn: parent
-									color: root.foreground
-									text: "Chat"
-									font.pixelSize: 10
-									font.weight: Font.DemiBold
-								}
-							}
-
-							ThemedRectangle {
-								id: ollamaModelRemoveButton
-								anchors.right: parent.right
-								anchors.rightMargin: 7
-								anchors.verticalCenter: parent.verticalCenter
-								width: 26
-								height: 26
-								radius: ThemeEngine.radiusMedium
-								opacity: root.aiStreaming || ollamaRemoveProcess.running ? 0.45 : 1
-								color: ollamaModelRemoveMouse.containsMouse ? root.secondaryBoxStrongColor : "transparent"
-
-								MouseArea {
-									id: ollamaModelRemoveMouse
-									anchors.fill: parent
-									enabled: !root.aiStreaming && !ollamaRemoveProcess.running
-									hoverEnabled: true
-									cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-									onClicked: root.removeOllamaModel(ollamaModelRow.modelName)
-								}
-
-								Text {
-									anchors.centerIn: parent
-									color: root.foreground
-									text: ollamaModelRow.removing ? "…" : "󰆴"
-									font.family: "CaskaydiaCove Nerd Font"
-									font.pixelSize: 15
-								}
-
-								ToolTip.visible: ollamaModelRemoveMouse.containsMouse
-								ToolTip.delay: 500
-								ToolTip.text: "Remove model"
-							}
-						}
-
-						ScrollBar.vertical: ScrollBar {
-							policy: ScrollBar.AsNeeded
-						}
-					}
-
-					Text {
-						anchors.centerIn: parent
-						visible: !root.aiModelsLoading && root.aiModels.length === 0
-						color: Qt.alpha(root.foreground, 0.5)
-						text: "No models installed"
-						font.pixelSize: 11
-						font.weight: Font.Medium
-					}
-				}
-
-				Text {
-					id: ollamaManagerErrorText
-					anchors.left: parent.left
-					anchors.right: parent.right
-					anchors.bottom: parent.bottom
-					height: visible ? 16 : 0
-					visible: root.ollamaManagerError !== ""
-						|| (!root.aiModelsLoading && root.aiModels.length === 0 && root.aiError !== "")
-					color: root.danger
-					text: root.ollamaManagerError !== "" ? root.ollamaManagerError : root.aiError
-					horizontalAlignment: Text.AlignHCenter
-					elide: Text.ElideRight
-					font.pixelSize: 10
-					font.weight: Font.Medium
-				}
-			}
-
-			Item {
-				id: chatPanel
-				width: parent.width
-				height: parent.height - searchBox.height - 12
-				visible: root.inChatMode
-
-				ThemedRectangle {
-					id: chatHeader
-					anchors.left: parent.left
-					anchors.right: parent.right
-					anchors.top: parent.top
-					height: 36
-					radius: ThemeEngine.radiusMedium
-					color: root.secondaryInsetColor
-					z: 2
-
-					ThemedRectangle {
-						id: chatBackButton
-						anchors.left: parent.left
-						anchors.leftMargin: 4
-						anchors.verticalCenter: parent.verticalCenter
-						width: 26
-						height: 26
-						radius: ThemeEngine.radiusMedium
-						color: chatBackMouse.containsMouse ? root.secondaryBoxStrongColor : "transparent"
-
-						MouseArea {
-							id: chatBackMouse
-							anchors.fill: parent
-							hoverEnabled: true
-							cursorShape: Qt.PointingHandCursor
-							onClicked: root.openAiOverview()
-						}
-
-						Text {
-							anchors.centerIn: parent
-							color: root.foreground
-							text: "←"
-							font.pixelSize: 16
-							font.weight: Font.DemiBold
-						}
-					}
-
-					Text {
-						anchors.left: chatBackButton.right
-						anchors.leftMargin: 8
-						anchors.right: chatControls.left
-						anchors.rightMargin: 8
-						anchors.verticalCenter: parent.verticalCenter
-						color: root.foreground
-						text: root.activeChat?.title || (root.aiTemporaryChatEnabled ? "Temporary chat" : "New chat")
-						elide: Text.ElideRight
-						font.pixelSize: 12
-						font.weight: Font.DemiBold
-					}
-
-						Row {
-							id: chatControls
-						anchors.right: parent.right
-						anchors.rightMargin: 6
-						anchors.verticalCenter: parent.verticalCenter
-						height: 28
-							spacing: 8
-
-							ComboBox {
-							id: chatModelCombo
-							anchors.verticalCenter: parent.verticalCenter
-							width: 132
-							height: 26
-							enabled: !root.aiStreaming && root.aiModels.length > 0
-							model: root.aiModels.map(model => String(model.name || model.model || ""))
-							currentIndex: Math.max(0, model.indexOf(root.selectedAiModel))
-							onActivated: root.selectAiModel(String(currentText))
-							leftPadding: 8
-							rightPadding: 22
-
-							delegate: ItemDelegate {
-								required property int index
-								required property var modelData
-								width: chatModelCombo.width
-								height: 30
-								highlighted: chatModelCombo.highlightedIndex === index
-								contentItem: Text {
-									text: String(modelData)
-									color: root.foreground
-									font.pixelSize: 10
-									font.weight: highlighted ? Font.DemiBold : Font.Medium
-									verticalAlignment: Text.AlignVCenter
-									elide: Text.ElideRight
-								}
-								background: ThemedRectangle {
-									radius: ThemeEngine.radiusMedium
-									color: highlighted ? root.secondaryBoxStrongColor : "transparent"
-								}
-							}
-
-							indicator: Text {
-								x: chatModelCombo.width - width - 7
-								y: (chatModelCombo.height - height) / 2
-								text: chatModelCombo.popup.visible ? "▴" : "▾"
-								color: root.foreground
-								font.pixelSize: 9
-							}
-
-							contentItem: Text {
-								text: chatModelCombo.displayText || "No model"
-								color: root.foreground
-								font.pixelSize: 10
-								font.weight: Font.DemiBold
-								verticalAlignment: Text.AlignVCenter
-								elide: Text.ElideRight
-							}
-
-							background: ThemedRectangle {
-								radius: ThemeEngine.radiusMedium
-								color: root.secondaryBoxColor
-								border.width: chatModelCombo.visualFocus ? 1 : 0
-								border.color: Qt.alpha(root.barColor, 0.65)
-							}
-
-							popup: Popup {
-								y: chatModelCombo.height + 4
-								width: chatModelCombo.width
-								padding: 4
-								background: ThemedRectangle {
-									radius: ThemeEngine.radiusMedium
-									color: root.background
-									border.width: 1
-									border.color: Qt.alpha(root.barColor, 0.3)
-								}
-								contentItem: ListView {
-									clip: true
-									implicitHeight: Math.min(contentHeight, 220)
-									model: chatModelCombo.popup.visible ? chatModelCombo.delegateModel : null
-									currentIndex: chatModelCombo.highlightedIndex
-									ScrollBar.vertical: ScrollBar {}
-								}
-							}
-						}
-
-						Row {
-							anchors.verticalCenter: parent.verticalCenter
-							height: parent.height
-							spacing: 5
-							opacity: root.aiStreaming || !root.selectedAiSupportsThinking ? 0.5 : 1
-
-							Text {
-								anchors.verticalCenter: parent.verticalCenter
-								color: Qt.alpha(root.foreground, 0.68)
-								text: "Think"
-								font.pixelSize: 10
-								font.weight: Font.Medium
-							}
-
-							ThemedRectangle {
-								anchors.verticalCenter: parent.verticalCenter
-								width: 32
-								height: 18
-								radius: ThemeEngine.radiusMedium
-								color: root.effectiveAiThinkingEnabled ? Qt.alpha(root.barColor, 0.72) : root.secondaryBoxStrongColor
-
-								ThemedRectangle {
-									width: 12
-									height: 12
-									radius: width / 2
-									x: root.effectiveAiThinkingEnabled ? parent.width - width - 3 : 3
-									anchors.verticalCenter: parent.verticalCenter
-									color: root.foreground
-
-									Behavior on x {
-										NumberAnimation {
-											duration: ThemeEngine.duration(120)
-											easing.type: ThemeEngine.standardEasing
-										}
-									}
-								}
-
-								MouseArea {
-									anchors.fill: parent
-									enabled: !root.aiStreaming && root.selectedAiSupportsThinking
-									cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-									onClicked: root.toggleAiThinking()
-								}
-							}
-							}
-
-							Row {
-								anchors.verticalCenter: parent.verticalCenter
-								height: parent.height
-								spacing: 5
-								opacity: root.aiStreaming ? 0.5 : 1
-
-								Text {
-									anchors.verticalCenter: parent.verticalCenter
-									color: Qt.alpha(root.foreground, 0.68)
-									text: "Short"
-									font.pixelSize: 10
-									font.weight: Font.Medium
-								}
-
-								ThemedRectangle {
-									anchors.verticalCenter: parent.verticalCenter
-									width: 32
-									height: 18
-									radius: ThemeEngine.radiusMedium
-									color: root.aiShortResponseEnabled ? Qt.alpha(root.barColor, 0.72) : root.secondaryBoxStrongColor
-
-									ThemedRectangle {
-										width: 12
-										height: 12
-										radius: width / 2
-										x: root.aiShortResponseEnabled ? parent.width - width - 3 : 3
-										anchors.verticalCenter: parent.verticalCenter
-										color: root.foreground
-
-										Behavior on x {
-											NumberAnimation {
-												duration: ThemeEngine.duration(120)
-												easing.type: ThemeEngine.standardEasing
-											}
-										}
-									}
-
-									MouseArea {
-										anchors.fill: parent
-										enabled: !root.aiStreaming
-										cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-										onClicked: root.toggleShortResponse()
-									}
-								}
-							}
-
-							Row {
-								anchors.verticalCenter: parent.verticalCenter
-								height: parent.height
-								spacing: 5
-								opacity: root.aiStreaming ? 0.5 : 1
-
-								Text {
-									anchors.verticalCenter: parent.verticalCenter
-									color: Qt.alpha(root.foreground, 0.68)
-									text: "Temporary"
-								font.pixelSize: 10
-								font.weight: Font.Medium
-							}
-
-							ThemedRectangle {
-								anchors.verticalCenter: parent.verticalCenter
-								width: 32
-								height: 18
-								radius: ThemeEngine.radiusMedium
-								color: root.aiTemporaryChatEnabled ? Qt.alpha(root.barColor, 0.72) : root.secondaryBoxStrongColor
-
-								ThemedRectangle {
-									width: 12
-									height: 12
-									radius: width / 2
-									x: root.aiTemporaryChatEnabled ? parent.width - width - 3 : 3
-									anchors.verticalCenter: parent.verticalCenter
-									color: root.foreground
-
-									Behavior on x {
-										NumberAnimation {
-											duration: ThemeEngine.duration(120)
-											easing.type: ThemeEngine.standardEasing
-										}
-									}
-								}
-
-								MouseArea {
-									anchors.fill: parent
-									enabled: !root.aiStreaming
-									cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-									onClicked: root.toggleTemporaryChat()
-								}
-							}
-						}
-					}
-				}
-
-				Row {
-					id: chatInfoBar
-					anchors.left: parent.left
-					anchors.right: parent.right
-					anchors.top: chatHeader.bottom
-					anchors.topMargin: 6
-					height: 20
-					spacing: 8
-
-					Text {
-						anchors.verticalCenter: parent.verticalCenter
-						color: Qt.alpha(root.foreground, 0.58)
-						text: "Context"
-						font.pixelSize: 9
-						font.weight: Font.Medium
-					}
-
-					ThemedRectangle {
-						anchors.verticalCenter: parent.verticalCenter
-						width: 150
-						height: 5
-						radius: ThemeEngine.radiusMedium
-						color: root.secondaryBoxStrongColor
-
-						ThemedRectangle {
-							width: parent.width * root.activeContextProgress
-							height: parent.height
-							radius: parent.radius
-							color: root.activeContextProgress > 0.85 ? root.danger : root.barColor
-						}
-					}
-
-					Text {
-						anchors.verticalCenter: parent.verticalCenter
-						color: Qt.alpha(root.foreground, 0.58)
-						text: `${root.formatTokenCount(root.activeContextUsed)} / ${root.formatTokenCount(root.activeContextLimit)}`
-						font.pixelSize: 9
-						font.weight: Font.Medium
-					}
-
-					Text {
-						anchors.verticalCenter: parent.verticalCenter
-						visible: root.activeResponseTokens > 0
-						color: Qt.alpha(root.foreground, 0.58)
-						text: `${root.activeTokensPerSecond.toFixed(1)} tok/s · ${root.activeResponseTokens} tokens`
-						font.pixelSize: 9
-						font.weight: Font.Medium
-					}
-
-					Text {
-						anchors.verticalCenter: parent.verticalCenter
-						visible: root.chatLoadedTimerText !== ""
-						color: root.chatLoadedModel
-							? Qt.alpha(root.foreground, 0.58)
-							: Qt.alpha(root.foreground, 0.42)
-						text: root.chatLoadedTimerText
-						elide: Text.ElideRight
-						font.pixelSize: 9
-						font.weight: Font.Medium
-					}
-				}
-
-				Item {
-					id: chatBody
-					anchors.left: parent.left
-					anchors.right: parent.right
-					anchors.top: chatInfoBar.bottom
-					anchors.topMargin: 6
-					anchors.bottom: pendingAttachmentBar.top
-					anchors.bottomMargin: pendingAttachmentBar.visible ? 6 : (chatError.visible ? 6 : 0)
-
-					ListView {
-						id: chatList
-						anchors.fill: parent
-						clip: true
-						spacing: 4
-						cacheBuffer: 800
-						reuseItems: false
-						model: chatMessageModel
-						boundsBehavior: Flickable.StopAtBounds
-
-						onContentHeightChanged: root.followChatImmediately()
-						onMovementStarted: root.chatAutoFollow = false
-						onMovementEnded: root.chatAutoFollow = root.chatNearEnd()
-
-						ScrollBar.vertical: ScrollBar {
-							policy: ScrollBar.AsNeeded
-						}
-
-						delegate: Item {
-							id: messageRow
-
-							required property var entry
-							required property int index
-							readonly property bool fromUser: entry.role === "user"
-							readonly property string responseModelName: !fromUser && String(entry.model || "") !== ""
-								? String(entry.model)
-								: ""
-							readonly property bool hasThinking:
-								entry.role === "assistant"
-								&& Boolean(root.activeChat?.thinkingEnabled)
-								&& String(entry.thinking || "") !== ""
-							readonly property bool loadingModel:
-								entry.role === "assistant"
-								&& entry.streaming
-								&& String(entry.content || "") === ""
-								&& String(entry.thinking || "") === ""
-							readonly property string displayText: String(entry.content || "") !== ""
-								? String(entry.content)
-								: (loadingModel ? "" : (entry.streaming ? "..." : ""))
-							readonly property var attachments: root.messageAttachments(entry)
-							readonly property var markdownSegments: root.markdownImageSegments(displayText)
-							readonly property bool hasMarkdownImages: markdownSegments.some(segment => segment.kind === "image")
-							readonly property string markdownTextOnly: markdownSegments
-								.filter(segment => segment.kind === "text")
-								.map(segment => String(segment.text || ""))
-								.join("\n")
-
-							width: chatList.width
-							height: messageBubble.height + 6
-
-								ThemedRectangle {
-									id: messageBubble
-									width: Math.min(
-										messageRow.width * 0.78,
-										Math.max(
-											messageRow.hasMarkdownImages || messageRow.attachments.length > 0 ? messageRow.width * 0.66 : 120,
-											Math.max(messageText.implicitWidth, thinkingText.implicitWidth, responseModelLabel.implicitWidth) + 24
-										)
-								)
-								height: messageRow.loadingModel
-									? 34
-									: messageBubbleBody.implicitHeight + 20
-								x: messageRow.fromUser ? messageRow.width - width : 0
-								radius: ThemeEngine.radiusMedium
-								color: messageRow.fromUser ? Qt.alpha(root.barColor, 0.24) : root.secondaryBoxColor
-								clip: true
-
-									Text {
-										visible: messageRow.loadingModel
-										anchors.centerIn: parent
-										width: parent.width - 20
-										color: Qt.alpha(root.foreground, 0.58)
-										text: messageRow.responseModelName !== ""
-											? "Loading " + messageRow.responseModelName + "..."
-											: "Loading model..."
-										horizontalAlignment: Text.AlignHCenter
-										elide: Text.ElideRight
-										font.pixelSize: 12
-										font.weight: Font.Medium
-									}
-
-								Column {
-									id: messageBubbleBody
-									visible: !messageRow.loadingModel
-									anchors.left: parent.left
-									anchors.right: parent.right
-									anchors.top: parent.top
-										anchors.margins: 10
-										spacing: 6
-
-										Text {
-											id: responseModelLabel
-											visible: messageRow.responseModelName !== ""
-											width: parent.width
-											color: Qt.alpha(root.foreground, 0.55)
-											text: messageRow.responseModelName
-											elide: Text.ElideRight
-											font.pixelSize: 10
-											font.weight: Font.DemiBold
-										}
-
-										ThemedRectangle {
-											id: thinkingHeader
-											visible: messageRow.hasThinking
-										width: parent.width
-										height: 18
-										radius: ThemeEngine.radiusSmall
-										color: root.secondaryInsetColor
-
-										MouseArea {
-											anchors.fill: parent
-											enabled: messageRow.hasThinking
-											cursorShape: Qt.PointingHandCursor
-											onClicked: root.toggleThinkingExpanded(messageRow.entry.id)
-										}
-
-										Text {
-											anchors.left: parent.left
-											anchors.leftMargin: 6
-											anchors.verticalCenter: parent.verticalCenter
-											color: Qt.alpha(root.foreground, 0.55)
-											text: messageRow.entry.streaming && String(messageRow.entry.thinking || "") !== ""
-												? "Thinking..."
-												: (root.thinkingExpanded(messageRow.entry.id) ? "Thinking" : "Thinking hidden")
-											font.pixelSize: 10
-											font.weight: Font.Medium
-										}
-
-										Text {
-											anchors.right: parent.right
-											anchors.rightMargin: 6
-											anchors.verticalCenter: parent.verticalCenter
-											color: Qt.alpha(root.foreground, 0.45)
-											text: root.thinkingExpanded(messageRow.entry.id) ? "▾" : "▸"
-											font.pixelSize: 10
-											font.weight: Font.DemiBold
-											}
-										}
-
-										Flow {
-											visible: messageRow.attachments.length > 0
-											width: parent.width
-											height: implicitHeight
-											spacing: 5
-
-											Repeater {
-												model: messageRow.attachments
-
-												delegate: ThemedRectangle {
-													id: sentAttachmentChip
-
-													required property var modelData
-
-													width: Math.min(messageBubbleBody.width, Math.max(112, sentAttachmentName.implicitWidth + 42))
-													height: 28
-													radius: ThemeEngine.radiusSmall
-													color: root.secondaryInsetColor
-													opacity: String(modelData.status || "") === "unavailable" ? 0.58 : 1
-
-													Image {
-														visible: sentAttachmentChip.modelData.kind === "image"
-														anchors.left: parent.left
-														anchors.leftMargin: 4
-														anchors.verticalCenter: parent.verticalCenter
-														width: 20
-														height: 20
-														source: sentAttachmentChip.modelData.kind === "image"
-															? root.resolveMarkdownImageSource(sentAttachmentChip.modelData.path)
-															: ""
-														fillMode: Image.PreserveAspectCrop
-														smooth: true
-														cache: true
-													}
-
-													QQCImpl.IconImage {
-														visible: sentAttachmentChip.modelData.kind !== "image"
-														anchors.left: parent.left
-														anchors.leftMargin: 6
-														anchors.verticalCenter: parent.verticalCenter
-														width: 16
-														height: 16
-														source: root.attachmentIconPath
-														sourceSize: Qt.size(width, height)
-														color: root.foreground
-													}
-
-													Text {
-														id: sentAttachmentName
-														anchors.left: parent.left
-														anchors.leftMargin: 30
-														anchors.right: parent.right
-														anchors.rightMargin: 7
-														anchors.verticalCenter: parent.verticalCenter
-														color: root.foreground
-														text: String(sentAttachmentChip.modelData.name || "Attachment")
-														elide: Text.ElideMiddle
-														font.pixelSize: 10
-														font.weight: Font.Medium
-													}
-
-													ToolTip.visible: sentAttachmentHover.containsMouse
-													ToolTip.delay: 500
-													ToolTip.text: String(sentAttachmentChip.modelData.status || "") === "unavailable"
-														? "Attachment content is not available after restart"
-														: String(sentAttachmentChip.modelData.name || "Attachment")
-
-													MouseArea {
-														id: sentAttachmentHover
-														anchors.fill: parent
-														hoverEnabled: true
-														acceptedButtons: Qt.NoButton
-													}
-												}
-											}
-										}
-
-										TextEdit {
-											id: thinkingText
-										visible: messageRow.hasThinking && root.thinkingExpanded(messageRow.entry.id)
-										width: parent.width
-										color: Qt.alpha(root.foreground, 0.62)
-										text: String(messageRow.entry.thinking || "")
-										textFormat: TextEdit.MarkdownText
-										baseUrl: Qt.resolvedUrl(".")
-										wrapMode: TextEdit.Wrap
-										readOnly: true
-										selectByMouse: true
-										persistentSelection: true
-										selectionColor: Qt.alpha(root.barColor, 0.35)
-										selectedTextColor: root.foreground
-										font.pixelSize: 11
-										onLinkActivated: link => Qt.openUrlExternally(link)
-										onSelectedTextChanged: root.updateChatSelection(selectedText)
-
-										HoverHandler {
-											cursorShape: thinkingText.hoveredLink !== ""
-												? Qt.PointingHandCursor
-												: Qt.IBeamCursor
-										}
-									}
-
-									TextEdit {
-										id: messageText
-										visible: String(messageRow.displayText || "") !== "" && !messageRow.hasMarkdownImages
-										width: parent.width
-										color: root.foreground
-										text: messageRow.hasMarkdownImages ? messageRow.markdownTextOnly : messageRow.displayText
-										textFormat: TextEdit.MarkdownText
-										baseUrl: Qt.resolvedUrl(".")
-										wrapMode: TextEdit.Wrap
-										readOnly: true
-										selectByMouse: true
-										persistentSelection: true
-										selectionColor: Qt.alpha(root.barColor, 0.55)
-										selectedTextColor: root.foreground
-										font.pixelSize: 12
-										onLinkActivated: link => Qt.openUrlExternally(link)
-										onSelectedTextChanged: root.updateChatSelection(selectedText)
-
-										HoverHandler {
-											cursorShape: messageText.hoveredLink !== ""
-												? Qt.PointingHandCursor
-												: Qt.IBeamCursor
-										}
-									}
-
-									Column {
-										id: markdownImageContent
-										visible: messageRow.hasMarkdownImages
-										width: parent.width
-										spacing: 8
-
-										Repeater {
-											model: messageRow.markdownSegments
-
-											delegate: Item {
-												id: markdownSegment
-
-												required property var modelData
-
-												width: markdownImageContent.width
-												height: modelData.kind === "image"
-													? markdownImageFrame.height
-													: markdownSegmentText.implicitHeight
-
-												TextEdit {
-													id: markdownSegmentText
-													visible: markdownSegment.modelData.kind === "text"
-													width: parent.width
-													color: root.foreground
-													text: String(markdownSegment.modelData.text || "")
-													textFormat: TextEdit.MarkdownText
-													baseUrl: Qt.resolvedUrl(".")
-													wrapMode: TextEdit.Wrap
-													readOnly: true
-													selectByMouse: true
-													persistentSelection: true
-													selectionColor: Qt.alpha(root.barColor, 0.55)
-													selectedTextColor: root.foreground
-													font.pixelSize: 12
-													onLinkActivated: link => Qt.openUrlExternally(link)
-													onSelectedTextChanged: root.updateChatSelection(selectedText)
-
-													HoverHandler {
-														cursorShape: markdownSegmentText.hoveredLink !== ""
-															? Qt.PointingHandCursor
-															: Qt.IBeamCursor
-													}
-												}
-
-												ThemedRectangle {
-													id: markdownImageFrame
-													visible: markdownSegment.modelData.kind === "image"
-													width: parent.width
-													height: !visible
-														? 0
-														: (markdownImage.status === Image.Ready && markdownImage.sourceSize.width > 0
-															? Math.min(280, Math.max(80, width * markdownImage.sourceSize.height / markdownImage.sourceSize.width))
-															: (markdownImage.status === Image.Error ? 64 : 96))
-													radius: ThemeEngine.radiusSmall
-													color: root.secondaryInsetColor
-													clip: true
-
-													Image {
-														id: markdownImage
-														anchors.fill: parent
-														anchors.margins: 4
-														source: root.resolveMarkdownImageSource(markdownSegment.modelData.source)
-														fillMode: Image.PreserveAspectFit
-														asynchronous: true
-														cache: true
-														smooth: true
-														mipmap: true
-													}
-
-													Text {
-														anchors.centerIn: parent
-														width: parent.width - 20
-														visible: markdownImage.status === Image.Loading
-														color: Qt.alpha(root.foreground, 0.5)
-														text: "Loading image..."
-														horizontalAlignment: Text.AlignHCenter
-														font.pixelSize: 11
-													}
-
-													Text {
-														anchors.centerIn: parent
-														width: parent.width - 20
-														visible: markdownImage.status === Image.Error
-														color: Qt.alpha(root.foreground, 0.58)
-														text: String(markdownSegment.modelData.alt || "Image could not be loaded")
-														horizontalAlignment: Text.AlignHCenter
-														elide: Text.ElideRight
-														font.pixelSize: 11
-													}
-
-													MouseArea {
-														anchors.fill: parent
-														hoverEnabled: true
-														cursorShape: Qt.PointingHandCursor
-														onClicked: Qt.openUrlExternally(root.resolveMarkdownImageSource(markdownSegment.modelData.source))
-													}
-												}
-											}
-										}
-									}
-								}
-							}
-
-							ThemedRectangle {
-								id: editMessageButton
-								x: messageBubble.x - width - 6
-								anchors.verticalCenter: messageBubble.verticalCenter
-								width: 24
-								height: 24
-								radius: ThemeEngine.radiusMedium
-								visible: messageRow.fromUser
-								opacity: root.aiStreaming ? 0.45 : 1
-								color: editMessageMouse.containsMouse ? root.secondaryBoxStrongColor : "transparent"
-
-								MouseArea {
-									id: editMessageMouse
-									anchors.fill: parent
-									enabled: !root.aiStreaming
-									hoverEnabled: true
-									cursorShape: Qt.PointingHandCursor
-									onClicked: root.beginEditMessage(messageRow.entry)
-								}
-
-								Text {
-									anchors.centerIn: parent
-									color: root.foreground
-									text: "✎"
-									font.pixelSize: 16
-									font.weight: Font.DemiBold
-								}
-							}
-						}
-					}
-
-					Text {
-						anchors.centerIn: parent
-						width: parent.width - 40
-						visible: root.activeMessages.length === 0
-						color: Qt.alpha(root.foreground, 0.5)
-						text: root.selectedAiModel === ""
-							? "Type >chat to start a new chat"
-							: "Type >chat followed by a message"
-						horizontalAlignment: Text.AlignHCenter
-						wrapMode: Text.WordWrap
-						font.pixelSize: 13
-						font.weight: Font.Medium
-					}
-				}
-
-				ThemedRectangle {
-					id: pendingAttachmentBar
-					anchors.left: parent.left
-					anchors.right: parent.right
-					anchors.bottom: chatError.top
-					anchors.bottomMargin: chatError.visible ? 5 : 0
-					height: visible ? 38 : 0
-					visible: root.aiPendingAttachments.length > 0
-					radius: ThemeEngine.radiusMedium
-					color: root.secondaryInsetColor
-
-					ListView {
-						anchors.fill: parent
-						anchors.margins: 5
-						orientation: ListView.Horizontal
-						spacing: 5
-						clip: true
-						model: root.aiPendingAttachments
-						boundsBehavior: Flickable.StopAtBounds
-
-						delegate: ThemedRectangle {
-							id: pendingAttachmentChip
-
-							required property var modelData
-
-							width: 148
-							height: 28
-							radius: ThemeEngine.radiusSmall
-							color: root.secondaryBoxColor
-							border.width: String(modelData.status || "") === "loading" ? 1 : 0
-							border.color: Qt.alpha(root.barColor, 0.55)
-							opacity: pendingAttachmentChip.modelData.kind === "image" && !root.selectedAiSupportsVision ? 0.48 : 1
-
-							Image {
-								visible: pendingAttachmentChip.modelData.kind === "image"
-								anchors.left: parent.left
-								anchors.leftMargin: 4
-								anchors.verticalCenter: parent.verticalCenter
-								width: 20
-								height: 20
-								source: pendingAttachmentChip.modelData.kind === "image"
-									? root.resolveMarkdownImageSource(pendingAttachmentChip.modelData.path)
-									: ""
-								fillMode: Image.PreserveAspectCrop
-								smooth: true
-								cache: true
-							}
-
-							QQCImpl.IconImage {
-								visible: pendingAttachmentChip.modelData.kind !== "image"
-								anchors.left: parent.left
-								anchors.leftMargin: 6
-								anchors.verticalCenter: parent.verticalCenter
-								width: 16
-								height: 16
-								source: root.attachmentIconPath
-								sourceSize: Qt.size(width, height)
-								color: root.foreground
-							}
-
-							Text {
-								anchors.left: parent.left
-								anchors.leftMargin: 29
-								anchors.right: pendingAttachmentRemove.left
-								anchors.rightMargin: 4
-								anchors.verticalCenter: parent.verticalCenter
-								color: root.foreground
-								text: String(pendingAttachmentChip.modelData.status || "") === "loading"
-									? `Reading ${pendingAttachmentChip.modelData.name || "file"}...`
-									: String(pendingAttachmentChip.modelData.name || "Attachment")
-								elide: Text.ElideMiddle
-								font.pixelSize: 10
-								font.weight: Font.Medium
-							}
-
-							ThemedRectangle {
-								id: pendingAttachmentRemove
-								anchors.right: parent.right
-								anchors.rightMargin: 3
-								anchors.verticalCenter: parent.verticalCenter
-								width: 21
-								height: 21
-								radius: ThemeEngine.radiusSmall
-								color: pendingAttachmentRemoveMouse.containsMouse ? root.secondaryBoxStrongColor : "transparent"
-
-								MouseArea {
-									id: pendingAttachmentRemoveMouse
-									anchors.fill: parent
-									hoverEnabled: true
-									cursorShape: Qt.PointingHandCursor
-									onClicked: root.removePendingAttachment(pendingAttachmentChip.modelData.id)
-								}
-
-								Text {
-									anchors.centerIn: parent
-									color: root.foreground
-									text: "x"
-									font.pixelSize: 11
-									font.weight: Font.DemiBold
-								}
-							}
-						}
-					}
-				}
-
-				Text {
-					id: chatError
-					anchors.left: parent.left
-					anchors.right: parent.right
-					anchors.bottom: parent.bottom
-					height: visible ? 18 : 0
-					visible: root.aiError !== ""
-					color: root.danger
-					text: root.aiError
-					horizontalAlignment: Text.AlignHCenter
-					elide: Text.ElideRight
-					font.pixelSize: 11
-					font.weight: Font.Medium
-				}
-			}
 
 			ThemedRectangle {
 				id: searchBox
@@ -4626,9 +2621,15 @@ Item {
 				height: root.inChatMode
 					? Math.min(180, Math.max(48, searchField.contentHeight + 22))
 					: 44
-				radius: root.inChatMode ? 20 : height / 2
+				radius: 0
 				color: root.secondaryBoxColor
-				border.width: searchField.activeFocus || root.editingMessageId !== "" ? 1 : 0
+				border.width: 0
+                Rectangle {
+                    anchors.bottom: parent.bottom
+                    width: parent.width
+                    height: searchField.activeFocus ? 2 : 1
+                    color: searchField.activeFocus ? Atelier.accent : Atelier.rule
+                }
 				border.color: Qt.alpha(root.barColor, 0.75)
 
 				QQCImpl.IconImage {
@@ -4925,7 +2926,7 @@ Item {
 						}
 					}
 
-					Text {
+					AtelierText {
 						anchors.centerIn: parent
 						color: root.foreground
 						font.pixelSize: root.aiStreaming && root.inChatMode ? 11 : 14
@@ -4937,6 +2938,2019 @@ Item {
 					ToolTip.text: "Stop and unload model"
 				}
 			}
+
+			GridView {
+				id: appList
+
+				readonly property int columns: 2
+
+				width: parent.width
+				height: parent.height - searchBox.height - 12
+				visible: !root.inCommandMode
+				clip: true
+				cellWidth: Math.floor(width / columns)
+				cellHeight: 64
+				model: root.filteredApps
+				currentIndex: model.length > 0 ? 0 : -1
+				boundsBehavior: Flickable.StopAtBounds
+
+				ScrollBar.vertical: ScrollBar {
+					policy: ScrollBar.AsNeeded
+				}
+
+				delegate: Item {
+					id: appTile
+
+					required property DesktopEntry modelData
+					required property int index
+					readonly property bool selected: appList.currentIndex === index
+
+					width: appList.cellWidth
+					height: appList.cellHeight
+
+					ThemedRectangle {
+						anchors.fill: parent
+						anchors.margins: 4
+						radius: ThemeEngine.radiusMedium
+						// Hovering a tile also selects it (see HoverLayer.onEntered
+						// below), so drive the background off `selected` alone. Keying
+						// it off containsMouse too made the tile flash the lighter hover
+						// colour for one frame before settling on the selected colour.
+						color: appTile.selected
+							? Qt.alpha(root.barColor, 0.06)
+							: "transparent"
+						border.width: 0
+						border.color: Qt.alpha(root.barColor, 0.6)
+                        Rectangle { width: 2; height: 24; anchors.verticalCenter: parent.verticalCenter; color: Atelier.accent; visible: appTile.selected }
+
+						Behavior on color {
+							CAnim {}
+						}
+
+						Row {
+                            anchors.centerIn: parent
+                            spacing: 16
+                            width: parent.width - 24
+
+							Image {
+								anchors.verticalCenter: parent.verticalCenter
+                                width: 28
+                                height: 28
+								source: root.iconSource(appTile.modelData)
+								sourceSize: Qt.size(width, height)
+								fillMode: Image.PreserveAspectFit
+								smooth: true
+								mipmap: true
+							}
+
+							AtelierText {
+								width: parent.width - 44
+                                anchors.verticalCenter: parent.verticalCenter
+                                horizontalAlignment: Text.AlignLeft
+                                color: root.foreground
+                                font.pixelSize: 14
+								font.weight: appTile.selected ? Font.DemiBold : Font.Medium
+								elide: Text.ElideRight
+								maximumLineCount: 1
+								text: appTile.modelData.name || appTile.modelData.id || "App"
+							}
+						}
+
+						HoverLayer {
+							id: tileHover
+							tint: root.foreground
+							showHover: false
+							rippleEnabled: false
+							onEntered: appList.currentIndex = appTile.index
+							onClicked: root.launchApp(appTile.modelData)
+						}
+					}
+				}
+			}
+
+			ListView {
+				id: commandList
+				width: parent.width
+				height: parent.height - searchBox.height - 12
+				visible: root.inCommandMode
+					&& !root.inCalculatorMode
+					&& !root.inAiMode
+					&& !root.inChatMode
+					&& !root.inOllamaMode
+					&& !root.inFileMode
+				clip: true
+				spacing: 6
+				model: root.filteredCommands
+				currentIndex: model.length > 0 ? 0 : -1
+				boundsBehavior: Flickable.StopAtBounds
+
+				delegate: ThemedRectangle {
+					id: commandRow
+
+					required property var modelData
+					required property int index
+
+					width: commandList.width
+					height: 54
+					radius: ThemeEngine.radiusMedium
+					color: commandList.currentIndex === index
+						? root.secondaryBoxStrongColor
+						: (commandMouse.containsMouse ? root.secondaryBoxColor : "transparent")
+
+					MouseArea {
+						id: commandMouse
+						anchors.fill: parent
+						hoverEnabled: true
+						cursorShape: Qt.PointingHandCursor
+						onEntered: commandList.currentIndex = parent.index
+						onClicked: root.launchCommand(parent.modelData)
+					}
+
+					QQCImpl.IconImage {
+						anchors.left: parent.left
+						anchors.leftMargin: 10
+						anchors.verticalCenter: parent.verticalCenter
+						width: 22
+						height: 22
+						source: root.commandIconSource(commandRow.modelData)
+						sourceSize: Qt.size(width, height)
+						color: root.foreground
+					}
+
+					Column {
+						anchors.left: parent.left
+						anchors.leftMargin: 42
+						anchors.right: parent.right
+						anchors.rightMargin: 10
+						anchors.verticalCenter: parent.verticalCenter
+						spacing: 2
+
+						AtelierText {
+							width: parent.width
+							color: root.foreground
+							font.pixelSize: 13
+							font.weight: Font.Medium
+							elide: Text.ElideRight
+							text: `>${commandRow.modelData.command || commandRow.modelData.id || "command"}`
+						}
+
+						AtelierText {
+							width: parent.width
+							color: Qt.alpha(root.foreground, 0.58)
+							font.pixelSize: 11
+							elide: Text.ElideRight
+							text: `${commandRow.modelData.name || "Command"} · ${commandRow.modelData.description || ""}`
+						}
+					}
+				}
+
+				ScrollBar.vertical: ScrollBar {
+					policy: ScrollBar.AsNeeded
+				}
+			}
+
+			Item {
+				id: calculatorPanel
+				width: parent.width
+				height: parent.height - searchBox.height - 12
+				visible: root.inCalculatorMode
+
+				MouseArea {
+					anchors.fill: parent
+					enabled: root.calculatorEvaluation.valid
+					cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+					onClicked: root.launchCommand(root.calculatorCommand())
+				}
+
+				Column {
+					width: parent.width
+					anchors.centerIn: parent
+					spacing: 12
+
+					AtelierText {
+						width: parent.width
+						color: Qt.alpha(root.foreground, 0.58)
+						text: root.calculatorExpression
+						visible: text !== ""
+						horizontalAlignment: Text.AlignHCenter
+						elide: Text.ElideRight
+						font.pixelSize: 16
+						font.weight: Font.Medium
+					}
+
+					AtelierText {
+						width: parent.width
+						color: root.calculatorEvaluation.valid ? root.foreground : Qt.alpha(root.foreground, 0.68)
+						text: root.calculatorEvaluation.valid ? root.calculatorEvaluation.result : "Calculator"
+						horizontalAlignment: Text.AlignHCenter
+						elide: Text.ElideMiddle
+						display: true
+    font.pixelSize: 58
+						font.weight: Font.DemiBold
+						fontSizeMode: Text.Fit
+						minimumPixelSize: 24
+					}
+
+					AtelierText {
+						width: parent.width
+						color: root.calculatorEvaluation.valid ? Qt.alpha(root.foreground, 0.58) : root.danger
+						text: root.calculatorEvaluation.valid ? "Press Enter to copy" : root.calculatorEvaluation.message
+						horizontalAlignment: Text.AlignHCenter
+						wrapMode: Text.WordWrap
+						font.pixelSize: 13
+						font.weight: Font.Medium
+					}
+				}
+			}
+
+			Item {
+				id: filePanel
+				width: parent.width
+				height: parent.height - searchBox.height - 12
+				visible: root.inFileMode
+
+				Column {
+					anchors.fill: parent
+					spacing: 8
+
+					ThemedRectangle {
+						id: fileHeader
+						width: parent.width
+						height: 36
+						radius: ThemeEngine.radiusMedium
+						color: root.secondaryInsetColor
+
+						ThemedRectangle {
+							id: fileUpButton
+							anchors.left: parent.left
+							anchors.leftMargin: 5
+							anchors.verticalCenter: parent.verticalCenter
+							width: 26
+							height: 26
+							radius: ThemeEngine.radiusMedium
+							color: fileUpMouse.containsMouse ? root.secondaryBoxStrongColor : "transparent"
+
+							MouseArea {
+								id: fileUpMouse
+								anchors.fill: parent
+								hoverEnabled: true
+								cursorShape: Qt.PointingHandCursor
+								onClicked: root.fileBrowserDirectory = root.attachmentParentDirectory(root.fileBrowserDirectory)
+							}
+
+							AtelierText {
+								anchors.centerIn: parent
+								color: root.foreground
+								text: "↑"
+								font.pixelSize: 16
+								font.weight: Font.DemiBold
+							}
+
+							ToolTip.visible: fileUpMouse.containsMouse
+							ToolTip.delay: 500
+							ToolTip.text: "Parent folder"
+						}
+
+						AtelierText {
+							anchors.left: fileUpButton.right
+							anchors.leftMargin: 8
+							anchors.right: fileOpenCurrentButton.left
+							anchors.rightMargin: 8
+							anchors.verticalCenter: parent.verticalCenter
+							color: root.foreground
+							text: root.fileBrowserDirectory
+							elide: Text.ElideMiddle
+							font.pixelSize: 12
+							font.weight: Font.DemiBold
+						}
+
+						ThemedRectangle {
+							id: fileOpenCurrentButton
+							anchors.right: parent.right
+							anchors.rightMargin: 5
+							anchors.verticalCenter: parent.verticalCenter
+							width: 26
+							height: 26
+							radius: ThemeEngine.radiusMedium
+							color: fileOpenCurrentMouse.containsMouse ? root.secondaryBoxStrongColor : "transparent"
+
+							MouseArea {
+								id: fileOpenCurrentMouse
+								anchors.fill: parent
+								hoverEnabled: true
+								cursorShape: Qt.PointingHandCursor
+								onClicked: root.openPathWithDefaultApp(root.fileBrowserDirectory)
+							}
+
+							QQCImpl.IconImage {
+								anchors.centerIn: parent
+								width: 16
+								height: 16
+								source: root.folderOpenIconPath
+								sourceSize: Qt.size(width, height)
+								color: root.foreground
+							}
+
+							ToolTip.visible: fileOpenCurrentMouse.containsMouse
+							ToolTip.delay: 500
+							ToolTip.text: "Open folder"
+						}
+					}
+
+					Row {
+						id: fileShortcutRow
+						width: parent.width
+						height: 26
+						spacing: 6
+
+						Repeater {
+							model: [
+								{ name: "Home", path: Quickshell.env("HOME") },
+								{ name: "Downloads", path: `${Quickshell.env("HOME")}/Downloads` },
+								{ name: "Documents", path: `${Quickshell.env("HOME")}/Documents` },
+								{ name: "Pictures", path: `${Quickshell.env("HOME")}/Pictures` }
+							]
+
+							delegate: ThemedRectangle {
+								id: fileShortcut
+
+								required property var modelData
+
+								width: fileShortcutText.implicitWidth + 20
+								height: 26
+								radius: ThemeEngine.radiusMedium
+								color: root.fileBrowserDirectory === String(modelData.path)
+									? root.secondaryBoxStrongColor
+									: (fileShortcutMouse.containsMouse ? root.secondaryBoxColor : "transparent")
+
+								MouseArea {
+									id: fileShortcutMouse
+									anchors.fill: parent
+									hoverEnabled: true
+									cursorShape: Qt.PointingHandCursor
+									onClicked: root.fileBrowserDirectory = String(fileShortcut.modelData.path)
+								}
+
+								AtelierText {
+									id: fileShortcutText
+									anchors.centerIn: parent
+									color: root.foreground
+									text: String(fileShortcut.modelData.name)
+									font.pixelSize: 10
+									font.weight: Font.Medium
+								}
+							}
+						}
+
+						AtelierText {
+							anchors.verticalCenter: parent.verticalCenter
+							width: Math.max(0, parent.width - x)
+							color: Qt.alpha(root.foreground, 0.5)
+							text: root.fileBrowserSearchQuery === ""
+								? `${root.fileBrowserEntries.length} items`
+								: `${root.filteredFileBrowserEntries.length} matches`
+							horizontalAlignment: Text.AlignRight
+							elide: Text.ElideLeft
+							font.pixelSize: 9
+							font.weight: Font.Medium
+						}
+					}
+
+					ThemedRectangle {
+						width: parent.width
+						height: parent.height - fileHeader.height - fileShortcutRow.height - parent.spacing * 2
+						radius: ThemeEngine.radiusMedium
+						color: root.background
+						border.width: 1
+						border.color: Qt.alpha(root.barColor, 0.18)
+
+						ListView {
+							id: fileBrowserList
+							anchors.fill: parent
+							anchors.margins: 6
+							clip: true
+							spacing: 4
+							model: root.filteredFileBrowserEntries
+							currentIndex: model.length > 0 ? 0 : -1
+							boundsBehavior: Flickable.StopAtBounds
+
+							delegate: ThemedRectangle {
+								id: fileRow
+
+								required property var modelData
+								required property int index
+								readonly property var file: modelData || ({})
+
+								width: fileBrowserList.width
+								height: 44
+								radius: ThemeEngine.radiusMedium
+								color: fileBrowserList.currentIndex === index
+									? root.secondaryBoxStrongColor
+									: (fileMouse.containsMouse ? root.secondaryBoxColor : "transparent")
+
+								MouseArea {
+									id: fileMouse
+									anchors.fill: parent
+									hoverEnabled: true
+									cursorShape: Qt.PointingHandCursor
+									onEntered: fileBrowserList.currentIndex = fileRow.index
+									onClicked: root.openFileBrowserEntry(fileRow.file)
+								}
+
+								Image {
+									visible: Boolean(fileRow.file.isImage)
+									anchors.left: parent.left
+									anchors.leftMargin: 7
+									anchors.verticalCenter: parent.verticalCenter
+									width: 30
+									height: 30
+									source: fileRow.file.isImage
+										? root.resolveMarkdownImageSource(fileRow.file.path)
+										: ""
+									fillMode: Image.PreserveAspectCrop
+									smooth: true
+									cache: true
+									asynchronous: true
+								}
+
+								QQCImpl.IconImage {
+									visible: !fileRow.file.isImage
+									anchors.left: parent.left
+									anchors.leftMargin: 10
+									anchors.verticalCenter: parent.verticalCenter
+									width: 20
+									height: 20
+									source: fileRow.file.isDir ? root.folderIconPath : root.attachmentIconPath
+									sourceSize: Qt.size(width, height)
+									color: root.foreground
+								}
+
+								Column {
+									anchors.left: parent.left
+									anchors.leftMargin: 45
+									anchors.right: fileFolderOpenButton.left
+									anchors.rightMargin: 8
+									anchors.verticalCenter: parent.verticalCenter
+									spacing: 1
+
+									AtelierText {
+										width: parent.width
+										color: root.foreground
+										text: String(fileRow.file.name || "")
+										elide: Text.ElideMiddle
+										font.pixelSize: 12
+										font.weight: Font.Medium
+									}
+
+									AtelierText {
+										width: parent.width
+										color: Qt.alpha(root.foreground, 0.5)
+										text: fileRow.file.isDir
+											? "Folder"
+											: `${fileRow.file.suffix || "file"} · ${root.formatAttachmentSize(fileRow.file.size)}`
+										elide: Text.ElideRight
+										font.pixelSize: 9
+									}
+								}
+
+								ThemedRectangle {
+									id: fileFolderOpenButton
+									anchors.right: parent.right
+									anchors.rightMargin: 7
+									anchors.verticalCenter: parent.verticalCenter
+									width: 26
+									height: 26
+									radius: ThemeEngine.radiusMedium
+									z: 2
+									visible: Boolean(fileRow.file.isDir)
+									color: fileFolderOpenMouse.containsMouse ? root.secondaryBoxStrongColor : "transparent"
+
+									MouseArea {
+										id: fileFolderOpenMouse
+										anchors.fill: parent
+										hoverEnabled: true
+										cursorShape: Qt.PointingHandCursor
+										onClicked: root.openPathWithDefaultApp(fileRow.file.path)
+									}
+
+									QQCImpl.IconImage {
+										anchors.centerIn: parent
+										width: 16
+										height: 16
+										source: root.folderOpenIconPath
+										sourceSize: Qt.size(width, height)
+										color: root.foreground
+									}
+
+									ToolTip.visible: fileFolderOpenMouse.containsMouse
+									ToolTip.delay: 500
+									ToolTip.text: "Open folder"
+								}
+							}
+
+							ScrollBar.vertical: ScrollBar {
+								policy: ScrollBar.AsNeeded
+							}
+						}
+
+						AtelierText {
+							anchors.centerIn: parent
+							width: parent.width - 40
+							visible: fileBrowserList.count === 0
+							color: Qt.alpha(root.foreground, 0.5)
+							text: root.fileBrowserDirectoryLoading
+								? "Loading..."
+								: (root.fileBrowserDirectoryError !== ""
+									? root.fileBrowserDirectoryError
+									: (root.fileBrowserSearchQuery === "" ? "This folder is empty" : "No matching files"))
+							horizontalAlignment: Text.AlignHCenter
+							wrapMode: Text.WordWrap
+							font.pixelSize: 12
+							font.weight: Font.Medium
+						}
+					}
+				}
+			}
+
+			Item {
+				id: aiPanel
+				width: parent.width
+				height: parent.height - searchBox.height - 12
+				visible: root.inAiMode
+
+				Column {
+					anchors.fill: parent
+					spacing: 10
+
+					Row {
+						width: parent.width
+						height: 28
+						spacing: 8
+
+						AtelierText {
+							width: parent.width - newChatButton.width - parent.spacing
+							anchors.verticalCenter: parent.verticalCenter
+							color: root.foreground
+							text: "Chats"
+							elide: Text.ElideRight
+							font.pixelSize: 15
+							font.weight: Font.DemiBold
+						}
+
+						ThemedRectangle {
+							id: newChatButton
+							anchors.verticalCenter: parent.verticalCenter
+							width: 92
+							height: 24
+							radius: ThemeEngine.radiusMedium
+							color: newChatMouse.containsMouse ? root.secondaryBoxStrongColor : root.secondaryBoxColor
+
+							MouseArea {
+								id: newChatMouse
+								anchors.fill: parent
+								hoverEnabled: true
+								cursorShape: Qt.PointingHandCursor
+								onClicked: root.startNewChat()
+							}
+
+							AtelierText {
+								anchors.left: parent.left
+								anchors.leftMargin: 9
+								anchors.verticalCenter: parent.verticalCenter
+								color: root.foreground
+								text: "+"
+								font.pixelSize: 16
+								font.weight: Font.DemiBold
+							}
+
+							AtelierText {
+								anchors.left: parent.left
+								anchors.leftMargin: 28
+								anchors.verticalCenter: parent.verticalCenter
+								color: root.foreground
+								text: "New chat"
+								font.pixelSize: 11
+								font.weight: Font.DemiBold
+							}
+						}
+					}
+
+					ThemedRectangle {
+						width: parent.width
+						height: parent.height - 38 - (aiPanelError.visible ? aiPanelError.implicitHeight + 10 : 0)
+						radius: ThemeEngine.radiusMedium
+						color: root.background
+						border.width: 1
+						border.color: Qt.alpha(root.barColor, 0.18)
+
+						ListView {
+							id: pastChatList
+							anchors.fill: parent
+							anchors.margins: 6
+							clip: true
+							spacing: 4
+							model: root.filteredAiChats
+							boundsBehavior: Flickable.StopAtBounds
+
+							delegate: ThemedRectangle {
+								id: pastChatRow
+
+								required property var modelData
+								required property int index
+								readonly property bool selected: String(modelData.id || "") === root.activeChatId
+
+								width: pastChatList.width
+								height: 52
+								radius: ThemeEngine.radiusMedium
+								color: selected
+									? root.secondaryBoxStrongColor
+									: (pastChatMouse.containsMouse ? root.secondaryBoxColor : "transparent")
+
+								MouseArea {
+									id: pastChatMouse
+									anchors.fill: parent
+									hoverEnabled: true
+									cursorShape: Qt.PointingHandCursor
+									onClicked: root.openPastChat(pastChatRow.modelData)
+								}
+
+								Column {
+									anchors.left: parent.left
+									anchors.leftMargin: 10
+									anchors.right: deleteChatButton.left
+									anchors.rightMargin: 10
+									anchors.verticalCenter: parent.verticalCenter
+									spacing: 2
+
+									AtelierText {
+										width: parent.width
+										color: root.foreground
+										text: pastChatRow.modelData.title || "Untitled chat"
+										elide: Text.ElideRight
+										font.pixelSize: 12
+										font.weight: Font.Medium
+									}
+
+									AtelierText {
+										width: parent.width
+										color: Qt.alpha(root.foreground, 0.5)
+										text: `${pastChatRow.modelData.model || "Unknown model"} · ${root.formatChatTime(pastChatRow.modelData.updatedAt)}`
+										elide: Text.ElideRight
+										font.pixelSize: 10
+									}
+								}
+
+								ThemedRectangle {
+									id: deleteChatButton
+									anchors.right: parent.right
+									anchors.rightMargin: 8
+									anchors.verticalCenter: parent.verticalCenter
+									width: 26
+									height: 26
+									radius: ThemeEngine.radiusMedium
+									z: 2
+									color: deleteChatMouse.containsMouse ? root.secondaryBoxStrongColor : "transparent"
+									opacity: root.aiStreaming && String(pastChatRow.modelData.id || "") === root.aiStreamingChatId ? 0.4 : 1
+
+									MouseArea {
+										id: deleteChatMouse
+										anchors.fill: parent
+										hoverEnabled: true
+										cursorShape: Qt.PointingHandCursor
+										enabled: !(root.aiStreaming && String(pastChatRow.modelData.id || "") === root.aiStreamingChatId)
+										onClicked: root.deleteChat(pastChatRow.modelData)
+									}
+
+									AtelierText {
+										anchors.centerIn: parent
+										color: root.foreground
+										text: "󰆴"
+										font.family: "CaskaydiaCove Nerd Font"
+										font.pixelSize: 15
+									}
+								}
+							}
+						}
+
+						AtelierText {
+							anchors.centerIn: parent
+							width: parent.width - 40
+							visible: root.filteredAiChats.length === 0
+							color: Qt.alpha(root.foreground, 0.5)
+							text: root.chatsSearchQuery === "" ? "No saved chats" : "No matching chats"
+							horizontalAlignment: Text.AlignHCenter
+							font.pixelSize: 12
+							font.weight: Font.Medium
+						}
+					}
+
+					AtelierText {
+						id: aiPanelError
+						width: parent.width
+						visible: root.aiError !== ""
+						color: root.danger
+						text: root.aiError
+						horizontalAlignment: Text.AlignHCenter
+						font.pixelSize: 11
+						font.weight: Font.Medium
+					}
+				}
+			}
+
+			Item {
+				id: ollamaPanel
+				width: parent.width
+				height: parent.height - searchBox.height - 12
+				visible: root.inOllamaMode
+
+				Row {
+					id: ollamaTitleRow
+					anchors.left: parent.left
+					anchors.right: parent.right
+					anchors.top: parent.top
+					height: 26
+					spacing: 8
+
+					AtelierText {
+						width: parent.width - ollamaRefreshButton.width - parent.spacing
+						anchors.verticalCenter: parent.verticalCenter
+						color: root.foreground
+						text: "Ollama models"
+						elide: Text.ElideRight
+						font.pixelSize: 15
+						font.weight: Font.DemiBold
+					}
+
+					ThemedRectangle {
+						id: ollamaRefreshButton
+						anchors.verticalCenter: parent.verticalCenter
+						width: 26
+						height: 26
+						radius: ThemeEngine.radiusMedium
+						color: ollamaRefreshMouse.containsMouse ? root.secondaryBoxStrongColor : "transparent"
+
+						MouseArea {
+							id: ollamaRefreshMouse
+							anchors.fill: parent
+							hoverEnabled: true
+							cursorShape: Qt.PointingHandCursor
+							onClicked: root.refreshOllamaOverview()
+						}
+
+						AtelierText {
+							anchors.centerIn: parent
+							color: root.foreground
+							text: "↻"
+							font.pixelSize: 16
+							font.weight: Font.DemiBold
+						}
+
+						ToolTip.visible: ollamaRefreshMouse.containsMouse
+						ToolTip.delay: 500
+						ToolTip.text: "Refresh models"
+					}
+				}
+
+				ThemedRectangle {
+					id: ollamaPullBox
+					anchors.left: parent.left
+					anchors.right: parent.right
+					anchors.top: ollamaTitleRow.bottom
+					anchors.topMargin: 8
+					height: root.ollamaPulling ? 76 : 42
+					radius: ThemeEngine.radiusMedium
+					color: root.secondaryInsetColor
+
+					Behavior on height {
+						NumberAnimation {
+							duration: ThemeEngine.duration(120)
+							easing.type: ThemeEngine.standardEasing
+						}
+					}
+
+					TextField {
+						id: ollamaPullField
+						anchors.left: parent.left
+						anchors.leftMargin: 8
+						anchors.right: ollamaPullButton.left
+						anchors.rightMargin: 8
+						anchors.top: parent.top
+						anchors.topMargin: 7
+						height: 28
+						text: root.ollamaPullModel
+						color: root.foreground
+						placeholderText: "Model to pull, for example qwen3:4b"
+						placeholderTextColor: Qt.alpha(root.foreground, 0.45)
+						selectedTextColor: root.foreground
+						selectionColor: Qt.alpha(root.barColor, 0.3)
+						font.pixelSize: 11
+						leftPadding: 9
+						rightPadding: 9
+						enabled: !root.ollamaPulling
+						onTextChanged: root.ollamaPullModel = text
+						onAccepted: root.startOllamaPull(text)
+
+						background: ThemedRectangle {
+							radius: ThemeEngine.radiusMedium
+							color: root.secondaryBoxColor
+							border.width: ollamaPullField.activeFocus ? 1 : 0
+							border.color: Qt.alpha(root.barColor, 0.7)
+						}
+					}
+
+					ThemedRectangle {
+						id: ollamaPullButton
+						anchors.right: parent.right
+						anchors.rightMargin: 8
+						anchors.top: parent.top
+						anchors.topMargin: 7
+						width: 58
+						height: 28
+						radius: ThemeEngine.radiusMedium
+						opacity: root.ollamaPullModel.trim() !== "" && !root.ollamaPulling ? 1 : 0.45
+						color: ollamaPullMouse.containsMouse ? root.secondaryBoxStrongColor : root.secondaryBoxColor
+
+						MouseArea {
+							id: ollamaPullMouse
+							anchors.fill: parent
+							enabled: root.ollamaPullModel.trim() !== "" && !root.ollamaPulling
+							hoverEnabled: true
+							cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+							onClicked: root.startOllamaPull(root.ollamaPullModel)
+						}
+
+						AtelierText {
+							anchors.centerIn: parent
+							color: root.foreground
+							text: "Pull"
+							font.pixelSize: 11
+							font.weight: Font.DemiBold
+						}
+					}
+
+					Item {
+						anchors.left: parent.left
+						anchors.leftMargin: 8
+						anchors.right: parent.right
+						anchors.rightMargin: 8
+						anchors.top: ollamaPullField.bottom
+						anchors.topMargin: 6
+						height: 26
+						visible: root.ollamaPulling
+
+						AtelierText {
+							anchors.left: parent.left
+							anchors.right: ollamaPullDetails.left
+							anchors.rightMargin: 8
+							anchors.top: parent.top
+							color: Qt.alpha(root.foreground, 0.68)
+							text: root.ollamaPullStatus
+							elide: Text.ElideRight
+							font.pixelSize: 9
+							font.weight: Font.Medium
+						}
+
+						AtelierText {
+							id: ollamaPullDetails
+							anchors.right: parent.right
+							anchors.top: parent.top
+							color: Qt.alpha(root.foreground, 0.52)
+							text: [
+								root.ollamaPullTotal > 0 ? `${Math.round(root.ollamaPullProgress * 100)}%` : "",
+								root.formatTransferRate(root.ollamaPullSpeed),
+								root.formatDuration(root.ollamaPullEtaSeconds) !== ""
+									? `${root.formatDuration(root.ollamaPullEtaSeconds)} left`
+									: ""
+							].filter(value => value !== "").join(" · ")
+							font.pixelSize: 9
+							font.weight: Font.Medium
+						}
+
+						ThemedRectangle {
+							anchors.left: parent.left
+							anchors.right: parent.right
+							anchors.bottom: parent.bottom
+							height: 5
+							radius: ThemeEngine.radiusMedium
+							color: root.secondaryBoxStrongColor
+
+							ThemedRectangle {
+								width: parent.width * root.ollamaPullProgress
+								height: parent.height
+								radius: parent.radius
+								color: root.barColor
+							}
+						}
+					}
+				}
+
+				ThemedRectangle {
+					id: ollamaRunningBox
+					anchors.left: parent.left
+					anchors.right: parent.right
+					anchors.top: ollamaPullBox.bottom
+					anchors.topMargin: 8
+					height: 38
+					radius: ThemeEngine.radiusMedium
+					color: root.secondaryInsetColor
+
+					AtelierText {
+						anchors.left: parent.left
+						anchors.leftMargin: 10
+						anchors.verticalCenter: parent.verticalCenter
+						color: root.foreground
+						text: "Running"
+						font.pixelSize: 11
+						font.weight: Font.DemiBold
+					}
+
+					AtelierText {
+						anchors.left: parent.left
+						anchors.leftMargin: 70
+						anchors.right: parent.right
+						anchors.rightMargin: 10
+						anchors.verticalCenter: parent.verticalCenter
+						color: Qt.alpha(root.foreground, 0.58)
+						text: root.ollamaRunningSummary()
+						elide: Text.ElideRight
+						font.pixelSize: 10
+						font.weight: Font.Medium
+					}
+				}
+
+				ThemedRectangle {
+					id: ollamaInstalledBox
+					anchors.left: parent.left
+					anchors.right: parent.right
+					anchors.top: ollamaRunningBox.bottom
+					anchors.topMargin: 8
+					anchors.bottom: ollamaManagerErrorText.top
+					anchors.bottomMargin: ollamaManagerErrorText.visible ? 6 : 0
+					radius: ThemeEngine.radiusMedium
+					color: root.background
+					border.width: 1
+					border.color: Qt.alpha(root.barColor, 0.18)
+
+					AtelierText {
+						anchors.left: parent.left
+						anchors.leftMargin: 10
+						anchors.top: parent.top
+						anchors.topMargin: 7
+						color: root.foreground
+						text: `Installed · ${root.aiModels.length}`
+						font.pixelSize: 11
+						font.weight: Font.DemiBold
+					}
+
+					ListView {
+						id: ollamaInstalledList
+						anchors.left: parent.left
+						anchors.right: parent.right
+						anchors.top: parent.top
+						anchors.topMargin: 27
+						anchors.bottom: parent.bottom
+						anchors.margins: 6
+						clip: true
+						spacing: 4
+						model: root.aiModels
+						boundsBehavior: Flickable.StopAtBounds
+
+						delegate: ThemedRectangle {
+							id: ollamaModelRow
+
+							required property var modelData
+							required property int index
+							readonly property string modelName: String(modelData?.name || modelData?.model || "")
+							readonly property bool running: root.isOllamaModelRunning(modelName)
+							readonly property bool removing: root.ollamaRemovingModel === modelName
+
+							width: ollamaInstalledList.width
+							height: 48
+							radius: ThemeEngine.radiusMedium
+							color: ollamaModelMouse.containsMouse ? root.secondaryBoxColor : "transparent"
+
+							MouseArea {
+								id: ollamaModelMouse
+								anchors.fill: parent
+								hoverEnabled: true
+								acceptedButtons: Qt.NoButton
+							}
+
+							Column {
+								anchors.left: parent.left
+								anchors.leftMargin: 9
+								anchors.right: ollamaModelChatButton.left
+								anchors.rightMargin: 10
+								anchors.verticalCenter: parent.verticalCenter
+								spacing: 2
+
+								AtelierText {
+									width: parent.width
+									color: root.foreground
+									text: ollamaModelRow.modelName
+									elide: Text.ElideRight
+									font.pixelSize: 11
+									font.weight: Font.DemiBold
+								}
+
+								AtelierText {
+									width: parent.width
+									color: Qt.alpha(root.foreground, 0.5)
+									text: [
+										ollamaModelRow.running ? "Running" : "",
+										String(ollamaModelRow.modelData?.details?.parameter_size || ""),
+										String(ollamaModelRow.modelData?.details?.quantization_level || ""),
+										root.formatModelSize(ollamaModelRow.modelData?.size)
+									].filter(value => value !== "").join(" · ")
+									elide: Text.ElideRight
+									font.pixelSize: 9
+									font.weight: Font.Medium
+								}
+							}
+
+							ThemedRectangle {
+								id: ollamaModelChatButton
+								anchors.right: ollamaModelRemoveButton.left
+								anchors.rightMargin: 5
+								anchors.verticalCenter: parent.verticalCenter
+								width: 52
+								height: 26
+								radius: ThemeEngine.radiusMedium
+								opacity: root.aiStreaming ? 0.45 : 1
+								color: ollamaModelChatMouse.containsMouse ? root.secondaryBoxStrongColor : root.secondaryBoxColor
+
+								MouseArea {
+									id: ollamaModelChatMouse
+									anchors.fill: parent
+									enabled: !root.aiStreaming
+									hoverEnabled: true
+									cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+									onClicked: root.startNewChatWithModel(ollamaModelRow.modelName)
+								}
+
+								AtelierText {
+									anchors.centerIn: parent
+									color: root.foreground
+									text: "Chat"
+									font.pixelSize: 10
+									font.weight: Font.DemiBold
+								}
+							}
+
+							ThemedRectangle {
+								id: ollamaModelRemoveButton
+								anchors.right: parent.right
+								anchors.rightMargin: 7
+								anchors.verticalCenter: parent.verticalCenter
+								width: 26
+								height: 26
+								radius: ThemeEngine.radiusMedium
+								opacity: root.aiStreaming || ollamaRemoveProcess.running ? 0.45 : 1
+								color: ollamaModelRemoveMouse.containsMouse ? root.secondaryBoxStrongColor : "transparent"
+
+								MouseArea {
+									id: ollamaModelRemoveMouse
+									anchors.fill: parent
+									enabled: !root.aiStreaming && !ollamaRemoveProcess.running
+									hoverEnabled: true
+									cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+									onClicked: root.removeOllamaModel(ollamaModelRow.modelName)
+								}
+
+								AtelierText {
+									anchors.centerIn: parent
+									color: root.foreground
+									text: ollamaModelRow.removing ? "…" : "󰆴"
+									font.family: "CaskaydiaCove Nerd Font"
+									font.pixelSize: 15
+								}
+
+								ToolTip.visible: ollamaModelRemoveMouse.containsMouse
+								ToolTip.delay: 500
+								ToolTip.text: "Remove model"
+							}
+						}
+
+						ScrollBar.vertical: ScrollBar {
+							policy: ScrollBar.AsNeeded
+						}
+					}
+
+					AtelierText {
+						anchors.centerIn: parent
+						visible: !root.aiModelsLoading && root.aiModels.length === 0
+						color: Qt.alpha(root.foreground, 0.5)
+						text: "No models installed"
+						font.pixelSize: 11
+						font.weight: Font.Medium
+					}
+				}
+
+				AtelierText {
+					id: ollamaManagerErrorText
+					anchors.left: parent.left
+					anchors.right: parent.right
+					anchors.bottom: parent.bottom
+					height: visible ? 16 : 0
+					visible: root.ollamaManagerError !== ""
+						|| (!root.aiModelsLoading && root.aiModels.length === 0 && root.aiError !== "")
+					color: root.danger
+					text: root.ollamaManagerError !== "" ? root.ollamaManagerError : root.aiError
+					horizontalAlignment: Text.AlignHCenter
+					elide: Text.ElideRight
+					font.pixelSize: 10
+					font.weight: Font.Medium
+				}
+			}
+
+			Item {
+				id: chatPanel
+				width: parent.width
+				height: parent.height - searchBox.height - 12
+				visible: root.inChatMode
+
+				ThemedRectangle {
+					id: chatHeader
+					anchors.left: parent.left
+					anchors.right: parent.right
+					anchors.top: parent.top
+					height: 36
+					radius: ThemeEngine.radiusMedium
+					color: root.secondaryInsetColor
+					z: 2
+
+					ThemedRectangle {
+						id: chatBackButton
+						anchors.left: parent.left
+						anchors.leftMargin: 4
+						anchors.verticalCenter: parent.verticalCenter
+						width: 26
+						height: 26
+						radius: ThemeEngine.radiusMedium
+						color: chatBackMouse.containsMouse ? root.secondaryBoxStrongColor : "transparent"
+
+						MouseArea {
+							id: chatBackMouse
+							anchors.fill: parent
+							hoverEnabled: true
+							cursorShape: Qt.PointingHandCursor
+							onClicked: root.openAiOverview()
+						}
+
+						AtelierText {
+							anchors.centerIn: parent
+							color: root.foreground
+							text: "←"
+							font.pixelSize: 16
+							font.weight: Font.DemiBold
+						}
+					}
+
+					AtelierText {
+						anchors.left: chatBackButton.right
+						anchors.leftMargin: 8
+						anchors.right: chatControls.left
+						anchors.rightMargin: 8
+						anchors.verticalCenter: parent.verticalCenter
+						color: root.foreground
+						text: root.activeChat?.title || (root.aiTemporaryChatEnabled ? "Temporary chat" : "New chat")
+						elide: Text.ElideRight
+						font.pixelSize: 12
+						font.weight: Font.DemiBold
+					}
+
+						Row {
+							id: chatControls
+						anchors.right: parent.right
+						anchors.rightMargin: 6
+						anchors.verticalCenter: parent.verticalCenter
+						height: 28
+							spacing: 8
+
+							ComboBox {
+							id: chatModelCombo
+							anchors.verticalCenter: parent.verticalCenter
+							width: 132
+							height: 26
+							enabled: !root.aiStreaming && root.aiModels.length > 0
+							model: root.aiModels.map(model => String(model.name || model.model || ""))
+							currentIndex: Math.max(0, model.indexOf(root.selectedAiModel))
+							onActivated: root.selectAiModel(String(currentText))
+							leftPadding: 8
+							rightPadding: 22
+
+							delegate: ItemDelegate {
+								required property int index
+								required property var modelData
+								width: chatModelCombo.width
+								height: 30
+								highlighted: chatModelCombo.highlightedIndex === index
+								contentItem: AtelierText {
+									text: String(modelData)
+									color: root.foreground
+									font.pixelSize: 10
+									font.weight: highlighted ? Font.DemiBold : Font.Medium
+									verticalAlignment: Text.AlignVCenter
+									elide: Text.ElideRight
+								}
+								background: ThemedRectangle {
+									radius: ThemeEngine.radiusMedium
+									color: highlighted ? root.secondaryBoxStrongColor : "transparent"
+								}
+							}
+
+							indicator: AtelierText {
+								x: chatModelCombo.width - width - 7
+								y: (chatModelCombo.height - height) / 2
+								text: chatModelCombo.popup.visible ? "▴" : "▾"
+								color: root.foreground
+								font.pixelSize: 9
+							}
+
+							contentItem: AtelierText {
+								text: chatModelCombo.displayText || "No model"
+								color: root.foreground
+								font.pixelSize: 10
+								font.weight: Font.DemiBold
+								verticalAlignment: Text.AlignVCenter
+								elide: Text.ElideRight
+							}
+
+							background: ThemedRectangle {
+								radius: ThemeEngine.radiusMedium
+								color: root.secondaryBoxColor
+								border.width: chatModelCombo.visualFocus ? 1 : 0
+								border.color: Qt.alpha(root.barColor, 0.65)
+							}
+
+							popup: Popup {
+								y: chatModelCombo.height + 4
+								width: chatModelCombo.width
+								padding: 4
+								background: ThemedRectangle {
+									radius: ThemeEngine.radiusMedium
+									color: root.background
+									border.width: 1
+									border.color: Qt.alpha(root.barColor, 0.3)
+								}
+								contentItem: ListView {
+									clip: true
+									implicitHeight: Math.min(contentHeight, 220)
+									model: chatModelCombo.popup.visible ? chatModelCombo.delegateModel : null
+									currentIndex: chatModelCombo.highlightedIndex
+									ScrollBar.vertical: ScrollBar {}
+								}
+							}
+						}
+
+						Row {
+							anchors.verticalCenter: parent.verticalCenter
+							height: parent.height
+							spacing: 5
+							opacity: root.aiStreaming || !root.selectedAiSupportsThinking ? 0.5 : 1
+
+							AtelierText {
+								anchors.verticalCenter: parent.verticalCenter
+								color: Qt.alpha(root.foreground, 0.68)
+								text: "Think"
+								font.pixelSize: 10
+								font.weight: Font.Medium
+							}
+
+							ThemedRectangle {
+								anchors.verticalCenter: parent.verticalCenter
+								width: 32
+								height: 18
+								radius: ThemeEngine.radiusMedium
+								color: root.effectiveAiThinkingEnabled ? Qt.alpha(root.barColor, 0.72) : root.secondaryBoxStrongColor
+
+								ThemedRectangle {
+									width: 12
+									height: 12
+									radius: width / 2
+									x: root.effectiveAiThinkingEnabled ? parent.width - width - 3 : 3
+									anchors.verticalCenter: parent.verticalCenter
+									color: root.foreground
+
+									Behavior on x {
+										NumberAnimation {
+											duration: ThemeEngine.duration(120)
+											easing.type: ThemeEngine.standardEasing
+										}
+									}
+								}
+
+								MouseArea {
+									anchors.fill: parent
+									enabled: !root.aiStreaming && root.selectedAiSupportsThinking
+									cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+									onClicked: root.toggleAiThinking()
+								}
+							}
+							}
+
+							Row {
+								anchors.verticalCenter: parent.verticalCenter
+								height: parent.height
+								spacing: 5
+								opacity: root.aiStreaming ? 0.5 : 1
+
+								AtelierText {
+									anchors.verticalCenter: parent.verticalCenter
+									color: Qt.alpha(root.foreground, 0.68)
+									text: "Short"
+									font.pixelSize: 10
+									font.weight: Font.Medium
+								}
+
+								ThemedRectangle {
+									anchors.verticalCenter: parent.verticalCenter
+									width: 32
+									height: 18
+									radius: ThemeEngine.radiusMedium
+									color: root.aiShortResponseEnabled ? Qt.alpha(root.barColor, 0.72) : root.secondaryBoxStrongColor
+
+									ThemedRectangle {
+										width: 12
+										height: 12
+										radius: width / 2
+										x: root.aiShortResponseEnabled ? parent.width - width - 3 : 3
+										anchors.verticalCenter: parent.verticalCenter
+										color: root.foreground
+
+										Behavior on x {
+											NumberAnimation {
+												duration: ThemeEngine.duration(120)
+												easing.type: ThemeEngine.standardEasing
+											}
+										}
+									}
+
+									MouseArea {
+										anchors.fill: parent
+										enabled: !root.aiStreaming
+										cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+										onClicked: root.toggleShortResponse()
+									}
+								}
+							}
+
+							Row {
+								anchors.verticalCenter: parent.verticalCenter
+								height: parent.height
+								spacing: 5
+								opacity: root.aiStreaming ? 0.5 : 1
+
+								AtelierText {
+									anchors.verticalCenter: parent.verticalCenter
+									color: Qt.alpha(root.foreground, 0.68)
+									text: "Temporary"
+								font.pixelSize: 10
+								font.weight: Font.Medium
+							}
+
+							ThemedRectangle {
+								anchors.verticalCenter: parent.verticalCenter
+								width: 32
+								height: 18
+								radius: ThemeEngine.radiusMedium
+								color: root.aiTemporaryChatEnabled ? Qt.alpha(root.barColor, 0.72) : root.secondaryBoxStrongColor
+
+								ThemedRectangle {
+									width: 12
+									height: 12
+									radius: width / 2
+									x: root.aiTemporaryChatEnabled ? parent.width - width - 3 : 3
+									anchors.verticalCenter: parent.verticalCenter
+									color: root.foreground
+
+									Behavior on x {
+										NumberAnimation {
+											duration: ThemeEngine.duration(120)
+											easing.type: ThemeEngine.standardEasing
+										}
+									}
+								}
+
+								MouseArea {
+									anchors.fill: parent
+									enabled: !root.aiStreaming
+									cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+									onClicked: root.toggleTemporaryChat()
+								}
+							}
+						}
+					}
+				}
+
+				Row {
+					id: chatInfoBar
+					anchors.left: parent.left
+					anchors.right: parent.right
+					anchors.top: chatHeader.bottom
+					anchors.topMargin: 6
+					height: 20
+					spacing: 8
+
+					AtelierText {
+						anchors.verticalCenter: parent.verticalCenter
+						color: Qt.alpha(root.foreground, 0.58)
+						text: "Context"
+						font.pixelSize: 9
+						font.weight: Font.Medium
+					}
+
+					ThemedRectangle {
+						anchors.verticalCenter: parent.verticalCenter
+						width: 150
+						height: 5
+						radius: ThemeEngine.radiusMedium
+						color: root.secondaryBoxStrongColor
+
+						ThemedRectangle {
+							width: parent.width * root.activeContextProgress
+							height: parent.height
+							radius: parent.radius
+							color: root.activeContextProgress > 0.85 ? root.danger : root.barColor
+						}
+					}
+
+					AtelierText {
+						anchors.verticalCenter: parent.verticalCenter
+						color: Qt.alpha(root.foreground, 0.58)
+						text: `${root.formatTokenCount(root.activeContextUsed)} / ${root.formatTokenCount(root.activeContextLimit)}`
+						font.pixelSize: 9
+						font.weight: Font.Medium
+					}
+
+					AtelierText {
+						anchors.verticalCenter: parent.verticalCenter
+						visible: root.activeResponseTokens > 0
+						color: Qt.alpha(root.foreground, 0.58)
+						text: `${root.activeTokensPerSecond.toFixed(1)} tok/s · ${root.activeResponseTokens} tokens`
+						font.pixelSize: 9
+						font.weight: Font.Medium
+					}
+
+					AtelierText {
+						anchors.verticalCenter: parent.verticalCenter
+						visible: root.chatLoadedTimerText !== ""
+						color: root.chatLoadedModel
+							? Qt.alpha(root.foreground, 0.58)
+							: Qt.alpha(root.foreground, 0.42)
+						text: root.chatLoadedTimerText
+						elide: Text.ElideRight
+						font.pixelSize: 9
+						font.weight: Font.Medium
+					}
+				}
+
+				Item {
+					id: chatBody
+					anchors.left: parent.left
+					anchors.right: parent.right
+					anchors.top: chatInfoBar.bottom
+					anchors.topMargin: 6
+					anchors.bottom: pendingAttachmentBar.top
+					anchors.bottomMargin: pendingAttachmentBar.visible ? 6 : (chatError.visible ? 6 : 0)
+
+					ListView {
+						id: chatList
+						anchors.fill: parent
+						clip: true
+						spacing: 4
+						cacheBuffer: 800
+						reuseItems: false
+						model: chatMessageModel
+						boundsBehavior: Flickable.StopAtBounds
+
+						onContentHeightChanged: root.followChatImmediately()
+						onMovementStarted: root.chatAutoFollow = false
+						onMovementEnded: root.chatAutoFollow = root.chatNearEnd()
+
+						ScrollBar.vertical: ScrollBar {
+							policy: ScrollBar.AsNeeded
+						}
+
+						delegate: Item {
+							id: messageRow
+
+							required property var entry
+							required property int index
+							readonly property bool fromUser: entry.role === "user"
+							readonly property string responseModelName: !fromUser && String(entry.model || "") !== ""
+								? String(entry.model)
+								: ""
+							readonly property bool hasThinking:
+								entry.role === "assistant"
+								&& Boolean(root.activeChat?.thinkingEnabled)
+								&& String(entry.thinking || "") !== ""
+							readonly property bool loadingModel:
+								entry.role === "assistant"
+								&& entry.streaming
+								&& String(entry.content || "") === ""
+								&& String(entry.thinking || "") === ""
+							readonly property string displayText: String(entry.content || "") !== ""
+								? String(entry.content)
+								: (loadingModel ? "" : (entry.streaming ? "..." : ""))
+							readonly property var attachments: root.messageAttachments(entry)
+							readonly property var markdownSegments: root.markdownImageSegments(displayText)
+							readonly property bool hasMarkdownImages: markdownSegments.some(segment => segment.kind === "image")
+							readonly property string markdownTextOnly: markdownSegments
+								.filter(segment => segment.kind === "text")
+								.map(segment => String(segment.text || ""))
+								.join("\n")
+
+							width: chatList.width
+							height: messageBubble.height + 6
+
+								ThemedRectangle {
+									id: messageBubble
+									width: Math.min(
+										messageRow.width * 0.78,
+										Math.max(
+											messageRow.hasMarkdownImages || messageRow.attachments.length > 0 ? messageRow.width * 0.66 : 120,
+											Math.max(messageText.implicitWidth, thinkingText.implicitWidth, responseModelLabel.implicitWidth) + 24
+										)
+								)
+								height: messageRow.loadingModel
+									? 34
+									: messageBubbleBody.implicitHeight + 20
+								x: messageRow.fromUser ? messageRow.width - width : 0
+								radius: ThemeEngine.radiusMedium
+								color: messageRow.fromUser ? Qt.alpha(root.barColor, 0.24) : root.secondaryBoxColor
+								clip: true
+
+									AtelierText {
+										visible: messageRow.loadingModel
+										anchors.centerIn: parent
+										width: parent.width - 20
+										color: Qt.alpha(root.foreground, 0.58)
+										text: messageRow.responseModelName !== ""
+											? "Loading " + messageRow.responseModelName + "..."
+											: "Loading model..."
+										horizontalAlignment: Text.AlignHCenter
+										elide: Text.ElideRight
+										font.pixelSize: 12
+										font.weight: Font.Medium
+									}
+
+								Column {
+									id: messageBubbleBody
+									visible: !messageRow.loadingModel
+									anchors.left: parent.left
+									anchors.right: parent.right
+									anchors.top: parent.top
+										anchors.margins: 10
+										spacing: 6
+
+										AtelierText {
+											id: responseModelLabel
+											visible: messageRow.responseModelName !== ""
+											width: parent.width
+											color: Qt.alpha(root.foreground, 0.55)
+											text: messageRow.responseModelName
+											elide: Text.ElideRight
+											font.pixelSize: 10
+											font.weight: Font.DemiBold
+										}
+
+										ThemedRectangle {
+											id: thinkingHeader
+											visible: messageRow.hasThinking
+										width: parent.width
+										height: 18
+										radius: ThemeEngine.radiusSmall
+										color: root.secondaryInsetColor
+
+										MouseArea {
+											anchors.fill: parent
+											enabled: messageRow.hasThinking
+											cursorShape: Qt.PointingHandCursor
+											onClicked: root.toggleThinkingExpanded(messageRow.entry.id)
+										}
+
+										AtelierText {
+											anchors.left: parent.left
+											anchors.leftMargin: 6
+											anchors.verticalCenter: parent.verticalCenter
+											color: Qt.alpha(root.foreground, 0.55)
+											text: messageRow.entry.streaming && String(messageRow.entry.thinking || "") !== ""
+												? "Thinking..."
+												: (root.thinkingExpanded(messageRow.entry.id) ? "Thinking" : "Thinking hidden")
+											font.pixelSize: 10
+											font.weight: Font.Medium
+										}
+
+										AtelierText {
+											anchors.right: parent.right
+											anchors.rightMargin: 6
+											anchors.verticalCenter: parent.verticalCenter
+											color: Qt.alpha(root.foreground, 0.45)
+											text: root.thinkingExpanded(messageRow.entry.id) ? "▾" : "▸"
+											font.pixelSize: 10
+											font.weight: Font.DemiBold
+											}
+										}
+
+										Flow {
+											visible: messageRow.attachments.length > 0
+											width: parent.width
+											height: implicitHeight
+											spacing: 5
+
+											Repeater {
+												model: messageRow.attachments
+
+												delegate: ThemedRectangle {
+													id: sentAttachmentChip
+
+													required property var modelData
+
+													width: Math.min(messageBubbleBody.width, Math.max(112, sentAttachmentName.implicitWidth + 42))
+													height: 28
+													radius: ThemeEngine.radiusSmall
+													color: root.secondaryInsetColor
+													opacity: String(modelData.status || "") === "unavailable" ? 0.58 : 1
+
+													Image {
+														visible: sentAttachmentChip.modelData.kind === "image"
+														anchors.left: parent.left
+														anchors.leftMargin: 4
+														anchors.verticalCenter: parent.verticalCenter
+														width: 20
+														height: 20
+														source: sentAttachmentChip.modelData.kind === "image"
+															? root.resolveMarkdownImageSource(sentAttachmentChip.modelData.path)
+															: ""
+														fillMode: Image.PreserveAspectCrop
+														smooth: true
+														cache: true
+													}
+
+													QQCImpl.IconImage {
+														visible: sentAttachmentChip.modelData.kind !== "image"
+														anchors.left: parent.left
+														anchors.leftMargin: 6
+														anchors.verticalCenter: parent.verticalCenter
+														width: 16
+														height: 16
+														source: root.attachmentIconPath
+														sourceSize: Qt.size(width, height)
+														color: root.foreground
+													}
+
+													AtelierText {
+														id: sentAttachmentName
+														anchors.left: parent.left
+														anchors.leftMargin: 30
+														anchors.right: parent.right
+														anchors.rightMargin: 7
+														anchors.verticalCenter: parent.verticalCenter
+														color: root.foreground
+														text: String(sentAttachmentChip.modelData.name || "Attachment")
+														elide: Text.ElideMiddle
+														font.pixelSize: 10
+														font.weight: Font.Medium
+													}
+
+													ToolTip.visible: sentAttachmentHover.containsMouse
+													ToolTip.delay: 500
+													ToolTip.text: String(sentAttachmentChip.modelData.status || "") === "unavailable"
+														? "Attachment content is not available after restart"
+														: String(sentAttachmentChip.modelData.name || "Attachment")
+
+													MouseArea {
+														id: sentAttachmentHover
+														anchors.fill: parent
+														hoverEnabled: true
+														acceptedButtons: Qt.NoButton
+													}
+												}
+											}
+										}
+
+										TextEdit {
+											id: thinkingText
+										visible: messageRow.hasThinking && root.thinkingExpanded(messageRow.entry.id)
+										width: parent.width
+										color: Qt.alpha(root.foreground, 0.62)
+										text: String(messageRow.entry.thinking || "")
+										textFormat: TextEdit.MarkdownText
+										baseUrl: Qt.resolvedUrl(".")
+										wrapMode: TextEdit.Wrap
+										readOnly: true
+										selectByMouse: true
+										persistentSelection: true
+										selectionColor: Qt.alpha(root.barColor, 0.35)
+										selectedTextColor: root.foreground
+										font.pixelSize: 11
+										onLinkActivated: link => Qt.openUrlExternally(link)
+										onSelectedTextChanged: root.updateChatSelection(selectedText)
+
+										HoverHandler {
+											cursorShape: thinkingText.hoveredLink !== ""
+												? Qt.PointingHandCursor
+												: Qt.IBeamCursor
+										}
+									}
+
+									TextEdit {
+										id: messageText
+										visible: String(messageRow.displayText || "") !== "" && !messageRow.hasMarkdownImages
+										width: parent.width
+										color: root.foreground
+										text: messageRow.hasMarkdownImages ? messageRow.markdownTextOnly : messageRow.displayText
+										textFormat: TextEdit.MarkdownText
+										baseUrl: Qt.resolvedUrl(".")
+										wrapMode: TextEdit.Wrap
+										readOnly: true
+										selectByMouse: true
+										persistentSelection: true
+										selectionColor: Qt.alpha(root.barColor, 0.55)
+										selectedTextColor: root.foreground
+										font.pixelSize: 12
+										onLinkActivated: link => Qt.openUrlExternally(link)
+										onSelectedTextChanged: root.updateChatSelection(selectedText)
+
+										HoverHandler {
+											cursorShape: messageText.hoveredLink !== ""
+												? Qt.PointingHandCursor
+												: Qt.IBeamCursor
+										}
+									}
+
+									Column {
+										id: markdownImageContent
+										visible: messageRow.hasMarkdownImages
+										width: parent.width
+										spacing: 8
+
+										Repeater {
+											model: messageRow.markdownSegments
+
+											delegate: Item {
+												id: markdownSegment
+
+												required property var modelData
+
+												width: markdownImageContent.width
+												height: modelData.kind === "image"
+													? markdownImageFrame.height
+													: markdownSegmentText.implicitHeight
+
+												TextEdit {
+													id: markdownSegmentText
+													visible: markdownSegment.modelData.kind === "text"
+													width: parent.width
+													color: root.foreground
+													text: String(markdownSegment.modelData.text || "")
+													textFormat: TextEdit.MarkdownText
+													baseUrl: Qt.resolvedUrl(".")
+													wrapMode: TextEdit.Wrap
+													readOnly: true
+													selectByMouse: true
+													persistentSelection: true
+													selectionColor: Qt.alpha(root.barColor, 0.55)
+													selectedTextColor: root.foreground
+													font.pixelSize: 12
+													onLinkActivated: link => Qt.openUrlExternally(link)
+													onSelectedTextChanged: root.updateChatSelection(selectedText)
+
+													HoverHandler {
+														cursorShape: markdownSegmentText.hoveredLink !== ""
+															? Qt.PointingHandCursor
+															: Qt.IBeamCursor
+													}
+												}
+
+												ThemedRectangle {
+													id: markdownImageFrame
+													visible: markdownSegment.modelData.kind === "image"
+													width: parent.width
+													height: !visible
+														? 0
+														: (markdownImage.status === Image.Ready && markdownImage.sourceSize.width > 0
+															? Math.min(280, Math.max(80, width * markdownImage.sourceSize.height / markdownImage.sourceSize.width))
+															: (markdownImage.status === Image.Error ? 64 : 96))
+													radius: ThemeEngine.radiusSmall
+													color: root.secondaryInsetColor
+													clip: true
+
+													Image {
+														id: markdownImage
+														anchors.fill: parent
+														anchors.margins: 4
+														source: root.resolveMarkdownImageSource(markdownSegment.modelData.source)
+														fillMode: Image.PreserveAspectFit
+														asynchronous: true
+														cache: true
+														smooth: true
+														mipmap: true
+													}
+
+													AtelierText {
+														anchors.centerIn: parent
+														width: parent.width - 20
+														visible: markdownImage.status === Image.Loading
+														color: Qt.alpha(root.foreground, 0.5)
+														text: "Loading image..."
+														horizontalAlignment: Text.AlignHCenter
+														font.pixelSize: 11
+													}
+
+													AtelierText {
+														anchors.centerIn: parent
+														width: parent.width - 20
+														visible: markdownImage.status === Image.Error
+														color: Qt.alpha(root.foreground, 0.58)
+														text: String(markdownSegment.modelData.alt || "Image could not be loaded")
+														horizontalAlignment: Text.AlignHCenter
+														elide: Text.ElideRight
+														font.pixelSize: 11
+													}
+
+													MouseArea {
+														anchors.fill: parent
+														hoverEnabled: true
+														cursorShape: Qt.PointingHandCursor
+														onClicked: Qt.openUrlExternally(root.resolveMarkdownImageSource(markdownSegment.modelData.source))
+													}
+												}
+											}
+										}
+									}
+								}
+							}
+
+							ThemedRectangle {
+								id: editMessageButton
+								x: messageBubble.x - width - 6
+								anchors.verticalCenter: messageBubble.verticalCenter
+								width: 24
+								height: 24
+								radius: ThemeEngine.radiusMedium
+								visible: messageRow.fromUser
+								opacity: root.aiStreaming ? 0.45 : 1
+								color: editMessageMouse.containsMouse ? root.secondaryBoxStrongColor : "transparent"
+
+								MouseArea {
+									id: editMessageMouse
+									anchors.fill: parent
+									enabled: !root.aiStreaming
+									hoverEnabled: true
+									cursorShape: Qt.PointingHandCursor
+									onClicked: root.beginEditMessage(messageRow.entry)
+								}
+
+								AtelierText {
+									anchors.centerIn: parent
+									color: root.foreground
+									text: "✎"
+									font.pixelSize: 16
+									font.weight: Font.DemiBold
+								}
+							}
+						}
+					}
+
+					AtelierText {
+						anchors.centerIn: parent
+						width: parent.width - 40
+						visible: root.activeMessages.length === 0
+						color: Qt.alpha(root.foreground, 0.5)
+						text: root.selectedAiModel === ""
+							? "Type >chat to start a new chat"
+							: "Type >chat followed by a message"
+						horizontalAlignment: Text.AlignHCenter
+						wrapMode: Text.WordWrap
+						font.pixelSize: 13
+						font.weight: Font.Medium
+					}
+				}
+
+				ThemedRectangle {
+					id: pendingAttachmentBar
+					anchors.left: parent.left
+					anchors.right: parent.right
+					anchors.bottom: chatError.top
+					anchors.bottomMargin: chatError.visible ? 5 : 0
+					height: visible ? 38 : 0
+					visible: root.aiPendingAttachments.length > 0
+					radius: ThemeEngine.radiusMedium
+					color: root.secondaryInsetColor
+
+					ListView {
+						anchors.fill: parent
+						anchors.margins: 5
+						orientation: ListView.Horizontal
+						spacing: 5
+						clip: true
+						model: root.aiPendingAttachments
+						boundsBehavior: Flickable.StopAtBounds
+
+						delegate: ThemedRectangle {
+							id: pendingAttachmentChip
+
+							required property var modelData
+
+							width: 148
+							height: 28
+							radius: ThemeEngine.radiusSmall
+							color: root.secondaryBoxColor
+							border.width: String(modelData.status || "") === "loading" ? 1 : 0
+							border.color: Qt.alpha(root.barColor, 0.55)
+							opacity: pendingAttachmentChip.modelData.kind === "image" && !root.selectedAiSupportsVision ? 0.48 : 1
+
+							Image {
+								visible: pendingAttachmentChip.modelData.kind === "image"
+								anchors.left: parent.left
+								anchors.leftMargin: 4
+								anchors.verticalCenter: parent.verticalCenter
+								width: 20
+								height: 20
+								source: pendingAttachmentChip.modelData.kind === "image"
+									? root.resolveMarkdownImageSource(pendingAttachmentChip.modelData.path)
+									: ""
+								fillMode: Image.PreserveAspectCrop
+								smooth: true
+								cache: true
+							}
+
+							QQCImpl.IconImage {
+								visible: pendingAttachmentChip.modelData.kind !== "image"
+								anchors.left: parent.left
+								anchors.leftMargin: 6
+								anchors.verticalCenter: parent.verticalCenter
+								width: 16
+								height: 16
+								source: root.attachmentIconPath
+								sourceSize: Qt.size(width, height)
+								color: root.foreground
+							}
+
+							AtelierText {
+								anchors.left: parent.left
+								anchors.leftMargin: 29
+								anchors.right: pendingAttachmentRemove.left
+								anchors.rightMargin: 4
+								anchors.verticalCenter: parent.verticalCenter
+								color: root.foreground
+								text: String(pendingAttachmentChip.modelData.status || "") === "loading"
+									? `Reading ${pendingAttachmentChip.modelData.name || "file"}...`
+									: String(pendingAttachmentChip.modelData.name || "Attachment")
+								elide: Text.ElideMiddle
+								font.pixelSize: 10
+								font.weight: Font.Medium
+							}
+
+							ThemedRectangle {
+								id: pendingAttachmentRemove
+								anchors.right: parent.right
+								anchors.rightMargin: 3
+								anchors.verticalCenter: parent.verticalCenter
+								width: 21
+								height: 21
+								radius: ThemeEngine.radiusSmall
+								color: pendingAttachmentRemoveMouse.containsMouse ? root.secondaryBoxStrongColor : "transparent"
+
+								MouseArea {
+									id: pendingAttachmentRemoveMouse
+									anchors.fill: parent
+									hoverEnabled: true
+									cursorShape: Qt.PointingHandCursor
+									onClicked: root.removePendingAttachment(pendingAttachmentChip.modelData.id)
+								}
+
+								AtelierText {
+									anchors.centerIn: parent
+									color: root.foreground
+									text: "x"
+									font.pixelSize: 11
+									font.weight: Font.DemiBold
+								}
+							}
+						}
+					}
+				}
+
+				AtelierText {
+					id: chatError
+					anchors.left: parent.left
+					anchors.right: parent.right
+					anchors.bottom: parent.bottom
+					height: visible ? 18 : 0
+					visible: root.aiError !== ""
+					color: root.danger
+					text: root.aiError
+					horizontalAlignment: Text.AlignHCenter
+					elide: Text.ElideRight
+					font.pixelSize: 11
+					font.weight: Font.Medium
+				}
+			}
+
+
 		}
 	}
 
@@ -4980,7 +4994,7 @@ Item {
 					onClicked: root.aiAttachmentDirectory = root.attachmentParentDirectory(root.aiAttachmentDirectory)
 				}
 
-				Text {
+				AtelierText {
 					anchors.centerIn: parent
 					color: root.foreground
 					text: "↑"
@@ -4989,7 +5003,7 @@ Item {
 				}
 			}
 
-			Text {
+			AtelierText {
 				anchors.left: attachmentUpButton.right
 				anchors.leftMargin: 7
 				anchors.right: attachmentDoneButton.left
@@ -5020,7 +5034,7 @@ Item {
 					onClicked: root.closeAttachmentPicker()
 				}
 
-				Text {
+				AtelierText {
 					anchors.centerIn: parent
 					color: root.foreground
 					text: "Done"
@@ -5068,7 +5082,7 @@ Item {
 						onClicked: root.aiAttachmentDirectory = String(attachmentShortcut.modelData.path)
 					}
 
-					Text {
+					AtelierText {
 						id: attachmentShortcutText
 						anchors.centerIn: parent
 						color: root.foreground
@@ -5079,7 +5093,7 @@ Item {
 				}
 			}
 
-			Text {
+			AtelierText {
 				anchors.verticalCenter: parent.verticalCenter
 				width: Math.max(0, parent.width - x)
 				color: Qt.alpha(root.foreground, 0.5)
@@ -5176,7 +5190,7 @@ Item {
 					anchors.verticalCenter: parent.verticalCenter
 					spacing: 1
 
-					Text {
+					AtelierText {
 						width: parent.width
 						color: root.foreground
 						text: String(attachmentFileRow.file.name || "")
@@ -5185,7 +5199,7 @@ Item {
 						font.weight: Font.Medium
 					}
 
-					Text {
+					AtelierText {
 						width: parent.width
 						color: Qt.alpha(root.foreground, 0.5)
 						text: attachmentFileRow.file.isDir
@@ -5198,7 +5212,7 @@ Item {
 					}
 				}
 
-				Text {
+				AtelierText {
 					id: attachmentFileState
 					anchors.right: parent.right
 					anchors.rightMargin: 12
@@ -5217,7 +5231,7 @@ Item {
 			}
 		}
 
-		Text {
+		AtelierText {
 			anchors.centerIn: attachmentFileList
 			visible: attachmentFileList.count === 0
 			color: Qt.alpha(root.foreground, 0.5)

@@ -35,7 +35,7 @@ ThemedRectangle {
 	}
 
 	radius: ThemeEngine.radiusMedium
-	color: root.background
+	color: "transparent"
 	clip: !ThemeEngine.shadowEnabled
 	implicitHeight: 30
 	implicitWidth: Math.min(taskContent.implicitWidth + horizontalPadding * 2, 520)
@@ -67,6 +67,13 @@ ThemedRectangle {
 					radius: ThemeEngine.radiusMedium
 					color: task.isFocused ? root.focusedColor : (hovered ? root.hoverColor : root.background)
 					border.width: task.isUrgent ? 1 : 0
+                    Rectangle {
+                        anchors.bottom: parent.bottom
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: parent.task.isFocused ? 16 : 3
+                        height: 2
+                        color: parent.task.isFocused ? Atelier.accent : Atelier.muted
+                    }
 					border.color: root.secondaryBoxStrongColor
 
 					Behavior on color {

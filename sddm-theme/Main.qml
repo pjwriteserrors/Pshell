@@ -10,9 +10,9 @@ Item {
 	height: 1080
 	focus: true
 
-	property color foreground: config.foreground
-	property color background: config.background
-	property color primary: config.primary
+	property color foreground: "#f0eee5"
+	property color background: "#161917"
+	property color primary: "#f3a46b"
 	property color danger: config.danger
 	property string mediaType: config.mediaType
 	property date now: new Date()
@@ -142,17 +142,17 @@ Item {
 		id: lockContent
 
 		width: Math.min(420, Math.max(260, root.width - 48))
-		x: Math.round((root.width - width) / 2)
-		y: Math.round((root.height - implicitHeight) / 2)
+		x: Math.max(32, Math.round(root.width * 0.1))
+		y: Math.round((root.height - implicitHeight) * 0.6)
 		spacing: 18
 
 		Text {
 			width: parent.width
 			color: root.foreground
 			text: Qt.formatDateTime(root.now, "HH:mm")
-			horizontalAlignment: Text.AlignHCenter
-			font.family: protoFont.status === FontLoader.Ready ? protoFont.name : "monospace"
-			font.pixelSize: 92
+			horizontalAlignment: Text.AlignLeft
+			font.family: "DejaVu Serif"
+			font.pixelSize: 104
 			font.weight: Font.DemiBold
 		}
 
@@ -160,7 +160,7 @@ Item {
 			width: parent.width
 			color: root.alpha(root.foreground, 0.76)
 			text: Qt.formatDateTime(root.now, "dddd, dd. MMMM yyyy")
-			horizontalAlignment: Text.AlignHCenter
+			horizontalAlignment: Text.AlignLeft
 			font.pixelSize: 16
 			font.weight: Font.Medium
 		}
@@ -177,7 +177,7 @@ Item {
 			horizontalAlignment: TextInput.AlignHCenter
 			font.pixelSize: 14
 			background: Rectangle {
-				radius: 7
+				radius: 2
 				color: Qt.tint(root.background, root.alpha(root.primary, 0.1))
 				border.width: 1
 				border.color: root.alpha(root.primary, 0.35)
@@ -206,7 +206,7 @@ Item {
 
 			width: parent.width
 			height: 56
-			radius: 7
+			radius: 2
 			color: Qt.tint(root.background, root.alpha(root.primary, 0.1))
 			border.width: 1
 			border.color: root.alpha(root.primary, 0.35)
@@ -259,7 +259,7 @@ Item {
 					width: 18
 					color: root.foreground
 					text: "\uf023"
-					horizontalAlignment: Text.AlignHCenter
+					horizontalAlignment: Text.AlignLeft
 					font.family: protoFont.status === FontLoader.Ready ? protoFont.name : "monospace"
 					font.pixelSize: 17
 					opacity: root.authenticating ? 0.42 : (passwordBox.inputLength > 0 ? 0.92 : 0.78)
@@ -333,7 +333,7 @@ Item {
 							anchors.centerIn: parent
 							width: parent.width
 							height: 4
-							radius: 7
+							radius: 2
 							color: root.alpha(root.foreground, 0.18)
 						}
 
@@ -342,7 +342,7 @@ Item {
 							anchors.left: parent.left
 							width: parent.width * passwordBox.inputLevel
 							height: 4
-							radius: 7
+							radius: 2
 							color: root.alpha(root.foreground, 0.72 + passwordBox.typePulse * 0.18)
 
 							Behavior on width {
@@ -356,7 +356,7 @@ Item {
 						Rectangle {
 							width: Math.max(26, parent.width * 0.34)
 							height: 10
-							radius: 7
+							radius: 2
 							x: (parent.width + width) * passwordBox.typeSweep - width
 							y: Math.round((parent.height - height) / 2)
 							color: root.alpha(root.foreground, 0.24)
@@ -373,7 +373,7 @@ Item {
 			color: root.authState === "checking" || root.capsLockOn
 				? root.alpha(root.foreground, 0.72) : root.danger
 			text: root.statusText
-			horizontalAlignment: Text.AlignHCenter
+			horizontalAlignment: Text.AlignLeft
 			verticalAlignment: Text.AlignVCenter
 			font.pixelSize: 13
 			font.weight: Font.Medium
@@ -433,7 +433,7 @@ Item {
 
 		width: Math.max(38, footerLabel.implicitWidth + 20)
 		height: 34
-		radius: 7
+		radius: 2
 		color: footerMouse.containsMouse ? root.alpha(root.background, 0.34) : root.alpha(root.background, 0.16)
 		border.width: 1
 		border.color: root.alpha(root.primary, footerMouse.containsMouse ? 0.5 : 0.3)

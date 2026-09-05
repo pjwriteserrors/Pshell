@@ -13,7 +13,7 @@ Item {
 	id: sheet
 
 	required property bool open
-	property real scrimOpacity: 0.3
+	property real scrimOpacity: 0.64
 	property string mode: "center"   // "center" | "bottom"
 	property real sheetWidth: 400
 	property real sheetHeight: 300

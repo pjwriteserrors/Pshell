@@ -275,8 +275,8 @@ Item {
 	ThemedRectangle {
 		anchors.fill: parent
 		radius: ThemeEngine.radiusLarge
-		color: Qt.alpha(root.secondaryInsetColor, 0.97)
-		border.width: 1
+		color: root.background
+		border.width: 0
 		border.color: Qt.alpha(root.barColor, 0.34)
 		clip: true
 	}
@@ -333,7 +333,7 @@ Item {
 			color: addMouse.containsMouse ? Qt.alpha(root.barColor, 0.32) : Qt.alpha(root.barColor, 0.16)
 			border.width: 1
 			border.color: Qt.alpha(root.barColor, 0.5)
-			Text { anchors.centerIn: parent; color: root.foreground; font.pixelSize: 22; text: "+" }
+			AtelierText { anchors.centerIn: parent; color: root.foreground; display: true; font.pixelSize: 22; text: "+" }
 			MouseArea { id: addMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.openComposer() }
 		}
 
@@ -346,7 +346,7 @@ Item {
 			height: 30
 			radius: ThemeEngine.radiusMedium
 			color: closeMouse.containsMouse ? Qt.alpha(root.barColor, 0.18) : "transparent"
-			Text { anchors.centerIn: parent; color: root.foreground; font.pixelSize: 14; text: "x" }
+			AtelierText { anchors.centerIn: parent; color: root.foreground; font.pixelSize: 14; text: "x" }
 			MouseArea { id: closeMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.closeRequested() }
 		}
 	}
@@ -361,7 +361,7 @@ Item {
 		height: errorLabel.implicitHeight + 16
 		radius: ThemeEngine.radiusMedium
 		color: Qt.alpha(root.danger, 0.9)
-		Text { id: errorLabel; anchors.centerIn: parent; width: Math.min(implicitWidth, root.width - 140); wrapMode: Text.Wrap; color: "white"; font.pixelSize: 12; text: root.errorText }
+		AtelierText { id: errorLabel; anchors.centerIn: parent; width: Math.min(implicitWidth, root.width - 140); wrapMode: Text.Wrap; color: "white"; font.pixelSize: 12; text: root.errorText }
 	}
 
 	Item {
@@ -392,14 +392,14 @@ Item {
 				readonly property int distance: Math.abs(offset)
 				readonly property bool active: offset === 0
 				readonly property var preset: root.filteredPresets[index]
-				visible: distance <= 2
+				visible: active
 				z: 8 - distance
-				width: Math.max(420, Math.min(stackArea.width * 0.62, 690)) - distance * 54
-				height: Math.max(280, Math.min(stackArea.height * 0.78, 470)) - distance * 42
+				width: Math.max(1, stackArea.width - 48)
+				height: Math.max(1, stackArea.height - 24)
 				anchors.horizontalCenter: parent.horizontalCenter
-				y: 12 + distance * 94 + (offset < 0 ? -30 : offset > 0 ? 30 : 0)
-				opacity: active ? 1 : distance === 1 ? 0.5 : 0.16
-				scale: active ? 1 : distance === 1 ? 0.92 : 0.84
+				y: 12
+				opacity: 1
+				scale: 1
 				Behavior on y { NumberAnimation { duration: ThemeEngine.duration(220); easing.type: ThemeEngine.standardEasing } }
 				Behavior on opacity { NumberAnimation { duration: ThemeEngine.duration(180) } }
 				Behavior on scale { NumberAnimation { duration: ThemeEngine.duration(220); easing.type: ThemeEngine.standardEasing } }
@@ -408,7 +408,7 @@ Item {
 					anchors.fill: parent
 					radius: ThemeEngine.radiusMedium
 					color: root.secondaryBoxColor
-					border.width: active ? 2 : 0
+					border.width: 0
 					border.color: presetCard.preset.valid ? Qt.alpha(root.barColor, 0.82) : Qt.alpha(root.danger, 0.8)
 					clip: true
 
@@ -448,7 +448,7 @@ Item {
 								color: Qt.rgba(0, 0, 0, 0.62)
 								border.width: 1
 								border.color: Qt.rgba(255, 255, 255, 0.22)
-								Text { id: badgeLabel; anchors.centerIn: parent; color: "white"; font.pixelSize: 10; font.weight: Font.DemiBold; text: parent.modelData }
+								AtelierText { id: badgeLabel; anchors.centerIn: parent; color: "white"; font.pixelSize: 10; font.weight: Font.DemiBold; text: parent.modelData }
 							}
 						}
 					}
@@ -480,9 +480,9 @@ Item {
 						anchors.bottom: parent.bottom
 						anchors.margins: 22
 						spacing: 5
-						Text { width: parent.width; color: "white"; font.pixelSize: 25; font.weight: Font.DemiBold; elide: Text.ElideRight; text: presetCard.preset.name || "Style" }
-						Text { width: parent.width; color: Qt.rgba(255, 255, 255, 0.72); font.pixelSize: 12; elide: Text.ElideRight; text: `${presetCard.preset.wallpaperName || "Wallpaper"}  ·  ${presetCard.preset.themeName || "Theme"}  ·  ${presetCard.preset.animationName || "Animation"}  ·  ${presetCard.preset.palette || "salience"}/${presetCard.preset.style || "dark"}` }
-						Text { visible: !presetCard.preset.valid; color: "#ffb7b7"; font.pixelSize: 11; text: "A referenced wallpaper, theme or animation is missing" }
+						AtelierText { width: parent.width; color: "white"; display: true; font.pixelSize: 25; font.weight: Font.DemiBold; elide: Text.ElideRight; text: presetCard.preset.name || "Style" }
+						AtelierText { width: parent.width; color: Qt.rgba(255, 255, 255, 0.72); font.pixelSize: 12; elide: Text.ElideRight; text: `${presetCard.preset.wallpaperName || "Wallpaper"}  ·  ${presetCard.preset.themeName || "Theme"}  ·  ${presetCard.preset.animationName || "Animation"}  ·  ${presetCard.preset.palette || "salience"}/${presetCard.preset.style || "dark"}` }
+						AtelierText { visible: !presetCard.preset.valid; color: "#ffb7b7"; font.pixelSize: 11; text: "A referenced wallpaper, theme or animation is missing" }
 					}
 
 					MouseArea {
@@ -501,8 +501,8 @@ Item {
 		visible: root.filteredPresets.length === 0
 		anchors.centerIn: parent
 		spacing: 10
-		Text { anchors.horizontalCenter: parent.horizontalCenter; color: root.foreground; font.pixelSize: 20; font.weight: Font.DemiBold; text: root.presets.length === 0 ? "No style presets yet" : "No matching style presets" }
-		Text { anchors.horizontalCenter: parent.horizontalCenter; color: Qt.alpha(root.foreground, 0.58); font.pixelSize: 12; text: root.presets.length === 0 ? "Use + to combine a wallpaper, interface theme and animation" : "Try another search" }
+		AtelierText { anchors.horizontalCenter: parent.horizontalCenter; color: root.foreground; font.pixelSize: 20; font.weight: Font.DemiBold; text: root.presets.length === 0 ? "No style presets yet" : "No matching style presets" }
+		AtelierText { anchors.horizontalCenter: parent.horizontalCenter; color: Qt.alpha(root.foreground, 0.58); font.pixelSize: 12; text: root.presets.length === 0 ? "Use + to combine a wallpaper, interface theme and animation" : "Try another search" }
 	}
 
 	Row {
@@ -512,8 +512,8 @@ Item {
 		anchors.horizontalCenter: parent.horizontalCenter
 		height: 28
 		spacing: 12
-		Text { color: Qt.alpha(root.foreground, 0.62); font.pixelSize: 11; text: `${root.filteredPresets.length} presets` }
-		Text { color: Qt.alpha(root.foreground, 0.38); font.pixelSize: 11; text: "↑↓ browse  ·  Enter apply  ·  + create" }
+		AtelierText { color: Qt.alpha(root.foreground, 0.62); font.pixelSize: 11; text: `${root.filteredPresets.length} presets` }
+		AtelierText { color: Qt.alpha(root.foreground, 0.38); font.pixelSize: 11; text: "↑↓ browse  ·  Enter apply  ·  + create" }
 	}
 
 	ThemedRectangle {
@@ -538,8 +538,8 @@ Item {
 				Column {
 					width: parent.width - composerClose.width - 14
 					spacing: 3
-					Text { color: root.foreground; font.pixelSize: 22; font.weight: Font.DemiBold; text: "Create style preset" }
-					Text { color: Qt.alpha(root.foreground, 0.6); font.pixelSize: 11; text: "Choose wallpaper, colors, interface style and window animation" }
+					AtelierText { color: root.foreground; display: true; font.pixelSize: 22; font.weight: Font.DemiBold; text: "Create style preset" }
+					AtelierText { color: Qt.alpha(root.foreground, 0.6); font.pixelSize: 11; text: "Choose wallpaper, colors, interface style and window animation" }
 				}
 				ThemedRectangle {
 					id: composerClose
@@ -547,7 +547,7 @@ Item {
 					height: 38
 					radius: ThemeEngine.radiusMedium
 					color: composerCloseMouse.containsMouse ? Qt.alpha(root.barColor, 0.2) : "transparent"
-					Text { anchors.centerIn: parent; color: root.foreground; text: "x" }
+					AtelierText { anchors.centerIn: parent; color: root.foreground; text: "x" }
 					MouseArea { id: composerCloseMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.composerOpen = false }
 				}
 			}
@@ -661,7 +661,7 @@ Item {
 					height: 40
 					radius: ThemeEngine.radiusMedium
 					color: cancelMouse.containsMouse ? Qt.alpha(root.foreground, 0.1) : root.secondaryBoxColor
-					Text { anchors.centerIn: parent; color: root.foreground; font.pixelSize: 12; text: "Cancel" }
+					AtelierText { anchors.centerIn: parent; color: root.foreground; font.pixelSize: 12; text: "Cancel" }
 					MouseArea { id: cancelMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.composerOpen = false }
 				}
 				ThemedRectangle {
@@ -671,7 +671,7 @@ Item {
 					color: root.canSave ? Qt.alpha(root.barColor, saveMouse.containsMouse ? 0.48 : 0.32) : Qt.alpha(root.secondaryBoxColor, 0.5)
 					border.width: root.canSave ? 1 : 0
 					border.color: Qt.alpha(root.barColor, 0.62)
-					Text { anchors.centerIn: parent; color: root.canSave ? root.foreground : Qt.alpha(root.foreground, 0.42); font.pixelSize: 12; font.weight: Font.DemiBold; text: root.mutationRunning ? "Saving…" : "Save preset" }
+					AtelierText { anchors.centerIn: parent; color: root.canSave ? root.foreground : Qt.alpha(root.foreground, 0.42); font.pixelSize: 12; font.weight: Font.DemiBold; text: root.mutationRunning ? "Saving…" : "Save preset" }
 					MouseArea { id: saveMouse; anchors.fill: parent; enabled: root.canSave; hoverEnabled: enabled; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: root.savePreset() }
 				}
 			}

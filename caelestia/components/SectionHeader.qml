@@ -16,7 +16,8 @@ ColumnLayout {
         Layout.topMargin: Appearance.spacing.large
         text: root.title
         font.pointSize: Appearance.font.size.larger
-        font.weight: 500
+        font.family: "DejaVu Serif"
+        font.weight: 400
     }
 
     StyledText {

@@ -155,11 +155,12 @@ Item {
 		Item {
 			id: hero
 			width: parent.width
-			height: 190
+			height: 148
 
 			Row {
 				id: spectrum
 				anchors.fill: parent
+				opacity: 0.2
 				spacing: 3
 
 				readonly property real barWidth: (width - (cava.bars - 1) * 3) / cava.bars
@@ -234,10 +235,11 @@ Item {
 					spacing: 2
 					width: hero.width - 78 - 12
 
-					Text {
+					AtelierText {
 						width: parent.width
 						color: root.foreground
-						font.pixelSize: 17
+						display: true
+    font.pixelSize: 24
 						font.weight: Font.DemiBold
 						elide: Text.ElideRight
 						text: root.titleText
@@ -252,7 +254,7 @@ Item {
 						}
 					}
 
-					Text {
+					AtelierText {
 						width: parent.width
 						color: Qt.alpha(root.foreground, 0.7)
 						font.pixelSize: 12
@@ -269,7 +271,7 @@ Item {
 			height: 26
 			visible: root.hasPlayer
 
-			Text {
+			AtelierText {
 				anchors.left: parent.left
 				anchors.verticalCenter: parent.verticalCenter
 				color: Qt.alpha(root.foreground, 0.65)
@@ -278,7 +280,7 @@ Item {
 				text: root.formatTime(root.trackPosition)
 			}
 
-			Text {
+			AtelierText {
 				anchors.right: parent.right
 				anchors.verticalCenter: parent.verticalCenter
 				color: Qt.alpha(root.foreground, 0.65)
@@ -297,7 +299,7 @@ Item {
 				anchors.verticalCenter: parent.verticalCenter
 				height: 6
 				radius: ThemeEngine.radiusTiny
-				color: root.secondaryInsetColor
+				color: Qt.alpha(root.foreground, 0.15)
 
 				ThemedRectangle {
 					themeStyle: "flat"
@@ -464,9 +466,9 @@ Item {
 				anchors.right: volumeLabel.left
 				anchors.rightMargin: 12
 				anchors.verticalCenter: parent.verticalCenter
-				height: 8
+				height: 3
 				radius: ThemeEngine.radiusSmall
-				color: root.secondaryInsetColor
+				color: Qt.alpha(root.foreground, 0.2)
 
 				ThemedRectangle {
 					themeStyle: "flat"
@@ -508,7 +510,7 @@ Item {
 				}
 			}
 
-			Text {
+			AtelierText {
 				id: volumeLabel
 				anchors.right: parent.right
 				anchors.verticalCenter: parent.verticalCenter
@@ -527,7 +529,7 @@ Item {
 			spacing: 6
 			visible: root.sinks.length > 1
 
-			Text {
+			AtelierText {
 				color: Qt.alpha(root.primary, 0.95)
 				font.pixelSize: 9
 				font.weight: Font.DemiBold
@@ -575,7 +577,7 @@ Item {
 							}
 						}
 
-						Text {
+						AtelierText {
 							anchors.verticalCenter: parent.verticalCenter
 							width: parent.width - 20
 							color: root.foreground
@@ -617,7 +619,7 @@ Item {
 						CAnim {}
 					}
 
-					Text {
+					AtelierText {
 						id: chipLabel
 						anchors.centerIn: parent
 						color: playerChip.active ? root.onPrimaryColor : root.foreground

@@ -114,7 +114,7 @@ ThemedRectangle {
 	readonly property string cpuText: root.cpuCores > 0 ? `${root.cpuCores} Cores` : ""
 
 	radius: ThemeEngine.radiusMedium
-	color: root.secondaryBoxColor
+	color: "transparent"
 	implicitWidth: resourceRow.implicitWidth + 18
 	implicitHeight: 27
 	clip: !ThemeEngine.shadowEnabled
@@ -151,7 +151,7 @@ ThemedRectangle {
 				source: root.mouseIcon
 			}
 
-			Text {
+			AtelierText {
 				anchors.verticalCenter: parent.verticalCenter
 				color: root.foreground
 				font.pixelSize: 10

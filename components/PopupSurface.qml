@@ -29,15 +29,15 @@ PanelWindow {
 	property real expandedWidth: 300
 	property real contentPreferredHeight: 0
 	property real fixedHeight: -1
-	property real contentMargins: 14
+	property real contentMargins: 24
 
 	// style
 	property color surfaceColor
 	property color borderColor: "transparent"
 	property real restingRadius: ThemeEngine.radiusMedium
-	property real edgeMargin: 10 + ThemeEngine.shadowRenderMargin
-	property real barGap: 6
-	property real barTopMargin: 6
+	property real edgeMargin: 20 + ThemeEngine.shadowRenderMargin
+	property real barGap: 12
+	property real barTopMargin: 0
 	property bool wantsKeyboard: true
 
 	default property alias content: contentSlot.data
@@ -99,8 +99,8 @@ PanelWindow {
 		}
 		y: Math.round(surface.barTopMargin + surface.barItem.height + surface.barGap)
 
-		width: surface.shellWidth
-		height: surface.expandedHeight
+		width: Math.min(surface.shellWidth, surface.width - surface.edgeMargin * 2)
+		height: Math.min(surface.expandedHeight, surface.height - y - surface.edgeMargin)
 		opacity: Math.min(1, surface.openProgress * ThemeEngine.popupOpacityMultiplier)
 		scale: ThemeEngine.popupStartScale + (1 - ThemeEngine.popupStartScale) * surface.openProgress
 		transformOrigin: Item.Top
@@ -129,7 +129,7 @@ PanelWindow {
 			color: ThemeEngine.solidSurfaces
 				? ThemeEngine.solidColor(surface.surfaceColor)
 				: surface.surfaceColor
-			border.width: Math.max(1, ThemeEngine.outlineWidth)
+			border.width: 0
 			border.color: surface.borderColor.a > 0.01
 				? surface.borderColor
 				: ThemeEngine.contrastEdge(surface.surfaceColor)
@@ -148,12 +148,21 @@ PanelWindow {
 				}
 			}
 
-			Item {
-				id: contentSlot
-
+			Rectangle { width: parent.width; height: 1; color: Atelier.rule }
+			Flickable {
 				anchors.fill: parent
 				anchors.margins: surface.contentMargins
-				opacity: surface.contentOpacity
+				contentHeight: contentSlot.height
+				contentWidth: width
+				clip: true
+				boundsBehavior: Flickable.StopAtBounds
+				interactive: contentHeight > height
+				Item {
+					id: contentSlot
+					width: parent.width
+					height: surface.expandedHeight - surface.contentMargins * 2
+					opacity: surface.contentOpacity
+				}
 			}
 		}
 	}

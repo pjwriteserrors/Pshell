@@ -75,10 +75,18 @@ PanelWindow {
 		anchors.top: parent.top
 		anchors.leftMargin: 12
 		anchors.rightMargin: 12
-		anchors.topMargin: 6
+		anchors.topMargin: 0
 		height: implicitHeight
-		implicitHeight: 34
+		implicitHeight: 44
 		clip: false
+            Rectangle {
+                anchors.fill: parent
+                anchors.leftMargin: -12
+                anchors.rightMargin: -12
+                color: Atelier.ink
+                z: -1
+                Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Atelier.rule }
+            }
 
 		Row {
 			anchors.left: parent.left
@@ -115,7 +123,7 @@ PanelWindow {
 				width: trayRow.implicitWidth + 20
 				height: bar.height
 				radius: ThemeEngine.radiusMedium
-				color: root.secondaryBoxColor
+				color: "transparent"
 				border.width: 0
 				border.color: "transparent"
 
@@ -187,7 +195,7 @@ PanelWindow {
 			height: parent.height
 			anchors.centerIn: parent
 			radius: ThemeEngine.radiusMedium
-			color: root.secondaryBoxColor
+			color: "transparent"
 			border.width: 0
 			border.color: "transparent"
 
@@ -198,7 +206,7 @@ PanelWindow {
 			}
 		}
 
-		Text {
+		AtelierText {
 			id: clock
 			anchors.centerIn: parent
 			color: root.foreground

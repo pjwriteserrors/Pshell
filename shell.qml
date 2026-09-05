@@ -65,11 +65,11 @@ Scope {
 	property var trayMenuHandle: null
 	property Item trayMenuTargetItem: null
 	// theme color roles (derived from the selected pywal theme below)
-	readonly property color secondaryBoxColor: Qt.alpha(primary, 0.16)
-	readonly property color secondaryBoxStrongColor: Qt.alpha(primary, 0.28)
-	readonly property color secondaryInsetColor: Qt.alpha(secondary, 0.14)
-	readonly property color surface: Qt.tint(background, Qt.alpha(primary, 0.07))
-	readonly property color surfaceBorder: Qt.alpha(primary, 0.35)
+	readonly property color secondaryBoxColor: Qt.alpha(foreground, 0.025)
+	readonly property color secondaryBoxStrongColor: Qt.alpha(primary, 0.13)
+	readonly property color secondaryInsetColor: Atelier.ink
+	readonly property color surface: Atelier.surface
+	readonly property color surfaceBorder: Atelier.rule
 	readonly property color onPrimary: background
 	readonly property color danger: "#d95c5c"
 	readonly property var primaryBarScreen: {
@@ -1215,13 +1215,13 @@ Scope {
 	}
 
 	readonly property var wal: JSON.parse(walFile.text())
-	readonly property color background: wal.special.background
-	readonly property color foreground: wal.special.foreground
-	readonly property color primary: wal.colors.color4
-	readonly property color secondary: wal.colors.color6
-	readonly property color accent: wal.colors.color3
-	readonly property color tertiary: wal.colors.color1
-	readonly property color border: wal.colors.color8
+	readonly property color background: Atelier.ink
+	readonly property color foreground: Atelier.paper
+	readonly property color primary: Atelier.accent
+	readonly property color secondary: "#bbc5ad"
+	readonly property color accent: Atelier.accent
+	readonly property color tertiary: "#c9b8a3"
+	readonly property color border: Atelier.rule
 
 	Process {
 		id: weatherProcess
@@ -1613,7 +1613,7 @@ Scope {
 						Layout.fillWidth: true
 						spacing: 8
 
-						Text {
+						AtelierText {
 							Layout.fillWidth: true
 							color: root.foreground
 							font.pixelSize: 14
@@ -1622,7 +1622,7 @@ Scope {
 							elide: Text.ElideRight
 						}
 
-						Text {
+						AtelierText {
 							color: Qt.alpha(root.foreground, 0.7)
 							font.pixelSize: 12
 							text: root.osdValueText
@@ -1689,10 +1689,18 @@ Scope {
 			anchors.top: parent.top
 			anchors.leftMargin: 12
 			anchors.rightMargin: 12
-			anchors.topMargin: 6
+			anchors.topMargin: 0
 			height: implicitHeight
-			implicitHeight: 34
+			implicitHeight: 44
 			clip: false
+            Rectangle {
+                anchors.fill: parent
+                anchors.leftMargin: -12
+                anchors.rightMargin: -12
+                color: Atelier.ink
+                z: -1
+                Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Atelier.rule }
+            }
 
 			Row {
 				id: leftModules
@@ -1730,7 +1738,7 @@ Scope {
 					width: trayRow.implicitWidth + 20
 					height: bar.height
 					radius: ThemeEngine.radiusMedium
-					color: root.surface
+					color: "transparent"
 					border.width: 0
 					border.color: "transparent"
 
@@ -1826,7 +1834,7 @@ Scope {
 				height: parent.height
 				anchors.centerIn: parent
 				radius: ThemeEngine.radiusMedium
-				color: root.surface
+				color: "transparent"
 				border.width: 0
 				border.color: "transparent"
 
@@ -1837,7 +1845,7 @@ Scope {
 				}
 			}
 
-			Text {
+			AtelierText {
 				id: clock
 				anchors.centerIn: parent
 				color: foreground
@@ -1866,7 +1874,7 @@ Scope {
 				anchors.rightMargin: 8
 				anchors.verticalCenter: parent.verticalCenter
 				radius: ThemeEngine.radiusMedium
-				color: root.surface
+				color: "transparent"
 
 				Row {
 					id: weatherIslandRow
@@ -1887,7 +1895,7 @@ Scope {
 						color: root.foreground
 					}
 
-					Text {
+					AtelierText {
 						anchors.verticalCenter: parent.verticalCenter
 						color: root.foreground
 						font.pixelSize: 12
@@ -1911,7 +1919,7 @@ Scope {
 				anchors.rightMargin: 8
 				anchors.verticalCenter: parent.verticalCenter
 				radius: ThemeEngine.radiusMedium
-				color: root.surface
+				color: "transparent"
 
 				QQCImpl.IconImage {
 					anchors.centerIn: parent
@@ -1938,7 +1946,7 @@ Scope {
 						SpatialAnim {}
 					}
 
-					Text {
+					AtelierText {
 						id: badgeLabel
 						anchors.centerIn: parent
 						color: root.background
@@ -2363,11 +2371,12 @@ Scope {
 								anchors.verticalCenter: parent.verticalCenter
 								spacing: 8
 
-								Text {
+								AtelierText {
 									anchors.verticalCenter: parent.verticalCenter
 									color: foreground
-									font.pixelSize: 15
-									font.weight: Font.DemiBold
+									font.pixelSize: 22
+                                display: true
+									font.weight: Font.Normal
 									text: "Clipboard"
 								}
 
@@ -2378,7 +2387,7 @@ Scope {
 									radius: ThemeEngine.radiusMedium
 									color: Qt.alpha(root.primary, 0.3)
 
-									Text {
+									AtelierText {
 										id: clipCountLabel
 										anchors.centerIn: parent
 										color: foreground
@@ -2398,7 +2407,7 @@ Scope {
 								radius: ThemeEngine.radiusMedium
 								color: root.secondaryBoxColor
 
-								Text {
+								AtelierText {
 									id: clipWipeLabel
 									anchors.centerIn: parent
 									color: foreground
@@ -2476,7 +2485,7 @@ Scope {
 							width: parent.width
 							height: 330
 
-							Text {
+							AtelierText {
 								anchors.centerIn: parent
 								visible: clipboardPopupContent.filteredEntries.length === 0
 								color: Qt.alpha(foreground, 0.5)
@@ -2567,7 +2576,7 @@ Scope {
 										radius: ThemeEngine.radiusLarge
 										color: Qt.alpha(root.secondary, 0.35)
 
-										Text {
+										AtelierText {
 											anchors.centerIn: parent
 											color: foreground
 											font.pixelSize: 8
@@ -2601,7 +2610,7 @@ Scope {
 										}
 									}
 
-									Text {
+									AtelierText {
 										visible: !clipEntry.modelData.isImage
 										anchors.left: parent.left
 										anchors.leftMargin: 14
@@ -2636,7 +2645,7 @@ Scope {
 											CAnim {}
 										}
 
-										Text {
+										AtelierText {
 											anchors.centerIn: parent
 											color: foreground
 											font.pixelSize: 11
@@ -2981,12 +2990,13 @@ done`
 							width: parent.width
 							height: 30
 
-							Text {
+							AtelierText {
 								anchors.left: parent.left
 								anchors.verticalCenter: parent.verticalCenter
 								color: foreground
-								font.pixelSize: 15
-								font.weight: Font.DemiBold
+								font.pixelSize: 22
+                                display: true
+								font.weight: Font.Normal
 								text: "Bluetooth"
 							}
 
@@ -3067,7 +3077,7 @@ done`
 									}
 								}
 
-								Text {
+								AtelierText {
 									anchors.verticalCenter: parent.verticalCenter
 									color: foreground
 									font.pixelSize: 12
@@ -3100,7 +3110,7 @@ done`
 									color: Qt.alpha(root.foreground, 0.35)
 								}
 
-								Text {
+								AtelierText {
 									anchors.horizontalCenter: parent.horizontalCenter
 									color: Qt.alpha(foreground, 0.5)
 									font.pixelSize: 12
@@ -3138,7 +3148,7 @@ done`
 									policy: ScrollBar.AsNeeded
 								}
 
-								header: Text {
+								header: AtelierText {
 									visible: bluetoothPopup.devices.length === 0
 									width: ListView.view ? ListView.view.width : 0
 									height: visible ? 30 : 0
@@ -3213,7 +3223,7 @@ done`
 											spacing: 2
 											width: parent.width - 42
 
-											Text {
+											AtelierText {
 												width: parent.width
 												color: foreground
 												font.pixelSize: 12
@@ -3222,7 +3232,7 @@ done`
 												text: btDevice.modelData.name
 											}
 
-											Text {
+											AtelierText {
 												width: parent.width
 												color: Qt.alpha(foreground, 0.58)
 												font.pixelSize: 10
@@ -3244,7 +3254,7 @@ done`
 										radius: ThemeEngine.radiusMedium
 										color: Qt.alpha(root.secondary, 0.3)
 
-										Text {
+										AtelierText {
 											id: batteryText
 											anchors.centerIn: parent
 											color: foreground
@@ -3491,7 +3501,7 @@ printf 'type=offline\niface=\nip=\n'`
 									anchors.verticalCenter: parent.verticalCenter
 									spacing: 1
 
-									Text {
+									AtelierText {
 										color: foreground
 										font.pixelSize: 13
 										font.weight: Font.DemiBold
@@ -3500,7 +3510,7 @@ printf 'type=offline\niface=\nip=\n'`
 											: (networkPopup.currentType === "ethernet" ? "Ethernet" : "Wi-Fi")
 									}
 
-									Text {
+									AtelierText {
 										color: Qt.alpha(foreground, 0.55)
 										font.pixelSize: 10
 										text: networkPopup.currentInterface !== ""
@@ -3519,7 +3529,7 @@ printf 'type=offline\niface=\nip=\n'`
 								radius: ThemeEngine.radiusMedium
 								color: Qt.alpha(root.danger, 0.16)
 
-								Text {
+								AtelierText {
 									id: disconnectLabel
 									anchors.centerIn: parent
 									color: foreground
@@ -3551,7 +3561,7 @@ printf 'type=offline\niface=\nip=\n'`
 									width: parent.width
 									height: 22
 
-									Text {
+									AtelierText {
 										anchors.left: parent.left
 										anchors.verticalCenter: parent.verticalCenter
 										color: foreground
@@ -3560,7 +3570,7 @@ printf 'type=offline\niface=\nip=\n'`
 										text: "Upload"
 									}
 
-									Text {
+									AtelierText {
 										anchors.right: parent.right
 										anchors.verticalCenter: parent.verticalCenter
 										color: foreground
@@ -3648,7 +3658,7 @@ printf 'type=offline\niface=\nip=\n'`
 									width: parent.width
 									height: 16
 
-									Text {
+									AtelierText {
 										anchors.left: parent.left
 										anchors.verticalCenter: parent.verticalCenter
 										color: foreground
@@ -3657,7 +3667,7 @@ printf 'type=offline\niface=\nip=\n'`
 										text: "Download"
 									}
 
-									Text {
+									AtelierText {
 										anchors.right: parent.right
 										anchors.verticalCenter: parent.verticalCenter
 										color: foreground
@@ -3780,10 +3790,11 @@ printf 'type=offline\niface=\nip=\n'`
 							anchors.fill: parent
 							spacing: 14
 
-							Text {
+							AtelierText {
 								color: foreground
-								font.pixelSize: 15
-								font.weight: Font.DemiBold
+								font.pixelSize: 22
+                                display: true
+								font.weight: Font.Normal
 								text: "System"
 							}
 
@@ -3832,14 +3843,14 @@ printf 'type=offline\niface=\nip=\n'`
 										anchors.verticalCenter: parent.verticalCenter
 										spacing: 1
 
-										Text {
+										AtelierText {
 											color: foreground
 											font.pixelSize: 12
 											font.weight: Font.Medium
 											text: "Mouse"
 										}
 
-										Text {
+										AtelierText {
 											visible: text !== ""
 											color: Qt.alpha(foreground, 0.5)
 											font.pixelSize: 9
@@ -3848,7 +3859,7 @@ printf 'type=offline\niface=\nip=\n'`
 									}
 								}
 
-								Text {
+								AtelierText {
 									anchors.right: parent.right
 									anchors.rightMargin: 14
 									anchors.verticalCenter: parent.verticalCenter
@@ -3892,7 +3903,7 @@ printf 'type=offline\niface=\nip=\n'`
 									anchors.margins: 12
 									spacing: 10
 
-									Text {
+									AtelierText {
 										color: foreground
 										font.pixelSize: 12
 										font.weight: Font.DemiBold
@@ -3940,8 +3951,8 @@ printf 'type=offline\niface=\nip=\n'`
 			open: root.themePickerPopupOpen
 			scrimOpacity: 0.34
 			shadowSurfaceColor: root.secondaryInsetColor
-			sheetWidth: 1180
-			sheetHeight: 780
+			sheetWidth: Math.min(1180, parent.width - 48)
+			sheetHeight: Math.min(780, parent.height - 80)
 			onDismissRequested: root.closeThemePickerPopup()
 
 			Loader {
@@ -3982,10 +3993,10 @@ printf 'type=offline\niface=\nip=\n'`
 
 		ModalSheet {
 			open: root.launcherPopupOpen
-			mode: "bottom"
-			scrimOpacity: 0.18
-			sheetWidth: 720
-			sheetHeight: 480
+			mode: "center"
+			scrimOpacity: 0.64
+			sheetWidth: Math.min(840, parent.width - 48)
+			sheetHeight: Math.min(560, parent.height - 80)
 			bottomMargin: 14
 			shadowSurfaceColor: root.surface
 			onDismissRequested: root.closeLauncherPopup()
@@ -4049,8 +4060,8 @@ printf 'type=offline\niface=\nip=\n'`
 			open: root.stylePresetPopupOpen
 			scrimOpacity: 0.34
 			shadowSurfaceColor: root.secondaryInsetColor
-			sheetWidth: 1320
-			sheetHeight: 840
+			sheetWidth: Math.min(1320, parent.width - 48)
+			sheetHeight: Math.min(840, parent.height - 80)
 			onDismissRequested: root.closeStylePresetPopup()
 
 			Loader {
@@ -4086,8 +4097,8 @@ printf 'type=offline\niface=\nip=\n'`
 			open: root.uiThemePickerPopupOpen
 			scrimOpacity: 0.3
 			shadowSurfaceColor: root.secondaryInsetColor
-			sheetWidth: 760
-			sheetHeight: 460
+			sheetWidth: Math.min(760, parent.width - 48)
+			sheetHeight: Math.min(460, parent.height - 80)
 			onDismissRequested: root.closeUiThemePickerPopup()
 
 			Loader {
@@ -4128,8 +4139,8 @@ printf 'type=offline\niface=\nip=\n'`
 			open: root.animationPickerPopupOpen
 			scrimOpacity: 0.34
 			shadowSurfaceColor: root.secondaryInsetColor
-			sheetWidth: 1280
-			sheetHeight: 840
+			sheetWidth: Math.min(1280, parent.width - 48)
+			sheetHeight: Math.min(840, parent.height - 80)
 			onDismissRequested: root.closeAnimationPickerPopup()
 
 			Loader {
@@ -4171,8 +4182,8 @@ printf 'type=offline\niface=\nip=\n'`
 			open: root.powerPopupOpen
 			scrimOpacity: 0.28
 			shadowSurfaceColor: root.surface
-			sheetWidth: 560
-			sheetHeight: 236
+			sheetWidth: Math.min(560, parent.width - 48)
+			sheetHeight: Math.min(236, parent.height - 80)
 			onDismissRequested: root.closePowerPopup()
 
 			ThemedRectangle {
@@ -4191,8 +4202,8 @@ printf 'type=offline\niface=\nip=\n'`
 				Keys.onEscapePressed: root.closePowerPopup()
 				Keys.onLeftPressed: root.powerSelectionIndex = Math.max(0, root.powerSelectionIndex - 1)
 				Keys.onRightPressed: root.powerSelectionIndex = Math.min(3, root.powerSelectionIndex + 1)
-				Keys.onUpPressed: root.powerSelectionIndex = Math.max(0, root.powerSelectionIndex - 2)
-				Keys.onDownPressed: root.powerSelectionIndex = Math.min(3, root.powerSelectionIndex + 2)
+				Keys.onUpPressed: root.powerSelectionIndex = Math.max(0, root.powerSelectionIndex - 1)
+				Keys.onDownPressed: root.powerSelectionIndex = Math.min(3, root.powerSelectionIndex + 1)
 				Keys.onReturnPressed: root.runSelectedPowerAction()
 				Keys.onEnterPressed: root.runSelectedPowerAction()
 
@@ -4238,16 +4249,17 @@ printf 'type=offline\niface=\nip=\n'`
 								radius: height / 2
 								color: root.primary
 
-								Text {
+								AtelierText {
 									anchors.centerIn: parent
 									color: root.onPrimary
+									display: true
 									font.pixelSize: 22
 									font.weight: Font.DemiBold
 									text: (powerModal.statUser || "?").charAt(0).toUpperCase()
 								}
 							}
 
-							Text {
+							AtelierText {
 								anchors.horizontalCenter: parent.horizontalCenter
 								width: parent.width
 								horizontalAlignment: Text.AlignHCenter
@@ -4274,7 +4286,7 @@ printf 'type=offline\niface=\nip=\n'`
 										anchors.verticalCenter: parent.verticalCenter
 										spacing: 6
 
-										Text {
+										AtelierText {
 											anchors.verticalCenter: parent.verticalCenter
 											color: Qt.alpha(root.primary, 0.95)
 											font.pixelSize: 8
@@ -4283,7 +4295,7 @@ printf 'type=offline\niface=\nip=\n'`
 											text: "UP"
 										}
 
-										Text {
+										AtelierText {
 											anchors.verticalCenter: parent.verticalCenter
 											color: foreground
 											font.pixelSize: 10
@@ -4305,7 +4317,7 @@ printf 'type=offline\niface=\nip=\n'`
 										anchors.verticalCenter: parent.verticalCenter
 										spacing: 6
 
-										Text {
+										AtelierText {
 											anchors.verticalCenter: parent.verticalCenter
 											color: Qt.alpha(root.primary, 0.95)
 											font.pixelSize: 8
@@ -4314,7 +4326,7 @@ printf 'type=offline\niface=\nip=\n'`
 											text: "KERNEL"
 										}
 
-										Text {
+										AtelierText {
 											anchors.verticalCenter: parent.verticalCenter
 											color: foreground
 											font.pixelSize: 10
@@ -4328,13 +4340,13 @@ printf 'type=offline\niface=\nip=\n'`
 					}
 
 					Grid {
-						columns: 2
-						columnSpacing: 10
-						rowSpacing: 10
-						anchors.verticalCenter: parent.verticalCenter
+						columns: 1
+                        columnSpacing: 0
+                        rowSpacing: 0
+                        anchors.verticalCenter: parent.verticalCenter
 
-						readonly property real tileWidth: (powerModal.width - 32 - 188 - 14 - 10) / 2
-						readonly property real tileHeight: (powerModal.height - 32 - 10) / 2
+						readonly property real tileWidth: powerModal.width - 32 - 188 - 14
+						readonly property real tileHeight: (powerModal.height - 32) / 4
 
 						PowerActionButton {
 							width: parent.tileWidth
@@ -4446,7 +4458,7 @@ printf 'type=offline\niface=\nip=\n'`
 			anchors.centerIn: parent
 			spacing: 0
 
-			Text {
+			AtelierText {
 				anchors.horizontalCenter: parent.horizontalCenter
 				color: foreground
 				font.pixelSize: 21
@@ -4454,7 +4466,7 @@ printf 'type=offline\niface=\nip=\n'`
 				text: `${Math.round(gauge.value * 100)}%`
 			}
 
-			Text {
+			AtelierText {
 				anchors.horizontalCenter: parent.horizontalCenter
 				color: Qt.alpha(root.primary, 0.95)
 				font.pixelSize: 9
@@ -4463,7 +4475,7 @@ printf 'type=offline\niface=\nip=\n'`
 				text: gauge.label
 			}
 
-			Text {
+			AtelierText {
 				anchors.horizontalCenter: parent.horizontalCenter
 				visible: text !== ""
 				color: Qt.alpha(foreground, 0.5)
@@ -4484,7 +4496,7 @@ printf 'type=offline\niface=\nip=\n'`
 		property string subValueText: ""
 
 		width: parent ? parent.width : 276
-		implicitHeight: 34
+		implicitHeight: 44
 
 		QQCImpl.IconImage {
 			id: resourceRowIcon
@@ -4497,7 +4509,7 @@ printf 'type=offline\niface=\nip=\n'`
 			color: root.foreground
 		}
 
-		Text {
+		AtelierText {
 			x: 26
 			y: 0
 			color: foreground
@@ -4506,7 +4518,7 @@ printf 'type=offline\niface=\nip=\n'`
 			text: resourceRow.label
 		}
 
-		Text {
+		AtelierText {
 			x: 54
 			y: 1
 			color: Qt.alpha(foreground, 0.6)
@@ -4518,7 +4530,7 @@ printf 'type=offline\niface=\nip=\n'`
 			elide: Text.ElideRight
 		}
 
-		Text {
+		AtelierText {
 			anchors.right: parent.right
 			y: 0
 			color: foreground
@@ -4527,7 +4539,7 @@ printf 'type=offline\niface=\nip=\n'`
 			text: resourceRow.valueText
 		}
 
-		Text {
+		AtelierText {
 			anchors.right: parent.right
 			y: 13
 			color: Qt.alpha(foreground, 0.42)
@@ -4575,10 +4587,12 @@ printf 'type=offline\niface=\nip=\n'`
 
 		radius: ThemeEngine.radiusMedium
 		color: (powerActionButton.selected || powerMouse.containsMouse)
-			? Qt.alpha(root.accent, 0.26)
-			: root.secondaryBoxColor
-		border.width: powerActionButton.selected ? 1 : 0
+			? Qt.alpha(root.accent, 0.06)
+			: "transparent"
+		border.width: 0
 		border.color: Qt.alpha(root.accent, 0.6)
+		Rectangle { width: parent.width; height: 1; color: Atelier.rule }
+		Rectangle { width: 2; height: 24; anchors.verticalCenter: parent.verticalCenter; color: Atelier.accent; visible: powerActionButton.selected }
 
 		Behavior on color {
 			CAnim {}
@@ -4621,14 +4635,14 @@ printf 'type=offline\niface=\nip=\n'`
 				anchors.verticalCenter: parent.verticalCenter
 				spacing: 1
 
-				Text {
+				AtelierText {
 					color: foreground
 					font.pixelSize: 13
 					font.weight: Font.DemiBold
 					text: powerActionButton.label
 				}
 
-				Text {
+				AtelierText {
 					color: Qt.alpha(foreground, 0.55)
 					font.pixelSize: 10
 					text: powerActionButton.sublabel
@@ -4792,7 +4806,7 @@ printf 'type=offline\niface=\nip=\n'`
 								fillMode: Image.PreserveAspectFit
 							}
 
-							Text {
+							AtelierText {
 								anchors.verticalCenter: parent.verticalCenter
 								width: parent.width - x - (menuEntry.modelData.hasChildren ? 18 : 0)
 								text: menuEntry.modelData.text
@@ -4801,7 +4815,7 @@ printf 'type=offline\niface=\nip=\n'`
 								elide: Text.ElideRight
 							}
 
-							Text {
+							AtelierText {
 								anchors.verticalCenter: parent.verticalCenter
 								visible: menuEntry.modelData.hasChildren
 								text: "›"
@@ -4831,7 +4845,7 @@ printf 'type=offline\niface=\nip=\n'`
 						onClicked: trayMenuStackLoader.item.pop()
 					}
 
-					Text {
+					AtelierText {
 						anchors.centerIn: parent
 						text: "Back"
 						color: foreground
@@ -4925,7 +4939,7 @@ printf 'type=offline\niface=\nip=\n'`
 					radius: ThemeEngine.radiusMedium
 					color: root.secondaryBoxColor
 
-					Text {
+					AtelierText {
 						anchors.centerIn: parent
 						color: foreground
 						font.pixelSize: 15
@@ -4943,7 +4957,7 @@ printf 'type=offline\niface=\nip=\n'`
 					anchors.centerIn: parent
 					spacing: 1
 
-					Text {
+					AtelierText {
 						anchors.horizontalCenter: parent.horizontalCenter
 						color: foreground
 						font.pixelSize: 17
@@ -4951,7 +4965,7 @@ printf 'type=offline\niface=\nip=\n'`
 						text: Qt.formatDateTime(root.currentDate, "MMMM yyyy")
 					}
 
-					Text {
+					AtelierText {
 						anchors.horizontalCenter: parent.horizontalCenter
 						color: Qt.alpha(foreground, 0.6)
 						font.pixelSize: 11
@@ -4967,7 +4981,7 @@ printf 'type=offline\niface=\nip=\n'`
 					radius: ThemeEngine.radiusMedium
 					color: root.secondaryBoxColor
 
-					Text {
+					AtelierText {
 						anchors.centerIn: parent
 						color: foreground
 						font.pixelSize: 15
@@ -4996,7 +5010,7 @@ printf 'type=offline\niface=\nip=\n'`
 						width: 44
 						height: 20
 
-						Text {
+						AtelierText {
 							anchors.centerIn: parent
 							color: Qt.alpha(root.primary, 0.9)
 							font.pixelSize: 10
@@ -5025,7 +5039,7 @@ printf 'type=offline\niface=\nip=\n'`
 							CAnim {}
 						}
 
-						Text {
+						AtelierText {
 							anchors.centerIn: parent
 							color: dayCell.today ? root.onPrimary : (dayCell.day === 0 ? "transparent" : foreground)
 							font.pixelSize: 12
@@ -5096,20 +5110,21 @@ printf 'type=offline\niface=\nip=\n'`
 					spacing: 0
 					anchors.verticalCenter: parent.verticalCenter
 
-					Text {
+					AtelierText {
 						color: foreground
+						display: true
 						font.pixelSize: 30
 						font.weight: Font.DemiBold
 						text: root.weatherTemperature
 					}
 
-					Text {
+					AtelierText {
 						color: Qt.alpha(foreground, 0.85)
 						font.pixelSize: 12
 						text: root.weatherDescription
 					}
 
-					Text {
+					AtelierText {
 						color: Qt.alpha(foreground, 0.55)
 						font.pixelSize: 10
 						text: root.weatherLocation
@@ -5146,7 +5161,7 @@ printf 'type=offline\niface=\nip=\n'`
 							anchors.verticalCenter: parent.verticalCenter
 							spacing: 2
 
-							Text {
+							AtelierText {
 								color: Qt.alpha(root.primary, 0.95)
 								font.pixelSize: 8
 								font.weight: Font.DemiBold
@@ -5154,7 +5169,7 @@ printf 'type=offline\niface=\nip=\n'`
 								text: modelData.label
 							}
 
-							Text {
+							AtelierText {
 								color: foreground
 								font.pixelSize: 14
 								font.weight: Font.Medium
@@ -5187,7 +5202,7 @@ printf 'type=offline\niface=\nip=\n'`
 							color: root.accent
 						}
 
-						Text {
+						AtelierText {
 							anchors.verticalCenter: parent.verticalCenter
 							color: foreground
 							font.pixelSize: 13
@@ -5215,7 +5230,7 @@ printf 'type=offline\niface=\nip=\n'`
 							color: root.secondary
 						}
 
-						Text {
+						AtelierText {
 							anchors.verticalCenter: parent.verticalCenter
 							color: foreground
 							font.pixelSize: 13
@@ -5258,10 +5273,11 @@ printf 'type=offline\niface=\nip=\n'`
 				Layout.fillWidth: true
 				spacing: 10
 
-				Text {
+				AtelierText {
 					color: foreground
-					font.pixelSize: 16
-					font.weight: Font.DemiBold
+					font.pixelSize: 22
+                                display: true
+					font.weight: Font.Normal
 					text: "Notifications"
 				}
 
@@ -5272,7 +5288,7 @@ printf 'type=offline\niface=\nip=\n'`
 					radius: ThemeEngine.radiusMedium
 					color: Qt.alpha(root.primary, 0.3)
 
-					Text {
+					AtelierText {
 						anchors.centerIn: parent
 						color: foreground
 						font.pixelSize: 11
@@ -5292,7 +5308,7 @@ printf 'type=offline\niface=\nip=\n'`
 					radius: ThemeEngine.radiusMedium
 					color: root.secondaryBoxColor
 
-					Text {
+					AtelierText {
 						id: clearAllLabel
 						anchors.centerIn: parent
 						color: foreground
@@ -5326,7 +5342,7 @@ printf 'type=offline\niface=\nip=\n'`
 						color: Qt.alpha(root.foreground, 0.3)
 					}
 
-					Text {
+					AtelierText {
 						anchors.horizontalCenter: parent.horizontalCenter
 						color: Qt.alpha(foreground, 0.5)
 						font.pixelSize: 13
@@ -5421,7 +5437,7 @@ printf 'type=offline\niface=\nip=\n'`
 														color: urgencyColor
 													}
 
-													Text {
+													AtelierText {
 														Layout.fillWidth: true
 														color: Qt.alpha(foreground, 0.85)
 														font.pixelSize: 10
@@ -5431,7 +5447,7 @@ printf 'type=offline\niface=\nip=\n'`
 														text: (modelData.appName || "SYSTEM").toUpperCase()
 													}
 
-													Text {
+													AtelierText {
 														color: Qt.alpha(foreground, 0.5)
 														font.pixelSize: 10
 														text: latestEntry
@@ -5445,7 +5461,7 @@ printf 'type=offline\niface=\nip=\n'`
 														radius: ThemeEngine.radiusMedium
 														color: "transparent"
 
-														Text {
+														AtelierText {
 															anchors.centerIn: parent
 															color: Qt.alpha(foreground, 0.7)
 															font.pixelSize: 11
@@ -5484,7 +5500,7 @@ printf 'type=offline\niface=\nip=\n'`
 												Layout.alignment: Qt.AlignTop
 												spacing: 3
 
-												Text {
+												AtelierText {
 													Layout.fillWidth: true
 													color: foreground
 													font.pixelSize: 14
@@ -5495,7 +5511,7 @@ printf 'type=offline\niface=\nip=\n'`
 													text: latestEntry ? latestEntry.summary : (modelData.appName || "Notification")
 												}
 
-												Text {
+												AtelierText {
 													Layout.fillWidth: true
 													visible: latestEntry && latestEntry.body !== ""
 													color: Qt.alpha(foreground, 0.72)
@@ -5564,7 +5580,7 @@ printf 'type=offline\niface=\nip=\n'`
 													anchors.margins: 9
 													spacing: 4
 
-													Text {
+													AtelierText {
 														Layout.fillWidth: true
 														color: foreground
 														font.pixelSize: 13
@@ -5623,7 +5639,7 @@ printf 'type=offline\niface=\nip=\n'`
 															border.width: 0
 															border.color: "transparent"
 
-															Text {
+															AtelierText {
 																id: actionLabel
 																anchors.centerIn: parent
 																color: foreground
@@ -5648,7 +5664,7 @@ printf 'type=offline\niface=\nip=\n'`
 													ThemedRectangle {
 														Layout.fillWidth: true
 														themeStyle: "inset"
-														implicitHeight: 34
+														implicitHeight: 44
 														radius: ThemeEngine.radiusMedium
 														color: Qt.alpha(background, 0.42)
 														border.width: 0
@@ -5671,7 +5687,7 @@ printf 'type=offline\niface=\nip=\n'`
 															Keys.onEnterPressed: root.submitInlineReply(liveNotification, inlineReplyInput)
 														}
 
-														Text {
+														AtelierText {
 															anchors.fill: parent
 															anchors.leftMargin: 12
 															anchors.rightMargin: 12
@@ -5687,13 +5703,13 @@ printf 'type=offline\niface=\nip=\n'`
 
 				ThemedRectangle {
 														implicitWidth: 60
-														implicitHeight: 34
+														implicitHeight: 44
 														radius: ThemeEngine.radiusMedium
 														color: Qt.alpha(urgencyColor, 0.16)
 														border.width: 0
 														border.color: "transparent"
 
-														Text {
+														AtelierText {
 															anchors.centerIn: parent
 															color: foreground
 															font.pixelSize: 12
@@ -5717,7 +5733,7 @@ printf 'type=offline\niface=\nip=\n'`
 													border.width: 0
 													border.color: "transparent"
 
-													Text {
+													AtelierText {
 														anchors.centerIn: parent
 														color: foreground
 														font.pixelSize: 12
@@ -5784,7 +5800,7 @@ printf 'type=offline\niface=\nip=\n'`
 																		RowLayout {
 																			Layout.fillWidth: true
 
-																			Text {
+																			AtelierText {
 																				Layout.fillWidth: true
 																				color: foreground
 																				font.pixelSize: 13
@@ -5793,14 +5809,14 @@ printf 'type=offline\niface=\nip=\n'`
 																				text: modelData.summary || "Notification"
 																			}
 
-																			Text {
+																			AtelierText {
 																				color: Qt.alpha(foreground, 0.45)
 																				font.pixelSize: 11
 																				text: `${root.formatNotificationTime(modelData.timestamp)}${modelData.active ? "" : "  •  closed"}`
 																			}
 																		}
 
-																		Text {
+																		AtelierText {
 																			Layout.fillWidth: true
 																			visible: !ThemeEngine.dialogueNotifications && modelData.body !== ""
 																			color: Qt.alpha(foreground, 0.85)
@@ -5953,7 +5969,7 @@ printf 'type=offline\niface=\nip=\n'`
 								color: urgencyColor
 							}
 
-							Text {
+							AtelierText {
 								Layout.fillWidth: true
 								color: Qt.alpha(foreground, 0.85)
 								font.pixelSize: 10
@@ -5963,7 +5979,7 @@ printf 'type=offline\niface=\nip=\n'`
 								text: (notification.appName || "System").toUpperCase()
 							}
 
-							Text {
+							AtelierText {
 								color: Qt.alpha(foreground, 0.5)
 								font.pixelSize: 10
 								text: Qt.formatDateTime(new Date(), "HH:mm")
@@ -5975,7 +5991,7 @@ printf 'type=offline\niface=\nip=\n'`
 								radius: ThemeEngine.radiusMedium
 								color: "transparent"
 
-								Text {
+								AtelierText {
 									anchors.centerIn: parent
 									color: Qt.alpha(foreground, 0.7)
 									font.pixelSize: 11
@@ -6014,7 +6030,7 @@ printf 'type=offline\niface=\nip=\n'`
 								Layout.alignment: Qt.AlignTop
 								spacing: 3
 
-								Text {
+								AtelierText {
 									Layout.fillWidth: true
 									color: foreground
 									font.pixelSize: 14
@@ -6025,7 +6041,7 @@ printf 'type=offline\niface=\nip=\n'`
 									text: notification.summary || "Notification"
 								}
 
-								Text {
+								AtelierText {
 									Layout.fillWidth: true
 									visible: notification.body !== ""
 									color: Qt.alpha(foreground, 0.72)
@@ -6096,7 +6112,7 @@ printf 'type=offline\niface=\nip=\n'`
 									anchors.margins: 9
 									spacing: 4
 
-									Text {
+									AtelierText {
 										Layout.fillWidth: true
 										color: foreground
 										font.pixelSize: 13
@@ -6156,7 +6172,7 @@ printf 'type=offline\niface=\nip=\n'`
 									radius: ThemeEngine.radiusMedium
 									color: root.secondaryBoxColor
 
-									Text {
+									AtelierText {
 										id: actionLabel
 										anchors.centerIn: parent
 										color: foreground
@@ -6202,7 +6218,7 @@ printf 'type=offline\niface=\nip=\n'`
 									Keys.onEnterPressed: root.submitInlineReply(notification, toastInlineReplyInput)
 								}
 
-								Text {
+								AtelierText {
 									anchors.fill: parent
 									anchors.leftMargin: 12
 									verticalAlignment: Text.AlignVCenter
@@ -6219,7 +6235,7 @@ printf 'type=offline\niface=\nip=\n'`
 								radius: ThemeEngine.radiusMedium
 								color: Qt.alpha(root.primary, 0.3)
 
-								Text {
+								AtelierText {
 									anchors.centerIn: parent
 									color: foreground
 									font.pixelSize: 11

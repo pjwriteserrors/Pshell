@@ -1,0 +1,5 @@
+launcher-ai-state.json
+launcher-usage.json
+__pycache__/
+*.pyc
+*.log

@@ -239,8 +239,8 @@ fi
 		width: Math.min(parent.width - 28, 1260)
 		height: Math.min(parent.height - 28, 800)
 		radius: ThemeEngine.radiusMedium
-		color: Qt.alpha(root.secondaryInsetColor, 0.94)
-		border.width: 1
+		color: root.background
+		border.width: 0
 		border.color: Qt.alpha(root.barColor, 0.34)
 
 		Column {
@@ -253,10 +253,11 @@ fi
 				height: 40
 				spacing: 12
 
-				Text {
+				AtelierText {
 					width: parent.width - applyButton.width - 12
 					height: parent.height
 					color: root.headingColor
+					display: true
 					font.pixelSize: 22
 					font.weight: Font.DemiBold
 					verticalAlignment: Text.AlignVCenter
@@ -280,7 +281,7 @@ fi
 						onClicked: root.applyAnimation()
 					}
 
-					Text {
+					AtelierText {
 						anchors.centerIn: parent
 						color: root.foreground
 						font.pixelSize: 12
@@ -329,7 +330,8 @@ fi
 								height: root.cardHeight
 								radius: ThemeEngine.radiusLarge
 								color: Qt.alpha(root.secondaryBoxColor, selected ? 0.78 : 0.5)
-								border.width: selected ? 2 : 1
+								border.width: 0
+								Rectangle { width: parent.width; height: 2; color: card.selected ? Atelier.accent : Atelier.rule; z: 10 }
 								border.color: Qt.alpha(selected ? root.barColor : root.foreground, selected ? 0.82 : 0.12)
 								clip: true
 
@@ -384,7 +386,7 @@ fi
 											}
 										}
 
-										Text {
+										AtelierText {
 											visible: card.hasVideoPreview && !card.videoPreviewActive
 											anchors.centerIn: parent
 											color: Qt.alpha(root.foreground, 0.58)
@@ -640,7 +642,7 @@ fi
 									height: 34
 									color: Qt.alpha(root.background, 0.46)
 
-									Text {
+									AtelierText {
 										anchors.left: parent.left
 										anchors.right: kindPill.left
 										anchors.leftMargin: 10
@@ -665,7 +667,7 @@ fi
 										border.width: 1
 										border.color: Qt.alpha(card.accent, 0.34)
 
-										Text {
+										AtelierText {
 											anchors.centerIn: parent
 											color: root.foreground
 											font.pixelSize: 9

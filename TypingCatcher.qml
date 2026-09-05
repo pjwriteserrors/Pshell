@@ -33,7 +33,7 @@ ThemedRectangle {
 	readonly property int maxWidth: 300
 
 	radius: ThemeEngine.radiusMedium
-	color: root.surface
+	color: "transparent"
 
 	clip: !ThemeEngine.shadowEnabled
 	implicitWidth: Math.min(maxWidth, Math.max(minWidth, Math.round(textMetrics.width) + horizontalPadding * 2 + 10))
@@ -156,11 +156,12 @@ ThemedRectangle {
 			anchors.verticalCenter: parent.verticalCenter
 			spacing: 3
 
-			Text {
+			AtelierText {
 				id: label
 				anchors.verticalCenter: parent.verticalCenter
 				color: root.foreground
 				font.family: root.fontFamily
+				display: true
 				font.pixelSize: 22
 				text: root.current
 				textFormat: Text.PlainText

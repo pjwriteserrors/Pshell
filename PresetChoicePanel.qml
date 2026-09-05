@@ -26,7 +26,7 @@ ThemedRectangle {
 	border.color: Qt.alpha(root.foreground, 0.11)
 	clip: true
 
-	Text {
+	AtelierText {
 		id: heading
 		anchors.top: parent.top
 		anchors.left: parent.left
@@ -83,7 +83,7 @@ ThemedRectangle {
 				anchors.rightMargin: 10
 				anchors.verticalCenter: parent.verticalCenter
 				spacing: 4
-				Text {
+				AtelierText {
 					width: parent.width
 					color: root.foreground
 					font.pixelSize: 12
@@ -91,7 +91,7 @@ ThemedRectangle {
 					elide: Text.ElideRight
 					text: String(choice.modelData[root.labelRole] || choice.modelData.name || "")
 				}
-				Text {
+				AtelierText {
 					width: parent.width
 					color: Qt.alpha(root.foreground, 0.52)
 					font.pixelSize: 10

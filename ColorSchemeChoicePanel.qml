@@ -42,7 +42,7 @@ ThemedRectangle {
 	border.color: Qt.alpha(root.foreground, 0.11)
 	clip: true
 
-	Text {
+	AtelierText {
 		id: heading
 		anchors.top: parent.top
 		anchors.left: parent.left
@@ -75,7 +75,7 @@ ThemedRectangle {
 				color: Qt.alpha(selected ? root.accent : root.strongSurface, selected ? 0.3 : 0.5)
 				border.width: selected ? 1 : 0
 				border.color: Qt.alpha(root.accent, 0.66)
-				Text { anchors.fill: parent; anchors.margins: 3; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight; color: root.foreground; font.pixelSize: 8; text: backendChip.modelData }
+				AtelierText { anchors.fill: parent; anchors.margins: 3; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight; color: root.foreground; font.pixelSize: 8; text: backendChip.modelData }
 				MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.backendSelected(backendChip.modelData) }
 			}
 		}
@@ -129,14 +129,14 @@ ThemedRectangle {
 					anchors.bottom: parent.bottom
 					height: 24
 					color: Qt.rgba(0, 0, 0, 0.58)
-					Text { anchors.centerIn: parent; color: "white"; font.pixelSize: 9; font.weight: schemeCell.selected ? Font.DemiBold : Font.Medium; text: `${schemeCell.colorSpaceName} · ${schemeCell.paletteName}` }
+					AtelierText { anchors.centerIn: parent; color: "white"; font.pixelSize: 9; font.weight: schemeCell.selected ? Font.DemiBold : Font.Medium; text: `${schemeCell.colorSpaceName} · ${schemeCell.paletteName}` }
 				}
 				MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.schemeSelected(schemeCell.colorSpaceName, schemeCell.paletteName) }
 			}
 		}
 	}
 
-	Text {
+	AtelierText {
 		visible: root.loading
 		anchors.centerIn: schemeGrid
 		z: 10

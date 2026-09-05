@@ -10,9 +10,9 @@ JsonObject {
 
     component Rounding: JsonObject {
         property real scale: 1
-        property int small: 12 * scale
-        property int normal: 17 * scale
-        property int large: 25 * scale
+        property int small: 2 * scale
+        property int normal: 3 * scale
+        property int large: 4 * scale
         property int full: 1000 * scale
     }
 
@@ -35,10 +35,10 @@ JsonObject {
     }
 
     component FontFamily: JsonObject {
-        property string sans: "Rubik"
-        property string mono: "CaskaydiaCove NF"
+        property string sans: "Adwaita Sans"
+        property string mono: "Adwaita Mono"
         property string material: "Material Symbols Rounded"
-        property string clock: "Rubik"
+        property string clock: "DejaVu Serif"
     }
 
     component FontSize: JsonObject {
@@ -71,8 +71,8 @@ JsonObject {
     component AnimDurations: JsonObject {
         property real scale: 1
         property int small: 200 * scale
-        property int normal: 400 * scale
-        property int large: 600 * scale
+        property int normal: 180 * scale
+        property int large: 280 * scale
         property int extraLarge: 1000 * scale
         property int expressiveFastSpatial: 350 * scale
         property int expressiveDefaultSpatial: 500 * scale

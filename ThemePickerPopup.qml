@@ -648,7 +648,7 @@ fi
 				onClicked: root.closeRequested()
 			}
 
-			Text {
+			AtelierText {
 				anchors.centerIn: parent
 				color: root.foreground
 				font.pixelSize: 14
@@ -668,7 +668,7 @@ fi
 		radius: ThemeEngine.radiusMedium
 		color: Qt.alpha(root.danger, 0.92)
 
-		Text {
+		AtelierText {
 			id: deleteErrorText
 			anchors.centerIn: parent
 			width: Math.min(implicitWidth, root.width - 108)
@@ -742,7 +742,7 @@ fi
 					height: variantSelector.sectionHeight(palettes.length)
 					y: variantSelector.sectionY(sectionName)
 
-					Text {
+					AtelierText {
 						width: parent.width
 						height: variantSelector.sectionTitleHeight
 						color: root.foreground
@@ -773,7 +773,7 @@ fi
 								border.width: root.selectedColorIndex === index ? 1 : 0
 								border.color: Qt.alpha(root.barColor, 0.72)
 
-								Text {
+								AtelierText {
 									anchors.fill: parent
 									anchors.leftMargin: 8
 									anchors.rightMargin: 8
@@ -938,7 +938,7 @@ fi
 										}
 									}
 
-									Text {
+									AtelierText {
 										anchors.left: parent.left
 										anchors.leftMargin: 10
 										anchors.right: parent.right
@@ -1011,15 +1011,15 @@ fi
 				readonly property int absOffset: Math.abs(offset)
 				readonly property bool active: offset === 0
 
-				visible: absOffset <= 2
+				visible: active
 				z: 10 - absOffset
-				width: root.activeCardWidth - absOffset * 58
-				height: root.activeCardHeight - absOffset * 46
+				width: root.activeCardWidth
+				height: root.activeCardHeight
 				anchors.horizontalCenter: stackArea.horizontalCenter
 				anchors.horizontalCenterOffset: root.stackCenterOffset
-				y: root.activeCardTop + absOffset * 102 + (offset < 0 ? -34 : offset > 0 ? 34 : 0)
-				opacity: active ? 1 : (absOffset === 1 ? 0.52 : 0.18)
-				scale: active ? 1 : (absOffset === 1 ? 0.92 : 0.84)
+				y: root.activeCardTop
+				opacity: 1
+				scale: 1
 
 				Behavior on y { NumberAnimation { duration: ThemeEngine.duration(220); easing.type: ThemeEngine.standardEasing } }
 				Behavior on opacity { NumberAnimation { duration: ThemeEngine.duration(180) } }
@@ -1029,7 +1029,7 @@ fi
 					anchors.fill: parent
 					radius: ThemeEngine.radiusMedium
 					color: Qt.alpha(root.secondaryInsetColor, active ? 0.96 : 0.74)
-					border.width: active ? 1 : 0
+					border.width: 0
 					border.color: Qt.alpha(root.barColor, 0.85)
 					clip: true
 
@@ -1068,7 +1068,7 @@ fi
 						border.width: 1
 						border.color: Qt.rgba(255, 255, 255, 0.22)
 
-						Text {
+						AtelierText {
 							id: mediaBadgeText
 							anchors.centerIn: parent
 							color: "white"
@@ -1168,7 +1168,7 @@ fi
 										border.width: modelData === 2 ? 0 : 1
 										border.color: Qt.alpha(livePreviewOverlay.previewForeground, 0.24)
 
-										Text {
+										AtelierText {
 											anchors.centerIn: parent
 											color: modelData === 2 ? root.readableTextColor(root.paletteSwatch(4)) : Qt.alpha(livePreviewOverlay.previewForeground, 0.72)
 											font.pixelSize: 8
@@ -1318,7 +1318,7 @@ fi
 								border.width: 1
 								border.color: Qt.alpha(root.paletteSwatch(4), 0.45)
 
-								Text {
+								AtelierText {
 									anchors.fill: parent
 									anchors.leftMargin: 10
 									anchors.rightMargin: 10
@@ -1353,7 +1353,7 @@ fi
 										border.width: 1
 										border.color: Qt.rgba(255, 255, 255, 0.18)
 
-										Text {
+										AtelierText {
 											anchors.centerIn: parent
 											color: root.readableTextColor(parent.blockColor)
 											font.pixelSize: 8
@@ -1374,7 +1374,7 @@ fi
 							anchors.margins: 24
 							spacing: 6
 
-						Text {
+						AtelierText {
 							width: parent.width
 							color: "white"
 							font.pixelSize: active ? 28 : 20
@@ -1383,7 +1383,7 @@ fi
 							text: root.filteredThemes[index].name
 						}
 
-						Text {
+						AtelierText {
 							width: parent.width
 							color: Qt.rgba(255, 255, 255, 0.78)
 							font.pixelSize: 12
@@ -1414,7 +1414,7 @@ fi
 			anchors.centerIn: parent
 			spacing: 8
 
-			Text {
+			AtelierText {
 				horizontalAlignment: Text.AlignHCenter
 				color: root.foreground
 				font.pixelSize: 18
@@ -1422,7 +1422,7 @@ fi
 				text: "No themes found"
 			}
 
-			Text {
+			AtelierText {
 				horizontalAlignment: Text.AlignHCenter
 				color: Qt.alpha(root.foreground, 0.58)
 				font.pixelSize: 12

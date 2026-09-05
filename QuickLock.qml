@@ -223,28 +223,29 @@ Scope {
 				id: lockContent
 
 				width: Math.min(420, Math.max(260, lockWindow.width - 48))
-				x: Math.round((lockWindow.width - width) / 2)
-				y: Math.round((lockWindow.height - implicitHeight) / 2)
+				x: Math.max(32, Math.round(lockWindow.width * 0.1))
+				y: Math.round((lockWindow.height - implicitHeight) * 0.6)
 				spacing: 18
 				opacity: lockWindow.reveal
 				scale: 0.98 + 0.02 * lockWindow.reveal
 				transformOrigin: Item.Center
 
-				Text {
+				AtelierText {
 					width: parent.width
 					color: root.foreground
 					text: Qt.formatDateTime(root.lockNow, "HH:mm")
-					horizontalAlignment: Text.AlignHCenter
-					font.family: "0xProto Nerd Font"
-					font.pixelSize: 92
-					font.weight: Font.DemiBold
+					horizontalAlignment: Text.AlignLeft
+					font.family: Atelier.display
+					display: true
+    font.pixelSize: 104
+					font.weight: Font.Normal
 				}
 
-				Text {
+				AtelierText {
 					width: parent.width
 					color: Qt.alpha(root.foreground, 0.76)
 					text: Qt.formatDateTime(root.lockNow, "dddd, dd. MMMM yyyy")
-					horizontalAlignment: Text.AlignHCenter
+					horizontalAlignment: Text.AlignLeft
 					font.pixelSize: 16
 					font.weight: Font.Medium
 				}
@@ -271,7 +272,8 @@ Scope {
 					height: 56
 					radius: ThemeEngine.radiusMedium
 					color: Qt.tint(root.background, Qt.alpha(root.primary, 0.1))
-					border.width: 1
+					border.width: 0
+                    Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Atelier.accent }
 					border.color: Qt.alpha(root.primary, 0.35)
 					clip: true
 
@@ -390,7 +392,7 @@ Scope {
 								target: root
 							}
 
-							Text {
+							AtelierText {
 								anchors.centerIn: parent
 								color: Qt.alpha(root.foreground, 0.64)
 								text: "Password"
@@ -461,12 +463,12 @@ Scope {
 					}
 				}
 
-				Text {
+				AtelierText {
 					width: parent.width
 					height: 22
 					color: root.authState === "checking" ? Qt.alpha(root.foreground, 0.72) : root.danger
 					text: root.statusText
-					horizontalAlignment: Text.AlignHCenter
+					horizontalAlignment: Text.AlignLeft
 					verticalAlignment: Text.AlignVCenter
 					font.pixelSize: 13
 					font.weight: Font.Medium

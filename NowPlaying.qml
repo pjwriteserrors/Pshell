@@ -93,7 +93,7 @@ ThemedRectangle {
 	}
 
 	radius: ThemeEngine.radiusMedium
-	color: root.secondaryBoxColor
+	color: "transparent"
 	clip: !ThemeEngine.shadowEnabled
 	implicitHeight: 30
 	implicitWidth: hasMedia ? nowPlayingLabel.implicitWidth + 32 : 30
@@ -130,7 +130,7 @@ ThemedRectangle {
 		color: root.foreground
 	}
 
-	Text {
+	AtelierText {
 		id: nowPlayingLabel
 		anchors.verticalCenter: parent.verticalCenter
 		anchors.left: parent.left

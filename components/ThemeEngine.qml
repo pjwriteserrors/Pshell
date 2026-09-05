@@ -7,8 +7,8 @@ import Quickshell.Io
 QtObject {
 	id: root
 
-	property string requestedThemeId: "default"
-	property string currentThemeId: "default"
+	property string requestedThemeId: "atelier"
+	property string currentThemeId: "atelier"
 	property var availableThemes: []
 	property var activeTokens: ({})
 	property bool ready: false
@@ -18,7 +18,7 @@ QtObject {
 	readonly property string statePath: `${Quickshell.shellDir}/ui-theme.json`
 	readonly property string catalogScriptPath: `${Quickshell.shellDir}/scripts/theme_engine.py`
 	readonly property var fallbackTokens: ({
-		radiusTiny: 2, radiusSmall: 4, radiusMedium: 7, radiusLarge: 9,
+		radiusTiny: 1, radiusSmall: 2, radiusMedium: 3, radiusLarge: 4,
 		fast: 120, normal: 220, popupOpen: 320, popupClose: 220,
 		large: 420, largeClose: 280, standardEasing: "outCubic",
 		emphasizedEasing: "outBack", popupOpenEasing: "outBack",

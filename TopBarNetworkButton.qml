@@ -14,7 +14,7 @@ ThemedRectangle {
 	required property string iconSource
 
 	radius: ThemeEngine.radiusMedium
-	color: root.secondaryBoxColor
+	color: "transparent"
 	implicitWidth: 32
 	implicitHeight: 30
 
