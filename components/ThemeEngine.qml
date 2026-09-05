@@ -158,11 +158,11 @@ QtObject {
 	}
 
 	function activate(themeId, persist) {
-		const theme = root.themeById(themeId) || root.themeById("default");
+		const theme = root.themeById("default");
 		if (!theme) return false;
 		root.currentThemeId = String(theme.id);
 		root.activeTokens = theme.tokens || {};
-		if (persist) stateFile.setText(JSON.stringify({ version: 1, theme: root.currentThemeId }, null, 2));
+
 		return true;
 	}
 
@@ -186,12 +186,7 @@ QtObject {
 		root.stateLoaded = true;
 	}
 
-	property FileView stateFile: FileView {
-		path: root.statePath
-		printErrors: false
-		onLoaded: root.parseState(text())
-		onLoadFailed: root.parseState("")
-	}
+
 
 	property Process catalogProcess: Process {
 		stdout: StdioCollector {

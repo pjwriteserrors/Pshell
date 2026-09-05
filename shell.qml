@@ -1287,6 +1287,8 @@ Scope {
 		danger: root.danger
 	}
 
+	IpcHandler { target: "styleSession"; function state(): string { return JSON.stringify({locked: quickLock.locked}); } }
+
 	IpcHandler {
 		target: "launcher"
 
