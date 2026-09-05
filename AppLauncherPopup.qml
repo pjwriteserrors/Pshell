@@ -3462,7 +3462,7 @@ Item {
                         TextField { id: ollamaPullField; width: parent.width - 100; height: 42; placeholderText: "Add a model, e.g. qwen3:8b"; text: root.ollamaPullModel; onTextChanged: root.ollamaPullModel=text; onAccepted: root.startOllamaPull(root.ollamaPullModel); background: Rectangle { radius: 21; color: Atelier.surface } }
                         Rectangle {
                             width: 90; height: 42; radius: 21; color: Atelier.accent
-                            AtelierText { anchors.centerIn: parent; text: "Download"; color: Atelier.paper; font.pixelSize: 12 }
+                            AtelierText { anchors.centerIn: parent; text: "Download"; color: Atelier.onAccent; font.pixelSize: 12 }
                             MouseArea { anchors.fill: parent; enabled: !root.ollamaPulling && root.ollamaPullModel.trim() !== ""; onClicked: root.startOllamaPull(root.ollamaPullModel) }
                         }
                     }
