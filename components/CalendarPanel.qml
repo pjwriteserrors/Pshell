@@ -53,7 +53,7 @@ Item {
                 }
                 AtelierText {
                     anchors.centerIn: parent; text: cell.valid ? cell.day : ""
-                    font.pixelSize: 14; color: cell.current ? Atelier.paper : Atelier.text
+                    font.pixelSize: 14; color: cell.current ? Atelier.onAccent : Atelier.text
                 }
             }
         }

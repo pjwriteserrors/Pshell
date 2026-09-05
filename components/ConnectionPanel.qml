@@ -30,7 +30,7 @@ Column {
                 required property string modelData
                 required property int index
                 width: (root.width - 10) / 2; height: 40; radius: 20; color: index === 1 ? Atelier.accent : Atelier.surface
-                AtelierText { anchors.centerIn: parent; text: parent.modelData; color: parent.index === 1 ? Atelier.paper : Atelier.text; font.pixelSize: 12 }
+                AtelierText { anchors.centerIn: parent; text: parent.modelData; color: parent.index === 1 ? Atelier.onAccent : Atelier.text; font.pixelSize: 12 }
                 MouseArea { anchors.fill: parent; enabled: parent.index === 0 || !!root.backend.powered; onClicked: parent.index === 0 ? root.backend.togglePower() : root.backend.startScan() }
             }
         }
@@ -83,7 +83,7 @@ Column {
             width: devices.cellWidth; height: devices.cellHeight
             Rectangle {
                 width: parent.width - 8; height: parent.height - 8; radius: 18
-                color: device.modelData.connected ? "#d2d8bf" : Atelier.surface
+                color: device.modelData.connected ? Atelier.selectedSurface : Atelier.surface
                 AtelierText { x: 14; y: 14; text: device.modelData.connected ? "● LINKED" : "○ NEARBY"; font.family: Atelier.mono; font.pixelSize: 9 }
                 AtelierText { x: 14; y: 38; width: parent.width - 28; text: device.modelData.name; wrapMode: Text.WordWrap; maximumLineCount: 2; elide: Text.ElideRight; font.pixelSize: 14 }
                 AtelierText { x: 14; y: 88; width: parent.width - 28; elide: Text.ElideRight; text: root.backend.deviceStatuses[device.modelData.address] || device.modelData.battery || (device.modelData.paired ? "Paired" : "Tap to connect"); color: Atelier.muted; font.pixelSize: 10 }

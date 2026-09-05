@@ -653,7 +653,7 @@ fi
                 AtelierSelect { width: parent.width; model: root.animationOptions; textRole: "name"; currentIndex: Math.max(0, root.animationOptions.findIndex(option => option.id === root.selectedAnimationId)); onActivated: root.selectedAnimationId = root.animationOptions[currentIndex].id }
                 Rectangle {
                     width: parent.width; height: 44; radius: 22; color: Atelier.accent
-                    AtelierText { anchors.centerIn: parent; text: "Bring this landscape home  ↗"; color: Atelier.paper; font.pixelSize: 12 }
+                    AtelierText { anchors.centerIn: parent; text: "Bring this landscape home  ↗"; color: Atelier.onAccent; font.pixelSize: 12 }
                     MouseArea { anchors.fill: parent; onClicked: root.applyTheme(root.currentTheme) }
                 }
                 AtelierText {

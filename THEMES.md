@@ -1,57 +1,31 @@
-# Quickshell UI theme engine
+# Git styles
 
-UI themes in this setup are deliberately separate from wallpaper/color themes and from Niri window animations. A UI theme changes geometry, depth, shell motion and the matching Niri window frame. All colors continue to come from the existing wallust palette.
+Styles selects complete local Git branches, not shape presets.
 
-## Using the picker
+- `main`: **default** — original layout.
+- `redesign/atelier`: **Atelier** — vertical rail and editorial surfaces, live Wallust colors.
 
-Open the launcher and choose **Interface Theme** (or type `>style`). The picker provides live previews for **Default**, **Neumorphism**, **Neo Brutalism**, and **Arcane Fantasy**. Click a card and press **Apply**, double-click it, or use the arrow keys and Enter.
+Open **Studio → Styles**, select a branch and confirm **checkout & restart**.
+The picker exists in both branches. Switching stops only this repository's shell,
+checks out the target and restarts it. A clean checkout is required: tracked changes
+and untracked files block switching. Nothing is stashed, discarded, pulled or forced.
+Locked sessions, detached HEAD and branches used by another worktree are rejected.
+A failed launch attempts to return to the previous clean branch.
 
-The same picker is exposed through Quickshell IPC:
+New local style branches need `.quickshell-style.json` with
+`{"api":1,"name":"Your style"}`, the branch picker, branch_styles.py and
+the styleSession IPC handler. Branches without this contract are shown but disabled.
 
-```sh
-qs -p ~/.config/quickshell/main ipc call uiTheme toggle
-qs -p ~/.config/quickshell/main ipc call uiTheme select neumorphism
-qs -p ~/.config/quickshell/main ipc call uiTheme select neo-brutalism
-qs -p ~/.config/quickshell/main ipc call uiTheme select fantasy
-qs -p ~/.config/quickshell/main ipc call uiTheme select default
-qs -p ~/.config/quickshell/main ipc call uiTheme current
-```
+Atelier reads `$XDG_CACHE_HOME/wal/colors.json` (default `~/.cache/wal/colors.json`)
+and follows changes live. Background and foreground establish the palette; color5
+is the main accent, color2/color6 supporting accents and color1 the alert accent.
+Surface colors are mixed from the palette. Text and controls receive contrast
+correction; text on accent chooses black or white. Invalid partial updates retain
+the last valid palette. The dark fallback is only used when no valid palette exists.
 
-The selected ID is persisted in `ui-theme.json` and restored when Quickshell starts.
+Fantasy, Neumorphism, Neo-brutalism and the old combined presets are removed.
+Their source remains recoverable in Git history. Each branch retains only its
+own internal geometry/motion tokens; wallpaper and motion controls remain separate.
 
-## Adding another theme
-
-Create `themes/<id>/theme.json` by copying `themes/default/theme.json`, then change its metadata and tokens. No existing QML component should be redesigned or copied. The engine discovers manifests dynamically through `scripts/theme_engine.py`; use `qs -p ~/.config/quickshell/main ipc call uiTheme reload` after adding one.
-
-Every manifest must provide these groups:
-
-- `radiusTiny`, `radiusSmall`, `radiusMedium`, `radiusLarge`: semantic corner radii. Existing circles continue to use `width / 2` or `height / 2` and are not altered.
-- `fast`, `normal`, `popupOpen`, `popupClose`, `large`, `largeClose`: shared durations in milliseconds. Explicit legacy durations are scaled through `ThemeEngine.duration(...)`, so the theme remains internally consistent.
-- `standardEasing`, `emphasizedEasing`, `popupOpenEasing`, `modalOpenEasing`, `exitEasing`: supported values are `outCubic`, `outQuart`, `outQuint`, `outExpo`, `outBack`, `outElastic`, `inCubic`, and `inQuart`.
-- `elasticAmplitude`, `elasticPeriod`: tune the soft spring used by elastic theme entrances.
-- `popupOvershoot`, `sheetOvershoot`, `smallOvershoot`: easing overshoot values.
-- `popupStartScale`, `popupTravel`, `popupContentRevealStart`, `popupShadowDepth`: the entrance pose, content reveal and elevation of bar-attached popups.
-- `modalStartScale`, `modalBottomTravelFactor`, `modalShadowDepth`: the corresponding choreography for centered and bottom modal sheets.
-- `shadowEnabled`, `shadowBlur`, `shadowOffset`, `shadowSpread`, `darkShadowOpacity`, `lightShadowOpacity`: depth language. Shadows derive their light/dark tones from the existing surface color; they do not introduce a new palette.
-- `controlEffectsEnabled`, `controlDepth`, `controlHoverDepth`, `controlPressedDepth`: enable and tune the material depth used by cards, buttons and popup content.
-- `bevelOpacity`, `insetOpacity`: control raised edge highlights and recessed inner edges.
-- `hoverScale`, `pressedScale`: reserved tactile state tokens for components that opt into scale feedback.
-- `outlineWidth`, `outlineOpacity`, `hardShadow`: hard keylines and offset block-shadow rendering. Their tones are derived from the active wallust surface colors.
-
-- `pressTravel`, `hoverLift`, `rippleEnabled`, `hoverTintOpacity`, `pressedTintOpacity`: physical button travel and pointer feedback.
-- `toastStartScale`, `toastTravel`, `toastRotation`, `toastOpen`: notification entrance pose and timing.
-- `solidSurfaces`: makes structural cards and controls opaque without changing their RGB palette roles; flat fills and overlays retain their authored alpha.
-- `ornamentStyle`, `ornamentOpacity`, `ornamentLineWidth`, `ornamentInset`, `ornamentCornerLength`, `ornamentNotchSize`: enable and size a palette-derived decorative frame.
-- `ornamentDoubleLine`, `ornamentCenterMarks`, `ornamentTrackCaps`: add engraved inner corners, diamond center marks, and jeweled caps to thin tracks such as sliders and progress bars.
-- `ornamentGlowOpacity`, `ornamentPulseDuration`: tune the hover/press shimmer of ornamental controls.
-- `dialogueNotifications`: replaces the standard notification body with an RPG dialogue panel and letter-by-letter reveal when enabled.
-
-The stable runtime API is the `ThemeEngine` singleton from `components`. Components should consume semantic properties such as `ThemeEngine.radiusMedium`, `Motion.normal`, `ThemeEngine.standardEasing`, and `ThemedRectangle`. `ThemedRectangle` accepts `themeStyle: "raised"`, `"inset"`, `"flat"`, or `"auto"`; use explicit roles for tracks, inputs and slider fills. Components must not branch on a concrete theme ID. This keeps future themes manifest-only unless they introduce a genuinely new reusable rendering primitive.
-
-Validate all manifests with:
-
-```sh
-python3 scripts/theme_engine.py | python3 -m json.tool
-```
-
-`Default` contains the original values, so selecting it restores the former geometry and motion without touching wallpaper, colors or application state.
+The original configuration outside this repository is untouched. This repository
+is `/home/lu/.config/quickshell/main/atelier`; it retains that path on either branch.

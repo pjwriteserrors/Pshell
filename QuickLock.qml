@@ -248,7 +248,7 @@ Scope {
 					width: parent.width
 					height: 56
 					radius: ThemeEngine.radiusMedium
-					color: "#384140"
+					color: Qt.tint(Atelier.ink, Qt.alpha(Atelier.paper, 0.1))
 					border.width: 0
                     Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Atelier.accent }
 					border.color: Qt.alpha(root.primary, 0.35)

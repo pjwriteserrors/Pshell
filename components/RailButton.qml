@@ -15,7 +15,7 @@ Item {
     Rectangle {
         anchors.horizontalCenter: parent.horizontalCenter
         width: 42; height: 34; radius: 17
-        color: root.active ? root.accent : mouse.containsMouse ? "#384140" : "transparent"
+        color: root.active ? root.accent : mouse.containsMouse ? Qt.tint(Atelier.ink, Qt.alpha(Atelier.paper, 0.1)) : "transparent"
         Behavior on color { ColorAnimation { duration: 140 } }
     }
     QQCImpl.IconImage {
@@ -25,7 +25,7 @@ Item {
     }
     Text {
         anchors.horizontalCenter: parent.horizontalCenter; y: 38
-        text: root.label; color: root.active ? Atelier.gold : "#a9b1a4"
+        text: root.label; color: root.active ? Atelier.gold : Atelier.paper
         font.family: Atelier.sans; font.pixelSize: 9; font.letterSpacing: 0.6
     }
     MouseArea { id: mouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.clicked() }

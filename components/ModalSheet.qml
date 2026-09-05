@@ -38,7 +38,7 @@ Item {
         Row {
             x: 60; y: 78; spacing: 20; visible: sheet.studio
             Repeater {
-                model: [{name:"presets",label:"Compositions"}, {name:"wallpaper",label:"Wallpapers"}, {name:"interface",label:"Materials"}, {name:"animations",label:"Motion"}]
+                model: [{name:"presets",label:"Styles"}, {name:"wallpaper",label:"Wallpapers"}, {name:"animations",label:"Motion"}]
                 delegate: AtelierText {
                     required property var modelData
                     text: modelData.label; font.pixelSize: 12

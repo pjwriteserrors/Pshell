@@ -9,7 +9,7 @@ ComboBox {
     font.pixelSize: 12
     leftPadding: 16
     rightPadding: 36
-    background: Rectangle { radius: 19; color: control.down ? "#d2d8bf" : Atelier.surface }
+    background: Rectangle { radius: 19; color: control.down ? Atelier.selectedSurface : Atelier.surface }
     contentItem: AtelierText { text: control.displayText; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight; font.pixelSize: 12 }
     indicator: AtelierText { x: control.width - 28; y: 8; text: "⌄"; font.pixelSize: 18 }
     delegate: ItemDelegate {

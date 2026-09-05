@@ -114,7 +114,7 @@ Item {
 		{
 			id: "ui-theme-picker",
 			command: "style",
-			name: "Interface Theme",
+			name: "Desktop Styles",
 			description: "Change shapes, depth and shell motion",
 			icon: "applications-graphics-symbolic"
 		},
@@ -2999,7 +2999,7 @@ Item {
                             AtelierText {
                                 x: 16; y: 53; width: parent.width - 28
                                 text: appTile.modelData.name || "Application"; font.pixelSize: 12
-                                color: appTile.selected ? Atelier.paper : Atelier.ink
+                                color: appTile.selected ? Atelier.paper : Atelier.text
                                 elide: Text.ElideRight
                             }
                             HoverLayer { tint: Atelier.gold; onEntered: appList.currentIndex = appTile.index; onClicked: root.launchApp(appTile.modelData) }
@@ -3019,7 +3019,7 @@ Item {
                     required property var modelData
                     required property int index
                     width: commandList.cellWidth - 12; height: 132; radius: 22
-                    color: commandList.currentIndex === index ? "#d2d8bf" : Atelier.surface
+                    color: commandList.currentIndex === index ? Atelier.selectedSurface : Atelier.surface
                     AtelierText { x: 22; y: 20; text: "0" + (commandRow.index + 1) + " / " + (commandRow.modelData.command || commandRow.modelData.id); font.family: Atelier.mono; font.pixelSize: 10; color: Atelier.muted }
                     AtelierText { x: 22; y: 46; width: parent.width - 44; text: commandRow.modelData.name || "Command"; display: true; font.pixelSize: 27; elide: Text.ElideRight }
                     AtelierText { x: 22; y: 90; width: parent.width - 44; text: commandRow.modelData.description || ""; font.pixelSize: 12; color: Atelier.muted; elide: Text.ElideRight }
@@ -3221,7 +3221,7 @@ Item {
                                 required property int index
                                 readonly property var file: modelData || ({})
                                 width: fileBrowserList.cellWidth - 10; height: 126; radius: 18
-                                color: fileBrowserList.currentIndex === index ? "#d2d8bf" : Atelier.surface
+                                color: fileBrowserList.currentIndex === index ? Atelier.selectedSurface : Atelier.surface
                                 Image { x: 18; y: 16; width: 44; height: 44; visible: !!fileRow.file.isImage; source: visible ? root.resolveMarkdownImageSource(fileRow.file.path) : ""; fillMode: Image.PreserveAspectCrop; asynchronous: true }
                                 QQCImpl.IconImage { x: 18; y: 16; width: 32; height: 32; visible: !fileRow.file.isImage; source: fileRow.file.isDir ? root.folderIconPath : root.attachmentIconPath; color: Atelier.sage }
                                 AtelierText { x: 18; y: 70; width: parent.width - 36; text: fileRow.file.name || ""; font.pixelSize: 13; elide: Text.ElideMiddle }

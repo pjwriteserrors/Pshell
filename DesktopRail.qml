@@ -48,7 +48,7 @@ PanelWindow {
             RailButton { icon: "edit-paste-symbolic"; label: "COLLECT"; active: rail.host.clipboardPopupOpen; onClicked: rail.host.toggleClipboardPopup(rail.monitor) }
             RailButton { icon: "network-wired-symbolic"; label: "CONNECT"; active: rail.host.networkPopupOpen || rail.host.bluetoothPopupOpen; onClicked: rail.host.toggleNetworkPopup(rail.monitor) }
             RailButton { icon: "applications-graphics-symbolic"; label: "STUDIO"; active: rail.host.themePickerPopupOpen || rail.host.stylePresetPopupOpen; onClicked: rail.host.toggleStylePresetPopup(rail.monitor) }
-            Rectangle { width: 28; height: 1; x: 18; color: "#4c5551" }
+            Rectangle { width: 28; height: 1; x: 18; color: Atelier.rule }
             Repeater {
                 model: rail.niri.tasksForOutput(String(rail.monitor.name || ""))
                 delegate: Item {
@@ -87,6 +87,6 @@ PanelWindow {
                 }
             }
         }
-        RailButton { icon: "system-shutdown-symbolic"; label: "SESSION"; accent: "#da8d77"; active: rail.host.powerPopupOpen; onClicked: rail.host.togglePowerPopup(rail.monitor) }
+        RailButton { icon: "system-shutdown-symbolic"; label: "SESSION"; accent: Atelier.danger; active: rail.host.powerPopupOpen; onClicked: rail.host.togglePowerPopup(rail.monitor) }
     }
 }

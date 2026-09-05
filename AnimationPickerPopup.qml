@@ -265,7 +265,7 @@ fi
         }
         Rectangle {
             y: stage.height + 16; width: stage.width; height: 44; radius: 22; color: Atelier.accent
-            AtelierText { anchors.centerIn: parent; text: "Set this movement  ↗"; color: Atelier.paper; font.pixelSize: 12 }
+            AtelierText { anchors.centerIn: parent; text: "Set this movement  ↗"; color: Atelier.onAccent; font.pixelSize: 12 }
             MouseArea { anchors.fill: parent; enabled: root.selectedAnimationId !== ""; onClicked: root.applyAnimation() }
         }
         Item {
@@ -283,7 +283,7 @@ fi
                     width: animationGridView.cellWidth; height: animationGridView.cellHeight
                     Rectangle {
                         width: parent.width - 10; height: parent.height - 10; radius: 20
-                        color: parent.index === root.selectedAnimationIndex ? "#d2d8bf" : Atelier.surface
+                        color: parent.index === root.selectedAnimationIndex ? Atelier.selectedSurface : Atelier.surface
                         FolioArtwork { x: 10; y: 2; width: parent.width - 20; height: 82; motif: parent.parent.index % 2 ? "signal" : "orbit"; tint: Atelier.sage }
                         AtelierText { x: 14; y: 86; width: parent.width - 28; text: parent.parent.modelData.label; font.pixelSize: 12; maximumLineCount: 2; wrapMode: Text.WordWrap; elide: Text.ElideRight }
                         AtelierText { x: 14; y: 121; text: parent.parent.modelData.kind || "motion"; font.family: Atelier.mono; color: Atelier.muted; font.pixelSize: 8 }

@@ -151,7 +151,7 @@ Item {
             Rectangle {
                 id: record
                 width: 220; height: 220; radius: 110; anchors.centerIn: parent
-                color: Atelier.ink
+                color: Atelier.text
                 Repeater {
                     model: 8
                     delegate: Rectangle {
@@ -198,7 +198,7 @@ Item {
                     QQCImpl.IconImage {
                         anchors.centerIn: parent; width: 20; height: 20
                         source: Atelier.icon(parent.modelData === "play" ? (root.playing ? "media-playback-pause-symbolic" : "media-playback-start-symbolic") : parent.modelData === "previous" ? "media-skip-backward-symbolic" : "media-skip-forward-symbolic")
-                        color: parent.modelData === "play" ? Atelier.paper : Atelier.ink
+                        color: parent.modelData === "play" ? Atelier.onAccent : Atelier.text
                     }
                     HoverLayer {
                         tint: Atelier.gold
@@ -216,15 +216,15 @@ Item {
             width: parent.width; spacing: 14
             Rectangle {
                 width: 34; height: 34; radius: 17; color: root.sinkMuted ? Atelier.surface : "transparent"
-                QQCImpl.IconImage { anchors.centerIn: parent; width: 16; height: 16; source: Atelier.icon(root.sinkMuted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic"); color: Atelier.ink }
+                QQCImpl.IconImage { anchors.centerIn: parent; width: 16; height: 16; source: Atelier.icon(root.sinkMuted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic"); color: Atelier.text }
                 HoverLayer { tint: Atelier.accent; onClicked: root.toggleSinkMute() }
             }
             Slider {
                 id: volume
                 width: parent.width - 100; height: 34; from: 0; to: 1; value: root.sinkVolume
                 onMoved: root.setSinkVolume(value)
-                background: Rectangle { x: volume.leftPadding; y: 16; width: volume.availableWidth; height: 2; color: Atelier.rule; Rectangle { width: parent.width * volume.visualPosition; height: 2; color: Atelier.ink } }
-                handle: Rectangle { x: volume.leftPadding + volume.visualPosition * (volume.availableWidth - width); y: 12; width: 10; height: 10; radius: 5; color: Atelier.ink }
+                background: Rectangle { x: volume.leftPadding; y: 16; width: volume.availableWidth; height: 2; color: Atelier.rule; Rectangle { width: parent.width * volume.visualPosition; height: 2; color: Atelier.text } }
+                handle: Rectangle { x: volume.leftPadding + volume.visualPosition * (volume.availableWidth - width); y: 12; width: 10; height: 10; radius: 5; color: Atelier.text }
             }
             AtelierText { anchors.verticalCenter: parent.verticalCenter; text: Math.round(root.sinkVolume * 100) + "%"; font.family: Atelier.mono; font.pixelSize: 11 }
         }

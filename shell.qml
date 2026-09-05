@@ -80,11 +80,11 @@ Scope {
 	// theme color roles (derived from the selected pywal theme below)
 	readonly property color secondaryBoxColor: Atelier.surface
 	readonly property color secondaryBoxStrongColor: Qt.tint(Atelier.canvas, Qt.alpha(primary, 0.16))
-	readonly property color secondaryInsetColor: "#e1d8c4"
+	readonly property color secondaryInsetColor: Atelier.surface
 	readonly property color surface: Atelier.canvas
 	readonly property color surfaceBorder: Atelier.rule
-	readonly property color onPrimary: background
-	readonly property color danger: "#d95c5c"
+	readonly property color onPrimary: Atelier.onAccent
+	readonly property color danger: Atelier.danger
 	readonly property var primaryBarScreen: {
 		for (const screen of Quickshell.screens) {
 			if (String(screen.name || "") === "DP-2") return screen;
@@ -1236,9 +1236,9 @@ Scope {
 	readonly property color background: Atelier.canvas
 	readonly property color foreground: Atelier.text
 	readonly property color primary: Atelier.accent
-	readonly property color secondary: "#bbc5ad"
+	readonly property color secondary: Atelier.sage
 	readonly property color accent: Atelier.accent
-	readonly property color tertiary: "#c9b8a3"
+	readonly property color tertiary: Atelier.gold
 	readonly property color border: Atelier.rule
 
 	Process {
@@ -1304,6 +1304,8 @@ Scope {
 		primary: root.primary
 		danger: root.danger
 	}
+
+	IpcHandler { target: "styleSession"; function state(): string { return JSON.stringify({locked: quickLock.locked}); } }
 
 	// Non-destructive review entry points: open surfaces without invoking actions.
 	IpcHandler {
@@ -3536,7 +3538,7 @@ printf 'type=offline\niface=\nip=\n'`
 
 		ModalSheet {
 			open: root.stylePresetPopupOpen
-            title: "Compositions"
+            title: "Desktop styles"
             caption: ""
             studio: true
             controller: root
@@ -3577,7 +3579,7 @@ printf 'type=offline\niface=\nip=\n'`
 
 		ModalSheet {
 			open: root.uiThemePickerPopupOpen
-            title: "Materials & character"
+            title: "Desktop styles"
             caption: ""
             studio: true
             controller: root
