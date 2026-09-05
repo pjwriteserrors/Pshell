@@ -1,7 +1,8 @@
 # Atelier — a new desktop composition
 
 Eigenständige Quickshell-Arbeitskopie unter `main/atelier`.
-Branch `main` enthält die ursprünglichen Quellen; `redesign/atelier` das Redesign.
+Branch `main` heißt im Style-Picker **default**; `redesign/atelier` heißt **Atelier**.
+Beide enthalten die Git-Branch-Auswahl, Details siehe [THEMES.md](THEMES.md).
 Die originale `../shell.qml` ist unverändert. Der Original-Autostart bleibt erhalten.
 
 ## Gestaltung
@@ -9,7 +10,7 @@ Die originale `../shell.qml` ist unverändert. Der Original-Autostart bleibt erh
 Die zweite Gestaltung ersetzt ausdrücklich auch die bisherige Anordnung:
 
 - 88 px breite, dunkle Seitenleiste links auf jedem Monitor; keine horizontale Statusbar.
-- Warme Papierflächen, Salbei, Gold und Ziegelrot; C059 als Displayschrift,
+- Live-Wallust-Palette mit abgeleiteten Flächen und kontrastkorrigierten Akzenten; C059 als Displayschrift,
   Adwaita Sans für Bedienung und Adwaita Mono für Metadaten.
 - Kontext-Popups mit typografischer Seitenfläche und eigenständigem Inhalt.
 - Launcher mit Fokusmotiv und Anwendungsmosaik, Rechner als Zahlenblatt,
@@ -17,12 +18,12 @@ Die zweite Gestaltung ersetzt ausdrücklich auch die bisherige Anordnung:
 - Medien als Schallplattenmotiv mit Transport-, Positions-, Lautstärke- und Ausgabewahl.
 - Verbindungen mit Statusmotiv, Live-Kurven und Gerätekacheln.
 - Benachrichtigungen als chronologischer Verlauf; Toasts als separate Wayland-Flächen.
-- Wallpaper als Bildgalerie mit sechs Farbstudien, Materialien als Musterflächen,
-  Animationen mit eigener Bühne, Presets als Kompositionssammlung.
+- Wallpaper als Bildgalerie mit sechs Farbstudien, Animationen mit eigener Bühne,
+  Styles als Auswahl vollständiger lokaler Git-Branches.
 - Sitzung mit vier Aktionskreisen und Bestätigung für Abmelden, Neustart und Ausschalten.
 
-Die Shell-Palette ist bewusst unabhängig von Wallust. Wallpaper-, Material- und
-Animationsfunktionen bleiben erhalten. Animationen ohne vorhandenen Vorschaufilm
+Die Shell-Palette folgt Wallust automatisch. Die alten Form-Styles und kombinierten
+Presets sind entfernt; Wallpaper- und Animationsfunktionen bleiben erhalten. Animationen ohne vorhandenen Vorschaufilm
 zeigen eine ausdrücklich beschriftete Bewegungsskizze, keinen echten Shader-Render.
 
 ## Laufendes Setup und Rückkehr
