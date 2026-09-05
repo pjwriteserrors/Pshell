@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Controls.impl as QQCImpl
 import Quickshell
 import Quickshell.Io
@@ -141,499 +142,116 @@ Item {
 		onTriggered: root.player?.positionChanged()
 	}
 
-	ExternalCava {
-		id: cava
-		bars: 40
-	}
-
-	Column {
-		id: contentColumn
-		width: parent.width
-		spacing: 14
-
-		// hero: spectrum with cover + titles floating on top
-		Item {
-			id: hero
-			width: parent.width
-			height: 148
-
-			Row {
-				id: spectrum
-				anchors.fill: parent
-				opacity: 0.2
-				spacing: 3
-
-				readonly property real barWidth: (width - (cava.bars - 1) * 3) / cava.bars
-
-				Repeater {
-					model: cava.bars
-
-					delegate: Item {
-						id: barSlot
-						required property int index
-						readonly property real level: cava.values[index] || 0
-
-						width: spectrum.barWidth
-						height: spectrum.height
-
-						ThemedRectangle {
-							anchors.bottom: parent.bottom
-							width: parent.width
-							height: Math.max(5, barSlot.level * (parent.height - 8))
-							radius: width / 2
-							color: Qt.alpha(
-								Qt.tint(root.primary, Qt.alpha(root.accent, barSlot.index / cava.bars)),
-								0.3 + 0.55 * barSlot.level
-							)
-
-							Behavior on height {
-								NumberAnimation {
-									duration: ThemeEngine.duration(70)
-									easing.type: Easing.OutQuad
-								}
-							}
-						}
-					}
-				}
-			}
-
-			Row {
-				anchors.left: parent.left
-				anchors.bottom: parent.bottom
-				anchors.bottomMargin: 6
-				spacing: 12
-
-				ClippingRectangle {
-					width: 78
-					height: 78
-					radius: ThemeEngine.radiusMedium
-					color: root.secondaryBoxColor
-
-					Image {
-						anchors.fill: parent
-						source: root.coverSource
-						visible: root.coverSource !== ""
-						fillMode: Image.PreserveAspectCrop
-						smooth: true
-						mipmap: true
-					}
-
-					QQCImpl.IconImage {
-						anchors.centerIn: parent
-						visible: root.coverSource === ""
-						width: 30
-						height: 30
-						source: "/usr/share/icons/Adwaita/symbolic/mimetypes/audio-x-generic-symbolic.svg"
-						sourceSize: Qt.size(width, height)
-						color: Qt.alpha(root.foreground, 0.65)
-					}
-				}
-
-				Column {
-					anchors.bottom: parent.bottom
-					anchors.bottomMargin: 4
-					spacing: 2
-					width: hero.width - 78 - 12
-
-					AtelierText {
-						width: parent.width
-						color: root.foreground
-						display: true
-    font.pixelSize: 24
-						font.weight: Font.DemiBold
-						elide: Text.ElideRight
-						text: root.titleText
-
-						// soft backdrop so the title stays readable over the bars
-						ThemedRectangle {
-							anchors.fill: parent
-							anchors.margins: -4
-							z: -1
-							radius: ThemeEngine.radiusLarge
-							color: Qt.alpha(root.secondaryBoxColor, 0.001)
-						}
-					}
-
-					AtelierText {
-						width: parent.width
-						color: Qt.alpha(root.foreground, 0.7)
-						font.pixelSize: 12
-						elide: Text.ElideRight
-						text: root.artistText
-					}
-				}
-			}
-		}
-
-		// seekable progress
-		Item {
-			width: parent.width
-			height: 26
-			visible: root.hasPlayer
-
-			AtelierText {
-				anchors.left: parent.left
-				anchors.verticalCenter: parent.verticalCenter
-				color: Qt.alpha(root.foreground, 0.65)
-				font.pixelSize: 10
-				font.weight: Font.Medium
-				text: root.formatTime(root.trackPosition)
-			}
-
-			AtelierText {
-				anchors.right: parent.right
-				anchors.verticalCenter: parent.verticalCenter
-				color: Qt.alpha(root.foreground, 0.65)
-				font.pixelSize: 10
-				font.weight: Font.Medium
-				text: root.hasProgress ? root.formatTime(root.trackLength) : "--"
-			}
-
-			ThemedRectangle {
-				id: seekTrack
-				themeStyle: "inset"
-				anchors.left: parent.left
-				anchors.right: parent.right
-				anchors.leftMargin: 42
-				anchors.rightMargin: 42
-				anchors.verticalCenter: parent.verticalCenter
-				height: 6
-				radius: ThemeEngine.radiusTiny
-				color: Qt.alpha(root.foreground, 0.15)
-
-				ThemedRectangle {
-					themeStyle: "flat"
-					width: parent.width * (root.hasProgress ? root.trackPosition / root.trackLength : 0)
-					height: parent.height
-					radius: parent.radius
-					color: root.primary
-
-					Behavior on width {
-						Anim {
-							duration: Motion.fast
-						}
-					}
-
-					ThemedRectangle {
-						themeStyle: "raised"
-						visible: root.hasProgress
-						width: 12
-						height: 12
-						radius: ThemeEngine.radiusSmall
-						anchors.verticalCenter: parent.verticalCenter
-						anchors.right: parent.right
-						anchors.rightMargin: -6
-						color: root.foreground
-					}
-				}
-
-				MouseArea {
-					anchors.fill: parent
-					anchors.margins: -6
-					cursorShape: Qt.PointingHandCursor
-					onClicked: mouse => {
-						if (!root.hasProgress || !(root.player?.canSeek ?? false))
-							return;
-						const ratio = Math.max(0, Math.min(1, mouse.x / seekTrack.width));
-						root.player.position = ratio * root.trackLength;
-					}
-				}
-			}
-		}
-
-		// transport controls
-		Row {
-			anchors.horizontalCenter: parent.horizontalCenter
-			spacing: 18
-
-			ThemedRectangle {
-				width: 42
-				height: 42
-				radius: ThemeEngine.radiusMedium
-				color: root.secondaryBoxColor
-				anchors.verticalCenter: parent.verticalCenter
-
-				QQCImpl.IconImage {
-					anchors.centerIn: parent
-					width: 16
-					height: 16
-					source: "/usr/share/icons/Adwaita/symbolic/actions/media-skip-backward-symbolic.svg"
-					sourceSize: Qt.size(width, height)
-					color: root.foreground
-				}
-
-				HoverLayer {
-					tint: root.primary
-					onClicked: root.player?.previous()
-				}
-			}
-
-			ThemedRectangle {
-				width: 56
-				height: 56
-				radius: ThemeEngine.radiusMedium
-				color: root.primary
-				scale: root.playing ? 1 : 0.94
-
-				Behavior on scale {
-					SpatialAnim {}
-				}
-
-				QQCImpl.IconImage {
-					anchors.centerIn: parent
-					width: 22
-					height: 22
-					source: root.playing
-						? "/usr/share/icons/Adwaita/symbolic/actions/media-playback-pause-symbolic.svg"
-						: "/usr/share/icons/Adwaita/symbolic/actions/media-playback-start-symbolic.svg"
-					sourceSize: Qt.size(width, height)
-					color: root.onPrimaryColor
-				}
-
-				HoverLayer {
-					tint: root.onPrimaryColor
-					onClicked: root.player?.togglePlaying()
-				}
-			}
-
-			ThemedRectangle {
-				width: 42
-				height: 42
-				radius: ThemeEngine.radiusMedium
-				color: root.secondaryBoxColor
-				anchors.verticalCenter: parent.verticalCenter
-
-				QQCImpl.IconImage {
-					anchors.centerIn: parent
-					width: 16
-					height: 16
-					source: "/usr/share/icons/Adwaita/symbolic/actions/media-skip-forward-symbolic.svg"
-					sourceSize: Qt.size(width, height)
-					color: root.foreground
-				}
-
-				HoverLayer {
-					tint: root.primary
-					onClicked: root.player?.next()
-				}
-			}
-		}
-
-		// output volume — integrated slider row
-		Item {
-			width: parent.width
-			height: 40
-
-			ThemedRectangle {
-				id: muteButton
-				width: 34
-				height: 34
-				radius: ThemeEngine.radiusMedium
-				anchors.left: parent.left
-				anchors.verticalCenter: parent.verticalCenter
-				color: root.sinkMuted ? Qt.alpha(root.accent, 0.35) : root.secondaryBoxColor
-
-				Behavior on color {
-					CAnim {}
-				}
-
-				QQCImpl.IconImage {
-					anchors.centerIn: parent
-					width: 15
-					height: 15
-					source: root.sinkMuted
-						? "/usr/share/icons/Adwaita/symbolic/status/audio-volume-muted-symbolic.svg"
-						: (root.sinkVolume < 0.34
-							? "/usr/share/icons/Adwaita/symbolic/status/audio-volume-low-symbolic.svg"
-							: (root.sinkVolume < 0.67
-								? "/usr/share/icons/Adwaita/symbolic/status/audio-volume-medium-symbolic.svg"
-								: "/usr/share/icons/Adwaita/symbolic/status/audio-volume-high-symbolic.svg"))
-					sourceSize: Qt.size(width, height)
-					color: root.foreground
-				}
-
-				HoverLayer {
-					tint: root.foreground
-					onClicked: root.toggleSinkMute()
-				}
-			}
-
-			ThemedRectangle {
-				id: volumeTrack
-				themeStyle: "inset"
-				anchors.left: muteButton.right
-				anchors.leftMargin: 12
-				anchors.right: volumeLabel.left
-				anchors.rightMargin: 12
-				anchors.verticalCenter: parent.verticalCenter
-				height: 3
-				radius: ThemeEngine.radiusSmall
-				color: Qt.alpha(root.foreground, 0.2)
-
-				ThemedRectangle {
-					themeStyle: "flat"
-					width: parent.width * Math.min(1, root.sinkVolume)
-					height: parent.height
-					radius: parent.radius
-					color: root.sinkMuted ? Qt.alpha(root.foreground, 0.3) : root.primary
-
-					Behavior on width {
-						Anim {
-							duration: Motion.fast
-						}
-					}
-
-					Behavior on color {
-						CAnim {}
-					}
-
-					ThemedRectangle {
-						themeStyle: "raised"
-						width: 14
-						height: 14
-						radius: height / 2
-						anchors.verticalCenter: parent.verticalCenter
-						anchors.right: parent.right
-						anchors.rightMargin: -7
-						color: root.foreground
-					}
-				}
-
-				MouseArea {
-					anchors.fill: parent
-					anchors.margins: -8
-					cursorShape: Qt.PointingHandCursor
-					onPressed: mouse => root.setSinkVolume(mouse.x / volumeTrack.width)
-					onPositionChanged: mouse => {
-						if (pressed) root.setSinkVolume(mouse.x / volumeTrack.width);
-					}
-				}
-			}
-
-			AtelierText {
-				id: volumeLabel
-				anchors.right: parent.right
-				anchors.verticalCenter: parent.verticalCenter
-				width: 34
-				horizontalAlignment: Text.AlignRight
-				color: Qt.alpha(root.foreground, 0.75)
-				font.pixelSize: 11
-				font.weight: Font.DemiBold
-				text: root.sinkMuted ? "mute" : `${Math.round(root.sinkVolume * 100)}%`
-			}
-		}
-
-		// output devices — integrated rows
-		Column {
-			width: parent.width
-			spacing: 6
-			visible: root.sinks.length > 1
-
-			AtelierText {
-				color: Qt.alpha(root.primary, 0.95)
-				font.pixelSize: 9
-				font.weight: Font.DemiBold
-				font.letterSpacing: 1
-				text: "OUTPUT"
-			}
-
-			Repeater {
-				model: root.sinks
-
-				delegate: ThemedRectangle {
-					id: sinkRow
-					required property var modelData
-
-					width: parent.width
-					height: 36
-					radius: ThemeEngine.radiusMedium
-					color: modelData.active ? Qt.alpha(root.primary, 0.24) : root.secondaryBoxColor
-					border.width: modelData.active ? 1 : 0
-					border.color: Qt.alpha(root.primary, 0.5)
-
-					Behavior on color {
-						CAnim {}
-					}
-
-					Row {
-						anchors.left: parent.left
-						anchors.leftMargin: 12
-						anchors.right: parent.right
-						anchors.rightMargin: 12
-						anchors.verticalCenter: parent.verticalCenter
-						spacing: 10
-
-						ThemedRectangle {
-							width: 10
-							height: 10
-							radius: height / 2
-							anchors.verticalCenter: parent.verticalCenter
-							color: sinkRow.modelData.active ? root.primary : "transparent"
-							border.width: 1.4
-							border.color: sinkRow.modelData.active ? root.primary : Qt.alpha(root.foreground, 0.4)
-
-							Behavior on color {
-								CAnim {}
-							}
-						}
-
-						AtelierText {
-							anchors.verticalCenter: parent.verticalCenter
-							width: parent.width - 20
-							color: root.foreground
-							font.pixelSize: 11
-							font.weight: sinkRow.modelData.active ? Font.DemiBold : Font.Normal
-							elide: Text.ElideRight
-							text: root.shortSinkName(sinkRow.modelData.description)
-						}
-					}
-
-					HoverLayer {
-						tint: root.foreground
-						onClicked: root.setDefaultSink(sinkRow.modelData.name)
-					}
-				}
-			}
-		}
-
-		// player chips
-		Flow {
-			width: parent.width
-			spacing: 8
-			visible: (root.players?.length ?? 0) > 1
-
-			Repeater {
-				model: root.players
-
-				delegate: ThemedRectangle {
-					id: playerChip
-					required property var modelData
-					readonly property bool active: modelData === root.player
-
-					width: chipLabel.implicitWidth + 26
-					height: 28
-					radius: ThemeEngine.radiusMedium
-					color: active ? root.primary : root.secondaryBoxColor
-
-					Behavior on color {
-						CAnim {}
-					}
-
-					AtelierText {
-						id: chipLabel
-						anchors.centerIn: parent
-						color: playerChip.active ? root.onPrimaryColor : root.foreground
-						font.pixelSize: 11
-						font.weight: Font.Medium
-						text: playerChip.modelData?.identity || "Player"
-					}
-
-					HoverLayer {
-						tint: playerChip.active ? root.onPrimaryColor : root.foreground
-						onClicked: root.selectPlayer(playerChip.modelData)
-					}
-				}
-			}
-		}
-	}
+    Column {
+        id: contentColumn
+        width: parent.width
+        spacing: 22
+        Item {
+            width: parent.width; height: 238
+            Rectangle {
+                id: record
+                width: 220; height: 220; radius: 110; anchors.centerIn: parent
+                color: Atelier.ink
+                Repeater {
+                    model: 8
+                    delegate: Rectangle {
+                        required property int index
+                        anchors.centerIn: parent
+                        width: 202 - index * 10; height: width; radius: width / 2
+                        color: "transparent"; border.color: "#48504a"; border.width: 1
+                    }
+                }
+                ClippingRectangle {
+                    anchors.centerIn: parent; width: 104; height: 104; radius: 52; color: Atelier.accent
+                    Image { anchors.fill: parent; source: root.coverSource; fillMode: Image.PreserveAspectCrop }
+                }
+                Rectangle { anchors.centerIn: parent; width: 12; height: 12; radius: 6; color: Atelier.canvas }
+                RotationAnimator on rotation { from: 0; to: 360; duration: 24000; loops: Animation.Infinite; running: root.playing && root.popupActive }
+            }
+        }
+        Column {
+            width: parent.width; spacing: 4
+            AtelierText { width: parent.width; text: root.titleText; display: true; font.pixelSize: 28; maximumLineCount: 2; wrapMode: Text.WordWrap; elide: Text.ElideRight; horizontalAlignment: Text.AlignHCenter }
+            AtelierText { width: parent.width; text: root.artistText || "Your next interlude awaits."; color: Atelier.muted; font.pixelSize: 12; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight }
+        }
+        Slider {
+            id: seek
+            width: parent.width; height: 18
+            from: 0; to: root.trackLength; value: root.trackPosition
+            enabled: root.hasProgress
+            onMoved: if(root.player && root.player.canSeek) root.player.position = value
+            background: Rectangle {
+                x: seek.leftPadding; y: (seek.height - height) / 2; width: seek.availableWidth; height: 2; color: Atelier.rule
+                Rectangle { width: parent.width * seek.visualPosition; height: 2; color: Atelier.accent }
+            }
+            handle: Rectangle { x: seek.leftPadding + seek.visualPosition * (seek.availableWidth - width); y: (seek.height - height) / 2; width: 8; height: 8; radius: 4; color: Atelier.accent }
+        }
+        Row {
+            anchors.horizontalCenter: parent.horizontalCenter; spacing: 18
+            Repeater {
+                model: ["previous", "play", "next"]
+                delegate: Rectangle {
+                    required property string modelData
+                    width: modelData === "play" ? 62 : 42; height: width; radius: width / 2
+                    anchors.verticalCenter: parent.verticalCenter
+                    color: modelData === "play" ? Atelier.accent : Atelier.surface
+                    QQCImpl.IconImage {
+                        anchors.centerIn: parent; width: 20; height: 20
+                        source: Atelier.icon(parent.modelData === "play" ? (root.playing ? "media-playback-pause-symbolic" : "media-playback-start-symbolic") : parent.modelData === "previous" ? "media-skip-backward-symbolic" : "media-skip-forward-symbolic")
+                        color: parent.modelData === "play" ? Atelier.paper : Atelier.ink
+                    }
+                    HoverLayer {
+                        tint: Atelier.gold
+                        onClicked: {
+                            if(!root.player) return;
+                            if(parent.modelData === "play") root.player.togglePlaying();
+                            else if(parent.modelData === "previous") root.player.previous();
+                            else root.player.next();
+                        }
+                    }
+                }
+            }
+        }
+        Row {
+            width: parent.width; spacing: 14
+            Rectangle {
+                width: 34; height: 34; radius: 17; color: root.sinkMuted ? Atelier.surface : "transparent"
+                QQCImpl.IconImage { anchors.centerIn: parent; width: 16; height: 16; source: Atelier.icon(root.sinkMuted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic"); color: Atelier.ink }
+                HoverLayer { tint: Atelier.accent; onClicked: root.toggleSinkMute() }
+            }
+            Slider {
+                id: volume
+                width: parent.width - 100; height: 34; from: 0; to: 1; value: root.sinkVolume
+                onMoved: root.setSinkVolume(value)
+                background: Rectangle { x: volume.leftPadding; y: 16; width: volume.availableWidth; height: 2; color: Atelier.rule; Rectangle { width: parent.width * volume.visualPosition; height: 2; color: Atelier.ink } }
+                handle: Rectangle { x: volume.leftPadding + volume.visualPosition * (volume.availableWidth - width); y: 12; width: 10; height: 10; radius: 5; color: Atelier.ink }
+            }
+            AtelierText { anchors.verticalCenter: parent.verticalCenter; text: Math.round(root.sinkVolume * 100) + "%"; font.family: Atelier.mono; font.pixelSize: 11 }
+        }
+        Flow {
+            width: parent.width; spacing: 8
+            Repeater {
+                model: root.players
+                delegate: Rectangle {
+                    required property var modelData
+                    width: playerName.implicitWidth + 20; height: 28; radius: 14
+                    color: modelData === root.player ? Atelier.surface : "transparent"
+                    AtelierText { id: playerName; anchors.centerIn: parent; text: parent.modelData.identity || "Player"; font.pixelSize: 11 }
+                    HoverLayer { tint: Atelier.accent; onClicked: root.selectPlayer(parent.modelData) }
+                }
+            }
+        }
+        Flow {
+            width: parent.width; spacing: 8
+            Repeater {
+                model: root.sinks
+                delegate: Rectangle {
+                    required property var modelData
+                    width: Math.min(outputName.implicitWidth + 20, contentColumn.width); height: 28; radius: 14; color: Atelier.surface
+                    AtelierText { id: outputName; anchors.centerIn: parent; text: root.shortSinkName(parent.modelData.description || parent.modelData.name); font.pixelSize: 10; width: Math.min(implicitWidth, parent.width - 20); elide: Text.ElideRight }
+                    HoverLayer { tint: Atelier.accent; onClicked: root.setDefaultSink(parent.modelData.name) }
+                }
+            }
+        }
+    }
 }

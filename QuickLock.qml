@@ -18,7 +18,7 @@ Scope {
 	property color primary: foreground
 	property color danger: "#d95c5c"
 
-	property bool locked: false
+	property alias locked: sessionLock.locked
 
 	readonly property string wallpaperMediaType: String(mediaTypeFile.text()).trim()
 	readonly property string wallpaperMediaPath: String(mediaSourceFile.text()).trim()
@@ -117,42 +117,19 @@ Scope {
 		onTriggered: root.focusPasswordInput()
 	}
 
-	Variants {
-		model: Quickshell.screens
 
-		PanelWindow {
-			id: lockWindow
-
-			required property var modelData
-
-			screen: modelData
-
-			anchors {
-				left: true
-				right: true
-				top: true
-				bottom: true
-			}
-
-			property real reveal: root.locked ? 1 : 0
-
-			exclusiveZone: 0
-			visible: root.locked
-			color: root.background
-			WlrLayershell.exclusionMode: ExclusionMode.Ignore
-			WlrLayershell.layer: WlrLayer.Overlay
-			WlrLayershell.keyboardFocus: root.locked ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    WlSessionLock {
+        id: sessionLock
+        WlSessionLockSurface {
+            id: lockWindow
+            property real reveal: root.locked ? 1 : 0
+            color: Atelier.ink
 
 			Behavior on reveal {
 				NumberAnimation {
 					duration: Motion.large
 					easing.type: ThemeEngine.standardEasing
 				}
-			}
-
-			ShortcutInhibitor {
-				window: lockWindow
-				enabled: root.locked
 			}
 
 			onVisibleChanged: {
@@ -232,7 +209,7 @@ Scope {
 
 				AtelierText {
 					width: parent.width
-					color: root.foreground
+					color: Atelier.paper
 					text: Qt.formatDateTime(root.lockNow, "HH:mm")
 					horizontalAlignment: Text.AlignLeft
 					font.family: Atelier.display
@@ -243,7 +220,7 @@ Scope {
 
 				AtelierText {
 					width: parent.width
-					color: Qt.alpha(root.foreground, 0.76)
+					color: Qt.alpha(Atelier.paper, 0.76)
 					text: Qt.formatDateTime(root.lockNow, "dddd, dd. MMMM yyyy")
 					horizontalAlignment: Text.AlignLeft
 					font.pixelSize: 16
@@ -271,7 +248,7 @@ Scope {
 					width: parent.width
 					height: 56
 					radius: ThemeEngine.radiusMedium
-					color: Qt.tint(root.background, Qt.alpha(root.primary, 0.1))
+					color: "#384140"
 					border.width: 0
                     Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Atelier.accent }
 					border.color: Qt.alpha(root.primary, 0.35)
@@ -327,7 +304,7 @@ Scope {
 							height: 18
 							source: "/usr/share/icons/Adwaita/symbolic/status/system-lock-screen-symbolic.svg"
 							sourceSize: Qt.size(width, height)
-							color: root.foreground
+							color: Atelier.paper
 							opacity: passwordPam.active ? 0.42 : (passwordBox.inputLength > 0 ? 0.92 : 0.78)
 						}
 
@@ -394,7 +371,7 @@ Scope {
 
 							AtelierText {
 								anchors.centerIn: parent
-								color: Qt.alpha(root.foreground, 0.64)
+								color: Qt.alpha(Atelier.paper, 0.64)
 								text: "Password"
 								font.pixelSize: 14
 								font.weight: Font.Medium
@@ -416,7 +393,7 @@ Scope {
 									width: parent.width
 									height: 4
 									radius: ThemeEngine.radiusMedium
-									color: Qt.alpha(root.foreground, 0.18)
+									color: Qt.alpha(Atelier.paper, 0.18)
 								}
 
 								ThemedRectangle {
@@ -425,7 +402,7 @@ Scope {
 									width: parent.width * passwordBox.inputLevel
 									height: 4
 									radius: ThemeEngine.radiusMedium
-									color: Qt.alpha(root.foreground, 0.72 + passwordBox.typePulse * 0.18)
+									color: Qt.alpha(Atelier.paper, 0.72 + passwordBox.typePulse * 0.18)
 
 									Behavior on width {
 										NumberAnimation {
@@ -441,7 +418,7 @@ Scope {
 									radius: ThemeEngine.radiusMedium
 									x: (parent.width + width) * passwordBox.typeSweep - width
 									y: Math.round((parent.height - height) / 2)
-									color: Qt.alpha(root.foreground, 0.24)
+									color: Qt.alpha(Atelier.paper, 0.24)
 									opacity: passwordBox.typePulse
 								}
 
@@ -466,7 +443,7 @@ Scope {
 				AtelierText {
 					width: parent.width
 					height: 22
-					color: root.authState === "checking" ? Qt.alpha(root.foreground, 0.72) : root.danger
+					color: root.authState === "checking" ? Qt.alpha(Atelier.paper, 0.72) : root.danger
 					text: root.statusText
 					horizontalAlignment: Text.AlignLeft
 					verticalAlignment: Text.AlignVCenter

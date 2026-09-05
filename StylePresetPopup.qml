@@ -364,138 +364,50 @@ Item {
 		AtelierText { id: errorLabel; anchors.centerIn: parent; width: Math.min(implicitWidth, root.width - 140); wrapMode: Text.Wrap; color: "white"; font.pixelSize: 12; text: root.errorText }
 	}
 
-	Item {
-		id: stackArea
-		anchors.top: searchBox.bottom
-		anchors.topMargin: 18
-		anchors.left: parent.left
-		anchors.right: parent.right
-		anchors.bottom: footer.top
-		anchors.bottomMargin: 10
-		visible: root.filteredPresets.length > 0
 
-		MouseArea {
-			anchors.fill: parent
-			acceptedButtons: Qt.NoButton
-			onWheel: function(wheel) {
-				root.movePreset(wheel.angleDelta.y < 0 ? 1 : -1);
-				wheel.accepted = true;
-			}
-		}
+    Item {
+        id: stackArea
+        anchors.top: searchBox.bottom; anchors.topMargin: 18
+        anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: footer.top; anchors.margins: 16
+        Rectangle {
+            id: composition
+            width: parent.width * 0.55; height: parent.height; radius: 24; color: Atelier.surface; clip: true
+            Image { width: parent.width; height: parent.height * 0.62; source: root.currentPreset ? root.currentPreset.previewPath || "" : ""; fillMode: Image.PreserveAspectCrop; asynchronous: true }
+            Column {
+                x: 22; y: parent.height * 0.62 + 18; width: parent.width - 44; spacing: 10
+                AtelierText { width: parent.width; text: root.currentPreset ? root.currentPreset.name : "Your next composition"; display: true; font.pixelSize: 28; elide: Text.ElideRight }
+                AtelierText { width: parent.width; text: root.currentPreset ? [root.currentPreset.themeName,root.currentPreset.animationName].filter(Boolean).join(" / ") : "Collect a wallpaper, material and movement."; color: Atelier.muted; font.pixelSize: 12; wrapMode: Text.WordWrap }
+                Rectangle {
+                    width: parent.width; height: 40; radius: 20; color: Atelier.ink
+                    AtelierText { anchors.centerIn: parent; text: root.currentPreset ? "Apply composition  ↗" : "Create composition  +"; color: Atelier.paper; font.pixelSize: 12 }
+                    MouseArea { anchors.fill: parent; onClicked: root.currentPreset ? root.applyPreset(root.currentPreset) : root.openComposer() }
+                }
+            }
+        }
+        GridView {
+            id: collection
+            x: composition.width + 20; width: parent.width - x; height: parent.height; clip: true
+            cellWidth: width / 2; cellHeight: 168; model: root.filteredPresets
+            delegate: Item {
+                required property var modelData
+                required property int index
+                width: collection.cellWidth; height: collection.cellHeight
+                Rectangle {
+                    width: parent.width - 10; height: parent.height - 10; radius: 16; color: parent.index === root.currentPresetIndex ? "#d2d8bf" : Atelier.surface; clip: true
+                    Image { width: parent.width; height: 100; source: parent.parent.modelData.previewPath || ""; fillMode: Image.PreserveAspectCrop; asynchronous: true }
+                    AtelierText { x: 12; y: 110; width: parent.width - 24; text: parent.parent.modelData.name; font.pixelSize: 13; elide: Text.ElideRight }
+                    AtelierText { x: 12; y: 135; text: parent.parent.modelData.valid ? "READY TO WEAR" : "NEEDS ATTENTION"; color: Atelier.muted; font.family: Atelier.mono; font.pixelSize: 8 }
+                    MouseArea { anchors.fill: parent; onClicked: root.currentPresetIndex = parent.parent.index; onDoubleClicked: root.applyPreset(parent.parent.modelData) }
+                }
+            }
+            ScrollBar.vertical: ScrollBar {}
+        }
+        AtelierText {
+            anchors.right: parent.right; anchors.bottom: parent.bottom; text: "Delete selected composition"; color: Atelier.accent; font.pixelSize: 10; visible: !!root.currentPreset
+            MouseArea { anchors.fill: parent; onClicked: root.deletePreset(root.currentPreset) }
+        }
+    }
 
-		Repeater {
-			model: root.filteredPresets.length
-			delegate: Item {
-				id: presetCard
-				required property int index
-				readonly property int offset: index - root.currentPresetIndex
-				readonly property int distance: Math.abs(offset)
-				readonly property bool active: offset === 0
-				readonly property var preset: root.filteredPresets[index]
-				visible: active
-				z: 8 - distance
-				width: Math.max(1, stackArea.width - 48)
-				height: Math.max(1, stackArea.height - 24)
-				anchors.horizontalCenter: parent.horizontalCenter
-				y: 12
-				opacity: 1
-				scale: 1
-				Behavior on y { NumberAnimation { duration: ThemeEngine.duration(220); easing.type: ThemeEngine.standardEasing } }
-				Behavior on opacity { NumberAnimation { duration: ThemeEngine.duration(180) } }
-				Behavior on scale { NumberAnimation { duration: ThemeEngine.duration(220); easing.type: ThemeEngine.standardEasing } }
-
-				ThemedRectangle {
-					anchors.fill: parent
-					radius: ThemeEngine.radiusMedium
-					color: root.secondaryBoxColor
-					border.width: 0
-					border.color: presetCard.preset.valid ? Qt.alpha(root.barColor, 0.82) : Qt.alpha(root.danger, 0.8)
-					clip: true
-
-					Image {
-						anchors.fill: parent
-						asynchronous: true
-						cache: true
-						fillMode: Image.PreserveAspectCrop
-						source: presetCard.preset.previewPath || ""
-					}
-
-					ThemedRectangle {
-						anchors.fill: parent
-						gradient: Gradient {
-							GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0.04) }
-							GradientStop { position: 0.48; color: "transparent" }
-							GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.78) }
-						}
-					}
-
-					Row {
-						anchors.top: parent.top
-						anchors.right: parent.right
-						anchors.margins: 16
-						spacing: 7
-						Repeater {
-							model: [
-								presetCard.preset.themeName || "Theme",
-								presetCard.preset.animationName || "Animation",
-								`${presetCard.preset.palette || "salience"} · ${presetCard.preset.style || "dark"}`
-							]
-							delegate: ThemedRectangle {
-								required property string modelData
-								width: badgeLabel.implicitWidth + 18
-								height: 26
-								radius: ThemeEngine.radiusMedium
-								color: Qt.rgba(0, 0, 0, 0.62)
-								border.width: 1
-								border.color: Qt.rgba(255, 255, 255, 0.22)
-								AtelierText { id: badgeLabel; anchors.centerIn: parent; color: "white"; font.pixelSize: 10; font.weight: Font.DemiBold; text: parent.modelData }
-							}
-						}
-					}
-
-					ThemedRectangle {
-						visible: presetCard.active
-						z: 5
-						anchors.top: parent.top
-						anchors.left: parent.left
-						anchors.margins: 16
-						width: 34
-						height: 34
-						radius: ThemeEngine.radiusMedium
-						color: Qt.alpha(root.danger, deleteMouse.containsMouse ? 0.82 : 0.55)
-						Image {
-							anchors.centerIn: parent
-							width: 16
-							height: 16
-							source: "/usr/share/icons/Adwaita/symbolic/actions/edit-delete-symbolic.svg"
-							layer.enabled: true
-							layer.effect: MultiEffect { colorization: 1; colorizationColor: "white" }
-						}
-						MouseArea { id: deleteMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; enabled: !root.mutationRunning; onClicked: root.deletePreset(presetCard.preset) }
-					}
-
-					Column {
-						anchors.left: parent.left
-						anchors.right: parent.right
-						anchors.bottom: parent.bottom
-						anchors.margins: 22
-						spacing: 5
-						AtelierText { width: parent.width; color: "white"; display: true; font.pixelSize: 25; font.weight: Font.DemiBold; elide: Text.ElideRight; text: presetCard.preset.name || "Style" }
-						AtelierText { width: parent.width; color: Qt.rgba(255, 255, 255, 0.72); font.pixelSize: 12; elide: Text.ElideRight; text: `${presetCard.preset.wallpaperName || "Wallpaper"}  ·  ${presetCard.preset.themeName || "Theme"}  ·  ${presetCard.preset.animationName || "Animation"}  ·  ${presetCard.preset.palette || "salience"}/${presetCard.preset.style || "dark"}` }
-						AtelierText { visible: !presetCard.preset.valid; color: "#ffb7b7"; font.pixelSize: 11; text: "A referenced wallpaper, theme or animation is missing" }
-					}
-
-					MouseArea {
-						anchors.fill: parent
-						z: 2
-						enabled: presetCard.active && presetCard.preset.valid
-						cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-						onClicked: root.applyPreset(presetCard.preset)
-					}
-				}
-			}
-		}
-	}
 
 	Column {
 		visible: root.filteredPresets.length === 0

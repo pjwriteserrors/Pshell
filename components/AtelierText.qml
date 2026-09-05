@@ -5,7 +5,7 @@ Text {
     font.family: display ? Atelier.display : Atelier.sans
     font.letterSpacing: display ? -0.6 : 0.2
     font.weight: Font.Normal
-    color: Atelier.paper
+    color: Atelier.text
     textFormat: Text.PlainText
     renderType: Text.NativeRendering
 }

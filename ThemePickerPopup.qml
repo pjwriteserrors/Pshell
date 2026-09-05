@@ -6,6 +6,7 @@ import QtQuick.Effects
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
+import Quickshell.Widgets
 import "components"
 import "NiriAnimation.js" as NiriAnimation
 
@@ -91,7 +92,7 @@ Item {
 	readonly property real activeCardTop: Math.max(10, stackArea.height * 0.05)
 	readonly property real stackCenterOffset: root.wideVariantLayout ? -Math.min(root.width * 0.2, 260) : 0
 	readonly property real variantGridWidth: Math.max(390, Math.min(root.width * 0.47, 600))
-	readonly property real variantGridHeight: Math.max(500, Math.min(stackArea.height - 24, 680))
+	readonly property real variantGridHeight: Math.max(240, Math.min(stackArea.height - 24, 680))
 
 	function setThemeEntries(raw) {
 		const entries = [];
@@ -556,879 +557,111 @@ fi
 		}
 	}
 
-	ThemedRectangle {
-		id: searchBox
-		z: 30
-		width: root.searchBarWidth
-		height: 48
-		anchors.top: parent.top
-		anchors.topMargin: 18
-		anchors.horizontalCenter: parent.horizontalCenter
-		themeStyle: "inset"
-		radius: ThemeEngine.radiusMedium
-		color: Qt.alpha(root.secondaryBoxColor, 0.86)
-		border.width: searchField.activeFocus ? 1 : 0
-		border.color: Qt.alpha(root.barColor, 0.65)
 
-		Image {
-			anchors.left: parent.left
-			anchors.leftMargin: 15
-			anchors.verticalCenter: parent.verticalCenter
-			width: 16
-			height: 16
-			source: "/usr/share/icons/Adwaita/symbolic/actions/system-search-symbolic.svg"
-			fillMode: Image.PreserveAspectFit
-			smooth: true
-			mipmap: true
-			layer.enabled: visible
-			layer.effect: MultiEffect {
-				colorization: 1
-				colorizationColor: root.barColor
-			}
-		}
-
-		TextField {
-			id: searchField
-			anchors.left: parent.left
-			anchors.leftMargin: 43
-			anchors.right: closeButton.left
-			anchors.rightMargin: 8
-			anchors.verticalCenter: parent.verticalCenter
-			color: root.foreground
-			placeholderText: "Filter themes"
-			placeholderTextColor: Qt.alpha(root.foreground, 0.45)
-			selectedTextColor: root.foreground
-			selectionColor: Qt.alpha(root.barColor, 0.22)
-			selectByMouse: true
-			focus: true
-			background: Item {}
-			onTextChanged: root.searchText = text
-			Keys.onEscapePressed: root.closeRequested()
-			Keys.onUpPressed: function(event) {
-				root.moveVertical(-1);
-				event.accepted = true;
-			}
-			Keys.onDownPressed: function(event) {
-				root.moveVertical(1);
-				event.accepted = true;
-			}
-			Keys.onLeftPressed: function(event) {
-				root.moveHorizontal(-1);
-				event.accepted = true;
-			}
-			Keys.onRightPressed: function(event) {
-				root.moveHorizontal(1);
-				event.accepted = true;
-			}
-			Keys.onReturnPressed: function(event) {
-				root.applyTheme(root.currentTheme);
-				event.accepted = true;
-			}
-			Keys.onEnterPressed: function(event) {
-				root.applyTheme(root.currentTheme);
-				event.accepted = true;
-			}
-		}
-
-		ThemedRectangle {
-			id: closeButton
-			anchors.right: parent.right
-			anchors.rightMargin: 8
-			anchors.verticalCenter: parent.verticalCenter
-			width: 30
-			height: 30
-			radius: ThemeEngine.radiusMedium
-			color: closeMouse.containsMouse ? Qt.alpha(root.barColor, 0.18) : "transparent"
-
-			MouseArea {
-				id: closeMouse
-				anchors.fill: parent
-				hoverEnabled: true
-				cursorShape: Qt.PointingHandCursor
-				onClicked: root.closeRequested()
-			}
-
-			AtelierText {
-				anchors.centerIn: parent
-				color: root.foreground
-				font.pixelSize: 14
-				text: "x"
-			}
-		}
-	}
-
-	ThemedRectangle {
-		visible: root.deleteError !== ""
-		z: 90
-		anchors.top: searchBox.bottom
-		anchors.topMargin: 8
-		anchors.horizontalCenter: parent.horizontalCenter
-		width: Math.min(deleteErrorText.implicitWidth + 28, root.width - 80)
-		height: deleteErrorText.implicitHeight + 16
-		radius: ThemeEngine.radiusMedium
-		color: Qt.alpha(root.danger, 0.92)
-
-		AtelierText {
-			id: deleteErrorText
-			anchors.centerIn: parent
-			width: Math.min(implicitWidth, root.width - 108)
-			color: "white"
-			font.pixelSize: 12
-			font.weight: Font.DemiBold
-			wrapMode: Text.Wrap
-			horizontalAlignment: Text.AlignHCenter
-			text: root.deleteError
-		}
-	}
-
-		Item {
-			id: variantSelector
-			visible: root.wideVariantLayout && root.currentTheme !== null
-			z: 18
-			width: root.variantGridWidth
-			height: root.variantGridHeight
-			x: stackArea.width * 0.5 + root.stackCenterOffset + root.activeCardWidth * 0.5 + 24 + (root.variantSelectionActive ? 0 : 18)
-			y: stackArea.y + root.activeCardTop
-			opacity: root.previewMatrixItems.length === root.colorSpaceOptions.length * root.paletteOptions.length ? 1 : 0.55
-
-			readonly property real gap: 8
-			readonly property real sectionGap: 14
-			readonly property real sectionTitleHeight: 20
-			readonly property real headerHeight: 24
-			readonly property int darkRowCount: root.darkPaletteOptions.length
-			readonly property int lightRowCount: root.lightPaletteOptions.length
-			readonly property int totalPaletteRows: darkRowCount + lightRowCount
-			readonly property real paletteGapsHeight: Math.max(0, darkRowCount - 1) * gap + Math.max(0, lightRowCount - 1) * gap
-			readonly property real cellWidth: (width - gap * (root.colorSpaceOptions.length - 1)) / root.colorSpaceOptions.length
-			readonly property real cellHeight: (height - sectionGap - (sectionTitleHeight + headerHeight) * 2 - paletteGapsHeight) / Math.max(1, totalPaletteRows)
-
-			function sectionHeight(rowCount) {
-				return variantSelector.sectionTitleHeight + variantSelector.headerHeight
-					+ rowCount * variantSelector.cellHeight
-					+ Math.max(0, rowCount - 1) * variantSelector.gap;
-			}
-
-			function sectionY(sectionName) {
-				return sectionName === "Light" ? variantSelector.sectionHeight(variantSelector.darkRowCount) + variantSelector.sectionGap : 0;
-			}
-
-			function paletteY(paletteName) {
-				const darkIndex = root.darkPaletteOptions.indexOf(paletteName);
-				if (darkIndex >= 0)
-					return variantSelector.sectionY("Dark") + variantSelector.sectionTitleHeight + variantSelector.headerHeight + darkIndex * (variantSelector.cellHeight + variantSelector.gap);
-
-				const lightIndex = root.lightPaletteOptions.indexOf(paletteName);
-				if (lightIndex >= 0)
-					return variantSelector.sectionY("Light") + variantSelector.sectionTitleHeight + variantSelector.headerHeight + lightIndex * (variantSelector.cellHeight + variantSelector.gap);
-
-				return 0;
-			}
-
-			Behavior on x { NumberAnimation { duration: ThemeEngine.duration(180); easing.type: ThemeEngine.standardEasing } }
-			Behavior on opacity { NumberAnimation { duration: ThemeEngine.duration(140) } }
-
-			Repeater {
-				model: ["Dark", "Light"]
-
-				delegate: Item {
-					id: paletteSection
-					required property int index
-					required property string modelData
-
-					readonly property string sectionName: modelData
-					readonly property var palettes: sectionName === "Dark" ? root.darkPaletteOptions : root.lightPaletteOptions
-
-					width: variantSelector.width
-					height: variantSelector.sectionHeight(palettes.length)
-					y: variantSelector.sectionY(sectionName)
-
-					AtelierText {
-						width: parent.width
-						height: variantSelector.sectionTitleHeight
-						color: root.foreground
-						font.pixelSize: 12
-						font.weight: Font.DemiBold
-						verticalAlignment: Text.AlignVCenter
-						text: paletteSection.sectionName
-					}
-
-					Row {
-						id: variantHeader
-						y: variantSelector.sectionTitleHeight
-						width: parent.width
-						height: variantSelector.headerHeight
-						spacing: variantSelector.gap
-
-						Repeater {
-							model: root.colorSpaceOptions
-
-							delegate: ThemedRectangle {
-								required property int index
-								required property string modelData
-
-								width: variantSelector.cellWidth
-								height: variantSelector.headerHeight - 4
-								radius: ThemeEngine.radiusMedium
-								color: Qt.alpha(root.selectedColorIndex === index ? root.barColor : root.secondaryBoxStrongColor, root.selectedColorIndex === index ? 0.34 : 0.42)
-								border.width: root.selectedColorIndex === index ? 1 : 0
-								border.color: Qt.alpha(root.barColor, 0.72)
-
-								AtelierText {
-									anchors.fill: parent
-									anchors.leftMargin: 8
-									anchors.rightMargin: 8
-									color: root.foreground
-									font.pixelSize: 11
-									font.weight: parent.index === root.selectedColorIndex ? Font.DemiBold : Font.Medium
-									horizontalAlignment: Text.AlignHCenter
-									verticalAlignment: Text.AlignVCenter
-									elide: Text.ElideRight
-									text: parent.modelData
-								}
-							}
-						}
-					}
-
-					Repeater {
-						model: paletteSection.palettes
-
-						delegate: Item {
-							id: paletteRow
-							required property int index
-							required property string modelData
-
-							readonly property string paletteName: modelData
-
-							width: variantSelector.width
-							height: variantSelector.cellHeight
-							y: variantSelector.sectionTitleHeight + variantSelector.headerHeight + index * (variantSelector.cellHeight + variantSelector.gap)
-
-							Repeater {
-								model: root.colorSpaceOptions
-
-								delegate: ThemedRectangle {
-									id: variantCell
-									required property int index
-									required property string modelData
-
-									readonly property string colorSpaceName: modelData
-									readonly property var cellData: root.matrixCell(colorSpaceName, paletteRow.paletteName)
-									readonly property bool selected: colorSpaceName === root.selectedColorSpace
-										&& paletteRow.paletteName === root.selectedPalette
-									readonly property color previewBackground: root.dataTone(cellData, -2)
-									readonly property color previewForeground: root.dataTone(cellData, -1)
-
-									x: index * (variantSelector.cellWidth + variantSelector.gap)
-									width: variantSelector.cellWidth
-									height: variantSelector.cellHeight
-									radius: ThemeEngine.radiusMedium
-									color: Qt.alpha(root.secondaryInsetColor, 0.8)
-									border.width: 1
-									border.color: Qt.alpha(selected ? root.barColor : root.foreground, selected ? 0.68 : 0.12)
-									clip: true
-
-									Image {
-										anchors.fill: parent
-										asynchronous: true
-										cache: true
-										fillMode: Image.PreserveAspectCrop
-										mipmap: true
-										smooth: true
-										source: root.currentTheme ? root.currentTheme.previewPath : ""
-									}
-
-									ThemedRectangle {
-										anchors.fill: parent
-										color: root.previewMatrixLoading && !variantCell.cellData ? Qt.rgba(0, 0, 0, 0.34) : Qt.rgba(0, 0, 0, 0.08)
-									}
-
-									ThemedRectangle {
-										anchors.fill: parent
-										gradient: Gradient {
-											GradientStop { position: 0.0; color: Qt.alpha(variantCell.previewBackground, 0.34) }
-											GradientStop { position: 0.56; color: "transparent" }
-											GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.62) }
-										}
-									}
-
-									ThemedRectangle {
-										anchors.left: parent.left
-										anchors.right: parent.right
-										anchors.top: parent.top
-										anchors.margins: 8
-										height: Math.max(12, parent.height * 0.13)
-										radius: ThemeEngine.radiusSmall
-										color: Qt.alpha(variantCell.previewBackground, 0.88)
-										border.width: 1
-										border.color: Qt.alpha(root.dataSwatch(variantCell.cellData, 4), 0.48)
-
-										Row {
-											anchors.left: parent.left
-											anchors.leftMargin: 7
-											anchors.verticalCenter: parent.verticalCenter
-											spacing: 4
-
-											Repeater {
-												model: [1, 2, 3]
-
-												delegate: ThemedRectangle {
-													required property int modelData
-
-													width: 7
-													height: 7
-													radius: ThemeEngine.radiusSmall
-													color: root.dataSwatch(variantCell.cellData, modelData)
-												}
-											}
-										}
-									}
-
-									ThemedRectangle {
-										anchors.left: parent.left
-										anchors.leftMargin: 10
-										anchors.top: parent.top
-										anchors.topMargin: Math.max(28, parent.height * 0.28)
-										width: parent.width * 0.52
-										height: parent.height * 0.34
-										radius: ThemeEngine.radiusSmall
-										color: Qt.alpha(variantCell.previewBackground, 0.82)
-										border.width: 1
-										border.color: Qt.alpha(variantCell.previewForeground, 0.18)
-
-										Column {
-											anchors.fill: parent
-											anchors.margins: 7
-											spacing: 4
-
-											Repeater {
-												model: [2, 3, 4]
-
-												delegate: ThemedRectangle {
-													required property int modelData
-
-													width: parent.width
-													height: Math.max(5, (parent.height - 8) / 3)
-													radius: ThemeEngine.radiusTiny
-													color: Qt.alpha(root.dataSwatch(variantCell.cellData, modelData), modelData === 3 ? 0.86 : 0.48)
-												}
-											}
-										}
-									}
-
-									Row {
-										anchors.right: parent.right
-										anchors.rightMargin: 9
-										anchors.bottom: parent.bottom
-										anchors.bottomMargin: 9
-										spacing: 3
-
-										Repeater {
-											model: [-2, -1, 1, 2, 3, 4]
-
-											delegate: ThemedRectangle {
-												required property int modelData
-
-												width: 11
-												height: 18
-												radius: ThemeEngine.radiusTiny
-												color: root.dataTone(variantCell.cellData, modelData)
-												border.width: 1
-												border.color: Qt.rgba(255, 255, 255, 0.16)
-											}
-										}
-									}
-
-									AtelierText {
-										anchors.left: parent.left
-										anchors.leftMargin: 10
-										anchors.right: parent.right
-										anchors.rightMargin: 10
-										anchors.bottom: parent.bottom
-										anchors.bottomMargin: 8
-										color: "white"
-										font.pixelSize: 10
-										font.weight: variantCell.selected ? Font.DemiBold : Font.Medium
-										elide: Text.ElideRight
-										text: paletteRow.paletteName
-									}
-
-									MouseArea {
-										anchors.fill: parent
-										hoverEnabled: true
-										cursorShape: Qt.PointingHandCursor
-										onClicked: root.selectVariant(variantCell.colorSpaceName, paletteRow.paletteName)
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-
-			ThemedRectangle {
-				x: root.selectedColorIndex * (variantSelector.cellWidth + variantSelector.gap)
-				y: variantSelector.paletteY(root.selectedPalette)
-				z: 40
-				width: variantSelector.cellWidth
-				height: variantSelector.cellHeight
-				radius: ThemeEngine.radiusMedium
-				color: "transparent"
-				border.width: root.variantSelectionActive ? 3 : 2
-				border.color: root.variantSelectionActive ? root.barColor : Qt.alpha(root.foreground, 0.72)
-
-				Behavior on x { NumberAnimation { duration: ThemeEngine.duration(180); easing.type: ThemeEngine.standardEasing } }
-				Behavior on y { NumberAnimation { duration: ThemeEngine.duration(180); easing.type: ThemeEngine.standardEasing } }
-			}
-		}
-
-	Item {
-		id: stackArea
-		anchors.top: searchBox.bottom
-		anchors.topMargin: 14
-		anchors.left: parent.left
-		anchors.right: parent.right
-		anchors.bottom: footerPill.top
-		anchors.bottomMargin: 8
-		visible: root.filteredThemes.length > 0
-		clip: false
-
-		MouseArea {
-			anchors.fill: parent
-			acceptedButtons: Qt.NoButton
-			onWheel: function(wheel) {
-				if (wheel.angleDelta.y < 0) root.moveSelection(1);
-				else if (wheel.angleDelta.y > 0) root.moveSelection(-1);
-				wheel.accepted = true;
-			}
-		}
-
-		Repeater {
-			model: root.filteredThemes.length
-
-			delegate: Item {
-				required property int index
-				readonly property int offset: index - root.currentThemeIndex
-				readonly property int absOffset: Math.abs(offset)
-				readonly property bool active: offset === 0
-
-				visible: active
-				z: 10 - absOffset
-				width: root.activeCardWidth
-				height: root.activeCardHeight
-				anchors.horizontalCenter: stackArea.horizontalCenter
-				anchors.horizontalCenterOffset: root.stackCenterOffset
-				y: root.activeCardTop
-				opacity: 1
-				scale: 1
-
-				Behavior on y { NumberAnimation { duration: ThemeEngine.duration(220); easing.type: ThemeEngine.standardEasing } }
-				Behavior on opacity { NumberAnimation { duration: ThemeEngine.duration(180) } }
-				Behavior on scale { NumberAnimation { duration: ThemeEngine.duration(220); easing.type: ThemeEngine.standardEasing } }
-
-				ThemedRectangle {
-					anchors.fill: parent
-					radius: ThemeEngine.radiusMedium
-					color: Qt.alpha(root.secondaryInsetColor, active ? 0.96 : 0.74)
-					border.width: 0
-					border.color: Qt.alpha(root.barColor, 0.85)
-					clip: true
-
-					Behavior on color { ColorAnimation { duration: ThemeEngine.duration(180) } }
-
-					Image {
-						anchors.fill: parent
-						asynchronous: true
-						cache: true
-						fillMode: Image.PreserveAspectCrop
-						mipmap: true
-						smooth: true
-						source: root.filteredThemes[index].previewPath
-					}
-
-					ThemedRectangle {
-						anchors.fill: parent
-						radius: ThemeEngine.radiusMedium
-						gradient: Gradient {
-							GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, active ? 0.06 : 0.16) }
-							GradientStop { position: 0.6; color: "transparent" }
-							GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, active ? 0.58 : 0.68) }
-						}
-					}
-
-					ThemedRectangle {
-						id: mediaTypeBadge
-						z: 6
-						anchors.top: parent.top
-						anchors.right: parent.right
-						anchors.margins: active ? 18 : 14
-						width: mediaBadgeText.implicitWidth + 18
-						height: 24
-						radius: ThemeEngine.radiusMedium
-						color: Qt.rgba(0, 0, 0, 0.58)
-						border.width: 1
-						border.color: Qt.rgba(255, 255, 255, 0.22)
-
-						AtelierText {
-							id: mediaBadgeText
-							anchors.centerIn: parent
-							color: "white"
-							font.pixelSize: 10
-							font.weight: Font.DemiBold
-							text: root.mediaBadgeLabel(root.filteredThemes[index].mediaType)
-						}
-					}
-
-					ThemedRectangle {
-						id: deleteMediaButton
-						visible: active
-						z: 8
-						anchors.top: parent.top
-						anchors.left: parent.left
-						anchors.margins: 18
-						width: 34
-						height: 34
-						radius: ThemeEngine.radiusMedium
-						color: Qt.alpha(root.danger, deleteMediaMouse.containsMouse ? 0.78 : 0.52)
-						opacity: root.deleteInProgress ? 0.45 : 1
-						border.width: 1
-						border.color: Qt.rgba(255, 255, 255, 0.26)
-
-						Image {
-							anchors.centerIn: parent
-							width: 16
-							height: 16
-							source: "/usr/share/icons/Adwaita/symbolic/actions/edit-delete-symbolic.svg"
-							fillMode: Image.PreserveAspectFit
-							layer.enabled: true
-							layer.effect: MultiEffect {
-								colorization: 1
-								colorizationColor: "white"
-							}
-						}
-
-						MouseArea {
-							id: deleteMediaMouse
-							anchors.fill: parent
-							enabled: !root.deleteInProgress
-							hoverEnabled: enabled
-							cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-							onClicked: root.deleteThemeMedia(root.filteredThemes[index])
-						}
-					}
-
-						MouseArea {
-							anchors.fill: parent
-							enabled: active
-							hoverEnabled: active
-							z: 1
-							cursorShape: active ? Qt.PointingHandCursor : Qt.ArrowCursor
-							onClicked: {
-								root.applyTheme(root.filteredThemes[index]);
-							}
-						}
-
-					Item {
-						id: livePreviewOverlay
-						anchors.fill: parent
-						visible: active && root.previewPaletteStatus === "ready"
-						z: 4
-
-							readonly property color previewBackground: root.activePreviewBackground
-							readonly property color previewForeground: root.activePreviewForeground
-							readonly property bool showMockup: parent.width > 410 && parent.height > 280
-
-						ThemedRectangle {
-							id: previewTopbar
-							anchors.top: parent.top
-							anchors.topMargin: 18
-							anchors.horizontalCenter: parent.horizontalCenter
-							width: Math.min(parent.width - 48, 590)
-							height: Math.max(28, Math.min(38, parent.height * 0.08))
-							radius: ThemeEngine.radiusMedium
-							color: Qt.alpha(livePreviewOverlay.previewBackground, 0.86)
-							border.width: 1
-							border.color: Qt.alpha(root.paletteSwatch(4), 0.7)
-
-							Row {
-								anchors.left: parent.left
-								anchors.leftMargin: 12
-								anchors.verticalCenter: parent.verticalCenter
-								spacing: 7
-
-								Repeater {
-									model: [1, 2, 3, 4, 5]
-
-									delegate: ThemedRectangle {
-										required property int modelData
-
-										width: 16
-										height: 16
-										radius: ThemeEngine.radiusLarge
-										color: modelData === 2 ? root.paletteSwatch(4) : Qt.alpha(livePreviewOverlay.previewForeground, 0.13)
-										border.width: modelData === 2 ? 0 : 1
-										border.color: Qt.alpha(livePreviewOverlay.previewForeground, 0.24)
-
-										AtelierText {
-											anchors.centerIn: parent
-											color: modelData === 2 ? root.readableTextColor(root.paletteSwatch(4)) : Qt.alpha(livePreviewOverlay.previewForeground, 0.72)
-											font.pixelSize: 8
-											font.weight: Font.DemiBold
-											text: modelData
-										}
-									}
-								}
-							}
-
-							Row {
-								anchors.right: parent.right
-								anchors.rightMargin: 12
-								anchors.verticalCenter: parent.verticalCenter
-								spacing: 8
-
-								Repeater {
-									model: [2, 3, 5]
-
-									delegate: ThemedRectangle {
-										required property int modelData
-
-										width: 18
-										height: 18
-										radius: ThemeEngine.radiusLarge
-										color: root.paletteSwatch(modelData)
-										border.width: 1
-										border.color: Qt.alpha(livePreviewOverlay.previewForeground, 0.2)
-									}
-								}
-							}
-						}
-
-						ThemedRectangle {
-							id: previewFileBrowser
-							visible: livePreviewOverlay.showMockup
-							anchors.left: parent.left
-							anchors.leftMargin: 24
-							anchors.top: previewTopbar.bottom
-							anchors.topMargin: 18
-							width: Math.min(parent.width * 0.38, 340)
-							height: Math.min(parent.height * 0.44, 250)
-							radius: ThemeEngine.radiusMedium
-							color: Qt.alpha(livePreviewOverlay.previewBackground, 0.86)
-							border.width: 1
-							border.color: Qt.alpha(root.paletteSwatch(3), 0.62)
-
-							ThemedRectangle {
-								anchors.left: parent.left
-								anchors.top: parent.top
-								anchors.bottom: parent.bottom
-								width: Math.max(58, parent.width * 0.24)
-								color: Qt.alpha(root.paletteSwatch(0), 0.48)
-
-								Column {
-									anchors.fill: parent
-									anchors.margins: 10
-									spacing: 8
-
-									Repeater {
-										model: [4, 2, 3, 5]
-
-										delegate: ThemedRectangle {
-											required property int modelData
-
-											width: parent.width
-											height: 18
-											radius: ThemeEngine.radiusSmall
-											color: modelData === 2 ? Qt.alpha(root.paletteSwatch(2), 0.82) : Qt.alpha(livePreviewOverlay.previewForeground, 0.09)
-
-											ThemedRectangle {
-												anchors.left: parent.left
-												anchors.leftMargin: 7
-												anchors.verticalCenter: parent.verticalCenter
-												width: 7
-												height: 7
-												radius: ThemeEngine.radiusTiny
-												color: root.paletteSwatch(modelData)
-											}
-										}
-									}
-								}
-							}
-
-							Column {
-								anchors.left: parent.left
-								anchors.leftMargin: Math.max(72, parent.width * 0.29)
-								anchors.right: parent.right
-								anchors.rightMargin: 12
-								anchors.top: parent.top
-								anchors.topMargin: 12
-								spacing: 9
-
-								Repeater {
-									model: [1, 2, 3, 4, 5]
-
-									delegate: ThemedRectangle {
-										required property int modelData
-
-										width: parent.width
-										height: 25
-										radius: ThemeEngine.radiusSmall
-										color: Qt.alpha(modelData === 3 ? root.paletteSwatch(3) : root.paletteSwatch(0), modelData === 3 ? 0.82 : 0.34)
-										border.width: modelData === 3 ? 1 : 0
-										border.color: Qt.alpha(livePreviewOverlay.previewForeground, 0.2)
-
-										Row {
-											anchors.left: parent.left
-											anchors.leftMargin: 8
-											anchors.verticalCenter: parent.verticalCenter
-											spacing: 8
-
-											ThemedRectangle {
-												width: 12
-												height: 12
-												radius: ThemeEngine.radiusTiny
-												color: root.paletteSwatch(modelData + 1)
-											}
-
-											ThemedRectangle {
-												width: Math.max(42, previewFileBrowser.width * (0.26 + modelData * 0.035))
-												height: 4
-												radius: ThemeEngine.radiusTiny
-												color: Qt.alpha(livePreviewOverlay.previewForeground, 0.58)
-											}
-										}
-									}
-								}
-							}
-						}
-
-						Column {
-							id: selectedSwatches
-							visible: livePreviewOverlay.showMockup
-							anchors.right: parent.right
-							anchors.rightMargin: 24
-							anchors.top: previewTopbar.bottom
-							anchors.topMargin: 18
-							width: Math.min(178, parent.width * 0.24)
-							spacing: 8
-
-							ThemedRectangle {
-								width: parent.width
-								height: 28
-								radius: ThemeEngine.radiusMedium
-								color: Qt.alpha(livePreviewOverlay.previewBackground, 0.88)
-								border.width: 1
-								border.color: Qt.alpha(root.paletteSwatch(4), 0.45)
-
-								AtelierText {
-									anchors.fill: parent
-									anchors.leftMargin: 10
-									anchors.rightMargin: 10
-									color: livePreviewOverlay.previewForeground
-									font.pixelSize: 10
-									font.weight: Font.DemiBold
-									horizontalAlignment: Text.AlignHCenter
-									verticalAlignment: Text.AlignVCenter
-									elide: Text.ElideRight
-									text: `${root.selectedColorSpace} / ${root.selectedPalette}`
-								}
-							}
-
-							Grid {
-								width: parent.width
-								columns: 2
-								columnSpacing: 6
-								rowSpacing: 6
-
-								Repeater {
-									model: [-2, -1, 1, 2, 3, 4, 5, 6]
-
-									delegate: ThemedRectangle {
-										required property int modelData
-
-										readonly property color blockColor: modelData === -2 ? livePreviewOverlay.previewBackground : modelData === -1 ? livePreviewOverlay.previewForeground : root.paletteSwatch(modelData)
-
-										width: (selectedSwatches.width - 6) / 2
-										height: 28
-										radius: ThemeEngine.radiusSmall
-										color: blockColor
-										border.width: 1
-										border.color: Qt.rgba(255, 255, 255, 0.18)
-
-										AtelierText {
-											anchors.centerIn: parent
-											color: root.readableTextColor(parent.blockColor)
-											font.pixelSize: 8
-											font.weight: Font.DemiBold
-											text: modelData === -2 ? "bg" : modelData === -1 ? "fg" : `c${modelData}`
-										}
-									}
-								}
-							}
-						}
-
-					}
-
-						Column {
-							anchors.left: parent.left
-							width: parent.width - 48
-							anchors.bottom: parent.bottom
-							anchors.margins: 24
-							spacing: 6
-
-						AtelierText {
-							width: parent.width
-							color: "white"
-							font.pixelSize: active ? 28 : 20
-							font.weight: Font.DemiBold
-							elide: Text.ElideRight
-							text: root.filteredThemes[index].name
-						}
-
-						AtelierText {
-							width: parent.width
-							color: Qt.rgba(255, 255, 255, 0.78)
-							font.pixelSize: 12
-							elide: Text.ElideRight
-							text: active ? `${root.selectedColorSpace} / ${root.selectedPalette}` : "Select"
-						}
-					}
-				}
-			}
-		}
-	}
-
-		Item {
-			id: footerPill
-			anchors.horizontalCenter: parent.horizontalCenter
-			anchors.bottom: parent.bottom
-			anchors.bottomMargin: 18
-			width: 1
-			height: 1
-			visible: false
-		}
-
-	Item {
-		anchors.fill: parent
-		visible: root.filteredThemes.length === 0
-
-		Column {
-			anchors.centerIn: parent
-			spacing: 8
-
-			AtelierText {
-				horizontalAlignment: Text.AlignHCenter
-				color: root.foreground
-				font.pixelSize: 18
-				font.weight: Font.DemiBold
-				text: "No themes found"
-			}
-
-			AtelierText {
-				horizontalAlignment: Text.AlignHCenter
-				color: Qt.alpha(root.foreground, 0.58)
-				font.pixelSize: 12
-				text: "Try a different search term"
-			}
-		}
-	}
-
+    Item {
+        id: stackArea
+        anchors.fill: parent; anchors.margins: 12
+        property bool confirmDelete: false
+        Rectangle {
+            id: searchBox
+            width: parent.width; height: 42; radius: 21; color: Atelier.surface
+            TextInput {
+                id: searchField
+                anchors.fill: parent; anchors.leftMargin: 20; anchors.rightMargin: 20
+                verticalAlignment: TextInput.AlignVCenter; color: Atelier.text; font.family: Atelier.sans; font.pixelSize: 13
+                onTextChanged: root.searchText = text
+                AtelierText { anchors.verticalCenter: parent.verticalCenter; text: "Find a landscape…"; visible: !parent.text; color: Atelier.muted; font.pixelSize: 13 }
+                Keys.onReturnPressed: root.applyTheme(root.currentTheme)
+                Keys.onEscapePressed: root.closeRequested()
+                Keys.onDownPressed: root.moveSelection(1)
+                Keys.onUpPressed: root.moveSelection(-1)
+            }
+        }
+        Item {
+            id: exhibition
+            y: 58; width: parent.width * 0.59; height: parent.height - 58
+            ClippingRectangle {
+                id: artwork
+                width: parent.width; height: parent.height - 118; radius: 24
+                color: Atelier.surface
+                Image { anchors.fill: parent; source: root.currentTheme ? root.currentTheme.previewPath : ""; fillMode: Image.PreserveAspectCrop; asynchronous: true }
+                Rectangle {
+                    x: 16; y: 16; width: edition.implicitWidth + 28; height: 32; radius: 16; color: Atelier.canvas
+                    AtelierText { id: edition; anchors.centerIn: parent; text: "LANDSCAPE  /  " + (root.currentThemeIndex + 1) + " OF " + root.filteredThemes.length; font.family: Atelier.mono; font.pixelSize: 10 }
+                }
+            }
+            AtelierText { y: artwork.height + 12; width: parent.width - 100; text: root.currentTheme ? root.currentTheme.name : "No landscapes found"; display: true; font.pixelSize: 28; elide: Text.ElideRight }
+            Row {
+                anchors.right: parent.right; y: artwork.height + 12; spacing: 8
+                Repeater {
+                    model: ["←", "→"]
+                    delegate: Rectangle {
+                        required property string modelData
+                        required property int index
+                        width: 36; height: 36; radius: 18; color: Atelier.surface
+                        AtelierText { anchors.centerIn: parent; text: parent.modelData; font.pixelSize: 18 }
+                        MouseArea { anchors.fill: parent; onClicked: root.moveSelection(parent.index === 0 ? -1 : 1) }
+                    }
+                }
+            }
+            ListView {
+                y: artwork.height + 58; width: parent.width; height: 60; orientation: ListView.Horizontal; spacing: 8; clip: true
+                model: root.filteredThemes
+                delegate: ClippingRectangle {
+                    id: thumbnail
+                    required property var modelData
+                    required property int index
+                    width: 88; height: 56; radius: 10
+                    Image { anchors.fill: parent; source: thumbnail.modelData.previewPath; fillMode: Image.PreserveAspectCrop; asynchronous: true }
+                    Rectangle { anchors.fill: parent; radius: 10; color: "transparent"; border.width: thumbnail.index === root.currentThemeIndex ? 3 : 0; border.color: Atelier.accent }
+                    MouseArea { anchors.fill: parent; onClicked: root.currentThemeIndex = thumbnail.index }
+                }
+            }
+        }
+        Flickable {
+            x: exhibition.width + 28; y: 58; width: parent.width - x; height: parent.height - 58
+            contentHeight: controls.height; clip: true
+            Column {
+                id: controls; width: parent.width; spacing: 12
+                AtelierText { text: "Colour studies"; display: true; font.pixelSize: 28 }
+                AtelierText { width: parent.width; text: "Six ways to interpret your landscape."; color: Atelier.muted; font.pixelSize: 12; wrapMode: Text.WordWrap }
+                Grid {
+                    width: parent.width; columns: 3; spacing: 8
+                    Repeater {
+                        model: 6
+                        delegate: Rectangle {
+                            id: study
+                            required property int index
+                            property string palette: root.colorSpaceOptions[index % 3]
+                            property string styleName: index < 3 ? "dark" : "light"
+                            property var paletteData: root.matrixCell(palette, styleName)
+                            width: (controls.width - 16) / 3; height: 86; radius: 12
+                            color: paletteData && paletteData.background ? paletteData.background : index < 3 ? Atelier.ink : Atelier.surface
+                            border.width: root.selectedColorSpace === palette && root.selectedPalette === styleName ? 2 : 0; border.color: Atelier.accent
+                            Row {
+                                anchors.horizontalCenter: parent.horizontalCenter; y: 16; spacing: 2
+                                Repeater { model: 3; delegate: Rectangle { required property int index; width: 14; height: 24; radius: 7; color: study.paletteData ? root.dataSwatch(study.paletteData, index + 1) : [Atelier.sage,Atelier.gold,Atelier.accent][index] } }
+                            }
+                            AtelierText { anchors.horizontalCenter: parent.horizontalCenter; y: 51; text: study.palette; color: root.readableTextColor(String(study.color)); font.pixelSize: 10 }
+                            AtelierText { anchors.horizontalCenter: parent.horizontalCenter; y: 66; text: study.styleName; color: root.readableTextColor(String(study.color)); font.pixelSize: 8 }
+                            MouseArea { anchors.fill: parent; onClicked: root.selectVariant(study.palette, study.styleName) }
+                        }
+                    }
+                }
+                AtelierText { text: "EXTRACTION / TRANSITION"; color: Atelier.muted; font.family: Atelier.mono; font.pixelSize: 9 }
+                AtelierSelect { width: parent.width; model: root.backendOptions; currentIndex: root.backendOptions.indexOf(root.selectedBackend); onActivated: root.selectedBackend = currentText }
+                AtelierSelect { width: parent.width; model: root.animationOptions; textRole: "name"; currentIndex: Math.max(0, root.animationOptions.findIndex(option => option.id === root.selectedAnimationId)); onActivated: root.selectedAnimationId = root.animationOptions[currentIndex].id }
+                Rectangle {
+                    width: parent.width; height: 44; radius: 22; color: Atelier.accent
+                    AtelierText { anchors.centerIn: parent; text: "Bring this landscape home  ↗"; color: Atelier.paper; font.pixelSize: 12 }
+                    MouseArea { anchors.fill: parent; onClicked: root.applyTheme(root.currentTheme) }
+                }
+                AtelierText {
+                    width: parent.width; text: root.deleteError || (stackArea.confirmDelete ? "Move this wallpaper to trash? Click again." : "Move landscape to trash"); color: Atelier.muted; font.pixelSize: 10; wrapMode: Text.WordWrap
+                    MouseArea { anchors.fill: parent; onClicked: { if(stackArea.confirmDelete) { root.deleteThemeMedia(root.currentTheme); stackArea.confirmDelete=false; } else stackArea.confirmDelete=true; } }
+                }
+            }
+            ScrollBar.vertical: ScrollBar {}
+        }
+    }
 }

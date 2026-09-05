@@ -19,7 +19,20 @@ import "components"
 Scope {
 	id: root
 
-	property int nextToastId: 0
+	function navigatePanel(name) {
+        const openers = {
+            launcher: root.openLauncherPopup, calendar: root.openClockPopup,
+            weather: root.openWeatherPopup, notifications: root.openNotifPopup,
+            media: root.openMediaPopup, resources: root.openResourcesPopup,
+            network: root.openNetworkPopup, bluetooth: root.openBluetoothPopup,
+            clipboard: root.openClipboardPopup, power: root.openPowerPopup,
+            wallpaper: root.openThemePickerPopup, interface: root.openUiThemePickerPopup,
+            animations: root.openAnimationPickerPopup, presets: root.openStylePresetPopup
+        };
+        if (openers[name]) openers[name]();
+    }
+
+    property int nextToastId: 0
 	property var toasts: []
 	property var notificationGroups: []
 	property bool clockPopupOpen: false
@@ -65,10 +78,10 @@ Scope {
 	property var trayMenuHandle: null
 	property Item trayMenuTargetItem: null
 	// theme color roles (derived from the selected pywal theme below)
-	readonly property color secondaryBoxColor: Qt.alpha(foreground, 0.025)
-	readonly property color secondaryBoxStrongColor: Qt.alpha(primary, 0.13)
-	readonly property color secondaryInsetColor: Atelier.ink
-	readonly property color surface: Atelier.surface
+	readonly property color secondaryBoxColor: Atelier.surface
+	readonly property color secondaryBoxStrongColor: Qt.tint(Atelier.canvas, Qt.alpha(primary, 0.16))
+	readonly property color secondaryInsetColor: "#e1d8c4"
+	readonly property color surface: Atelier.canvas
 	readonly property color surfaceBorder: Atelier.rule
 	readonly property color onPrimary: background
 	readonly property color danger: "#d95c5c"
@@ -741,6 +754,7 @@ Scope {
 	}
 
 	function closePowerPopup() {
+        root.pendingPowerAction = "";
 		root.powerPopupOpen = false;
 		powerPopupCloseTimer.restart();
 	}
@@ -845,7 +859,11 @@ Scope {
 		quickLock.lock();
 	}
 
+	property string pendingPowerAction: ""
+
 	function runPowerAction(kind) {
+        if (kind !== "lock" && root.pendingPowerAction !== kind) { root.pendingPowerAction = kind; return; }
+        root.pendingPowerAction = "";
 		root.closePowerPopup();
 
 		switch (kind) {
@@ -1215,8 +1233,8 @@ Scope {
 	}
 
 	readonly property var wal: JSON.parse(walFile.text())
-	readonly property color background: Atelier.ink
-	readonly property color foreground: Atelier.paper
+	readonly property color background: Atelier.canvas
+	readonly property color foreground: Atelier.text
 	readonly property color primary: Atelier.accent
 	readonly property color secondary: "#bbc5ad"
 	readonly property color accent: Atelier.accent
@@ -1285,6 +1303,33 @@ Scope {
 		background: root.background
 		primary: root.primary
 		danger: root.danger
+	}
+
+	// Non-destructive review entry points: open surfaces without invoking actions.
+	IpcHandler {
+		target: "designReview"
+		function open(name: string): void {
+			const openers = {
+				launcher: root.openLauncherPopup, calendar: root.openClockPopup,
+				weather: root.openWeatherPopup, notifications: root.openNotifPopup,
+				media: root.openMediaPopup, resources: root.openResourcesPopup,
+				network: root.openNetworkPopup, bluetooth: root.openBluetoothPopup,
+				clipboard: root.openClipboardPopup, power: root.openPowerPopup,
+				wallpaper: root.openThemePickerPopup, interface: root.openUiThemePickerPopup,
+				animations: root.openAnimationPickerPopup, presets: root.openStylePresetPopup
+			};
+			if (openers[name]) openers[name]();
+		}
+		function close(): void { root.closeOtherPopups(""); }
+		function osd(): void {
+			root.showOsd("volume", "Volume", 0.42, "42%", root.iconNameSource("audio-volume-high-symbolic", []));
+		}
+		function state(): string {
+			return JSON.stringify({locked: quickLock.locked, theme: ThemeEngine.currentThemeId, themeError: ThemeEngine.error,
+				screen: root.activePopupScreen?.name, screens: Quickshell.screens.map(s => ({name:s.name,width:s.width,height:s.height})),
+				background: String(root.background), foreground: String(root.foreground),
+				network: root.networkStatusType, notificationGroups: root.notificationGroups.length});
+		}
 	}
 
 	IpcHandler {
@@ -1537,12 +1582,10 @@ Scope {
 		id: osdWindow
 		screen: root.primaryBarScreen
 
-		anchors {
-			left: true
-			right: true
-			top: true
-			bottom: true
-		}
+		anchors { left: true; bottom: true }
+        margins { left: 112; bottom: 28 }
+        implicitWidth: 280
+        implicitHeight: 76
 
 		exclusiveZone: 0
 		visible: root.osdVisible
@@ -1554,9 +1597,9 @@ Scope {
 			id: osdCard
 			width: 280
 			height: 76
-			x: Math.round((parent.width - width) / 2)
-			y: 84
-			radius: ThemeEngine.radiusMedium
+			x: 0
+			y: 0
+			radius: 38
 			color: root.surface
 			border.width: 1
 			border.color: root.surfaceBorder
@@ -1658,6 +1701,7 @@ Scope {
 
 	PanelWindow {
 		id: barWindow
+        visible: false
 		screen: root.primaryBarScreen
 
 		anchors {
@@ -2044,33 +2088,14 @@ Scope {
 	}
 
 	Variants {
-		model: root.extraBarScreens
-
-		TopBarReplica {
-			required property var modelData
-
-			screenModel: modelData
-			foreground: root.foreground
-			background: root.background
-			secondaryBoxColor: root.surface
-			secondaryBoxStrongColor: root.secondaryBoxStrongColor
-			secondaryInsetColor: root.secondaryInsetColor
-			tertiary: root.accent
-			primary: root.primary
-			onPrimaryColor: root.onPrimary
-			danger: root.danger
-			networkStatusType: root.networkStatusType
-			niriState: niriState
-			onLauncherClicked: root.toggleLauncherPopup(modelData)
-			onMediaClicked: root.toggleMediaPopup(modelData)
-			onClockClicked: root.toggleClockPopup(modelData)
-			onClipboardClicked: root.toggleClipboardPopup(modelData)
-			onBluetoothClicked: root.toggleBluetoothPopup(modelData)
-			onNetworkClicked: root.toggleNetworkPopup(modelData)
-			onResourcesClicked: root.toggleResourcesPopup(modelData)
-			onPowerClicked: root.togglePowerPopup(modelData)
-		}
-	}
+        model: Quickshell.screens
+        DesktopRail {
+            required property var modelData
+            monitor: modelData
+            host: root
+            niri: niriState
+        }
+    }
 
 	Timer {
 		id: launcherPopupOpenTimer
@@ -2249,6 +2274,10 @@ Scope {
 
 	PopupSurface {
 		id: clipboardPopup
+        controller: root
+        chapter: "05"
+        title: "Collected"
+        subtitle: "Fragments worth keeping close."
 		screen: root.activePopupScreen
 
 		onDismissRequested: root.closeClipboardPopup()
@@ -2259,7 +2288,7 @@ Scope {
 		anchorMode: "right"
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
-		expandedWidth: 360
+		expandedWidth: 520
 		contentPreferredHeight: clipboardColumn.implicitHeight
 
 		onVisibleChanged: {
@@ -2384,7 +2413,7 @@ Scope {
 									anchors.verticalCenter: parent.verticalCenter
 									width: Math.max(22, clipCountLabel.implicitWidth + 12)
 									height: 19
-									radius: ThemeEngine.radiusMedium
+									radius: 18
 									color: Qt.alpha(root.primary, 0.3)
 
 									AtelierText {
@@ -2493,11 +2522,12 @@ Scope {
 								text: clipboardPopupContent.searchText !== "" ? "No matches" : "Clipboard is empty"
 							}
 
-							ListView {
+							GridView {
 								id: clipboardList
 								anchors.fill: parent
 								clip: true
-								spacing: 8
+								cellWidth: width / 2
+                                cellHeight: 158
 								model: clipboardPopupContent.filteredEntries
 								boundsBehavior: Flickable.StopAtBounds
 								currentIndex: clipboardPopupContent.filteredEntries.length > 0
@@ -2542,8 +2572,8 @@ Scope {
 									required property int index
 									readonly property bool selected: index === clipboardPopupContent.selectedIndex
 
-									width: ListView.view.width
-									height: modelData.isImage ? 110 : 46
+									width: clipboardList.cellWidth - 10
+									height: 148
 									radius: ThemeEngine.radiusMedium
 									color: selected ? Qt.alpha(root.primary, 0.26) : root.secondaryBoxColor
 									border.width: selected ? 1 : 0
@@ -2620,7 +2650,8 @@ Scope {
 										color: foreground
 										font.pixelSize: 11
 										elide: Text.ElideRight
-										maximumLineCount: 1
+										maximumLineCount: 5
+                                        wrapMode: Text.WordWrap
 										text: clipEntry.modelData.preview
 									}
 
@@ -2677,6 +2708,11 @@ Scope {
 
 	PopupSurface {
 		id: bluetoothPopup
+        controller: root
+        chapter: "06"
+        title: "Wireless"
+        subtitle: "Your devices, in conversation."
+        destinations: [{name:"network",label:"Network"},{name:"bluetooth",label:"Bluetooth"},{name:"resources",label:"System"}]
 		screen: root.activePopupScreen
 
 		onDismissRequested: root.closeBluetoothPopup()
@@ -2687,7 +2723,7 @@ Scope {
 		anchorMode: "right"
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
-		expandedWidth: 300
+		expandedWidth: 380
 		contentPreferredHeight: bluetoothPopupColumn.implicitHeight
 
 		property bool powered: false
@@ -2981,297 +3017,18 @@ done`
 					id: bluetoothPopupContent
 					anchors.fill: parent
 
-					Column {
-						id: bluetoothPopupColumn
-						anchors.fill: parent
-						spacing: 12
-
-						Item {
-							width: parent.width
-							height: 30
-
-							AtelierText {
-								anchors.left: parent.left
-								anchors.verticalCenter: parent.verticalCenter
-								color: foreground
-								font.pixelSize: 22
-                                display: true
-								font.weight: Font.Normal
-								text: "Bluetooth"
-							}
-
-							ThemedRectangle {
-								id: btSwitch
-								themeStyle: "inset"
-								anchors.right: parent.right
-								anchors.verticalCenter: parent.verticalCenter
-								width: 44
-								height: 24
-								radius: height / 2
-								color: bluetoothPopup.powered ? root.primary : root.secondaryInsetColor
-
-								Behavior on color {
-									CAnim {
-										duration: Motion.normal
-									}
-								}
-
-								ThemedRectangle {
-									themeStyle: "raised"
-									width: 18
-									height: 18
-									radius: height / 2
-									anchors.verticalCenter: parent.verticalCenter
-									x: bluetoothPopup.powered ? parent.width - width - 3 : 3
-									color: bluetoothPopup.powered ? root.onPrimary : Qt.alpha(root.foreground, 0.7)
-
-									Behavior on x {
-										SpatialAnim {}
-									}
-
-									Behavior on color {
-										CAnim {
-											duration: Motion.normal
-										}
-									}
-								}
-
-								HoverLayer {
-									tint: root.foreground
-									showHover: false
-									onClicked: bluetoothPopup.togglePower()
-								}
-							}
-						}
-
-						ThemedRectangle {
-							width: parent.width
-							height: 32
-							radius: ThemeEngine.radiusMedium
-							color: bluetoothPopup.scanning ? Qt.alpha(root.primary, 0.3) : root.secondaryBoxColor
-							visible: bluetoothPopup.powered
-
-							Behavior on color {
-								CAnim {}
-							}
-
-							Row {
-								anchors.centerIn: parent
-								spacing: 8
-
-								QQCImpl.IconImage {
-									id: scanIcon
-									anchors.verticalCenter: parent.verticalCenter
-									width: 13
-									height: 13
-									source: "/usr/share/icons/Adwaita/symbolic/actions/view-refresh-symbolic.svg"
-									sourceSize: Qt.size(width, height)
-									color: root.foreground
-
-									RotationAnimator on rotation {
-										running: bluetoothPopup.scanning
-										loops: Animation.Infinite
-										from: 0
-										to: 360
-										duration: ThemeEngine.duration(1100)
-									}
-								}
-
-								AtelierText {
-									anchors.verticalCenter: parent.verticalCenter
-									color: foreground
-									font.pixelSize: 12
-									font.weight: Font.Medium
-									text: bluetoothPopup.scanning ? "Scanning for devices..." : "Scan for devices"
-								}
-							}
-
-							HoverLayer {
-								tint: root.primary
-								onClicked: bluetoothPopup.startScan()
-							}
-						}
-
-						Item {
-							width: parent.width
-							implicitHeight: bluetoothPopup.powered ? 250 : 64
-
-							Column {
-								visible: !bluetoothPopup.powered
-								anchors.centerIn: parent
-								spacing: 6
-
-								QQCImpl.IconImage {
-									anchors.horizontalCenter: parent.horizontalCenter
-									width: 26
-									height: 26
-									source: "/usr/share/icons/Adwaita/symbolic/status/bluetooth-disabled-symbolic.svg"
-									sourceSize: Qt.size(width, height)
-									color: Qt.alpha(root.foreground, 0.35)
-								}
-
-								AtelierText {
-									anchors.horizontalCenter: parent.horizontalCenter
-									color: Qt.alpha(foreground, 0.5)
-									font.pixelSize: 12
-									text: "Bluetooth is off"
-								}
-							}
-
-							ListView {
-								visible: bluetoothPopup.powered
-								anchors.fill: parent
-								clip: true
-								spacing: 8
-								model: bluetoothPopup.devices
-								boundsBehavior: Flickable.StopAtBounds
-
-								add: Transition {
-									NumberAnimation {
-										properties: "opacity"
-										from: 0
-										to: 1
-										duration: Motion.normal
-										easing.type: ThemeEngine.standardEasing
-									}
-								}
-
-								displaced: Transition {
-									NumberAnimation {
-										properties: "y"
-										duration: Motion.normal
-										easing.type: ThemeEngine.standardEasing
-									}
-								}
-
-								ScrollBar.vertical: ScrollBar {
-									policy: ScrollBar.AsNeeded
-								}
-
-								header: AtelierText {
-									visible: bluetoothPopup.devices.length === 0
-									width: ListView.view ? ListView.view.width : 0
-									height: visible ? 30 : 0
-									horizontalAlignment: Text.AlignHCenter
-									verticalAlignment: Text.AlignVCenter
-									color: Qt.alpha(foreground, 0.5)
-									font.pixelSize: 11
-									text: "No devices found yet"
-								}
-
-								delegate: ThemedRectangle {
-									id: btDevice
-									required property var modelData
-									readonly property string deviceIcon: {
-										const n = String(modelData.name || "").toLowerCase();
-										if (/bud|head|arctis|wh-|wf-|airpod|speaker|soundcore|jbl/.test(n))
-											return "/usr/share/icons/Adwaita/symbolic/devices/audio-headphones-symbolic.svg";
-										if (n.includes("mouse"))
-											return "/usr/share/icons/Adwaita/symbolic/devices/input-mouse-symbolic.svg";
-										if (n.includes("keyboard") || n.includes("keychron"))
-											return "/usr/share/icons/Adwaita/symbolic/devices/input-keyboard-symbolic.svg";
-										if (/phone|pixel|galaxy|iphone/.test(n))
-											return "/usr/share/icons/Adwaita/symbolic/devices/phone-symbolic.svg";
-										if (/tv|cast/.test(n))
-											return "/usr/share/icons/Adwaita/symbolic/devices/tv-symbolic.svg";
-										return "/usr/share/icons/Adwaita/symbolic/status/bluetooth-active-symbolic.svg";
-									}
-
-									width: ListView.view.width
-									height: 52
-									radius: ThemeEngine.radiusMedium
-									color: modelData.connected ? Qt.alpha(root.primary, 0.26) : root.secondaryBoxColor
-									border.width: modelData.connected ? 1 : 0
-									border.color: Qt.alpha(root.primary, 0.55)
-
-									Behavior on color {
-										CAnim {}
-									}
-
-									HoverLayer {
-										tint: root.foreground
-										onClicked: bluetoothPopup.connectDevice(btDevice.modelData.address)
-									}
-
-									Row {
-										anchors.left: parent.left
-										anchors.leftMargin: 10
-										anchors.right: btBatteryChip.visible ? btBatteryChip.left : parent.right
-										anchors.rightMargin: 10
-										anchors.verticalCenter: parent.verticalCenter
-										spacing: 10
-
-										ThemedRectangle {
-											width: 32
-											height: 32
-											radius: ThemeEngine.radiusMedium
-											anchors.verticalCenter: parent.verticalCenter
-											color: btDevice.modelData.connected ? Qt.alpha(root.primary, 0.45) : root.secondaryInsetColor
-
-											QQCImpl.IconImage {
-												anchors.centerIn: parent
-												width: 15
-												height: 15
-												source: btDevice.deviceIcon
-												sourceSize: Qt.size(width, height)
-												color: root.foreground
-											}
-										}
-
-										Column {
-											anchors.verticalCenter: parent.verticalCenter
-											spacing: 2
-											width: parent.width - 42
-
-											AtelierText {
-												width: parent.width
-												color: foreground
-												font.pixelSize: 12
-												font.weight: Font.Medium
-												elide: Text.ElideRight
-												text: btDevice.modelData.name
-											}
-
-											AtelierText {
-												width: parent.width
-												color: Qt.alpha(foreground, 0.58)
-												font.pixelSize: 10
-												elide: Text.ElideRight
-												text: bluetoothPopup.deviceStatuses[btDevice.modelData.address]
-													|| (btDevice.modelData.connected ? "Connected" : (btDevice.modelData.paired ? "Paired" : "Available"))
-											}
-										}
-									}
-
-									ThemedRectangle {
-										id: btBatteryChip
-										visible: btDevice.modelData.connected && String(btDevice.modelData.battery || "") !== ""
-										anchors.right: parent.right
-										anchors.rightMargin: 10
-										anchors.verticalCenter: parent.verticalCenter
-										width: batteryText.implicitWidth + 14
-										height: 20
-										radius: ThemeEngine.radiusMedium
-										color: Qt.alpha(root.secondary, 0.3)
-
-										AtelierText {
-											id: batteryText
-											anchors.centerIn: parent
-											color: foreground
-											font.pixelSize: 10
-											font.weight: Font.DemiBold
-											text: btDevice.modelData.battery
-										}
-									}
-								}
-							}
-						}
-					}
+					ConnectionPanel { id: bluetoothPopupColumn; width: parent.width; backend: bluetoothPopup; wireless: true }
 				}
 	}
 
 	PopupSurface {
 		id: networkPopup
+        controller: root
+        chapter: "07"
+        title: "Connected"
+        subtitle: "A view of the flow."
+        motif: "signal"
+        destinations: [{name:"network",label:"Network"},{name:"bluetooth",label:"Bluetooth"},{name:"resources",label:"System"}]
 		screen: root.activePopupScreen
 
 		onDismissRequested: root.closeNetworkPopup()
@@ -3282,7 +3039,7 @@ done`
 		anchorMode: "right"
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
-		expandedWidth: 300
+		expandedWidth: 380
 		contentPreferredHeight: networkPopupColumn.implicitHeight
 
 		property string currentType: "offline"
@@ -3460,304 +3217,17 @@ printf 'type=offline\niface=\nip=\n'`
 					id: networkPopupContent
 					anchors.fill: parent
 
-					Column {
-						id: networkPopupColumn
-						anchors.fill: parent
-						spacing: 12
-
-						Item {
-							width: parent.width
-							height: 34
-
-							Row {
-								anchors.left: parent.left
-								anchors.verticalCenter: parent.verticalCenter
-								spacing: 10
-
-								ThemedRectangle {
-									width: 32
-									height: 32
-									radius: ThemeEngine.radiusMedium
-									anchors.verticalCenter: parent.verticalCenter
-									color: networkPopup.currentType === "offline" ? root.secondaryInsetColor : Qt.alpha(root.primary, 0.4)
-
-									Behavior on color {
-										CAnim {}
-									}
-
-									QQCImpl.IconImage {
-										anchors.centerIn: parent
-										width: 15
-										height: 15
-										source: networkPopup.currentType === "ethernet"
-											? "/usr/share/icons/Adwaita/symbolic/devices/network-wired-symbolic.svg"
-											: "/usr/share/icons/Adwaita/symbolic/status/network-wireless-signal-excellent-symbolic.svg"
-										sourceSize: Qt.size(width, height)
-										color: root.foreground
-									}
-								}
-
-								Column {
-									anchors.verticalCenter: parent.verticalCenter
-									spacing: 1
-
-									AtelierText {
-										color: foreground
-										font.pixelSize: 13
-										font.weight: Font.DemiBold
-										text: networkPopup.currentType === "offline"
-											? "Offline"
-											: (networkPopup.currentType === "ethernet" ? "Ethernet" : "Wi-Fi")
-									}
-
-									AtelierText {
-										color: Qt.alpha(foreground, 0.55)
-										font.pixelSize: 10
-										text: networkPopup.currentInterface !== ""
-											? `${networkPopup.currentInterface}  \u00b7  ${networkPopup.currentIp !== "" ? networkPopup.currentIp : "no IP"}`
-											: "no interface"
-									}
-								}
-							}
-
-							ThemedRectangle {
-								visible: networkPopup.currentType !== "offline"
-								anchors.right: parent.right
-								anchors.verticalCenter: parent.verticalCenter
-								width: disconnectLabel.implicitWidth + 22
-								height: 25
-								radius: ThemeEngine.radiusMedium
-								color: Qt.alpha(root.danger, 0.16)
-
-								AtelierText {
-									id: disconnectLabel
-									anchors.centerIn: parent
-									color: foreground
-									font.pixelSize: 10
-									font.weight: Font.Medium
-									text: "Disconnect"
-								}
-
-								HoverLayer {
-									tint: root.danger
-									onClicked: root.disconnectActiveNetwork()
-								}
-							}
-						}
-
-						ThemedRectangle {
-							width: parent.width
-							implicitHeight: networkInfoColumn.implicitHeight + 20
-							radius: ThemeEngine.radiusMedium
-							color: root.secondaryBoxColor
-
-							Column {
-								id: networkInfoColumn
-								anchors.fill: parent
-								anchors.margins: 10
-								spacing: 8
-
-								Item {
-									width: parent.width
-									height: 22
-
-									AtelierText {
-										anchors.left: parent.left
-										anchors.verticalCenter: parent.verticalCenter
-										color: foreground
-										font.pixelSize: 12
-										font.weight: Font.Medium
-										text: "Upload"
-									}
-
-									AtelierText {
-										anchors.right: parent.right
-										anchors.verticalCenter: parent.verticalCenter
-										color: foreground
-										font.pixelSize: 12
-										font.weight: Font.Medium
-										text: networkPopup.formatSpeed(networkPopup.currentUploadSpeed)
-									}
-								}
-
-								ThemedRectangle {
-									width: parent.width
-									height: 96
-									radius: ThemeEngine.radiusMedium
-									color: root.secondaryInsetColor
-
-									Canvas {
-										id: uploadChart
-										anchors.fill: parent
-										anchors.margins: 8
-										anchors.bottomMargin: 8
-										antialiasing: true
-										onWidthChanged: requestPaint()
-										onHeightChanged: requestPaint()
-										Connections {
-											target: networkPopup
-											function onUploadHistoryChanged() {
-												uploadChart.requestPaint();
-											}
-											function onCurrentUploadSpeedChanged() {
-												uploadChart.requestPaint();
-											}
-										}
-
-										onPaint: {
-											const ctx = getContext("2d");
-											ctx.reset();
-
-											const values = networkPopup.uploadHistory || [];
-											if (values.length < 2) return;
-
-											const width = uploadChart.width;
-											const height = uploadChart.height;
-											const step = values.length > 1 ? width / (values.length - 1) : width;
-
-											ctx.strokeStyle = root.accent;
-											ctx.lineWidth = 2;
-											ctx.lineJoin = "round";
-											ctx.lineCap = "round";
-											ctx.beginPath();
-
-											for (let i = 0; i < values.length; i += 1) {
-												const x = i * step;
-												const y = height - Math.max(0, Math.min(height, height * networkPopup.chartRatio(values[i], networkPopup.uploadChartMax)));
-												if (i === 0) ctx.moveTo(x, y);
-												else ctx.lineTo(x, y);
-											}
-
-											ctx.stroke();
-
-											ctx.fillStyle = root.accent;
-											ctx.beginPath();
-											ctx.moveTo(0, height);
-											for (let i = 0; i < values.length; i += 1) {
-												const x = i * step;
-												const y = height - Math.max(0, Math.min(height, height * networkPopup.chartRatio(values[i], networkPopup.uploadChartMax)));
-												ctx.lineTo(x, y);
-											}
-											ctx.lineTo(width, height);
-											ctx.closePath();
-											ctx.fill();
-
-											ctx.fillStyle = root.accent;
-											for (let i = 0; i < values.length; i += 1) {
-												const x = i * step;
-												const y = height - Math.max(0, Math.min(height, height * networkPopup.chartRatio(values[i], networkPopup.uploadChartMax)));
-												ctx.beginPath();
-												ctx.arc(x, y, 2.6, 0, Math.PI * 2);
-												ctx.fill();
-											}
-										}
-									}
-								}
-
-								Item {
-									width: parent.width
-									height: 16
-
-									AtelierText {
-										anchors.left: parent.left
-										anchors.verticalCenter: parent.verticalCenter
-										color: foreground
-										font.pixelSize: 12
-										font.weight: Font.Medium
-										text: "Download"
-									}
-
-									AtelierText {
-										anchors.right: parent.right
-										anchors.verticalCenter: parent.verticalCenter
-										color: foreground
-										font.pixelSize: 12
-										font.weight: Font.Medium
-										text: networkPopup.formatSpeed(networkPopup.currentDownloadSpeed)
-									}
-								}
-
-								ThemedRectangle {
-									width: parent.width
-									height: 96
-									radius: ThemeEngine.radiusMedium
-									color: root.secondaryInsetColor
-
-									Canvas {
-										id: downloadChart
-										anchors.fill: parent
-										anchors.margins: 8
-										anchors.bottomMargin: 8
-										antialiasing: true
-										onWidthChanged: requestPaint()
-										onHeightChanged: requestPaint()
-										Connections {
-											target: networkPopup
-											function onDownloadHistoryChanged() {
-												downloadChart.requestPaint();
-											}
-											function onCurrentDownloadSpeedChanged() {
-												downloadChart.requestPaint();
-											}
-										}
-
-										onPaint: {
-											const ctx = getContext("2d");
-											ctx.reset();
-
-											const values = networkPopup.downloadHistory || [];
-											if (values.length < 2) return;
-
-											const width = downloadChart.width;
-											const height = downloadChart.height;
-											const step = values.length > 1 ? width / (values.length - 1) : width;
-
-											ctx.strokeStyle = root.accent;
-											ctx.lineWidth = 2;
-											ctx.lineJoin = "round";
-											ctx.lineCap = "round";
-											ctx.beginPath();
-
-											for (let i = 0; i < values.length; i += 1) {
-												const x = i * step;
-												const y = height - Math.max(0, Math.min(height, height * networkPopup.chartRatio(values[i], networkPopup.downloadChartMax)));
-												if (i === 0) ctx.moveTo(x, y);
-												else ctx.lineTo(x, y);
-											}
-
-											ctx.stroke();
-
-											ctx.fillStyle = root.accent;
-											ctx.beginPath();
-											ctx.moveTo(0, height);
-											for (let i = 0; i < values.length; i += 1) {
-												const x = i * step;
-												const y = height - Math.max(0, Math.min(height, height * networkPopup.chartRatio(values[i], networkPopup.downloadChartMax)));
-												ctx.lineTo(x, y);
-											}
-											ctx.lineTo(width, height);
-											ctx.closePath();
-											ctx.fill();
-
-											ctx.fillStyle = root.accent;
-											for (let i = 0; i < values.length; i += 1) {
-												const x = i * step;
-												const y = height - Math.max(0, Math.min(height, height * networkPopup.chartRatio(values[i], networkPopup.downloadChartMax)));
-												ctx.beginPath();
-												ctx.arc(x, y, 2.6, 0, Math.PI * 2);
-												ctx.fill();
-											}
-										}
-									}
-								}
-							}
-						}
-					}
+					ConnectionPanel { id: networkPopupColumn; width: parent.width; backend: networkPopup; onDisconnectRequested: root.disconnectActiveNetwork() }
 				}
 	}
 
 	PopupSurface {
 		id: resourcesPopup
+        controller: root
+        chapter: "08"
+        title: "Vitals"
+        subtitle: "The pulse of your machine."
+        motif: "signal"
 		screen: root.activePopupScreen
 
 		onDismissRequested: root.closeResourcesPopup()
@@ -3768,7 +3238,7 @@ printf 'type=offline\niface=\nip=\n'`
 		anchorMode: "right"
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
-		expandedWidth: 300
+		expandedWidth: 380
 		contentPreferredHeight: resourcesPopupColumn.implicitHeight
 
 		onVisibleChanged: {
@@ -3802,14 +3272,14 @@ printf 'type=offline\niface=\nip=\n'`
 								anchors.horizontalCenter: parent.horizontalCenter
 								spacing: 18
 
-								ArcGauge {
+								ResourceMetric {
 									value: resourceBars.cpuUsage
 									label: "CPU"
 									detail: resourceBars.cpuText
 									gaugeColor: root.primary
 								}
 
-								ArcGauge {
+								ResourceMetric {
 									value: resourceBars.memoryUsage
 									label: "RAM"
 									detail: resourceBars.memoryText
@@ -3949,6 +3419,10 @@ printf 'type=offline\niface=\nip=\n'`
 
 		ModalSheet {
 			open: root.themePickerPopupOpen
+            title: "The wallpaper atelier"
+            caption: ""
+            studio: true
+            controller: root
 			scrimOpacity: 0.34
 			shadowSurfaceColor: root.secondaryInsetColor
 			sheetWidth: Math.min(1180, parent.width - 48)
@@ -3993,10 +3467,14 @@ printf 'type=offline\niface=\nip=\n'`
 
 		ModalSheet {
 			open: root.launcherPopupOpen
+            title: "Discover"
+            caption: "Applications, ideas and everything in between."
+            studio: false
+            controller: root
 			mode: "center"
 			scrimOpacity: 0.64
-			sheetWidth: Math.min(840, parent.width - 48)
-			sheetHeight: Math.min(560, parent.height - 80)
+			sheetWidth: Math.min(1080, parent.width - 152)
+			sheetHeight: Math.min(600, parent.height - 180)
 			bottomMargin: 14
 			shadowSurfaceColor: root.surface
 			onDismissRequested: root.closeLauncherPopup()
@@ -4058,6 +3536,10 @@ printf 'type=offline\niface=\nip=\n'`
 
 		ModalSheet {
 			open: root.stylePresetPopupOpen
+            title: "Compositions"
+            caption: ""
+            studio: true
+            controller: root
 			scrimOpacity: 0.34
 			shadowSurfaceColor: root.secondaryInsetColor
 			sheetWidth: Math.min(1320, parent.width - 48)
@@ -4095,6 +3577,10 @@ printf 'type=offline\niface=\nip=\n'`
 
 		ModalSheet {
 			open: root.uiThemePickerPopupOpen
+            title: "Materials & character"
+            caption: ""
+            studio: true
+            controller: root
 			scrimOpacity: 0.3
 			shadowSurfaceColor: root.secondaryInsetColor
 			sheetWidth: Math.min(760, parent.width - 48)
@@ -4137,6 +3623,10 @@ printf 'type=offline\niface=\nip=\n'`
 
 		ModalSheet {
 			open: root.animationPickerPopupOpen
+            title: "In motion"
+            caption: ""
+            studio: true
+            controller: root
 			scrimOpacity: 0.34
 			shadowSurfaceColor: root.secondaryInsetColor
 			sheetWidth: Math.min(1280, parent.width - 48)
@@ -4180,10 +3670,14 @@ printf 'type=offline\niface=\nip=\n'`
 
 		ModalSheet {
 			open: root.powerPopupOpen
+            title: "Until next time"
+            caption: "Take a pause, or begin again."
+            studio: false
+            controller: root
 			scrimOpacity: 0.28
 			shadowSurfaceColor: root.surface
 			sheetWidth: Math.min(560, parent.width - 48)
-			sheetHeight: Math.min(236, parent.height - 80)
+			sheetHeight: Math.min(306, parent.height - 180)
 			onDismissRequested: root.closePowerPopup()
 
 			ThemedRectangle {
@@ -4191,7 +3685,7 @@ printf 'type=offline\niface=\nip=\n'`
 				anchors.fill: parent
 				radius: ThemeEngine.radiusMedium
 				color: root.surface
-				border.width: 1
+				border.width: 0
 				border.color: root.surfaceBorder
 				focus: root.powerPopupVisible
 
@@ -4225,265 +3719,55 @@ printf 'type=offline\niface=\nip=\n'`
 					}
 				}
 
-				Row {
-					anchors.fill: parent
-					anchors.margins: 16
-					spacing: 14
+                Column {
+                    anchors.fill: parent; anchors.margins: 16; spacing: 22
+                    AtelierText { width: parent.width; text: powerModal.statUser; display: true; font.pixelSize: 24; elide: Text.ElideMiddle }
+                    AtelierText { text: "UPTIME  /  " + powerModal.statUptime; font.family: Atelier.mono; font.pixelSize: 10; color: Atelier.muted }
+                    Row {
+                        width: parent.width; spacing: 12
+                        Repeater {
+                            model: [{name:"Lock",action:"lock",icon:"system-lock-screen",category:"status"},{name:"Sign out",action:"logout",icon:"system-log-out",category:"actions"},{name:"Restart",action:"reboot",icon:"system-reboot",category:"actions"},{name:"Power off",action:"shutdown",icon:"system-shutdown",category:"actions"}]
+                            delegate: Item {
+                                required property var modelData
+                                required property int index
+                                width: (powerModal.width - 68) / 4; height: 120
+                                Rectangle {
+                                    anchors.horizontalCenter: parent.horizontalCenter; width: 72; height: 72; radius: 36
+                                    color: root.powerSelectionIndex === parent.index ? Atelier.ink : Atelier.surface
+                                    QQCImpl.IconImage { anchors.centerIn: parent; width: 26; height: 26; source: "/usr/share/icons/Adwaita/symbolic/" + parent.parent.modelData.category + "/" + parent.parent.modelData.icon + "-symbolic.svg"; color: root.powerSelectionIndex === parent.parent.index ? Atelier.gold : Atelier.ink }
+                                }
+                                AtelierText { y: 88; width: parent.width; horizontalAlignment: Text.AlignHCenter; text: parent.modelData.name; font.pixelSize: 12 }
+                                MouseArea { anchors.fill: parent; hoverEnabled: true; onEntered: root.powerSelectionIndex = parent.index; onClicked: root.runPowerAction(parent.modelData.action) }
+                            }
+                        }
+                    }
+                    AtelierText { width: parent.width; text: root.pendingPowerAction ? "Press again to confirm " + root.pendingPowerAction + ". Esc cancels." : "A moment to pause. Your workspace will be here."; color: root.pendingPowerAction ? Atelier.accent : Atelier.muted; font.pixelSize: 12; wrapMode: Text.WordWrap }
+                }
 
-					ThemedRectangle {
-						id: powerUserPanel
-						width: 188
-						height: parent.height
-						radius: ThemeEngine.radiusMedium
-						color: root.secondaryBoxColor
-
-						Column {
-							anchors.centerIn: parent
-							spacing: 10
-							width: parent.width - 24
-
-							ThemedRectangle {
-								anchors.horizontalCenter: parent.horizontalCenter
-								width: 54
-								height: 54
-								radius: height / 2
-								color: root.primary
-
-								AtelierText {
-									anchors.centerIn: parent
-									color: root.onPrimary
-									display: true
-									font.pixelSize: 22
-									font.weight: Font.DemiBold
-									text: (powerModal.statUser || "?").charAt(0).toUpperCase()
-								}
-							}
-
-							AtelierText {
-								anchors.horizontalCenter: parent.horizontalCenter
-								width: parent.width
-								horizontalAlignment: Text.AlignHCenter
-								color: foreground
-								font.pixelSize: 13
-								font.weight: Font.DemiBold
-								elide: Text.ElideMiddle
-								text: powerModal.statUser
-							}
-
-							Column {
-								width: parent.width
-								spacing: 5
-
-								ThemedRectangle {
-									width: parent.width
-									height: 24
-									radius: ThemeEngine.radiusMedium
-									color: root.secondaryInsetColor
-
-									Row {
-										anchors.left: parent.left
-										anchors.leftMargin: 9
-										anchors.verticalCenter: parent.verticalCenter
-										spacing: 6
-
-										AtelierText {
-											anchors.verticalCenter: parent.verticalCenter
-											color: Qt.alpha(root.primary, 0.95)
-											font.pixelSize: 8
-											font.weight: Font.DemiBold
-											font.letterSpacing: 1
-											text: "UP"
-										}
-
-										AtelierText {
-											anchors.verticalCenter: parent.verticalCenter
-											color: foreground
-											font.pixelSize: 10
-											font.weight: Font.Medium
-											text: powerModal.statUptime
-										}
-									}
-								}
-
-								ThemedRectangle {
-									width: parent.width
-									height: 24
-									radius: ThemeEngine.radiusMedium
-									color: root.secondaryInsetColor
-
-									Row {
-										anchors.left: parent.left
-										anchors.leftMargin: 9
-										anchors.verticalCenter: parent.verticalCenter
-										spacing: 6
-
-										AtelierText {
-											anchors.verticalCenter: parent.verticalCenter
-											color: Qt.alpha(root.primary, 0.95)
-											font.pixelSize: 8
-											font.weight: Font.DemiBold
-											font.letterSpacing: 1
-											text: "KERNEL"
-										}
-
-										AtelierText {
-											anchors.verticalCenter: parent.verticalCenter
-											color: foreground
-											font.pixelSize: 10
-											font.weight: Font.Medium
-											text: powerModal.statKernel
-										}
-									}
-								}
-							}
-						}
-					}
-
-					Grid {
-						columns: 1
-                        columnSpacing: 0
-                        rowSpacing: 0
-                        anchors.verticalCenter: parent.verticalCenter
-
-						readonly property real tileWidth: powerModal.width - 32 - 188 - 14
-						readonly property real tileHeight: (powerModal.height - 32) / 4
-
-						PowerActionButton {
-							width: parent.tileWidth
-							height: parent.tileHeight
-							label: "Lock"
-							sublabel: "Secure session"
-							iconSource: "/usr/share/icons/Adwaita/symbolic/status/system-lock-screen-symbolic.svg"
-							selectionIndex: 0
-							selected: root.powerSelectionIndex === 0
-							onClicked: root.runPowerAction("lock")
-						}
-
-						PowerActionButton {
-							width: parent.tileWidth
-							height: parent.tileHeight
-							label: "Logout"
-							sublabel: "End session"
-							iconSource: "/usr/share/icons/Adwaita/symbolic/actions/system-log-out-symbolic.svg"
-							selectionIndex: 1
-							selected: root.powerSelectionIndex === 1
-							onClicked: root.runPowerAction("logout")
-						}
-
-						PowerActionButton {
-							width: parent.tileWidth
-							height: parent.tileHeight
-							label: "Reboot"
-							sublabel: "Restart system"
-							iconSource: "/usr/share/icons/Adwaita/symbolic/actions/system-reboot-symbolic.svg"
-							selectionIndex: 2
-							selected: root.powerSelectionIndex === 2
-							dangerous: true
-							onClicked: root.runPowerAction("reboot")
-						}
-
-						PowerActionButton {
-							width: parent.tileWidth
-							height: parent.tileHeight
-							label: "Shutdown"
-							sublabel: "Power off"
-							iconSource: "/usr/share/icons/Adwaita/symbolic/actions/system-shutdown-symbolic.svg"
-							selectionIndex: 3
-							selected: root.powerSelectionIndex === 3
-							dangerous: true
-							onClicked: root.runPowerAction("shutdown")
-						}
-					}
-				}
 			}
 		}
 	}
 
-	component ArcGauge: Item {
-		id: gauge
-
-		required property real value
-		required property string label
-		property string detail: ""
-		property color gaugeColor: root.primary
-		property real animatedValue: 0
-
-		width: 118
-		height: 118
-
-		onValueChanged: animatedValue = Math.max(0, Math.min(1, value))
-		Component.onCompleted: animatedValue = Math.max(0, Math.min(1, value))
-		onAnimatedValueChanged: gaugeCanvas.requestPaint()
-
-		Behavior on animatedValue {
-			NumberAnimation {
-				duration: Motion.popupOpen
-				easing.type: ThemeEngine.standardEasing
-			}
-		}
-
-		Canvas {
-			id: gaugeCanvas
-			anchors.fill: parent
-			antialiasing: true
-
-			onPaint: {
-				const ctx = getContext("2d");
-				ctx.reset();
-
-				const cx = width / 2;
-				const cy = height / 2;
-				const r = Math.min(width, height) / 2 - 7;
-				const start = Math.PI * 0.75;
-				const sweep = Math.PI * 1.5;
-
-				ctx.lineWidth = 9;
-				ctx.lineCap = "round";
-
-				ctx.strokeStyle = root.secondaryInsetColor;
-				ctx.beginPath();
-				ctx.arc(cx, cy, r, start, start + sweep);
-				ctx.stroke();
-
-				if (gauge.animatedValue > 0.005) {
-					ctx.strokeStyle = gauge.gaugeColor;
-					ctx.beginPath();
-					ctx.arc(cx, cy, r, start, start + sweep * gauge.animatedValue);
-					ctx.stroke();
-				}
-			}
-		}
-
-		Column {
-			anchors.centerIn: parent
-			spacing: 0
-
-			AtelierText {
-				anchors.horizontalCenter: parent.horizontalCenter
-				color: foreground
-				font.pixelSize: 21
-				font.weight: Font.DemiBold
-				text: `${Math.round(gauge.value * 100)}%`
-			}
-
-			AtelierText {
-				anchors.horizontalCenter: parent.horizontalCenter
-				color: Qt.alpha(root.primary, 0.95)
-				font.pixelSize: 9
-				font.weight: Font.DemiBold
-				font.letterSpacing: 1
-				text: gauge.label
-			}
-
-			AtelierText {
-				anchors.horizontalCenter: parent.horizontalCenter
-				visible: text !== ""
-				color: Qt.alpha(foreground, 0.5)
-				font.pixelSize: 8
-				text: gauge.detail
-			}
-		}
-	}
+	component ResourceMetric: Item {
+        id: metric
+        required property real value
+        required property string label
+        property string detail: ""
+        property color gaugeColor: root.primary
+        width: 145
+        height: 124
+        AtelierText { text: metric.label; font.family: Atelier.mono; font.pixelSize: 11; color: Atelier.muted }
+        AtelierText { y: 22; text: Math.round(metric.value * 100) + "%"; display: true; font.pixelSize: 38 }
+        AtelierText { y: 78; text: metric.detail; font.pixelSize: 11; color: Atelier.muted; width: parent.width; elide: Text.ElideRight }
+        Rectangle {
+            anchors.bottom: parent.bottom; width: parent.width; height: 2; color: Atelier.rule
+            Rectangle {
+                width: parent.width * Math.max(0, Math.min(1, metric.value))
+                height: 2; color: metric.gaugeColor
+                Behavior on width { NumberAnimation { duration: 180 } }
+            }
+        }
+    }
 
 	component ResourceRow: Item {
 		id: resourceRow
@@ -4653,6 +3937,10 @@ printf 'type=offline\niface=\nip=\n'`
 
 	PopupSurface {
 		id: trayMenuPopup
+        controller: root
+        chapter: "09"
+        title: "Accessories"
+        subtitle: "Small tools, close at hand."
 		screen: root.activePopupScreen
 
 		onDismissRequested: root.closeTrayMenu()
@@ -4859,6 +4147,11 @@ printf 'type=offline\niface=\nip=\n'`
 
 	PopupSurface {
 		id: mediaPopup
+        controller: root
+        chapter: "04"
+        title: "Listening"
+        subtitle: "An interlude for whatever moves you."
+        motif: "signal"
 		screen: root.activePopupScreen
 
 		onDismissRequested: root.closeMediaPopup()
@@ -4901,6 +4194,10 @@ printf 'type=offline\niface=\nip=\n'`
 
 	PopupSurface {
 		id: clockPopup
+        controller: root
+        chapter: "01"
+        title: "Daybook"
+        subtitle: "Time, dates and room to plan."
 		screen: root.activePopupScreen
 
 		onDismissRequested: root.closeClockPopup()
@@ -4911,7 +4208,7 @@ printf 'type=offline\niface=\nip=\n'`
 		anchorItem: clockIsland
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
-		expandedWidth: 380
+		expandedWidth: 420
 		contentPreferredHeight: calendarContent.implicitHeight
 
 		onVisibleChanged: {
@@ -4921,139 +4218,21 @@ printf 'type=offline\niface=\nip=\n'`
 			}
 		}
 
-		Column {
-			id: calendarContent
-			anchors.fill: parent
-			spacing: 14
-
-			Item {
-				width: parent.width
-				height: 44
-
-				ThemedRectangle {
-					id: calPrev
-					width: 34
-					height: 34
-					anchors.left: parent.left
-					anchors.verticalCenter: parent.verticalCenter
-					radius: ThemeEngine.radiusMedium
-					color: root.secondaryBoxColor
-
-					AtelierText {
-						anchors.centerIn: parent
-						color: foreground
-						font.pixelSize: 15
-						font.weight: Font.Medium
-						text: "\u2039"
-					}
-
-					HoverLayer {
-						tint: root.primary
-						onClicked: root.shiftCalendarMonths(-1)
-					}
-				}
-
-				Column {
-					anchors.centerIn: parent
-					spacing: 1
-
-					AtelierText {
-						anchors.horizontalCenter: parent.horizontalCenter
-						color: foreground
-						font.pixelSize: 17
-						font.weight: Font.DemiBold
-						text: Qt.formatDateTime(root.currentDate, "MMMM yyyy")
-					}
-
-					AtelierText {
-						anchors.horizontalCenter: parent.horizontalCenter
-						color: Qt.alpha(foreground, 0.6)
-						font.pixelSize: 11
-						text: Qt.formatDateTime(root.now, "dddd, d MMMM")
-					}
-				}
-
-				ThemedRectangle {
-					width: 34
-					height: 34
-					anchors.right: parent.right
-					anchors.verticalCenter: parent.verticalCenter
-					radius: ThemeEngine.radiusMedium
-					color: root.secondaryBoxColor
-
-					AtelierText {
-						anchors.centerIn: parent
-						color: foreground
-						font.pixelSize: 15
-						font.weight: Font.Medium
-						text: "\u203a"
-					}
-
-					HoverLayer {
-						tint: root.primary
-						onClicked: root.shiftCalendarMonths(1)
-					}
-				}
-			}
-
-			Grid {
-				columns: 7
-				columnSpacing: 4
-				rowSpacing: 4
-				anchors.horizontalCenter: parent.horizontalCenter
-
-				Repeater {
-					model: root.weekdayNames
-
-					delegate: Item {
-						required property string modelData
-						width: 44
-						height: 20
-
-						AtelierText {
-							anchors.centerIn: parent
-							color: Qt.alpha(root.primary, 0.9)
-							font.pixelSize: 10
-							font.weight: Font.DemiBold
-							text: modelData
-						}
-					}
-				}
-
-				Repeater {
-					model: 42
-
-					delegate: ThemedRectangle {
-						id: dayCell
-						required property int index
-						readonly property int day: root.calendarDayNumber(index)
-						readonly property bool today: root.isToday(day)
-
-						width: 44
-						height: 34
-						radius: ThemeEngine.radiusMedium
-						color: today ? root.primary : (day === 0 ? "transparent" : root.secondaryInsetColor)
-						scale: today ? 1.06 : 1
-
-						Behavior on color {
-							CAnim {}
-						}
-
-						AtelierText {
-							anchors.centerIn: parent
-							color: dayCell.today ? root.onPrimary : (dayCell.day === 0 ? "transparent" : foreground)
-							font.pixelSize: 12
-							font.weight: dayCell.today ? Font.DemiBold : Font.Normal
-							text: dayCell.day === 0 ? "" : dayCell.day
-						}
-					}
-				}
-			}
-		}
+		CalendarPanel {
+            id: calendarContent
+            anchors.fill: parent
+            selectedDate: root.currentDate
+            today: root.now
+            onShiftMonth: delta => root.shiftCalendarMonths(delta)
+        }
 	}
 
 	PopupSurface {
 		id: weatherPopup
+        controller: root
+        chapter: "02"
+        title: "Atmosphere"
+        subtitle: "A window onto the world outside."
 		screen: root.activePopupScreen
 
 		onDismissRequested: root.closeWeatherPopup()
@@ -5064,7 +4243,7 @@ printf 'type=offline\niface=\nip=\n'`
 		anchorItem: weatherIsland
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
-		expandedWidth: 330
+		expandedWidth: 380
 		contentPreferredHeight: weatherContent.implicitHeight
 
 		onVisibleChanged: {
@@ -5074,177 +4253,32 @@ printf 'type=offline\niface=\nip=\n'`
 			}
 		}
 
-		Column {
-			id: weatherContent
-			anchors.fill: parent
-			spacing: 12
-
-			Row {
-				width: parent.width
-				spacing: 14
-
-				ThemedRectangle {
-					width: 58
-					height: 58
-					radius: ThemeEngine.radiusMedium
-					color: Qt.alpha(root.accent, 0.22)
-					anchors.verticalCenter: parent.verticalCenter
-
-					QQCImpl.IconImage {
-						anchors.centerIn: parent
-						width: 28
-						height: 28
-						source: root.resolveIconSource("", [
-							root.weatherIcon,
-							root.weatherIcon.replace("-symbolic", ""),
-							"weather-overcast-symbolic",
-							"dialog-information-symbolic"
-						])
-						visible: source !== ""
-						sourceSize: Qt.size(width, height)
-						color: root.foreground
-					}
-				}
-
-				Column {
-					spacing: 0
-					anchors.verticalCenter: parent.verticalCenter
-
-					AtelierText {
-						color: foreground
-						display: true
-						font.pixelSize: 30
-						font.weight: Font.DemiBold
-						text: root.weatherTemperature
-					}
-
-					AtelierText {
-						color: Qt.alpha(foreground, 0.85)
-						font.pixelSize: 12
-						text: root.weatherDescription
-					}
-
-					AtelierText {
-						color: Qt.alpha(foreground, 0.55)
-						font.pixelSize: 10
-						text: root.weatherLocation
-					}
-				}
-			}
-
-			Grid {
-				columns: 2
-				columnSpacing: 8
-				rowSpacing: 8
-				width: parent.width
-
-				Repeater {
-					model: [
-						{ label: "FEELS LIKE", value: root.weatherFeelsLike },
-						{ label: "HUMIDITY", value: root.weatherHumidity },
-						{ label: "WIND", value: root.weatherWind },
-						{ label: "RAIN", value: root.weatherPrecipitation },
-						{ label: "PRESSURE", value: root.weatherPressure },
-						{ label: "UPDATED", value: root.weatherObservationTime !== "" ? Qt.formatDateTime(new Date(root.weatherObservationTime), "HH:mm") : "--" }
-					]
-
-					delegate: ThemedRectangle {
-						required property var modelData
-						width: (weatherContent.width - 8) / 2
-						height: 52
-						radius: ThemeEngine.radiusMedium
-						color: root.secondaryBoxColor
-
-						Column {
-							anchors.left: parent.left
-							anchors.leftMargin: 12
-							anchors.verticalCenter: parent.verticalCenter
-							spacing: 2
-
-							AtelierText {
-								color: Qt.alpha(root.primary, 0.95)
-								font.pixelSize: 8
-								font.weight: Font.DemiBold
-								font.letterSpacing: 1
-								text: modelData.label
-							}
-
-							AtelierText {
-								color: foreground
-								font.pixelSize: 14
-								font.weight: Font.Medium
-								text: modelData.value
-							}
-						}
-					}
-				}
-			}
-
-			ThemedRectangle {
-				width: parent.width
-				height: 48
-				radius: ThemeEngine.radiusMedium
-				color: root.secondaryInsetColor
-
-				Row {
-					anchors.centerIn: parent
-					spacing: 32
-
-					Row {
-						spacing: 8
-
-						QQCImpl.IconImage {
-							anchors.verticalCenter: parent.verticalCenter
-							width: 14
-							height: 14
-							source: root.resolveIconSource("weather-clear-symbolic", ["weather-clear"])
-							sourceSize: Qt.size(width, height)
-							color: root.accent
-						}
-
-						AtelierText {
-							anchors.verticalCenter: parent.verticalCenter
-							color: foreground
-							font.pixelSize: 13
-							font.weight: Font.Medium
-							text: root.weatherSunrise
-						}
-					}
-
-					ThemedRectangle {
-						width: 1
-						height: 22
-						anchors.verticalCenter: parent.verticalCenter
-						color: Qt.alpha(foreground, 0.15)
-					}
-
-					Row {
-						spacing: 8
-
-						QQCImpl.IconImage {
-							anchors.verticalCenter: parent.verticalCenter
-							width: 14
-							height: 14
-							source: root.resolveIconSource("weather-clear-night-symbolic", ["weather-clear-night", "weather-clear"])
-							sourceSize: Qt.size(width, height)
-							color: root.secondary
-						}
-
-						AtelierText {
-							anchors.verticalCenter: parent.verticalCenter
-							color: foreground
-							font.pixelSize: 13
-							font.weight: Font.Medium
-							text: root.weatherSunset
-						}
-					}
-				}
-			}
-		}
+		WeatherPanel {
+            id: weatherContent
+            anchors.fill: parent
+            temperature: root.weatherTemperature
+            description: root.weatherDescription
+            location: root.weatherLocation
+            iconSource: root.resolveIconSource(root.weatherIcon, ["weather-overcast-symbolic"])
+            sunrise: root.weatherSunrise
+            sunset: root.weatherSunset
+            readings: [
+                {label: "Feels like", value: root.weatherFeelsLike},
+                {label: "Humidity", value: root.weatherHumidity},
+                {label: "Wind", value: root.weatherWind},
+                {label: "Rain", value: root.weatherPrecipitation},
+                {label: "Pressure", value: root.weatherPressure},
+                {label: "Observed", value: root.weatherObservationTime !== "" ? Qt.formatDateTime(new Date(root.weatherObservationTime), "HH:mm") : "—"}
+            ]
+        }
 	}
 
 	PopupSurface {
 		id: notifPopup
+        controller: root
+        chapter: "03"
+        title: "Activity"
+        subtitle: "What arrived while you were away."
 		screen: root.activePopupScreen
 
 		onDismissRequested: root.closeNotifPopup()
@@ -5265,1021 +4299,12 @@ printf 'type=offline\niface=\nip=\n'`
 			}
 		}
 
-		ColumnLayout {
-			anchors.fill: parent
-			spacing: 12
-
-			RowLayout {
-				Layout.fillWidth: true
-				spacing: 10
-
-				AtelierText {
-					color: foreground
-					font.pixelSize: 22
-                                display: true
-					font.weight: Font.Normal
-					text: "Notifications"
-				}
-
-				ThemedRectangle {
-					visible: root.notificationGroups.length > 0
-					width: 24
-					height: 20
-					radius: ThemeEngine.radiusMedium
-					color: Qt.alpha(root.primary, 0.3)
-
-					AtelierText {
-						anchors.centerIn: parent
-						color: foreground
-						font.pixelSize: 11
-						font.weight: Font.DemiBold
-						text: root.notificationGroups.length
-					}
-				}
-
-				Item {
-					Layout.fillWidth: true
-				}
-
-				ThemedRectangle {
-					visible: root.notificationGroups.length > 0
-					width: clearAllLabel.implicitWidth + 22
-					height: 26
-					radius: ThemeEngine.radiusMedium
-					color: root.secondaryBoxColor
-
-					AtelierText {
-						id: clearAllLabel
-						anchors.centerIn: parent
-						color: foreground
-						font.pixelSize: 11
-						font.weight: Font.Medium
-						text: "Clear all"
-					}
-
-					HoverLayer {
-						tint: root.danger
-						onClicked: root.dismissAllNotificationGroups()
-					}
-				}
-			}
-
-			Item {
-				Layout.fillWidth: true
-				Layout.fillHeight: true
-				visible: notificationList.count === 0
-
-				Column {
-					anchors.centerIn: parent
-					spacing: 8
-
-					QQCImpl.IconImage {
-						anchors.horizontalCenter: parent.horizontalCenter
-						width: 34
-						height: 34
-						source: root.resolveIconSource("preferences-system-notifications-symbolic", ["dialog-information-symbolic"])
-						sourceSize: Qt.size(width, height)
-						color: Qt.alpha(root.foreground, 0.3)
-					}
-
-					AtelierText {
-						anchors.horizontalCenter: parent.horizontalCenter
-						color: Qt.alpha(foreground, 0.5)
-						font.pixelSize: 13
-						text: "All caught up"
-					}
-				}
-			}
-
-			ListView {
-				id: notificationList
-				Layout.fillWidth: true
-				Layout.fillHeight: true
-				visible: count > 0
-				clip: true
-				spacing: 10
-				topMargin: ThemeEngine.shadowRenderMargin
-				bottomMargin: ThemeEngine.shadowRenderMargin
-				model: root.notificationGroups
-
-										delegate: ThemedRectangle {
-											required property var modelData
-											readonly property var latestEntry: modelData.latestSnapshot
-											readonly property var liveNotification: modelData.latestNotification
-											readonly property color urgencyColor: root.notificationUrgencyColor({
-												urgency: latestEntry ? latestEntry.urgency : -1
-											})
-											readonly property string iconSource: latestEntry && latestEntry.image !== ""
-												? latestEntry.image
-												: root.resolveIconSource(latestEntry ? latestEntry.appIcon : "", [
-													"dialog-information-symbolic",
-													"dialog-information"
-												])
-											property bool dismissing: false
-
-											width: notificationList.width - ThemeEngine.shadowRenderMargin * 2
-											height: groupHeader.height + notificationContent.implicitHeight + 22
-											x: dismissing ? -width - 24 : ThemeEngine.shadowRenderMargin
-											radius: ThemeEngine.radiusMedium
-											color: root.secondaryBoxColor
-											themeStyle: "raised"
-											border.width: 0
-											border.color: "transparent"
-											opacity: dismissing ? 0 : 1
-											clip: !ThemeEngine.controlEffectsEnabled
-
-											Behavior on x {
-												NumberAnimation {
-													duration: Motion.normal
-													easing.type: ThemeEngine.emphasizedEasing
-													easing.overshoot: 0.12
-												}
-											}
-
-											Behavior on opacity {
-												Anim {}
-											}
-
-											Timer {
-												id: notificationDismissTimer
-												interval: 240
-												repeat: false
-												onTriggered: root.dismissNotificationGroup(modelData.key)
-											}
-
-										ThemedRectangle {
-											id: groupHeader
-											themeStyle: "flat"
-												anchors.left: parent.left
-												anchors.right: parent.right
-												anchors.top: parent.top
-												height: 32
-												color: Qt.alpha(urgencyColor, 0.12)
-
-												ThemedRectangle {
-													anchors.left: parent.left
-													anchors.right: parent.right
-													anchors.bottom: parent.bottom
-													height: 1
-													color: Qt.alpha(urgencyColor, 0.3)
-												}
-
-												RowLayout {
-													anchors.fill: parent
-													anchors.leftMargin: 12
-													anchors.rightMargin: 6
-													spacing: 8
-
-													ThemedRectangle {
-														implicitWidth: 8
-														implicitHeight: 8
-														radius: ThemeEngine.radiusSmall
-														color: urgencyColor
-													}
-
-													AtelierText {
-														Layout.fillWidth: true
-														color: Qt.alpha(foreground, 0.85)
-														font.pixelSize: 10
-														font.weight: Font.DemiBold
-														font.letterSpacing: 1.4
-														elide: Text.ElideRight
-														text: (modelData.appName || "SYSTEM").toUpperCase()
-													}
-
-													AtelierText {
-														color: Qt.alpha(foreground, 0.5)
-														font.pixelSize: 10
-														text: latestEntry
-															? `${root.formatNotificationTime(latestEntry.timestamp)}${latestEntry.active ? "" : "  •  closed"}`
-															: ""
-													}
-
-													ThemedRectangle {
-														implicitWidth: 20
-														implicitHeight: 20
-														radius: ThemeEngine.radiusMedium
-														color: "transparent"
-
-														AtelierText {
-															anchors.centerIn: parent
-															color: Qt.alpha(foreground, 0.7)
-															font.pixelSize: 11
-															text: "×"
-														}
-
-														HoverLayer {
-															tint: root.danger
-															onClicked: {
-																if (dismissing) return;
-																dismissing = true;
-																notificationDismissTimer.start();
-															}
-														}
-													}
-												}
-											}
-
-											ColumnLayout {
-												id: notificationContent
-												anchors.left: parent.left
-												anchors.right: parent.right
-												anchors.top: groupHeader.bottom
-												anchors.leftMargin: 12
-												anchors.rightMargin: 12
-												anchors.topMargin: 10
-												spacing: 8
-
-										RowLayout {
-											Layout.fillWidth: true
-											visible: !ThemeEngine.dialogueNotifications
-											spacing: 12
-
-											ColumnLayout {
-												Layout.fillWidth: true
-												Layout.alignment: Qt.AlignTop
-												spacing: 3
-
-												AtelierText {
-													Layout.fillWidth: true
-													color: foreground
-													font.pixelSize: 14
-													font.weight: Font.DemiBold
-													wrapMode: Text.WordWrap
-													maximumLineCount: 2
-													elide: Text.ElideRight
-													text: latestEntry ? latestEntry.summary : (modelData.appName || "Notification")
-												}
-
-												AtelierText {
-													Layout.fillWidth: true
-													visible: latestEntry && latestEntry.body !== ""
-													color: Qt.alpha(foreground, 0.72)
-													font.pixelSize: 12
-													textFormat: Text.PlainText
-													wrapMode: Text.WordWrap
-													text: latestEntry ? latestEntry.body : ""
-												}
-											}
-
-											ThemedRectangle {
-												Layout.alignment: Qt.AlignTop
-												implicitWidth: 52
-												implicitHeight: 52
-												radius: ThemeEngine.radiusMedium
-												visible: iconSource !== ""
-												color: Qt.alpha(urgencyColor, 0.1)
-												clip: true
-
-												Image {
-													anchors.fill: parent
-													anchors.margins: latestEntry && latestEntry.image !== "" ? 0 : 13
-													source: iconSource
-													fillMode: latestEntry && latestEntry.image !== "" ? Image.PreserveAspectCrop : Image.PreserveAspectFit
-													smooth: true
-													mipmap: true
-												}
-											}
-										}
-
-										RowLayout {
-											Layout.fillWidth: true
-											visible: ThemeEngine.dialogueNotifications
-											spacing: 12
-
-											ThemedRectangle {
-												Layout.alignment: Qt.AlignTop
-												implicitWidth: 52
-												implicitHeight: 52
-												radius: ThemeEngine.radiusMedium
-												visible: iconSource !== ""
-												color: Qt.alpha(urgencyColor, 0.1)
-												clip: true
-
-												Image {
-													anchors.fill: parent
-													anchors.margins: latestEntry && latestEntry.image !== "" ? 0 : 13
-													source: iconSource
-													fillMode: latestEntry && latestEntry.image !== "" ? Image.PreserveAspectCrop : Image.PreserveAspectFit
-													smooth: true
-													mipmap: true
-												}
-											}
-
-											ThemedRectangle {
-												Layout.fillWidth: true
-												Layout.alignment: Qt.AlignTop
-												implicitHeight: dialogueColumn.implicitHeight + 18
-												themeStyle: "inset"
-												radius: ThemeEngine.radiusMedium
-												color: Qt.alpha(background, 0.34)
-
-												ColumnLayout {
-													id: dialogueColumn
-													anchors.fill: parent
-													anchors.margins: 9
-													spacing: 4
-
-													AtelierText {
-														Layout.fillWidth: true
-														color: foreground
-														font.pixelSize: 13
-														font.weight: Font.DemiBold
-														font.letterSpacing: 0.5
-														wrapMode: Text.WordWrap
-														maximumLineCount: 2
-														elide: Text.ElideRight
-														text: latestEntry ? latestEntry.summary : (modelData.appName || "Notification")
-													}
-
-													RpgDialogueText {
-														Layout.fillWidth: true
-														visible: latestEntry && latestEntry.body !== ""
-														dialogueText: latestEntry ? latestEntry.body : ""
-														textColor: Qt.alpha(foreground, 0.82)
-														fontPixelSize: 12
-														letterDelay: 20
-													}
-												}
-											}
-										}
-
-												ThemedRectangle {
-													Layout.fillWidth: true
-													themeStyle: "inset"
-													implicitHeight: 6
-													radius: ThemeEngine.radiusTiny
-													visible: latestEntry && latestEntry.progressValue >= 0 && latestEntry.progressValue <= 100
-													color: Qt.alpha(border, 0.18)
-
-													ThemedRectangle {
-														themeStyle: "flat"
-														width: parent.width * Math.max(0, Math.min(latestEntry ? latestEntry.progressValue : -1, 100)) / 100
-														height: parent.height
-														radius: parent.radius
-														color: urgencyColor
-													}
-												}
-
-												Flow {
-													Layout.fillWidth: true
-													visible: liveNotification && liveNotification.actions.length > 0
-													spacing: 8
-
-													Repeater {
-														model: liveNotification ? liveNotification.actions : []
-
-														delegate: ThemedRectangle {
-															required property var modelData
-
-															width: actionLabel.implicitWidth + 20
-															height: 30
-															radius: ThemeEngine.radiusMedium
-															color: root.secondaryBoxStrongColor
-															border.width: 0
-															border.color: "transparent"
-
-															AtelierText {
-																id: actionLabel
-																anchors.centerIn: parent
-																color: foreground
-																font.pixelSize: 12
-																font.weight: Font.Medium
-																text: modelData.text
-															}
-
-															HoverLayer {
-																tint: root.foreground
-																onClicked: modelData.invoke()
-															}
-														}
-													}
-												}
-
-												RowLayout {
-													Layout.fillWidth: true
-													visible: liveNotification && liveNotification.hasInlineReply
-													spacing: 8
-
-													ThemedRectangle {
-														Layout.fillWidth: true
-														themeStyle: "inset"
-														implicitHeight: 44
-														radius: ThemeEngine.radiusMedium
-														color: Qt.alpha(background, 0.42)
-														border.width: 0
-														border.color: "transparent"
-
-														TextInput {
-															id: inlineReplyInput
-															anchors.fill: parent
-															anchors.leftMargin: 12
-															anchors.rightMargin: 12
-															anchors.topMargin: 8
-															anchors.bottomMargin: 8
-															color: foreground
-															clip: true
-															selectByMouse: true
-															selectedTextColor: background
-															selectionColor: urgencyColor
-
-															Keys.onReturnPressed: root.submitInlineReply(liveNotification, inlineReplyInput)
-															Keys.onEnterPressed: root.submitInlineReply(liveNotification, inlineReplyInput)
-														}
-
-														AtelierText {
-															anchors.fill: parent
-															anchors.leftMargin: 12
-															anchors.rightMargin: 12
-															anchors.topMargin: 8
-															anchors.bottomMargin: 8
-															visible: inlineReplyInput.text.length === 0
-															color: Qt.alpha(foreground, 0.45)
-															font.pixelSize: 13
-															text: liveNotification ? (liveNotification.inlineReplyPlaceholder || "Reply") : "Reply"
-															verticalAlignment: Text.AlignVCenter
-														}
-													}
-
-				ThemedRectangle {
-														implicitWidth: 60
-														implicitHeight: 44
-														radius: ThemeEngine.radiusMedium
-														color: Qt.alpha(urgencyColor, 0.16)
-														border.width: 0
-														border.color: "transparent"
-
-														AtelierText {
-															anchors.centerIn: parent
-															color: foreground
-															font.pixelSize: 12
-															font.weight: Font.Medium
-															text: "Send"
-														}
-
-														HoverLayer {
-															tint: root.foreground
-															onClicked: root.submitInlineReply(liveNotification, inlineReplyInput)
-														}
-													}
-												}
-
-												ThemedRectangle {
-													Layout.fillWidth: true
-													implicitHeight: 28
-													radius: ThemeEngine.radiusMedium
-													visible: modelData.notifications.length > 1
-													color: root.secondaryInsetColor
-													border.width: 0
-													border.color: "transparent"
-
-													AtelierText {
-														anchors.centerIn: parent
-														color: foreground
-														font.pixelSize: 12
-														font.weight: Font.Medium
-														text: modelData.expanded
-															? `Hide ${modelData.notifications.length - 1} older`
-															: `Show ${modelData.notifications.length - 1} older`
-													}
-
-													HoverLayer {
-														tint: root.foreground
-														onClicked: root.setNotificationGroupExpanded(modelData.key, !modelData.expanded)
-													}
-												}
-
-												Item {
-													Layout.fillWidth: true
-													Layout.preferredHeight: expandedOlderSection.height
-													Layout.maximumHeight: expandedOlderSection.height
-													clip: true
-													visible: modelData.notifications.length > 1
-
-													Item {
-														id: expandedOlderSection
-														readonly property real contentHeight: olderNotificationsColumn.implicitHeight
-														anchors.left: parent.left
-														anchors.right: parent.right
-														anchors.top: parent.top
-														height: modelData.expanded ? contentHeight : 0
-														clip: true
-
-														Behavior on height {
-															NumberAnimation {
-																duration: modelData.expanded ? Motion.popupOpen : Motion.popupClose
-																easing.type: modelData.expanded ? ThemeEngine.emphasizedEasing : ThemeEngine.standardEasing
-																easing.overshoot: modelData.expanded ? 0.35 : 0
-															}
-														}
-
-														Column {
-															id: olderNotificationsColumn
-															width: parent.width
-															spacing: 6
-
-															Repeater {
-																model: modelData.notifications.slice(1)
-
-																delegate: ThemedRectangle {
-																	required property var modelData
-
-																	width: olderNotificationsColumn.width
-																	implicitHeight: olderEntry.implicitHeight + 18
-																	radius: ThemeEngine.radiusMedium
-																	color: root.secondaryInsetColor
-																	border.width: 0
-																	border.color: "transparent"
-
-																	ColumnLayout {
-																		id: olderEntry
-																		anchors.fill: parent
-																		anchors.margins: 9
-																		spacing: 4
-
-																		RowLayout {
-																			Layout.fillWidth: true
-
-																			AtelierText {
-																				Layout.fillWidth: true
-																				color: foreground
-																				font.pixelSize: 13
-																				font.weight: Font.Medium
-																				elide: Text.ElideRight
-																				text: modelData.summary || "Notification"
-																			}
-
-																			AtelierText {
-																				color: Qt.alpha(foreground, 0.45)
-																				font.pixelSize: 11
-																				text: `${root.formatNotificationTime(modelData.timestamp)}${modelData.active ? "" : "  •  closed"}`
-																			}
-																		}
-
-																		AtelierText {
-																			Layout.fillWidth: true
-																			visible: !ThemeEngine.dialogueNotifications && modelData.body !== ""
-																			color: Qt.alpha(foreground, 0.85)
-																			font.pixelSize: 13
-																			textFormat: Text.PlainText
-																			wrapMode: Text.WordWrap
-																			text: modelData.body
-																		}
-
-																		RpgDialogueText {
-																			Layout.fillWidth: true
-																			visible: ThemeEngine.dialogueNotifications && modelData.body !== ""
-																			dialogueText: modelData.body
-																			textColor: Qt.alpha(foreground, 0.85)
-																			fontPixelSize: 13
-																			letterDelay: 16
-																		}
-																	}
-																}
-															}
-														}
-													}
-												}
-
-											}
-										}
-			}
-		}
+		ActivityPanel { anchors.fill: parent; host: root }
 	}
 
 	Instantiator {
-		model: root.toasts
-
-		delegate: PopupWindow {
-			id: toastWindow
-			required property int index
-			required property var modelData
-
-			readonly property int toastId: modelData.toastId
-			readonly property int duration: modelData.duration
-			readonly property var notification: modelData.notification
-			readonly property color urgencyColor: root.notificationUrgencyColor(notification)
-			readonly property real progressValue: notification.hints.value !== undefined
-				? Number(notification.hints.value)
-				: -1
-			readonly property string iconSource: notification.image !== ""
-				? notification.image
-				: root.resolveIconSource(notification.appIcon, [
-					"dialog-information-symbolic",
-					"dialog-information"
-				])
-			property bool dismissing: false
-			property real revealProgress: 0
-
-			visible: true
-			color: "transparent"
-
-			anchor {
-				window: barWindow
-				edges: Edges.Bottom
-				gravity: Edges.Bottom
-				adjustment: PopupAdjustment.SlideX | PopupAdjustment.SlideY
-
-				onAnchoring: {
-					anchor.rect.x = 0;
-					anchor.rect.y = 0;
-					anchor.rect.width = barWindow.width;
-					anchor.rect.height = bar.height + 12 + index * (toastWindow.implicitHeight + 12);
-				}
-			}
-
-			implicitWidth: toastCard.implicitWidth + ThemeEngine.shadowRenderMargin * 2
-				+ Math.abs(ThemeEngine.toastTravel)
-			implicitHeight: toastCard.implicitHeight + ThemeEngine.shadowRenderMargin * 2
-
-			NumberAnimation on revealProgress {
-				from: 0
-				to: 1
-				duration: ThemeEngine.toastOpen
-				easing.type: ThemeEngine.emphasizedEasing
-				easing.overshoot: ThemeEngine.smallOvershoot
-			}
-
-			ThemedRectangle {
-					id: toastCard
-					implicitWidth: 380
-					implicitHeight: toastHeader.height + toastContent.implicitHeight + 24
-					x: dismissing ? -implicitWidth - 24
-						: ThemeEngine.shadowRenderMargin + ThemeEngine.toastTravel * (1 - toastWindow.revealProgress)
-					y: ThemeEngine.shadowRenderMargin
-					scale: ThemeEngine.toastStartScale
-						+ (1 - ThemeEngine.toastStartScale) * toastWindow.revealProgress
-					rotation: ThemeEngine.toastRotation * (1 - toastWindow.revealProgress)
-					transformOrigin: Item.TopRight
-					radius: ThemeEngine.radiusMedium
-					color: root.surface
-					themeStyle: "raised"
-					border.width: 1
-					border.color: root.surfaceBorder
-					opacity: dismissing ? 0 : 1
-					clip: !ThemeEngine.controlEffectsEnabled
-
-					Behavior on x {
-						NumberAnimation {
-							duration: Motion.normal
-							easing.type: ThemeEngine.emphasizedEasing
-							easing.overshoot: 0.12
-						}
-					}
-
-					Behavior on opacity {
-						Anim {}
-					}
-
-					Timer {
-						id: toastDismissTimer
-						interval: 240
-						repeat: false
-						onTriggered: notification.dismiss()
-					}
-
-					// urgency-tinted header band
-					ThemedRectangle {
-						id: toastHeader
-						themeStyle: "flat"
-						anchors.left: parent.left
-						anchors.right: parent.right
-						anchors.top: parent.top
-						height: 34
-						color: Qt.alpha(urgencyColor, 0.14)
-
-						ThemedRectangle {
-							anchors.left: parent.left
-							anchors.right: parent.right
-							anchors.bottom: parent.bottom
-							height: 1
-							color: Qt.alpha(urgencyColor, 0.35)
-						}
-
-						RowLayout {
-							anchors.fill: parent
-							anchors.leftMargin: 12
-							anchors.rightMargin: 7
-							spacing: 8
-
-							ThemedRectangle {
-								implicitWidth: 8
-								implicitHeight: 8
-								radius: ThemeEngine.radiusSmall
-								color: urgencyColor
-							}
-
-							AtelierText {
-								Layout.fillWidth: true
-								color: Qt.alpha(foreground, 0.85)
-								font.pixelSize: 10
-								font.weight: Font.DemiBold
-								font.letterSpacing: 1.4
-								elide: Text.ElideRight
-								text: (notification.appName || "System").toUpperCase()
-							}
-
-							AtelierText {
-								color: Qt.alpha(foreground, 0.5)
-								font.pixelSize: 10
-								text: Qt.formatDateTime(new Date(), "HH:mm")
-							}
-
-							ThemedRectangle {
-								implicitWidth: 20
-								implicitHeight: 20
-								radius: ThemeEngine.radiusMedium
-								color: "transparent"
-
-								AtelierText {
-									anchors.centerIn: parent
-									color: Qt.alpha(foreground, 0.7)
-									font.pixelSize: 11
-									text: "\u00d7"
-								}
-
-								HoverLayer {
-									tint: root.danger
-									onClicked: {
-										if (dismissing) return;
-										dismissing = true;
-										toastDismissTimer.start();
-									}
-								}
-							}
-						}
-					}
-
-					ColumnLayout {
-						id: toastContent
-						anchors.left: parent.left
-						anchors.right: parent.right
-						anchors.top: toastHeader.bottom
-						anchors.leftMargin: 14
-						anchors.rightMargin: 14
-						anchors.topMargin: 10
-						spacing: 8
-
-						RowLayout {
-							Layout.fillWidth: true
-							visible: !ThemeEngine.dialogueNotifications
-							spacing: 12
-
-							ColumnLayout {
-								Layout.fillWidth: true
-								Layout.alignment: Qt.AlignTop
-								spacing: 3
-
-								AtelierText {
-									Layout.fillWidth: true
-									color: foreground
-									font.pixelSize: 14
-									font.weight: Font.DemiBold
-									wrapMode: Text.WordWrap
-									maximumLineCount: 2
-									elide: Text.ElideRight
-									text: notification.summary || "Notification"
-								}
-
-								AtelierText {
-									Layout.fillWidth: true
-									visible: notification.body !== ""
-									color: Qt.alpha(foreground, 0.72)
-									font.pixelSize: 12
-									textFormat: Text.PlainText
-									wrapMode: Text.WordWrap
-									maximumLineCount: 4
-									elide: Text.ElideRight
-									text: notification.body
-								}
-							}
-
-							ThemedRectangle {
-								Layout.alignment: Qt.AlignTop
-								implicitWidth: 52
-								implicitHeight: 52
-								radius: ThemeEngine.radiusMedium
-								visible: iconSource !== ""
-								color: Qt.alpha(urgencyColor, 0.1)
-								clip: true
-
-								Image {
-									anchors.fill: parent
-									anchors.margins: notification.image !== "" ? 0 : 13
-									source: iconSource
-									fillMode: notification.image !== "" ? Image.PreserveAspectCrop : Image.PreserveAspectFit
-									smooth: true
-									mipmap: true
-								}
-							}
-						}
-
-						RowLayout {
-							Layout.fillWidth: true
-							visible: ThemeEngine.dialogueNotifications
-							spacing: 12
-
-							ThemedRectangle {
-								Layout.alignment: Qt.AlignTop
-								implicitWidth: 52
-								implicitHeight: 52
-								radius: ThemeEngine.radiusMedium
-								visible: iconSource !== ""
-								color: Qt.alpha(urgencyColor, 0.1)
-								clip: true
-
-								Image {
-									anchors.fill: parent
-									anchors.margins: notification.image !== "" ? 0 : 13
-									source: iconSource
-									fillMode: notification.image !== "" ? Image.PreserveAspectCrop : Image.PreserveAspectFit
-									smooth: true
-									mipmap: true
-								}
-							}
-
-							ThemedRectangle {
-								Layout.fillWidth: true
-								Layout.alignment: Qt.AlignTop
-								implicitHeight: toastDialogueColumn.implicitHeight + 18
-								themeStyle: "inset"
-								radius: ThemeEngine.radiusMedium
-								color: Qt.alpha(root.background, 0.36)
-
-								ColumnLayout {
-									id: toastDialogueColumn
-									anchors.fill: parent
-									anchors.margins: 9
-									spacing: 4
-
-									AtelierText {
-										Layout.fillWidth: true
-										color: foreground
-										font.pixelSize: 13
-										font.weight: Font.DemiBold
-										font.letterSpacing: 0.5
-										wrapMode: Text.WordWrap
-										maximumLineCount: 2
-										elide: Text.ElideRight
-										text: notification.summary || "Notification"
-									}
-
-									RpgDialogueText {
-										Layout.fillWidth: true
-										visible: notification.body !== ""
-										dialogueText: notification.body
-										textColor: Qt.alpha(foreground, 0.82)
-										fontPixelSize: 12
-										maximumLineCount: 4
-										letterDelay: 22
-									}
-								}
-							}
-						}
-
-						ThemedRectangle {
-							Layout.fillWidth: true
-							implicitHeight: 6
-							radius: ThemeEngine.radiusTiny
-							visible: progressValue >= 0 && progressValue <= 100
-							color: root.secondaryInsetColor
-
-							ThemedRectangle {
-								width: parent.width * Math.max(0, Math.min(progressValue, 100)) / 100
-								height: parent.height
-								radius: parent.radius
-								color: urgencyColor
-
-								Behavior on width {
-									Anim {}
-								}
-							}
-						}
-
-						Flow {
-							Layout.fillWidth: true
-							visible: notification && notification.actions.length > 0
-							spacing: 8
-
-							Repeater {
-								model: notification ? notification.actions : []
-
-								delegate: ThemedRectangle {
-									required property var modelData
-
-									width: actionLabel.implicitWidth + 22
-									height: 27
-									radius: ThemeEngine.radiusMedium
-									color: root.secondaryBoxColor
-
-									AtelierText {
-										id: actionLabel
-										anchors.centerIn: parent
-										color: foreground
-										font.pixelSize: 11
-										font.weight: Font.Medium
-										text: modelData.text
-									}
-
-									HoverLayer {
-										tint: root.primary
-										onClicked: modelData.invoke()
-									}
-								}
-							}
-						}
-
-						RowLayout {
-							Layout.fillWidth: true
-							visible: notification && notification.hasInlineReply
-							spacing: 8
-
-							ThemedRectangle {
-								Layout.fillWidth: true
-								themeStyle: "inset"
-								implicitHeight: 32
-								radius: ThemeEngine.radiusMedium
-								color: root.secondaryInsetColor
-
-								TextInput {
-									id: toastInlineReplyInput
-									anchors.fill: parent
-									anchors.leftMargin: 12
-									anchors.rightMargin: 12
-									anchors.topMargin: 7
-									anchors.bottomMargin: 7
-									color: foreground
-									clip: true
-									selectByMouse: true
-									selectedTextColor: background
-									selectionColor: urgencyColor
-
-									Keys.onReturnPressed: root.submitInlineReply(notification, toastInlineReplyInput)
-									Keys.onEnterPressed: root.submitInlineReply(notification, toastInlineReplyInput)
-								}
-
-								AtelierText {
-									anchors.fill: parent
-									anchors.leftMargin: 12
-									verticalAlignment: Text.AlignVCenter
-									visible: toastInlineReplyInput.text.length === 0
-									color: Qt.alpha(foreground, 0.45)
-									font.pixelSize: 12
-									text: notification ? (notification.inlineReplyPlaceholder || "Reply") : "Reply"
-								}
-							}
-
-							ThemedRectangle {
-								implicitWidth: 56
-								implicitHeight: 32
-								radius: ThemeEngine.radiusMedium
-								color: Qt.alpha(root.primary, 0.3)
-
-								AtelierText {
-									anchors.centerIn: parent
-									color: foreground
-									font.pixelSize: 11
-									font.weight: Font.DemiBold
-									text: "Send"
-								}
-
-								HoverLayer {
-									tint: root.primary
-									onClicked: root.submitInlineReply(notification, toastInlineReplyInput)
-								}
-							}
-						}
-					}
-
-					// timeout countdown
-					ThemedRectangle {
-						id: toastCountdown
-						anchors.left: parent.left
-						anchors.bottom: parent.bottom
-						anchors.leftMargin: 1
-						anchors.bottomMargin: 1
-						height: 3
-						radius: 1.5
-						color: Qt.alpha(urgencyColor, 0.75)
-						width: toastCard.implicitWidth - 2
-
-						NumberAnimation on width {
-							from: toastCard.implicitWidth - 2
-							to: 0
-							duration: duration
-							easing.type: Easing.Linear
-						}
-					}
-
-				}
-
-				Timer {
-					running: true
-					repeat: false
-					interval: duration
-					onTriggered: root.removeToast(toastId)
-				}
-			}
-		}
+        model: root.toasts
+        delegate: ToastSurface { host: root }
+    }
 
 }

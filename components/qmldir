@@ -13,3 +13,11 @@ RpgDialogueText 1.0 RpgDialogueText.qml
 ThemedRectangle 1.0 ThemedRectangle.qml
 singleton Atelier 1.0 Atelier.qml
 AtelierText 1.0 AtelierText.qml
+CalendarPanel 1.0 CalendarPanel.qml
+WeatherPanel 1.0 WeatherPanel.qml
+RailButton 1.0 RailButton.qml
+FolioArtwork 1.0 FolioArtwork.qml
+ConnectionPanel 1.0 ConnectionPanel.qml
+ActivityPanel 1.0 ActivityPanel.qml
+AtelierSelect 1.0 AtelierSelect.qml
+ToastSurface 1.0 ToastSurface.qml

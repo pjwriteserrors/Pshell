@@ -2621,7 +2621,7 @@ Item {
 				height: root.inChatMode
 					? Math.min(180, Math.max(48, searchField.contentHeight + 22))
 					: 44
-				radius: 0
+				radius: 12
 				color: root.secondaryBoxColor
 				border.width: 0
                 Rectangle {
@@ -2939,229 +2939,109 @@ Item {
 				}
 			}
 
+            Item {
+                width: parent.width
+                height: parent.height - searchBox.height - 18
+                visible: !root.inCommandMode
+                Rectangle {
+                    id: spotlight
+                    width: Math.min(260, parent.width * 0.34)
+                    height: parent.height
+                    radius: 18
+                    color: Qt.tint(Atelier.canvas, Qt.alpha(Atelier.sage, 0.28))
+                    readonly property var app: appList.currentItem ? appList.currentItem.modelData : null
+                    AtelierText { x: 24; y: 24; text: "IN FOCUS"; font.family: Atelier.mono; font.pixelSize: 10; font.letterSpacing: 2 }
+                    Rectangle {
+                        anchors.horizontalCenter: parent.horizontalCenter; y: 72
+                        width: Math.min(168, parent.width - 40); height: width; radius: width / 2
+                        color: Qt.alpha(Atelier.canvas, 0.7)
+                        Image { id: focusIcon; anchors.centerIn: parent; width: 80; height: 80; source: spotlight.app ? root.iconSource(spotlight.app) : ""; fillMode: Image.PreserveAspectFit }
+                        AtelierText { anchors.centerIn: parent; text: spotlight.app ? spotlight.app.name.charAt(0) : "A"; display: true; font.pixelSize: 64; visible: focusIcon.status !== Image.Ready }
+                    }
+                    AtelierText {
+                        x: 24; y: 264; width: parent.width - 48
+                        text: spotlight.app ? spotlight.app.name : "Something new"
+                        font.pixelSize: 27; display: true; wrapMode: Text.WordWrap; maximumLineCount: 3; elide: Text.ElideRight
+                    }
+                    Rectangle {
+                        anchors.bottom: parent.bottom; anchors.bottomMargin: 24; x: 24
+                        width: parent.width - 48; height: 44; radius: 22; color: Atelier.ink
+                        AtelierText { anchors.centerIn: parent; text: "Open application  ↗"; color: Atelier.paper; font.pixelSize: 12 }
+                        HoverLayer { tint: Atelier.paper; onClicked: if(spotlight.app) root.launchApp(spotlight.app) }
+                    }
+                }
+                GridView {
+                    id: appList
+                    x: spotlight.width + 24
+                    width: parent.width - x
+                    height: parent.height
+                    readonly property int columns: width > 580 ? 3 : 2
+                    cellWidth: Math.floor(width / columns)
+                    cellHeight: 94
+                    model: root.filteredApps
+                    currentIndex: model.length > 0 ? 0 : -1
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+                    ScrollBar.vertical: ScrollBar {}
+                    delegate: Item {
+                        id: appTile
+                        required property DesktopEntry modelData
+                        required property int index
+                        readonly property bool selected: appList.currentIndex === index
+                        width: appList.cellWidth
+                        height: appList.cellHeight
+                        Rectangle {
+                            anchors.fill: parent; anchors.rightMargin: 10; anchors.bottomMargin: 10
+                            radius: 14
+                            color: appTile.selected ? Atelier.ink : Qt.alpha(Atelier.surface, 0.65)
+                            Image { id: tileIcon; x: 16; y: 14; width: 26; height: 26; source: root.iconSource(appTile.modelData); fillMode: Image.PreserveAspectFit }
+                            AtelierText { x: 16; y: 8; text: appTile.modelData.name.charAt(0); display: true; font.pixelSize: 26; color: appTile.selected ? Atelier.gold : Atelier.sage; visible: tileIcon.status !== Image.Ready }
+                            AtelierText {
+                                x: 16; y: 53; width: parent.width - 28
+                                text: appTile.modelData.name || "Application"; font.pixelSize: 12
+                                color: appTile.selected ? Atelier.paper : Atelier.ink
+                                elide: Text.ElideRight
+                            }
+                            HoverLayer { tint: Atelier.gold; onEntered: appList.currentIndex = appTile.index; onClicked: root.launchApp(appTile.modelData) }
+                        }
+                    }
+                }
+            }
+
 			GridView {
-				id: appList
+                id: commandList
+                width: parent.width; height: parent.height - searchBox.height - 12
+                visible: root.inCommandMode && !root.inCalculatorMode && !root.inAiMode && !root.inChatMode && !root.inOllamaMode && !root.inFileMode
+                clip: true; model: root.filteredCommands; currentIndex: model.length ? 0 : -1
+                cellWidth: width / 2; cellHeight: 144
+                delegate: Rectangle {
+                    id: commandRow
+                    required property var modelData
+                    required property int index
+                    width: commandList.cellWidth - 12; height: 132; radius: 22
+                    color: commandList.currentIndex === index ? "#d2d8bf" : Atelier.surface
+                    AtelierText { x: 22; y: 20; text: "0" + (commandRow.index + 1) + " / " + (commandRow.modelData.command || commandRow.modelData.id); font.family: Atelier.mono; font.pixelSize: 10; color: Atelier.muted }
+                    AtelierText { x: 22; y: 46; width: parent.width - 44; text: commandRow.modelData.name || "Command"; display: true; font.pixelSize: 27; elide: Text.ElideRight }
+                    AtelierText { x: 22; y: 90; width: parent.width - 44; text: commandRow.modelData.description || ""; font.pixelSize: 12; color: Atelier.muted; elide: Text.ElideRight }
+                    MouseArea { anchors.fill: parent; hoverEnabled: true; onEntered: commandList.currentIndex = commandRow.index; onClicked: root.launchCommand(commandRow.modelData) }
+                }
+                ScrollBar.vertical: ScrollBar {}
+            }
 
-				readonly property int columns: 2
-
-				width: parent.width
-				height: parent.height - searchBox.height - 12
-				visible: !root.inCommandMode
-				clip: true
-				cellWidth: Math.floor(width / columns)
-				cellHeight: 64
-				model: root.filteredApps
-				currentIndex: model.length > 0 ? 0 : -1
-				boundsBehavior: Flickable.StopAtBounds
-
-				ScrollBar.vertical: ScrollBar {
-					policy: ScrollBar.AsNeeded
-				}
-
-				delegate: Item {
-					id: appTile
-
-					required property DesktopEntry modelData
-					required property int index
-					readonly property bool selected: appList.currentIndex === index
-
-					width: appList.cellWidth
-					height: appList.cellHeight
-
-					ThemedRectangle {
-						anchors.fill: parent
-						anchors.margins: 4
-						radius: ThemeEngine.radiusMedium
-						// Hovering a tile also selects it (see HoverLayer.onEntered
-						// below), so drive the background off `selected` alone. Keying
-						// it off containsMouse too made the tile flash the lighter hover
-						// colour for one frame before settling on the selected colour.
-						color: appTile.selected
-							? Qt.alpha(root.barColor, 0.06)
-							: "transparent"
-						border.width: 0
-						border.color: Qt.alpha(root.barColor, 0.6)
-                        Rectangle { width: 2; height: 24; anchors.verticalCenter: parent.verticalCenter; color: Atelier.accent; visible: appTile.selected }
-
-						Behavior on color {
-							CAnim {}
-						}
-
-						Row {
-                            anchors.centerIn: parent
-                            spacing: 16
-                            width: parent.width - 24
-
-							Image {
-								anchors.verticalCenter: parent.verticalCenter
-                                width: 28
-                                height: 28
-								source: root.iconSource(appTile.modelData)
-								sourceSize: Qt.size(width, height)
-								fillMode: Image.PreserveAspectFit
-								smooth: true
-								mipmap: true
-							}
-
-							AtelierText {
-								width: parent.width - 44
-                                anchors.verticalCenter: parent.verticalCenter
-                                horizontalAlignment: Text.AlignLeft
-                                color: root.foreground
-                                font.pixelSize: 14
-								font.weight: appTile.selected ? Font.DemiBold : Font.Medium
-								elide: Text.ElideRight
-								maximumLineCount: 1
-								text: appTile.modelData.name || appTile.modelData.id || "App"
-							}
-						}
-
-						HoverLayer {
-							id: tileHover
-							tint: root.foreground
-							showHover: false
-							rippleEnabled: false
-							onEntered: appList.currentIndex = appTile.index
-							onClicked: root.launchApp(appTile.modelData)
-						}
-					}
-				}
-			}
-
-			ListView {
-				id: commandList
-				width: parent.width
-				height: parent.height - searchBox.height - 12
-				visible: root.inCommandMode
-					&& !root.inCalculatorMode
-					&& !root.inAiMode
-					&& !root.inChatMode
-					&& !root.inOllamaMode
-					&& !root.inFileMode
-				clip: true
-				spacing: 6
-				model: root.filteredCommands
-				currentIndex: model.length > 0 ? 0 : -1
-				boundsBehavior: Flickable.StopAtBounds
-
-				delegate: ThemedRectangle {
-					id: commandRow
-
-					required property var modelData
-					required property int index
-
-					width: commandList.width
-					height: 54
-					radius: ThemeEngine.radiusMedium
-					color: commandList.currentIndex === index
-						? root.secondaryBoxStrongColor
-						: (commandMouse.containsMouse ? root.secondaryBoxColor : "transparent")
-
-					MouseArea {
-						id: commandMouse
-						anchors.fill: parent
-						hoverEnabled: true
-						cursorShape: Qt.PointingHandCursor
-						onEntered: commandList.currentIndex = parent.index
-						onClicked: root.launchCommand(parent.modelData)
-					}
-
-					QQCImpl.IconImage {
-						anchors.left: parent.left
-						anchors.leftMargin: 10
-						anchors.verticalCenter: parent.verticalCenter
-						width: 22
-						height: 22
-						source: root.commandIconSource(commandRow.modelData)
-						sourceSize: Qt.size(width, height)
-						color: root.foreground
-					}
-
-					Column {
-						anchors.left: parent.left
-						anchors.leftMargin: 42
-						anchors.right: parent.right
-						anchors.rightMargin: 10
-						anchors.verticalCenter: parent.verticalCenter
-						spacing: 2
-
-						AtelierText {
-							width: parent.width
-							color: root.foreground
-							font.pixelSize: 13
-							font.weight: Font.Medium
-							elide: Text.ElideRight
-							text: `>${commandRow.modelData.command || commandRow.modelData.id || "command"}`
-						}
-
-						AtelierText {
-							width: parent.width
-							color: Qt.alpha(root.foreground, 0.58)
-							font.pixelSize: 11
-							elide: Text.ElideRight
-							text: `${commandRow.modelData.name || "Command"} · ${commandRow.modelData.description || ""}`
-						}
-					}
-				}
-
-				ScrollBar.vertical: ScrollBar {
-					policy: ScrollBar.AsNeeded
-				}
-			}
-
-			Item {
-				id: calculatorPanel
-				width: parent.width
-				height: parent.height - searchBox.height - 12
-				visible: root.inCalculatorMode
-
-				MouseArea {
-					anchors.fill: parent
-					enabled: root.calculatorEvaluation.valid
-					cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-					onClicked: root.launchCommand(root.calculatorCommand())
-				}
-
-				Column {
-					width: parent.width
-					anchors.centerIn: parent
-					spacing: 12
-
-					AtelierText {
-						width: parent.width
-						color: Qt.alpha(root.foreground, 0.58)
-						text: root.calculatorExpression
-						visible: text !== ""
-						horizontalAlignment: Text.AlignHCenter
-						elide: Text.ElideRight
-						font.pixelSize: 16
-						font.weight: Font.Medium
-					}
-
-					AtelierText {
-						width: parent.width
-						color: root.calculatorEvaluation.valid ? root.foreground : Qt.alpha(root.foreground, 0.68)
-						text: root.calculatorEvaluation.valid ? root.calculatorEvaluation.result : "Calculator"
-						horizontalAlignment: Text.AlignHCenter
-						elide: Text.ElideMiddle
-						display: true
-    font.pixelSize: 58
-						font.weight: Font.DemiBold
-						fontSizeMode: Text.Fit
-						minimumPixelSize: 24
-					}
-
-					AtelierText {
-						width: parent.width
-						color: root.calculatorEvaluation.valid ? Qt.alpha(root.foreground, 0.58) : root.danger
-						text: root.calculatorEvaluation.valid ? "Press Enter to copy" : root.calculatorEvaluation.message
-						horizontalAlignment: Text.AlignHCenter
-						wrapMode: Text.WordWrap
-						font.pixelSize: 13
-						font.weight: Font.Medium
-					}
-				}
-			}
+			Rectangle {
+                id: calculatorPanel
+                width: parent.width; height: parent.height - searchBox.height - 12
+                visible: root.inCalculatorMode; radius: 26; color: Atelier.ink
+                FolioArtwork { anchors.right: parent.right; width: parent.width * 0.45; height: parent.height; tint: Atelier.sage }
+                Column {
+                    x: 40; y: 40; width: parent.width * 0.6; spacing: 24
+                    AtelierText { text: "A LITTLE ROOM FOR NUMBERS"; font.family: Atelier.mono; font.pixelSize: 10; color: Atelier.gold }
+                    AtelierText { width: parent.width; text: root.calculatorExpression || "What adds up?"; display: true; font.pixelSize: 28; color: Atelier.paper; wrapMode: Text.WordWrap }
+                    AtelierText { width: parent.width; text: root.calculatorEvaluation.valid ? root.calculatorEvaluation.result : "—"; display: true; font.pixelSize: Math.min(100, calculatorPanel.height * 0.25); color: Atelier.paper; elide: Text.ElideMiddle }
+                    AtelierText { width: parent.width; text: root.calculatorEvaluation.valid ? "Click or press Enter to copy the result  ↗" : root.calculatorEvaluation.message; color: Atelier.gold; font.pixelSize: 12; wrapMode: Text.WordWrap }
+                }
+                MouseArea { anchors.fill: parent; enabled: root.calculatorEvaluation.valid; onClicked: root.launchCommand(root.calculatorCommand()) }
+            }
 
 			Item {
 				id: filePanel
@@ -3324,129 +3204,31 @@ Item {
 						border.width: 1
 						border.color: Qt.alpha(root.barColor, 0.18)
 
-						ListView {
+						GridView {
 							id: fileBrowserList
 							anchors.fill: parent
 							anchors.margins: 6
 							clip: true
-							spacing: 4
+							cellWidth: width / Math.max(2, Math.floor(width / 230))
+                            cellHeight: 138
 							model: root.filteredFileBrowserEntries
 							currentIndex: model.length > 0 ? 0 : -1
 							boundsBehavior: Flickable.StopAtBounds
 
-							delegate: ThemedRectangle {
-								id: fileRow
-
-								required property var modelData
-								required property int index
-								readonly property var file: modelData || ({})
-
-								width: fileBrowserList.width
-								height: 44
-								radius: ThemeEngine.radiusMedium
-								color: fileBrowserList.currentIndex === index
-									? root.secondaryBoxStrongColor
-									: (fileMouse.containsMouse ? root.secondaryBoxColor : "transparent")
-
-								MouseArea {
-									id: fileMouse
-									anchors.fill: parent
-									hoverEnabled: true
-									cursorShape: Qt.PointingHandCursor
-									onEntered: fileBrowserList.currentIndex = fileRow.index
-									onClicked: root.openFileBrowserEntry(fileRow.file)
-								}
-
-								Image {
-									visible: Boolean(fileRow.file.isImage)
-									anchors.left: parent.left
-									anchors.leftMargin: 7
-									anchors.verticalCenter: parent.verticalCenter
-									width: 30
-									height: 30
-									source: fileRow.file.isImage
-										? root.resolveMarkdownImageSource(fileRow.file.path)
-										: ""
-									fillMode: Image.PreserveAspectCrop
-									smooth: true
-									cache: true
-									asynchronous: true
-								}
-
-								QQCImpl.IconImage {
-									visible: !fileRow.file.isImage
-									anchors.left: parent.left
-									anchors.leftMargin: 10
-									anchors.verticalCenter: parent.verticalCenter
-									width: 20
-									height: 20
-									source: fileRow.file.isDir ? root.folderIconPath : root.attachmentIconPath
-									sourceSize: Qt.size(width, height)
-									color: root.foreground
-								}
-
-								Column {
-									anchors.left: parent.left
-									anchors.leftMargin: 45
-									anchors.right: fileFolderOpenButton.left
-									anchors.rightMargin: 8
-									anchors.verticalCenter: parent.verticalCenter
-									spacing: 1
-
-									AtelierText {
-										width: parent.width
-										color: root.foreground
-										text: String(fileRow.file.name || "")
-										elide: Text.ElideMiddle
-										font.pixelSize: 12
-										font.weight: Font.Medium
-									}
-
-									AtelierText {
-										width: parent.width
-										color: Qt.alpha(root.foreground, 0.5)
-										text: fileRow.file.isDir
-											? "Folder"
-											: `${fileRow.file.suffix || "file"} · ${root.formatAttachmentSize(fileRow.file.size)}`
-										elide: Text.ElideRight
-										font.pixelSize: 9
-									}
-								}
-
-								ThemedRectangle {
-									id: fileFolderOpenButton
-									anchors.right: parent.right
-									anchors.rightMargin: 7
-									anchors.verticalCenter: parent.verticalCenter
-									width: 26
-									height: 26
-									radius: ThemeEngine.radiusMedium
-									z: 2
-									visible: Boolean(fileRow.file.isDir)
-									color: fileFolderOpenMouse.containsMouse ? root.secondaryBoxStrongColor : "transparent"
-
-									MouseArea {
-										id: fileFolderOpenMouse
-										anchors.fill: parent
-										hoverEnabled: true
-										cursorShape: Qt.PointingHandCursor
-										onClicked: root.openPathWithDefaultApp(fileRow.file.path)
-									}
-
-									QQCImpl.IconImage {
-										anchors.centerIn: parent
-										width: 16
-										height: 16
-										source: root.folderOpenIconPath
-										sourceSize: Qt.size(width, height)
-										color: root.foreground
-									}
-
-									ToolTip.visible: fileFolderOpenMouse.containsMouse
-									ToolTip.delay: 500
-									ToolTip.text: "Open folder"
-								}
-							}
+							delegate: Rectangle {
+                                id: fileRow
+                                required property var modelData
+                                required property int index
+                                readonly property var file: modelData || ({})
+                                width: fileBrowserList.cellWidth - 10; height: 126; radius: 18
+                                color: fileBrowserList.currentIndex === index ? "#d2d8bf" : Atelier.surface
+                                Image { x: 18; y: 16; width: 44; height: 44; visible: !!fileRow.file.isImage; source: visible ? root.resolveMarkdownImageSource(fileRow.file.path) : ""; fillMode: Image.PreserveAspectCrop; asynchronous: true }
+                                QQCImpl.IconImage { x: 18; y: 16; width: 32; height: 32; visible: !fileRow.file.isImage; source: fileRow.file.isDir ? root.folderIconPath : root.attachmentIconPath; color: Atelier.sage }
+                                AtelierText { x: 18; y: 70; width: parent.width - 36; text: fileRow.file.name || ""; font.pixelSize: 13; elide: Text.ElideMiddle }
+                                AtelierText { x: 18; y: 96; text: fileRow.file.isDir ? "FOLDER" : root.formatAttachmentSize(fileRow.file.size); font.family: Atelier.mono; font.pixelSize: 9; color: Atelier.muted }
+                                MouseArea { anchors.fill: parent; hoverEnabled: true; onEntered: fileBrowserList.currentIndex=fileRow.index; onClicked: root.openFileBrowserEntry(fileRow.file) }
+                                AtelierText { anchors.right: parent.right; anchors.rightMargin: 16; y: 20; text: "↗"; visible: !!fileRow.file.isDir; font.pixelSize: 20; MouseArea { anchors.fill: parent; onClicked: root.openPathWithDefaultApp(fileRow.file.path) } }
+                            }
 
 							ScrollBar.vertical: ScrollBar {
 								policy: ScrollBar.AsNeeded
@@ -3543,12 +3325,13 @@ Item {
 						border.width: 1
 						border.color: Qt.alpha(root.barColor, 0.18)
 
-						ListView {
+						GridView {
 							id: pastChatList
 							anchors.fill: parent
 							anchors.margins: 6
 							clip: true
-							spacing: 4
+							cellWidth: width / 2
+                            cellHeight: 138
 							model: root.filteredAiChats
 							boundsBehavior: Flickable.StopAtBounds
 
@@ -3559,9 +3342,9 @@ Item {
 								required property int index
 								readonly property bool selected: String(modelData.id || "") === root.activeChatId
 
-								width: pastChatList.width
-								height: 52
-								radius: ThemeEngine.radiusMedium
+								width: pastChatList.cellWidth - 10
+								height: 126
+								radius: 18
 								color: selected
 									? root.secondaryBoxStrongColor
 									: (pastChatMouse.containsMouse ? root.secondaryBoxColor : "transparent")
@@ -3607,7 +3390,7 @@ Item {
 									anchors.verticalCenter: parent.verticalCenter
 									width: 26
 									height: 26
-									radius: ThemeEngine.radiusMedium
+									radius: 18
 									z: 2
 									color: deleteChatMouse.containsMouse ? root.secondaryBoxStrongColor : "transparent"
 									opacity: root.aiStreaming && String(pastChatRow.modelData.id || "") === root.aiStreamingChatId ? 0.4 : 1
@@ -3658,410 +3441,61 @@ Item {
 			}
 
 			Item {
-				id: ollamaPanel
-				width: parent.width
-				height: parent.height - searchBox.height - 12
-				visible: root.inOllamaMode
-
-				Row {
-					id: ollamaTitleRow
-					anchors.left: parent.left
-					anchors.right: parent.right
-					anchors.top: parent.top
-					height: 26
-					spacing: 8
-
-					AtelierText {
-						width: parent.width - ollamaRefreshButton.width - parent.spacing
-						anchors.verticalCenter: parent.verticalCenter
-						color: root.foreground
-						text: "Ollama models"
-						elide: Text.ElideRight
-						font.pixelSize: 15
-						font.weight: Font.DemiBold
-					}
-
-					ThemedRectangle {
-						id: ollamaRefreshButton
-						anchors.verticalCenter: parent.verticalCenter
-						width: 26
-						height: 26
-						radius: ThemeEngine.radiusMedium
-						color: ollamaRefreshMouse.containsMouse ? root.secondaryBoxStrongColor : "transparent"
-
-						MouseArea {
-							id: ollamaRefreshMouse
-							anchors.fill: parent
-							hoverEnabled: true
-							cursorShape: Qt.PointingHandCursor
-							onClicked: root.refreshOllamaOverview()
-						}
-
-						AtelierText {
-							anchors.centerIn: parent
-							color: root.foreground
-							text: "↻"
-							font.pixelSize: 16
-							font.weight: Font.DemiBold
-						}
-
-						ToolTip.visible: ollamaRefreshMouse.containsMouse
-						ToolTip.delay: 500
-						ToolTip.text: "Refresh models"
-					}
-				}
-
-				ThemedRectangle {
-					id: ollamaPullBox
-					anchors.left: parent.left
-					anchors.right: parent.right
-					anchors.top: ollamaTitleRow.bottom
-					anchors.topMargin: 8
-					height: root.ollamaPulling ? 76 : 42
-					radius: ThemeEngine.radiusMedium
-					color: root.secondaryInsetColor
-
-					Behavior on height {
-						NumberAnimation {
-							duration: ThemeEngine.duration(120)
-							easing.type: ThemeEngine.standardEasing
-						}
-					}
-
-					TextField {
-						id: ollamaPullField
-						anchors.left: parent.left
-						anchors.leftMargin: 8
-						anchors.right: ollamaPullButton.left
-						anchors.rightMargin: 8
-						anchors.top: parent.top
-						anchors.topMargin: 7
-						height: 28
-						text: root.ollamaPullModel
-						color: root.foreground
-						placeholderText: "Model to pull, for example qwen3:4b"
-						placeholderTextColor: Qt.alpha(root.foreground, 0.45)
-						selectedTextColor: root.foreground
-						selectionColor: Qt.alpha(root.barColor, 0.3)
-						font.pixelSize: 11
-						leftPadding: 9
-						rightPadding: 9
-						enabled: !root.ollamaPulling
-						onTextChanged: root.ollamaPullModel = text
-						onAccepted: root.startOllamaPull(text)
-
-						background: ThemedRectangle {
-							radius: ThemeEngine.radiusMedium
-							color: root.secondaryBoxColor
-							border.width: ollamaPullField.activeFocus ? 1 : 0
-							border.color: Qt.alpha(root.barColor, 0.7)
-						}
-					}
-
-					ThemedRectangle {
-						id: ollamaPullButton
-						anchors.right: parent.right
-						anchors.rightMargin: 8
-						anchors.top: parent.top
-						anchors.topMargin: 7
-						width: 58
-						height: 28
-						radius: ThemeEngine.radiusMedium
-						opacity: root.ollamaPullModel.trim() !== "" && !root.ollamaPulling ? 1 : 0.45
-						color: ollamaPullMouse.containsMouse ? root.secondaryBoxStrongColor : root.secondaryBoxColor
-
-						MouseArea {
-							id: ollamaPullMouse
-							anchors.fill: parent
-							enabled: root.ollamaPullModel.trim() !== "" && !root.ollamaPulling
-							hoverEnabled: true
-							cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-							onClicked: root.startOllamaPull(root.ollamaPullModel)
-						}
-
-						AtelierText {
-							anchors.centerIn: parent
-							color: root.foreground
-							text: "Pull"
-							font.pixelSize: 11
-							font.weight: Font.DemiBold
-						}
-					}
-
-					Item {
-						anchors.left: parent.left
-						anchors.leftMargin: 8
-						anchors.right: parent.right
-						anchors.rightMargin: 8
-						anchors.top: ollamaPullField.bottom
-						anchors.topMargin: 6
-						height: 26
-						visible: root.ollamaPulling
-
-						AtelierText {
-							anchors.left: parent.left
-							anchors.right: ollamaPullDetails.left
-							anchors.rightMargin: 8
-							anchors.top: parent.top
-							color: Qt.alpha(root.foreground, 0.68)
-							text: root.ollamaPullStatus
-							elide: Text.ElideRight
-							font.pixelSize: 9
-							font.weight: Font.Medium
-						}
-
-						AtelierText {
-							id: ollamaPullDetails
-							anchors.right: parent.right
-							anchors.top: parent.top
-							color: Qt.alpha(root.foreground, 0.52)
-							text: [
-								root.ollamaPullTotal > 0 ? `${Math.round(root.ollamaPullProgress * 100)}%` : "",
-								root.formatTransferRate(root.ollamaPullSpeed),
-								root.formatDuration(root.ollamaPullEtaSeconds) !== ""
-									? `${root.formatDuration(root.ollamaPullEtaSeconds)} left`
-									: ""
-							].filter(value => value !== "").join(" · ")
-							font.pixelSize: 9
-							font.weight: Font.Medium
-						}
-
-						ThemedRectangle {
-							anchors.left: parent.left
-							anchors.right: parent.right
-							anchors.bottom: parent.bottom
-							height: 5
-							radius: ThemeEngine.radiusMedium
-							color: root.secondaryBoxStrongColor
-
-							ThemedRectangle {
-								width: parent.width * root.ollamaPullProgress
-								height: parent.height
-								radius: parent.radius
-								color: root.barColor
-							}
-						}
-					}
-				}
-
-				ThemedRectangle {
-					id: ollamaRunningBox
-					anchors.left: parent.left
-					anchors.right: parent.right
-					anchors.top: ollamaPullBox.bottom
-					anchors.topMargin: 8
-					height: 38
-					radius: ThemeEngine.radiusMedium
-					color: root.secondaryInsetColor
-
-					AtelierText {
-						anchors.left: parent.left
-						anchors.leftMargin: 10
-						anchors.verticalCenter: parent.verticalCenter
-						color: root.foreground
-						text: "Running"
-						font.pixelSize: 11
-						font.weight: Font.DemiBold
-					}
-
-					AtelierText {
-						anchors.left: parent.left
-						anchors.leftMargin: 70
-						anchors.right: parent.right
-						anchors.rightMargin: 10
-						anchors.verticalCenter: parent.verticalCenter
-						color: Qt.alpha(root.foreground, 0.58)
-						text: root.ollamaRunningSummary()
-						elide: Text.ElideRight
-						font.pixelSize: 10
-						font.weight: Font.Medium
-					}
-				}
-
-				ThemedRectangle {
-					id: ollamaInstalledBox
-					anchors.left: parent.left
-					anchors.right: parent.right
-					anchors.top: ollamaRunningBox.bottom
-					anchors.topMargin: 8
-					anchors.bottom: ollamaManagerErrorText.top
-					anchors.bottomMargin: ollamaManagerErrorText.visible ? 6 : 0
-					radius: ThemeEngine.radiusMedium
-					color: root.background
-					border.width: 1
-					border.color: Qt.alpha(root.barColor, 0.18)
-
-					AtelierText {
-						anchors.left: parent.left
-						anchors.leftMargin: 10
-						anchors.top: parent.top
-						anchors.topMargin: 7
-						color: root.foreground
-						text: `Installed · ${root.aiModels.length}`
-						font.pixelSize: 11
-						font.weight: Font.DemiBold
-					}
-
-					ListView {
-						id: ollamaInstalledList
-						anchors.left: parent.left
-						anchors.right: parent.right
-						anchors.top: parent.top
-						anchors.topMargin: 27
-						anchors.bottom: parent.bottom
-						anchors.margins: 6
-						clip: true
-						spacing: 4
-						model: root.aiModels
-						boundsBehavior: Flickable.StopAtBounds
-
-						delegate: ThemedRectangle {
-							id: ollamaModelRow
-
-							required property var modelData
-							required property int index
-							readonly property string modelName: String(modelData?.name || modelData?.model || "")
-							readonly property bool running: root.isOllamaModelRunning(modelName)
-							readonly property bool removing: root.ollamaRemovingModel === modelName
-
-							width: ollamaInstalledList.width
-							height: 48
-							radius: ThemeEngine.radiusMedium
-							color: ollamaModelMouse.containsMouse ? root.secondaryBoxColor : "transparent"
-
-							MouseArea {
-								id: ollamaModelMouse
-								anchors.fill: parent
-								hoverEnabled: true
-								acceptedButtons: Qt.NoButton
-							}
-
-							Column {
-								anchors.left: parent.left
-								anchors.leftMargin: 9
-								anchors.right: ollamaModelChatButton.left
-								anchors.rightMargin: 10
-								anchors.verticalCenter: parent.verticalCenter
-								spacing: 2
-
-								AtelierText {
-									width: parent.width
-									color: root.foreground
-									text: ollamaModelRow.modelName
-									elide: Text.ElideRight
-									font.pixelSize: 11
-									font.weight: Font.DemiBold
-								}
-
-								AtelierText {
-									width: parent.width
-									color: Qt.alpha(root.foreground, 0.5)
-									text: [
-										ollamaModelRow.running ? "Running" : "",
-										String(ollamaModelRow.modelData?.details?.parameter_size || ""),
-										String(ollamaModelRow.modelData?.details?.quantization_level || ""),
-										root.formatModelSize(ollamaModelRow.modelData?.size)
-									].filter(value => value !== "").join(" · ")
-									elide: Text.ElideRight
-									font.pixelSize: 9
-									font.weight: Font.Medium
-								}
-							}
-
-							ThemedRectangle {
-								id: ollamaModelChatButton
-								anchors.right: ollamaModelRemoveButton.left
-								anchors.rightMargin: 5
-								anchors.verticalCenter: parent.verticalCenter
-								width: 52
-								height: 26
-								radius: ThemeEngine.radiusMedium
-								opacity: root.aiStreaming ? 0.45 : 1
-								color: ollamaModelChatMouse.containsMouse ? root.secondaryBoxStrongColor : root.secondaryBoxColor
-
-								MouseArea {
-									id: ollamaModelChatMouse
-									anchors.fill: parent
-									enabled: !root.aiStreaming
-									hoverEnabled: true
-									cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-									onClicked: root.startNewChatWithModel(ollamaModelRow.modelName)
-								}
-
-								AtelierText {
-									anchors.centerIn: parent
-									color: root.foreground
-									text: "Chat"
-									font.pixelSize: 10
-									font.weight: Font.DemiBold
-								}
-							}
-
-							ThemedRectangle {
-								id: ollamaModelRemoveButton
-								anchors.right: parent.right
-								anchors.rightMargin: 7
-								anchors.verticalCenter: parent.verticalCenter
-								width: 26
-								height: 26
-								radius: ThemeEngine.radiusMedium
-								opacity: root.aiStreaming || ollamaRemoveProcess.running ? 0.45 : 1
-								color: ollamaModelRemoveMouse.containsMouse ? root.secondaryBoxStrongColor : "transparent"
-
-								MouseArea {
-									id: ollamaModelRemoveMouse
-									anchors.fill: parent
-									enabled: !root.aiStreaming && !ollamaRemoveProcess.running
-									hoverEnabled: true
-									cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-									onClicked: root.removeOllamaModel(ollamaModelRow.modelName)
-								}
-
-								AtelierText {
-									anchors.centerIn: parent
-									color: root.foreground
-									text: ollamaModelRow.removing ? "…" : "󰆴"
-									font.family: "CaskaydiaCove Nerd Font"
-									font.pixelSize: 15
-								}
-
-								ToolTip.visible: ollamaModelRemoveMouse.containsMouse
-								ToolTip.delay: 500
-								ToolTip.text: "Remove model"
-							}
-						}
-
-						ScrollBar.vertical: ScrollBar {
-							policy: ScrollBar.AsNeeded
-						}
-					}
-
-					AtelierText {
-						anchors.centerIn: parent
-						visible: !root.aiModelsLoading && root.aiModels.length === 0
-						color: Qt.alpha(root.foreground, 0.5)
-						text: "No models installed"
-						font.pixelSize: 11
-						font.weight: Font.Medium
-					}
-				}
-
-				AtelierText {
-					id: ollamaManagerErrorText
-					anchors.left: parent.left
-					anchors.right: parent.right
-					anchors.bottom: parent.bottom
-					height: visible ? 16 : 0
-					visible: root.ollamaManagerError !== ""
-						|| (!root.aiModelsLoading && root.aiModels.length === 0 && root.aiError !== "")
-					color: root.danger
-					text: root.ollamaManagerError !== "" ? root.ollamaManagerError : root.aiError
-					horizontalAlignment: Text.AlignHCenter
-					elide: Text.ElideRight
-					font.pixelSize: 10
-					font.weight: Font.Medium
-				}
-			}
+                id: ollamaPanel
+                width: parent.width; height: parent.height - searchBox.height - 12; visible: root.inOllamaMode
+                Rectangle {
+                    id: modelSpine
+                    width: parent.width * 0.31; height: parent.height; radius: 26; color: Atelier.ink
+                    FolioArtwork { anchors.fill: parent; anchors.margins: 20; tint: Atelier.sage }
+                    Column {
+                        x: 24; y: 28; width: parent.width - 48; spacing: 20
+                        AtelierText { text: "LOCAL INTELLIGENCE"; font.family: Atelier.mono; font.pixelSize: 9; color: Atelier.gold }
+                        AtelierText { width: parent.width; text: "Room to think."; display: true; font.pixelSize: 38; wrapMode: Text.WordWrap; color: Atelier.paper }
+                        AtelierText { width: parent.width; text: root.ollamaRunningSummary(); font.pixelSize: 12; wrapMode: Text.WordWrap; color: Atelier.paper }
+                    }
+                    AtelierText { anchors.bottom: parent.bottom; anchors.bottomMargin: 28; x: 24; text: "Refresh library  ↻"; font.pixelSize: 12; color: Atelier.gold; MouseArea { anchors.fill: parent; onClicked: root.refreshOllamaOverview() } }
+                }
+                Column {
+                    x: modelSpine.width + 24; width: parent.width - x; spacing: 14
+                    Row {
+                        width: parent.width; spacing: 10
+                        TextField { id: ollamaPullField; width: parent.width - 100; height: 42; placeholderText: "Add a model, e.g. qwen3:8b"; text: root.ollamaPullModel; onTextChanged: root.ollamaPullModel=text; onAccepted: root.startOllamaPull(root.ollamaPullModel); background: Rectangle { radius: 21; color: Atelier.surface } }
+                        Rectangle {
+                            width: 90; height: 42; radius: 21; color: Atelier.accent
+                            AtelierText { anchors.centerIn: parent; text: "Download"; color: Atelier.paper; font.pixelSize: 12 }
+                            MouseArea { anchors.fill: parent; enabled: !root.ollamaPulling && root.ollamaPullModel.trim() !== ""; onClicked: root.startOllamaPull(root.ollamaPullModel) }
+                        }
+                    }
+                    AtelierText { width: parent.width; visible: root.ollamaPulling || root.ollamaManagerError !== ""; text: root.ollamaManagerError || root.ollamaPullStatus + "  " + Math.round(root.ollamaPullProgress*100) + "%  " + root.formatTransferRate(root.ollamaPullSpeed); font.pixelSize: 11; color: Atelier.accent; wrapMode: Text.WordWrap }
+                    GridView {
+                        id: ollamaInstalledList
+                        width: parent.width; height: ollamaPanel.height - 92; clip: true
+                        cellWidth: width / 2; cellHeight: 218; model: root.aiModels
+                        delegate: Rectangle {
+                            id: modelCard
+                            required property var modelData
+                            required property int index
+                            property string modelName: String(modelData.name || modelData.model || "")
+                            property bool confirmRemove: false
+                            width: ollamaInstalledList.cellWidth - 10; height: 204; radius: 22; color: Atelier.surface
+                            AtelierText { x: 20; y: 20; text: root.isOllamaModelRunning(modelCard.modelName) ? "● IN MEMORY" : "○ ON DISK"; font.family: Atelier.mono; font.pixelSize: 9; color: Atelier.muted }
+                            AtelierText { x: 20; y: 53; width: parent.width - 40; text: modelCard.modelName; display: true; font.pixelSize: 26; wrapMode: Text.WordWrap; maximumLineCount: 2; elide: Text.ElideRight }
+                            AtelierText { x: 20; y: 124; text: root.formatModelSize(modelCard.modelData.size); font.pixelSize: 11; color: Atelier.muted }
+                            Rectangle {
+                                x: 16; y: 158; width: parent.width - 68; height: 32; radius: 16; color: Atelier.ink
+                                AtelierText { anchors.centerIn: parent; text: "Start a conversation"; color: Atelier.paper; font.pixelSize: 11 }
+                                MouseArea { anchors.fill: parent; enabled: !root.aiStreaming; onClicked: root.startNewChatWithModel(modelCard.modelName) }
+                            }
+                            AtelierText {
+                                anchors.right: parent.right; anchors.rightMargin: 18; y: 164; text: modelCard.confirmRemove ? "!" : "×"; font.pixelSize: 18; color: Atelier.accent
+                                MouseArea { anchors.fill: parent; anchors.margins: -6; enabled: !root.aiStreaming && !ollamaRemoveProcess.running; onClicked: { if(modelCard.confirmRemove) root.removeOllamaModel(modelCard.modelName); else modelCard.confirmRemove=true; } }
+                                ToolTip.visible: modelCard.confirmRemove; ToolTip.text: "Click again to delete the downloaded model"
+                            }
+                        }
+                        ScrollBar.vertical: ScrollBar {}
+                    }
+                }
+            }
 
 			Item {
 				id: chatPanel
@@ -4074,9 +3508,9 @@ Item {
 					anchors.left: parent.left
 					anchors.right: parent.right
 					anchors.top: parent.top
-					height: 36
+					height: 86
 					radius: ThemeEngine.radiusMedium
-					color: root.secondaryInsetColor
+					color: "transparent"
 					z: 2
 
 					ThemedRectangle {
@@ -4109,25 +3543,26 @@ Item {
 					AtelierText {
 						anchors.left: chatBackButton.right
 						anchors.leftMargin: 8
-						anchors.right: chatControls.left
+						anchors.right: parent.right
 						anchors.rightMargin: 8
-						anchors.verticalCenter: parent.verticalCenter
+						y: 2
 						color: root.foreground
 						text: root.activeChat?.title || (root.aiTemporaryChatEnabled ? "Temporary chat" : "New chat")
 						elide: Text.ElideRight
-						font.pixelSize: 12
+						display: true
+                        font.pixelSize: 28
 						font.weight: Font.DemiBold
 					}
 
 						Row {
 							id: chatControls
-						anchors.right: parent.right
-						anchors.rightMargin: 6
-						anchors.verticalCenter: parent.verticalCenter
+						anchors.left: parent.left
+						anchors.leftMargin: 0
+						y: 48
 						height: 28
 							spacing: 8
 
-							ComboBox {
+							AtelierSelect {
 							id: chatModelCombo
 							anchors.verticalCenter: parent.verticalCenter
 							width: 132
@@ -4462,23 +3897,18 @@ Item {
 								.join("\n")
 
 							width: chatList.width
-							height: messageBubble.height + 6
+							height: messageBubble.height + 18
+                            AtelierText { x: 0; y: 12; width: 72; text: messageRow.fromUser ? "YOU" : "REPLY"; font.family: Atelier.mono; font.pixelSize: 10; color: Atelier.muted }
 
 								ThemedRectangle {
 									id: messageBubble
-									width: Math.min(
-										messageRow.width * 0.78,
-										Math.max(
-											messageRow.hasMarkdownImages || messageRow.attachments.length > 0 ? messageRow.width * 0.66 : 120,
-											Math.max(messageText.implicitWidth, thinkingText.implicitWidth, responseModelLabel.implicitWidth) + 24
-										)
-								)
-								height: messageRow.loadingModel
+									width: messageRow.width - 110
+                                height: messageRow.loadingModel
 									? 34
 									: messageBubbleBody.implicitHeight + 20
-								x: messageRow.fromUser ? messageRow.width - width : 0
+								x: 86
 								radius: ThemeEngine.radiusMedium
-								color: messageRow.fromUser ? Qt.alpha(root.barColor, 0.24) : root.secondaryBoxColor
+								color: messageRow.fromUser ? Qt.alpha(Atelier.surface, 0.65) : "transparent"
 								clip: true
 
 									AtelierText {
@@ -4814,19 +4244,13 @@ Item {
 						}
 					}
 
-					AtelierText {
-						anchors.centerIn: parent
-						width: parent.width - 40
-						visible: root.activeMessages.length === 0
-						color: Qt.alpha(root.foreground, 0.5)
-						text: root.selectedAiModel === ""
-							? "Type >chat to start a new chat"
-							: "Type >chat followed by a message"
-						horizontalAlignment: Text.AlignHCenter
-						wrapMode: Text.WordWrap
-						font.pixelSize: 13
-						font.weight: Font.Medium
-					}
+					Column {
+                        anchors.centerIn: parent; spacing: 18
+                        visible: chatMessageModel.count === 0 && !root.aiStreaming
+                        FolioArtwork { anchors.horizontalCenter: parent.horizontalCenter; width: 180; height: 120; tint: Atelier.sage }
+                        AtelierText { anchors.horizontalCenter: parent.horizontalCenter; text: "A thought begins here."; display: true; font.pixelSize: 32 }
+                        AtelierText { anchors.horizontalCenter: parent.horizontalCenter; text: "Write above. Everything runs on your machine."; color: Atelier.muted; font.pixelSize: 12 }
+                    }
 				}
 
 				ThemedRectangle {

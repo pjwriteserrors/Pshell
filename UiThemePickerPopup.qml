@@ -41,79 +41,58 @@ Item {
     Keys.onReturnPressed: applySelection()
     Keys.onEnterPressed: applySelection()
 
-    Rectangle { anchors.fill: parent; color: root.background }
-    Column {
-        anchors.fill: parent
-        anchors.margins: 24
-        spacing: 18
-        Item {
-            width: parent.width
-            height: 64
-            AtelierText { text: "Interface"; display: true; font.pixelSize: 32 }
-            AtelierText {
-                y: 44; text: "Choose the character of your desktop."
-                color: Atelier.muted; font.pixelSize: 12
+
+    Item {
+        anchors.fill: parent; anchors.margins: 16
+        Rectangle {
+            id: sample
+            width: parent.width * 0.43; height: parent.height - 46; radius: 90
+            color: [Atelier.surface, "#d2d8bf", "#d9c6a3", "#c6cfd0", "#d6c6bd"][root.selectedIndex % 5]
+            FolioArtwork { anchors.fill: parent; anchors.margins: 30; tint: Atelier.sage }
+            Rectangle {
+                anchors.centerIn: parent; width: parent.width * 0.7; height: width; radius: width / 2
+                color: Atelier.ink
+                AtelierText { anchors.centerIn: parent; text: "Aa"; display: true; font.pixelSize: Math.min(110, parent.width * 0.5); color: Atelier.paper }
+            }
+            AtelierText { x: 26; y: 28; text: "MATERIAL STUDY  /  0" + (root.selectedIndex + 1); font.family: Atelier.mono; font.pixelSize: 10 }
+        }
+        Column {
+            x: sample.width + 32; width: parent.width - x; spacing: 14
+            AtelierText { text: "Make it yours."; display: true; font.pixelSize: 32 }
+            AtelierText { width: parent.width; text: "Shape, movement and surface. Select a study to explore its character."; wrapMode: Text.WordWrap; color: Atelier.muted; font.pixelSize: 12 }
+            GridView {
+                id: list
+                width: parent.width; height: Math.max(150, root.height - 214)
+                model: root.themeOptions; currentIndex: root.selectedIndex; clip: true
+                cellWidth: width / 2; cellHeight: 116
+                ScrollBar.vertical: ScrollBar {}
+                delegate: Item {
+                    id: choice
+                    required property var modelData
+                    required property int index
+                    width: list.cellWidth; height: list.cellHeight
+                    Rectangle {
+                        width: parent.width - 10; height: parent.height - 10; radius: 16
+                        color: choice.index === root.selectedIndex ? Atelier.ink : Atelier.surface
+                        Row {
+                            x: 16; y: 16; spacing: -6
+                            Repeater {
+                                model: [Atelier.sage, Atelier.gold, Atelier.accent]
+                                delegate: Rectangle { required property color modelData; width: 24; height: 24; radius: 12; color: modelData; border.width: 2; border.color: choice.index === root.selectedIndex ? Atelier.ink : Atelier.surface }
+                            }
+                        }
+                        AtelierText { x: 16; y: 58; width: parent.width - 32; text: choice.modelData.name; color: choice.index === root.selectedIndex ? Atelier.paper : Atelier.text; font.pixelSize: 15; elide: Text.ElideRight }
+                        AtelierText { x: 16; y: 82; text: choice.index === root.selectedIndex ? "IN FOCUS" : "EXPLORE"; font.family: Atelier.mono; font.pixelSize: 8; color: choice.index === root.selectedIndex ? Atelier.gold : Atelier.muted }
+                        MouseArea { anchors.fill: parent; onClicked: { root.selectIndex(choice.index); root.forceActiveFocus(); } }
+                    }
+                }
             }
             Rectangle {
-                anchors.right: parent.right
-                width: 100; height: 36; radius: 2
-                color: root.barColor
-                AtelierText {
-                    anchors.centerIn: parent; color: root.background
-                    text: root.selectedThemeId === ThemeEngine.currentThemeId ? "Selected" : "Apply"
-                    font.pixelSize: 12
-                }
-                HoverLayer { tint: root.background; onClicked: root.applySelection() }
+                width: parent.width; height: 44; radius: 22; color: Atelier.accent
+                AtelierText { anchors.centerIn: parent; text: root.selectedThemeId === ThemeEngine.currentThemeId ? "Current material" : "Apply material  ↗"; color: Atelier.paper; font.pixelSize: 13 }
+                MouseArea { anchors.fill: parent; onClicked: root.applySelection() }
             }
         }
-        ListView {
-            id: list
-            width: parent.width
-            height: parent.height - 112
-            clip: true
-            model: root.themeOptions
-            currentIndex: root.selectedIndex
-            boundsBehavior: Flickable.StopAtBounds
-            ScrollBar.vertical: ScrollBar {}
-            delegate: Item {
-                id: choice
-                required property var modelData
-                required property int index
-                width: list.width
-                height: 76
-                Rectangle { width: parent.width; height: 1; color: Atelier.rule }
-                Rectangle {
-                    y: 20; width: 2; height: 36
-                    color: root.barColor; visible: choice.index === root.selectedIndex
-                }
-                AtelierText {
-                    x: 16; y: 26; text: ("0" + (choice.index + 1)).slice(-2)
-                    font.family: Atelier.mono; font.pixelSize: 11
-                    color: choice.index === root.selectedIndex ? root.barColor : Atelier.muted
-                }
-                AtelierText {
-                    x: 64; y: 12; text: choice.modelData.name
-                    font.pixelSize: 18; color: root.foreground
-                }
-                AtelierText {
-                    x: 64; y: 40; width: parent.width - 112
-                    text: choice.modelData.description
-                    elide: Text.ElideRight; font.pixelSize: 12; color: Atelier.muted
-                }
-                AtelierText {
-                    anchors.right: parent.right; y: 26
-                    text: choice.index === root.selectedIndex ? "●" : "○"
-                    color: choice.index === root.selectedIndex ? root.barColor : Atelier.muted
-                }
-                HoverLayer {
-                    tint: root.foreground; rippleEnabled: false
-                    onClicked: { root.selectIndex(choice.index); root.forceActiveFocus(); }
-                }
-            }
-        }
-        AtelierText {
-            text: "↑ ↓  Browse     ↵  Apply     Esc  Close"
-            font.family: Atelier.mono; font.pixelSize: 11; color: Atelier.muted
-        }
+        AtelierText { anchors.bottom: parent.bottom; text: "← →  Explore    ↵  Apply    Esc  Close"; font.family: Atelier.mono; font.pixelSize: 10; color: Atelier.muted }
     }
 }

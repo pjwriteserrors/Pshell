@@ -1,169 +1,118 @@
 pragma ComponentBehavior: Bound
-
 import QtQuick
+import QtQuick.Controls
 import Quickshell
 import Quickshell.Wayland
 
-// Shared shell for every bar-anchored popup: a detached floating card
-// below the bar. Built on PanelWindow (full-screen overlay) so text
-// fields inside popups receive keyboard input (WlrKeyboardFocus).
-//
-// Choreography contract (identical for every popup):
-//   open:  card pops in — slides down a few px, scales up from 0.94
-//          with a slight overshoot, fades in; content fade trails.
-//   close: card shrinks/fades out crisply, no bounce.
-//
-// Clicking outside the card emits dismissRequested(); the instance
-// decides how to close (usually its root.closeXPopup()).
 PanelWindow {
-	id: surface
+    id: surface
+    required property bool open
+    required property Item barItem
+    property var controller: null
+    property var anchorWindow: null
+    property string anchorMode: "center"
+    property Item anchorItem: null
+    property real expandedWidth: 400
+    property real contentPreferredHeight: 0
+    property real fixedHeight: -1
+    property real contentMargins: 28
+    property color surfaceColor: Atelier.canvas
+    property color borderColor: Atelier.rule
+    property real restingRadius: 20
+    property real edgeMargin: 24
+    property real barGap: 0
+    property real barTopMargin: 0
+    property bool wantsKeyboard: true
+    property string title: "Overview"
+    property string chapter: "01"
+    property string subtitle: "A little space for your day."
+    property string motif: "orbit"
+    property color tone: Atelier.sage
+    property var destinations: [
+        {name: "calendar", label: "Day"},
+        {name: "weather", label: "Weather"},
+        {name: "resources", label: "System"},
+        {name: "media", label: "Listen"}
+    ]
+    default property alias content: contentSlot.data
+    readonly property Item contentArea: contentSlot
+    readonly property real expandedHeight: fixedHeight > 0 ? fixedHeight : Math.max(52, contentPreferredHeight + contentMargins * 2)
+    readonly property real shellWidth: expandedWidth
+    readonly property real contentOpacity: openProgress
+    property real openProgress: open ? 1 : 0
+    signal dismissRequested()
 
-	// wiring
-	required property bool open
-	required property Item barItem
-	property var anchorWindow: null       // legacy, unused
-	property string anchorMode: "right"   // "right" | "center" | "item"
-	property Item anchorItem: null
+    anchors { left: true; right: true; top: true; bottom: true }
+    exclusiveZone: 0
+    color: "transparent"
+    WlrLayershell.exclusionMode: ExclusionMode.Ignore
+    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.keyboardFocus: visible && wantsKeyboard ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    Behavior on openProgress { NumberAnimation { duration: surface.open ? 260 : 160; easing.type: Easing.OutCubic } }
 
-	// sizing
-	property real expandedWidth: 300
-	property real contentPreferredHeight: 0
-	property real fixedHeight: -1
-	property real contentMargins: 24
-
-	// style
-	property color surfaceColor
-	property color borderColor: "transparent"
-	property real restingRadius: ThemeEngine.radiusMedium
-	property real edgeMargin: 20 + ThemeEngine.shadowRenderMargin
-	property real barGap: 12
-	property real barTopMargin: 0
-	property bool wantsKeyboard: true
-
-	default property alias content: contentSlot.data
-	readonly property Item contentArea: contentSlot
-
-	signal dismissRequested()
-
-	property real openProgress: open ? 1 : 0
-
-	readonly property real expandedHeight: fixedHeight > 0
-		? fixedHeight
-		: Math.max(52, contentPreferredHeight + contentMargins * 2)
-	readonly property real shellWidth: expandedWidth
-	readonly property real contentOpacity: Math.max(0, Math.min(1,
-		(openProgress - ThemeEngine.popupContentRevealStart)
-		/ Math.max(0.01, 1 - ThemeEngine.popupContentRevealStart)))
-
-	anchors {
-		left: true
-		right: true
-		top: true
-		bottom: true
-	}
-
-	exclusiveZone: 0
-	color: "transparent"
-	WlrLayershell.exclusionMode: ExclusionMode.Ignore
-	WlrLayershell.layer: WlrLayer.Overlay
-	WlrLayershell.keyboardFocus: visible && wantsKeyboard ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
-
-	Behavior on openProgress {
-		NumberAnimation {
-			duration: surface.open ? Motion.popupOpen : Motion.popupClose
-			easing.type: surface.open ? ThemeEngine.popupOpenEasing : ThemeEngine.exitEasing
-			easing.overshoot: surface.open ? Motion.popupOvershoot : 0
-			easing.amplitude: ThemeEngine.elasticAmplitude
-			easing.period: ThemeEngine.elasticPeriod
-		}
-	}
-
-	MouseArea {
-		anchors.fill: parent
-		onClicked: surface.dismissRequested()
-	}
-
-	Item {
-		id: cardMotion
-		x: {
-			if (surface.anchorMode === "center")
-				return Math.round((parent.width - width) / 2);
-			if (surface.anchorMode === "item" && surface.anchorItem) {
-				const pos = surface.anchorItem.mapToItem(surface.barItem, surface.anchorItem.width / 2, 0);
-				return Math.round(Math.min(
-					Math.max(pos.x + surface.edgeMargin - width / 2, surface.edgeMargin),
-					parent.width - width - surface.edgeMargin
-				));
-			}
-			return Math.round(parent.width - width - surface.edgeMargin);
-		}
-		y: Math.round(surface.barTopMargin + surface.barItem.height + surface.barGap)
-
-		width: Math.min(surface.shellWidth, surface.width - surface.edgeMargin * 2)
-		height: Math.min(surface.expandedHeight, surface.height - y - surface.edgeMargin)
-		opacity: Math.min(1, surface.openProgress * ThemeEngine.popupOpacityMultiplier)
-		scale: ThemeEngine.popupStartScale + (1 - ThemeEngine.popupStartScale) * surface.openProgress
-		transformOrigin: Item.Top
-
-		transform: Translate {
-				y: ThemeEngine.popupTravel * (1 - surface.openProgress)
-		}
-
-		Behavior on height {
-			Anim {}
-		}
-
-		NeumorphicShadow {
-			anchors.fill: parent
-			surfaceColor: surface.surfaceColor
-			cornerRadius: card.radius
-			depth: surface.openProgress * ThemeEngine.popupShadowDepth
-			animateDepth: false
-		}
-
-		Rectangle {
-			id: card
-
-			anchors.fill: parent
-			radius: surface.restingRadius
-			color: ThemeEngine.solidSurfaces
-				? ThemeEngine.solidColor(surface.surfaceColor)
-				: surface.surfaceColor
-			border.width: 0
-			border.color: surface.borderColor.a > 0.01
-				? surface.borderColor
-				: ThemeEngine.contrastEdge(surface.surfaceColor)
-			clip: true
-
-			ThemeOrnament {
-				anchors.fill: parent
-				surfaceColor: card.color
-				cornerRadius: card.radius
-			}
-
-			Behavior on radius {
-				NumberAnimation {
-					duration: Motion.normal
-					easing.type: ThemeEngine.standardEasing
-				}
-			}
-
-			Rectangle { width: parent.width; height: 1; color: Atelier.rule }
-			Flickable {
-				anchors.fill: parent
-				anchors.margins: surface.contentMargins
-				contentHeight: contentSlot.height
-				contentWidth: width
-				clip: true
-				boundsBehavior: Flickable.StopAtBounds
-				interactive: contentHeight > height
-				Item {
-					id: contentSlot
-					width: parent.width
-					height: surface.expandedHeight - surface.contentMargins * 2
-					opacity: surface.contentOpacity
-				}
-			}
-		}
-	}
+    Rectangle { anchors.fill: parent; color: "#232b2b"; opacity: surface.openProgress * 0.36 }
+    MouseArea { anchors.fill: parent; onClicked: surface.dismissRequested() }
+    Rectangle {
+        id: folio
+        readonly property real spine: surface.width >= 900 ? 248 : 176
+        width: Math.min(surface.expandedWidth + spine, surface.width - 136)
+        height: Math.min(Math.max(surface.expandedHeight + 24, 500), surface.height - 56)
+        x: Math.max(108, (surface.width - width) / 2 + 44)
+        y: (surface.height - height) / 2 + 20 * (1 - surface.openProgress)
+        radius: 20
+        color: Atelier.canvas
+        opacity: surface.openProgress
+        clip: true
+        MouseArea { anchors.fill: parent }
+        Rectangle {
+            width: folio.spine
+            height: parent.height
+            color: Qt.tint(Atelier.canvas, Qt.alpha(surface.tone, 0.2))
+            AtelierText { x: 28; y: 30; text: "ATELIER  /  " + surface.chapter; font.family: Atelier.mono; font.pixelSize: 10; font.letterSpacing: 1.5 }
+            AtelierText { x: 28; y: 88; width: parent.width - 48; text: surface.title; display: true; font.pixelSize: 36; wrapMode: Text.WordWrap }
+            AtelierText { x: 28; y: 190; width: parent.width - 56; text: surface.subtitle; font.pixelSize: 12; color: Atelier.muted; wrapMode: Text.WordWrap }
+            FolioArtwork { x: 12; y: 250; width: parent.width - 24; height: Math.max(80, parent.height - 392); tint: surface.tone; motif: surface.motif }
+            Flow {
+                x: 24; width: parent.width - 48
+                anchors.bottom: parent.bottom; anchors.bottomMargin: 34
+                spacing: 8
+                Repeater {
+                    model: surface.destinations
+                    delegate: Rectangle {
+                        required property var modelData
+                        width: destination.implicitWidth + 20; height: 30; radius: 15
+                        color: mouse.containsMouse ? Qt.alpha(surface.tone, 0.24) : Qt.alpha(Atelier.canvas, 0.6)
+                        AtelierText { id: destination; anchors.centerIn: parent; text: parent.modelData.label; font.pixelSize: 11 }
+                        MouseArea {
+                            id: mouse; anchors.fill: parent; hoverEnabled: true
+                            onClicked: if (surface.controller) surface.controller.navigatePanel(parent.modelData.name);
+                        }
+                    }
+                }
+            }
+        }
+        Flickable {
+            x: folio.spine + surface.contentMargins
+            y: surface.contentMargins + 16
+            width: folio.width - folio.spine - surface.contentMargins * 2
+            height: folio.height - surface.contentMargins * 2 - 16
+            contentHeight: contentSlot.height
+            contentWidth: width
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            interactive: contentHeight > height
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+            Item {
+                id: contentSlot
+                width: parent.width
+                height: surface.expandedHeight - surface.contentMargins * 2
+            }
+        }
+        Item {
+            anchors.right: parent.right; anchors.top: parent.top
+            width: 38; height: 38
+            AtelierText { anchors.centerIn: parent; text: "×"; font.pixelSize: 22; color: Atelier.muted }
+            MouseArea { anchors.fill: parent; onClicked: surface.dismissRequested() }
+        }
+    }
 }

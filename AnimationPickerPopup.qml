@@ -233,456 +233,65 @@ fi
 		}
 	}
 
-	ThemedRectangle {
-		id: panel
-		anchors.centerIn: parent
-		width: Math.min(parent.width - 28, 1260)
-		height: Math.min(parent.height - 28, 800)
-		radius: ThemeEngine.radiusMedium
-		color: root.background
-		border.width: 0
-		border.color: Qt.alpha(root.barColor, 0.34)
 
-		Column {
-			anchors.fill: parent
-			anchors.margins: 18
-			spacing: 14
-
-			Row {
-				width: parent.width
-				height: 40
-				spacing: 12
-
-				AtelierText {
-					width: parent.width - applyButton.width - 12
-					height: parent.height
-					color: root.headingColor
-					display: true
-					font.pixelSize: 22
-					font.weight: Font.DemiBold
-					verticalAlignment: Text.AlignVCenter
-					elide: Text.ElideRight
-					text: root.currentAnimationOption ? root.currentAnimationOption.label : "Animation"
-				}
-
-				ThemedRectangle {
-					id: applyButton
-					width: 104
-					height: 38
-					radius: ThemeEngine.radiusMedium
-					color: root.selectedAnimationId === "" ? Qt.alpha(root.secondaryBoxColor, 0.42) : Qt.alpha(root.barColor, 0.28)
-					border.width: 1
-					border.color: Qt.alpha(root.barColor, 0.52)
-
-					MouseArea {
-						anchors.fill: parent
-						enabled: root.selectedAnimationId !== ""
-						cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-						onClicked: root.applyAnimation()
-					}
-
-					AtelierText {
-						anchors.centerIn: parent
-						color: root.foreground
-						font.pixelSize: 12
-						font.weight: Font.DemiBold
-						text: "Apply"
-					}
-				}
-			}
-
-			Item {
-				id: gridViewport
-				width: parent.width
-				height: parent.height - 54
-				clip: true
-
-				GridView {
-					id: animationGridView
-					anchors.fill: parent
-					cellWidth: (width + root.gridGap) / root.gridColumns
-					cellHeight: root.cardHeight + root.gridGap
-					model: root.animationOptions
-					currentIndex: root.selectedAnimationIndex
-					cacheBuffer: cellHeight
-					reuseItems: true
-					boundsBehavior: Flickable.StopAtBounds
-					clip: true
-
-					delegate: ThemedRectangle {
-								id: card
-								required property int index
-								required property var modelData
-
-								readonly property bool selected: card.index === root.selectedAnimationIndex
-								readonly property string styleName: root.previewStyle(String(modelData.kind || ""), String(modelData.name || ""))
-								readonly property string videoPreviewSource: String(modelData.preview || "")
-								readonly property bool hasVideoPreview: card.videoPreviewSource !== ""
-								readonly property bool inViewport: card.y + card.height >= animationGridView.contentY
-									&& card.y <= animationGridView.contentY + animationGridView.height
-								readonly property bool previewActive: card.selected && card.inViewport
-								readonly property bool videoPreviewActive: card.hasVideoPreview && card.previewActive
-								readonly property real p: root.easeOut(card.previewActive ? root.previewProgress : 0.72)
-								readonly property real pulse: root.oscillate(card.previewActive ? root.previewProgress : 0.72)
-								readonly property color accent: modelData.kind === "shader" ? root.barColor : Qt.lighter(root.barColor, 1.32)
-
-								width: root.cardWidth
-								height: root.cardHeight
-								radius: ThemeEngine.radiusLarge
-								color: Qt.alpha(root.secondaryBoxColor, selected ? 0.78 : 0.5)
-								border.width: 0
-								Rectangle { width: parent.width; height: 2; color: card.selected ? Atelier.accent : Atelier.rule; z: 10 }
-								border.color: Qt.alpha(selected ? root.barColor : root.foreground, selected ? 0.82 : 0.12)
-								clip: true
-
-								Behavior on border.color { ColorAnimation { duration: ThemeEngine.duration(140) } }
-								Behavior on color { ColorAnimation { duration: ThemeEngine.duration(140) } }
-
-									MouseArea {
-										anchors.fill: parent
-										hoverEnabled: true
-										cursorShape: Qt.PointingHandCursor
-										onClicked: {
-											root.selectAnimationIndex(card.index);
-										}
-										onDoubleClicked: root.applyAnimation()
-									}
-
-								ThemedRectangle {
-									anchors.left: parent.left
-									anchors.right: parent.right
-									anchors.top: parent.top
-									anchors.margins: 10
-									height: parent.height - 42
-									radius: ThemeEngine.radiusMedium
-									color: Qt.alpha(root.background, 0.72)
-									border.width: 1
-									border.color: Qt.alpha(card.accent, 0.22)
-									clip: true
-
-									Item {
-										id: previewArea
-										anchors.fill: parent
-										anchors.margins: 8
-										clip: true
-
-										Loader {
-											anchors.fill: parent
-											active: card.videoPreviewActive
-											sourceComponent: Component {
-												Item {
-													VideoOutput {
-														id: previewVideo
-														anchors.fill: parent
-														fillMode: VideoOutput.PreserveAspectCrop
-													}
-													MediaPlayer {
-														source: card.videoPreviewSource
-														videoOutput: previewVideo
-														autoPlay: true
-														loops: MediaPlayer.Infinite
-													}
-												}
-											}
-										}
-
-										AtelierText {
-											visible: card.hasVideoPreview && !card.videoPreviewActive
-											anchors.centerIn: parent
-											color: Qt.alpha(root.foreground, 0.58)
-											font.pixelSize: 11
-											text: "Select to play real preview"
-										}
-
-										ThemedRectangle {
-											id: shadowWindow
-											visible: !card.hasVideoPreview && sampleWindow.opacity > 0.08
-											x: sampleWindow.x + 5
-											y: sampleWindow.y + 7
-											width: sampleWindow.width
-											height: sampleWindow.height
-											radius: sampleWindow.radius
-											color: Qt.rgba(0, 0, 0, 0.25)
-											opacity: sampleWindow.opacity
-										}
-
-										Item {
-											id: revealClip
-											visible: !card.hasVideoPreview
-											x: sampleWindow.x
-											y: sampleWindow.y
-											width: card.styleName === "wipe" ? sampleWindow.width * card.p : sampleWindow.width
-											height: sampleWindow.height
-											clip: card.styleName === "wipe"
-
-											ThemedRectangle {
-												id: sampleWindow
-												x: card.styleName === "swipe" ? -previewArea.width * (1 - card.p) : 0
-												y: card.styleName === "roll" || card.styleName === "pop" ? -18 * (1 - card.p) : (card.styleName === "bounce" ? Math.abs(Math.cos(card.p * Math.PI * 3)) * 26 * (1 - card.p) : 0)
-												width: Math.min(previewArea.width - 16, 178)
-												height: Math.min(previewArea.height - 14, 94)
-												radius: ThemeEngine.radiusMedium
-												color: Qt.alpha(root.background, 0.95)
-												border.width: 1
-												border.color: Qt.alpha(card.accent, 0.5)
-												opacity: card.styleName === "fade" ? card.p : (card.styleName === "flash" ? Math.min(1, card.p + 0.25) : 1)
-												scale: card.styleName === "pop" ? 0.62 + card.p * 0.38 : (card.styleName === "snap" ? 0.72 + card.p * 0.28 : 1)
-												rotation: card.styleName === "roll" ? (1 - card.p) * -18 : (card.styleName === "fold" ? (1 - card.p) * -9 : 0)
-												transformOrigin: Item.Center
-												clip: true
-
-												ThemedRectangle {
-													anchors.left: parent.left
-													anchors.right: parent.right
-													anchors.top: parent.top
-													height: 18
-													color: Qt.alpha(card.accent, 0.18)
-
-													Row {
-														anchors.left: parent.left
-														anchors.leftMargin: 8
-														anchors.verticalCenter: parent.verticalCenter
-														spacing: 5
-
-														Repeater {
-															model: [1, 2, 3]
-
-															delegate: ThemedRectangle {
-																required property int modelData
-
-																width: 6
-																height: 6
-																radius: ThemeEngine.radiusTiny
-																color: modelData === 1 ? root.speedHotColor : modelData === 2 ? root.speedWarmColor : card.accent
-															}
-														}
-													}
-												}
-
-												Column {
-													anchors.left: parent.left
-													anchors.right: parent.right
-													anchors.top: parent.top
-													anchors.topMargin: 28
-													anchors.margins: 12
-													spacing: 8
-
-													Repeater {
-														model: [0.62, 0.86, 0.48, 0.76]
-
-														delegate: ThemedRectangle {
-															required property real modelData
-
-															width: parent.width * modelData
-															height: 7
-															radius: ThemeEngine.radiusSmall
-															color: Qt.alpha(root.foreground, 0.35)
-														}
-													}
-												}
-
-											ThemedRectangle {
-												visible: card.previewActive && card.styleName === "flash"
-													anchors.fill: parent
-													color: Qt.rgba(255, 247, 210, 0.58 * (1 - card.p))
-												}
-
-											ThemedRectangle {
-												visible: card.previewActive && card.styleName === "fold"
-													anchors.right: parent.right
-													anchors.top: parent.top
-													anchors.bottom: parent.bottom
-													width: parent.width * (0.48 * (1 - card.p))
-													color: Qt.rgba(0, 0, 0, 0.32)
-												}
-											}
-										}
-
-										Repeater {
-											model: card.previewActive && !card.hasVideoPreview && card.styleName === "pixelate" ? 72 : 0
-
-											delegate: ThemedRectangle {
-												required property int index
-
-												readonly property int cols: 12
-												readonly property int rows: 6
-												readonly property real cellW: previewArea.width / cols
-												readonly property real cellH: previewArea.height / rows
-
-												x: (index % cols) * cellW
-												y: Math.floor(index / cols) * cellH
-												width: cellW + 1
-												height: cellH + 1
-												color: Qt.alpha(index % 3 === 0 ? card.accent : root.foreground, 0.36 * (1 - card.p))
-												visible: card.p < 0.92
-											}
-										}
-
-										Repeater {
-											model: card.previewActive && !card.hasVideoPreview && (card.styleName === "squares" || card.styleName === "snap") ? 48 : 0
-
-											delegate: ThemedRectangle {
-												required property int index
-
-												readonly property int cols: 8
-												readonly property int rows: 6
-												readonly property real threshold: ((index * 37) % 48) / 48
-
-												x: (index % cols) * previewArea.width / cols
-												y: Math.floor(index / cols) * previewArea.height / rows
-												width: previewArea.width / cols - 2
-												height: previewArea.height / rows - 2
-												radius: ThemeEngine.radiusTiny
-												color: Qt.alpha(card.accent, 0.48)
-												visible: card.p < threshold
-											}
-										}
-
-										Repeater {
-											model: card.previewActive && !card.hasVideoPreview && card.styleName === "glitch" ? 7 : 0
-
-											delegate: ThemedRectangle {
-												required property int index
-
-												x: ((index % 2) ? -1 : 1) * (1 - card.p) * (10 + index * 3)
-												y: 12 + index * 12
-												width: previewArea.width
-												height: 5 + (index % 3)
-												color: index % 3 === 0 ? Qt.rgba(1, 0.2, 0.26, 0.45) : index % 3 === 1 ? Qt.rgba(0.2, 0.85, 1, 0.38) : Qt.alpha(root.foreground, 0.28)
-												visible: card.p < 0.88
-											}
-										}
-
-										Repeater {
-											model: card.previewActive && !card.hasVideoPreview && card.styleName === "ribbons" ? 7 : 0
-
-											delegate: ThemedRectangle {
-												required property int index
-
-												x: -previewArea.width * 0.2 + card.p * previewArea.width * 1.15 + index * 12
-												y: index * previewArea.height / 8
-												width: previewArea.width * 0.55
-												height: 7
-												radius: ThemeEngine.radiusSmall
-												rotation: -18
-												color: Qt.alpha(index % 2 ? card.accent : root.foreground, 0.46)
-											}
-										}
-
-										Repeater {
-											model: card.previewActive && !card.hasVideoPreview && card.styleName === "unravel" ? 8 : 0
-
-											delegate: ThemedRectangle {
-												required property int index
-
-												x: index * previewArea.width / 8
-												y: 0
-												width: previewArea.width / 8 - 2
-												height: previewArea.height * (1 - card.p)
-												color: Qt.alpha(root.background, 0.82)
-											}
-										}
-
-									ThemedRectangle {
-										visible: card.previewActive && !card.hasVideoPreview && card.styleName === "circle"
-											x: previewArea.width / 2 - width / 2
-											y: previewArea.height / 2 - height / 2
-											width: 24 + card.p * Math.max(previewArea.width, previewArea.height) * 1.6
-											height: width
-											radius: width / 2
-											color: "transparent"
-											border.width: Math.max(2, 9 * (1 - card.p))
-											border.color: Qt.alpha(card.accent, 0.68)
-										}
-
-										Repeater {
-											model: card.previewActive && !card.hasVideoPreview && (card.styleName === "dissolve" || card.styleName === "burn") ? 30 : 0
-
-											delegate: ThemedRectangle {
-												required property int index
-
-												readonly property real seedX: ((index * 29) % 100) / 100
-												readonly property real seedY: ((index * 53) % 100) / 100
-												readonly property real sizeSeed: 4 + ((index * 17) % 9)
-
-												x: seedX * previewArea.width
-												y: seedY * previewArea.height - (card.styleName === "burn" ? card.p * 34 : card.p * 16)
-												width: sizeSeed
-												height: sizeSeed
-												radius: sizeSeed / 2
-												color: card.styleName === "burn" ? Qt.rgba(1, 0.42, 0.14, 0.72 * (1 - card.p)) : Qt.alpha(card.accent, 0.5 * (1 - card.p))
-												visible: card.p < seedY + 0.26
-											}
-										}
-
-										Repeater {
-											model: card.previewActive && !card.hasVideoPreview && (card.styleName === "ripple" || card.styleName === "warp") ? 4 : 0
-
-											delegate: ThemedRectangle {
-												required property int index
-
-												x: previewArea.width / 2 - width / 2
-												y: previewArea.height / 2 - height / 2
-												width: 32 + ((card.p + index * 0.18) % 1) * previewArea.width * 1.25
-												height: width * 0.58
-												radius: ThemeEngine.radiusMedium
-												rotation: card.styleName === "warp" ? 18 + index * 16 : 0
-												color: "transparent"
-												border.width: 2
-												border.color: Qt.alpha(card.accent, 0.45 * (1 - ((card.p + index * 0.18) % 1)))
-											}
-										}
-									}
-								}
-
-								ThemedRectangle {
-									anchors.left: parent.left
-									anchors.right: parent.right
-									anchors.bottom: parent.bottom
-									height: 34
-									color: Qt.alpha(root.background, 0.46)
-
-									AtelierText {
-										anchors.left: parent.left
-										anchors.right: kindPill.left
-										anchors.leftMargin: 10
-										anchors.rightMargin: 8
-										anchors.verticalCenter: parent.verticalCenter
-										color: root.foreground
-										font.pixelSize: 12
-										font.weight: card.selected ? Font.DemiBold : Font.Medium
-										elide: Text.ElideRight
-										text: String(card.modelData.name || "")
-									}
-
-									ThemedRectangle {
-										id: kindPill
-										anchors.right: parent.right
-										anchors.rightMargin: 9
-										anchors.verticalCenter: parent.verticalCenter
-										width: 58
-										height: 20
-										radius: ThemeEngine.radiusMedium
-										color: Qt.alpha(card.accent, 0.24)
-										border.width: 1
-										border.color: Qt.alpha(card.accent, 0.34)
-
-										AtelierText {
-											anchors.centerIn: parent
-											color: root.foreground
-											font.pixelSize: 9
-											font.weight: Font.DemiBold
-											text: String(card.modelData.kind || "")
-										}
-									}
-								}
-							}
-
-					ScrollBar.vertical: ScrollBar {
-						policy: ScrollBar.AsNeeded
-					}
-				}
-			}
-		}
-	}
+    Item {
+        id: panel; anchors.fill: parent; anchors.margins: 14
+        Rectangle {
+            id: stage
+            width: parent.width * 0.5; height: parent.height - 62; radius: 28; color: Atelier.ink; clip: true
+            FolioArtwork { anchors.fill: parent; anchors.margins: 20; tint: Atelier.sage }
+            VideoOutput { id: selectedVideo; anchors.fill: parent; fillMode: VideoOutput.PreserveAspectCrop; visible: selectedPlayer.source.toString() !== "" }
+            MediaPlayer {
+                id: selectedPlayer
+                source: root.currentAnimationOption ? root.currentAnimationOption.preview || "" : ""
+                videoOutput: selectedVideo; loops: MediaPlayer.Infinite; autoPlay: true
+            }
+            Item {
+                anchors.fill: parent; visible: !selectedVideo.visible
+                Repeater {
+                    model: 5
+                    delegate: Rectangle {
+                        required property int index
+                        width: 58 + index * 12; height: width; radius: width / 2
+                        x: stage.width / 2 - width / 2 + Math.cos(root.previewProgress * Math.PI * 2 + index * 0.8) * stage.width * 0.24
+                        y: stage.height / 2 - height / 2 + Math.sin(root.previewProgress * Math.PI * 2 + index * 0.8) * stage.height * 0.24
+                        color: [Atelier.sage,Atelier.gold,Atelier.accent,Atelier.surface,Atelier.paper][index]
+                        opacity: 0.8
+                    }
+                }
+            }
+            AtelierText { x: 24; y: 24; text: selectedVideo.visible ? "MOTION FILM" : "MOTION SKETCH · NOT A SHADER RENDER"; color: Atelier.paper; font.family: Atelier.mono; font.pixelSize: 9 }
+            AtelierText { x: 24; anchors.bottom: parent.bottom; anchors.bottomMargin: 26; width: parent.width - 48; text: root.currentAnimationOption ? root.currentAnimationOption.label : "Movement"; color: Atelier.paper; display: true; font.pixelSize: 30; wrapMode: Text.WordWrap }
+        }
+        Rectangle {
+            y: stage.height + 16; width: stage.width; height: 44; radius: 22; color: Atelier.accent
+            AtelierText { anchors.centerIn: parent; text: "Set this movement  ↗"; color: Atelier.paper; font.pixelSize: 12 }
+            MouseArea { anchors.fill: parent; enabled: root.selectedAnimationId !== ""; onClicked: root.applyAnimation() }
+        }
+        Item {
+            id: gridViewport
+            x: stage.width + 24; width: parent.width - x; height: parent.height
+            AtelierText { text: "A library of movement"; display: true; font.pixelSize: 28; width: parent.width; wrapMode: Text.WordWrap }
+            GridView {
+                id: animationGridView
+                y: 72; width: parent.width; height: parent.height - y; clip: true
+                cellWidth: width / 2; cellHeight: 148; model: root.animationOptions
+                currentIndex: root.selectedAnimationIndex
+                delegate: Item {
+                    required property int index
+                    required property var modelData
+                    width: animationGridView.cellWidth; height: animationGridView.cellHeight
+                    Rectangle {
+                        width: parent.width - 10; height: parent.height - 10; radius: 20
+                        color: parent.index === root.selectedAnimationIndex ? "#d2d8bf" : Atelier.surface
+                        FolioArtwork { x: 10; y: 2; width: parent.width - 20; height: 82; motif: parent.parent.index % 2 ? "signal" : "orbit"; tint: Atelier.sage }
+                        AtelierText { x: 14; y: 86; width: parent.width - 28; text: parent.parent.modelData.label; font.pixelSize: 12; maximumLineCount: 2; wrapMode: Text.WordWrap; elide: Text.ElideRight }
+                        AtelierText { x: 14; y: 121; text: parent.parent.modelData.kind || "motion"; font.family: Atelier.mono; color: Atelier.muted; font.pixelSize: 8 }
+                        MouseArea { anchors.fill: parent; onClicked: root.selectAnimationIndex(parent.parent.index); onDoubleClicked: root.applyAnimation() }
+                    }
+                }
+                ScrollBar.vertical: ScrollBar {}
+            }
+        }
+    }
 }
