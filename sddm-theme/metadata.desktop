@@ -1,0 +1,11 @@
+[SddmGreeterTheme]
+Name=Quickshell Lock
+Type=sddm-theme
+Description=SDDM greeter matching the Quickshell QuickLock screen
+License=MIT
+Version=1.0.0
+Theme-Id=quickshell-lock
+Theme-API=2.0
+MainScript=Main.qml
+QtVersion=6
+ConfigFile=theme.conf

@@ -1,0 +1,63 @@
+--- a/src/histogram/salience.rs
++++ b/src/histogram/salience.rs
+@@
+-        // sample colors 0-5 that we will use
+-        let c: &[Srgb] = match mode {
+-            SamplingMode::Low           => &cols,
+-            SamplingMode::Balanced      => &util::sample_center(&cols, 6),
+-            SamplingMode::Distributed   => &util::sample_distributed(&cols, 6),
+-            SamplingMode::High          => &cols[cols.len() - 6..],
+-        };
++        // Sample colors 0-5 that we will use. Deduplication can legitimately
++        // leave fewer than six histogram entries for low-colour images. The
++        // palette still needs six slots, so repeat the real samples instead of
++        // indexing beyond the end of the vector.
++        let sampled: Vec<Srgb> = match mode {
++            SamplingMode::Low         => cols.clone(),
++            SamplingMode::Balanced    => util::sample_center(&cols, 6),
++            SamplingMode::Distributed => util::sample_distributed(&cols, 6),
++            SamplingMode::High        => cols[cols.len().saturating_sub(6)..].to_vec(),
++        };
++        let c: Vec<Srgb> = sampled.iter().copied().cycle().take(6).collect();
+--- a/src/histogram/mod.rs
++++ b/src/histogram/mod.rs
+@@
+-    'outter: for c in colors {
++    'outter: for c in &colors {
+         if !filt(&c) {
+             continue 'outter;
+         };
+@@
+-            if hist.color.can_bucket(&c, threshold) {
++            if hist.color.can_bucket(c, threshold) {
+                 hist.count += 1;
+                 continue 'outter;
+             }
+@@
+         // so we found a new color.
+         histo.push(Histo {
+-            color: c,
++            color: *c,
+             count: 1,
+             score: 0.0,
+         });
+     }
++
++    // Very low-colour inputs can have every pixel rejected by the salience
++    // constraints above. Preserve their actual pixels as a monochrome
++    // histogram instead of returning an empty palette and panicking later.
++    if histo.is_empty() {
++        'raw: for c in colors {
++            for hist in &mut histo {
++                if hist.color.can_bucket(&c, threshold) {
++                    hist.count += 1;
++                    continue 'raw;
++                }
++            }
++            histo.push(Histo {
++                color: c,
++                count: 1,
++                score: 0.0,
++            });
++        }
++    }

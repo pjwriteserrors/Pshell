@@ -1,0 +1,152 @@
+#!/usr/bin/env python3
+"""Project an image onto the SteelSeries Apex Pro TKL key matrix."""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import os
+from pathlib import Path
+import subprocess
+import sys
+
+from PIL import Image, ImageEnhance, ImageOps
+
+
+NA = -1
+MATRIX_WIDTH = 22
+MATRIX_HEIGHT = 6
+LED_COUNT = 112
+
+# OpenRGB's ANSI matrix for SteelSeries Apex keyboards. Values are indices in
+# the device's 112-entry LED array, not HID key codes.
+BASE_MATRIX = [
+    [37, NA, 53, 54, 55, 56, NA, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, NA, NA, NA, NA],
+    [48, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 41, 42, 38, NA, 68, 69, 70, 94, 95, 96, 97],
+    [39, NA, 16, 22, 4, 17, 19, 24, 20, 8, 14, 15, 43, 44, 88, 71, 72, 73, 106, 107, 108, 98],
+    [52, NA, 0, 18, 3, 5, 6, 7, 9, 10, 11, 46, 47, 36, NA, NA, NA, NA, 103, 104, 105, NA],
+    [80, NA, 25, 23, 2, 21, 1, 13, 12, 49, 50, 51, 84, NA, NA, NA, 77, NA, 100, 101, 102, 99],
+    [79, 82, 81, NA, NA, NA, NA, 40, NA, NA, NA, 85, 86, 87, 83, 75, 76, 74, 109, NA, 110, NA],
+]
+
+TKL_PATCH = [
+    (0, 15, NA), (0, 16, NA), (0, 17, 111),
+    (1, 18, NA), (1, 19, NA), (1, 20, NA), (1, 21, NA),
+    (2, 18, NA), (2, 19, NA), (2, 20, NA), (2, 21, NA),
+    (3, 18, NA), (3, 19, NA), (3, 20, NA),
+    (4, 18, NA), (4, 19, NA), (4, 20, NA), (4, 21, NA),
+    (5, 18, NA), (5, 20, NA),
+]
+
+ISO_PATCH = [(2, 14, 36), (3, 13, 45), (4, 1, 78)]
+
+
+def keyboard_matrix(layout: str) -> list[list[int]]:
+    matrix = [row[:] for row in BASE_MATRIX]
+    for row, column, value in TKL_PATCH:
+        matrix[row][column] = value
+    if layout == "de-tkl":
+        for row, column, value in ISO_PATCH:
+            matrix[row][column] = value
+    return matrix
+
+
+def sampled_colors(
+    image_path: Path,
+    layout: str,
+    saturation: float,
+    brightness: float,
+    contrast: float,
+    sharpness: float,
+) -> list[str]:
+    with Image.open(image_path) as source:
+        source.seek(0)
+        rgba = source.convert("RGBA")
+        background = Image.new("RGBA", rgba.size, (0, 0, 0, 255))
+        image = Image.alpha_composite(background, rgba).convert("RGB")
+
+    # Keep the full-resolution source until the final projection. Reducing only
+    # once avoids throwing away detail before it reaches the keyboard matrix.
+    image = ImageOps.fit(
+        image,
+        (MATRIX_WIDTH, MATRIX_HEIGHT),
+        method=Image.Resampling.LANCZOS,
+        centering=(0.5, 0.5),
+    )
+    image = ImageEnhance.Color(image).enhance(saturation)
+    image = ImageEnhance.Brightness(image).enhance(brightness)
+    image = ImageEnhance.Contrast(image).enhance(contrast)
+    image = ImageEnhance.Sharpness(image).enhance(sharpness)
+
+    colors = ["000000"] * LED_COUNT
+    matrix = keyboard_matrix(layout)
+    pixels = image.load()
+    for row in range(MATRIX_HEIGHT):
+        for column in range(MATRIX_WIDTH):
+            led = matrix[row][column]
+            if led == NA:
+                continue
+            red, green, blue = pixels[column, row]
+            colors[led] = f"{red:02X}{green:02X}{blue:02X}"
+    return colors
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("image", type=Path)
+    parser.add_argument("--device", default=os.environ.get("OPENRGB_KEYBOARD", "Apex Pro TKL Gen 3"))
+    parser.add_argument(
+        "--layout",
+        choices=("de-tkl", "us-tkl"),
+        default=os.environ.get("OPENRGB_KEYBOARD_LAYOUT", "us-tkl"),
+    )
+    parser.add_argument("--saturation", type=float, default=float(os.environ.get("OPENRGB_IMAGE_SATURATION", "1.35")))
+    parser.add_argument("--brightness", type=float, default=float(os.environ.get("OPENRGB_IMAGE_BRIGHTNESS", "0.95")))
+    parser.add_argument("--contrast", type=float, default=float(os.environ.get("OPENRGB_IMAGE_CONTRAST", "1.45")))
+    parser.add_argument("--sharpness", type=float, default=float(os.environ.get("OPENRGB_IMAGE_SHARPNESS", "2.0")))
+    parser.add_argument("--dry-run", action="store_true")
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    image_path = args.image.expanduser().resolve()
+    if not image_path.is_file():
+        print(f"Theme image does not exist: {image_path}", file=sys.stderr)
+        return 2
+
+    colors = sampled_colors(
+        image_path,
+        args.layout,
+        args.saturation,
+        args.brightness,
+        args.contrast,
+        args.sharpness,
+    )
+    command = [
+        "openrgb",
+        "--client", os.environ.get("OPENRGB_SERVER", "127.0.0.1:6742"),
+        "--device", args.device,
+        "--mode", "Direct",
+        "--color", ",".join(colors),
+    ]
+
+    if args.dry_run:
+        print(f"device={args.device} layout={args.layout} leds={len(colors)}")
+        print(",".join(colors))
+        return 0
+
+    lock_path = Path("/tmp/openrgb-keyboard-image.lock")
+    with lock_path.open("w", encoding="utf-8") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        result = subprocess.run(command, text=True, capture_output=True, timeout=35, check=False)
+
+    if result.stdout:
+        print(result.stdout, end="")
+    if result.stderr:
+        print(result.stderr, end="", file=sys.stderr)
+    return result.returncode
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
