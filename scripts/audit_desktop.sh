@@ -6,7 +6,7 @@ mkdir -p "$audit_dir"
 case "${1:-status}" in
   capture)
     output="$(niri msg -j focused-output | jq -r .name)"
-    for panel in launcher calendar weather notifications media resources network bluetooth clipboard power wallpaper interface animations presets; do
+    for panel in launcher calendar weather notifications media resources network bluetooth clipboard power wallpaper animations styles collection; do
       quickshell ipc -p "$atelier_dir" call designReview open "$panel"
       sleep 1
       grim -o "$output" "$audit_dir/$output-$panel.png"

@@ -11,6 +11,8 @@ import "NiriAnimation.js" as NiriAnimation
 Item {
 	id: root
 
+	property bool embedded: false
+	signal studioApplyRequested
 	signal closeRequested
 
 	required property color foreground
@@ -100,8 +102,9 @@ Item {
 	}
 
 	function applyAnimation() {
+        if (root.embedded) { root.studioApplyRequested(); return; }
 		if (root.selectedAnimationId === "") return;
-		root.closeRequested();
+		if (!root.embedded) root.closeRequested();
 		Quickshell.execDetached(["bash", root.applyScriptPath, "--animation", root.selectedAnimationId]);
 	}
 
@@ -264,7 +267,7 @@ fi
             AtelierText { x: 24; anchors.bottom: parent.bottom; anchors.bottomMargin: 26; width: parent.width - 48; text: root.currentAnimationOption ? root.currentAnimationOption.label : "Movement"; color: Atelier.paper; display: true; font.pixelSize: 30; wrapMode: Text.WordWrap }
         }
         Rectangle {
-            y: stage.height + 16; width: stage.width; height: 44; radius: 22; color: Atelier.accent
+            visible: !root.embedded; y: stage.height + 16; width: stage.width; height: 44; radius: 22; color: Atelier.accent
             AtelierText { anchors.centerIn: parent; text: "Set this movement  ↗"; color: Atelier.onAccent; font.pixelSize: 12 }
             MouseArea { anchors.fill: parent; enabled: root.selectedAnimationId !== ""; onClicked: root.applyAnimation() }
         }

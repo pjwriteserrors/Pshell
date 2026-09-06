@@ -105,32 +105,9 @@ Item {
 	property string fileBrowserListTargetDirectory: ""
 	property var commands: [
 		{
-			id: "style-presets",
-			command: "preset",
-			name: "Style Presets",
-			description: "Combine wallpaper, interface theme and animation",
-			icon: "view-grid-symbolic"
-		},
-		{
-			id: "ui-theme-picker",
-			command: "style",
-			name: "Desktop Styles",
-			description: "Change shapes, depth and shell motion",
+			id: "style-presets", command: "studio", name: "Studio",
+			description: "Wallpaper, Farben, Animationen, Git-Styles und Sammlung",
 			icon: "applications-graphics-symbolic"
-		},
-		{
-			id: "theme-picker",
-			command: "theme",
-			name: "Theme Picker",
-			description: "Browse color themes and choose an image or video",
-			icon: "preferences-desktop-wallpaper-symbolic"
-		},
-		{
-			id: "animation-picker",
-			command: "animation",
-			name: "Animation Picker",
-			description: "Change Niri window animations only",
-			icon: "preferences-desktop-effects-symbolic"
 		},
 		{
 			id: "calculator",
@@ -2135,7 +2112,7 @@ Item {
 	function commandIconSource(command) {
 		switch (String(command?.id || "")) {
 		case "style-presets":
-			return "/usr/share/icons/Adwaita/symbolic/actions/bookmark-new-symbolic.svg";
+			return "/usr/share/icons/Adwaita/symbolic/categories/applications-graphics-symbolic.svg";
 		case "theme-picker":
 			return "/usr/share/icons/Adwaita/symbolic/legacy/preferences-desktop-wallpaper-symbolic.svg";
 		case "animation-picker":

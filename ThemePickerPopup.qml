@@ -13,6 +13,8 @@ import "NiriAnimation.js" as NiriAnimation
 Item {
 	id: root
 
+	property bool embedded: false
+	signal studioApplyRequested
 	signal closeRequested
 
 	required property color foreground
@@ -375,8 +377,9 @@ Item {
 	}
 
 	function applyTheme(theme) {
+        if (root.embedded) { root.studioApplyRequested(); return; }
 		if (!theme) return;
-		root.closeRequested();
+		if (!root.embedded) root.closeRequested();
 		const command = [
 			"bash", root.applyScriptPath, theme.path,
 			"--backend", root.selectedBackend,
@@ -648,11 +651,11 @@ fi
                         }
                     }
                 }
-                AtelierText { text: "EXTRACTION / TRANSITION"; color: Atelier.muted; font.family: Atelier.mono; font.pixelSize: 9 }
+                AtelierText { text: "Farbextraktion"; color: Atelier.muted; font.family: Atelier.mono; font.pixelSize: 9 }
                 AtelierSelect { width: parent.width; model: root.backendOptions; currentIndex: root.backendOptions.indexOf(root.selectedBackend); onActivated: root.selectedBackend = currentText }
-                AtelierSelect { width: parent.width; model: root.animationOptions; textRole: "name"; currentIndex: Math.max(0, root.animationOptions.findIndex(option => option.id === root.selectedAnimationId)); onActivated: root.selectedAnimationId = root.animationOptions[currentIndex].id }
+                AtelierSelect { visible: !root.embedded; width: parent.width; model: root.animationOptions; textRole: "name"; currentIndex: Math.max(0, root.animationOptions.findIndex(option => option.id === root.selectedAnimationId)); onActivated: root.selectedAnimationId = root.animationOptions[currentIndex].id }
                 Rectangle {
-                    width: parent.width; height: 44; radius: 22; color: Atelier.accent
+                    visible: !root.embedded; width: parent.width; height: 44; radius: 22; color: Atelier.accent
                     AtelierText { anchors.centerIn: parent; text: "Bring this landscape home  ↗"; color: Atelier.onAccent; font.pixelSize: 12 }
                     MouseArea { anchors.fill: parent; onClicked: root.applyTheme(root.currentTheme) }
                 }

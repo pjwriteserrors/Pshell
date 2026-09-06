@@ -27,11 +27,15 @@ Scope {
             network: root.openNetworkPopup, bluetooth: root.openBluetoothPopup,
             clipboard: root.openClipboardPopup, power: root.openPowerPopup,
             wallpaper: root.openThemePickerPopup, interface: root.openUiThemePickerPopup,
-            animations: root.openAnimationPickerPopup, presets: root.openStylePresetPopup
+            animations: root.openAnimationPickerPopup,
+            styles: root.openUiThemePickerPopup,
+            collection: function() { root.studioPage = "collection"; root.openStylePresetPopup(); },
+            presets: root.openThemePickerPopup
         };
         if (openers[name]) openers[name]();
     }
 
+    property string studioPage: "wallpaper"
     property int nextToastId: 0
 	property var toasts: []
 	property var notificationGroups: []
@@ -764,59 +768,32 @@ Scope {
 		else root.openPowerPopup(scr);
 	}
 
-	function openThemePickerPopup(scr = null) {
-		root.openPopupOnFocusedScreen(function() {
-			root.closeOtherPopups("themePicker");
-			root.themePickerPopupVisible = true;
-			root.themePickerPopupOpen = true;
-		}, scr);
-	}
+	function openThemePickerPopup(scr = null) { root.studioPage = "wallpaper"; root.openStylePresetPopup(scr); }
 
-	function closeThemePickerPopup() {
-		root.themePickerPopupOpen = false;
-		themePickerPopupCloseTimer.restart();
-	}
+	function closeThemePickerPopup() { root.closeStylePresetPopup(); }
 
-	function toggleThemePickerPopup(scr) {
-		if (root.themePickerPopupOpen) root.closeThemePickerPopup();
-		else root.openThemePickerPopup(scr);
-	}
+	function toggleThemePickerPopup(scr = null) {
+        if(root.stylePresetPopupOpen && root.studioPage === "wallpaper") root.closeStylePresetPopup();
+        else root.openThemePickerPopup(scr);
+    }
 
-	function openUiThemePickerPopup(scr = null) {
-		root.openPopupOnFocusedScreen(function() {
-			root.closeOtherPopups("uiThemePicker");
-			root.uiThemePickerPopupVisible = true;
-			root.uiThemePickerPopupOpen = true;
-		}, scr);
-	}
+	function openUiThemePickerPopup(scr = null) { root.studioPage = "styles"; root.openStylePresetPopup(scr); }
 
-	function closeUiThemePickerPopup() {
-		root.uiThemePickerPopupOpen = false;
-		uiThemePickerPopupCloseTimer.restart();
-	}
+	function closeUiThemePickerPopup() { root.closeStylePresetPopup(); }
 
 	function toggleUiThemePickerPopup(scr = null) {
-		if (root.uiThemePickerPopupOpen) root.closeUiThemePickerPopup();
-		else root.openUiThemePickerPopup(scr);
-	}
+        if(root.stylePresetPopupOpen && root.studioPage === "styles") root.closeStylePresetPopup();
+        else root.openUiThemePickerPopup(scr);
+    }
 
-	function openAnimationPickerPopup(scr = null) {
-		root.openPopupOnFocusedScreen(function() {
-			root.closeOtherPopups("animationPicker");
-			root.animationPickerPopupVisible = true;
-			root.animationPickerPopupOpen = true;
-		}, scr);
-	}
+	function openAnimationPickerPopup(scr = null) { root.studioPage = "motion"; root.openStylePresetPopup(scr); }
 
-	function closeAnimationPickerPopup() {
-		root.animationPickerPopupOpen = false;
-		animationPickerPopupCloseTimer.restart();
-	}
+	function closeAnimationPickerPopup() { root.closeStylePresetPopup(); }
 
-	function toggleAnimationPickerPopup(scr) {
-		if (root.animationPickerPopupOpen) root.closeAnimationPickerPopup();
-		else root.openAnimationPickerPopup(scr);
-	}
+	function toggleAnimationPickerPopup(scr = null) {
+        if(root.stylePresetPopupOpen && root.studioPage === "motion") root.closeStylePresetPopup();
+        else root.openAnimationPickerPopup(scr);
+    }
 
 	function openStylePresetPopup(scr = null) {
 		root.openPopupOnFocusedScreen(function() {
@@ -1318,7 +1295,10 @@ Scope {
 				network: root.openNetworkPopup, bluetooth: root.openBluetoothPopup,
 				clipboard: root.openClipboardPopup, power: root.openPowerPopup,
 				wallpaper: root.openThemePickerPopup, interface: root.openUiThemePickerPopup,
-				animations: root.openAnimationPickerPopup, presets: root.openStylePresetPopup
+				animations: root.openAnimationPickerPopup,
+				styles: root.openUiThemePickerPopup,
+				collection: function() { root.studioPage = "collection"; root.openStylePresetPopup(); },
+				presets: root.openThemePickerPopup
 			};
 			if (openers[name]) openers[name]();
 		}
@@ -1509,6 +1489,26 @@ Scope {
 		function open(): void { root.openStylePresetPopup(); }
 		function close(): void { root.closeStylePresetPopup(); }
 		function toggle(): void { root.toggleStylePresetPopup(); }
+	}
+
+	IpcHandler {
+		target: "studio"
+
+		function open(page: string): void {
+			root.studioPage = page && page !== "" ? page : "wallpaper";
+			root.openStylePresetPopup();
+		}
+
+		function close(): void { root.closeStylePresetPopup(); }
+
+		function toggle(page: string): void {
+			const next = page && page !== "" ? page : "wallpaper";
+			if (root.stylePresetPopupOpen && root.studioPage === next) root.closeStylePresetPopup();
+			else {
+				root.studioPage = next;
+				root.openStylePresetPopup();
+			}
+		}
 	}
 
 	Process {
@@ -3401,53 +3401,6 @@ printf 'type=offline\niface=\nip=\n'`
 					}
 	}
 
-	PanelWindow {
-		id: themePickerPopup
-		screen: root.activePopupScreen
-
-		anchors {
-			left: true
-			right: true
-			top: true
-			bottom: true
-		}
-
-		exclusiveZone: 0
-		color: "transparent"
-		visible: root.themePickerPopupVisible
-		WlrLayershell.exclusionMode: ExclusionMode.Ignore
-		WlrLayershell.layer: WlrLayer.Overlay
-		WlrLayershell.keyboardFocus: root.themePickerPopupVisible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
-
-		ModalSheet {
-			open: root.themePickerPopupOpen
-            title: "The wallpaper atelier"
-            caption: ""
-            studio: true
-            controller: root
-			scrimOpacity: 0.34
-			shadowSurfaceColor: root.secondaryInsetColor
-			sheetWidth: Math.min(1180, parent.width - 48)
-			sheetHeight: Math.min(780, parent.height - 80)
-			onDismissRequested: root.closeThemePickerPopup()
-
-			Loader {
-				id: themePickerSheetLoader
-				anchors.fill: parent
-				active: root.themePickerPopupVisible
-				sourceComponent: ThemePickerPopup {
-					foreground: root.foreground
-					background: root.background
-					secondaryBoxColor: root.secondaryBoxColor
-					secondaryBoxStrongColor: root.secondaryBoxStrongColor
-					secondaryInsetColor: root.secondaryInsetColor
-					barColor: root.accent
-					danger: root.danger
-					onCloseRequested: root.closeThemePickerPopup()
-				}
-			}
-		}
-	}
 
 	PanelWindow {
 		id: launcherPopup
@@ -3538,9 +3491,9 @@ printf 'type=offline\niface=\nip=\n'`
 
 		ModalSheet {
 			open: root.stylePresetPopupOpen
-            title: "Desktop styles"
+            title: "Studio"
             caption: ""
-            studio: true
+            studio: false
             controller: root
 			scrimOpacity: 0.34
 			shadowSurfaceColor: root.secondaryInsetColor
@@ -3551,106 +3504,16 @@ printf 'type=offline\niface=\nip=\n'`
 			Loader {
 				anchors.fill: parent
 				active: root.stylePresetPopupVisible
-				sourceComponent: StylePresetPopup {
-					foreground: root.foreground
-					background: root.background
-					secondaryBoxColor: root.secondaryBoxColor
-					secondaryBoxStrongColor: root.secondaryBoxStrongColor
-					secondaryInsetColor: root.secondaryInsetColor
-					barColor: root.accent
-					danger: root.danger
+				sourceComponent: Studio {
+                        page: root.studioPage
+                        onPageChanged: root.studioPage = page
 					onCloseRequested: root.closeStylePresetPopup()
 				}
 			}
 		}
 	}
 
-	PanelWindow {
-		id: uiThemePickerPopup
-		screen: root.activePopupScreen
 
-		anchors { left: true; right: true; top: true; bottom: true }
-		exclusiveZone: 0
-		color: "transparent"
-		visible: root.uiThemePickerPopupVisible
-		WlrLayershell.exclusionMode: ExclusionMode.Ignore
-		WlrLayershell.layer: WlrLayer.Overlay
-		WlrLayershell.keyboardFocus: root.uiThemePickerPopupVisible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
-
-		ModalSheet {
-			open: root.uiThemePickerPopupOpen
-            title: "Desktop styles"
-            caption: ""
-            studio: true
-            controller: root
-			scrimOpacity: 0.3
-			shadowSurfaceColor: root.secondaryInsetColor
-			sheetWidth: Math.min(760, parent.width - 48)
-			sheetHeight: Math.min(460, parent.height - 80)
-			onDismissRequested: root.closeUiThemePickerPopup()
-
-			Loader {
-				anchors.fill: parent
-				active: root.uiThemePickerPopupVisible
-				sourceComponent: UiThemePickerPopup {
-					foreground: root.foreground
-					background: root.background
-					secondaryBoxColor: root.secondaryBoxColor
-					secondaryBoxStrongColor: root.secondaryBoxStrongColor
-					secondaryInsetColor: root.secondaryInsetColor
-					barColor: root.accent
-					onCloseRequested: root.closeUiThemePickerPopup()
-				}
-			}
-		}
-	}
-
-	PanelWindow {
-		id: animationPickerPopup
-		screen: root.activePopupScreen
-
-		anchors {
-			left: true
-			right: true
-			top: true
-			bottom: true
-		}
-
-		exclusiveZone: 0
-		color: "transparent"
-		visible: root.animationPickerPopupVisible
-		WlrLayershell.exclusionMode: ExclusionMode.Ignore
-		WlrLayershell.layer: WlrLayer.Overlay
-		WlrLayershell.keyboardFocus: root.animationPickerPopupVisible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
-
-		ModalSheet {
-			open: root.animationPickerPopupOpen
-            title: "In motion"
-            caption: ""
-            studio: true
-            controller: root
-			scrimOpacity: 0.34
-			shadowSurfaceColor: root.secondaryInsetColor
-			sheetWidth: Math.min(1280, parent.width - 48)
-			sheetHeight: Math.min(840, parent.height - 80)
-			onDismissRequested: root.closeAnimationPickerPopup()
-
-			Loader {
-				id: animationPickerSheetLoader
-				anchors.fill: parent
-				active: root.animationPickerPopupVisible
-				sourceComponent: AnimationPickerPopup {
-					foreground: root.foreground
-					background: root.background
-					secondaryBoxColor: root.secondaryBoxColor
-					secondaryBoxStrongColor: root.secondaryBoxStrongColor
-					secondaryInsetColor: root.secondaryInsetColor
-					barColor: root.accent
-					onCloseRequested: root.closeAnimationPickerPopup()
-				}
-			}
-		}
-	}
 
 	PanelWindow {
 		id: powerOverlay
