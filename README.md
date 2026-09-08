@@ -31,11 +31,15 @@ zeigen eine ausdrücklich beschriftete Bewegungsskizze, keinen echten Shader-Ren
 
 ## Laufendes Setup und Rückkehr
 
-Die Atelier-Kopie wurde in der laufenden Sitzung gestartet. Niri-Tastenkürzel
-verwenden `scripts/dispatch_ipc.sh`: solange Atelier läuft, wird diese Instanz
-angesprochen; andernfalls das Original.
+Niri startet diese Konfiguration (`quickshell -c atelier`); welcher Style dabei
+erscheint, entscheidet der ausgecheckte Branch. Der Wechsel zwischen den Styles
+gehört in **Studio → Styles** und nicht in den Autostart.
 
-Zur Rückkehr zum Original, ausschließlich bei entsperrter Sitzung:
+Niri-Tastenkürzel verwenden `scripts/dispatch_ipc.sh`: solange diese
+Konfiguration läuft, wird sie angesprochen; andernfalls `~/.config/quickshell/main`.
+
+Zur einmaligen Rückkehr zur unversionierten Originalkonfiguration, ausschließlich
+bei entsperrter Sitzung:
 
 ```sh
 quickshell kill -c atelier
@@ -43,7 +47,7 @@ quickshell kill -c atelier
 quickshell -c main --daemonize --no-duplicate
 ```
 
-Kein systemweiter SDDM-Wechsel, kein neuer Autostart und kein Remote-Repository.
+Kein systemweiter SDDM-Wechsel und kein Remote-Repository.
 Die Quellensicherung ist lokal. Persönliche Chatverläufe und Nutzungsstatistiken
 sind nicht versioniert.
 
