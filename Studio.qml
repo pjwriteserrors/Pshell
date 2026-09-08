@@ -27,12 +27,26 @@ Item {
 		{ id: "styles", label: "Styles" }
 	]
 
+	// The sheet itself draws no surface and the branch picker is plain text, so
+	// Studio brings its own panel: without it the pages float unreadably over
+	// the desktop.
+	Rectangle {
+		anchors.fill: parent
+		radius: 24
+		color: root.background
+		border.width: 1
+		border.color: Qt.alpha(root.foreground, 0.12)
+	}
+
 	Row {
 		id: tabs
 
 		anchors.top: parent.top
+		anchors.topMargin: 22
 		anchors.left: parent.left
+		anchors.leftMargin: 24
 		anchors.right: parent.right
+		anchors.rightMargin: 24
 		height: 42
 		spacing: 8
 
@@ -44,7 +58,7 @@ Item {
 
 				required property var modelData
 
-				width: Math.min(220, (root.width - 16) / 3)
+				width: Math.min(220, (root.width - 64) / 3)
 				height: 42
 				radius: 21
 				color: root.page === tab.modelData.id ? root.secondaryBoxStrongColor : "transparent"
@@ -72,8 +86,11 @@ Item {
 		anchors.top: tabs.bottom
 		anchors.topMargin: 14
 		anchors.left: parent.left
+		anchors.leftMargin: 24
 		anchors.right: parent.right
+		anchors.rightMargin: 24
 		anchors.bottom: parent.bottom
+		anchors.bottomMargin: 24
 
 		// Only the visible page is instantiated: the wallpaper page starts
 		// preview processes and must not run behind another tab.
