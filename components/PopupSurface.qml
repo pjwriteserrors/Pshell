@@ -50,7 +50,7 @@ PanelWindow {
     WlrLayershell.keyboardFocus: visible && wantsKeyboard ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     Behavior on openProgress { NumberAnimation { duration: surface.open ? 260 : 160; easing.type: Easing.OutCubic } }
 
-    Rectangle { anchors.fill: parent; color: Atelier.ink; opacity: surface.openProgress * 0.36 }
+    Rectangle { anchors.fill: parent; color: Atelier.scrim; opacity: surface.openProgress * 0.36 }
     MouseArea { anchors.fill: parent; onClicked: surface.dismissRequested() }
     Rectangle {
         id: folio

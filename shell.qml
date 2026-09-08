@@ -1441,8 +1441,12 @@ Scope {
 	IpcHandler {
 		target: "theme"
 
+		// Also refresh the Atelier palette: the singleton watches the file, but a
+		// freshly started shell after a style checkout must not wait for a change
+		// event to show the current Wallust colours.
 		function reload(): void {
 			walFile.reload();
+			Atelier.colorsFile.reload();
 		}
 	}
 

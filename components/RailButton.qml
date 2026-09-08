@@ -21,7 +21,7 @@ Item {
     QQCImpl.IconImage {
         anchors.horizontalCenter: parent.horizontalCenter; y: 8
         width: 18; height: 18; source: Atelier.icon(root.icon)
-        color: root.active ? Atelier.ink : Atelier.paper
+        color: root.active ? Atelier.on(root.accent) : Atelier.paper
     }
     Text {
         anchors.horizontalCenter: parent.horizontalCenter; y: 38

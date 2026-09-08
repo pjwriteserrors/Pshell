@@ -1,15 +1,18 @@
 # Atelier — a new desktop composition
 
-Eigenständige Quickshell-Arbeitskopie unter `main/atelier`.
+Eigenständige Quickshell-Konfiguration unter `~/.config/quickshell/atelier`,
+also gleichrangig neben `~/.config/quickshell/main` statt darin.
+Start mit `quickshell -c atelier`.
 Branch `main` heißt im Style-Picker **default**; `redesign/atelier` heißt **Atelier**.
-Beide enthalten die Git-Branch-Auswahl, Details siehe [THEMES.md](THEMES.md).
-Die originale `../shell.qml` ist unverändert. Der Original-Autostart bleibt erhalten.
+Beide Branches enthalten Studio mit der Git-Branch-Auswahl, Details siehe [THEMES.md](THEMES.md).
+Die originale Konfiguration in `~/.config/quickshell/main` ist unverändert.
 
 ## Gestaltung
 
 Die zweite Gestaltung ersetzt ausdrücklich auch die bisherige Anordnung:
 
-- 88 px breite, dunkle Seitenleiste links auf jedem Monitor; keine horizontale Statusbar.
+- 88 px breite Seitenleiste links auf jedem Monitor; keine horizontale Statusbar.
+  Sie folgt der Wallust-Palette: helle Palette, helle Leiste; dunkle Palette, dunkle Leiste.
 - Live-Wallust-Palette mit abgeleiteten Flächen und kontrastkorrigierten Akzenten; C059 als Displayschrift,
   Adwaita Sans für Bedienung und Adwaita Mono für Metadaten.
 - Kontext-Popups mit typografischer Seitenfläche und eigenständigem Inhalt.
@@ -35,9 +38,9 @@ angesprochen; andernfalls das Original.
 Zur Rückkehr zum Original, ausschließlich bei entsperrter Sitzung:
 
 ```sh
-quickshell kill -p /home/lu/.config/quickshell/main/atelier
+quickshell kill -c atelier
 # Nach dem Beenden:
-quickshell -p /home/lu/.config/quickshell/main --daemonize --no-duplicate
+quickshell -c main --daemonize --no-duplicate
 ```
 
 Kein systemweiter SDDM-Wechsel, kein neuer Autostart und kein Remote-Repository.

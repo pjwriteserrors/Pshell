@@ -21,7 +21,7 @@ Item {
     signal dismissRequested()
     anchors.fill: parent
     Behavior on reveal { NumberAnimation { duration: sheet.open ? 280 : 160; easing.type: Easing.OutCubic } }
-    Rectangle { anchors.fill: parent; color: Atelier.ink; opacity: sheet.reveal * 0.42 }
+    Rectangle { anchors.fill: parent; color: Atelier.scrim; opacity: sheet.reveal * 0.42 }
     MouseArea { anchors.fill: parent; onClicked: sheet.dismissRequested() }
     Rectangle {
         id: frame

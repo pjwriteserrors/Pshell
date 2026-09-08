@@ -19,6 +19,37 @@ QtObject {
         return channel(c.r)*0.2126+channel(c.g)*0.7152+channel(c.b)*0.0722;
     }
     function contrast(a,b) { const x=luminance(a),y=luminance(b); return (Math.max(x,y)+0.05)/(Math.min(x,y)+0.05); }
+    function chroma(c) { return Math.max(c.r,c.g,c.b)-Math.min(c.r,c.g,c.b); }
+    function on(surfaceColor) { return contrast(Qt.color("#ffffff"),surfaceColor)>contrast(Qt.color("#000000"),surfaceColor)?Qt.color("#ffffff"):Qt.color("#000000"); }
+    // Rank the Wallust colours by how much hue they carry and how legible they
+    // stay on the current canvas, so the accent follows the wallpaper instead
+    // of a fixed slot that can land on a washed-out entry.
+    function ranked(base) {
+        const source=palette.colors||{}, list=[];
+        for(let index=1;index<=6;index++){
+            const raw=source["color"+index];
+            if(!/^#[0-9a-f]{6}$/i.test(String(raw))) continue;
+            const color=Qt.color(raw), tint=chroma(color);
+            if(tint<0.04) continue;
+            list.push({color:color,score:tint*Math.min(1,contrast(color,base)/3)});
+        }
+        list.sort((a,b)=>b.score-a.score);
+        return list.map(entry=>entry.color);
+    }
+    function alert(fallback) {
+        const source=palette.colors||{};
+        let best=null,bestScore=-1;
+        for(let index=1;index<=15;index++){
+            const raw=source["color"+index];
+            if(!/^#[0-9a-f]{6}$/i.test(String(raw))) continue;
+            const color=Qt.color(raw),tint=chroma(color);
+            if(tint<0.08) continue;
+            const hue=color.hslHue<0?0.5:color.hslHue;
+            if(Math.min(hue,1-hue)>0.055) continue;
+            if(tint>bestScore){bestScore=tint;best=color;}
+        }
+        return best||Qt.color(fallback);
+    }
     function parsed(value, fallback) { return /^#[0-9a-f]{6}$/i.test(String(value)) ? Qt.color(value) : Qt.color(fallback); }
     function readable(color, background, ratio) {
         const end=contrast(Qt.color("#ffffff"),background)>contrast(Qt.color("#000000"),background)?Qt.color("#ffffff"):Qt.color("#000000");
@@ -43,18 +74,23 @@ QtObject {
         onFileChanged: reload()
     }
     readonly property color canvas: parsed(palette.special.background,"#1a1e20")
+    // A light Wallust palette gets light chrome; only a dark palette gets dark
+    // chrome. The rail must not invert the mode the wallpaper established.
+    readonly property bool light: luminance(canvas)>0.42
     readonly property color text: readable(parsed(palette.special.foreground,"#b7c0ba"),canvas,7)
-    readonly property color ink: mix(canvas,Qt.color("#000000"),luminance(canvas)>0.3?0.88:0.28)
+    readonly property color ink: light?mix(canvas,Qt.color("#ffffff"),0.5):mix(canvas,Qt.color("#000000"),0.28)
     readonly property color paper: readable(text,ink,7)
+    readonly property color scrim: mix(canvas,Qt.color("#000000"),0.86)
     readonly property color muted: readable(mix(canvas,text,0.58),canvas,4.5)
-    readonly property color accent: readable(parsed(palette.colors?.color5,"#d45a44"),canvas,3)
-    readonly property color onAccent: contrast(Qt.color("#ffffff"),accent)>contrast(Qt.color("#000000"),accent)?Qt.color("#ffffff"):Qt.color("#000000")
+    readonly property var accents: ranked(canvas)
+    readonly property color accent: readable(accents.length>0?accents[0]:parsed(palette.colors?.color5,"#d45a44"),canvas,3)
+    readonly property color onAccent: on(accent)
     readonly property color surface: mix(canvas,text,0.08)
     readonly property color selectedSurface: mix(canvas,accent,0.22)
     readonly property color rule: mix(canvas,text,0.25)
-    readonly property color sage: readable(parsed(palette.colors?.color2,"#583832"),canvas,3)
-    readonly property color gold: readable(parsed(palette.colors?.color6,"#c57a76"),ink,4.5)
-    readonly property color danger: readable(parsed(palette.colors?.color1,"#d45a44"),canvas,4.5)
+    readonly property color sage: readable(accents.length>1?accents[1]:parsed(palette.colors?.color2,"#583832"),canvas,3)
+    readonly property color gold: readable(accents.length>2?accents[2]:accents.length>0?accents[0]:parsed(palette.colors?.color6,"#c57a76"),ink,4.5)
+    readonly property color danger: readable(alert("#c8453c"),canvas,4.5)
     readonly property string sans: "Adwaita Sans"
     readonly property string display: "C059"
     readonly property string mono: "Adwaita Mono"

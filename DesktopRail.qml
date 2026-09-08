@@ -16,6 +16,10 @@ PanelWindow {
     exclusiveZone: 88
     color: Atelier.ink
 
+    // The rail can now be light chrome on a light wallpaper, so it needs an
+    // explicit edge instead of relying on a dark panel to separate itself.
+    Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: Atelier.rule }
+
     Column {
         id: crown
         x: 12; y: 22; width: 64; spacing: 20
