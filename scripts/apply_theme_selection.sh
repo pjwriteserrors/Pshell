@@ -152,8 +152,29 @@ finish_report() {
 	fi
 }
 
+# Reload every Quickshell configuration that is currently running instead of a
+# single hard-coded path: the style checkout can live in any config directory.
+reload_running_shells() {
+	local paths path reloaded=1
+	paths="$(quickshell list --all 2>/dev/null | sed -n 's/^[[:space:]]*Config path:[[:space:]]*//p' \
+		| xargs -r -n1 dirname | sort -u)"
+	if [[ -z "$paths" ]]; then
+		paths="${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/main"
+	fi
+	while read -r path; do
+		[[ -n "$path" ]] || continue
+		if quickshell --path "$path" ipc call theme reload >/dev/null 2>&1; then
+			echo "reloaded $path"
+			reloaded=0
+		else
+			echo "no theme reload handler in $path"
+		fi
+	done <<<"$paths"
+	return "$reloaded"
+}
+
 reload_quickshell_theme() {
-	run_step "quickshell theme reload" quickshell --path "$HOME/.config/quickshell/main" ipc call theme reload
+	run_step "quickshell theme reload" reload_running_shells
 }
 
 read_wallust_config_value() {

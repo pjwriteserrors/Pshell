@@ -49,6 +49,8 @@ Scope {
 	property bool animationPickerPopupVisible: false
 	property bool stylePresetPopupOpen: false
 	property bool stylePresetPopupVisible: false
+	// Studio page to show when the sheet opens.
+	property string studioPage: "styles"
 	property string networkStatusType: "offline"
 	property bool launcherPopupOpen: false
 	property bool launcherPopupVisible: false
@@ -812,6 +814,17 @@ Scope {
 		}, scr);
 	}
 
+	function openStudio(page, scr = null) {
+		root.studioPage = page && page !== "" ? page : "styles";
+		root.openStylePresetPopup(scr);
+	}
+
+	function toggleStudio(page, scr = null) {
+		const next = page && page !== "" ? page : "styles";
+		if (root.stylePresetPopupOpen && root.studioPage === next) root.closeStylePresetPopup();
+		else root.openStudio(next, scr);
+	}
+
 	function closeStylePresetPopup() {
 		root.stylePresetPopupOpen = false;
 		stylePresetPopupCloseTimer.restart();
@@ -1464,6 +1477,14 @@ Scope {
 		function open(): void { root.openStylePresetPopup(); }
 		function close(): void { root.closeStylePresetPopup(); }
 		function toggle(): void { root.toggleStylePresetPopup(); }
+	}
+
+	IpcHandler {
+		target: "studio"
+
+		function open(page: string): void { root.openStudio(page); }
+		function close(): void { root.closeStylePresetPopup(); }
+		function toggle(page: string): void { root.toggleStudio(page); }
 	}
 
 	Process {
@@ -4058,7 +4079,8 @@ printf 'type=offline\niface=\nip=\n'`
 			Loader {
 				anchors.fill: parent
 				active: root.stylePresetPopupVisible
-				sourceComponent: StylePresetPopup {
+				sourceComponent: Studio {
+					page: root.studioPage
 					foreground: root.foreground
 					background: root.background
 					secondaryBoxColor: root.secondaryBoxColor

@@ -105,9 +105,9 @@ Item {
 	property var commands: [
 		{
 			id: "style-presets",
-			command: "preset",
-			name: "Style Presets",
-			description: "Combine wallpaper, interface theme and animation",
+			command: "studio",
+			name: "Studio",
+			description: "Wallpaper and colours, motion, and the style branch",
 			icon: "view-grid-symbolic"
 		},
 		{
@@ -164,7 +164,7 @@ Item {
 			command: "ollama",
 			name: "Ollama",
 			description: "Manage installed and running models",
-			icon: "/home/lu/.config/quickshell/main/ollama-symbolic.png"
+			icon: Quickshell.shellDir + "/ollama-symbolic.png"
 		}
 	]
 
@@ -199,7 +199,7 @@ Item {
 		case "view-list-symbolic":
 			return "/usr/share/icons/Adwaita/symbolic/actions/view-list-symbolic.svg";
 		case "ollama":
-			return "/home/lu/.config/quickshell/main/ollama-symbolic.png";
+			return Quickshell.shellDir + "/ollama-symbolic.png";
 		default:
 			return "/usr/share/icons/Adwaita/symbolic/actions/system-search-symbolic.svg";
 		}
@@ -2149,7 +2149,7 @@ Item {
 		case "chats":
 			return "/usr/share/icons/Adwaita/symbolic/actions/view-list-symbolic.svg";
 		case "ollama":
-			return "/home/lu/.config/quickshell/main/ollama-symbolic.png";
+			return Quickshell.shellDir + "/ollama-symbolic.png";
 		}
 		const iconName = String(command?.icon || "");
 		if (iconName.startsWith("/")) return iconName;

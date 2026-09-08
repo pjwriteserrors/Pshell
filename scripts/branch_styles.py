@@ -75,6 +75,36 @@ def state_directory(repo):
     return path
 
 
+def await_session(repo, timeout=12.0):
+    """Wait until the freshly started shell answers its style IPC."""
+    deadline = time.monotonic() + timeout
+    last = "The new shell did not report a session state."
+    while time.monotonic() < deadline:
+        result = run(["quickshell", "ipc", "-p", str(repo), "call", "styleSession", "state"], repo, False)
+        if not result.returncode:
+            try:
+                return json.loads(result.stdout)
+            except ValueError:
+                last = "The new shell answered with an unreadable session state."
+        else:
+            last = result.stderr.strip() or last
+        time.sleep(0.15)
+    raise RuntimeError(last)
+
+
+def apply_palette(repo):
+    """Push the current Wallust palette into the new shell right away so the
+    style appears in the wallpaper's colours instead of its built-in fallback."""
+    run(["quickshell", "ipc", "-p", str(repo), "call", "theme", "reload"], repo, False)
+
+
+def start(repo):
+    run(["quickshell", "-p", str(repo), "--daemonize", "--no-duplicate"], repo)
+    session = await_session(repo)
+    apply_palette(repo)
+    return session
+
+
 def switch(repo, branch):
     previous = preflight(repo, branch)
     if previous == branch:
@@ -92,15 +122,16 @@ def switch(repo, branch):
         raise RuntimeError("The old shell did not stop; checkout was not performed.")
     try:
         checkout(repo, branch)  # Recheck after stopping: no force and no stash.
-        run(["quickshell", "-p", str(repo), "--daemonize", "--no-duplicate"], repo)
-        time.sleep(0.7)
-        run(["quickshell", "ipc", "-p", str(repo), "call", "styleSession", "state"], repo)
+        start(repo)
     except Exception:
         run(["quickshell", "kill", "-p", str(repo)], repo, False)
         # Roll back only a clean checkout. Never overwrite files created meanwhile.
         if not git(repo, "status", "--porcelain"):
             git(repo, "switch", "--no-guess", previous)
-        run(["quickshell", "-p", str(repo), "--daemonize", "--no-duplicate"], repo, False)
+        try:
+            start(repo)
+        except Exception:
+            pass
         raise
 
 
