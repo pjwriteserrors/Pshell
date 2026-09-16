@@ -35,7 +35,7 @@ Item {
 	readonly property string nirimationShowcaseDir: "/home/lu/.config/niri/animations/nirimation/animations/showcase"
 	readonly property string animationStatePath: "/home/lu/.local/state/quickshell-theme/current-animation"
 	readonly property string shaderCurrentPath: "/home/lu/.config/niri/animations/shaders/.current"
-	readonly property color headingColor: Qt.lighter(root.barColor, 1.12)
+	readonly property color headingColor: root.foreground
 	readonly property int gridColumns: Math.max(2, Math.min(4, Math.floor((gridViewport.width + gridGap) / 270)))
 	readonly property real gridGap: 14
 	readonly property real cardWidth: (gridViewport.width - root.gridGap * (root.gridColumns - 1)) / root.gridColumns
@@ -233,19 +233,15 @@ fi
 		}
 	}
 
-	ThemedRectangle {
+	// A page of Studio, which already draws the panel. Painting another tinted
+	// surface on top of it turned the whole page into a slab of accent colour.
+	Item {
 		id: panel
-		anchors.centerIn: parent
-		width: Math.min(parent.width - 28, 1260)
-		height: Math.min(parent.height - 28, 800)
-		radius: ThemeEngine.radiusMedium
-		color: Qt.alpha(root.secondaryInsetColor, 0.94)
-		border.width: 1
-		border.color: Qt.alpha(root.barColor, 0.34)
+		anchors.fill: parent
 
 		Column {
 			anchors.fill: parent
-			anchors.margins: 18
+			anchors.margins: 6
 			spacing: 14
 
 			Row {
