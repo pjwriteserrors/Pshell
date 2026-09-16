@@ -1425,15 +1425,13 @@ Scope {
 		}
 	}
 
-	// The shape/motion token set. It has no window of its own any more; the
-	// style branches carry these tokens now. The calls stay because scripts
-	// use them to re-read the catalog after a checkout.
+	// The shape/motion token set. It has no window of its own any more - the
+	// style branch a config was checked out from decides it. The calls stay so
+	// scripts can re-read the catalog after a checkout.
 	IpcHandler {
 		target: "uiTheme"
 
 		function select(themeId: string): void { ThemeEngine.selectTheme(themeId); }
-		// Complete presets apply Niri once Wallust has generated their new colors.
-		function selectShell(themeId: string): void { ThemeEngine.activate(themeId, true); }
 		function current(): string { return ThemeEngine.currentThemeId; }
 		function reload(): void { ThemeEngine.reloadCatalog(); }
 	}

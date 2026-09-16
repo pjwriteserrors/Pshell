@@ -1,23 +1,9 @@
-# Git styles
+# Colours
 
-Styles selects complete local Git branches, not shape presets.
+How a style turns a wallpaper into a palette. The branch mechanics - what a
+style is, how to switch and how to add one - are in [README.md](README.md).
 
-- `main`: **default** — original layout.
-- `redesign/atelier`: **Atelier** — vertical rail and editorial surfaces, live Wallust colors.
-
-Open **Studio → Styles**, select a branch and confirm **checkout & restart**.
-Studio exists in both branches, so the default style can always return to
-Atelier. Switching stops only this repository's shell, checks out the target
-and restarts it. A clean checkout is required: tracked changes
-and untracked files block switching. Nothing is stashed, discarded, pulled or forced.
-Locked sessions, detached HEAD and branches used by another worktree are rejected.
-A failed launch attempts to return to the previous clean branch.
-
-New local style branches need `.quickshell-style.json` with
-`{"api":1,"name":"Your style"}`, the branch picker, branch_styles.py and
-the styleSession IPC handler. Branches without this contract are shown but disabled.
-
-Atelier reads `$XDG_CACHE_HOME/wal/colors.json` (default `~/.cache/wal/colors.json`)
+Every style reads `$XDG_CACHE_HOME/wal/colors.json` (default `~/.cache/wal/colors.json`)
 and follows changes live; a style checkout also pushes the palette into the new
 shell over `theme reload`, so the colours are right on the first frame.
 Background and foreground establish the palette and decide light or dark chrome:
@@ -30,10 +16,6 @@ palette. Text and controls receive contrast correction; text on accent chooses
 black or white. Invalid partial updates retain the last valid palette. The dark
 fallback is only used when no valid palette exists.
 
-Fantasy, Neumorphism, Neo-brutalism and the old combined presets are removed.
-Their source remains recoverable in Git history. Each branch retains only its
-own internal geometry/motion tokens; wallpaper and motion controls remain separate.
-
-The original configuration in `~/.config/quickshell/main` is untouched. This
-repository is `~/.config/quickshell/atelier`, a Quickshell configuration of its
-own (`quickshell -c atelier`); it retains that path on either branch.
+The shape and motion tokens that used to be selectable presets (Fantasy,
+Neumorphism, Neo-brutalism) are gone; each style branch carries its own set in
+`themes/<id>/theme.json`. Their sources stay recoverable in Git history.

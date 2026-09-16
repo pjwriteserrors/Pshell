@@ -7,15 +7,15 @@ import Quickshell.Io
 QtObject {
 	id: root
 
-	property string requestedThemeId: "default"
-	property string currentThemeId: "default"
+	// The geometry and motion tokens of the checked-out style. Each style branch
+	// ships exactly one set under themes/<id>/theme.json; the id is not a user
+	// choice any more, it belongs to the branch.
+	property string currentThemeId: ""
 	property var availableThemes: []
 	property var activeTokens: ({})
 	property bool ready: false
-	property bool stateLoaded: false
 	property string error: ""
 
-	readonly property string statePath: `${Quickshell.shellDir}/ui-theme.json`
 	readonly property string catalogScriptPath: `${Quickshell.shellDir}/scripts/theme_engine.py`
 	readonly property var fallbackTokens: ({
 		radiusTiny: 2, radiusSmall: 4, radiusMedium: 7, radiusLarge: 9,
@@ -157,17 +157,19 @@ QtObject {
 		return null;
 	}
 
-	function activate(themeId, persist) {
-		const theme = root.themeById("default");
+	// Named theme if the branch has one, otherwise whatever it ships. Falling
+	// back to the first entry is what lets a style branch name its tokens after
+	// itself without this file knowing the name.
+	function activate(themeId) {
+		const theme = root.themeById(themeId) || root.availableThemes[0] || null;
 		if (!theme) return false;
 		root.currentThemeId = String(theme.id);
 		root.activeTokens = theme.tokens || {};
-
 		return true;
 	}
 
 	function selectTheme(themeId) {
-		return root.activate(themeId, true);
+		return root.activate(themeId);
 	}
 
 	function reloadCatalog() {
@@ -176,18 +178,6 @@ QtObject {
 		catalogProcess.running = true;
 	}
 
-	function parseState(raw) {
-		try {
-			root.requestedThemeId = String(JSON.parse(String(raw || "{}"))?.theme || "default");
-		} catch (parseError) {
-			root.requestedThemeId = "default";
-		}
-		if (root.availableThemes.length > 0) root.activate(root.requestedThemeId, false);
-		root.stateLoaded = true;
-	}
-
-
-
 	property Process catalogProcess: Process {
 		stdout: StdioCollector {
 			onStreamFinished: {
@@ -195,7 +185,7 @@ QtObject {
 					root.availableThemes = JSON.parse(String(text || "[]"));
 					root.error = "";
 					root.ready = true;
-					root.activate(root.requestedThemeId, false);
+					root.activate(root.currentThemeId);
 				} catch (parseError) {
 					root.error = String(parseError);
 					root.ready = false;
