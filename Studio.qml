@@ -2,11 +2,21 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
+import "components"
 
-// One place to change how the desktop looks: wallpaper and colours, window
-// motion, and the Git branch that carries the whole setup. Every style branch
-// ships a Studio so that switching back out of it is always possible.
-Item {
+// The one place where the desktop's looks are changed.
+//
+// This used to be four separate launcher commands opening four separate
+// windows: a wallpaper picker, a shell-shape picker, an animation picker and a
+// style-branch picker. They are pages here now, and the page that gets you a
+// new wallpaper and a new palette is the one that opens first.
+//
+// Everything is reachable with the mouse and with the keyboard:
+//   Escape            close
+//   Ctrl+Tab / Ctrl+Shift+Tab  next / previous page
+//   Ctrl+1 .. Ctrl+3  jump to a page
+//   arrows / Enter    handled by the page itself
+FocusScope {
 	id: root
 
 	signal closeRequested
@@ -19,20 +29,75 @@ Item {
 	required property color barColor
 	required property color danger
 
-	property string page: "styles"
+	property string page: "wallpaper"
 
 	readonly property var pages: [
-		{ id: "wallpaper", label: "Wallpaper & Colours" },
-		{ id: "motion", label: "Motion" },
-		{ id: "styles", label: "Styles" }
+		{ id: "wallpaper", label: "Wallpaper & Colours", hint: "Ctrl+1" },
+		{ id: "motion", label: "Motion", hint: "Ctrl+2" },
+		{ id: "styles", label: "Style", hint: "Ctrl+3" }
 	]
 
-	// The sheet itself draws no surface and the branch picker is plain text, so
-	// Studio brings its own panel: without it the pages float unreadably over
-	// the desktop.
+	readonly property int pageIndex: {
+		for (let i = 0; i < root.pages.length; i += 1)
+			if (root.pages[i].id === root.page) return i;
+		return 0;
+	}
+
+	function showPage(id) {
+		if (!id || id === root.page) return;
+		root.page = id;
+	}
+
+	function cyclePage(delta) {
+		const next = (root.pageIndex + delta + root.pages.length) % root.pages.length;
+		root.showPage(root.pages[next].id);
+	}
+
+	// The page owns the arrow keys, so it has to hold the focus. Re-claiming it
+	// after every page change keeps a freshly loaded page keyboard-usable
+	// without a click.
+	function focusPage() {
+		if (stage.activeItem) stage.activeItem.forceActiveFocus();
+		else root.forceActiveFocus();
+	}
+
+	focus: true
+	Component.onCompleted: Qt.callLater(root.focusPage)
+	onPageChanged: Qt.callLater(root.focusPage)
+
+	// Page shortcuts are deliberately Ctrl-modified: the pages themselves use
+	// plain arrows, Enter and typing, and must keep them.
+	Keys.onPressed: event => {
+		if (!(event.modifiers & Qt.ControlModifier)) return;
+
+		switch (event.key) {
+		case Qt.Key_Tab:
+			root.cyclePage(event.modifiers & Qt.ShiftModifier ? -1 : 1);
+			event.accepted = true;
+			return;
+		case Qt.Key_Backtab:
+			root.cyclePage(-1);
+			event.accepted = true;
+			return;
+		case Qt.Key_1:
+		case Qt.Key_2:
+		case Qt.Key_3: {
+			const index = event.key - Qt.Key_1;
+			if (index < root.pages.length) {
+				root.showPage(root.pages[index].id);
+				event.accepted = true;
+			}
+			return;
+		}
+		}
+	}
+
+	// The sheet itself draws no surface and the pages are plain content, so
+	// Studio brings its own panel: without it they float unreadably over the
+	// desktop.
 	Rectangle {
 		anchors.fill: parent
-		radius: 24
+		radius: ThemeEngine.radiusLarge
 		color: root.background
 		border.width: 1
 		border.color: Qt.alpha(root.foreground, 0.12)
@@ -42,13 +107,13 @@ Item {
 		id: tabs
 
 		anchors.top: parent.top
-		anchors.topMargin: 22
+		anchors.topMargin: 18
 		anchors.left: parent.left
-		anchors.leftMargin: 24
+		anchors.leftMargin: 20
 		anchors.right: parent.right
-		anchors.rightMargin: 24
-		height: 42
-		spacing: 8
+		anchors.rightMargin: 20
+		height: 40
+		spacing: 6
 
 		Repeater {
 			model: root.pages
@@ -57,24 +122,47 @@ Item {
 				id: tab
 
 				required property var modelData
+				readonly property bool active: root.page === tab.modelData.id
 
-				width: Math.min(220, (root.width - 64) / 3)
-				height: 42
-				radius: 21
-				color: root.page === tab.modelData.id ? root.secondaryBoxStrongColor : "transparent"
+				width: Math.min(240, (root.width - 46) / root.pages.length)
+				height: tabs.height
+				radius: ThemeEngine.radiusMedium
+				color: tab.active
+					? root.secondaryBoxStrongColor
+					: tabMouse.containsMouse ? root.secondaryBoxColor : "transparent"
 
-				Text {
+				Behavior on color {
+					CAnim {}
+				}
+
+				Row {
 					anchors.centerIn: parent
-					text: tab.modelData.label
-					color: root.foreground
-					opacity: root.page === tab.modelData.id ? 1 : 0.62
-					font.pixelSize: 12
+					spacing: 8
+
+					Text {
+						anchors.verticalCenter: parent.verticalCenter
+						text: tab.modelData.label
+						color: root.foreground
+						opacity: tab.active ? 1 : 0.62
+						font.pixelSize: 13
+					}
+
+					Text {
+						anchors.verticalCenter: parent.verticalCenter
+						text: tab.modelData.hint
+						color: root.foreground
+						opacity: tab.active ? 0.45 : 0.28
+						font.family: "Adwaita Mono"
+						font.pixelSize: 10
+					}
 				}
 
 				MouseArea {
+					id: tabMouse
 					anchors.fill: parent
+					hoverEnabled: true
 					cursorShape: Qt.PointingHandCursor
-					onClicked: root.page = tab.modelData.id
+					onClicked: root.showPage(tab.modelData.id)
 				}
 			}
 		}
@@ -83,20 +171,30 @@ Item {
 	Item {
 		id: stage
 
+		// The item of whichever page is currently loaded; the keyboard follows it.
+		readonly property Item activeItem: {
+			if (wallpaperPage.active) return wallpaperPage.item;
+			if (motionPage.active) return motionPage.item;
+			if (stylePage.active) return stylePage.item;
+			return null;
+		}
+
 		anchors.top: tabs.bottom
-		anchors.topMargin: 14
+		anchors.topMargin: 10
 		anchors.left: parent.left
-		anchors.leftMargin: 24
+		anchors.leftMargin: 20
 		anchors.right: parent.right
-		anchors.rightMargin: 24
+		anchors.rightMargin: 20
 		anchors.bottom: parent.bottom
-		anchors.bottomMargin: 24
+		anchors.bottomMargin: 20
 
 		// Only the visible page is instantiated: the wallpaper page starts
 		// preview processes and must not run behind another tab.
 		Loader {
+			id: wallpaperPage
 			anchors.fill: parent
 			active: root.page === "wallpaper"
+			onLoaded: Qt.callLater(root.focusPage)
 			sourceComponent: ThemePickerPopup {
 				foreground: root.foreground
 				background: root.background
@@ -110,8 +208,10 @@ Item {
 		}
 
 		Loader {
+			id: motionPage
 			anchors.fill: parent
 			active: root.page === "motion"
+			onLoaded: Qt.callLater(root.focusPage)
 			sourceComponent: AnimationPickerPopup {
 				foreground: root.foreground
 				background: root.background
@@ -124,8 +224,10 @@ Item {
 		}
 
 		Loader {
+			id: stylePage
 			anchors.fill: parent
 			active: root.page === "styles"
+			onLoaded: Qt.callLater(root.focusPage)
 			sourceComponent: BranchStylePicker {
 				foreground: root.foreground
 				background: root.background

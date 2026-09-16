@@ -29,6 +29,18 @@ Item {
 
 	anchors.fill: parent
 
+	// Every modal answers Escape, whatever is inside it. Unhandled keys travel
+	// up from the focused item, so a search field inside the sheet still gets
+	// first refusal and content that wants Escape for itself (stepping back out
+	// of a confirmation, clearing a query) just accepts the event.
+	// focus: true only claims the keyboard while nothing inside wants it.
+	focus: true
+
+	Keys.onEscapePressed: event => {
+		event.accepted = true;
+		sheet.dismissRequested();
+	}
+
 
 	Rectangle {
 		anchors.fill: parent

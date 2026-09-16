@@ -14,10 +14,8 @@ Item {
 
 	signal closeRequested
 	signal launchRequested
-	signal openThemePickerRequested
-	signal openUiThemePickerRequested
-	signal openAnimationPickerRequested
-	signal openStylePresetRequested
+	// "wallpaper", "motion" or "styles"
+	signal openStudioRequested(string page)
 
 	required property color foreground
 	required property color background
@@ -103,33 +101,32 @@ Item {
 	property string fileBrowserDirectoryError: ""
 	property string fileBrowserListTargetDirectory: ""
 	property var commands: [
+		// One command for everything that changes how the desktop looks.
+		// `studio` lands on wallpaper and colours; the two suffixed forms jump
+		// straight to another page of the same window.
 		{
-			id: "style-presets",
+			id: "studio",
 			command: "studio",
 			name: "Studio",
-			description: "Wallpaper and colours, motion, and the style branch",
-			icon: "view-grid-symbolic"
+			description: "Wallpaper and colours, window motion, style branch",
+			icon: "preferences-desktop-wallpaper-symbolic",
+			studioPage: "wallpaper"
 		},
 		{
-			id: "ui-theme-picker",
-			command: "style",
-			name: "Interface Theme",
-			description: "Change shapes, depth and shell motion",
-			icon: "applications-graphics-symbolic"
+			id: "studio-motion",
+			command: "studio motion",
+			name: "Studio: Motion",
+			description: "Niri window animations",
+			icon: "preferences-desktop-effects-symbolic",
+			studioPage: "motion"
 		},
 		{
-			id: "theme-picker",
-			command: "theme",
-			name: "Theme Picker",
-			description: "Browse color themes and choose an image or video",
-			icon: "preferences-desktop-wallpaper-symbolic"
-		},
-		{
-			id: "animation-picker",
-			command: "animation",
-			name: "Animation Picker",
-			description: "Change Niri window animations only",
-			icon: "preferences-desktop-effects-symbolic"
+			id: "studio-style",
+			command: "studio style",
+			name: "Studio: Style",
+			description: "Switch the whole setup to another style branch",
+			icon: "view-grid-symbolic",
+			studioPage: "styles"
 		},
 		{
 			id: "calculator",
@@ -2165,21 +2162,11 @@ Item {
 		if (!command) return;
 
 		switch (String(command.id || "")) {
-		case "style-presets":
+		case "studio":
+		case "studio-motion":
+		case "studio-style":
 			root.closeRequested();
-			root.openStylePresetRequested();
-			break;
-		case "ui-theme-picker":
-			root.closeRequested();
-			root.openUiThemePickerRequested();
-			break;
-		case "theme-picker":
-			root.closeRequested();
-			root.openThemePickerRequested();
-			break;
-		case "animation-picker":
-			root.closeRequested();
-			root.openAnimationPickerRequested();
+			root.openStudioRequested(String(command.studioPage || "wallpaper"));
 			break;
 		case "calculator":
 			root.setLauncherSearch(">c ");

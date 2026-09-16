@@ -85,6 +85,18 @@ PanelWindow {
 
 	Item {
 		id: cardMotion
+
+		// Escape closes every popup. The handler sits on the card itself, an
+		// ancestor of the content, so an unhandled key from a focused field
+		// inside travels up to here. focus: true only claims the keyboard
+		// while nothing inside the card wants it.
+		focus: true
+
+		Keys.onEscapePressed: event => {
+			event.accepted = true;
+			surface.dismissRequested();
+		}
+
 		x: {
 			if (surface.anchorMode === "center")
 				return Math.round((parent.width - width) / 2);
