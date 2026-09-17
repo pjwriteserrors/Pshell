@@ -8,10 +8,9 @@ import Quickshell.Io
 import Quickshell.Widgets
 import "components"
 
-// Media popup, redesigned around the cava visualizer:
-// a full-width spectrum hero with the cover art and track info floating
-// on top, a seekable progress bar, pill transport controls and player
-// chips. Keeps the same external API as the old implementation.
+// Media popup: a turning record with the cover art at its centre, the track
+// underneath, then seek, transport, volume, players and outputs. Keeps the same
+// external API as every other style's media popup.
 Item {
 	id: root
 
