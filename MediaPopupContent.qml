@@ -144,6 +144,7 @@ Item {
 	ExternalCava {
 		id: cava
 		bars: 40
+		active: root.popupActive
 	}
 
 	Column {
