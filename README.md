@@ -72,6 +72,22 @@ The branch also needs the parts every style shares: `scripts/`, `Studio.qml`,
 otherwise you can check the branch out but not get back. Branches without the
 manifest are listed in the picker and greyed out.
 
+### Keeping the styles in sync
+
+Everything outside `shell.qml` and the branch's own components is shared:
+`scripts/`, the wallpaper runtime, the style switcher, `Studio.qml`'s wiring.
+Fixes land on `main` and travel out from there:
+
+```
+git worktree add /tmp/port style/atelier
+git -C /tmp/port merge main
+(cd /tmp/port && quickshell -p ./Validate.qml)   # must compile before you switch to it
+git worktree remove /tmp/port
+```
+
+A worktree rather than a checkout, so the shell you are running keeps its files
+while you work on another style.
+
 ## Studio
 
 One window for everything that changes how the desktop looks:
