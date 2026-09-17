@@ -3008,6 +3008,9 @@ done`
 		property real lastRxBytes: 0
 		property real lastTxBytes: 0
 		property bool throughputSampleReady: false
+		// One place for the sampling period: the timer that reads /proc/net/dev
+		// and the delta that turns two readings into a speed have to agree.
+		readonly property int throughputIntervalMs: 2000
 		property var uploadHistory: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 		property var downloadHistory: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 		readonly property real uploadChartMax: networkPopup.historyMax(networkPopup.uploadHistory)
@@ -3070,7 +3073,7 @@ done`
 				return;
 			}
 
-			const intervalSeconds = 2;
+			const intervalSeconds = networkPopup.throughputIntervalMs / 1000;
 			const downloadSpeed = Math.max(0, (rxBytes - networkPopup.lastRxBytes) / intervalSeconds);
 			const uploadSpeed = Math.max(0, (txBytes - networkPopup.lastTxBytes) / intervalSeconds);
 
@@ -3124,22 +3127,37 @@ done`
 			}
 		}
 
+		// Which interface carries the connection changes on the order of
+		// minutes; the bar icon does not need a process every two seconds. The
+		// popup, which shows the interface and its address, refreshes faster
+		// while it is actually on screen.
 		Timer {
 			running: true
 			repeat: true
-			interval: 2000
+			interval: root.networkPopupVisible ? 2000 : 10000
 			triggeredOnStart: true
-			onTriggered: {
-				networkStatusProcess.running = true;
-				netDevFile.reload();
-			}
+			onTriggered: networkStatusProcess.running = true
+		}
+
+		// Throughput is a live read-out. It is only live while it is visible, and
+		// the first sample after reopening is thrown away rather than counted as
+		// one interval's worth of everything that happened in between.
+		Timer {
+			running: root.networkPopupVisible
+			repeat: true
+			interval: networkPopup.throughputIntervalMs
+			triggeredOnStart: true
+			onTriggered: netDevFile.reload()
+			onRunningChanged: if (!running) networkPopup.resetThroughput()
 		}
 
 		Process {
 			id: networkStatusProcess
+			// sh -c, not sh -lc: a login shell sources the whole profile chain,
+			// which is a lot of work for a script that only reads /sys and runs ip.
 			command: [
 				"sh",
-				"-lc",
+				"-c",
 				`for iface in /sys/class/net/*; do
 name=$(basename "$iface")
 case "$name" in

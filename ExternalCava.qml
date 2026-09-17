@@ -8,6 +8,10 @@ Item {
 	id: root
 	visible: false
 
+	// Only run while something is drawing the spectrum. cava at 75 fps holds a
+	// capture stream open and hands over a frame 75 times a second; doing that
+	// for a graph nobody is looking at was most of this shell's idle CPU.
+	property bool active: true
 	property int bars: 28
 	property var values: []
 	property string inputMethod: "pipewire"
@@ -40,11 +44,15 @@ Item {
 		if (parsed.length > 0) root.values = parsed;
 	}
 
+	// Restart by dipping a property the `running` binding reads, never by
+	// assigning to `running` itself: an imperative assignment replaces the
+	// binding, and then the process stops following `active` for good.
+	property bool restarting: false
+
 	function restartProcess() {
-		cavaProcess.running = false;
+		root.restarting = true;
 		Qt.callLater(function() {
-			cavaProcess.command = root.buildCommand(root.inputMethod);
-			cavaProcess.running = true;
+			root.restarting = false;
 		});
 	}
 
@@ -81,10 +89,16 @@ Item {
 		root.rebuildValues();
 		root.restartProcess();
 	}
+	onActiveChanged: {
+		if (root.active) return;
+		// Leave the bars where they were rather than collapsing them: the popup
+		// is closing, and an animated slump on the way out is just noise.
+		restartTimer.stop();
+	}
 
 	Process {
 		id: cavaProcess
-		running: true
+		running: root.active && !root.restarting
 		command: root.buildCommand(root.inputMethod)
 
 		stdout: SplitParser {
@@ -92,6 +106,7 @@ Item {
 		}
 
 		onExited: (exitCode, exitStatus) => {
+			if (!root.active) return;
 			if (root.inputMethod === "pipewire") {
 				root.inputMethod = "pulse";
 				root.restartProcess();

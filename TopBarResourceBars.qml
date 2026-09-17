@@ -161,6 +161,7 @@ ThemedRectangle {
 		}
 	}
 
+	// CPU and memory come from /proc: two cheap file reads.
 	Timer {
 		running: true
 		repeat: true
@@ -169,8 +170,17 @@ ThemedRectangle {
 		onTriggered: {
 			cpuStat.reload();
 			memInfo.reload();
-			storageProcess.running = true;
 		}
+	}
+
+	// Disk usage is an lsblk process. It does not move fast enough to be worth
+	// spawning one every two seconds for the rest of the session.
+	Timer {
+		running: true
+		repeat: true
+		interval: 60000
+		triggeredOnStart: true
+		onTriggered: storageProcess.running = true
 	}
 
 	Timer {
