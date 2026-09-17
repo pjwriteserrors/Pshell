@@ -162,6 +162,9 @@ sanitize_output_name() {
 
 # ---------------------------------------------------------------- outputs ---
 
+# Only outputs that are actually switched on. niri keeps a disabled monitor in
+# this list with "logical": null, and a disabled output has no surface to paint:
+# counting it would make every check report a monitor that can never be covered.
 list_outputs_from_niri() {
 	niri msg -j outputs 2>/dev/null | python3 -c '
 import json, sys
@@ -171,7 +174,7 @@ except ValueError:
     raise SystemExit(0)
 items = data.values() if isinstance(data, dict) else data
 for item in items:
-    if isinstance(item, dict) and item.get("name"):
+    if isinstance(item, dict) and item.get("name") and item.get("logical"):
         print(item["name"])
 '
 }
