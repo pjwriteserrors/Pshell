@@ -42,6 +42,10 @@ ensure() {
 	bash "$SCRIPT_DIR/apply_wallpaper_runtime.sh" --ensure >>"$LOG_FILE" 2>&1 || true
 }
 
+# The set of outputs that are switched on. Names alone are not enough: niri
+# keeps a monitor in its output list while it is disabled, so the names never
+# change when one is switched off and on again - which is exactly the moment
+# this watcher exists for. An output that is on has a "logical" geometry.
 output_fingerprint() {
 	niri msg -j outputs 2>/dev/null | python3 -c '
 import json, sys
@@ -50,7 +54,8 @@ try:
 except ValueError:
     raise SystemExit(0)
 items = data.values() if isinstance(data, dict) else data
-names = sorted(i["name"] for i in items if isinstance(i, dict) and i.get("name"))
+names = sorted(i["name"] for i in items
+               if isinstance(i, dict) and i.get("name") and i.get("logical"))
 print(",".join(names))
 '
 }
