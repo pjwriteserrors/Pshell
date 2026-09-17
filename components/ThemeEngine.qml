@@ -7,9 +7,9 @@ import Quickshell.Io
 QtObject {
 	id: root
 
-	// The geometry and motion tokens of the checked-out style. Each style branch
-	// ships exactly one set under themes/<id>/theme.json; the id is not a user
-	// choice any more, it belongs to the branch.
+	// The geometry and motion tokens of the checked-out style. They are not a
+	// user choice any more: the style branch names its own token set in
+	// .quickshell-style.json ("theme"), and themes/<id>/theme.json holds it.
 	property string currentThemeId: ""
 	property var availableThemes: []
 	property var activeTokens: ({})
@@ -17,6 +17,19 @@ QtObject {
 	property string error: ""
 
 	readonly property string catalogScriptPath: `${Quickshell.shellDir}/scripts/theme_engine.py`
+	// Blocking on purpose: the answer decides which tokens the first frame is
+	// drawn with, and it is one small local file.
+	readonly property FileView styleManifest: FileView {
+		path: `${Quickshell.shellDir}/.quickshell-style.json`
+		blockLoading: true
+	}
+	readonly property string branchThemeId: {
+		try {
+			return String(JSON.parse(root.styleManifest.text()).theme || "");
+		} catch (error) {
+			return "";
+		}
+	}
 	readonly property var fallbackTokens: ({
 		radiusTiny: 2, radiusSmall: 4, radiusMedium: 7, radiusLarge: 9,
 		fast: 120, normal: 220, popupOpen: 320, popupClose: 220,
@@ -157,11 +170,14 @@ QtObject {
 		return null;
 	}
 
-	// Named theme if the branch has one, otherwise whatever it ships. Falling
-	// back to the first entry is what lets a style branch name its tokens after
-	// itself without this file knowing the name.
+	// The branch's own token set, else the one that was asked for, else whatever
+	// the branch ships. The last fallback is what keeps a branch working that
+	// forgot to name its theme in the manifest.
 	function activate(themeId) {
-		const theme = root.themeById(themeId) || root.availableThemes[0] || null;
+		const theme = root.themeById(root.branchThemeId)
+			|| root.themeById(themeId)
+			|| root.availableThemes[0]
+			|| null;
 		if (!theme) return false;
 		root.currentThemeId = String(theme.id);
 		root.activeTokens = theme.tokens || {};

@@ -58,14 +58,19 @@ running and the switcher checks the previous branch back out.
 A branch becomes a style by carrying `.quickshell-style.json`:
 
 ```json
-{"api": 1, "name": "Your style", "description": "One line for the picker"}
+{"api": 1, "name": "Your style", "theme": "your-style",
+ "description": "One line for the picker"}
 ```
 
 `name` must be unique across branches - it is how the switcher verifies that a
-reload actually landed. The branch also needs the parts every style shares:
-`scripts/`, `Studio.qml`, `BranchStylePicker.qml`, and a `styleSession` IPC
-handler in `shell.qml`, otherwise you can check the branch out but not get back.
-Branches without the manifest are listed in the picker and greyed out.
+reload actually landed. `theme` names the branch's geometry and motion tokens in
+`themes/<theme>/theme.json`; leave it out and the branch gets whichever token set
+sorts first, which is only ever right when it ships exactly one.
+
+The branch also needs the parts every style shares: `scripts/`, `Studio.qml`,
+`BranchStylePicker.qml`, and a `styleSession` IPC handler in `shell.qml`,
+otherwise you can check the branch out but not get back. Branches without the
+manifest are listed in the picker and greyed out.
 
 ## Studio
 
