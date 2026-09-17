@@ -37,6 +37,7 @@ declare -a BG_PIDS=()
 declare -a BG_NAMES=()
 OK_COUNT=0
 FAIL_COUNT=0
+SKIP_COUNT=0
 
 while (($# > 0)); do
 	case "$1" in
@@ -116,6 +117,29 @@ run_bg() {
 	BG_NAMES+=("$name")
 }
 
+# Optional integration: a program that is not installed, or a helper script that
+# was moved away, is not a failure of the theme change. Reporting it as one
+# makes the summary cry wolf on every single wallpaper pick.
+#
+#   run_optional <name> <requirement> <command...>
+#
+# <requirement> is a command name or an absolute path that has to exist.
+run_optional() {
+	local name="$1"
+	local requirement="$2"
+	shift 2
+
+	if [[ "$requirement" == /* ]]; then
+		[[ -e "$requirement" ]] || { log "SKIP $name (missing $requirement)"; SKIP_COUNT=$((SKIP_COUNT + 1)); return 0; }
+	elif ! command -v "$requirement" >/dev/null 2>&1; then
+		log "SKIP $name (no $requirement)"
+		SKIP_COUNT=$((SKIP_COUNT + 1))
+		return 0
+	fi
+
+	run_bg "$name" "$@"
+}
+
 run_detached() {
 	local name="$1"
 	shift
@@ -142,13 +166,15 @@ wait_for_jobs() {
 
 finish_report() {
 	local summary
-	summary="Theme apply finished: ${OK_COUNT} ok, ${FAIL_COUNT} failed"
+	summary="Theme apply finished: ${OK_COUNT} ok"
+	(( SKIP_COUNT > 0 )) && summary+=", ${SKIP_COUNT} skipped"
+	(( FAIL_COUNT > 0 )) && summary+=", ${FAIL_COUNT} failed"
 	log "$summary"
 	log "Log file: $LOG_FILE"
+	# Only a real failure is worth interrupting for. Skipped integrations are in
+	# the log for whoever goes looking.
 	if (( FAIL_COUNT > 0 )); then
 		notify-send "Theme Apply" "$summary"$'\n'"$LOG_FILE"
-	else
-		notify-send "Theme Apply" "$summary"
 	fi
 }
 
@@ -269,13 +295,17 @@ update_pywalfox_theme() {
 }
 
 update_spicetify_theme() {
-	[[ -f "$SPICETIFY_THEME_GENERATOR" ]] || return 0
-
-	run_bg "spicetify theme update" bash -lc '
+	# The colour file is written either way; only re-patching the Spotify client
+	# can fail, and after a Spotify update it always does until the user runs
+	# `spicetify backup apply` themselves. That is not a theme failure.
+	run_optional "spicetify theme update" "$SPICETIFY_THEME_GENERATOR" bash -lc '
 		generator="$1"
 		python "$generator"
 		spicetify config current_theme custom color_scheme Base >/dev/null 2>&1 || true
-		spicetify refresh || spicetify apply
+		spicetify refresh || spicetify apply || {
+			echo "spicetify could not re-patch Spotify; run: spicetify backup apply"
+			exit 0
+		}
 	' _ "$SPICETIFY_THEME_GENERATOR"
 }
 
@@ -574,13 +604,24 @@ reload_quickshell_theme
 update_oomox_preset
 update_papirus_icon_theme
 
-run_bg "obsidian css copy" cp "$HOME/.cache/wal/colors.css" "$HOME/Documents/Obsidian/Remote-Vault/.obsidian/snippets/colors.css"
+run_optional "obsidian css copy" "$HOME/Documents/Obsidian/Remote-Vault/.obsidian/snippets" \
+	cp "$HOME/.cache/wal/colors.css" "$HOME/Documents/Obsidian/Remote-Vault/.obsidian/snippets/colors.css"
 update_spicetify_theme
-run_bg "steam theme update" python "$HOME/Scripts/themes/changer/update_steam_theme.py"
-run_bg "kitty colors update" kitty @ set-colors --all "$HOME/.config/kitty/colors.conf"
+run_optional "steam theme update" "$HOME/Scripts/themes/changer/update_steam_theme.py" \
+	python "$HOME/Scripts/themes/changer/update_steam_theme.py"
+run_optional "kitty colours reload" kitty bash -lc '
+	# `kitty @ set-colors` only reaches a kitty that is listening on a socket,
+	# which is not the case when this runs from a detached theme apply. Every
+	# kitty re-reads its configuration - and with it colors.conf - on SIGUSR1.
+	if [[ -n "${KITTY_LISTEN_ON:-}" ]]; then
+		kitty @ set-colors --all "$HOME/.config/kitty/colors.conf" && exit 0
+	fi
+	pgrep -x kitty >/dev/null 2>&1 || exit 0
+	pkill -USR1 -x kitty
+'
 update_pywalfox_theme "$selected_palette_mode"
-run_bg "telegram theme update" wal-telegram --background="$frame_path"
-run_bg "oomox apply" env no_jokes=1 oomox-cli "$HOME/.config/oomox/colors/wal"
+run_optional "telegram theme update" wal-telegram wal-telegram --background="$frame_path"
+run_optional "oomox apply" oomox-cli env no_jokes=1 oomox-cli "$HOME/.config/oomox/colors/wal"
 
 run_bg "gtk theme bounce" bash -lc '
 	gtktheme="$(gsettings get org.gnome.desktop.interface gtk-theme 2>/dev/null || true)"
@@ -597,8 +638,11 @@ run_detached "swayosd restart" bash -lc '
 	exec swayosd-server -s "$1"
 ' _ "$HOME/.config/swayosd/style.css"
 
-run_bg "gpu colors" env SAT=1.5 "$HOME/Scripts/themes/changer/gpu.sh" "$HOME/.cache/wal/colors.css" sakura color1
-run_bg "openrgb keyboard image" python3 "$SCRIPT_DIR/openrgb_keyboard_image.py" "$frame_path"
+# gpu.sh drives ~/Scripts/lighting/GPUlights.sh; without it the step can only
+# ever exit 127.
+run_optional "gpu colors" "$HOME/Scripts/lighting/GPUlights.sh" \
+	env SAT=1.5 "$HOME/Scripts/themes/changer/gpu.sh" "$HOME/.cache/wal/colors.css" sakura color1
+run_optional "openrgb keyboard image" openrgb python3 "$SCRIPT_DIR/openrgb_keyboard_image.py" "$frame_path"
 
 wait_for_jobs
 finish_report
