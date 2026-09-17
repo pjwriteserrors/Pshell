@@ -89,6 +89,11 @@ Picking a wallpaper runs `scripts/apply_theme_selection.sh`, which paints the
 wallpaper first and then pushes the Wallust palette through every other
 application (GTK, Discord, Spotify, Kitty, Firefox, SDDM, the keyboard…).
 
+Those side integrations are optional: one whose program is not installed, or
+whose helper script has moved away, is logged as *skipped* and does not count as
+a failure. You only get a notification when something that should have worked
+did not; the full account is in `~/.local/state/quickshell-theme/apply-*.log`.
+
 ## The wallpaper stack
 
 Three layers, bottom to top:
