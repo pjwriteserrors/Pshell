@@ -20,6 +20,13 @@ Item {
     readonly property bool centered: true
     signal dismissRequested()
     anchors.fill: parent
+
+    // Every modal answers Escape, whatever is inside it. Unhandled keys travel
+    // up from the focused item, so a search field inside the sheet still gets
+    // first refusal; focus: true only claims the keyboard while nothing inside
+    // wants it.
+    focus: true
+    Keys.onEscapePressed: event => { event.accepted = true; sheet.dismissRequested(); }
     Behavior on reveal { NumberAnimation { duration: sheet.open ? 280 : 160; easing.type: Easing.OutCubic } }
     Rectangle { anchors.fill: parent; color: Atelier.scrim; opacity: sheet.reveal * 0.42 }
     MouseArea { anchors.fill: parent; onClicked: sheet.dismissRequested() }

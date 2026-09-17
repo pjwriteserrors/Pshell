@@ -16,7 +16,7 @@ class BranchStylesTest(unittest.TestCase):
         styles.git(self.repo, "config", "user.name", "Style Test")
         styles.git(self.repo, "config", "user.email", "test@localhost")
         self.write("default")
-        styles.git(self.repo, "switch", "-c", "redesign/atelier")
+        styles.git(self.repo, "switch", "-c", "style/atelier")
         self.write("Atelier")
 
     def write(self, name):
@@ -26,8 +26,8 @@ class BranchStylesTest(unittest.TestCase):
 
     def test_round_trip_and_labels(self):
         self.assertEqual({b["name"] for b in styles.catalog(self.repo)["branches"]}, {"Atelier", "default"})
-        self.assertEqual(styles.checkout(self.repo, "main"), "redesign/atelier")
-        self.assertEqual(styles.checkout(self.repo, "redesign/atelier"), "main")
+        self.assertEqual(styles.checkout(self.repo, "main"), "style/atelier")
+        self.assertEqual(styles.checkout(self.repo, "style/atelier"), "main")
 
     def test_untracked_preserved(self):
         file = self.repo / "precious.txt"

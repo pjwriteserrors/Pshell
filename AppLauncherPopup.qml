@@ -14,10 +14,8 @@ Item {
 
 	signal closeRequested
 	signal launchRequested
-	signal openThemePickerRequested
-	signal openUiThemePickerRequested
-	signal openAnimationPickerRequested
-	signal openStylePresetRequested
+	// "wallpaper", "motion" or "styles"
+	signal openStudioRequested(string page)
 
 	required property color foreground
 	required property color background
@@ -104,10 +102,40 @@ Item {
 	property string fileBrowserDirectoryError: ""
 	property string fileBrowserListTargetDirectory: ""
 	property var commands: [
+		// One command for everything that changes how the desktop looks.
+		// `studio` lands on wallpaper and colours; the two suffixed forms jump
+		// straight to another page of the same window.
 		{
-			id: "style-presets", command: "studio", name: "Studio",
-			description: "Wallpaper, Farben, Animationen, Git-Styles und Sammlung",
-			icon: "applications-graphics-symbolic"
+			id: "studio",
+			command: "studio",
+			name: "Studio",
+			description: "Wallpaper und Farben, Bewegung, Style-Branch, Sammlung",
+			icon: "preferences-desktop-wallpaper-symbolic",
+			studioPage: "wallpaper"
+		},
+		{
+			id: "studio-motion",
+			command: "studio bewegung",
+			name: "Studio: Bewegung",
+			description: "Niri-Fensteranimationen",
+			icon: "preferences-desktop-effects-symbolic",
+			studioPage: "motion"
+		},
+		{
+			id: "studio-style",
+			command: "studio style",
+			name: "Studio: Styles",
+			description: "Das ganze Setup auf einen anderen Style-Branch wechseln",
+			icon: "view-grid-symbolic",
+			studioPage: "styles"
+		},
+		{
+			id: "studio-collection",
+			command: "studio sammlung",
+			name: "Studio: Sammlung",
+			description: "Gespeicherte Kompositionen laden",
+			icon: "view-list-symbolic",
+			studioPage: "collection"
 		},
 		{
 			id: "calculator",
@@ -2111,12 +2139,6 @@ Item {
 
 	function commandIconSource(command) {
 		switch (String(command?.id || "")) {
-		case "style-presets":
-			return "/usr/share/icons/Adwaita/symbolic/categories/applications-graphics-symbolic.svg";
-		case "theme-picker":
-			return "/usr/share/icons/Adwaita/symbolic/legacy/preferences-desktop-wallpaper-symbolic.svg";
-		case "animation-picker":
-			return "/usr/share/icons/Adwaita/symbolic/categories/applications-graphics-symbolic.svg";
 		case "calculator":
 		case "calculator-result":
 			return "/usr/share/icons/Adwaita/symbolic/legacy/accessories-calculator-symbolic.svg";
@@ -2143,21 +2165,12 @@ Item {
 		if (!command) return;
 
 		switch (String(command.id || "")) {
-		case "style-presets":
+		case "studio":
+		case "studio-motion":
+		case "studio-style":
+		case "studio-collection":
 			root.closeRequested();
-			root.openStylePresetRequested();
-			break;
-		case "ui-theme-picker":
-			root.closeRequested();
-			root.openUiThemePickerRequested();
-			break;
-		case "theme-picker":
-			root.closeRequested();
-			root.openThemePickerRequested();
-			break;
-		case "animation-picker":
-			root.closeRequested();
-			root.openAnimationPickerRequested();
+			root.openStudioRequested(String(command.studioPage || "wallpaper"));
 			break;
 		case "calculator":
 			root.setLauncherSearch(">c ");

@@ -7,16 +7,29 @@ import Quickshell.Io
 QtObject {
 	id: root
 
-	property string requestedThemeId: "atelier"
-	property string currentThemeId: "atelier"
+	// The geometry and motion tokens of the checked-out style. They are not a
+	// user choice any more: the style branch names its own token set in
+	// .quickshell-style.json ("theme"), and themes/<id>/theme.json holds it.
+	property string currentThemeId: ""
 	property var availableThemes: []
 	property var activeTokens: ({})
 	property bool ready: false
-	property bool stateLoaded: false
 	property string error: ""
 
-	readonly property string statePath: `${Quickshell.shellDir}/ui-theme.json`
 	readonly property string catalogScriptPath: `${Quickshell.shellDir}/scripts/theme_engine.py`
+	// Blocking on purpose: the answer decides which tokens the first frame is
+	// drawn with, and it is one small local file.
+	readonly property FileView styleManifest: FileView {
+		path: `${Quickshell.shellDir}/.quickshell-style.json`
+		blockLoading: true
+	}
+	readonly property string branchThemeId: {
+		try {
+			return String(JSON.parse(root.styleManifest.text()).theme || "");
+		} catch (error) {
+			return "";
+		}
+	}
 	readonly property var fallbackTokens: ({
 		radiusTiny: 1, radiusSmall: 2, radiusMedium: 3, radiusLarge: 4,
 		fast: 120, normal: 220, popupOpen: 320, popupClose: 220,
@@ -157,17 +170,22 @@ QtObject {
 		return null;
 	}
 
-	function activate(themeId, persist) {
-		const theme = root.themeById("atelier");
+	// The branch's own token set, else the one that was asked for, else whatever
+	// the branch ships. The last fallback is what keeps a branch working that
+	// forgot to name its theme in the manifest.
+	function activate(themeId) {
+		const theme = root.themeById(root.branchThemeId)
+			|| root.themeById(themeId)
+			|| root.availableThemes[0]
+			|| null;
 		if (!theme) return false;
 		root.currentThemeId = String(theme.id);
 		root.activeTokens = theme.tokens || {};
-
 		return true;
 	}
 
 	function selectTheme(themeId) {
-		return root.activate(themeId, true);
+		return root.activate(themeId);
 	}
 
 	function reloadCatalog() {
@@ -176,18 +194,6 @@ QtObject {
 		catalogProcess.running = true;
 	}
 
-	function parseState(raw) {
-		try {
-			root.requestedThemeId = String(JSON.parse(String(raw || "{}"))?.theme || "default");
-		} catch (parseError) {
-			root.requestedThemeId = "default";
-		}
-		if (root.availableThemes.length > 0) root.activate(root.requestedThemeId, false);
-		root.stateLoaded = true;
-	}
-
-
-
 	property Process catalogProcess: Process {
 		stdout: StdioCollector {
 			onStreamFinished: {
@@ -195,7 +201,7 @@ QtObject {
 					root.availableThemes = JSON.parse(String(text || "[]"));
 					root.error = "";
 					root.ready = true;
-					root.activate(root.requestedThemeId, false);
+					root.activate(root.currentThemeId);
 				} catch (parseError) {
 					root.error = String(parseError);
 					root.ready = false;

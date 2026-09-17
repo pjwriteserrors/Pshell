@@ -152,25 +152,17 @@ finish_report() {
 	fi
 }
 
-# Reload every Quickshell configuration that is currently running instead of a
-# single hard-coded path: the style checkout can live in any config directory.
+# Push the fresh palette into the shell this script belongs to. The config
+# directory is this script's repository, whatever style branch is checked out.
 reload_running_shells() {
-	local paths path reloaded=1
-	paths="$(quickshell list --all 2>/dev/null | sed -n 's/^[[:space:]]*Config path:[[:space:]]*//p' \
-		| xargs -r -n1 dirname | sort -u)"
-	if [[ -z "$paths" ]]; then
-		paths="${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/main"
+	local config_dir
+	config_dir="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+	if quickshell ipc -p "$config_dir" call theme reload >/dev/null 2>&1; then
+		echo "reloaded $config_dir"
+		return 0
 	fi
-	while read -r path; do
-		[[ -n "$path" ]] || continue
-		if quickshell --path "$path" ipc call theme reload >/dev/null 2>&1; then
-			echo "reloaded $path"
-			reloaded=0
-		else
-			echo "no theme reload handler in $path"
-		fi
-	done <<<"$paths"
-	return "$reloaded"
+	echo "no running shell at $config_dir"
+	return 1
 }
 
 reload_quickshell_theme() {

@@ -51,7 +51,7 @@ ApplicationWindow {
             id: review
             x: 32; y: 198
             width: parent.width - 64; height: parent.height - y - 48
-            sourceComponent: window.page === 0 ? applications : window.page === 1 ? interfacePage : media
+            sourceComponent: window.page === 0 ? applications : media
         }
         AtelierText {
             anchors.bottom: parent.bottom
@@ -67,17 +67,6 @@ ApplicationWindow {
         id: applications
         AppLauncherPopup {
             previewMode: true
-            foreground: Atelier.paper
-            background: Atelier.ink
-            secondaryBoxColor: Qt.alpha(Atelier.paper, 0.025)
-            secondaryBoxStrongColor: Qt.alpha(Atelier.accent, 0.13)
-            secondaryInsetColor: Atelier.ink
-            barColor: Atelier.accent
-        }
-    }
-    Component {
-        id: interfacePage
-        UiThemePickerPopup {
             foreground: Atelier.paper
             background: Atelier.ink
             secondaryBoxColor: Qt.alpha(Atelier.paper, 0.025)

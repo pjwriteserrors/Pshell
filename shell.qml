@@ -19,24 +19,24 @@ import "components"
 Scope {
 	id: root
 
+	// Named entry point for the rail and for scripted navigation. Everything
+	// that used to be its own picker window is a Studio page now.
 	function navigatePanel(name) {
-        const openers = {
-            launcher: root.openLauncherPopup, calendar: root.openClockPopup,
-            weather: root.openWeatherPopup, notifications: root.openNotifPopup,
-            media: root.openMediaPopup, resources: root.openResourcesPopup,
-            network: root.openNetworkPopup, bluetooth: root.openBluetoothPopup,
-            clipboard: root.openClipboardPopup, power: root.openPowerPopup,
-            wallpaper: root.openThemePickerPopup, interface: root.openUiThemePickerPopup,
-            animations: root.openAnimationPickerPopup,
-            styles: root.openUiThemePickerPopup,
-            collection: function() { root.studioPage = "collection"; root.openStylePresetPopup(); },
-            presets: root.openThemePickerPopup
-        };
-        if (openers[name]) openers[name]();
-    }
+		const openers = {
+			launcher: root.openLauncherPopup, calendar: root.openClockPopup,
+			weather: root.openWeatherPopup, notifications: root.openNotifPopup,
+			media: root.openMediaPopup, resources: root.openResourcesPopup,
+			network: root.openNetworkPopup, bluetooth: root.openBluetoothPopup,
+			clipboard: root.openClipboardPopup, power: root.openPowerPopup,
+			wallpaper: function() { root.openStudio("wallpaper"); },
+			animations: function() { root.openStudio("motion"); },
+			styles: function() { root.openStudio("styles"); },
+			collection: function() { root.openStudio("collection"); }
+		};
+		if (openers[name]) openers[name]();
+	}
 
-    property string studioPage: "wallpaper"
-    property int nextToastId: 0
+	property int nextToastId: 0
 	property var toasts: []
 	property var notificationGroups: []
 	property bool clockPopupOpen: false
@@ -58,14 +58,25 @@ Scope {
 	property bool powerPopupOpen: false
 	property bool powerPopupVisible: false
 	property int powerSelectionIndex: 0
-	property bool themePickerPopupOpen: false
-	property bool themePickerPopupVisible: false
-	property bool uiThemePickerPopupOpen: false
-	property bool uiThemePickerPopupVisible: false
-	property bool animationPickerPopupOpen: false
-	property bool animationPickerPopupVisible: false
-	property bool stylePresetPopupOpen: false
-	property bool stylePresetPopupVisible: false
+	// Name of the style branch this config was loaded from, and whether a
+	// switch to another one is in flight.
+	readonly property string styleId: {
+		try {
+			return String(JSON.parse(styleManifest.text()).name || "");
+		} catch (error) {
+			return "";
+		}
+	}
+	property bool styleSwitching: false
+
+	// Studio: one window for wallpaper and colours, window motion, and the
+	// style branch. It replaced four separate pickers that each had their own
+	// window, own shortcut and own launcher command.
+	property bool studioPopupOpen: false
+	property bool studioPopupVisible: false
+	// Page to show when Studio opens. Wallpaper and colours is the page that
+	// gets used a dozen times a day, so it is the default.
+	property string studioPage: "wallpaper"
 	property string networkStatusType: "offline"
 	property bool launcherPopupOpen: false
 	property bool launcherPopupVisible: false
@@ -538,28 +549,10 @@ Scope {
 			root.powerPopupVisible = false;
 		}
 
-		if (except !== "themePicker") {
-			themePickerPopupCloseTimer.stop();
-			root.themePickerPopupOpen = false;
-			root.themePickerPopupVisible = false;
-		}
-
-		if (except !== "uiThemePicker") {
-			uiThemePickerPopupCloseTimer.stop();
-			root.uiThemePickerPopupOpen = false;
-			root.uiThemePickerPopupVisible = false;
-		}
-
-		if (except !== "animationPicker") {
-			animationPickerPopupCloseTimer.stop();
-			root.animationPickerPopupOpen = false;
-			root.animationPickerPopupVisible = false;
-		}
-
-		if (except !== "stylePreset") {
-			stylePresetPopupCloseTimer.stop();
-			root.stylePresetPopupOpen = false;
-			root.stylePresetPopupVisible = false;
+		if (except !== "studio") {
+			studioPopupCloseTimer.stop();
+			root.studioPopupOpen = false;
+			root.studioPopupVisible = false;
 		}
 
 		if (except !== "launcher") {
@@ -768,49 +761,32 @@ Scope {
 		else root.openPowerPopup(scr);
 	}
 
-	function openThemePickerPopup(scr = null) { root.studioPage = "wallpaper"; root.openStylePresetPopup(scr); }
+	function studioPageOrDefault(page) {
+		const name = String(page || "");
+		return [ "wallpaper", "motion", "styles", "collection" ].indexOf(name) >= 0 ? name : "wallpaper";
+	}
 
-	function closeThemePickerPopup() { root.closeStylePresetPopup(); }
-
-	function toggleThemePickerPopup(scr = null) {
-        if(root.stylePresetPopupOpen && root.studioPage === "wallpaper") root.closeStylePresetPopup();
-        else root.openThemePickerPopup(scr);
-    }
-
-	function openUiThemePickerPopup(scr = null) { root.studioPage = "styles"; root.openStylePresetPopup(scr); }
-
-	function closeUiThemePickerPopup() { root.closeStylePresetPopup(); }
-
-	function toggleUiThemePickerPopup(scr = null) {
-        if(root.stylePresetPopupOpen && root.studioPage === "styles") root.closeStylePresetPopup();
-        else root.openUiThemePickerPopup(scr);
-    }
-
-	function openAnimationPickerPopup(scr = null) { root.studioPage = "motion"; root.openStylePresetPopup(scr); }
-
-	function closeAnimationPickerPopup() { root.closeStylePresetPopup(); }
-
-	function toggleAnimationPickerPopup(scr = null) {
-        if(root.stylePresetPopupOpen && root.studioPage === "motion") root.closeStylePresetPopup();
-        else root.openAnimationPickerPopup(scr);
-    }
-
-	function openStylePresetPopup(scr = null) {
+	function openStudio(page = "", scr = null) {
+		root.studioPage = root.studioPageOrDefault(page);
 		root.openPopupOnFocusedScreen(function() {
-			root.closeOtherPopups("stylePreset");
-			root.stylePresetPopupVisible = true;
-			root.stylePresetPopupOpen = true;
+			root.closeOtherPopups("studio");
+			root.studioPopupVisible = true;
+			root.studioPopupOpen = true;
 		}, scr);
 	}
 
-	function closeStylePresetPopup() {
-		root.stylePresetPopupOpen = false;
-		stylePresetPopupCloseTimer.restart();
+	function closeStudio() {
+		root.studioPopupOpen = false;
+		studioPopupCloseTimer.restart();
 	}
 
-	function toggleStylePresetPopup(scr = null) {
-		if (root.stylePresetPopupOpen) root.closeStylePresetPopup();
-		else root.openStylePresetPopup(scr);
+	// Asking for the page that is already showing closes Studio; asking for a
+	// different one switches to it instead of closing and reopening.
+	function toggleStudio(page = "", scr = null) {
+		const next = root.studioPageOrDefault(page);
+		if (root.studioPopupOpen && root.studioPage === next) root.closeStudio();
+		else if (root.studioPopupOpen) root.studioPage = next;
+		else root.openStudio(next, scr);
 	}
 
 	function openLauncherPopup(scr = null) {
@@ -1197,14 +1173,17 @@ Scope {
 		blockLoading: true
 	}
 
-	// Recreate the wallpaper process from the last Theme Changer selection.
-	// Colours are already persisted in ~/.cache/wal; only the image/video
-	// runtime needs to be started again when the desktop session comes up.
+	// Make sure every output shows the current wallpaper. This runs on every
+	// load, including a style reload, so it must not rebuild a runtime that is
+	// already fine: --ensure paints only outputs that are missing one and
+	// returns in milliseconds when there are none. The full restore at session
+	// start is niri's job (see restore_theme_wallpaper.sh in the autostart).
 	Process {
-		id: restoreThemeWallpaperProcess
+		id: ensureWallpaperProcess
 		command: [
 			"bash",
-			`${Quickshell.shellDir}/scripts/restore_theme_wallpaper.sh`
+			`${Quickshell.shellDir}/scripts/apply_wallpaper_runtime.sh`,
+			"--ensure"
 		]
 		running: true
 	}
@@ -1282,7 +1261,60 @@ Scope {
 		danger: root.danger
 	}
 
-	IpcHandler { target: "styleSession"; function state(): string { return JSON.stringify({locked: quickLock.locked}); } }
+	// Style switching. A style is a Git branch of this repository, and switching
+	// used to mean killing Quickshell, checking the branch out and starting it
+	// again - several seconds of empty desktop. Quickshell can reload its own
+	// config in place instead, which keeps the process, the Wayland connection
+	// and the warm QML cache, so the switch is a blink.
+	//
+	//   state    what is running right now (used to verify a switch landed)
+	//   freeze   stop reacting to files while the checkout writes them
+	//   reload   re-read the config from disk
+	//   thaw     undo freeze, for a switch that was aborted
+	IpcHandler {
+		target: "styleSession"
+
+		function state(): string {
+			return JSON.stringify({
+				locked: quickLock.locked,
+				style: root.styleId,
+				shellDir: Quickshell.shellDir,
+				switching: root.styleSwitching
+			});
+		}
+
+		function freeze(): void {
+			root.styleSwitching = true;
+			Quickshell.watchFiles = false;
+		}
+
+		function thaw(): void {
+			root.styleSwitching = false;
+		}
+
+		function reload(): void {
+			// Never reload from inside the call that is being answered: the
+			// handler itself is part of the tree that is about to be torn down.
+			styleReloadTimer.restart();
+		}
+	}
+
+	Timer {
+		id: styleReloadTimer
+		interval: 1
+		repeat: false
+		onTriggered: Quickshell.reload(true)
+	}
+
+	// Identity of the checked-out style, read once per load. A reload that
+	// fails leaves the previous config running, and then this still reports the
+	// previous style - which is how the switcher notices and rolls back.
+	FileView {
+		id: styleManifest
+		path: `${Quickshell.shellDir}/.quickshell-style.json`
+		blockLoading: true
+	}
+
 
 	// Non-destructive review entry points: open surfaces without invoking actions.
 	IpcHandler {
@@ -1294,11 +1326,10 @@ Scope {
 				media: root.openMediaPopup, resources: root.openResourcesPopup,
 				network: root.openNetworkPopup, bluetooth: root.openBluetoothPopup,
 				clipboard: root.openClipboardPopup, power: root.openPowerPopup,
-				wallpaper: root.openThemePickerPopup, interface: root.openUiThemePickerPopup,
-				animations: root.openAnimationPickerPopup,
-				styles: root.openUiThemePickerPopup,
-				collection: function() { root.studioPage = "collection"; root.openStylePresetPopup(); },
-				presets: root.openThemePickerPopup
+				wallpaper: function() { root.openStudio("wallpaper"); },
+				animations: function() { root.openStudio("motion"); },
+				styles: function() { root.openStudio("styles"); },
+				collection: function() { root.openStudio("collection"); }
 			};
 			if (openers[name]) openers[name]();
 		}
@@ -1450,69 +1481,25 @@ Scope {
 		}
 	}
 
-	IpcHandler {
-		target: "themeTask"
-
-		function show(status: string, title: string, detail: string): void {
-			root.addThemeTaskPopup(status, title, detail);
-		}
-	}
-
+	// The shape/motion token set. It has no window of its own any more - the
+	// style branch a config was checked out from decides it. The calls stay so
+	// scripts can re-read the catalog after a checkout.
 	IpcHandler {
 		target: "uiTheme"
 
-		function open(): void { root.openUiThemePickerPopup(); }
-		function close(): void { root.closeUiThemePickerPopup(); }
-		function toggle(): void { root.toggleUiThemePickerPopup(); }
 		function select(themeId: string): void { ThemeEngine.selectTheme(themeId); }
-		// Complete presets apply Niri once Wallust has generated their new colors.
-		function selectShell(themeId: string): void { ThemeEngine.activate(themeId, true); }
 		function current(): string { return ThemeEngine.currentThemeId; }
 		function reload(): void { ThemeEngine.reloadCatalog(); }
 	}
 
-	IpcHandler {
-		target: "animationPicker"
-
-		function open(): void {
-			root.openAnimationPickerPopup();
-		}
-
-		function close(): void {
-			root.closeAnimationPickerPopup();
-		}
-
-		function toggle(): void {
-			root.toggleAnimationPickerPopup();
-		}
-	}
-
-	IpcHandler {
-		target: "stylePreset"
-
-		function open(): void { root.openStylePresetPopup(); }
-		function close(): void { root.closeStylePresetPopup(); }
-		function toggle(): void { root.toggleStylePresetPopup(); }
-	}
-
+	// One entry point for every look-and-feel window.
+	// `page` is "wallpaper", "motion" or "styles"; anything else means wallpaper.
 	IpcHandler {
 		target: "studio"
 
-		function open(page: string): void {
-			root.studioPage = page && page !== "" ? page : "wallpaper";
-			root.openStylePresetPopup();
-		}
-
-		function close(): void { root.closeStylePresetPopup(); }
-
-		function toggle(page: string): void {
-			const next = page && page !== "" ? page : "wallpaper";
-			if (root.stylePresetPopupOpen && root.studioPage === next) root.closeStylePresetPopup();
-			else {
-				root.studioPage = next;
-				root.openStylePresetPopup();
-			}
-		}
+		function open(page: string): void { root.openStudio(page); }
+		function close(): void { root.closeStudio(); }
+		function toggle(page: string): void { root.toggleStudio(page); }
 	}
 
 	Process {
@@ -1868,14 +1855,6 @@ Scope {
 					onClicked: root.toggleMediaPopup()
 				}
 
-				TypingCatcher {
-					id: typingCatcherIsland
-					height: bar.height
-					foreground: root.foreground
-					surface: root.surface
-					maxWords: 3
-					paused: quickLock.locked
-				}
 			}
 
 			ThemedRectangle {
@@ -2221,38 +2200,11 @@ Scope {
 	}
 
 	Timer {
-		id: themePickerPopupCloseTimer
+		id: studioPopupCloseTimer
 		interval: Motion.largeClose + 50
 		repeat: false
 		onTriggered: {
-			if (!root.themePickerPopupOpen) root.themePickerPopupVisible = false;
-		}
-	}
-
-	Timer {
-		id: uiThemePickerPopupCloseTimer
-		interval: Motion.largeClose + 50
-		repeat: false
-		onTriggered: {
-			if (!root.uiThemePickerPopupOpen) root.uiThemePickerPopupVisible = false;
-		}
-	}
-
-	Timer {
-		id: animationPickerPopupCloseTimer
-		interval: Motion.largeClose + 50
-		repeat: false
-		onTriggered: {
-			if (!root.animationPickerPopupOpen) root.animationPickerPopupVisible = false;
-		}
-	}
-
-	Timer {
-		id: stylePresetPopupCloseTimer
-		interval: Motion.largeClose + 50
-		repeat: false
-		onTriggered: {
-			if (!root.stylePresetPopupOpen) root.stylePresetPopupVisible = false;
+			if (!root.studioPopupOpen) root.studioPopupVisible = false;
 		}
 	}
 
@@ -3405,7 +3357,6 @@ printf 'type=offline\niface=\nip=\n'`
 					}
 	}
 
-
 	PanelWindow {
 		id: launcherPopup
 		screen: root.activePopupScreen
@@ -3459,21 +3410,9 @@ printf 'type=offline\niface=\nip=\n'`
 						barColor: root.accent
 						danger: root.danger
 						onCloseRequested: root.closeLauncherPopup()
-						onOpenThemePickerRequested: {
+						onOpenStudioRequested: page => {
 							root.closeLauncherPopup();
-							root.openThemePickerPopup();
-						}
-						onOpenUiThemePickerRequested: {
-							root.closeLauncherPopup();
-							root.openUiThemePickerPopup();
-						}
-						onOpenAnimationPickerRequested: {
-							root.closeLauncherPopup();
-							root.openAnimationPickerPopup();
-						}
-						onOpenStylePresetRequested: {
-							root.closeLauncherPopup();
-							root.openStylePresetPopup();
+							root.openStudio(page);
 						}
 					}
 				}
@@ -3482,42 +3421,40 @@ printf 'type=offline\niface=\nip=\n'`
 	}
 
 	PanelWindow {
-		id: stylePresetPopup
+		id: studioPopup
 		screen: root.activePopupScreen
 
 		anchors { left: true; right: true; top: true; bottom: true }
 		exclusiveZone: 0
 		color: "transparent"
-		visible: root.stylePresetPopupVisible
+		visible: root.studioPopupVisible
 		WlrLayershell.exclusionMode: ExclusionMode.Ignore
 		WlrLayershell.layer: WlrLayer.Overlay
-		WlrLayershell.keyboardFocus: root.stylePresetPopupVisible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+		WlrLayershell.keyboardFocus: root.studioPopupVisible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
 		ModalSheet {
-			open: root.stylePresetPopupOpen
-            title: "Studio"
-            caption: ""
-            studio: false
-            controller: root
+			open: root.studioPopupOpen
+			title: "Studio"
+			caption: ""
+			studio: false
+			controller: root
 			scrimOpacity: 0.34
 			shadowSurfaceColor: root.secondaryInsetColor
 			sheetWidth: Math.min(1320, parent.width - 48)
-			sheetHeight: Math.min(840, parent.height - 80)
-			onDismissRequested: root.closeStylePresetPopup()
+			sheetHeight: Math.min(860, parent.height - 80)
+			onDismissRequested: root.closeStudio()
 
 			Loader {
 				anchors.fill: parent
-				active: root.stylePresetPopupVisible
+				active: root.studioPopupVisible
 				sourceComponent: Studio {
-                        page: root.studioPage
-                        onPageChanged: root.studioPage = page
-					onCloseRequested: root.closeStylePresetPopup()
+					page: root.studioPage
+					onPageChanged: root.studioPage = page
+					onCloseRequested: root.closeStudio()
 				}
 			}
 		}
 	}
-
-
 
 	PanelWindow {
 		id: powerOverlay

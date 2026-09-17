@@ -12,5 +12,5 @@ configuration after every Quickshell theme change.
 Test the source copy without changing the active display manager:
 
 ```sh
-sddm-greeter-qt6 --test-mode --theme "$HOME/.config/quickshell/atelier/sddm-theme"
+sddm-greeter-qt6 --test-mode --theme "$HOME/.config/quickshell/shell/sddm-theme"
 ```

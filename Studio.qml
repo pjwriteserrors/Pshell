@@ -6,8 +6,53 @@ import Quickshell
 import Quickshell.Io
 import "components"
 
-Item {
+// The one place where the desktop's looks are changed: a wallpaper and its
+// palette, window motion, the style branch, and the compositions you saved.
+//
+// Everything is reachable with the mouse and with the keyboard:
+//   Escape                     close
+//   Ctrl+Tab / Ctrl+Shift+Tab  next / previous page
+//   Ctrl+1 .. Ctrl+4           jump to a page
+//   arrows / Enter             handled by the page itself
+FocusScope {
     id: root
+    readonly property var pages: [
+        {id: "wallpaper", label: "Wallpaper & Farben", hint: "^1"},
+        {id: "motion", label: "Bewegung", hint: "^2"},
+        {id: "styles", label: "Styles", hint: "^3"},
+        {id: "collection", label: "Sammlung", hint: "^4"}
+    ]
+    readonly property int pageIndex: {
+        for (let i = 0; i < root.pages.length; i += 1)
+            if (root.pages[i].id === root.page) return i;
+        return 0;
+    }
+    function showPage(id) { if (id && id !== root.page) root.page = id; }
+    function cyclePage(delta) {
+        root.showPage(root.pages[(root.pageIndex + delta + root.pages.length) % root.pages.length].id);
+    }
+    // The page owns the arrow keys, so it has to hold the focus.
+    function focusPage() {
+        const item = root.page === "motion" ? motion : root.page === "wallpaper" ? landscape : null;
+        if (item) item.forceActiveFocus();
+        else root.forceActiveFocus();
+    }
+    focus: true
+    onPageChanged: Qt.callLater(root.focusPage)
+    // Ctrl-modified on purpose: the pages use plain arrows, Enter and typing.
+    Keys.onPressed: event => {
+        if (!(event.modifiers & Qt.ControlModifier)) return;
+        if (event.key === Qt.Key_Tab) {
+            root.cyclePage(event.modifiers & Qt.ShiftModifier ? -1 : 1);
+            event.accepted = true;
+        } else if (event.key === Qt.Key_Backtab) {
+            root.cyclePage(-1);
+            event.accepted = true;
+        } else if (event.key >= Qt.Key_1 && event.key <= Qt.Key_4) {
+            root.showPage(root.pages[event.key - Qt.Key_1].id);
+            event.accepted = true;
+        }
+    }
     property string page: "wallpaper"
     property var collection: []
     property string message: ""
@@ -60,6 +105,7 @@ Item {
     Component.onCompleted: {
         library.command = ["python3", Quickshell.shellDir + "/scripts/studio_library.py", "list"];
         library.running = true;
+        Qt.callLater(root.focusPage);
     }
     Process {
         id: library
@@ -70,14 +116,20 @@ Item {
         id: tabs
         width: parent.width; spacing: 8
         Repeater {
-            model: [{id:"wallpaper",label:"Wallpaper & Farben"},{id:"motion",label:"Bewegung"},{id:"styles",label:"Styles"},{id:"collection",label:"Sammlung"}]
+            model: root.pages
             delegate: Rectangle {
                 id: tab
                 required property var modelData
+                readonly property bool current: root.page === tab.modelData.id
                 width: Math.min(190, (root.width-24)/4); height: 42; radius: 21
-                color: root.page === modelData.id ? Atelier.selectedSurface : "transparent"
-                AtelierText { anchors.centerIn: parent; text: tab.modelData.label; font.pixelSize: 12; color: root.page === tab.modelData.id ? Atelier.text : Atelier.muted }
-                MouseArea { anchors.fill: parent; onClicked: root.page = tab.modelData.id }
+                color: tab.current ? Atelier.selectedSurface : tabHover.containsMouse ? Atelier.surface : "transparent"
+                Behavior on color { ColorAnimation { duration: 120 } }
+                Row {
+                    anchors.centerIn: parent; spacing: 6
+                    AtelierText { anchors.verticalCenter: parent.verticalCenter; text: tab.modelData.label; font.pixelSize: 12; color: tab.current ? Atelier.text : Atelier.muted }
+                    AtelierText { anchors.verticalCenter: parent.verticalCenter; text: tab.modelData.hint; font.family: Atelier.mono; font.pixelSize: 9; color: Atelier.muted; opacity: tab.current ? 0.8 : 0.45 }
+                }
+                MouseArea { id: tabHover; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.showPage(tab.modelData.id) }
             }
         }
     }

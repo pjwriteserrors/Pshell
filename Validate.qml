@@ -11,7 +11,7 @@ Scope {
             console.error(component.errorString());
             Qt.quit();
         } else if (component.status === Component.Ready) {
-            console.log("ATELIER: complete shell and dependencies compiled successfully");
+            console.log("STYLE: complete shell and dependencies compiled successfully");
             Qt.quit();
         } else {
             console.error("Shell did not compile synchronously");

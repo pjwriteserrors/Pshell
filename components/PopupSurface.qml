@@ -54,6 +54,13 @@ PanelWindow {
     MouseArea { anchors.fill: parent; onClicked: surface.dismissRequested() }
     Rectangle {
         id: folio
+
+        // Escape closes every popup. The handler sits on the card itself, an
+        // ancestor of the content, so an unhandled key from a focused field
+        // inside travels up to here.
+        focus: true
+        Keys.onEscapePressed: event => { event.accepted = true; surface.dismissRequested(); }
+
         readonly property real spine: surface.width >= 900 ? 248 : 176
         width: Math.min(surface.expandedWidth + spine, surface.width - 136)
         height: Math.min(Math.max(surface.expandedHeight + 24, 500), surface.height - 56)

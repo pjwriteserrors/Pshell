@@ -51,7 +51,7 @@ PanelWindow {
             RailButton { icon: "preferences-system-notifications-symbolic"; label: "ACTIVITY"; active: rail.host.notifPopupOpen; onClicked: rail.host.toggleNotifPopup(rail.monitor) }
             RailButton { icon: "edit-paste-symbolic"; label: "COLLECT"; active: rail.host.clipboardPopupOpen; onClicked: rail.host.toggleClipboardPopup(rail.monitor) }
             RailButton { icon: "network-wired-symbolic"; label: "CONNECT"; active: rail.host.networkPopupOpen || rail.host.bluetoothPopupOpen; onClicked: rail.host.toggleNetworkPopup(rail.monitor) }
-            RailButton { icon: "applications-graphics-symbolic"; label: "STUDIO"; active: rail.host.themePickerPopupOpen || rail.host.stylePresetPopupOpen; onClicked: rail.host.toggleStylePresetPopup(rail.monitor) }
+            RailButton { icon: "applications-graphics-symbolic"; label: "STUDIO"; active: rail.host.studioPopupOpen; onClicked: rail.host.toggleStudio("", rail.monitor) }
             Rectangle { width: 28; height: 1; x: 18; color: Atelier.rule }
             Repeater {
                 model: rail.niri.tasksForOutput(String(rail.monitor.name || ""))

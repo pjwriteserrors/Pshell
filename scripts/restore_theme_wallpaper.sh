@@ -57,5 +57,4 @@ fi
 # The persisted media can be unchanged while its compositor-side process is
 # gone after logout/reboot. Force only the runtime recreation; the cached frame
 # and selected media state remain reusable.
-export WALLPAPER_FORCE_RESTART=1
-exec bash "$SCRIPT_DIR/apply_wallpaper_runtime.sh" "$current_media"
+exec bash "$SCRIPT_DIR/apply_wallpaper_runtime.sh" --force "$current_media"

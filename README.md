@@ -1,96 +1,138 @@
-# Atelier — a new desktop composition
+# The shell
 
-Eigenständige Quickshell-Konfiguration unter `~/.config/quickshell/atelier`,
-also gleichrangig neben `~/.config/quickshell/main` statt darin.
-Start mit `quickshell -c atelier`.
-Branch `main` heißt im Style-Picker **default**; `redesign/atelier` heißt **Atelier**.
-Beide Branches enthalten Studio mit der Git-Branch-Auswahl, Details siehe [THEMES.md](THEMES.md).
-Die originale Konfiguration in `~/.config/quickshell/main` ist unverändert.
+This repository **is** the desktop shell. There is one Quickshell configuration
+on this system and this is it:
 
-## Gestaltung
-
-Die zweite Gestaltung ersetzt ausdrücklich auch die bisherige Anordnung:
-
-- 88 px breite Seitenleiste links auf jedem Monitor; keine horizontale Statusbar.
-  Sie folgt der Wallust-Palette: helle Palette, helle Leiste; dunkle Palette, dunkle Leiste.
-- Live-Wallust-Palette mit abgeleiteten Flächen und kontrastkorrigierten Akzenten; C059 als Displayschrift,
-  Adwaita Sans für Bedienung und Adwaita Mono für Metadaten.
-- Kontext-Popups mit typografischer Seitenfläche und eigenständigem Inhalt.
-- Launcher mit Fokusmotiv und Anwendungsmosaik, Rechner als Zahlenblatt,
-  Dateien als Sammlung, Modellverwaltung mit eigener Bibliotheksansicht.
-- Medien als Schallplattenmotiv mit Transport-, Positions-, Lautstärke- und Ausgabewahl.
-- Verbindungen mit Statusmotiv, Live-Kurven und Gerätekacheln.
-- Benachrichtigungen als chronologischer Verlauf; Toasts als separate Wayland-Flächen.
-- Wallpaper als Bildgalerie mit sechs Farbstudien, Animationen mit eigener Bühne,
-  Styles als Auswahl vollständiger lokaler Git-Branches.
-- Sitzung mit vier Aktionskreisen und Bestätigung für Abmelden, Neustart und Ausschalten.
-
-Die Shell-Palette folgt Wallust automatisch. Die alten Form-Styles und kombinierten
-Presets sind entfernt; Wallpaper- und Animationsfunktionen bleiben erhalten. Animationen ohne vorhandenen Vorschaufilm
-zeigen eine ausdrücklich beschriftete Bewegungsskizze, keinen echten Shader-Render.
-
-## Laufendes Setup und Rückkehr
-
-Niri startet diese Konfiguration (`quickshell -c atelier`); welcher Style dabei
-erscheint, entscheidet der ausgecheckte Branch. Der Wechsel zwischen den Styles
-gehört in **Studio → Styles** und nicht in den Autostart.
-
-Niri-Tastenkürzel verwenden `scripts/dispatch_ipc.sh`: solange diese
-Konfiguration läuft, wird sie angesprochen; andernfalls `~/.config/quickshell/main`.
-
-Zur einmaligen Rückkehr zur unversionierten Originalkonfiguration, ausschließlich
-bei entsperrter Sitzung:
-
-```sh
-quickshell kill -c atelier
-# Nach dem Beenden:
-quickshell -c main --daemonize --no-duplicate
+```
+~/.config/quickshell/shell          the config directory and the Git repository
+quickshell -c shell                 how niri starts it (spawn-sh-at-startup)
+quickshell list                     what is running right now
 ```
 
-Kein systemweiter SDDM-Wechsel und kein Remote-Repository.
-Die Quellensicherung ist lokal. Persönliche Chatverläufe und Nutzungsstatistiken
-sind nicht versioniert.
+`quickshell -c <name>` resolves `<name>` to `~/.config/quickshell/<name>`, so the
+directory name and the config name are the same thing. Nothing else under
+`~/.config/quickshell/` is a shell; if a second directory ever shows up there,
+Quickshell would offer it as a second config and shortcuts would become
+ambiguous. Keep it at one.
 
-## Prüfungen
+Everything that talks to the running shell addresses it by path, never by name,
+so it keeps working across style checkouts:
 
-```sh
-bash scripts/review_atelier.sh validate
-bash scripts/audit_desktop.sh capture
-bash scripts/audit_desktop.sh small
-bash scripts/audit_desktop.sh keyboard
-bash scripts/audit_desktop.sh status
-git diff --check
+```
+scripts/dispatch_ipc.sh studio toggle wallpaper
+quickshell ipc -p ~/.config/quickshell/shell call studio toggle wallpaper
 ```
 
-`validate` kompiliert die komplette Shell samt QML-Abhängigkeiten, ohne ihre
-Systemdienste zu starten. `capture` öffnet 14 Hauptansichten auf dem fokussierten
-Monitor. `small` führt denselben Test auf HDMI-A-1 aus und stellt den vorherigen
-Monitorfokus wieder her. `keyboard` prüft Rechner, Dateien, Chat,
-Modellverwaltung und Befehle mit Eingaben, ohne sie auszuführen.
-Screenshots liegen ausschließlich unter `/tmp/atelier-audit`; sie können private
-Desktop- und Zwischenablageinhalte zeigen und gehören deshalb nicht ins Git.
+## Styles are branches
 
-Visuell geprüft wurden große und kleine Desktopansichten (1920×1080 und
-1360×768), Launcher-Untermodi, Medieninformationen, Kalender, Wetter,
-Systemwerte, Verbindungen, Zwischenablage und Testbenachrichtigungen.
-Dabei wurden fehlende Symbole, abgeschnittene Inhalte, ungültige Canvas-Größen,
-eine leere Clipboard-Ansicht und unsichtbare Toasts korrigiert.
+A style is a local Git branch of this repository. Checking one out replaces the
+whole shell - layout, components, motion, the lot.
 
-## Grenzen des Tests
+| Branch | Style |
+| --- | --- |
+| `main` | **Default** - the original layout |
+| `style/atelier` | **Atelier** - vertical rail, editorial surfaces |
+| `style/meridian` | **Meridian** - panel-based, datum-driven |
+| `archive/legacy-main` | not a style; a snapshot of the old unversioned `~/.config/quickshell/main` |
 
-Dies ist kein vollständiger End-to-End-Test aller Systemaktionen.
-Nicht automatisch ausgeführt: Passwort-Anmeldung, Abmelden, Reboot, Ausschalten,
-Bluetooth-Pairing, Netzwerk-Trennung, Modell-Downloads/-Löschung und echte
-KI-Generierung. Das verhindert unbeabsichtigte Änderungen an der Sitzung.
+Switch in **Studio → Style** (`Mod+Shift+S`, then `Ctrl+3`), or from a terminal:
 
-Der Sperrbildschirm verwendet jetzt `WlSessionLock` statt einer bloßen
-Layer-Shell-Überlagerung. Die PAM-Erfolgsprüfung bleibt Voraussetzung für das
-Entsperren. Er wurde kompiliert, aber nicht durch Sperren der Benutzersitzung
-authentifiziert. SDDM-Quellen sind nicht systemweit installiert oder als
-Anmeldedienst geprüft. Die mitgelieferte Caelestia-Shell ist nicht aktiv;
-die Haupt-Shell verwendet daraus nur die Fuzzy-Suche.
+```
+python3 scripts/branch_styles.py catalog          # what is available
+python3 scripts/branch_styles.py switch style/atelier
+```
 
-Bekannte externe Laufzeitmeldungen: ungültige Leerzeilen in zwei
-Desktop-Einträgen und ein fehlendes `battery-080`-Tray-Symbol.
-Beim Live-Neuladen meldet Quickshell gelegentlich verworfene FileView-Operationen.
-Diese Meldungen sind von den behobenen QML-Layoutfehlern zu unterscheiden.
+The switch does **not** restart Quickshell. It stops the config file watcher,
+runs `git switch`, and asks the running shell to reload its configuration. The
+process, its Wayland connection and the warm QML cache all survive, so the
+desktop blinks once instead of going away for several seconds.
+
+What it will never do: stash, reset, force-checkout, pull, or discard anything.
+A dirty tree - tracked changes *or* untracked files - is a hard stop. So are a
+locked session, a detached HEAD, and a branch that is checked out in another
+worktree. If the new branch fails to load, Quickshell keeps the old config
+running and the switcher checks the previous branch back out.
+
+### Adding a style
+
+A branch becomes a style by carrying `.quickshell-style.json`:
+
+```json
+{"api": 1, "name": "Your style", "theme": "your-style",
+ "description": "One line for the picker"}
+```
+
+`name` must be unique across branches - it is how the switcher verifies that a
+reload actually landed. `theme` names the branch's geometry and motion tokens in
+`themes/<theme>/theme.json`; leave it out and the branch gets whichever token set
+sorts first, which is only ever right when it ships exactly one.
+
+The branch also needs the parts every style shares: `scripts/`, `Studio.qml`,
+`BranchStylePicker.qml`, and a `styleSession` IPC handler in `shell.qml`,
+otherwise you can check the branch out but not get back. Branches without the
+manifest are listed in the picker and greyed out.
+
+## Studio
+
+One window for everything that changes how the desktop looks:
+
+| | |
+| --- | --- |
+| `Mod+Shift+S` | open on **Wallpaper & Colours** |
+| `Mod+Shift+M` | open on **Motion** |
+| `>studio` in the launcher | same, plus `>studio motion` and `>studio style` |
+| `Ctrl+1` / `Ctrl+2` / `Ctrl+3` | jump between the pages |
+| `Ctrl+Tab` | next page |
+| `Escape` | close |
+
+Picking a wallpaper runs `scripts/apply_theme_selection.sh`, which paints the
+wallpaper first and then pushes the Wallust palette through every other
+application (GTK, Discord, Spotify, Kitty, Firefox, SDDM, the keyboard…).
+
+## The wallpaper stack
+
+Three layers, bottom to top:
+
+| | |
+| --- | --- |
+| `swaybg` | a still frame. It follows monitor hotplug by itself, so a display is never black while the rest catches up. |
+| `awww` | image wallpapers, with a transition. Paints only the outputs that existed when it ran. |
+| `mpvpaper` | video wallpapers, one instance per output. Same limitation. |
+
+Because the two upper layers only paint what exists at the time, two things keep
+them honest:
+
+- `scripts/apply_wallpaper_runtime.sh --ensure` compares the live output list
+  against what is actually painted and fills in only the difference. It is a
+  no-op (~90 ms) when everything is covered.
+- `scripts/wallpaper_watch.sh` follows niri's event stream and calls that on
+  every output change. niri starts it at login.
+
+`awww` and `mpvpaper` are mutually exclusive - whichever does not belong to the
+current media type gets stopped, because a leftover `mpvpaper` sits on top of the
+image wallpaper and shows black.
+
+Runtime state lives in `~/.local/state/quickshell-theme/`; the log worth reading
+when a monitor stays black is `wallpaper-runtime.log`.
+
+## Layout
+
+```
+shell.qml                 bar, popups, OSD, IPC handlers
+Studio.qml                the look-and-feel window; the three pages below are its tabs
+ThemePickerPopup.qml        wallpaper and colours
+AnimationPickerPopup.qml    niri window animations
+BranchStylePicker.qml       style branches
+AppLauncherPopup.qml      launcher, calculator, files, AI chat
+components/               ThemeEngine (design tokens), PopupSurface, ModalSheet, motion
+scripts/                  theme pipeline, wallpaper runtime, style switching
+themes/<id>/theme.json    geometry and motion tokens for ThemeEngine
+caelestia/                vendored upstream sources
+```
+
+`Validate.qml` compiles the whole shell and its dependencies without opening a
+window - run it before committing:
+
+```
+quickshell -p ./Validate.qml
+```
