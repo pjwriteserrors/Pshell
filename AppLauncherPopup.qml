@@ -121,6 +121,14 @@ Item {
 			studioPage: "motion"
 		},
 		{
+			id: "style",
+			command: "style",
+			name: "Style",
+			description: "Switch the whole shell to another style branch",
+			icon: "view-grid-symbolic",
+			studioPage: "styles"
+		},
+		{
 			id: "studio-style",
 			command: "studio style",
 			name: "Studio: Style",
@@ -2165,6 +2173,7 @@ Item {
 		case "studio":
 		case "studio-motion":
 		case "studio-style":
+		case "style":
 			root.closeRequested();
 			root.openStudioRequested(String(command.studioPage || "wallpaper"));
 			break;

@@ -222,40 +222,49 @@ Scope {
 			Column {
 				id: lockContent
 
-				width: Math.min(420, Math.max(260, lockWindow.width - 48))
+				width: Math.min(440, Math.max(280, lockWindow.width - 48))
 				x: Math.round((lockWindow.width - width) / 2)
 				y: Math.round((lockWindow.height - implicitHeight) / 2)
-				spacing: 18
+				spacing: Bio.s5
 				opacity: lockWindow.reveal
 				scale: 0.98 + 0.02 * lockWindow.reveal
 				transformOrigin: Item.Center
 
-				Text {
+				BioSigil {
+					anchors.horizontalCenter: parent.horizontalCenter
+					width: 92
+					height: 92
+					seed: 13
+					lineColor: Qt.alpha(Bio.bone, 0.8)
+					weight: Bio.rib
+				}
+
+				BioText {
+					role: "specimen"
 					width: parent.width
-					color: root.foreground
 					text: Qt.formatDateTime(root.lockNow, "HH:mm")
 					horizontalAlignment: Text.AlignHCenter
-					font.family: "0xProto Nerd Font"
-					font.pixelSize: 92
-					font.weight: Font.DemiBold
+					font.pixelSize: 84
 				}
 
-				Text {
+				BioText {
+					role: "label"
+					tone: "muted"
 					width: parent.width
-					color: Qt.alpha(root.foreground, 0.76)
-					text: Qt.formatDateTime(root.lockNow, "dddd, dd. MMMM yyyy")
+					text: Qt.formatDateTime(root.lockNow, "dddd, dd MMMM yyyy")
 					horizontalAlignment: Text.AlignHCenter
-					font.pixelSize: 16
-					font.weight: Font.Medium
+					font.pixelSize: 13
 				}
 
-				ThemedRectangle {
+				// The seal. Nothing here shows what was typed — a run of
+				// vertebrae grows along the chamber instead, one per character,
+				// and the ring on the left lights while PAM is thinking.
+				Item {
 					id: passwordBox
 
 					property int inputLength: 0
 					property real inputLevel: 0
 					property real typePulse: 0
-					property real typeSweep: 1
 
 					function syncLength(length) {
 						inputLength = length;
@@ -268,65 +277,100 @@ Scope {
 					}
 
 					width: parent.width
-					height: 56
-					radius: ThemeEngine.radiusMedium
-					color: Qt.tint(root.background, Qt.alpha(root.primary, 0.1))
-					border.width: 1
-					border.color: Qt.alpha(root.primary, 0.35)
-					clip: true
+					height: 58
 
-					ParallelAnimation {
+					SequentialAnimation {
 						id: typePulseAnim
 
-						SequentialAnimation {
-							NumberAnimation {
-								target: passwordBox
-								property: "typePulse"
-								to: 1
-								duration: ThemeEngine.duration(55)
-								easing.type: ThemeEngine.standardEasing
-							}
-
-							NumberAnimation {
-								target: passwordBox
-								property: "typePulse"
-								to: 0
-								duration: ThemeEngine.duration(260)
-								easing.type: ThemeEngine.standardEasing
-							}
+						NumberAnimation {
+							target: passwordBox
+							property: "typePulse"
+							to: 1
+							duration: 60
+							easing.type: Easing.OutCubic
 						}
 
-						SequentialAnimation {
-							PropertyAction {
-								target: passwordBox
-								property: "typeSweep"
-								value: 0
-							}
-
-							NumberAnimation {
-								target: passwordBox
-								property: "typeSweep"
-								to: 1
-								duration: ThemeEngine.duration(320)
-								easing.type: ThemeEngine.standardEasing
-							}
+						NumberAnimation {
+							target: passwordBox
+							property: "typePulse"
+							to: 0
+							duration: 280
+							easing.type: Easing.OutCubic
 						}
 					}
 
-					Row {
+					BioSurface {
 						anchors.fill: parent
-						anchors.leftMargin: 16
-						anchors.rightMargin: 16
-						spacing: 12
+						variant: "plate"
+						washTop: Bio.membrane
+						washBottom: Bio.membraneDeep
+						lineColor: root.authState === "failed" || root.authState === "max"
+							? Qt.alpha(Bio.necrosis, 0.6)
+							: Bio.boneDim
+						liveColor: root.authState === "failed" || root.authState === "max"
+							? Bio.necrosis
+							: Bio.organ
+						haloStrength: 0.20
+						intensity: Math.max(passwordBox.typePulse,
+							passwordPam.active ? 0.8 : (passwordBox.inputLength > 0 ? 0.45 : 0))
+						padding: Bio.s4
 
-						QQCImpl.IconImage {
+						BioRing {
+							id: sealRing
+							anchors.left: parent.left
 							anchors.verticalCenter: parent.verticalCenter
-							width: 18
-							height: 18
-							source: "/usr/share/icons/Adwaita/symbolic/status/system-lock-screen-symbolic.svg"
-							sourceSize: Qt.size(width, height)
-							color: root.foreground
-							opacity: passwordPam.active ? 0.42 : (passwordBox.inputLength > 0 ? 0.92 : 0.78)
+							width: 30
+							height: 30
+							seed: 2
+							lineColor: Bio.boneFaint
+							liveColor: passwordPam.active ? Bio.organ : Bio.bone
+							intensity: passwordPam.active ? 1 : passwordBox.typePulse
+
+							QQCImpl.IconImage {
+								anchors.centerIn: parent
+								width: 14
+								height: 14
+								source: "/usr/share/icons/Adwaita/symbolic/status/system-lock-screen-symbolic.svg"
+								sourceSize: Qt.size(width, height)
+								color: passwordPam.active ? Bio.organ : Bio.text
+							}
+						}
+
+						BioText {
+							anchors.left: sealRing.right
+							anchors.leftMargin: Bio.s4
+							anchors.verticalCenter: parent.verticalCenter
+							role: "label"
+							tone: "faint"
+							text: passwordPam.active ? "Testing" : "Sealed"
+							visible: passwordBox.inputLength === 0 || passwordPam.active
+						}
+
+						// One vertebra per character, growing away from the ring.
+						Row {
+							id: inputTrace
+							anchors.left: sealRing.right
+							anchors.leftMargin: Bio.s4
+							anchors.right: parent.right
+							anchors.verticalCenter: parent.verticalCenter
+							spacing: Bio.s2
+							visible: passwordBox.inputLength > 0 && !passwordPam.active
+
+							Repeater {
+								model: Math.min(passwordBox.inputLength, 16)
+
+								delegate: Rectangle {
+									required property int index
+
+									anchors.verticalCenter: parent?.verticalCenter ?? undefined
+									width: Bio.nodule * 2
+									height: Bio.nodule * 2 * (index === passwordBox.inputLength - 1
+										? 1 + passwordBox.typePulse * 0.5 : 1)
+									radius: width / 2
+									color: Bio.organ
+									opacity: 0.55 + 0.45 * (index / Math.max(1, passwordBox.inputLength))
+								}
+							}
 						}
 
 						TextInput {
@@ -334,8 +378,7 @@ Scope {
 
 							property int previousTextLength: 0
 
-							width: parent.width - 30
-							height: parent.height
+							anchors.fill: parent
 							verticalAlignment: TextInput.AlignVCenter
 							horizontalAlignment: TextInput.AlignHCenter
 							color: "transparent"
@@ -350,7 +393,6 @@ Scope {
 							enabled: !passwordPam.active && root.authState !== "max"
 							focus: root.locked
 							font.pixelSize: 18
-							font.weight: Font.Medium
 							clip: true
 
 							onTextChanged: {
@@ -390,67 +432,6 @@ Scope {
 								target: root
 							}
 
-							Text {
-								anchors.centerIn: parent
-								color: Qt.alpha(root.foreground, 0.64)
-								text: "Password"
-								font.pixelSize: 14
-								font.weight: Font.Medium
-								visible: passwordInput.text.length === 0 && !passwordPam.active
-							}
-
-							Item {
-								id: inputTrace
-
-								anchors.centerIn: parent
-								width: Math.min(parent.width - 24, 236)
-								height: 18
-								visible: passwordInput.text.length > 0
-								opacity: 0.68 + passwordBox.typePulse * 0.24
-								clip: true
-
-								ThemedRectangle {
-									anchors.centerIn: parent
-									width: parent.width
-									height: 4
-									radius: ThemeEngine.radiusMedium
-									color: Qt.alpha(root.foreground, 0.18)
-								}
-
-								ThemedRectangle {
-									anchors.verticalCenter: parent.verticalCenter
-									anchors.left: parent.left
-									width: parent.width * passwordBox.inputLevel
-									height: 4
-									radius: ThemeEngine.radiusMedium
-									color: Qt.alpha(root.foreground, 0.72 + passwordBox.typePulse * 0.18)
-
-									Behavior on width {
-										NumberAnimation {
-											duration: ThemeEngine.duration(150)
-											easing.type: ThemeEngine.standardEasing
-										}
-									}
-								}
-
-								ThemedRectangle {
-									width: Math.max(26, parent.width * 0.34)
-									height: 10
-									radius: ThemeEngine.radiusMedium
-									x: (parent.width + width) * passwordBox.typeSweep - width
-									y: Math.round((parent.height - height) / 2)
-									color: Qt.alpha(root.foreground, 0.24)
-									opacity: passwordBox.typePulse
-								}
-
-								Behavior on opacity {
-									NumberAnimation {
-										duration: ThemeEngine.duration(120)
-										easing.type: ThemeEngine.standardEasing
-									}
-								}
-							}
-
 							MouseArea {
 								anchors.fill: parent
 								acceptedButtons: Qt.NoButton
@@ -461,25 +442,18 @@ Scope {
 					}
 				}
 
-				Text {
+				BioText {
+					role: "label"
 					width: parent.width
 					height: 22
-					color: root.authState === "checking" ? Qt.alpha(root.foreground, 0.72) : root.danger
+					tone: root.authState === "checking" ? "muted" : "alert"
 					text: root.statusText
 					horizontalAlignment: Text.AlignHCenter
 					verticalAlignment: Text.AlignVCenter
-					font.pixelSize: 13
-					font.weight: Font.Medium
 					opacity: text === "" ? 0 : 1
 
 					Behavior on opacity {
-						Anim {
-							duration: Motion.fast
-						}
-					}
-
-					Behavior on color {
-						CAnim {}
+						NumberAnimation { duration: Bio.grow }
 					}
 				}
 			}

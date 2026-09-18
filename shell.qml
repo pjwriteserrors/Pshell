@@ -2259,7 +2259,8 @@ Scope {
 								anchors.verticalCenter: parent.verticalCenter
 								spacing: 8
 
-								Text {
+								BioText {
+									role: "heading"
 									anchors.verticalCenter: parent.verticalCenter
 									color: foreground
 									font.pixelSize: 15
@@ -2274,7 +2275,8 @@ Scope {
 									radius: ThemeEngine.radiusMedium
 									color: Qt.alpha(root.primary, 0.3)
 
-									Text {
+									BioText {
+										role: "label"
 										id: clipCountLabel
 										anchors.centerIn: parent
 										color: foreground
@@ -2294,7 +2296,8 @@ Scope {
 								radius: ThemeEngine.radiusMedium
 								color: root.secondaryBoxColor
 
-								Text {
+								BioText {
+									role: "label"
 									id: clipWipeLabel
 									anchors.centerIn: parent
 									color: foreground
@@ -2372,7 +2375,8 @@ Scope {
 							width: parent.width
 							height: 330
 
-							Text {
+							BioText {
+								role: "body"
 								anchors.centerIn: parent
 								visible: clipboardPopupContent.filteredEntries.length === 0
 								color: Qt.alpha(foreground, 0.5)
@@ -2463,7 +2467,8 @@ Scope {
 										radius: ThemeEngine.radiusLarge
 										color: Qt.alpha(root.secondary, 0.35)
 
-										Text {
+										BioText {
+											role: "label"
 											anchors.centerIn: parent
 											color: foreground
 											font.pixelSize: 8
@@ -2497,7 +2502,8 @@ Scope {
 										}
 									}
 
-									Text {
+									BioText {
+										role: "caption"
 										visible: !clipEntry.modelData.isImage
 										anchors.left: parent.left
 										anchors.leftMargin: 14
@@ -2532,7 +2538,8 @@ Scope {
 											CAnim {}
 										}
 
-										Text {
+										BioText {
+											role: "caption"
 											anchors.centerIn: parent
 											color: foreground
 											font.pixelSize: 11
@@ -2877,7 +2884,8 @@ done`
 							width: parent.width
 							height: 30
 
-							Text {
+							BioText {
+								role: "heading"
 								anchors.left: parent.left
 								anchors.verticalCenter: parent.verticalCenter
 								color: foreground
@@ -2963,7 +2971,8 @@ done`
 									}
 								}
 
-								Text {
+								BioText {
+									role: "body"
 									anchors.verticalCenter: parent.verticalCenter
 									color: foreground
 									font.pixelSize: 12
@@ -2996,7 +3005,8 @@ done`
 									color: Qt.alpha(root.foreground, 0.35)
 								}
 
-								Text {
+								BioText {
+									role: "body"
 									anchors.horizontalCenter: parent.horizontalCenter
 									color: Qt.alpha(foreground, 0.5)
 									font.pixelSize: 12
@@ -3109,7 +3119,8 @@ done`
 											spacing: 2
 											width: parent.width - 42
 
-											Text {
+											BioText {
+												role: "body"
 												width: parent.width
 												color: foreground
 												font.pixelSize: 12
@@ -3118,7 +3129,8 @@ done`
 												text: btDevice.modelData.name
 											}
 
-											Text {
+											BioText {
+												role: "label"
 												width: parent.width
 												color: Qt.alpha(foreground, 0.58)
 												font.pixelSize: 10
@@ -3140,7 +3152,8 @@ done`
 										radius: ThemeEngine.radiusMedium
 										color: Qt.alpha(root.secondary, 0.3)
 
-										Text {
+										BioText {
+											role: "label"
 											id: batteryText
 											anchors.centerIn: parent
 											color: foreground
@@ -3405,7 +3418,8 @@ printf 'type=offline\niface=\nip=\n'`
 									anchors.verticalCenter: parent.verticalCenter
 									spacing: 1
 
-									Text {
+									BioText {
+										role: "bodyStrong"
 										color: foreground
 										font.pixelSize: 13
 										font.weight: Font.DemiBold
@@ -3414,7 +3428,8 @@ printf 'type=offline\niface=\nip=\n'`
 											: (networkPopup.currentType === "ethernet" ? "Ethernet" : "Wi-Fi")
 									}
 
-									Text {
+									BioText {
+										role: "label"
 										color: Qt.alpha(foreground, 0.55)
 										font.pixelSize: 10
 										text: networkPopup.currentInterface !== ""
@@ -3433,7 +3448,8 @@ printf 'type=offline\niface=\nip=\n'`
 								radius: ThemeEngine.radiusMedium
 								color: Qt.alpha(root.danger, 0.16)
 
-								Text {
+								BioText {
+									role: "label"
 									id: disconnectLabel
 									anchors.centerIn: parent
 									color: foreground
@@ -3465,7 +3481,8 @@ printf 'type=offline\niface=\nip=\n'`
 									width: parent.width
 									height: 22
 
-									Text {
+									BioText {
+										role: "body"
 										anchors.left: parent.left
 										anchors.verticalCenter: parent.verticalCenter
 										color: foreground
@@ -3474,7 +3491,8 @@ printf 'type=offline\niface=\nip=\n'`
 										text: "Upload"
 									}
 
-									Text {
+									BioText {
+										role: "body"
 										anchors.right: parent.right
 										anchors.verticalCenter: parent.verticalCenter
 										color: foreground
@@ -3562,7 +3580,8 @@ printf 'type=offline\niface=\nip=\n'`
 									width: parent.width
 									height: 16
 
-									Text {
+									BioText {
+										role: "body"
 										anchors.left: parent.left
 										anchors.verticalCenter: parent.verticalCenter
 										color: foreground
@@ -3571,7 +3590,8 @@ printf 'type=offline\niface=\nip=\n'`
 										text: "Download"
 									}
 
-									Text {
+									BioText {
+										role: "body"
 										anchors.right: parent.right
 										anchors.verticalCenter: parent.verticalCenter
 										color: foreground
@@ -4411,7 +4431,8 @@ printf 'type=offline\niface=\nip=\n'`
 								fillMode: Image.PreserveAspectFit
 							}
 
-							Text {
+							BioText {
+								role: "body"
 								anchors.verticalCenter: parent.verticalCenter
 								width: parent.width - x - (menuEntry.modelData.hasChildren ? 18 : 0)
 								text: menuEntry.modelData.text
@@ -4420,7 +4441,8 @@ printf 'type=offline\niface=\nip=\n'`
 								elide: Text.ElideRight
 							}
 
-							Text {
+							BioText {
+								role: "heading"
 								anchors.verticalCenter: parent.verticalCenter
 								visible: menuEntry.modelData.hasChildren
 								text: "›"
@@ -4450,7 +4472,8 @@ printf 'type=offline\niface=\nip=\n'`
 						onClicked: trayMenuStackLoader.item.pop()
 					}
 
-					Text {
+					BioText {
+						role: "body"
 						anchors.centerIn: parent
 						text: "Back"
 						color: foreground

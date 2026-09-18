@@ -206,8 +206,17 @@ Item {
 				ClippingRectangle {
 					width: 78
 					height: 78
-					radius: ThemeEngine.radiusMedium
-					color: root.secondaryBoxColor
+					radius: 3
+					color: Bio.cavity
+
+					BioFrame {
+						anchors.fill: parent
+						z: 2
+						variant: "plate"
+						weight: Bio.ribThin
+						lineColor: Bio.boneDim
+						liveColor: Bio.organ
+					}
 
 					Image {
 						anchors.fill: parent
@@ -235,29 +244,17 @@ Item {
 					spacing: 2
 					width: hero.width - 78 - 12
 
-					Text {
+					BioText {
 						width: parent.width
-						color: root.foreground
+						role: "title"
 						font.pixelSize: 17
-						font.weight: Font.DemiBold
-						elide: Text.ElideRight
 						text: root.titleText
-
-						// soft backdrop so the title stays readable over the bars
-						ThemedRectangle {
-							anchors.fill: parent
-							anchors.margins: -4
-							z: -1
-							radius: ThemeEngine.radiusLarge
-							color: Qt.alpha(root.secondaryBoxColor, 0.001)
-						}
 					}
 
-					Text {
+					BioText {
 						width: parent.width
-						color: Qt.alpha(root.foreground, 0.7)
-						font.pixelSize: 12
-						elide: Text.ElideRight
+						role: "body"
+						tone: "muted"
 						text: root.artistText
 					}
 				}
@@ -270,60 +267,38 @@ Item {
 			height: 26
 			visible: root.hasPlayer
 
-			Text {
+			BioText {
 				anchors.left: parent.left
 				anchors.verticalCenter: parent.verticalCenter
-				color: Qt.alpha(root.foreground, 0.65)
+				role: "mono"
+				tone: "faint"
 				font.pixelSize: 10
-				font.weight: Font.Medium
 				text: root.formatTime(root.trackPosition)
 			}
 
-			Text {
+			BioText {
 				anchors.right: parent.right
 				anchors.verticalCenter: parent.verticalCenter
-				color: Qt.alpha(root.foreground, 0.65)
+				role: "mono"
+				tone: "faint"
 				font.pixelSize: 10
-				font.weight: Font.Medium
 				text: root.hasProgress ? root.formatTime(root.trackLength) : "--"
 			}
 
-			ThemedRectangle {
+			Item {
 				id: seekTrack
-				themeStyle: "inset"
 				anchors.left: parent.left
 				anchors.right: parent.right
 				anchors.leftMargin: 42
 				anchors.rightMargin: 42
 				anchors.verticalCenter: parent.verticalCenter
-				height: 6
-				radius: ThemeEngine.radiusTiny
-				color: root.secondaryInsetColor
+				height: 10
 
-				ThemedRectangle {
-					themeStyle: "flat"
-					width: parent.width * (root.hasProgress ? root.trackPosition / root.trackLength : 0)
-					height: parent.height
-					radius: parent.radius
-					color: root.primary
-
-					Behavior on width {
-						Anim {
-							duration: Motion.fast
-						}
-					}
-
-					ThemedRectangle {
-						themeStyle: "raised"
-						visible: root.hasProgress
-						width: 12
-						height: 12
-						radius: ThemeEngine.radiusSmall
-						anchors.verticalCenter: parent.verticalCenter
-						anchors.right: parent.right
-						anchors.rightMargin: -6
-						color: root.foreground
-					}
+				BioMeter {
+					anchors.fill: parent
+					value: root.hasProgress ? root.trackPosition / root.trackLength : 0
+					fillColor: Bio.organ
+					trackColor: Bio.boneGhost
 				}
 
 				MouseArea {
@@ -345,76 +320,41 @@ Item {
 			anchors.horizontalCenter: parent.horizontalCenter
 			spacing: 18
 
-			ThemedRectangle {
-				width: 42
-				height: 42
-				radius: ThemeEngine.radiusMedium
-				color: root.secondaryBoxColor
+			BioNode {
 				anchors.verticalCenter: parent.verticalCenter
-
-				QQCImpl.IconImage {
-					anchors.centerIn: parent
-					width: 16
-					height: 16
-					source: "/usr/share/icons/Adwaita/symbolic/actions/media-skip-backward-symbolic.svg"
-					sourceSize: Qt.size(width, height)
-					color: root.foreground
-				}
-
-				HoverLayer {
-					tint: root.primary
-					onClicked: root.player?.previous()
-				}
+				size: 38
+				seed: 0
+				iconSource: "/usr/share/icons/Adwaita/symbolic/actions/media-skip-backward-symbolic.svg"
+				onClicked: root.player?.previous()
 			}
 
-			ThemedRectangle {
-				width: 56
-				height: 56
-				radius: ThemeEngine.radiusMedium
-				color: root.primary
+			// The heart: the one control in the chamber that is bigger than
+			// the others, and the only one that changes size when it beats.
+			BioNode {
+				anchors.verticalCenter: parent.verticalCenter
+				size: 54
+				seed: 2
+				lit: root.playing
+				iconSize: 20
+				iconColor: root.playing ? Bio.organ : Bio.text
+				iconSource: root.playing
+					? "/usr/share/icons/Adwaita/symbolic/actions/media-playback-pause-symbolic.svg"
+					: "/usr/share/icons/Adwaita/symbolic/actions/media-playback-start-symbolic.svg"
+				onClicked: root.player?.togglePlaying()
+
 				scale: root.playing ? 1 : 0.94
 
 				Behavior on scale {
-					SpatialAnim {}
-				}
-
-				QQCImpl.IconImage {
-					anchors.centerIn: parent
-					width: 22
-					height: 22
-					source: root.playing
-						? "/usr/share/icons/Adwaita/symbolic/actions/media-playback-pause-symbolic.svg"
-						: "/usr/share/icons/Adwaita/symbolic/actions/media-playback-start-symbolic.svg"
-					sourceSize: Qt.size(width, height)
-					color: root.onPrimaryColor
-				}
-
-				HoverLayer {
-					tint: root.onPrimaryColor
-					onClicked: root.player?.togglePlaying()
+					NumberAnimation { duration: Bio.grow; easing.type: Easing.OutBack }
 				}
 			}
 
-			ThemedRectangle {
-				width: 42
-				height: 42
-				radius: ThemeEngine.radiusMedium
-				color: root.secondaryBoxColor
+			BioNode {
 				anchors.verticalCenter: parent.verticalCenter
-
-				QQCImpl.IconImage {
-					anchors.centerIn: parent
-					width: 16
-					height: 16
-					source: "/usr/share/icons/Adwaita/symbolic/actions/media-skip-forward-symbolic.svg"
-					sourceSize: Qt.size(width, height)
-					color: root.foreground
-				}
-
-				HoverLayer {
-					tint: root.primary
-					onClicked: root.player?.next()
-				}
+				size: 38
+				seed: 3
+				iconSource: "/usr/share/icons/Adwaita/symbolic/actions/media-skip-forward-symbolic.svg"
+				onClicked: root.player?.next()
 			}
 		}
 
@@ -423,79 +363,40 @@ Item {
 			width: parent.width
 			height: 40
 
-			ThemedRectangle {
+			BioNode {
 				id: muteButton
-				width: 34
-				height: 34
-				radius: ThemeEngine.radiusMedium
+				size: 32
+				seed: 1
 				anchors.left: parent.left
 				anchors.verticalCenter: parent.verticalCenter
-				color: root.sinkMuted ? Qt.alpha(root.accent, 0.35) : root.secondaryBoxColor
+				lit: root.sinkMuted
+				liveColor: root.sinkMuted ? Bio.necrosis : Bio.organ
+				iconColor: root.sinkMuted ? Bio.necrosis : Bio.text
+				onClicked: root.toggleSinkMute()
 
-				Behavior on color {
-					CAnim {}
-				}
-
-				QQCImpl.IconImage {
-					anchors.centerIn: parent
-					width: 15
-					height: 15
-					source: root.sinkMuted
+				iconSource: root.sinkMuted
 						? "/usr/share/icons/Adwaita/symbolic/status/audio-volume-muted-symbolic.svg"
 						: (root.sinkVolume < 0.34
 							? "/usr/share/icons/Adwaita/symbolic/status/audio-volume-low-symbolic.svg"
 							: (root.sinkVolume < 0.67
 								? "/usr/share/icons/Adwaita/symbolic/status/audio-volume-medium-symbolic.svg"
 								: "/usr/share/icons/Adwaita/symbolic/status/audio-volume-high-symbolic.svg"))
-					sourceSize: Qt.size(width, height)
-					color: root.foreground
-				}
-
-				HoverLayer {
-					tint: root.foreground
-					onClicked: root.toggleSinkMute()
-				}
 			}
 
-			ThemedRectangle {
+			Item {
 				id: volumeTrack
-				themeStyle: "inset"
 				anchors.left: muteButton.right
 				anchors.leftMargin: 12
 				anchors.right: volumeLabel.left
 				anchors.rightMargin: 12
 				anchors.verticalCenter: parent.verticalCenter
-				height: 8
-				radius: ThemeEngine.radiusSmall
-				color: root.secondaryInsetColor
+				height: 12
 
-				ThemedRectangle {
-					themeStyle: "flat"
-					width: parent.width * Math.min(1, root.sinkVolume)
-					height: parent.height
-					radius: parent.radius
-					color: root.sinkMuted ? Qt.alpha(root.foreground, 0.3) : root.primary
-
-					Behavior on width {
-						Anim {
-							duration: Motion.fast
-						}
-					}
-
-					Behavior on color {
-						CAnim {}
-					}
-
-					ThemedRectangle {
-						themeStyle: "raised"
-						width: 14
-						height: 14
-						radius: height / 2
-						anchors.verticalCenter: parent.verticalCenter
-						anchors.right: parent.right
-						anchors.rightMargin: -7
-						color: root.foreground
-					}
+				BioMeter {
+					anchors.fill: parent
+					value: Math.min(1, root.sinkVolume)
+					fillColor: root.sinkMuted ? Bio.boneDim : Bio.organ
+					trackColor: Bio.boneGhost
 				}
 
 				MouseArea {
@@ -509,13 +410,14 @@ Item {
 				}
 			}
 
-			Text {
+			BioText {
 				id: volumeLabel
 				anchors.right: parent.right
 				anchors.verticalCenter: parent.verticalCenter
 				width: 34
 				horizontalAlignment: Text.AlignRight
-				color: Qt.alpha(root.foreground, 0.75)
+				role: "mono"
+				tone: "muted"
 				font.pixelSize: 11
 				font.weight: Font.DemiBold
 				text: root.sinkMuted ? "mute" : `${Math.round(root.sinkVolume * 100)}%`
@@ -528,68 +430,45 @@ Item {
 			spacing: 6
 			visible: root.sinks.length > 1
 
-			Text {
-				color: Qt.alpha(root.primary, 0.95)
-				font.pixelSize: 9
-				font.weight: Font.DemiBold
-				font.letterSpacing: 1
-				text: "OUTPUT"
+			BioText {
+				role: "label"
+				tone: "muted"
+				text: "Outflow"
 			}
 
 			Repeater {
 				model: root.sinks
 
-				delegate: ThemedRectangle {
+				delegate: BioRow {
 					id: sinkRow
 					required property var modelData
 
 					width: parent.width
-					height: 36
-					radius: ThemeEngine.radiusMedium
-					color: modelData.active ? Qt.alpha(root.primary, 0.24) : root.secondaryBoxColor
-					border.width: modelData.active ? 1 : 0
-					border.color: Qt.alpha(root.primary, 0.5)
-
-					Behavior on color {
-						CAnim {}
-					}
+					implicitHeight: 32
+					selected: modelData.active
+					onClicked: root.setDefaultSink(sinkRow.modelData.name)
 
 					Row {
 						anchors.left: parent.left
-						anchors.leftMargin: 12
 						anchors.right: parent.right
-						anchors.rightMargin: 12
 						anchors.verticalCenter: parent.verticalCenter
-						spacing: 10
+						spacing: Bio.s3
 
-						ThemedRectangle {
-							width: 10
-							height: 10
-							radius: height / 2
+						Rectangle {
 							anchors.verticalCenter: parent.verticalCenter
-							color: sinkRow.modelData.active ? root.primary : "transparent"
-							border.width: 1.4
-							border.color: sinkRow.modelData.active ? root.primary : Qt.alpha(root.foreground, 0.4)
-
-							Behavior on color {
-								CAnim {}
-							}
+							width: Bio.nodule * 2
+							height: Bio.nodule * 2
+							radius: width / 2
+							color: sinkRow.modelData.active ? Bio.organ : Bio.boneFaint
 						}
 
-						Text {
+						BioText {
 							anchors.verticalCenter: parent.verticalCenter
 							width: parent.width - 20
-							color: root.foreground
-							font.pixelSize: 11
-							font.weight: sinkRow.modelData.active ? Font.DemiBold : Font.Normal
-							elide: Text.ElideRight
+							role: sinkRow.modelData.active ? "bodyStrong" : "body"
+							tone: sinkRow.modelData.active ? "default" : "muted"
 							text: root.shortSinkName(sinkRow.modelData.description)
 						}
-					}
-
-					HoverLayer {
-						tint: root.foreground
-						onClicked: root.setDefaultSink(sinkRow.modelData.name)
 					}
 				}
 			}
@@ -604,33 +483,15 @@ Item {
 			Repeater {
 				model: root.players
 
-				delegate: ThemedRectangle {
+				delegate: BioButton {
 					id: playerChip
 					required property var modelData
 					readonly property bool active: modelData === root.player
 
-					width: chipLabel.implicitWidth + 26
-					height: 28
-					radius: ThemeEngine.radiusMedium
-					color: active ? root.primary : root.secondaryBoxColor
-
-					Behavior on color {
-						CAnim {}
-					}
-
-					Text {
-						id: chipLabel
-						anchors.centerIn: parent
-						color: playerChip.active ? root.onPrimaryColor : root.foreground
-						font.pixelSize: 11
-						font.weight: Font.Medium
-						text: playerChip.modelData?.identity || "Player"
-					}
-
-					HoverLayer {
-						tint: playerChip.active ? root.onPrimaryColor : root.foreground
-						onClicked: root.selectPlayer(playerChip.modelData)
-					}
+					implicitHeight: 26
+					lit: playerChip.active
+					text: playerChip.modelData?.identity || "Player"
+					onClicked: root.selectPlayer(playerChip.modelData)
 				}
 			}
 		}

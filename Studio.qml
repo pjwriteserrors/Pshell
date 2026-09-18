@@ -139,7 +139,8 @@ FocusScope {
 					anchors.centerIn: parent
 					spacing: 8
 
-					Text {
+					BioText {
+						role: "body"
 						anchors.verticalCenter: parent.verticalCenter
 						text: tab.modelData.label
 						color: root.foreground
@@ -147,7 +148,8 @@ FocusScope {
 						font.pixelSize: 13
 					}
 
-					Text {
+					BioText {
+						role: "label"
 						anchors.verticalCenter: parent.verticalCenter
 						text: tab.modelData.hint
 						color: root.foreground

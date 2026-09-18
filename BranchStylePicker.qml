@@ -123,14 +123,16 @@ Item {
 		anchors.margins: 6
 		spacing: 14
 
-		Text {
+		BioText {
+			role: "title"
 			text: "Style"
 			color: root.foreground
 			font.family: "C059"
 			font.pixelSize: 34
 		}
 
-		Text {
+		BioText {
+			role: "body"
 			width: parent.width
 			text: "One branch, one complete desktop.   Current: " + root.currentBranch
 			color: root.foreground
@@ -185,7 +187,8 @@ Item {
 						anchors.margins: 22
 						spacing: 8
 
-						Text {
+						BioText {
+							role: "label"
 							text: entry.modelData.current ? "●  ACTIVE"
 								: entry.modelData.compatible ? "○  STYLE BRANCH" : "–  NOT A STYLE"
 							color: root.foreground
@@ -194,7 +197,8 @@ Item {
 							font.pixelSize: 10
 						}
 
-						Text {
+						BioText {
+							role: "title"
 							width: parent.width
 							text: entry.modelData.name
 							color: root.foreground
@@ -203,7 +207,8 @@ Item {
 							elide: Text.ElideRight
 						}
 
-						Text {
+						BioText {
+							role: "caption"
 							width: parent.width
 							text: entry.modelData.branch
 							color: root.foreground
@@ -213,7 +218,8 @@ Item {
 							elide: Text.ElideMiddle
 						}
 
-						Text {
+						BioText {
+							role: "caption"
 							width: parent.width
 							text: entry.modelData.description || ""
 							visible: text !== ""
@@ -250,7 +256,8 @@ Item {
 			ScrollBar.vertical: ScrollBar {}
 		}
 
-		Text {
+		BioText {
+			role: "body"
 			width: parent.width
 			wrapMode: Text.WordWrap
 			color: root.dirty || root.errorText ? root.danger : root.foreground
@@ -277,7 +284,8 @@ Item {
 				CAnim {}
 			}
 
-			Text {
+			BioText {
+				role: "body"
 				anchors.centerIn: parent
 				color: root.foreground
 				font.pixelSize: 13

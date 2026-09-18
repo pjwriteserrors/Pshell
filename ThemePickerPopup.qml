@@ -648,7 +648,8 @@ fi
 				onClicked: root.closeRequested()
 			}
 
-			Text {
+			BioText {
+				role: "heading"
 				anchors.centerIn: parent
 				color: root.foreground
 				font.pixelSize: 14
@@ -668,7 +669,8 @@ fi
 		radius: ThemeEngine.radiusMedium
 		color: Qt.alpha(root.danger, 0.92)
 
-		Text {
+		BioText {
+			role: "bodyStrong"
 			id: deleteErrorText
 			anchors.centerIn: parent
 			width: Math.min(implicitWidth, root.width - 108)
@@ -742,7 +744,8 @@ fi
 					height: variantSelector.sectionHeight(palettes.length)
 					y: variantSelector.sectionY(sectionName)
 
-					Text {
+					BioText {
+						role: "bodyStrong"
 						width: parent.width
 						height: variantSelector.sectionTitleHeight
 						color: root.foreground
@@ -773,7 +776,8 @@ fi
 								border.width: root.selectedColorIndex === index ? 1 : 0
 								border.color: Qt.alpha(root.barColor, 0.72)
 
-								Text {
+								BioText {
+									role: "caption"
 									anchors.fill: parent
 									anchors.leftMargin: 8
 									anchors.rightMargin: 8
@@ -938,7 +942,8 @@ fi
 										}
 									}
 
-									Text {
+									BioText {
+										role: "label"
 										anchors.left: parent.left
 										anchors.leftMargin: 10
 										anchors.right: parent.right
@@ -1068,7 +1073,8 @@ fi
 						border.width: 1
 						border.color: Qt.rgba(255, 255, 255, 0.22)
 
-						Text {
+						BioText {
+							role: "label"
 							id: mediaBadgeText
 							anchors.centerIn: parent
 							color: "white"
@@ -1168,7 +1174,8 @@ fi
 										border.width: modelData === 2 ? 0 : 1
 										border.color: Qt.alpha(livePreviewOverlay.previewForeground, 0.24)
 
-										Text {
+										BioText {
+											role: "label"
 											anchors.centerIn: parent
 											color: modelData === 2 ? root.readableTextColor(root.paletteSwatch(4)) : Qt.alpha(livePreviewOverlay.previewForeground, 0.72)
 											font.pixelSize: 8
@@ -1318,7 +1325,8 @@ fi
 								border.width: 1
 								border.color: Qt.alpha(root.paletteSwatch(4), 0.45)
 
-								Text {
+								BioText {
+									role: "label"
 									anchors.fill: parent
 									anchors.leftMargin: 10
 									anchors.rightMargin: 10
@@ -1353,7 +1361,8 @@ fi
 										border.width: 1
 										border.color: Qt.rgba(255, 255, 255, 0.18)
 
-										Text {
+										BioText {
+											role: "label"
 											anchors.centerIn: parent
 											color: root.readableTextColor(parent.blockColor)
 											font.pixelSize: 8
@@ -1374,7 +1383,8 @@ fi
 							anchors.margins: 24
 							spacing: 6
 
-						Text {
+						BioText {
+							role: "bodyStrong"
 							width: parent.width
 							color: "white"
 							font.pixelSize: active ? 28 : 20
@@ -1383,7 +1393,8 @@ fi
 							text: root.filteredThemes[index].name
 						}
 
-						Text {
+						BioText {
+							role: "body"
 							width: parent.width
 							color: Qt.rgba(255, 255, 255, 0.78)
 							font.pixelSize: 12
@@ -1414,7 +1425,8 @@ fi
 			anchors.centerIn: parent
 			spacing: 8
 
-			Text {
+			BioText {
+				role: "title"
 				horizontalAlignment: Text.AlignHCenter
 				color: root.foreground
 				font.pixelSize: 18
@@ -1422,7 +1434,8 @@ fi
 				text: "No themes found"
 			}
 
-			Text {
+			BioText {
+				role: "body"
 				horizontalAlignment: Text.AlignHCenter
 				color: Qt.alpha(root.foreground, 0.58)
 				font.pixelSize: 12

@@ -249,7 +249,8 @@ fi
 				height: 40
 				spacing: 12
 
-				Text {
+				BioText {
+					role: "title"
 					width: parent.width - applyButton.width - 12
 					height: parent.height
 					color: root.headingColor
@@ -276,7 +277,8 @@ fi
 						onClicked: root.applyAnimation()
 					}
 
-					Text {
+					BioText {
+						role: "bodyStrong"
 						anchors.centerIn: parent
 						color: root.foreground
 						font.pixelSize: 12
@@ -380,7 +382,8 @@ fi
 											}
 										}
 
-										Text {
+										BioText {
+											role: "caption"
 											visible: card.hasVideoPreview && !card.videoPreviewActive
 											anchors.centerIn: parent
 											color: Qt.alpha(root.foreground, 0.58)
@@ -636,7 +639,8 @@ fi
 									height: 34
 									color: Qt.alpha(root.background, 0.46)
 
-									Text {
+									BioText {
+										role: "bodyStrong"
 										anchors.left: parent.left
 										anchors.right: kindPill.left
 										anchors.leftMargin: 10
@@ -661,7 +665,8 @@ fi
 										border.width: 1
 										border.color: Qt.alpha(card.accent, 0.34)
 
-										Text {
+										BioText {
+											role: "label"
 											anchors.centerIn: parent
 											color: root.foreground
 											font.pixelSize: 9
