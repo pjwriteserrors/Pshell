@@ -1,11 +1,17 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls.impl as QQCImpl
 import Quickshell
 import Quickshell.Services.SystemTray
+import Quickshell.Wayland
 import "components"
 
+// The spine again, on a screen that is not the primary one.
+//
+// Same organism, fewer organs: the specimen plate, the tendons and the clusters
+// are here, but the readings that belong to the machine as a whole (weather,
+// notifications) stay on the one spine that owns them. Every press is a signal
+// — this window knows nothing about popups.
 PanelWindow {
 	id: root
 
@@ -19,17 +25,22 @@ PanelWindow {
 	signal powerClicked
 
 	required property var screenModel
-	required property color foreground
-	required property color background
-	required property color secondaryBoxColor
-	required property color secondaryBoxStrongColor
-	required property color secondaryInsetColor
-	required property color tertiary
 	required property string networkStatusType
 	required property var niriState
-	property color primary: secondaryBoxColor
-	property color onPrimaryColor: background
-	property color danger: "#d95c5c"
+
+	// Kept so the primary shell can keep handing its palette over; the colours
+	// themselves come from Bio, which reads the same Wallust file.
+	property color foreground: Bio.text
+	property color background: Bio.carapace
+	property color secondaryBoxColor: Bio.tissue1
+	property color secondaryBoxStrongColor: Bio.tissue2
+	property color secondaryInsetColor: Bio.cavity
+	property color tertiary: Bio.organAlt
+	property color primary: Bio.organ
+	property color onPrimaryColor: Bio.onOrgan
+	property color danger: Bio.necrosis
+
+	property date now: new Date()
 
 	function trayIconSource(icon) {
 		if (!icon) return "";
@@ -58,8 +69,8 @@ PanelWindow {
 		top: 0
 	}
 
-	exclusiveZone: bar.y + bar.implicitHeight
-	implicitHeight: bar.y + bar.implicitHeight + ThemeEngine.shadowRenderMargin
+	exclusiveZone: Math.round(bar.y + Bio.spine)
+	implicitHeight: Math.round(bar.y + bar.height)
 	color: "transparent"
 	mask: Region {
 		x: bar.x
@@ -73,223 +84,237 @@ PanelWindow {
 		anchors.left: parent.left
 		anchors.right: parent.right
 		anchors.top: parent.top
-		anchors.leftMargin: 12
-		anchors.rightMargin: 12
-		anchors.topMargin: 6
-		height: implicitHeight
-		implicitHeight: 34
-		clip: false
+		anchors.leftMargin: Bio.s5
+		anchors.rightMargin: Bio.s5
+		anchors.topMargin: Bio.s2
+		height: Bio.spine + plate.overhang
+
+		readonly property real line: Bio.spine / 2
+
+		// The carapace edge, as on the primary spine: without it the bone lines
+		// vanish wherever the wallpaper is pale.
+		Rectangle {
+			anchors.left: parent.left
+			anchors.right: parent.right
+			anchors.top: parent.top
+			anchors.topMargin: -bar.anchors.topMargin
+			anchors.leftMargin: -Bio.s5
+			anchors.rightMargin: -Bio.s5
+			height: Bio.spine + Bio.s5
+			gradient: Gradient {
+				GradientStop { position: 0.0; color: Qt.alpha(Bio.cavity, 0.92) }
+				GradientStop { position: 0.62; color: Qt.alpha(Bio.cavity, 0.66) }
+				GradientStop { position: 1.0; color: "transparent" }
+			}
+		}
 
 		Row {
+			id: leftCluster
 			anchors.left: parent.left
-			anchors.leftMargin: 0
-			anchors.verticalCenter: parent.verticalCenter
-			spacing: 10
+			y: bar.line - height / 2
+			spacing: Bio.s3
 
-			ThemedRectangle {
-				id: launcherButton
-				width: 38
-				height: bar.height
-				radius: ThemeEngine.radiusMedium
-				color: root.primary
+			BioNode {
+				id: launcherNode
+				anchors.verticalCenter: parent.verticalCenter
+				seed: 0
+				onClicked: root.launcherClicked()
 
-				HoverLayer {
-					id: launcherInteraction
-					tint: root.onPrimaryColor
-					onClicked: root.launcherClicked()
-				}
-
-				QQCImpl.IconImage {
+				BioSigil {
 					anchors.centerIn: parent
-					width: 16
-					height: 16
-					source: "/usr/share/icons/Adwaita/symbolic/actions/view-app-grid-symbolic.svg"
-					sourceSize: Qt.size(width, height)
-					color: root.onPrimaryColor
+					width: parent.width * 0.64
+					height: parent.height * 0.64
+					seed: 7
+					detail: 0.6
+					weight: Bio.ribThin
+					lineColor: Bio.text
 				}
 			}
 
-			ThemedRectangle {
-				id: trayIsland
+			Row {
+				anchors.verticalCenter: parent.verticalCenter
+				spacing: Bio.s2
 				visible: trayRepeater.count > 0
-				width: trayRow.implicitWidth + 20
-				height: bar.height
-				radius: ThemeEngine.radiusMedium
-				color: root.secondaryBoxColor
-				border.width: 0
-				border.color: "transparent"
 
-				Row {
-					id: trayRow
-					anchors.centerIn: parent
-					spacing: 6
+				Repeater {
+					id: trayRepeater
+					model: ScriptModel {
+						values: SystemTray.items.values
+					}
 
-					Repeater {
-						id: trayRepeater
-						model: ScriptModel {
-							values: SystemTray.items.values
+					BioNode {
+						id: trayNode
+
+						required property SystemTrayItem modelData
+						required property int index
+
+						anchors.verticalCenter: parent?.verticalCenter ?? undefined
+						size: 26
+						seed: trayNode.index + 1
+						acceptedButtons: Qt.LeftButton | Qt.RightButton
+
+						Image {
+							anchors.centerIn: parent
+							width: 14
+							height: 14
+							source: root.trayIconSource(trayNode.modelData.icon)
+							fillMode: Image.PreserveAspectFit
+							smooth: true
+							mipmap: true
 						}
 
-						Item {
-							id: replicaTrayIcon
-
-							required property SystemTrayItem modelData
-
-							width: 18
-							height: 18
-
-							Image {
-								anchors.fill: parent
-								source: root.trayIconSource(replicaTrayIcon.modelData.icon)
-								fillMode: Image.PreserveAspectFit
-								smooth: true
-								mipmap: true
-							}
-
-							HoverLayer {
-								tint: root.foreground
-								cornerRadius: 5
-								acceptedButtons: Qt.LeftButton | Qt.RightButton
-
-								onClicked: event => {
-									if (event.button === Qt.RightButton) replicaTrayIcon.modelData.secondaryActivate();
-									else replicaTrayIcon.modelData.activate();
-								}
-							}
+						onClicked: event => {
+							if (event.button === Qt.RightButton) trayNode.modelData.secondaryActivate();
+							else trayNode.modelData.activate();
 						}
 					}
 				}
 			}
 
 			NiriTaskbar {
-				visible: root.niriState.tasksForOutput(String(root.screenModel?.name || "")).length > 0
-				height: bar.height
+				anchors.verticalCenter: parent.verticalCenter
+				visible: root.niriState.tasksForOutput(String(root.screen?.name || "")).length > 0
+				height: Bio.spine
 				niriState: root.niriState
-				outputName: String(root.screenModel?.name || "")
-				background: root.background
-				foreground: root.foreground
-				secondaryBoxColor: root.secondaryBoxColor
-				secondaryBoxStrongColor: root.secondaryBoxStrongColor
+				outputName: String(root.screen?.name || "")
+				background: Bio.tissue1
+				foreground: Bio.text
+				secondaryBoxColor: Bio.tissue2
+				secondaryBoxStrongColor: Bio.tissue3
 			}
 
 			NowPlaying {
-				height: bar.height
-				foreground: root.foreground
-				secondaryBoxColor: root.secondaryBoxColor
-				progressColor: root.tertiary
+				anchors.verticalCenter: parent.verticalCenter
+				height: Bio.spine
+				foreground: Bio.text
+				secondaryBoxColor: Bio.tissue1
+				progressColor: Bio.organ
 				onClicked: root.mediaClicked()
 			}
 		}
 
-		ThemedRectangle {
-			id: clockIsland
-			width: Math.max(clock.width + 32, 132)
-			height: parent.height
-			anchors.centerIn: parent
-			radius: ThemeEngine.radiusMedium
-			color: root.secondaryBoxColor
-			border.width: 0
-			border.color: "transparent"
-
-			HoverLayer {
-				id: clockInteraction
-				tint: root.foreground
-				onClicked: root.clockClicked()
-			}
+		BioTendon {
+			anchors.left: leftCluster.right
+			anchors.right: plate.left
+			anchors.leftMargin: Bio.s4
+			anchors.rightMargin: Bio.s3
+			y: bar.line - height / 2
+			height: 16
+			facing: Qt.LeftToRight
+			sag: 2
+			weight: Bio.rib * 1.15
+			lineColor: Bio.boneDim
+			visible: width > 40
 		}
 
-		Text {
-			id: clock
-			anchors.centerIn: parent
-			color: root.foreground
-			font.pixelSize: 18
-			font.weight: Font.Medium
-			text: Qt.formatDateTime(new Date(), "HH:mm")
+		BioTendon {
+			anchors.left: plate.right
+			anchors.right: rightCluster.left
+			anchors.leftMargin: Bio.s3
+			anchors.rightMargin: Bio.s4
+			y: bar.line - height / 2
+			height: 16
+			facing: Qt.RightToLeft
+			sag: 2
+			weight: Bio.rib * 1.15
+			lineColor: Bio.boneDim
+			visible: width > 40
+		}
+
+		BioSurface {
+			id: plate
+
+			readonly property real overhang: 18
+
+			anchors.horizontalCenter: parent.horizontalCenter
+			y: 0
+			width: Math.max(168, plateColumn.implicitWidth + 64)
+			height: Bio.spine + overhang
+			washTop: Bio.membrane
+			washBottom: Bio.membraneDeep
+			haloStrength: 0.18
+			intensity: plateTouch.live
+			padding: 0
+
+			Column {
+				id: plateColumn
+				anchors.centerIn: parent
+				spacing: -2
+
+				BioText {
+					anchors.horizontalCenter: parent.horizontalCenter
+					role: "specimen"
+					font.pixelSize: 24
+					text: Qt.formatDateTime(root.now, "HH:mm")
+				}
+
+				BioText {
+					anchors.horizontalCenter: parent.horizontalCenter
+					role: "label"
+					tone: "muted"
+					font.pixelSize: 9
+					text: Qt.formatDateTime(root.now, "ddd dd MMM")
+				}
+			}
+
+			BioTouch {
+				id: plateTouch
+				onClicked: root.clockClicked()
+			}
 		}
 
 		Timer {
 			running: true
 			repeat: true
 			interval: 1000
-
-			onTriggered: clock.text = Qt.formatDateTime(new Date(), "HH:mm")
+			onTriggered: root.now = new Date()
 		}
 
-		TopBarNetworkButton {
-			anchors.right: bluetoothButton.left
-			anchors.rightMargin: 8
-			anchors.verticalCenter: parent.verticalCenter
-			foreground: root.foreground
-			secondaryBoxColor: root.secondaryBoxColor
-			iconSource: "/usr/share/icons/Adwaita/symbolic/actions/edit-paste-symbolic.svg"
-			onClicked: root.clipboardClicked()
-		}
-
-		TopBarNetworkButton {
-			id: bluetoothButton
-			anchors.right: networkButton.left
-			anchors.rightMargin: 8
-			anchors.verticalCenter: parent.verticalCenter
-			foreground: root.foreground
-			secondaryBoxColor: root.secondaryBoxColor
-			iconSource: "/usr/share/icons/Adwaita/symbolic/status/bluetooth-active-symbolic.svg"
-			onClicked: root.bluetoothClicked()
-		}
-
-		TopBarNetworkButton {
-			id: networkButton
-			anchors.right: resourceBars.left
-			anchors.rightMargin: 8
-			anchors.verticalCenter: parent.verticalCenter
-			foreground: root.foreground
-			secondaryBoxColor: root.secondaryBoxColor
-			iconSource: root.networkStatusType === "ethernet"
-				? "/usr/share/icons/Adwaita/symbolic/devices/network-wired-symbolic.svg"
-				: "/usr/share/icons/Adwaita/symbolic/status/network-wireless-signal-excellent-symbolic.svg"
-			onClicked: root.networkClicked()
-		}
-
-		TopBarResourceBars {
-			id: resourceBars
-			anchors.right: powerButton.left
-			anchors.rightMargin: 8
-			anchors.verticalCenter: parent.verticalCenter
-			height: parent.height
-			foreground: root.foreground
-			secondaryBoxColor: root.secondaryBoxColor
-			secondaryInsetColor: root.secondaryInsetColor
-			barColor: root.tertiary
-			cpuIcon: "/usr/share/icons/hicolor/scalable/actions/xsi-cpu-symbolic.svg"
-			memoryIcon: "/usr/share/icons/hicolor/scalable/actions/xsi-applications-electronics-symbolic.svg"
-			storageIcon: Quickshell.iconPath("drive-harddisk-symbolic", true) || Quickshell.iconPath("drive-harddisk-system-symbolic", true) || Quickshell.iconPath("xsi-drive-harddisk-symbolic", true)
-			mouseIcon: "/usr/share/icons/Adwaita/symbolic/devices/input-mouse-symbolic.svg"
-			onClicked: root.resourcesClicked()
-		}
-
-		ThemedRectangle {
-			id: powerButton
-			width: 34
-			height: parent.height
+		Row {
+			id: rightCluster
 			anchors.right: parent.right
-			anchors.rightMargin: 0
-			anchors.verticalCenter: parent.verticalCenter
-			radius: ThemeEngine.radiusMedium
-			color: Qt.tint(root.secondaryBoxColor, Qt.alpha(root.danger, 0.25))
+			y: bar.line - height / 2
+			spacing: Bio.s3
 
-			HoverLayer {
-				id: powerInteraction
-				tint: root.danger
+			BioNode {
+				anchors.verticalCenter: parent.verticalCenter
+				seed: 2
+				iconSource: Bio.icon("edit-paste-symbolic")
+				onClicked: root.clipboardClicked()
+			}
+
+			BioNode {
+				anchors.verticalCenter: parent.verticalCenter
+				seed: 3
+				iconSource: Bio.icon("bluetooth-active-symbolic")
+				onClicked: root.bluetoothClicked()
+			}
+
+			BioNode {
+				anchors.verticalCenter: parent.verticalCenter
+				seed: 0
+				iconSource: root.networkStatusType === "ethernet"
+					? Bio.icon("network-wired-symbolic")
+					: Bio.icon("network-wireless-signal-excellent-symbolic")
+				onClicked: root.networkClicked()
+			}
+
+			TopBarResourceBars {
+				anchors.verticalCenter: parent.verticalCenter
+				height: Bio.spine
+				onClicked: root.resourcesClicked()
+			}
+
+			BioNode {
+				id: powerNode
+				anchors.verticalCenter: parent.verticalCenter
+				seed: 2
+				ringColor: Qt.alpha(Bio.necrosis, 0.45)
+				liveColor: Bio.necrosis
+				iconColor: Qt.alpha(Bio.necrosis, 0.85)
+				iconSource: Bio.icon("system-shutdown-symbolic")
 				onClicked: root.powerClicked()
 			}
-
-				QQCImpl.IconImage {
-					anchors.centerIn: parent
-					width: 16
-					height: 16
-					source: "/usr/share/icons/Adwaita/symbolic/actions/system-shutdown-symbolic.svg"
-					sourceSize: Qt.size(width, height)
-					color: root.danger
-				}
-			}
+		}
 	}
 }

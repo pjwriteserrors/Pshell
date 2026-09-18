@@ -7,14 +7,19 @@ import Quickshell
 import Quickshell.Services.Mpris
 import "components"
 
-ThemedRectangle {
+// What is playing, as a specimen label.
+//
+// A ring that is the transport indicator, the track engraved next to it, and
+// the position running underneath as a vein rather than a bar. With nothing
+// playing it collapses to the ring alone.
+Item {
 	id: root
 
 	signal clicked
 
-	required property color foreground
-	required property color secondaryBoxColor
-	property color progressColor: foreground
+	property color foreground: Bio.text
+	property color secondaryBoxColor: Bio.tissue1
+	property color progressColor: Bio.organ
 	readonly property bool hasMedia: mediaText !== ""
 	readonly property bool hasProgress: !!root.activePlayer && Number(root.activePlayer.length || 0) > 0
 	readonly property real progressValue: root.hasProgress
@@ -92,19 +97,17 @@ ThemedRectangle {
 		return unique;
 	}
 
-	radius: ThemeEngine.radiusMedium
-	color: root.secondaryBoxColor
-	clip: !ThemeEngine.shadowEnabled
-	implicitHeight: 30
-	implicitWidth: hasMedia ? nowPlayingLabel.implicitWidth + 32 : 30
+	implicitHeight: Bio.spine
+	implicitWidth: root.hasMedia ? Math.min(nowPlayingLabel.implicitWidth + 58, 380) : 30
+
+	readonly property real live: Math.max(interaction.live, root.activePlayer?.isPlaying ? 0.35 : 0)
 
 	Behavior on implicitWidth {
-		Anim {}
+		NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
 	}
 
-	HoverLayer {
+	BioTouch {
 		id: interaction
-		tint: root.foreground
 		onClicked: root.clicked()
 	}
 
@@ -120,51 +123,50 @@ ThemedRectangle {
 		onTriggered: root.activePlayer?.positionChanged()
 	}
 
-	QQCImpl.IconImage {
-		anchors.centerIn: parent
-		width: 16
-		height: 16
-		source: root.idleIconSource()
-		visible: !root.hasMedia
-		sourceSize: Qt.size(width, height)
-		color: root.foreground
+	BioRing {
+		id: transport
+		anchors.left: parent.left
+		anchors.verticalCenter: parent.verticalCenter
+		width: 26
+		height: 26
+		seed: 1
+		intensity: root.live
+		liveColor: root.progressColor
+
+		QQCImpl.IconImage {
+			anchors.centerIn: parent
+			width: 13
+			height: 13
+			source: root.idleIconSource()
+			sourceSize: Qt.size(width, height)
+			color: root.live > 0.3 ? root.progressColor : root.foreground
+		}
 	}
 
-	Text {
+	BioText {
 		id: nowPlayingLabel
 		anchors.verticalCenter: parent.verticalCenter
-		anchors.left: parent.left
-		anchors.leftMargin: 16
+		anchors.left: transport.right
+		anchors.leftMargin: Bio.s3
 		anchors.right: parent.right
-		anchors.rightMargin: 16
-		color: root.foreground
-		font.pixelSize: 12
-		font.weight: Font.Medium
+		anchors.rightMargin: Bio.s3
+		role: "caption"
 		text: root.mediaText
 		visible: root.hasMedia
-		elide: Text.ElideRight
 		maximumLineCount: 1
 	}
 
-	ThemedRectangle {
-		id: progressTrack
+	// The position, as a vein under the title.
+	BioMeter {
 		visible: root.hasMedia && root.hasProgress
-		x: 12
-		y: parent.height - height - 3
-		width: parent.width - 24
-		height: 3
-		radius: ThemeEngine.radiusTiny
-		color: Qt.alpha(root.foreground, 0.12)
-
-		ThemedRectangle {
-			width: parent.width * root.progressValue
-			height: parent.height
-			radius: ThemeEngine.radiusTiny
-			color: root.progressColor
-
-			Behavior on width {
-				Anim {}
-			}
-		}
+		anchors.left: nowPlayingLabel.left
+		anchors.right: nowPlayingLabel.right
+		anchors.top: nowPlayingLabel.bottom
+		anchors.topMargin: 1
+		height: 6
+		weight: Bio.ribThin
+		value: root.progressValue
+		fillColor: root.progressColor
+		trackColor: Bio.boneGhost
 	}
 }

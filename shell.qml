@@ -75,14 +75,16 @@ Scope {
 	property bool trayMenuVisible: false
 	property var trayMenuHandle: null
 	property Item trayMenuTargetItem: null
-	// theme color roles (derived from the selected pywal theme below)
-	readonly property color secondaryBoxColor: Qt.alpha(primary, 0.16)
-	readonly property color secondaryBoxStrongColor: Qt.alpha(primary, 0.28)
-	readonly property color secondaryInsetColor: Qt.alpha(secondary, 0.14)
-	readonly property color surface: Qt.tint(background, Qt.alpha(primary, 0.07))
-	readonly property color surfaceBorder: Qt.alpha(primary, 0.35)
-	readonly property color onPrimary: background
-	readonly property color danger: "#d95c5c"
+	// Tissue roles. Every one of them comes out of Bio, which is the only place
+	// the Wallust palette is read and the only place contrast is decided. A
+	// colour is never picked here by palette slot — "color4" is not a role.
+	readonly property color secondaryBoxColor: Bio.tissue2
+	readonly property color secondaryBoxStrongColor: Bio.tissue3
+	readonly property color secondaryInsetColor: Bio.cavity
+	readonly property color surface: Bio.tissue1
+	readonly property color surfaceBorder: Bio.boneDim
+	readonly property color onPrimary: Bio.onOrgan
+	readonly property color danger: Bio.necrosis
 	readonly property var primaryBarScreen: {
 		for (const screen of Quickshell.screens) {
 			if (String(screen.name || "") === "DP-2") return screen;
@@ -1145,12 +1147,6 @@ Scope {
 		return icon;
 	}
 
-	FileView {
-		id: walFile
-		path: "/home/lu/.cache/wal/colors.json"
-		blockLoading: true
-	}
-
 	// Make sure every output shows the current wallpaper. This runs on every
 	// load, including a style reload, so it must not rebuild a runtime that is
 	// already fine: --ensure paints only outputs that are missing one and
@@ -1166,14 +1162,13 @@ Scope {
 		running: true
 	}
 
-	readonly property var wal: JSON.parse(walFile.text())
-	readonly property color background: wal.special.background
-	readonly property color foreground: wal.special.foreground
-	readonly property color primary: wal.colors.color4
-	readonly property color secondary: wal.colors.color6
-	readonly property color accent: wal.colors.color3
-	readonly property color tertiary: wal.colors.color1
-	readonly property color border: wal.colors.color8
+	readonly property color background: Bio.carapace
+	readonly property color foreground: Bio.text
+	readonly property color primary: Bio.organ
+	readonly property color secondary: Bio.organAlt
+	readonly property color accent: Bio.organAlt
+	readonly property color tertiary: Bio.organThird
+	readonly property color border: Bio.boneFaint
 
 	Process {
 		id: weatherProcess
@@ -1420,8 +1415,11 @@ Scope {
 	IpcHandler {
 		target: "theme"
 
+		// Bio watches the palette file itself and re-reads it on every change;
+		// this stays so a style checkout can push the new colours in before the
+		// first frame instead of waiting for the file watcher to notice.
 		function reload(): void {
-			walFile.reload();
+			Bio.colorsFile.reload();
 		}
 	}
 
@@ -1515,6 +1513,9 @@ Scope {
 		onTriggered: root.osdVisible = false
 	}
 
+	// The reflex: what the desktop does when a key changes the volume or the
+	// brightness. It surfaces low and centred, over the work rather than over
+	// the spine, and it is a reading — a ring that fills — not a slider.
 	PanelWindow {
 		id: osdWindow
 		screen: root.primaryBarScreen
@@ -1532,112 +1533,92 @@ Scope {
 		WlrLayershell.exclusionMode: ExclusionMode.Ignore
 		WlrLayershell.layer: WlrLayer.Overlay
 
-		ThemedRectangle {
+		BioSurface {
 			id: osdCard
-			width: 280
-			height: 76
+			width: 296
+			height: 92
 			x: Math.round((parent.width - width) / 2)
-			y: 84
-			radius: ThemeEngine.radiusMedium
-			color: root.surface
-			border.width: 1
-			border.color: root.surfaceBorder
+			y: Math.round(parent.height - height - 140)
+			washTop: Bio.membrane
+			washBottom: Bio.membraneDeep
+			haloStrength: 0.34
+			intensity: 0.75
 			opacity: root.osdVisible ? 1 : 0
-			scale: root.osdVisible ? 1 : 0.96
+
+			transform: Scale {
+				origin.x: osdCard.width / 2
+				origin.y: osdCard.height / 2
+				xScale: root.osdVisible ? 1 : 0.94
+				yScale: root.osdVisible ? 1 : 0.7
+
+				Behavior on yScale {
+					NumberAnimation { duration: Bio.grow; easing.type: Easing.OutBack; easing.overshoot: 1.2 }
+				}
+				Behavior on xScale {
+					NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
+				}
+			}
 
 			Behavior on opacity {
-				Anim {
-					duration: Motion.fast
+				NumberAnimation { duration: Bio.twitch }
+			}
+
+			BioRing {
+				id: osdRing
+				anchors.left: parent.left
+				anchors.verticalCenter: parent.verticalCenter
+				width: 46
+				height: 46
+				seed: 2
+				intensity: 0.5
+				progress: Math.min(1, Math.max(0, root.osdProgress))
+
+				Image {
+					anchors.centerIn: parent
+					width: 18
+					height: 18
+					source: root.osdIconSource
+					fillMode: Image.PreserveAspectFit
+					smooth: true
+					mipmap: true
+					layer.enabled: visible
+					layer.effect: MultiEffect {
+						colorization: 1
+						colorizationColor: Bio.organ
+					}
 				}
 			}
 
-			Behavior on scale {
-				NumberAnimation {
-					duration: Motion.normal
-					easing.type: ThemeEngine.emphasizedEasing
-					easing.overshoot: Motion.smallOvershoot
-				}
-			}
+			Column {
+				anchors.left: osdRing.right
+				anchors.leftMargin: Bio.s4
+				anchors.right: parent.right
+				anchors.verticalCenter: parent.verticalCenter
+				spacing: Bio.s2
 
-			RowLayout {
-				anchors.fill: parent
-				anchors.margins: 12
-				spacing: 10
-
-				ThemedRectangle {
-					Layout.preferredWidth: 38
-					Layout.preferredHeight: 38
-										radius: ThemeEngine.radiusMedium
-										color: root.secondaryBoxColor
-										themeStyle: "raised"
-
-					Image {
-						anchors.centerIn: parent
-						width: 18
-						height: 18
-						source: root.osdIconSource
-						fillMode: Image.PreserveAspectFit
-						smooth: true
-						mipmap: true
-						layer.enabled: visible
-						layer.effect: MultiEffect {
-							colorization: 1
-							colorizationColor: root.foreground
-						}
-					}
+				BioText {
+					width: parent.width
+					role: "label"
+					tone: "muted"
+					text: root.osdLabel
 				}
 
-				ColumnLayout {
-					Layout.fillWidth: true
-					spacing: 6
-
-					RowLayout {
-						Layout.fillWidth: true
-						spacing: 8
-
-						Text {
-							Layout.fillWidth: true
-							color: root.foreground
-							font.pixelSize: 14
-							font.weight: Font.Medium
-							text: root.osdLabel
-							elide: Text.ElideRight
-						}
-
-						Text {
-							color: Qt.alpha(root.foreground, 0.7)
-							font.pixelSize: 12
-							text: root.osdValueText
-												}
-
-											}
-
-											ThemedRectangle {
-						Layout.fillWidth: true
-						implicitHeight: 8
-						radius: ThemeEngine.radiusSmall
-						color: root.secondaryInsetColor
-						border.width: 0
-						border.color: "transparent"
-
-						ThemedRectangle {
-							width: parent.width * Math.min(1, Math.max(0, root.osdProgress))
-							height: parent.height
-							radius: parent.radius
-							color: root.accent
-
-							Behavior on width {
-								Anim {
-									duration: Motion.fast
-								}
-							}
-						}
-					}
+				BioText {
+					role: "reading"
+					tone: "default"
+					text: root.osdValueText
 				}
 			}
 		}
 	}
 
+	// The spine.
+	//
+	// Not a bar: nothing is docked in a strip of chrome. The organs sit loose on
+	// the wallpaper at the top of the screen, a tendon runs from each cluster to
+	// the specimen plate in the middle, and the plate hangs a little below the
+	// line everything else is aligned to. The plate is the only thing with a
+	// membrane behind it — everything else is a ring with a hole in the middle.
 	PanelWindow {
 		id: barWindow
 		screen: root.primaryBarScreen
@@ -1654,8 +1635,10 @@ Scope {
 			top: 0
 		}
 
-		exclusiveZone: bar.y + bar.implicitHeight
-		implicitHeight: bar.y + bar.implicitHeight + ThemeEngine.shadowRenderMargin
+		// Only the line the organs sit on is reserved; the specimen plate hangs
+		// into the workspace below it, over whatever is there.
+		exclusiveZone: Math.round(bar.y + Bio.spine)
+		implicitHeight: Math.round(bar.y + bar.height)
 		color: "transparent"
 		mask: Region {
 			x: bar.x
@@ -1669,102 +1652,104 @@ Scope {
 			anchors.left: parent.left
 			anchors.right: parent.right
 			anchors.top: parent.top
-			anchors.leftMargin: 12
-			anchors.rightMargin: 12
-			anchors.topMargin: 6
-			height: implicitHeight
-			implicitHeight: 34
-			clip: false
+			anchors.leftMargin: Bio.s5
+			anchors.rightMargin: Bio.s5
+			anchors.topMargin: Bio.s2
+			height: Bio.spine + specimenPlate.overhang
+
+			// Everything but the specimen plate is centred on this line.
+			readonly property real line: Bio.spine / 2
+
+			// The carapace edge: the screen's own rim darkening under the spine.
+			// Without it the bone lines vanish wherever the wallpaper is pale,
+			// and the organs have nothing to sit against.
+			Rectangle {
+				anchors.left: parent.left
+				anchors.right: parent.right
+				anchors.top: parent.top
+				anchors.topMargin: -bar.anchors.topMargin
+				anchors.leftMargin: -Bio.s5
+				anchors.rightMargin: -Bio.s5
+				height: Bio.spine + Bio.s5
+				gradient: Gradient {
+					GradientStop { position: 0.0; color: Qt.alpha(Bio.cavity, 0.92) }
+					GradientStop { position: 0.62; color: Qt.alpha(Bio.cavity, 0.66) }
+					GradientStop { position: 1.0; color: "transparent" }
+				}
+			}
 
 			Row {
-				id: leftModules
+				id: leftCluster
 				anchors.left: parent.left
-				anchors.leftMargin: 0
-				anchors.verticalCenter: parent.verticalCenter
-				spacing: 10
+				y: bar.line - height / 2
+				spacing: Bio.s3
 
-				ThemedRectangle {
-					id: launcherButton
-					width: 38
-					height: bar.height
-					radius: ThemeEngine.radiusMedium
-					color: root.primary
+				BioNode {
+					id: launcherNode
+					anchors.verticalCenter: parent.verticalCenter
+					seed: 0
+					lit: root.launcherPopupOpen
+					onClicked: root.toggleLauncherPopup()
 
-					HoverLayer {
-						id: launcherInteraction
-						tint: root.onPrimary
-						onClicked: root.toggleLauncherPopup()
-					}
-
-					QQCImpl.IconImage {
+					BioSigil {
 						anchors.centerIn: parent
-						width: 16
-						height: 16
-						source: "/usr/share/icons/Adwaita/symbolic/actions/view-app-grid-symbolic.svg"
-						sourceSize: Qt.size(width, height)
-						color: root.onPrimary
+						width: parent.width * 0.64
+						height: parent.height * 0.64
+						seed: 7
+						detail: 0.6
+						weight: Bio.ribThin
+						lineColor: launcherNode.lit ? Bio.organ : Bio.text
 					}
 				}
 
-				ThemedRectangle {
-					id: trayIsland
+				Row {
+					id: trayRow
+					anchors.verticalCenter: parent.verticalCenter
+					spacing: Bio.s2
 					visible: trayRepeater.count > 0
-					width: trayRow.implicitWidth + 20
-					height: bar.height
-					radius: ThemeEngine.radiusMedium
-					color: root.surface
-					border.width: 0
-					border.color: "transparent"
 
-					Row {
-						id: trayRow
-						anchors.centerIn: parent
-						spacing: 6
+					Repeater {
+						id: trayRepeater
+						model: ScriptModel {
+							values: SystemTray.items.values
+						}
 
-						Repeater {
-							id: trayRepeater
-							model: ScriptModel {
-								values: SystemTray.items.values
+						BioNode {
+							id: trayNode
+
+							required property SystemTrayItem modelData
+							required property int index
+
+							anchors.verticalCenter: parent?.verticalCenter ?? undefined
+							size: 26
+							seed: trayNode.index + 1
+							acceptedButtons: Qt.LeftButton | Qt.RightButton
+
+							Image {
+								anchors.centerIn: parent
+								width: 14
+								height: 14
+								source: root.resolveIconSource(root.trayIconSource(trayNode.modelData.icon))
+								fillMode: Image.PreserveAspectFit
+								smooth: true
+								mipmap: true
 							}
 
-							Item {
-								id: trayIconItem
-
-								required property SystemTrayItem modelData
-
-								width: 18
-								height: 18
-
-								Image {
-									anchors.fill: parent
-									source: root.resolveIconSource(root.trayIconSource(trayIconItem.modelData.icon))
-									fillMode: Image.PreserveAspectFit
-									smooth: true
-									mipmap: true
-								}
-
-								HoverLayer {
-									tint: root.foreground
-									cornerRadius: 5
-									acceptedButtons: Qt.LeftButton | Qt.RightButton
-
-									onClicked: event => {
-										if (trayIconItem.modelData.menu) {
-											if (
-												root.trayMenuOpen
-												&& root.trayMenuVisible
-												&& root.trayMenuHandle === trayIconItem.modelData.menu
-											) {
-												root.closeTrayMenu();
-											} else {
-												root.openTrayMenu(trayIconItem.modelData.menu, trayIconItem);
-											}
-										} else {
-											root.closeTrayMenu();
-											if (event.button === Qt.RightButton) trayIconItem.modelData.secondaryActivate();
-											else trayIconItem.modelData.activate();
-										}
+							onClicked: event => {
+								if (trayNode.modelData.menu) {
+									if (
+										root.trayMenuOpen
+										&& root.trayMenuVisible
+										&& root.trayMenuHandle === trayNode.modelData.menu
+									) {
+										root.closeTrayMenu();
+									} else {
+										root.openTrayMenu(trayNode.modelData.menu, trayNode);
 									}
+								} else {
+									root.closeTrayMenu();
+									if (event.button === Qt.RightButton) trayNode.modelData.secondaryActivate();
+									else trayNode.modelData.activate();
 								}
 							}
 						}
@@ -1773,237 +1758,201 @@ Scope {
 
 				NiriTaskbar {
 					id: taskbarIsland
+					anchors.verticalCenter: parent.verticalCenter
 					visible: niriState.tasksForOutput(String(barWindow.screen?.name || "")).length > 0
-					height: bar.height
+					height: Bio.spine
 					niriState: niriState
 					outputName: String(barWindow.screen?.name || "")
-					background: root.surface
-					foreground: root.foreground
-					secondaryBoxColor: root.secondaryBoxColor
-					secondaryBoxStrongColor: root.secondaryBoxStrongColor
+					background: Bio.tissue1
+					foreground: Bio.text
+					secondaryBoxColor: Bio.tissue2
+					secondaryBoxStrongColor: Bio.tissue3
 				}
 
 				NowPlaying {
 					id: nowPlayingIsland
-					height: bar.height
-					foreground: root.foreground
-					secondaryBoxColor: root.surface
-					progressColor: root.accent
+					anchors.verticalCenter: parent.verticalCenter
+					height: Bio.spine
+					foreground: Bio.text
+					secondaryBoxColor: Bio.tissue1
+					progressColor: Bio.organ
 					onClicked: root.toggleMediaPopup()
 				}
-
 			}
 
-			ThemedRectangle {
-				id: clockIsland
-				width: Math.max(clock.width + 32, 132)
-				height: parent.height
-				anchors.centerIn: parent
-				radius: ThemeEngine.radiusMedium
-				color: root.surface
-				border.width: 0
-				border.color: "transparent"
+			// The tendons. They run from each cluster to the plate and are the
+			// reason the spine reads as one organism instead of two toolbars
+			// with a clock between them.
+			BioTendon {
+				anchors.left: leftCluster.right
+				anchors.right: specimenPlate.left
+				anchors.leftMargin: Bio.s4
+				anchors.rightMargin: Bio.s3
+				y: bar.line - height / 2
+				height: 16
+				facing: Qt.LeftToRight
+				sag: 2
+				weight: Bio.rib * 1.15
+				lineColor: Bio.boneDim
+				visible: width > 40
+			}
 
-				HoverLayer {
-					id: clockInteraction
-					tint: root.foreground
+			BioTendon {
+				anchors.left: specimenPlate.right
+				anchors.right: rightCluster.left
+				anchors.leftMargin: Bio.s3
+				anchors.rightMargin: Bio.s4
+				y: bar.line - height / 2
+				height: 16
+				facing: Qt.RightToLeft
+				sag: 2
+				weight: Bio.rib * 1.15
+				lineColor: Bio.boneDim
+				visible: width > 40
+			}
+
+			// The specimen plate: the one chamber on the spine. It hangs below
+			// the line so the middle of the screen has a shape, and it carries
+			// the time and the date.
+			BioSurface {
+				id: specimenPlate
+
+				readonly property real overhang: 18
+
+				anchors.horizontalCenter: parent.horizontalCenter
+				y: 0
+				width: Math.max(168, specimenColumn.implicitWidth + 64)
+				height: Bio.spine + overhang
+				washTop: Bio.membrane
+				washBottom: Bio.membraneDeep
+				haloStrength: 0.18
+				intensity: Math.max(plateTouch.live, root.clockPopupOpen ? 0.5 : 0)
+				padding: 0
+
+				Column {
+					id: specimenColumn
+					anchors.centerIn: parent
+					spacing: -2
+
+					BioText {
+						anchors.horizontalCenter: parent.horizontalCenter
+						role: "specimen"
+						font.pixelSize: 24
+						text: Qt.formatDateTime(root.now, "HH:mm")
+					}
+
+					BioText {
+						anchors.horizontalCenter: parent.horizontalCenter
+						role: "label"
+						tone: "muted"
+						font.pixelSize: 9
+						text: Qt.formatDateTime(root.now, "ddd dd MMM")
+					}
+				}
+
+				BioTouch {
+					id: plateTouch
 					onClicked: root.toggleClockPopup()
 				}
-			}
-
-			Text {
-				id: clock
-				anchors.centerIn: parent
-				color: foreground
-				font.pixelSize: 18
-				font.weight: Font.Medium
-				text: Qt.formatDateTime(new Date(), "HH:mm")
 			}
 
 			Timer {
 				running: true
 				repeat: true
 				interval: 1000
-
-				onTriggered: {
-					const now = new Date();
-					root.now = now;
-					clock.text = Qt.formatDateTime(now, "HH:mm");
-				}
+				onTriggered: root.now = new Date()
 			}
 
-			ThemedRectangle {
-				id: weatherIsland
-				width: weatherIslandRow.implicitWidth + 24
-				height: bar.height
-				anchors.right: bellIsland.left
-				anchors.rightMargin: 8
-				anchors.verticalCenter: parent.verticalCenter
-				radius: ThemeEngine.radiusMedium
-				color: root.surface
+			Row {
+				id: rightCluster
+				anchors.right: parent.right
+				y: bar.line - height / 2
+				spacing: Bio.s3
 
 				Row {
-					id: weatherIslandRow
-					anchors.centerIn: parent
-					spacing: 6
+					anchors.verticalCenter: parent.verticalCenter
+					spacing: Bio.s2
 
-					QQCImpl.IconImage {
+					BioNode {
+						id: weatherNode
 						anchors.verticalCenter: parent.verticalCenter
-						width: 15
-						height: 15
-						source: root.resolveIconSource("", [
+						size: 26
+						seed: 3
+						lit: root.weatherPopupOpen
+						iconSource: root.resolveIconSource("", [
 							root.weatherIcon,
 							root.weatherIcon.replace("-symbolic", ""),
 							"weather-overcast-symbolic"
 						])
-						visible: source !== ""
-						sourceSize: Qt.size(width, height)
-						color: root.foreground
+						iconSize: 13
+						onClicked: root.toggleWeatherPopup()
 					}
 
-					Text {
+					BioText {
 						anchors.verticalCenter: parent.verticalCenter
-						color: root.foreground
-						font.pixelSize: 12
-						font.weight: Font.Medium
+						role: "reading"
+						font.pixelSize: 14
 						text: root.weatherTemperature
 					}
 				}
 
-				HoverLayer {
-					id: weatherInteraction
-					tint: root.foreground
-					onClicked: root.toggleWeatherPopup()
-				}
-			}
-
-			ThemedRectangle {
-				id: bellIsland
-				width: 34
-				height: bar.height
-				anchors.right: clipboardButton.left
-				anchors.rightMargin: 8
-				anchors.verticalCenter: parent.verticalCenter
-				radius: ThemeEngine.radiusMedium
-				color: root.surface
-
-				QQCImpl.IconImage {
-					anchors.centerIn: parent
-					width: 15
-					height: 15
-					source: root.resolveIconSource("preferences-system-notifications-symbolic", ["dialog-information-symbolic"])
-					sourceSize: Qt.size(width, height)
-					color: root.foreground
-				}
-
-				ThemedRectangle {
-					visible: root.notificationGroups.length > 0
-					width: Math.max(15, badgeLabel.implicitWidth + 8)
-					height: 15
-					radius: height / 2
-					anchors.top: parent.top
-					anchors.right: parent.right
-					anchors.topMargin: -2
-					anchors.rightMargin: -2
-					color: root.accent
-					scale: root.notificationGroups.length > 0 ? 1 : 0
-
-					Behavior on scale {
-						SpatialAnim {}
-					}
-
-					Text {
-						id: badgeLabel
-						anchors.centerIn: parent
-						color: root.background
-						font.pixelSize: 9
-						font.weight: Font.DemiBold
-						text: root.notificationGroups.length
-					}
-				}
-
-				HoverLayer {
-					id: bellInteraction
-					tint: root.foreground
+				BioNode {
+					id: notifNode
+					anchors.verticalCenter: parent.verticalCenter
+					seed: 1
+					lit: root.notifPopupOpen
+					badge: root.notificationGroups.length > 0 ? String(root.notificationGroups.length) : ""
+					iconSource: root.resolveIconSource("preferences-system-notifications-symbolic", ["dialog-information-symbolic"])
 					onClicked: root.toggleNotifPopup()
 				}
-			}
 
-			TopBarNetworkButton {
-				id: clipboardButton
-				anchors.right: bluetoothButton.left
-				anchors.rightMargin: 8
-				anchors.verticalCenter: parent.verticalCenter
-				foreground: root.foreground
-				secondaryBoxColor: root.surface
-				iconSource: "/usr/share/icons/Adwaita/symbolic/actions/edit-paste-symbolic.svg"
-				onClicked: root.toggleClipboardPopup()
-			}
-
-			TopBarNetworkButton {
-				id: bluetoothButton
-				anchors.right: networkButton.left
-				anchors.rightMargin: 8
-				anchors.verticalCenter: parent.verticalCenter
-				foreground: root.foreground
-				secondaryBoxColor: root.surface
-				iconSource: "/usr/share/icons/Adwaita/symbolic/status/bluetooth-active-symbolic.svg"
-				onClicked: root.toggleBluetoothPopup()
-			}
-
-			TopBarNetworkButton {
-				id: networkButton
-				anchors.right: resourceBars.left
-				anchors.rightMargin: 8
-				anchors.verticalCenter: parent.verticalCenter
-				foreground: root.foreground
-				secondaryBoxColor: root.surface
-				iconSource: root.networkStatusType === "ethernet"
-					? "/usr/share/icons/Adwaita/symbolic/devices/network-wired-symbolic.svg"
-					: "/usr/share/icons/Adwaita/symbolic/status/network-wireless-signal-excellent-symbolic.svg"
-				onClicked: root.toggleNetworkPopup()
-			}
-
-			TopBarResourceBars {
-				id: resourceBars
-				anchors.right: powerButton.left
-				anchors.rightMargin: 8
-				anchors.verticalCenter: parent.verticalCenter
-				height: parent.height
-				foreground: root.foreground
-				secondaryBoxColor: root.surface
-				secondaryInsetColor: root.secondaryInsetColor
-				barColor: root.accent
-				cpuIcon: "/usr/share/icons/hicolor/scalable/actions/xsi-cpu-symbolic.svg"
-				memoryIcon: "/usr/share/icons/hicolor/scalable/actions/xsi-applications-electronics-symbolic.svg"
-				storageIcon: root.resolveIconSource("drive-harddisk-symbolic", ["drive-harddisk-system-symbolic", "xsi-drive-harddisk-symbolic"])
-				mouseIcon: "/usr/share/icons/Adwaita/symbolic/devices/input-mouse-symbolic.svg"
-				onClicked: root.toggleResourcesPopup()
-			}
-
-			ThemedRectangle {
-				id: powerButton
-				width: 34
-				height: parent.height
-				anchors.right: parent.right
-				anchors.rightMargin: 0
-				anchors.verticalCenter: parent.verticalCenter
-				radius: ThemeEngine.radiusMedium
-				color: Qt.tint(root.surface, Qt.alpha(root.danger, 0.25))
-
-				HoverLayer {
-					id: powerInteraction
-					tint: root.danger
-					onClicked: root.togglePowerPopup()
+				BioNode {
+					id: clipboardNode
+					anchors.verticalCenter: parent.verticalCenter
+					seed: 2
+					lit: root.clipboardPopupOpen
+					iconSource: root.resolveIconSource("edit-paste-symbolic", ["edit-copy-symbolic"])
+					onClicked: root.toggleClipboardPopup()
 				}
 
-				QQCImpl.IconImage {
-					anchors.centerIn: parent
-					width: 16
-					height: 16
-					source: "/usr/share/icons/Adwaita/symbolic/actions/system-shutdown-symbolic.svg"
-					sourceSize: Qt.size(width, height)
-					color: root.danger
+				BioNode {
+					id: bluetoothNode
+					anchors.verticalCenter: parent.verticalCenter
+					seed: 3
+					lit: root.bluetoothPopupOpen
+					iconSource: root.resolveIconSource("bluetooth-active-symbolic", ["bluetooth-symbolic"])
+					onClicked: root.toggleBluetoothPopup()
+				}
+
+				BioNode {
+					id: networkNode
+					anchors.verticalCenter: parent.verticalCenter
+					seed: 0
+					lit: root.networkPopupOpen
+					iconSource: root.networkStatusType === "ethernet"
+						? Bio.icon("network-wired-symbolic")
+						: Bio.icon("network-wireless-signal-excellent-symbolic")
+					onClicked: root.toggleNetworkPopup()
+				}
+
+				TopBarResourceBars {
+					id: resourceBars
+					anchors.verticalCenter: parent.verticalCenter
+					height: Bio.spine
+					lit: root.resourcesPopupOpen
+					onClicked: root.toggleResourcesPopup()
+				}
+
+				BioNode {
+					id: powerNode
+					anchors.verticalCenter: parent.verticalCenter
+					seed: 2
+					lit: root.powerPopupOpen
+					ringColor: Qt.alpha(Bio.necrosis, 0.45)
+					liveColor: Bio.necrosis
+					iconColor: powerNode.lit ? Bio.necrosis : Qt.alpha(Bio.necrosis, 0.85)
+					iconSource: Bio.icon("system-shutdown-symbolic")
+					onClicked: root.togglePowerPopup()
 				}
 			}
 		}
@@ -3740,147 +3689,76 @@ printf 'type=offline\niface=\nip=\n'`
 							id: resourcesPopupContent
 							anchors.fill: parent
 
-						Column {
-							id: resourcesPopupColumn
-							anchors.fill: parent
-							spacing: 14
+							Column {
+								id: resourcesPopupColumn
+								anchors.fill: parent
+								spacing: Bio.s4
 
-							Text {
-								color: foreground
-								font.pixelSize: 15
-								font.weight: Font.DemiBold
-								text: "System"
-							}
-
-							Row {
-								anchors.horizontalCenter: parent.horizontalCenter
-								spacing: 18
-
-								ArcGauge {
-									value: resourceBars.cpuUsage
-									label: "CPU"
-									detail: resourceBars.cpuText
-									gaugeColor: root.primary
+								BioSection {
+									width: parent.width
+									title: "Vitals"
+									trailing: resourceBars.cpuText
 								}
-
-								ArcGauge {
-									value: resourceBars.memoryUsage
-									label: "RAM"
-									detail: resourceBars.memoryText
-									gaugeColor: root.secondary
-								}
-							}
-
-							ThemedRectangle {
-								visible: resourceBars.mouseBatteryAvailable
-								width: parent.width
-								height: 46
-								radius: ThemeEngine.radiusMedium
-								color: root.secondaryBoxColor
 
 								Row {
-									anchors.left: parent.left
-									anchors.leftMargin: 12
-									anchors.verticalCenter: parent.verticalCenter
-									spacing: 10
+									anchors.horizontalCenter: parent.horizontalCenter
+									spacing: Bio.s5
 
-									QQCImpl.IconImage {
-										anchors.verticalCenter: parent.verticalCenter
-										width: 16
-										height: 16
-										source: resourceBars.mouseIcon
-										sourceSize: Qt.size(width, height)
-										color: root.foreground
+									ArcGauge {
+										value: resourceBars.cpuUsage
+										label: "Cortex"
+										detail: resourceBars.cpuText
+										gaugeColor: resourceBars.cpuUsage > 0.88 ? Bio.necrosis : Bio.organ
 									}
+
+									ArcGauge {
+										value: resourceBars.memoryUsage
+										label: "Reserve"
+										detail: resourceBars.memoryText
+										gaugeColor: resourceBars.memoryUsage > 0.88 ? Bio.necrosis : Bio.organAlt
+									}
+								}
+
+								BioSection {
+									width: parent.width
+									visible: resourceBars.mouseBatteryAvailable
+									title: "Limb"
+									trailing: resourceBars.mouseBatteryStatus
+
+									ResourceRow {
+										width: parent.width
+										label: resourceBars.mouseBatteryName
+										detail: ""
+										usage: resourceBars.mouseBatteryUsage
+										valueText: resourceBars.mouseBatteryText
+									}
+								}
+
+								BioSection {
+									width: parent.width
+									title: "Stores"
+									trailing: `${resourceBars.disks.length}`
 
 									Column {
-										anchors.verticalCenter: parent.verticalCenter
-										spacing: 1
+										width: parent.width
+										spacing: Bio.s3
 
-										Text {
-											color: foreground
-											font.pixelSize: 12
-											font.weight: Font.Medium
-											text: "Mouse"
-										}
+										Repeater {
+											model: resourceBars.disks
 
-										Text {
-											visible: text !== ""
-											color: Qt.alpha(foreground, 0.5)
-											font.pixelSize: 9
-											text: resourceBars.mouseBatteryStatus
-										}
-									}
-								}
-
-								Text {
-									anchors.right: parent.right
-									anchors.rightMargin: 14
-									anchors.verticalCenter: parent.verticalCenter
-									color: foreground
-									font.pixelSize: 13
-									font.weight: Font.DemiBold
-									text: resourceBars.mouseBatteryText
-								}
-
-								ThemedRectangle {
-									anchors.bottom: parent.bottom
-									anchors.left: parent.left
-									anchors.right: parent.right
-									anchors.margins: 6
-									height: 4
-									radius: ThemeEngine.radiusTiny
-									color: root.secondaryInsetColor
-
-									ThemedRectangle {
-										width: parent.width * resourceBars.mouseBatteryUsage
-										height: parent.height
-										radius: parent.radius
-										color: root.accent
-
-										Behavior on width {
-											Anim {}
-										}
-									}
-								}
-							}
-
-							ThemedRectangle {
-								width: parent.width
-								implicitHeight: diskBoxContent.implicitHeight + 24
-								radius: ThemeEngine.radiusMedium
-								color: root.secondaryBoxColor
-
-								Column {
-									id: diskBoxContent
-									anchors.fill: parent
-									anchors.margins: 12
-									spacing: 10
-
-									Text {
-										color: foreground
-										font.pixelSize: 12
-										font.weight: Font.DemiBold
-										text: "Disks"
-									}
-
-									Repeater {
-										model: resourceBars.disks
-
-										delegate: ResourceRow {
-											required property var modelData
-											width: diskBoxContent.width
-											label: modelData.name
-											detail: `${modelData.usedText}/${modelData.totalText}`
-											usage: modelData.usage
-											icon: resourceBars.storageIcon
-											valueText: `${modelData.freeText} left`
+											delegate: ResourceRow {
+												required property var modelData
+												width: parent.width
+												label: modelData.name
+												detail: `${modelData.usedText}/${modelData.totalText}`
+												usage: modelData.usage
+												valueText: `${modelData.freeText} left`
+											}
 										}
 									}
 								}
 							}
 						}
-					}
 	}
 
 	PanelWindow {
@@ -4000,19 +3878,20 @@ printf 'type=offline\niface=\nip=\n'`
 
 		ModalSheet {
 			open: root.powerPopupOpen
-			scrimOpacity: 0.28
-			shadowSurfaceColor: root.surface
-			sheetWidth: 560
-			sheetHeight: 236
+			scrimOpacity: 0.72
+			sheetWidth: 620
+			sheetHeight: 300
 			onDismissRequested: root.closePowerPopup()
 
-			ThemedRectangle {
+			BioSurface {
 				id: powerModal
 				anchors.fill: parent
-				radius: ThemeEngine.radiusMedium
-				color: root.surface
-				border.width: 1
-				border.color: root.surfaceBorder
+				washTop: Bio.membrane
+				washBottom: Bio.membraneDeep
+				lineColor: Qt.alpha(Bio.necrosis, 0.42)
+				liveColor: Bio.necrosis
+				haloStrength: 0.30
+				intensity: 0.5
 				focus: root.powerPopupVisible
 
 				property string statUser: ""
@@ -4045,354 +3924,259 @@ printf 'type=offline\niface=\nip=\n'`
 					}
 				}
 
-				Row {
-					anchors.fill: parent
-					anchors.margins: 16
-					spacing: 14
+				// Who is being ended, and how long it has been alive.
+				Column {
+					id: hostColumn
+					anchors.left: parent.left
+					anchors.verticalCenter: parent.verticalCenter
+					width: 176
+					spacing: Bio.s3
 
-					ThemedRectangle {
-						id: powerUserPanel
-						width: 188
-						height: parent.height
-						radius: ThemeEngine.radiusMedium
-						color: root.secondaryBoxColor
-
-						Column {
-							anchors.centerIn: parent
-							spacing: 10
-							width: parent.width - 24
-
-							ThemedRectangle {
-								anchors.horizontalCenter: parent.horizontalCenter
-								width: 54
-								height: 54
-								radius: height / 2
-								color: root.primary
-
-								Text {
-									anchors.centerIn: parent
-									color: root.onPrimary
-									font.pixelSize: 22
-									font.weight: Font.DemiBold
-									text: (powerModal.statUser || "?").charAt(0).toUpperCase()
-								}
-							}
-
-							Text {
-								anchors.horizontalCenter: parent.horizontalCenter
-								width: parent.width
-								horizontalAlignment: Text.AlignHCenter
-								color: foreground
-								font.pixelSize: 13
-								font.weight: Font.DemiBold
-								elide: Text.ElideMiddle
-								text: powerModal.statUser
-							}
-
-							Column {
-								width: parent.width
-								spacing: 5
-
-								ThemedRectangle {
-									width: parent.width
-									height: 24
-									radius: ThemeEngine.radiusMedium
-									color: root.secondaryInsetColor
-
-									Row {
-										anchors.left: parent.left
-										anchors.leftMargin: 9
-										anchors.verticalCenter: parent.verticalCenter
-										spacing: 6
-
-										Text {
-											anchors.verticalCenter: parent.verticalCenter
-											color: Qt.alpha(root.primary, 0.95)
-											font.pixelSize: 8
-											font.weight: Font.DemiBold
-											font.letterSpacing: 1
-											text: "UP"
-										}
-
-										Text {
-											anchors.verticalCenter: parent.verticalCenter
-											color: foreground
-											font.pixelSize: 10
-											font.weight: Font.Medium
-											text: powerModal.statUptime
-										}
-									}
-								}
-
-								ThemedRectangle {
-									width: parent.width
-									height: 24
-									radius: ThemeEngine.radiusMedium
-									color: root.secondaryInsetColor
-
-									Row {
-										anchors.left: parent.left
-										anchors.leftMargin: 9
-										anchors.verticalCenter: parent.verticalCenter
-										spacing: 6
-
-										Text {
-											anchors.verticalCenter: parent.verticalCenter
-											color: Qt.alpha(root.primary, 0.95)
-											font.pixelSize: 8
-											font.weight: Font.DemiBold
-											font.letterSpacing: 1
-											text: "KERNEL"
-										}
-
-										Text {
-											anchors.verticalCenter: parent.verticalCenter
-											color: foreground
-											font.pixelSize: 10
-											font.weight: Font.Medium
-											text: powerModal.statKernel
-										}
-									}
-								}
-							}
-						}
+					BioSigil {
+						anchors.horizontalCenter: parent.horizontalCenter
+						width: 72
+						height: 72
+						seed: 5
+						lineColor: Bio.boneDim
 					}
 
-					Grid {
-						columns: 2
-						columnSpacing: 10
-						rowSpacing: 10
-						anchors.verticalCenter: parent.verticalCenter
+					BioText {
+						anchors.horizontalCenter: parent.horizontalCenter
+						role: "title"
+						font.pixelSize: 17
+						text: powerModal.statUser
+					}
 
-						readonly property real tileWidth: (powerModal.width - 32 - 188 - 14 - 10) / 2
-						readonly property real tileHeight: (powerModal.height - 32 - 10) / 2
+					Column {
+						anchors.horizontalCenter: parent.horizontalCenter
+						spacing: 0
 
-						PowerActionButton {
-							width: parent.tileWidth
-							height: parent.tileHeight
-							label: "Lock"
-							sublabel: "Secure session"
-							iconSource: "/usr/share/icons/Adwaita/symbolic/status/system-lock-screen-symbolic.svg"
-							selectionIndex: 0
-							selected: root.powerSelectionIndex === 0
-							onClicked: root.runPowerAction("lock")
+						BioText {
+							anchors.horizontalCenter: parent.horizontalCenter
+							role: "label"
+							tone: "faint"
+							text: "Alive"
 						}
 
-						PowerActionButton {
-							width: parent.tileWidth
-							height: parent.tileHeight
-							label: "Logout"
-							sublabel: "End session"
-							iconSource: "/usr/share/icons/Adwaita/symbolic/actions/system-log-out-symbolic.svg"
-							selectionIndex: 1
-							selected: root.powerSelectionIndex === 1
-							onClicked: root.runPowerAction("logout")
+						BioText {
+							anchors.horizontalCenter: parent.horizontalCenter
+							role: "caption"
+							tone: "muted"
+							text: powerModal.statUptime
 						}
 
-						PowerActionButton {
-							width: parent.tileWidth
-							height: parent.tileHeight
-							label: "Reboot"
-							sublabel: "Restart system"
-							iconSource: "/usr/share/icons/Adwaita/symbolic/actions/system-reboot-symbolic.svg"
-							selectionIndex: 2
-							selected: root.powerSelectionIndex === 2
-							dangerous: true
-							onClicked: root.runPowerAction("reboot")
+						BioText {
+							anchors.horizontalCenter: parent.horizontalCenter
+							role: "label"
+							tone: "faint"
+							text: "Strain"
 						}
 
-						PowerActionButton {
-							width: parent.tileWidth
-							height: parent.tileHeight
-							label: "Shutdown"
-							sublabel: "Power off"
-							iconSource: "/usr/share/icons/Adwaita/symbolic/actions/system-shutdown-symbolic.svg"
-							selectionIndex: 3
-							selected: root.powerSelectionIndex === 3
-							dangerous: true
-							onClicked: root.runPowerAction("shutdown")
+						BioText {
+							anchors.horizontalCenter: parent.horizontalCenter
+							role: "caption"
+							tone: "muted"
+							text: powerModal.statKernel
 						}
+					}
+				}
+
+				Grid {
+					columns: 2
+					columnSpacing: Bio.s3
+					rowSpacing: Bio.s3
+					anchors.left: hostColumn.right
+					anchors.leftMargin: Bio.s6
+					anchors.right: parent.right
+					anchors.verticalCenter: parent.verticalCenter
+
+					readonly property real tileWidth: (width - Bio.s3) / 2
+					readonly property real tileHeight: (powerModal.height - 68) / 2
+
+					PowerActionButton {
+						width: parent.tileWidth
+						height: parent.tileHeight
+						label: "Seal"
+						sublabel: "Lock the session"
+						iconSource: "/usr/share/icons/Adwaita/symbolic/status/system-lock-screen-symbolic.svg"
+						selectionIndex: 0
+						selected: root.powerSelectionIndex === 0
+						onClicked: root.runPowerAction("lock")
+					}
+
+					PowerActionButton {
+						width: parent.tileWidth
+						height: parent.tileHeight
+						label: "Shed"
+						sublabel: "End the session"
+						iconSource: "/usr/share/icons/Adwaita/symbolic/actions/system-log-out-symbolic.svg"
+						selectionIndex: 1
+						selected: root.powerSelectionIndex === 1
+						onClicked: root.runPowerAction("logout")
+					}
+
+					PowerActionButton {
+						width: parent.tileWidth
+						height: parent.tileHeight
+						label: "Regrow"
+						sublabel: "Restart the machine"
+						iconSource: "/usr/share/icons/Adwaita/symbolic/actions/system-reboot-symbolic.svg"
+						selectionIndex: 2
+						selected: root.powerSelectionIndex === 2
+						dangerous: true
+						onClicked: root.runPowerAction("reboot")
+					}
+
+					PowerActionButton {
+						width: parent.tileWidth
+						height: parent.tileHeight
+						label: "Terminate"
+						sublabel: "Power off"
+						iconSource: "/usr/share/icons/Adwaita/symbolic/actions/system-shutdown-symbolic.svg"
+						selectionIndex: 3
+						selected: root.powerSelectionIndex === 3
+						dangerous: true
+						onClicked: root.runPowerAction("shutdown")
 					}
 				}
 			}
 		}
 	}
 
+	// A load, as an organ: a ring that fills, the number engraved inside it and
+	// the name of the thing under it. Used wherever a proportion is the reading
+	// — never a bar with a percentage written next to it.
 	component ArcGauge: Item {
 		id: gauge
 
 		required property real value
 		required property string label
 		property string detail: ""
-		property color gaugeColor: root.primary
-		property real animatedValue: 0
+		property color gaugeColor: Bio.organ
 
-		width: 118
-		height: 118
+		width: 108
+		height: 108
 
-		onValueChanged: animatedValue = Math.max(0, Math.min(1, value))
-		Component.onCompleted: animatedValue = Math.max(0, Math.min(1, value))
-		onAnimatedValueChanged: gaugeCanvas.requestPaint()
-
-		Behavior on animatedValue {
-			NumberAnimation {
-				duration: Motion.popupOpen
-				easing.type: ThemeEngine.standardEasing
-			}
+		BioGlow {
+			anchors.centerIn: ring
+			width: ring.width * 1.8
+			height: ring.height * 1.8
+			color: gauge.gaugeColor
+			strength: 0.20
+			spread: 0.36
 		}
 
-		Canvas {
-			id: gaugeCanvas
-			anchors.fill: parent
-			antialiasing: true
+		BioRing {
+			id: ring
+			anchors.horizontalCenter: parent.horizontalCenter
+			anchors.top: parent.top
+			width: 78
+			height: 78
+			seed: 1
+			weight: Bio.ribHeavy
+			lineColor: Bio.boneFaint
+			liveColor: gauge.gaugeColor
+			progress: Math.max(0, Math.min(1, gauge.value))
+		}
 
-			onPaint: {
-				const ctx = getContext("2d");
-				ctx.reset();
-
-				const cx = width / 2;
-				const cy = height / 2;
-				const r = Math.min(width, height) / 2 - 7;
-				const start = Math.PI * 0.75;
-				const sweep = Math.PI * 1.5;
-
-				ctx.lineWidth = 9;
-				ctx.lineCap = "round";
-
-				ctx.strokeStyle = root.secondaryInsetColor;
-				ctx.beginPath();
-				ctx.arc(cx, cy, r, start, start + sweep);
-				ctx.stroke();
-
-				if (gauge.animatedValue > 0.005) {
-					ctx.strokeStyle = gauge.gaugeColor;
-					ctx.beginPath();
-					ctx.arc(cx, cy, r, start, start + sweep * gauge.animatedValue);
-					ctx.stroke();
-				}
-			}
+		BioText {
+			anchors.centerIn: ring
+			role: "reading"
+			font.pixelSize: 22
+			text: `${Math.round(gauge.value * 100)}%`
 		}
 
 		Column {
-			anchors.centerIn: parent
+			anchors.horizontalCenter: parent.horizontalCenter
+			anchors.top: ring.bottom
+			anchors.topMargin: Bio.s2
 			spacing: 0
 
-			Text {
+			BioText {
 				anchors.horizontalCenter: parent.horizontalCenter
-				color: foreground
-				font.pixelSize: 21
-				font.weight: Font.DemiBold
-				text: `${Math.round(gauge.value * 100)}%`
-			}
-
-			Text {
-				anchors.horizontalCenter: parent.horizontalCenter
-				color: Qt.alpha(root.primary, 0.95)
-				font.pixelSize: 9
-				font.weight: Font.DemiBold
-				font.letterSpacing: 1
+				role: "label"
+				color: gauge.gaugeColor
 				text: gauge.label
 			}
 
-			Text {
+			BioText {
 				anchors.horizontalCenter: parent.horizontalCenter
-				visible: text !== ""
-				color: Qt.alpha(foreground, 0.5)
-				font.pixelSize: 8
+				role: "caption"
+				tone: "faint"
+				visible: gauge.detail !== ""
 				text: gauge.detail
 			}
 		}
 	}
 
+	// A named reading with a vein under it: disks, batteries, anything that has
+	// a proportion and a couple of numbers worth reading.
 	component ResourceRow: Item {
 		id: resourceRow
 
 		required property string label
 		required property string detail
 		required property real usage
-		required property string icon
+		property string icon: ""
 		property string valueText: `${Math.round(resourceRow.usage * 100)}%`
 		property string subValueText: ""
 
+		readonly property bool strained: resourceRow.usage > 0.88
+
 		width: parent ? parent.width : 276
-		implicitHeight: 34
+		implicitHeight: 38
 
-		QQCImpl.IconImage {
-			id: resourceRowIcon
-			x: 0
-			y: 1
-			width: 16
-			height: 16
-			source: resourceRow.icon
-			sourceSize: Qt.size(width, height)
-			color: root.foreground
-		}
-
-		Text {
-			x: 26
-			y: 0
-			color: foreground
-			font.pixelSize: 12
-			font.weight: Font.Medium
+		BioText {
+			id: rowLabel
+			anchors.left: parent.left
+			anchors.top: parent.top
+			role: "heading"
+			font.pixelSize: 13
 			text: resourceRow.label
 		}
 
-		Text {
-			x: 54
-			y: 1
-			color: Qt.alpha(foreground, 0.6)
-			font.pixelSize: 10
-			font.weight: Font.Normal
+		BioText {
+			anchors.left: rowLabel.right
+			anchors.leftMargin: Bio.s2
+			anchors.baseline: rowLabel.baseline
+			role: "caption"
+			tone: "faint"
 			text: resourceRow.detail
-			visible: text !== ""
-			width: parent.width - 100
-			elide: Text.ElideRight
 		}
 
-		Text {
+		BioText {
 			anchors.right: parent.right
-			y: 0
-			color: foreground
-			font.pixelSize: 12
-			font.weight: Font.Medium
+			anchors.baseline: rowLabel.baseline
+			role: "caption"
+			tone: resourceRow.strained ? "alert" : "muted"
 			text: resourceRow.valueText
 		}
 
-		Text {
+		BioMeter {
+			anchors.left: parent.left
 			anchors.right: parent.right
-			y: 13
-			color: Qt.alpha(foreground, 0.42)
-			font.pixelSize: 9
-			font.weight: Font.Medium
-			text: resourceRow.subValueText
-			visible: text !== ""
+			anchors.top: rowLabel.bottom
+			anchors.topMargin: Bio.s2
+			height: 8
+			value: resourceRow.usage
+			fillColor: resourceRow.strained ? Bio.necrosis : Bio.organ
+			trackColor: Bio.boneGhost
 		}
 
-		ThemedRectangle {
-			x: 26
-			themeStyle: "inset"
-			y: 20
-			width: parent.width - 26
-			height: 8
-			radius: ThemeEngine.radiusSmall
-			color: root.secondaryInsetColor
-			clip: true
-
-			ThemedRectangle {
-				themeStyle: "flat"
-				width: parent.width * resourceRow.usage
-				height: parent.height
-				radius: parent.radius
-				color: root.accent
-
-				Behavior on width {
-					Anim {}
-				}
-			}
+		BioText {
+			anchors.right: parent.right
+			anchors.bottom: parent.bottom
+			role: "caption"
+			tone: "faint"
+			visible: resourceRow.subValueText !== ""
+			text: resourceRow.subValueText
 		}
 	}
 
-	component PowerActionButton: ThemedRectangle {
+	// One way out of the session. A tile is a chamber with a ring in it; the
+	// dangerous two are outlined in necrosis so the hand knows before the eye
+	// has read the word.
+	component PowerActionButton: Item {
 		id: powerActionButton
 
 		signal clicked
@@ -4404,66 +4188,70 @@ printf 'type=offline\niface=\nip=\n'`
 		property string sublabel: ""
 		property bool dangerous: false
 
-		radius: ThemeEngine.radiusMedium
-		color: (powerActionButton.selected || powerMouse.containsMouse)
-			? Qt.alpha(root.accent, 0.26)
-			: root.secondaryBoxColor
-		border.width: powerActionButton.selected ? 1 : 0
-		border.color: Qt.alpha(root.accent, 0.6)
+		readonly property color toneColor: powerActionButton.dangerous ? Bio.necrosis : Bio.organ
+		readonly property real live: Math.max(powerMouse.live, powerActionButton.selected ? 0.85 : 0)
 
-		Behavior on color {
-			CAnim {}
-		}
+		BioSurface {
+			anchors.fill: parent
+			variant: "plate"
+			lineColor: powerActionButton.dangerous ? Qt.alpha(Bio.necrosis, 0.38) : Bio.boneFaint
+			liveColor: powerActionButton.toneColor
+			washTop: Qt.alpha(powerActionButton.toneColor, 0.07)
+			washBottom: Bio.tissue1
+			haloStrength: 0.18 * powerActionButton.live
+			intensity: powerActionButton.live
+			padding: Bio.s4
 
-		HoverLayer {
-			id: powerMouse
-			tint: root.foreground
-			showHover: false
-			onEntered: root.powerSelectionIndex = powerActionButton.selectionIndex
-			onClicked: powerActionButton.clicked()
-		}
-
-		Row {
-			anchors.left: parent.left
-			anchors.leftMargin: 12
-			anchors.verticalCenter: parent.verticalCenter
-			spacing: 10
-
-			ThemedRectangle {
-				width: 36
-				height: 36
-				radius: ThemeEngine.radiusMedium
+			Row {
 				anchors.verticalCenter: parent.verticalCenter
-				color: powerActionButton.dangerous
-					? Qt.alpha(root.danger, 0.2)
-					: Qt.alpha(root.primary, 0.22)
+				anchors.left: parent.left
+				anchors.right: parent.right
+				spacing: Bio.s3
 
-				QQCImpl.IconImage {
-					anchors.centerIn: parent
-					width: 17
-					height: 17
-					source: powerActionButton.iconSource
-					sourceSize: Qt.size(width, height)
-					color: powerActionButton.dangerous ? root.danger : root.foreground
+				BioRing {
+					anchors.verticalCenter: parent.verticalCenter
+					width: 34
+					height: 34
+					seed: powerActionButton.selectionIndex
+					lineColor: Bio.boneFaint
+					liveColor: powerActionButton.toneColor
+					intensity: powerActionButton.live
+
+					QQCImpl.IconImage {
+						anchors.centerIn: parent
+						width: 16
+						height: 16
+						source: powerActionButton.iconSource
+						sourceSize: Qt.size(width, height)
+						color: powerActionButton.live > 0.3 ? powerActionButton.toneColor : Bio.text
+					}
+				}
+
+				Column {
+					anchors.verticalCenter: parent.verticalCenter
+					spacing: -1
+
+					BioText {
+						role: "heading"
+						color: powerActionButton.live > 0.3 ? powerActionButton.toneColor : Bio.text
+						text: powerActionButton.label
+					}
+
+					BioText {
+						role: "caption"
+						tone: "faint"
+						visible: powerActionButton.sublabel !== ""
+						text: powerActionButton.sublabel
+					}
 				}
 			}
+		}
 
-			Column {
-				anchors.verticalCenter: parent.verticalCenter
-				spacing: 1
-
-				Text {
-					color: foreground
-					font.pixelSize: 13
-					font.weight: Font.DemiBold
-					text: powerActionButton.label
-				}
-
-				Text {
-					color: Qt.alpha(foreground, 0.55)
-					font.pixelSize: 10
-					text: powerActionButton.sublabel
-				}
+		BioTouch {
+			id: powerMouse
+			onClicked: powerActionButton.clicked()
+			onContainsMouseChanged: {
+				if (containsMouse) root.powerSelectionIndex = powerActionButton.selectionIndex;
 			}
 		}
 	}
@@ -4478,7 +4266,7 @@ printf 'type=offline\niface=\nip=\n'`
 		barItem: bar
 		anchorWindow: barWindow
 		anchorMode: "item"
-		anchorItem: trayIsland
+		anchorItem: trayRow
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
 		expandedWidth: (trayMenuStackLoader.item ? trayMenuStackLoader.item.implicitWidth : 240) + 24
@@ -4725,7 +4513,7 @@ printf 'type=offline\niface=\nip=\n'`
 		visible: root.clockPopupVisible
 		barItem: bar
 		anchorMode: "item"
-		anchorItem: clockIsland
+		anchorItem: specimenPlate
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
 		expandedWidth: 380
@@ -4741,82 +4529,72 @@ printf 'type=offline\niface=\nip=\n'`
 		Column {
 			id: calendarContent
 			anchors.fill: parent
-			spacing: 14
+			spacing: Bio.s4
+
+			// Today, stated once and large. The spine already carries the time,
+			// so the chamber carries the date.
+			Column {
+				width: parent.width
+				spacing: -2
+
+				BioText {
+					anchors.horizontalCenter: parent.horizontalCenter
+					role: "specimen"
+					text: Qt.formatDateTime(root.now, "d MMMM")
+				}
+
+				BioText {
+					anchors.horizontalCenter: parent.horizontalCenter
+					role: "label"
+					tone: "organ"
+					text: Qt.formatDateTime(root.now, "dddd")
+				}
+			}
 
 			Item {
 				width: parent.width
-				height: 44
+				height: 30
 
-				ThemedRectangle {
-					id: calPrev
-					width: 34
-					height: 34
+				BioNode {
 					anchors.left: parent.left
 					anchors.verticalCenter: parent.verticalCenter
-					radius: ThemeEngine.radiusMedium
-					color: root.secondaryBoxColor
+					size: 26
+					seed: 1
+					onClicked: root.shiftCalendarMonths(-1)
 
-					Text {
+					BioText {
 						anchors.centerIn: parent
-						color: foreground
-						font.pixelSize: 15
-						font.weight: Font.Medium
-						text: "\u2039"
-					}
-
-					HoverLayer {
-						tint: root.primary
-						onClicked: root.shiftCalendarMonths(-1)
+						role: "heading"
+						text: "‹"
 					}
 				}
 
-				Column {
+				BioText {
 					anchors.centerIn: parent
-					spacing: 1
-
-					Text {
-						anchors.horizontalCenter: parent.horizontalCenter
-						color: foreground
-						font.pixelSize: 17
-						font.weight: Font.DemiBold
-						text: Qt.formatDateTime(root.currentDate, "MMMM yyyy")
-					}
-
-					Text {
-						anchors.horizontalCenter: parent.horizontalCenter
-						color: Qt.alpha(foreground, 0.6)
-						font.pixelSize: 11
-						text: Qt.formatDateTime(root.now, "dddd, d MMMM")
-					}
+					role: "title"
+					font.pixelSize: 16
+					text: Qt.formatDateTime(root.currentDate, "MMMM yyyy")
 				}
 
-				ThemedRectangle {
-					width: 34
-					height: 34
+				BioNode {
 					anchors.right: parent.right
 					anchors.verticalCenter: parent.verticalCenter
-					radius: ThemeEngine.radiusMedium
-					color: root.secondaryBoxColor
+					size: 26
+					seed: 3
+					onClicked: root.shiftCalendarMonths(1)
 
-					Text {
+					BioText {
 						anchors.centerIn: parent
-						color: foreground
-						font.pixelSize: 15
-						font.weight: Font.Medium
-						text: "\u203a"
-					}
-
-					HoverLayer {
-						tint: root.primary
-						onClicked: root.shiftCalendarMonths(1)
+						role: "heading"
+						text: "›"
 					}
 				}
 			}
 
 			Grid {
 				columns: 7
-				columnSpacing: 4
-				rowSpacing: 4
+				columnSpacing: 2
+				rowSpacing: 2
 				anchors.horizontalCenter: parent.horizontalCenter
 
 				Repeater {
@@ -4825,43 +4603,67 @@ printf 'type=offline\niface=\nip=\n'`
 					delegate: Item {
 						required property string modelData
 						width: 44
-						height: 20
+						height: 22
 
-						Text {
+						BioText {
 							anchors.centerIn: parent
-							color: Qt.alpha(root.primary, 0.9)
-							font.pixelSize: 10
-							font.weight: Font.DemiBold
+							role: "label"
+							tone: "faint"
 							text: modelData
 						}
 					}
 				}
 
+				// No cells. A calendar drawn as a grid of boxes is a spreadsheet;
+				// here the days are just numbers on the membrane and only the
+				// one you are on, or the one under the pointer, grows a ring.
 				Repeater {
 					model: 42
 
-					delegate: ThemedRectangle {
+					delegate: Item {
 						id: dayCell
 						required property int index
 						readonly property int day: root.calendarDayNumber(index)
 						readonly property bool today: root.isToday(day)
+						readonly property bool present: dayCell.day !== 0
 
 						width: 44
-						height: 34
-						radius: ThemeEngine.radiusMedium
-						color: today ? root.primary : (day === 0 ? "transparent" : root.secondaryInsetColor)
-						scale: today ? 1.06 : 1
+						height: 32
 
-						Behavior on color {
-							CAnim {}
+						BioGlow {
+							anchors.centerIn: parent
+							width: 44
+							height: 44
+							color: Bio.organ
+							strength: 0.30
+							spread: 0.30
+							visible: dayCell.today
 						}
 
-						Text {
+						BioRing {
 							anchors.centerIn: parent
-							color: dayCell.today ? root.onPrimary : (dayCell.day === 0 ? "transparent" : foreground)
+							width: 30
+							height: 30
+							seed: dayCell.index % 4
+							visible: dayCell.present
+							lineColor: "transparent"
+							liveColor: Bio.organ
+							intensity: dayCell.today ? 1 : dayTouch.live
+						}
+
+						BioText {
+							anchors.centerIn: parent
+							role: dayCell.today ? "heading" : "body"
+							tone: dayCell.today ? "organ" : "muted"
 							font.pixelSize: 12
-							font.weight: dayCell.today ? Font.DemiBold : Font.Normal
-							text: dayCell.day === 0 ? "" : dayCell.day
+							visible: dayCell.present
+							text: dayCell.present ? dayCell.day : ""
+						}
+
+						BioTouch {
+							id: dayTouch
+							enabled: dayCell.present
+							cursorShape: Qt.ArrowCursor
 						}
 					}
 				}
@@ -4878,7 +4680,7 @@ printf 'type=offline\niface=\nip=\n'`
 		visible: root.weatherPopupVisible
 		barItem: bar
 		anchorMode: "item"
-		anchorItem: weatherIsland
+		anchorItem: weatherNode
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
 		expandedWidth: 330
@@ -4894,166 +4696,157 @@ printf 'type=offline\niface=\nip=\n'`
 		Column {
 			id: weatherContent
 			anchors.fill: parent
-			spacing: 12
+			spacing: Bio.s4
 
+			// The reading first, at the size of a thing you glance at, with the
+			// sky's own sigil beside it rather than a boxed-in icon.
 			Row {
 				width: parent.width
-				spacing: 14
+				spacing: Bio.s4
 
-				ThemedRectangle {
+				BioRing {
+					id: skyRing
+					anchors.verticalCenter: parent.verticalCenter
 					width: 58
 					height: 58
-					radius: ThemeEngine.radiusMedium
-					color: Qt.alpha(root.accent, 0.22)
-					anchors.verticalCenter: parent.verticalCenter
+					seed: 2
+					weight: Bio.ribHeavy
+					intensity: 0.55
+					lineColor: Bio.boneFaint
 
 					QQCImpl.IconImage {
 						anchors.centerIn: parent
-						width: 28
-						height: 28
+						width: 26
+						height: 26
 						source: root.resolveIconSource("", [
 							root.weatherIcon,
 							root.weatherIcon.replace("-symbolic", ""),
-							"weather-overcast-symbolic",
-							"dialog-information-symbolic"
+							"weather-overcast-symbolic"
 						])
-						visible: source !== ""
 						sourceSize: Qt.size(width, height)
-						color: root.foreground
+						color: Bio.organ
 					}
 				}
 
 				Column {
-					spacing: 0
 					anchors.verticalCenter: parent.verticalCenter
+					spacing: -1
 
-					Text {
-						color: foreground
-						font.pixelSize: 30
-						font.weight: Font.DemiBold
+					BioText {
+						role: "specimen"
 						text: root.weatherTemperature
 					}
 
-					Text {
-						color: Qt.alpha(foreground, 0.85)
-						font.pixelSize: 12
+					BioText {
+						role: "body"
+						tone: "muted"
 						text: root.weatherDescription
 					}
 
-					Text {
-						color: Qt.alpha(foreground, 0.55)
-						font.pixelSize: 10
+					BioText {
+						role: "label"
+						tone: "faint"
 						text: root.weatherLocation
 					}
 				}
 			}
 
-			Grid {
-				columns: 2
-				columnSpacing: 8
-				rowSpacing: 8
+			BioSection {
 				width: parent.width
+				title: "Atmosphere"
 
-				Repeater {
-					model: [
-						{ label: "FEELS LIKE", value: root.weatherFeelsLike },
-						{ label: "HUMIDITY", value: root.weatherHumidity },
-						{ label: "WIND", value: root.weatherWind },
-						{ label: "RAIN", value: root.weatherPrecipitation },
-						{ label: "PRESSURE", value: root.weatherPressure },
-						{ label: "UPDATED", value: root.weatherObservationTime !== "" ? Qt.formatDateTime(new Date(root.weatherObservationTime), "HH:mm") : "--" }
-					]
+				Grid {
+					columns: 2
+					columnSpacing: Bio.s5
+					rowSpacing: Bio.s3
+					width: parent.width
 
-					delegate: ThemedRectangle {
-						required property var modelData
-						width: (weatherContent.width - 8) / 2
-						height: 52
-						radius: ThemeEngine.radiusMedium
-						color: root.secondaryBoxColor
+					Repeater {
+						model: [
+							{ label: "Feels like", value: root.weatherFeelsLike },
+							{ label: "Humidity", value: root.weatherHumidity },
+							{ label: "Wind", value: root.weatherWind },
+							{ label: "Rain", value: root.weatherPrecipitation },
+							{ label: "Pressure", value: root.weatherPressure },
+							{ label: "Sampled", value: root.weatherObservationTime !== "" ? Qt.formatDateTime(new Date(root.weatherObservationTime), "HH:mm") : "--" }
+						]
 
-						Column {
-							anchors.left: parent.left
-							anchors.leftMargin: 12
-							anchors.verticalCenter: parent.verticalCenter
-							spacing: 2
+						delegate: Item {
+							required property var modelData
+							width: (weatherContent.width - Bio.s5) / 2
+							height: 34
 
-							Text {
-								color: Qt.alpha(root.primary, 0.95)
-								font.pixelSize: 8
-								font.weight: Font.DemiBold
-								font.letterSpacing: 1
-								text: modelData.label
+							Rectangle {
+								anchors.left: parent.left
+								anchors.verticalCenter: parent.verticalCenter
+								width: Bio.ribThin
+								height: parent.height * 0.62
+								color: Bio.boneGhost
 							}
 
-							Text {
-								color: foreground
-								font.pixelSize: 14
-								font.weight: Font.Medium
-								text: modelData.value
+							Column {
+								anchors.left: parent.left
+								anchors.leftMargin: Bio.s3
+								anchors.verticalCenter: parent.verticalCenter
+								spacing: -1
+
+								BioText {
+									role: "label"
+									tone: "faint"
+									text: modelData.label
+								}
+
+								BioText {
+									role: "bodyStrong"
+									text: modelData.value
+								}
 							}
 						}
 					}
 				}
 			}
 
-			ThemedRectangle {
+			// Sunrise and sunset as the two ends of one run of light.
+			Item {
 				width: parent.width
-				height: 48
-				radius: ThemeEngine.radiusMedium
-				color: root.secondaryInsetColor
+				height: 34
 
-				Row {
-					anchors.centerIn: parent
-					spacing: 32
+				BioText {
+					id: sunriseLabel
+					anchors.left: parent.left
+					anchors.verticalCenter: parent.verticalCenter
+					role: "reading"
+					font.pixelSize: 15
+					text: root.weatherSunrise
+				}
 
-					Row {
-						spacing: 8
+				BioText {
+					id: sunsetLabel
+					anchors.right: parent.right
+					anchors.verticalCenter: parent.verticalCenter
+					role: "reading"
+					font.pixelSize: 15
+					text: root.weatherSunset
+				}
 
-						QQCImpl.IconImage {
-							anchors.verticalCenter: parent.verticalCenter
-							width: 14
-							height: 14
-							source: root.resolveIconSource("weather-clear-symbolic", ["weather-clear"])
-							sourceSize: Qt.size(width, height)
-							color: root.accent
-						}
+				BioTendon {
+					anchors.left: sunriseLabel.right
+					anchors.right: sunsetLabel.left
+					anchors.leftMargin: Bio.s3
+					anchors.rightMargin: Bio.s3
+					anchors.verticalCenter: parent.verticalCenter
+					height: 14
+					lineColor: Bio.boneFaint
+					facing: Qt.LeftToRight
+				}
 
-						Text {
-							anchors.verticalCenter: parent.verticalCenter
-							color: foreground
-							font.pixelSize: 13
-							font.weight: Font.Medium
-							text: root.weatherSunrise
-						}
-					}
-
-					ThemedRectangle {
-						width: 1
-						height: 22
-						anchors.verticalCenter: parent.verticalCenter
-						color: Qt.alpha(foreground, 0.15)
-					}
-
-					Row {
-						spacing: 8
-
-						QQCImpl.IconImage {
-							anchors.verticalCenter: parent.verticalCenter
-							width: 14
-							height: 14
-							source: root.resolveIconSource("weather-clear-night-symbolic", ["weather-clear-night", "weather-clear"])
-							sourceSize: Qt.size(width, height)
-							color: root.secondary
-						}
-
-						Text {
-							anchors.verticalCenter: parent.verticalCenter
-							color: foreground
-							font.pixelSize: 13
-							font.weight: Font.Medium
-							text: root.weatherSunset
-						}
-					}
+				BioText {
+					anchors.horizontalCenter: parent.horizontalCenter
+					anchors.top: parent.verticalCenter
+					anchors.topMargin: Bio.s1
+					role: "label"
+					tone: "faint"
+					text: "Light"
 				}
 			}
 		}
@@ -5068,7 +4861,7 @@ printf 'type=offline\niface=\nip=\n'`
 		visible: root.notifPopupVisible
 		barItem: bar
 		anchorMode: "item"
-		anchorItem: bellIsland
+		anchorItem: notifNode
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
 		expandedWidth: 420
@@ -5085,55 +4878,43 @@ printf 'type=offline\niface=\nip=\n'`
 			anchors.fill: parent
 			spacing: 12
 
-			RowLayout {
+			Item {
 				Layout.fillWidth: true
-				spacing: 10
+				Layout.preferredHeight: 20
 
-				Text {
-					color: foreground
+				BioText {
+					id: notifTitle
+					anchors.left: parent.left
+					anchors.verticalCenter: parent.verticalCenter
+					role: "title"
 					font.pixelSize: 16
-					font.weight: Font.DemiBold
-					text: "Notifications"
+					text: "Signals"
 				}
 
-				ThemedRectangle {
+				BioTendon {
+					anchors.left: notifTitle.right
+					anchors.right: purgeLabel.visible ? purgeLabel.left : parent.right
+					anchors.leftMargin: Bio.s3
+					anchors.rightMargin: Bio.s3
+					anchors.verticalCenter: parent.verticalCenter
+					height: 12
+					facing: Qt.LeftToRight
+					lineColor: Bio.boneFaint
+					visible: width > 24
+				}
+
+				BioText {
+					id: purgeLabel
+					anchors.right: parent.right
+					anchors.verticalCenter: parent.verticalCenter
 					visible: root.notificationGroups.length > 0
-					width: 24
-					height: 20
-					radius: ThemeEngine.radiusMedium
-					color: Qt.alpha(root.primary, 0.3)
+					role: "label"
+					tone: purgeTouch.containsMouse ? "alert" : "muted"
+					text: `Purge ${root.notificationGroups.length}`
 
-					Text {
-						anchors.centerIn: parent
-						color: foreground
-						font.pixelSize: 11
-						font.weight: Font.DemiBold
-						text: root.notificationGroups.length
-					}
-				}
-
-				Item {
-					Layout.fillWidth: true
-				}
-
-				ThemedRectangle {
-					visible: root.notificationGroups.length > 0
-					width: clearAllLabel.implicitWidth + 22
-					height: 26
-					radius: ThemeEngine.radiusMedium
-					color: root.secondaryBoxColor
-
-					Text {
-						id: clearAllLabel
-						anchors.centerIn: parent
-						color: foreground
-						font.pixelSize: 11
-						font.weight: Font.Medium
-						text: "Clear all"
-					}
-
-					HoverLayer {
-						tint: root.danger
+					BioTouch {
+						id: purgeTouch
+						anchors.margins: -Bio.s2
 						onClicked: root.dismissAllNotificationGroups()
 					}
 				}
@@ -5146,22 +4927,21 @@ printf 'type=offline\niface=\nip=\n'`
 
 				Column {
 					anchors.centerIn: parent
-					spacing: 8
+					spacing: Bio.s3
 
-					QQCImpl.IconImage {
+					BioSigil {
 						anchors.horizontalCenter: parent.horizontalCenter
-						width: 34
-						height: 34
-						source: root.resolveIconSource("preferences-system-notifications-symbolic", ["dialog-information-symbolic"])
-						sourceSize: Qt.size(width, height)
-						color: Qt.alpha(root.foreground, 0.3)
+						width: 56
+						height: 56
+						seed: 21
+						lineColor: Bio.boneGhost
 					}
 
-					Text {
+					BioText {
 						anchors.horizontalCenter: parent.horizontalCenter
-						color: Qt.alpha(foreground, 0.5)
-						font.pixelSize: 13
-						text: "All caught up"
+						role: "label"
+						tone: "faint"
+						text: "Nothing stirring"
 					}
 				}
 			}
@@ -5177,487 +4957,353 @@ printf 'type=offline\niface=\nip=\n'`
 				bottomMargin: ThemeEngine.shadowRenderMargin
 				model: root.notificationGroups
 
-										delegate: ThemedRectangle {
-											required property var modelData
-											readonly property var latestEntry: modelData.latestSnapshot
-											readonly property var liveNotification: modelData.latestNotification
-											readonly property color urgencyColor: root.notificationUrgencyColor({
-												urgency: latestEntry ? latestEntry.urgency : -1
-											})
-											readonly property string iconSource: latestEntry && latestEntry.image !== ""
-												? latestEntry.image
-												: root.resolveIconSource(latestEntry ? latestEntry.appIcon : "", [
-													"dialog-information-symbolic",
-													"dialog-information"
-												])
-											property bool dismissing: false
+						delegate: Item {
+							id: notificationCard
 
-											width: notificationList.width - ThemeEngine.shadowRenderMargin * 2
-											height: groupHeader.height + notificationContent.implicitHeight + 22
-											x: dismissing ? -width - 24 : ThemeEngine.shadowRenderMargin
-											radius: ThemeEngine.radiusMedium
-											color: root.secondaryBoxColor
-											themeStyle: "raised"
-											border.width: 0
-											border.color: "transparent"
-											opacity: dismissing ? 0 : 1
-											clip: !ThemeEngine.controlEffectsEnabled
+							required property var modelData
+							readonly property var latestEntry: modelData.latestSnapshot
+							readonly property var liveNotification: modelData.latestNotification
+							readonly property color urgencyColor: root.notificationUrgencyColor({
+								urgency: latestEntry ? latestEntry.urgency : -1
+							})
+							readonly property string iconSource: latestEntry && latestEntry.image !== ""
+								? latestEntry.image
+								: root.resolveIconSource(latestEntry ? latestEntry.appIcon : "", [
+									"dialog-information-symbolic",
+									"dialog-information"
+								])
+							property bool dismissing: false
 
-											Behavior on x {
+							width: notificationList.width
+							height: cardBody.implicitHeight + Bio.s5 * 2
+							// Dismissing pulls the record out sideways; nothing
+							// in this style fades away where it stands.
+							x: dismissing ? -width - 24 : 0
+							opacity: dismissing ? 0 : 1
+
+							Behavior on x {
+								NumberAnimation { duration: Bio.relax; easing.type: Easing.InCubic }
+							}
+
+							Behavior on opacity {
+								NumberAnimation { duration: Bio.relax }
+							}
+
+							Timer {
+								id: notificationDismissTimer
+								interval: 240
+								repeat: false
+								onTriggered: root.dismissNotificationGroup(notificationCard.modelData.key)
+							}
+
+							BioSurface {
+								anchors.fill: parent
+								variant: "plate"
+								lineColor: Qt.alpha(notificationCard.urgencyColor, 0.45)
+								liveColor: notificationCard.urgencyColor
+								washTop: Qt.alpha(notificationCard.urgencyColor, 0.10)
+								washBottom: Bio.tissue1
+								haloStrength: 0.10
+								padding: Bio.s5
+
+								Column {
+									id: cardBody
+									anchors.fill: parent
+									spacing: Bio.s3
+
+									// Which organism sent this, and when.
+									Item {
+										width: parent.width
+										height: 14
+
+										Rectangle {
+											id: urgencyBead
+											anchors.left: parent.left
+											anchors.verticalCenter: parent.verticalCenter
+											width: Bio.nodule * 2
+											height: Bio.nodule * 2
+											radius: width / 2
+											color: notificationCard.urgencyColor
+										}
+
+										BioText {
+											id: sourceLabel
+											anchors.left: urgencyBead.right
+											anchors.leftMargin: Bio.s2
+											anchors.verticalCenter: parent.verticalCenter
+											role: "label"
+											color: notificationCard.urgencyColor
+											text: notificationCard.modelData.appName || "System"
+										}
+
+										BioText {
+											id: stampLabel
+											anchors.right: dismissTarget.left
+											anchors.rightMargin: Bio.s2
+											anchors.verticalCenter: parent.verticalCenter
+											role: "caption"
+											tone: "faint"
+											text: notificationCard.latestEntry
+												? `${root.formatNotificationTime(notificationCard.latestEntry.timestamp)}${notificationCard.latestEntry.active ? "" : " · closed"}`
+												: ""
+										}
+
+										Item {
+											id: dismissTarget
+											anchors.right: parent.right
+											anchors.verticalCenter: parent.verticalCenter
+											width: 16
+											height: 16
+
+											BioText {
+												anchors.centerIn: parent
+												role: "body"
+												tone: dismissTouch.containsMouse ? "alert" : "faint"
+												text: "×"
+											}
+
+											BioTouch {
+												id: dismissTouch
+												onClicked: {
+													if (notificationCard.dismissing) return;
+													notificationCard.dismissing = true;
+													notificationDismissTimer.start();
+												}
+											}
+										}
+									}
+
+									// What it says, with whatever it came with.
+									Row {
+										width: parent.width
+										spacing: Bio.s3
+
+										Column {
+											width: parent.width - (specimenImage.visible ? specimenImage.width + Bio.s3 : 0)
+											spacing: Bio.s1
+
+											BioText {
+												width: parent.width
+												role: "heading"
+												wrapMode: Text.WordWrap
+												maximumLineCount: 2
+												text: notificationCard.latestEntry
+													? notificationCard.latestEntry.summary
+													: (notificationCard.modelData.appName || "Notification")
+											}
+
+											BioText {
+												width: parent.width
+												visible: notificationCard.latestEntry && notificationCard.latestEntry.body !== ""
+												role: "body"
+												tone: "muted"
+												wrapMode: Text.WordWrap
+												elide: Text.ElideNone
+												text: notificationCard.latestEntry ? notificationCard.latestEntry.body : ""
+											}
+										}
+
+										Item {
+											id: specimenImage
+											width: 50
+											height: 50
+											visible: notificationCard.iconSource !== ""
+
+											BioFrame {
+												anchors.fill: parent
+												variant: "plate"
+												beading: false
+												weight: Bio.ribThin
+												lineColor: Bio.boneFaint
+												liveColor: notificationCard.urgencyColor
+												fillTop: Bio.cavity
+												fillBottom: Bio.cavity
+											}
+
+											Image {
+												anchors.fill: parent
+												anchors.margins: notificationCard.latestEntry && notificationCard.latestEntry.image !== "" ? 3 : 13
+												source: notificationCard.iconSource
+												fillMode: notificationCard.latestEntry && notificationCard.latestEntry.image !== ""
+													? Image.PreserveAspectCrop
+													: Image.PreserveAspectFit
+												smooth: true
+												mipmap: true
+											}
+										}
+									}
+
+									BioMeter {
+										width: parent.width
+										visible: notificationCard.latestEntry
+											&& notificationCard.latestEntry.progressValue >= 0
+											&& notificationCard.latestEntry.progressValue <= 100
+										height: 8
+										fillColor: notificationCard.urgencyColor
+										value: Math.max(0, Math.min(notificationCard.latestEntry ? notificationCard.latestEntry.progressValue : 0, 100)) / 100
+									}
+
+									Flow {
+										width: parent.width
+										visible: notificationCard.liveNotification && notificationCard.liveNotification.actions.length > 0
+										spacing: Bio.s2
+
+										Repeater {
+											model: notificationCard.liveNotification ? notificationCard.liveNotification.actions : []
+
+											delegate: BioButton {
+												required property var modelData
+
+												implicitHeight: 28
+												text: modelData.text
+												onClicked: modelData.invoke()
+											}
+										}
+									}
+
+									Row {
+										width: parent.width
+										visible: notificationCard.liveNotification && notificationCard.liveNotification.hasInlineReply
+										spacing: Bio.s3
+
+										BioField {
+											id: inlineReply
+											width: parent.width - sendButton.width - Bio.s3
+											placeholder: notificationCard.liveNotification
+												? (notificationCard.liveNotification.inlineReplyPlaceholder || "Reply")
+												: "Reply"
+											onAccepted: root.submitInlineReply(notificationCard.liveNotification, inlineReply.inputItem)
+										}
+
+										BioButton {
+											id: sendButton
+											anchors.verticalCenter: parent.verticalCenter
+											text: "Send"
+											tone: "organ"
+											onClicked: root.submitInlineReply(notificationCard.liveNotification, inlineReply.inputItem)
+										}
+									}
+
+									// Older entries from the same source, folded away.
+									Item {
+										width: parent.width
+										height: 20
+										visible: notificationCard.modelData.notifications.length > 1
+
+										BioText {
+											id: foldLabel
+											anchors.left: parent.left
+											anchors.verticalCenter: parent.verticalCenter
+											role: "label"
+											tone: foldTouch.containsMouse ? "organ" : "faint"
+											text: notificationCard.modelData.expanded
+												? `Fold ${notificationCard.modelData.notifications.length - 1} older`
+												: `Unfold ${notificationCard.modelData.notifications.length - 1} older`
+										}
+
+										BioTendon {
+											anchors.left: foldLabel.right
+											anchors.right: parent.right
+											anchors.leftMargin: Bio.s3
+											anchors.verticalCenter: parent.verticalCenter
+											height: 10
+											facing: Qt.LeftToRight
+											lineColor: foldTouch.containsMouse ? Qt.alpha(Bio.organ, 0.6) : Bio.boneGhost
+											visible: width > 24
+										}
+
+										BioTouch {
+											id: foldTouch
+											onClicked: root.setNotificationGroupExpanded(
+												notificationCard.modelData.key, !notificationCard.modelData.expanded)
+										}
+									}
+
+									Item {
+										width: parent.width
+										height: olderSection.height
+										clip: true
+										visible: notificationCard.modelData.notifications.length > 1
+
+										Item {
+											id: olderSection
+											width: parent.width
+											height: notificationCard.modelData.expanded ? olderColumn.implicitHeight : 0
+											clip: true
+
+											Behavior on height {
 												NumberAnimation {
-													duration: Motion.normal
-													easing.type: ThemeEngine.emphasizedEasing
-													easing.overshoot: 0.12
+													duration: notificationCard.modelData.expanded ? Bio.swell : Bio.relax
+													easing.type: notificationCard.modelData.expanded ? Easing.OutBack : Easing.InCubic
+													easing.overshoot: notificationCard.modelData.expanded ? 1.05 : 0
 												}
 											}
 
-											Behavior on opacity {
-												Anim {}
-											}
+											Column {
+												id: olderColumn
+												width: parent.width
+												spacing: Bio.s2
 
-											Timer {
-												id: notificationDismissTimer
-												interval: 240
-												repeat: false
-												onTriggered: root.dismissNotificationGroup(modelData.key)
-											}
+												Repeater {
+													model: notificationCard.modelData.notifications.slice(1)
 
-										ThemedRectangle {
-											id: groupHeader
-											themeStyle: "flat"
-												anchors.left: parent.left
-												anchors.right: parent.right
-												anchors.top: parent.top
-												height: 32
-												color: Qt.alpha(urgencyColor, 0.12)
+													delegate: Item {
+														id: olderEntry
 
-												ThemedRectangle {
-													anchors.left: parent.left
-													anchors.right: parent.right
-													anchors.bottom: parent.bottom
-													height: 1
-													color: Qt.alpha(urgencyColor, 0.3)
-												}
+														required property var modelData
 
-												RowLayout {
-													anchors.fill: parent
-													anchors.leftMargin: 12
-													anchors.rightMargin: 6
-													spacing: 8
+														width: olderColumn.width
+														implicitHeight: olderText.implicitHeight + Bio.s3 * 2
 
-													ThemedRectangle {
-														implicitWidth: 8
-														implicitHeight: 8
-														radius: ThemeEngine.radiusSmall
-														color: urgencyColor
-													}
-
-													Text {
-														Layout.fillWidth: true
-														color: Qt.alpha(foreground, 0.85)
-														font.pixelSize: 10
-														font.weight: Font.DemiBold
-														font.letterSpacing: 1.4
-														elide: Text.ElideRight
-														text: (modelData.appName || "SYSTEM").toUpperCase()
-													}
-
-													Text {
-														color: Qt.alpha(foreground, 0.5)
-														font.pixelSize: 10
-														text: latestEntry
-															? `${root.formatNotificationTime(latestEntry.timestamp)}${latestEntry.active ? "" : "  •  closed"}`
-															: ""
-													}
-
-													ThemedRectangle {
-														implicitWidth: 20
-														implicitHeight: 20
-														radius: ThemeEngine.radiusMedium
-														color: "transparent"
-
-														Text {
-															anchors.centerIn: parent
-															color: Qt.alpha(foreground, 0.7)
-															font.pixelSize: 11
-															text: "×"
-														}
-
-														HoverLayer {
-															tint: root.danger
-															onClicked: {
-																if (dismissing) return;
-																dismissing = true;
-																notificationDismissTimer.start();
-															}
-														}
-													}
-												}
-											}
-
-											ColumnLayout {
-												id: notificationContent
-												anchors.left: parent.left
-												anchors.right: parent.right
-												anchors.top: groupHeader.bottom
-												anchors.leftMargin: 12
-												anchors.rightMargin: 12
-												anchors.topMargin: 10
-												spacing: 8
-
-										RowLayout {
-											Layout.fillWidth: true
-											visible: !ThemeEngine.dialogueNotifications
-											spacing: 12
-
-											ColumnLayout {
-												Layout.fillWidth: true
-												Layout.alignment: Qt.AlignTop
-												spacing: 3
-
-												Text {
-													Layout.fillWidth: true
-													color: foreground
-													font.pixelSize: 14
-													font.weight: Font.DemiBold
-													wrapMode: Text.WordWrap
-													maximumLineCount: 2
-													elide: Text.ElideRight
-													text: latestEntry ? latestEntry.summary : (modelData.appName || "Notification")
-												}
-
-												Text {
-													Layout.fillWidth: true
-													visible: latestEntry && latestEntry.body !== ""
-													color: Qt.alpha(foreground, 0.72)
-													font.pixelSize: 12
-													textFormat: Text.PlainText
-													wrapMode: Text.WordWrap
-													text: latestEntry ? latestEntry.body : ""
-												}
-											}
-
-											ThemedRectangle {
-												Layout.alignment: Qt.AlignTop
-												implicitWidth: 52
-												implicitHeight: 52
-												radius: ThemeEngine.radiusMedium
-												visible: iconSource !== ""
-												color: Qt.alpha(urgencyColor, 0.1)
-												clip: true
-
-												Image {
-													anchors.fill: parent
-													anchors.margins: latestEntry && latestEntry.image !== "" ? 0 : 13
-													source: iconSource
-													fillMode: latestEntry && latestEntry.image !== "" ? Image.PreserveAspectCrop : Image.PreserveAspectFit
-													smooth: true
-													mipmap: true
-												}
-											}
-										}
-
-										RowLayout {
-											Layout.fillWidth: true
-											visible: ThemeEngine.dialogueNotifications
-											spacing: 12
-
-											ThemedRectangle {
-												Layout.alignment: Qt.AlignTop
-												implicitWidth: 52
-												implicitHeight: 52
-												radius: ThemeEngine.radiusMedium
-												visible: iconSource !== ""
-												color: Qt.alpha(urgencyColor, 0.1)
-												clip: true
-
-												Image {
-													anchors.fill: parent
-													anchors.margins: latestEntry && latestEntry.image !== "" ? 0 : 13
-													source: iconSource
-													fillMode: latestEntry && latestEntry.image !== "" ? Image.PreserveAspectCrop : Image.PreserveAspectFit
-													smooth: true
-													mipmap: true
-												}
-											}
-
-											ThemedRectangle {
-												Layout.fillWidth: true
-												Layout.alignment: Qt.AlignTop
-												implicitHeight: dialogueColumn.implicitHeight + 18
-												themeStyle: "inset"
-												radius: ThemeEngine.radiusMedium
-												color: Qt.alpha(background, 0.34)
-
-												ColumnLayout {
-													id: dialogueColumn
-													anchors.fill: parent
-													anchors.margins: 9
-													spacing: 4
-
-													Text {
-														Layout.fillWidth: true
-														color: foreground
-														font.pixelSize: 13
-														font.weight: Font.DemiBold
-														font.letterSpacing: 0.5
-														wrapMode: Text.WordWrap
-														maximumLineCount: 2
-														elide: Text.ElideRight
-														text: latestEntry ? latestEntry.summary : (modelData.appName || "Notification")
-													}
-
-													RpgDialogueText {
-														Layout.fillWidth: true
-														visible: latestEntry && latestEntry.body !== ""
-														dialogueText: latestEntry ? latestEntry.body : ""
-														textColor: Qt.alpha(foreground, 0.82)
-														fontPixelSize: 12
-														letterDelay: 20
-													}
-												}
-											}
-										}
-
-												ThemedRectangle {
-													Layout.fillWidth: true
-													themeStyle: "inset"
-													implicitHeight: 6
-													radius: ThemeEngine.radiusTiny
-													visible: latestEntry && latestEntry.progressValue >= 0 && latestEntry.progressValue <= 100
-													color: Qt.alpha(border, 0.18)
-
-													ThemedRectangle {
-														themeStyle: "flat"
-														width: parent.width * Math.max(0, Math.min(latestEntry ? latestEntry.progressValue : -1, 100)) / 100
-														height: parent.height
-														radius: parent.radius
-														color: urgencyColor
-													}
-												}
-
-												Flow {
-													Layout.fillWidth: true
-													visible: liveNotification && liveNotification.actions.length > 0
-													spacing: 8
-
-													Repeater {
-														model: liveNotification ? liveNotification.actions : []
-
-														delegate: ThemedRectangle {
-															required property var modelData
-
-															width: actionLabel.implicitWidth + 20
-															height: 30
-															radius: ThemeEngine.radiusMedium
-															color: root.secondaryBoxStrongColor
-															border.width: 0
-															border.color: "transparent"
-
-															Text {
-																id: actionLabel
-																anchors.centerIn: parent
-																color: foreground
-																font.pixelSize: 12
-																font.weight: Font.Medium
-																text: modelData.text
-															}
-
-															HoverLayer {
-																tint: root.foreground
-																onClicked: modelData.invoke()
-															}
-														}
-													}
-												}
-
-												RowLayout {
-													Layout.fillWidth: true
-													visible: liveNotification && liveNotification.hasInlineReply
-													spacing: 8
-
-													ThemedRectangle {
-														Layout.fillWidth: true
-														themeStyle: "inset"
-														implicitHeight: 34
-														radius: ThemeEngine.radiusMedium
-														color: Qt.alpha(background, 0.42)
-														border.width: 0
-														border.color: "transparent"
-
-														TextInput {
-															id: inlineReplyInput
-															anchors.fill: parent
-															anchors.leftMargin: 12
-															anchors.rightMargin: 12
-															anchors.topMargin: 8
-															anchors.bottomMargin: 8
-															color: foreground
-															clip: true
-															selectByMouse: true
-															selectedTextColor: background
-															selectionColor: urgencyColor
-
-															Keys.onReturnPressed: root.submitInlineReply(liveNotification, inlineReplyInput)
-															Keys.onEnterPressed: root.submitInlineReply(liveNotification, inlineReplyInput)
-														}
-
-														Text {
-															anchors.fill: parent
-															anchors.leftMargin: 12
-															anchors.rightMargin: 12
-															anchors.topMargin: 8
-															anchors.bottomMargin: 8
-															visible: inlineReplyInput.text.length === 0
-															color: Qt.alpha(foreground, 0.45)
-															font.pixelSize: 13
-															text: liveNotification ? (liveNotification.inlineReplyPlaceholder || "Reply") : "Reply"
-															verticalAlignment: Text.AlignVCenter
-														}
-													}
-
-				ThemedRectangle {
-														implicitWidth: 60
-														implicitHeight: 34
-														radius: ThemeEngine.radiusMedium
-														color: Qt.alpha(urgencyColor, 0.16)
-														border.width: 0
-														border.color: "transparent"
-
-														Text {
-															anchors.centerIn: parent
-															color: foreground
-															font.pixelSize: 12
-															font.weight: Font.Medium
-															text: "Send"
-														}
-
-														HoverLayer {
-															tint: root.foreground
-															onClicked: root.submitInlineReply(liveNotification, inlineReplyInput)
-														}
-													}
-												}
-
-												ThemedRectangle {
-													Layout.fillWidth: true
-													implicitHeight: 28
-													radius: ThemeEngine.radiusMedium
-													visible: modelData.notifications.length > 1
-													color: root.secondaryInsetColor
-													border.width: 0
-													border.color: "transparent"
-
-													Text {
-														anchors.centerIn: parent
-														color: foreground
-														font.pixelSize: 12
-														font.weight: Font.Medium
-														text: modelData.expanded
-															? `Hide ${modelData.notifications.length - 1} older`
-															: `Show ${modelData.notifications.length - 1} older`
-													}
-
-													HoverLayer {
-														tint: root.foreground
-														onClicked: root.setNotificationGroupExpanded(modelData.key, !modelData.expanded)
-													}
-												}
-
-												Item {
-													Layout.fillWidth: true
-													Layout.preferredHeight: expandedOlderSection.height
-													Layout.maximumHeight: expandedOlderSection.height
-													clip: true
-													visible: modelData.notifications.length > 1
-
-													Item {
-														id: expandedOlderSection
-														readonly property real contentHeight: olderNotificationsColumn.implicitHeight
-														anchors.left: parent.left
-														anchors.right: parent.right
-														anchors.top: parent.top
-														height: modelData.expanded ? contentHeight : 0
-														clip: true
-
-														Behavior on height {
-															NumberAnimation {
-																duration: modelData.expanded ? Motion.popupOpen : Motion.popupClose
-																easing.type: modelData.expanded ? ThemeEngine.emphasizedEasing : ThemeEngine.standardEasing
-																easing.overshoot: modelData.expanded ? 0.35 : 0
-															}
+														Rectangle {
+															anchors.left: parent.left
+															anchors.top: parent.top
+															anchors.bottom: parent.bottom
+															anchors.topMargin: Bio.s2
+															anchors.bottomMargin: Bio.s2
+															width: Bio.ribThin
+															color: Bio.boneGhost
 														}
 
 														Column {
-															id: olderNotificationsColumn
-															width: parent.width
-															spacing: 6
+															id: olderText
+															anchors.left: parent.left
+															anchors.right: parent.right
+															anchors.leftMargin: Bio.s3
+															anchors.verticalCenter: parent.verticalCenter
+															spacing: 0
 
-															Repeater {
-																model: modelData.notifications.slice(1)
+															BioText {
+																width: parent.width
+																role: "bodyStrong"
+																tone: "muted"
+																text: olderEntry.modelData.summary
+															}
 
-																delegate: ThemedRectangle {
-																	required property var modelData
+															BioText {
+																width: parent.width
+																visible: olderEntry.modelData.body !== ""
+																role: "caption"
+																tone: "faint"
+																wrapMode: Text.WordWrap
+																maximumLineCount: 2
+																text: olderEntry.modelData.body
+															}
 
-																	width: olderNotificationsColumn.width
-																	implicitHeight: olderEntry.implicitHeight + 18
-																	radius: ThemeEngine.radiusMedium
-																	color: root.secondaryInsetColor
-																	border.width: 0
-																	border.color: "transparent"
-
-																	ColumnLayout {
-																		id: olderEntry
-																		anchors.fill: parent
-																		anchors.margins: 9
-																		spacing: 4
-
-																		RowLayout {
-																			Layout.fillWidth: true
-
-																			Text {
-																				Layout.fillWidth: true
-																				color: foreground
-																				font.pixelSize: 13
-																				font.weight: Font.Medium
-																				elide: Text.ElideRight
-																				text: modelData.summary || "Notification"
-																			}
-
-																			Text {
-																				color: Qt.alpha(foreground, 0.45)
-																				font.pixelSize: 11
-																				text: `${root.formatNotificationTime(modelData.timestamp)}${modelData.active ? "" : "  •  closed"}`
-																			}
-																		}
-
-																		Text {
-																			Layout.fillWidth: true
-																			visible: !ThemeEngine.dialogueNotifications && modelData.body !== ""
-																			color: Qt.alpha(foreground, 0.85)
-																			font.pixelSize: 13
-																			textFormat: Text.PlainText
-																			wrapMode: Text.WordWrap
-																			text: modelData.body
-																		}
-
-																		RpgDialogueText {
-																			Layout.fillWidth: true
-																			visible: ThemeEngine.dialogueNotifications && modelData.body !== ""
-																			dialogueText: modelData.body
-																			textColor: Qt.alpha(foreground, 0.85)
-																			fontPixelSize: 13
-																			letterDelay: 16
-																		}
-																	}
-																}
+															BioText {
+																role: "caption"
+																tone: "faint"
+																text: root.formatNotificationTime(olderEntry.modelData.timestamp)
 															}
 														}
 													}
 												}
-
 											}
 										}
+									}
+								}
+							}
+						}
 			}
 		}
 	}
@@ -5703,390 +5349,216 @@ printf 'type=offline\niface=\nip=\n'`
 				}
 			}
 
-			implicitWidth: toastCard.implicitWidth + ThemeEngine.shadowRenderMargin * 2
-				+ Math.abs(ThemeEngine.toastTravel)
-			implicitHeight: toastCard.implicitHeight + ThemeEngine.shadowRenderMargin * 2
+			implicitWidth: toastCard.implicitWidth + 40
+			implicitHeight: toastCard.implicitHeight
 
 			NumberAnimation on revealProgress {
 				from: 0
 				to: 1
-				duration: ThemeEngine.toastOpen
-				easing.type: ThemeEngine.emphasizedEasing
-				easing.overshoot: ThemeEngine.smallOvershoot
+				duration: Bio.swell
+				easing.type: Easing.OutBack
+				easing.overshoot: 1.1
 			}
 
-			ThemedRectangle {
-					id: toastCard
-					implicitWidth: 380
-					implicitHeight: toastHeader.height + toastContent.implicitHeight + 24
-					x: dismissing ? -implicitWidth - 24
-						: ThemeEngine.shadowRenderMargin + ThemeEngine.toastTravel * (1 - toastWindow.revealProgress)
-					y: ThemeEngine.shadowRenderMargin
-					scale: ThemeEngine.toastStartScale
-						+ (1 - ThemeEngine.toastStartScale) * toastWindow.revealProgress
-					rotation: ThemeEngine.toastRotation * (1 - toastWindow.revealProgress)
-					transformOrigin: Item.TopRight
-					radius: ThemeEngine.radiusMedium
-					color: root.surface
-					themeStyle: "raised"
-					border.width: 1
-					border.color: root.surfaceBorder
-					opacity: dismissing ? 0 : 1
-					clip: !ThemeEngine.controlEffectsEnabled
+			BioSurface {
+				id: toastCard
 
-					Behavior on x {
-						NumberAnimation {
-							duration: Motion.normal
-							easing.type: ThemeEngine.emphasizedEasing
-							easing.overshoot: 0.12
-						}
-					}
+				implicitWidth: 380
+				implicitHeight: toastContent.implicitHeight + Bio.s5 * 2
+				width: implicitWidth
+				height: implicitHeight
+				// It arrives from off the right edge, the way something crawls
+				// in, and leaves the same way.
+				x: toastWindow.dismissing
+					? implicitWidth + 24
+					: (1 - toastWindow.revealProgress) * 40
+				y: 0
+				opacity: toastWindow.dismissing ? 0 : Math.min(1, toastWindow.revealProgress * 2)
+				variant: "plate"
+				lineColor: Qt.alpha(toastWindow.urgencyColor, 0.55)
+				liveColor: toastWindow.urgencyColor
+				washTop: Qt.alpha(toastWindow.urgencyColor, 0.12)
+				washBottom: Bio.membraneDeep
+				haloStrength: 0.22
+				intensity: 0.55
+				padding: Bio.s5
 
-					Behavior on opacity {
-						Anim {}
-					}
-
-					Timer {
-						id: toastDismissTimer
-						interval: 240
-						repeat: false
-						onTriggered: notification.dismiss()
-					}
-
-					// urgency-tinted header band
-					ThemedRectangle {
-						id: toastHeader
-						themeStyle: "flat"
-						anchors.left: parent.left
-						anchors.right: parent.right
-						anchors.top: parent.top
-						height: 34
-						color: Qt.alpha(urgencyColor, 0.14)
-
-						ThemedRectangle {
-							anchors.left: parent.left
-							anchors.right: parent.right
-							anchors.bottom: parent.bottom
-							height: 1
-							color: Qt.alpha(urgencyColor, 0.35)
-						}
-
-						RowLayout {
-							anchors.fill: parent
-							anchors.leftMargin: 12
-							anchors.rightMargin: 7
-							spacing: 8
-
-							ThemedRectangle {
-								implicitWidth: 8
-								implicitHeight: 8
-								radius: ThemeEngine.radiusSmall
-								color: urgencyColor
-							}
-
-							Text {
-								Layout.fillWidth: true
-								color: Qt.alpha(foreground, 0.85)
-								font.pixelSize: 10
-								font.weight: Font.DemiBold
-								font.letterSpacing: 1.4
-								elide: Text.ElideRight
-								text: (notification.appName || "System").toUpperCase()
-							}
-
-							Text {
-								color: Qt.alpha(foreground, 0.5)
-								font.pixelSize: 10
-								text: Qt.formatDateTime(new Date(), "HH:mm")
-							}
-
-							ThemedRectangle {
-								implicitWidth: 20
-								implicitHeight: 20
-								radius: ThemeEngine.radiusMedium
-								color: "transparent"
-
-								Text {
-									anchors.centerIn: parent
-									color: Qt.alpha(foreground, 0.7)
-									font.pixelSize: 11
-									text: "\u00d7"
-								}
-
-								HoverLayer {
-									tint: root.danger
-									onClicked: {
-										if (dismissing) return;
-										dismissing = true;
-										toastDismissTimer.start();
-									}
-								}
-							}
-						}
-					}
-
-					ColumnLayout {
-						id: toastContent
-						anchors.left: parent.left
-						anchors.right: parent.right
-						anchors.top: toastHeader.bottom
-						anchors.leftMargin: 14
-						anchors.rightMargin: 14
-						anchors.topMargin: 10
-						spacing: 8
-
-						RowLayout {
-							Layout.fillWidth: true
-							visible: !ThemeEngine.dialogueNotifications
-							spacing: 12
-
-							ColumnLayout {
-								Layout.fillWidth: true
-								Layout.alignment: Qt.AlignTop
-								spacing: 3
-
-								Text {
-									Layout.fillWidth: true
-									color: foreground
-									font.pixelSize: 14
-									font.weight: Font.DemiBold
-									wrapMode: Text.WordWrap
-									maximumLineCount: 2
-									elide: Text.ElideRight
-									text: notification.summary || "Notification"
-								}
-
-								Text {
-									Layout.fillWidth: true
-									visible: notification.body !== ""
-									color: Qt.alpha(foreground, 0.72)
-									font.pixelSize: 12
-									textFormat: Text.PlainText
-									wrapMode: Text.WordWrap
-									maximumLineCount: 4
-									elide: Text.ElideRight
-									text: notification.body
-								}
-							}
-
-							ThemedRectangle {
-								Layout.alignment: Qt.AlignTop
-								implicitWidth: 52
-								implicitHeight: 52
-								radius: ThemeEngine.radiusMedium
-								visible: iconSource !== ""
-								color: Qt.alpha(urgencyColor, 0.1)
-								clip: true
-
-								Image {
-									anchors.fill: parent
-									anchors.margins: notification.image !== "" ? 0 : 13
-									source: iconSource
-									fillMode: notification.image !== "" ? Image.PreserveAspectCrop : Image.PreserveAspectFit
-									smooth: true
-									mipmap: true
-								}
-							}
-						}
-
-						RowLayout {
-							Layout.fillWidth: true
-							visible: ThemeEngine.dialogueNotifications
-							spacing: 12
-
-							ThemedRectangle {
-								Layout.alignment: Qt.AlignTop
-								implicitWidth: 52
-								implicitHeight: 52
-								radius: ThemeEngine.radiusMedium
-								visible: iconSource !== ""
-								color: Qt.alpha(urgencyColor, 0.1)
-								clip: true
-
-								Image {
-									anchors.fill: parent
-									anchors.margins: notification.image !== "" ? 0 : 13
-									source: iconSource
-									fillMode: notification.image !== "" ? Image.PreserveAspectCrop : Image.PreserveAspectFit
-									smooth: true
-									mipmap: true
-								}
-							}
-
-							ThemedRectangle {
-								Layout.fillWidth: true
-								Layout.alignment: Qt.AlignTop
-								implicitHeight: toastDialogueColumn.implicitHeight + 18
-								themeStyle: "inset"
-								radius: ThemeEngine.radiusMedium
-								color: Qt.alpha(root.background, 0.36)
-
-								ColumnLayout {
-									id: toastDialogueColumn
-									anchors.fill: parent
-									anchors.margins: 9
-									spacing: 4
-
-									Text {
-										Layout.fillWidth: true
-										color: foreground
-										font.pixelSize: 13
-										font.weight: Font.DemiBold
-										font.letterSpacing: 0.5
-										wrapMode: Text.WordWrap
-										maximumLineCount: 2
-										elide: Text.ElideRight
-										text: notification.summary || "Notification"
-									}
-
-									RpgDialogueText {
-										Layout.fillWidth: true
-										visible: notification.body !== ""
-										dialogueText: notification.body
-										textColor: Qt.alpha(foreground, 0.82)
-										fontPixelSize: 12
-										maximumLineCount: 4
-										letterDelay: 22
-									}
-								}
-							}
-						}
-
-						ThemedRectangle {
-							Layout.fillWidth: true
-							implicitHeight: 6
-							radius: ThemeEngine.radiusTiny
-							visible: progressValue >= 0 && progressValue <= 100
-							color: root.secondaryInsetColor
-
-							ThemedRectangle {
-								width: parent.width * Math.max(0, Math.min(progressValue, 100)) / 100
-								height: parent.height
-								radius: parent.radius
-								color: urgencyColor
-
-								Behavior on width {
-									Anim {}
-								}
-							}
-						}
-
-						Flow {
-							Layout.fillWidth: true
-							visible: notification && notification.actions.length > 0
-							spacing: 8
-
-							Repeater {
-								model: notification ? notification.actions : []
-
-								delegate: ThemedRectangle {
-									required property var modelData
-
-									width: actionLabel.implicitWidth + 22
-									height: 27
-									radius: ThemeEngine.radiusMedium
-									color: root.secondaryBoxColor
-
-									Text {
-										id: actionLabel
-										anchors.centerIn: parent
-										color: foreground
-										font.pixelSize: 11
-										font.weight: Font.Medium
-										text: modelData.text
-									}
-
-									HoverLayer {
-										tint: root.primary
-										onClicked: modelData.invoke()
-									}
-								}
-							}
-						}
-
-						RowLayout {
-							Layout.fillWidth: true
-							visible: notification && notification.hasInlineReply
-							spacing: 8
-
-							ThemedRectangle {
-								Layout.fillWidth: true
-								themeStyle: "inset"
-								implicitHeight: 32
-								radius: ThemeEngine.radiusMedium
-								color: root.secondaryInsetColor
-
-								TextInput {
-									id: toastInlineReplyInput
-									anchors.fill: parent
-									anchors.leftMargin: 12
-									anchors.rightMargin: 12
-									anchors.topMargin: 7
-									anchors.bottomMargin: 7
-									color: foreground
-									clip: true
-									selectByMouse: true
-									selectedTextColor: background
-									selectionColor: urgencyColor
-
-									Keys.onReturnPressed: root.submitInlineReply(notification, toastInlineReplyInput)
-									Keys.onEnterPressed: root.submitInlineReply(notification, toastInlineReplyInput)
-								}
-
-								Text {
-									anchors.fill: parent
-									anchors.leftMargin: 12
-									verticalAlignment: Text.AlignVCenter
-									visible: toastInlineReplyInput.text.length === 0
-									color: Qt.alpha(foreground, 0.45)
-									font.pixelSize: 12
-									text: notification ? (notification.inlineReplyPlaceholder || "Reply") : "Reply"
-								}
-							}
-
-							ThemedRectangle {
-								implicitWidth: 56
-								implicitHeight: 32
-								radius: ThemeEngine.radiusMedium
-								color: Qt.alpha(root.primary, 0.3)
-
-								Text {
-									anchors.centerIn: parent
-									color: foreground
-									font.pixelSize: 11
-									font.weight: Font.DemiBold
-									text: "Send"
-								}
-
-								HoverLayer {
-									tint: root.primary
-									onClicked: root.submitInlineReply(notification, toastInlineReplyInput)
-								}
-							}
-						}
-					}
-
-					// timeout countdown
-					ThemedRectangle {
-						id: toastCountdown
-						anchors.left: parent.left
-						anchors.bottom: parent.bottom
-						anchors.leftMargin: 1
-						anchors.bottomMargin: 1
-						height: 3
-						radius: 1.5
-						color: Qt.alpha(urgencyColor, 0.75)
-						width: toastCard.implicitWidth - 2
-
-						NumberAnimation on width {
-							from: toastCard.implicitWidth - 2
-							to: 0
-							duration: duration
-							easing.type: Easing.Linear
-						}
-					}
-
+				Behavior on x {
+					NumberAnimation { duration: Bio.relax; easing.type: Easing.InCubic }
 				}
+
+				Behavior on opacity {
+					NumberAnimation { duration: Bio.relax }
+				}
+
+				Timer {
+					id: toastDismissTimer
+					interval: 240
+					repeat: false
+					onTriggered: toastWindow.notification.dismiss()
+				}
+
+				Column {
+					id: toastContent
+					anchors.fill: parent
+					spacing: Bio.s3
+
+					Item {
+						width: parent.width
+						height: 14
+
+						Rectangle {
+							id: toastBead
+							anchors.left: parent.left
+							anchors.verticalCenter: parent.verticalCenter
+							width: Bio.nodule * 2
+							height: Bio.nodule * 2
+							radius: width / 2
+							color: toastWindow.urgencyColor
+						}
+
+						BioText {
+							anchors.left: toastBead.right
+							anchors.leftMargin: Bio.s2
+							anchors.verticalCenter: parent.verticalCenter
+							role: "label"
+							color: toastWindow.urgencyColor
+							text: toastWindow.notification.appName || "System"
+						}
+
+						Item {
+							id: toastDismiss
+							anchors.right: parent.right
+							anchors.verticalCenter: parent.verticalCenter
+							width: 16
+							height: 16
+
+							BioText {
+								anchors.centerIn: parent
+								role: "body"
+								tone: toastDismissTouch.containsMouse ? "alert" : "faint"
+								text: "×"
+							}
+
+							BioTouch {
+								id: toastDismissTouch
+								onClicked: {
+									if (toastWindow.dismissing) return;
+									toastWindow.dismissing = true;
+									toastDismissTimer.start();
+								}
+							}
+						}
+					}
+
+					Row {
+						width: parent.width
+						spacing: Bio.s3
+
+						Column {
+							width: parent.width - (toastImage.visible ? toastImage.width + Bio.s3 : 0)
+							spacing: Bio.s1
+
+							BioText {
+								width: parent.width
+								role: "heading"
+								wrapMode: Text.WordWrap
+								maximumLineCount: 2
+								text: toastWindow.notification.summary || (toastWindow.notification.appName || "Notification")
+							}
+
+							BioText {
+								width: parent.width
+								visible: toastWindow.notification.body !== ""
+								role: "body"
+								tone: "muted"
+								wrapMode: Text.WordWrap
+								elide: Text.ElideRight
+								maximumLineCount: 4
+								text: toastWindow.notification.body
+							}
+						}
+
+						Item {
+							id: toastImage
+							width: 50
+							height: 50
+							visible: toastWindow.iconSource !== ""
+
+							BioFrame {
+								anchors.fill: parent
+								variant: "plate"
+								beading: false
+								weight: Bio.ribThin
+								lineColor: Bio.boneFaint
+								liveColor: toastWindow.urgencyColor
+								fillTop: Bio.cavity
+								fillBottom: Bio.cavity
+							}
+
+							Image {
+								anchors.fill: parent
+								anchors.margins: toastWindow.notification.image !== "" ? 3 : 13
+								source: toastWindow.iconSource
+								fillMode: toastWindow.notification.image !== ""
+									? Image.PreserveAspectCrop
+									: Image.PreserveAspectFit
+								smooth: true
+								mipmap: true
+							}
+						}
+					}
+
+					BioMeter {
+						width: parent.width
+						visible: toastWindow.progressValue >= 0 && toastWindow.progressValue <= 100
+						height: 8
+						fillColor: toastWindow.urgencyColor
+						value: Math.max(0, Math.min(toastWindow.progressValue, 100)) / 100
+					}
+
+					Flow {
+						width: parent.width
+						visible: toastWindow.notification && toastWindow.notification.actions.length > 0
+						spacing: Bio.s2
+
+						Repeater {
+							model: toastWindow.notification ? toastWindow.notification.actions : []
+
+							delegate: BioButton {
+								required property var modelData
+
+								implicitHeight: 28
+								text: modelData.text
+								onClicked: modelData.invoke()
+							}
+						}
+					}
+
+					Row {
+						width: parent.width
+						visible: toastWindow.notification && toastWindow.notification.hasInlineReply
+						spacing: Bio.s3
+
+						BioField {
+							id: toastInlineReply
+							width: parent.width - toastSend.width - Bio.s3
+							placeholder: toastWindow.notification
+								? (toastWindow.notification.inlineReplyPlaceholder || "Reply")
+								: "Reply"
+							onAccepted: root.submitInlineReply(toastWindow.notification, toastInlineReply.inputItem)
+						}
+
+						BioButton {
+							id: toastSend
+							anchors.verticalCenter: parent.verticalCenter
+							text: "Send"
+							tone: "organ"
+							onClicked: root.submitInlineReply(toastWindow.notification, toastInlineReply.inputItem)
+						}
+					}
+				}
+			}
 
 				Timer {
 					running: true

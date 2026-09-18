@@ -1,24 +1,22 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls.impl
 import Quickshell
 import Quickshell.Io
 import "components"
 
-ThemedRectangle {
+// The vial rack: three readings standing side by side on the spine.
+//
+// Not icons with numbers next to them — each load is a vessel filling from the
+// bottom, so a glance at their heights is the whole status. The engraved
+// initial under each one says which organ it is.
+Item {
 	id: root
 
 	signal clicked
 
-	required property color foreground
-	required property color secondaryBoxColor
-	required property color secondaryInsetColor
-	required property color barColor
-	required property string cpuIcon
-	required property string memoryIcon
-	required property string storageIcon
-	required property string mouseIcon
+	property bool lit: false
+
 
 	property real cpuUsage: 0
 	property real memoryUsage: 0
@@ -113,51 +111,97 @@ ThemedRectangle {
 	readonly property string memoryText: `${root.formatStorage(root.memoryUsedKiB)}/${root.formatStorage(root.memoryTotalKiB)}`
 	readonly property string cpuText: root.cpuCores > 0 ? `${root.cpuCores} Cores` : ""
 
-	radius: ThemeEngine.radiusMedium
-	color: root.secondaryBoxColor
-	implicitWidth: resourceRow.implicitWidth + 18
-	implicitHeight: 27
-	clip: !ThemeEngine.shadowEnabled
+	implicitWidth: rack.implicitWidth + Bio.s4
+	implicitHeight: Bio.spine
 
-	HoverLayer {
+	readonly property real live: Math.max(interaction.live, root.lit ? 0.5 : 0)
+
+	Row {
+		id: rack
+		anchors.centerIn: parent
+		spacing: Bio.s3
+
+		Vial {
+			label: "C"
+			value: root.cpuUsage
+		}
+
+		Vial {
+			label: "M"
+			value: root.memoryUsage
+		}
+
+		Vial {
+			label: "D"
+			value: root.storageUsage
+		}
+
+		Vial {
+			visible: root.mouseBatteryAvailable
+			label: "P"
+			value: root.mouseBatteryUsage
+			// A pointer running out of charge is the one reading here that is
+			// bad when it is low rather than when it is high.
+			inverted: true
+		}
+	}
+
+	BioTouch {
 		id: interaction
-		tint: root.foreground
 		onClicked: root.clicked()
 	}
 
-	Row {
-		id: resourceRow
-		anchors.centerIn: parent
-		spacing: 8
+	component Vial: Item {
+		id: vial
 
-		IconBadge {
-			source: root.cpuIcon
+		property string label: ""
+		property real value: 0
+		property bool inverted: false
+
+		readonly property bool strained: vial.inverted ? vial.value < 0.2 : vial.value > 0.85
+
+		width: 13
+		height: Bio.spine
+
+		// The vessel the reading stands in. Without it three loose veins read as
+		// scratches on the wallpaper rather than as instruments.
+		BioFrame {
+			id: tube
+			anchors.horizontalCenter: parent.horizontalCenter
+			anchors.top: parent.top
+			width: parent.width
+			height: parent.height - 11
+			variant: "capsule"
+			beading: false
+			weight: Bio.ribThin
+			inset: 1
+			lineColor: Bio.boneFaint
+			liveColor: vial.strained ? Bio.necrosis : Bio.organ
+			fillTop: Bio.cavity
+			fillBottom: Bio.cavity
+			intensity: Math.max(root.live * 0.8, vial.strained ? 0.75 : 0)
 		}
 
-		IconBadge {
-			source: root.memoryIcon
+		BioMeter {
+			anchors.horizontalCenter: tube.horizontalCenter
+			anchors.top: tube.top
+			anchors.topMargin: 3
+			width: 6
+			height: tube.height - 6
+			vertical: true
+			value: vial.value
+			weight: Bio.rib
+			trackColor: "transparent"
+			fillColor: vial.strained ? Bio.necrosis : (root.live > 0.3 ? Bio.organ : Bio.organAlt)
 		}
 
-		IconBadge {
-			source: root.storageIcon
-		}
-
-		Row {
-			visible: root.mouseBatteryAvailable
-			height: 16
-			spacing: 4
-
-			IconBadge {
-				source: root.mouseIcon
-			}
-
-			Text {
-				anchors.verticalCenter: parent.verticalCenter
-				color: root.foreground
-				font.pixelSize: 10
-				font.weight: Font.Medium
-				text: root.mouseBatteryText
-			}
+		BioText {
+			anchors.horizontalCenter: parent.horizontalCenter
+			anchors.bottom: parent.bottom
+			role: "label"
+			font.pixelSize: 8
+			tone: root.live > 0.3 ? "organ" : "faint"
+			text: vial.label
 		}
 	}
 
@@ -295,19 +339,4 @@ ThemedRectangle {
 		}
 	}
 
-	component IconBadge: Item {
-		id: badge
-
-		required property string source
-
-		width: 16
-		height: 16
-
-		IconImage {
-			anchors.fill: parent
-			source: badge.source
-			sourceSize: Qt.size(width, height)
-			color: root.foreground
-		}
-	}
 }

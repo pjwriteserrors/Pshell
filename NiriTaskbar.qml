@@ -4,21 +4,30 @@ import QtQuick
 import Quickshell
 import "components"
 
-ThemedRectangle {
+// The windows on this output, as a segment of spine.
+//
+// Every window is a vertebra on one bone. The focused one is a full ring with
+// the application's icon in it; the rest are beads, sized by nothing and
+// meaning only "there is another one". An urgent window flushes.
+//
+// This replaces a row of rounded buttons on purpose: a taskbar that looks like
+// buttons invites reading each one, and there is nothing to read — the icon is
+// the whole content.
+Item {
 	id: root
 
 	required property var niriState
 	required property string outputName
-	required property color background
-	required property color foreground
-	required property color secondaryBoxColor
-	required property color secondaryBoxStrongColor
 
-	readonly property int horizontalPadding: 10
-	readonly property int taskSpacing: 6
-	readonly property color hoverColor: Qt.alpha(root.foreground, 0.1)
-	readonly property color focusedColor: Qt.tint(root.secondaryBoxColor, Qt.rgba(1, 1, 1, 0.08))
-	readonly property int taskButtonSize: 24
+	// Handed over by the spine so a screen can be re-coloured in one place; the
+	// values themselves come from Bio.
+	property color background: Bio.tissue1
+	property color foreground: Bio.text
+	property color secondaryBoxColor: Bio.tissue2
+	property color secondaryBoxStrongColor: Bio.tissue3
+
+	readonly property int beadSize: 22
+	readonly property int focusedSize: 28
 
 	function iconSource(appId) {
 		if (!appId) return Quickshell.iconPath("application-x-executable", true);
@@ -33,90 +42,125 @@ ThemedRectangle {
 		return Quickshell.iconPath("application-x-executable", true);
 	}
 
-	radius: ThemeEngine.radiusMedium
-	color: root.background
-	clip: !ThemeEngine.shadowEnabled
-	implicitHeight: 30
-	implicitWidth: Math.min(taskContent.implicitWidth + horizontalPadding * 2, 520)
+	implicitHeight: Bio.spine
+	implicitWidth: Math.min(chain.implicitWidth + Bio.s4, 520)
 
-	Item {
-		id: taskRow
-		anchors.fill: parent
-		anchors.leftMargin: root.horizontalPadding
-		anchors.rightMargin: root.horizontalPadding
+	// The bone the vertebrae sit on.
+	Rectangle {
+		anchors.left: parent.left
+		anchors.right: parent.right
+		anchors.leftMargin: Bio.s3
+		anchors.rightMargin: Bio.s3
+		anchors.verticalCenter: parent.verticalCenter
+		height: Bio.ribThin
+		color: Bio.boneGhost
+	}
 
-		Row {
-			id: taskContent
-			anchors.fill: parent
-			spacing: root.taskSpacing
+	Row {
+		id: chain
+		anchors.centerIn: parent
+		spacing: Bio.s2
 
-			Repeater {
-				id: taskRepeater
+		Repeater {
+			id: taskRepeater
 
-				// Keyed by window id so an unrelated window event reuses the
-				// existing delegates instead of recreating them - recreating
-				// reloads every icon, which reads as a flicker.
-				model: ScriptModel {
-					objectProp: "id"
-					values: root.niriState.tasksForOutput(root.outputName)
+			// Keyed by window id so an unrelated window event reuses the
+			// existing delegates instead of recreating them — recreating
+			// reloads every icon, which reads as a flicker.
+			model: ScriptModel {
+				objectProp: "id"
+				values: root.niriState.tasksForOutput(root.outputName)
+			}
+
+			delegate: Item {
+				id: vertebra
+
+				required property var modelData
+				readonly property var task: modelData
+				readonly property bool focused: vertebra.task.isFocused
+
+				width: vertebra.focused ? root.focusedSize : root.beadSize
+				height: root.focusedSize
+				anchors.verticalCenter: parent?.verticalCenter ?? undefined
+
+				Behavior on width {
+					NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
 				}
 
-				// A plain Rectangle on purpose. As a ThemedRectangle the button
-				// would cross the "has a surface colour" threshold the moment
-				// the hover tint faded in and pop into a raised, bevelled,
-				// lifted control in a single frame.
-				delegate: Rectangle {
-					id: taskButton
+				BioGlow {
+					anchors.centerIn: parent
+					width: root.focusedSize * 2
+					height: root.focusedSize * 2
+					color: vertebra.task.isUrgent ? Bio.necrosis : Bio.organ
+					strength: 0.28
+					spread: 0.32
+					opacity: vertebra.focused || touch.containsMouse ? 1 : 0
+					visible: opacity > 0.01
 
-					required property var modelData
-					readonly property var task: modelData
-					readonly property bool hovered: mouseArea.containsMouse
-
-					width: root.taskButtonSize + 4
-					height: root.height - 6
-					y: Math.round((root.height - height) / 2)
-					radius: ThemeEngine.radiusMedium
-					color: taskButton.task.isFocused
-						? root.focusedColor
-						: taskButton.hovered ? root.hoverColor : "transparent"
-					border.width: taskButton.task.isUrgent ? 1 : 0
-					border.color: root.secondaryBoxStrongColor
-
-					Behavior on color {
-						CAnim {}
+					Behavior on opacity {
+						NumberAnimation { duration: Bio.grow }
 					}
+				}
 
-					Image {
-						anchors.centerIn: parent
-						source: root.iconSource(taskButton.task.appId)
-						sourceSize.width: 16
-						sourceSize.height: 16
-						width: 16
-						height: 16
-						fillMode: Image.PreserveAspectFit
-						smooth: true
-						mipmap: true
-						asynchronous: true
-						cache: true
-						opacity: taskButton.task.isFocused || taskButton.hovered ? 1 : 0.78
+				BioRing {
+					anchors.centerIn: parent
+					width: root.focusedSize
+					height: root.focusedSize
+					seed: vertebra.task.id % 4
+					lineColor: Bio.boneFaint
+					liveColor: vertebra.task.isUrgent ? Bio.necrosis : Bio.organ
+					intensity: vertebra.focused ? 1 : touch.live
+					opacity: vertebra.focused || touch.containsMouse ? 1 : 0.0
+					visible: opacity > 0.01
 
-						Behavior on opacity {
-							CAnim {}
-						}
+					Behavior on opacity {
+						NumberAnimation { duration: Bio.twitch }
 					}
+				}
 
-					MouseArea {
-						id: mouseArea
-						anchors.fill: parent
-						hoverEnabled: true
-						cursorShape: Qt.PointingHandCursor
-						acceptedButtons: Qt.LeftButton | Qt.MiddleButton
-						onClicked: event => {
-							if (event.button === Qt.MiddleButton)
-								root.niriState.closeWindow(taskButton.task.id);
-							else
-								root.niriState.focusWindow(taskButton.task.id);
-						}
+				// The resting state: a bead on the bone, nothing else.
+				Rectangle {
+					anchors.centerIn: parent
+					width: Bio.nodule * 2
+					height: Bio.nodule * 2
+					radius: width / 2
+					color: vertebra.task.isUrgent ? Bio.necrosis : Bio.boneDim
+					opacity: vertebra.focused || touch.containsMouse ? 0 : 1
+					visible: opacity > 0.01
+
+					Behavior on opacity {
+						NumberAnimation { duration: Bio.twitch }
+					}
+				}
+
+				Image {
+					anchors.centerIn: parent
+					source: root.iconSource(vertebra.task.appId)
+					sourceSize.width: 15
+					sourceSize.height: 15
+					width: 15
+					height: 15
+					fillMode: Image.PreserveAspectFit
+					smooth: true
+					mipmap: true
+					asynchronous: true
+					cache: true
+					opacity: vertebra.focused ? 1 : touch.containsMouse ? 0.85 : 0
+					visible: opacity > 0.01
+
+					Behavior on opacity {
+						NumberAnimation { duration: Bio.twitch }
+					}
+				}
+
+				BioTouch {
+					id: touch
+					acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+					onClicked: event => {
+						if (event.button === Qt.MiddleButton)
+							root.niriState.closeWindow(vertebra.task.id);
+						else
+							root.niriState.focusWindow(vertebra.task.id);
 					}
 				}
 			}
