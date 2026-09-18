@@ -17,9 +17,12 @@
     "brightness": 1.0,
     "gains": {
       "r": 1.0,
-      "g": 0.85,
-      "b": 0.7
-    }
+      "g": 0.5,
+      "b": 0.35
+    },
+    "order": "RGB",
+    "saturation_floor": 1.0,
+    "lightness": 0.5
   },
   "argb": {
     "enabled": true,
@@ -29,8 +32,8 @@
     "brightness": 1.0,
     "gains": {
       "r": 1.0,
-      "g": 0.85,
-      "b": 0.7
+      "g": 0.5,
+      "b": 0.35
     },
     "headers": [
       {
@@ -54,6 +57,12 @@
         "source": "accent2"
       }
     ],
-    "_comment": "leds is how many LEDs the header drives. An ARGB chain ignores data past its last LED, so 120 (the header's maximum) lights everything on it without anyone having to count. Set the real number if you ever want a gradient along the chain rather than one colour: apply_lighting.py --probe 0 <n>."
+    "_comment": "leds is how many LEDs the header drives. An ARGB chain ignores data past its last LED, so 120 (the header's maximum) lights everything on it without anyone having to count. Set the real number if you ever want a gradient along the chain rather than one colour: apply_lighting.py --probe 0 <n>.",
+    "order": "RGB",
+    "saturation_floor": 1.0,
+    "_comment_order": "order names the byte order the strip reads. Probe it with apply_lighting.py --probe-order <zone>: it paints the first 12 LEDs as red, green, blue, and the order you actually see is the answer.",
+    "_comment_saturation": "saturation_floor and lightness are what keep a wallpaper colour from arriving pink. A muted palette entry has all three channels lit; on a diffused LED that floor is just white mixed in. floor 1.0 with lightness 0.5 is the one point where a hue is pure - one channel full, one at zero. Use brightness to dim, and drop saturation_floor towards 0 if you ever want the paler original back.",
+    "lightness": 0.5,
+    "_comment_gains": "gains calibrate the channels on the way out, after the colour is shaped. These LEDs' green is far more efficient than their red, so an untouched green drags every warm colour towards plain orange. Turn g down for redder, up for more orange."
   }
 }

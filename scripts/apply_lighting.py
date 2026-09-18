@@ -4,6 +4,7 @@
     apply_lighting.py                 derive everything from the current theme
     apply_lighting.py --restore       re-apply the last state (used at login)
     apply_lighting.py --probe 0 30    light 30 LEDs on ARGB header 0, to count them
+    apply_lighting.py --probe-order 0 paint it red/green/blue to read its wiring
     apply_lighting.py --dry-run       print what would be sent
 
 The keyboard gets the wallpaper itself, projected onto its key matrix. The GPU
@@ -88,17 +89,23 @@ DEFAULT_CONFIG = {
         "device": "PowerColor Red Devil RX5700XT",
         "mode": "Static",
         "source": "accent",
+        "order": "RGB",
         "saturation": 1.2,
+        "saturation_floor": 1.0,
+        "lightness": 0.5,
         "brightness": 1.0,
-        "gains": {"r": 1.0, "g": 0.85, "b": 0.7},
+        "gains": {"r": 1.0, "g": 0.5, "b": 0.35},
     },
     "argb": {
         "enabled": True,
         "device": "ASUS ROG STRIX Z370-F GAMING Addressable",
         "mode": "Direct",
+        "order": "RGB",
         "saturation": 1.2,
+        "saturation_floor": 1.0,
+        "lightness": 0.5,
         "brightness": 1.0,
-        "gains": {"r": 1.0, "g": 0.85, "b": 0.7},
+        "gains": {"r": 1.0, "g": 0.5, "b": 0.35},
         # One entry per Addressable RGB Header. "leds" is how many LEDs are
         # physically on that header - 0 means nothing is plugged in. Fans are
         # usually daisy-chained, so one header can carry several of them.
@@ -173,12 +180,58 @@ def resolve_source(name: str, palette: dict[str, str]) -> str:
     return palette.get(name, ranked[0])
 
 
-def adjust(hex_color: str, saturation: float, brightness: float, gains: dict) -> str:
-    """Per-channel gains in linear light, then HLS saturation, then brightness.
+# LED strips do not all take their bytes in the same order. A WS2812 wants
+# green first; some fan rings swap green and blue. Sending sRGB to a strip that
+# expects something else does not just shift the hue, it lands somewhere else
+# entirely - an orange arrives as pink. --probe-order reads the wiring off the
+# hardware; this then permutes every colour on the way out.
+CHANNEL_ORDERS = {
+    "RGB": (0, 1, 2),
+    "RBG": (0, 2, 1),
+    "GRB": (1, 0, 2),
+    "GBR": (1, 2, 0),
+    "BRG": (2, 0, 1),
+    "BGR": (2, 1, 0),
+}
 
-    The gains exist because LED channels are not equally efficient: on these
-    strips an untouched blue swamps everything else and every colour drifts
-    violet.
+
+def reorder(hex_color: str, order: str) -> str:
+    """Permute a colour so a strip wired in `order` displays it as intended.
+
+    `order` names the order the strip reads its bytes in. Position i of the
+    output is the intended channel that the strip will read there.
+    """
+    mapping = CHANNEL_ORDERS.get(order.upper())
+    if mapping is None or mapping == (0, 1, 2):
+        return hex_color
+    channels = [hex_color[0:2], hex_color[2:4], hex_color[4:6]]
+    return "".join(channels[index] for index in mapping)
+
+
+def adjust(hex_color: str, saturation: float, brightness: float, gains: dict,
+           saturation_floor: float = 0.0, lightness_target: float | None = None) -> str:
+    """Shape the colour in HLS, then calibrate the channels on the way out.
+
+    Order matters. Gains used to run first, before the saturation floor, which
+    made them nearly pointless: renormalising to full saturation afterwards puts
+    back most of what they took away, so they only nudged the hue. They are
+    output calibration and belong last, where turning green down actually turns
+    the green LED down. That is the knob for "the wallpaper's brick red arrives
+    as plain orange": these LEDs' green is far more efficient than their red, so
+    even a small green value drags the mix towards orange.
+
+    `saturation_floor` is what makes a wallpaper colour survive the trip to a
+    lamp. A palette entry like "#D45A44" is a muted brick: every channel is lit,
+    the darkest sitting at 68/255. A screen shows that as brick because it is
+    also showing everything around it. A diffused LED has no surroundings, so
+    that floor is just white mixed in, and the fans come out pink. Raising the
+    saturation to the floor keeps the hue and drops the white.
+
+    `lightness_target` finishes the job. Saturation alone cannot clear the white
+    when the colour is lighter than mid: at L=0.53 even S=1.0 leaves every
+    channel at 14/255. L=0.5 with S=1.0 is the one point where a hue is pure -
+    one channel at full, one at zero - which is the brightest honest version of
+    a colour an LED can show. `brightness` then dims from there.
     """
     def to_linear(value: float) -> float:
         value /= 255
@@ -189,25 +242,26 @@ def adjust(hex_color: str, saturation: float, brightness: float, gains: dict) ->
         srgb = 12.92 * value if value <= 0.0031308 else 1.055 * value ** (1 / 2.4) - 0.055
         return int(round(srgb * 255))
 
-    channels = [int(hex_color[i:i + 2], 16) for i in (0, 2, 4)]
-    linear = [to_linear(c) for c in channels]
+    r, g, b = (int(hex_color[i:i + 2], 16) / 255 for i in (0, 2, 4))
+
+    hue, lightness, sat = colorsys.rgb_to_hls(r, g, b)
+    sat = max(0.0, min(1.0, sat * saturation))
+    sat = max(sat, max(0.0, min(1.0, saturation_floor)))
+    if lightness_target is not None:
+        lightness = lightness_target
+    lightness = max(0.0, min(1.0, lightness * brightness))
+    r, g, b = colorsys.hls_to_rgb(hue, lightness, sat)
+
+    # Channel calibration, in linear light because that is where an LED's output
+    # actually is: halving the green gain halves the light the green die emits.
+    linear = [to_linear(c * 255) for c in (r, g, b)]
     linear = [
         linear[0] * float(gains.get("r", 1.0)),
         linear[1] * float(gains.get("g", 1.0)),
         linear[2] * float(gains.get("b", 1.0)),
     ]
-    r, g, b = (to_srgb(c) / 255 for c in linear)
 
-    hue, lightness, sat = colorsys.rgb_to_hls(r, g, b)
-    sat = max(0.0, min(1.0, sat * saturation))
-    lightness = max(0.0, min(1.0, lightness * brightness))
-    r, g, b = colorsys.hls_to_rgb(hue, lightness, sat)
-
-    return "{:02X}{:02X}{:02X}".format(
-        max(0, min(255, round(r * 255))),
-        max(0, min(255, round(g * 255))),
-        max(0, min(255, round(b * 255))),
-    )
+    return "{:02X}{:02X}{:02X}".format(*(to_srgb(c) for c in linear))
 
 
 # ----------------------------------------------------------------- keyboard ---
@@ -287,12 +341,14 @@ def build_plan(config: dict) -> list[dict]:
 
     gpu = config.get("gpu", {})
     if gpu.get("enabled", True):
-        color = adjust(
+        color = reorder(adjust(
             resolve_source(gpu.get("source", "accent"), palette),
             float(gpu.get("saturation", 1.2)),
             float(gpu.get("brightness", 1.0)),
             gpu.get("gains", {}),
-        )
+            float(gpu.get("saturation_floor", 1.0)),
+            gpu.get("lightness", 0.5),
+        ), gpu.get("order", "RGB"))
         plan.append({
             "what": "gpu",
             "args": ["--device", gpu["device"], "--mode", gpu.get("mode", "Static"), "--color", color],
@@ -304,12 +360,14 @@ def build_plan(config: dict) -> list[dict]:
             leds = int(header.get("leds", 0))
             if leds <= 0:
                 continue
-            color = adjust(
+            color = reorder(adjust(
                 resolve_source(header.get("source", "accent"), palette),
                 float(argb.get("saturation", 1.2)),
                 float(argb.get("brightness", 1.0)),
                 argb.get("gains", {}),
-            )
+                float(argb.get("saturation_floor", 1.0)),
+                argb.get("lightness", 0.5),
+            ), header.get("order", argb.get("order", "RGB")))
             plan.append({
                 "what": f"argb header {header['zone']}",
                 # --size before --color: a zone that is still 0 LEDs long has
@@ -369,6 +427,9 @@ def main() -> int:
                         help="wait for the OpenRGB server to answer first")
     parser.add_argument("--probe", nargs=2, metavar=("ZONE", "LEDS"), type=int,
                         help="light LEDS LEDs on an ARGB header so you can count them")
+    parser.add_argument("--probe-order", metavar="ZONE", type=int,
+                        help="paint a header in three blocks - intended red, green, blue - "
+                             "so the order you actually see names its wiring")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -381,6 +442,27 @@ def main() -> int:
     if args.wait and not args.dry_run and not wait_for_server():
         print("OpenRGB server did not answer", file=sys.stderr)
         return 1
+
+    if args.probe_order is not None:
+        zone = args.probe_order
+        argb = config.get("argb", {})
+        # Deliberately short. Spreading the three blocks over the configured
+        # length hides two of them whenever the chain is shorter than that, and
+        # the chain's real length is exactly what nobody knows. Twelve LEDs fit
+        # inside a single fan, so all three colours are always on screen.
+        leds = 12
+        block = leds // 3
+        blocks = ["FF0000"] * block + ["00FF00"] * block + ["0000FF"] * (leds - 2 * block)
+        plan = [{
+            "what": f"order probe header {zone}",
+            "args": [
+                "--device", argb["device"], "--zone", str(zone),
+                "--size", str(leds), "--mode", argb.get("mode", "Direct"),
+                "--color", ",".join(blocks),
+            ],
+        }]
+        print(f"header {zone}: first third sent as RED, middle as GREEN, last as BLUE")
+        return 1 if run_plan(plan, args.dry_run) else 0
 
     if args.probe:
         zone, leds = args.probe
