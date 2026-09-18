@@ -638,11 +638,9 @@ run_detached "swayosd restart" bash -lc '
 	exec swayosd-server -s "$1"
 ' _ "$HOME/.config/swayosd/style.css"
 
-# gpu.sh drives ~/Scripts/lighting/GPUlights.sh; without it the step can only
-# ever exit 127.
-run_optional "gpu colors" "$HOME/Scripts/lighting/GPUlights.sh" \
-	env SAT=1.5 "$HOME/Scripts/themes/changer/gpu.sh" "$HOME/.cache/wal/colors.css" sakura color1
-run_optional "openrgb keyboard image" openrgb python3 "$SCRIPT_DIR/openrgb_keyboard_image.py" "$frame_path"
+# Keyboard, GPU and the ARGB headers, from one place. It also records what it
+# sent, so the next login can put the same light back instead of starting dark.
+run_optional "openrgb lighting" openrgb python3 "$SCRIPT_DIR/apply_lighting.py" "$frame_path"
 
 wait_for_jobs
 finish_report
