@@ -1,0 +1,59 @@
+{
+  "keyboard": {
+    "enabled": true,
+    "device": "SteelSeries Apex Pro TKL Gen 3",
+    "layout": "us-tkl",
+    "saturation": 1.35,
+    "brightness": 0.95,
+    "contrast": 1.45,
+    "sharpness": 2.0
+  },
+  "gpu": {
+    "enabled": true,
+    "device": "PowerColor Red Devil RX5700XT",
+    "mode": "Static",
+    "source": "accent",
+    "saturation": 1.2,
+    "brightness": 1.0,
+    "gains": {
+      "r": 1.0,
+      "g": 0.85,
+      "b": 0.7
+    }
+  },
+  "argb": {
+    "enabled": true,
+    "device": "ASUS ROG STRIX Z370-F GAMING Addressable",
+    "mode": "Direct",
+    "saturation": 1.2,
+    "brightness": 1.0,
+    "gains": {
+      "r": 1.0,
+      "g": 0.85,
+      "b": 0.7
+    },
+    "headers": [
+      {
+        "zone": 0,
+        "leds": 120,
+        "source": "accent"
+      },
+      {
+        "zone": 1,
+        "leds": 0,
+        "source": "accent"
+      },
+      {
+        "zone": 2,
+        "leds": 0,
+        "source": "accent2"
+      },
+      {
+        "zone": 3,
+        "leds": 0,
+        "source": "accent2"
+      }
+    ],
+    "_comment": "leds is how many LEDs the header drives. An ARGB chain ignores data past its last LED, so 120 (the header's maximum) lights everything on it without anyone having to count. Set the real number if you ever want a gradient along the chain rather than one colour: apply_lighting.py --probe 0 <n>."
+  }
+}

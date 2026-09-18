@@ -110,6 +110,35 @@ whose helper script has moved away, is logged as *skipped* and does not count as
 a failure. You only get a notification when something that should have worked
 did not; the full account is in `~/.local/state/quickshell-theme/apply-*.log`.
 
+## The lighting
+
+`scripts/apply_lighting.py` puts the wallpaper's colours on the hardware, and it
+is the only thing that touches OpenRGB:
+
+| | |
+| --- | --- |
+| keyboard | the wallpaper itself, projected onto the key matrix |
+| GPU | one colour: the palette entry with the most chroma that is still bright |
+| ARGB header 1 | same colour, for the fans |
+
+Which devices exist, their gains, and how many LEDs each ARGB header drives are
+in `lighting.json`. A header at `"leds": 0` is left alone. Header 1 is set to
+120 (its maximum) rather than the real fan count: an ARGB chain ignores data
+past its last LED, so oversizing lights everything without anyone counting. If
+you ever want a gradient *along* the chain you need the real number —
+`apply_lighting.py --probe 0 <n>` lights `<n>` LEDs so you can find it.
+
+Every run records what it sent to `~/.local/state/quickshell-theme/lighting-state.json`.
+`--restore` replays that file, which is what `quickshell-lighting.service` does
+at login and after every restart of `openrgb-theme.service`: the devices come up
+dark, and replaying is both faster than recomputing and guaranteed to match what
+was on before the reboot.
+
+There used to be a niri autostart line here instead. It set OpenRGB *device
+index 2* — whichever device that was after a rescan — to the palette's
+`background`, which on a dark wallpaper is `#1A1E20`. That is why the keyboard
+came up black on every login.
+
 ## The wallpaper stack
 
 Three layers, bottom to top:
@@ -147,6 +176,7 @@ BranchStylePicker.qml       style branches
 AppLauncherPopup.qml      launcher, calculator, files, AI chat
 components/               ThemeEngine (design tokens), PopupSurface, ModalSheet, motion
 scripts/                  theme pipeline, wallpaper runtime, style switching
+lighting.json             which RGB devices exist and how they are driven
 themes/<id>/theme.json    geometry and motion tokens for ThemeEngine
 caelestia/                vendored upstream sources
 ```
