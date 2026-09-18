@@ -121,8 +121,20 @@ is the only thing that touches OpenRGB:
 | GPU | one colour: the palette entry with the most chroma that is still bright |
 | ARGB header 1 | same colour, for the fans |
 
-Which devices exist, their gains, and how many LEDs each ARGB header drives are
-in `lighting.json`. A header at `"leds": 0` is left alone. Header 1 is set to
+Which devices exist, their colour calibration, and how many LEDs each ARGB
+header drives are in `lighting.json`. A wallpaper colour does not survive the
+trip to a lamp unchanged, so three knobs shape it:
+
+| | |
+| --- | --- |
+| `saturation_floor` | A palette entry like `#D45A44` has all three channels lit. On a screen that reads as brick, because the screen is also showing everything around it; a diffused LED has no surroundings, so the floor is just white mixed in and the fans come out **pink**. `1.0` keeps the hue and drops the white. |
+| `lightness` | Saturation alone cannot clear the white above mid-lightness: at L=0.53 even S=1.0 leaves every channel at 14/255. `0.5` is the one point where a hue is pure — one channel full, one at zero. |
+| `gains` | Channel calibration, applied last, in linear light. These LEDs' green is far more efficient than their red, so an untouched green drags every warm colour to plain **orange**. Turn `g` down for redder, up for more orange. |
+
+`order` names the byte order the strip reads. Wrong order sends a colour
+somewhere else entirely; `apply_lighting.py --probe-order <zone>` paints the
+first twelve LEDs red, green, blue, and the order you see is the answer. Here it
+turned out to be plain `RGB`. A header at `"leds": 0` is left alone. Header 1 is set to
 120 (its maximum) rather than the real fan count: an ARGB chain ignores data
 past its last LED, so oversizing lights everything without anyone counting. If
 you ever want a gradient *along* the chain you need the real number —
