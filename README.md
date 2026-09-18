@@ -33,6 +33,7 @@ whole shell - layout, components, motion, the lot.
 | `main` | **Default** - the original layout |
 | `style/atelier` | **Atelier** - vertical rail, editorial surfaces |
 | `style/meridian` | **Meridian** - panel-based, datum-driven |
+| `style/biopunk` | **Biopunk** - bone-drawn chambers on a spine, one luminous organ |
 | `archive/legacy-main` | not a style; a snapshot of the old unversioned `~/.config/quickshell/main` |
 
 Switch in **Studio → Style** (`Mod+Shift+S`, then `Ctrl+3`), or from a terminal:
@@ -88,6 +89,22 @@ git worktree remove /tmp/port
 A worktree rather than a checkout, so the shell you are running keeps its files
 while you work on another style.
 
+## Biopunk, in one paragraph
+
+The branch `style/biopunk` draws the desktop as a specimen under glass. There is
+no chrome: the organs sit loose on the wallpaper along a spine, a tendon runs
+from each cluster to the plate that carries the time, and every panel is a
+chamber whose outline is grown rather than stroked - `components/BioInk.js`
+builds each line as a filled ribbon, so a bone swells through a joint and runs
+out to a point, and a corner breaks into vertebrae instead of turning.
+
+Colour comes from one place. `components/Bio.qml` reads the Wallust palette,
+ranks it by hue strength weighted with legibility, and the winner becomes the
+*organ* - the single live colour every edge, reading and selection uses. A light
+wallpaper inverts the specimen (ink on bleached chitin) rather than washing it
+out, and the alert colour is only taken from the palette when its hue sits
+clearly apart from the organ's.
+
 ## Studio
 
 One window for everything that changes how the desktop looks:
@@ -96,6 +113,7 @@ One window for everything that changes how the desktop looks:
 | --- | --- |
 | `Mod+Shift+S` | open on **Wallpaper & Colours** |
 | `Mod+Shift+M` | open on **Motion** |
+| `>style` in the launcher | straight to the style branches |
 | `>studio` in the launcher | same, plus `>studio motion` and `>studio style` |
 | `Ctrl+1` / `Ctrl+2` / `Ctrl+3` | jump between the pages |
 | `Ctrl+Tab` | next page |

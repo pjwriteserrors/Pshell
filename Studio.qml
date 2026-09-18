@@ -93,14 +93,15 @@ FocusScope {
 	}
 
 	// The sheet itself draws no surface and the pages are plain content, so
-	// Studio brings its own panel: without it they float unreadably over the
+	// Studio brings its own chamber: without it they float unreadably over the
 	// desktop.
-	Rectangle {
+	BioSurface {
 		anchors.fill: parent
-		radius: ThemeEngine.radiusLarge
-		color: root.background
-		border.width: 1
-		border.color: Qt.alpha(root.foreground, 0.12)
+		washTop: Bio.membrane
+		washBottom: Bio.membraneDeep
+		haloStrength: 0.18
+		intensity: 0.35
+		padding: 0
 	}
 
 	Row {
@@ -118,52 +119,59 @@ FocusScope {
 		Repeater {
 			model: root.pages
 
-			delegate: Rectangle {
+			// A tab is a lobe of the same organ: it does not get a box of its
+			// own, it lights and grows a bone under it when it is the one you
+			// are in.
+			delegate: Item {
 				id: tab
 
 				required property var modelData
 				readonly property bool active: root.page === tab.modelData.id
+				readonly property real live: Math.max(tabMouse.live, tab.active ? 1 : 0)
 
 				width: Math.min(240, (root.width - 46) / root.pages.length)
 				height: tabs.height
-				radius: ThemeEngine.radiusMedium
-				color: tab.active
-					? root.secondaryBoxStrongColor
-					: tabMouse.containsMouse ? root.secondaryBoxColor : "transparent"
-
-				Behavior on color {
-					CAnim {}
-				}
 
 				Row {
 					anchors.centerIn: parent
-					spacing: 8
+					spacing: Bio.s2
 
 					BioText {
-						role: "body"
+						role: "heading"
 						anchors.verticalCenter: parent.verticalCenter
 						text: tab.modelData.label
-						color: root.foreground
-						opacity: tab.active ? 1 : 0.62
-						font.pixelSize: 13
+						tone: tab.active ? "organ" : "muted"
+						font.pixelSize: 14
 					}
 
 					BioText {
-						role: "label"
+						role: "mono"
 						anchors.verticalCenter: parent.verticalCenter
 						text: tab.modelData.hint
-						color: root.foreground
-						opacity: tab.active ? 0.45 : 0.28
-						font.family: "Adwaita Mono"
+						tone: "faint"
+						opacity: tab.live > 0.3 ? 1 : 0.5
 						font.pixelSize: 10
 					}
 				}
 
-				MouseArea {
+				BioTendon {
+					anchors.left: parent.left
+					anchors.right: parent.right
+					anchors.bottom: parent.bottom
+					anchors.leftMargin: Bio.s4
+					anchors.rightMargin: Bio.s4
+					height: 10
+					facing: Qt.LeftToRight
+					lineColor: tab.active ? Bio.organ : Bio.boneGhost
+					opacity: 0.35 + 0.65 * tab.live
+
+					Behavior on opacity {
+						NumberAnimation { duration: Bio.twitch }
+					}
+				}
+
+				BioTouch {
 					id: tabMouse
-					anchors.fill: parent
-					hoverEnabled: true
-					cursorShape: Qt.PointingHandCursor
 					onClicked: root.showPage(tab.modelData.id)
 				}
 			}
