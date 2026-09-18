@@ -1,3 +1,19 @@
+singleton Bio 1.0 Bio.qml
+BioFrame 1.0 BioFrame.qml
+BioSurface 1.0 BioSurface.qml
+BioRing 1.0 BioRing.qml
+BioNode 1.0 BioNode.qml
+BioGlow 1.0 BioGlow.qml
+BioTouch 1.0 BioTouch.qml
+BioText 1.0 BioText.qml
+BioTendon 1.0 BioTendon.qml
+BioSigil 1.0 BioSigil.qml
+BioButton 1.0 BioButton.qml
+BioRow 1.0 BioRow.qml
+BioSection 1.0 BioSection.qml
+BioMeter 1.0 BioMeter.qml
+BioField 1.0 BioField.qml
+BioToggle 1.0 BioToggle.qml
 singleton Motion 1.0 Motion.qml
 singleton ThemeEngine 1.0 ThemeEngine.qml
 Anim 1.0 Anim.qml
@@ -6,8 +22,4 @@ SpatialAnim 1.0 SpatialAnim.qml
 HoverLayer 1.0 HoverLayer.qml
 PopupSurface 1.0 PopupSurface.qml
 ModalSheet 1.0 ModalSheet.qml
-NeumorphicShadow 1.0 NeumorphicShadow.qml
-NeumorphicBevel 1.0 NeumorphicBevel.qml
-ThemeOrnament 1.0 ThemeOrnament.qml
-RpgDialogueText 1.0 RpgDialogueText.qml
 ThemedRectangle 1.0 ThemedRectangle.qml

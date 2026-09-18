@@ -1,132 +1,63 @@
 import QtQuick
 
+// The shell's general-purpose surface, grown over.
+//
+// Call sites hand it a colour and a size; what comes back is a chamber with a
+// skeleton around it. Which skeleton is decided here rather than at the call
+// site, from the shape of the thing: a panel gets the full corner bones, a cell
+// or button gets the short ones, a pill gets the beaded capsule, and anything
+// smaller than a fingertip or larger than a window gets none at all — a
+// skeleton drawn around a 10px badge is noise, not anatomy.
+//
+// Hover and press are picked up from whatever MouseArea a call site already put
+// inside, so every existing surface in the shell reacts by lighting up.
 Rectangle {
 	id: root
 
-	// auto: cards/buttons are raised, thin tracks are inset, tiny decoration is flat.
-	// Explicit roles are "raised", "inset", and "flat".
+	// Kept for source compatibility with the shared components; the bio frames
+	// have no bevels or shadows to switch between.
 	property string themeStyle: "auto"
-	property real themeDepth: ThemeEngine.controlDepth
+	property real themeDepth: 0
 	property bool themeEffectsEnabled: true
+	property color boneColor: Bio.boneFaint
+	property color liveColor: Bio.organ
 
 	readonly property real shortestSide: Math.min(width, height)
 	readonly property real longestSide: Math.max(width, height)
-	readonly property bool isTinyDecoration: shortestSide < 14
+	readonly property bool isTinyDecoration: shortestSide < 15
 	readonly property bool isThinTrack: shortestSide >= 4
 		&& shortestSide <= 18 && longestSide / Math.max(1, shortestSide) >= 2.4
 	readonly property bool isHugeBackdrop: width >= 720 && height >= 480
 	readonly property bool hasSurfaceColor: root.color.a > 0.015
-	readonly property string effectiveThemeStyle: root.themeStyle !== "auto"
-		? root.themeStyle
-		: root.isTinyDecoration || root.isHugeBackdrop ? "flat"
-		: root.isThinTrack ? "inset"
-		: "raised"
+	readonly property bool boned: root.themeEffectsEnabled && !root.isTinyDecoration
+		&& !root.isHugeBackdrop && root.themeStyle !== "flat"
+		&& root.shortestSide >= 15
+	readonly property string boneVariant: root.isThinTrack ? "capsule"
+		: (root.shortestSide >= 64 && root.longestSide >= 120) ? "chamber" : "plate"
+
 	readonly property bool themePressed: root.findInteractionState(root, "pressed")
 	readonly property bool themeHovered: root.findInteractionState(root, "containsMouse")
-	readonly property bool showRaised: ThemeEngine.controlEffectsEnabled
-		&& root.themeEffectsEnabled && root.hasSurfaceColor
-		&& root.effectiveThemeStyle === "raised"
-	readonly property bool showInset: ThemeEngine.controlEffectsEnabled
-		&& root.themeEffectsEnabled && root.hasSurfaceColor
-		&& (root.effectiveThemeStyle === "inset" || root.themePressed)
-	readonly property bool showOrnament: ThemeEngine.ornamentStyle !== "none"
-		&& root.themeEffectsEnabled && root.hasSurfaceColor
-		&& (root.effectiveThemeStyle !== "flat" || root.isThinTrack
-			|| (root.shortestSide >= 24 && root.longestSide >= 96))
-		&& !root.isHugeBackdrop
-
-	scale: root.showRaised
-		? (root.themePressed ? ThemeEngine.pressedScale
-			: root.themeHovered ? ThemeEngine.hoverScale : 1)
-		: 1
-
-	Behavior on scale {
-		NumberAnimation {
-			duration: ThemeEngine.fast
-			easing.type: ThemeEngine.standardEasing
-		}
-	}
 
 	function findInteractionState(item, propertyName) {
 		for (const child of item.children || []) {
-			if (child === outerShadow || child === solidSurfaceBacking
-					|| child === ornament || child === edgeTreatment || child === brutalOutline) continue;
+			if (child === skeleton) continue;
 			if (child[propertyName] === true) return true;
 		}
 		return false;
 	}
 
-	NeumorphicShadow {
-		id: outerShadow
+	radius: root.isTinyDecoration || root.isThinTrack ? Math.min(width, height) / 2 : 3
+
+	BioFrame {
+		id: skeleton
 		anchors.fill: parent
-		surfaceColor: root.color
-		cornerRadius: root.radius
-		depth: !root.showRaised ? 0
-			: root.themePressed ? ThemeEngine.controlPressedDepth
-			: root.themeHovered ? ThemeEngine.controlHoverDepth
-			: root.themeDepth
-	}
-
-	// Existing shell roles often use alpha for glassy themes. A hard-shadow
-	// theme needs visual mass, so structural surfaces receive an opaque base
-	// in the exact same RGB color. Flat fills and overlays remain untouched.
-	Rectangle {
-		id: solidSurfaceBacking
-		anchors.fill: parent
-		radius: root.radius
-		color: ThemeEngine.solidColor(root.color)
-		visible: ThemeEngine.solidSurfaces && root.themeEffectsEnabled
-			&& root.hasSurfaceColor && root.color.a < 0.995
-			&& root.effectiveThemeStyle !== "flat"
-		z: -0.5
-	}
-
-	ThemeOrnament {
-		id: ornament
-		anchors.fill: parent
-		surfaceColor: root.color
-		cornerRadius: root.radius
-		compact: root.isThinTrack
-		interactive: root.themeHovered || root.themePressed
-		pressed: root.themePressed
-		visible: root.showOrnament
-	}
-
-	NeumorphicBevel {
-		id: edgeTreatment
-		anchors.fill: parent
-		visible: root.showRaised || root.showInset
-		surfaceColor: root.color
-		cornerRadius: root.radius
-		inset: root.showInset
-		strength: root.showInset ? ThemeEngine.insetOpacity : ThemeEngine.bevelOpacity
-	}
-
-	// Palette-safe hard keyline used by graphic/neo-brutalist themes. The
-	// color is a contrast derivative of this surface, never a theme color.
-	Rectangle {
-		id: brutalOutline
-		anchors.fill: parent
-		radius: root.radius
-		color: "transparent"
-		border.width: ThemeEngine.outlineWidth
-		border.color: ThemeEngine.contrastEdge(root.color)
-		visible: ThemeEngine.outlineWidth > 0 && root.themeEffectsEnabled
-			&& root.hasSurfaceColor && root.effectiveThemeStyle !== "flat"
-		z: 901
-	}
-
-	transform: Translate {
-		x: root.showRaised
-			? (root.themePressed ? ThemeEngine.pressTravel
-				: root.themeHovered ? -ThemeEngine.hoverLift : 0)
-			: 0
-		y: root.showRaised
-			? (root.themePressed ? ThemeEngine.pressTravel
-				: root.themeHovered ? -ThemeEngine.hoverLift : 0)
-			: 0
-
-		Behavior on x { NumberAnimation { duration: ThemeEngine.fast; easing.type: ThemeEngine.standardEasing } }
-		Behavior on y { NumberAnimation { duration: ThemeEngine.fast; easing.type: ThemeEngine.standardEasing } }
+		visible: root.boned && root.hasSurfaceColor
+		variant: root.boneVariant
+		beading: root.boneVariant !== "plate" || root.shortestSide >= 22
+		crest: false
+		lineColor: root.boneColor
+		liveColor: root.liveColor
+		weight: root.shortestSide < 40 ? Bio.ribThin : Bio.rib
+		intensity: root.themePressed ? 1 : root.themeHovered ? 0.62 : 0
 	}
 }

@@ -2,18 +2,18 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 
-// Shared wrapper for full-screen modal surfaces (power menu, launcher,
-// theme picker, animation picker). Owns the scrim cross-fade and the
-// sheet's bouncy entrance / crisp exit so all modal surfaces move
-// identically. Place inside a full-screen PanelWindow.
+// The wrapper every full-screen modal sits in (power, launcher, Studio, the
+// pickers). It owns the scrim and the one entrance the style has: the sheet
+// does not scale up out of nowhere, it *incubates* — the scrim thickens like
+// fluid, the sheet swells from a slit and settles, and closing collapses it
+// back along the same axis.
 //
-//   center mode: sheet scales up from 0.92 with a slight overshoot.
-//   bottom mode: sheet slides up from below with a slight overshoot.
+// Place inside a full-screen PanelWindow.
 Item {
 	id: sheet
 
 	required property bool open
-	property real scrimOpacity: 0.3
+	property real scrimOpacity: 0.62
 	property string mode: "center"   // "center" | "bottom"
 	property real sheetWidth: 400
 	property real sheetHeight: 300
@@ -26,14 +26,14 @@ Item {
 	signal dismissRequested()
 
 	readonly property bool centered: mode === "center"
+	property real openProgress: open ? 1 : 0
 
 	anchors.fill: parent
 
 	// Every modal answers Escape, whatever is inside it. Unhandled keys travel
 	// up from the focused item, so a search field inside the sheet still gets
-	// first refusal and content that wants Escape for itself (stepping back out
-	// of a confirmation, clearing a query) just accepts the event.
-	// focus: true only claims the keyboard while nothing inside wants it.
+	// first refusal. focus: true only claims the keyboard while nothing inside
+	// wants it.
 	focus: true
 
 	Keys.onEscapePressed: event => {
@@ -41,16 +41,23 @@ Item {
 		sheet.dismissRequested();
 	}
 
+	Behavior on openProgress {
+		NumberAnimation {
+			duration: sheet.open ? Bio.swell : Bio.relax
+			easing.type: sheet.open ? Easing.OutBack : Easing.InCubic
+			easing.overshoot: sheet.open ? 1.08 : 0
+		}
+	}
 
 	Rectangle {
 		anchors.fill: parent
-		color: "black"
+		color: Bio.scrim
 		opacity: sheet.open ? sheet.scrimOpacity : 0
 
 		Behavior on opacity {
 			NumberAnimation {
-				duration: sheet.open ? Motion.large : Motion.largeClose
-				easing.type: ThemeEngine.standardEasing
+				duration: sheet.open ? Bio.swell : Bio.relax
+				easing.type: Easing.OutCubic
 			}
 		}
 
@@ -58,6 +65,17 @@ Item {
 			anchors.fill: parent
 			onClicked: sheet.dismissRequested()
 		}
+	}
+
+	// The organ light the sheet throws onto the scrim while it is open.
+	BioGlow {
+		anchors.centerIn: container
+		width: container.width * 1.5
+		height: container.height * 1.5
+		color: Bio.organ
+		strength: 0.16 * sheet.openProgress
+		spread: 0.45
+		visible: sheet.openProgress > 0.02
 	}
 
 	Item {
@@ -69,46 +87,13 @@ Item {
 		y: sheet.centered
 			? Math.round((sheet.height - height) / 2)
 			: sheet.height - height - sheet.bottomMargin
-		opacity: sheet.open ? 1 : 0
-		scale: sheet.centered ? (sheet.open ? 1 : ThemeEngine.modalStartScale) : 1
-		transformOrigin: Item.Center
+		opacity: Math.min(1, sheet.openProgress * 2.4)
 
-		NeumorphicShadow {
-			anchors.fill: parent
-			surfaceColor: sheet.shadowSurfaceColor
-			cornerRadius: ThemeEngine.radiusLarge
-			depth: sheet.open ? ThemeEngine.modalShadowDepth : 0
-		}
-
-		transform: Translate {
-			y: sheet.centered ? 0 : (sheet.open ? 0 : Math.round(sheet.sheetHeight * ThemeEngine.modalBottomTravelFactor))
-
-			Behavior on y {
-				NumberAnimation {
-					duration: sheet.open ? Motion.large : Motion.largeClose
-					easing.type: sheet.open ? ThemeEngine.modalOpenEasing : ThemeEngine.exitEasing
-					easing.overshoot: sheet.open ? Motion.sheetOvershoot : 0
-					easing.amplitude: ThemeEngine.elasticAmplitude
-					easing.period: ThemeEngine.elasticPeriod
-				}
-			}
-		}
-
-		Behavior on scale {
-			NumberAnimation {
-				duration: sheet.open ? Motion.large : Motion.largeClose
-			easing.type: sheet.open ? ThemeEngine.modalOpenEasing : ThemeEngine.exitEasing
-			easing.overshoot: sheet.open ? Motion.sheetOvershoot : 0
-			easing.amplitude: ThemeEngine.elasticAmplitude
-			easing.period: ThemeEngine.elasticPeriod
-			}
-		}
-
-		Behavior on opacity {
-			NumberAnimation {
-				duration: sheet.open ? Motion.normal : Motion.largeClose
-				easing.type: sheet.open ? ThemeEngine.standardEasing : ThemeEngine.exitEasing
-			}
+		transform: Scale {
+			origin.x: container.width / 2
+			origin.y: sheet.centered ? container.height / 2 : container.height
+			xScale: 0.90 + 0.10 * Math.min(1, sheet.openProgress * 1.7)
+			yScale: Math.max(0.03, sheet.openProgress)
 		}
 	}
 }

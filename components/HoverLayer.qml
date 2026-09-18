@@ -1,114 +1,51 @@
 import QtQuick
-import Quickshell.Widgets
 
-// Reusable hover-tint + press-ripple layer. Drop into any clickable
-// rounded rect: it fills the parent, shows a soft tint on hover, a
-// stronger tint while pressed and an expanding ripple from the click
-// point. Use like a MouseArea (onClicked etc. work as usual).
+// What every clickable surface in the shell does when a pointer is on it.
+//
+// The old contract was a grey tint and a ripple. Here a surface is tissue: it
+// warms with the organ colour and a vein lights along its leading edge. Same
+// API — drop it in, use onClicked — so every call site that already had one
+// reacts correctly without knowing any of this.
 MouseArea {
 	id: layer
 
-	property color tint: "#ffffff"
-	// qmllint disable missing-property
+	property color tint: Bio.organ
 	property real cornerRadius: parent?.radius ?? 0
-	// qmllint enable missing-property
 	property bool showHover: true
-	property bool rippleEnabled: ThemeEngine.rippleEnabled
+	property bool rippleEnabled: false      // kept for source compatibility
+	property bool veined: true
+
+	readonly property real live: !showHover ? 0 : pressed ? 1 : containsMouse ? 0.6 : 0
 
 	anchors.fill: parent
 	hoverEnabled: true
 	cursorShape: Qt.PointingHandCursor
 
-	onPressed: event => {
-		if (!layer.rippleEnabled)
-			return;
-
-		rippleAnim.cx = event.x;
-		rippleAnim.cy = event.y;
-
-		const dist = (ox, oy) => ox * ox + oy * oy;
-		rippleAnim.targetRadius = Math.sqrt(Math.max(
-			dist(event.x, event.y),
-			dist(event.x, height - event.y),
-			dist(width - event.x, event.y),
-			dist(width - event.x, height - event.y)
-		));
-
-		rippleAnim.restart();
-	}
-
-	ClippingRectangle {
+	Rectangle {
 		anchors.fill: parent
 		radius: layer.cornerRadius
-		color: "transparent"
+		color: Qt.alpha(Bio.organ, 0.13 * layer.live)
 
-		Rectangle {
-			anchors.fill: parent
-			radius: layer.cornerRadius
-			color: layer.tint
-			opacity: layer.pressed ? ThemeEngine.pressedTintOpacity
-				: (layer.showHover && layer.containsMouse) ? ThemeEngine.hoverTintOpacity : 0
-
-			Behavior on opacity {
-				NumberAnimation {
-					duration: Motion.fast
-					easing.type: ThemeEngine.standardEasing
-				}
-			}
-		}
-
-		Rectangle {
-			id: ripple
-
-			width: 0
-			height: 0
-			radius: width / 2
-			color: layer.tint
-			opacity: 0
-
-			transform: Translate {
-				x: -ripple.width / 2
-				y: -ripple.height / 2
-			}
+		Behavior on color {
+			ColorAnimation { duration: Bio.twitch }
 		}
 	}
 
-	SequentialAnimation {
-		id: rippleAnim
+	Rectangle {
+		anchors.left: parent.left
+		anchors.verticalCenter: parent.verticalCenter
+		visible: layer.veined
+		width: Bio.rib * 1.5
+		height: parent.height * (0.3 + 0.62 * layer.live)
+		radius: width / 2
+		color: Bio.organ
+		opacity: layer.live
 
-		property real cx
-		property real cy
-		property real targetRadius
-
-		PropertyAction {
-			target: ripple
-			property: "x"
-			value: rippleAnim.cx
+		Behavior on opacity {
+			NumberAnimation { duration: Bio.twitch }
 		}
-		PropertyAction {
-			target: ripple
-			property: "y"
-			value: rippleAnim.cy
-		}
-		PropertyAction {
-			target: ripple
-			property: "opacity"
-			value: 0.1
-		}
-		NumberAnimation {
-			target: ripple
-			properties: "width,height"
-			from: 0
-			to: rippleAnim.targetRadius * 2
-			duration: Motion.normal
-			easing.type: ThemeEngine.standardEasing
-		}
-		NumberAnimation {
-			target: ripple
-			property: "opacity"
-			to: 0
-			duration: Motion.normal
-			easing.type: ThemeEngine.standardEasing
+		Behavior on height {
+			NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
 		}
 	}
 }

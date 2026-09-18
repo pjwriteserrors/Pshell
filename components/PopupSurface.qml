@@ -4,17 +4,17 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 
-// Shared shell for every bar-anchored popup: a detached floating card
-// below the bar. Built on PanelWindow (full-screen overlay) so text
-// fields inside popups receive keyboard input (WlrKeyboardFocus).
+// Every popup the spine opens is a chamber that grows out of the node that
+// owns it. Built on PanelWindow (a full-screen overlay) so text fields inside
+// receive keyboard input.
 //
-// Choreography contract (identical for every popup):
-//   open:  card pops in — slides down a few px, scales up from 0.94
-//          with a slight overshoot, fades in; content fade trails.
-//   close: card shrinks/fades out crisply, no bounce.
+// Choreography contract, the same for every popup:
+//   open:  the chamber unseals — it comes up as a slit at the top, swells to
+//          full height past its resting size by a hair, and the membrane
+//          brightens; content surfaces once the chamber has room for it.
+//   close: it contracts back into the slit, faster than it opened.
 //
-// Clicking outside the card emits dismissRequested(); the instance
-// decides how to close (usually its root.closeXPopup()).
+// Clicking outside emits dismissRequested(); the instance decides how to close.
 PanelWindow {
 	id: surface
 
@@ -29,15 +29,15 @@ PanelWindow {
 	property real expandedWidth: 300
 	property real contentPreferredHeight: 0
 	property real fixedHeight: -1
-	property real contentMargins: 14
+	property real contentMargins: Bio.s4
 
 	// style
-	property color surfaceColor
+	property color surfaceColor: Bio.membrane
 	property color borderColor: "transparent"
-	property real restingRadius: ThemeEngine.radiusMedium
-	property real edgeMargin: 10 + ThemeEngine.shadowRenderMargin
-	property real barGap: 6
-	property real barTopMargin: 6
+	property real restingRadius: 0        // kept for source compatibility
+	property real edgeMargin: 12
+	property real barGap: 10
+	property real barTopMargin: 4
 	property bool wantsKeyboard: true
 
 	default property alias content: contentSlot.data
@@ -47,13 +47,18 @@ PanelWindow {
 
 	property real openProgress: open ? 1 : 0
 
+	// How far in from the frame content has to stay so the corner bones have
+	// room. A constant rather than the frame's own measurement: the frame sizes
+	// its bones from the chamber's height, and the height is what this feeds.
+	readonly property real boneMargin: 11
+
 	readonly property real expandedHeight: fixedHeight > 0
 		? fixedHeight
-		: Math.max(52, contentPreferredHeight + contentMargins * 2)
+		: Math.max(64, contentPreferredHeight + (contentMargins + boneMargin) * 2)
 	readonly property real shellWidth: expandedWidth
-	readonly property real contentOpacity: Math.max(0, Math.min(1,
-		(openProgress - ThemeEngine.popupContentRevealStart)
-		/ Math.max(0.01, 1 - ThemeEngine.popupContentRevealStart)))
+	// Content only appears once the chamber has swelled past half open,
+	// otherwise it is briefly wider than the thing containing it.
+	readonly property real contentOpacity: Math.max(0, Math.min(1, (openProgress - 0.45) / 0.55))
 
 	anchors {
 		left: true
@@ -70,11 +75,9 @@ PanelWindow {
 
 	Behavior on openProgress {
 		NumberAnimation {
-			duration: surface.open ? Motion.popupOpen : Motion.popupClose
-			easing.type: surface.open ? ThemeEngine.popupOpenEasing : ThemeEngine.exitEasing
-			easing.overshoot: surface.open ? Motion.popupOvershoot : 0
-			easing.amplitude: ThemeEngine.elasticAmplitude
-			easing.period: ThemeEngine.elasticPeriod
+			duration: surface.open ? Bio.swell : Bio.relax
+			easing.type: surface.open ? Easing.OutBack : Easing.InCubic
+			easing.overshoot: surface.open ? 1.05 : 0
 		}
 	}
 
@@ -88,8 +91,8 @@ PanelWindow {
 
 		// Escape closes every popup. The handler sits on the card itself, an
 		// ancestor of the content, so an unhandled key from a focused field
-		// inside travels up to here. focus: true only claims the keyboard
-		// while nothing inside the card wants it.
+		// inside travels up to here. focus: true only claims the keyboard while
+		// nothing inside the card wants it.
 		focus: true
 
 		Keys.onEscapePressed: event => {
@@ -113,58 +116,36 @@ PanelWindow {
 
 		width: surface.shellWidth
 		height: surface.expandedHeight
-		opacity: Math.min(1, surface.openProgress * ThemeEngine.popupOpacityMultiplier)
-		scale: ThemeEngine.popupStartScale + (1 - ThemeEngine.popupStartScale) * surface.openProgress
-		transformOrigin: Item.Top
+		opacity: Math.min(1, surface.openProgress * 2.2)
 
-		transform: Translate {
-				y: ThemeEngine.popupTravel * (1 - surface.openProgress)
+		// The chamber unseals downwards: it is scaled from its top edge, so it
+		// looks like it is being extruded out of the spine rather than zoomed.
+		transform: Scale {
+			origin.x: cardMotion.width / 2
+			origin.y: 0
+			xScale: 0.86 + 0.14 * Math.min(1, surface.openProgress * 1.8)
+			yScale: Math.max(0.02, surface.openProgress)
 		}
 
 		Behavior on height {
-			Anim {}
+			NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
 		}
 
-		NeumorphicShadow {
+		BioSurface {
+			id: chamber
 			anchors.fill: parent
-			surfaceColor: surface.surfaceColor
-			cornerRadius: card.radius
-			depth: surface.openProgress * ThemeEngine.popupShadowDepth
-			animateDepth: false
-		}
-
-		Rectangle {
-			id: card
-
-			anchors.fill: parent
-			radius: surface.restingRadius
-			color: ThemeEngine.solidSurfaces
-				? ThemeEngine.solidColor(surface.surfaceColor)
-				: surface.surfaceColor
-			border.width: Math.max(1, ThemeEngine.outlineWidth)
-			border.color: surface.borderColor.a > 0.01
-				? surface.borderColor
-				: ThemeEngine.contrastEdge(surface.surfaceColor)
-			clip: true
-
-			ThemeOrnament {
-				anchors.fill: parent
-				surfaceColor: card.color
-				cornerRadius: card.radius
-			}
-
-			Behavior on radius {
-				NumberAnimation {
-					duration: Motion.normal
-					easing.type: ThemeEngine.standardEasing
-				}
-			}
+			variant: "chamber"
+			lineColor: surface.borderColor.a > 0.01 ? surface.borderColor : Bio.boneDim
+			liveColor: Bio.organ
+			washTop: surface.surfaceColor
+			washBottom: Bio.membraneDeep
+			haloStrength: 0.26 * surface.openProgress
+			padding: 0
 
 			Item {
 				id: contentSlot
-
 				anchors.fill: parent
-				anchors.margins: surface.contentMargins
+				anchors.margins: surface.contentMargins + surface.boneMargin
 				opacity: surface.contentOpacity
 			}
 		}
