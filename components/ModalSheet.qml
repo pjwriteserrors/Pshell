@@ -56,7 +56,7 @@ Item {
 		anchors.top: parent.top
 		anchors.bottom: parent.bottom
 		anchors.leftMargin: Math.round(Bio.spine)
-		color: Bio.scrim
+		color: Bio.cavity
 		opacity: sheet.open ? sheet.scrimOpacity : 0
 
 		Behavior on opacity {

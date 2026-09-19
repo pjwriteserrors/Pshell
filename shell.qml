@@ -3795,10 +3795,10 @@ printf 'type=offline\niface=\nip=\n'`
 
 		ModalSheet {
 			open: root.studioPopupOpen
-			scrimOpacity: 0.34
+			scrimOpacity: 0.985
 			shadowSurfaceColor: root.secondaryInsetColor
-			sheetWidth: Math.min(1320, studioPopup.width - 80)
-			sheetHeight: Math.min(860, studioPopup.height - 80)
+			sheetWidth: Math.min(1400, studioPopup.width - 80)
+			sheetHeight: studioPopup.height - Bio.s7 * 2
 			onDismissRequested: root.closeStudio()
 
 			Loader {
@@ -3839,7 +3839,7 @@ printf 'type=offline\niface=\nip=\n'`
 
 		ModalSheet {
 			open: root.powerPopupOpen
-			scrimOpacity: 0.86
+			scrimOpacity: 0.93
 			sheetWidth: 420
 			sheetHeight: 680
 			onDismissRequested: root.closePowerPopup()

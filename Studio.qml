@@ -92,29 +92,19 @@ FocusScope {
 		}
 	}
 
-	// The sheet itself draws no surface and the pages are plain content, so
-	// Studio brings its own chamber: without it they float unreadably over the
-	// desktop.
-	BioSurface {
-		anchors.fill: parent
-		washTop: Bio.membrane
-		washBottom: Bio.membraneDeep
-		haloStrength: 0.18
-		intensity: 0.35
-		padding: 0
-	}
-
-	Row {
+	// Studio is a bench, not a box: the scrim behind it is the surface, and the
+	// only structure drawn is the bone between the lobes and the pages.
+	//
+	// The lobes stand in a column down the left, the way everything in this
+	// shell is now read — top to bottom, against a bone.
+	Column {
 		id: tabs
 
 		anchors.top: parent.top
-		anchors.topMargin: 18
+		anchors.topMargin: Bio.s5
 		anchors.left: parent.left
-		anchors.leftMargin: 20
-		anchors.right: parent.right
-		anchors.rightMargin: 20
-		height: 40
-		spacing: 6
+		width: 210
+		spacing: Bio.s2
 
 		Repeater {
 			model: root.pages
@@ -129,44 +119,50 @@ FocusScope {
 				readonly property bool active: root.page === tab.modelData.id
 				readonly property real live: Math.max(tabMouse.live, tab.active ? 1 : 0)
 
-				width: Math.min(240, (root.width - 46) / root.pages.length)
-				height: tabs.height
+				width: tabs.width
+				height: 44
 
-				Row {
-					anchors.centerIn: parent
-					spacing: Bio.s2
-
-					BioText {
-						role: "heading"
-						anchors.verticalCenter: parent.verticalCenter
-						text: tab.modelData.label
-						tone: tab.active ? "organ" : "muted"
-						font.pixelSize: 14
-					}
-
-					BioText {
-						role: "mono"
-						anchors.verticalCenter: parent.verticalCenter
-						text: tab.modelData.hint
-						tone: "faint"
-						opacity: tab.live > 0.3 ? 1 : 0.5
-						font.pixelSize: 10
-					}
-				}
-
-				BioTendon {
+				// The vein: the lobe you are in is the one the organ is
+				// feeding, exactly as a row is marked everywhere else.
+				Rectangle {
 					anchors.left: parent.left
-					anchors.right: parent.right
-					anchors.bottom: parent.bottom
-					anchors.leftMargin: Bio.s4
-					anchors.rightMargin: Bio.s4
-					height: 10
-					facing: Qt.LeftToRight
-					lineColor: tab.active ? Bio.organ : Bio.boneGhost
-					opacity: 0.35 + 0.65 * tab.live
+					anchors.verticalCenter: parent.verticalCenter
+					width: Bio.rib * 1.6
+					height: parent.height * (tab.active ? 0.6 : 0)
+					radius: width / 2
+					color: Bio.organ
+					opacity: tab.active ? 1 : 0
 
 					Behavior on opacity {
 						NumberAnimation { duration: Bio.twitch }
+					}
+					Behavior on height {
+						NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
+					}
+				}
+
+				Column {
+					anchors.left: parent.left
+					anchors.leftMargin: Bio.s4
+					anchors.right: parent.right
+					anchors.verticalCenter: parent.verticalCenter
+					spacing: -2
+
+					BioText {
+						width: parent.width
+						role: "heading"
+						text: tab.modelData.label
+						tone: tab.active ? "organ" : (tab.live > 0.3 ? "default" : "muted")
+						font.pixelSize: 15
+					}
+
+					BioText {
+						width: parent.width
+						role: "mono"
+						text: tab.modelData.hint
+						tone: "faint"
+						opacity: tab.live > 0.3 ? 1 : 0.55
+						font.pixelSize: 10
 					}
 				}
 
@@ -176,6 +172,20 @@ FocusScope {
 				}
 			}
 		}
+	}
+
+	// The bone the lobes are written against, and the pages hang off.
+	Rectangle {
+		id: studioBone
+
+		anchors.left: tabs.right
+		anchors.leftMargin: Bio.s6
+		anchors.top: parent.top
+		anchors.bottom: parent.bottom
+		anchors.topMargin: Bio.s4
+		anchors.bottomMargin: Bio.s4
+		width: Bio.ribThin
+		color: Bio.boneGhost
 	}
 
 	Item {
@@ -189,14 +199,13 @@ FocusScope {
 			return null;
 		}
 
-		anchors.top: tabs.bottom
-		anchors.topMargin: 10
-		anchors.left: parent.left
-		anchors.leftMargin: 20
+		anchors.top: parent.top
+		anchors.topMargin: Bio.s5
+		anchors.left: studioBone.right
+		anchors.leftMargin: Bio.s7
 		anchors.right: parent.right
-		anchors.rightMargin: 20
 		anchors.bottom: parent.bottom
-		anchors.bottomMargin: 20
+		anchors.bottomMargin: Bio.s5
 
 		// Only the visible page is instantiated: the wallpaper page starts
 		// preview processes and must not run behind another tab.
