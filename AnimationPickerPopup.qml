@@ -1,13 +1,27 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls
-import QtMultimedia
 import Quickshell
 import Quickshell.Io
 import "components"
 import "NiriAnimation.js" as NiriAnimation
 
+// Studio's motion page: what a window does when it opens and when it closes.
+//
+// This page shows the animation, not a likeness of it. The list on the left is
+// every animation niri can be given; the stage on the right runs the one the
+// list is pointing at — the same shader, the same duration, the same curve or
+// spring — on a mock window, over and over, until you pick another. Nothing is
+// applied until you graft it, so you can walk the whole list and watch.
+//
+// It used to be a wall of cards: a recorded clip for the few that had one, and
+// for the rest a hand-drawn impression of what the animation might look like.
+// Those impressions were guesses, and wrong often enough that the only way to
+// know was to apply one and live with it.
+//
+// If you are writing a new style: keep the stage (`components/AnimationStage`).
+// Draw the list however your style draws lists, but do not go back to pictures
+// of animations.
 Item {
 	id: root
 
@@ -19,33 +33,27 @@ Item {
 	required property color secondaryBoxStrongColor
 	required property color secondaryInsetColor
 	required property color barColor
-	// speed-tier indicator dots (fast / medium / accent)
-	readonly property color speedHotColor: "#f07f86"
-	readonly property color speedWarmColor: "#d7c477"
 
 	property var animationOptions: []
 	property string animationStateHint: ""
 	property string selectedAnimationId: ""
 	property int selectedAnimationIndex: 0
-	property real previewProgress: 0
 
 	readonly property string applyScriptPath: `${Quickshell.shellDir}/scripts/apply_niri_animation.sh`
 	readonly property string shaderAnimationsDir: "/home/lu/.config/niri/animations/shaders"
 	readonly property string nirimationAnimationsDir: "/home/lu/.config/niri/animations/nirimation/animations"
-	readonly property string nirimationShowcaseDir: "/home/lu/.config/niri/animations/nirimation/animations/showcase"
 	readonly property string animationStatePath: "/home/lu/.local/state/quickshell-theme/current-animation"
 	readonly property string shaderCurrentPath: "/home/lu/.config/niri/animations/shaders/.current"
-	readonly property color headingColor: root.foreground
-	readonly property int gridColumns: Math.max(2, Math.min(4, Math.floor((gridViewport.width + gridGap) / 270)))
-	readonly property real gridGap: 14
-	readonly property real cardWidth: (gridViewport.width - root.gridGap * (root.gridColumns - 1)) / root.gridColumns
-	readonly property real cardHeight: 208
+
 	readonly property var currentAnimationOption: {
 		for (const option of root.animationOptions) {
 			if (String(option.id || "") === root.selectedAnimationId) return option;
 		}
 		return root.animationOptions.length > 0 ? root.animationOptions[0] : null;
 	}
+
+	// What is on the machine right now, so the list can mark it.
+	readonly property string liveAnimationId: String(root.animationStateHint || "").trim()
 
 	focus: true
 
@@ -78,10 +86,8 @@ Item {
 	function selectAnimationIndex(index) {
 		if (root.animationOptions.length === 0) return;
 		const next = Math.max(0, Math.min(root.animationOptions.length - 1, index));
-		if (next === root.selectedAnimationIndex && root.selectedAnimationId === String(root.animationOptions[next].id || "")) return;
 		root.selectedAnimationIndex = next;
 		root.selectedAnimationId = String(root.animationOptions[next].id || "");
-		previewCycle.restart();
 		Qt.callLater(root.ensureSelectedVisible);
 	}
 
@@ -90,8 +96,8 @@ Item {
 	}
 
 	function ensureSelectedVisible() {
-		if (root.animationOptions.length === 0 || root.gridColumns <= 0) return;
-		animationGridView.positionViewAtIndex(root.selectedAnimationIndex, GridView.Contain);
+		if (root.animationOptions.length === 0) return;
+		animationList.positionViewAtIndex(root.selectedAnimationIndex, ListView.Contain);
 	}
 
 	function reloadAnimations() {
@@ -107,89 +113,20 @@ Item {
 
 	function reset() {
 		root.reloadAnimations();
-		Qt.callLater(function() {
+		Qt.callLater(function () {
 			root.forceActiveFocus();
 		});
 	}
 
-	function easeOut(value) {
-		const v = Math.max(0, Math.min(1, value));
-		return 1 - Math.pow(1 - v, 3);
-	}
-
-	function oscillate(value) {
-		return 0.5 - Math.cos(value * Math.PI * 2) * 0.5;
-	}
-
-	function previewStyle(kind, name) {
-		const key = `${String(kind || "").toLowerCase()}:${String(name || "").toLowerCase()}`;
-		const styles = ({
-			"nirimation:bloom": "pop",
-			"nirimation:burn-ashes": "burn",
-			"nirimation:burn-multicolor": "burn",
-			"nirimation:burn": "burn",
-			"nirimation:fold-window": "fold",
-			"nirimation:glitch": "glitch",
-			"nirimation:pixelate": "pixelate",
-			"nirimation:pop-drop": "pop",
-			"nirimation:ribbons": "ribbons",
-			"nirimation:roll-drop": "roll",
-			"nirimation:swipe-window": "swipe",
-			"nirimation:unravel": "unravel",
-			"shader:bounce": "bounce",
-			"shader:circle": "circle",
-			"shader:colour-distance": "dissolve",
-			"shader:crazy-parametric": "warp",
-			"shader:crosshatch": "dissolve",
-			"shader:crosswarp": "warp",
-			"shader:directional-wipe": "wipe",
-			"shader:directional": "wipe",
-			"shader:dissolve": "dissolve",
-			"shader:fade": "fade",
-			"shader:fadecolor": "fade",
-			"shader:flyeye": "warp",
-			"shader:glitch": "glitch",
-			"shader:heat-melt": "burn",
-			"shader:ink-splash": "dissolve",
-			"shader:inkwell-drop": "dissolve",
-			"shader:morph": "warp",
-			"shader:overexposure": "flash",
-			"shader:perlin": "dissolve",
-			"shader:pixelate": "pixelate",
-			"shader:pixelfade-wave": "pixelate",
-			"shader:plasma-flow": "warp",
-			"shader:polar-function": "circle",
-			"shader:polka-dots-curtain": "squares",
-			"shader:randomsquares": "squares",
-			"shader:ripple": "ripple",
-			"shader:smoke": "dissolve",
-			"shader:snap": "snap",
-			"shader:soft-warp-fade": "warp",
-			"shader:static-fade": "glitch",
-			"shader:voronoi-shatter": "dissolve",
-			"shader:wave-warp": "warp"
-		});
-		return styles[key] || "fade";
-	}
-
 	Component.onCompleted: root.reset()
-	onGridColumnsChanged: Qt.callLater(root.ensureSelectedVisible)
-	Keys.onEscapePressed: closeRequested()
-	Keys.onReturnPressed: applyAnimation()
-	Keys.onEnterPressed: applyAnimation()
-	Keys.onLeftPressed: moveSelection(-1)
-	Keys.onRightPressed: moveSelection(1)
-	Keys.onUpPressed: moveSelection(-root.gridColumns)
-	Keys.onDownPressed: moveSelection(root.gridColumns)
-
-	SequentialAnimation on previewProgress {
-		id: previewCycle
-		running: root.visible
-		loops: Animation.Infinite
-		NumberAnimation { from: 0; to: 1; duration: ThemeEngine.duration(1500); easing.type: Easing.InOutCubic }
-		PauseAnimation { duration: ThemeEngine.duration(280) }
-		ScriptAction { script: root.previewProgress = 0 }
-		PauseAnimation { duration: ThemeEngine.duration(120) }
+	Keys.onEscapePressed: root.closeRequested()
+	Keys.onReturnPressed: root.applyAnimation()
+	Keys.onEnterPressed: root.applyAnimation()
+	Keys.onUpPressed: root.moveSelection(-1)
+	Keys.onDownPressed: root.moveSelection(1)
+	Keys.onSpacePressed: event => {
+		stage.restart();
+		event.accepted = true;
 	}
 
 	Process {
@@ -204,13 +141,7 @@ Item {
 	done
 	for file in "${root.nirimationAnimationsDir}"/*.kdl; do
 		[ -f "$file" ] || continue
-		name="$(basename "$file" .kdl)"
-		showcase="${root.nirimationShowcaseDir}/$name.mp4"
-		if [ -f "$showcase" ]; then
-			printf 'nirimation:%s\\tfile://%s\\n' "$name" "$showcase"
-		else
-			printf 'nirimation:%s\\n' "$name"
-		fi
+		printf 'nirimation:%s\\n' "$(basename "$file" .kdl)"
 	done
 } | sort
 `]
@@ -233,441 +164,236 @@ fi
 		}
 	}
 
-	// A page of Studio, which already draws the panel. Painting another tinted
-	// surface on top of it turned the whole page into a slab of accent colour.
-	Item {
-		id: panel
-		anchors.fill: parent
+	// ------------------------------------------------------------- the index
+	ListView {
+		id: animationList
 
-		Column {
-			anchors.fill: parent
-			anchors.margins: 6
-			spacing: 14
+		anchors.left: parent.left
+		anchors.top: parent.top
+		anchors.bottom: parent.bottom
+		width: Math.round(Math.min(parent.width * 0.32, 300))
+		clip: true
+		model: root.animationOptions
+		currentIndex: root.selectedAnimationIndex
+		boundsBehavior: Flickable.StopAtBounds
+		spacing: 0
 
-			Row {
-				width: parent.width
-				height: 40
-				spacing: 12
+		delegate: Item {
+			id: optionRow
 
-				BioText {
-					role: "title"
-					width: parent.width - applyButton.width - 12
-					height: parent.height
-					color: root.headingColor
-					font.pixelSize: 22
-					font.weight: Font.DemiBold
-					verticalAlignment: Text.AlignVCenter
-					elide: Text.ElideRight
-					text: root.currentAnimationOption ? root.currentAnimationOption.label : "Animation"
+			required property var modelData
+			required property int index
+
+			readonly property bool selected: root.selectedAnimationIndex === optionRow.index
+			readonly property bool live: String(optionRow.modelData.id || "") === root.liveAnimationId
+
+			width: animationList.width
+			height: 32
+
+			Rectangle {
+				anchors.left: parent.left
+				anchors.verticalCenter: parent.verticalCenter
+				width: Bio.rib * 1.6
+				height: parent.height * (optionRow.selected ? 0.66 : 0)
+				radius: width / 2
+				color: Bio.organ
+				opacity: optionRow.selected ? 1 : 0
+
+				Behavior on opacity {
+					NumberAnimation { duration: Bio.twitch }
 				}
-
-				BioButton {
-					id: applyButton
-					anchors.verticalCenter: parent.verticalCenter
-					minimumWidth: 104
-					implicitHeight: 34
-					enabled: root.selectedAnimationId !== ""
-					text: "Graft"
-					onClicked: root.applyAnimation()
+				Behavior on height {
+					NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
 				}
 			}
 
-			Item {
-				id: gridViewport
+			BioText {
+				id: optionKind
+				anchors.left: parent.left
+				anchors.leftMargin: Bio.s4
+				anchors.verticalCenter: parent.verticalCenter
+				role: "mono"
+				tone: optionRow.selected ? "organ" : "faint"
+				font.pixelSize: 9
+				text: String(optionRow.modelData.kind || "") === "shader" ? "sh" : "bl"
+			}
+
+			BioText {
+				anchors.left: optionKind.right
+				anchors.leftMargin: Bio.s3
+				anchors.right: liveMark.visible ? liveMark.left : parent.right
+				anchors.rightMargin: Bio.s3
+				anchors.verticalCenter: parent.verticalCenter
+				role: "heading"
+				font.pixelSize: 13
+				tone: optionRow.selected ? "default" : "muted"
+				text: String(optionRow.modelData.name || "")
+			}
+
+			// The one the machine is actually wearing.
+			Rectangle {
+				id: liveMark
+				visible: optionRow.live
+				anchors.right: parent.right
+				anchors.rightMargin: Bio.s4
+				anchors.verticalCenter: parent.verticalCenter
+				width: Bio.nodule * 2
+				height: Bio.nodule * 2
+				radius: width / 2
+				color: Bio.vital
+			}
+
+			BioTouch {
+				onEntered: root.selectAnimationIndex(optionRow.index)
+				onClicked: root.selectAnimationIndex(optionRow.index)
+				onDoubleClicked: root.applyAnimation()
+			}
+		}
+	}
+
+	Rectangle {
+		id: motionBone
+		anchors.left: animationList.right
+		anchors.leftMargin: Bio.s6
+		anchors.top: parent.top
+		anchors.bottom: parent.bottom
+		anchors.topMargin: Bio.s3
+		anchors.bottomMargin: Bio.s3
+		width: Bio.ribThin
+		color: Bio.boneGhost
+	}
+
+	// ------------------------------------------------------------- the stage
+	Item {
+		id: stageColumn
+
+		anchors.left: motionBone.right
+		anchors.leftMargin: Bio.s7
+		anchors.right: parent.right
+		anchors.top: parent.top
+		anchors.bottom: parent.bottom
+
+		BioText {
+			id: stageName
+			anchors.left: parent.left
+			anchors.top: parent.top
+			role: "specimen"
+			font.pixelSize: 26
+			text: root.currentAnimationOption ? String(root.currentAnimationOption.name || "") : ""
+		}
+
+		BioText {
+			id: stageKind
+			anchors.left: stageName.right
+			anchors.leftMargin: Bio.s3
+			anchors.baseline: stageName.baseline
+			role: "label"
+			tone: "faint"
+			text: root.currentAnimationOption
+				? (String(root.currentAnimationOption.kind || "") === "shader" ? "shader" : "block")
+				: ""
+		}
+
+		AnimationStage {
+			id: stage
+
+			anchors.left: parent.left
+			anchors.right: parent.right
+			anchors.top: stageName.bottom
+			anchors.topMargin: Bio.s5
+			anchors.bottom: readings.top
+			anchors.bottomMargin: Bio.s5
+			animationId: root.selectedAnimationId
+			playing: root.visible
+		}
+
+		// What is happening, in words, under the thing happening.
+		Column {
+			id: readings
+
+			anchors.left: parent.left
+			anchors.right: parent.right
+			anchors.bottom: parent.bottom
+			anchors.bottomMargin: Bio.s3
+			spacing: Bio.s3
+
+			BioTendon {
 				width: parent.width
-				height: parent.height - 54
-				clip: true
+				height: 12
+				facing: Qt.LeftToRight
+				lineColor: Bio.boneFaint
+			}
 
-				GridView {
-					id: animationGridView
-					anchors.fill: parent
-					cellWidth: (width + root.gridGap) / root.gridColumns
-					cellHeight: root.cardHeight + root.gridGap
-					model: root.animationOptions
-					currentIndex: root.selectedAnimationIndex
-					cacheBuffer: cellHeight
-					reuseItems: true
-					boundsBehavior: Flickable.StopAtBounds
-					clip: true
+			Item {
+				width: parent.width
+				height: 34
 
-					delegate: ThemedRectangle {
-								id: card
-								required property int index
-								required property var modelData
+				Column {
+					anchors.left: parent.left
+					anchors.verticalCenter: parent.verticalCenter
+					spacing: -1
 
-								readonly property bool selected: card.index === root.selectedAnimationIndex
-								readonly property string styleName: root.previewStyle(String(modelData.kind || ""), String(modelData.name || ""))
-								readonly property string videoPreviewSource: String(modelData.preview || "")
-								readonly property bool hasVideoPreview: card.videoPreviewSource !== ""
-								readonly property bool inViewport: card.y + card.height >= animationGridView.contentY
-									&& card.y <= animationGridView.contentY + animationGridView.height
-								readonly property bool previewActive: card.selected && card.inViewport
-								readonly property bool videoPreviewActive: card.hasVideoPreview && card.previewActive
-								readonly property real p: root.easeOut(card.previewActive ? root.previewProgress : 0.72)
-								readonly property real pulse: root.oscillate(card.previewActive ? root.previewProgress : 0.72)
-								readonly property color accent: modelData.kind === "shader" ? root.barColor : Qt.lighter(root.barColor, 1.32)
+					BioText {
+						role: "label"
+						tone: stage.phase === "opening" || stage.phase === "open" ? "organ" : "faint"
+						text: "Opening"
+					}
 
-								width: root.cardWidth
-								height: root.cardHeight
-								radius: 2
-								color: Bio.tissue1
-								clip: true
+					BioText {
+						role: "caption"
+						tone: "muted"
+						text: stage.timingLabel(stage.openTiming)
+					}
+				}
 
-								BioFrame {
-									anchors.fill: parent
-									z: 5
-									variant: "plate"
-									weight: card.selected ? Bio.rib : Bio.ribThin
-									lineColor: card.selected ? Bio.boneDim : Bio.boneGhost
-									liveColor: Bio.organ
-									intensity: card.selected ? 1 : 0
-								}
+				Column {
+					anchors.horizontalCenter: parent.horizontalCenter
+					anchors.verticalCenter: parent.verticalCenter
+					spacing: -1
 
-									MouseArea {
-										anchors.fill: parent
-										hoverEnabled: true
-										cursorShape: Qt.PointingHandCursor
-										onClicked: {
-											root.selectAnimationIndex(card.index);
-										}
-										onDoubleClicked: root.applyAnimation()
-									}
+					BioText {
+						anchors.horizontalCenter: parent.horizontalCenter
+						role: "label"
+						tone: stage.phase === "closing" || stage.phase === "closed" ? "organ" : "faint"
+						text: "Closing"
+					}
 
-								ThemedRectangle {
-									anchors.left: parent.left
-									anchors.right: parent.right
-									anchors.top: parent.top
-									anchors.margins: 10
-									height: parent.height - 42
-									radius: ThemeEngine.radiusMedium
-									color: Qt.alpha(root.background, 0.72)
-									border.width: 1
-									border.color: Qt.alpha(card.accent, 0.22)
-									clip: true
+					BioText {
+						anchors.horizontalCenter: parent.horizontalCenter
+						role: "caption"
+						tone: "muted"
+						text: stage.timingLabel(stage.closeTiming)
+					}
+				}
 
-									Item {
-										id: previewArea
-										anchors.fill: parent
-										anchors.margins: 8
-										clip: true
+				BioText {
+					id: replayLabel
+					anchors.right: graftLabel.left
+					anchors.rightMargin: Bio.s5
+					anchors.verticalCenter: parent.verticalCenter
+					role: "label"
+					tone: replayTouch.containsMouse ? "organ" : "faint"
+					text: stage.building ? "Building…" : (stage.buildError !== "" ? stage.buildError : "Replay")
 
-										Loader {
-											anchors.fill: parent
-											active: card.videoPreviewActive
-											sourceComponent: Component {
-												Item {
-													VideoOutput {
-														id: previewVideo
-														anchors.fill: parent
-														fillMode: VideoOutput.PreserveAspectCrop
-													}
-													MediaPlayer {
-														source: card.videoPreviewSource
-														videoOutput: previewVideo
-														autoPlay: true
-														loops: MediaPlayer.Infinite
-													}
-												}
-											}
-										}
+					BioTouch {
+						id: replayTouch
+						anchors.margins: -Bio.s2
+						onClicked: stage.restart()
+					}
+				}
 
-										BioText {
-											role: "caption"
-											visible: card.hasVideoPreview && !card.videoPreviewActive
-											anchors.centerIn: parent
-											color: Qt.alpha(root.foreground, 0.58)
-											font.pixelSize: 11
-											text: "Select to play real preview"
-										}
+				BioText {
+					id: graftLabel
+					anchors.right: parent.right
+					anchors.verticalCenter: parent.verticalCenter
+					role: "label"
+					tone: graftTouch.containsMouse ? "organ" : "muted"
+					text: root.liveAnimationId === root.selectedAnimationId ? "Grafted" : "Graft"
 
-										ThemedRectangle {
-											id: shadowWindow
-											visible: !card.hasVideoPreview && sampleWindow.opacity > 0.08
-											x: sampleWindow.x + 5
-											y: sampleWindow.y + 7
-											width: sampleWindow.width
-											height: sampleWindow.height
-											radius: sampleWindow.radius
-											color: Qt.rgba(0, 0, 0, 0.25)
-											opacity: sampleWindow.opacity
-										}
-
-										Item {
-											id: revealClip
-											visible: !card.hasVideoPreview
-											x: sampleWindow.x
-											y: sampleWindow.y
-											width: card.styleName === "wipe" ? sampleWindow.width * card.p : sampleWindow.width
-											height: sampleWindow.height
-											clip: card.styleName === "wipe"
-
-											ThemedRectangle {
-												id: sampleWindow
-												x: card.styleName === "swipe" ? -previewArea.width * (1 - card.p) : 0
-												y: card.styleName === "roll" || card.styleName === "pop" ? -18 * (1 - card.p) : (card.styleName === "bounce" ? Math.abs(Math.cos(card.p * Math.PI * 3)) * 26 * (1 - card.p) : 0)
-												width: Math.min(previewArea.width - 16, 178)
-												height: Math.min(previewArea.height - 14, 94)
-												radius: ThemeEngine.radiusMedium
-												color: Qt.alpha(root.background, 0.95)
-												border.width: 1
-												border.color: Qt.alpha(card.accent, 0.5)
-												opacity: card.styleName === "fade" ? card.p : (card.styleName === "flash" ? Math.min(1, card.p + 0.25) : 1)
-												scale: card.styleName === "pop" ? 0.62 + card.p * 0.38 : (card.styleName === "snap" ? 0.72 + card.p * 0.28 : 1)
-												rotation: card.styleName === "roll" ? (1 - card.p) * -18 : (card.styleName === "fold" ? (1 - card.p) * -9 : 0)
-												transformOrigin: Item.Center
-												clip: true
-
-												ThemedRectangle {
-													anchors.left: parent.left
-													anchors.right: parent.right
-													anchors.top: parent.top
-													height: 18
-													color: Qt.alpha(card.accent, 0.18)
-
-													Row {
-														anchors.left: parent.left
-														anchors.leftMargin: 8
-														anchors.verticalCenter: parent.verticalCenter
-														spacing: 5
-
-														Repeater {
-															model: [1, 2, 3]
-
-															delegate: ThemedRectangle {
-																required property int modelData
-
-																width: 6
-																height: 6
-																radius: ThemeEngine.radiusTiny
-																color: modelData === 1 ? root.speedHotColor : modelData === 2 ? root.speedWarmColor : card.accent
-															}
-														}
-													}
-												}
-
-												Column {
-													anchors.left: parent.left
-													anchors.right: parent.right
-													anchors.top: parent.top
-													anchors.topMargin: 28
-													anchors.margins: 12
-													spacing: 8
-
-													Repeater {
-														model: [0.62, 0.86, 0.48, 0.76]
-
-														delegate: ThemedRectangle {
-															required property real modelData
-
-															width: parent.width * modelData
-															height: 7
-															radius: ThemeEngine.radiusSmall
-															color: Qt.alpha(root.foreground, 0.35)
-														}
-													}
-												}
-
-											ThemedRectangle {
-												visible: card.previewActive && card.styleName === "flash"
-													anchors.fill: parent
-													color: Qt.rgba(255, 247, 210, 0.58 * (1 - card.p))
-												}
-
-											ThemedRectangle {
-												visible: card.previewActive && card.styleName === "fold"
-													anchors.right: parent.right
-													anchors.top: parent.top
-													anchors.bottom: parent.bottom
-													width: parent.width * (0.48 * (1 - card.p))
-													color: Qt.rgba(0, 0, 0, 0.32)
-												}
-											}
-										}
-
-										Repeater {
-											model: card.previewActive && !card.hasVideoPreview && card.styleName === "pixelate" ? 72 : 0
-
-											delegate: ThemedRectangle {
-												required property int index
-
-												readonly property int cols: 12
-												readonly property int rows: 6
-												readonly property real cellW: previewArea.width / cols
-												readonly property real cellH: previewArea.height / rows
-
-												x: (index % cols) * cellW
-												y: Math.floor(index / cols) * cellH
-												width: cellW + 1
-												height: cellH + 1
-												color: Qt.alpha(index % 3 === 0 ? card.accent : root.foreground, 0.36 * (1 - card.p))
-												visible: card.p < 0.92
-											}
-										}
-
-										Repeater {
-											model: card.previewActive && !card.hasVideoPreview && (card.styleName === "squares" || card.styleName === "snap") ? 48 : 0
-
-											delegate: ThemedRectangle {
-												required property int index
-
-												readonly property int cols: 8
-												readonly property int rows: 6
-												readonly property real threshold: ((index * 37) % 48) / 48
-
-												x: (index % cols) * previewArea.width / cols
-												y: Math.floor(index / cols) * previewArea.height / rows
-												width: previewArea.width / cols - 2
-												height: previewArea.height / rows - 2
-												radius: ThemeEngine.radiusTiny
-												color: Qt.alpha(card.accent, 0.48)
-												visible: card.p < threshold
-											}
-										}
-
-										Repeater {
-											model: card.previewActive && !card.hasVideoPreview && card.styleName === "glitch" ? 7 : 0
-
-											delegate: ThemedRectangle {
-												required property int index
-
-												x: ((index % 2) ? -1 : 1) * (1 - card.p) * (10 + index * 3)
-												y: 12 + index * 12
-												width: previewArea.width
-												height: 5 + (index % 3)
-												color: index % 3 === 0 ? Qt.rgba(1, 0.2, 0.26, 0.45) : index % 3 === 1 ? Qt.rgba(0.2, 0.85, 1, 0.38) : Qt.alpha(root.foreground, 0.28)
-												visible: card.p < 0.88
-											}
-										}
-
-										Repeater {
-											model: card.previewActive && !card.hasVideoPreview && card.styleName === "ribbons" ? 7 : 0
-
-											delegate: ThemedRectangle {
-												required property int index
-
-												x: -previewArea.width * 0.2 + card.p * previewArea.width * 1.15 + index * 12
-												y: index * previewArea.height / 8
-												width: previewArea.width * 0.55
-												height: 7
-												radius: ThemeEngine.radiusSmall
-												rotation: -18
-												color: Qt.alpha(index % 2 ? card.accent : root.foreground, 0.46)
-											}
-										}
-
-										Repeater {
-											model: card.previewActive && !card.hasVideoPreview && card.styleName === "unravel" ? 8 : 0
-
-											delegate: ThemedRectangle {
-												required property int index
-
-												x: index * previewArea.width / 8
-												y: 0
-												width: previewArea.width / 8 - 2
-												height: previewArea.height * (1 - card.p)
-												color: Qt.alpha(root.background, 0.82)
-											}
-										}
-
-									ThemedRectangle {
-										visible: card.previewActive && !card.hasVideoPreview && card.styleName === "circle"
-											x: previewArea.width / 2 - width / 2
-											y: previewArea.height / 2 - height / 2
-											width: 24 + card.p * Math.max(previewArea.width, previewArea.height) * 1.6
-											height: width
-											radius: width / 2
-											color: "transparent"
-											border.width: Math.max(2, 9 * (1 - card.p))
-											border.color: Qt.alpha(card.accent, 0.68)
-										}
-
-										Repeater {
-											model: card.previewActive && !card.hasVideoPreview && (card.styleName === "dissolve" || card.styleName === "burn") ? 30 : 0
-
-											delegate: ThemedRectangle {
-												required property int index
-
-												readonly property real seedX: ((index * 29) % 100) / 100
-												readonly property real seedY: ((index * 53) % 100) / 100
-												readonly property real sizeSeed: 4 + ((index * 17) % 9)
-
-												x: seedX * previewArea.width
-												y: seedY * previewArea.height - (card.styleName === "burn" ? card.p * 34 : card.p * 16)
-												width: sizeSeed
-												height: sizeSeed
-												radius: sizeSeed / 2
-												color: card.styleName === "burn" ? Qt.rgba(1, 0.42, 0.14, 0.72 * (1 - card.p)) : Qt.alpha(card.accent, 0.5 * (1 - card.p))
-												visible: card.p < seedY + 0.26
-											}
-										}
-
-										Repeater {
-											model: card.previewActive && !card.hasVideoPreview && (card.styleName === "ripple" || card.styleName === "warp") ? 4 : 0
-
-											delegate: ThemedRectangle {
-												required property int index
-
-												x: previewArea.width / 2 - width / 2
-												y: previewArea.height / 2 - height / 2
-												width: 32 + ((card.p + index * 0.18) % 1) * previewArea.width * 1.25
-												height: width * 0.58
-												radius: ThemeEngine.radiusMedium
-												rotation: card.styleName === "warp" ? 18 + index * 16 : 0
-												color: "transparent"
-												border.width: 2
-												border.color: Qt.alpha(card.accent, 0.45 * (1 - ((card.p + index * 0.18) % 1)))
-											}
-										}
-									}
-								}
-
-								ThemedRectangle {
-									anchors.left: parent.left
-									anchors.right: parent.right
-									anchors.bottom: parent.bottom
-									height: 34
-									color: Qt.alpha(root.background, 0.46)
-
-									BioText {
-										role: "bodyStrong"
-										anchors.left: parent.left
-										anchors.right: kindPill.left
-										anchors.leftMargin: 10
-										anchors.rightMargin: 8
-										anchors.verticalCenter: parent.verticalCenter
-										color: root.foreground
-										font.pixelSize: 12
-										font.weight: card.selected ? Font.DemiBold : Font.Medium
-										elide: Text.ElideRight
-										text: String(card.modelData.name || "")
-									}
-
-									ThemedRectangle {
-										id: kindPill
-										anchors.right: parent.right
-										anchors.rightMargin: 9
-										anchors.verticalCenter: parent.verticalCenter
-										width: 58
-										height: 20
-										radius: ThemeEngine.radiusMedium
-										color: Qt.alpha(card.accent, 0.24)
-										border.width: 1
-										border.color: Qt.alpha(card.accent, 0.34)
-
-										BioText {
-											role: "label"
-											anchors.centerIn: parent
-											color: root.foreground
-											font.pixelSize: 9
-											font.weight: Font.DemiBold
-											text: String(card.modelData.kind || "")
-										}
-									}
-								}
-							}
-
-					ScrollBar.vertical: ScrollBar {
-						policy: ScrollBar.AsNeeded
+					BioTouch {
+						id: graftTouch
+						anchors.margins: -Bio.s2
+						onClicked: root.applyAnimation()
 					}
 				}
 			}

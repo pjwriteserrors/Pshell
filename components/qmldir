@@ -15,6 +15,7 @@ BioMeter 1.0 BioMeter.qml
 BioPulse 1.0 BioPulse.qml
 BioField 1.0 BioField.qml
 BioToggle 1.0 BioToggle.qml
+AnimationStage 1.0 AnimationStage.qml
 singleton Motion 1.0 Motion.qml
 singleton ThemeEngine 1.0 ThemeEngine.qml
 Anim 1.0 Anim.qml
