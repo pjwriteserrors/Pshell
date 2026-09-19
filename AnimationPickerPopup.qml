@@ -261,30 +261,14 @@ fi
 					text: root.currentAnimationOption ? root.currentAnimationOption.label : "Animation"
 				}
 
-				ThemedRectangle {
+				BioButton {
 					id: applyButton
-					width: 104
-					height: 38
-					radius: ThemeEngine.radiusMedium
-					color: root.selectedAnimationId === "" ? Qt.alpha(root.secondaryBoxColor, 0.42) : Qt.alpha(root.barColor, 0.28)
-					border.width: 1
-					border.color: Qt.alpha(root.barColor, 0.52)
-
-					MouseArea {
-						anchors.fill: parent
-						enabled: root.selectedAnimationId !== ""
-						cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-						onClicked: root.applyAnimation()
-					}
-
-					BioText {
-						role: "bodyStrong"
-						anchors.centerIn: parent
-						color: root.foreground
-						font.pixelSize: 12
-						font.weight: Font.DemiBold
-						text: "Apply"
-					}
+					anchors.verticalCenter: parent.verticalCenter
+					minimumWidth: 104
+					implicitHeight: 34
+					enabled: root.selectedAnimationId !== ""
+					text: "Graft"
+					onClicked: root.applyAnimation()
 				}
 			}
 
@@ -325,14 +309,19 @@ fi
 
 								width: root.cardWidth
 								height: root.cardHeight
-								radius: ThemeEngine.radiusLarge
-								color: Qt.alpha(root.secondaryBoxColor, selected ? 0.78 : 0.5)
-								border.width: selected ? 2 : 1
-								border.color: Qt.alpha(selected ? root.barColor : root.foreground, selected ? 0.82 : 0.12)
+								radius: 2
+								color: Bio.tissue1
 								clip: true
 
-								Behavior on border.color { ColorAnimation { duration: ThemeEngine.duration(140) } }
-								Behavior on color { ColorAnimation { duration: ThemeEngine.duration(140) } }
+								BioFrame {
+									anchors.fill: parent
+									z: 5
+									variant: "plate"
+									weight: card.selected ? Bio.rib : Bio.ribThin
+									lineColor: card.selected ? Bio.boneDim : Bio.boneGhost
+									liveColor: Bio.organ
+									intensity: card.selected ? 1 : 0
+								}
 
 									MouseArea {
 										anchors.fill: parent

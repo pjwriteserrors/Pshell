@@ -176,14 +176,19 @@ Item {
 						width: spectrum.barWidth
 						height: spectrum.height
 
-						ThemedRectangle {
+						// Cilia: the sound as a bed of hairs standing up, lit from
+						// the organ colour through to its neighbour along the row.
+						// Silence has to look like silence, so at rest they all
+						// but disappear instead of lying there as a dotted rule.
+						Rectangle {
 							anchors.bottom: parent.bottom
-							width: parent.width
-							height: Math.max(5, barSlot.level * (parent.height - 8))
+							anchors.horizontalCenter: parent.horizontalCenter
+							width: Math.max(2, parent.width * 0.5)
+							height: Math.max(2, barSlot.level * (parent.height - 8))
 							radius: width / 2
 							color: Qt.alpha(
-								Qt.tint(root.primary, Qt.alpha(root.accent, barSlot.index / cava.bars)),
-								0.3 + 0.55 * barSlot.level
+								Bio.mix(Bio.organ, Bio.organAlt, barSlot.index / cava.bars),
+								0.06 + 0.78 * barSlot.level
 							)
 
 							Behavior on height {

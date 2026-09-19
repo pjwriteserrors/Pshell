@@ -124,20 +124,16 @@ Item {
 		spacing: 14
 
 		BioText {
-			role: "title"
-			text: "Style"
-			color: root.foreground
-			font.family: "C059"
-			font.pixelSize: 34
+			role: "specimen"
+			text: "Strains"
+			font.pixelSize: 30
 		}
 
 		BioText {
-			role: "body"
+			role: "caption"
+			tone: "muted"
 			width: parent.width
-			text: "One branch, one complete desktop.   Current: " + root.currentBranch
-			color: root.foreground
-			opacity: 0.65
-			font.pixelSize: 12
+			text: "One branch, one whole organism.   Growing: " + root.currentBranch
 			elide: Text.ElideMiddle
 		}
 
@@ -167,68 +163,71 @@ Item {
 				width: library.cellWidth
 				height: library.cellHeight
 
-				Rectangle {
+				// A branch is a strain in the collection: its own chamber, its
+				// name engraved, and a bead that says whether it is the one
+				// currently growing.
+				BioSurface {
 					anchors.fill: parent
 					anchors.margins: 7
-					radius: ThemeEngine.radiusLarge
-					color: entry.chosen
-						? root.secondaryBoxStrongColor
-						: entryMouse.containsMouse ? root.secondaryBoxColor : Qt.alpha(root.secondaryBoxColor, 0.45)
-					border.width: entry.chosen ? 1 : 0
-					border.color: root.barColor
+					variant: "plate"
+					washTop: entry.chosen ? Bio.membrane : Bio.tissue2
+					washBottom: entry.chosen ? Bio.membraneDeep : Bio.tissue1
+					lineColor: entry.chosen ? Bio.boneDim : Bio.boneFaint
+					liveColor: Bio.organ
+					haloStrength: entry.chosen ? 0.22 : 0
+					intensity: entry.chosen ? 1 : (entryMouse.containsMouse ? 0.5 : 0)
+					padding: Bio.s6
 					opacity: entry.modelData.compatible ? 1 : 0.45
-
-					Behavior on color {
-						CAnim {}
-					}
 
 					Column {
 						anchors.fill: parent
-						anchors.margins: 22
-						spacing: 8
+						spacing: Bio.s2
 
-						BioText {
-							role: "label"
-							text: entry.modelData.current ? "●  ACTIVE"
-								: entry.modelData.compatible ? "○  STYLE BRANCH" : "–  NOT A STYLE"
-							color: root.foreground
-							opacity: 0.65
-							font.family: "Adwaita Mono"
-							font.pixelSize: 10
+						Row {
+							spacing: Bio.s2
+
+							Rectangle {
+								anchors.verticalCenter: parent.verticalCenter
+								width: Bio.nodule * 2
+								height: Bio.nodule * 2
+								radius: width / 2
+								color: entry.modelData.current ? Bio.organ
+									: entry.modelData.compatible ? Bio.boneFaint : Bio.boneGhost
+							}
+
+							BioText {
+								anchors.verticalCenter: parent.verticalCenter
+								role: "label"
+								tone: entry.modelData.current ? "organ" : "faint"
+								text: entry.modelData.current ? "Growing"
+									: entry.modelData.compatible ? "Viable" : "Not a strain"
+							}
 						}
 
 						BioText {
 							role: "title"
 							width: parent.width
+							font.pixelSize: 26
 							text: entry.modelData.name
-							color: root.foreground
-							font.family: "C059"
-							font.pixelSize: 32
-							elide: Text.ElideRight
 						}
 
 						BioText {
-							role: "caption"
+							role: "mono"
+							tone: "faint"
 							width: parent.width
-							text: entry.modelData.branch
-							color: root.foreground
-							opacity: 0.6
-							font.family: "Adwaita Mono"
 							font.pixelSize: 11
+							text: entry.modelData.branch
 							elide: Text.ElideMiddle
 						}
 
 						BioText {
 							role: "caption"
+							tone: "muted"
 							width: parent.width
 							text: entry.modelData.description || ""
 							visible: text !== ""
-							color: root.foreground
-							opacity: 0.55
-							font.pixelSize: 11
 							wrapMode: Text.WordWrap
 							maximumLineCount: 2
-							elide: Text.ElideRight
 						}
 					}
 
@@ -257,12 +256,10 @@ Item {
 		}
 
 		BioText {
-			role: "body"
+			role: "caption"
+			tone: root.dirty || root.errorText ? "alert" : "muted"
 			width: parent.width
 			wrapMode: Text.WordWrap
-			color: root.dirty || root.errorText ? root.danger : root.foreground
-			opacity: root.dirty || root.errorText ? 1 : 0.7
-			font.pixelSize: 12
 			text: {
 				if (root.errorText) return root.errorText;
 				if (root.dirty) return "Uncommitted changes: commit or move them before switching. Nothing will be discarded.";
@@ -271,36 +268,34 @@ Item {
 			}
 		}
 
-		Rectangle {
+		BioSurface {
 			width: parent.width
 			height: 44
-			radius: ThemeEngine.radiusMedium
-			color: applyMouse.containsMouse && root.canApply
-				? Qt.lighter(root.secondaryBoxStrongColor, 1.15)
-				: root.secondaryBoxStrongColor
+			variant: "plate"
+			washTop: Bio.tissue2
+			washBottom: Bio.tissue1
+			lineColor: Bio.boneFaint
+			liveColor: Bio.organ
+			haloStrength: 0.12
+			intensity: applyMouse.live
 			opacity: root.canApply ? 1 : 0.5
-
-			Behavior on color {
-				CAnim {}
-			}
+			padding: 0
 
 			BioText {
-				role: "body"
 				anchors.centerIn: parent
-				color: root.foreground
-				font.pixelSize: 13
+				role: "label"
+				tone: applyMouse.live > 0.3 ? "organ" : "default"
 				text: {
-					if (root.switching) return "Switching…";
-					if (root.selected && root.selected.current) return "Current style";
-					if (root.confirming) return "Confirm checkout";
-					return "Use selected style";
+					if (root.switching) return "Grafting";
+					if (root.selected && root.selected.current) return "This strain is growing";
+					if (root.confirming) return "Confirm the graft";
+					return "Graft the chosen strain";
 				}
 			}
 
-			MouseArea {
+			BioTouch {
 				id: applyMouse
-				anchors.fill: parent
-				hoverEnabled: true
+				enabled: root.canApply
 				cursorShape: root.canApply ? Qt.PointingHandCursor : Qt.ArrowCursor
 				onClicked: {
 					root.forceActiveFocus();

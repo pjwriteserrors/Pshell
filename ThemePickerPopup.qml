@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Effects
+import QtQuick.Controls.impl as QQCImpl
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
@@ -556,49 +557,71 @@ fi
 		}
 	}
 
-	ThemedRectangle {
+	// The probe line again: the sample you are hunting for, typed on a bone
+	// line, with the mode's ring at its head.
+	Item {
 		id: searchBox
 		z: 30
 		width: root.searchBarWidth
-		height: 48
+		height: 40
 		anchors.top: parent.top
 		anchors.topMargin: 18
 		anchors.horizontalCenter: parent.horizontalCenter
-		themeStyle: "inset"
-		radius: ThemeEngine.radiusMedium
-		color: Qt.alpha(root.secondaryBoxColor, 0.86)
-		border.width: searchField.activeFocus ? 1 : 0
-		border.color: Qt.alpha(root.barColor, 0.65)
 
-		Image {
+		Rectangle {
 			anchors.left: parent.left
-			anchors.leftMargin: 15
+			anchors.right: parent.right
+			anchors.bottom: parent.bottom
+			height: Bio.ribThin
+			color: Bio.boneFaint
+		}
+
+		Rectangle {
+			anchors.left: parent.left
+			anchors.bottom: parent.bottom
+			width: searchField.activeFocus ? parent.width : 0
+			height: Bio.rib
+			color: Bio.organ
+
+			Behavior on width {
+				NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
+			}
+		}
+
+		BioRing {
+			id: searchMark
+			anchors.left: parent.left
 			anchors.verticalCenter: parent.verticalCenter
-			width: 16
-			height: 16
-			source: "/usr/share/icons/Adwaita/symbolic/actions/system-search-symbolic.svg"
-			fillMode: Image.PreserveAspectFit
-			smooth: true
-			mipmap: true
-			layer.enabled: visible
-			layer.effect: MultiEffect {
-				colorization: 1
-				colorizationColor: root.barColor
+			width: 26
+			height: 26
+			seed: 3
+			lineColor: Bio.boneFaint
+			intensity: searchField.activeFocus ? 0.9 : 0
+
+			QQCImpl.IconImage {
+				anchors.centerIn: parent
+				width: 13
+				height: 13
+				source: "/usr/share/icons/Adwaita/symbolic/actions/system-search-symbolic.svg"
+				sourceSize: Qt.size(width, height)
+				color: searchField.activeFocus ? Bio.organ : Bio.textMuted
 			}
 		}
 
 		TextField {
 			id: searchField
-			anchors.left: parent.left
-			anchors.leftMargin: 43
+			anchors.left: searchMark.right
+			anchors.leftMargin: Bio.s3
 			anchors.right: closeButton.left
-			anchors.rightMargin: 8
+			anchors.rightMargin: Bio.s3
 			anchors.verticalCenter: parent.verticalCenter
-			color: root.foreground
-			placeholderText: "Filter themes"
-			placeholderTextColor: Qt.alpha(root.foreground, 0.45)
-			selectedTextColor: root.foreground
-			selectionColor: Qt.alpha(root.barColor, 0.22)
+			font.family: Bio.sans
+			font.pixelSize: Bio.sizeBody
+			color: Bio.text
+			placeholderText: "Sift cultures"
+			placeholderTextColor: Bio.textFaint
+			selectedTextColor: Bio.text
+			selectionColor: Qt.alpha(Bio.organ, 0.3)
 			selectByMouse: true
 			focus: true
 			background: Item {}
@@ -630,53 +653,49 @@ fi
 			}
 		}
 
-		ThemedRectangle {
+		Item {
 			id: closeButton
 			anchors.right: parent.right
-			anchors.rightMargin: 8
 			anchors.verticalCenter: parent.verticalCenter
-			width: 30
-			height: 30
-			radius: ThemeEngine.radiusMedium
-			color: closeMouse.containsMouse ? Qt.alpha(root.barColor, 0.18) : "transparent"
-
-			MouseArea {
-				id: closeMouse
-				anchors.fill: parent
-				hoverEnabled: true
-				cursorShape: Qt.PointingHandCursor
-				onClicked: root.closeRequested()
-			}
+			width: 24
+			height: 24
 
 			BioText {
-				role: "heading"
 				anchors.centerIn: parent
-				color: root.foreground
-				font.pixelSize: 14
-				text: "x"
+				role: "body"
+				tone: closeMouse.containsMouse ? "alert" : "faint"
+				text: "×"
+			}
+
+			BioTouch {
+				id: closeMouse
+				onClicked: root.closeRequested()
 			}
 		}
 	}
 
-	ThemedRectangle {
+	BioSurface {
 		visible: root.deleteError !== ""
 		z: 90
 		anchors.top: searchBox.bottom
 		anchors.topMargin: 8
 		anchors.horizontalCenter: parent.horizontalCenter
-		width: Math.min(deleteErrorText.implicitWidth + 28, root.width - 80)
-		height: deleteErrorText.implicitHeight + 16
-		radius: ThemeEngine.radiusMedium
-		color: Qt.alpha(root.danger, 0.92)
+		width: Math.min(deleteErrorText.implicitWidth + 56, root.width - 80)
+		height: deleteErrorText.implicitHeight + 28
+		variant: "plate"
+		lineColor: Qt.alpha(Bio.necrosis, 0.6)
+		liveColor: Bio.necrosis
+		washTop: Qt.alpha(Bio.necrosis, 0.14)
+		washBottom: Bio.membraneDeep
+		intensity: 0.8
+		padding: Bio.s4
 
 		BioText {
-			role: "bodyStrong"
 			id: deleteErrorText
 			anchors.centerIn: parent
 			width: Math.min(implicitWidth, root.width - 108)
-			color: "white"
-			font.pixelSize: 12
-			font.weight: Font.DemiBold
+			role: "caption"
+			tone: "alert"
 			wrapMode: Text.Wrap
 			horizontalAlignment: Text.AlignHCenter
 			text: root.deleteError
@@ -745,12 +764,10 @@ fi
 					y: variantSelector.sectionY(sectionName)
 
 					BioText {
-						role: "bodyStrong"
+						role: "label"
+						tone: "muted"
 						width: parent.width
 						height: variantSelector.sectionTitleHeight
-						color: root.foreground
-						font.pixelSize: 12
-						font.weight: Font.DemiBold
 						verticalAlignment: Text.AlignVCenter
 						text: paletteSection.sectionName
 					}
@@ -765,19 +782,30 @@ fi
 						Repeater {
 							model: root.colorSpaceOptions
 
-							delegate: ThemedRectangle {
+							delegate: Item {
+								id: colorSpaceHead
 								required property int index
 								required property string modelData
 
 								width: variantSelector.cellWidth
 								height: variantSelector.headerHeight - 4
-								radius: ThemeEngine.radiusMedium
-								color: Qt.alpha(root.selectedColorIndex === index ? root.barColor : root.secondaryBoxStrongColor, root.selectedColorIndex === index ? 0.34 : 0.42)
-								border.width: root.selectedColorIndex === index ? 1 : 0
-								border.color: Qt.alpha(root.barColor, 0.72)
+
+								BioFrame {
+									anchors.fill: parent
+									variant: "capsule"
+									beading: false
+									weight: Bio.ribThin
+									inset: 1
+									lineColor: Bio.boneGhost
+									liveColor: Bio.organ
+									fillTop: Bio.cavity
+									fillBottom: Bio.cavity
+									intensity: root.selectedColorIndex === colorSpaceHead.index ? 1 : 0
+								}
 
 								BioText {
-									role: "caption"
+									role: "label"
+									tone: root.selectedColorIndex === colorSpaceHead.index ? "organ" : "faint"
 									anchors.fill: parent
 									anchors.leftMargin: 8
 									anchors.rightMargin: 8
@@ -1030,87 +1058,82 @@ fi
 				Behavior on opacity { NumberAnimation { duration: ThemeEngine.duration(180) } }
 				Behavior on scale { NumberAnimation { duration: ThemeEngine.duration(220); easing.type: ThemeEngine.standardEasing } }
 
-				ThemedRectangle {
+				// A wallpaper is a slide under glass: the image, a wash so the
+				// engraving on it stays readable, and bone around the one you
+				// are looking at.
+				Item {
 					anchors.fill: parent
-					radius: ThemeEngine.radiusMedium
-					color: Qt.alpha(root.secondaryInsetColor, active ? 0.96 : 0.74)
-					border.width: active ? 1 : 0
-					border.color: Qt.alpha(root.barColor, 0.85)
-					clip: true
 
-					Behavior on color { ColorAnimation { duration: ThemeEngine.duration(180) } }
-
-					Image {
-						anchors.fill: parent
-						asynchronous: true
-						cache: true
-						fillMode: Image.PreserveAspectCrop
-						mipmap: true
-						smooth: true
-						source: root.filteredThemes[index].previewPath
+					BioGlow {
+						anchors.centerIn: parent
+						width: parent.width * 1.2
+						height: parent.height * 1.3
+						color: Bio.organ
+						strength: active ? 0.22 : 0
+						spread: 0.42
 					}
 
-					ThemedRectangle {
+					Rectangle {
 						anchors.fill: parent
-						radius: ThemeEngine.radiusMedium
-						gradient: Gradient {
-							GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, active ? 0.06 : 0.16) }
-							GradientStop { position: 0.6; color: "transparent" }
-							GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, active ? 0.58 : 0.68) }
+						anchors.margins: 3
+						radius: 2
+						color: Bio.cavity
+						clip: true
+
+						Image {
+							anchors.fill: parent
+							asynchronous: true
+							cache: true
+							fillMode: Image.PreserveAspectCrop
+							mipmap: true
+							smooth: true
+							source: root.filteredThemes[index].previewPath
+						}
+
+						Rectangle {
+							anchors.fill: parent
+							gradient: Gradient {
+								GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, active ? 0.06 : 0.20) }
+								GradientStop { position: 0.6; color: "transparent" }
+								GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, active ? 0.62 : 0.72) }
+							}
 						}
 					}
 
-					ThemedRectangle {
+					BioFrame {
+						anchors.fill: parent
+						variant: "plate"
+						weight: active ? Bio.rib : Bio.ribThin
+						lineColor: active ? Bio.boneDim : Bio.boneGhost
+						liveColor: Bio.organ
+						intensity: active ? 1 : 0
+					}
+
+					BioText {
 						id: mediaTypeBadge
 						z: 6
 						anchors.top: parent.top
 						anchors.right: parent.right
-						anchors.margins: active ? 18 : 14
-						width: mediaBadgeText.implicitWidth + 18
-						height: 24
-						radius: ThemeEngine.radiusMedium
-						color: Qt.rgba(0, 0, 0, 0.58)
-						border.width: 1
-						border.color: Qt.rgba(255, 255, 255, 0.22)
-
-						BioText {
-							role: "label"
-							id: mediaBadgeText
-							anchors.centerIn: parent
-							color: "white"
-							font.pixelSize: 10
-							font.weight: Font.DemiBold
-							text: root.mediaBadgeLabel(root.filteredThemes[index].mediaType)
-						}
+						anchors.margins: active ? 20 : 16
+						role: "label"
+						color: Bio.text
+						text: root.mediaBadgeLabel(root.filteredThemes[index].mediaType)
 					}
 
-					ThemedRectangle {
+					BioNode {
 						id: deleteMediaButton
 						visible: active
 						z: 8
 						anchors.top: parent.top
 						anchors.left: parent.left
-						anchors.margins: 18
-						width: 34
-						height: 34
-						radius: ThemeEngine.radiusMedium
-						color: Qt.alpha(root.danger, deleteMediaMouse.containsMouse ? 0.78 : 0.52)
+						anchors.margins: 16
+						size: 30
+						seed: 2
+						ringColor: Qt.alpha(Bio.necrosis, 0.5)
+						liveColor: Bio.necrosis
+						iconColor: Bio.necrosis
+						iconSource: "/usr/share/icons/Adwaita/symbolic/actions/edit-delete-symbolic.svg"
 						opacity: root.deleteInProgress ? 0.45 : 1
-						border.width: 1
-						border.color: Qt.rgba(255, 255, 255, 0.26)
-
-						Image {
-							anchors.centerIn: parent
-							width: 16
-							height: 16
-							source: "/usr/share/icons/Adwaita/symbolic/actions/edit-delete-symbolic.svg"
-							fillMode: Image.PreserveAspectFit
-							layer.enabled: true
-							layer.effect: MultiEffect {
-								colorization: 1
-								colorizationColor: "white"
-							}
-						}
 
 						MouseArea {
 							id: deleteMediaMouse
