@@ -4324,18 +4324,10 @@ printf 'type=offline\niface=\nip=\n'`
 							inset: Bio.s3
 							interactive: !menuEntry.modelData.isSeparator && menuEntry.modelData.enabled
 
-							Rectangle {
-								anchors.fill: parent
-								visible: menuEntry.modelData.isSeparator
-								color: Bio.boneGhost
-							}
-
-							BioTouch {
-								id: entryMouseArea
-								enabled: !menuEntry.modelData.isSeparator && menuEntry.modelData.enabled
-								cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-
-								onClicked: {
+							// The row is the target. A second touch layer inside
+							// it would sit over the row's own and take the hover
+							// with it.
+							onClicked: {
 								if (menuEntry.modelData.hasChildren) {
 									trayMenuStackLoader.item.push(traySubMenuComponent.createObject(null, {
 										handle: menuEntry.modelData,
@@ -4346,7 +4338,12 @@ printf 'type=offline\niface=\nip=\n'`
 									root.closeTrayMenu();
 								}
 							}
-						}
+
+							Rectangle {
+								anchors.fill: parent
+								visible: menuEntry.modelData.isSeparator
+								color: Bio.boneGhost
+							}
 
 						Row {
 							visible: !menuEntry.modelData.isSeparator
@@ -4394,10 +4391,7 @@ printf 'type=offline\niface=\nip=\n'`
 					width: trayMenuColumn.implicitWidth
 					implicitHeight: 30
 					inset: Bio.s3
-
-					BioTouch {
-						onClicked: trayMenuStackLoader.item.pop()
-					}
+					onClicked: trayMenuStackLoader.item.pop()
 
 					BioText {
 						anchors.centerIn: parent
