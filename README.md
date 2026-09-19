@@ -33,7 +33,7 @@ whole shell - layout, components, motion, the lot.
 | `main` | **Default** - the original layout |
 | `style/atelier` | **Atelier** - vertical rail, editorial surfaces |
 | `style/meridian` | **Meridian** - panel-based, datum-driven |
-| `style/biopunk` | **Biopunk** - bone-drawn chambers on a spine, one luminous organ |
+| `style/biopunk` | **Biopunk** - a spine down the left edge, chambers drawn out of it sideways |
 | `archive/legacy-main` | not a style; a snapshot of the old unversioned `~/.config/quickshell/main` |
 
 Switch in **Studio → Style** (`Mod+Shift+S`, then `Ctrl+3`), or from a terminal:
@@ -91,12 +91,18 @@ while you work on another style.
 
 ## Biopunk, in one paragraph
 
-The branch `style/biopunk` draws the desktop as a specimen under glass. There is
-no chrome: the organs sit loose on the wallpaper along a spine, a tendon runs
-from each cluster to the plate that carries the time, and every panel is a
-chamber whose outline is grown rather than stroked - `components/BioInk.js`
-builds each line as a filled ribbon, so a bone swells through a joint and runs
-out to a point, and a corner breaks into vertebrae instead of turning.
+The branch `style/biopunk` draws the desktop as a specimen under glass, and it
+stands the shell on its edge. There is no bar: a spine runs down the left of
+every screen, and everything the shell has to say is read top to bottom along
+it - what opens things at the head, the hour held in the middle, what the
+machine is carrying at the foot. Nothing hangs off it and nothing is centred.
+A panel is a drawer in that column: a spur reaches out at the organ that owns
+it, the chamber unrolls sideways, opens level with that organ, and carries its
+name engraved down its outer edge. The launcher and the modals take the whole
+bench beside the column, with the spine left lit and live. Every outline is
+grown rather than stroked - `components/BioInk.js` builds each line as a filled
+ribbon, so a bone swells through a joint and runs out to a point, and a corner
+breaks into vertebrae instead of turning.
 
 Colour comes from one place. `components/Bio.qml` reads the Wallust palette,
 ranks it by hue strength weighted with legibility, and the winner becomes the

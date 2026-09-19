@@ -3266,7 +3266,7 @@ Item {
 
 			ListView {
 				id: commandList
-				width: parent.width
+				width: Math.min(parent.width, 860)
 				height: dish.viewHeight
 				visible: root.inCommandMode
 					&& !root.inCalculatorMode
@@ -3418,7 +3418,7 @@ Item {
 
 			Item {
 				id: filePanel
-				width: parent.width
+				width: Math.min(parent.width, 980)
 				height: dish.viewHeight
 				visible: root.inFileMode
 

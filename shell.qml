@@ -2232,8 +2232,6 @@ Scope {
 		open: root.clipboardPopupOpen
 		visible: root.clipboardPopupVisible
 		barItem: bar
-		anchorWindow: barWindow
-		anchorMode: "item"
 		anchorItem: clipboardNode
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
@@ -2664,8 +2662,6 @@ Scope {
 		open: root.bluetoothPopupOpen
 		visible: root.bluetoothPopupVisible
 		barItem: bar
-		anchorWindow: barWindow
-		anchorMode: "item"
 		anchorItem: bluetoothNode
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
@@ -3219,8 +3215,6 @@ done`
 		open: root.networkPopupOpen
 		visible: root.networkPopupVisible
 		barItem: bar
-		anchorWindow: barWindow
-		anchorMode: "item"
 		anchorItem: networkNode
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
@@ -3582,8 +3576,6 @@ printf 'type=offline\niface=\nip=\n'`
 		open: root.resourcesPopupOpen
 		visible: root.resourcesPopupVisible
 		barItem: bar
-		anchorWindow: barWindow
-		anchorMode: "item"
 		anchorItem: resourceBars
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
@@ -3796,7 +3788,6 @@ printf 'type=offline\niface=\nip=\n'`
 		ModalSheet {
 			open: root.studioPopupOpen
 			scrimOpacity: 0.985
-			shadowSurfaceColor: root.secondaryInsetColor
 			sheetWidth: Math.min(1400, studioPopup.width - 80)
 			sheetHeight: studioPopup.height - Bio.s7 * 2
 			onDismissRequested: root.closeStudio()
@@ -4238,8 +4229,6 @@ printf 'type=offline\niface=\nip=\n'`
 		open: root.trayMenuOpen
 		visible: root.trayMenuVisible
 		barItem: bar
-		anchorWindow: barWindow
-		anchorMode: "item"
 		anchorItem: trayRow
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
@@ -4445,8 +4434,6 @@ printf 'type=offline\niface=\nip=\n'`
 		open: root.mediaPopupOpen
 		visible: root.mediaPopupVisible
 		barItem: bar
-		anchorWindow: barWindow
-		anchorMode: "item"
 		anchorItem: nowPlayingIsland
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
@@ -4488,7 +4475,6 @@ printf 'type=offline\niface=\nip=\n'`
 		open: root.clockPopupOpen
 		visible: root.clockPopupVisible
 		barItem: bar
-		anchorMode: "item"
 		anchorItem: specimenPlate
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
@@ -4656,7 +4642,6 @@ printf 'type=offline\niface=\nip=\n'`
 		open: root.weatherPopupOpen
 		visible: root.weatherPopupVisible
 		barItem: bar
-		anchorMode: "item"
 		anchorItem: weatherNode
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
@@ -4838,7 +4823,6 @@ printf 'type=offline\niface=\nip=\n'`
 		open: root.notifPopupOpen
 		visible: root.notifPopupVisible
 		barItem: bar
-		anchorMode: "item"
 		anchorItem: notifNode
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder

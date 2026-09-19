@@ -1,1 +1,6 @@
-{"api":1,"name":"Biopunk","theme":"biopunk","description":"A specimen under glass: bone-drawn chambers, one luminous organ, wallust as the living colour."}
+{
+  "api": 1,
+  "name": "Biopunk",
+  "theme": "biopunk",
+  "description": "A specimen under glass, stood on its edge: a spine down the left, chambers drawn out of it sideways, and wallust as the one living colour."
+}

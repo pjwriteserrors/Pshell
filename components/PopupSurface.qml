@@ -25,8 +25,8 @@ PanelWindow {
 	// wiring
 	required property bool open
 	required property Item barItem
-	property var anchorWindow: null       // legacy, unused
-	property string anchorMode: "right"   // legacy: every chamber docks left now
+	// The organ this chamber belongs to: the spur leaves the column there, and
+	// the chamber opens level with it.
 	property Item anchorItem: null
 
 	// The name engraved down the chamber's outer edge. Every chamber has one —
@@ -42,10 +42,6 @@ PanelWindow {
 	// style
 	property color surfaceColor: Bio.membrane
 	property color borderColor: "transparent"
-	property real restingRadius: 0        // kept for source compatibility
-	property real edgeMargin: 12
-	property real barGap: 10
-	property real barTopMargin: 4
 	property bool wantsKeyboard: true
 
 	default property alias content: contentSlot.data

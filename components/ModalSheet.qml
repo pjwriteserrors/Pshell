@@ -16,18 +16,14 @@ Item {
 
 	required property bool open
 	property real scrimOpacity: 0.62
-	property string mode: "center"   // legacy: every bench docks to the spine
 	property real sheetWidth: 400
 	property real sheetHeight: 300
-	property real bottomMargin: 0
-	property color shadowSurfaceColor: "transparent"
 
 	default property alias content: container.data
 	readonly property Item containerItem: container
 
 	signal dismissRequested()
 
-	readonly property bool centered: mode === "center"
 	property real openProgress: open ? 1 : 0
 
 	anchors.fill: parent
