@@ -219,32 +219,74 @@ Scope {
 				onClicked: root.focusPasswordInput()
 			}
 
+			// Sealed, the screen keeps the shell's own anatomy: a bone runs
+			// down the left where the spine would be, the hour is cut against
+			// it at the size of the thing it is, and the seal lies across the
+			// foot. Nothing is centred and nothing floats in a box.
+			Rectangle {
+				id: lockBone
+				x: Math.round(Math.max(Bio.s7, lockWindow.width * 0.085))
+				anchors.top: parent.top
+				anchors.bottom: parent.bottom
+				anchors.topMargin: Bio.s8
+				anchors.bottomMargin: Bio.s8
+				width: Bio.ribThin
+				color: Qt.alpha(Bio.bone, 0.22)
+				opacity: lockWindow.reveal
+			}
+
+			BioSigil {
+				id: lockSigil
+				x: Math.round(lockBone.x - width / 2)
+				y: Math.round(lockWindow.height * 0.12)
+				width: 92
+				height: 92
+				seed: 13
+				lineColor: Qt.alpha(Bio.bone, 0.8)
+				weight: Bio.rib
+				opacity: lockWindow.reveal
+			}
+
 			Column {
 				id: lockContent
 
-				width: Math.min(440, Math.max(280, lockWindow.width - 48))
-				x: Math.round((lockWindow.width - width) / 2)
+				width: Math.min(760, Math.max(280, lockWindow.width - lockBone.x - Bio.s8))
+				x: Math.round(lockBone.x + Bio.s7)
 				y: Math.round((lockWindow.height - implicitHeight) / 2)
-				spacing: Bio.s5
+				spacing: Bio.s4
 				opacity: lockWindow.reveal
-				scale: 0.98 + 0.02 * lockWindow.reveal
-				transformOrigin: Item.Center
-
-				BioSigil {
-					anchors.horizontalCenter: parent.horizontalCenter
-					width: 92
-					height: 92
-					seed: 13
-					lineColor: Qt.alpha(Bio.bone, 0.8)
-					weight: Bio.rib
+				transform: Translate {
+					x: (1 - lockWindow.reveal) * -40
 				}
 
 				BioText {
 					role: "specimen"
 					width: parent.width
-					text: Qt.formatDateTime(root.lockNow, "HH:mm")
-					horizontalAlignment: Text.AlignHCenter
-					font.pixelSize: 84
+					text: Qt.formatDateTime(root.lockNow, "HH")
+					horizontalAlignment: Text.AlignLeft
+					font.pixelSize: 132
+					font.letterSpacing: 0
+					lineHeight: 0.84
+				}
+
+				BioText {
+					role: "specimen"
+					width: parent.width
+					tone: "organ"
+					text: Qt.formatDateTime(root.lockNow, "mm")
+					horizontalAlignment: Text.AlignLeft
+					font.pixelSize: 132
+					font.letterSpacing: 0
+					lineHeight: 0.84
+				}
+
+				BioTendon {
+					width: Math.min(parent.width, 300)
+					height: 14
+					facing: Qt.LeftToRight
+					sag: 2
+					weight: Bio.rib * 1.2
+					lineColor: Qt.alpha(Bio.bone, 0.45)
 				}
 
 				BioText {
@@ -252,8 +294,13 @@ Scope {
 					tone: "muted"
 					width: parent.width
 					text: Qt.formatDateTime(root.lockNow, "dddd, dd MMMM yyyy")
-					horizontalAlignment: Text.AlignHCenter
+					horizontalAlignment: Text.AlignLeft
 					font.pixelSize: 13
+				}
+
+				Item {
+					width: 1
+					height: Bio.s5
 				}
 
 				// The seal. Nothing here shows what was typed — a run of
@@ -276,7 +323,7 @@ Scope {
 						typePulseAnim.restart();
 					}
 
-					width: parent.width
+					width: Math.min(parent.width, 440)
 					height: 58
 
 					SequentialAnimation {

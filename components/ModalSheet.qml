@@ -2,11 +2,13 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 
-// The wrapper every full-screen modal sits in (power, launcher, Studio, the
-// pickers). It owns the scrim and the one entrance the style has: the sheet
-// does not scale up out of nowhere, it *incubates* — the scrim thickens like
-// fluid, the sheet swells from a slit and settles, and closing collapses it
-// back along the same axis.
+// The wrapper every full-screen modal sits in (power, Studio, the pickers).
+//
+// Nothing in this style appears in the middle of the screen. A modal is a
+// bench, like the launcher: the desktop dims beside the spine, the column
+// itself stays lit and live, and the work is drawn out of it sideways. The
+// scrim thickens like fluid while the bench unrolls from the column, and
+// closing rolls it back the same way.
 //
 // Place inside a full-screen PanelWindow.
 Item {
@@ -14,7 +16,7 @@ Item {
 
 	required property bool open
 	property real scrimOpacity: 0.62
-	property string mode: "center"   // "center" | "bottom"
+	property string mode: "center"   // legacy: every bench docks to the spine
 	property real sheetWidth: 400
 	property real sheetHeight: 300
 	property real bottomMargin: 0
@@ -43,14 +45,17 @@ Item {
 
 	Behavior on openProgress {
 		NumberAnimation {
-			duration: sheet.open ? Bio.swell : Bio.relax
-			easing.type: sheet.open ? Easing.OutBack : Easing.InCubic
-			easing.overshoot: sheet.open ? 1.08 : 0
+			duration: sheet.open ? Bio.unfurl : Bio.furl
+			easing.type: sheet.open ? Easing.OutQuint : Easing.InCubic
 		}
 	}
 
 	Rectangle {
-		anchors.fill: parent
+		anchors.left: parent.left
+		anchors.right: parent.right
+		anchors.top: parent.top
+		anchors.bottom: parent.bottom
+		anchors.leftMargin: Math.round(Bio.spine)
 		color: Bio.scrim
 		opacity: sheet.open ? sheet.scrimOpacity : 0
 
@@ -81,19 +86,19 @@ Item {
 	Item {
 		id: container
 
-		width: sheet.sheetWidth
-		height: sheet.sheetHeight
-		anchors.horizontalCenter: parent.horizontalCenter
-		y: sheet.centered
-			? Math.round((sheet.height - height) / 2)
-			: sheet.height - height - sheet.bottomMargin
-		opacity: Math.min(1, sheet.openProgress * 2.4)
+		x: Math.round(Bio.spine + Bio.s7)
+		width: Math.min(sheet.sheetWidth, sheet.width - Bio.spine - Bio.s7 * 2)
+		height: Math.min(sheet.sheetHeight, sheet.height - Bio.s6 * 2)
+		y: Math.round((sheet.height - height) / 2)
+		opacity: Math.min(1, sheet.openProgress * 2.2)
 
+		// It unrolls out of the column, like every other chamber: scaled from
+		// its left edge only, never from its middle.
 		transform: Scale {
-			origin.x: container.width / 2
-			origin.y: sheet.centered ? container.height / 2 : container.height
-			xScale: 0.90 + 0.10 * Math.min(1, sheet.openProgress * 1.7)
-			yScale: Math.max(0.03, sheet.openProgress)
+			origin.x: -Bio.s7
+			origin.y: container.height / 2
+			xScale: Math.max(0.03, sheet.openProgress)
+			yScale: 0.97 + 0.03 * sheet.openProgress
 		}
 	}
 }

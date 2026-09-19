@@ -6,10 +6,10 @@ import Quickshell.Services.SystemTray
 import Quickshell.Wayland
 import "components"
 
-// The spine again, on a screen that is not the primary one.
+// The spine again, down the left of a screen that is not the primary one.
 //
-// Same organism, fewer organs: the specimen plate, the tendons and the clusters
-// are here, but the readings that belong to the machine as a whole (weather,
+// Same organism, fewer organs: the hour, the windows on this output and the way
+// out are here, but the readings that belong to the machine as a whole (weather,
 // notifications) stay on the one spine that owns them. Every press is a signal
 // — this window knows nothing about popups.
 PanelWindow {
@@ -59,64 +59,65 @@ PanelWindow {
 
 	anchors {
 		left: true
-		right: true
 		top: true
+		bottom: true
 	}
 
 	margins {
 		left: 0
-		right: 0
 		top: 0
+		bottom: 0
 	}
 
-	exclusiveZone: Math.round(bar.y + Bio.spine)
-	implicitHeight: Math.round(bar.y + bar.height)
+	exclusiveZone: Math.round(Bio.spine)
+	implicitWidth: Math.round(Bio.spine)
 	color: "transparent"
 	mask: Region {
-		x: bar.x
-		y: bar.y
-		width: bar.width
-		height: bar.height
+		x: 0
+		y: 0
+		width: Math.round(Bio.spine)
+		height: root.height
 	}
 
 	Item {
 		id: bar
-		anchors.left: parent.left
-		anchors.right: parent.right
-		anchors.top: parent.top
-		anchors.leftMargin: Bio.s5
-		anchors.rightMargin: Bio.s5
-		anchors.topMargin: Bio.s2
-		height: Bio.spine + plate.overhang
+		anchors.fill: parent
 
-		readonly property real line: Bio.spine / 2
+		readonly property real line: width / 2
 
 		// The carapace edge, as on the primary spine: without it the bone lines
 		// vanish wherever the wallpaper is pale.
 		Rectangle {
-			anchors.left: parent.left
-			anchors.right: parent.right
-			anchors.top: parent.top
-			anchors.topMargin: -bar.anchors.topMargin
-			anchors.leftMargin: -Bio.s5
-			anchors.rightMargin: -Bio.s5
-			height: Bio.spine + Bio.s5
+			anchors.fill: parent
 			gradient: Gradient {
-				GradientStop { position: 0.0; color: Qt.alpha(Bio.cavity, 0.92) }
-				GradientStop { position: 0.62; color: Qt.alpha(Bio.cavity, 0.66) }
+				orientation: Gradient.Horizontal
+				GradientStop { position: 0.0; color: Qt.alpha(Bio.cavity, 0.94) }
+				GradientStop { position: 0.68; color: Qt.alpha(Bio.cavity, 0.7) }
 				GradientStop { position: 1.0; color: "transparent" }
 			}
 		}
 
-		Row {
+		Rectangle {
+			x: Math.round(bar.line - width / 2)
+			anchors.top: parent.top
+			anchors.bottom: parent.bottom
+			anchors.topMargin: Bio.s5
+			anchors.bottomMargin: Bio.s5
+			width: Bio.ribThin
+			color: Bio.boneGhost
+		}
+
+		Column {
 			id: leftCluster
-			anchors.left: parent.left
-			y: bar.line - height / 2
+			anchors.top: parent.top
+			anchors.topMargin: Bio.s4
+			anchors.horizontalCenter: parent.horizontalCenter
 			spacing: Bio.s3
 
 			BioNode {
 				id: launcherNode
-				anchors.verticalCenter: parent.verticalCenter
+				anchors.horizontalCenter: parent.horizontalCenter
+				size: 38
 				seed: 0
 				onClicked: root.launcherClicked()
 
@@ -131,8 +132,8 @@ PanelWindow {
 				}
 			}
 
-			Row {
-				anchors.verticalCenter: parent.verticalCenter
+			Column {
+				anchors.horizontalCenter: parent.horizontalCenter
 				spacing: Bio.s2
 				visible: trayRepeater.count > 0
 
@@ -148,7 +149,7 @@ PanelWindow {
 						required property SystemTrayItem modelData
 						required property int index
 
-						anchors.verticalCenter: parent?.verticalCenter ?? undefined
+						anchors.horizontalCenter: parent?.horizontalCenter ?? undefined
 						size: 26
 						seed: trayNode.index + 1
 						acceptedButtons: Qt.LeftButton | Qt.RightButton
@@ -172,9 +173,9 @@ PanelWindow {
 			}
 
 			NiriTaskbar {
-				anchors.verticalCenter: parent.verticalCenter
+				anchors.horizontalCenter: parent.horizontalCenter
 				visible: root.niriState.tasksForOutput(String(root.screen?.name || "")).length > 0
-				height: Bio.spine
+				width: bar.width
 				niriState: root.niriState
 				outputName: String(root.screen?.name || "")
 				background: Bio.tissue1
@@ -183,53 +184,15 @@ PanelWindow {
 				secondaryBoxStrongColor: Bio.tissue3
 			}
 
-			NowPlaying {
-				anchors.verticalCenter: parent.verticalCenter
-				height: Bio.spine
-				foreground: Bio.text
-				secondaryBoxColor: Bio.tissue1
-				progressColor: Bio.organ
-				onClicked: root.mediaClicked()
-			}
-		}
-
-		BioTendon {
-			anchors.left: leftCluster.right
-			anchors.right: plate.left
-			anchors.leftMargin: Bio.s4
-			anchors.rightMargin: Bio.s3
-			y: bar.line - height / 2
-			height: 16
-			facing: Qt.LeftToRight
-			sag: 2
-			weight: Bio.rib * 1.15
-			lineColor: Bio.boneDim
-			visible: width > 40
-		}
-
-		BioTendon {
-			anchors.left: plate.right
-			anchors.right: rightCluster.left
-			anchors.leftMargin: Bio.s3
-			anchors.rightMargin: Bio.s4
-			y: bar.line - height / 2
-			height: 16
-			facing: Qt.RightToLeft
-			sag: 2
-			weight: Bio.rib * 1.15
-			lineColor: Bio.boneDim
-			visible: width > 40
 		}
 
 		BioSurface {
 			id: plate
 
-			readonly property real overhang: 18
-
 			anchors.horizontalCenter: parent.horizontalCenter
-			y: 0
-			width: Math.max(168, plateColumn.implicitWidth + 64)
-			height: Bio.spine + overhang
+			anchors.verticalCenter: parent.verticalCenter
+			width: bar.width
+			height: plateColumn.implicitHeight + Bio.s6
 			washTop: Bio.membrane
 			washBottom: Bio.membraneDeep
 			haloStrength: 0.18
@@ -239,13 +202,35 @@ PanelWindow {
 			Column {
 				id: plateColumn
 				anchors.centerIn: parent
-				spacing: -2
+				spacing: 1
 
 				BioText {
 					anchors.horizontalCenter: parent.horizontalCenter
 					role: "specimen"
-					font.pixelSize: 24
-					text: Qt.formatDateTime(root.now, "HH:mm")
+					font.pixelSize: 21
+					font.letterSpacing: 0
+					text: Qt.formatDateTime(root.now, "HH")
+				}
+
+				Rectangle {
+					anchors.horizontalCenter: parent.horizontalCenter
+					width: 16
+					height: Bio.ribThin
+					color: Bio.boneFaint
+				}
+
+				BioText {
+					anchors.horizontalCenter: parent.horizontalCenter
+					role: "specimen"
+					font.pixelSize: 21
+					font.letterSpacing: 0
+					tone: "organ"
+					text: Qt.formatDateTime(root.now, "mm")
+				}
+
+				Item {
+					width: 1
+					height: Bio.s2
 				}
 
 				BioText {
@@ -253,7 +238,16 @@ PanelWindow {
 					role: "label"
 					tone: "muted"
 					font.pixelSize: 9
-					text: Qt.formatDateTime(root.now, "ddd dd MMM")
+					text: Qt.formatDateTime(root.now, "ddd")
+				}
+
+				BioText {
+					anchors.horizontalCenter: parent.horizontalCenter
+					role: "label"
+					tone: "faint"
+					font.pixelSize: 9
+					font.letterSpacing: 0.4
+					text: Qt.formatDateTime(root.now, "dd MMM")
 				}
 			}
 
@@ -270,44 +264,76 @@ PanelWindow {
 			onTriggered: root.now = new Date()
 		}
 
-		Row {
+		Column {
 			id: rightCluster
-			anchors.right: parent.right
-			y: bar.line - height / 2
+			anchors.bottom: parent.bottom
+			anchors.bottomMargin: Bio.s4
+			anchors.horizontalCenter: parent.horizontalCenter
 			spacing: Bio.s3
 
-			BioNode {
-				anchors.verticalCenter: parent.verticalCenter
-				seed: 2
-				iconSource: Bio.icon("edit-paste-symbolic")
-				onClicked: root.clipboardClicked()
+			NowPlaying {
+				anchors.horizontalCenter: parent.horizontalCenter
+				width: bar.width
+				foreground: Bio.text
+				secondaryBoxColor: Bio.tissue1
+				progressColor: Bio.organ
+				onClicked: root.mediaClicked()
 			}
 
-			BioNode {
-				anchors.verticalCenter: parent.verticalCenter
-				seed: 3
-				iconSource: Bio.icon("bluetooth-active-symbolic")
-				onClicked: root.bluetoothClicked()
-			}
+			Column {
+				anchors.horizontalCenter: parent.horizontalCenter
+				spacing: Bio.s2
 
-			BioNode {
-				anchors.verticalCenter: parent.verticalCenter
-				seed: 0
-				iconSource: root.networkStatusType === "ethernet"
-					? Bio.icon("network-wired-symbolic")
-					: Bio.icon("network-wireless-signal-excellent-symbolic")
-				onClicked: root.networkClicked()
+				BioNode {
+					anchors.horizontalCenter: parent.horizontalCenter
+					seed: 2
+					iconSource: Bio.icon("edit-paste-symbolic")
+					onClicked: root.clipboardClicked()
+				}
+
+				BioNode {
+					anchors.horizontalCenter: parent.horizontalCenter
+					seed: 3
+					iconSource: Bio.icon("bluetooth-active-symbolic")
+					onClicked: root.bluetoothClicked()
+				}
+
+				BioNode {
+					anchors.horizontalCenter: parent.horizontalCenter
+					seed: 0
+					iconSource: root.networkStatusType === "ethernet"
+						? Bio.icon("network-wired-symbolic")
+						: Bio.icon("network-wireless-signal-excellent-symbolic")
+					onClicked: root.networkClicked()
+				}
 			}
 
 			TopBarResourceBars {
-				anchors.verticalCenter: parent.verticalCenter
-				height: Bio.spine
+				anchors.horizontalCenter: parent.horizontalCenter
+				width: bar.width
 				onClicked: root.resourcesClicked()
+			}
+
+			Item {
+				anchors.horizontalCenter: parent.horizontalCenter
+				width: bar.width
+				height: 22
+
+				BioTendon {
+					anchors.centerIn: parent
+					width: parent.height
+					height: 14
+					rotation: 90
+					facing: Qt.RightToLeft
+					sag: 1.5
+					weight: Bio.rib * 1.1
+					lineColor: Bio.boneDim
+				}
 			}
 
 			BioNode {
 				id: powerNode
-				anchors.verticalCenter: parent.verticalCenter
+				anchors.horizontalCenter: parent.horizontalCenter
 				seed: 2
 				ringColor: Qt.alpha(Bio.necrosis, 0.45)
 				liveColor: Bio.necrosis

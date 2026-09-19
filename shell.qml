@@ -3839,9 +3839,9 @@ printf 'type=offline\niface=\nip=\n'`
 
 		ModalSheet {
 			open: root.powerPopupOpen
-			scrimOpacity: 0.72
-			sheetWidth: 620
-			sheetHeight: 300
+			scrimOpacity: 0.86
+			sheetWidth: 420
+			sheetHeight: 680
 			onDismissRequested: root.closePowerPopup()
 
 			BioSurface {
@@ -3860,10 +3860,8 @@ printf 'type=offline\niface=\nip=\n'`
 				property string statUptime: ""
 
 				Keys.onEscapePressed: root.closePowerPopup()
-				Keys.onLeftPressed: root.powerSelectionIndex = Math.max(0, root.powerSelectionIndex - 1)
-				Keys.onRightPressed: root.powerSelectionIndex = Math.min(3, root.powerSelectionIndex + 1)
-				Keys.onUpPressed: root.powerSelectionIndex = Math.max(0, root.powerSelectionIndex - 2)
-				Keys.onDownPressed: root.powerSelectionIndex = Math.min(3, root.powerSelectionIndex + 2)
+				Keys.onUpPressed: root.powerSelectionIndex = Math.max(0, root.powerSelectionIndex - 1)
+				Keys.onDownPressed: root.powerSelectionIndex = Math.min(3, root.powerSelectionIndex + 1)
 				Keys.onReturnPressed: root.runSelectedPowerAction()
 				Keys.onEnterPressed: root.runSelectedPowerAction()
 
@@ -3889,8 +3887,9 @@ printf 'type=offline\niface=\nip=\n'`
 				Column {
 					id: hostColumn
 					anchors.left: parent.left
-					anchors.verticalCenter: parent.verticalCenter
-					width: 176
+					anchors.right: parent.right
+					anchors.top: parent.top
+					anchors.topMargin: Bio.s6
 					spacing: Bio.s3
 
 					BioSigil {
@@ -3942,20 +3941,32 @@ printf 'type=offline\niface=\nip=\n'`
 					}
 				}
 
-				Grid {
-					columns: 2
-					columnSpacing: Bio.s3
-					rowSpacing: Bio.s3
-					anchors.left: hostColumn.right
-					anchors.leftMargin: Bio.s6
+				BioTendon {
+					id: powerTendon
+					anchors.left: parent.left
 					anchors.right: parent.right
-					anchors.verticalCenter: parent.verticalCenter
+					anchors.top: hostColumn.bottom
+					anchors.topMargin: Bio.s5
+					height: 14
+					facing: Qt.LeftToRight
+					sag: 2
+					weight: Bio.rib * 1.15
+					lineColor: Bio.boneDim
+				}
 
-					readonly property real tileWidth: (width - Bio.s3) / 2
-					readonly property real tileHeight: (powerModal.height - 68) / 2
+				Column {
+					anchors.left: parent.left
+					anchors.right: parent.right
+					anchors.top: powerTendon.bottom
+					anchors.topMargin: Bio.s5
+					anchors.bottom: parent.bottom
+					anchors.bottomMargin: Bio.s5
+					spacing: Bio.s2
+
+					readonly property real tileHeight: (height - Bio.s2 * 3) / 4
 
 					PowerActionButton {
-						width: parent.tileWidth
+						width: parent.width
 						height: parent.tileHeight
 						label: "Seal"
 						sublabel: "Lock the session"
@@ -3966,7 +3977,7 @@ printf 'type=offline\niface=\nip=\n'`
 					}
 
 					PowerActionButton {
-						width: parent.tileWidth
+						width: parent.width
 						height: parent.tileHeight
 						label: "Shed"
 						sublabel: "End the session"
@@ -3977,7 +3988,7 @@ printf 'type=offline\niface=\nip=\n'`
 					}
 
 					PowerActionButton {
-						width: parent.tileWidth
+						width: parent.width
 						height: parent.tileHeight
 						label: "Regrow"
 						sublabel: "Restart the machine"
@@ -3989,7 +4000,7 @@ printf 'type=offline\niface=\nip=\n'`
 					}
 
 					PowerActionButton {
-						width: parent.tileWidth
+						width: parent.width
 						height: parent.tileHeight
 						label: "Terminate"
 						sublabel: "Power off"
@@ -4171,8 +4182,8 @@ printf 'type=offline\niface=\nip=\n'`
 
 				BioRing {
 					anchors.verticalCenter: parent.verticalCenter
-					width: 34
-					height: 34
+					width: 42
+					height: 42
 					seed: powerActionButton.selectionIndex
 					lineColor: Bio.boneFaint
 					liveColor: powerActionButton.toneColor
@@ -4180,8 +4191,8 @@ printf 'type=offline\niface=\nip=\n'`
 
 					QQCImpl.IconImage {
 						anchors.centerIn: parent
-						width: 16
-						height: 16
+						width: 19
+						height: 19
 						source: powerActionButton.iconSource
 						sourceSize: Qt.size(width, height)
 						color: powerActionButton.live > 0.3 ? powerActionButton.toneColor : Bio.text
@@ -4190,10 +4201,11 @@ printf 'type=offline\niface=\nip=\n'`
 
 				Column {
 					anchors.verticalCenter: parent.verticalCenter
-					spacing: -1
+					spacing: -2
 
 					BioText {
-						role: "heading"
+						role: "specimen"
+						font.pixelSize: 24
 						color: powerActionButton.live > 0.3 ? powerActionButton.toneColor : Bio.text
 						text: powerActionButton.label
 					}
@@ -5301,17 +5313,22 @@ printf 'type=offline\niface=\nip=\n'`
 			visible: true
 			color: "transparent"
 
+			// A signal leaves the column at the organ that received it and
+			// stacks downwards from there, beside the spine — never in a
+			// corner of the screen the spine has nothing to do with.
 			anchor {
 				window: barWindow
-				edges: Edges.Bottom
-				gravity: Edges.Bottom
+				edges: Edges.Right
+				gravity: Edges.Right
 				adjustment: PopupAdjustment.SlideX | PopupAdjustment.SlideY
 
 				onAnchoring: {
+					const mark = notifNode.mapToItem(null, 0, 0);
 					anchor.rect.x = 0;
-					anchor.rect.y = 0;
-					anchor.rect.width = barWindow.width;
-					anchor.rect.height = bar.height + 12 + index * (toastWindow.implicitHeight + 12);
+					anchor.rect.y = (mark ? mark.y : barWindow.height / 2)
+						+ index * (toastWindow.implicitHeight + 12);
+					anchor.rect.width = Math.round(Bio.spine + Bio.dockGap);
+					anchor.rect.height = 0;
 				}
 			}
 
@@ -5321,9 +5338,8 @@ printf 'type=offline\niface=\nip=\n'`
 			NumberAnimation on revealProgress {
 				from: 0
 				to: 1
-				duration: Bio.swell
-				easing.type: Easing.OutBack
-				easing.overshoot: 1.1
+				duration: Bio.unfurl
+				easing.type: Easing.OutQuint
 			}
 
 			BioSurface {
@@ -5333,11 +5349,10 @@ printf 'type=offline\niface=\nip=\n'`
 				implicitHeight: toastContent.implicitHeight + Bio.s5 * 2
 				width: implicitWidth
 				height: implicitHeight
-				// It arrives from off the right edge, the way something crawls
-				// in, and leaves the same way.
+				// It crawls out of the column, and crawls back into it.
 				x: toastWindow.dismissing
-					? implicitWidth + 24
-					: (1 - toastWindow.revealProgress) * 40
+					? -(implicitWidth + 24)
+					: (1 - toastWindow.revealProgress) * -46
 				y: 0
 				opacity: toastWindow.dismissing ? 0 : Math.min(1, toastWindow.revealProgress * 2)
 				variant: "plate"
