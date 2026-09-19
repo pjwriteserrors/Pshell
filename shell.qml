@@ -2252,101 +2252,115 @@ Scope {
 
 						Item {
 							width: parent.width
-							height: 28
+							height: 20
 
-							Row {
+							BioText {
+								id: clipTitle
 								anchors.left: parent.left
 								anchors.verticalCenter: parent.verticalCenter
-								spacing: 8
-
-								BioText {
-									role: "heading"
-									anchors.verticalCenter: parent.verticalCenter
-									color: foreground
-									font.pixelSize: 15
-									font.weight: Font.DemiBold
-									text: "Clipboard"
-								}
-
-								ThemedRectangle {
-									anchors.verticalCenter: parent.verticalCenter
-									width: Math.max(22, clipCountLabel.implicitWidth + 12)
-									height: 19
-									radius: ThemeEngine.radiusMedium
-									color: Qt.alpha(root.primary, 0.3)
-
-									BioText {
-										role: "label"
-										id: clipCountLabel
-										anchors.centerIn: parent
-										color: foreground
-										font.pixelSize: 10
-										font.weight: Font.DemiBold
-										text: clipboardPopupContent.entries.length
-									}
-								}
+								role: "title"
+								font.pixelSize: 15
+								text: "Residue"
 							}
 
-							ThemedRectangle {
-								anchors.right: parent.right
+							BioTendon {
+								anchors.left: clipTitle.right
+								anchors.right: clipWipeLabel.visible ? clipWipeLabel.left : clipCountLabel.left
+								anchors.leftMargin: Bio.s3
+								anchors.rightMargin: Bio.s3
+								anchors.verticalCenter: parent.verticalCenter
+								height: 12
+								facing: Qt.LeftToRight
+								lineColor: Bio.boneFaint
+								visible: width > 24
+							}
+
+							BioText {
+								id: clipWipeLabel
+								anchors.right: clipCountLabel.left
+								anchors.rightMargin: Bio.s3
 								anchors.verticalCenter: parent.verticalCenter
 								visible: clipboardPopupContent.entries.length > 0
-								width: clipWipeLabel.implicitWidth + 22
-								height: 25
-								radius: ThemeEngine.radiusMedium
-								color: root.secondaryBoxColor
+								role: "label"
+								tone: clipWipeTouch.containsMouse ? "alert" : "muted"
+								text: "Purge"
 
-								BioText {
-									role: "label"
-									id: clipWipeLabel
-									anchors.centerIn: parent
-									color: foreground
-									font.pixelSize: 10
-									font.weight: Font.Medium
-									text: "Clear all"
-								}
-
-								HoverLayer {
-									tint: root.danger
+								BioTouch {
+									id: clipWipeTouch
+									anchors.margins: -Bio.s2
 									onClicked: {
 										Quickshell.execDetached(["sh", "-lc", "cliphist wipe"]);
 										clipboardPopupContent.entries = [];
 									}
 								}
 							}
+
+							BioText {
+								id: clipCountLabel
+								anchors.right: parent.right
+								anchors.verticalCenter: parent.verticalCenter
+								role: "label"
+								tone: "faint"
+								text: clipboardPopupContent.entries.length
+							}
 						}
 
-						ThemedRectangle {
+						Item {
 							width: parent.width
-							height: 38
-							themeStyle: "inset"
-							radius: ThemeEngine.radiusMedium
-							color: root.secondaryBoxColor
-							border.width: clipboardSearch.activeFocus ? 1 : 0
-							border.color: Qt.alpha(root.primary, 0.6)
+							height: 34
 
-							QQCImpl.IconImage {
+							Rectangle {
+								anchors.left: parent.left
+								anchors.right: parent.right
+								anchors.bottom: parent.bottom
+								height: Bio.ribThin
+								color: Bio.boneFaint
+							}
+
+							Rectangle {
+								anchors.left: parent.left
+								anchors.bottom: parent.bottom
+								width: clipboardSearch.activeFocus ? parent.width : 0
+								height: Bio.rib
+								color: Bio.organ
+
+								Behavior on width {
+									NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
+								}
+							}
+
+							BioRing {
 								id: clipSearchIcon
 								anchors.left: parent.left
-								anchors.leftMargin: 14
 								anchors.verticalCenter: parent.verticalCenter
-								width: 14
-								height: 14
-								source: "/usr/share/icons/Adwaita/symbolic/actions/edit-find-symbolic.svg"
-								sourceSize: Qt.size(width, height)
-								color: Qt.alpha(root.foreground, 0.55)
+								width: 24
+								height: 24
+								seed: 2
+								lineColor: Bio.boneFaint
+								intensity: clipboardSearch.activeFocus ? 0.9 : 0
+
+								QQCImpl.IconImage {
+									anchors.centerIn: parent
+									width: 12
+									height: 12
+									source: "/usr/share/icons/Adwaita/symbolic/actions/edit-find-symbolic.svg"
+									sourceSize: Qt.size(width, height)
+									color: clipboardSearch.activeFocus ? Bio.organ : Bio.textMuted
+								}
 							}
 
 							TextField {
 								id: clipboardSearch
 								anchors.fill: parent
-								anchors.leftMargin: 36
-								anchors.rightMargin: 14
-								color: foreground
-								placeholderText: "Search clipboard"
-								placeholderTextColor: Qt.alpha(foreground, 0.45)
-								selectedTextColor: foreground
-								selectionColor: root.accent
+								anchors.leftMargin: 34
+								anchors.bottomMargin: Bio.s2
+								font.family: Bio.sans
+								font.pixelSize: Bio.sizeBody
+								color: Bio.text
+								placeholderText: "Sift residue"
+								placeholderTextColor: Bio.textFaint
+								selectedTextColor: Bio.text
+								selectionColor: Qt.alpha(Bio.organ, 0.3)
 								selectByMouse: true
 								focus: root.clipboardPopupVisible
 								background: Item {}
@@ -2427,67 +2441,64 @@ Scope {
 									policy: ScrollBar.AsNeeded
 								}
 
-								delegate: ThemedRectangle {
+								// A scrap of residue: text on the membrane with a vein
+								// beside it, or the image itself framed in bone.
+								delegate: BioRow {
 									id: clipEntry
 									required property var modelData
 									required property int index
-									readonly property bool selected: index === clipboardPopupContent.selectedIndex
+									readonly property bool current: clipEntry.index === clipboardPopupContent.selectedIndex
 
 									width: ListView.view.width
-									height: modelData.isImage ? 110 : 46
-									radius: ThemeEngine.radiusMedium
-									color: selected ? Qt.alpha(root.primary, 0.26) : root.secondaryBoxColor
-									border.width: selected ? 1 : 0
-									border.color: Qt.alpha(root.primary, 0.55)
-
-									Behavior on color {
-										CAnim {}
+									implicitHeight: clipEntry.modelData.isImage ? 104 : 40
+									inset: Bio.s3
+									selected: clipEntry.current
+									onClicked: clipboardPopupContent.selectEntry(clipEntry.modelData)
+									onContainsMouseChanged: {
+										if (containsMouse) clipboardPopupContent.selectedIndex = clipEntry.index;
 									}
 
 									Component.onCompleted: {
-										if (!modelData.isImage) return;
+										if (!clipEntry.modelData.isImage) return;
 										imagePreviewProcess.running = true;
 									}
 
-									HoverLayer {
-										id: clipEntryHover
-										tint: root.foreground
-										showHover: false
-										onEntered: clipboardPopupContent.selectedIndex = index
-										onClicked: clipboardPopupContent.selectEntry(clipEntry.modelData)
-									}
-
-									ThemedRectangle {
+									BioText {
 										visible: clipEntry.modelData.isImage
 										anchors.left: parent.left
 										anchors.top: parent.top
-										anchors.margins: 8
-										width: 30
-										height: 16
-										radius: ThemeEngine.radiusLarge
-										color: Qt.alpha(root.secondary, 0.35)
-
-										BioText {
-											role: "label"
-											anchors.centerIn: parent
-											color: foreground
-											font.pixelSize: 8
-											font.weight: Font.DemiBold
-											text: clipEntry.modelData.extension.toUpperCase()
-										}
+										anchors.topMargin: Bio.s2
+										role: "label"
+										tone: "faint"
+										text: clipEntry.modelData.extension.toUpperCase()
 									}
 
-									Image {
-										id: imagePreview
+									Item {
 										visible: clipEntry.modelData.isImage && clipEntry.modelData.previewPath !== ""
 										anchors.centerIn: parent
-										width: 90
-										height: 90
-										source: ""
-										fillMode: Image.PreserveAspectCrop
-										smooth: true
-										mipmap: true
-										cache: false
+										width: 88
+										height: 88
+
+										BioFrame {
+											anchors.fill: parent
+											variant: "plate"
+											beading: false
+											weight: Bio.ribThin
+											lineColor: Bio.boneFaint
+											liveColor: Bio.organ
+											intensity: clipEntry.current ? 1 : 0
+										}
+
+										Image {
+											id: imagePreview
+											anchors.fill: parent
+											anchors.margins: 4
+											source: ""
+											fillMode: Image.PreserveAspectCrop
+											smooth: true
+											mipmap: true
+											cache: false
+										}
 									}
 
 									Process {
@@ -2503,53 +2514,38 @@ Scope {
 									}
 
 									BioText {
-										role: "caption"
 										visible: !clipEntry.modelData.isImage
 										anchors.left: parent.left
-										anchors.leftMargin: 14
 										anchors.right: deleteButton.left
-										anchors.rightMargin: 8
+										anchors.rightMargin: Bio.s3
 										anchors.verticalCenter: parent.verticalCenter
-										color: foreground
-										font.pixelSize: 11
-										elide: Text.ElideRight
+										role: "body"
+										tone: clipEntry.current ? "default" : "muted"
 										maximumLineCount: 1
 										text: clipEntry.modelData.preview
 									}
 
-									ThemedRectangle {
+									Item {
 										id: deleteButton
 										anchors.right: parent.right
-										anchors.rightMargin: 8
 										anchors.verticalCenter: parent.verticalCenter
-										width: 24
-										height: 24
-										radius: ThemeEngine.radiusMedium
-										color: Qt.alpha(root.danger, deleteHover.containsMouse ? 0.4 : 0.16)
-										opacity: clipEntryHover.containsMouse || deleteHover.containsMouse || clipEntry.selected ? 1 : 0
+										width: 20
+										height: 20
+										opacity: clipEntry.containsMouse || deleteHover.containsMouse || clipEntry.current ? 1 : 0
 
 										Behavior on opacity {
-											Anim {
-												duration: Motion.fast
-											}
-										}
-
-										Behavior on color {
-											CAnim {}
+											NumberAnimation { duration: Bio.twitch }
 										}
 
 										BioText {
-											role: "caption"
 											anchors.centerIn: parent
-											color: foreground
-											font.pixelSize: 11
-											font.weight: Font.DemiBold
+											role: "body"
+											tone: deleteHover.containsMouse ? "alert" : "faint"
 											text: "\u00d7"
 										}
 
-										HoverLayer {
+										BioTouch {
 											id: deleteHover
-											tint: root.danger
 											onClicked: {
 												Quickshell.execDetached([
 													"sh",
@@ -2882,107 +2878,88 @@ done`
 
 						Item {
 							width: parent.width
-							height: 30
+							height: 24
 
 							BioText {
-								role: "heading"
+								id: btTitle
 								anchors.left: parent.left
 								anchors.verticalCenter: parent.verticalCenter
-								color: foreground
+								role: "title"
 								font.pixelSize: 15
-								font.weight: Font.DemiBold
-								text: "Bluetooth"
+								text: "Tether"
 							}
 
-							ThemedRectangle {
+							BioTendon {
+								anchors.left: btTitle.right
+								anchors.right: btSwitch.left
+								anchors.leftMargin: Bio.s3
+								anchors.rightMargin: Bio.s3
+								anchors.verticalCenter: parent.verticalCenter
+								height: 12
+								facing: Qt.LeftToRight
+								lineColor: Bio.boneFaint
+								visible: width > 24
+							}
+
+							BioToggle {
 								id: btSwitch
-								themeStyle: "inset"
 								anchors.right: parent.right
 								anchors.verticalCenter: parent.verticalCenter
-								width: 44
-								height: 24
-								radius: height / 2
-								color: bluetoothPopup.powered ? root.primary : root.secondaryInsetColor
-
-								Behavior on color {
-									CAnim {
-										duration: Motion.normal
-									}
-								}
-
-								ThemedRectangle {
-									themeStyle: "raised"
-									width: 18
-									height: 18
-									radius: height / 2
-									anchors.verticalCenter: parent.verticalCenter
-									x: bluetoothPopup.powered ? parent.width - width - 3 : 3
-									color: bluetoothPopup.powered ? root.onPrimary : Qt.alpha(root.foreground, 0.7)
-
-									Behavior on x {
-										SpatialAnim {}
-									}
-
-									Behavior on color {
-										CAnim {
-											duration: Motion.normal
-										}
-									}
-								}
-
-								HoverLayer {
-									tint: root.foreground
-									showHover: false
-									onClicked: bluetoothPopup.togglePower()
-								}
+								checked: bluetoothPopup.powered
+								onToggled: bluetoothPopup.togglePower()
 							}
 						}
 
-						ThemedRectangle {
+						// Sensing: a ring that turns while the adapter is listening,
+						// and the verb beside it. No button plate — the ring is
+						// the control.
+						Item {
 							width: parent.width
-							height: 32
-							radius: ThemeEngine.radiusMedium
-							color: bluetoothPopup.scanning ? Qt.alpha(root.primary, 0.3) : root.secondaryBoxColor
+							height: 30
 							visible: bluetoothPopup.powered
 
-							Behavior on color {
-								CAnim {}
-							}
+							BioRing {
+								id: scanIcon
+								anchors.left: parent.left
+								anchors.verticalCenter: parent.verticalCenter
+								width: 26
+								height: 26
+								seed: 1
+								lineColor: Bio.boneFaint
+								intensity: bluetoothPopup.scanning ? 1 : scanTouch.live
 
-							Row {
-								anchors.centerIn: parent
-								spacing: 8
-
-								QQCImpl.IconImage {
-									id: scanIcon
-									anchors.verticalCenter: parent.verticalCenter
-									width: 13
-									height: 13
-									source: "/usr/share/icons/Adwaita/symbolic/actions/view-refresh-symbolic.svg"
-									sourceSize: Qt.size(width, height)
-									color: root.foreground
-
-									RotationAnimator on rotation {
-										running: bluetoothPopup.scanning
-										loops: Animation.Infinite
-										from: 0
-										to: 360
-										duration: ThemeEngine.duration(1100)
-									}
-								}
-
-								BioText {
-									role: "body"
-									anchors.verticalCenter: parent.verticalCenter
-									color: foreground
-									font.pixelSize: 12
-									font.weight: Font.Medium
-									text: bluetoothPopup.scanning ? "Scanning for devices..." : "Scan for devices"
+								RotationAnimator on rotation {
+									running: bluetoothPopup.scanning
+									loops: Animation.Infinite
+									from: 0
+									to: 360
+									duration: 2600
 								}
 							}
 
-							HoverLayer {
-								tint: root.primary
+							BioText {
+								id: scanLabel
+								anchors.left: scanIcon.right
+								anchors.leftMargin: Bio.s3
+								anchors.verticalCenter: parent.verticalCenter
+								role: "label"
+								tone: bluetoothPopup.scanning || scanTouch.containsMouse ? "organ" : "muted"
+								text: bluetoothPopup.scanning ? "Sensing" : "Sense"
+							}
+
+							BioTendon {
+								anchors.left: scanLabel.right
+								anchors.right: parent.right
+								anchors.leftMargin: Bio.s3
+								anchors.verticalCenter: parent.verticalCenter
+								height: 12
+								facing: Qt.LeftToRight
+								lineColor: bluetoothPopup.scanning ? Qt.alpha(Bio.organ, 0.55) : Bio.boneGhost
+								visible: width > 24
+							}
+
+							BioTouch {
+								id: scanTouch
 								onClicked: bluetoothPopup.startScan()
 							}
 						}
@@ -2994,23 +2971,21 @@ done`
 							Column {
 								visible: !bluetoothPopup.powered
 								anchors.centerIn: parent
-								spacing: 6
+								spacing: Bio.s3
 
-								QQCImpl.IconImage {
+								BioSigil {
 									anchors.horizontalCenter: parent.horizontalCenter
-									width: 26
-									height: 26
-									source: "/usr/share/icons/Adwaita/symbolic/status/bluetooth-disabled-symbolic.svg"
-									sourceSize: Qt.size(width, height)
-									color: Qt.alpha(root.foreground, 0.35)
+									width: 46
+									height: 46
+									seed: 17
+									lineColor: Bio.boneGhost
 								}
 
 								BioText {
-									role: "body"
 									anchors.horizontalCenter: parent.horizontalCenter
-									color: Qt.alpha(foreground, 0.5)
-									font.pixelSize: 12
-									text: "Bluetooth is off"
+									role: "label"
+									tone: "faint"
+									text: "Tether dormant"
 								}
 							}
 
@@ -3044,22 +3019,25 @@ done`
 									policy: ScrollBar.AsNeeded
 								}
 
-								header: Text {
+								header: BioText {
 									visible: bluetoothPopup.devices.length === 0
 									width: ListView.view ? ListView.view.width : 0
 									height: visible ? 30 : 0
 									horizontalAlignment: Text.AlignHCenter
 									verticalAlignment: Text.AlignVCenter
-									color: Qt.alpha(foreground, 0.5)
-									font.pixelSize: 11
-									text: "No devices found yet"
+									role: "label"
+									tone: "faint"
+									text: "Nothing within reach"
 								}
 
-								delegate: ThemedRectangle {
+								// A tethered organism: the ring carries its mark and
+								// lights when it is attached, the vein says the row is
+								// live, and its charge is engraved, not chipped.
+								delegate: BioRow {
 									id: btDevice
 									required property var modelData
 									readonly property string deviceIcon: {
-										const n = String(modelData.name || "").toLowerCase();
+										const n = String(btDevice.modelData.name || "").toLowerCase();
 										if (/bud|head|arctis|wh-|wf-|airpod|speaker|soundcore|jbl/.test(n))
 											return "/usr/share/icons/Adwaita/symbolic/devices/audio-headphones-symbolic.svg";
 										if (n.includes("mouse"))
@@ -3074,93 +3052,64 @@ done`
 									}
 
 									width: ListView.view.width
-									height: 52
-									radius: ThemeEngine.radiusMedium
-									color: modelData.connected ? Qt.alpha(root.primary, 0.26) : root.secondaryBoxColor
-									border.width: modelData.connected ? 1 : 0
-									border.color: Qt.alpha(root.primary, 0.55)
+									implicitHeight: 46
+									inset: Bio.s3
+									selected: Boolean(btDevice.modelData.connected)
+									onClicked: bluetoothPopup.connectDevice(btDevice.modelData.address)
 
-									Behavior on color {
-										CAnim {}
-									}
-
-									HoverLayer {
-										tint: root.foreground
-										onClicked: bluetoothPopup.connectDevice(btDevice.modelData.address)
-									}
-
-									Row {
+									BioRing {
+										id: btMark
 										anchors.left: parent.left
-										anchors.leftMargin: 10
-										anchors.right: btBatteryChip.visible ? btBatteryChip.left : parent.right
-										anchors.rightMargin: 10
 										anchors.verticalCenter: parent.verticalCenter
-										spacing: 10
+										width: 30
+										height: 30
+										seed: 2
+										lineColor: Bio.boneGhost
+										intensity: btDevice.modelData.connected ? 1 : btDevice.live
 
-										ThemedRectangle {
-											width: 32
-											height: 32
-											radius: ThemeEngine.radiusMedium
-											anchors.verticalCenter: parent.verticalCenter
-											color: btDevice.modelData.connected ? Qt.alpha(root.primary, 0.45) : root.secondaryInsetColor
-
-											QQCImpl.IconImage {
-												anchors.centerIn: parent
-												width: 15
-												height: 15
-												source: btDevice.deviceIcon
-												sourceSize: Qt.size(width, height)
-												color: root.foreground
-											}
-										}
-
-										Column {
-											anchors.verticalCenter: parent.verticalCenter
-											spacing: 2
-											width: parent.width - 42
-
-											BioText {
-												role: "body"
-												width: parent.width
-												color: foreground
-												font.pixelSize: 12
-												font.weight: Font.Medium
-												elide: Text.ElideRight
-												text: btDevice.modelData.name
-											}
-
-											BioText {
-												role: "label"
-												width: parent.width
-												color: Qt.alpha(foreground, 0.58)
-												font.pixelSize: 10
-												elide: Text.ElideRight
-												text: bluetoothPopup.deviceStatuses[btDevice.modelData.address]
-													|| (btDevice.modelData.connected ? "Connected" : (btDevice.modelData.paired ? "Paired" : "Available"))
-											}
+										QQCImpl.IconImage {
+											anchors.centerIn: parent
+											width: 14
+											height: 14
+											source: btDevice.deviceIcon
+											sourceSize: Qt.size(width, height)
+											color: btDevice.modelData.connected ? Bio.organ : Bio.text
 										}
 									}
 
-									ThemedRectangle {
+									Column {
+										anchors.left: btMark.right
+										anchors.leftMargin: Bio.s3
+										anchors.right: btBatteryChip.visible ? btBatteryChip.left : parent.right
+										anchors.rightMargin: Bio.s3
+										anchors.verticalCenter: parent.verticalCenter
+										spacing: -1
+
+										BioText {
+											width: parent.width
+											role: "bodyStrong"
+											tone: btDevice.modelData.connected ? "organ" : "default"
+											text: btDevice.modelData.name
+										}
+
+										BioText {
+											width: parent.width
+											role: "caption"
+											tone: "faint"
+											text: bluetoothPopup.deviceStatuses[btDevice.modelData.address]
+												|| (btDevice.modelData.connected ? "Attached" : (btDevice.modelData.paired ? "Known" : "Adrift"))
+										}
+									}
+
+									BioText {
 										id: btBatteryChip
 										visible: btDevice.modelData.connected && String(btDevice.modelData.battery || "") !== ""
 										anchors.right: parent.right
-										anchors.rightMargin: 10
 										anchors.verticalCenter: parent.verticalCenter
-										width: batteryText.implicitWidth + 14
-										height: 20
-										radius: ThemeEngine.radiusMedium
-										color: Qt.alpha(root.secondary, 0.3)
-
-										BioText {
-											role: "label"
-											id: batteryText
-											anchors.centerIn: parent
-											color: foreground
-											font.pixelSize: 10
-											font.weight: Font.DemiBold
-											text: btDevice.modelData.battery
-										}
+										role: "reading"
+										font.pixelSize: 13
+										tone: "muted"
+										text: btDevice.modelData.battery
 									}
 								}
 							}
@@ -3373,311 +3322,141 @@ printf 'type=offline\niface=\nip=\n'`
 			onLoaded: networkPopup.updateThroughput(text())
 		}
 
-				Item {
-					id: networkPopupContent
-					anchors.fill: parent
-
-					Column {
-						id: networkPopupColumn
+					Item {
+						id: networkPopupContent
 						anchors.fill: parent
-						spacing: 12
 
-						Item {
-							width: parent.width
-							height: 34
+						Column {
+							id: networkPopupColumn
+							anchors.fill: parent
+							spacing: Bio.s4
 
-							Row {
-								anchors.left: parent.left
-								anchors.verticalCenter: parent.verticalCenter
-								spacing: 10
+							// What the machine is attached to, and by what.
+							Item {
+								width: parent.width
+								height: 34
 
-								ThemedRectangle {
+								BioRing {
+									id: linkMark
+									anchors.left: parent.left
+									anchors.verticalCenter: parent.verticalCenter
 									width: 32
 									height: 32
-									radius: ThemeEngine.radiusMedium
-									anchors.verticalCenter: parent.verticalCenter
-									color: networkPopup.currentType === "offline" ? root.secondaryInsetColor : Qt.alpha(root.primary, 0.4)
-
-									Behavior on color {
-										CAnim {}
-									}
+									seed: 0
+									lineColor: Bio.boneFaint
+									intensity: networkPopup.currentType === "offline" ? 0 : 1
 
 									QQCImpl.IconImage {
 										anchors.centerIn: parent
 										width: 15
 										height: 15
 										source: networkPopup.currentType === "ethernet"
-											? "/usr/share/icons/Adwaita/symbolic/devices/network-wired-symbolic.svg"
-											: "/usr/share/icons/Adwaita/symbolic/status/network-wireless-signal-excellent-symbolic.svg"
+											? Bio.icon("network-wired-symbolic")
+											: Bio.icon("network-wireless-signal-excellent-symbolic")
 										sourceSize: Qt.size(width, height)
-										color: root.foreground
+										color: networkPopup.currentType === "offline" ? Bio.textMuted : Bio.organ
 									}
 								}
 
 								Column {
+									anchors.left: linkMark.right
+									anchors.leftMargin: Bio.s3
+									anchors.right: severLabel.visible ? severLabel.left : parent.right
+									anchors.rightMargin: Bio.s3
 									anchors.verticalCenter: parent.verticalCenter
-									spacing: 1
+									spacing: -1
 
 									BioText {
-										role: "bodyStrong"
-										color: foreground
-										font.pixelSize: 13
-										font.weight: Font.DemiBold
+										width: parent.width
+										role: "heading"
+										tone: networkPopup.currentType === "offline" ? "muted" : "default"
 										text: networkPopup.currentType === "offline"
-											? "Offline"
-											: (networkPopup.currentType === "ethernet" ? "Ethernet" : "Wi-Fi")
+											? "Severed"
+											: (networkPopup.currentType === "ethernet" ? "Corded" : "Airborne")
 									}
 
 									BioText {
-										role: "label"
-										color: Qt.alpha(foreground, 0.55)
-										font.pixelSize: 10
+										width: parent.width
+										role: "caption"
+										tone: "faint"
 										text: networkPopup.currentInterface !== ""
-											? `${networkPopup.currentInterface}  \u00b7  ${networkPopup.currentIp !== "" ? networkPopup.currentIp : "no IP"}`
+											? `${networkPopup.currentInterface} · ${networkPopup.currentIp !== "" ? networkPopup.currentIp : "no address"}`
 											: "no interface"
 									}
 								}
-							}
-
-							ThemedRectangle {
-								visible: networkPopup.currentType !== "offline"
-								anchors.right: parent.right
-								anchors.verticalCenter: parent.verticalCenter
-								width: disconnectLabel.implicitWidth + 22
-								height: 25
-								radius: ThemeEngine.radiusMedium
-								color: Qt.alpha(root.danger, 0.16)
 
 								BioText {
+									id: severLabel
+									visible: networkPopup.currentType !== "offline"
+									anchors.right: parent.right
+									anchors.verticalCenter: parent.verticalCenter
 									role: "label"
-									id: disconnectLabel
-									anchors.centerIn: parent
-									color: foreground
-									font.pixelSize: 10
-									font.weight: Font.Medium
-									text: "Disconnect"
-								}
+									tone: severTouch.containsMouse ? "alert" : "muted"
+									text: "Sever"
 
-								HoverLayer {
-									tint: root.danger
-									onClicked: root.disconnectActiveNetwork()
+									BioTouch {
+										id: severTouch
+										anchors.margins: -Bio.s2
+										onClicked: root.disconnectActiveNetwork()
+									}
 								}
 							}
-						}
 
-						ThemedRectangle {
-							width: parent.width
-							implicitHeight: networkInfoColumn.implicitHeight + 20
-							radius: ThemeEngine.radiusMedium
-							color: root.secondaryBoxColor
-
-							Column {
-								id: networkInfoColumn
-								anchors.fill: parent
-								anchors.margins: 10
-								spacing: 8
+							// Throughput, as two pulses. The trace is the same
+							// ribbon the rest of the style is drawn with, so a
+							// busy link reads as something alive rather than as
+							// a line chart in a box.
+							BioSection {
+								width: parent.width
+								title: "Outflow"
+								trailing: networkPopup.formatSpeed(networkPopup.currentUploadSpeed)
 
 								Item {
 									width: parent.width
-									height: 22
+									height: 74
 
-									BioText {
-										role: "body"
-										anchors.left: parent.left
-										anchors.verticalCenter: parent.verticalCenter
-										color: foreground
-										font.pixelSize: 12
-										font.weight: Font.Medium
-										text: "Upload"
-									}
-
-									BioText {
-										role: "body"
-										anchors.right: parent.right
-										anchors.verticalCenter: parent.verticalCenter
-										color: foreground
-										font.pixelSize: 12
-										font.weight: Font.Medium
-										text: networkPopup.formatSpeed(networkPopup.currentUploadSpeed)
-									}
-								}
-
-								ThemedRectangle {
-									width: parent.width
-									height: 96
-									radius: ThemeEngine.radiusMedium
-									color: root.secondaryInsetColor
-
-									Canvas {
+									BioPulse {
 										id: uploadChart
 										anchors.fill: parent
-										anchors.margins: 8
-										anchors.bottomMargin: 8
-										antialiasing: true
-										onWidthChanged: requestPaint()
-										onHeightChanged: requestPaint()
+										values: networkPopup.uploadHistory || []
+										ceiling: networkPopup.uploadChartMax
+										traceColor: Bio.organ
+
 										Connections {
 											target: networkPopup
-											function onUploadHistoryChanged() {
-												uploadChart.requestPaint();
-											}
-											function onCurrentUploadSpeedChanged() {
-												uploadChart.requestPaint();
-											}
-										}
-
-										onPaint: {
-											const ctx = getContext("2d");
-											ctx.reset();
-
-											const values = networkPopup.uploadHistory || [];
-											if (values.length < 2) return;
-
-											const width = uploadChart.width;
-											const height = uploadChart.height;
-											const step = values.length > 1 ? width / (values.length - 1) : width;
-
-											ctx.strokeStyle = root.accent;
-											ctx.lineWidth = 2;
-											ctx.lineJoin = "round";
-											ctx.lineCap = "round";
-											ctx.beginPath();
-
-											for (let i = 0; i < values.length; i += 1) {
-												const x = i * step;
-												const y = height - Math.max(0, Math.min(height, height * networkPopup.chartRatio(values[i], networkPopup.uploadChartMax)));
-												if (i === 0) ctx.moveTo(x, y);
-												else ctx.lineTo(x, y);
-											}
-
-											ctx.stroke();
-
-											ctx.fillStyle = root.accent;
-											ctx.beginPath();
-											ctx.moveTo(0, height);
-											for (let i = 0; i < values.length; i += 1) {
-												const x = i * step;
-												const y = height - Math.max(0, Math.min(height, height * networkPopup.chartRatio(values[i], networkPopup.uploadChartMax)));
-												ctx.lineTo(x, y);
-											}
-											ctx.lineTo(width, height);
-											ctx.closePath();
-											ctx.fill();
-
-											ctx.fillStyle = root.accent;
-											for (let i = 0; i < values.length; i += 1) {
-												const x = i * step;
-												const y = height - Math.max(0, Math.min(height, height * networkPopup.chartRatio(values[i], networkPopup.uploadChartMax)));
-												ctx.beginPath();
-												ctx.arc(x, y, 2.6, 0, Math.PI * 2);
-												ctx.fill();
-											}
+											function onUploadHistoryChanged() { uploadChart.repaint(); }
+											function onCurrentUploadSpeedChanged() { uploadChart.repaint(); }
 										}
 									}
 								}
+							}
+
+							BioSection {
+								width: parent.width
+								title: "Intake"
+								trailing: networkPopup.formatSpeed(networkPopup.currentDownloadSpeed)
 
 								Item {
 									width: parent.width
-									height: 16
+									height: 74
 
-									BioText {
-										role: "body"
-										anchors.left: parent.left
-										anchors.verticalCenter: parent.verticalCenter
-										color: foreground
-										font.pixelSize: 12
-										font.weight: Font.Medium
-										text: "Download"
-									}
-
-									BioText {
-										role: "body"
-										anchors.right: parent.right
-										anchors.verticalCenter: parent.verticalCenter
-										color: foreground
-										font.pixelSize: 12
-										font.weight: Font.Medium
-										text: networkPopup.formatSpeed(networkPopup.currentDownloadSpeed)
-									}
-								}
-
-								ThemedRectangle {
-									width: parent.width
-									height: 96
-									radius: ThemeEngine.radiusMedium
-									color: root.secondaryInsetColor
-
-									Canvas {
+									BioPulse {
 										id: downloadChart
 										anchors.fill: parent
-										anchors.margins: 8
-										anchors.bottomMargin: 8
-										antialiasing: true
-										onWidthChanged: requestPaint()
-										onHeightChanged: requestPaint()
+										values: networkPopup.downloadHistory || []
+										ceiling: networkPopup.downloadChartMax
+										traceColor: Bio.organAlt
+
 										Connections {
 											target: networkPopup
-											function onDownloadHistoryChanged() {
-												downloadChart.requestPaint();
-											}
-											function onCurrentDownloadSpeedChanged() {
-												downloadChart.requestPaint();
-											}
-										}
-
-										onPaint: {
-											const ctx = getContext("2d");
-											ctx.reset();
-
-											const values = networkPopup.downloadHistory || [];
-											if (values.length < 2) return;
-
-											const width = downloadChart.width;
-											const height = downloadChart.height;
-											const step = values.length > 1 ? width / (values.length - 1) : width;
-
-											ctx.strokeStyle = root.accent;
-											ctx.lineWidth = 2;
-											ctx.lineJoin = "round";
-											ctx.lineCap = "round";
-											ctx.beginPath();
-
-											for (let i = 0; i < values.length; i += 1) {
-												const x = i * step;
-												const y = height - Math.max(0, Math.min(height, height * networkPopup.chartRatio(values[i], networkPopup.downloadChartMax)));
-												if (i === 0) ctx.moveTo(x, y);
-												else ctx.lineTo(x, y);
-											}
-
-											ctx.stroke();
-
-											ctx.fillStyle = root.accent;
-											ctx.beginPath();
-											ctx.moveTo(0, height);
-											for (let i = 0; i < values.length; i += 1) {
-												const x = i * step;
-												const y = height - Math.max(0, Math.min(height, height * networkPopup.chartRatio(values[i], networkPopup.downloadChartMax)));
-												ctx.lineTo(x, y);
-											}
-											ctx.lineTo(width, height);
-											ctx.closePath();
-											ctx.fill();
-
-											ctx.fillStyle = root.accent;
-											for (let i = 0; i < values.length; i += 1) {
-												const x = i * step;
-												const y = height - Math.max(0, Math.min(height, height * networkPopup.chartRatio(values[i], networkPopup.downloadChartMax)));
-												ctx.beginPath();
-												ctx.arc(x, y, 2.6, 0, Math.PI * 2);
-												ctx.fill();
-											}
+											function onDownloadHistoryChanged() { downloadChart.repaint(); }
+											function onCurrentDownloadSpeedChanged() { downloadChart.repaint(); }
 										}
 									}
 								}
 							}
 						}
 					}
-				}
 	}
 
 	PopupSurface {
@@ -3801,21 +3580,17 @@ printf 'type=offline\niface=\nip=\n'`
 
 		ModalSheet {
 			open: root.launcherPopupOpen
-			mode: "bottom"
-			scrimOpacity: 0.18
-			sheetWidth: 720
-			sheetHeight: 480
-			bottomMargin: 14
-			shadowSurfaceColor: root.surface
+			mode: "center"
+			scrimOpacity: 0.55
+			sheetWidth: 760
+			sheetHeight: 620
 			onDismissRequested: root.closeLauncherPopup()
 
-			ThemedRectangle {
+			// The launcher brings no surface of its own: it *is* the chamber,
+			// drawn inside AppLauncherPopup, so the corner bones are not clipped
+			// off by a box around it.
+			Item {
 				anchors.fill: parent
-				radius: ThemeEngine.radiusMedium
-				color: root.surface
-				border.width: 1
-				border.color: root.surfaceBorder
-				clip: true
 
 				Loader {
 					id: launcherSheetLoader
@@ -4384,21 +4159,26 @@ printf 'type=offline\niface=\nip=\n'`
 				Repeater {
 					model: trayMenuOpener.children
 
-						ThemedRectangle {
+						// A menu entry is a row like every other row in this style,
+						// and a separator is a thread of bone rather than a grey
+						// bar.
+						BioRow {
 							id: menuEntry
 							required property QsMenuEntry modelData
 
 							width: trayMenuColumn.implicitWidth
-							implicitHeight: modelData.isSeparator ? 1 : 32
-							radius: ThemeEngine.radiusMedium
-							color: modelData.isSeparator
-								? root.secondaryBoxStrongColor
-								: (entryMouseArea.containsMouse && entryMouseArea.enabled ? root.secondaryBoxColor : "transparent")
+							implicitHeight: menuEntry.modelData.isSeparator ? 1 : 30
+							inset: Bio.s3
+							interactive: !menuEntry.modelData.isSeparator && menuEntry.modelData.enabled
 
-							HoverLayer {
+							Rectangle {
+								anchors.fill: parent
+								visible: menuEntry.modelData.isSeparator
+								color: Bio.boneGhost
+							}
+
+							BioTouch {
 								id: entryMouseArea
-								tint: root.foreground
-								showHover: false
 								enabled: !menuEntry.modelData.isSeparator && menuEntry.modelData.enabled
 								cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
 
@@ -4418,14 +4198,12 @@ printf 'type=offline\niface=\nip=\n'`
 						Row {
 							visible: !menuEntry.modelData.isSeparator
 							anchors.fill: parent
-							anchors.leftMargin: 10
-							anchors.rightMargin: 10
-							spacing: 8
+							spacing: Bio.s3
 
 							Image {
 								anchors.verticalCenter: parent.verticalCenter
-								width: 16
-								height: 16
+								width: 15
+								height: 15
 								visible: menuEntry.modelData.icon !== ""
 								source: menuEntry.modelData.icon
 								fillMode: Image.PreserveAspectFit
@@ -4436,7 +4214,7 @@ printf 'type=offline\niface=\nip=\n'`
 								anchors.verticalCenter: parent.verticalCenter
 								width: parent.width - x - (menuEntry.modelData.hasChildren ? 18 : 0)
 								text: menuEntry.modelData.text
-								color: menuEntry.modelData.enabled ? foreground : Qt.alpha(foreground, 0.45)
+								color: menuEntry.modelData.enabled ? Bio.text : Bio.textFaint
 								font.pixelSize: 13
 								elide: Text.ElideRight
 							}
@@ -4459,26 +4237,20 @@ printf 'type=offline\niface=\nip=\n'`
 				active: trayMenuColumn.isSubMenu
 				y: menuEntries.implicitHeight + 6
 
-				sourceComponent: ThemedRectangle {
+				sourceComponent: BioRow {
 					width: trayMenuColumn.implicitWidth
-					height: 32
-					radius: ThemeEngine.radiusMedium
-					color: root.secondaryBoxColor
-					border.width: 0
-					border.color: "transparent"
+					implicitHeight: 30
+					inset: Bio.s3
 
-					HoverLayer {
-						tint: root.foreground
+					BioTouch {
 						onClicked: trayMenuStackLoader.item.pop()
 					}
 
 					BioText {
-						role: "body"
 						anchors.centerIn: parent
+						role: "label"
+						tone: "muted"
 						text: "Back"
-						color: foreground
-						font.pixelSize: 13
-						font.weight: Font.Medium
 					}
 				}
 			}

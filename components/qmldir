@@ -12,6 +12,7 @@ BioButton 1.0 BioButton.qml
 BioRow 1.0 BioRow.qml
 BioSection 1.0 BioSection.qml
 BioMeter 1.0 BioMeter.qml
+BioPulse 1.0 BioPulse.qml
 BioField 1.0 BioField.qml
 BioToggle 1.0 BioToggle.qml
 singleton Motion 1.0 Motion.qml
