@@ -47,6 +47,17 @@ Item {
 		}
 	}
 
+	// The row's own touch layer sits *under* its contents, not over them: a
+	// button, a toggle or a menu entry placed in a row has to get the click
+	// first, and whatever it does not take falls through to the row. Put this
+	// last and everything inside the row goes deaf.
+	BioTouch {
+		id: touch
+		enabled: row.interactive
+		visible: row.interactive
+		onClicked: event => row.clicked(event)
+	}
+
 	Item {
 		id: slot
 		anchors.fill: parent
@@ -60,12 +71,5 @@ Item {
 				NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
 			}
 		}
-	}
-
-	BioTouch {
-		id: touch
-		enabled: row.interactive
-		visible: row.interactive
-		onClicked: event => row.clicked(event)
 	}
 }
