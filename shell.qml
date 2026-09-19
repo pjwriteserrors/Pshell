@@ -3676,6 +3676,111 @@ printf 'type=offline\niface=\nip=\n'`
 						}
 	}
 
+	// The launcher takes the whole bench. There is no sheet and no card: the
+	// desktop is dimmed to a cavity, the spine stays lit down the left, and the
+	// work is laid out directly on the dark with bone rules for structure. It
+	// arrives the way the chambers do — wiped in from the column.
+	PanelWindow {
+		id: launcherPopup
+		screen: root.activePopupScreen
+
+		anchors {
+			left: true
+			right: true
+			top: true
+			bottom: true
+		}
+
+		exclusiveZone: 0
+		color: "transparent"
+		visible: root.launcherPopupVisible
+		WlrLayershell.exclusionMode: ExclusionMode.Ignore
+		WlrLayershell.layer: WlrLayer.Overlay
+		WlrLayershell.keyboardFocus: root.launcherPopupVisible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+
+		// The column is never covered. The bench dims the desktop beside it and
+		// leaves the spine lit and live, so the organ you pulled this out of is
+		// still there to push it back in.
+		mask: Region {
+			x: Math.round(Bio.spine)
+			y: 0
+			width: Math.max(0, launcherPopup.width - Math.round(Bio.spine))
+			height: launcherPopup.height
+		}
+
+		property real progress: root.launcherPopupOpen ? 1 : 0
+
+		Behavior on progress {
+			NumberAnimation {
+				duration: root.launcherPopupOpen ? Bio.unfurl : Bio.furl
+				easing.type: root.launcherPopupOpen ? Easing.OutQuint : Easing.InCubic
+			}
+		}
+
+		Rectangle {
+			anchors.left: parent.left
+			anchors.right: parent.right
+			anchors.top: parent.top
+			anchors.bottom: parent.bottom
+			anchors.leftMargin: Math.round(Bio.spine)
+			color: Bio.cavity
+			opacity: 0.985 * launcherPopup.progress
+		}
+
+		MouseArea {
+			anchors.fill: parent
+			anchors.leftMargin: Math.round(Bio.spine)
+			onClicked: root.closeLauncherPopup()
+		}
+
+		Item {
+			id: launcherStage
+
+			focus: true
+
+			Keys.onEscapePressed: event => {
+				event.accepted = true;
+				root.closeLauncherPopup();
+			}
+
+			// The bench runs from the column out, not across the middle of the
+			// screen, and stops at a width a person can still read across.
+			anchors.left: parent.left
+			anchors.top: parent.top
+			anchors.bottom: parent.bottom
+			anchors.leftMargin: Math.round(Bio.spine + Bio.s7)
+			anchors.topMargin: Bio.s7
+			anchors.bottomMargin: Bio.s6
+			width: Math.min(parent.width - Bio.spine - Bio.s7 * 2, 1400)
+
+			opacity: Math.min(1, launcherPopup.progress * 1.6)
+
+			transform: Translate {
+				x: (1 - launcherPopup.progress) * -70
+			}
+
+			Loader {
+				id: launcherSheetLoader
+				anchors.fill: parent
+				active: true
+				sourceComponent: AppLauncherPopup {
+					foreground: root.foreground
+					background: root.background
+					secondaryBoxColor: root.secondaryBoxColor
+					secondaryBoxStrongColor: root.secondaryBoxStrongColor
+					secondaryInsetColor: root.secondaryInsetColor
+					barColor: root.accent
+					danger: root.danger
+					onCloseRequested: root.closeLauncherPopup()
+					onOpenStudioRequested: page => {
+						root.closeLauncherPopup();
+						root.openStudio(page);
+					}
+				}
+			}
+		}
+	}
+
 	PanelWindow {
 		id: studioPopup
 		screen: root.activePopupScreen

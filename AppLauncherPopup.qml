@@ -2597,79 +2597,33 @@ Item {
 		ollamaVersionProcess.running = true;
 	}
 
-	// The dish: one chamber, a plate of names at the top, the probe line under
-	// it, and whatever is being cultured below. The name of what you are looking
-	// at is engraved on the chamber, so the mode is never a mystery.
-	BioSurface {
+	// The bench. The launcher is not a card floating in the middle of the
+	// screen: it takes the whole working surface, and what you type is the
+	// largest thing on it. The probe runs across the top in the specimen hand,
+	// the mode and the count are engraved under it, and everything being
+	// cultured lies below that with nothing drawn around it.
+	Item {
 		anchors.fill: parent
-		washTop: Bio.membrane
-		washBottom: Bio.membraneDeep
-		haloStrength: 0.20
-		intensity: 0.4
-		padding: 0
 
 		Column {
 			id: dish
 			anchors.fill: parent
-			anchors.margins: Bio.s6
-			anchors.topMargin: Bio.s5
-			spacing: Bio.s3
+			spacing: Bio.s4
 
-			// How much room the cultures get once the plate and the probe line
-			// have taken theirs.
+			// How much room the cultures get once the probe and the plate have
+			// taken theirs.
 			readonly property real viewHeight: height - plate.height - searchBox.height - spacing * 2
 
-			Item {
-				id: plate
-				width: parent.width
-				height: 20
-
-				BioText {
-					id: plateTitle
-					anchors.left: parent.left
-					anchors.verticalCenter: parent.verticalCenter
-					role: "title"
-					font.pixelSize: 15
-					text: root.inChatMode ? "Discourse"
-						: root.inOllamaMode ? "Strains"
-						: root.inAiMode ? "Culture"
-						: root.inFileMode ? "Specimens"
-						: root.inCalculatorMode ? "Calculus"
-						: root.inCommandMode ? "Verbs"
-						: "Colony"
-				}
-
-				BioTendon {
-					anchors.left: plateTitle.right
-					anchors.right: plateCount.left
-					anchors.leftMargin: Bio.s3
-					anchors.rightMargin: Bio.s3
-					anchors.verticalCenter: parent.verticalCenter
-					height: 12
-					facing: Qt.LeftToRight
-					lineColor: Bio.boneFaint
-					visible: width > 30
-				}
-
-				BioText {
-					id: plateCount
-					anchors.right: parent.right
-					anchors.verticalCenter: parent.verticalCenter
-					role: "label"
-					tone: "faint"
-					text: root.inCommandMode ? "" : `${root.filteredApps.length}`
-				}
-			}
-
 			// The probe line. Not a search box — there is no box: a ring holds
-			// the mode's mark, the text runs on a bone line, and the line lights
-			// along its whole length while the keyboard is in it.
+			// the mode's mark, what you type is cut at specimen size straight
+			// onto the bench, and the bone under it lights along its whole
+			// length while the keyboard is in it.
 			Item {
 				id: searchBox
 				width: parent.width
 				height: root.inChatMode
-					? Math.min(180, Math.max(44, searchField.contentHeight + 20))
-					: 40
+					? Math.min(190, Math.max(58, searchField.contentHeight + 24))
+					: 58
 
 				Rectangle {
 					anchors.left: parent.left
@@ -2695,8 +2649,8 @@ Item {
 					id: probeRing
 					anchors.left: parent.left
 					anchors.verticalCenter: parent.verticalCenter
-					width: 26
-					height: 26
+					width: 36
+					height: 36
 					seed: 1
 					lineColor: Bio.boneFaint
 					intensity: searchField.activeFocus ? 0.85 : 0
@@ -2704,8 +2658,8 @@ Item {
 					QQCImpl.IconImage {
 						id: inputCommandIcon
 						anchors.centerIn: parent
-						width: 13
-						height: 13
+						width: 17
+						height: 17
 						source: root.inputIconPath
 						sourceSize: Qt.size(width, height)
 						color: searchField.activeFocus ? Bio.organ : Bio.text
@@ -2816,8 +2770,8 @@ Item {
 					anchors.top: parent.top
 					anchors.bottom: parent.bottom
 					anchors.bottomMargin: Bio.s2
-					font.family: Bio.sans
-					font.pixelSize: Bio.sizeBody
+					font.family: root.inChatMode ? Bio.sans : Bio.serif
+					font.pixelSize: root.inChatMode ? Bio.sizeBody : 27
 					color: Bio.text
 					placeholderText: root.inChatMode
 						? "Message"
@@ -2841,9 +2795,9 @@ Item {
 					background: Item {}
 					cursorDelegate: ThemedRectangle {
 						visible: searchField.activeFocus
-						width: 1
+						width: root.inChatMode ? 1 : 2
 						height: searchField.font.pixelSize + 3
-						color: root.foreground
+						color: Bio.organ
 					}
 
 					onTextChanged: {
@@ -2888,8 +2842,8 @@ Item {
 							event.accepted = false;
 							return;
 						}
-						appList.currentIndex = Math.max(0, appList.currentIndex - 1);
-						appList.positionViewAtIndex(appList.currentIndex, GridView.Contain);
+						appList.currentIndex = Math.max(0, appList.currentIndex - 8);
+						appList.positionViewAtIndex(appList.currentIndex, ListView.Contain);
 						event.accepted = true;
 					}
 					Keys.onRightPressed: event => {
@@ -2897,8 +2851,8 @@ Item {
 							event.accepted = false;
 							return;
 						}
-						appList.currentIndex = Math.min(root.filteredApps.length - 1, appList.currentIndex + 1);
-						appList.positionViewAtIndex(appList.currentIndex, GridView.Contain);
+						appList.currentIndex = Math.min(root.filteredApps.length - 1, appList.currentIndex + 8);
+						appList.positionViewAtIndex(appList.currentIndex, ListView.Contain);
 						event.accepted = true;
 					}
 					Keys.onDownPressed: {
@@ -2918,7 +2872,7 @@ Item {
 
 						if (root.filteredApps.length === 0) return;
 						appList.currentIndex = Math.min(root.filteredApps.length - 1, appList.currentIndex + appList.columns);
-						appList.positionViewAtIndex(appList.currentIndex, GridView.Contain);
+						appList.positionViewAtIndex(appList.currentIndex, ListView.Contain);
 					}
 					Keys.onUpPressed: {
 						if (root.inFileMode) {
@@ -2937,7 +2891,7 @@ Item {
 
 						if (root.filteredApps.length === 0) return;
 						appList.currentIndex = Math.max(0, appList.currentIndex - appList.columns);
-						appList.positionViewAtIndex(appList.currentIndex, GridView.Contain);
+						appList.positionViewAtIndex(appList.currentIndex, ListView.Contain);
 					}
 				}
 
@@ -3009,86 +2963,195 @@ Item {
 				}
 			}
 
-			// The colony. Not a grid of icon tiles — every application is a
-			// specimen row: a ring holding its mark, its name engraved, and
-			// what it is in plain type behind it. Two columns, because a
-			// hundred of them in one column is a scroll and not a colony.
-			GridView {
-				id: appList
+			Item {
+				id: plate
+				width: parent.width
+				height: 16
 
-				readonly property int columns: 2
+				BioText {
+					id: plateTitle
+					anchors.left: parent.left
+					anchors.verticalCenter: parent.verticalCenter
+					role: "label"
+					tone: "organ"
+					text: root.inChatMode ? "Discourse"
+						: root.inOllamaMode ? "Strains"
+						: root.inAiMode ? "Culture"
+						: root.inFileMode ? "Specimens"
+						: root.inCalculatorMode ? "Calculus"
+						: root.inCommandMode ? "Verbs"
+						: "Colony"
+				}
+
+				BioTendon {
+					anchors.left: plateTitle.right
+					anchors.right: plateCount.left
+					anchors.leftMargin: Bio.s3
+					anchors.rightMargin: Bio.s3
+					anchors.verticalCenter: parent.verticalCenter
+					height: 12
+					facing: Qt.LeftToRight
+					lineColor: Bio.boneFaint
+					visible: width > 30
+				}
+
+				BioText {
+					id: plateCount
+					anchors.right: parent.right
+					anchors.verticalCenter: parent.verticalCenter
+					role: "label"
+					tone: "faint"
+					text: root.inCommandMode ? "" : `${root.filteredApps.length} held`
+				}
+			}
+
+			// The colony, read as an index and a specimen. On the left a plain
+			// list of names with nothing in it but the names — that is what you
+			// scan. On the right, whatever the index is pointing at, blown up
+			// to the size of the thing you are about to open: its mark, its
+			// name cut large, what it is, and the command that will run.
+			Item {
+				id: colony
 
 				width: parent.width
 				height: dish.viewHeight
 				visible: !root.inCommandMode
-				clip: true
-				cellWidth: Math.floor(width / columns)
-				cellHeight: 46
-				model: root.filteredApps
-				currentIndex: model.length > 0 ? 0 : -1
-				boundsBehavior: Flickable.StopAtBounds
 
-				delegate: Item {
-					id: appTile
+				readonly property var current: appList.currentIndex >= 0 && appList.currentIndex < root.filteredApps.length
+					? root.filteredApps[appList.currentIndex]
+					: null
 
-					required property DesktopEntry modelData
-					required property int index
-					readonly property bool selected: appList.currentIndex === index
+				ListView {
+					id: appList
 
-					width: appList.cellWidth
-					height: appList.cellHeight
+					// Kept so the key handlers have something to step by; the
+					// index is one column now, so a step is one row.
+					readonly property int columns: 1
 
-					BioGlow {
-						anchors.centerIn: parent
-						width: parent.width
-						height: parent.height * 1.6
-						color: Bio.organ
-						strength: 0.20
-						spread: 0.34
-						opacity: appTile.selected ? 1 : 0
-						visible: opacity > 0.01
+					anchors.left: parent.left
+					anchors.top: parent.top
+					anchors.bottom: parent.bottom
+					width: Math.round(parent.width * 0.36)
+					clip: true
+					model: root.filteredApps
+					currentIndex: model.length > 0 ? 0 : -1
+					boundsBehavior: Flickable.StopAtBounds
+					spacing: 0
 
-						Behavior on opacity {
-							NumberAnimation { duration: Bio.grow }
+					delegate: Item {
+						id: appTile
+
+						required property DesktopEntry modelData
+						required property int index
+						readonly property bool selected: appList.currentIndex === index
+
+						width: appList.width
+						height: 32
+
+						// The vein: the whole selection state in one stroke,
+						// the same one a row uses everywhere else in this style.
+						Rectangle {
+							anchors.left: parent.left
+							anchors.verticalCenter: parent.verticalCenter
+							width: Bio.rib * 1.6
+							height: parent.height * (appTile.selected ? 0.66 : 0)
+							radius: width / 2
+							color: Bio.organ
+							opacity: appTile.selected ? 1 : 0
+
+							Behavior on opacity {
+								NumberAnimation { duration: Bio.twitch }
+							}
+							Behavior on height {
+								NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
+							}
+						}
+
+						BioText {
+							id: appRank
+							anchors.left: parent.left
+							anchors.leftMargin: Bio.s4
+							anchors.verticalCenter: parent.verticalCenter
+							role: "mono"
+							tone: appTile.selected ? "organ" : "faint"
+							font.pixelSize: 10
+							text: String(appTile.index + 1).padStart(2, "0")
+						}
+
+						BioText {
+							anchors.left: appRank.right
+							anchors.leftMargin: Bio.s3
+							anchors.right: parent.right
+							anchors.rightMargin: Bio.s4
+							anchors.verticalCenter: parent.verticalCenter
+							role: "heading"
+							font.pixelSize: 14
+							tone: appTile.selected ? "default" : "muted"
+							text: appTile.modelData.name || appTile.modelData.id || "App"
+						}
+
+						BioTouch {
+							id: tileHover
+							onEntered: appList.currentIndex = appTile.index
+							onClicked: root.launchApp(appTile.modelData)
 						}
 					}
+				}
 
-					// The vein: the whole selection state in one stroke, the
-					// same one a list row uses everywhere else in this style.
-					Rectangle {
-						anchors.left: parent.left
-						anchors.leftMargin: Bio.s1
-						anchors.verticalCenter: parent.verticalCenter
-						width: Bio.rib * 1.6
-						height: parent.height * (appTile.selected ? 0.7 : 0.24)
-						radius: width / 2
+				// The bone the index is written against.
+				Rectangle {
+					id: colonySpine
+					anchors.left: appList.right
+					anchors.leftMargin: Bio.s6
+					anchors.top: parent.top
+					anchors.bottom: parent.bottom
+					anchors.topMargin: Bio.s3
+					anchors.bottomMargin: Bio.s3
+					width: Bio.ribThin
+					color: Bio.boneGhost
+				}
+
+				// The specimen itself.
+				Item {
+					id: specimen
+
+					anchors.left: colonySpine.right
+					anchors.leftMargin: Bio.s7
+					anchors.right: parent.right
+					anchors.top: parent.top
+					anchors.bottom: parent.bottom
+					opacity: colony.current ? 1 : 0
+
+					Behavior on opacity {
+						NumberAnimation { duration: Bio.grow }
+					}
+
+					BioGlow {
+						anchors.centerIn: specimenMark
+						width: 220
+						height: 220
 						color: Bio.organ
-						opacity: appTile.selected ? 1 : 0
-
-						Behavior on opacity {
-							NumberAnimation { duration: Bio.twitch }
-						}
-						Behavior on height {
-							NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
-						}
+						strength: 0.24
+						spread: 0.4
 					}
 
 					BioRing {
-						id: appRing
+						id: specimenMark
 						anchors.left: parent.left
-						anchors.leftMargin: Bio.s3
-						anchors.verticalCenter: parent.verticalCenter
-						width: 32
-						height: 32
-						seed: appTile.index % 4
-						lineColor: Bio.boneGhost
-						intensity: appTile.selected ? 1 : 0
+						anchors.bottom: specimenBody.top
+						anchors.bottomMargin: Bio.s5
+						width: 84
+						height: 84
+						seed: appList.currentIndex % 4
+						weight: Bio.rib * 1.2
+						lineColor: Bio.boneDim
+						intensity: 1
 
 						Image {
 							anchors.centerIn: parent
-							width: 17
-							height: 17
-							source: root.iconSource(appTile.modelData)
+							width: 44
+							height: 44
+							source: colony.current ? root.iconSource(colony.current) : ""
 							sourceSize: Qt.size(width, height)
 							fillMode: Image.PreserveAspectFit
 							smooth: true
@@ -3097,34 +3160,76 @@ Item {
 					}
 
 					Column {
-						anchors.left: appRing.right
-						anchors.leftMargin: Bio.s3
+						id: specimenBody
+						anchors.left: parent.left
 						anchors.right: parent.right
-						anchors.rightMargin: Bio.s4
+						anchors.rightMargin: Bio.s6
 						anchors.verticalCenter: parent.verticalCenter
-						spacing: -1
+						anchors.verticalCenterOffset: Bio.s4
+						spacing: Bio.s2
 
 						BioText {
 							width: parent.width
-							role: "heading"
-							font.pixelSize: 13
-							tone: appTile.selected ? "organ" : "default"
-							text: appTile.modelData.name || appTile.modelData.id || "App"
+							role: "specimen"
+							font.pixelSize: 34
+							wrapMode: Text.NoWrap
+							text: colony.current ? (colony.current.name || colony.current.id || "") : ""
 						}
 
 						BioText {
 							width: parent.width
-							role: "caption"
-							tone: "faint"
+							role: "body"
+							tone: "muted"
+							wrapMode: Text.WordWrap
+							maximumLineCount: 3
 							visible: text !== ""
-							text: appTile.modelData.genericName || appTile.modelData.comment || ""
+							text: colony.current
+								? (colony.current.comment || colony.current.genericName || "")
+								: ""
+						}
+
+						Item {
+							width: 1
+							height: Bio.s3
+						}
+
+						BioTendon {
+							width: Math.min(parent.width, 220)
+							height: 12
+							facing: Qt.LeftToRight
+							lineColor: Bio.boneFaint
+						}
+
+						BioText {
+							width: parent.width
+							role: "mono"
+							tone: "faint"
+							font.pixelSize: 11
+							visible: text !== ""
+							text: colony.current
+								? String((colony.current.command || []).join(" ")).slice(0, 120)
+								: ""
 						}
 					}
 
-					BioTouch {
-						id: tileHover
-						onEntered: appList.currentIndex = appTile.index
-						onClicked: root.launchApp(appTile.modelData)
+					// What pressing return will do to it.
+					Row {
+						anchors.left: parent.left
+						anchors.bottom: parent.bottom
+						anchors.bottomMargin: Bio.s3
+						spacing: Bio.s3
+
+						BioText {
+							role: "label"
+							tone: "organ"
+							text: "Return"
+						}
+
+						BioText {
+							role: "label"
+							tone: "faint"
+							text: "to grow it"
+						}
 					}
 				}
 			}
