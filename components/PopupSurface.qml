@@ -4,15 +4,19 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 
-// Every popup the spine opens is a chamber that grows out of the node that
-// owns it. Built on PanelWindow (a full-screen overlay) so text fields inside
-// receive keyboard input.
+// Every chamber the spine opens is docked to it: it stands the full height of
+// the screen, immediately beside the column, and unfurls sideways out of it.
+// Nothing drops, nothing floats, nothing is centred — a chamber is a drawer in
+// the cabinet the spine runs down.
 //
-// Choreography contract, the same for every popup:
-//   open:  the chamber unseals — it comes up as a slit at the top, swells to
-//          full height past its resting size by a hair, and the membrane
-//          brightens; content surfaces once the chamber has room for it.
-//   close: it contracts back into the slit, faster than it opened.
+// Built on PanelWindow (a full-screen overlay) so text fields inside receive
+// keyboard input.
+//
+// Choreography contract, the same for every chamber:
+//   open:  a spur reaches out of the spine at the organ that owns the chamber,
+//          the chamber unrolls horizontally from that edge, and its contents
+//          surface band by band, each one sliding the last few pixels in.
+//   close: it rolls back into the spine, faster than it came out.
 //
 // Clicking outside emits dismissRequested(); the instance decides how to close.
 PanelWindow {
@@ -22,8 +26,12 @@ PanelWindow {
 	required property bool open
 	required property Item barItem
 	property var anchorWindow: null       // legacy, unused
-	property string anchorMode: "right"   // "right" | "center" | "item"
+	property string anchorMode: "right"   // legacy: every chamber docks left now
 	property Item anchorItem: null
+
+	// The name engraved down the chamber's outer edge. Every chamber has one —
+	// it is what tells you which drawer is open without reading the contents.
+	property string title: ""
 
 	// sizing
 	property real expandedWidth: 300
@@ -48,17 +56,23 @@ PanelWindow {
 	property real openProgress: open ? 1 : 0
 
 	// How far in from the frame content has to stay so the corner bones have
-	// room. A constant rather than the frame's own measurement: the frame sizes
-	// its bones from the chamber's height, and the height is what this feeds.
+	// room.
 	readonly property real boneMargin: 11
 
-	readonly property real expandedHeight: fixedHeight > 0
-		? fixedHeight
-		: Math.max(64, contentPreferredHeight + (contentMargins + boneMargin) * 2)
-	readonly property real shellWidth: expandedWidth
-	// Content only appears once the chamber has swelled past half open,
-	// otherwise it is briefly wider than the thing containing it.
-	readonly property real contentOpacity: Math.max(0, Math.min(1, (openProgress - 0.45) / 0.55))
+	readonly property real shellWidth: Math.round(expandedWidth + Bio.nameColumn)
+	// A chamber is as deep as what it holds, never shallower than a drawer
+	// worth pulling and never deeper than the screen. It opens level with the
+	// organ that owns it, so where it appears tells you what pulled it.
+	readonly property real roomHeight: Math.max(120, height - Bio.dockInset * 2)
+	readonly property real expandedHeight: Math.round(Math.min(
+		roomHeight,
+		fixedHeight > 0
+			? fixedHeight
+			: Math.max(260, contentPreferredHeight + (contentMargins + boneMargin) * 2)
+	))
+	// Contents only surface once the chamber has unrolled far enough to hold a
+	// line of text without it being crushed.
+	readonly property real contentOpacity: Math.max(0, Math.min(1, (openProgress - 0.55) / 0.45))
 
 	anchors {
 		left: true
@@ -75,9 +89,8 @@ PanelWindow {
 
 	Behavior on openProgress {
 		NumberAnimation {
-			duration: surface.open ? Bio.swell : Bio.relax
-			easing.type: surface.open ? Easing.OutBack : Easing.InCubic
-			easing.overshoot: surface.open ? 1.05 : 0
+			duration: surface.open ? Bio.unfurl : Bio.furl
+			easing.type: surface.open ? Easing.OutQuint : Easing.InCubic
 		}
 	}
 
@@ -86,10 +99,51 @@ PanelWindow {
 		onClicked: surface.dismissRequested()
 	}
 
+	// The spur: the short bone that reaches out of the spine at whichever organ
+	// owns this chamber, so an open drawer is traceable back to the thing that
+	// pulled it. Without an anchor it leaves from the middle of the column.
+	Item {
+		id: spur
+		x: Bio.spine
+		width: Bio.dockGap
+		height: 2
+		opacity: Math.min(1, surface.openProgress * 2.4)
+
+		readonly property real anchorY: {
+			if (!surface.anchorItem || !surface.visible)
+				return -1;
+			const p = surface.anchorItem.mapToItem(null, 0, surface.anchorItem.height / 2);
+			return p ? p.y : -1;
+		}
+
+		y: Math.round(spur.anchorY >= 0
+			? Math.max(Bio.dockInset + 12, Math.min(parent.height - Bio.dockInset - 12, spur.anchorY))
+			: parent.height / 2)
+
+		Behavior on y {
+			NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
+		}
+
+		Rectangle {
+			anchors.fill: parent
+			color: Bio.organ
+			opacity: 0.8
+		}
+
+		Rectangle {
+			width: 5
+			height: 5
+			radius: 2.5
+			anchors.right: parent.right
+			anchors.verticalCenter: parent.verticalCenter
+			color: Bio.organ
+		}
+	}
+
 	Item {
 		id: cardMotion
 
-		// Escape closes every popup. The handler sits on the card itself, an
+		// Escape closes every chamber. The handler sits on the card itself, an
 		// ancestor of the content, so an unhandled key from a focused field
 		// inside travels up to here. focus: true only claims the keyboard while
 		// nothing inside the card wants it.
@@ -100,35 +154,31 @@ PanelWindow {
 			surface.dismissRequested();
 		}
 
-		x: {
-			if (surface.anchorMode === "center")
-				return Math.round((parent.width - width) / 2);
-			if (surface.anchorMode === "item" && surface.anchorItem) {
-				const pos = surface.anchorItem.mapToItem(surface.barItem, surface.anchorItem.width / 2, 0);
-				return Math.round(Math.min(
-					Math.max(pos.x + surface.edgeMargin - width / 2, surface.edgeMargin),
-					parent.width - width - surface.edgeMargin
-				));
-			}
-			return Math.round(parent.width - width - surface.edgeMargin);
-		}
-		y: Math.round(surface.barTopMargin + surface.barItem.height + surface.barGap)
-
+		x: Math.round(Bio.spine + Bio.dockGap)
+		y: Math.round(Math.max(Bio.dockInset, Math.min(
+			parent.height - Bio.dockInset - height,
+			(spur.anchorY >= 0 ? spur.anchorY : parent.height / 2) - height / 2
+		)))
 		width: surface.shellWidth
 		height: surface.expandedHeight
-		opacity: Math.min(1, surface.openProgress * 2.2)
 
-		// The chamber unseals downwards: it is scaled from its top edge, so it
-		// looks like it is being extruded out of the spine rather than zoomed.
-		transform: Scale {
-			origin.x: cardMotion.width / 2
-			origin.y: 0
-			xScale: 0.86 + 0.14 * Math.min(1, surface.openProgress * 1.8)
-			yScale: Math.max(0.02, surface.openProgress)
+		Behavior on y {
+			NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
 		}
 
 		Behavior on height {
 			NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
+		}
+		opacity: Math.min(1, surface.openProgress * 2.6)
+
+		// The chamber unrolls out of the spine: scaled from its left edge only,
+		// so it reads as something being drawn out of the column rather than as
+		// a window appearing.
+		transform: Scale {
+			origin.x: 0
+			origin.y: cardMotion.height / 2
+			xScale: Math.max(0.03, surface.openProgress)
+			yScale: 0.985 + 0.015 * surface.openProgress
 		}
 
 		BioSurface {
@@ -142,11 +192,75 @@ PanelWindow {
 			haloStrength: 0.26 * surface.openProgress
 			padding: 0
 
+			// The name, engraved down the outer edge and read from the bottom
+			// up, with a beaded hairline running out of it to the floor of the
+			// chamber. This column is why a chamber can stand full height with
+			// little in it and still look deliberate.
+			Item {
+				id: nameStrip
+				anchors.left: parent.left
+				anchors.top: parent.top
+				anchors.bottom: parent.bottom
+				anchors.leftMargin: surface.boneMargin + Bio.s1
+				anchors.topMargin: surface.boneMargin + Bio.s3
+				anchors.bottomMargin: surface.boneMargin + Bio.s3
+				width: Bio.nameColumn
+				opacity: surface.contentOpacity
+
+				BioText {
+					id: nameText
+					role: "label"
+					tone: "organ"
+					text: surface.title
+					rotation: -90
+					transformOrigin: Item.Center
+					anchors.horizontalCenter: parent.horizontalCenter
+					// Rotated about its own centre, so its visual top sits at
+					// y + height/2 - width/2. Solve that for a flush start.
+					y: Math.round(width / 2 - height / 2)
+					font.letterSpacing: Bio.trackingEyebrow + 1.4
+				}
+
+				Rectangle {
+					id: nameRule
+					anchors.horizontalCenter: parent.horizontalCenter
+					anchors.top: parent.top
+					anchors.topMargin: nameText.implicitWidth + Bio.s3
+					anchors.bottom: parent.bottom
+					width: Bio.ribThin
+					color: Bio.boneGhost
+				}
+
+				Repeater {
+					model: 3
+					delegate: Rectangle {
+						required property int index
+						anchors.horizontalCenter: parent.horizontalCenter
+						y: nameRule.y + nameRule.height * (0.22 + index * 0.28)
+						width: Bio.nodule
+						height: Bio.nodule
+						radius: Bio.nodule / 2
+						color: Bio.boneFaint
+					}
+				}
+			}
+
+			// Contents ride in the last few pixels as they surface, so a
+			// chamber opening reads as one motion instead of two.
 			Item {
 				id: contentSlot
-				anchors.fill: parent
-				anchors.margins: surface.contentMargins + surface.boneMargin
+				anchors.left: nameStrip.right
+				anchors.leftMargin: Bio.s3
+				anchors.right: parent.right
+				anchors.top: parent.top
+				anchors.bottom: parent.bottom
+				anchors.rightMargin: surface.contentMargins + surface.boneMargin
+				anchors.topMargin: surface.contentMargins + surface.boneMargin
+				anchors.bottomMargin: surface.contentMargins + surface.boneMargin
 				opacity: surface.contentOpacity
+				transform: Translate {
+					x: (1 - surface.contentOpacity) * 26
+				}
 			}
 		}
 	}

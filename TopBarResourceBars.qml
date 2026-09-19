@@ -5,11 +5,11 @@ import Quickshell
 import Quickshell.Io
 import "components"
 
-// The vial rack: three readings standing side by side on the spine.
+// The vial rack: the readings stacked down the column, one under the next.
 //
-// Not icons with numbers next to them — each load is a vessel filling from the
-// bottom, so a glance at their heights is the whole status. The engraved
-// initial under each one says which organ it is.
+// Not icons with numbers next to them — each load is a vessel filling from its
+// engraved end, so a glance down the stack is the whole status. The initial
+// beside each one says which organ it is.
 Item {
 	id: root
 
@@ -111,15 +111,15 @@ Item {
 	readonly property string memoryText: `${root.formatStorage(root.memoryUsedKiB)}/${root.formatStorage(root.memoryTotalKiB)}`
 	readonly property string cpuText: root.cpuCores > 0 ? `${root.cpuCores} Cores` : ""
 
-	implicitWidth: rack.implicitWidth + Bio.s4
-	implicitHeight: Bio.spine
+	implicitWidth: Bio.spine
+	implicitHeight: rack.implicitHeight + Bio.s3
 
 	readonly property real live: Math.max(interaction.live, root.lit ? 0.5 : 0)
 
-	Row {
+	Column {
 		id: rack
 		anchors.centerIn: parent
-		spacing: Bio.s3
+		spacing: Bio.s1 + 1
 
 		Vial {
 			label: "C"
@@ -160,17 +160,28 @@ Item {
 
 		readonly property bool strained: vial.inverted ? vial.value < 0.2 : vial.value > 0.85
 
-		width: 13
-		height: Bio.spine
+		width: 42
+		height: 13
 
-		// The vessel the reading stands in. Without it three loose veins read as
-		// scratches on the wallpaper rather than as instruments.
+		BioText {
+			id: vialLabel
+			anchors.left: parent.left
+			anchors.verticalCenter: parent.verticalCenter
+			role: "label"
+			font.pixelSize: 8
+			tone: root.live > 0.3 ? "organ" : "faint"
+			text: vial.label
+		}
+
+		// The vessel the reading lies in. Without it a loose vein reads as a
+		// scratch on the wallpaper rather than as an instrument.
 		BioFrame {
 			id: tube
-			anchors.horizontalCenter: parent.horizontalCenter
-			anchors.top: parent.top
-			width: parent.width
-			height: parent.height - 11
+			anchors.left: vialLabel.right
+			anchors.leftMargin: 3
+			anchors.right: parent.right
+			anchors.verticalCenter: parent.verticalCenter
+			height: parent.height
 			variant: "capsule"
 			beading: false
 			weight: Bio.ribThin
@@ -183,25 +194,15 @@ Item {
 		}
 
 		BioMeter {
-			anchors.horizontalCenter: tube.horizontalCenter
-			anchors.top: tube.top
-			anchors.topMargin: 3
-			width: 6
-			height: tube.height - 6
-			vertical: true
+			anchors.verticalCenter: tube.verticalCenter
+			anchors.left: tube.left
+			anchors.leftMargin: 3
+			width: tube.width - 6
+			height: 5
 			value: vial.value
 			weight: Bio.rib
 			trackColor: "transparent"
 			fillColor: vial.strained ? Bio.necrosis : (root.live > 0.3 ? Bio.organ : Bio.organAlt)
-		}
-
-		BioText {
-			anchors.horizontalCenter: parent.horizontalCenter
-			anchors.bottom: parent.bottom
-			role: "label"
-			font.pixelSize: 8
-			tone: root.live > 0.3 ? "organ" : "faint"
-			text: vial.label
 		}
 	}
 

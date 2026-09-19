@@ -242,9 +242,16 @@ QtObject {
 	readonly property real shoulderSmall: 9
 	readonly property real crest: 7
 
-	// The spine: one height the bar and everything docked to it align to.
-	readonly property real spine: 36
+	// The spine: the column down the left edge of the screen. One width every
+	// organ on it, and every chamber docked beside it, aligns to.
+	readonly property real spine: 58
 	readonly property real nodeSize: 32
+	// How far a chamber stands off the spine, and how much air it keeps at the
+	// top and bottom of the screen.
+	readonly property real dockGap: 10
+	readonly property real dockInset: 14
+	// The width of the engraved name running down a chamber's outer edge.
+	readonly property real nameColumn: 26
 
 	// ------------------------------------------------------------------ motion
 	// Organic: things swell open and relax shut, and a living edge never stops
@@ -254,6 +261,18 @@ QtObject {
 	readonly property int swell: 380
 	readonly property int relax: 220
 	readonly property int breath: 4200
+	// A chamber unfurls sideways out of the spine, and what is in it surfaces
+	// afterwards, one band at a time.
+	readonly property int unfurl: 420
+	readonly property int furl: 200
+	readonly property int band: 240
+	readonly property int bandStep: 34
+
+	// The delay before the nth band of a chamber surfaces. Capped so a long
+	// list never keeps the reader waiting on arithmetic.
+	function stagger(index) {
+		return Math.min(8, Math.max(0, index)) * bandStep;
+	}
 
 	function icon(name, fallback) {
 		const paths = {

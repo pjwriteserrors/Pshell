@@ -1533,28 +1533,30 @@ Scope {
 		WlrLayershell.exclusionMode: ExclusionMode.Ignore
 		WlrLayershell.layer: WlrLayer.Overlay
 
-		BioSurface {
+		// Volume and brightness are not a toast in the corner: they are a
+		// vessel standing beside the spine, filling from the floor. The number
+		// is engraved at its head, the organ it belongs to sits at its foot,
+		// and it rises out of the column rather than fading in on top of the
+		// desktop.
+		Item {
 			id: osdCard
-			width: 296
-			height: 92
-			x: Math.round((parent.width - width) / 2)
-			y: Math.round(parent.height - height - 140)
-			washTop: Bio.membrane
-			washBottom: Bio.membraneDeep
-			haloStrength: 0.34
-			intensity: 0.75
+
+			width: 66
+			height: 268
+			x: Math.round(Bio.spine + Bio.dockGap)
+			y: Math.round((parent.height - height) / 2)
 			opacity: root.osdVisible ? 1 : 0
 
 			transform: Scale {
-				origin.x: osdCard.width / 2
+				origin.x: 0
 				origin.y: osdCard.height / 2
-				xScale: root.osdVisible ? 1 : 0.94
-				yScale: root.osdVisible ? 1 : 0.7
+				xScale: root.osdVisible ? 1 : 0.1
+				yScale: root.osdVisible ? 1 : 0.86
 
-				Behavior on yScale {
-					NumberAnimation { duration: Bio.grow; easing.type: Easing.OutBack; easing.overshoot: 1.2 }
-				}
 				Behavior on xScale {
+					NumberAnimation { duration: Bio.unfurl; easing.type: Easing.OutQuint }
+				}
+				Behavior on yScale {
 					NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
 				}
 			}
@@ -1563,50 +1565,91 @@ Scope {
 				NumberAnimation { duration: Bio.twitch }
 			}
 
-			BioRing {
-				id: osdRing
-				anchors.left: parent.left
-				anchors.verticalCenter: parent.verticalCenter
-				width: 46
-				height: 46
-				seed: 2
-				intensity: 0.5
-				progress: Math.min(1, Math.max(0, root.osdProgress))
+			BioGlow {
+				anchors.centerIn: parent
+				width: parent.width * 2
+				height: parent.height * 1.1
+				color: Bio.organ
+				strength: 0.3
+				spread: 0.4
+			}
 
-				Image {
-					anchors.centerIn: parent
-					width: 18
-					height: 18
-					source: root.osdIconSource
-					fillMode: Image.PreserveAspectFit
-					smooth: true
-					mipmap: true
-					layer.enabled: visible
-					layer.effect: MultiEffect {
-						colorization: 1
-						colorizationColor: Bio.organ
-					}
+			BioFrame {
+				id: osdVessel
+				anchors.fill: parent
+				variant: "capsule"
+				weight: Bio.rib
+				lineColor: Bio.boneDim
+				liveColor: Bio.organ
+				fillTop: Bio.membrane
+				fillBottom: Bio.cavity
+				intensity: 0.8
+			}
+
+			// The fluid: it stands at the reading and settles when the reading
+			// stops moving.
+			Rectangle {
+				id: osdFluid
+				anchors.horizontalCenter: parent.horizontalCenter
+				anchors.bottom: parent.bottom
+				anchors.bottomMargin: 14
+				width: 16
+				height: Math.max(3, (osdCard.height - 74) * Math.min(1, Math.max(0, root.osdProgress)))
+				radius: 8
+				color: Bio.organ
+				opacity: 0.9
+
+				Behavior on height {
+					NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
 				}
 			}
 
-			Column {
-				anchors.left: osdRing.right
-				anchors.leftMargin: Bio.s4
-				anchors.right: parent.right
-				anchors.verticalCenter: parent.verticalCenter
-				spacing: Bio.s2
+			Rectangle {
+				anchors.horizontalCenter: parent.horizontalCenter
+				anchors.bottom: parent.bottom
+				anchors.bottomMargin: 14
+				width: 16
+				height: osdCard.height - 74
+				radius: 8
+				color: Qt.alpha(Bio.bone, 0.09)
+				z: -1
+			}
 
-				BioText {
-					width: parent.width
-					role: "label"
-					tone: "muted"
-					text: root.osdLabel
-				}
+			BioText {
+				id: osdReading
+				anchors.horizontalCenter: parent.horizontalCenter
+				anchors.top: parent.top
+				anchors.topMargin: 13
+				role: "reading"
+				font.pixelSize: 17
+				text: root.osdValueText
+			}
 
-				BioText {
-					role: "reading"
-					tone: "default"
-					text: root.osdValueText
+			BioText {
+				anchors.horizontalCenter: parent.horizontalCenter
+				anchors.top: osdReading.bottom
+				role: "label"
+				tone: "muted"
+				font.pixelSize: 8
+				text: root.osdLabel
+			}
+
+			// The mark of whichever organ is being turned, sunk into the foot
+			// of the vessel.
+			Image {
+				anchors.horizontalCenter: parent.horizontalCenter
+				anchors.bottom: parent.bottom
+				anchors.bottomMargin: -3
+				width: 16
+				height: 16
+				source: root.osdIconSource
+				fillMode: Image.PreserveAspectFit
+				smooth: true
+				mipmap: true
+				layer.enabled: visible
+				layer.effect: MultiEffect {
+					colorization: 1
+					colorizationColor: Bio.organ
 				}
 			}
 		}
@@ -1614,79 +1657,82 @@ Scope {
 
 	// The spine.
 	//
-	// Not a bar: nothing is docked in a strip of chrome. The organs sit loose on
-	// the wallpaper at the top of the screen, a tendon runs from each cluster to
-	// the specimen plate in the middle, and the plate hangs a little below the
-	// line everything else is aligned to. The plate is the only thing with a
-	// membrane behind it — everything else is a ring with a hole in the middle.
+	// Not a bar, and not at the top: the shell stands on its edge. Everything
+	// it has to say is read top to bottom in one column down the left of the
+	// screen — what opens things at the head, what the machine is carrying at
+	// the foot, and the hour held in the middle, where the eye rests. Chambers
+	// do not hang off it; they are drawn out of it sideways.
 	PanelWindow {
 		id: barWindow
 		screen: root.primaryBarScreen
 
 		anchors {
 			left: true
-			right: true
 			top: true
+			bottom: true
 		}
 
 		margins {
 			left: 0
-			right: 0
 			top: 0
+			bottom: 0
 		}
 
-		// Only the line the organs sit on is reserved; the specimen plate hangs
-		// into the workspace below it, over whatever is there.
-		exclusiveZone: Math.round(bar.y + Bio.spine)
-		implicitHeight: Math.round(bar.y + bar.height)
+		exclusiveZone: Math.round(Bio.spine)
+		implicitWidth: Math.round(Bio.spine)
 		color: "transparent"
 		mask: Region {
-			x: bar.x
-			y: bar.y
-			width: bar.width
-			height: bar.height
+			x: 0
+			y: 0
+			width: Math.round(Bio.spine)
+			height: barWindow.height
 		}
 
 		Item {
 			id: bar
-			anchors.left: parent.left
-			anchors.right: parent.right
-			anchors.top: parent.top
-			anchors.leftMargin: Bio.s5
-			anchors.rightMargin: Bio.s5
-			anchors.topMargin: Bio.s2
-			height: Bio.spine + specimenPlate.overhang
+			anchors.fill: parent
 
-			// Everything but the specimen plate is centred on this line.
-			readonly property real line: Bio.spine / 2
+			// Everything on the column is centred on this line.
+			readonly property real line: width / 2
 
-			// The carapace edge: the screen's own rim darkening under the spine.
-			// Without it the bone lines vanish wherever the wallpaper is pale,
-			// and the organs have nothing to sit against.
+			// The carapace edge: the screen's own rim darkening under the
+			// column, so the bone lines survive a pale wallpaper.
 			Rectangle {
-				anchors.left: parent.left
-				anchors.right: parent.right
-				anchors.top: parent.top
-				anchors.topMargin: -bar.anchors.topMargin
-				anchors.leftMargin: -Bio.s5
-				anchors.rightMargin: -Bio.s5
-				height: Bio.spine + Bio.s5
+				anchors.fill: parent
 				gradient: Gradient {
-					GradientStop { position: 0.0; color: Qt.alpha(Bio.cavity, 0.92) }
-					GradientStop { position: 0.62; color: Qt.alpha(Bio.cavity, 0.66) }
+					orientation: Gradient.Horizontal
+					GradientStop { position: 0.0; color: Qt.alpha(Bio.cavity, 0.94) }
+					GradientStop { position: 0.68; color: Qt.alpha(Bio.cavity, 0.7) }
 					GradientStop { position: 1.0; color: "transparent" }
 				}
 			}
 
-			Row {
-				id: leftCluster
-				anchors.left: parent.left
-				y: bar.line - height / 2
+			// The bone itself: one line running the whole height, which every
+			// organ is strung on.
+			Rectangle {
+				id: spineBone
+				x: Math.round(bar.line - width / 2)
+				anchors.top: parent.top
+				anchors.bottom: parent.bottom
+				anchors.topMargin: Bio.s5
+				anchors.bottomMargin: Bio.s5
+				width: Bio.ribThin
+				color: Bio.boneGhost
+			}
+
+			// ------------------------------------------------------- the head
+			// What opens things, and what is running.
+			Column {
+				id: headCluster
+				anchors.top: parent.top
+				anchors.topMargin: Bio.s4
+				anchors.horizontalCenter: parent.horizontalCenter
 				spacing: Bio.s3
 
 				BioNode {
 					id: launcherNode
-					anchors.verticalCenter: parent.verticalCenter
+					anchors.horizontalCenter: parent.horizontalCenter
+					size: 38
 					seed: 0
 					lit: root.launcherPopupOpen
 					onClicked: root.toggleLauncherPopup()
@@ -1702,9 +1748,28 @@ Scope {
 					}
 				}
 
-				Row {
+				// A vertical tendon: the same ornamental run as everywhere
+				// else, turned on its side to follow the column.
+				Item {
+					anchors.horizontalCenter: parent.horizontalCenter
+					width: bar.width
+					height: 26
+
+					BioTendon {
+						anchors.centerIn: parent
+						width: parent.height
+						height: 14
+						rotation: 90
+						facing: Qt.LeftToRight
+						sag: 1.5
+						weight: Bio.rib * 1.1
+						lineColor: Bio.boneDim
+					}
+				}
+
+				Column {
 					id: trayRow
-					anchors.verticalCenter: parent.verticalCenter
+					anchors.horizontalCenter: parent.horizontalCenter
 					spacing: Bio.s2
 					visible: trayRepeater.count > 0
 
@@ -1720,7 +1785,7 @@ Scope {
 							required property SystemTrayItem modelData
 							required property int index
 
-							anchors.verticalCenter: parent?.verticalCenter ?? undefined
+							anchors.horizontalCenter: parent?.horizontalCenter ?? undefined
 							size: 26
 							seed: trayNode.index + 1
 							acceptedButtons: Qt.LeftButton | Qt.RightButton
@@ -1758,9 +1823,9 @@ Scope {
 
 				NiriTaskbar {
 					id: taskbarIsland
-					anchors.verticalCenter: parent.verticalCenter
+					anchors.horizontalCenter: parent.horizontalCenter
 					visible: niriState.tasksForOutput(String(barWindow.screen?.name || "")).length > 0
-					height: Bio.spine
+					width: bar.width
 					niriState: niriState
 					outputName: String(barWindow.screen?.name || "")
 					background: Bio.tissue1
@@ -1768,61 +1833,18 @@ Scope {
 					secondaryBoxColor: Bio.tissue2
 					secondaryBoxStrongColor: Bio.tissue3
 				}
-
-				NowPlaying {
-					id: nowPlayingIsland
-					anchors.verticalCenter: parent.verticalCenter
-					height: Bio.spine
-					foreground: Bio.text
-					secondaryBoxColor: Bio.tissue1
-					progressColor: Bio.organ
-					onClicked: root.toggleMediaPopup()
-				}
 			}
 
-			// The tendons. They run from each cluster to the plate and are the
-			// reason the spine reads as one organism instead of two toolbars
-			// with a clock between them.
-			BioTendon {
-				anchors.left: leftCluster.right
-				anchors.right: specimenPlate.left
-				anchors.leftMargin: Bio.s4
-				anchors.rightMargin: Bio.s3
-				y: bar.line - height / 2
-				height: 16
-				facing: Qt.LeftToRight
-				sag: 2
-				weight: Bio.rib * 1.15
-				lineColor: Bio.boneDim
-				visible: width > 40
-			}
-
-			BioTendon {
-				anchors.left: specimenPlate.right
-				anchors.right: rightCluster.left
-				anchors.leftMargin: Bio.s3
-				anchors.rightMargin: Bio.s4
-				y: bar.line - height / 2
-				height: 16
-				facing: Qt.RightToLeft
-				sag: 2
-				weight: Bio.rib * 1.15
-				lineColor: Bio.boneDim
-				visible: width > 40
-			}
-
-			// The specimen plate: the one chamber on the spine. It hangs below
-			// the line so the middle of the screen has a shape, and it carries
-			// the time and the date.
+			// ------------------------------------------------------ the heart
+			// The hour, held at the middle of the column: two readings stacked
+			// on a bone, with the day under them.
 			BioSurface {
 				id: specimenPlate
 
-				readonly property real overhang: 18
-
 				anchors.horizontalCenter: parent.horizontalCenter
-				y: 0
-				width: Math.max(168, specimenColumn.implicitWidth + 64)
-				height: Bio.spine + overhang
+				anchors.verticalCenter: parent.verticalCenter
+				width: bar.width
+				height: specimenColumn.implicitHeight + Bio.s6
 				washTop: Bio.membrane
 				washBottom: Bio.membraneDeep
 				haloStrength: 0.18
@@ -1832,13 +1854,35 @@ Scope {
 				Column {
 					id: specimenColumn
 					anchors.centerIn: parent
-					spacing: -2
+					spacing: 1
 
 					BioText {
 						anchors.horizontalCenter: parent.horizontalCenter
 						role: "specimen"
-						font.pixelSize: 24
-						text: Qt.formatDateTime(root.now, "HH:mm")
+						font.pixelSize: 21
+						font.letterSpacing: 0
+						text: Qt.formatDateTime(root.now, "HH")
+					}
+
+					Rectangle {
+						anchors.horizontalCenter: parent.horizontalCenter
+						width: 16
+						height: Bio.ribThin
+						color: Bio.boneFaint
+					}
+
+					BioText {
+						anchors.horizontalCenter: parent.horizontalCenter
+						role: "specimen"
+						font.pixelSize: 21
+						font.letterSpacing: 0
+						tone: "organ"
+						text: Qt.formatDateTime(root.now, "mm")
+					}
+
+					Item {
+						width: 1
+						height: Bio.s2
 					}
 
 					BioText {
@@ -1846,7 +1890,16 @@ Scope {
 						role: "label"
 						tone: "muted"
 						font.pixelSize: 9
-						text: Qt.formatDateTime(root.now, "ddd dd MMM")
+						text: Qt.formatDateTime(root.now, "ddd")
+					}
+
+					BioText {
+						anchors.horizontalCenter: parent.horizontalCenter
+						role: "label"
+						tone: "faint"
+						font.pixelSize: 9
+						font.letterSpacing: 0.4
+						text: Qt.formatDateTime(root.now, "dd MMM")
 					}
 				}
 
@@ -1863,19 +1916,32 @@ Scope {
 				onTriggered: root.now = new Date()
 			}
 
-			Row {
-				id: rightCluster
-				anchors.right: parent.right
-				y: bar.line - height / 2
+			// ------------------------------------------------------- the foot
+			// What is playing, what the machine is carrying, and the way out.
+			Column {
+				id: footCluster
+				anchors.bottom: parent.bottom
+				anchors.bottomMargin: Bio.s4
+				anchors.horizontalCenter: parent.horizontalCenter
 				spacing: Bio.s3
 
-				Row {
-					anchors.verticalCenter: parent.verticalCenter
-					spacing: Bio.s2
+				NowPlaying {
+					id: nowPlayingIsland
+					anchors.horizontalCenter: parent.horizontalCenter
+					width: bar.width
+					foreground: Bio.text
+					secondaryBoxColor: Bio.tissue1
+					progressColor: Bio.organ
+					onClicked: root.toggleMediaPopup()
+				}
+
+				Column {
+					anchors.horizontalCenter: parent.horizontalCenter
+					spacing: -1
 
 					BioNode {
 						id: weatherNode
-						anchors.verticalCenter: parent.verticalCenter
+						anchors.horizontalCenter: parent.horizontalCenter
 						size: 26
 						seed: 3
 						lit: root.weatherPopupOpen
@@ -1889,63 +1955,85 @@ Scope {
 					}
 
 					BioText {
-						anchors.verticalCenter: parent.verticalCenter
+						anchors.horizontalCenter: parent.horizontalCenter
 						role: "reading"
-						font.pixelSize: 14
+						font.pixelSize: 13
 						text: root.weatherTemperature
 					}
 				}
 
-				BioNode {
-					id: notifNode
-					anchors.verticalCenter: parent.verticalCenter
-					seed: 1
-					lit: root.notifPopupOpen
-					badge: root.notificationGroups.length > 0 ? String(root.notificationGroups.length) : ""
-					iconSource: root.resolveIconSource("preferences-system-notifications-symbolic", ["dialog-information-symbolic"])
-					onClicked: root.toggleNotifPopup()
-				}
+				Column {
+					anchors.horizontalCenter: parent.horizontalCenter
+					spacing: Bio.s2
 
-				BioNode {
-					id: clipboardNode
-					anchors.verticalCenter: parent.verticalCenter
-					seed: 2
-					lit: root.clipboardPopupOpen
-					iconSource: root.resolveIconSource("edit-paste-symbolic", ["edit-copy-symbolic"])
-					onClicked: root.toggleClipboardPopup()
-				}
+					BioNode {
+						id: notifNode
+						anchors.horizontalCenter: parent.horizontalCenter
+						seed: 1
+						lit: root.notifPopupOpen
+						badge: root.notificationGroups.length > 0 ? String(root.notificationGroups.length) : ""
+						iconSource: root.resolveIconSource("preferences-system-notifications-symbolic", ["dialog-information-symbolic"]) || Bio.icon("preferences-system-notifications-symbolic")
+						onClicked: root.toggleNotifPopup()
+					}
 
-				BioNode {
-					id: bluetoothNode
-					anchors.verticalCenter: parent.verticalCenter
-					seed: 3
-					lit: root.bluetoothPopupOpen
-					iconSource: root.resolveIconSource("bluetooth-active-symbolic", ["bluetooth-symbolic"])
-					onClicked: root.toggleBluetoothPopup()
-				}
+					BioNode {
+						id: clipboardNode
+						anchors.horizontalCenter: parent.horizontalCenter
+						seed: 2
+						lit: root.clipboardPopupOpen
+						iconSource: root.resolveIconSource("edit-paste-symbolic", ["edit-copy-symbolic"]) || Bio.icon("edit-paste-symbolic")
+						onClicked: root.toggleClipboardPopup()
+					}
 
-				BioNode {
-					id: networkNode
-					anchors.verticalCenter: parent.verticalCenter
-					seed: 0
-					lit: root.networkPopupOpen
-					iconSource: root.networkStatusType === "ethernet"
-						? Bio.icon("network-wired-symbolic")
-						: Bio.icon("network-wireless-signal-excellent-symbolic")
-					onClicked: root.toggleNetworkPopup()
+					BioNode {
+						id: bluetoothNode
+						anchors.horizontalCenter: parent.horizontalCenter
+						seed: 3
+						lit: root.bluetoothPopupOpen
+						iconSource: root.resolveIconSource("bluetooth-active-symbolic", ["bluetooth-symbolic"]) || Bio.icon("bluetooth-active-symbolic")
+						onClicked: root.toggleBluetoothPopup()
+					}
+
+					BioNode {
+						id: networkNode
+						anchors.horizontalCenter: parent.horizontalCenter
+						seed: 0
+						lit: root.networkPopupOpen
+						iconSource: root.networkStatusType === "ethernet"
+							? Bio.icon("network-wired-symbolic")
+							: Bio.icon("network-wireless-signal-excellent-symbolic")
+						onClicked: root.toggleNetworkPopup()
+					}
 				}
 
 				TopBarResourceBars {
 					id: resourceBars
-					anchors.verticalCenter: parent.verticalCenter
-					height: Bio.spine
+					anchors.horizontalCenter: parent.horizontalCenter
+					width: bar.width
 					lit: root.resourcesPopupOpen
 					onClicked: root.toggleResourcesPopup()
 				}
 
+				Item {
+					anchors.horizontalCenter: parent.horizontalCenter
+					width: bar.width
+					height: 22
+
+					BioTendon {
+						anchors.centerIn: parent
+						width: parent.height
+						height: 14
+						rotation: 90
+						facing: Qt.RightToLeft
+						sag: 1.5
+						weight: Bio.rib * 1.1
+						lineColor: Bio.boneDim
+					}
+				}
+
 				BioNode {
 					id: powerNode
-					anchors.verticalCenter: parent.verticalCenter
+					anchors.horizontalCenter: parent.horizontalCenter
 					seed: 2
 					lit: root.powerPopupOpen
 					ringColor: Qt.alpha(Bio.necrosis, 0.45)
@@ -2137,6 +2225,7 @@ Scope {
 
 	PopupSurface {
 		id: clipboardPopup
+		title: "Residue"
 		screen: root.activePopupScreen
 
 		onDismissRequested: root.closeClipboardPopup()
@@ -2144,7 +2233,8 @@ Scope {
 		visible: root.clipboardPopupVisible
 		barItem: bar
 		anchorWindow: barWindow
-		anchorMode: "right"
+		anchorMode: "item"
+		anchorItem: clipboardNode
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
 		expandedWidth: 360
@@ -2567,6 +2657,7 @@ Scope {
 
 	PopupSurface {
 		id: bluetoothPopup
+		title: "Tether"
 		screen: root.activePopupScreen
 
 		onDismissRequested: root.closeBluetoothPopup()
@@ -2574,7 +2665,8 @@ Scope {
 		visible: root.bluetoothPopupVisible
 		barItem: bar
 		anchorWindow: barWindow
-		anchorMode: "right"
+		anchorMode: "item"
+		anchorItem: bluetoothNode
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
 		expandedWidth: 300
@@ -3120,6 +3212,7 @@ done`
 
 	PopupSurface {
 		id: networkPopup
+		title: "Link"
 		screen: root.activePopupScreen
 
 		onDismissRequested: root.closeNetworkPopup()
@@ -3127,11 +3220,12 @@ done`
 		visible: root.networkPopupVisible
 		barItem: bar
 		anchorWindow: barWindow
-		anchorMode: "right"
+		anchorMode: "item"
+		anchorItem: networkNode
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
 		expandedWidth: 300
-		contentPreferredHeight: networkPopupColumn.implicitHeight
+		fixedHeight: 470
 
 		property string currentType: "offline"
 		property string currentInterface: ""
@@ -3326,14 +3420,16 @@ printf 'type=offline\niface=\nip=\n'`
 						id: networkPopupContent
 						anchors.fill: parent
 
-						Column {
+						Item {
 							id: networkPopupColumn
 							anchors.fill: parent
-							spacing: Bio.s4
 
 							// What the machine is attached to, and by what.
 							Item {
-								width: parent.width
+								id: linkHead
+								anchors.left: parent.left
+								anchors.right: parent.right
+								anchors.top: parent.top
 								height: 34
 
 								BioRing {
@@ -3402,65 +3498,84 @@ printf 'type=offline\niface=\nip=\n'`
 								}
 							}
 
-							// Throughput, as two pulses. The trace is the same
-							// ribbon the rest of the style is drawn with, so a
-							// busy link reads as something alive rather than as
-							// a line chart in a box.
+						// Throughput, as two pulses given the whole height of the
+						// chamber to move in. The trace is the same ribbon the rest
+						// of the style is drawn with, so a busy link reads as
+						// something alive rather than as a line chart in a box.
+						Item {
+							id: outflowBlock
+							anchors.left: parent.left
+							anchors.right: parent.right
+							anchors.top: linkHead.bottom
+							anchors.topMargin: Bio.s5
+							height: (parent.height - linkHead.height - Bio.s5 * 2 - Bio.s5) / 2
+
 							BioSection {
+								id: outflowHead
 								width: parent.width
 								title: "Outflow"
 								trailing: networkPopup.formatSpeed(networkPopup.currentUploadSpeed)
-
-								Item {
-									width: parent.width
-									height: 74
-
-									BioPulse {
-										id: uploadChart
-										anchors.fill: parent
-										values: networkPopup.uploadHistory || []
-										ceiling: networkPopup.uploadChartMax
-										traceColor: Bio.organ
-
-										Connections {
-											target: networkPopup
-											function onUploadHistoryChanged() { uploadChart.repaint(); }
-											function onCurrentUploadSpeedChanged() { uploadChart.repaint(); }
-										}
-									}
-								}
 							}
 
+							BioPulse {
+								id: uploadChart
+								anchors.left: parent.left
+								anchors.right: parent.right
+								anchors.top: outflowHead.bottom
+								anchors.topMargin: Bio.s3
+								anchors.bottom: parent.bottom
+								values: networkPopup.uploadHistory || []
+								ceiling: networkPopup.uploadChartMax
+								traceColor: Bio.organ
+
+								Connections {
+									target: networkPopup
+									function onUploadHistoryChanged() { uploadChart.repaint(); }
+									function onCurrentUploadSpeedChanged() { uploadChart.repaint(); }
+								}
+							}
+						}
+
+						Item {
+							id: intakeBlock
+							anchors.left: parent.left
+							anchors.right: parent.right
+							anchors.top: outflowBlock.bottom
+							anchors.topMargin: Bio.s5
+							anchors.bottom: parent.bottom
+
 							BioSection {
+								id: intakeHead
 								width: parent.width
 								title: "Intake"
 								trailing: networkPopup.formatSpeed(networkPopup.currentDownloadSpeed)
+							}
 
-								Item {
-									width: parent.width
-									height: 74
+							BioPulse {
+								id: downloadChart
+								anchors.left: parent.left
+								anchors.right: parent.right
+								anchors.top: intakeHead.bottom
+								anchors.topMargin: Bio.s3
+								anchors.bottom: parent.bottom
+								values: networkPopup.downloadHistory || []
+								ceiling: networkPopup.downloadChartMax
+								traceColor: Bio.organAlt
 
-									BioPulse {
-										id: downloadChart
-										anchors.fill: parent
-										values: networkPopup.downloadHistory || []
-										ceiling: networkPopup.downloadChartMax
-										traceColor: Bio.organAlt
-
-										Connections {
-											target: networkPopup
-											function onDownloadHistoryChanged() { downloadChart.repaint(); }
-											function onCurrentDownloadSpeedChanged() { downloadChart.repaint(); }
-										}
-									}
+								Connections {
+									target: networkPopup
+									function onDownloadHistoryChanged() { downloadChart.repaint(); }
+									function onCurrentDownloadSpeedChanged() { downloadChart.repaint(); }
 								}
 							}
 						}
 					}
+				}
 	}
 
 	PopupSurface {
 		id: resourcesPopup
+		title: "Vitals"
 		screen: root.activePopupScreen
 
 		onDismissRequested: root.closeResourcesPopup()
@@ -3468,7 +3583,8 @@ printf 'type=offline\niface=\nip=\n'`
 		visible: root.resourcesPopupVisible
 		barItem: bar
 		anchorWindow: barWindow
-		anchorMode: "right"
+		anchorMode: "item"
+		anchorItem: resourceBars
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
 		expandedWidth: 300
@@ -3558,61 +3674,6 @@ printf 'type=offline\niface=\nip=\n'`
 								}
 							}
 						}
-	}
-
-	PanelWindow {
-		id: launcherPopup
-		screen: root.activePopupScreen
-
-		anchors {
-			left: true
-			right: true
-			top: true
-			bottom: true
-		}
-
-		exclusiveZone: 0
-		color: "transparent"
-		visible: root.launcherPopupVisible
-		WlrLayershell.exclusionMode: ExclusionMode.Ignore
-		WlrLayershell.layer: WlrLayer.Overlay
-		WlrLayershell.keyboardFocus: root.launcherPopupVisible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
-
-		ModalSheet {
-			open: root.launcherPopupOpen
-			mode: "center"
-			scrimOpacity: 0.55
-			sheetWidth: 760
-			sheetHeight: 620
-			onDismissRequested: root.closeLauncherPopup()
-
-			// The launcher brings no surface of its own: it *is* the chamber,
-			// drawn inside AppLauncherPopup, so the corner bones are not clipped
-			// off by a box around it.
-			Item {
-				anchors.fill: parent
-
-				Loader {
-					id: launcherSheetLoader
-					anchors.fill: parent
-					active: true
-					sourceComponent: AppLauncherPopup {
-						foreground: root.foreground
-						background: root.background
-						secondaryBoxColor: root.secondaryBoxColor
-						secondaryBoxStrongColor: root.secondaryBoxStrongColor
-						secondaryInsetColor: root.secondaryInsetColor
-						barColor: root.accent
-						danger: root.danger
-						onCloseRequested: root.closeLauncherPopup()
-						onOpenStudioRequested: page => {
-							root.closeLauncherPopup();
-							root.openStudio(page);
-						}
-					}
-				}
-			}
-		}
 	}
 
 	PanelWindow {
@@ -4053,6 +4114,7 @@ printf 'type=offline\niface=\nip=\n'`
 
 	PopupSurface {
 		id: trayMenuPopup
+		title: "Organ"
 		screen: root.activePopupScreen
 
 		onDismissRequested: root.closeTrayMenu()
@@ -4259,6 +4321,7 @@ printf 'type=offline\niface=\nip=\n'`
 
 	PopupSurface {
 		id: mediaPopup
+		title: "Sound"
 		screen: root.activePopupScreen
 
 		onDismissRequested: root.closeMediaPopup()
@@ -4301,6 +4364,7 @@ printf 'type=offline\niface=\nip=\n'`
 
 	PopupSurface {
 		id: clockPopup
+		title: "Cycle"
 		screen: root.activePopupScreen
 
 		onDismissRequested: root.closeClockPopup()
@@ -4468,6 +4532,7 @@ printf 'type=offline\niface=\nip=\n'`
 
 	PopupSurface {
 		id: weatherPopup
+		title: "Sky"
 		screen: root.activePopupScreen
 
 		onDismissRequested: root.closeWeatherPopup()
@@ -4649,6 +4714,7 @@ printf 'type=offline\niface=\nip=\n'`
 
 	PopupSurface {
 		id: notifPopup
+		title: "Signals"
 		screen: root.activePopupScreen
 
 		onDismissRequested: root.closeNotifPopup()

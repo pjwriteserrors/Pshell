@@ -97,12 +97,12 @@ Item {
 		return unique;
 	}
 
-	implicitHeight: Bio.spine
-	implicitWidth: root.hasMedia ? Math.min(nowPlayingLabel.implicitWidth + 58, 380) : 30
+	implicitWidth: Bio.spine
+	implicitHeight: root.hasMedia ? 44 : 30
 
 	readonly property real live: Math.max(interaction.live, root.activePlayer?.isPlaying ? 0.35 : 0)
 
-	Behavior on implicitWidth {
+	Behavior on implicitHeight {
 		NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
 	}
 
@@ -123,15 +123,20 @@ Item {
 		onTriggered: root.activePlayer?.positionChanged()
 	}
 
+	// In the column there is no room for a title, and no need for one: the
+	// track's name belongs in the chamber this opens. What stands on the spine
+	// is the organ itself, with how far through the track it is drawn around
+	// its own rim.
 	BioRing {
 		id: transport
-		anchors.left: parent.left
-		anchors.verticalCenter: parent.verticalCenter
-		width: 26
-		height: 26
+		anchors.horizontalCenter: parent.horizontalCenter
+		anchors.top: parent.top
+		width: 28
+		height: 28
 		seed: 1
 		intensity: root.live
 		liveColor: root.progressColor
+		progress: root.hasMedia && root.hasProgress ? root.progressValue : -1
 
 		QQCImpl.IconImage {
 			anchors.centerIn: parent
@@ -143,30 +148,37 @@ Item {
 		}
 	}
 
-	BioText {
-		id: nowPlayingLabel
-		anchors.verticalCenter: parent.verticalCenter
-		anchors.left: transport.right
-		anchors.leftMargin: Bio.s3
-		anchors.right: parent.right
-		anchors.rightMargin: Bio.s3
-		role: "caption"
-		text: root.mediaText
+	// A beat under the organ while something is playing: three beads that
+	// brighten in turn, so the column shows life without showing words.
+	Row {
 		visible: root.hasMedia
-		maximumLineCount: 1
-	}
+		anchors.horizontalCenter: parent.horizontalCenter
+		anchors.top: transport.bottom
+		anchors.topMargin: Bio.s2
+		spacing: 4
 
-	// The position, as a vein under the title.
-	BioMeter {
-		visible: root.hasMedia && root.hasProgress
-		anchors.left: nowPlayingLabel.left
-		anchors.right: nowPlayingLabel.right
-		anchors.top: nowPlayingLabel.bottom
-		anchors.topMargin: 1
-		height: 6
-		weight: Bio.ribThin
-		value: root.progressValue
-		fillColor: root.progressColor
-		trackColor: Bio.boneGhost
+		Repeater {
+			model: 3
+
+			delegate: Rectangle {
+				required property int index
+
+				width: Bio.nodule
+				height: Bio.nodule
+				radius: Bio.nodule / 2
+				color: root.progressColor
+				opacity: root.activePlayer?.isPlaying ? 0.25 : 0.18
+
+				SequentialAnimation on opacity {
+					running: root.activePlayer?.isPlaying ?? false
+					loops: Animation.Infinite
+
+					PauseAnimation { duration: index * 180 }
+					NumberAnimation { to: 1; duration: 220; easing.type: Easing.OutCubic }
+					NumberAnimation { to: 0.25; duration: 520; easing.type: Easing.InOutSine }
+					PauseAnimation { duration: 540 - index * 180 }
+				}
+			}
+		}
 	}
 }

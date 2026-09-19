@@ -4,9 +4,9 @@ import QtQuick
 import Quickshell
 import "components"
 
-// The windows on this output, as a segment of spine.
+// The windows on this output, as a segment of the spine.
 //
-// Every window is a vertebra on one bone. The focused one is a full ring with
+// Every window is a vertebra stacked on one bone running down the column. The focused one is a full ring with
 // the application's icon in it; the rest are beads, sized by nothing and
 // meaning only "there is another one". An urgent window flushes.
 //
@@ -42,21 +42,21 @@ Item {
 		return Quickshell.iconPath("application-x-executable", true);
 	}
 
-	implicitHeight: Bio.spine
-	implicitWidth: Math.min(chain.implicitWidth + Bio.s4, 520)
+	implicitWidth: Bio.spine
+	implicitHeight: Math.min(chain.implicitHeight + Bio.s4, 620)
 
-	// The bone the vertebrae sit on.
+	// The bone the vertebrae are strung on, running with the column.
 	Rectangle {
-		anchors.left: parent.left
-		anchors.right: parent.right
-		anchors.leftMargin: Bio.s3
-		anchors.rightMargin: Bio.s3
-		anchors.verticalCenter: parent.verticalCenter
-		height: Bio.ribThin
+		anchors.top: parent.top
+		anchors.bottom: parent.bottom
+		anchors.topMargin: Bio.s3
+		anchors.bottomMargin: Bio.s3
+		anchors.horizontalCenter: parent.horizontalCenter
+		width: Bio.ribThin
 		color: Bio.boneGhost
 	}
 
-	Row {
+	Column {
 		id: chain
 		anchors.centerIn: parent
 		spacing: Bio.s2
@@ -79,11 +79,11 @@ Item {
 				readonly property var task: modelData
 				readonly property bool focused: vertebra.task.isFocused
 
-				width: vertebra.focused ? root.focusedSize : root.beadSize
-				height: root.focusedSize
-				anchors.verticalCenter: parent?.verticalCenter ?? undefined
+				width: root.focusedSize
+				height: vertebra.focused ? root.focusedSize : root.beadSize
+				anchors.horizontalCenter: parent?.horizontalCenter ?? undefined
 
-				Behavior on width {
+				Behavior on height {
 					NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
 				}
 
