@@ -90,8 +90,13 @@ PanelWindow {
 		}
 	}
 
+	// Clicking off a chamber dismisses it — but not while it is still coming
+	// out of the column. A chamber opens under the pointer that opened it, and
+	// a press that is still travelling when the window maps would otherwise
+	// land here and shut it again before it had finished unrolling.
 	MouseArea {
 		anchors.fill: parent
+		enabled: surface.openProgress > 0.75
 		onClicked: surface.dismissRequested()
 	}
 

@@ -158,7 +158,7 @@ PanelWindow {
 							anchors.centerIn: parent
 							width: 14
 							height: 14
-							source: root.trayIconSource(trayNode.modelData.icon)
+							source: root.trayIconSource(trayNode.modelData?.icon ?? "")
 							fillMode: Image.PreserveAspectFit
 							smooth: true
 							mipmap: true

@@ -835,20 +835,17 @@ Scope {
 	function openTrayMenu(handle, targetItem) {
 		if (!handle || !targetItem) return;
 		root.openPopupOnFocusedScreen(function() {
+			// Straight there: hand the chamber its menu, show it, and let it
+			// unroll on the next tick. It used to null everything out first and
+			// rebuild across two hops, which left a window in which the chamber
+			// existed with no handle — long enough for anything arriving in
+			// between to tear it down again.
 			trayMenuCloseTimer.stop();
-			root.trayMenuOpen = false;
-			root.trayMenuVisible = false;
-			root.trayMenuHandle = null;
-			root.trayMenuTargetItem = null;
-
+			root.trayMenuHandle = handle;
+			root.trayMenuTargetItem = targetItem;
+			root.trayMenuVisible = true;
 			Qt.callLater(function() {
-				root.trayMenuHandle = handle;
-				root.trayMenuTargetItem = targetItem;
-				root.trayMenuVisible = true;
-
-				Qt.callLater(function() {
-					root.trayMenuOpen = true;
-				});
+				root.trayMenuOpen = true;
 			});
 		}, barWindow.screen);
 	}
@@ -1794,7 +1791,7 @@ Scope {
 								anchors.centerIn: parent
 								width: 14
 								height: 14
-								source: root.resolveIconSource(root.trayIconSource(trayNode.modelData.icon))
+								source: root.resolveIconSource(root.trayIconSource(trayNode.modelData?.icon ?? ""))
 								fillMode: Image.PreserveAspectFit
 								smooth: true
 								mipmap: true
@@ -4234,21 +4231,6 @@ printf 'type=offline\niface=\nip=\n'`
 		borderColor: root.surfaceBorder
 		expandedWidth: (trayMenuStackLoader.item ? trayMenuStackLoader.item.implicitWidth : 240) + 24
 		contentPreferredHeight: trayMenuStackLoader.item ? trayMenuStackLoader.item.implicitHeight : 0
-
-		onVisibleChanged: {
-			if (!visible && root.trayMenuVisible) {
-				trayMenuCloseTimer.stop();
-
-				if (root.trayMenuOpen) {
-					root.trayMenuVisible = true;
-					root.closeTrayMenu();
-				} else {
-					root.trayMenuVisible = false;
-					root.trayMenuHandle = null;
-					root.trayMenuTargetItem = null;
-				}
-			}
-		}
 
 		Loader {
 			id: trayMenuStackLoader
