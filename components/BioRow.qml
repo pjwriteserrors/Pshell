@@ -3,8 +3,9 @@ pragma ComponentBehavior: Bound
 import QtQuick
 
 // A row in a list. Hovering does not paint a grey band behind it — a vein
-// lights up along its left edge and the tissue under it warms, which is the
-// same reaction every other surface in this style has.
+// lights up along its left edge, the tissue under it warms, and the row leans
+// away from the vein as if the stroke were pushing it. Everything in this shell
+// now reads left to right out of the spine, and a row answers the same way.
 Item {
 	id: row
 
@@ -51,6 +52,14 @@ Item {
 		anchors.fill: parent
 		anchors.leftMargin: row.inset
 		anchors.rightMargin: row.inset * 0.6
+
+		transform: Translate {
+			x: row.live * 5
+
+			Behavior on x {
+				NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
+			}
+		}
 	}
 
 	BioTouch {

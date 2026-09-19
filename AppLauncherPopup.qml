@@ -2207,6 +2207,29 @@ Item {
 		root.aiAttachmentPickerOpen = false;
 		root.leaveCommandInput("");
 		appList.currentIndex = root.filteredApps.length > 0 ? 0 : -1;
+		root.reveal = 0;
+		revealAnimation.restart();
+	}
+
+	// The bench does not appear all at once: the probe is cut first, the index
+	// rises under it, and the specimen surfaces last. One band at a time, in
+	// the order you would read them.
+	property real reveal: 1
+
+	NumberAnimation {
+		id: revealAnimation
+		target: root
+		property: "reveal"
+		from: 0
+		to: 1
+		duration: Bio.band + Bio.bandStep * 3
+		easing.type: Easing.OutCubic
+	}
+
+	function band(index) {
+		const start = Bio.stagger(index) / (Bio.band + Bio.bandStep * 3);
+		const span = Bio.band / (Bio.band + Bio.bandStep * 3);
+		return Math.max(0, Math.min(1, (root.reveal - start) / span));
 	}
 
 	onFilteredAppsChanged: {
@@ -2621,6 +2644,7 @@ Item {
 			Item {
 				id: searchBox
 				width: parent.width
+				opacity: root.band(0)
 				height: root.inChatMode
 					? Math.min(190, Math.max(58, searchField.contentHeight + 24))
 					: 58
@@ -2966,6 +2990,7 @@ Item {
 			Item {
 				id: plate
 				width: parent.width
+				opacity: root.band(1)
 				height: 16
 
 				BioText {
@@ -3027,6 +3052,11 @@ Item {
 					// Kept so the key handlers have something to step by; the
 					// index is one column now, so a step is one row.
 					readonly property int columns: 1
+
+					opacity: root.band(2)
+					transform: Translate {
+						x: (1 - root.band(2)) * -22
+					}
 
 					anchors.left: parent.left
 					anchors.top: parent.top
@@ -3120,7 +3150,7 @@ Item {
 					anchors.right: parent.right
 					anchors.top: parent.top
 					anchors.bottom: parent.bottom
-					opacity: colony.current ? 1 : 0
+					opacity: colony.current ? root.band(3) : 0
 
 					Behavior on opacity {
 						NumberAnimation { duration: Bio.grow }

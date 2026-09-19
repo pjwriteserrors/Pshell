@@ -3,9 +3,14 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls.impl as QQCImpl
 
-// A node: one organ of the bar. A grown ring, an icon inside it, and a halo
+// A node: one organ of the column. A grown ring, an icon inside it, and a halo
 // that comes up when it is live. Everything on the spine that can be pressed is
-// one of these, which is why the bar reads as a colony rather than a toolbar.
+// one of these, which is why the column reads as a colony rather than a
+// toolbar.
+//
+// Touched, an organ twitches: it turns a few degrees against its own ring and
+// swells, and settles back when you leave it. Nothing here slides or fades on
+// its own — live things move by contracting.
 Item {
 	id: node
 
@@ -28,6 +33,33 @@ Item {
 
 	implicitWidth: size
 	implicitHeight: size
+
+	// The twitch. The whole node turns, so the ring's own asymmetry is what
+	// reads as movement rather than a scale on a circle.
+	transform: [
+		Rotation {
+			origin.x: node.width / 2
+			origin.y: node.height / 2
+			angle: touch.live * (node.seed % 2 === 0 ? 6 : -6)
+
+			Behavior on angle {
+				NumberAnimation { duration: Bio.grow; easing.type: Easing.OutBack; easing.overshoot: 2.2 }
+			}
+		},
+		Scale {
+			origin.x: node.width / 2
+			origin.y: node.height / 2
+			xScale: 1 + touch.live * 0.08
+			yScale: 1 + touch.live * 0.08
+
+			Behavior on xScale {
+				NumberAnimation { duration: Bio.grow; easing.type: Easing.OutBack; easing.overshoot: 2.2 }
+			}
+			Behavior on yScale {
+				NumberAnimation { duration: Bio.grow; easing.type: Easing.OutBack; easing.overshoot: 2.2 }
+			}
+		}
+	]
 
 	BioGlow {
 		anchors.centerIn: parent
