@@ -2597,34 +2597,436 @@ Item {
 		ollamaVersionProcess.running = true;
 	}
 
-	ThemedRectangle {
+	// The dish: one chamber, a plate of names at the top, the probe line under
+	// it, and whatever is being cultured below. The name of what you are looking
+	// at is engraved on the chamber, so the mode is never a mystery.
+	BioSurface {
 		anchors.fill: parent
-		radius: ThemeEngine.radiusMedium
-		color: root.background
+		washTop: Bio.membrane
+		washBottom: Bio.membraneDeep
+		haloStrength: 0.20
+		intensity: 0.4
+		padding: 0
 
 		Column {
+			id: dish
 			anchors.fill: parent
-			anchors.margins: 12
-			spacing: 12
+			anchors.margins: Bio.s6
+			anchors.topMargin: Bio.s5
+			spacing: Bio.s3
 
+			// How much room the cultures get once the plate and the probe line
+			// have taken theirs.
+			readonly property real viewHeight: height - plate.height - searchBox.height - spacing * 2
+
+			Item {
+				id: plate
+				width: parent.width
+				height: 20
+
+				BioText {
+					id: plateTitle
+					anchors.left: parent.left
+					anchors.verticalCenter: parent.verticalCenter
+					role: "title"
+					font.pixelSize: 15
+					text: root.inChatMode ? "Discourse"
+						: root.inOllamaMode ? "Strains"
+						: root.inAiMode ? "Culture"
+						: root.inFileMode ? "Specimens"
+						: root.inCalculatorMode ? "Calculus"
+						: root.inCommandMode ? "Verbs"
+						: "Colony"
+				}
+
+				BioTendon {
+					anchors.left: plateTitle.right
+					anchors.right: plateCount.left
+					anchors.leftMargin: Bio.s3
+					anchors.rightMargin: Bio.s3
+					anchors.verticalCenter: parent.verticalCenter
+					height: 12
+					facing: Qt.LeftToRight
+					lineColor: Bio.boneFaint
+					visible: width > 30
+				}
+
+				BioText {
+					id: plateCount
+					anchors.right: parent.right
+					anchors.verticalCenter: parent.verticalCenter
+					role: "label"
+					tone: "faint"
+					text: root.inCommandMode ? "" : `${root.filteredApps.length}`
+				}
+			}
+
+			// The probe line. Not a search box — there is no box: a ring holds
+			// the mode's mark, the text runs on a bone line, and the line lights
+			// along its whole length while the keyboard is in it.
+			Item {
+				id: searchBox
+				width: parent.width
+				height: root.inChatMode
+					? Math.min(180, Math.max(44, searchField.contentHeight + 20))
+					: 40
+
+				Rectangle {
+					anchors.left: parent.left
+					anchors.right: parent.right
+					anchors.bottom: parent.bottom
+					height: Bio.ribThin
+					color: Bio.boneFaint
+				}
+
+				Rectangle {
+					anchors.left: parent.left
+					anchors.bottom: parent.bottom
+					width: searchField.activeFocus || root.editingMessageId !== "" ? parent.width : 0
+					height: Bio.rib
+					color: Bio.organ
+
+					Behavior on width {
+						NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
+					}
+				}
+
+				BioRing {
+					id: probeRing
+					anchors.left: parent.left
+					anchors.verticalCenter: parent.verticalCenter
+					width: 26
+					height: 26
+					seed: 1
+					lineColor: Bio.boneFaint
+					intensity: searchField.activeFocus ? 0.85 : 0
+
+					QQCImpl.IconImage {
+						id: inputCommandIcon
+						anchors.centerIn: parent
+						width: 13
+						height: 13
+						source: root.inputIconPath
+						sourceSize: Qt.size(width, height)
+						color: searchField.activeFocus ? Bio.organ : Bio.text
+					}
+				}
+
+				Item {
+					id: commandTokenBox
+					anchors.left: probeRing.right
+					anchors.leftMargin: Bio.s3
+					anchors.verticalCenter: parent.verticalCenter
+					width: visible ? Math.min(140, Math.max(30, commandTokenField.contentWidth + 14)) : 0
+					height: 24
+					visible: root.commandInputActive
+
+					BioFrame {
+						anchors.fill: parent
+						variant: "capsule"
+						beading: false
+						weight: Bio.ribThin
+						inset: 1
+						lineColor: Bio.boneFaint
+						liveColor: Bio.organ
+						fillTop: Bio.cavity
+						fillBottom: Bio.cavity
+						intensity: commandTokenField.activeFocus ? 1 : 0
+					}
+
+					TextInput {
+						id: commandTokenField
+						anchors.fill: parent
+						anchors.leftMargin: 7
+						anchors.rightMargin: 7
+						text: ">"
+						color: commandTokenField.activeFocus ? Bio.organ : Bio.textMuted
+						selectionColor: Qt.alpha(Bio.organ, 0.35)
+						selectedTextColor: Bio.text
+						cursorVisible: activeFocus
+						verticalAlignment: Text.AlignVCenter
+						clip: true
+						font.family: Bio.mono
+						font.pixelSize: 12
+
+						onTextChanged: {
+							if (root.commandInputSyncing) return;
+							if (text === "") {
+								root.leaveCommandInput("");
+								return;
+							}
+							if (!text.startsWith(">")) {
+								root.commandInputSyncing = true;
+								text = `>${text.replace(/^>+/, "")}`;
+								cursorPosition = text.length;
+								root.commandInputSyncing = false;
+							}
+							root.syncLauncherSearch();
+						}
+
+						Keys.onEscapePressed: root.closeRequested()
+						Keys.onPressed: event => {
+							if (event.key === Qt.Key_Space) {
+								root.focusCommandArgument();
+								event.accepted = true;
+								return;
+							}
+							if (event.key === Qt.Key_Backspace && commandTokenField.text === ">") {
+								root.leaveCommandInput("");
+								event.accepted = true;
+								return;
+							}
+							if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+								root.activateCurrent();
+								event.accepted = true;
+							}
+						}
+						Keys.onDownPressed: {
+							if (root.inFileMode) {
+								if (root.filteredFileBrowserEntries.length === 0) return;
+								fileBrowserList.currentIndex = Math.min(root.filteredFileBrowserEntries.length - 1, fileBrowserList.currentIndex + 1);
+								fileBrowserList.positionViewAtIndex(fileBrowserList.currentIndex, ListView.Contain);
+								return;
+							}
+							if (root.filteredCommands.length === 0) return;
+							commandList.currentIndex = Math.min(root.filteredCommands.length - 1, commandList.currentIndex + 1);
+							commandList.positionViewAtIndex(commandList.currentIndex, ListView.Contain);
+						}
+						Keys.onUpPressed: {
+							if (root.inFileMode) {
+								if (root.filteredFileBrowserEntries.length === 0) return;
+								fileBrowserList.currentIndex = Math.max(0, fileBrowserList.currentIndex - 1);
+								fileBrowserList.positionViewAtIndex(fileBrowserList.currentIndex, ListView.Contain);
+								return;
+							}
+							if (root.filteredCommands.length === 0) return;
+							commandList.currentIndex = Math.max(0, commandList.currentIndex - 1);
+							commandList.positionViewAtIndex(commandList.currentIndex, ListView.Contain);
+						}
+					}
+				}
+
+				TextArea {
+					id: searchField
+					z: 1
+					anchors.left: root.commandInputActive ? commandTokenBox.right : probeRing.right
+					anchors.leftMargin: Bio.s3
+					anchors.right: attachButton.visible ? attachButton.left : clearButton.left
+					anchors.rightMargin: Bio.s3
+					anchors.top: parent.top
+					anchors.bottom: parent.bottom
+					anchors.bottomMargin: Bio.s2
+					font.family: Bio.sans
+					font.pixelSize: Bio.sizeBody
+					color: Bio.text
+					placeholderText: root.inChatMode
+						? "Message"
+						: (root.inAiMode
+							? "Search chats"
+							: (root.inFileMode
+								? "Search files"
+								: (root.inCalculatorMode
+									? "Expression"
+									: (root.commandInputActive ? "Options" : "Search apps or type >c 5+5"))))
+					placeholderTextColor: Bio.textFaint
+					selectedTextColor: Bio.text
+					selectionColor: Qt.alpha(Bio.organ, 0.3)
+					selectByMouse: true
+					focus: true
+					cursorVisible: activeFocus
+					clip: true
+					wrapMode: root.inChatMode ? TextEdit.Wrap : TextEdit.NoWrap
+					horizontalAlignment: Text.AlignLeft
+					verticalAlignment: Text.AlignVCenter
+					background: Item {}
+					cursorDelegate: ThemedRectangle {
+						visible: searchField.activeFocus
+						width: 1
+						height: searchField.font.pixelSize + 3
+						color: root.foreground
+					}
+
+					onTextChanged: {
+						if (root.commandInputSyncing) return;
+						if (!root.commandInputActive && text.startsWith(">")) {
+							root.enterCommandInput(text, false);
+							return;
+						}
+						if (root.commandInputActive && text !== "" && !root.commandInputHasSeparator)
+							root.commandInputHasSeparator = true;
+						root.syncLauncherSearch();
+					}
+
+					onActiveFocusChanged: {
+						if (!activeFocus || !root.commandInputActive || root.commandInputHasSeparator) return;
+						root.commandInputHasSeparator = true;
+						root.syncLauncherSearch();
+					}
+
+					Keys.onEscapePressed: root.closeRequested()
+					Keys.onPressed: event => {
+						if (
+							event.key === Qt.Key_Backspace
+							&& root.commandInputActive
+							&& searchField.text === ""
+							&& searchField.cursorPosition === 0
+						) {
+							event.accepted = root.focusCommandTokenFromEmptyArgument();
+							if (event.accepted) return;
+						}
+						if (event.key !== Qt.Key_Return && event.key !== Qt.Key_Enter) return;
+						if (root.inChatMode && (event.modifiers & Qt.ShiftModifier)) {
+							searchField.insert(searchField.cursorPosition, "\n");
+							event.accepted = true;
+							return;
+						}
+						root.activateCurrent();
+						event.accepted = true;
+					}
+					Keys.onLeftPressed: event => {
+						if (root.inFileMode || root.inCalculatorMode || root.inAiMode || root.inChatMode || root.inOllamaMode || root.inCommandMode || root.filteredApps.length === 0) {
+							event.accepted = false;
+							return;
+						}
+						appList.currentIndex = Math.max(0, appList.currentIndex - 1);
+						appList.positionViewAtIndex(appList.currentIndex, GridView.Contain);
+						event.accepted = true;
+					}
+					Keys.onRightPressed: event => {
+						if (root.inFileMode || root.inCalculatorMode || root.inAiMode || root.inChatMode || root.inOllamaMode || root.inCommandMode || root.filteredApps.length === 0) {
+							event.accepted = false;
+							return;
+						}
+						appList.currentIndex = Math.min(root.filteredApps.length - 1, appList.currentIndex + 1);
+						appList.positionViewAtIndex(appList.currentIndex, GridView.Contain);
+						event.accepted = true;
+					}
+					Keys.onDownPressed: {
+						if (root.inFileMode) {
+							if (root.filteredFileBrowserEntries.length === 0) return;
+							fileBrowserList.currentIndex = Math.min(root.filteredFileBrowserEntries.length - 1, fileBrowserList.currentIndex + 1);
+							fileBrowserList.positionViewAtIndex(fileBrowserList.currentIndex, ListView.Contain);
+							return;
+						}
+						if (root.inCalculatorMode || root.inAiMode || root.inChatMode || root.inOllamaMode) return;
+						if (root.inCommandMode) {
+							if (root.filteredCommands.length === 0) return;
+							commandList.currentIndex = Math.min(root.filteredCommands.length - 1, commandList.currentIndex + 1);
+							commandList.positionViewAtIndex(commandList.currentIndex, ListView.Contain);
+							return;
+						}
+
+						if (root.filteredApps.length === 0) return;
+						appList.currentIndex = Math.min(root.filteredApps.length - 1, appList.currentIndex + appList.columns);
+						appList.positionViewAtIndex(appList.currentIndex, GridView.Contain);
+					}
+					Keys.onUpPressed: {
+						if (root.inFileMode) {
+							if (root.filteredFileBrowserEntries.length === 0) return;
+							fileBrowserList.currentIndex = Math.max(0, fileBrowserList.currentIndex - 1);
+							fileBrowserList.positionViewAtIndex(fileBrowserList.currentIndex, ListView.Contain);
+							return;
+						}
+						if (root.inCalculatorMode || root.inAiMode || root.inChatMode || root.inOllamaMode) return;
+						if (root.inCommandMode) {
+							if (root.filteredCommands.length === 0) return;
+							commandList.currentIndex = Math.max(0, commandList.currentIndex - 1);
+							commandList.positionViewAtIndex(commandList.currentIndex, ListView.Contain);
+							return;
+						}
+
+						if (root.filteredApps.length === 0) return;
+						appList.currentIndex = Math.max(0, appList.currentIndex - appList.columns);
+						appList.positionViewAtIndex(appList.currentIndex, GridView.Contain);
+					}
+				}
+
+				Item {
+					id: attachButton
+					anchors.right: clearButton.left
+					anchors.rightMargin: 4
+					anchors.verticalCenter: parent.verticalCenter
+					width: 22
+					height: 22
+					visible: root.inChatMode && !root.aiStreaming
+
+					MouseArea {
+						id: attachMouse
+						anchors.fill: parent
+						hoverEnabled: true
+						cursorShape: Qt.PointingHandCursor
+						onClicked: root.aiAttachmentPickerOpen
+							? root.closeAttachmentPicker()
+							: root.openAttachmentPicker()
+					}
+
+					QQCImpl.IconImage {
+						anchors.centerIn: parent
+						width: 14
+						height: 14
+						source: root.attachmentIconPath
+						sourceSize: Qt.size(width, height)
+						color: attachMouse.containsMouse || root.aiAttachmentPickerOpen ? Bio.organ : Bio.textMuted
+					}
+
+					ToolTip.visible: attachMouse.containsMouse
+					ToolTip.delay: 500
+					ToolTip.text: root.selectedAiSupportsVision
+						? "Attach text, document, PDF, or image"
+						: "Attach text, document, or PDF"
+				}
+
+				Item {
+					id: clearButton
+					anchors.right: parent.right
+					anchors.verticalCenter: parent.verticalCenter
+					width: 22
+					height: 22
+					visible: (root.aiStreaming && root.inChatMode) || root.commandInputActive || searchField.text !== ""
+
+					MouseArea {
+						id: clearMouse
+						anchors.fill: parent
+						hoverEnabled: true
+						cursorShape: Qt.PointingHandCursor
+						onClicked: {
+							if (root.aiStreaming && root.inChatMode) root.cancelAiStream();
+							else if (root.editingMessageId !== "") root.cancelMessageEdit();
+							else root.leaveCommandInput("");
+						}
+					}
+
+					BioText {
+						anchors.centerIn: parent
+						role: "body"
+						tone: clearMouse.containsMouse ? "organ" : "faint"
+						text: root.aiStreaming && root.inChatMode ? "■" : "×"
+					}
+
+					ToolTip.visible: clearMouse.containsMouse && root.aiStreaming && root.inChatMode
+					ToolTip.delay: 500
+					ToolTip.text: "Stop and unload model"
+				}
+			}
+
+			// The colony. Not a grid of icon tiles — every application is a
+			// specimen row: a ring holding its mark, its name engraved, and
+			// what it is in plain type behind it. Two columns, because a
+			// hundred of them in one column is a scroll and not a colony.
 			GridView {
 				id: appList
 
-				readonly property int columns: 5
+				readonly property int columns: 2
 
 				width: parent.width
-				height: parent.height - searchBox.height - 12
+				height: dish.viewHeight
 				visible: !root.inCommandMode
 				clip: true
 				cellWidth: Math.floor(width / columns)
-				cellHeight: 100
+				cellHeight: 46
 				model: root.filteredApps
 				currentIndex: model.length > 0 ? 0 : -1
 				boundsBehavior: Flickable.StopAtBounds
-
-				ScrollBar.vertical: ScrollBar {
-					policy: ScrollBar.AsNeeded
-				}
 
 				delegate: Item {
 					id: appTile
@@ -2636,60 +3038,93 @@ Item {
 					width: appList.cellWidth
 					height: appList.cellHeight
 
-					ThemedRectangle {
-						anchors.fill: parent
-						anchors.margins: 4
-						radius: ThemeEngine.radiusMedium
-						// Hovering a tile also selects it (see HoverLayer.onEntered
-						// below), so drive the background off `selected` alone. Keying
-						// it off containsMouse too made the tile flash the lighter hover
-						// colour for one frame before settling on the selected colour.
-						color: appTile.selected
-							? Qt.alpha(root.barColor, 0.24)
-							: "transparent"
-						border.width: appTile.selected ? 1 : 0
-						border.color: Qt.alpha(root.barColor, 0.6)
+					BioGlow {
+						anchors.centerIn: parent
+						width: parent.width
+						height: parent.height * 1.6
+						color: Bio.organ
+						strength: 0.20
+						spread: 0.34
+						opacity: appTile.selected ? 1 : 0
+						visible: opacity > 0.01
 
-						Behavior on color {
-							CAnim {}
+						Behavior on opacity {
+							NumberAnimation { duration: Bio.grow }
 						}
+					}
 
-						Column {
+					// The vein: the whole selection state in one stroke, the
+					// same one a list row uses everywhere else in this style.
+					Rectangle {
+						anchors.left: parent.left
+						anchors.leftMargin: Bio.s1
+						anchors.verticalCenter: parent.verticalCenter
+						width: Bio.rib * 1.6
+						height: parent.height * (appTile.selected ? 0.7 : 0.24)
+						radius: width / 2
+						color: Bio.organ
+						opacity: appTile.selected ? 1 : 0
+
+						Behavior on opacity {
+							NumberAnimation { duration: Bio.twitch }
+						}
+						Behavior on height {
+							NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
+						}
+					}
+
+					BioRing {
+						id: appRing
+						anchors.left: parent.left
+						anchors.leftMargin: Bio.s3
+						anchors.verticalCenter: parent.verticalCenter
+						width: 32
+						height: 32
+						seed: appTile.index % 4
+						lineColor: Bio.boneGhost
+						intensity: appTile.selected ? 1 : 0
+
+						Image {
 							anchors.centerIn: parent
-							spacing: 8
-							width: parent.width - 16
+							width: 17
+							height: 17
+							source: root.iconSource(appTile.modelData)
+							sourceSize: Qt.size(width, height)
+							fillMode: Image.PreserveAspectFit
+							smooth: true
+							mipmap: true
+						}
+					}
 
-							Image {
-								anchors.horizontalCenter: parent.horizontalCenter
-								width: 40
-								height: 40
-								source: root.iconSource(appTile.modelData)
-								sourceSize: Qt.size(width, height)
-								fillMode: Image.PreserveAspectFit
-								smooth: true
-								mipmap: true
-							}
+					Column {
+						anchors.left: appRing.right
+						anchors.leftMargin: Bio.s3
+						anchors.right: parent.right
+						anchors.rightMargin: Bio.s4
+						anchors.verticalCenter: parent.verticalCenter
+						spacing: -1
 
-							Text {
-								width: parent.width
-								horizontalAlignment: Text.AlignHCenter
-								color: root.foreground
-								font.pixelSize: 11
-								font.weight: appTile.selected ? Font.DemiBold : Font.Medium
-								elide: Text.ElideRight
-								maximumLineCount: 1
-								text: appTile.modelData.name || appTile.modelData.id || "App"
-							}
+						BioText {
+							width: parent.width
+							role: "heading"
+							font.pixelSize: 13
+							tone: appTile.selected ? "organ" : "default"
+							text: appTile.modelData.name || appTile.modelData.id || "App"
 						}
 
-						HoverLayer {
-							id: tileHover
-							tint: root.foreground
-							showHover: false
-							rippleEnabled: false
-							onEntered: appList.currentIndex = appTile.index
-							onClicked: root.launchApp(appTile.modelData)
+						BioText {
+							width: parent.width
+							role: "caption"
+							tone: "faint"
+							visible: text !== ""
+							text: appTile.modelData.genericName || appTile.modelData.comment || ""
 						}
+					}
+
+					BioTouch {
+						id: tileHover
+						onEntered: appList.currentIndex = appTile.index
+						onClicked: root.launchApp(appTile.modelData)
 					}
 				}
 			}
@@ -2697,7 +3132,7 @@ Item {
 			ListView {
 				id: commandList
 				width: parent.width
-				height: parent.height - searchBox.height - 12
+				height: dish.viewHeight
 				visible: root.inCommandMode
 					&& !root.inCalculatorMode
 					&& !root.inAiMode
@@ -2710,61 +3145,62 @@ Item {
 				currentIndex: model.length > 0 ? 0 : -1
 				boundsBehavior: Flickable.StopAtBounds
 
-				delegate: ThemedRectangle {
+				// A verb: the word you type in mono, what it does underneath,
+				// and a ring that lights when it is the one under the cursor.
+				delegate: BioRow {
 					id: commandRow
 
 					required property var modelData
 					required property int index
 
 					width: commandList.width
-					height: 54
-					radius: ThemeEngine.radiusMedium
-					color: commandList.currentIndex === index
-						? root.secondaryBoxStrongColor
-						: (commandMouse.containsMouse ? root.secondaryBoxColor : "transparent")
-
-					MouseArea {
-						id: commandMouse
-						anchors.fill: parent
-						hoverEnabled: true
-						cursorShape: Qt.PointingHandCursor
-						onEntered: commandList.currentIndex = parent.index
-						onClicked: root.launchCommand(parent.modelData)
+					implicitHeight: 48
+					inset: Bio.s3
+					selected: commandList.currentIndex === commandRow.index
+					onClicked: root.launchCommand(commandRow.modelData)
+					onContainsMouseChanged: {
+						if (containsMouse) commandList.currentIndex = commandRow.index;
 					}
 
-					QQCImpl.IconImage {
+					BioRing {
+						id: commandRing
 						anchors.left: parent.left
-						anchors.leftMargin: 10
 						anchors.verticalCenter: parent.verticalCenter
-						width: 22
-						height: 22
-						source: root.commandIconSource(commandRow.modelData)
-						sourceSize: Qt.size(width, height)
-						color: root.foreground
+						width: 30
+						height: 30
+						seed: commandRow.index % 4
+						lineColor: Bio.boneGhost
+						intensity: commandRow.selected ? 1 : 0
+
+						QQCImpl.IconImage {
+							anchors.centerIn: parent
+							width: 15
+							height: 15
+							source: root.commandIconSource(commandRow.modelData)
+							sourceSize: Qt.size(width, height)
+							color: commandRow.selected ? Bio.organ : Bio.text
+						}
 					}
 
 					Column {
-						anchors.left: parent.left
-						anchors.leftMargin: 42
+						anchors.left: commandRing.right
+						anchors.leftMargin: Bio.s3
 						anchors.right: parent.right
-						anchors.rightMargin: 10
 						anchors.verticalCenter: parent.verticalCenter
-						spacing: 2
+						spacing: -1
 
-						Text {
+						BioText {
 							width: parent.width
-							color: root.foreground
+							role: "mono"
 							font.pixelSize: 13
-							font.weight: Font.Medium
-							elide: Text.ElideRight
+							color: commandRow.selected ? Bio.organ : Bio.text
 							text: `>${commandRow.modelData.command || commandRow.modelData.id || "command"}`
 						}
 
-						Text {
+						BioText {
 							width: parent.width
-							color: Qt.alpha(root.foreground, 0.58)
-							font.pixelSize: 11
-							elide: Text.ElideRight
+							role: "caption"
+							tone: "faint"
 							text: `${commandRow.modelData.name || "Command"} · ${commandRow.modelData.description || ""}`
 						}
 					}
@@ -2778,7 +3214,7 @@ Item {
 			Item {
 				id: calculatorPanel
 				width: parent.width
-				height: parent.height - searchBox.height - 12
+				height: dish.viewHeight
 				visible: root.inCalculatorMode
 
 				MouseArea {
@@ -2788,42 +3224,59 @@ Item {
 					onClicked: root.launchCommand(root.calculatorCommand())
 				}
 
+				// The result is the specimen here: it is engraved at the size
+				// of the thing you came for, with the expression above it as a
+				// label and the outcome of the reaction underneath.
+				BioGlow {
+					anchors.centerIn: parent
+					width: parent.width * 0.9
+					height: parent.height * 0.7
+					color: root.calculatorEvaluation.valid ? Bio.organ : Bio.necrosis
+					strength: 0.14
+					spread: 0.4
+				}
+
 				Column {
 					width: parent.width
 					anchors.centerIn: parent
-					spacing: 12
+					spacing: Bio.s3
 
-					Text {
+					BioText {
 						width: parent.width
-						color: Qt.alpha(root.foreground, 0.58)
+						role: "label"
+						tone: "muted"
 						text: root.calculatorExpression
 						visible: text !== ""
 						horizontalAlignment: Text.AlignHCenter
-						elide: Text.ElideRight
-						font.pixelSize: 16
-						font.weight: Font.Medium
 					}
 
-					Text {
+					BioText {
 						width: parent.width
-						color: root.calculatorEvaluation.valid ? root.foreground : Qt.alpha(root.foreground, 0.68)
-						text: root.calculatorEvaluation.valid ? root.calculatorEvaluation.result : "Calculator"
+						role: "specimen"
+						tone: root.calculatorEvaluation.valid ? "default" : "muted"
+						text: root.calculatorEvaluation.valid ? root.calculatorEvaluation.result : "Calculus"
 						horizontalAlignment: Text.AlignHCenter
 						elide: Text.ElideMiddle
-						font.pixelSize: 58
-						font.weight: Font.DemiBold
+						font.pixelSize: 56
 						fontSizeMode: Text.Fit
 						minimumPixelSize: 24
 					}
 
-					Text {
+					BioTendon {
+						width: parent.width * 0.5
+						anchors.horizontalCenter: parent.horizontalCenter
+						height: 12
+						facing: Qt.LeftToRight
+						lineColor: root.calculatorEvaluation.valid ? Qt.alpha(Bio.organ, 0.6) : Bio.boneGhost
+					}
+
+					BioText {
 						width: parent.width
-						color: root.calculatorEvaluation.valid ? Qt.alpha(root.foreground, 0.58) : root.danger
-						text: root.calculatorEvaluation.valid ? "Press Enter to copy" : root.calculatorEvaluation.message
+						role: "label"
+						tone: root.calculatorEvaluation.valid ? "faint" : "alert"
+						text: root.calculatorEvaluation.valid ? "Enter to extract" : root.calculatorEvaluation.message
 						horizontalAlignment: Text.AlignHCenter
 						wrapMode: Text.WordWrap
-						font.pixelSize: 13
-						font.weight: Font.Medium
 					}
 				}
 			}
@@ -2831,73 +3284,52 @@ Item {
 			Item {
 				id: filePanel
 				width: parent.width
-				height: parent.height - searchBox.height - 12
+				height: dish.viewHeight
 				visible: root.inFileMode
 
 				Column {
 					anchors.fill: parent
 					spacing: 8
 
-					ThemedRectangle {
+					Item {
 						id: fileHeader
 						width: parent.width
-						height: 36
-						radius: ThemeEngine.radiusMedium
-						color: root.secondaryInsetColor
+						height: 32
 
-						ThemedRectangle {
+						BioNode {
 							id: fileUpButton
 							anchors.left: parent.left
-							anchors.leftMargin: 5
 							anchors.verticalCenter: parent.verticalCenter
-							width: 26
-							height: 26
-							radius: ThemeEngine.radiusMedium
-							color: fileUpMouse.containsMouse ? root.secondaryBoxStrongColor : "transparent"
+							size: 26
+							seed: 1
+							onClicked: root.fileBrowserDirectory = root.attachmentParentDirectory(root.fileBrowserDirectory)
 
-							MouseArea {
-								id: fileUpMouse
-								anchors.fill: parent
-								hoverEnabled: true
-								cursorShape: Qt.PointingHandCursor
-								onClicked: root.fileBrowserDirectory = root.attachmentParentDirectory(root.fileBrowserDirectory)
-							}
-
-							Text {
+							BioText {
 								anchors.centerIn: parent
-								color: root.foreground
+								role: "heading"
 								text: "↑"
-								font.pixelSize: 16
-								font.weight: Font.DemiBold
 							}
-
-							ToolTip.visible: fileUpMouse.containsMouse
-							ToolTip.delay: 500
-							ToolTip.text: "Parent folder"
 						}
 
-						Text {
+						BioText {
 							anchors.left: fileUpButton.right
-							anchors.leftMargin: 8
+							anchors.leftMargin: Bio.s3
 							anchors.right: fileOpenCurrentButton.left
-							anchors.rightMargin: 8
+							anchors.rightMargin: Bio.s3
 							anchors.verticalCenter: parent.verticalCenter
-							color: root.foreground
+							role: "mono"
+							tone: "muted"
+							font.pixelSize: 11
 							text: root.fileBrowserDirectory
 							elide: Text.ElideMiddle
-							font.pixelSize: 12
-							font.weight: Font.DemiBold
 						}
 
-						ThemedRectangle {
+						BioNode {
 							id: fileOpenCurrentButton
 							anchors.right: parent.right
-							anchors.rightMargin: 5
 							anchors.verticalCenter: parent.verticalCenter
-							width: 26
-							height: 26
-							radius: ThemeEngine.radiusMedium
-							color: fileOpenCurrentMouse.containsMouse ? root.secondaryBoxStrongColor : "transparent"
+							size: 26
+							seed: 3
 
 							MouseArea {
 								id: fileOpenCurrentMouse
@@ -2936,70 +3368,46 @@ Item {
 								{ name: "Pictures", path: `${Quickshell.env("HOME")}/Pictures` }
 							]
 
-							delegate: ThemedRectangle {
+							delegate: BioButton {
 								id: fileShortcut
 
 								required property var modelData
 
-								width: fileShortcutText.implicitWidth + 20
-								height: 26
-								radius: ThemeEngine.radiusMedium
-								color: root.fileBrowserDirectory === String(modelData.path)
-									? root.secondaryBoxStrongColor
-									: (fileShortcutMouse.containsMouse ? root.secondaryBoxColor : "transparent")
-
-								MouseArea {
-									id: fileShortcutMouse
-									anchors.fill: parent
-									hoverEnabled: true
-									cursorShape: Qt.PointingHandCursor
-									onClicked: root.fileBrowserDirectory = String(fileShortcut.modelData.path)
-								}
-
-								Text {
-									id: fileShortcutText
-									anchors.centerIn: parent
-									color: root.foreground
-									text: String(fileShortcut.modelData.name)
-									font.pixelSize: 10
-									font.weight: Font.Medium
-								}
+								implicitHeight: 26
+								lit: root.fileBrowserDirectory === String(fileShortcut.modelData.path)
+								text: String(fileShortcut.modelData.name)
+								onClicked: root.fileBrowserDirectory = String(fileShortcut.modelData.path)
 							}
 						}
 
-						Text {
+						BioText {
 							anchors.verticalCenter: parent.verticalCenter
 							width: Math.max(0, parent.width - x)
-							color: Qt.alpha(root.foreground, 0.5)
+							role: "label"
+							tone: "faint"
 							text: root.fileBrowserSearchQuery === ""
-								? `${root.fileBrowserEntries.length} items`
+								? `${root.fileBrowserEntries.length} specimens`
 								: `${root.filteredFileBrowserEntries.length} matches`
 							horizontalAlignment: Text.AlignRight
 							elide: Text.ElideLeft
-							font.pixelSize: 9
-							font.weight: Font.Medium
 						}
 					}
 
-					ThemedRectangle {
+					Item {
 						width: parent.width
 						height: parent.height - fileHeader.height - fileShortcutRow.height - parent.spacing * 2
-						radius: ThemeEngine.radiusMedium
-						color: root.background
-						border.width: 1
-						border.color: Qt.alpha(root.barColor, 0.18)
 
 						ListView {
 							id: fileBrowserList
 							anchors.fill: parent
-							anchors.margins: 6
+							anchors.topMargin: Bio.s2
 							clip: true
 							spacing: 4
 							model: root.filteredFileBrowserEntries
 							currentIndex: model.length > 0 ? 0 : -1
 							boundsBehavior: Flickable.StopAtBounds
 
-							delegate: ThemedRectangle {
+							delegate: BioRow {
 								id: fileRow
 
 								required property var modelData
@@ -3007,74 +3415,76 @@ Item {
 								readonly property var file: modelData || ({})
 
 								width: fileBrowserList.width
-								height: 44
-								radius: ThemeEngine.radiusMedium
-								color: fileBrowserList.currentIndex === index
-									? root.secondaryBoxStrongColor
-									: (fileMouse.containsMouse ? root.secondaryBoxColor : "transparent")
-
-								MouseArea {
-									id: fileMouse
-									anchors.fill: parent
-									hoverEnabled: true
-									cursorShape: Qt.PointingHandCursor
-									onEntered: fileBrowserList.currentIndex = fileRow.index
-									onClicked: root.openFileBrowserEntry(fileRow.file)
+								implicitHeight: 40
+								inset: Bio.s2
+								selected: fileBrowserList.currentIndex === fileRow.index
+								onClicked: root.openFileBrowserEntry(fileRow.file)
+								onContainsMouseChanged: {
+									if (containsMouse) fileBrowserList.currentIndex = fileRow.index;
 								}
 
-								Image {
-									visible: Boolean(fileRow.file.isImage)
+								Item {
+									id: fileMark
 									anchors.left: parent.left
-									anchors.leftMargin: 7
 									anchors.verticalCenter: parent.verticalCenter
-									width: 30
-									height: 30
-									source: fileRow.file.isImage
-										? root.resolveMarkdownImageSource(fileRow.file.path)
-										: ""
-									fillMode: Image.PreserveAspectCrop
-									smooth: true
-									cache: true
-									asynchronous: true
-								}
+									width: 28
+									height: 28
 
-								QQCImpl.IconImage {
-									visible: !fileRow.file.isImage
-									anchors.left: parent.left
-									anchors.leftMargin: 10
-									anchors.verticalCenter: parent.verticalCenter
-									width: 20
-									height: 20
-									source: fileRow.file.isDir ? root.folderIconPath : root.attachmentIconPath
-									sourceSize: Qt.size(width, height)
-									color: root.foreground
+									BioRing {
+										anchors.fill: parent
+										seed: fileRow.index % 4
+										lineColor: Bio.boneGhost
+										intensity: fileRow.selected ? 1 : 0
+									}
+
+									Image {
+										visible: Boolean(fileRow.file.isImage)
+										anchors.centerIn: parent
+										width: 20
+										height: 20
+										source: fileRow.file.isImage
+											? root.resolveMarkdownImageSource(fileRow.file.path)
+											: ""
+										fillMode: Image.PreserveAspectCrop
+										smooth: true
+										cache: true
+										asynchronous: true
+									}
+
+									QQCImpl.IconImage {
+										visible: !fileRow.file.isImage
+										anchors.centerIn: parent
+										width: 14
+										height: 14
+										source: fileRow.file.isDir ? root.folderIconPath : root.attachmentIconPath
+										sourceSize: Qt.size(width, height)
+										color: fileRow.selected ? Bio.organ : Bio.text
+									}
 								}
 
 								Column {
-									anchors.left: parent.left
-									anchors.leftMargin: 45
+									anchors.left: fileMark.right
+									anchors.leftMargin: Bio.s3
 									anchors.right: fileFolderOpenButton.left
-									anchors.rightMargin: 8
+									anchors.rightMargin: Bio.s2
 									anchors.verticalCenter: parent.verticalCenter
-									spacing: 1
+									spacing: -1
 
-									Text {
+									BioText {
 										width: parent.width
-										color: root.foreground
+										role: "bodyStrong"
+										tone: fileRow.selected ? "organ" : "default"
 										text: String(fileRow.file.name || "")
 										elide: Text.ElideMiddle
-										font.pixelSize: 12
-										font.weight: Font.Medium
 									}
 
-									Text {
+									BioText {
 										width: parent.width
-										color: Qt.alpha(root.foreground, 0.5)
+										role: "caption"
+										tone: "faint"
 										text: fileRow.file.isDir
-											? "Folder"
+											? "Colony"
 											: `${fileRow.file.suffix || "file"} · ${root.formatAttachmentSize(fileRow.file.size)}`
-										elide: Text.ElideRight
-										font.pixelSize: 9
 									}
 								}
 
@@ -3118,7 +3528,8 @@ Item {
 							}
 						}
 
-						Text {
+						BioText {
+							role: "body"
 							anchors.centerIn: parent
 							width: parent.width - 40
 							visible: fileBrowserList.count === 0
@@ -3140,184 +3551,151 @@ Item {
 			Item {
 				id: aiPanel
 				width: parent.width
-				height: parent.height - searchBox.height - 12
+				height: dish.viewHeight
 				visible: root.inAiMode
 
 				Column {
 					anchors.fill: parent
 					spacing: 10
 
-					Row {
+					Item {
 						width: parent.width
-						height: 28
-						spacing: 8
+						height: 24
 
-						Text {
-							width: parent.width - newChatButton.width - parent.spacing
+						BioText {
+							id: chatsHeading
+							anchors.left: parent.left
 							anchors.verticalCenter: parent.verticalCenter
-							color: root.foreground
-							text: "Chats"
-							elide: Text.ElideRight
-							font.pixelSize: 15
-							font.weight: Font.DemiBold
+							role: "label"
+							tone: "muted"
+							text: "Cultures"
 						}
 
-						ThemedRectangle {
-							id: newChatButton
+						BioTendon {
+							anchors.left: chatsHeading.right
+							anchors.right: newChatButton.left
+							anchors.leftMargin: Bio.s3
+							anchors.rightMargin: Bio.s3
 							anchors.verticalCenter: parent.verticalCenter
-							width: 92
-							height: 24
-							radius: ThemeEngine.radiusMedium
-							color: newChatMouse.containsMouse ? root.secondaryBoxStrongColor : root.secondaryBoxColor
+							height: 12
+							facing: Qt.LeftToRight
+							lineColor: Bio.boneFaint
+							visible: width > 24
+						}
 
-							MouseArea {
-								id: newChatMouse
-								anchors.fill: parent
-								hoverEnabled: true
-								cursorShape: Qt.PointingHandCursor
-								onClicked: root.startNewChat()
-							}
-
-							Text {
-								anchors.left: parent.left
-								anchors.leftMargin: 9
-								anchors.verticalCenter: parent.verticalCenter
-								color: root.foreground
-								text: "+"
-								font.pixelSize: 16
-								font.weight: Font.DemiBold
-							}
-
-							Text {
-								anchors.left: parent.left
-								anchors.leftMargin: 28
-								anchors.verticalCenter: parent.verticalCenter
-								color: root.foreground
-								text: "New chat"
-								font.pixelSize: 11
-								font.weight: Font.DemiBold
-							}
+						BioButton {
+							id: newChatButton
+							anchors.right: parent.right
+							anchors.verticalCenter: parent.verticalCenter
+							implicitHeight: 24
+							text: "Inoculate"
+							onClicked: root.startNewChat()
 						}
 					}
 
-					ThemedRectangle {
+					Item {
 						width: parent.width
-						height: parent.height - 38 - (aiPanelError.visible ? aiPanelError.implicitHeight + 10 : 0)
-						radius: ThemeEngine.radiusMedium
-						color: root.background
-						border.width: 1
-						border.color: Qt.alpha(root.barColor, 0.18)
+						height: parent.height - 34 - (aiPanelError.visible ? aiPanelError.implicitHeight + 10 : 0)
 
 						ListView {
 							id: pastChatList
 							anchors.fill: parent
-							anchors.margins: 6
 							clip: true
 							spacing: 4
 							model: root.filteredAiChats
 							boundsBehavior: Flickable.StopAtBounds
 
-							delegate: ThemedRectangle {
+							delegate: BioRow {
 								id: pastChatRow
 
 								required property var modelData
 								required property int index
-								readonly property bool selected: String(modelData.id || "") === root.activeChatId
+								readonly property bool active: String(pastChatRow.modelData.id || "") === root.activeChatId
 
 								width: pastChatList.width
-								height: 52
-								radius: ThemeEngine.radiusMedium
-								color: selected
-									? root.secondaryBoxStrongColor
-									: (pastChatMouse.containsMouse ? root.secondaryBoxColor : "transparent")
-
-								MouseArea {
-									id: pastChatMouse
-									anchors.fill: parent
-									hoverEnabled: true
-									cursorShape: Qt.PointingHandCursor
-									onClicked: root.openPastChat(pastChatRow.modelData)
-								}
+								implicitHeight: 46
+								inset: Bio.s3
+								selected: pastChatRow.active
+								onClicked: root.openPastChat(pastChatRow.modelData)
 
 								Column {
 									anchors.left: parent.left
-									anchors.leftMargin: 10
 									anchors.right: deleteChatButton.left
-									anchors.rightMargin: 10
+									anchors.rightMargin: Bio.s3
 									anchors.verticalCenter: parent.verticalCenter
-									spacing: 2
+									spacing: -1
 
-									Text {
+									BioText {
 										width: parent.width
-										color: root.foreground
-										text: pastChatRow.modelData.title || "Untitled chat"
-										elide: Text.ElideRight
-										font.pixelSize: 12
-										font.weight: Font.Medium
+										role: "bodyStrong"
+										tone: pastChatRow.active ? "organ" : "default"
+										text: pastChatRow.modelData.title || "Untitled culture"
 									}
 
-									Text {
+									BioText {
 										width: parent.width
-										color: Qt.alpha(root.foreground, 0.5)
-										text: `${pastChatRow.modelData.model || "Unknown model"} · ${root.formatChatTime(pastChatRow.modelData.updatedAt)}`
-										elide: Text.ElideRight
-										font.pixelSize: 10
+										role: "caption"
+										tone: "faint"
+										text: `${pastChatRow.modelData.model || "Unknown strain"} · ${root.formatChatTime(pastChatRow.modelData.updatedAt)}`
 									}
 								}
 
-								ThemedRectangle {
+								Item {
 									id: deleteChatButton
 									anchors.right: parent.right
-									anchors.rightMargin: 8
 									anchors.verticalCenter: parent.verticalCenter
-									width: 26
-									height: 26
-									radius: ThemeEngine.radiusMedium
+									width: 22
+									height: 22
 									z: 2
-									color: deleteChatMouse.containsMouse ? root.secondaryBoxStrongColor : "transparent"
 									opacity: root.aiStreaming && String(pastChatRow.modelData.id || "") === root.aiStreamingChatId ? 0.4 : 1
 
-									MouseArea {
-										id: deleteChatMouse
-										anchors.fill: parent
-										hoverEnabled: true
-										cursorShape: Qt.PointingHandCursor
-										enabled: !(root.aiStreaming && String(pastChatRow.modelData.id || "") === root.aiStreamingChatId)
-										onClicked: root.deleteChat(pastChatRow.modelData)
+									BioText {
+										anchors.centerIn: parent
+										role: "body"
+										tone: deleteChatMouse.containsMouse ? "alert" : "faint"
+										text: "×"
 									}
 
-									Text {
-										anchors.centerIn: parent
-										color: root.foreground
-										text: "󰆴"
-										font.family: "CaskaydiaCove Nerd Font"
-										font.pixelSize: 15
+									BioTouch {
+										id: deleteChatMouse
+										enabled: !(root.aiStreaming && String(pastChatRow.modelData.id || "") === root.aiStreamingChatId)
+										onClicked: root.deleteChat(pastChatRow.modelData)
 									}
 								}
 							}
 						}
 
-						Text {
+						Column {
 							anchors.centerIn: parent
-							width: parent.width - 40
+							spacing: Bio.s3
 							visible: root.filteredAiChats.length === 0
-							color: Qt.alpha(root.foreground, 0.5)
-							text: root.chatsSearchQuery === "" ? "No saved chats" : "No matching chats"
-							horizontalAlignment: Text.AlignHCenter
-							font.pixelSize: 12
-							font.weight: Font.Medium
+
+							BioSigil {
+								anchors.horizontalCenter: parent.horizontalCenter
+								width: 48
+								height: 48
+								seed: 31
+								lineColor: Bio.boneGhost
+							}
+
+							BioText {
+								anchors.horizontalCenter: parent.horizontalCenter
+								role: "label"
+								tone: "faint"
+								text: root.chatsSearchQuery === "" ? "No cultures kept" : "No matches"
+							}
 						}
 					}
 
-					Text {
+					BioText {
 						id: aiPanelError
 						width: parent.width
 						visible: root.aiError !== ""
-						color: root.danger
+						role: "caption"
+						tone: "alert"
 						text: root.aiError
 						horizontalAlignment: Text.AlignHCenter
-						font.pixelSize: 11
-						font.weight: Font.Medium
+						wrapMode: Text.WordWrap
 					}
 				}
 			}
@@ -3325,7 +3703,7 @@ Item {
 			Item {
 				id: ollamaPanel
 				width: parent.width
-				height: parent.height - searchBox.height - 12
+				height: dish.viewHeight
 				visible: root.inOllamaMode
 
 				Row {
@@ -3336,38 +3714,32 @@ Item {
 					height: 26
 					spacing: 8
 
-					Text {
+					BioText {
+						role: "label"
+						tone: "muted"
 						width: parent.width - ollamaRefreshButton.width - parent.spacing
 						anchors.verticalCenter: parent.verticalCenter
-						color: root.foreground
-						text: "Ollama models"
-						elide: Text.ElideRight
-						font.pixelSize: 15
-						font.weight: Font.DemiBold
+						text: "Strains held"
 					}
 
-					ThemedRectangle {
+					BioNode {
 						id: ollamaRefreshButton
 						anchors.verticalCenter: parent.verticalCenter
-						width: 26
-						height: 26
-						radius: ThemeEngine.radiusMedium
-						color: ollamaRefreshMouse.containsMouse ? root.secondaryBoxStrongColor : "transparent"
+						size: 26
+						seed: 2
+						onClicked: root.refreshOllamaOverview()
+
+						BioText {
+							anchors.centerIn: parent
+							role: "heading"
+							text: "↻"
+						}
 
 						MouseArea {
 							id: ollamaRefreshMouse
 							anchors.fill: parent
+							acceptedButtons: Qt.NoButton
 							hoverEnabled: true
-							cursorShape: Qt.PointingHandCursor
-							onClicked: root.refreshOllamaOverview()
-						}
-
-						Text {
-							anchors.centerIn: parent
-							color: root.foreground
-							text: "↻"
-							font.pixelSize: 16
-							font.weight: Font.DemiBold
 						}
 
 						ToolTip.visible: ollamaRefreshMouse.containsMouse
@@ -3376,15 +3748,13 @@ Item {
 					}
 				}
 
-				ThemedRectangle {
+				Item {
 					id: ollamaPullBox
 					anchors.left: parent.left
 					anchors.right: parent.right
 					anchors.top: ollamaTitleRow.bottom
 					anchors.topMargin: 8
 					height: root.ollamaPulling ? 76 : 42
-					radius: ThemeEngine.radiusMedium
-					color: root.secondaryInsetColor
 
 					Behavior on height {
 						NumberAnimation {
@@ -3393,60 +3763,69 @@ Item {
 						}
 					}
 
+					// A strain to bring in: typed on a bone line, grafted with
+					// the verb beside it.
 					TextField {
 						id: ollamaPullField
 						anchors.left: parent.left
-						anchors.leftMargin: 8
 						anchors.right: ollamaPullButton.left
-						anchors.rightMargin: 8
+						anchors.rightMargin: Bio.s3
 						anchors.top: parent.top
-						anchors.topMargin: 7
-						height: 28
+						height: 30
 						text: root.ollamaPullModel
-						color: root.foreground
-						placeholderText: "Model to pull, for example qwen3:4b"
-						placeholderTextColor: Qt.alpha(root.foreground, 0.45)
-						selectedTextColor: root.foreground
-						selectionColor: Qt.alpha(root.barColor, 0.3)
-						font.pixelSize: 11
-						leftPadding: 9
-						rightPadding: 9
+						font.family: Bio.sans
+						font.pixelSize: Bio.sizeCaption
+						color: Bio.text
+						placeholderText: "Strain to bring in, for example qwen3:4b"
+						placeholderTextColor: Bio.textFaint
+						selectedTextColor: Bio.text
+						selectionColor: Qt.alpha(Bio.organ, 0.3)
 						enabled: !root.ollamaPulling
 						onTextChanged: root.ollamaPullModel = text
 						onAccepted: root.startOllamaPull(text)
 
-						background: ThemedRectangle {
-							radius: ThemeEngine.radiusMedium
-							color: root.secondaryBoxColor
-							border.width: ollamaPullField.activeFocus ? 1 : 0
-							border.color: Qt.alpha(root.barColor, 0.7)
+						background: Item {
+							Rectangle {
+								anchors.left: parent.left
+								anchors.right: parent.right
+								anchors.bottom: parent.bottom
+								height: Bio.ribThin
+								color: Bio.boneFaint
+							}
+
+							Rectangle {
+								anchors.left: parent.left
+								anchors.bottom: parent.bottom
+								width: ollamaPullField.activeFocus ? parent.width : 0
+								height: Bio.rib
+								color: Bio.organ
+
+								Behavior on width {
+									NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
+								}
+							}
 						}
 					}
 
-					ThemedRectangle {
+					Item {
 						id: ollamaPullButton
 						anchors.right: parent.right
-						anchors.rightMargin: 8
 						anchors.top: parent.top
-						anchors.topMargin: 7
-						width: 58
-						height: 28
-						radius: ThemeEngine.radiusMedium
+						width: 62
+						height: 30
 						opacity: root.ollamaPullModel.trim() !== "" && !root.ollamaPulling ? 1 : 0.45
-						color: ollamaPullMouse.containsMouse ? root.secondaryBoxStrongColor : root.secondaryBoxColor
 
-						MouseArea {
+						BioTouch {
 							id: ollamaPullMouse
-							anchors.fill: parent
 							enabled: root.ollamaPullModel.trim() !== "" && !root.ollamaPulling
-							hoverEnabled: true
 							cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
 							onClicked: root.startOllamaPull(root.ollamaPullModel)
 						}
 
-						Text {
+						BioText {
+							role: "label"
 							anchors.centerIn: parent
-							color: root.foreground
+							tone: ollamaPullMouse.containsMouse ? "organ" : "muted"
 							text: "Pull"
 							font.pixelSize: 11
 							font.weight: Font.DemiBold
@@ -3463,7 +3842,8 @@ Item {
 						height: 26
 						visible: root.ollamaPulling
 
-						Text {
+						BioText {
+							role: "label"
 							anchors.left: parent.left
 							anchors.right: ollamaPullDetails.left
 							anchors.rightMargin: 8
@@ -3475,7 +3855,8 @@ Item {
 							font.weight: Font.Medium
 						}
 
-						Text {
+						BioText {
+							role: "label"
 							id: ollamaPullDetails
 							anchors.right: parent.right
 							anchors.top: parent.top
@@ -3515,35 +3896,42 @@ Item {
 					anchors.right: parent.right
 					anchors.top: ollamaPullBox.bottom
 					anchors.topMargin: 8
-					height: 38
-					radius: ThemeEngine.radiusMedium
-					color: root.secondaryInsetColor
+					height: 30
 
-					Text {
+					BioText {
+						id: ollamaRunningLabel
 						anchors.left: parent.left
-						anchors.leftMargin: 10
 						anchors.verticalCenter: parent.verticalCenter
-						color: root.foreground
-						text: "Running"
-						font.pixelSize: 11
-						font.weight: Font.DemiBold
+						role: "label"
+						tone: "muted"
+						text: "Awake"
 					}
 
-					Text {
-						anchors.left: parent.left
-						anchors.leftMargin: 70
-						anchors.right: parent.right
-						anchors.rightMargin: 10
+					BioTendon {
+						anchors.left: ollamaRunningLabel.right
+						anchors.right: ollamaRunningSummary.left
+						anchors.leftMargin: Bio.s3
+						anchors.rightMargin: Bio.s3
 						anchors.verticalCenter: parent.verticalCenter
-						color: Qt.alpha(root.foreground, 0.58)
+						height: 12
+						facing: Qt.LeftToRight
+						lineColor: Bio.boneFaint
+						visible: width > 24
+					}
+
+					BioText {
+						id: ollamaRunningSummary
+						anchors.right: parent.right
+						anchors.verticalCenter: parent.verticalCenter
+						width: Math.min(implicitWidth, parent.width * 0.6)
+						horizontalAlignment: Text.AlignRight
+						role: "caption"
+						tone: "faint"
 						text: root.ollamaRunningSummary()
-						elide: Text.ElideRight
-						font.pixelSize: 10
-						font.weight: Font.Medium
 					}
 				}
 
-				ThemedRectangle {
+				Item {
 					id: ollamaInstalledBox
 					anchors.left: parent.left
 					anchors.right: parent.right
@@ -3551,20 +3939,13 @@ Item {
 					anchors.topMargin: 8
 					anchors.bottom: ollamaManagerErrorText.top
 					anchors.bottomMargin: ollamaManagerErrorText.visible ? 6 : 0
-					radius: ThemeEngine.radiusMedium
-					color: root.background
-					border.width: 1
-					border.color: Qt.alpha(root.barColor, 0.18)
 
-					Text {
+					BioText {
 						anchors.left: parent.left
-						anchors.leftMargin: 10
 						anchors.top: parent.top
-						anchors.topMargin: 7
-						color: root.foreground
-						text: `Installed · ${root.aiModels.length}`
-						font.pixelSize: 11
-						font.weight: Font.DemiBold
+						role: "label"
+						tone: "muted"
+						text: `Held · ${root.aiModels.length}`
 					}
 
 					ListView {
@@ -3580,7 +3961,7 @@ Item {
 						model: root.aiModels
 						boundsBehavior: Flickable.StopAtBounds
 
-						delegate: ThemedRectangle {
+						delegate: BioRow {
 							id: ollamaModelRow
 
 							required property var modelData
@@ -3590,9 +3971,10 @@ Item {
 							readonly property bool removing: root.ollamaRemovingModel === modelName
 
 							width: ollamaInstalledList.width
-							height: 48
-							radius: ThemeEngine.radiusMedium
-							color: ollamaModelMouse.containsMouse ? root.secondaryBoxColor : "transparent"
+							implicitHeight: 44
+							inset: Bio.s2
+							selected: ollamaModelRow.running
+							interactive: false
 
 							MouseArea {
 								id: ollamaModelMouse
@@ -3603,26 +3985,24 @@ Item {
 
 							Column {
 								anchors.left: parent.left
-								anchors.leftMargin: 9
 								anchors.right: ollamaModelChatButton.left
-								anchors.rightMargin: 10
+								anchors.rightMargin: Bio.s3
 								anchors.verticalCenter: parent.verticalCenter
-								spacing: 2
+								spacing: -1
 
-								Text {
+								BioText {
+									role: "bodyStrong"
+									tone: ollamaModelRow.running ? "organ" : "default"
 									width: parent.width
-									color: root.foreground
 									text: ollamaModelRow.modelName
-									elide: Text.ElideRight
-									font.pixelSize: 11
-									font.weight: Font.DemiBold
 								}
 
-								Text {
+								BioText {
+									role: "caption"
+									tone: "faint"
 									width: parent.width
-									color: Qt.alpha(root.foreground, 0.5)
 									text: [
-										ollamaModelRow.running ? "Running" : "",
+										ollamaModelRow.running ? "Awake" : "",
 										String(ollamaModelRow.modelData?.details?.parameter_size || ""),
 										String(ollamaModelRow.modelData?.details?.quantization_level || ""),
 										root.formatModelSize(ollamaModelRow.modelData?.size)
@@ -3633,61 +4013,45 @@ Item {
 								}
 							}
 
-							ThemedRectangle {
+							BioButton {
 								id: ollamaModelChatButton
 								anchors.right: ollamaModelRemoveButton.left
-								anchors.rightMargin: 5
+								anchors.rightMargin: Bio.s2
 								anchors.verticalCenter: parent.verticalCenter
-								width: 52
-								height: 26
-								radius: ThemeEngine.radiusMedium
-								opacity: root.aiStreaming ? 0.45 : 1
-								color: ollamaModelChatMouse.containsMouse ? root.secondaryBoxStrongColor : root.secondaryBoxColor
+								implicitHeight: 26
+								minimumWidth: 70
+								enabled: !root.aiStreaming
+								text: "Culture"
+								onClicked: root.startNewChatWithModel(ollamaModelRow.modelName)
 
 								MouseArea {
 									id: ollamaModelChatMouse
 									anchors.fill: parent
-									enabled: !root.aiStreaming
+									acceptedButtons: Qt.NoButton
 									hoverEnabled: true
-									cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-									onClicked: root.startNewChatWithModel(ollamaModelRow.modelName)
-								}
-
-								Text {
-									anchors.centerIn: parent
-									color: root.foreground
-									text: "Chat"
-									font.pixelSize: 10
-									font.weight: Font.DemiBold
 								}
 							}
 
-							ThemedRectangle {
+							Item {
 								id: ollamaModelRemoveButton
 								anchors.right: parent.right
-								anchors.rightMargin: 7
 								anchors.verticalCenter: parent.verticalCenter
-								width: 26
-								height: 26
-								radius: ThemeEngine.radiusMedium
+								width: 22
+								height: 22
 								opacity: root.aiStreaming || ollamaRemoveProcess.running ? 0.45 : 1
-								color: ollamaModelRemoveMouse.containsMouse ? root.secondaryBoxStrongColor : "transparent"
 
-								MouseArea {
+								BioTouch {
 									id: ollamaModelRemoveMouse
-									anchors.fill: parent
 									enabled: !root.aiStreaming && !ollamaRemoveProcess.running
-									hoverEnabled: true
 									cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
 									onClicked: root.removeOllamaModel(ollamaModelRow.modelName)
 								}
 
-								Text {
+								BioText {
 									anchors.centerIn: parent
-									color: root.foreground
-									text: ollamaModelRow.removing ? "…" : "󰆴"
-									font.family: "CaskaydiaCove Nerd Font"
-									font.pixelSize: 15
+									role: "body"
+									tone: ollamaModelRemoveMouse.containsMouse ? "alert" : "faint"
+									text: ollamaModelRow.removing ? "…" : "×"
 								}
 
 								ToolTip.visible: ollamaModelRemoveMouse.containsMouse
@@ -3701,7 +4065,8 @@ Item {
 						}
 					}
 
-					Text {
+					BioText {
+						role: "caption"
 						anchors.centerIn: parent
 						visible: !root.aiModelsLoading && root.aiModels.length === 0
 						color: Qt.alpha(root.foreground, 0.5)
@@ -3711,7 +4076,8 @@ Item {
 					}
 				}
 
-				Text {
+				BioText {
+					role: "label"
 					id: ollamaManagerErrorText
 					anchors.left: parent.left
 					anchors.right: parent.right
@@ -3731,57 +4097,56 @@ Item {
 			Item {
 				id: chatPanel
 				width: parent.width
-				height: parent.height - searchBox.height - 12
+				height: dish.viewHeight
 				visible: root.inChatMode
 
-				ThemedRectangle {
+				Item {
 					id: chatHeader
 					anchors.left: parent.left
 					anchors.right: parent.right
 					anchors.top: parent.top
-					height: 36
-					radius: ThemeEngine.radiusMedium
-					color: root.secondaryInsetColor
+					height: 34
 					z: 2
 
-					ThemedRectangle {
+					Rectangle {
+						anchors.left: parent.left
+						anchors.right: parent.right
+						anchors.bottom: parent.bottom
+						height: Bio.ribThin
+						color: Bio.boneGhost
+					}
+
+					BioNode {
 						id: chatBackButton
 						anchors.left: parent.left
-						anchors.leftMargin: 4
 						anchors.verticalCenter: parent.verticalCenter
-						width: 26
-						height: 26
-						radius: ThemeEngine.radiusMedium
-						color: chatBackMouse.containsMouse ? root.secondaryBoxStrongColor : "transparent"
+						size: 26
+						seed: 0
+						onClicked: root.openAiOverview()
+
+						BioText {
+							anchors.centerIn: parent
+							role: "heading"
+							text: "←"
+						}
 
 						MouseArea {
 							id: chatBackMouse
 							anchors.fill: parent
+							acceptedButtons: Qt.NoButton
 							hoverEnabled: true
-							cursorShape: Qt.PointingHandCursor
-							onClicked: root.openAiOverview()
-						}
-
-						Text {
-							anchors.centerIn: parent
-							color: root.foreground
-							text: "←"
-							font.pixelSize: 16
-							font.weight: Font.DemiBold
 						}
 					}
 
-					Text {
+					BioText {
 						anchors.left: chatBackButton.right
-						anchors.leftMargin: 8
+						anchors.leftMargin: Bio.s3
 						anchors.right: chatControls.left
-						anchors.rightMargin: 8
+						anchors.rightMargin: Bio.s3
 						anchors.verticalCenter: parent.verticalCenter
-						color: root.foreground
-						text: root.activeChat?.title || (root.aiTemporaryChatEnabled ? "Temporary chat" : "New chat")
-						elide: Text.ElideRight
-						font.pixelSize: 12
-						font.weight: Font.DemiBold
+						role: "heading"
+						font.pixelSize: 13
+						text: root.activeChat?.title || (root.aiTemporaryChatEnabled ? "Transient culture" : "New culture")
 					}
 
 						Row {
@@ -3874,7 +4239,8 @@ Item {
 							spacing: 5
 							opacity: root.aiStreaming || !root.selectedAiSupportsThinking ? 0.5 : 1
 
-							Text {
+							BioText {
+								role: "label"
 								anchors.verticalCenter: parent.verticalCenter
 								color: Qt.alpha(root.foreground, 0.68)
 								text: "Think"
@@ -3920,7 +4286,8 @@ Item {
 								spacing: 5
 								opacity: root.aiStreaming ? 0.5 : 1
 
-								Text {
+								BioText {
+									role: "label"
 									anchors.verticalCenter: parent.verticalCenter
 									color: Qt.alpha(root.foreground, 0.68)
 									text: "Short"
@@ -3966,7 +4333,8 @@ Item {
 								spacing: 5
 								opacity: root.aiStreaming ? 0.5 : 1
 
-								Text {
+								BioText {
+									role: "label"
 									anchors.verticalCenter: parent.verticalCenter
 									color: Qt.alpha(root.foreground, 0.68)
 									text: "Temporary"
@@ -4017,7 +4385,8 @@ Item {
 					height: 20
 					spacing: 8
 
-					Text {
+					BioText {
+						role: "label"
 						anchors.verticalCenter: parent.verticalCenter
 						color: Qt.alpha(root.foreground, 0.58)
 						text: "Context"
@@ -4040,7 +4409,8 @@ Item {
 						}
 					}
 
-					Text {
+					BioText {
+						role: "label"
 						anchors.verticalCenter: parent.verticalCenter
 						color: Qt.alpha(root.foreground, 0.58)
 						text: `${root.formatTokenCount(root.activeContextUsed)} / ${root.formatTokenCount(root.activeContextLimit)}`
@@ -4048,7 +4418,8 @@ Item {
 						font.weight: Font.Medium
 					}
 
-					Text {
+					BioText {
+						role: "label"
 						anchors.verticalCenter: parent.verticalCenter
 						visible: root.activeResponseTokens > 0
 						color: Qt.alpha(root.foreground, 0.58)
@@ -4057,7 +4428,8 @@ Item {
 						font.weight: Font.Medium
 					}
 
-					Text {
+					BioText {
+						role: "label"
 						anchors.verticalCenter: parent.verticalCenter
 						visible: root.chatLoadedTimerText !== ""
 						color: root.chatLoadedModel
@@ -4129,35 +4501,40 @@ Item {
 							width: chatList.width
 							height: messageBubble.height + 6
 
-								ThemedRectangle {
+								// An utterance is a specimen record: what you said is
+								// washed in the organ colour, what answered is bone
+								// on tissue, and the two never share an edge.
+								BioSurface {
 									id: messageBubble
 									width: Math.min(
 										messageRow.width * 0.78,
 										Math.max(
-											messageRow.hasMarkdownImages || messageRow.attachments.length > 0 ? messageRow.width * 0.66 : 120,
-											Math.max(messageText.implicitWidth, thinkingText.implicitWidth, responseModelLabel.implicitWidth) + 24
+											messageRow.hasMarkdownImages || messageRow.attachments.length > 0 ? messageRow.width * 0.66 : 140,
+											Math.max(messageText.implicitWidth, thinkingText.implicitWidth, responseModelLabel.implicitWidth) + 48
 										)
 								)
 								height: messageRow.loadingModel
-									? 34
-									: messageBubbleBody.implicitHeight + 20
+									? 38
+									: messageBubbleBody.implicitHeight + 26
 								x: messageRow.fromUser ? messageRow.width - width : 0
-								radius: ThemeEngine.radiusMedium
-								color: messageRow.fromUser ? Qt.alpha(root.barColor, 0.24) : root.secondaryBoxColor
-								clip: true
+								variant: "plate"
+								padding: Bio.s4
+								haloStrength: messageRow.fromUser ? 0.14 : 0.06
+								intensity: messageRow.fromUser ? 0.55 : 0
+								lineColor: messageRow.fromUser ? Qt.alpha(Bio.organ, 0.5) : Bio.boneFaint
+								washTop: messageRow.fromUser ? Qt.alpha(Bio.organ, 0.12) : Bio.tissue2
+								washBottom: messageRow.fromUser ? Bio.membraneDeep : Bio.tissue1
 
-									Text {
+									BioText {
 										visible: messageRow.loadingModel
 										anchors.centerIn: parent
-										width: parent.width - 20
-										color: Qt.alpha(root.foreground, 0.58)
+										width: parent.width
+										role: "label"
+										tone: "faint"
 										text: messageRow.responseModelName !== ""
-											? "Loading " + messageRow.responseModelName + "..."
-											: "Loading model..."
+											? "Waking " + messageRow.responseModelName
+											: "Waking strain"
 										horizontalAlignment: Text.AlignHCenter
-										elide: Text.ElideRight
-										font.pixelSize: 12
-										font.weight: Font.Medium
 									}
 
 								Column {
@@ -4166,10 +4543,10 @@ Item {
 									anchors.left: parent.left
 									anchors.right: parent.right
 									anchors.top: parent.top
-										anchors.margins: 10
-										spacing: 6
+										spacing: Bio.s2
 
-										Text {
+										BioText {
+											role: "label"
 											id: responseModelLabel
 											visible: messageRow.responseModelName !== ""
 											width: parent.width
@@ -4195,7 +4572,8 @@ Item {
 											onClicked: root.toggleThinkingExpanded(messageRow.entry.id)
 										}
 
-										Text {
+										BioText {
+											role: "label"
 											anchors.left: parent.left
 											anchors.leftMargin: 6
 											anchors.verticalCenter: parent.verticalCenter
@@ -4207,7 +4585,8 @@ Item {
 											font.weight: Font.Medium
 										}
 
-										Text {
+										BioText {
+											role: "label"
 											anchors.right: parent.right
 											anchors.rightMargin: 6
 											anchors.verticalCenter: parent.verticalCenter
@@ -4265,7 +4644,8 @@ Item {
 														color: root.foreground
 													}
 
-													Text {
+													BioText {
+														role: "label"
 														id: sentAttachmentName
 														anchors.left: parent.left
 														anchors.leftMargin: 30
@@ -4414,7 +4794,8 @@ Item {
 														mipmap: true
 													}
 
-													Text {
+													BioText {
+														role: "caption"
 														anchors.centerIn: parent
 														width: parent.width - 20
 														visible: markdownImage.status === Image.Loading
@@ -4424,7 +4805,8 @@ Item {
 														font.pixelSize: 11
 													}
 
-													Text {
+													BioText {
+														role: "caption"
 														anchors.centerIn: parent
 														width: parent.width - 20
 														visible: markdownImage.status === Image.Error
@@ -4468,7 +4850,8 @@ Item {
 									onClicked: root.beginEditMessage(messageRow.entry)
 								}
 
-								Text {
+								BioText {
+									role: "title"
 									anchors.centerIn: parent
 									color: root.foreground
 									text: "✎"
@@ -4479,7 +4862,8 @@ Item {
 						}
 					}
 
-					Text {
+					BioText {
+						role: "body"
 						anchors.centerIn: parent
 						width: parent.width - 40
 						visible: root.activeMessages.length === 0
@@ -4554,7 +4938,8 @@ Item {
 								color: root.foreground
 							}
 
-							Text {
+							BioText {
+								role: "label"
 								anchors.left: parent.left
 								anchors.leftMargin: 29
 								anchors.right: pendingAttachmentRemove.left
@@ -4587,7 +4972,8 @@ Item {
 									onClicked: root.removePendingAttachment(pendingAttachmentChip.modelData.id)
 								}
 
-								Text {
+								BioText {
+									role: "caption"
 									anchors.centerIn: parent
 									color: root.foreground
 									text: "x"
@@ -4599,7 +4985,8 @@ Item {
 					}
 				}
 
-				Text {
+				BioText {
+					role: "caption"
 					id: chatError
 					anchors.left: parent.left
 					anchors.right: parent.right
@@ -4615,324 +5002,6 @@ Item {
 				}
 			}
 
-			ThemedRectangle {
-				id: searchBox
-				themeStyle: "inset"
-				width: parent.width
-				height: root.inChatMode
-					? Math.min(180, Math.max(48, searchField.contentHeight + 22))
-					: 44
-				radius: root.inChatMode ? 20 : height / 2
-				color: root.secondaryBoxColor
-				border.width: searchField.activeFocus || root.editingMessageId !== "" ? 1 : 0
-				border.color: Qt.alpha(root.barColor, 0.75)
-
-				QQCImpl.IconImage {
-					id: inputCommandIcon
-					anchors.left: parent.left
-					anchors.leftMargin: 12
-					anchors.verticalCenter: parent.verticalCenter
-					width: 16
-					height: 16
-					source: root.inputIconPath
-					sourceSize: Qt.size(width, height)
-					color: root.foreground
-				}
-
-				ThemedRectangle {
-					id: commandTokenBox
-					themeStyle: "inset"
-					anchors.left: inputCommandIcon.right
-					anchors.leftMargin: 8
-					anchors.verticalCenter: parent.verticalCenter
-					width: visible ? Math.min(140, Math.max(38, commandTokenField.contentWidth + 18)) : 0
-					height: 28
-					visible: root.commandInputActive
-					radius: ThemeEngine.radiusSmall
-					color: root.secondaryInsetColor
-					border.width: commandTokenField.activeFocus ? 1 : 0
-					border.color: Qt.alpha(root.foreground, 0.3)
-
-					TextInput {
-						id: commandTokenField
-						anchors.fill: parent
-						anchors.leftMargin: 9
-						anchors.rightMargin: 9
-						text: ">"
-						color: Qt.alpha(root.foreground, 0.62)
-						selectionColor: Qt.alpha(root.barColor, 0.35)
-						selectedTextColor: root.foreground
-						cursorVisible: activeFocus
-						verticalAlignment: Text.AlignVCenter
-						clip: true
-						font.pixelSize: 12
-						font.weight: Font.DemiBold
-
-						onTextChanged: {
-							if (root.commandInputSyncing) return;
-							if (text === "") {
-								root.leaveCommandInput("");
-								return;
-							}
-							if (!text.startsWith(">")) {
-								root.commandInputSyncing = true;
-								text = `>${text.replace(/^>+/, "")}`;
-								cursorPosition = text.length;
-								root.commandInputSyncing = false;
-							}
-							root.syncLauncherSearch();
-						}
-
-						Keys.onEscapePressed: root.closeRequested()
-						Keys.onPressed: event => {
-							if (event.key === Qt.Key_Space) {
-								root.focusCommandArgument();
-								event.accepted = true;
-								return;
-							}
-							if (event.key === Qt.Key_Backspace && commandTokenField.text === ">") {
-								root.leaveCommandInput("");
-								event.accepted = true;
-								return;
-							}
-							if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-								root.activateCurrent();
-								event.accepted = true;
-							}
-						}
-						Keys.onDownPressed: {
-							if (root.inFileMode) {
-								if (root.filteredFileBrowserEntries.length === 0) return;
-								fileBrowserList.currentIndex = Math.min(root.filteredFileBrowserEntries.length - 1, fileBrowserList.currentIndex + 1);
-								fileBrowserList.positionViewAtIndex(fileBrowserList.currentIndex, ListView.Contain);
-								return;
-							}
-							if (root.filteredCommands.length === 0) return;
-							commandList.currentIndex = Math.min(root.filteredCommands.length - 1, commandList.currentIndex + 1);
-							commandList.positionViewAtIndex(commandList.currentIndex, ListView.Contain);
-						}
-						Keys.onUpPressed: {
-							if (root.inFileMode) {
-								if (root.filteredFileBrowserEntries.length === 0) return;
-								fileBrowserList.currentIndex = Math.max(0, fileBrowserList.currentIndex - 1);
-								fileBrowserList.positionViewAtIndex(fileBrowserList.currentIndex, ListView.Contain);
-								return;
-							}
-							if (root.filteredCommands.length === 0) return;
-							commandList.currentIndex = Math.max(0, commandList.currentIndex - 1);
-							commandList.positionViewAtIndex(commandList.currentIndex, ListView.Contain);
-						}
-					}
-				}
-
-				TextArea {
-					id: searchField
-					z: 1
-					anchors.left: root.commandInputActive ? commandTokenBox.right : parent.left
-					anchors.leftMargin: root.commandInputActive ? 8 : 38
-					anchors.right: attachButton.visible ? attachButton.left : clearButton.left
-					anchors.rightMargin: 8
-					anchors.top: parent.top
-					anchors.topMargin: 4
-					anchors.bottom: parent.bottom
-					anchors.bottomMargin: 4
-					color: root.foreground
-					placeholderText: root.inChatMode
-						? "Message"
-						: (root.inAiMode
-							? "Search chats"
-							: (root.inFileMode
-								? "Search files"
-								: (root.inCalculatorMode
-									? "Expression"
-									: (root.commandInputActive ? "Options" : "Search apps or type >c 5+5"))))
-					placeholderTextColor: Qt.alpha(root.foreground, 0.45)
-					selectedTextColor: root.foreground
-					selectionColor: Qt.alpha(root.barColor, 0.22)
-					selectByMouse: true
-					focus: true
-					cursorVisible: activeFocus
-					clip: true
-					wrapMode: root.inChatMode ? TextEdit.Wrap : TextEdit.NoWrap
-					horizontalAlignment: Text.AlignLeft
-					verticalAlignment: Text.AlignVCenter
-					background: Item {}
-					cursorDelegate: ThemedRectangle {
-						visible: searchField.activeFocus
-						width: 1
-						height: searchField.font.pixelSize + 3
-						color: root.foreground
-					}
-
-					onTextChanged: {
-						if (root.commandInputSyncing) return;
-						if (!root.commandInputActive && text.startsWith(">")) {
-							root.enterCommandInput(text, false);
-							return;
-						}
-						if (root.commandInputActive && text !== "" && !root.commandInputHasSeparator)
-							root.commandInputHasSeparator = true;
-						root.syncLauncherSearch();
-					}
-
-					onActiveFocusChanged: {
-						if (!activeFocus || !root.commandInputActive || root.commandInputHasSeparator) return;
-						root.commandInputHasSeparator = true;
-						root.syncLauncherSearch();
-					}
-
-					Keys.onEscapePressed: root.closeRequested()
-					Keys.onPressed: event => {
-						if (
-							event.key === Qt.Key_Backspace
-							&& root.commandInputActive
-							&& searchField.text === ""
-							&& searchField.cursorPosition === 0
-						) {
-							event.accepted = root.focusCommandTokenFromEmptyArgument();
-							if (event.accepted) return;
-						}
-						if (event.key !== Qt.Key_Return && event.key !== Qt.Key_Enter) return;
-						if (root.inChatMode && (event.modifiers & Qt.ShiftModifier)) {
-							searchField.insert(searchField.cursorPosition, "\n");
-							event.accepted = true;
-							return;
-						}
-						root.activateCurrent();
-						event.accepted = true;
-					}
-					Keys.onLeftPressed: event => {
-						if (root.inFileMode || root.inCalculatorMode || root.inAiMode || root.inChatMode || root.inOllamaMode || root.inCommandMode || root.filteredApps.length === 0) {
-							event.accepted = false;
-							return;
-						}
-						appList.currentIndex = Math.max(0, appList.currentIndex - 1);
-						appList.positionViewAtIndex(appList.currentIndex, GridView.Contain);
-						event.accepted = true;
-					}
-					Keys.onRightPressed: event => {
-						if (root.inFileMode || root.inCalculatorMode || root.inAiMode || root.inChatMode || root.inOllamaMode || root.inCommandMode || root.filteredApps.length === 0) {
-							event.accepted = false;
-							return;
-						}
-						appList.currentIndex = Math.min(root.filteredApps.length - 1, appList.currentIndex + 1);
-						appList.positionViewAtIndex(appList.currentIndex, GridView.Contain);
-						event.accepted = true;
-					}
-					Keys.onDownPressed: {
-						if (root.inFileMode) {
-							if (root.filteredFileBrowserEntries.length === 0) return;
-							fileBrowserList.currentIndex = Math.min(root.filteredFileBrowserEntries.length - 1, fileBrowserList.currentIndex + 1);
-							fileBrowserList.positionViewAtIndex(fileBrowserList.currentIndex, ListView.Contain);
-							return;
-						}
-						if (root.inCalculatorMode || root.inAiMode || root.inChatMode || root.inOllamaMode) return;
-						if (root.inCommandMode) {
-							if (root.filteredCommands.length === 0) return;
-							commandList.currentIndex = Math.min(root.filteredCommands.length - 1, commandList.currentIndex + 1);
-							commandList.positionViewAtIndex(commandList.currentIndex, ListView.Contain);
-							return;
-						}
-
-						if (root.filteredApps.length === 0) return;
-						appList.currentIndex = Math.min(root.filteredApps.length - 1, appList.currentIndex + appList.columns);
-						appList.positionViewAtIndex(appList.currentIndex, GridView.Contain);
-					}
-					Keys.onUpPressed: {
-						if (root.inFileMode) {
-							if (root.filteredFileBrowserEntries.length === 0) return;
-							fileBrowserList.currentIndex = Math.max(0, fileBrowserList.currentIndex - 1);
-							fileBrowserList.positionViewAtIndex(fileBrowserList.currentIndex, ListView.Contain);
-							return;
-						}
-						if (root.inCalculatorMode || root.inAiMode || root.inChatMode || root.inOllamaMode) return;
-						if (root.inCommandMode) {
-							if (root.filteredCommands.length === 0) return;
-							commandList.currentIndex = Math.max(0, commandList.currentIndex - 1);
-							commandList.positionViewAtIndex(commandList.currentIndex, ListView.Contain);
-							return;
-						}
-
-						if (root.filteredApps.length === 0) return;
-						appList.currentIndex = Math.max(0, appList.currentIndex - appList.columns);
-						appList.positionViewAtIndex(appList.currentIndex, GridView.Contain);
-					}
-				}
-
-				ThemedRectangle {
-					id: attachButton
-					anchors.right: clearButton.left
-					anchors.rightMargin: 4
-					anchors.verticalCenter: parent.verticalCenter
-					width: 24
-					height: 24
-					radius: ThemeEngine.radiusMedium
-					visible: root.inChatMode && !root.aiStreaming
-					color: attachMouse.containsMouse || root.aiAttachmentPickerOpen
-						? root.secondaryBoxStrongColor
-						: "transparent"
-
-					MouseArea {
-						id: attachMouse
-						anchors.fill: parent
-						hoverEnabled: true
-						cursorShape: Qt.PointingHandCursor
-						onClicked: root.aiAttachmentPickerOpen
-							? root.closeAttachmentPicker()
-							: root.openAttachmentPicker()
-					}
-
-					QQCImpl.IconImage {
-						anchors.centerIn: parent
-						width: 15
-						height: 15
-						source: root.attachmentIconPath
-						sourceSize: Qt.size(width, height)
-						color: root.foreground
-					}
-
-					ToolTip.visible: attachMouse.containsMouse
-					ToolTip.delay: 500
-					ToolTip.text: root.selectedAiSupportsVision
-						? "Attach text, document, PDF, or image"
-						: "Attach text, document, or PDF"
-				}
-
-				ThemedRectangle {
-					id: clearButton
-					anchors.right: parent.right
-					anchors.rightMargin: 8
-					anchors.verticalCenter: parent.verticalCenter
-					width: 24
-					height: 24
-					radius: ThemeEngine.radiusMedium
-					color: clearMouse.containsMouse ? root.secondaryBoxStrongColor : "transparent"
-					visible: (root.aiStreaming && root.inChatMode) || root.commandInputActive || searchField.text !== ""
-
-					MouseArea {
-						id: clearMouse
-						anchors.fill: parent
-						hoverEnabled: true
-						cursorShape: Qt.PointingHandCursor
-						onClicked: {
-							if (root.aiStreaming && root.inChatMode) root.cancelAiStream();
-							else if (root.editingMessageId !== "") root.cancelMessageEdit();
-							else root.leaveCommandInput("");
-						}
-					}
-
-					Text {
-						anchors.centerIn: parent
-						color: root.foreground
-						font.pixelSize: root.aiStreaming && root.inChatMode ? 11 : 14
-						text: root.aiStreaming && root.inChatMode ? "■" : "x"
-					}
-
-					ToolTip.visible: clearMouse.containsMouse && root.aiStreaming && root.inChatMode
-					ToolTip.delay: 500
-					ToolTip.text: "Stop and unload model"
-				}
-			}
 		}
 	}
 
@@ -4976,7 +5045,8 @@ Item {
 					onClicked: root.aiAttachmentDirectory = root.attachmentParentDirectory(root.aiAttachmentDirectory)
 				}
 
-				Text {
+				BioText {
+					role: "title"
 					anchors.centerIn: parent
 					color: root.foreground
 					text: "↑"
@@ -4985,7 +5055,8 @@ Item {
 				}
 			}
 
-			Text {
+			BioText {
+				role: "caption"
 				anchors.left: attachmentUpButton.right
 				anchors.leftMargin: 7
 				anchors.right: attachmentDoneButton.left
@@ -5016,7 +5087,8 @@ Item {
 					onClicked: root.closeAttachmentPicker()
 				}
 
-				Text {
+				BioText {
+					role: "label"
 					anchors.centerIn: parent
 					color: root.foreground
 					text: "Done"
@@ -5064,7 +5136,8 @@ Item {
 						onClicked: root.aiAttachmentDirectory = String(attachmentShortcut.modelData.path)
 					}
 
-					Text {
+					BioText {
+						role: "label"
 						id: attachmentShortcutText
 						anchors.centerIn: parent
 						color: root.foreground
@@ -5075,7 +5148,8 @@ Item {
 				}
 			}
 
-			Text {
+			BioText {
+				role: "label"
 				anchors.verticalCenter: parent.verticalCenter
 				width: Math.max(0, parent.width - x)
 				color: Qt.alpha(root.foreground, 0.5)
@@ -5172,7 +5246,8 @@ Item {
 					anchors.verticalCenter: parent.verticalCenter
 					spacing: 1
 
-					Text {
+					BioText {
+						role: "caption"
 						width: parent.width
 						color: root.foreground
 						text: String(attachmentFileRow.file.name || "")
@@ -5181,7 +5256,8 @@ Item {
 						font.weight: Font.Medium
 					}
 
-					Text {
+					BioText {
+						role: "label"
 						width: parent.width
 						color: Qt.alpha(root.foreground, 0.5)
 						text: attachmentFileRow.file.isDir
@@ -5194,7 +5270,8 @@ Item {
 					}
 				}
 
-				Text {
+				BioText {
+					role: "title"
 					id: attachmentFileState
 					anchors.right: parent.right
 					anchors.rightMargin: 12
@@ -5213,7 +5290,8 @@ Item {
 			}
 		}
 
-		Text {
+		BioText {
+			role: "body"
 			anchors.centerIn: attachmentFileList
 			visible: attachmentFileList.count === 0
 			color: Qt.alpha(root.foreground, 0.5)
