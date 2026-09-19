@@ -14,7 +14,7 @@ Item {
 
 	signal closeRequested
 	signal launchRequested
-	// "wallpaper", "motion" or "styles"
+	// "wallpaper", "motion", "dress", "styles" or "combinations"
 	signal openStudioRequested(string page)
 
 	required property color foreground
@@ -119,6 +119,30 @@ Item {
 			description: "Niri window animations",
 			icon: "preferences-desktop-effects-symbolic",
 			studioPage: "motion"
+		},
+		{
+			id: "studio-dress",
+			command: "studio icons",
+			name: "Studio: Icons & Pointer",
+			description: "Icon theme and cursor theme",
+			icon: "preferences-desktop-theme-symbolic",
+			studioPage: "dress"
+		},
+		{
+			id: "studio-combinations",
+			command: "studio combinations",
+			name: "Studio: Combinations",
+			description: "Whole looks, saved under a name",
+			icon: "bookmark-new-symbolic",
+			studioPage: "combinations"
+		},
+		{
+			id: "combinations",
+			command: "combinations",
+			name: "Combinations",
+			description: "Wear a saved look, or keep the one that is on",
+			icon: "bookmark-new-symbolic",
+			studioPage: "combinations"
 		},
 		{
 			id: "style",
@@ -2172,6 +2196,9 @@ Item {
 		switch (String(command.id || "")) {
 		case "studio":
 		case "studio-motion":
+		case "studio-dress":
+		case "studio-combinations":
+		case "combinations":
 		case "studio-style":
 		case "style":
 			root.closeRequested();

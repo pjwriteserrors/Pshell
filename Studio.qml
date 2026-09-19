@@ -31,10 +31,19 @@ FocusScope {
 
 	property string page: "wallpaper"
 
+	// The pages Studio has. Adding one means adding a lobe here and a Loader
+	// in the stage below — nothing else.
+	//
+	// STUDIO IS PART OF EVERY STYLE. A style branch may draw these pages any
+	// way it likes, but it may not drop one: `>studio` is how the desktop is
+	// changed at all, and a style that ships without a page leaves the thing
+	// that page controls unreachable. See STUDIO.md.
 	readonly property var pages: [
 		{ id: "wallpaper", label: "Wallpaper & Colours", hint: "Ctrl+1" },
 		{ id: "motion", label: "Motion", hint: "Ctrl+2" },
-		{ id: "styles", label: "Style", hint: "Ctrl+3" }
+		{ id: "dress", label: "Icons & Pointer", hint: "Ctrl+3" },
+		{ id: "styles", label: "Style", hint: "Ctrl+4" },
+		{ id: "combinations", label: "Combinations", hint: "Ctrl+5" }
 	]
 
 	readonly property int pageIndex: {
@@ -81,7 +90,9 @@ FocusScope {
 			return;
 		case Qt.Key_1:
 		case Qt.Key_2:
-		case Qt.Key_3: {
+		case Qt.Key_3:
+		case Qt.Key_4:
+		case Qt.Key_5: {
 			const index = event.key - Qt.Key_1;
 			if (index < root.pages.length) {
 				root.showPage(root.pages[index].id);
@@ -195,7 +206,9 @@ FocusScope {
 		readonly property Item activeItem: {
 			if (wallpaperPage.active) return wallpaperPage.item;
 			if (motionPage.active) return motionPage.item;
+			if (dressPage.active) return dressPage.item;
 			if (stylePage.active) return stylePage.item;
+			if (combinationPage.active) return combinationPage.item;
 			return null;
 		}
 
@@ -238,6 +251,39 @@ FocusScope {
 				secondaryBoxStrongColor: root.secondaryBoxStrongColor
 				secondaryInsetColor: root.secondaryInsetColor
 				barColor: root.barColor
+				onCloseRequested: root.closeRequested()
+			}
+		}
+
+		Loader {
+			id: dressPage
+			anchors.fill: parent
+			active: root.page === "dress"
+			onLoaded: Qt.callLater(root.focusPage)
+			sourceComponent: DressPicker {
+				foreground: root.foreground
+				background: root.background
+				secondaryBoxColor: root.secondaryBoxColor
+				secondaryBoxStrongColor: root.secondaryBoxStrongColor
+				secondaryInsetColor: root.secondaryInsetColor
+				barColor: root.barColor
+				onCloseRequested: root.closeRequested()
+			}
+		}
+
+		Loader {
+			id: combinationPage
+			anchors.fill: parent
+			active: root.page === "combinations"
+			onLoaded: Qt.callLater(root.focusPage)
+			sourceComponent: CombinationPicker {
+				foreground: root.foreground
+				background: root.background
+				secondaryBoxColor: root.secondaryBoxColor
+				secondaryBoxStrongColor: root.secondaryBoxStrongColor
+				secondaryInsetColor: root.secondaryInsetColor
+				barColor: root.barColor
+				danger: root.danger
 				onCloseRequested: root.closeRequested()
 			}
 		}

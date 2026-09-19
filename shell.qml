@@ -745,9 +745,12 @@ Scope {
 		else root.openPowerPopup(scr);
 	}
 
+	// Studio's pages, by name. Every style ships all of them — see STUDIO.md.
 	function studioPageOrDefault(page) {
 		const name = String(page || "");
-		return [ "wallpaper", "motion", "styles" ].indexOf(name) >= 0 ? name : "wallpaper";
+		return [ "wallpaper", "motion", "dress", "styles", "combinations" ].indexOf(name) >= 0
+			? name
+			: "wallpaper";
 	}
 
 	function openStudio(page = "", scr = null) {

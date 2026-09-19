@@ -113,17 +113,43 @@ clearly apart from the organ's.
 
 ## Studio
 
-One window for everything that changes how the desktop looks:
+One window for everything that changes how the desktop looks. It has five
+pages, and **every style ships all five** — the contract, and the build check
+that enforces it, are in [STUDIO.md](STUDIO.md).
+
+| Page | What it controls |
+| --- | --- |
+| Wallpaper & Colours | the wallpaper, and the Wallust palette taken from it |
+| Motion | what a window does when it opens and closes — played, not illustrated |
+| Icons & Pointer | icon theme, cursor theme and cursor size |
+| Style | which style branch the shell is running |
+| Combinations | whole looks — wallpaper, palette, motion, dress and style — saved under a name |
 
 | | |
 | --- | --- |
 | `Mod+Shift+S` | open on **Wallpaper & Colours** |
 | `Mod+Shift+M` | open on **Motion** |
 | `>style` in the launcher | straight to the style branches |
-| `>studio` in the launcher | same, plus `>studio motion` and `>studio style` |
-| `Ctrl+1` / `Ctrl+2` / `Ctrl+3` | jump between the pages |
+| `>combinations` | straight to the saved looks |
+| `>studio` in the launcher | plus `>studio motion`, `>studio icons`, `>studio style`, `>studio combinations` |
+| `Ctrl+1` … `Ctrl+5` | jump between the pages |
 | `Ctrl+Tab` | next page |
 | `Escape` | close |
+
+**Motion plays the animation.** The page used to show a recorded clip for the
+few animations that had one and a hand-drawn impression for the rest; now
+`scripts/build_animation_preview.py` compiles the GLSL niri would actually run
+into a Qt shader bundle with `qsb`, and the page runs it on a mock window over
+the real duration, on the real curve — or integrates the real spring. Walk the
+list, watch, then graft.
+
+**Combinations keep the set.** Each other page changes one thing;
+`scripts/combinations.py` records all of them at once — wallpaper, Wallust
+backend/palette/style, animation, icon theme, cursor theme and size, and the
+style branch — under a name you give it, and puts the whole thing back on in one
+action. They live in `~/.local/state/quickshell-theme/combinations.json`, not in
+the repository, because a combination names a branch and would otherwise be lost
+on the first switch.
 
 Picking a wallpaper runs `scripts/apply_theme_selection.sh`, which paints the
 wallpaper first and then pushes the Wallust palette through every other

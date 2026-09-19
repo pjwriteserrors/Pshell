@@ -10,6 +10,14 @@ import Quickshell.Io
 import "components"
 import "NiriAnimation.js" as NiriAnimation
 
+// Studio's wallpaper and colours page: the wallpaper, and the Wallust palette
+// taken from it. Applying runs scripts/apply_theme_selection.sh, which paints
+// the wallpaper and then pushes the palette through everything else on the
+// machine.
+//
+// This page is part of the Studio contract every style has to keep — draw it
+// however your style draws things, but do not drop it. See STUDIO.md.
+
 Item {
 	id: root
 

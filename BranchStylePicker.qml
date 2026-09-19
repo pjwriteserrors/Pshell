@@ -6,8 +6,12 @@ import Quickshell
 import Quickshell.Io
 import "components"
 
-// Styles page of Studio. A style is a local Git branch of this configuration:
+// Studio's style page. A style is a local Git branch of this configuration:
 // checking one out swaps the whole shell at once.
+//
+// This page is part of the Studio contract every style has to keep — and this
+// one especially: it is how you get back out of a style once you are in it.
+// See STUDIO.md.
 //
 // Keyboard: arrows move, Enter applies (twice - once to arm, once to confirm),
 // Escape steps back out of the confirmation and then closes Studio.
