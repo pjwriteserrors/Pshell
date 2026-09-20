@@ -1,18 +1,17 @@
 import QtQuick
 
-// Candlelight. It is in front of the page, not behind it, so it never offsets
-// and is never grey — it is the aether colour bleeding outward from whatever it
-// is lighting.
+// Light, bleeding into the void around whatever it is coming from. Never
+// offset, never grey: it is in front of the thing, not behind it.
 //
-// The bloom is painted once. `flicker` puts the shell's one shared flame on its
-// opacity instead of its paint, so a room full of lamps guttering together
-// costs one timer and no repaints at all.
+// The bloom is painted once. `flicker` puts the sanctum's single guttering
+// value on its opacity rather than its paint, so a room full of conjured
+// lights breathes together for one timer and no repaints.
 Canvas {
 	id: halo
 
 	property color color: Arc.aether
-	property real strength: 0.4       // alpha at the centre
-	property real spread: 0.5         // how far out it reaches, as a fraction
+	property real strength: 0.4
+	property real spread: 0.5
 	property real falloff: 2.2
 	property bool flicker: false
 

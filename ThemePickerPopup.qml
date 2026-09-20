@@ -581,7 +581,7 @@ fi
 			anchors.right: parent.right
 			anchors.bottom: parent.bottom
 			height: Arc.ruleThin
-			color: Arc.giltFaint
+			color: Arc.goldFaint
 		}
 
 		Rectangle {
@@ -603,7 +603,7 @@ fi
 			width: 26
 			height: 26
 			seed: 3
-			lineColor: Arc.giltFaint
+			lineColor: Arc.goldFaint
 			intensity: searchField.activeFocus ? 0.9 : 0
 
 			QQCImpl.IconImage {
@@ -694,7 +694,7 @@ fi
 		lineColor: Qt.alpha(Arc.bane, 0.6)
 		liveColor: Arc.bane
 		washTop: Qt.alpha(Arc.bane, 0.14)
-		washBottom: Arc.washDeep
+		washBottom: Arc.hazeDeep
 		intensity: 0.8
 		padding: Arc.s4
 
@@ -804,10 +804,10 @@ fi
 									beading: false
 									weight: Arc.ruleThin
 									inset: 1
-									lineColor: Arc.giltGhost
+									lineColor: Arc.goldGhost
 									liveColor: Arc.aether
-									fillTop: Arc.well
-									fillBottom: Arc.well
+									fillTop: Arc.depth
+									fillBottom: Arc.depth
 									intensity: root.selectedColorIndex === colorSpaceHead.index ? 1 : 0
 								}
 
@@ -1085,7 +1085,7 @@ fi
 						anchors.fill: parent
 						anchors.margins: 3
 						radius: 2
-						color: Arc.well
+						color: Arc.depth
 						clip: true
 
 						Image {
@@ -1112,7 +1112,7 @@ fi
 						anchors.fill: parent
 						variant: "plate"
 						weight: active ? Arc.rule : Arc.ruleThin
-						lineColor: active ? Arc.giltDim : Arc.giltGhost
+						lineColor: active ? Arc.goldDim : Arc.goldGhost
 						liveColor: Arc.aether
 						intensity: active ? 1 : 0
 					}

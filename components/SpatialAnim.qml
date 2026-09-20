@@ -5,5 +5,5 @@ import QtQuick
 NumberAnimation {
 	duration: Arc.turn
 	easing.type: Easing.Bezier
-	easing.bezierCurve: Arc.curveDetent
+	easing.bezierCurve: Arc.curveSnap
 }

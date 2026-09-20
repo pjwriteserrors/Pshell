@@ -5,13 +5,13 @@ import Quickshell
 import Quickshell.Io
 import "components"
 
-// The rack: four phials standing side by side on the chain.
+// The readings, gathered.
 //
-// The machine's readings are not numbers with icons next to them here. They are
-// quantities of liquid in glass, each with a letter cut above it, and the
-// glance across the rack is the whole status. What each one is called is on the
-// scroll this opens — Mana, Aether, Vault, Essence — because a letter is enough
-// once you know the instrument and a word is in the way once you do.
+// This draws nothing at all any more. It is where the shell learns what the
+// machine is doing — CPU and memory out of /proc, the disks out of lsblk, the
+// pointer's charge out of a helper — and both the arcane core on the horizon
+// and the humours panel take their numbers from this one reader, so the work
+// is done once.
 Item {
 	id: root
 
@@ -113,98 +113,9 @@ Item {
 	readonly property string memoryText: `${root.formatStorage(root.memoryUsedKiB)}/${root.formatStorage(root.memoryTotalKiB)}`
 	readonly property string cpuText: root.cpuCores > 0 ? `${root.cpuCores} Cores` : ""
 
-	implicitWidth: rack.implicitWidth
-	implicitHeight: 48
-
-	readonly property real live: Math.max(interaction.live, root.lit ? 0.5 : 0)
-
-	Row {
-		id: rack
-		anchors.centerIn: parent
-		spacing: 5
-
-		Phial {
-			letter: "M"
-			value: root.cpuUsage
-		}
-
-		Phial {
-			letter: "A"
-			value: root.memoryUsage
-		}
-
-		Phial {
-			letter: "V"
-			value: root.storageUsage
-		}
-
-		Phial {
-			visible: root.mouseBatteryAvailable
-			letter: "E"
-			value: root.mouseBatteryUsage
-			// A pointer running out of charge is the one reading in the rack
-			// that is bad when it is low rather than when it is high.
-			inverted: true
-		}
-	}
-
-	ArcTouch {
-		id: interaction
-		onClicked: root.clicked()
-	}
-
-	component Phial: Item {
-		id: phial
-
-		property string letter: ""
-		property real value: 0
-		property bool inverted: false
-
-		readonly property bool strained: phial.inverted ? phial.value < 0.2 : phial.value > 0.85
-
-		width: 11
-		height: 44
-
-		ArcText {
-			id: mark
-			anchors.horizontalCenter: parent.horizontalCenter
-			anchors.top: parent.top
-			role: "label"
-			font.pixelSize: 10
-			font.letterSpacing: 0
-			tone: phial.strained ? "alert" : root.live > 0.3 ? "aether" : "faint"
-			text: phial.letter
-		}
-
-		// The glass. A phial without one is a stripe on the wallpaper.
-		ArcPlate {
-			id: glass
-			anchors.horizontalCenter: parent.horizontalCenter
-			anchors.top: mark.bottom
-			anchors.topMargin: 1
-			anchors.bottom: parent.bottom
-			width: parent.width
-			variant: "field"
-			beading: false
-			weight: Arc.ruleThin
-			inset: 0
-			lineColor: Arc.giltFaint
-			liveColor: phial.strained ? Arc.bane : Arc.aether
-			fillTop: Arc.well
-			fillBottom: Arc.well
-			intensity: Math.max(root.live * 0.8, phial.strained ? 0.8 : 0)
-		}
-
-		ArcPhial {
-			anchors.fill: glass
-			anchors.margins: 1.5
-			vertical: true
-			value: phial.value
-			weight: Arc.ruleThin
-			trackColor: "transparent"
-			fillColor: phial.strained ? Arc.bane : (root.live > 0.3 ? Arc.aether : Arc.aetherAlt)
-		}
-	}
+	visible: false
+	width: 0
+	height: 0
 
 	// CPU and memory come from /proc: two cheap file reads.
 	Timer {

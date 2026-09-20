@@ -3,41 +3,36 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import "ArcInk.js" as Ink
 
-// THE STRUCTURAL IDEA, and the file that owns it.
+// THE CONJURING, and the file that owns it.
 //
-// The shell hangs from a brass chain strung across the top of the screen,
-// fixed at both corners and sagging to its lowest point in the middle. Every
-// panel in the instrument is a scroll hung off that chain, directly under the
-// seat that owns it — so where a panel appears tells you what opened it, and
-// because the chain sags, no two panels start at the same height.
+// Nothing in this shell appears, slides, unrolls or scales. A panel is called
+// up out of the floor of the sanctum, and it is called in four movements that
+// happen in this order every single time:
 //
-// Nothing in this shell appears. A scroll is *let down*:
+//   1  a ring inscribes itself on the horizon under the sigil that was
+//      touched, drawn once round from the twelve at the speed a hand moves
+//   2  motes gather off that ring and are thrown upward
+//   3  the glass precipitates out of them, condensing from the ring upward —
+//      revealed bottom to top, never scaled and never faded from nowhere
+//   4  what is written on it ignites band by band, from the top down
 //
-//   open   the roller slides out of the chain, the cords drop, and the sheet
-//          unrolls downward under the weight of the dowel at its foot — the
-//          sheet is revealed from the top as the dowel travels, never scaled.
-//          It overruns its rest length and swings, and the swing is a real
-//          damped oscillator, not an overshoot curve. Contents are written on
-//          the sheet band by band behind the dowel, each band arriving a beat
-//          after the one above it.
-//   close  the roller takes it back up, faster than it came down, and the
-//          cords go last.
+// Dismissing runs it backwards and twice as fast: the writing goes out, the
+// glass comes apart into motes that fall back into the ring, and the ring
+// un-draws itself.
 //
-// Built on PanelWindow (a full-screen overlay) so text fields inside receive
-// keyboard input. Clicking outside emits dismissRequested().
+// Because the ring is on the horizon under the sigil, where a panel stands
+// tells you what called it, and everything in the sanctum moves in the same
+// direction — up out of the floor, and back down into it.
 PanelWindow {
 	id: surface
 
-	// wiring
 	required property bool open
 	required property Item barItem
-	// The seat this scroll hangs under. Without one it hangs from the middle
-	// of the chain, which is where the horologe is.
+	// The sigil this was called by. Without one it rises from the middle.
 	property Item anchorItem: null
 
-	// The name struck into the scroll's head rail. Every scroll has one — it is
-	// what tells you which one is down without reading the contents.
 	property string title: ""
 
 	// sizing
@@ -46,8 +41,7 @@ PanelWindow {
 	property real fixedHeight: -1
 	property real contentMargins: Arc.s4
 
-	// style
-	property color surfaceColor: Arc.wash
+	property color surfaceColor: Arc.haze
 	property color borderColor: "transparent"
 	property bool wantsKeyboard: true
 
@@ -58,35 +52,34 @@ PanelWindow {
 
 	property real openProgress: open ? 1 : 0
 
-	// How far in from the fittings content has to stay.
-	readonly property real mountMargin: 10
-	readonly property real headRail: 24
+	readonly property real mountMargin: Arc.s3
+	readonly property real headRail: 26
+
+	// The four movements, cut out of one progress value so they can never get
+	// out of order.
+	readonly property real inscribed: Math.max(0, Math.min(1, openProgress / 0.34))
+	readonly property real gathered: Math.max(0, Math.min(1, (openProgress - 0.18) / 0.34))
+	readonly property real condensed: Math.max(0, Math.min(1, (openProgress - 0.30) / 0.45))
+	readonly property real contentOpacity: Math.max(0, Math.min(1, (openProgress - 0.58) / 0.42))
 
 	readonly property real shellWidth: Math.round(expandedWidth)
-	readonly property real roomHeight: height - Arc.gantryDepth - Arc.dropInset
+	readonly property real roomHeight: height - Arc.horizon - Arc.riseInset
 	readonly property real expandedHeight: Math.round(Math.min(
 		roomHeight,
 		fixedHeight > 0
 			? fixedHeight
-			: Math.max(220, contentPreferredHeight + headRail + (contentMargins + mountMargin) * 2)
+			: Math.max(200, contentPreferredHeight + headRail + (contentMargins + mountMargin) * 2)
 	))
 
-	// Where on the chain this scroll hangs from, and how far down the chain is
-	// at that point. Clamped so a scroll hung off a seat near the screen edge
-	// still lands on the screen.
+	// Where on the horizon this was called from.
 	readonly property real anchorX: {
 		if (!surface.anchorItem || !surface.visible) return surface.width / 2;
 		const p = surface.anchorItem.mapToItem(null, surface.anchorItem.width / 2, 0);
 		return p ? p.x : surface.width / 2;
 	}
-	readonly property real cradleX: Math.round(Math.max(Arc.s4,
-		Math.min(surface.width - surface.shellWidth - Arc.s4, surface.anchorX - surface.shellWidth / 2)))
-	readonly property real cradleY: Math.round(
-		Arc.chainY(surface.anchorX / Math.max(1, surface.width)) + Arc.seat / 2 + Arc.dropGap)
-
-	// The sheet is written on behind the dowel: nothing surfaces until the
-	// roller has let down enough of it to hold a line of text.
-	readonly property real contentOpacity: Math.max(0, Math.min(1, (openProgress - 0.34) / 0.42))
+	readonly property real riseX: Math.round(Math.max(Arc.s5,
+		Math.min(surface.width - surface.shellWidth - Arc.s5, surface.anchorX - surface.shellWidth / 2)))
+	readonly property real floorY: Math.round(surface.height - Arc.horizon + Arc.riseGap)
 
 	anchors {
 		left: true
@@ -103,89 +96,49 @@ PanelWindow {
 
 	Behavior on openProgress {
 		NumberAnimation {
-			duration: surface.open ? Arc.unroll : Arc.reroll
+			duration: surface.open ? Arc.conjure : Arc.dispel
 			easing.type: Easing.Bezier
-			easing.bezierCurve: surface.open ? Arc.curveUnroll : Arc.curveReroll
+			easing.bezierCurve: surface.open ? Arc.curveRise : Arc.curveSink
 		}
 	}
-
-	// The swing. A scroll that has just been let down is a weight on two cords,
-	// so it rocks and is damped by the cords rather than by an easing curve.
-	// Integrated at 16 ms and stopped dead once it is below a tenth of a degree.
-	property real swing: 0
-	property real swingVelocity: 0
 
 	onOpenChanged: {
-		if (surface.open) {
-			surface.swing = 0;
-			surface.swingVelocity = 0;
-			swingKick.restart();
-		} else {
-			swingClock.running = false;
-			surface.swing = 0;
-		}
+		if (surface.open) gatherTimer.restart();
 	}
 
 	Timer {
-		id: swingKick
-		interval: Math.round(Arc.unroll * 0.62)
+		id: gatherTimer
+		interval: Math.round(Arc.conjure * 0.24)
 		onTriggered: {
-			// The kick is the dowel arriving at the end of its travel.
-			surface.swingVelocity = 0.30;
-			swingClock.running = true;
+			if (surface.open && motes.visible)
+				motes.burst(motes.width / 2, motes.height - 4, 22);
 		}
 	}
 
-	Timer {
-		id: swingClock
-		interval: 16
-		repeat: true
-		onTriggered: {
-			surface.swingVelocity += -surface.swing * 0.16;
-			surface.swingVelocity *= 0.90;
-			surface.swing += surface.swingVelocity;
-			if (Math.abs(surface.swing) < 0.01 && Math.abs(surface.swingVelocity) < 0.01) {
-				surface.swing = 0;
-				swingClock.running = false;
-			}
-		}
-	}
-
-	// Clicking off a scroll rolls it up — but not while it is still coming
-	// down. A scroll is let down under the pointer that pulled it, and a press
-	// still travelling when the window maps would otherwise land here.
+	// Clicking off dismisses — but not while it is still being called. A panel
+	// arrives under the pointer that called it, and a press still travelling
+	// when the window maps would otherwise land here.
 	MouseArea {
 		anchors.fill: parent
-		enabled: surface.openProgress > 0.75
+		enabled: surface.openProgress > 0.8
 		onClicked: surface.dismissRequested()
 	}
 
 	Item {
 		id: rig
 
-		x: surface.cradleX
-		y: surface.cradleY
+		x: surface.riseX
 		width: surface.shellWidth
 		height: surface.expandedHeight
+		y: Math.round(surface.floorY - height)
 
 		Behavior on x {
-			NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveDetent }
+			NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveSnap }
 		}
 		Behavior on height {
-			NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveUnroll }
+			NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveRise }
 		}
 
-		// Everything below the roller hangs off it, so the swing pivots where
-		// the cords meet the chain and not in the middle of the sheet.
-		transform: Rotation {
-			origin.x: rig.width / 2
-			origin.y: -Arc.dropGap
-			angle: surface.swing
-		}
-
-		// Escape rolls every scroll up. The handler sits on the rig, an
-		// ancestor of the content, so an unhandled key from a focused field
-		// inside travels up to here.
 		focus: true
 
 		Keys.onEscapePressed: event => {
@@ -193,88 +146,98 @@ PanelWindow {
 			surface.dismissRequested();
 		}
 
-		// The cords: the two lines the scroll hangs on, dropped from the chain
-		// before anything else moves.
-		Repeater {
-			model: 2
-			delegate: Rectangle {
-				required property int index
-				x: index === 0 ? Arc.s4 : rig.width - Arc.s4
-				y: -Arc.dropGap
-				width: Arc.ruleThin
-				height: Arc.dropGap * Math.min(1, surface.openProgress * 5)
-				color: Arc.giltDim
-			}
-		}
-
-		// The roller: the brass rod the sheet is wound on. It comes out of the
-		// chain sideways, which is the first thing that happens.
-		Rectangle {
-			id: roller
+		// 1 — the ring, inscribed on the horizon under the sigil.
+		Canvas {
+			id: circle
 			anchors.horizontalCenter: parent.horizontalCenter
-			y: 0
-			width: rig.width * Math.min(1, surface.openProgress * 4.5)
-			height: 4
-			color: Arc.gilt
+			y: rig.height - Arc.riseGap - height / 2
+			width: Math.min(rig.width * 1.05, 420)
+			height: width * 0.30
+			renderStrategy: Canvas.Cooperative
+			opacity: surface.openProgress > 0.02 ? 1 : 0
 
-			Rectangle {
-				anchors.verticalCenter: parent.verticalCenter
-				anchors.left: parent.left
-				anchors.leftMargin: -2
-				width: 5
-				height: 8
-				color: Arc.giltDim
-			}
+			readonly property real through: surface.inscribed
 
-			Rectangle {
-				anchors.verticalCenter: parent.verticalCenter
-				anchors.right: parent.right
-				anchors.rightMargin: -2
-				width: 5
-				height: 8
-				color: Arc.giltDim
+			onThroughChanged: requestPaint()
+
+			onPaint: {
+				const ctx = getContext("2d");
+				ctx.reset();
+				if (width < 12 || circle.through <= 0.002) return;
+				const cx = width / 2, cy = height / 2;
+				// Seen at a raking angle, so it lies on the floor rather than
+				// standing up facing the reader.
+				ctx.save();
+				ctx.translate(cx, cy);
+				ctx.scale(1, height / width);
+				Ink.ring(ctx, 0, 0, width / 2 - 3, 2.2, Arc.aether, circle.through);
+				Ink.graduations(ctx, 0, 0, width / 2 - 5, 48, 4, 9, 4,
+					Arc.ruleThin, Qt.alpha(Arc.aether, 0.5), circle.through);
+				Ink.runeRing(ctx, 0, 0, width / 2 - 16, 9, 7, 13, Arc.ruleThin,
+					Qt.alpha(Arc.gold, 0.22), Arc.aether,
+					Math.round(9 * circle.through));
+				ctx.restore();
 			}
 		}
 
-		// The let-down sheet. Clipped, so what you see is the sheet being
-		// revealed from the top as the dowel travels — not a rectangle being
-		// scaled into existence.
+		ArcHalo {
+			anchors.centerIn: circle
+			width: circle.width * 1.5
+			height: circle.height * 4
+			color: Arc.aether
+			strength: 0.30 * surface.inscribed * (1.1 - surface.condensed * 0.5)
+			spread: 0.42
+			flicker: true
+		}
+
+		// 2 — the motes thrown off the ring while the glass is condensing.
+		ArcMotes {
+			id: motes
+			anchors.fill: parent
+			color: Arc.aether
+			span: 3.4
+			visible: surface.openProgress > 0.05 && surface.openProgress < 0.97
+		}
+
+		// 3 — the glass, condensing upward out of the ring. Clipped from the
+		// bottom, so it is revealed rather than scaled.
 		Item {
 			id: window
-			anchors.top: roller.bottom
 			anchors.left: parent.left
 			anchors.right: parent.right
-			height: Math.max(0, (rig.height - roller.height) * surface.openProgress)
+			anchors.bottom: parent.bottom
+			anchors.bottomMargin: Arc.riseGap
+			height: Math.max(0, (rig.height - Arc.riseGap) * surface.condensed)
 			clip: true
+			opacity: Math.min(1, surface.condensed * 1.6)
 
 			ArcLeaf {
-				id: sheet
-				y: 0
-				width: window.width
-				height: rig.height - roller.height
+				id: pane
+				anchors.left: parent.left
+				anchors.right: parent.right
+				anchors.bottom: parent.bottom
+				height: rig.height - Arc.riseGap
 				variant: "chamber"
 				crest: true
-				lineColor: surface.borderColor.a > 0.01 ? surface.borderColor : Arc.giltDim
+				lineColor: surface.borderColor.a > 0.01 ? surface.borderColor : Arc.goldDim
 				liveColor: Arc.aether
 				washTop: surface.surfaceColor
-				washBottom: Arc.washDeep
-				haloStrength: 0.22 * surface.openProgress
+				washBottom: Arc.hazeDeep
+				haloStrength: 0.16 * surface.condensed
 				padding: 0
 
-				// The name, struck into the head rail across the top of the
-				// sheet. This is why a scroll standing half empty still looks
-				// like a made object.
+				// The name, written across the head with a ley out to the edge.
 				ArcText {
 					id: nameText
 					anchors.left: parent.left
 					anchors.top: parent.top
 					anchors.leftMargin: surface.mountMargin + Arc.s4
-					anchors.topMargin: surface.mountMargin - 1
+					anchors.topMargin: surface.mountMargin + Arc.s3
 					role: "label"
 					tone: "aether"
 					text: surface.title
 					opacity: surface.contentOpacity
-					font.letterSpacing: Arc.trackingRubric + 1.2
+					font.letterSpacing: Arc.trackingRubric + 1.6
 				}
 
 				ArcFlourish {
@@ -284,62 +247,29 @@ PanelWindow {
 					anchors.rightMargin: surface.mountMargin + Arc.s4
 					anchors.verticalCenter: nameText.verticalCenter
 					height: 10
-					lineColor: Arc.giltFaint
+					lineColor: Arc.goldGhost
 					facing: Qt.LeftToRight
 					opacity: surface.contentOpacity
-					visible: width > 34
+					visible: width > 30
 				}
 
+				// 4 — what is written on it, arriving after the glass has set.
 				Item {
 					id: contentSlot
-					anchors.left: parent.left
-					anchors.right: parent.right
-					anchors.top: parent.top
-					anchors.bottom: parent.bottom
+					anchors.fill: parent
 					anchors.leftMargin: surface.contentMargins + surface.mountMargin
 					anchors.rightMargin: surface.contentMargins + surface.mountMargin
 					anchors.topMargin: surface.contentMargins + surface.mountMargin + surface.headRail
 					anchors.bottomMargin: surface.contentMargins + surface.mountMargin
 					opacity: surface.contentOpacity
 
-					// Writing follows the dowel down, so the page is written as
-					// it is uncovered rather than after it has arrived.
+					// It settles down into place rather than fading up: the
+					// writing arrives from the light above it.
 					transform: Translate {
-						y: (1 - surface.contentOpacity) * -18
+						y: (1 - surface.contentOpacity) * -10
 					}
 				}
 			}
-
-			// The curl at the leading edge, and the shade the turn throws onto
-			// the sheet behind it. It rides the bottom of what has been let
-			// down, which is what makes the motion read as unrolling.
-			Rectangle {
-				anchors.left: parent.left
-				anchors.right: parent.right
-				anchors.bottom: parent.bottom
-				height: 14
-				visible: surface.openProgress > 0.02 && surface.openProgress < 0.995
-
-				gradient: Gradient {
-					GradientStop { position: 0.0; color: "transparent" }
-					GradientStop { position: 0.55; color: Qt.alpha(Arc.well, 0.7) }
-					GradientStop { position: 0.92; color: Qt.alpha(Arc.gilt, 0.22) }
-					GradientStop { position: 1.0; color: Qt.alpha(Arc.well, 0.5) }
-				}
-			}
-		}
-
-		// The dowel: the weight at the foot of the sheet. It is what the sheet
-		// is falling behind, so it is always at the bottom of what is showing.
-		Rectangle {
-			anchors.top: window.bottom
-			anchors.left: parent.left
-			anchors.right: parent.right
-			anchors.leftMargin: -2
-			anchors.rightMargin: -2
-			height: 3
-			color: Arc.gilt
-			opacity: Math.min(1, surface.openProgress * 6)
 		}
 	}
 }

@@ -7,12 +7,12 @@ import Quickshell.Wayland
 import "components"
 import "components/ArcInk.js" as Ink
 
-// The chain again, across the top of a screen that is not the primary one.
+// The horizon again, on a screen that is not the primary one.
 //
-// Same instrument, fewer fittings: the horologe, the realms on this output and
-// the way out are here, but the readings that belong to the machine as a whole
-// — the oracle, the ravens — stay on the one chain that owns them. Every press
-// is a signal; this window knows nothing about panels.
+// Same sanctum, fewer things in it: the chronomancer, the realms on this
+// output, and the way out. The readings that belong to the machine as a whole
+// — the oracle, the ravens, the core — stay on the one horizon that owns them.
+// Every press is a signal; this window knows nothing about panels.
 PanelWindow {
 	id: root
 
@@ -32,10 +32,10 @@ PanelWindow {
 	// Kept so the primary shell can keep handing its palette over; the colours
 	// themselves come from Bio, which reads the same Wallust file.
 	property color foreground: Arc.ink
-	property color background: Arc.vellum
-	property color secondaryBoxColor: Arc.leaf1
-	property color secondaryBoxStrongColor: Arc.leaf2
-	property color secondaryInsetColor: Arc.well
+	property color background: Arc.abyss
+	property color secondaryBoxColor: Arc.veil1
+	property color secondaryBoxStrongColor: Arc.veil2
+	property color secondaryInsetColor: Arc.depth
 	property color tertiary: Arc.aetherAlt
 	property color primary: Arc.aether
 	property color onPrimaryColor: Arc.onAether
@@ -61,248 +61,157 @@ PanelWindow {
 	anchors {
 		left: true
 		right: true
-		top: true
+		bottom: true
 	}
 
 	margins {
 		left: 0
 		right: 0
-		top: 0
+		bottom: 0
 	}
 
-	exclusiveZone: Math.round(Arc.gantryDepth)
-	implicitHeight: Math.round(Arc.gantryDepth)
+	exclusiveZone: Math.round(Arc.horizon)
+	implicitHeight: Math.round(Arc.horizon)
 	color: "transparent"
 
 	Item {
 		id: bar
 		anchors.fill: parent
 
-		function chainAt(centreX) {
-			return Arc.chainY(centreX / Math.max(1, bar.width));
-		}
+		readonly property real chronoCentreY: bar.height + Arc.chronoSunk
 
-		function seatY(centreX, size) {
-			return Math.round(bar.chainAt(centreX) - size / 2);
-		}
-
-		// The instrument's shade, as on the primary chain: without it the
-		// engraving vanishes wherever the wallpaper is pale.
 		Rectangle {
 			anchors.fill: parent
 			gradient: Gradient {
-				GradientStop { position: 0.0; color: Qt.alpha(Arc.well, Arc.light ? 0.50 : 0.92) }
-				GradientStop { position: 0.62; color: Qt.alpha(Arc.well, Arc.light ? 0.34 : 0.66) }
-				GradientStop { position: 1.0; color: "transparent" }
-			}
-		}
-
-		Canvas {
-			id: chain
-			anchors.fill: parent
-			renderStrategy: Canvas.Cooperative
-
-			Connections {
-				target: Arc
-				function onGiltChanged() { chain.requestPaint(); }
-			}
-
-			onPaint: {
-				const ctx = getContext("2d");
-				ctx.reset();
-				if (width <= 8) return;
-				const shadow = Qt.alpha(Qt.darker(Arc.gilt, 2.4), 0.6);
-				const highlight = Qt.alpha(Qt.lighter(Arc.gilt, 1.8), 0.5);
-				const gap = Arc.horologe * 0.44;
-
-				Ink.groove(ctx, [
-					{ x: 0, y: Arc.gantryRise },
-					{ x: width / 2 - gap, y: Arc.chainY(0.5 - gap / width) }
-				], Arc.rule * 2.0, Arc.gilt, highlight, shadow, false);
-				Ink.groove(ctx, [
-					{ x: width / 2 + gap, y: Arc.chainY(0.5 + gap / width) },
-					{ x: width, y: Arc.gantryRise }
-				], Arc.rule * 2.0, Arc.gilt, highlight, shadow, false);
-
-				const spacing = 26;
-				const marks = Math.floor(width / spacing);
-				for (let index = 0; index <= marks; index++) {
-					const x = index * spacing;
-					const y = Arc.chainY(x / width);
-					const long = index % 5 === 0;
-					Ink.cut(ctx, [{ x: x, y: y + 2 }, { x: x, y: y + (long ? 8 : 4) }],
-						Arc.ruleThin, Qt.alpha(Arc.gilt, long ? 0.55 : 0.3), false);
-				}
-
-				for (const side of [0, width]) {
-					const dir = side === 0 ? 1 : -1;
-					Ink.groove(ctx, [
-						{ x: side, y: Arc.gantryRise + 16 },
-						{ x: side, y: Arc.gantryRise },
-						{ x: side + dir * 20, y: Arc.gantryRise }
-					], Arc.rule * 1.4, Arc.gilt, highlight, shadow, false);
-					Ink.rivet(ctx, side + dir * 7, Arc.gantryRise, 2.4, Arc.gilt, highlight, shadow);
-				}
-			}
-		}
-
-		Row {
-			id: leftLimb
-			anchors.left: parent.left
-			anchors.leftMargin: 22
-			anchors.top: parent.top
-			height: parent.height
-			spacing: Arc.s3
-
-			ArcSeat {
-				id: launcherNode
-				size: 34
-				seed: 0
-				y: bar.seatY(leftLimb.x + x + width / 2, height)
-				onClicked: root.launcherClicked()
-
-				ArcMark {
-					anchors.centerIn: parent
-					width: parent.width * 0.60
-					height: parent.height * 0.60
-					glyph: "book"
-					weight: Arc.rule
-					lineColor: Arc.ink
-				}
-			}
-
-			NiriTaskbar {
-				id: taskbarIsland
-				visible: root.niriState.tasksForOutput(String(root.screen?.name || "")).length > 0
-				height: root.height
-				niriState: root.niriState
-				outputName: String(root.screen?.name || "")
-				originX: leftLimb.x + x
-				chainAt: bar.chainAt
-				background: Arc.leaf1
-				foreground: Arc.ink
-				secondaryBoxColor: Arc.leaf2
-				secondaryBoxStrongColor: Arc.leaf3
+				GradientStop { position: 0.0; color: "transparent" }
+				GradientStop { position: 0.35; color: Qt.alpha(Arc.abyss, Arc.light ? 0.40 : 0.62) }
+				GradientStop { position: 1.0; color: Qt.alpha(Arc.abyss, Arc.light ? 0.80 : 0.96) }
 			}
 		}
 
 		Item {
-			id: horologe
+			id: chrono
 
-			width: Arc.horologe
-			height: Arc.horologe
+			width: Arc.chronoRadius * 2
+			height: Arc.chronoRadius * 2
 			x: Math.round((bar.width - width) / 2)
-			y: bar.seatY(bar.width / 2, height)
+			y: Math.round(bar.chronoCentreY - Arc.chronoRadius)
 
 			readonly property real seconds: root.now.getSeconds()
 
 			ArcHalo {
 				anchors.centerIn: parent
-				width: parent.width * 2.3
-				height: parent.height * 2.3
+				width: parent.width * 1.5
+				height: parent.height * 1.5
 				color: Arc.aether
-				strength: 0.26
-				spread: 0.34
+				strength: 0.20
+				spread: 0.30
 				flicker: true
 			}
 
 			Canvas {
-				id: face
+				id: limb
 				anchors.fill: parent
 				renderStrategy: Canvas.Cooperative
 
+				readonly property int hour: root.now.getHours()
+
+				onHourChanged: requestPaint()
+
 				Connections {
 					target: Arc
-					function onGiltChanged() { face.requestPaint(); }
-					function onLeaf1Changed() { face.requestPaint(); }
+					function onGoldChanged() { limb.requestPaint(); }
 				}
 
 				onPaint: {
 					const ctx = getContext("2d");
 					ctx.reset();
-					const cx = width / 2, cy = height / 2;
-					const r = Math.min(width, height) / 2 - 1;
-					const cast = ctx.createLinearGradient(0, 0, 0, height);
-					cast.addColorStop(0, Arc.leaf2);
-					cast.addColorStop(1, Arc.well);
-					ctx.fillStyle = cast;
-					ctx.beginPath();
-					ctx.arc(cx, cy, r, 0, Math.PI * 2);
-					ctx.fill();
-					Ink.guilloche(ctx, cx, cy, r * 0.74, 22, r * 0.045, 3,
-						Arc.ruleThin * 0.7, Qt.alpha(Arc.gilt, 0.14));
+					const cx = width / 2, cy = height / 2, r = Arc.chronoRadius;
+					Ink.ring(ctx, cx, cy, r - 3, 1.4, Qt.alpha(Arc.gold, 0.34), 1);
+					Ink.graduations(ctx, cx, cy, r - 5, 60, 4, 11, 5,
+						Arc.ruleThin, Qt.alpha(Arc.gold, 0.30), 1);
+					Ink.ring(ctx, cx, cy, r - 26, 1.0, Qt.alpha(Arc.gold, 0.22), 1);
+					Ink.runeRing(ctx, cx, cy, r - 42, 12, 101 + limb.hour * 17, 17,
+						Arc.ruleThin, Qt.alpha(Arc.gold, 0.30), Arc.aether, 0);
+					Ink.ring(ctx, cx, cy, r - 62, 1.0, Qt.alpha(Arc.gold, 0.16), 1);
 				}
 			}
 
-			ArcDial {
+			Canvas {
+				id: hands
 				anchors.fill: parent
-				seed: 0
-				weight: Arc.rule
-				lineColor: Arc.giltDim
-				liveColor: Arc.aether
-				intensity: horologeTouch.live
-				progress: horologe.seconds / 60
-			}
+				renderStrategy: Canvas.Cooperative
 
-			ArcDial {
-				anchors.centerIn: parent
-				width: parent.width - 13
-				height: parent.height - 13
-				seed: 1
-				weight: Arc.ruleThin
-				beading: false
-				lineColor: Arc.giltGhost
-				liveColor: Arc.aetherAlt
-				progress: (root.now.getMinutes() + horologe.seconds / 60) / 60
+				readonly property real seconds: chrono.seconds
+				readonly property real minutes: root.now.getMinutes() + chrono.seconds / 60
+
+				onSecondsChanged: requestPaint()
+
+				onPaint: {
+					const ctx = getContext("2d");
+					ctx.reset();
+					const cx = width / 2, cy = height / 2, r = Arc.chronoRadius;
+					const s = hands.seconds / 60;
+					Ink.ring(ctx, cx, cy, r - 3, 1.8, Qt.alpha(Arc.aether, 0.85), s);
+					const tip = -Math.PI / 2 + Math.PI * 2 * s;
+					Ink.mote(ctx, cx + Math.cos(tip) * (r - 3), cy + Math.sin(tip) * (r - 3), 3.4, Arc.aether);
+					Ink.ring(ctx, cx, cy, r - 26, 2.4, Qt.alpha(Arc.aetherAlt, 0.7), hands.minutes / 60);
+					Ink.runeRing(ctx, cx, cy, r - 42, 12, 101 + root.now.getHours() * 17, 17,
+						Arc.ruleThin * 1.3, Qt.alpha(Arc.gold, 0),
+						Arc.aether, Math.floor(hands.minutes / 60 * 12) + 1);
+				}
 			}
 
 			Column {
-				anchors.centerIn: parent
-				spacing: -3
+				anchors.horizontalCenter: parent.horizontalCenter
+				y: 20
+				spacing: -2
 
 				ArcText {
 					anchors.horizontalCenter: parent.horizontalCenter
-					role: "reading"
-					font.pixelSize: 20
-					font.letterSpacing: 0.5
+					role: "display"
+					font.pixelSize: 38
+					font.letterSpacing: 3
 					text: Qt.formatDateTime(root.now, "HH:mm")
 				}
 
-				Rectangle {
+				ArcText {
 					anchors.horizontalCenter: parent.horizontalCenter
-					width: 22
-					height: Arc.ruleThin
-					color: Arc.giltFaint
+					role: "hand"
+					tone: "aether"
+					font.pixelSize: 16
+					text: Arc.hourName(root.now)
+				}
+
+				ArcText {
+					anchors.horizontalCenter: parent.horizontalCenter
+					role: "label"
+					tone: "muted"
+					font.pixelSize: 9
+					text: Qt.formatDateTime(root.now, "ddd dd MMM")
 				}
 			}
 
 			ArcTouch {
-				id: horologeTouch
+				anchors.fill: undefined
+				anchors.horizontalCenter: parent.horizontalCenter
+				y: 20
+				width: 230
+				height: Arc.horizon - 20
 				onClicked: root.clockClicked()
 			}
 		}
 
-		Column {
-			id: dayBlock
-			anchors.right: horologe.left
-			anchors.rightMargin: Arc.s4
-			y: Math.round(bar.chainAt(dayBlock.x + dayBlock.width / 2) - dayBlock.height / 2)
-			spacing: -1
-
-			ArcText {
-				anchors.right: parent.right
-				role: "label"
-				tone: "muted"
-				text: Qt.formatDateTime(root.now, "ddd dd MMM")
-			}
-
-			ArcText {
-				anchors.right: parent.right
-				role: "hand"
-				tone: "faint"
-				font.pixelSize: 13
-				text: Arc.hourName(root.now)
-			}
+		ArcMotes {
+			anchors.horizontalCenter: parent.horizontalCenter
+			anchors.bottom: parent.bottom
+			width: Arc.chronoRadius * 2.2
+			height: Arc.horizon
+			color: Arc.aether
+			drifting: true
+			density: 5
+			drift: -6
+			span: 2.6
 		}
 
 		Timer {
@@ -312,107 +221,74 @@ PanelWindow {
 			onTriggered: root.now = new Date()
 		}
 
-		Row {
-			id: rightLimb
-			anchors.right: parent.right
-			anchors.rightMargin: 22
-			anchors.top: parent.top
-			height: parent.height
-			layoutDirection: Qt.RightToLeft
-			spacing: Arc.s3
+		ArcSeat {
+			id: launcherNode
+			x: Arc.s6
+			y: Math.round(Arc.horizon * 0.42)
+			size: 38
+			seed: 0
+			label: "Codex"
+			onClicked: root.launcherClicked()
 
-			ArcSeat {
-				id: powerNode
-				seed: 2
-				y: bar.seatY(rightLimb.x + x + width / 2, height)
-				ringColor: Qt.alpha(Arc.bane, 0.5)
-				liveColor: Arc.bane
-				iconColor: Qt.alpha(Arc.bane, 0.85)
-				iconSource: Arc.icon("system-shutdown-symbolic")
-				onClicked: root.powerClicked()
+			ArcMark {
+				anchors.centerIn: parent
+				width: parent.width * 0.68
+				height: parent.height * 0.68
+				glyph: "book"
+				weight: Arc.rule
+				lineColor: launcherNode.live > 0.25 ? Arc.aether : Arc.ink
 			}
+		}
 
-			Item {
-				id: trayRun
-				width: trayRow.width
-				height: root.height
-				visible: trayRepeater.count > 0
+		RealmMap {
+			anchors.left: launcherNode.right
+			anchors.leftMargin: Arc.s6
+			anchors.bottom: parent.bottom
+			width: Math.max(0, bar.width / 2 - Arc.chronoRadius * 0.86 - x - Arc.s5)
+			height: Arc.horizon
+			niriState: root.niriState
+			outputName: String(root.screen?.name || "")
+		}
 
-				Row {
-					id: trayRow
-					spacing: Arc.s2
+		NowPlaying {
+			id: media
+			x: Math.round(bar.width / 2 + Arc.chronoRadius * 0.86)
+			y: Math.round(Arc.horizon * 0.44)
+			progressColor: Arc.aether
+			onClicked: root.mediaClicked()
+		}
 
-					Repeater {
-						id: trayRepeater
-						model: ScriptModel {
-							values: SystemTray.items.values
-						}
+		ArcSeat {
+			id: networkNode
+			anchors.left: media.right
+			anchors.leftMargin: Arc.s6
+			y: Math.round(Arc.horizon * 0.62)
+			size: 24
+			seed: 0
+			label: "Ley"
+			iconSource: root.networkStatusType === "ethernet"
+				? Arc.icon("network-wired-symbolic")
+				: Arc.icon("network-wireless-signal-excellent-symbolic")
+			onClicked: root.networkClicked()
+		}
 
-						ArcSeat {
-							id: trayNode
+		ArcSeat {
+			id: powerNode
+			x: bar.width - Arc.s6 - width
+			y: Math.round(Arc.horizon * 0.42)
+			size: 32
+			seed: 2
+			label: "The Void"
+			liveColor: Arc.bane
+			onClicked: root.powerClicked()
 
-							required property SystemTrayItem modelData
-							required property int index
-
-							size: 26
-							seed: trayNode.index + 1
-							y: bar.seatY(rightLimb.x + trayRun.x + trayNode.x + width / 2, height)
-							acceptedButtons: Qt.LeftButton | Qt.RightButton
-
-							Image {
-								anchors.centerIn: parent
-								width: 14
-								height: 14
-								source: root.trayIconSource(trayNode.modelData?.icon ?? "")
-								fillMode: Image.PreserveAspectFit
-								smooth: true
-								mipmap: true
-							}
-
-							onClicked: event => {
-								if (event.button === Qt.RightButton) trayNode.modelData.secondaryActivate();
-								else trayNode.modelData.activate();
-							}
-						}
-					}
-				}
-			}
-
-			TopBarResourceBars {
-				y: bar.seatY(rightLimb.x + x + width / 2, height)
-				onClicked: root.resourcesClicked()
-			}
-
-			ArcSeat {
-				seed: 0
-				y: bar.seatY(rightLimb.x + x + width / 2, height)
-				iconSource: root.networkStatusType === "ethernet"
-					? Arc.icon("network-wired-symbolic")
-					: Arc.icon("network-wireless-signal-excellent-symbolic")
-				onClicked: root.networkClicked()
-			}
-
-			ArcSeat {
-				seed: 3
-				y: bar.seatY(rightLimb.x + x + width / 2, height)
-				iconSource: Arc.icon("bluetooth-active-symbolic")
-				onClicked: root.bluetoothClicked()
-			}
-
-			ArcSeat {
-				seed: 2
-				y: bar.seatY(rightLimb.x + x + width / 2, height)
-				iconSource: Arc.icon("edit-paste-symbolic")
-				onClicked: root.clipboardClicked()
-			}
-
-			NowPlaying {
-				originX: rightLimb.x + x
-				chainAt: bar.chainAt
-				foreground: Arc.ink
-				secondaryBoxColor: Arc.leaf1
-				progressColor: Arc.aether
-				onClicked: root.mediaClicked()
+			ArcMark {
+				anchors.centerIn: parent
+				width: parent.width * 0.7
+				height: parent.height * 0.7
+				glyph: "gate"
+				weight: Arc.rule
+				lineColor: powerNode.live > 0.25 ? Arc.bane : Qt.alpha(Arc.bane, 0.8)
 			}
 		}
 	}

@@ -12,7 +12,7 @@ import "ArcInk.js" as Ink
 Item {
 	id: rune
 
-	property color lineColor: Arc.gilt
+	property color lineColor: Arc.gold
 	property int seed: 1
 	property real weight: Arc.rule
 	property real detail: 1.0

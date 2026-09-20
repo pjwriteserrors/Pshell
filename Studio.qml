@@ -11,11 +11,10 @@ import "components"
 // all, and a style that ships without a page leaves whatever that page controls
 // unreachable. See STUDIO.md.
 //
-// Here it is a ledger. The five sections are tabbed dividers standing out of
-// the fore-edge of the book, on the right where a thumb would find them; the
-// one you are in is pulled proud of the block and the rest sit flush. Changing
-// section turns a leaf: a blank page sweeps over the stage about its right edge
-// and what is underneath it is the new section, written band by band.
+// Here it is a book of five chapters, and the chapters are runes across the
+// foot of the page — the same five runes the codex has at its foot, and turned
+// to the same way. Changing chapter does not slide or cross-fade: what is on
+// the page comes apart into motes and the next condenses in its place.
 //
 // Everything is reachable with the mouse and with the keyboard:
 //   Escape            close
@@ -53,12 +52,10 @@ FocusScope {
 		return 0;
 	}
 
-	readonly property real tabColumn: 46
-
 	function showPage(id) {
 		if (!id || id === root.page) return;
 		root.page = id;
-		leafTurn.restart();
+		changeover.restart();
 	}
 
 	function cyclePage(delta) {
@@ -139,34 +136,36 @@ FocusScope {
 		}
 	}
 
-	// The block: the leaf everything is written on, with the cut edges of the
-	// paper showing along its foot.
-	Rectangle {
-		id: block
-		anchors.left: parent.left
-		anchors.top: parent.top
-		anchors.bottom: parent.bottom
-		anchors.right: parent.right
-		anchors.rightMargin: root.tabColumn
-		color: Arc.leaf1
+	// The stage. Changing chapter does not slide or cross-fade: what is on the
+	// page comes apart into motes and the next chapter condenses in its place,
+	// which is the only way anything arrives in this shell.
+	property real settled: 1
 
-		Rectangle {
-			anchors.fill: parent
-			color: "transparent"
-			border.width: Arc.ruleThin
-			border.color: Arc.giltFaint
-		}
+	SequentialAnimation {
+		id: changeover
+		NumberAnimation { target: root; property: "settled"; to: 0; duration: Arc.recoil; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveSink }
+		ScriptAction { script: pageMotes.burst(pageMotes.width / 2, pageMotes.height / 2, 26) }
+		NumberAnimation { target: root; property: "settled"; to: 1; duration: Arc.draw; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveRise }
+	}
 
-		// The running head: what book this is and what section is open.
+	ArcLeaf {
+		id: page
+
+		anchors.fill: parent
+		variant: "chamber"
+		crest: true
+		washTop: Arc.haze
+		washBottom: Arc.hazeDeep
+		haloStrength: 0.14
+		padding: Arc.s6
+
+		// The running head: what book this is and what chapter is open.
 		Item {
 			id: runningHead
 			anchors.left: parent.left
 			anchors.right: parent.right
 			anchors.top: parent.top
-			anchors.leftMargin: Arc.s6
-			anchors.rightMargin: Arc.s6
-			anchors.topMargin: Arc.s4
-			height: 22
+			height: 24
 
 			ArcText {
 				id: bookName
@@ -175,7 +174,7 @@ FocusScope {
 				role: "label"
 				tone: "aether"
 				text: "Studio"
-				font.letterSpacing: Arc.trackingRubric + 1.4
+				font.letterSpacing: Arc.trackingRubric + 2
 			}
 
 			ArcText {
@@ -190,42 +189,19 @@ FocusScope {
 
 			ArcFlourish {
 				anchors.left: sectionName.right
-				anchors.right: headFolio.left
+				anchors.right: parent.right
 				anchors.leftMargin: Arc.s4
-				anchors.rightMargin: Arc.s4
 				anchors.verticalCenter: parent.verticalCenter
 				height: 10
+				lineColor: Arc.goldGhost
 				facing: Qt.LeftToRight
-				lineColor: Arc.giltFaint
 				visible: width > 36
 			}
-
-			ArcText {
-				id: headFolio
-				anchors.right: parent.right
-				anchors.verticalCenter: parent.verticalCenter
-				role: "mono"
-				tone: "faint"
-				font.pixelSize: 10
-				text: `${root.pageIndex + 1} / ${root.pages.length}`
-			}
-		}
-
-		Rectangle {
-			id: headRule
-			anchors.left: runningHead.left
-			anchors.right: runningHead.right
-			anchors.top: runningHead.bottom
-			anchors.topMargin: Arc.s2
-			height: Arc.ruleThin
-			color: Arc.giltFaint
 		}
 
 		Item {
 			id: stage
 
-			// The item of whichever section is currently loaded; the keyboard
-			// follows it.
 			readonly property Item activeItem: {
 				if (wallpaperPage.active) return wallpaperPage.item;
 				if (motionPage.active) return motionPage.item;
@@ -237,15 +213,19 @@ FocusScope {
 
 			anchors.left: parent.left
 			anchors.right: parent.right
-			anchors.top: headRule.bottom
-			anchors.bottom: parent.bottom
-			anchors.leftMargin: Arc.s6
-			anchors.rightMargin: Arc.s6
+			anchors.top: runningHead.bottom
+			anchors.bottom: chapters.top
 			anchors.topMargin: Arc.s5
 			anchors.bottomMargin: Arc.s5
 
-			// Only the visible section is instantiated: the wallpaper page
-			// starts preview processes and must not run behind another tab.
+			opacity: root.settled
+
+			transform: Translate {
+				y: (1 - root.settled) * 14
+			}
+
+			// Only the visible chapter is instantiated: the wallpaper page
+			// starts preview processes and must not run behind another.
 			Loader {
 				id: wallpaperPage
 				anchors.fill: parent
@@ -330,168 +310,113 @@ FocusScope {
 			}
 		}
 
-		// THE LEAF. Changing section turns a page: a blank sheet lies over the
-		// stage for a beat and then swings away about its right edge, in real
-		// perspective, and what is under it is the new section. Nothing here
-		// cross-fades.
-		Item {
-			id: turningLeaf
-
-			property real turn: 1
-
-			anchors.fill: parent
-			visible: turningLeaf.turn < 0.995
-			z: 5
-
-			NumberAnimation {
-				id: leafTurn
-				target: turningLeaf
-				property: "turn"
-				from: 0
-				to: 1
-				duration: Arc.unroll
-				easing.type: Easing.Bezier
-				easing.bezierCurve: Arc.curveSwing
-			}
-
-			transform: Matrix4x4 {
-				readonly property real angle: -104 * Math.max(0, (turningLeaf.turn - 0.18) / 0.82)
-
-				matrix: {
-					const d = 2600;
-					const rad = angle * Math.PI / 180;
-					const c = Math.cos(rad), s = Math.sin(rad);
-					const px = turningLeaf.width, py = turningLeaf.height / 2;
-					const toPivot = Qt.matrix4x4(1, 0, 0, px, 0, 1, 0, py, 0, 0, 1, 0, 0, 0, 0, 1);
-					const persp = Qt.matrix4x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, -1 / d, 1);
-					const rotate = Qt.matrix4x4(c, 0, s, 0, 0, 1, 0, 0, -s, 0, c, 0, 0, 0, 0, 1);
-					const fromPivot = Qt.matrix4x4(1, 0, 0, -px, 0, 1, 0, -py, 0, 0, 1, 0, 0, 0, 0, 1);
-					return toPivot.times(persp).times(rotate).times(fromPivot);
-				}
-			}
-
-			Rectangle {
-				anchors.fill: parent
-				gradient: Gradient {
-					orientation: Gradient.Horizontal
-					GradientStop { position: 0.0; color: Arc.leaf2 }
-					GradientStop { position: 0.85; color: Arc.leaf1 }
-					GradientStop { position: 1.0; color: Arc.leaf3 }
-				}
-
-				Rectangle {
-					anchors.right: parent.right
-					anchors.top: parent.top
-					anchors.bottom: parent.bottom
-					width: Arc.rule
-					color: Arc.giltFaint
-				}
-			}
+		ArcMotes {
+			id: pageMotes
+			anchors.fill: stage
+			color: Arc.aether
+			span: 3.4
 		}
-	}
 
-	// The dividers, standing out of the fore-edge. The one you are in is pulled
-	// proud of the block; the rest sit flush with it and only their titles show.
-	Column {
-		id: dividers
+		// THE CHAPTERS.
+		//
+		// Five runes across the foot of the page, exactly as the codex has its
+		// runes, and for the same reason: this is a book of five chapters and
+		// the runes are how you turn to one. The one you are in is alight with
+		// a ley drawn under it and its name written beneath; the others name
+		// themselves when the pointer finds them.
+		Item {
+			id: chapters
 
-		anchors.right: parent.right
-		anchors.top: parent.top
-		anchors.topMargin: Arc.s6
-		width: root.tabColumn
-		spacing: Arc.s3
+			anchors.left: parent.left
+			anchors.right: parent.right
+			anchors.bottom: parent.bottom
+			height: 64
 
-		Repeater {
-			model: root.pages
+			Row {
+				id: chapterRow
+				anchors.horizontalCenter: parent.horizontalCenter
+				anchors.top: parent.top
+				spacing: Arc.s7
 
-			delegate: Item {
-				id: divider
+				Repeater {
+					model: root.pages
 
-				required property var modelData
-				required property int index
-				readonly property bool active: root.page === divider.modelData.id
-				readonly property real live: Math.max(dividerTouch.live, divider.active ? 1 : 0)
+					delegate: Item {
+						id: chapter
 
-				width: root.tabColumn
-				height: Math.max(118, tabName.implicitWidth + 46)
+						required property var modelData
+						required property int index
+						readonly property bool active: root.page === chapter.modelData.id
+						readonly property real live: Math.max(chapterTouch.live, chapter.active ? 1 : 0)
 
-				// Pulled out by the thumb, and it stops against a detent.
-				x: 0
+						width: 46
+						height: 64
 
-				transform: Translate {
-					x: divider.active ? 7 : dividerTouch.containsMouse ? 4 : 0
+						ArcHalo {
+							anchors.horizontalCenter: parent.horizontalCenter
+							anchors.top: parent.top
+							width: 88
+							height: 88
+							color: Arc.aether
+							strength: 0.32
+							spread: 0.3
+							flicker: true
+							opacity: chapter.live
+							visible: opacity > 0.01
 
-					Behavior on x {
-						NumberAnimation {
-							duration: Arc.turn
-							easing.type: Easing.Bezier
-							easing.bezierCurve: Arc.curveDetent
+							Behavior on opacity {
+								NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveKindle }
+							}
+						}
+
+						ArcRune {
+							anchors.horizontalCenter: parent.horizontalCenter
+							anchors.top: parent.top
+							anchors.topMargin: 2
+							width: 22
+							height: 30
+							seed: chapter.index * 9 + 5
+							weight: chapter.active ? Arc.rule * 1.4 : Arc.ruleThin
+							lineColor: chapter.active ? Arc.aether
+								: chapter.live > 0.2 ? Arc.ink : Qt.alpha(Arc.gold, 0.4)
+						}
+
+						Rectangle {
+							anchors.horizontalCenter: parent.horizontalCenter
+							anchors.top: parent.top
+							anchors.topMargin: 38
+							width: chapter.active ? parent.width : 0
+							height: Arc.ruleThin
+							color: Arc.aether
+
+							Behavior on width {
+								NumberAnimation { duration: Arc.draw; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveInk }
+							}
+						}
+
+						ArcText {
+							anchors.horizontalCenter: parent.horizontalCenter
+							anchors.top: parent.top
+							anchors.topMargin: 44
+							width: 128
+							horizontalAlignment: Text.AlignHCenter
+							role: "label"
+							font.pixelSize: 9
+							tone: chapter.active ? "aether" : "muted"
+							text: chapter.modelData.label
+							opacity: chapter.live > 0.2 ? 1 : 0
+							elide: Text.ElideNone
+
+							Behavior on opacity {
+								NumberAnimation { duration: Arc.tick }
+							}
+						}
+
+						ArcTouch {
+							id: chapterTouch
+							onClicked: root.showPage(chapter.modelData.id)
 						}
 					}
-				}
-
-				ArcHalo {
-					anchors.centerIn: parent
-					width: parent.width * 3
-					height: parent.height * 1.4
-					color: Arc.aether
-					strength: 0.22
-					spread: 0.34
-					opacity: divider.live
-					visible: opacity > 0.01
-
-					Behavior on opacity {
-						NumberAnimation {
-							duration: Arc.turn
-							easing.type: Easing.Bezier
-							easing.bezierCurve: Arc.curveKindle
-						}
-					}
-				}
-
-				ArcPlate {
-					anchors.fill: parent
-					variant: "plate"
-					weight: Arc.ruleThin
-					inset: 0
-					beading: false
-					lineColor: Arc.giltFaint
-					liveColor: Arc.aether
-					fillTop: divider.active ? Arc.leaf2 : Arc.leaf0
-					fillBottom: divider.active ? Arc.leaf1 : Arc.leaf0
-					intensity: divider.live
-				}
-
-				// The title, read up the divider the way a divider is read.
-				ArcText {
-					id: tabName
-					anchors.horizontalCenter: parent.horizontalCenter
-					anchors.horizontalCenterOffset: -4
-					y: Math.round(parent.height / 2 - height / 2)
-					rotation: -90
-					transformOrigin: Item.Center
-					role: "label"
-					tone: divider.active ? "aether" : (divider.live > 0.3 ? "default" : "muted")
-					text: divider.modelData.label
-					font.letterSpacing: Arc.trackingRubric
-				}
-
-				ArcText {
-					anchors.horizontalCenter: parent.horizontalCenter
-					anchors.horizontalCenterOffset: 12
-					y: Math.round(parent.height / 2 - height / 2)
-					rotation: -90
-					transformOrigin: Item.Center
-					role: "mono"
-					tone: "faint"
-					font.pixelSize: 9
-					text: divider.modelData.hint
-					opacity: divider.live > 0.3 ? 1 : 0.55
-				}
-
-				ArcTouch {
-					id: dividerTouch
-					onClicked: root.showPage(divider.modelData.id)
 				}
 			}
 		}

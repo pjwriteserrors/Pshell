@@ -3,10 +3,11 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls.impl as QQCImpl
 
-// A button is a small brass plate with a name struck into it. Pressing it does
-// not move it across the page — it is struck: the plate takes the blow, drops a
-// pixel into its mount and the strike flashes through the engraving. There is
-// no lift and no shadow; a plate is bolted down.
+// A word you can say.
+//
+// Not a plate with a label on it: the word itself is the control. A ley line
+// under it lights when the pointer is on it, and saying it sends a ring out
+// once. Nothing is enclosed, nothing moves down, nothing is shaded.
 Item {
 	id: button
 
@@ -22,46 +23,61 @@ Item {
 
 	signal clicked()
 
-	implicitHeight: 32
-	implicitWidth: Math.max(minimumWidth, row.implicitWidth + Arc.s7)
+	implicitHeight: 30
+	implicitWidth: Math.max(minimumWidth, row.implicitWidth + Arc.s5)
 	opacity: enabled ? 1 : 0.45
 
-	transform: Translate {
-		y: touch.pressed ? 1 : 0
+	ArcHalo {
+		anchors.fill: parent
+		anchors.margins: -8
+		color: button.accentColor
+		strength: 0.26 * button.live
+		spread: 0.46
+		flicker: true
+		visible: button.live > 0.02
+	}
 
-		Behavior on y {
-			NumberAnimation { duration: Arc.tick }
+	Rectangle {
+		id: ley
+		anchors.horizontalCenter: parent.horizontalCenter
+		anchors.bottom: parent.bottom
+		anchors.bottomMargin: 2
+		width: button.live > 0.05 ? row.implicitWidth + Arc.s3 : 0
+		height: Arc.ruleThin
+		color: button.accentColor
+
+		Behavior on width {
+			NumberAnimation {
+				duration: Arc.turn
+				easing.type: Easing.Bezier
+				easing.bezierCurve: Arc.curveInk
+			}
 		}
 	}
 
-	ArcPlate {
-		anchors.fill: parent
-		variant: "plate"
-		lineColor: button.tone === "alert" ? Qt.alpha(Arc.bane, 0.55) : Arc.giltDim
-		liveColor: button.accentColor
-		fillTop: button.tone === "alert" ? Qt.alpha(Arc.bane, 0.08) : Arc.leaf2
-		fillBottom: Arc.leaf1
-		intensity: button.live
-	}
-
-	// The strike: the flash that runs through the plate at the moment of the
-	// blow and is gone before the hand is off it.
 	Rectangle {
-		id: strike
-		anchors.fill: parent
-		anchors.margins: 2
-		color: button.accentColor
+		id: shock
+		anchors.centerIn: parent
+		width: Math.max(parent.width, parent.height)
+		height: width
+		radius: width / 2
+		color: "transparent"
+		border.width: Arc.ruleThin
+		border.color: button.accentColor
 		opacity: 0
+
+		ParallelAnimation {
+			id: shockwave
+			NumberAnimation { target: shock; property: "scale"; from: 0.35; to: 1.5; duration: 480; easing.type: Easing.OutCubic }
+			SequentialAnimation {
+				NumberAnimation { target: shock; property: "opacity"; to: 0.55; duration: 50 }
+				NumberAnimation { target: shock; property: "opacity"; to: 0; duration: 430; easing.type: Easing.OutCubic }
+			}
+		}
 
 		Connections {
 			target: touch
-			function onPressed() { strikeFlash.restart(); }
-		}
-
-		SequentialAnimation {
-			id: strikeFlash
-			NumberAnimation { target: strike; property: "opacity"; to: 0.26; duration: 40 }
-			NumberAnimation { target: strike; property: "opacity"; to: 0; duration: 260; easing.type: Easing.OutCubic }
+			function onPressed() { shockwave.restart(); }
 		}
 	}
 

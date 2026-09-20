@@ -3,28 +3,33 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls.impl as QQCImpl
 
-// A seat: one fitting on the chain. A brass limb, a mark inside it, and a lamp
-// behind it that is only alight when the seat is doing something.
+// A sigil: one of the shell's functions, standing in the void.
 //
-// Brass turns. Under the hand the limb rotates a few degrees and arrests
-// against a detent — overshooting the stop by a hair and settling back into it,
-// which is what the curve in `Arc.curveDetent` is for. Pressing does not shrink
-// the seat: it seats it, one pixel deeper into the chain, and the limb snaps
-// straight. While a seat's panel is open its limb turns slowly and never stops,
-// which is the only idle motion on the chain.
+// At rest it is a mark and nothing else — no ring, no plate, no circle drawn
+// round it. That absence is deliberate: a row of marks in circles is a row of
+// buttons, and the sanctum has no buttons in it.
+//
+// Touched, it kindles: light comes up behind it, the mark warms to the live
+// colour and its name writes itself beside it. Pressed, it throws a ring
+// outward, once. While the thing it opens is open, a ring of runes is
+// inscribed around it and turns slowly — the only sigil on the screen that is
+// moving, so you can always see which one is answering.
 Item {
 	id: seat
 
 	property string iconSource: ""
-	property real iconSize: Math.round(size * 0.44)
+	property real iconSize: Math.round(size * 0.58)
 	property color iconColor: seat.lit ? Arc.aether : Arc.ink
-	property color ringColor: Arc.giltDim
+	property color ringColor: Arc.goldDim
 	property color liveColor: Arc.aether
-	property real size: Arc.seat
-	property bool lit: false          // the panel this seat owns is open
+	property real size: Arc.sigilSize
+	property bool lit: false
 	property int seed: 0
 	property real progress: -1
 	property string badge: ""
+	// The name that writes itself under the mark when it is touched. Empty
+	// means the mark is its own explanation.
+	property string label: ""
 	property alias containsMouse: touch.containsMouse
 	property alias acceptedButtons: touch.acceptedButtons
 
@@ -35,26 +40,17 @@ Item {
 	implicitWidth: size
 	implicitHeight: size
 
-	readonly property real turnTo: touch.pressed ? 0 : touch.containsMouse ? (seat.seed % 2 === 0 ? 11 : -11) : 0
-
-	// Seated: pressing pushes the fitting into the chain rather than scaling it.
-	transform: Translate {
-		y: touch.pressed ? 1.5 : 0
-
-		Behavior on y {
-			NumberAnimation { duration: Arc.tick }
-		}
-	}
+	readonly property real live: Math.max(touch.live, seat.lit ? 0.9 : 0)
 
 	ArcHalo {
 		anchors.centerIn: parent
-		width: seat.size * 2.2
-		height: seat.size * 2.2
+		width: seat.size * 2.6
+		height: seat.size * 2.6
 		color: seat.liveColor
-		strength: 0.32
-		spread: 0.33
+		strength: 0.36
+		spread: 0.32
 		flicker: true
-		opacity: Math.max(touch.live, seat.lit ? 0.85 : 0)
+		opacity: seat.live
 		visible: opacity > 0.01
 
 		Behavior on opacity {
@@ -66,33 +62,63 @@ Item {
 		}
 	}
 
+	// The ring, inscribed only while this sigil's panel is open.
 	ArcDial {
-		id: limb
-		anchors.fill: parent
-		lineColor: seat.ringColor
+		id: warding
+		anchors.centerIn: parent
+		width: seat.size * 1.55
+		height: seat.size * 1.55
+		lineColor: Qt.alpha(seat.liveColor, 0.55)
 		liveColor: seat.liveColor
-		intensity: Math.max(touch.live, seat.lit ? 0.9 : 0)
+		weight: Arc.ruleThin
 		seed: seat.seed
+		beading: false
 		progress: seat.progress
+		visible: seat.lit || warding.drawn > 0.01
+		drawn: seat.lit ? 1 : 0
 
-		rotation: seat.turnTo
-
-		Behavior on rotation {
+		Behavior on drawn {
 			NumberAnimation {
-				duration: Arc.turn
+				duration: seat.lit ? Arc.draw : Arc.recoil
 				easing.type: Easing.Bezier
-				easing.bezierCurve: Arc.curveDetent
+				easing.bezierCurve: seat.lit ? Arc.curveInk : Arc.curveSink
 			}
 		}
 
-		// The only thing on the chain that moves while nothing is happening,
-		// and only on the one seat whose panel is open.
 		RotationAnimation on rotation {
-			running: seat.lit && !touch.containsMouse
+			running: seat.lit
 			loops: Animation.Infinite
 			from: 0
 			to: 360
-			duration: 42000
+			duration: 26000
+		}
+	}
+
+	// The shock a press sends out. One ring, once, and gone.
+	Rectangle {
+		id: shock
+		anchors.centerIn: parent
+		width: seat.size * 1.2
+		height: width
+		radius: width / 2
+		color: "transparent"
+		border.width: Arc.rule
+		border.color: seat.liveColor
+		opacity: 0
+		scale: 1
+
+		ParallelAnimation {
+			id: shockwave
+			NumberAnimation { target: shock; property: "scale"; from: 0.5; to: 2.4; duration: 520; easing.type: Easing.OutCubic }
+			SequentialAnimation {
+				NumberAnimation { target: shock; property: "opacity"; to: 0.75; duration: 60 }
+				NumberAnimation { target: shock; property: "opacity"; to: 0; duration: 460; easing.type: Easing.OutCubic }
+			}
+		}
+
+		Connections {
+			target: touch
+			function onPressed() { shockwave.restart(); }
 		}
 	}
 
@@ -107,7 +133,7 @@ Item {
 			visible: seat.iconSource !== ""
 			source: seat.iconSource
 			sourceSize: Qt.size(width, height)
-			color: seat.iconColor
+			color: seat.live > 0.25 ? seat.liveColor : seat.iconColor
 
 			Behavior on color {
 				ColorAnimation { duration: Arc.tick }
@@ -115,15 +141,43 @@ Item {
 		}
 	}
 
-	// A count is struck on a small lozenge pinned to the seat, not a chip.
+	// The name, written under the mark while it is touched. It is not a
+	// tooltip: it is on the same plane as everything else and it belongs to
+	// the sigil, so it arrives by being written rather than by popping up.
+	ArcText {
+		id: naming
+		anchors.horizontalCenter: parent.horizontalCenter
+		anchors.top: parent.bottom
+		anchors.topMargin: 2
+		role: "label"
+		tone: "aether"
+		font.pixelSize: 9
+		text: seat.label
+		visible: seat.label !== ""
+		opacity: touch.containsMouse ? 1 : 0
+
+		transform: Translate {
+			y: touch.containsMouse ? 0 : -4
+
+			Behavior on y {
+				NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveSnap }
+			}
+		}
+
+		Behavior on opacity {
+			NumberAnimation { duration: Arc.tick }
+		}
+	}
+
+	// A count is a mote with a number in it, set off the mark.
 	Item {
 		id: tally
 		anchors.right: parent.right
 		anchors.top: parent.top
-		anchors.rightMargin: -Arc.s2
-		anchors.topMargin: -Arc.s1
-		width: Math.max(13, count.implicitWidth + 7)
-		height: 13
+		anchors.rightMargin: -6
+		anchors.topMargin: -4
+		width: Math.max(14, count.implicitWidth + 6)
+		height: 14
 		visible: seat.badge !== ""
 		scale: seat.badge !== "" ? 1 : 0
 
@@ -131,28 +185,18 @@ Item {
 			NumberAnimation {
 				duration: Arc.turn
 				easing.type: Easing.Bezier
-				easing.bezierCurve: Arc.curveDetent
+				easing.bezierCurve: Arc.curveSnap
 			}
 		}
 
-		Canvas {
-			anchors.fill: parent
-			renderStrategy: Canvas.Cooperative
-			onPaint: {
-				const ctx = getContext("2d");
-				ctx.reset();
-				const c = height / 2;
-				ctx.fillStyle = Arc.aether;
-				ctx.beginPath();
-				ctx.moveTo(c, 0);
-				ctx.lineTo(width - c, 0);
-				ctx.lineTo(width, c);
-				ctx.lineTo(width - c, height);
-				ctx.lineTo(c, height);
-				ctx.lineTo(0, c);
-				ctx.closePath();
-				ctx.fill();
-			}
+		ArcHalo {
+			anchors.centerIn: parent
+			width: 34
+			height: 34
+			color: Arc.aether
+			strength: 0.5
+			spread: 0.3
+			flicker: true
 		}
 
 		ArcText {
@@ -160,7 +204,7 @@ Item {
 			anchors.centerIn: parent
 			role: "mono"
 			font.pixelSize: 9
-			color: Arc.onAether
+			color: Arc.aether
 			text: seat.badge
 		}
 	}

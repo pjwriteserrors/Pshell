@@ -2,38 +2,37 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 
-// A rubric: the heading a scribe put in the margin in red before writing the
-// block it belongs to. The name is cut, a flourish carries the eye from it to
-// the edge of the page, and whatever the section holds follows underneath.
+// A heading. A rune, the name in small capitals, a ley line out to the edge,
+// and whatever count belongs at the end of it. Nothing is boxed and nothing is
+// underlined; the ley is what says the heading owns what follows.
 Column {
 	id: section
 
 	property string title: ""
 	property string trailing: ""
-	property color tendonColor: Arc.giltFaint
+	property color tendonColor: Arc.goldFaint
 
 	spacing: Arc.s3
 
 	Item {
 		width: parent.width
-		height: Math.max(heading.implicitHeight, 13)
+		height: Math.max(heading.implicitHeight, 14)
 		visible: section.title !== ""
 
-		// The rubric mark: the paragraph sign a scribe struck before a heading.
-		Rectangle {
-			id: pilcrow
+		ArcRune {
+			id: sigil
 			anchors.left: parent.left
 			anchors.verticalCenter: parent.verticalCenter
-			width: 4
-			height: 4
-			rotation: 45
-			color: Arc.aether
-			opacity: 0.85
+			width: 9
+			height: 13
+			seed: 5
+			weight: Arc.ruleThin
+			lineColor: Arc.aether
 		}
 
 		ArcText {
 			id: heading
-			anchors.left: pilcrow.right
+			anchors.left: sigil.right
 			anchors.leftMargin: Arc.s2
 			anchors.verticalCenter: parent.verticalCenter
 			role: "label"

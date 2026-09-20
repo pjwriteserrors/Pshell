@@ -68,6 +68,36 @@ Item {
 			}));
 	}
 
+	// The realms on one output, in the order niri lays them out.
+	function realmsForOutput(outputName) {
+		const list = [];
+		for (const workspace of Object.values(root.workspaceById)) {
+			if (outputName && String(workspace.output || "") !== outputName) continue;
+			list.push({
+				id: Number(workspace.id),
+				idx: Number(workspace.idx || 0),
+				name: String(workspace.name || ""),
+				active: !!workspace.is_active,
+				focused: !!workspace.is_focused,
+				urgent: !!workspace.is_urgent
+			});
+		}
+		list.sort((left, right) => left.idx - right.idx);
+		return list;
+	}
+
+	function focusRealm(workspaceId) {
+		if (workspaceId === undefined || workspaceId === null) return;
+		Quickshell.execDetached([ "niri", "msg", "action", "focus-workspace", String(workspaceId) ]);
+	}
+
+	function windowsInRealm(workspaceId) {
+		const list = [];
+		for (const window of Object.values(root.windowById))
+			if (Number(window.workspace_id) === Number(workspaceId)) list.push(window);
+		return root.buildTasks(list);
+	}
+
 	function tasksForOutput(outputName) {
 		if (!outputName) return root.tasks;
 		return root.tasksByOutput[outputName] || [];

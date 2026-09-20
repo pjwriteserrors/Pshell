@@ -79,11 +79,11 @@ Scope {
 	// Tissue roles. Every one of them comes out of Bio, which is the only place
 	// the Wallust palette is read and the only place contrast is decided. A
 	// colour is never picked here by palette slot — "color4" is not a role.
-	readonly property color secondaryBoxColor: Arc.leaf2
-	readonly property color secondaryBoxStrongColor: Arc.leaf3
-	readonly property color secondaryInsetColor: Arc.well
-	readonly property color surface: Arc.leaf1
-	readonly property color surfaceBorder: Arc.giltDim
+	readonly property color secondaryBoxColor: Arc.veil2
+	readonly property color secondaryBoxStrongColor: Arc.veil3
+	readonly property color secondaryInsetColor: Arc.depth
+	readonly property color surface: Arc.veil1
+	readonly property color surfaceBorder: Arc.goldDim
 	readonly property color onPrimary: Arc.onAether
 	readonly property color danger: Arc.bane
 	readonly property var primaryBarScreen: {
@@ -1183,13 +1183,13 @@ Scope {
 		running: true
 	}
 
-	readonly property color background: Arc.vellum
+	readonly property color background: Arc.abyss
 	readonly property color foreground: Arc.ink
 	readonly property color primary: Arc.aether
 	readonly property color secondary: Arc.aetherAlt
 	readonly property color accent: Arc.aetherAlt
 	readonly property color tertiary: Arc.aetherThird
-	readonly property color border: Arc.giltFaint
+	readonly property color border: Arc.goldFaint
 
 	Process {
 		id: weatherProcess
@@ -1205,6 +1205,13 @@ Scope {
 
 	NiriState {
 		id: niriState
+	}
+
+	// The machine's readings. It draws nothing: the arcane core on the horizon
+	// and the humours panel both take their numbers from here, so the readings
+	// are gathered once for the whole shell.
+	TopBarResourceBars {
+		id: resourceBars
 	}
 
 	Process {
@@ -1536,15 +1543,11 @@ Scope {
 
 	// SOUL RESONANCE.
 	//
-	// Volume and brightness are not a slider and not a toast in a corner. A
-	// crystal is let down from the vertex of the chain, directly under the
-	// horologe, and what you are turning is the light inside it. The level is
-	// the depth of what has been poured in; the reading is cut on the facet
-	// above it.
-	//
-	// Every change rings it — the crystal is struck and the ring damps out,
-	// integrated rather than eased, so turning a knob a long way rings louder
-	// than nudging it.
+	// Turning the volume or the brightness does not put a bar on the screen. A
+	// crystal is called up out of the floor of the sanctum, a little above the
+	// horizon and dead centre, and what you are turning is the light standing
+	// inside it. Every change strikes the stone: it rings, and the ring is
+	// integrated and damps out, so a long turn rings harder than a nudge.
 	PanelWindow {
 		id: osdWindow
 		screen: root.primaryBarScreen
@@ -1566,21 +1569,24 @@ Scope {
 
 		Behavior on shown {
 			NumberAnimation {
-				duration: root.osdVisible ? Arc.unroll : Arc.reroll
+				duration: root.osdVisible ? Arc.conjure : Arc.dispel
 				easing.type: Easing.Bezier
-				easing.bezierCurve: root.osdVisible ? Arc.curveUnroll : Arc.curveReroll
+				easing.bezierCurve: root.osdVisible ? Arc.curveRise : Arc.curveSink
 			}
 		}
 
-		// The ring: struck on every change, damped by the stone.
+		readonly property real inscribed: Math.max(0, Math.min(1, shown / 0.34))
+		readonly property real condensed: Math.max(0, Math.min(1, (shown - 0.24) / 0.5))
+
 		property real ring: 0
 		property real ringVelocity: 0
 
 		Connections {
 			target: root
 			function onOsdProgressChanged() {
-				osdWindow.ringVelocity += 0.34;
+				osdWindow.ringVelocity += 0.36;
 				ringClock.running = true;
+				if (osdWindow.visible) osdMotes.burst(osdMotes.width / 2, osdMotes.height / 2, 10);
 			}
 		}
 
@@ -1599,170 +1605,194 @@ Scope {
 			}
 		}
 
-		// The cord it is let down on, out of the vertex of the chain.
-		Rectangle {
-			anchors.horizontalCenter: parent.horizontalCenter
-			y: Arc.gantryDepth - 6
-			width: Arc.ruleThin
-			height: Math.max(0, crystal.y - (Arc.gantryDepth - 6))
-			color: Qt.alpha(Arc.gilt, 0.4 * osdWindow.shown)
-		}
-
 		Item {
-			id: crystal
+			id: rig
 
-			readonly property real level: Math.max(0, Math.min(1, root.osdProgress))
-
-			width: 120
-			height: 188
+			width: 220
+			height: 250
 			x: Math.round((parent.width - width) / 2)
-			y: Math.round(Arc.gantryDepth + Arc.s6 + (1 - osdWindow.shown) * -70)
-			opacity: Math.min(1, osdWindow.shown * 2.2)
+			y: Math.round(parent.height - Arc.horizon - Arc.s7 - height)
 
-			scale: 1 + osdWindow.ring * 0.05
-
-			ArcHalo {
-				anchors.centerIn: parent
-				width: parent.width * 2.4
-				height: parent.height * 1.8
-				color: Arc.aether
-				strength: 0.30 + Math.abs(osdWindow.ring) * 0.3
-				spread: 0.36
-				flicker: true
-			}
-
-			// The stone. Cut once, filled every frame the level moves: the
-			// facets are static, the light in them is not.
+			// The ring it stands in.
 			Canvas {
-				id: stone
-				anchors.fill: parent
+				id: floorRing
+				anchors.horizontalCenter: parent.horizontalCenter
+				y: parent.height - 30
+				width: 200
+				height: 46
 				renderStrategy: Canvas.Cooperative
 
-				readonly property real level: crystal.level
-				readonly property real struck: osdWindow.ring
+				readonly property real through: osdWindow.inscribed
 
-				onLevelChanged: requestPaint()
-				onStruckChanged: requestPaint()
-
-				function facets(w, h) {
-					// A hexagonal bipyramid seen side-on: shoulder, waist,
-					// point. Six sides, because a crystal with four is a
-					// diamond and a crystal with eight is a ball.
-					const cx = w / 2;
-					return [
-						{ x: cx, y: h * 0.02 },
-						{ x: w * 0.90, y: h * 0.24 },
-						{ x: w * 0.90, y: h * 0.70 },
-						{ x: cx, y: h * 0.98 },
-						{ x: w * 0.10, y: h * 0.70 },
-						{ x: w * 0.10, y: h * 0.24 }
-					];
-				}
+				onThroughChanged: requestPaint()
 
 				onPaint: {
 					const ctx = getContext("2d");
 					ctx.reset();
-					if (width < 8) return;
-					const outline = stone.facets(width, height);
-					const shadow = Qt.alpha(Qt.darker(Arc.gilt, 2.3), 0.6);
-					const highlight = Qt.alpha(Qt.lighter(Arc.gilt, 1.8), 0.55);
-
-					// the body of the stone
-					Ink.polyline(ctx, outline, true);
-					const body = ctx.createLinearGradient(0, 0, 0, height);
-					body.addColorStop(0, Arc.leaf2);
-					body.addColorStop(1, Arc.well);
-					ctx.fillStyle = body;
-					ctx.fill();
-
-					// what has been poured into it
-					const top = height * (0.98 - 0.96 * stone.level);
+					if (floorRing.through <= 0.002) return;
 					ctx.save();
-					Ink.polyline(ctx, outline, true);
-					ctx.clip();
-					const lit = ctx.createLinearGradient(0, top, 0, height);
-					lit.addColorStop(0, Qt.alpha(Arc.aether, 0.85));
-					lit.addColorStop(1, Qt.alpha(Arc.aether, 0.32));
-					ctx.fillStyle = lit;
-					// the surface tips when the stone is struck
-					const tip = height * 0.035 * stone.struck;
-					ctx.beginPath();
-					ctx.moveTo(0, top + tip);
-					ctx.quadraticCurveTo(width / 2, top - tip * 2.2, width, top + tip);
-					ctx.lineTo(width, height);
-					ctx.lineTo(0, height);
-					ctx.closePath();
-					ctx.fill();
+					ctx.translate(width / 2, height / 2);
+					ctx.scale(1, height / width);
+					Ink.ring(ctx, 0, 0, width / 2 - 3, 2.2, Arc.aether, floorRing.through);
+					Ink.runeRing(ctx, 0, 0, width / 2 - 20, 7, 61, 15, Arc.ruleThin,
+						Qt.alpha(Arc.gold, 0.2), Arc.aether, Math.round(7 * floorRing.through));
 					ctx.restore();
-
-					// the cut: the girdle, the two table edges and the point
-					Ink.groove(ctx, outline, Arc.rule * 1.4, Arc.gilt, highlight, shadow, true);
-					Ink.cut(ctx, [{ x: width * 0.10, y: height * 0.24 }, { x: width * 0.90, y: height * 0.24 }],
-						Arc.ruleThin, Qt.alpha(Arc.gilt, 0.5), false);
-					Ink.cut(ctx, [{ x: width * 0.10, y: height * 0.70 }, { x: width * 0.90, y: height * 0.70 }],
-						Arc.ruleThin, Qt.alpha(Arc.gilt, 0.5), false);
-					Ink.cut(ctx, [{ x: width / 2, y: height * 0.02 }, { x: width / 2, y: height * 0.98 }],
-						Arc.ruleThin, Qt.alpha(Arc.gilt, 0.28), false);
-					Ink.cut(ctx, [{ x: width * 0.10, y: height * 0.24 }, { x: width / 2, y: height * 0.02 }],
-						Arc.ruleThin, Qt.alpha(Arc.gilt, 0.3), false);
-					Ink.cut(ctx, [{ x: width * 0.90, y: height * 0.24 }, { x: width / 2, y: height * 0.02 }],
-						Arc.ruleThin, Qt.alpha(Arc.gilt, 0.3), false);
 				}
 			}
 
-			// The reading, cut on the table of the stone.
-			Column {
-				anchors.horizontalCenter: parent.horizontalCenter
-				y: parent.height * 0.29
-				spacing: -3
-
-				ArcText {
-					anchors.horizontalCenter: parent.horizontalCenter
-					role: "reading"
-					font.pixelSize: 22
-					text: root.osdValueText
-				}
-
-				ArcText {
-					anchors.horizontalCenter: parent.horizontalCenter
-					role: "label"
-					tone: "muted"
-					font.pixelSize: 9
-					text: root.osdLabel
-				}
+			ArcHalo {
+				anchors.centerIn: crystal
+				width: 300
+				height: 340
+				color: Arc.aether
+				strength: (0.20 + Math.abs(osdWindow.ring) * 0.4) * osdWindow.shown
+				spread: 0.38
+				flicker: true
 			}
 
-			// The mark of whatever is being turned, set at the point.
-			Image {
-				anchors.horizontalCenter: parent.horizontalCenter
-				y: parent.height * 0.76
-				width: 17
-				height: 17
-				source: root.osdIconSource
-				fillMode: Image.PreserveAspectFit
-				smooth: true
-				mipmap: true
-				layer.enabled: visible
-				layer.effect: MultiEffect {
-					colorization: 1
-					colorizationColor: Arc.onAether
+			ArcMotes {
+				id: osdMotes
+				anchors.fill: parent
+				color: Arc.aether
+				span: 3.2
+				visible: osdWindow.shown > 0.05
+			}
+
+			Item {
+				id: crystal
+
+				readonly property real level: Math.max(0, Math.min(1, root.osdProgress))
+
+				width: 128
+				height: 196
+				x: Math.round((parent.width - width) / 2)
+				y: Math.round((parent.height - 30 - height) * 0.5)
+				opacity: Math.min(1, osdWindow.condensed * 1.5)
+				scale: (0.86 + 0.14 * osdWindow.condensed) * (1 + osdWindow.ring * 0.05)
+
+				Canvas {
+					id: stone
+					anchors.fill: parent
+					renderStrategy: Canvas.Cooperative
+
+					readonly property real level: crystal.level
+					readonly property real struck: osdWindow.ring
+
+					onLevelChanged: requestPaint()
+					onStruckChanged: requestPaint()
+
+					function facets(w, h) {
+						const cx = w / 2;
+						return [
+							{ x: cx, y: h * 0.02 },
+							{ x: w * 0.90, y: h * 0.26 },
+							{ x: w * 0.90, y: h * 0.70 },
+							{ x: cx, y: h * 0.98 },
+							{ x: w * 0.10, y: h * 0.70 },
+							{ x: w * 0.10, y: h * 0.26 }
+						];
+					}
+
+					onPaint: {
+						const ctx = getContext("2d");
+						ctx.reset();
+						if (width < 8) return;
+						const outline = stone.facets(width, height);
+
+						Ink.polyline(ctx, outline, true);
+						const body = ctx.createLinearGradient(0, 0, 0, height);
+						body.addColorStop(0, Qt.alpha(Arc.abyss, 0.75));
+						body.addColorStop(1, Qt.alpha(Arc.depth, 0.85));
+						ctx.fillStyle = body;
+						ctx.fill();
+
+						const top = height * (0.98 - 0.96 * stone.level);
+						ctx.save();
+						Ink.polyline(ctx, outline, true);
+						ctx.clip();
+						const lit = ctx.createLinearGradient(0, top, 0, height);
+						lit.addColorStop(0, Qt.alpha(Arc.aether, 0.9));
+						lit.addColorStop(1, Qt.alpha(Arc.aether, 0.28));
+						ctx.fillStyle = lit;
+						const tip = height * 0.035 * stone.struck;
+						ctx.beginPath();
+						ctx.moveTo(0, top + tip);
+						ctx.quadraticCurveTo(width / 2, top - tip * 2.2, width, top + tip);
+						ctx.lineTo(width, height);
+						ctx.lineTo(0, height);
+						ctx.closePath();
+						ctx.fill();
+						ctx.restore();
+
+						// the cut: the girdle and the two long edges, nothing else
+						Ink.cut(ctx, outline, 1.6, Qt.alpha(Arc.gold, 0.75), true);
+						Ink.cut(ctx, [{ x: width * 0.10, y: height * 0.26 }, { x: width * 0.90, y: height * 0.26 }],
+							Arc.ruleThin, Qt.alpha(Arc.gold, 0.4), false);
+						Ink.cut(ctx, [{ x: width * 0.10, y: height * 0.70 }, { x: width * 0.90, y: height * 0.70 }],
+							Arc.ruleThin, Qt.alpha(Arc.gold, 0.4), false);
+						Ink.cut(ctx, [{ x: width / 2, y: height * 0.02 }, { x: width / 2, y: height * 0.98 }],
+							Arc.ruleThin, Qt.alpha(Arc.gold, 0.22), false);
+					}
+				}
+
+				Column {
+					anchors.horizontalCenter: parent.horizontalCenter
+					y: parent.height * 0.33
+					spacing: -4
+
+					ArcText {
+						anchors.horizontalCenter: parent.horizontalCenter
+						role: "display"
+						font.pixelSize: 26
+						text: root.osdValueText
+					}
+
+					ArcText {
+						anchors.horizontalCenter: parent.horizontalCenter
+						role: "label"
+						tone: "muted"
+						font.pixelSize: 9
+						text: root.osdLabel
+					}
+				}
+
+				Image {
+					anchors.horizontalCenter: parent.horizontalCenter
+					y: parent.height * 0.76
+					width: 18
+					height: 18
+					source: root.osdIconSource
+					fillMode: Image.PreserveAspectFit
+					smooth: true
+					mipmap: true
+					layer.enabled: visible
+					layer.effect: MultiEffect {
+						colorization: 1
+						colorizationColor: Arc.onAether
+					}
 				}
 			}
 		}
 	}
 
-	// THE CHAIN.
+	// THE HORIZON.
 	//
-	// There is no bar. A brass chain is strung across the top of the screen,
-	// fixed at both corners, sagging to its lowest point in the middle — and
-	// every fitting the shell has is seated on that curve, so nothing on it
-	// shares a height with anything else. The grimoire's clasp is at the far
-	// left, the realms hang off the left limb, the horologe hangs at the lowest
-	// point where the eye rests, and everything the machine is carrying runs
-	// back up the right limb to the way out.
+	// There is no bar. The shell reserves a band at the foot of the screen and
+	// puts one permanent object in it: the chronomancer, a great rune circle
+	// half sunk below the edge like a moon that has not finished rising. The
+	// hour stands inside its cap; the runes around its limb are cut from the
+	// name the hour goes by, so they change as the night turns, and on the hour
+	// a wave of light runs once round the whole circle.
 	//
-	// Panels are not attached to this window. They are let down from it: see
-	// components/PopupSurface.qml, which reads the same curve.
+	// Everything else in the band is placed *around* that object with air
+	// between — the realms to the west of it, the arcane core to the east, and
+	// the rest of the shell's marks scattered on a rising line past that.
+	// Nothing is in a row, nothing is in a box, and nothing has a container
+	// drawn round it. The band itself is not a plate: it is the void getting
+	// deeper towards the bottom of the screen.
+	//
+	// Panels are not attached to this window. They are called up out of it:
+	// see components/PopupSurface.qml, which inscribes its ring on this floor.
 	PanelWindow {
 		id: barWindow
 		screen: root.primaryBarScreen
@@ -1770,327 +1800,252 @@ Scope {
 		anchors {
 			left: true
 			right: true
-			top: true
+			bottom: true
 		}
 
 		margins {
 			left: 0
 			right: 0
-			top: 0
+			bottom: 0
 		}
 
-		exclusiveZone: Math.round(Arc.gantryDepth)
-		implicitHeight: Math.round(Arc.gantryDepth)
+		exclusiveZone: Math.round(Arc.horizon)
+		implicitHeight: Math.round(Arc.horizon)
 		color: "transparent"
 
 		Item {
 			id: bar
 			anchors.fill: parent
 
-			// Where the chain hangs at a given x, and where a fitting of a
-			// given size has to sit to be seated on it.
-			function chainAt(centreX) {
-				return Arc.chainY(centreX / Math.max(1, bar.width));
-			}
+			readonly property real chronoCentreY: bar.height + Arc.chronoSunk
+			readonly property real chronoTop: bar.chronoCentreY - Arc.chronoRadius
 
-			function seatY(centreX, size) {
-				return Math.round(bar.chainAt(centreX) - size / 2);
-			}
-
-			// The instrument's own shadow on the desktop. Without a plane of
-			// its own the engraving would disappear into a bright wallpaper,
-			// and raising the line opacity until it did not would be uglier
-			// than admitting the instrument casts a shade.
+			// The void deepening towards the foot of the screen. Not a plate,
+			// not a line: the only thing that keeps fine light legible over a
+			// pale wallpaper is more depth under it.
 			Rectangle {
 				anchors.fill: parent
 				gradient: Gradient {
-					GradientStop { position: 0.0; color: Qt.alpha(Arc.well, Arc.light ? 0.50 : 0.92) }
-					GradientStop { position: 0.62; color: Qt.alpha(Arc.well, Arc.light ? 0.34 : 0.66) }
-					GradientStop { position: 1.0; color: "transparent" }
+					GradientStop { position: 0.0; color: "transparent" }
+					GradientStop { position: 0.35; color: Qt.alpha(Arc.abyss, Arc.light ? 0.40 : 0.62) }
+					GradientStop { position: 1.0; color: Qt.alpha(Arc.abyss, Arc.light ? 0.80 : 0.96) }
 				}
 			}
 
-			// The chain itself, and the graduations cut along it. Painted once
-			// per resize: this window redraws whenever a clock digit changes
-			// and it must not cost anything to keep on screen.
-			Canvas {
-				id: chain
-				anchors.fill: parent
-				renderStrategy: Canvas.Cooperative
-
-				Connections {
-					target: Arc
-					function onGiltChanged() { chain.requestPaint(); }
-				}
-
-				onPaint: {
-					const ctx = getContext("2d");
-					ctx.reset();
-					if (width <= 8) return;
-					const shadow = Qt.alpha(Qt.darker(Arc.gilt, 2.4), 0.6);
-					const highlight = Qt.alpha(Qt.lighter(Arc.gilt, 1.8), 0.5);
-					// Two straight runs meeting under the horologe, broken
-					// where the dial hangs: the chain goes behind it, and a
-					// line drawn across a dial is a line drawn across a dial.
-					const gap = Arc.horologe * 0.44;
-					Ink.groove(ctx, [
-						{ x: 0, y: Arc.gantryRise },
-						{ x: width / 2 - gap, y: Arc.chainY(0.5 - gap / width) }
-					], Arc.rule * 2.0, Arc.gilt, highlight, shadow, false);
-					Ink.groove(ctx, [
-						{ x: width / 2 + gap, y: Arc.chainY(0.5 + gap / width) },
-						{ x: width, y: Arc.gantryRise }
-					], Arc.rule * 2.0, Arc.gilt, highlight, shadow, false);
-
-					// The limb is graduated, because this is an instrument and
-					// not a rail. Every fifth mark runs long.
-					const spacing = 26;
-					const marks = Math.floor(width / spacing);
-					for (let index = 0; index <= marks; index++) {
-						const x = index * spacing;
-						const y = Arc.chainY(x / width);
-						const long = index % 5 === 0;
-						Ink.cut(ctx, [{ x: x, y: y + 2 }, { x: x, y: y + (long ? 8 : 4) }],
-							Arc.ruleThin, Qt.alpha(Arc.gilt, long ? 0.55 : 0.3), false);
-					}
-
-					// The two anchor plates the chain is bolted to.
-					for (const side of [0, width]) {
-						const dir = side === 0 ? 1 : -1;
-						Ink.groove(ctx, [
-							{ x: side, y: Arc.gantryRise + 16 },
-							{ x: side, y: Arc.gantryRise },
-							{ x: side + dir * 20, y: Arc.gantryRise }
-						], Arc.rule * 1.4, Arc.gilt, highlight, shadow, false);
-						Ink.rivet(ctx, side + dir * 7, Arc.gantryRise, 2.4, Arc.gilt, highlight, shadow);
-					}
-
-
-				}
-			}
-
-			// ------------------------------------------------------ the left limb
-			// What opens things, and what is already open.
-			Row {
-				id: leftLimb
-				anchors.left: parent.left
-				anchors.leftMargin: 22
-				anchors.top: parent.top
-				height: parent.height
-				spacing: Arc.s3
-
-				ArcSeat {
-					id: launcherNode
-					size: 34
-					seed: 0
-					lit: root.launcherPopupOpen
-					y: bar.seatY(leftLimb.x + x + width / 2, height)
-					onClicked: root.toggleLauncherPopup()
-
-					// The grimoire, drawn rather than fetched: the one thing
-					// on the chain that has no system icon and should not
-					// borrow one.
-					ArcMark {
-						anchors.centerIn: parent
-						width: parent.width * 0.60
-						height: parent.height * 0.60
-						glyph: "book"
-						weight: Arc.rule
-						lineColor: launcherNode.lit ? Arc.aether : Arc.ink
-					}
-				}
-
-				NiriTaskbar {
-					id: taskbarIsland
-					visible: niriState.tasksForOutput(String(barWindow.screen?.name || "")).length > 0
-					height: barWindow.height
-					niriState: niriState
-					outputName: String(barWindow.screen?.name || "")
-					originX: leftLimb.x + x
-					chainAt: bar.chainAt
-					background: Arc.leaf1
-					foreground: Arc.ink
-					secondaryBoxColor: Arc.leaf2
-					secondaryBoxStrongColor: Arc.leaf3
-				}
-			}
-
-			// -------------------------------------------------- the lowest point
-			// The horologe: the hour, held where the chain hangs deepest.
-			// Around it the day is engraved on the left and what is playing on
-			// the right, so the middle of the chain reads as one instrument.
+			// ------------------------------------------------ the chronomancer
 			Item {
-				id: horologe
+				id: chrono
 
-				width: Arc.horologe
-				height: Arc.horologe
+				width: Arc.chronoRadius * 2
+				height: Arc.chronoRadius * 2
 				x: Math.round((bar.width - width) / 2)
-				y: bar.seatY(bar.width / 2, height)
+				y: Math.round(bar.chronoCentreY - Arc.chronoRadius)
 
 				readonly property real seconds: root.now.getSeconds() + root.now.getMilliseconds() / 1000
+				readonly property int hour: root.now.getHours()
+
+				// The wave that runs round the circle when the hour turns.
+				property real hourWave: 0
+
+				onHourChanged: hourWaveAnim.restart()
+
+				NumberAnimation {
+					id: hourWaveAnim
+					target: chrono
+					property: "hourWave"
+					from: 0
+					to: 1
+					duration: 2200
+					easing.type: Easing.Bezier
+					easing.bezierCurve: Arc.curveInk
+				}
 
 				ArcHalo {
 					anchors.centerIn: parent
-					width: parent.width * 2.3
-					height: parent.height * 2.3
+					width: parent.width * 1.5
+					height: parent.height * 1.5
 					color: Arc.aether
-					strength: 0.26
-					spread: 0.34
+					strength: 0.20
+					spread: 0.30
 					flicker: true
 				}
 
-				// The face. Cast, filled and engine-turned, so the dial is a
-				// thing hanging in front of the wallpaper rather than two rings
-				// drawn on top of it. Painted once.
+				// The limb: three rings and the runes of this hour, painted
+				// once an hour rather than once a second.
 				Canvas {
-					id: face
+					id: limb
 					anchors.fill: parent
 					renderStrategy: Canvas.Cooperative
 
+					readonly property int hour: chrono.hour
+
+					onHourChanged: requestPaint()
+
 					Connections {
 						target: Arc
-						function onGiltChanged() { face.requestPaint(); }
-						function onLeaf1Changed() { face.requestPaint(); }
+						function onGoldChanged() { limb.requestPaint(); }
 					}
 
 					onPaint: {
 						const ctx = getContext("2d");
 						ctx.reset();
-						const cx = width / 2, cy = height / 2;
-						const r = Math.min(width, height) / 2 - 1;
-
-						const cast = ctx.createLinearGradient(0, 0, 0, height);
-						cast.addColorStop(0, Arc.leaf2);
-						cast.addColorStop(1, Arc.well);
-						ctx.fillStyle = cast;
-						ctx.beginPath();
-						ctx.arc(cx, cy, r, 0, Math.PI * 2);
-						ctx.fill();
-
-						// Engine turning: the lathe pattern on an instrument's
-						// face. It is the difference between brass and a circle.
-						Ink.guilloche(ctx, cx, cy, r * 0.74, 22, r * 0.045, 3,
-							Arc.ruleThin * 0.7, Qt.alpha(Arc.gilt, 0.14));
+						const cx = width / 2, cy = height / 2, r = Arc.chronoRadius;
+						// the outer limb the seconds run on
+						Ink.ring(ctx, cx, cy, r - 3, 1.4, Qt.alpha(Arc.gold, 0.34), 1);
+						Ink.graduations(ctx, cx, cy, r - 5, 60, 4, 11, 5,
+							Arc.ruleThin, Qt.alpha(Arc.gold, 0.30), 1);
+						// the minute limb
+						Ink.ring(ctx, cx, cy, r - 26, 1.0, Qt.alpha(Arc.gold, 0.22), 1);
+						// the hour's own runes, cut from the name it goes by
+						Ink.runeRing(ctx, cx, cy, r - 42, 12, 101 + limb.hour * 17, 17,
+							Arc.ruleThin, Qt.alpha(Arc.gold, 0.30), Arc.aether, 0);
+						// the inner limb the reading stands in
+						Ink.ring(ctx, cx, cy, r - 62, 1.0, Qt.alpha(Arc.gold, 0.16), 1);
 					}
 				}
 
-				// The limb: the seconds, taken round the outside.
-				ArcDial {
-					id: secondsLimb
+				// The seconds: one light travelling the outer limb, and the
+				// minutes lighting the runes behind it.
+				Canvas {
+					id: hands
 					anchors.fill: parent
-					seed: 0
-					weight: Arc.rule
-					lineColor: Arc.giltDim
-					liveColor: Arc.aether
-					intensity: Math.max(horologeTouch.live, root.clockPopupOpen ? 0.9 : 0)
-					progress: horologe.seconds / 60
+					renderStrategy: Canvas.Cooperative
+
+					readonly property real seconds: chrono.seconds
+					readonly property real minutes: root.now.getMinutes() + chrono.seconds / 60
+					readonly property real wave: chrono.hourWave
+
+					onSecondsChanged: requestPaint()
+					onWaveChanged: requestPaint()
+
+					onPaint: {
+						const ctx = getContext("2d");
+						ctx.reset();
+						const cx = width / 2, cy = height / 2, r = Arc.chronoRadius;
+						const s = hands.seconds / 60;
+
+						Ink.ring(ctx, cx, cy, r - 3, 1.8, Qt.alpha(Arc.aether, 0.85), s);
+						const tip = -Math.PI / 2 + Math.PI * 2 * s;
+						Ink.mote(ctx, cx + Math.cos(tip) * (r - 3), cy + Math.sin(tip) * (r - 3), 3.4, Arc.aether);
+
+						Ink.ring(ctx, cx, cy, r - 26, 2.4, Qt.alpha(Arc.aetherAlt, 0.7), hands.minutes / 60);
+
+						Ink.runeRing(ctx, cx, cy, r - 42, 12, 101 + root.now.getHours() * 17, 17,
+							Arc.ruleThin * 1.3, Qt.alpha(Arc.gold, 0),
+							Arc.aether, Math.floor(hands.minutes / 60 * 12) + 1);
+
+						// the wave that runs the whole limb when the hour turns
+						if (hands.wave > 0.001 && hands.wave < 0.999) {
+							const head = hands.wave;
+							ctx.save();
+							ctx.globalAlpha = Math.sin(hands.wave * Math.PI);
+							Ink.ring(ctx, cx, cy, r - 14, 5, Arc.aether,
+								Math.min(0.14, head), -Math.PI / 2 + Math.PI * 2 * head);
+							ctx.restore();
+						}
+					}
 				}
 
-				// The minutes, taken round a second limb inside the first.
-				ArcDial {
-					anchors.centerIn: parent
-					width: parent.width - 13
-					height: parent.height - 13
-					seed: 1
-					weight: Arc.ruleThin
-					beading: false
-					lineColor: Arc.giltGhost
-					liveColor: Arc.aetherAlt
-					progress: (root.now.getMinutes() + horologe.seconds / 60) / 60
-				}
-
+				// The hour, standing in the cap of the circle.
 				Column {
-					anchors.centerIn: parent
-					spacing: -3
+					anchors.horizontalCenter: parent.horizontalCenter
+					y: 20
+					spacing: -2
 
 					ArcText {
 						anchors.horizontalCenter: parent.horizontalCenter
-						role: "reading"
-						font.pixelSize: 20
-						font.letterSpacing: 0.5
+						role: "display"
+						font.pixelSize: 38
+						font.letterSpacing: 3
 						text: Qt.formatDateTime(root.now, "HH:mm")
 					}
 
-					Rectangle {
+					ArcText {
 						anchors.horizontalCenter: parent.horizontalCenter
-						width: 22
-						height: Arc.ruleThin
-						color: Arc.giltFaint
+						role: "hand"
+						tone: "aether"
+						font.pixelSize: 16
+						text: Arc.hourName(root.now)
 					}
 
-					// The moon, because the instrument is telling you which
-					// part of the night this is and not only the time.
-					Canvas {
-						id: moon
+					Row {
 						anchors.horizontalCenter: parent.horizontalCenter
-						width: 13
-						height: 13
-						renderStrategy: Canvas.Cooperative
+						spacing: Arc.s2
 
-						readonly property real phase: Arc.moonPhase(root.now).fraction
+						// The moon, because the instrument is telling you which
+						// part of the night this is, not only the time.
+						Canvas {
+							id: moon
+							anchors.verticalCenter: parent.verticalCenter
+							width: 13
+							height: 13
+							renderStrategy: Canvas.Cooperative
 
-						onPhaseChanged: requestPaint()
+							readonly property real phase: Arc.moonPhase(root.now).fraction
 
-						onPaint: {
-							const ctx = getContext("2d");
-							ctx.reset();
-							const r = width / 2 - 1;
-							ctx.strokeStyle = Arc.giltDim;
-							ctx.lineWidth = Arc.ruleThin;
-							ctx.beginPath();
-							ctx.arc(width / 2, height / 2, r, 0, Math.PI * 2);
-							ctx.stroke();
-							// The terminator: the lit limb is a half circle, and
-							// the inner edge is an ellipse whose width is the
-							// cosine of the phase. Waxing lights the right.
-							const waxing = moon.phase < 0.5;
-							const sweep = Math.cos(moon.phase * Math.PI * 2);
-							ctx.fillStyle = Arc.gilt;
-							ctx.beginPath();
-							ctx.arc(width / 2, height / 2, r,
-								waxing ? -Math.PI / 2 : Math.PI / 2,
-								waxing ? Math.PI / 2 : Math.PI * 1.5);
-							ctx.closePath();
-							ctx.fill();
-							ctx.globalCompositeOperation = sweep > 0 ? "destination-out" : "source-over";
-							ctx.beginPath();
-							ctx.ellipse(width / 2 - Math.abs(sweep) * r, height / 2 - r,
-								Math.abs(sweep) * r * 2, r * 2);
-							ctx.fill();
-							ctx.globalCompositeOperation = "source-over";
+							onPhaseChanged: requestPaint()
+
+							onPaint: {
+								const ctx = getContext("2d");
+								ctx.reset();
+								const r = width / 2 - 1;
+								ctx.strokeStyle = Arc.goldDim;
+								ctx.lineWidth = Arc.ruleThin;
+								ctx.beginPath();
+								ctx.arc(width / 2, height / 2, r, 0, Math.PI * 2);
+								ctx.stroke();
+								const waxing = moon.phase < 0.5;
+								const sweep = Math.cos(moon.phase * Math.PI * 2);
+								ctx.fillStyle = Arc.gold;
+								ctx.beginPath();
+								ctx.arc(width / 2, height / 2, r,
+									waxing ? -Math.PI / 2 : Math.PI / 2,
+									waxing ? Math.PI / 2 : Math.PI * 1.5);
+								ctx.closePath();
+								ctx.fill();
+								ctx.globalCompositeOperation = sweep > 0 ? "destination-out" : "source-over";
+								ctx.beginPath();
+								ctx.ellipse(width / 2 - Math.abs(sweep) * r, height / 2 - r,
+									Math.abs(sweep) * r * 2, r * 2);
+								ctx.fill();
+								ctx.globalCompositeOperation = "source-over";
+							}
+						}
+
+						ArcText {
+							anchors.verticalCenter: parent.verticalCenter
+							role: "label"
+							tone: "muted"
+							font.pixelSize: 9
+							text: Qt.formatDateTime(root.now, "ddd dd MMM")
 						}
 					}
 				}
 
 				ArcTouch {
-					id: horologeTouch
+					id: chronoTouch
+					anchors.fill: undefined
+					anchors.horizontalCenter: parent.horizontalCenter
+					y: 20
+					width: 230
+					height: Arc.horizon - 20
 					onClicked: root.toggleClockPopup()
 				}
 			}
 
-			// The day, engraved on the chain to the left of the horologe, and
-			// under it the name this hour goes by.
-			Column {
-				id: dayBlock
-				anchors.right: horologe.left
-				anchors.rightMargin: Arc.s4
-				y: Math.round(bar.chainAt(dayBlock.x + dayBlock.width / 2) - dayBlock.height / 2)
-				spacing: -1
-
-				ArcText {
-					anchors.right: parent.right
-					role: "label"
-					tone: "muted"
-					text: Qt.formatDateTime(root.now, "ddd dd MMM")
-				}
-
-				ArcText {
-					anchors.right: parent.right
-					role: "hand"
-					tone: "faint"
-					font.pixelSize: 13
-					text: Arc.hourName(root.now)
-				}
+			// Fireflies above the circle. The only thing on the screen that
+			// moves while nothing is happening, and deliberately too slow and
+			// too faint to pull the eye off work.
+			ArcMotes {
+				anchors.horizontalCenter: parent.horizontalCenter
+				anchors.bottom: parent.bottom
+				width: Arc.chronoRadius * 2.2
+				height: Arc.horizon
+				color: Arc.aether
+				drifting: true
+				density: 5
+				drift: -6
+				span: 2.6
 			}
 
 			Timer {
@@ -2100,180 +2055,277 @@ Scope {
 				onTriggered: root.now = new Date()
 			}
 
-			// ----------------------------------------------------- the right limb
-			// Laid out from the right edge inwards, so the way out is always
-			// the last fitting on the chain and never moves.
-			Row {
-				id: rightLimb
-				anchors.right: parent.right
-				anchors.rightMargin: 22
-				anchors.top: parent.top
-				height: parent.height
-				layoutDirection: Qt.RightToLeft
-				spacing: Arc.s3
+			// -------------------------------------------------- the west side
+			// What opens the codex, and the realms.
+			ArcSeat {
+				id: launcherNode
+				x: Arc.s6
+				y: Math.round(Arc.horizon * 0.42)
+				size: 38
+				seed: 0
+				label: "Codex"
+				lit: root.launcherPopupOpen
+				onClicked: root.toggleLauncherPopup()
 
-				function seatedY(item) {
-					return bar.seatY(rightLimb.x + item.x + item.width / 2, item.height);
+				ArcMark {
+					anchors.centerIn: parent
+					width: parent.width * 0.68
+					height: parent.height * 0.68
+					glyph: "book"
+					weight: Arc.rule
+					lineColor: launcherNode.live > 0.25 ? Arc.aether : Arc.ink
+				}
+			}
+
+			RealmMap {
+				id: realms
+				anchors.left: launcherNode.right
+				anchors.leftMargin: Arc.s6
+				anchors.bottom: parent.bottom
+				width: Math.max(0, bar.width / 2 - Arc.chronoRadius * 0.86 - x - Arc.s5)
+				height: Arc.horizon
+				niriState: niriState
+				outputName: String(barWindow.screen?.name || "")
+			}
+
+			// -------------------------------------------------- the east side
+			// What the machine is carrying, and then the rest of the sanctum
+			// scattered on a line rising away from the circle.
+			ArcCore {
+				id: core
+				x: Math.round(bar.width / 2 + Arc.chronoRadius * 0.80)
+				anchors.bottom: parent.bottom
+				height: Arc.horizon
+				lit: root.resourcesPopupOpen
+				resources: resourceBars
+				onClicked: root.toggleResourcesPopup()
+			}
+
+			// The constellation. Each mark sits at its own height on a line
+			// climbing away from the horizon, because a row of marks at one
+			// height is a toolbar however it is drawn.
+			Item {
+				id: constellation
+
+				anchors.left: core.right
+				anchors.leftMargin: Arc.s6
+				anchors.right: powerNode.left
+				anchors.rightMargin: Arc.s6
+				anchors.bottom: parent.bottom
+				height: Arc.horizon
+
+				// how far along, and how high, each mark sits
+				readonly property var stations: [
+					{ at: 0.00, up: 0.30 },
+					{ at: 0.19, up: 0.56 },
+					{ at: 0.37, up: 0.34 },
+					{ at: 0.55, up: 0.62 },
+					{ at: 0.74, up: 0.38 },
+					{ at: 0.92, up: 0.60 }
+				]
+
+				function placeX(index, w) {
+					return Math.round(constellation.stations[index].at * (constellation.width - 60) + (30 - w / 2));
 				}
 
-				ArcSeat {
-					id: powerNode
-					seed: 2
-					lit: root.powerPopupOpen
-					y: bar.seatY(rightLimb.x + x + width / 2, height)
-					ringColor: Qt.alpha(Arc.bane, 0.5)
-					liveColor: Arc.bane
-					iconColor: powerNode.lit ? Arc.bane : Qt.alpha(Arc.bane, 0.85)
-					iconSource: Arc.icon("system-shutdown-symbolic")
-					onClicked: root.togglePowerPopup()
+				function placeY(index, h) {
+					return Math.round(Arc.horizon - constellation.stations[index].up * Arc.horizon - h / 2);
 				}
 
-				Item {
-					id: trayRun
-					width: trayRow.width
-					height: barWindow.height
-					visible: trayRepeater.count > 0
+				// The line the constellation is strung on: faint, and only
+				// there so the marks read as one group rather than as litter.
+				Canvas {
+					id: strand
+					anchors.fill: parent
+					renderStrategy: Canvas.Cooperative
 
-					Row {
-						id: trayRow
-						spacing: Arc.s2
-
-						Repeater {
-							id: trayRepeater
-							model: ScriptModel {
-								values: SystemTray.items.values
-							}
-
-							ArcSeat {
-								id: trayNode
-
-								required property SystemTrayItem modelData
-								required property int index
-
-								size: 26
-								seed: trayNode.index + 1
-								y: bar.seatY(rightLimb.x + trayRun.x + trayNode.x + width / 2, height)
-								acceptedButtons: Qt.LeftButton | Qt.RightButton
-
-								Image {
-									anchors.centerIn: parent
-									width: 14
-									height: 14
-									source: root.resolveIconSource(root.trayIconSource(trayNode.modelData?.icon ?? ""))
-									fillMode: Image.PreserveAspectFit
-									smooth: true
-									mipmap: true
-								}
-
-								onClicked: event => {
-									if (trayNode.modelData.menu) {
-										if (
-											root.trayMenuOpen
-											&& root.trayMenuVisible
-											&& root.trayMenuHandle === trayNode.modelData.menu
-										) {
-											root.closeTrayMenu();
-										} else {
-											root.openTrayMenu(trayNode.modelData.menu, trayNode);
-										}
-									} else {
-										root.closeTrayMenu();
-										if (event.button === Qt.RightButton) trayNode.modelData.secondaryActivate();
-										else trayNode.modelData.activate();
-									}
-								}
-							}
-						}
-					}
-				}
-
-				TopBarResourceBars {
-					id: resourceBars
-					lit: root.resourcesPopupOpen
-					y: bar.seatY(rightLimb.x + x + width / 2, height)
-					onClicked: root.toggleResourcesPopup()
-				}
-
-				ArcSeat {
-					id: networkNode
-					seed: 0
-					lit: root.networkPopupOpen
-					y: bar.seatY(rightLimb.x + x + width / 2, height)
-					iconSource: root.networkStatusType === "ethernet"
-						? Arc.icon("network-wired-symbolic")
-						: Arc.icon("network-wireless-signal-excellent-symbolic")
-					onClicked: root.toggleNetworkPopup()
-				}
-
-				ArcSeat {
-					id: bluetoothNode
-					seed: 3
-					lit: root.bluetoothPopupOpen
-					y: bar.seatY(rightLimb.x + x + width / 2, height)
-					iconSource: root.resolveIconSource("bluetooth-active-symbolic", ["bluetooth-symbolic"]) || Arc.icon("bluetooth-active-symbolic")
-					onClicked: root.toggleBluetoothPopup()
-				}
-
-				ArcSeat {
-					id: clipboardNode
-					seed: 2
-					lit: root.clipboardPopupOpen
-					y: bar.seatY(rightLimb.x + x + width / 2, height)
-					iconSource: root.resolveIconSource("edit-paste-symbolic", ["edit-copy-symbolic"]) || Arc.icon("edit-paste-symbolic")
-					onClicked: root.toggleClipboardPopup()
-				}
-
-				ArcSeat {
-					id: notifNode
-					seed: 1
-					lit: root.notifPopupOpen
-					y: bar.seatY(rightLimb.x + x + width / 2, height)
-					badge: root.notificationGroups.length > 0 ? String(root.notificationGroups.length) : ""
-					iconSource: root.resolveIconSource("preferences-system-notifications-symbolic", ["dialog-information-symbolic"]) || Arc.icon("preferences-system-notifications-symbolic")
-					onClicked: root.toggleNotifPopup()
-				}
-
-				// The oracle: the sky's mark with the reading struck beside it,
-				// because a temperature nobody can see is not a reading.
-				Item {
-					id: weatherRun
-					width: weatherNode.width + weatherReading.implicitWidth + Arc.s1
-					height: barWindow.height
-
-					ArcSeat {
-						id: weatherNode
-						seed: 3
-						size: 28
-						lit: root.weatherPopupOpen
-						y: bar.seatY(rightLimb.x + weatherRun.x + x + width / 2, height)
-						iconSource: root.resolveIconSource("", [
-							root.weatherIcon,
-							root.weatherIcon.replace("-symbolic", ""),
-							"weather-overcast-symbolic"
-						])
-						iconSize: 14
-						onClicked: root.toggleWeatherPopup()
+					Connections {
+						target: Arc
+						function onGoldChanged() { strand.requestPaint(); }
 					}
 
-					ArcText {
-						id: weatherReading
-						anchors.left: weatherNode.right
-						anchors.leftMargin: Arc.s1
-						y: Math.round(bar.chainAt(rightLimb.x + weatherRun.x + x + width / 2) - height / 2)
-						role: "reading"
-						font.pixelSize: 14
-						text: root.weatherTemperature
+					onPaint: {
+						const ctx = getContext("2d");
+						ctx.reset();
+						if (width < 40) return;
+						const points = [];
+						for (const station of constellation.stations)
+							points.push({
+								x: station.at * (width - 60) + 30,
+								y: Arc.horizon - station.up * Arc.horizon
+							});
+						for (let index = 0; index + 1 < points.length; index++)
+							Ink.leyCurve(ctx, points[index].x, points[index].y,
+								points[index + 1].x, points[index + 1].y,
+								index % 2 === 0 ? 9 : -9, Arc.ruleThin,
+								Qt.alpha(Arc.gold, 0.14));
 					}
 				}
 
 				NowPlaying {
 					id: nowPlayingIsland
-					originX: rightLimb.x + x
-					chainAt: bar.chainAt
-					foreground: Arc.ink
-					secondaryBoxColor: Arc.leaf1
+					x: constellation.placeX(0, width)
+					y: constellation.placeY(0, height)
 					progressColor: Arc.aether
 					onClicked: root.toggleMediaPopup()
+				}
+
+				ArcSeat {
+					id: weatherNode
+					x: constellation.placeX(1, width)
+					y: constellation.placeY(1, height)
+					size: 30
+					seed: 3
+					label: root.weatherTemperature
+					lit: root.weatherPopupOpen
+					onClicked: root.toggleWeatherPopup()
+
+					ArcMark {
+						anchors.centerIn: parent
+						width: parent.width * 0.78
+						height: parent.height * 0.78
+						glyph: "eye"
+						weight: Arc.ruleThin
+						lineColor: weatherNode.live > 0.25 ? Arc.aether : Arc.ink
+					}
+				}
+
+				ArcSeat {
+					id: notifNode
+					x: constellation.placeX(2, width)
+					y: constellation.placeY(2, height)
+					size: 30
+					seed: 1
+					label: "Ravens"
+					lit: root.notifPopupOpen
+					badge: root.notificationGroups.length > 0 ? String(root.notificationGroups.length) : ""
+					onClicked: root.toggleNotifPopup()
+
+					ArcMark {
+						anchors.centerIn: parent
+						width: parent.width * 0.8
+						height: parent.height * 0.8
+						glyph: "raven"
+						lineColor: notifNode.live > 0.25 ? Arc.aether : Arc.ink
+					}
+				}
+
+				ArcSeat {
+					id: clipboardNode
+					x: constellation.placeX(3, width)
+					y: constellation.placeY(3, height)
+					size: 28
+					seed: 2
+					label: "Palimpsest"
+					lit: root.clipboardPopupOpen
+					iconSource: root.resolveIconSource("edit-paste-symbolic", ["edit-copy-symbolic"]) || Arc.icon("edit-paste-symbolic")
+					onClicked: root.toggleClipboardPopup()
+				}
+
+				ArcSeat {
+					id: bluetoothNode
+					x: constellation.placeX(4, width)
+					y: constellation.placeY(4, height)
+					size: 28
+					seed: 3
+					label: "Bindings"
+					lit: root.bluetoothPopupOpen
+					iconSource: root.resolveIconSource("bluetooth-active-symbolic", ["bluetooth-symbolic"]) || Arc.icon("bluetooth-active-symbolic")
+					onClicked: root.toggleBluetoothPopup()
+				}
+
+				ArcSeat {
+					id: networkNode
+					x: constellation.placeX(5, width)
+					y: constellation.placeY(5, height)
+					size: 28
+					seed: 0
+					label: "Ley"
+					lit: root.networkPopupOpen
+					iconSource: root.networkStatusType === "ethernet"
+						? Arc.icon("network-wired-symbolic")
+						: Arc.icon("network-wireless-signal-excellent-symbolic")
+					onClicked: root.toggleNetworkPopup()
+				}
+			}
+
+			// The familiars the system has sent: bound marks, set below the
+			// constellation so they never move the rest of it about.
+			Row {
+				id: trayRow
+				anchors.right: powerNode.left
+				anchors.rightMargin: Arc.s6
+				anchors.bottom: parent.bottom
+				anchors.bottomMargin: Arc.s3
+				spacing: Arc.s3
+				visible: trayRepeater.count > 0
+
+				Repeater {
+					id: trayRepeater
+					model: ScriptModel {
+						values: SystemTray.items.values
+					}
+
+					ArcSeat {
+						id: trayNode
+
+						required property SystemTrayItem modelData
+						required property int index
+
+						size: 22
+						seed: trayNode.index + 1
+						acceptedButtons: Qt.LeftButton | Qt.RightButton
+
+						Image {
+							anchors.centerIn: parent
+							width: 14
+							height: 14
+							source: root.resolveIconSource(root.trayIconSource(trayNode.modelData?.icon ?? ""))
+							fillMode: Image.PreserveAspectFit
+							smooth: true
+							mipmap: true
+						}
+
+						onClicked: event => {
+							if (trayNode.modelData.menu) {
+								if (
+									root.trayMenuOpen
+									&& root.trayMenuVisible
+									&& root.trayMenuHandle === trayNode.modelData.menu
+								) {
+									root.closeTrayMenu();
+								} else {
+									root.openTrayMenu(trayNode.modelData.menu, trayNode);
+								}
+							} else {
+								root.closeTrayMenu();
+								if (event.button === Qt.RightButton) trayNode.modelData.secondaryActivate();
+								else trayNode.modelData.activate();
+							}
+						}
+					}
+				}
+			}
+
+			// The way out, alone in the far corner with air round it.
+			ArcSeat {
+				id: powerNode
+				x: bar.width - Arc.s6 - width
+				y: Math.round(Arc.horizon * 0.42)
+				size: 32
+				seed: 2
+				label: "The Void"
+				lit: root.powerPopupOpen
+				liveColor: Arc.bane
+				onClicked: root.togglePowerPopup()
+
+				ArcMark {
+					anchors.centerIn: parent
+					width: parent.width * 0.7
+					height: parent.height * 0.7
+					glyph: "gate"
+					weight: Arc.rule
+					lineColor: powerNode.live > 0.25 ? Arc.bane : Qt.alpha(Arc.bane, 0.8)
 				}
 			}
 		}
@@ -2591,7 +2643,7 @@ Scope {
 								anchors.verticalCenter: parent.verticalCenter
 								height: 12
 								facing: Qt.LeftToRight
-								lineColor: Arc.giltFaint
+								lineColor: Arc.goldFaint
 								visible: width > 24
 							}
 
@@ -2627,87 +2679,7 @@ Scope {
 
 						Item {
 							width: parent.width
-							height: 34
-
-							Rectangle {
-								anchors.left: parent.left
-								anchors.right: parent.right
-								anchors.bottom: parent.bottom
-								height: Arc.ruleThin
-								color: Arc.giltFaint
-							}
-
-							Rectangle {
-								anchors.left: parent.left
-								anchors.bottom: parent.bottom
-								width: clipboardSearch.activeFocus ? parent.width : 0
-								height: Arc.rule
-								color: Arc.aether
-
-								Behavior on width {
-									NumberAnimation { duration: Arc.turn; easing.type: Easing.OutCubic }
-								}
-							}
-
-							ArcDial {
-								id: clipSearchIcon
-								anchors.left: parent.left
-								anchors.verticalCenter: parent.verticalCenter
-								width: 24
-								height: 24
-								seed: 2
-								lineColor: Arc.giltFaint
-								intensity: clipboardSearch.activeFocus ? 0.9 : 0
-
-								QQCImpl.IconImage {
-									anchors.centerIn: parent
-									width: 12
-									height: 12
-									source: "/usr/share/icons/Adwaita/symbolic/actions/edit-find-symbolic.svg"
-									sourceSize: Qt.size(width, height)
-									color: clipboardSearch.activeFocus ? Arc.aether : Arc.inkMuted
-								}
-							}
-
-							TextField {
-								id: clipboardSearch
-								anchors.fill: parent
-								anchors.leftMargin: 34
-								anchors.bottomMargin: Arc.s2
-								font.family: Arc.book
-								font.pixelSize: Arc.sizeBody
-								color: Arc.ink
-								placeholderText: "Sift the palimpsest"
-								placeholderTextColor: Arc.inkFaint
-								selectedTextColor: Arc.ink
-								selectionColor: Qt.alpha(Arc.aether, 0.3)
-								selectByMouse: true
-								focus: root.clipboardPopupVisible
-								background: Item {}
-								onTextChanged: {
-									clipboardPopupContent.searchText = text;
-									clipboardPopupContent.selectedIndex = 0;
-									clipboardList.currentIndex = clipboardPopupContent.filteredEntries.length > 0 ? 0 : -1;
-									if (clipboardList.currentIndex >= 0)
-										clipboardList.positionViewAtIndex(clipboardList.currentIndex, ListView.Beginning);
-								}
-								Keys.onDownPressed: {
-									clipboardPopupContent.moveSelection(1);
-									clipboardList.forceActiveFocus();
-								}
-								Keys.onUpPressed: {
-									clipboardPopupContent.moveSelection(-1);
-									clipboardList.forceActiveFocus();
-								}
-								Keys.onReturnPressed: clipboardPopupContent.activateSelection()
-								Keys.onEnterPressed: clipboardPopupContent.activateSelection()
-								Keys.onEscapePressed: root.closeClipboardPopup()
-							}
-						}
-
-						Item {
-							width: parent.width
-							height: 330
+							height: clipboardColumn.height - 34 - 34 - 24
 
 							ArcText {
 								role: "body"
@@ -2804,7 +2776,7 @@ Scope {
 											variant: "plate"
 											beading: false
 											weight: Arc.ruleThin
-											lineColor: Arc.giltFaint
+											lineColor: Arc.goldFaint
 											liveColor: Arc.aether
 											intensity: clipEntry.current ? 1 : 0
 										}
@@ -2879,6 +2851,86 @@ Scope {
 										}
 									}
 								}
+							}
+						}
+
+						Item {
+							width: parent.width
+							height: 34
+
+							Rectangle {
+								anchors.left: parent.left
+								anchors.right: parent.right
+								anchors.bottom: parent.bottom
+								height: Arc.ruleThin
+								color: Arc.goldFaint
+							}
+
+							Rectangle {
+								anchors.left: parent.left
+								anchors.bottom: parent.bottom
+								width: clipboardSearch.activeFocus ? parent.width : 0
+								height: Arc.rule
+								color: Arc.aether
+
+								Behavior on width {
+									NumberAnimation { duration: Arc.turn; easing.type: Easing.OutCubic }
+								}
+							}
+
+							ArcDial {
+								id: clipSearchIcon
+								anchors.left: parent.left
+								anchors.verticalCenter: parent.verticalCenter
+								width: 24
+								height: 24
+								seed: 2
+								lineColor: Arc.goldFaint
+								intensity: clipboardSearch.activeFocus ? 0.9 : 0
+
+								QQCImpl.IconImage {
+									anchors.centerIn: parent
+									width: 12
+									height: 12
+									source: "/usr/share/icons/Adwaita/symbolic/actions/edit-find-symbolic.svg"
+									sourceSize: Qt.size(width, height)
+									color: clipboardSearch.activeFocus ? Arc.aether : Arc.inkMuted
+								}
+							}
+
+							TextField {
+								id: clipboardSearch
+								anchors.fill: parent
+								anchors.leftMargin: 34
+								anchors.bottomMargin: Arc.s2
+								font.family: Arc.book
+								font.pixelSize: Arc.sizeBody
+								color: Arc.ink
+								placeholderText: "Sift the palimpsest"
+								placeholderTextColor: Arc.inkFaint
+								selectedTextColor: Arc.ink
+								selectionColor: Qt.alpha(Arc.aether, 0.3)
+								selectByMouse: true
+								focus: root.clipboardPopupVisible
+								background: Item {}
+								onTextChanged: {
+									clipboardPopupContent.searchText = text;
+									clipboardPopupContent.selectedIndex = 0;
+									clipboardList.currentIndex = clipboardPopupContent.filteredEntries.length > 0 ? 0 : -1;
+									if (clipboardList.currentIndex >= 0)
+										clipboardList.positionViewAtIndex(clipboardList.currentIndex, ListView.Beginning);
+								}
+								Keys.onDownPressed: {
+									clipboardPopupContent.moveSelection(1);
+									clipboardList.forceActiveFocus();
+								}
+								Keys.onUpPressed: {
+									clipboardPopupContent.moveSelection(-1);
+									clipboardList.forceActiveFocus();
+								}
+								Keys.onReturnPressed: clipboardPopupContent.activateSelection()
+								Keys.onEnterPressed: clipboardPopupContent.activateSelection()
+								Keys.onEscapePressed: root.closeClipboardPopup()
 							}
 						}
 					}
@@ -3196,35 +3248,103 @@ done`
 						anchors.fill: parent
 						spacing: 12
 
+						// THE BINDINGS.
+						//
+						// The adapter is a core, and everything it has ever been
+						// bound to is a familiar in orbit around it. A familiar
+						// that is here and answering is tied to the core by a
+						// lit ley; one that is merely known sits dark on the
+						// ring. So the state of the whole binding is one shape
+						// you take in at a glance, and the list underneath is
+						// only there for the names and the verbs.
 						Item {
+							id: bindingRing
 							width: parent.width
-							height: 24
+							height: 150
 
-							ArcText {
-								id: btTitle
-								anchors.left: parent.left
-								anchors.verticalCenter: parent.verticalCenter
-								role: "title"
-								font.pixelSize: 15
-								text: "The Binding"
+							readonly property var known: bluetoothPopup.devices || []
+
+							ArcHalo {
+								anchors.centerIn: parent
+								width: 200
+								height: 200
+								color: Arc.aether
+								strength: bluetoothPopup.powered ? 0.22 : 0.04
+								spread: 0.32
+								flicker: true
 							}
 
-							ArcFlourish {
-								anchors.left: btTitle.right
-								anchors.right: btSwitch.left
-								anchors.leftMargin: Arc.s3
-								anchors.rightMargin: Arc.s3
-								anchors.verticalCenter: parent.verticalCenter
-								height: 12
-								facing: Qt.LeftToRight
-								lineColor: Arc.giltFaint
-								visible: width > 24
+							Canvas {
+								id: bindings
+								anchors.fill: parent
+								renderStrategy: Canvas.Cooperative
+
+								readonly property int count: bindingRing.known.length
+								readonly property bool powered: bluetoothPopup.powered
+								property real phase: 0
+
+								NumberAnimation on phase {
+									running: bindings.powered
+									loops: Animation.Infinite
+									from: 0
+									to: 1
+									duration: 3400
+								}
+
+								onCountChanged: requestPaint()
+								onPoweredChanged: requestPaint()
+								onPhaseChanged: requestPaint()
+
+								onPaint: {
+									const ctx = getContext("2d");
+									ctx.reset();
+									if (width < 60) return;
+									const cx = width / 2, cy = height / 2;
+									const orbit = Math.min(width, height) / 2 - 22;
+
+									Ink.ring(ctx, cx, cy, orbit, Arc.ruleThin,
+										Qt.alpha(Arc.gold, bindings.powered ? 0.16 : 0.07), 1);
+									Ink.mote(ctx, cx, cy, 7, bindings.powered ? Arc.aether : Arc.goldDim);
+									Ink.ring(ctx, cx, cy, 14, Arc.ruleThin,
+										Qt.alpha(bindings.powered ? Arc.aether : Arc.gold, 0.4), 1);
+
+									const total = Math.max(1, bindings.count);
+									for (let index = 0; index < bindings.count; index++) {
+										const device = bindingRing.known[index];
+										const angle = -Math.PI / 2 + Math.PI * 2 * index / total;
+										const x = cx + Math.cos(angle) * orbit;
+										const y = cy + Math.sin(angle) * orbit;
+										if (device && device.connected) {
+											Ink.ley(ctx, cx, cy, x, y, Arc.ruleThin,
+												Qt.alpha(Arc.aether, 0.45), null, -1);
+											// something running down the tie
+											const t = (bindings.phase + index / total) % 1;
+											Ink.mote(ctx, cx + Math.cos(angle) * orbit * t,
+												cy + Math.sin(angle) * orbit * t, 2.4, Arc.aether);
+											Ink.mote(ctx, x, y, 5.5, Arc.aether);
+										} else {
+											Ink.ring(ctx, x, y, 5, Arc.ruleThin,
+												Qt.alpha(Arc.gold, 0.5), 1);
+										}
+									}
+								}
+							}
+
+							ArcText {
+								anchors.horizontalCenter: parent.horizontalCenter
+								anchors.top: parent.top
+								role: "hand"
+								tone: bluetoothPopup.powered ? "muted" : "faint"
+								font.pixelSize: 14
+								text: bluetoothPopup.powered
+									? (bindingRing.known.length === 0 ? "nothing is bound" : "")
+									: "the binding is cold"
 							}
 
 							ArcLever {
 								id: btSwitch
-								anchors.right: parent.right
-								anchors.verticalCenter: parent.verticalCenter
+								anchors.horizontalCenter: parent.horizontalCenter
+								anchors.bottom: parent.bottom
 								checked: bluetoothPopup.powered
 								onToggled: bluetoothPopup.togglePower()
 							}
@@ -3245,7 +3365,7 @@ done`
 								width: 26
 								height: 26
 								seed: 1
-								lineColor: Arc.giltFaint
+								lineColor: Arc.goldFaint
 								intensity: bluetoothPopup.scanning ? 1 : scanTouch.live
 
 								RotationAnimator on rotation {
@@ -3274,7 +3394,7 @@ done`
 								anchors.verticalCenter: parent.verticalCenter
 								height: 12
 								facing: Qt.LeftToRight
-								lineColor: bluetoothPopup.scanning ? Qt.alpha(Arc.aether, 0.55) : Arc.giltGhost
+								lineColor: bluetoothPopup.scanning ? Qt.alpha(Arc.aether, 0.55) : Arc.goldGhost
 								visible: width > 24
 							}
 
@@ -3298,7 +3418,7 @@ done`
 									width: 46
 									height: 46
 									seed: 17
-									lineColor: Arc.giltGhost
+									lineColor: Arc.goldGhost
 								}
 
 								ArcText {
@@ -3384,7 +3504,7 @@ done`
 										width: 30
 										height: 30
 										seed: 2
-										lineColor: Arc.giltGhost
+										lineColor: Arc.goldGhost
 										intensity: btDevice.modelData.connected ? 1 : btDevice.live
 
 										QQCImpl.IconImage {
@@ -3646,172 +3766,247 @@ printf 'type=offline\niface=\nip=\n'`
 						id: networkPopupContent
 						anchors.fill: parent
 
+						// THE LEY.
+						//
+						// A connection is a line with something running along
+						// it, so that is what is drawn: this machine at the
+						// foot, the world at the head, and the ley between them
+						// with lights travelling it — up for what is being
+						// sent, down for what is arriving, and each one moving
+						// at the rate it is actually moving at. An idle link is
+						// a still line. A busy one is a stream.
 						Item {
 							id: networkPopupColumn
 							anchors.fill: parent
 
-							// What the machine is attached to, and by what.
+							readonly property bool offline: networkPopup.currentType === "offline"
+
+							// The world.
 							Item {
-								id: linkHead
-								anchors.left: parent.left
-								anchors.right: parent.right
+								id: worldNode
+								anchors.horizontalCenter: parent.horizontalCenter
 								anchors.top: parent.top
-								height: 34
+								width: 64
+								height: 64
 
-								ArcDial {
-									id: linkMark
-									anchors.left: parent.left
-									anchors.verticalCenter: parent.verticalCenter
-									width: 32
-									height: 32
-									seed: 0
-									lineColor: Arc.giltFaint
-									intensity: networkPopup.currentType === "offline" ? 0 : 1
-
-									QQCImpl.IconImage {
-										anchors.centerIn: parent
-										width: 15
-										height: 15
-										source: networkPopup.currentType === "ethernet"
-											? Arc.icon("network-wired-symbolic")
-											: Arc.icon("network-wireless-signal-excellent-symbolic")
-										sourceSize: Qt.size(width, height)
-										color: networkPopup.currentType === "offline" ? Arc.inkMuted : Arc.aether
-									}
+								ArcHalo {
+									anchors.centerIn: parent
+									width: 130
+									height: 130
+									color: Arc.aether
+									strength: networkPopupColumn.offline ? 0 : 0.26
+									spread: 0.32
+									flicker: true
 								}
 
-								Column {
-									anchors.left: linkMark.right
-									anchors.leftMargin: Arc.s3
-									anchors.right: severLabel.visible ? severLabel.left : parent.right
-									anchors.rightMargin: Arc.s3
-									anchors.verticalCenter: parent.verticalCenter
-									spacing: -1
+								ArcDial {
+									anchors.fill: parent
+									lineColor: Qt.alpha(Arc.gold, 0.3)
+									liveColor: Arc.aether
+									weight: Arc.ruleThin
+									seed: 2
+									intensity: networkPopupColumn.offline ? 0 : 0.7
+								}
 
-									ArcText {
-										width: parent.width
-										role: "heading"
-										tone: networkPopup.currentType === "offline" ? "muted" : "default"
-										text: networkPopup.currentType === "offline"
-											? "Severed"
-											: (networkPopup.currentType === "ethernet" ? "Corded" : "Airborne")
+								ArcMark {
+									anchors.centerIn: parent
+									width: 26
+									height: 26
+									glyph: "star"
+									weight: Arc.ruleThin
+									lineColor: networkPopupColumn.offline ? Arc.goldDim : Arc.aether
+								}
+							}
+
+							ArcText {
+								anchors.horizontalCenter: worldNode.horizontalCenter
+								anchors.top: worldNode.bottom
+								anchors.topMargin: 2
+								role: "label"
+								tone: networkPopupColumn.offline ? "faint" : "muted"
+								text: networkPopupColumn.offline ? "Severed" : "The World"
+							}
+
+							// The ley itself, with the traffic running on it.
+							Canvas {
+								id: leyRun
+								anchors.horizontalCenter: parent.horizontalCenter
+								anchors.top: worldNode.bottom
+								anchors.bottom: hereNode.top
+								anchors.topMargin: 24
+								anchors.bottomMargin: 6
+								width: 180
+								renderStrategy: Canvas.Cooperative
+
+								// Two lights per direction, walking the line.
+								property real phase: 0
+
+								NumberAnimation on phase {
+									running: !networkPopupColumn.offline
+									loops: Animation.Infinite
+									from: 0
+									to: 1
+									duration: 2600
+								}
+
+								readonly property real up: Math.min(1, networkPopup.currentUploadSpeed / 262144)
+								readonly property real down: Math.min(1, networkPopup.currentDownloadSpeed / 1048576)
+
+								onPhaseChanged: requestPaint()
+
+								onPaint: {
+									const ctx = getContext("2d");
+									ctx.reset();
+									if (height < 20) return;
+									const left = width * 0.34, right = width * 0.66;
+									Ink.ley(ctx, left, 0, left, height, Arc.ruleThin, Arc.goldGhost, null, -1);
+									Ink.ley(ctx, right, 0, right, height, Arc.ruleThin, Arc.goldGhost, null, -1);
+
+									// what is being sent: lights climbing the
+									// left line, spaced by how much there is
+									const sending = Math.max(1, Math.round(1 + leyRun.up * 5));
+									for (let index = 0; index < sending; index++) {
+										const t = (leyRun.phase * (0.4 + leyRun.up) + index / sending) % 1;
+										Ink.mote(ctx, left, height * (1 - t), 2.4 + leyRun.up * 2, Arc.aetherAlt);
 									}
 
-									ArcText {
-										width: parent.width
-										role: "caption"
-										tone: "faint"
-										text: networkPopup.currentInterface !== ""
-											? `${networkPopup.currentInterface} · ${networkPopup.currentIp !== "" ? networkPopup.currentIp : "no address"}`
-											: "no interface"
+									// what is arriving: lights falling the right
+									const arriving = Math.max(1, Math.round(1 + leyRun.down * 7));
+									for (let index = 0; index < arriving; index++) {
+										const t = (leyRun.phase * (0.4 + leyRun.down * 1.6) + index / arriving) % 1;
+										Ink.mote(ctx, right, height * t, 2.4 + leyRun.down * 2.4, Arc.aether);
 									}
+								}
+							}
+
+							ArcText {
+								anchors.right: leyRun.left
+								anchors.rightMargin: Arc.s2
+								anchors.verticalCenter: leyRun.verticalCenter
+								anchors.verticalCenterOffset: -16
+								horizontalAlignment: Text.AlignRight
+								role: "label"
+								tone: "faint"
+								text: "Sent"
+							}
+
+							ArcText {
+								anchors.right: leyRun.left
+								anchors.rightMargin: Arc.s2
+								anchors.verticalCenter: leyRun.verticalCenter
+								anchors.verticalCenterOffset: 4
+								horizontalAlignment: Text.AlignRight
+								role: "bodyStrong"
+								text: networkPopup.formatSpeed(networkPopup.currentUploadSpeed)
+							}
+
+							ArcText {
+								anchors.left: leyRun.right
+								anchors.leftMargin: Arc.s2
+								anchors.verticalCenter: leyRun.verticalCenter
+								anchors.verticalCenterOffset: -16
+								role: "label"
+								tone: "faint"
+								text: "Drawn"
+							}
+
+							ArcText {
+								anchors.left: leyRun.right
+								anchors.leftMargin: Arc.s2
+								anchors.verticalCenter: leyRun.verticalCenter
+								anchors.verticalCenterOffset: 4
+								role: "bodyStrong"
+								text: networkPopup.formatSpeed(networkPopup.currentDownloadSpeed)
+							}
+
+							// This machine.
+							Item {
+								id: hereNode
+								anchors.horizontalCenter: parent.horizontalCenter
+								anchors.bottom: hereName.top
+								anchors.bottomMargin: Arc.s2
+								width: 52
+								height: 52
+
+								ArcDial {
+									anchors.fill: parent
+									lineColor: Qt.alpha(Arc.gold, 0.3)
+									liveColor: Arc.aether
+									weight: Arc.ruleThin
+									seed: 1
+									beading: false
+									intensity: networkPopupColumn.offline ? 0 : 0.5
+								}
+
+								QQCImpl.IconImage {
+									anchors.centerIn: parent
+									width: 18
+									height: 18
+									source: networkPopup.currentType === "ethernet"
+										? Arc.icon("network-wired-symbolic")
+										: Arc.icon("network-wireless-signal-excellent-symbolic")
+									sourceSize: Qt.size(width, height)
+									color: networkPopupColumn.offline ? Arc.inkFaint : Arc.aether
+								}
+							}
+
+							Column {
+								id: hereName
+								anchors.horizontalCenter: parent.horizontalCenter
+								anchors.bottom: severVerb.top
+								anchors.bottomMargin: Arc.s4
+								spacing: -2
+
+								ArcText {
+									anchors.horizontalCenter: parent.horizontalCenter
+									role: "display"
+									font.pixelSize: 19
+									text: networkPopupColumn.offline ? "Unbound"
+										: (networkPopup.currentType === "ethernet" ? "Corded" : "Adrift")
 								}
 
 								ArcText {
-									id: severLabel
-									visible: networkPopup.currentType !== "offline"
-									anchors.right: parent.right
-									anchors.verticalCenter: parent.verticalCenter
-									role: "label"
-									tone: severTouch.containsMouse ? "alert" : "muted"
-									text: "Sever"
+									anchors.horizontalCenter: parent.horizontalCenter
+									role: "caption"
+									tone: "faint"
+									text: networkPopup.currentInterface === "" ? "" : networkPopup.currentInterface
+								}
 
-									ArcTouch {
-										id: severTouch
-										anchors.margins: -Arc.s2
-										onClicked: root.disconnectActiveNetwork()
-									}
+								ArcText {
+									anchors.horizontalCenter: parent.horizontalCenter
+									role: "mono"
+									tone: "muted"
+									font.pixelSize: 11
+									text: networkPopup.currentIp
 								}
 							}
 
-						// Throughput, as two pulses given the whole height of the
-						// chamber to move in. The trace is the same ribbon the rest
-						// of the style is drawn with, so a busy link reads as
-						// something alive rather than as a line chart in a box.
-						Item {
-							id: outflowBlock
-							anchors.left: parent.left
-							anchors.right: parent.right
-							anchors.top: linkHead.bottom
-							anchors.topMargin: Arc.s5
-							height: (parent.height - linkHead.height - Arc.s5 * 2 - Arc.s5) / 2
-
-							ArcRubric {
-								id: outflowHead
-								width: parent.width
-								title: "Outflow"
-								trailing: networkPopup.formatSpeed(networkPopup.currentUploadSpeed)
-							}
-
-							ArcTrace {
-								id: uploadChart
-								anchors.left: parent.left
-								anchors.right: parent.right
-								anchors.top: outflowHead.bottom
-								anchors.topMargin: Arc.s3
+							ArcButton {
+								id: severVerb
+								anchors.horizontalCenter: parent.horizontalCenter
 								anchors.bottom: parent.bottom
-								values: networkPopup.uploadHistory || []
-								ceiling: networkPopup.uploadChartMax
-								traceColor: Arc.aether
-
-								Connections {
-									target: networkPopup
-									function onUploadHistoryChanged() { uploadChart.repaint(); }
-									function onCurrentUploadSpeedChanged() { uploadChart.repaint(); }
-								}
+								text: "Sever"
+								tone: "alert"
+								enabled: !networkPopupColumn.offline
+								onClicked: root.disconnectActiveNetwork()
 							}
 						}
-
-						Item {
-							id: intakeBlock
-							anchors.left: parent.left
-							anchors.right: parent.right
-							anchors.top: outflowBlock.bottom
-							anchors.topMargin: Arc.s5
-							anchors.bottom: parent.bottom
-
-							ArcRubric {
-								id: intakeHead
-								width: parent.width
-								title: "Intake"
-								trailing: networkPopup.formatSpeed(networkPopup.currentDownloadSpeed)
-							}
-
-							ArcTrace {
-								id: downloadChart
-								anchors.left: parent.left
-								anchors.right: parent.right
-								anchors.top: intakeHead.bottom
-								anchors.topMargin: Arc.s3
-								anchors.bottom: parent.bottom
-								values: networkPopup.downloadHistory || []
-								ceiling: networkPopup.downloadChartMax
-								traceColor: Arc.aetherAlt
-
-								Connections {
-									target: networkPopup
-									function onDownloadHistoryChanged() { downloadChart.repaint(); }
-									function onCurrentDownloadSpeedChanged() { downloadChart.repaint(); }
-								}
-							}
-						}
-					}
 				}
 	}
 
 	PopupSurface {
 		id: resourcesPopup
-		title: "Humours"
+		title: "The Arcane Core"
 		screen: root.activePopupScreen
 
 		onDismissRequested: root.closeResourcesPopup()
 		open: root.resourcesPopupOpen
 		visible: root.resourcesPopupVisible
 		barItem: bar
-		anchorItem: resourceBars
+		anchorItem: core
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
-		expandedWidth: 420
+		expandedWidth: 460
 		contentPreferredHeight: resourcesPopupColumn.implicitHeight
 
 		onVisibleChanged: {
@@ -3824,103 +4019,284 @@ printf 'type=offline\niface=\nip=\n'`
 			}
 		}
 
-						Item {
-							id: resourcesPopupContent
+		// The core, opened.
+		//
+		// The same object that sits on the horizon, at a size where it can be
+		// read: four bodies held off a burning core on four spokes, each one
+		// drawn *in* towards the core as its own reading rises. So a machine at
+		// rest is a wide, calm, dim thing and a machine under load is a tight,
+		// bright, crowded one, and you know which before you have read a
+		// single number.
+		Column {
+			id: resourcesPopupColumn
+			anchors.fill: parent
+			spacing: Arc.s5
+
+			Item {
+				width: parent.width
+				height: 230
+
+				readonly property real strain: Math.max(resourceBars.cpuUsage, resourceBars.memoryUsage)
+				readonly property bool burning: strain > 0.86
+				readonly property real cx: width / 2
+				readonly property real cy: height / 2
+
+				readonly property var bodies: [
+					{ name: "Mana", reading: resourceBars.cpuUsage, note: resourceBars.cpuText, angle: -90 },
+					{ name: "Aether", reading: resourceBars.memoryUsage, note: resourceBars.memoryText, angle: 0 },
+					{ name: "Vault", reading: resourceBars.storageUsage, note: `${resourceBars.disks.length} held`, angle: 90 },
+					{ name: "Essence", reading: resourceBars.mouseBatteryAvailable ? resourceBars.mouseBatteryUsage : 0,
+					  note: resourceBars.mouseBatteryAvailable ? resourceBars.mouseBatteryText : "none", angle: 180 }
+				]
+
+				ArcHalo {
+					anchors.centerIn: parent
+					width: 280
+					height: 280
+					color: parent.burning ? Arc.bane : Arc.aether
+					strength: 0.14 + parent.strain * 0.30
+					spread: 0.34
+					flicker: true
+				}
+
+				Canvas {
+					id: orrery
+					anchors.fill: parent
+					renderStrategy: Canvas.Cooperative
+
+					readonly property real mana: resourceBars.cpuUsage
+					readonly property real aether: resourceBars.memoryUsage
+					readonly property real vault: resourceBars.storageUsage
+					readonly property real essence: resourceBars.mouseBatteryUsage
+
+					onManaChanged: requestPaint()
+					onAetherChanged: requestPaint()
+					onVaultChanged: requestPaint()
+					onEssenceChanged: requestPaint()
+
+					Connections {
+						target: Arc
+						function onGoldChanged() { orrery.requestPaint(); }
+					}
+
+					onPaint: {
+						const ctx = getContext("2d");
+						ctx.reset();
+						if (width < 60) return;
+						const cx = width / 2, cy = height / 2;
+						const strain = Math.max(orrery.mana, orrery.aether);
+						const hot = strain > 0.86;
+						const live = hot ? Arc.bane : Arc.aether;
+						const orbit = 84;
+
+						Ink.ring(ctx, cx, cy, orbit, Arc.ruleThin, Qt.alpha(Arc.gold, 0.14), 1);
+						Ink.ring(ctx, cx, cy, orbit * 0.5, Arc.ruleThin, Qt.alpha(Arc.gold, 0.08), 1);
+
+						Ink.mote(ctx, cx, cy, 8 + strain * 8, live);
+						Ink.ring(ctx, cx, cy, 18 + strain * 6, Arc.ruleThin,
+							Qt.alpha(live, 0.28 + strain * 0.5), 1);
+
+						const readings = [orrery.mana, orrery.aether, orrery.vault, orrery.essence];
+						const tints = [live, hot ? Arc.bane : Arc.aetherAlt, Arc.aetherThird, Arc.gold];
+						for (let index = 0; index < 4; index++) {
+							const angle = -Math.PI / 2 + index * Math.PI / 2;
+							const at = orbit * (1 - readings[index] * 0.52);
+							const x = cx + Math.cos(angle) * at, y = cy + Math.sin(angle) * at;
+							// the spoke, marked to the full orbit so the gap is
+							// legible as the distance it has been drawn in
+							Ink.ley(ctx, cx + Math.cos(angle) * 22, cy + Math.sin(angle) * 22,
+								cx + Math.cos(angle) * orbit, cy + Math.sin(angle) * orbit,
+								Arc.ruleThin, Qt.alpha(Arc.gold, 0.13), null, -1);
+							Ink.ley(ctx, cx + Math.cos(angle) * 22, cy + Math.sin(angle) * 22,
+								x, y, Arc.ruleThin * 1.4, Qt.alpha(tints[index], 0.5), null, -1);
+							Ink.mote(ctx, x, y, 4 + readings[index] * 6, tints[index]);
+						}
+					}
+				}
+
+				// The names, written at the far end of each spoke.
+				Repeater {
+					model: parent.bodies
+
+					delegate: Column {
+						id: bodyName
+
+						required property var modelData
+						required property int index
+
+						readonly property real radians: modelData.angle * Math.PI / 180
+						readonly property real outward: 108
+
+						width: 116
+						spacing: -2
+
+						x: Math.round(parent.cx + Math.cos(bodyName.radians) * bodyName.outward - width / 2)
+						y: Math.round(parent.cy + Math.sin(bodyName.radians) * bodyName.outward - height / 2)
+
+						ArcText {
+							width: parent.width
+							horizontalAlignment: Text.AlignHCenter
+							role: "label"
+							tone: bodyName.modelData.reading > 0.86 ? "alert" : "aether"
+							text: bodyName.modelData.name
+						}
+
+						ArcText {
+							width: parent.width
+							horizontalAlignment: Text.AlignHCenter
+							role: "display"
+							font.pixelSize: 20
+							text: `${Math.round(bodyName.modelData.reading * 100)}%`
+						}
+
+						ArcText {
+							width: parent.width
+							horizontalAlignment: Text.AlignHCenter
+							role: "caption"
+							tone: "faint"
+							text: bodyName.modelData.note
+						}
+					}
+				}
+
+				// Motes thrown off the core while it is working hard.
+				ArcMotes {
+					anchors.centerIn: parent
+					width: 180
+					height: 180
+					color: parent.burning ? Arc.bane : Arc.aether
+					drifting: parent.strain > 0.5
+					density: Math.round(parent.strain * 22)
+					drift: -20
+					span: 2.6
+				}
+			}
+
+			ArcRubric {
+				width: parent.width
+				title: "The Vaults"
+				trailing: `${resourceBars.disks.length}`
+
+				Column {
+					width: parent.width
+					spacing: Arc.s3
+
+					Repeater {
+						model: resourceBars.disks
+
+						delegate: ResourceRow {
+							required property var modelData
+							width: parent.width
+							label: modelData.name
+							detail: `${modelData.usedText}/${modelData.totalText}`
+							usage: modelData.usage
+							valueText: `${modelData.freeText} left`
+						}
+					}
+				}
+			}
+
+			// Life essence: the pointer's charge, in the flask the reference
+			// asks for. It only exists when there is a pointer with a charge.
+			ArcRubric {
+				width: parent.width
+				visible: resourceBars.mouseBatteryAvailable
+				title: "Life Essence"
+				trailing: resourceBars.mouseBatteryStatus
+
+				Row {
+					width: parent.width
+					spacing: Arc.s4
+
+					Item {
+						width: 46
+						height: 86
+
+						Canvas {
+							id: flask
 							anchors.fill: parent
+							renderStrategy: Canvas.Cooperative
 
-							Column {
-								id: resourcesPopupColumn
-								anchors.fill: parent
-								spacing: Arc.s4
+							Connections {
+								target: Arc
+								function onGoldChanged() { flask.requestPaint(); }
+							}
 
-								ArcRubric {
-									width: parent.width
-									title: "The Rack"
-									trailing: resourceBars.cpuText
-								}
-
-								// The rack, at the size it deserves. The letters on
-								// the chain are these four, spelled out: what the
-								// machine is actually carrying, in glass.
-								Row {
-									anchors.horizontalCenter: parent.horizontalCenter
-									spacing: Arc.s6
-
-									ArcMeasure {
-										value: resourceBars.cpuUsage
-										label: "Mana"
-										detail: resourceBars.cpuText
-									}
-
-									ArcMeasure {
-										value: resourceBars.memoryUsage
-										label: "Aether"
-										detail: resourceBars.memoryText
-										fillColor: Arc.aetherAlt
-									}
-
-									ArcMeasure {
-										value: resourceBars.storageUsage
-										label: "Vault"
-										detail: `${resourceBars.disks.length} stores`
-										fillColor: Arc.aetherThird
-									}
-
-									ArcMeasure {
-										visible: resourceBars.mouseBatteryAvailable
-										value: resourceBars.mouseBatteryUsage
-										label: "Essence"
-										detail: resourceBars.mouseBatteryText
-										inverted: true
-									}
-								}
-
-								ArcRubric {
-									width: parent.width
-									visible: resourceBars.mouseBatteryAvailable
-									title: "Essence"
-									trailing: resourceBars.mouseBatteryStatus
-
-									ResourceRow {
-										width: parent.width
-										label: resourceBars.mouseBatteryName
-										detail: ""
-										usage: resourceBars.mouseBatteryUsage
-										valueText: resourceBars.mouseBatteryText
-									}
-								}
-
-								ArcRubric {
-									width: parent.width
-									title: "Vaults"
-									trailing: `${resourceBars.disks.length}`
-
-									Column {
-										width: parent.width
-										spacing: Arc.s3
-
-										Repeater {
-											model: resourceBars.disks
-
-											delegate: ResourceRow {
-												required property var modelData
-												width: parent.width
-												label: modelData.name
-												detail: `${modelData.usedText}/${modelData.totalText}`
-												usage: modelData.usage
-												valueText: `${modelData.freeText} left`
-											}
-										}
-									}
-								}
+							onPaint: {
+								const ctx = getContext("2d");
+								ctx.reset();
+								const neck = width * 0.22, shoulder = height * 0.22;
+								Ink.cut(ctx, [
+									{ x: width / 2 - neck, y: 6 },
+									{ x: width / 2 - neck, y: shoulder },
+									{ x: 3, y: shoulder + 14 },
+									{ x: 3, y: height - 8 },
+									{ x: 10, y: height - 2 },
+									{ x: width - 10, y: height - 2 },
+									{ x: width - 3, y: height - 8 },
+									{ x: width - 3, y: shoulder + 14 },
+									{ x: width / 2 + neck, y: shoulder },
+									{ x: width / 2 + neck, y: 6 }
+								], Arc.rule, Qt.alpha(Arc.gold, 0.6), false);
+								Ink.cut(ctx, [{ x: width / 2 - neck - 4, y: 5 }, { x: width / 2 + neck + 4, y: 5 }],
+									Arc.ruleHeavy, Arc.gold, false);
 							}
 						}
+
+						ArcPhial {
+							anchors.left: parent.left
+							anchors.right: parent.right
+							anchors.bottom: parent.bottom
+							anchors.leftMargin: 5
+							anchors.rightMargin: 5
+							anchors.bottomMargin: 4
+							height: parent.height * 0.62
+							vertical: true
+							value: resourceBars.mouseBatteryUsage
+							trackColor: "transparent"
+							fillColor: resourceBars.mouseBatteryUsage < 0.2 ? Arc.bane : Arc.ward
+						}
+
+						// While it is filling, the essence gives off motes.
+						ArcMotes {
+							anchors.fill: parent
+							color: Arc.ward
+							drifting: String(resourceBars.mouseBatteryStatus).toLowerCase().indexOf("charg") >= 0
+							density: 8
+							drift: -24
+							span: 2.2
+						}
+					}
+
+					Column {
+						anchors.verticalCenter: parent.verticalCenter
+						spacing: -2
+
+						ArcText {
+							role: "display"
+							font.pixelSize: 24
+							text: resourceBars.mouseBatteryText
+						}
+
+						ArcText {
+							role: "body"
+							tone: "muted"
+							text: resourceBars.mouseBatteryName
+						}
+					}
+				}
+			}
+		}
 	}
 
-	// The launcher takes the whole bench. There is no sheet and no card: the
-	// desktop is dimmed to a cavity, the spine stays lit down the left, and the
-	// work is laid out directly on the dark with bone rules for structure. It
-	// arrives the way the chambers do — wiped in from the column.
+	// THE ARCANE CODEX.
+	//
+	// The launcher is the book the reference draws: one tall narrow volume
+	// standing in the middle of the sanctum, not a spread and not a card. It is
+	// called up exactly the way every other panel is — a ring inscribes itself
+	// on the floor beneath it, motes gather off the ring, and the page
+	// condenses upward out of them. There are no covers and nothing opens on a
+	// hinge, so there is nothing to get the wrong way round.
 	PanelWindow {
 		id: launcherPopup
 		screen: root.activePopupScreen
@@ -3939,324 +4315,173 @@ printf 'type=offline\niface=\nip=\n'`
 		WlrLayershell.layer: WlrLayer.Overlay
 		WlrLayershell.keyboardFocus: root.launcherPopupVisible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
-		// The chain is never covered. The grimoire dims the desktop under it
-		// and leaves the chain lit and live, so the clasp you opened this with
-		// is still there to shut it.
+		// The horizon is never covered: the sigil you opened this with is still
+		// there to close it, and the chronomancer keeps the hour.
 		mask: Region {
 			x: 0
-			y: Math.round(Arc.gantryDepth)
+			y: 0
 			width: launcherPopup.width
-			height: Math.max(0, launcherPopup.height - Math.round(Arc.gantryDepth))
+			height: Math.max(0, launcherPopup.height - Math.round(Arc.horizon))
 		}
 
 		property real progress: root.launcherPopupOpen ? 1 : 0
 
-		// Two movements, in order, the same pair every modal in this style
-		// makes: the volume is lowered off the chain, and only then is it
-		// opened. Reading begins after that, which is what the launcher's own
-		// band stagger is for.
-		readonly property real lower: Math.max(0, Math.min(1, progress / 0.42))
-		readonly property real turned: Math.max(0, Math.min(1, (progress - 0.36) / 0.64))
+		readonly property real inscribed: Math.max(0, Math.min(1, progress / 0.34))
+		readonly property real condensed: Math.max(0, Math.min(1, (progress - 0.26) / 0.48))
 
 		Behavior on progress {
 			NumberAnimation {
-				duration: root.launcherPopupOpen ? Arc.unroll + Arc.turn : Arc.reroll + 70
+				duration: root.launcherPopupOpen ? Arc.conjure + 140 : Arc.dispel + 60
 				easing.type: Easing.Bezier
-				easing.bezierCurve: root.launcherPopupOpen ? Arc.curveUnroll : Arc.curveReroll
+				easing.bezierCurve: root.launcherPopupOpen ? Arc.curveRise : Arc.curveSink
 			}
 		}
 
+		onVisibleChanged: if (visible) gatherTimer.restart()
+
+		Timer {
+			id: gatherTimer
+			interval: Math.round(Arc.conjure * 0.26)
+			onTriggered: if (root.launcherPopupOpen) codexMotes.burst(codexMotes.width / 2, codexMotes.height - 10, 30)
+		}
+
 		Rectangle {
-			anchors.left: parent.left
-			anchors.right: parent.right
-			anchors.top: parent.top
-			anchors.bottom: parent.bottom
-			anchors.topMargin: Math.round(Arc.gantryDepth)
-			color: Arc.well
-			opacity: 0.985 * launcherPopup.progress
+			anchors.fill: parent
+			anchors.bottomMargin: Math.round(Arc.horizon)
+			color: Arc.scrim
+			opacity: launcherPopup.progress
+
+			Behavior on opacity {
+				NumberAnimation { duration: Arc.draw; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveKindle }
+			}
 		}
 
 		MouseArea {
 			anchors.fill: parent
-			anchors.topMargin: Math.round(Arc.gantryDepth)
+			anchors.bottomMargin: Math.round(Arc.horizon)
 			onClicked: root.closeLauncherPopup()
 		}
 
-		// THE GRIMOIRE.
-		//
-		// The launcher is a book, and it behaves like one. It is lowered off
-		// the chain on two cords, its boards turn outward about the gutter, and
-		// what is underneath them is a two-page spread with a sewn binding down
-		// the middle and the cut edges of the page block showing at the sides.
-		// Nothing here is a panel with a list in it.
 		Item {
-			id: book
+			id: codex
 
-			readonly property real boardMargin: 9
-			readonly property real typeMargin: 30
+			// A folio when there is a discourse in it, an octavo otherwise. A
+			// book is whatever size the thing bound in it needs.
+			readonly property bool folio: {
+				const sheet = launcherSheetLoader.item;
+				return !!sheet && (sheet.inChatMode || sheet.inOllamaMode || sheet.inFileMode);
+			}
 
-			width: Math.min(parent.width - Arc.s8 * 2, 1520)
-			height: parent.height - Arc.gantryDepth - Arc.s6 * 2
+			width: Math.min(parent.width - Arc.s8 * 2, codex.folio ? 980 : 560)
+			height: Math.min(parent.height - Arc.horizon - Arc.s6 * 2, 760)
 			x: Math.round((parent.width - width) / 2)
-			y: Math.round(Arc.gantryDepth + Arc.s6 - (1 - launcherPopup.lower) * 110)
-			opacity: Math.min(1, launcherPopup.lower * 2.2)
+			y: Math.round((parent.height - Arc.horizon - height) / 2)
 
-			// The cords it hangs on while it is coming down.
-			Repeater {
-				model: 2
-				delegate: Rectangle {
-					required property int index
-					x: index === 0 ? Arc.s8 : book.width - Arc.s8
-					y: -(book.y - Arc.gantryDepth + Arc.s2)
-					width: Arc.ruleThin
-					height: Math.max(0, book.y - Arc.gantryDepth + Arc.s2)
-					color: Qt.alpha(Arc.gilt, 0.4 * (1 - launcherPopup.turned))
+			Behavior on width {
+				NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveSnap }
+			}
+
+			// The ring on the floor under the book.
+			Canvas {
+				id: codexCircle
+				anchors.horizontalCenter: parent.horizontalCenter
+				y: parent.height - 18
+				width: codex.width * 1.1
+				height: width * 0.22
+				renderStrategy: Canvas.Cooperative
+
+				readonly property real through: launcherPopup.inscribed
+
+				onThroughChanged: requestPaint()
+
+				onPaint: {
+					const ctx = getContext("2d");
+					ctx.reset();
+					if (width < 40 || codexCircle.through <= 0.002) return;
+					ctx.save();
+					ctx.translate(width / 2, height / 2);
+					ctx.scale(1, height / width);
+					Ink.ring(ctx, 0, 0, width / 2 - 4, 2.4, Arc.aether, codexCircle.through);
+					Ink.graduations(ctx, 0, 0, width / 2 - 7, 72, 6, 14, 6,
+						Arc.ruleThin, Qt.alpha(Arc.aether, 0.45), codexCircle.through);
+					Ink.runeRing(ctx, 0, 0, width / 2 - 30, 12, 41, 18, Arc.ruleThin,
+						Qt.alpha(Arc.gold, 0.2), Arc.aether,
+						Math.round(12 * codexCircle.through));
+					ctx.restore();
 				}
 			}
 
 			ArcHalo {
-				anchors.centerIn: parent
-				width: parent.width * 1.2
-				height: parent.height * 1.3
+				anchors.centerIn: codexCircle
+				width: codexCircle.width * 1.4
+				height: codexCircle.height * 6
 				color: Arc.aether
-				strength: 0.13 * launcherPopup.progress
-				spread: 0.46
+				strength: 0.30 * launcherPopup.inscribed
+				spread: 0.42
 				flicker: true
 			}
 
-			// The page block: the boards around the outside, a tooled brass
-			// line on them, and two leaves of vellum inside.
-			Rectangle {
+			ArcMotes {
+				id: codexMotes
 				anchors.fill: parent
-				color: Arc.leaf3
-
-				Rectangle {
-					anchors.fill: parent
-					color: "transparent"
-					border.width: Arc.rule
-					border.color: Arc.giltDim
-				}
-
-				Rectangle {
-					anchors.fill: parent
-					anchors.margins: 4
-					color: "transparent"
-					border.width: Arc.ruleThin
-					border.color: Arc.giltGhost
-				}
-
-				Rectangle {
-					anchors.fill: parent
-					anchors.margins: book.boardMargin
-					color: Arc.leaf1
-
-					// The leaves are not flat. A page lifts off the board at
-					// its fore-edge and falls away into the binding, and that
-					// is the only reason a spread reads as paper.
-					Rectangle {
-						anchors.fill: parent
-						gradient: Gradient {
-							orientation: Gradient.Horizontal
-							GradientStop { position: 0.00; color: Qt.alpha(Arc.raised, 0.045) }
-							GradientStop { position: 0.36; color: "transparent" }
-							GradientStop { position: 0.64; color: "transparent" }
-							GradientStop { position: 1.00; color: Qt.alpha(Arc.raised, 0.045) }
-						}
-					}
-				}
+				color: Arc.aether
+				span: 3.6
+				visible: launcherPopup.progress > 0.04 && launcherPopup.progress < 0.97
 			}
 
-			Repeater {
-				model: 2
-
-				delegate: Item {
-					required property int index
-					readonly property bool leftEdge: index === 0
-
-					x: leftEdge ? book.boardMargin : book.width - book.boardMargin - width
-					y: book.boardMargin + 6
-					width: 7
-					height: book.height - book.boardMargin * 2 - 12
-
-					Repeater {
-						model: 4
-						delegate: Rectangle {
-							required property int index
-							x: index * 2
-							width: Arc.ruleThin
-							height: parent.height
-							color: Qt.alpha(Arc.gilt, 0.16 - index * 0.03)
-						}
-					}
-				}
-			}
-
-			// The binding: the gutter shadow, and the thread the sections are
-			// sewn on. This is the line the boards turn about.
-			Rectangle {
-				anchors.horizontalCenter: parent.horizontalCenter
-				anchors.top: parent.top
-				anchors.bottom: parent.bottom
-				anchors.topMargin: book.boardMargin
-				anchors.bottomMargin: book.boardMargin
-				width: Arc.s8
-
-				gradient: Gradient {
-					orientation: Gradient.Horizontal
-					GradientStop { position: 0.00; color: "transparent" }
-					GradientStop { position: 0.34; color: Qt.alpha(Arc.well, 0.55) }
-					GradientStop { position: 0.50; color: Qt.alpha(Arc.well, 0.95) }
-					GradientStop { position: 0.66; color: Qt.alpha(Arc.well, 0.55) }
-					GradientStop { position: 1.00; color: "transparent" }
-				}
-
-				// The sewing: the thread showing through the fold, in pairs,
-				// the way a section is actually sewn onto its cords.
-				Repeater {
-					model: 6
-
-					delegate: Item {
-						required property int index
-						anchors.horizontalCenter: parent.horizontalCenter
-						y: parent.height * (0.07 + index * 0.172)
-						width: Arc.ruleThin
-						height: 22
-
-						Rectangle {
-							width: Arc.ruleThin
-							height: 9
-							color: Qt.alpha(Arc.gilt, 0.34)
-						}
-
-						Rectangle {
-							y: 13
-							width: Arc.ruleThin
-							height: 9
-							color: Qt.alpha(Arc.gilt, 0.34)
-						}
-					}
-				}
-			}
-
+			// The page, condensing upward out of the ring.
 			Item {
-				id: launcherStage
+				id: aperture
+				anchors.left: parent.left
+				anchors.right: parent.right
+				anchors.bottom: parent.bottom
+				anchors.bottomMargin: 14
+				height: Math.max(0, (parent.height - 14) * launcherPopup.condensed)
+				clip: true
+				opacity: Math.min(1, launcherPopup.condensed * 1.5)
 
-				focus: true
+				ArcLeaf {
+					id: page
+					anchors.left: parent.left
+					anchors.right: parent.right
+					anchors.bottom: parent.bottom
+					height: codex.height - 14
+					variant: "chamber"
+					crest: true
+					washTop: Arc.haze
+					washBottom: Arc.hazeDeep
+					haloStrength: 0.16 * launcherPopup.condensed
+					padding: Arc.s6
 
-				Keys.onEscapePressed: event => {
-					event.accepted = true;
-					root.closeLauncherPopup();
-				}
+					Item {
+						id: launcherStage
 
-				anchors.fill: parent
-				anchors.margins: book.boardMargin + book.typeMargin
-				opacity: Math.max(0, (launcherPopup.turned - 0.45) / 0.55)
+						focus: true
 
-				Loader {
-					id: launcherSheetLoader
-					anchors.fill: parent
-					active: true
-					sourceComponent: AppLauncherPopup {
-						foreground: root.foreground
-						background: root.background
-						secondaryBoxColor: root.secondaryBoxColor
-						secondaryBoxStrongColor: root.secondaryBoxStrongColor
-						secondaryInsetColor: root.secondaryInsetColor
-						barColor: root.accent
-						danger: root.danger
-						gutter: Arc.s6
-						onCloseRequested: root.closeLauncherPopup()
-						onOpenStudioRequested: page => {
+						Keys.onEscapePressed: event => {
+							event.accepted = true;
 							root.closeLauncherPopup();
-							root.openStudio(page);
 						}
-					}
-				}
-			}
 
-			// The boards. They are over everything until they have turned out
-			// of the way, and they cost nothing once the book is open.
-			Repeater {
-				model: 2
-
-				delegate: Item {
-					id: board
-
-					required property int index
-					readonly property bool leftBoard: index === 0
-
-					x: leftBoard ? 0 : book.width / 2
-					width: book.width / 2
-					height: book.height
-					visible: launcherPopup.turned < 0.995 && launcherPopup.progress > 0.004
-					z: 20
-
-					transform: Matrix4x4 {
-						readonly property real angle: (board.leftBoard ? -1 : 1) * 98 * launcherPopup.turned
-						readonly property real pivotX: board.leftBoard ? board.width : 0
-						readonly property real pivotY: board.height / 2
-
-						matrix: {
-							const d = 2200;
-							const rad = angle * Math.PI / 180;
-							const c = Math.cos(rad), s = Math.sin(rad);
-							const toPivot = Qt.matrix4x4(1, 0, 0, pivotX, 0, 1, 0, pivotY, 0, 0, 1, 0, 0, 0, 0, 1);
-							const persp = Qt.matrix4x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, -1 / d, 1);
-							const rotate = Qt.matrix4x4(c, 0, s, 0, 0, 1, 0, 0, -s, 0, c, 0, 0, 0, 0, 1);
-							const fromPivot = Qt.matrix4x4(1, 0, 0, -pivotX, 0, 1, 0, -pivotY, 0, 0, 1, 0, 0, 0, 0, 1);
-							return toPivot.times(persp).times(rotate).times(fromPivot);
-						}
-					}
-
-					// The board: tooled leather over wood, and the only surface
-					// in the style that is neither vellum nor brass.
-					Rectangle {
 						anchors.fill: parent
-						color: Arc.mix(Arc.leaf3, Arc.tan, Arc.light ? 0.16 : 0.10)
 
-						Rectangle {
+						Loader {
+							id: launcherSheetLoader
 							anchors.fill: parent
-							anchors.margins: 7
-							color: "transparent"
-							border.width: Arc.rule
-							border.color: Arc.gilt
-						}
-
-						Rectangle {
-							anchors.fill: parent
-							anchors.margins: 12
-							color: "transparent"
-							border.width: Arc.ruleThin
-							border.color: Arc.giltDim
-						}
-					}
-
-					// The grimoire's own mark, stamped on the front board, and
-					// the raised bands across the spine on the back of it.
-					ArcMark {
-						anchors.centerIn: parent
-						width: Math.min(parent.width, parent.height) * 0.4
-						height: width
-						glyph: "book"
-						weight: Arc.ruleHeavy * 1.4
-						lineColor: Arc.gilt
-						visible: !board.leftBoard
-						opacity: 1 - launcherPopup.turned
-					}
-
-					Column {
-						anchors.right: parent.right
-						anchors.verticalCenter: parent.verticalCenter
-						spacing: 14
-						visible: board.leftBoard
-						opacity: 1 - launcherPopup.turned
-
-						Repeater {
-							model: 5
-							delegate: Rectangle {
-								width: 30
-								height: Arc.ruleHeavy
-								color: Arc.giltDim
+							active: true
+							sourceComponent: AppLauncherPopup {
+								foreground: root.foreground
+								background: root.background
+								secondaryBoxColor: root.secondaryBoxColor
+								secondaryBoxStrongColor: root.secondaryBoxStrongColor
+								secondaryInsetColor: root.secondaryInsetColor
+								barColor: root.accent
+								danger: root.danger
+								onCloseRequested: root.closeLauncherPopup()
+								onOpenStudioRequested: page => {
+									root.closeLauncherPopup();
+									root.openStudio(page);
+								}
 							}
 						}
 					}
@@ -4344,7 +4569,7 @@ printf 'type=offline\niface=\nip=\n'`
 				property string statKernel: ""
 				property string statUptime: ""
 
-				readonly property real radius: Math.min(width, height) * 0.36
+				readonly property real radius: Math.min(width, height) * 0.33
 				// The four quarters, clockwise from the top.
 				readonly property var stations: [
 					{ angle: -90, label: "Seal", sub: "Lock the session", action: "lock",
@@ -4406,7 +4631,7 @@ printf 'type=offline\niface=\nip=\n'`
 
 					Connections {
 						target: Arc
-						function onGiltChanged() { circle.requestPaint(); }
+						function onGoldChanged() { circle.requestPaint(); }
 					}
 
 					onPaint: {
@@ -4414,19 +4639,19 @@ printf 'type=offline\niface=\nip=\n'`
 						ctx.reset();
 						const cx = width / 2, cy = height / 2, r = powerModal.radius;
 						if (r < 20) return;
-						const shadow = Qt.alpha(Qt.darker(Arc.gilt, 2.4), 0.55);
-						const highlight = Qt.alpha(Qt.lighter(Arc.gilt, 1.8), 0.5);
+						const shadow = Qt.alpha(Qt.darker(Arc.gold, 2.4), 0.55);
+						const highlight = Qt.alpha(Qt.lighter(Arc.gold, 1.8), 0.5);
 
 						Ink.groove(ctx, Ink.arcPoints(cx, cy, r, 0, Math.PI * 2, 88),
-							Arc.rule * 1.4, Arc.gilt, highlight, shadow, true);
+							Arc.rule * 1.4, Arc.gold, highlight, shadow, true);
 						Ink.cut(ctx, Ink.arcPoints(cx, cy, r - 12, 0, Math.PI * 2, 88),
-							Arc.ruleThin, Qt.alpha(Arc.gilt, 0.35), true);
+							Arc.ruleThin, Qt.alpha(Arc.gold, 0.35), true);
 						Ink.graduations(ctx, cx, cy, r - 1, -Math.PI / 2, Math.PI * 1.5,
-							72, 4, 10, 18, Arc.ruleThin, Qt.alpha(Arc.gilt, 0.42));
+							72, 4, 10, 18, Arc.ruleThin, Qt.alpha(Arc.gold, 0.42));
 
 						// The inner ring the name stands in.
 						Ink.cut(ctx, Ink.arcPoints(cx, cy, r * 0.42, 0, Math.PI * 2, 60),
-							Arc.ruleThin, Qt.alpha(Arc.gilt, 0.25), true);
+							Arc.ruleThin, Qt.alpha(Arc.gold, 0.25), true);
 					}
 				}
 
@@ -4446,7 +4671,7 @@ printf 'type=offline\niface=\nip=\n'`
 							direction: RotationAnimation.Shortest
 							duration: Arc.turn + 90
 							easing.type: Easing.Bezier
-							easing.bezierCurve: Arc.curveDetent
+							easing.bezierCurve: Arc.curveSnap
 						}
 					}
 
@@ -4479,7 +4704,7 @@ printf 'type=offline\niface=\nip=\n'`
 						width: 40
 						height: 40
 						glyph: "star"
-						lineColor: Arc.giltDim
+						lineColor: Arc.goldDim
 					}
 
 					ArcText {
@@ -4551,7 +4776,7 @@ printf 'type=offline\niface=\nip=\n'`
 							width: 56
 							height: 56
 							radius: 28
-							color: Arc.leaf1
+							color: Arc.veil1
 						}
 
 						ArcDial {
@@ -4562,7 +4787,7 @@ printf 'type=offline\niface=\nip=\n'`
 							height: 54
 							seed: station.index
 							weight: Arc.rule
-							lineColor: station.modelData.grave ? Qt.alpha(Arc.bane, 0.5) : Arc.giltDim
+							lineColor: station.modelData.grave ? Qt.alpha(Arc.bane, 0.5) : Arc.goldDim
 							liveColor: station.toneColor
 							intensity: station.live
 
@@ -4582,24 +4807,23 @@ printf 'type=offline\niface=\nip=\n'`
 
 						// The name, written outside the circle so the limb stays
 						// clean. Which side it sits on follows the quarter.
+						// The name is always set under its station, except the one
+						// at the top of the circle which is set above it. Set
+						// outside the circle to left and right, the names would
+						// run off the edge of the conjuring.
 						Column {
 							id: naming
 							spacing: -2
-							width: 190
+							width: 168
 
-							readonly property real outward: 46
-
-							x: station.modelData.angle === 0 ? station.width + 8
-								: station.modelData.angle === 180 ? -width - 8
-								: (station.width - width) / 2
-							y: station.modelData.angle === -90 ? -naming.height - 6
-								: station.modelData.angle === 90 ? station.height + 6
-								: (station.height - naming.height) / 2
+							x: Math.round((station.width - width) / 2)
+							y: station.modelData.angle === -90
+								? -naming.height - 8
+								: station.height + 8
 
 							ArcText {
 								width: parent.width
-								horizontalAlignment: station.modelData.angle === 180 ? Text.AlignRight
-									: station.modelData.angle === 0 ? Text.AlignLeft : Text.AlignHCenter
+								horizontalAlignment: Text.AlignHCenter
 								role: "display"
 								font.pixelSize: 24
 								color: station.live > 0.3 ? station.toneColor : Arc.ink
@@ -4612,8 +4836,7 @@ printf 'type=offline\niface=\nip=\n'`
 
 							ArcText {
 								width: parent.width
-								horizontalAlignment: station.modelData.angle === 180 ? Text.AlignRight
-									: station.modelData.angle === 0 ? Text.AlignLeft : Text.AlignHCenter
+								horizontalAlignment: Text.AlignHCenter
 								role: "caption"
 								tone: "faint"
 								text: station.modelData.sub
@@ -4637,131 +4860,10 @@ printf 'type=offline\niface=\nip=\n'`
 		}
 	}
 
-	// A quantity, as what is in the glass. Used wherever the reading is a
-	// proportion of something the machine holds — never a bar with a percentage
-	// written beside it. The liquid overruns and rocks back when the reading
-	// jumps, because that is what liquid does.
-	component ArcMeasure: Item {
-		id: measure
-
-		required property real value
-		required property string label
-		property string detail: ""
-		property color fillColor: Arc.aether
-		property bool inverted: false
-
-		readonly property bool strained: measure.inverted ? measure.value < 0.2 : measure.value > 0.88
-
-		width: 78
-		height: 176
-
-		ArcHalo {
-			anchors.centerIn: glass
-			width: 110
-			height: 220
-			color: measure.strained ? Arc.bane : measure.fillColor
-			strength: 0.18
-			spread: 0.34
-		}
-
-		// The glass: a stoppered phial, cut once.
-		Canvas {
-			id: glass
-			anchors.horizontalCenter: parent.horizontalCenter
-			anchors.top: parent.top
-			width: 40
-			height: 118
-			renderStrategy: Canvas.Cooperative
-
-			Connections {
-				target: Arc
-				function onGiltChanged() { glass.requestPaint(); }
-			}
-
-			onPaint: {
-				const ctx = getContext("2d");
-				ctx.reset();
-				const shadow = Qt.alpha(Qt.darker(Arc.gilt, 2.4), 0.5);
-				const highlight = Qt.alpha(Qt.lighter(Arc.gilt, 1.8), 0.5);
-				const neck = width * 0.30, shoulder = height * 0.16;
-
-				const outline = [
-					{ x: width / 2 - neck, y: 4 },
-					{ x: width / 2 - neck, y: shoulder },
-					{ x: 2, y: shoulder + 12 },
-					{ x: 2, y: height - 6 },
-					{ x: 8, y: height - 1 },
-					{ x: width - 8, y: height - 1 },
-					{ x: width - 2, y: height - 6 },
-					{ x: width - 2, y: shoulder + 12 },
-					{ x: width / 2 + neck, y: shoulder },
-					{ x: width / 2 + neck, y: 4 }
-				];
-
-				Ink.polyline(ctx, outline, true);
-				ctx.fillStyle = Arc.well;
-				ctx.fill();
-				Ink.groove(ctx, outline, Arc.rule * 1.2, Arc.gilt, highlight, shadow, false);
-				// the stopper
-				Ink.groove(ctx, [{ x: width / 2 - neck - 3, y: 3 }, { x: width / 2 + neck + 3, y: 3 }],
-					Arc.ruleHeavy, Arc.gilt, highlight, shadow, false);
-				// the graduations up the side
-				for (let mark = 1; mark <= 4; mark++) {
-					const y = height - 6 - (height - shoulder - 22) * mark / 5;
-					Ink.cut(ctx, [{ x: 4, y: y }, { x: mark === 2 || mark === 4 ? 13 : 9, y: y }],
-						Arc.ruleThin, Qt.alpha(Arc.gilt, 0.4), false);
-				}
-			}
-		}
-
-		ArcPhial {
-			anchors.left: glass.left
-			anchors.right: glass.right
-			anchors.bottom: glass.bottom
-			anchors.leftMargin: 3
-			anchors.rightMargin: 3
-			anchors.bottomMargin: 3
-			height: glass.height * 0.74
-			vertical: true
-			value: measure.value
-			trackColor: "transparent"
-			fillColor: measure.strained ? Arc.bane : measure.fillColor
-		}
-
-		ArcText {
-			anchors.horizontalCenter: glass.horizontalCenter
-			anchors.bottom: glass.bottom
-			anchors.bottomMargin: 18
-			role: "reading"
-			font.pixelSize: 17
-			text: `${Math.round(measure.value * 100)}%`
-		}
-
-		Column {
-			anchors.horizontalCenter: parent.horizontalCenter
-			anchors.top: glass.bottom
-			anchors.topMargin: Arc.s3
-			spacing: -1
-
-			ArcText {
-				anchors.horizontalCenter: parent.horizontalCenter
-				role: "label"
-				color: measure.strained ? Arc.bane : Arc.ink
-				text: measure.label
-			}
-
-			ArcText {
-				anchors.horizontalCenter: parent.horizontalCenter
-				role: "caption"
-				tone: "faint"
-				visible: measure.detail !== ""
-				text: measure.detail
-			}
-		}
-	}
-
-	// A named reading with a vein under it: disks, batteries, anything that has
-	// a proportion and a couple of numbers worth reading.
+	// A named reading: what it is on the left, what it says on the right, and a
+	// ley under it with a single light standing at the value. A filled bar
+	// would be a different style's idea of a quantity; here a quantity is where
+	// the light has got to.
 	component ResourceRow: Item {
 		id: resourceRow
 
@@ -4775,7 +4877,7 @@ printf 'type=offline\niface=\nip=\n'`
 		readonly property bool strained: resourceRow.usage > 0.88
 
 		width: parent ? parent.width : 276
-		implicitHeight: 38
+		implicitHeight: 40
 
 		ArcText {
 			id: rowLabel
@@ -4803,32 +4905,35 @@ printf 'type=offline\niface=\nip=\n'`
 			text: resourceRow.valueText
 		}
 
-		// A channel with something running along it, not a bar: the glass is
-		// cut first and the liquid is put in it.
-		ArcPlate {
-			id: channel
+		Canvas {
+			id: line
 			anchors.left: parent.left
 			anchors.right: parent.right
 			anchors.top: rowLabel.bottom
 			anchors.topMargin: Arc.s2
-			height: 10
-			variant: "capsule"
-			beading: false
-			weight: Arc.ruleThin
-			inset: 0
-			lineColor: Arc.giltFaint
-			liveColor: resourceRow.strained ? Arc.bane : Arc.aether
-			fillTop: Arc.well
-			fillBottom: Arc.well
-			intensity: resourceRow.strained ? 0.8 : 0
-		}
+			height: 12
+			renderStrategy: Canvas.Cooperative
 
-		ArcPhial {
-			anchors.fill: channel
-			anchors.margins: 2
-			value: resourceRow.usage
-			fillColor: resourceRow.strained ? Arc.bane : Arc.aether
-			trackColor: "transparent"
+			readonly property real at: Math.max(0, Math.min(1, resourceRow.usage))
+
+			onAtChanged: requestPaint()
+
+			Connections {
+				target: Arc
+				function onGoldChanged() { line.requestPaint(); }
+			}
+
+			onPaint: {
+				const ctx = getContext("2d");
+				ctx.reset();
+				if (width < 10) return;
+				const y = height / 2;
+				const tint = resourceRow.strained ? Arc.bane : Arc.aether;
+				Ink.ley(ctx, 0, y, width, y, Arc.ruleThin, Arc.goldGhost, null, -1);
+				Ink.ley(ctx, 0, y, width * line.at, y, Arc.ruleThin * 1.6,
+					Qt.alpha(tint, 0.55), null, -1);
+				Ink.mote(ctx, width * line.at, y, 3.2, tint);
+			}
 		}
 
 		ArcText {
@@ -4841,9 +4946,6 @@ printf 'type=offline\niface=\nip=\n'`
 		}
 	}
 
-	// One way out of the session. A tile is a chamber with a ring in it; the
-	// dangerous two are outlined in necrosis so the hand knows before the eye
-	// has read the word.
 	PopupSurface {
 		id: trayMenuPopup
 		title: "Sigil"
@@ -4966,7 +5068,7 @@ printf 'type=offline\niface=\nip=\n'`
 							Rectangle {
 								anchors.fill: parent
 								visible: menuEntry.modelData.isSeparator
-								color: Arc.giltGhost
+								color: Arc.goldGhost
 							}
 
 						Row {
@@ -5078,11 +5180,11 @@ printf 'type=offline\niface=\nip=\n'`
 		open: root.clockPopupOpen
 		visible: root.clockPopupVisible
 		barItem: bar
-		anchorItem: horologe
+		anchorItem: chrono
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
-		expandedWidth: 380
-		contentPreferredHeight: calendarContent.implicitHeight
+		expandedWidth: 420
+		fixedHeight: 470
 
 		onVisibleChanged: {
 			if (!visible && root.clockPopupVisible) {
@@ -5091,146 +5193,275 @@ printf 'type=offline\niface=\nip=\n'`
 			}
 		}
 
-		Column {
+		// THE WHEEL OF THE MONTH.
+		//
+		// There is no grid here. A month is a turn of a wheel, so the days are
+		// set round the rim in order and today is where the index arm is
+		// pointing. Weekends are dimmer; the day under the pointer lights. The
+		// middle of the wheel holds what the month actually is — its name, the
+		// moon as it stands tonight, and the name this hour goes by.
+		//
+		// Reading a date off it is not slower than reading a grid, because the
+		// only date anybody looks for is today, and today is the lit one with
+		// an arm pointing at it.
+		Item {
 			id: calendarContent
 			anchors.fill: parent
-			spacing: Arc.s4
 
-			// Today, stated once and large. The spine already carries the time,
-			// so the chamber carries the date.
+			readonly property var shown: root.currentDate
+			readonly property int days: root.calendarDaysInMonth(calendarContent.shown)
+			// Which weekday the first of the month falls on, 0 = Monday.
+			readonly property int firstWeekday: root.calendarOffset(calendarContent.shown)
+			readonly property bool thisMonth: calendarContent.shown.getMonth() === root.now.getMonth()
+				&& calendarContent.shown.getFullYear() === root.now.getFullYear()
+			readonly property int today: root.now.getDate()
+
+			property int hoveredDay: 0
+
+			function angleOf(day) {
+				return -Math.PI / 2 + Math.PI * 2 * (day - 1) / calendarContent.days;
+			}
+
+			function isWeekend(day) {
+				const weekday = (calendarContent.firstWeekday + day - 1) % 7;
+				return weekday >= 5;
+			}
+
+			// The limb the days are written on, painted once per month.
+			Canvas {
+				id: wheel
+				anchors.centerIn: parent
+				anchors.verticalCenterOffset: -6
+				width: Math.min(parent.width, parent.height - 40)
+				height: width
+				renderStrategy: Canvas.Cooperative
+
+				readonly property int days: calendarContent.days
+				readonly property int first: calendarContent.firstWeekday
+
+				onDaysChanged: requestPaint()
+				onFirstChanged: requestPaint()
+
+				Connections {
+					target: Arc
+					function onGoldChanged() { wheel.requestPaint(); }
+				}
+
+				onPaint: {
+					const ctx = getContext("2d");
+					ctx.reset();
+					if (width < 60) return;
+					const cx = width / 2, cy = height / 2, r = width / 2 - 4;
+					Ink.ring(ctx, cx, cy, r, Arc.ruleThin, Qt.alpha(Arc.gold, 0.26), 1);
+					Ink.ring(ctx, cx, cy, r - 30, Arc.ruleThin, Qt.alpha(Arc.gold, 0.12), 1);
+					Ink.graduations(ctx, cx, cy, r - 1, wheel.days, 4, 10, 7,
+						Arc.ruleThin, Qt.alpha(Arc.gold, 0.30), 1);
+					// the four quarters of the wheel, marked heavier
+					Ink.graduations(ctx, cx, cy, r - 30, 4, 7, 7, 1,
+						Arc.ruleThin, Qt.alpha(Arc.gold, 0.22), 1);
+				}
+			}
+
+			// The index arm, pointing at today. It turns to the day when the
+			// month is turned back to this one and simply is not drawn when you
+			// are looking at another month.
+			Item {
+				id: indexArm
+				anchors.centerIn: wheel
+				width: 2
+				height: wheel.height - 8
+				visible: calendarContent.thisMonth
+				rotation: (calendarContent.angleOf(calendarContent.today) + Math.PI / 2) * 180 / Math.PI
+
+				Behavior on rotation {
+					RotationAnimation {
+						direction: RotationAnimation.Shortest
+						duration: Arc.draw
+						easing.type: Easing.Bezier
+						easing.bezierCurve: Arc.curveSnap
+					}
+				}
+
+				Rectangle {
+					anchors.horizontalCenter: parent.horizontalCenter
+					anchors.top: parent.top
+					anchors.topMargin: 14
+					width: Arc.ruleThin
+					height: parent.height / 2 - 52
+					color: Qt.alpha(Arc.aether, 0.55)
+				}
+			}
+
+			// The days.
+			Repeater {
+				model: calendarContent.days
+
+				delegate: Item {
+					id: dayMark
+
+					required property int index
+					readonly property int day: dayMark.index + 1
+					readonly property bool isToday: calendarContent.thisMonth && dayMark.day === calendarContent.today
+					readonly property bool hovered: calendarContent.hoveredDay === dayMark.day
+					readonly property real radians: calendarContent.angleOf(dayMark.day)
+
+					width: 26
+					height: 26
+					x: Math.round(wheel.x + wheel.width / 2 + Math.cos(dayMark.radians) * (wheel.width / 2 - 17) - width / 2)
+					y: Math.round(wheel.y + wheel.height / 2 + Math.sin(dayMark.radians) * (wheel.height / 2 - 17) - height / 2)
+
+					ArcHalo {
+						anchors.centerIn: parent
+						width: 52
+						height: 52
+						color: Arc.aether
+						strength: 0.42
+						spread: 0.3
+						flicker: true
+						visible: dayMark.isToday
+					}
+
+					ArcText {
+						anchors.centerIn: parent
+						role: dayMark.isToday ? "display" : "body"
+						font.pixelSize: dayMark.isToday ? 16 : 12
+						font.letterSpacing: 0
+						tone: dayMark.isToday ? "aether"
+							: dayMark.hovered ? "default"
+							: calendarContent.isWeekend(dayMark.day) ? "faint" : "muted"
+						text: dayMark.day
+					}
+
+					ArcTouch {
+						hoverEnabled: true
+						cursorShape: Qt.ArrowCursor
+						onContainsMouseChanged: calendarContent.hoveredDay = containsMouse ? dayMark.day : 0
+					}
+				}
+			}
+
+			// The middle of the wheel: what month this is, the moon as it
+			// stands, and the name of the hour.
 			Column {
-				width: parent.width
-				spacing: -2
+				anchors.centerIn: wheel
+				spacing: 1
 
 				ArcText {
 					anchors.horizontalCenter: parent.horizontalCenter
 					role: "display"
-					text: Qt.formatDateTime(root.now, "d MMMM")
+					font.pixelSize: 26
+					text: Qt.formatDateTime(calendarContent.shown, "MMMM")
 				}
 
 				ArcText {
 					anchors.horizontalCenter: parent.horizontalCenter
 					role: "label"
-					tone: "aether"
-					text: Qt.formatDateTime(root.now, "dddd")
+					tone: "muted"
+					text: Qt.formatDateTime(calendarContent.shown, "yyyy")
 				}
-			}
 
-			Item {
-				width: parent.width
-				height: 30
+				Item { width: 1; height: Arc.s3 }
 
-				ArcSeat {
-					anchors.left: parent.left
-					anchors.verticalCenter: parent.verticalCenter
-					size: 26
-					seed: 1
-					onClicked: root.shiftCalendarMonths(-1)
+				Canvas {
+					id: bigMoon
+					anchors.horizontalCenter: parent.horizontalCenter
+					width: 30
+					height: 30
+					renderStrategy: Canvas.Cooperative
 
-					ArcText {
-						anchors.centerIn: parent
-						role: "heading"
-						text: "‹"
+					readonly property real phase: Arc.moonPhase(root.now).fraction
+
+					onPhaseChanged: requestPaint()
+
+					onPaint: {
+						const ctx = getContext("2d");
+						ctx.reset();
+						const r = width / 2 - 1;
+						ctx.strokeStyle = Arc.goldDim;
+						ctx.lineWidth = Arc.ruleThin;
+						ctx.beginPath();
+						ctx.arc(width / 2, height / 2, r, 0, Math.PI * 2);
+						ctx.stroke();
+						const waxing = bigMoon.phase < 0.5;
+						const sweep = Math.cos(bigMoon.phase * Math.PI * 2);
+						ctx.fillStyle = Arc.gold;
+						ctx.beginPath();
+						ctx.arc(width / 2, height / 2, r,
+							waxing ? -Math.PI / 2 : Math.PI / 2,
+							waxing ? Math.PI / 2 : Math.PI * 1.5);
+						ctx.closePath();
+						ctx.fill();
+						ctx.globalCompositeOperation = sweep > 0 ? "destination-out" : "source-over";
+						ctx.beginPath();
+						ctx.ellipse(width / 2 - Math.abs(sweep) * r, height / 2 - r,
+							Math.abs(sweep) * r * 2, r * 2);
+						ctx.fill();
+						ctx.globalCompositeOperation = "source-over";
 					}
 				}
 
 				ArcText {
-					anchors.centerIn: parent
-					role: "title"
-					font.pixelSize: 16
-					text: Qt.formatDateTime(root.currentDate, "MMMM yyyy")
+					anchors.horizontalCenter: parent.horizontalCenter
+					role: "hand"
+					tone: "muted"
+					font.pixelSize: 13
+					text: Arc.moonPhase(root.now).name
 				}
 
-				ArcSeat {
-					anchors.right: parent.right
-					anchors.verticalCenter: parent.verticalCenter
-					size: 26
-					seed: 3
-					onClicked: root.shiftCalendarMonths(1)
-
-					ArcText {
-						anchors.centerIn: parent
-						role: "heading"
-						text: "›"
-					}
+				ArcText {
+					anchors.horizontalCenter: parent.horizontalCenter
+					role: "hand"
+					tone: "aether"
+					font.pixelSize: 14
+					text: Arc.hourName(root.now)
+					visible: calendarContent.thisMonth
 				}
 			}
 
-			Grid {
-				columns: 7
-				columnSpacing: 2
-				rowSpacing: 2
-				anchors.horizontalCenter: parent.horizontalCenter
+			// Turning the wheel. Two runes, one either side, and nothing that
+			// looks like a button.
+			ArcSeat {
+				anchors.left: parent.left
+				anchors.bottom: parent.bottom
+				size: 26
+				seed: 1
+				label: "Back"
+				onClicked: root.shiftCalendarMonths(-1)
 
-				Repeater {
-					model: root.weekdayNames
-
-					delegate: Item {
-						required property string modelData
-						width: 44
-						height: 22
-
-						ArcText {
-							anchors.centerIn: parent
-							role: "label"
-							tone: "faint"
-							text: modelData
-						}
-					}
+				ArcRune {
+					anchors.centerIn: parent
+					width: 11
+					height: 16
+					seed: 2
+					weight: Arc.ruleThin
+					lineColor: Arc.ink
 				}
+			}
 
-				// No cells. A calendar drawn as a grid of boxes is a spreadsheet;
-				// here the days are just numbers on the membrane and only the
-				// one you are on, or the one under the pointer, grows a ring.
-				Repeater {
-					model: 42
+			ArcText {
+				anchors.horizontalCenter: parent.horizontalCenter
+				anchors.bottom: parent.bottom
+				anchors.bottomMargin: 4
+				role: "label"
+				tone: "faint"
+				text: calendarContent.thisMonth ? "" : Qt.formatDateTime(root.now, "d MMMM") + " is today"
+			}
 
-					delegate: Item {
-						id: dayCell
-						required property int index
-						readonly property int day: root.calendarDayNumber(index)
-						readonly property bool today: root.isToday(day)
-						readonly property bool present: dayCell.day !== 0
+			ArcSeat {
+				anchors.right: parent.right
+				anchors.bottom: parent.bottom
+				size: 26
+				seed: 3
+				label: "On"
+				onClicked: root.shiftCalendarMonths(1)
 
-						width: 44
-						height: 32
-
-						ArcHalo {
-							anchors.centerIn: parent
-							width: 44
-							height: 44
-							color: Arc.aether
-							strength: 0.30
-							spread: 0.30
-							visible: dayCell.today
-						}
-
-						ArcDial {
-							anchors.centerIn: parent
-							width: 30
-							height: 30
-							seed: dayCell.index % 4
-							visible: dayCell.present
-							lineColor: "transparent"
-							liveColor: Arc.aether
-							intensity: dayCell.today ? 1 : dayTouch.live
-						}
-
-						ArcText {
-							anchors.centerIn: parent
-							role: dayCell.today ? "heading" : "body"
-							tone: dayCell.today ? "aether" : "muted"
-							font.pixelSize: 12
-							visible: dayCell.present
-							text: dayCell.present ? dayCell.day : ""
-						}
-
-						ArcTouch {
-							id: dayTouch
-							enabled: dayCell.present
-							cursorShape: Qt.ArrowCursor
-						}
-					}
+				ArcRune {
+					anchors.centerIn: parent
+					width: 11
+					height: 16
+					seed: 8
+					weight: Arc.ruleThin
+					lineColor: Arc.ink
 				}
 			}
 		}
@@ -5238,18 +5469,18 @@ printf 'type=offline\niface=\nip=\n'`
 
 	PopupSurface {
 		id: weatherPopup
-		title: "Oracle"
+		title: "The Oracle"
 		screen: root.activePopupScreen
 
 		onDismissRequested: root.closeWeatherPopup()
 		open: root.weatherPopupOpen
 		visible: root.weatherPopupVisible
 		barItem: bar
-		anchorItem: weatherRun
+		anchorItem: weatherNode
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
-		expandedWidth: 330
-		contentPreferredHeight: weatherContent.implicitHeight
+		expandedWidth: 340
+		fixedHeight: 470
 
 		onVisibleChanged: {
 			if (!visible && root.weatherPopupVisible) {
@@ -5258,164 +5489,222 @@ printf 'type=offline\niface=\nip=\n'`
 			}
 		}
 
-		Column {
+		readonly property bool raining: parseFloat(String(root.weatherPrecipitation || "0")) > 0
+			|| String(root.weatherDescription || "").toLowerCase().indexOf("rain") >= 0
+		readonly property bool storming: String(root.weatherDescription || "").toLowerCase().indexOf("thunder") >= 0
+			|| String(root.weatherDescription || "").toLowerCase().indexOf("storm") >= 0
+
+		// THE ORACLE.
+		//
+		// A scrying pane, read from the top down and centred, because that is
+		// what somebody consulting an oracle is doing: the sky first, then the
+		// bare fact, then the answer in its own hand, and the particulars
+		// underneath for anyone who does not believe it.
+		//
+		// The sky is not an icon in a ring. It is drawn: the moon or the sun
+		// where it actually stands tonight, the stars behind it, and cloud
+		// across it if there is cloud. And what the weather *is* happens to the
+		// pane itself — rain runs down the glass, a storm lights the whole
+		// panel for an instant, and on a clear day the light in it warms.
+		Item {
 			id: weatherContent
 			anchors.fill: parent
-			spacing: Arc.s4
 
-			// THE ORACLE.
-			//
-			// Not a weather widget. A basin of dark water with the sky's own
-			// mark floating in it, the reading cut across it, and under that
-			// the line the oracle gives you — one sentence, in the hand,
-			// because a number is a fact and a sentence is an answer.
-			Item {
-				width: parent.width
-				height: 128
+			// Rain on the glass. Only there when it is raining, and it falls in
+			// front of everything including the writing, because it is on the
+			// outside of the pane.
+			ArcMotes {
+				anchors.fill: parent
+				anchors.margins: -20
+				z: 20
+				color: Arc.aetherAlt
+				drifting: weatherPopup.raining
+				density: parseFloat(String(root.weatherPrecipitation || "0")) > 1 ? 46 : 18
+				drift: 190
+				span: 2.0
+				visible: weatherPopup.raining
+			}
 
-				ArcHalo {
-					anchors.centerIn: basin
-					width: 200
-					height: 200
-					color: Arc.aether
-					strength: 0.22
-					spread: 0.36
-					flicker: true
+			// The flash. A storm lights the pane from outside, once, at random.
+			Rectangle {
+				id: lightning
+				anchors.fill: parent
+				anchors.margins: -20
+				z: 19
+				color: Arc.aetherAlt
+				opacity: 0
+
+				SequentialAnimation {
+					id: strike
+					NumberAnimation { target: lightning; property: "opacity"; to: 0.30; duration: 45 }
+					NumberAnimation { target: lightning; property: "opacity"; to: 0.02; duration: 70 }
+					NumberAnimation { target: lightning; property: "opacity"; to: 0.22; duration: 40 }
+					NumberAnimation { target: lightning; property: "opacity"; to: 0; duration: 380; easing.type: Easing.OutCubic }
 				}
 
-				// The basin: a disc of still water, ruled with the horizon and
-				// the meridian, the way a scrying bowl is marked.
+				Timer {
+					running: weatherPopup.storming && weatherPopup.visible
+					repeat: true
+					interval: 2600 + Math.random() * 5200
+					onTriggered: {
+						strike.restart();
+						interval = 2600 + Math.random() * 5200;
+					}
+				}
+			}
+
+			Column {
+				anchors.left: parent.left
+				anchors.right: parent.right
+				anchors.top: parent.top
+				spacing: Arc.s3
+
+				// The sky itself, drawn rather than fetched.
 				Canvas {
-					id: basin
-					anchors.left: parent.left
-					anchors.verticalCenter: parent.verticalCenter
-					width: 104
-					height: 104
+					id: sky
+					anchors.horizontalCenter: parent.horizontalCenter
+					width: 150
+					height: 116
 					renderStrategy: Canvas.Cooperative
 
-					Connections {
-						target: Arc
-						function onGiltChanged() { basin.requestPaint(); }
+					readonly property string condition: String(root.weatherDescription || "").toLowerCase()
+					readonly property bool day: {
+						const rise = String(root.weatherSunrise || ""), set = String(root.weatherSunset || "");
+						if (!/^\d{1,2}:\d{2}$/.test(rise) || !/^\d{1,2}:\d{2}$/.test(set)) return true;
+						const minutes = value => Number(value.split(":")[0]) * 60 + Number(value.split(":")[1]);
+						const now = root.now.getHours() * 60 + root.now.getMinutes();
+						return now >= minutes(rise) && now <= minutes(set);
 					}
+					readonly property real phase: Arc.moonPhase(root.now).fraction
+
+					onConditionChanged: requestPaint()
+					onDayChanged: requestPaint()
 
 					onPaint: {
 						const ctx = getContext("2d");
 						ctx.reset();
-						const cx = width / 2, cy = height / 2;
-						const r = width / 2 - 2;
-						const shadow = Qt.alpha(Qt.darker(Arc.gilt, 2.4), 0.55);
-						const highlight = Qt.alpha(Qt.lighter(Arc.gilt, 1.8), 0.5);
+						const cx = width / 2, cy = height * 0.42;
+						const clouded = sky.condition.indexOf("cloud") >= 0
+							|| sky.condition.indexOf("overcast") >= 0
+							|| sky.condition.indexOf("rain") >= 0
+							|| sky.condition.indexOf("thunder") >= 0;
 
-						const water = ctx.createLinearGradient(0, 0, 0, height);
-						water.addColorStop(0, Arc.leaf2);
-						water.addColorStop(1, Arc.well);
-						ctx.fillStyle = water;
-						ctx.beginPath();
-						ctx.arc(cx, cy, r, 0, Math.PI * 2);
-						ctx.fill();
+						// the field of stars behind it, always there
+						let state = 20250920;
+						const random = function () {
+							state = (state * 48271) % 2147483647;
+							return (state - 1) / 2147483646;
+						};
+						for (let index = 0; index < 26; index++) {
+							const x = random() * width, y = random() * height * 0.8;
+							Ink.mote(ctx, x, y, 0.5 + random() * 0.9,
+								Qt.alpha(Arc.gold, 0.16 + random() * 0.4));
+						}
 
-						Ink.groove(ctx, Ink.arcPoints(cx, cy, r, 0, Math.PI * 2, 56),
-							Arc.rule * 1.3, Arc.gilt, highlight, shadow, true);
-						Ink.cut(ctx, [{ x: cx - r * 0.86, y: cy }, { x: cx + r * 0.86, y: cy }],
-							Arc.ruleThin, Qt.alpha(Arc.gilt, 0.26), false);
-						Ink.cut(ctx, [{ x: cx, y: cy - r * 0.86 }, { x: cx, y: cy + r * 0.86 }],
-							Arc.ruleThin, Qt.alpha(Arc.gilt, 0.18), false);
-						Ink.graduations(ctx, cx, cy, r - 3, -Math.PI / 2, Math.PI * 1.5,
-							32, 3, 6, 8, Arc.ruleThin, Qt.alpha(Arc.gilt, 0.35));
+						if (sky.day) {
+							// the sun: a disc with a ring of rays
+							Ink.ring(ctx, cx, cy, 20, 2.0, Arc.ember, 1);
+							for (let ray = 0; ray < 12; ray++) {
+								const angle = ray * Math.PI / 6;
+								Ink.ley(ctx, cx + Math.cos(angle) * 26, cy + Math.sin(angle) * 26,
+									cx + Math.cos(angle) * 33, cy + Math.sin(angle) * 33,
+									Arc.ruleThin * 1.4, Qt.alpha(Arc.ember, 0.7), null, -1);
+							}
+						} else {
+							// the moon, at the phase it actually stands at
+							const r = 21;
+							const waxing = sky.phase < 0.5;
+							const sweep = Math.cos(sky.phase * Math.PI * 2);
+							ctx.fillStyle = Arc.gold;
+							ctx.beginPath();
+							ctx.arc(cx, cy, r, waxing ? -Math.PI / 2 : Math.PI / 2,
+								waxing ? Math.PI / 2 : Math.PI * 1.5);
+							ctx.closePath();
+							ctx.fill();
+							ctx.globalCompositeOperation = sweep > 0 ? "destination-out" : "source-over";
+							ctx.beginPath();
+							ctx.ellipse(cx - Math.abs(sweep) * r, cy - r, Math.abs(sweep) * r * 2, r * 2);
+							ctx.fill();
+							ctx.globalCompositeOperation = "source-over";
+							Ink.ring(ctx, cx, cy, r, Arc.ruleThin, Qt.alpha(Arc.gold, 0.4), 1);
+						}
+
+						if (!clouded) return;
+						// cloud across it: three arcs of one bank
+						ctx.fillStyle = Qt.alpha(Arc.inkFaint, 0.55);
+						for (const puff of [{ x: -26, y: 16, r: 15 }, { x: -4, y: 9, r: 21 },
+							{ x: 22, y: 16, r: 16 }, { x: 2, y: 22, r: 18 }]) {
+							ctx.beginPath();
+							ctx.ellipse(cx + puff.x - puff.r, cy + puff.y - puff.r, puff.r * 2, puff.r * 2);
+							ctx.fill();
+						}
 					}
 				}
 
-				// The sky's mark, floating on the water. It drifts, slowly,
-				// which is the only idle motion in this panel.
-				QQCImpl.IconImage {
-					id: skyMark
-					anchors.centerIn: basin
-					width: 40
-					height: 40
-					source: root.resolveIconSource("", [
-						root.weatherIcon,
-						root.weatherIcon.replace("-symbolic", ""),
-						"weather-overcast-symbolic"
-					])
-					sourceSize: Qt.size(width, height)
-					color: Arc.aether
-
-					SequentialAnimation on anchors.verticalCenterOffset {
-						running: root.weatherPopupVisible
-						loops: Animation.Infinite
-						NumberAnimation { to: -3; duration: 3400; easing.type: Easing.InOutSine }
-						NumberAnimation { to: 3; duration: 3400; easing.type: Easing.InOutSine }
-					}
-				}
-
-				Column {
-					anchors.left: basin.right
-					anchors.leftMargin: Arc.s5
-					anchors.right: parent.right
-					anchors.verticalCenter: parent.verticalCenter
-					spacing: -2
+				// The bare fact.
+				Row {
+					anchors.horizontalCenter: parent.horizontalCenter
+					spacing: Arc.s3
 
 					ArcText {
-						width: parent.width
+						anchors.verticalCenter: parent.verticalCenter
 						role: "display"
-						font.pixelSize: 40
+						font.pixelSize: 34
 						text: root.weatherTemperature
 					}
 
-					ArcText {
-						width: parent.width
-						role: "label"
-						tone: "muted"
-						text: root.weatherDescription
+					Rectangle {
+						anchors.verticalCenter: parent.verticalCenter
+						width: 4
+						height: 4
+						radius: 2
+						color: Arc.goldDim
 					}
 
 					ArcText {
-						width: parent.width
-						role: "label"
-						tone: "faint"
-						text: root.weatherLocation
+						anchors.verticalCenter: parent.verticalCenter
+						role: "display"
+						font.pixelSize: 22
+						tone: "muted"
+						text: root.weatherCity
 					}
+				}
+
+				// The answer, in the oracle's own hand.
+				ArcText {
+					width: parent.width
+					horizontalAlignment: Text.AlignHCenter
+					role: "hand"
+					tone: "aether"
+					font.pixelSize: 18
+					wrapMode: Text.WordWrap
+					text: `“${root.oracleLine}”`
 				}
 			}
 
-			// What the oracle actually says.
-			ArcText {
-				width: parent.width
-				role: "hand"
-				tone: "aether"
-				font.pixelSize: 17
-				wrapMode: Text.WordWrap
-				text: root.oracleLine
-			}
-
-			ArcFlourish {
-				width: parent.width
-				height: 12
-				facing: Qt.LeftToRight
-				lineColor: Arc.giltFaint
-			}
-
-			// The readings, ruled in two columns the way a table in a book is.
-			Grid {
-				width: parent.width
-				columns: 2
-				columnSpacing: Arc.s5
-				rowSpacing: Arc.s1
+			// The particulars, for anyone who does not take the oracle's word
+			// for it. Name on the left, reading on the right, a ley between.
+			Column {
+				anchors.left: parent.left
+				anchors.right: parent.right
+				anchors.bottom: sunRun.top
+				anchors.bottomMargin: Arc.s4
+				spacing: Arc.s1
 
 				Repeater {
 					model: [
-						{ label: "Feels like", value: root.weatherFeelsLike },
-						{ label: "Humidity", value: root.weatherHumidity },
 						{ label: "Wind", value: root.weatherWind },
-						{ label: "Rain", value: root.weatherPrecipitation },
-						{ label: "Pressure", value: root.weatherPressure },
-						{ label: "Sampled", value: root.weatherObservationTime !== "" ? Qt.formatDateTime(new Date(root.weatherObservationTime), "HH:mm") : "--" }
+						{ label: "Aether", value: root.weatherDescription },
+						{ label: "Humour", value: root.weatherHumidity },
+						{ label: "Fall", value: root.weatherPrecipitation },
+						{ label: "Weight", value: root.weatherPressure },
+						{ label: "Seen", value: root.weatherObservationTime !== "" ? Qt.formatDateTime(new Date(root.weatherObservationTime), "HH:mm") : "--" }
 					]
 
 					delegate: Item {
 						required property var modelData
-						width: (weatherContent.width - Arc.s5) / 2
-						height: 30
+						width: parent.width
+						height: 24
 
 						ArcText {
 							id: readingName
@@ -5426,17 +5715,14 @@ printf 'type=offline\niface=\nip=\n'`
 							text: modelData.label
 						}
 
-						// Leader dots: what carries the eye from a name to its
-						// value in a printed table.
 						Rectangle {
 							anchors.left: readingName.right
 							anchors.right: readingValue.left
-							anchors.leftMargin: Arc.s2
-							anchors.rightMargin: Arc.s2
+							anchors.leftMargin: Arc.s3
+							anchors.rightMargin: Arc.s3
 							anchors.verticalCenter: parent.verticalCenter
-							anchors.verticalCenterOffset: 3
 							height: Arc.ruleThin
-							color: Arc.giltGhost
+							color: Arc.goldGhost
 							visible: width > 8
 						}
 
@@ -5444,6 +5730,8 @@ printf 'type=offline\niface=\nip=\n'`
 							id: readingValue
 							anchors.right: parent.right
 							anchors.verticalCenter: parent.verticalCenter
+							width: Math.min(implicitWidth, parent.width * 0.5)
+							horizontalAlignment: Text.AlignRight
 							role: "bodyStrong"
 							text: modelData.value
 						}
@@ -5451,44 +5739,45 @@ printf 'type=offline\niface=\nip=\n'`
 				}
 			}
 
-			// The horizon: the run of the sun across it, and the moon's face
-			// for the night at the end of it.
+			// The sun's passage, and where in it we are.
 			Item {
-				width: parent.width
-				height: 44
+				id: sunRun
+				anchors.left: parent.left
+				anchors.right: parent.right
+				anchors.bottom: parent.bottom
+				height: 42
 
 				ArcText {
-					id: sunriseLabel
+					id: riseLabel
 					anchors.left: parent.left
-					anchors.top: parent.top
-					role: "reading"
-					font.pixelSize: 15
+					anchors.bottom: parent.bottom
+					role: "label"
+					tone: "faint"
 					text: root.weatherSunrise
 				}
 
 				ArcText {
-					id: sunsetLabel
+					id: setLabel
 					anchors.right: parent.right
-					anchors.top: parent.top
-					role: "reading"
-					font.pixelSize: 15
+					anchors.bottom: parent.bottom
+					role: "label"
+					tone: "faint"
 					text: root.weatherSunset
 				}
 
-				// The sun's arc, with a mark where it stands now.
 				Canvas {
-					id: horizon
-					anchors.left: sunriseLabel.right
-					anchors.right: sunsetLabel.left
+					id: passage
+					anchors.left: riseLabel.right
+					anchors.right: setLabel.left
 					anchors.leftMargin: Arc.s3
 					anchors.rightMargin: Arc.s3
-					anchors.top: parent.top
-					height: 22
+					anchors.bottom: parent.bottom
+					anchors.bottomMargin: 2
+					height: 30
 					renderStrategy: Canvas.Cooperative
 
 					readonly property real through: {
-						const rise = String(root.weatherSunrise || "");
-						const set = String(root.weatherSunset || "");
+						const rise = String(root.weatherSunrise || ""), set = String(root.weatherSunset || "");
 						if (!/^\d{1,2}:\d{2}$/.test(rise) || !/^\d{1,2}:\d{2}$/.test(set)) return -1;
 						const minutes = value => Number(value.split(":")[0]) * 60 + Number(value.split(":")[1]);
 						const now = root.now.getHours() * 60 + root.now.getMinutes();
@@ -5502,32 +5791,17 @@ printf 'type=offline\niface=\nip=\n'`
 					onPaint: {
 						const ctx = getContext("2d");
 						ctx.reset();
-						if (width < 20) return;
+						if (width < 24) return;
 						const path = [];
-						for (let index = 0; index <= 24; index++) {
-							const t = index / 24;
-							path.push({ x: t * width, y: height - Math.sin(t * Math.PI) * (height - 4) });
+						for (let index = 0; index <= 28; index++) {
+							const t = index / 28;
+							path.push({ x: t * width, y: height - Math.sin(t * Math.PI) * (height - 5) });
 						}
-						Ink.cut(ctx, path, Arc.ruleThin, Qt.alpha(Arc.gilt, 0.42), false);
-						Ink.cut(ctx, [{ x: 0, y: height }, { x: width, y: height }],
-							Arc.ruleThin, Qt.alpha(Arc.gilt, 0.22), false);
-						if (horizon.through < 0) return;
-						const at = path[Math.round(horizon.through * 24)];
-						ctx.fillStyle = Arc.aether;
-						ctx.beginPath();
-						ctx.ellipse(at.x - 3.5, at.y - 3.5, 7, 7);
-						ctx.fill();
+						Ink.cut(ctx, path, Arc.ruleThin, Qt.alpha(Arc.gold, 0.34), false);
+						if (passage.through < 0) return;
+						const at = path[Math.round(passage.through * 28)];
+						Ink.mote(ctx, at.x, at.y, 3.4, Arc.ember);
 					}
-				}
-
-				ArcText {
-					anchors.horizontalCenter: horizon.horizontalCenter
-					anchors.top: horizon.bottom
-					anchors.topMargin: 1
-					role: "label"
-					tone: "faint"
-					font.pixelSize: 9
-					text: Arc.moonPhase(root.now).name
 				}
 			}
 		}
@@ -5559,39 +5833,72 @@ printf 'type=offline\niface=\nip=\n'`
 			anchors.fill: parent
 			spacing: 12
 
+			// THE PERCH.
+			//
+			// The notes that have come in are not a stack of cards. They hang
+			// from a perch across the head of the panel, each on its own cord,
+			// with the bird that brought them sitting at the end of it — so the
+			// panel reads as a rookery rather than as an inbox.
 			Item {
 				Layout.fillWidth: true
-				Layout.preferredHeight: 20
+				Layout.preferredHeight: 38
+
+				Rectangle {
+					id: perchLine
+					anchors.left: parent.left
+					anchors.right: parent.right
+					anchors.bottom: parent.bottom
+					height: Arc.ruleThin
+					color: Qt.alpha(Arc.gold, 0.45)
+				}
+
+				ArcMark {
+					id: perchedRaven
+					anchors.right: parent.right
+					anchors.rightMargin: Arc.s4
+					anchors.bottom: perchLine.top
+					width: 30
+					height: 26
+					glyph: "raven"
+					lineColor: root.notificationGroups.length > 0 ? Arc.aether : Arc.goldDim
+				}
+
+				ArcHalo {
+					anchors.centerIn: perchedRaven
+					width: 80
+					height: 80
+					color: Arc.aether
+					strength: 0.26
+					spread: 0.32
+					flicker: true
+					visible: root.notificationGroups.length > 0
+				}
 
 				ArcText {
 					id: notifTitle
 					anchors.left: parent.left
-					anchors.verticalCenter: parent.verticalCenter
-					role: "title"
-					font.pixelSize: 16
-					text: "Signals"
-				}
-
-				ArcFlourish {
-					anchors.left: notifTitle.right
-					anchors.right: purgeLabel.visible ? purgeLabel.left : parent.right
-					anchors.leftMargin: Arc.s3
-					anchors.rightMargin: Arc.s3
-					anchors.verticalCenter: parent.verticalCenter
-					height: 12
-					facing: Qt.LeftToRight
-					lineColor: Arc.giltFaint
-					visible: width > 24
+					anchors.bottom: perchLine.top
+					anchors.bottomMargin: 3
+					role: "hand"
+					tone: "muted"
+					font.pixelSize: 15
+					text: root.notificationGroups.length === 0
+						? "no birds today"
+						: root.notificationGroups.length === 1
+							? "one bird came"
+							: `${root.notificationGroups.length} birds came`
 				}
 
 				ArcText {
 					id: purgeLabel
-					anchors.right: parent.right
-					anchors.verticalCenter: parent.verticalCenter
+					anchors.right: perchedRaven.left
+					anchors.rightMargin: Arc.s4
+					anchors.bottom: perchLine.top
+					anchors.bottomMargin: 4
 					visible: root.notificationGroups.length > 0
 					role: "label"
-					tone: purgeTouch.containsMouse ? "alert" : "muted"
-					text: `Purge ${root.notificationGroups.length}`
+					tone: purgeTouch.containsMouse ? "alert" : "faint"
+					text: "Let them go"
 
 					ArcTouch {
 						id: purgeTouch
@@ -5617,7 +5924,7 @@ printf 'type=offline\niface=\nip=\n'`
 						width: 54
 						height: 54
 						glyph: "raven"
-						lineColor: Arc.giltGhost
+						lineColor: Arc.goldGhost
 					}
 
 					ArcText {
@@ -5693,7 +6000,7 @@ printf 'type=offline\niface=\nip=\n'`
 								lineColor: Qt.alpha(notificationCard.urgencyColor, 0.45)
 								liveColor: notificationCard.urgencyColor
 								washTop: Qt.alpha(notificationCard.urgencyColor, 0.10)
-								washBottom: Arc.leaf1
+								washBottom: Arc.veil1
 								haloStrength: 0.10
 								padding: Arc.s5
 
@@ -5711,8 +6018,8 @@ printf 'type=offline\niface=\nip=\n'`
 											id: urgencyBead
 											anchors.left: parent.left
 											anchors.verticalCenter: parent.verticalCenter
-											width: Arc.stud * 2
-											height: Arc.stud * 2
+											width: Arc.mote * 2
+											height: Arc.mote * 2
 											radius: width / 2
 											color: notificationCard.urgencyColor
 										}
@@ -5805,10 +6112,10 @@ printf 'type=offline\niface=\nip=\n'`
 												variant: "plate"
 												beading: false
 												weight: Arc.ruleThin
-												lineColor: Arc.giltFaint
+												lineColor: Arc.goldFaint
 												liveColor: notificationCard.urgencyColor
-												fillTop: Arc.well
-												fillBottom: Arc.well
+												fillTop: Arc.depth
+												fillBottom: Arc.depth
 											}
 
 											Image {
@@ -5899,7 +6206,7 @@ printf 'type=offline\niface=\nip=\n'`
 											anchors.verticalCenter: parent.verticalCenter
 											height: 10
 											facing: Qt.LeftToRight
-											lineColor: foldTouch.containsMouse ? Qt.alpha(Arc.aether, 0.6) : Arc.giltGhost
+											lineColor: foldTouch.containsMouse ? Qt.alpha(Arc.aether, 0.6) : Arc.goldGhost
 											visible: width > 24
 										}
 
@@ -5953,7 +6260,7 @@ printf 'type=offline\niface=\nip=\n'`
 															anchors.topMargin: Arc.s2
 															anchors.bottomMargin: Arc.s2
 															width: Arc.ruleThin
-															color: Arc.giltGhost
+															color: Arc.goldGhost
 														}
 
 														Column {
@@ -5999,14 +6306,14 @@ printf 'type=offline\niface=\nip=\n'`
 		}
 	}
 
-	// THE RAVEN.
+	// THE MESSENGER RAVENS.
 	//
-	// A notification does not fade up in the corner of the screen. A bird comes
-	// in off the top of the screen, beating, settles on the chain under the
-	// seat that took the message, and the note unrolls out of its claws — the
-	// same let-down every panel in this shell uses, at a smaller size, because
-	// the shell only knows one way of putting something in front of you.
-	// Dismissing rolls the note back up and the bird goes the way it came.
+	// A notification is not a card that fades up in a corner. A bird comes in
+	// across the screen, beating, and settles on a perch above the horizon
+	// beside the sigil that took the message; the note it carried is then
+	// conjured under it, rising out of the perch the way everything in this
+	// sanctum rises. Dismissing it lets the note fall back and the bird goes
+	// the way it came.
 	Instantiator {
 		model: root.toasts
 
@@ -6031,60 +6338,69 @@ printf 'type=offline\niface=\nip=\n'`
 			property bool dismissing: false
 			property real revealProgress: 0
 
-			// Two movements, in order: the bird arrives, and only then does the
-			// note come down. Never one fade for both.
-			readonly property real flight: Math.max(0, Math.min(1, revealProgress / 0.40))
-			readonly property real letDown: Math.max(0, Math.min(1, (revealProgress - 0.28) / 0.72))
-			readonly property real perch: 34
+			// Two movements, in order: the bird arrives, and only then is the
+			// note conjured. Never one fade for both.
+			readonly property real flight: Math.max(0, Math.min(1, revealProgress / 0.42))
+			readonly property real risen: Math.max(0, Math.min(1, (revealProgress - 0.30) / 0.70))
+			readonly property real perch: 40
+			readonly property real approach: 120
 
 			visible: true
 			color: "transparent"
 
-			// A message lands under the seat that took it, and the ones behind
-			// it queue downwards from there — never in a corner of the screen
-			// the chain has nothing to do with.
+			// A message lands beside the sigil that took it, above the horizon,
+			// and the ones behind it queue upward from there.
 			anchor {
 				window: barWindow
-				edges: Edges.Right | Edges.Bottom
-				gravity: Edges.Right | Edges.Bottom
+				edges: Edges.Right | Edges.Top
+				gravity: Edges.Right | Edges.Top
 				adjustment: PopupAdjustment.SlideX | PopupAdjustment.SlideY
 
 				onAnchoring: {
 					const mark = notifNode.mapToItem(null, notifNode.width / 2, 0);
-					const centre = mark ? mark.x : barWindow.width - 220;
-					anchor.rect.x = Math.round(centre - toastWindow.implicitWidth / 2);
+					const centre = mark ? mark.x : barWindow.width - 260;
+					anchor.rect.x = Math.round(centre - toastWindow.implicitWidth + 80);
 					anchor.rect.width = 0;
-					anchor.rect.y = Math.round(
-						Arc.chainY(centre / Math.max(1, barWindow.width)) + Arc.seat / 2)
-						+ index * (toastWindow.implicitHeight + 10);
+					anchor.rect.y = -Math.round(Arc.s3)
+						- index * (toastWindow.implicitHeight + 10);
 					anchor.rect.height = 0;
 				}
 			}
 
-			implicitWidth: 380
-			implicitHeight: toastWindow.perch + toastCard.implicitHeight + 6
+			implicitWidth: 400 + toastWindow.approach
+			implicitHeight: toastWindow.perch + toastCard.implicitHeight + 8
 
 			NumberAnimation on revealProgress {
 				from: 0
 				to: 1
-				duration: Arc.unroll + Arc.turn
+				duration: Arc.conjure
 				easing.type: Easing.Bezier
-				easing.bezierCurve: Arc.curveUnroll
+				easing.bezierCurve: Arc.curveRise
 			}
 
-			// The bird. It comes in from off the top right, beating, and stops
-			// dead when it has something to stand on.
+			// The perch the bird lands on.
+			Rectangle {
+				x: 56
+				y: toastWindow.perch
+				width: (toastWindow.implicitWidth - 56) * Math.min(1, toastWindow.flight * 1.4)
+				height: Arc.ruleThin
+				color: Qt.alpha(toastWindow.urgencyColor, 0.5)
+				visible: !toastWindow.dismissing
+			}
+
+			// The bird. It comes in across the screen, beating, and stops dead
+			// when it has something to stand on.
 			Item {
 				id: raven
 
 				property real beat: 0
 
-				width: 30
-				height: 26
-				x: toastWindow.implicitWidth - 62 + (1 - toastWindow.flight) * 150
-				y: 2 - (1 - toastWindow.flight) * 64
+				width: 34
+				height: 30
+				x: toastWindow.implicitWidth - 86 + (1 - toastWindow.flight) * toastWindow.approach * 1.8
+				y: toastWindow.perch - height + 2 - (1 - toastWindow.flight) * 46
 				opacity: toastWindow.dismissing ? 0 : Math.min(1, toastWindow.flight * 3)
-				rotation: (1 - toastWindow.flight) * -22
+				rotation: (1 - toastWindow.flight) * -20
 
 				Behavior on opacity {
 					NumberAnimation { duration: Arc.recoil }
@@ -6097,20 +6413,18 @@ printf 'type=offline\niface=\nip=\n'`
 					NumberAnimation { to: 0; duration: 130; easing.type: Easing.InQuad }
 				}
 
-				// Wing-beats are a vertical squash on a silhouette. Nothing
-				// more elaborate survives being 26 pixels tall anyway.
 				transform: Scale {
 					origin.x: raven.width / 2
 					origin.y: raven.height
-					yScale: toastWindow.flight < 1 ? 0.55 + raven.beat * 0.7 : 1
+					yScale: toastWindow.flight < 1 ? 0.5 + raven.beat * 0.75 : 1
 				}
 
 				ArcHalo {
 					anchors.centerIn: parent
-					width: 80
-					height: 80
+					width: 90
+					height: 90
 					color: toastWindow.urgencyColor
-					strength: 0.28
+					strength: 0.3
 					spread: 0.34
 					flicker: true
 				}
@@ -6122,80 +6436,39 @@ printf 'type=offline\niface=\nip=\n'`
 				}
 			}
 
-			// The cord the note hangs on out of the bird's claws.
-			Rectangle {
-				x: toastWindow.implicitWidth - 48
-				y: 24
-				width: Arc.ruleThin
-				height: (toastWindow.perch - 24) * Math.min(1, toastWindow.letDown * 4)
-				color: Qt.alpha(toastWindow.urgencyColor, 0.6)
-				visible: !toastWindow.dismissing
-			}
-
-			// The roller the note is wound on.
-			Rectangle {
-				x: 0
-				y: toastWindow.perch - 3
-				width: toastWindow.implicitWidth * Math.min(1, toastWindow.letDown * 4)
-				height: 3
-				color: Arc.gilt
-				opacity: toastWindow.dismissing ? 0 : 1
-
-				Behavior on opacity {
-					NumberAnimation { duration: Arc.recoil }
-				}
-			}
-
-			// The note itself, revealed from the top as the dowel travels. It
-			// is never scaled and it never fades in.
+			// The note, conjured out of the perch. Clipped from the top so it
+			// is revealed upward, the same as every panel in the shell.
 			Item {
 				id: noteWindow
 
-				x: 0
-				y: toastWindow.perch
-				width: toastWindow.implicitWidth
-				height: toastCard.implicitHeight * (toastWindow.dismissing ? 0 : toastWindow.letDown)
+				x: toastWindow.approach
+				y: toastWindow.perch + 4
+				width: 400
+				height: toastCard.implicitHeight
 				clip: true
+				opacity: toastWindow.dismissing ? 0 : Math.min(1, toastWindow.risen * 1.5)
 
-				Behavior on height {
-					NumberAnimation {
-						duration: Arc.reroll
-						easing.type: Easing.Bezier
-						easing.bezierCurve: Arc.curveReroll
-					}
-				}
-
-				Rectangle {
-					anchors.left: parent.left
-					anchors.right: parent.right
-					anchors.bottom: parent.bottom
-					height: 12
-					z: 5
-					visible: toastWindow.letDown < 0.99 && toastWindow.letDown > 0.02
-
-					gradient: Gradient {
-						GradientStop { position: 0.0; color: "transparent" }
-						GradientStop { position: 0.6; color: Qt.alpha(Arc.well, 0.7) }
-						GradientStop { position: 1.0; color: Qt.alpha(Arc.gilt, 0.2) }
-					}
+				Behavior on opacity {
+					NumberAnimation { duration: Arc.dispel }
 				}
 
 			ArcLeaf {
 				id: toastCard
 
-				implicitWidth: toastWindow.implicitWidth
+				implicitWidth: 400
 				implicitHeight: toastContent.implicitHeight + Arc.s5 * 2
 				width: implicitWidth
 				height: implicitHeight
 				x: 0
-				y: 0
+				y: Math.round(-(1 - toastWindow.risen) * 24)
 				variant: "plate"
-				lineColor: Qt.alpha(toastWindow.urgencyColor, 0.55)
+				crest: false
+				lineColor: Qt.alpha(toastWindow.urgencyColor, 0.7)
 				liveColor: toastWindow.urgencyColor
-				washTop: Qt.alpha(toastWindow.urgencyColor, 0.12)
-				washBottom: Arc.washDeep
-				haloStrength: 0.22
-				intensity: 0.55
+				washTop: Qt.alpha(Arc.veil2, 1)
+				washBottom: Arc.hazeDeep
+				haloStrength: 0.20
+				intensity: 0.5
 				padding: Arc.s5
 
 				Timer {
@@ -6217,8 +6490,8 @@ printf 'type=offline\niface=\nip=\n'`
 							id: toastBead
 							anchors.left: parent.left
 							anchors.verticalCenter: parent.verticalCenter
-							width: Arc.stud * 2
-							height: Arc.stud * 2
+							width: Arc.mote * 2
+							height: Arc.mote * 2
 							radius: width / 2
 							color: toastWindow.urgencyColor
 						}
@@ -6296,10 +6569,10 @@ printf 'type=offline\niface=\nip=\n'`
 								variant: "plate"
 								beading: false
 								weight: Arc.ruleThin
-								lineColor: Arc.giltFaint
+								lineColor: Arc.goldFaint
 								liveColor: toastWindow.urgencyColor
-								fillTop: Arc.well
-								fillBottom: Arc.well
+								fillTop: Arc.depth
+								fillBottom: Arc.depth
 							}
 
 							Image {

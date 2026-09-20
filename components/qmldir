@@ -8,6 +8,7 @@ ArcTouch 1.0 ArcTouch.qml
 ArcText 1.0 ArcText.qml
 ArcFlourish 1.0 ArcFlourish.qml
 ArcRune 1.0 ArcRune.qml
+ArcMotes 1.0 ArcMotes.qml
 ArcMark 1.0 ArcMark.qml
 ArcButton 1.0 ArcButton.qml
 ArcEntry 1.0 ArcEntry.qml

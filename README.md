@@ -34,7 +34,7 @@ whole shell - layout, components, motion, the lot.
 | `style/atelier` | **Atelier** - vertical rail, editorial surfaces |
 | `style/meridian` | **Meridian** - panel-based, datum-driven |
 | `style/biopunk` | **Biopunk** - a spine down the left edge, chambers drawn out of it sideways |
-| `style/arcanum` | **Arcanum** - a brass chain across the top, panels let down off it as scrolls |
+| `style/arcanum` | **Arcanum** - a sanctum: a great rune circle at the horizon, and everything else conjured out of it |
 | `archive/legacy-main` | not a style; a snapshot of the old unversioned `~/.config/quickshell/main` |
 
 Switch in **Studio → Style** (`Mod+Shift+S`, then `Ctrl+3`), or from a terminal:
@@ -92,48 +92,59 @@ while you work on another style.
 
 ## Arcanum, in one paragraph
 
-The branch `style/arcanum` draws the desktop as a working instrument and hangs
-it from the ceiling. There is no bar: a brass chain is strung across the top of
-every screen, fixed at both corners and sagging in two straight runs to its
-lowest point in the middle, and every fitting the shell has is seated on that
-curve — so nothing on it shares a height with anything else, which is the whole
-reason it cannot be read as a toolbar. The grimoire's clasp is at the far left,
-the windows on the output hang off the left limb as stones on cords, the
-horologe hangs in the vertex where the eye rests, and everything the machine is
-carrying runs back up the right limb to the way out. Panels are not attached to
-the chain, they are **let down** from it: a roller slides out, two cords drop,
-and the sheet unrolls downward under the weight of the dowel at its foot, is
-written on band by band behind that dowel, overruns its rest length and swings
-once. Closing takes it back up, faster. The launcher is a book — lowered on
-cords, boards turning outward about the gutter in real perspective, a two-page
-spread with a sewn binding and the cut edges of the page block showing — and
-every other full-screen surface is a bound volume of the same kind. Locking the
-session inscribes a warding circle; the volume OSD is a crystal let down from
-the vertex; a notification is a raven that flies in and lets a note down out of
-its claws.
+The branch `style/arcanum` draws the desktop as a sanctum. There is no bar, no
+rail and no row of anything: the shell reserves a band at the **foot** of the
+screen and puts one permanent object in it — the chronomancer, a great rune
+circle half sunk below the edge like a moon that has not finished rising. The
+hour stands in its cap, the runes around its limb are cut from the name the
+hour goes by so they change as the night turns, and on the hour a wave of light
+runs once round the whole circle. West of it the workspaces are a **realm map**
+— places on a ley line, the one you are in alight with its windows set round it
+like holdings, and moving between realms sends a light down the ley. East of it
+the machine's load is the **arcane core**: four bodies in orbit that are drawn
+*in* towards a burning centre as the readings rise, so a machine at rest is a
+wide, calm, dim thing and a machine under load is a tight, bright, crowded one.
+Everything else is a mark placed on a line climbing away from the circle, with
+air between and no container drawn round any of it.
 
-Three materials and nothing else. Brass turns and stops against a detent,
-overshooting the stop by a hair and settling back into it — `Arc.curveDetent`
-is that stop, and every small thing that takes up a position obeys it. Vellum
-unrolls downward and is taken back up; it is never scaled and never faded.
-Flame kindles fast and then creeps, and never settles: one timer in
-`components/Arc.qml` drives a single guttering value that every lamp in the
-shell multiplies its own strength by, so the room breathes together for the
-cost of one timer and no repaints. Lines are not strokes — `components/ArcInk.js`
-cuts every line as a groove, drawing it three times so one wall of the cut
-catches the light and the other stays in shadow, which is what makes a flat
-canvas read as metal.
+Nothing appears, slides or unrolls. Every panel in the shell is **conjured**, in
+four movements and always in this order: a ring inscribes itself on the floor
+under the sigil that was touched, motes gather off that ring and are thrown up,
+the glass precipitates out of them from the ring upward, and what is written on
+it ignites band by band. Dismissing runs it backwards, twice as fast. The
+launcher is the **codex** — one tall narrow volume standing in the middle of the
+sanctum with the spells listed by their true names (Firefox is *Portal*, a
+terminal is an *Arcane Console*, and those names are searchable), the incantation
+line at its foot and five runes under that. The month is a **wheel**, not a grid.
+The weather is an **oracle** whose sky is drawn rather than fetched, and whose
+weather happens to the pane: rain runs down the glass, a storm lights the whole
+panel for an instant. A notification is a **raven** that flies in across the
+screen and leaves its note hanging from a perch. Volume is a **crystal** called
+up out of the floor. Ending the session is a **summoning circle** with a station
+at each quarter and an index arm that turns to the one you choose.
+
+Three materials and nothing else. The void is the ground, and it is the
+wallpaper pushed towards its own coldest pigment until it reads as distance
+rather than as a plane. Glass is what a panel is made of, and it gets no
+frame — the only line a pane ever has is the light caught along its upper edge,
+plus the four corner marks a conjuring leaves behind, which are two short
+strokes that do not meet. Light is the only bright thing there is, and it is
+conjured: rings that draw themselves, runes that ignite, motes that drift.
+`components/ArcMotes.qml` is the one place in the shell that uses a real
+particle system, because what motes do is not something a Canvas repaint can do
+without costing a repaint per frame.
 
 Colour comes from one place. `components/Arc.qml` reads the Wallust palette,
 ranks it by hue strength weighted with legibility, and the winner becomes the
 *aether* — the single live colour every reading, selection and lamp uses. The
-metal is deliberately **not** the accent: it is the palette's warmest pigment
-taken down in saturation and up in lightness, so on a monochrome wallpaper the
-fittings still separate from the live colour by chroma and lightness instead of
-collapsing into it. A light wallpaper turns the instrument over rather than
-washing it out — real cream vellum, dark bronze fittings and brown ink — and the
-alert colour is only taken from the palette when its hue sits clearly apart from
-the aether's.
+void is pulled towards whichever palette entry is coldest, which is what makes a
+dark ground read as depth instead of as black card; gold, the colour of writing
+and of runes, is taken from the warmest entry instead, because everything else
+in the sanctum is cold and that is the only reason it reads at all. A light
+wallpaper turns the sanctum over into daylight rather than washing it out. One
+timer in `Arc.qml` drives a single guttering value that every light in the shell
+multiplies its own strength by, so the room breathes together for the cost of
+one timer and no repaints anywhere.
 
 ## Studio
 
@@ -256,14 +267,15 @@ when a monitor stays black is `wallpaper-runtime.log`.
 ## Layout
 
 ```
-shell.qml                 the chain, panels, OSD, IPC handlers
+shell.qml                 the horizon, panels, OSD, IPC handlers
 Studio.qml                the look-and-feel window; the three pages below are its tabs
 ThemePickerPopup.qml        wallpaper and colours
 AnimationPickerPopup.qml    niri window animations
 BranchStylePicker.qml       style branches
 AppLauncherPopup.qml      launcher, calculator, files, AI chat
-components/               Arc (the tokens and the palette), ArcInk.js (the burin),
-                          PopupSurface (the let-down scroll), ModalSheet (the book)
+components/               Arc (the tokens and the palette), ArcInk.js (rings,
+                          runes, leys and motes), PopupSurface (the conjuring),
+                          ArcMotes (the particle field)
 scripts/                  theme pipeline, wallpaper runtime, style switching
 lighting.json             which RGB devices exist and how they are driven
 themes/<id>/theme.json    geometry and motion tokens for ThemeEngine

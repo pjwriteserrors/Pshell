@@ -7,29 +7,20 @@ import Quickshell
 import Quickshell.Services.Mpris
 import "components"
 
-// What is playing, hung on the right limb of the chain.
+// What is playing: a chalice with the track's progress running round it.
 //
-// A dial with how far through the track it is taken round its rim, and under
-// it a beat of three marks that light in turn while something is playing. The
-// name of the track belongs in the scroll this opens; there is no room for it
-// on the chain and no reason to put it there.
+// No title, no artist, no bar. The name of what is playing belongs on the panel
+// this opens; out here it is one mark, and how far through the track you are is
+// the ring that has been drawn around it.
 Item {
 	id: root
 
 	signal clicked
 
 	property color foreground: Arc.ink
-	property color secondaryBoxColor: Arc.leaf1
+	property color secondaryBoxColor: Arc.veil1
 	property color progressColor: Arc.aether
 
-	// The chain this is hung from: where on screen this item starts, and the
-	// curve to read a height off.
-	property real originX: 0
-	property var chainAt: null
-
-	function heightAt(centreX) {
-		return root.chainAt ? root.chainAt(centreX) : Arc.chainY(0.7);
-	}
 	readonly property bool hasMedia: mediaText !== ""
 	readonly property bool hasProgress: !!root.activePlayer && Number(root.activePlayer.length || 0) > 0
 	readonly property real progressValue: root.hasProgress
@@ -108,10 +99,9 @@ Item {
 	}
 
 	implicitWidth: 30
-	implicitHeight: Arc.gantryDepth
+	implicitHeight: 30
 
-	readonly property real live: Math.max(interaction.live, root.activePlayer?.isPlaying ? 0.35 : 0)
-	readonly property real restY: root.heightAt(root.originX + root.x + width / 2)
+	readonly property real live: Math.max(interaction.live, root.activePlayer?.isPlaying ? 0.4 : 0)
 
 	onActivePlayerChanged: {
 		if (activePlayer) root.rememberedPlayer = activePlayer;
@@ -125,58 +115,76 @@ Item {
 		onTriggered: root.activePlayer?.positionChanged()
 	}
 
-	ArcDial {
-		id: transport
-		anchors.horizontalCenter: parent.horizontalCenter
-		y: Math.round(root.restY - height / 2)
-		width: 28
-		height: 28
-		seed: 1
-		intensity: root.live
-		liveColor: root.progressColor
-		progress: root.hasMedia && root.hasProgress ? root.progressValue : -1
+	ArcHalo {
+		anchors.centerIn: parent
+		width: 78
+		height: 78
+		color: root.progressColor
+		strength: 0.34
+		spread: 0.32
+		flicker: true
+		opacity: root.live
+		visible: opacity > 0.01
 
-		QQCImpl.IconImage {
-			anchors.centerIn: parent
-			width: 13
-			height: 13
-			source: root.idleIconSource()
-			sourceSize: Qt.size(width, height)
-			color: root.live > 0.3 ? root.progressColor : root.foreground
+		Behavior on opacity {
+			NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveKindle }
 		}
 	}
 
-	// The beat: three marks struck in turn under the dial while something is
-	// playing. It is the one thing on the chain that moves to its own time.
-	Row {
-		visible: root.hasMedia
+	// How far through, taken round the mark. Nothing is drawn when nothing is
+	// playing: an empty ring would be a promise the shell is not keeping.
+	ArcDial {
+		anchors.centerIn: parent
+		width: 30
+		height: 30
+		seed: 1
+		weight: Arc.ruleThin
+		beading: false
+		lineColor: root.hasMedia ? Qt.alpha(Arc.gold, 0.3) : "transparent"
+		liveColor: root.progressColor
+		progress: root.hasMedia && root.hasProgress ? root.progressValue : -1
+		drawn: root.hasMedia ? 1 : 0
+
+		Behavior on drawn {
+			NumberAnimation { duration: Arc.draw; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveInk }
+		}
+	}
+
+	ArcMark {
+		anchors.centerIn: parent
+		width: 17
+		height: 17
+		glyph: "chalice"
+		weight: Arc.ruleThin
+		lineColor: root.live > 0.25 ? root.progressColor : root.foreground
+	}
+
+	// A single mote rising off the chalice while something is playing: the one
+	// thing out here that keeps time with the music rather than with the shell.
+	ArcMotes {
 		anchors.horizontalCenter: parent.horizontalCenter
-		anchors.top: transport.bottom
-		anchors.topMargin: Arc.s1
-		spacing: 4
+		anchors.bottom: parent.top
+		width: 26
+		height: 30
+		color: root.progressColor
+		drifting: root.activePlayer?.isPlaying ?? false
+		density: 3
+		drift: -14
+		span: 2.2
+	}
 
-		Repeater {
-			model: 3
+	ArcText {
+		anchors.horizontalCenter: parent.horizontalCenter
+		anchors.top: parent.bottom
+		anchors.topMargin: 2
+		role: "label"
+		tone: "aether"
+		font.pixelSize: 9
+		text: "Consort"
+		opacity: interaction.containsMouse ? 1 : 0
 
-			delegate: Rectangle {
-				required property int index
-
-				width: 3
-				height: 3
-				rotation: 45
-				color: root.progressColor
-				opacity: root.activePlayer?.isPlaying ? 0.22 : 0.16
-
-				SequentialAnimation on opacity {
-					running: root.activePlayer?.isPlaying ?? false
-					loops: Animation.Infinite
-
-					PauseAnimation { duration: index * 170 }
-					NumberAnimation { to: 1; duration: 180; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveKindle }
-					NumberAnimation { to: 0.22; duration: 520; easing.type: Easing.InOutSine }
-					PauseAnimation { duration: 520 - index * 170 }
-				}
-			}
+		Behavior on opacity {
+			NumberAnimation { duration: Arc.tick }
 		}
 	}
 

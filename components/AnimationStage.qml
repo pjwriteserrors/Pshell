@@ -297,13 +297,13 @@ Item {
 
 		Rectangle {
 			anchors.fill: parent
-			color: Arc.leaf1
+			color: Arc.veil1
 
 			Rectangle {
 				id: mockBar
 				width: parent.width
 				height: 26
-				color: Arc.leaf3
+				color: Arc.veil3
 
 				Row {
 					anchors.left: parent.left
@@ -339,7 +339,7 @@ Item {
 				anchors.top: mockBar.bottom
 				anchors.bottom: parent.bottom
 				width: 52
-				color: Arc.leaf2
+				color: Arc.veil2
 
 				Column {
 					anchors.horizontalCenter: parent.horizontalCenter
@@ -355,7 +355,7 @@ Item {
 							width: 22
 							height: 22
 							radius: 11
-							color: index === 1 ? Qt.alpha(Arc.aether, 0.8) : Arc.leaf3
+							color: index === 1 ? Qt.alpha(Arc.aether, 0.8) : Arc.veil3
 						}
 					}
 				}
@@ -385,7 +385,7 @@ Item {
 						width: Math.round(parent.width * (0.92 - index * 0.13))
 						height: 7
 						radius: 3
-						color: Qt.alpha(Arc.gilt, 0.24 - index * 0.025)
+						color: Qt.alpha(Arc.gold, 0.24 - index * 0.025)
 					}
 				}
 			}

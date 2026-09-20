@@ -263,7 +263,7 @@ Item {
 					anchors.right: parent.right
 					anchors.bottom: parent.bottom
 					height: Arc.ruleThin
-					color: Arc.giltFaint
+					color: Arc.goldFaint
 				}
 
 				Rectangle {
@@ -306,7 +306,7 @@ Item {
 		anchors.topMargin: Arc.s3
 		anchors.bottomMargin: Arc.s3
 		width: Arc.ruleThin
-		color: Arc.giltGhost
+		color: Arc.goldGhost
 	}
 
 	// ----------------------------------------------------------- the specimen
@@ -392,10 +392,10 @@ Item {
 						id: partMark
 						anchors.right: parent.right
 						anchors.verticalCenter: parent.verticalCenter
-						width: Arc.stud * 2
-						height: Arc.stud * 2
+						width: Arc.mote * 2
+						height: Arc.mote * 2
 						radius: width / 2
-						color: partRow.modelData.live ? Arc.ward : Arc.giltGhost
+						color: partRow.modelData.live ? Arc.ward : Arc.goldGhost
 					}
 
 					Rectangle {
@@ -403,7 +403,7 @@ Item {
 						anchors.right: parent.right
 						anchors.bottom: parent.bottom
 						height: Arc.ruleThin
-						color: Arc.giltGhost
+						color: Arc.goldGhost
 						opacity: 0.6
 					}
 				}
@@ -477,7 +477,7 @@ Item {
 			width: 54
 			height: 54
 			seed: 11
-			lineColor: Arc.giltGhost
+			lineColor: Arc.goldGhost
 		}
 
 		ArcText {

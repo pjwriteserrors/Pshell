@@ -237,8 +237,8 @@ fi
 				anchors.right: parent.right
 				anchors.rightMargin: Arc.s4
 				anchors.verticalCenter: parent.verticalCenter
-				width: Arc.stud * 2
-				height: Arc.stud * 2
+				width: Arc.mote * 2
+				height: Arc.mote * 2
 				radius: width / 2
 				color: Arc.ward
 			}
@@ -260,7 +260,7 @@ fi
 		anchors.topMargin: Arc.s3
 		anchors.bottomMargin: Arc.s3
 		width: Arc.ruleThin
-		color: Arc.giltGhost
+		color: Arc.goldGhost
 	}
 
 	// ------------------------------------------------------------- the stage
@@ -321,7 +321,7 @@ fi
 				width: parent.width
 				height: 12
 				facing: Qt.LeftToRight
-				lineColor: Arc.giltFaint
+				lineColor: Arc.goldFaint
 			}
 
 			Item {

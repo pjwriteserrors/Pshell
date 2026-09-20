@@ -2,102 +2,98 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 
-// On or off, as a lever in a slot. The arm swings from one end of the slot to
-// the other and arrests against the stop; the lamp under the slot comes up as
-// it arrives, not before it.
+// Bound or loose. Two runes with a ley line between them and a mote that
+// travels from one to the other; the rune it arrives at takes the light. There
+// is no track, no pill and no knob — the two ends are the two states and the
+// mote is which one is true.
 Item {
-	id: lever
+	id: toggle
 
 	property bool checked: false
 	property bool enabled: true
 
 	signal toggled(bool value)
 
-	implicitWidth: 40
+	implicitWidth: 44
 	implicitHeight: 18
 	opacity: enabled ? 1 : 0.45
 
-	ArcPlate {
-		anchors.fill: parent
-		variant: "capsule"
-		beading: false
-		weight: Arc.ruleThin
-		lineColor: Arc.giltFaint
-		liveColor: Arc.aether
-		fillTop: Arc.well
-		fillBottom: Arc.well
-		intensity: lever.checked ? 1 : touch.live * 0.5
+	Rectangle {
+		anchors.left: parent.left
+		anchors.right: parent.right
+		anchors.verticalCenter: parent.verticalCenter
+		anchors.leftMargin: 8
+		anchors.rightMargin: 8
+		height: Arc.ruleThin
+		color: Arc.goldGhost
 	}
 
-	// The lamp in the slot behind the arm: it belongs to the state, so it comes
-	// up as the arm lands rather than travelling with it.
-	Rectangle {
-		anchors.fill: parent
-		anchors.margins: 2
-		color: Qt.alpha(Arc.aether, lever.checked ? 0.30 : 0)
+	ArcRune {
+		id: loose
+		anchors.left: parent.left
+		anchors.verticalCenter: parent.verticalCenter
+		width: 9
+		height: 14
+		seed: 2
+		weight: Arc.ruleThin
+		lineColor: toggle.checked ? Arc.goldGhost : Arc.goldDim
+	}
 
-		Behavior on color {
-			ColorAnimation { duration: Arc.turn }
-		}
+	ArcRune {
+		id: bound
+		anchors.right: parent.right
+		anchors.verticalCenter: parent.verticalCenter
+		width: 9
+		height: 14
+		seed: 9
+		weight: Arc.ruleThin
+		lineColor: toggle.checked ? Arc.aether : Arc.goldGhost
 	}
 
 	Item {
-		id: arm
-		width: parent.height - Arc.s1
-		height: width
+		id: traveller
+		width: 8
+		height: 8
 		anchors.verticalCenter: parent.verticalCenter
-		x: lever.checked ? parent.width - width - 2 : 2
+		x: toggle.checked ? parent.width - 14 : 6
 
 		Behavior on x {
 			NumberAnimation {
 				duration: Arc.turn
 				easing.type: Easing.Bezier
-				easing.bezierCurve: Arc.curveDetent
+				easing.bezierCurve: Arc.curveSnap
 			}
 		}
 
-		// The arm turns as it travels, so the throw reads as a lever and not as
-		// a bead sliding along a wire.
-		rotation: lever.checked ? 30 : -30
-
-		Behavior on rotation {
-			NumberAnimation {
-				duration: Arc.turn
-				easing.type: Easing.Bezier
-				easing.bezierCurve: Arc.curveDetent
-			}
+		ArcHalo {
+			anchors.centerIn: parent
+			width: 30
+			height: 30
+			color: Arc.aether
+			strength: toggle.checked ? 0.6 : 0.22
+			spread: 0.3
+			flicker: true
 		}
 
-		Canvas {
-			anchors.fill: parent
-			renderStrategy: Canvas.Cooperative
-			onPaint: {
-				const ctx = getContext("2d");
-				ctx.reset();
-				const c = width / 2;
-				ctx.fillStyle = lever.checked ? Arc.aether : Arc.giltDim;
-				ctx.beginPath();
-				ctx.moveTo(c, 0);
-				ctx.lineTo(width, c);
-				ctx.lineTo(c, height);
-				ctx.lineTo(0, c);
-				ctx.closePath();
-				ctx.fill();
-			}
+		Rectangle {
+			anchors.centerIn: parent
+			width: 5
+			height: 5
+			radius: 2.5
+			color: toggle.checked ? Arc.aether : Arc.goldDim
 
-			Connections {
-				target: lever
-				function onCheckedChanged() { parent.requestPaint(); }
+			Behavior on color {
+				ColorAnimation { duration: Arc.tick }
 			}
 		}
 	}
 
 	ArcTouch {
 		id: touch
-		enabled: lever.enabled
+		enabled: toggle.enabled
 		onClicked: {
-			lever.checked = !lever.checked;
-			lever.toggled(lever.checked);
+			toggle.checked = !toggle.checked;
+			toggle.toggled(toggle.checked);
 		}
 	}
 }

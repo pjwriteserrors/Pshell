@@ -196,7 +196,7 @@ Item {
 				width: Arc.rule * 1.6
 				height: parent.height * (iconRow.marked ? 0.6 : 0)
 				radius: width / 2
-				color: iconRow.selected ? Arc.aether : Arc.giltDim
+				color: iconRow.selected ? Arc.aether : Arc.goldDim
 				opacity: iconRow.marked ? 1 : 0
 
 				Behavior on height {
@@ -248,8 +248,8 @@ Item {
 				anchors.right: parent.right
 				anchors.rightMargin: Arc.s4
 				anchors.verticalCenter: parent.verticalCenter
-				width: Arc.stud * 2
-				height: Arc.stud * 2
+				width: Arc.mote * 2
+				height: Arc.mote * 2
 				radius: width / 2
 				color: Arc.ward
 			}
@@ -311,7 +311,7 @@ Item {
 				width: Arc.rule * 1.6
 				height: parent.height * (cursorRow.marked ? 0.6 : 0)
 				radius: width / 2
-				color: cursorRow.selected ? Arc.aether : Arc.giltDim
+				color: cursorRow.selected ? Arc.aether : Arc.goldDim
 				opacity: cursorRow.marked ? 1 : 0
 
 				Behavior on height {
@@ -353,8 +353,8 @@ Item {
 				anchors.right: parent.right
 				anchors.rightMargin: Arc.s4
 				anchors.verticalCenter: parent.verticalCenter
-				width: Arc.stud * 2
-				height: Arc.stud * 2
+				width: Arc.mote * 2
+				height: Arc.mote * 2
 				radius: width / 2
 				color: Arc.ward
 			}
@@ -382,7 +382,7 @@ Item {
 		anchors.topMargin: Arc.s3
 		anchors.bottomMargin: Arc.s3
 		width: Arc.ruleThin
-		color: Arc.giltGhost
+		color: Arc.goldGhost
 	}
 
 	// --------------------------------------------------------- what is chosen
@@ -452,7 +452,7 @@ Item {
 			anchors.topMargin: Arc.s6
 			height: 12
 			facing: Qt.LeftToRight
-			lineColor: Arc.giltFaint
+			lineColor: Arc.goldFaint
 		}
 
 		// The pointer, at the size it will be drawn.

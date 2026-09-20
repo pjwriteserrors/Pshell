@@ -2,20 +2,19 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 
-// An entry in an index.
+// A line in a list.
 //
-// Two different events, deliberately not the same event at two strengths.
-// Hovering writes a mark in the margin — a lozenge and a tick slide in from
-// outside the page and the entry gives way to them. Selecting rules the entry
-// underneath: an ink line drawn left to right at the speed a nib travels,
-// which is a thing that stays on the page rather than a thing that follows the
-// pointer.
+// No band, no plate, no tint behind it. Touching it lights a rune out in the
+// margin and draws a ley line under the words, left to right, at the speed a
+// hand moves; choosing it leaves that line lit and warms the words. Those are
+// two different events and they are meant to look it — one is the pointer
+// passing over, the other is a decision.
 Item {
 	id: entry
 
 	property bool selected: false
 	property bool interactive: true
-	property real inset: Arc.s3
+	property real inset: Arc.s4
 	property alias containsMouse: touch.containsMouse
 	property alias acceptedButtons: touch.acceptedButtons
 	readonly property real live: interactive ? Math.max(touch.live, selected ? 0.55 : 0) : (selected ? 0.55 : 0)
@@ -27,30 +26,26 @@ Item {
 
 	implicitHeight: 34
 
-	// The page warms under the entry. Never a grey band.
-	Rectangle {
-		anchors.fill: parent
-		anchors.leftMargin: Arc.s2
-		color: Qt.alpha(Arc.aether, 0.09 * entry.live)
-	}
-
-	// The marginal mark, written outside the text block and sliding in.
-	Item {
-		id: margin
+	// The rune out in the margin: the mark that says the pointer is here.
+	ArcRune {
+		id: marker
 		anchors.left: parent.left
 		anchors.verticalCenter: parent.verticalCenter
-		width: Arc.s3
-		height: parent.height
+		width: 11
+		height: 15
+		seed: 3
+		weight: Arc.ruleThin
+		lineColor: Arc.aether
 		opacity: entry.hovered
 
 		transform: Translate {
-			x: (1 - entry.hovered) * -9
+			x: (1 - entry.hovered) * -7
 
 			Behavior on x {
 				NumberAnimation {
 					duration: Arc.turn
 					easing.type: Easing.Bezier
-					easing.bezierCurve: Arc.curveDetent
+					easing.bezierCurve: Arc.curveSnap
 				}
 			}
 		}
@@ -58,34 +53,18 @@ Item {
 		Behavior on opacity {
 			NumberAnimation { duration: Arc.tick }
 		}
-
-		Rectangle {
-			anchors.centerIn: parent
-			width: 5
-			height: 5
-			rotation: 45
-			color: Arc.aether
-		}
-
-		Rectangle {
-			anchors.verticalCenter: parent.verticalCenter
-			anchors.left: parent.left
-			anchors.leftMargin: 1
-			width: 3
-			height: Arc.ruleThin
-			color: Qt.alpha(Arc.aether, 0.7)
-		}
 	}
 
-	// The rule: drawn, not faded. It is the whole selected state.
+	// The ley: drawn under the words, and the whole of both states.
 	Rectangle {
-		id: ruled
+		id: ley
 		anchors.left: parent.left
-		anchors.leftMargin: Arc.s2
+		anchors.leftMargin: entry.inset
 		anchors.bottom: parent.bottom
+		anchors.bottomMargin: 1
 		height: Arc.ruleThin
-		width: entry.selected ? parent.width - Arc.s2 * 2 : 0
-		color: Arc.aether
+		width: entry.live > 0.05 ? parent.width - entry.inset * 1.6 : 0
+		color: entry.selected ? Arc.aether : Arc.goldDim
 
 		Behavior on width {
 			NumberAnimation {
@@ -94,12 +73,32 @@ Item {
 				easing.bezierCurve: Arc.curveInk
 			}
 		}
+
+		Behavior on color {
+			ColorAnimation { duration: Arc.tick }
+		}
 	}
 
-	// The entry's own touch layer sits *under* its contents: a button, a lever
-	// or a menu item inside an entry has to get the click first, and whatever
-	// it does not take falls through to here. Put this last and everything
-	// inside the entry goes deaf.
+	ArcHalo {
+		anchors.left: parent.left
+		anchors.right: parent.right
+		anchors.bottom: parent.bottom
+		height: 26
+		color: Arc.aether
+		strength: 0.22
+		spread: 0.5
+		opacity: entry.selected ? 1 : 0
+		visible: opacity > 0.01
+
+		Behavior on opacity {
+			NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveKindle }
+		}
+	}
+
+	// The row's own touch layer sits *under* its contents: a button or a
+	// switch inside a row has to get the click first, and whatever it does not
+	// take falls through to here. Put this last and everything inside goes
+	// deaf.
 	ArcTouch {
 		id: touch
 		enabled: entry.interactive
@@ -111,16 +110,16 @@ Item {
 		id: slot
 		anchors.fill: parent
 		anchors.leftMargin: entry.inset
-		anchors.rightMargin: entry.inset * 0.6
+		anchors.rightMargin: entry.inset * 0.5
 
 		transform: Translate {
-			x: entry.hovered * 6
+			x: entry.hovered * 5
 
 			Behavior on x {
 				NumberAnimation {
 					duration: Arc.turn
 					easing.type: Easing.Bezier
-					easing.bezierCurve: Arc.curveDetent
+					easing.bezierCurve: Arc.curveSnap
 				}
 			}
 		}

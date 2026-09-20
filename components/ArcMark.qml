@@ -7,16 +7,19 @@ import "ArcInk.js" as Ink
 // this shell and have no icon anywhere on the system. Drawn rather than
 // fetched, so they are cut in the same hand as everything around them.
 //
-//   book    the grimoire — what the launcher opens
-//   star    a fixed star — an empty page, a thing with no reading yet
-//   raven   the messenger — a notification, and the toast it carries
-//   eye     the oracle — the weather, and anything being watched
-//   phial   a measure — an empty rack, a reading that has not been taken
+//   book    the codex — what the launcher opens
+//   star    a fixed star — an empty place, a thing with no reading yet
+//   raven   the messenger — a notification, and the note it carries
+//   eye     the oracle — the sky, and anything being watched
+//   phial   a measure — an empty rack, a reading not yet taken
+//   gate    the void — the way out
+//   crystal soul resonance — what a volume is measured in
+//   chalice what is playing
 Item {
 	id: mark
 
 	property string glyph: "star"
-	property color lineColor: Arc.gilt
+	property color lineColor: Arc.gold
 	property real weight: Arc.rule
 
 	implicitWidth: 28
@@ -148,6 +151,40 @@ Item {
 				ctx.beginPath();
 				ctx.ellipse(cx - w * 1.2, cy - w * 1.2, w * 2.4, w * 2.4);
 				ctx.fill();
+				return;
+			}
+
+			if (mark.glyph === "gate") {
+				// Two uprights and a lintel, with nothing between them: a way
+				// out is an absence, so the middle of this mark is empty.
+				const half = s * 0.30, top = cy - s * 0.42, foot = cy + s * 0.44;
+				Ink.cut(ctx, [{ x: cx - half, y: foot }, { x: cx - half, y: top + s * 0.16 },
+					{ x: cx, y: top }, { x: cx + half, y: top + s * 0.16 },
+					{ x: cx + half, y: foot }], w, c, false);
+				Ink.cut(ctx, [{ x: cx - half * 1.35, y: foot }, { x: cx + half * 1.35, y: foot }],
+					w, c, false);
+				Ink.mote(ctx, cx, cy + s * 0.08, w * 1.6, Qt.alpha(c, 0.7));
+				return;
+			}
+
+			if (mark.glyph === "crystal") {
+				const half = s * 0.26;
+				Ink.cut(ctx, [{ x: cx, y: cy - s * 0.46 }, { x: cx + half, y: cy - s * 0.14 },
+					{ x: cx + half, y: cy + s * 0.20 }, { x: cx, y: cy + s * 0.48 },
+					{ x: cx - half, y: cy + s * 0.20 }, { x: cx - half, y: cy - s * 0.14 }],
+					w, c, true);
+				Ink.cut(ctx, [{ x: cx - half, y: cy - s * 0.14 }, { x: cx + half, y: cy - s * 0.14 }], w * 0.7, Qt.alpha(c, 0.6), false);
+				Ink.cut(ctx, [{ x: cx, y: cy - s * 0.46 }, { x: cx, y: cy + s * 0.48 }], w * 0.6, Qt.alpha(c, 0.4), false);
+				return;
+			}
+
+			if (mark.glyph === "chalice") {
+				const half = s * 0.28;
+				Ink.cut(ctx, [{ x: cx - half, y: cy - s * 0.34 }, { x: cx - half * 0.8, y: cy + s * 0.04 },
+					{ x: cx, y: cy + s * 0.20 }, { x: cx + half * 0.8, y: cy + s * 0.04 },
+					{ x: cx + half, y: cy - s * 0.34 }], w, c, false);
+				Ink.cut(ctx, [{ x: cx, y: cy + s * 0.20 }, { x: cx, y: cy + s * 0.40 }], w, c, false);
+				Ink.cut(ctx, [{ x: cx - half * 0.7, y: cy + s * 0.44 }, { x: cx + half * 0.7, y: cy + s * 0.44 }], w, c, false);
 				return;
 			}
 

@@ -24,9 +24,6 @@ Item {
 	required property color secondaryInsetColor
 	required property color barColor
 	property color danger: "#d95c5c"
-	// How wide the binding is, handed down by the book this spread is bound
-	// into: the two pages part by exactly that much.
-	property real gutter: Arc.s6
 
 	// True names. An application's own name is what is printed on the tin; a
 	// grimoire lists what the thing actually does when you call it. Both are
@@ -2700,406 +2697,91 @@ Item {
 
 			// How much room the cultures get once the probe and the plate have
 			// taken theirs.
-			readonly property real viewHeight: height - plate.height - searchBox.height - spacing * 2
+			readonly property real viewHeight: height - codexHead.height - plate.height - searchBox.height - spacing * 3
 
 			// The probe line. Not a search box — there is no box: a ring holds
 			// the mode's mark, what you type is cut at specimen size straight
 			// onto the bench, and the bone under it lights along its whole
 			// length while the keyboard is in it.
+
+			// The head of the codex. Two stars and the name of the book, the way
+			// the reference draws it, with what you are looking at written
+			// under them.
 			Item {
-				id: searchBox
+				id: codexHead
 				width: parent.width
+				height: 52
 				opacity: root.band(0)
-				height: root.inChatMode
-					? Math.min(190, Math.max(58, searchField.contentHeight + 24))
-					: 58
 
-				Rectangle {
-					anchors.left: parent.left
-					anchors.right: parent.right
-					anchors.bottom: parent.bottom
-					height: Arc.ruleThin
-					color: Arc.giltFaint
-				}
-
-				Rectangle {
-					anchors.left: parent.left
-					anchors.bottom: parent.bottom
-					width: searchField.activeFocus || root.editingMessageId !== "" ? parent.width : 0
-					height: Arc.rule
-					color: Arc.aether
-
-					Behavior on width {
-						NumberAnimation { duration: Arc.turn; easing.type: Easing.OutCubic }
-					}
-				}
-
-				ArcDial {
-					id: probeRing
-					anchors.left: parent.left
-					anchors.verticalCenter: parent.verticalCenter
-					width: 36
-					height: 36
-					seed: 1
-					lineColor: Arc.giltFaint
-					intensity: searchField.activeFocus ? 0.85 : 0
-
-					QQCImpl.IconImage {
-						id: inputCommandIcon
-						anchors.centerIn: parent
-						width: 17
-						height: 17
-						source: root.inputIconPath
-						sourceSize: Qt.size(width, height)
-						color: searchField.activeFocus ? Arc.aether : Arc.ink
-					}
-				}
-
-				Item {
-					id: commandTokenBox
-					anchors.left: probeRing.right
-					anchors.leftMargin: Arc.s3
-					anchors.verticalCenter: parent.verticalCenter
-					width: visible ? Math.min(140, Math.max(30, commandTokenField.contentWidth + 14)) : 0
-					height: 24
-					visible: root.commandInputActive
-
-					ArcPlate {
-						anchors.fill: parent
-						variant: "capsule"
-						beading: false
-						weight: Arc.ruleThin
-						inset: 1
-						lineColor: Arc.giltFaint
-						liveColor: Arc.aether
-						fillTop: Arc.well
-						fillBottom: Arc.well
-						intensity: commandTokenField.activeFocus ? 1 : 0
-					}
-
-					TextInput {
-						id: commandTokenField
-						anchors.fill: parent
-						anchors.leftMargin: 7
-						anchors.rightMargin: 7
-						text: ">"
-						color: commandTokenField.activeFocus ? Arc.aether : Arc.inkMuted
-						selectionColor: Qt.alpha(Arc.aether, 0.35)
-						selectedTextColor: Arc.ink
-						cursorVisible: activeFocus
-						verticalAlignment: Text.AlignVCenter
-						clip: true
-						font.family: Arc.mono
-						font.pixelSize: 12
-
-						onTextChanged: {
-							if (root.commandInputSyncing) return;
-							if (text === "") {
-								root.leaveCommandInput("");
-								return;
-							}
-							if (!text.startsWith(">")) {
-								root.commandInputSyncing = true;
-								text = `>${text.replace(/^>+/, "")}`;
-								cursorPosition = text.length;
-								root.commandInputSyncing = false;
-							}
-							root.syncLauncherSearch();
-						}
-
-						Keys.onEscapePressed: root.closeRequested()
-						Keys.onPressed: event => {
-							if (event.key === Qt.Key_Space) {
-								root.focusCommandArgument();
-								event.accepted = true;
-								return;
-							}
-							if (event.key === Qt.Key_Backspace && commandTokenField.text === ">") {
-								root.leaveCommandInput("");
-								event.accepted = true;
-								return;
-							}
-							if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-								root.activateCurrent();
-								event.accepted = true;
-							}
-						}
-						Keys.onDownPressed: {
-							if (root.inFileMode) {
-								if (root.filteredFileBrowserEntries.length === 0) return;
-								fileBrowserList.currentIndex = Math.min(root.filteredFileBrowserEntries.length - 1, fileBrowserList.currentIndex + 1);
-								fileBrowserList.positionViewAtIndex(fileBrowserList.currentIndex, ListView.Contain);
-								return;
-							}
-							if (root.filteredCommands.length === 0) return;
-							commandList.currentIndex = Math.min(root.filteredCommands.length - 1, commandList.currentIndex + 1);
-							commandList.positionViewAtIndex(commandList.currentIndex, ListView.Contain);
-						}
-						Keys.onUpPressed: {
-							if (root.inFileMode) {
-								if (root.filteredFileBrowserEntries.length === 0) return;
-								fileBrowserList.currentIndex = Math.max(0, fileBrowserList.currentIndex - 1);
-								fileBrowserList.positionViewAtIndex(fileBrowserList.currentIndex, ListView.Contain);
-								return;
-							}
-							if (root.filteredCommands.length === 0) return;
-							commandList.currentIndex = Math.max(0, commandList.currentIndex - 1);
-							commandList.positionViewAtIndex(commandList.currentIndex, ListView.Contain);
-						}
-					}
-				}
-
-				TextArea {
-					id: searchField
-					z: 1
-					anchors.left: root.commandInputActive ? commandTokenBox.right : probeRing.right
-					anchors.leftMargin: Arc.s3
-					anchors.right: attachButton.visible ? attachButton.left : clearButton.left
-					anchors.rightMargin: Arc.s3
+				Row {
+					anchors.horizontalCenter: parent.horizontalCenter
 					anchors.top: parent.top
-					anchors.bottom: parent.bottom
-					anchors.bottomMargin: Arc.s2
-					font.family: root.inChatMode ? Arc.book : Arc.cut
-					font.pixelSize: root.inChatMode ? Arc.sizeBody : 28
-					color: Arc.ink
-					placeholderText: root.inChatMode
-						? "Put the question"
-						: (root.inAiMode
-							? "Search the discourses"
-							: (root.inFileMode
-								? "Search the vault"
-								: (root.inCalculatorMode
-									? "Set down the reckoning"
-									: (root.commandInputActive ? "Options" : "Name a thing, or speak a cantrip with >"))))
-					placeholderTextColor: Arc.inkFaint
-					selectedTextColor: Arc.ink
-					selectionColor: Qt.alpha(Arc.aether, 0.3)
-					selectByMouse: true
-					focus: true
-					cursorVisible: activeFocus
-					clip: true
-					wrapMode: root.inChatMode ? TextEdit.Wrap : TextEdit.NoWrap
-					horizontalAlignment: Text.AlignLeft
-					verticalAlignment: Text.AlignVCenter
-					background: Item {}
-					cursorDelegate: ThemedRectangle {
-						visible: searchField.activeFocus
-						width: root.inChatMode ? 1 : 2
-						height: searchField.font.pixelSize + 3
-						color: Arc.aether
-					}
+					spacing: Arc.s3
 
-					onTextChanged: {
-						if (root.commandInputSyncing) return;
-						if (!root.commandInputActive && text.startsWith(">")) {
-							root.enterCommandInput(text, false);
-							return;
-						}
-						if (root.commandInputActive && text !== "" && !root.commandInputHasSeparator)
-							root.commandInputHasSeparator = true;
-						root.syncLauncherSearch();
-					}
-
-					onActiveFocusChanged: {
-						if (!activeFocus || !root.commandInputActive || root.commandInputHasSeparator) return;
-						root.commandInputHasSeparator = true;
-						root.syncLauncherSearch();
-					}
-
-					Keys.onEscapePressed: root.closeRequested()
-					Keys.onPressed: event => {
-						if (
-							event.key === Qt.Key_Backspace
-							&& root.commandInputActive
-							&& searchField.text === ""
-							&& searchField.cursorPosition === 0
-						) {
-							event.accepted = root.focusCommandTokenFromEmptyArgument();
-							if (event.accepted) return;
-						}
-						if (event.key !== Qt.Key_Return && event.key !== Qt.Key_Enter) return;
-						if (root.inChatMode && (event.modifiers & Qt.ShiftModifier)) {
-							searchField.insert(searchField.cursorPosition, "\n");
-							event.accepted = true;
-							return;
-						}
-						root.activateCurrent();
-						event.accepted = true;
-					}
-					Keys.onLeftPressed: event => {
-						if (root.inFileMode || root.inCalculatorMode || root.inAiMode || root.inChatMode || root.inOllamaMode || root.inCommandMode || root.filteredApps.length === 0) {
-							event.accepted = false;
-							return;
-						}
-						appList.currentIndex = Math.max(0, appList.currentIndex - 8);
-						appList.positionViewAtIndex(appList.currentIndex, ListView.Contain);
-						event.accepted = true;
-					}
-					Keys.onRightPressed: event => {
-						if (root.inFileMode || root.inCalculatorMode || root.inAiMode || root.inChatMode || root.inOllamaMode || root.inCommandMode || root.filteredApps.length === 0) {
-							event.accepted = false;
-							return;
-						}
-						appList.currentIndex = Math.min(root.filteredApps.length - 1, appList.currentIndex + 8);
-						appList.positionViewAtIndex(appList.currentIndex, ListView.Contain);
-						event.accepted = true;
-					}
-					Keys.onDownPressed: {
-						if (root.inFileMode) {
-							if (root.filteredFileBrowserEntries.length === 0) return;
-							fileBrowserList.currentIndex = Math.min(root.filteredFileBrowserEntries.length - 1, fileBrowserList.currentIndex + 1);
-							fileBrowserList.positionViewAtIndex(fileBrowserList.currentIndex, ListView.Contain);
-							return;
-						}
-						if (root.inCalculatorMode || root.inAiMode || root.inChatMode || root.inOllamaMode) return;
-						if (root.inCommandMode) {
-							if (root.filteredCommands.length === 0) return;
-							commandList.currentIndex = Math.min(root.filteredCommands.length - 1, commandList.currentIndex + 1);
-							commandList.positionViewAtIndex(commandList.currentIndex, ListView.Contain);
-							return;
-						}
-
-						if (root.filteredApps.length === 0) return;
-						appList.currentIndex = Math.min(root.filteredApps.length - 1, appList.currentIndex + appList.columns);
-						appList.positionViewAtIndex(appList.currentIndex, ListView.Contain);
-					}
-					Keys.onUpPressed: {
-						if (root.inFileMode) {
-							if (root.filteredFileBrowserEntries.length === 0) return;
-							fileBrowserList.currentIndex = Math.max(0, fileBrowserList.currentIndex - 1);
-							fileBrowserList.positionViewAtIndex(fileBrowserList.currentIndex, ListView.Contain);
-							return;
-						}
-						if (root.inCalculatorMode || root.inAiMode || root.inChatMode || root.inOllamaMode) return;
-						if (root.inCommandMode) {
-							if (root.filteredCommands.length === 0) return;
-							commandList.currentIndex = Math.max(0, commandList.currentIndex - 1);
-							commandList.positionViewAtIndex(commandList.currentIndex, ListView.Contain);
-							return;
-						}
-
-						if (root.filteredApps.length === 0) return;
-						appList.currentIndex = Math.max(0, appList.currentIndex - appList.columns);
-						appList.positionViewAtIndex(appList.currentIndex, ListView.Contain);
-					}
-				}
-
-				Item {
-					id: attachButton
-					anchors.right: clearButton.left
-					anchors.rightMargin: 4
-					anchors.verticalCenter: parent.verticalCenter
-					width: 22
-					height: 22
-					visible: root.inChatMode && !root.aiStreaming
-
-					MouseArea {
-						id: attachMouse
-						anchors.fill: parent
-						hoverEnabled: true
-						cursorShape: Qt.PointingHandCursor
-						onClicked: root.aiAttachmentPickerOpen
-							? root.closeAttachmentPicker()
-							: root.openAttachmentPicker()
-					}
-
-					QQCImpl.IconImage {
-						anchors.centerIn: parent
-						width: 14
-						height: 14
-						source: root.attachmentIconPath
-						sourceSize: Qt.size(width, height)
-						color: attachMouse.containsMouse || root.aiAttachmentPickerOpen ? Arc.aether : Arc.inkMuted
-					}
-
-					ToolTip.visible: attachMouse.containsMouse
-					ToolTip.delay: 500
-					ToolTip.text: root.selectedAiSupportsVision
-						? "Attach text, document, PDF, or image"
-						: "Attach text, document, or PDF"
-				}
-
-				Item {
-					id: clearButton
-					anchors.right: parent.right
-					anchors.verticalCenter: parent.verticalCenter
-					width: 22
-					height: 22
-					visible: (root.aiStreaming && root.inChatMode) || root.commandInputActive || searchField.text !== ""
-
-					MouseArea {
-						id: clearMouse
-						anchors.fill: parent
-						hoverEnabled: true
-						cursorShape: Qt.PointingHandCursor
-						onClicked: {
-							if (root.aiStreaming && root.inChatMode) root.cancelAiStream();
-							else if (root.editingMessageId !== "") root.cancelMessageEdit();
-							else root.leaveCommandInput("");
-						}
+					ArcMark {
+						anchors.verticalCenter: parent.verticalCenter
+						width: 11
+						height: 11
+						glyph: "star"
+						weight: Arc.ruleThin
+						lineColor: Arc.aether
 					}
 
 					ArcText {
-						anchors.centerIn: parent
-						role: "body"
-						tone: clearMouse.containsMouse ? "aether" : "faint"
-						text: root.aiStreaming && root.inChatMode ? "■" : "×"
+						anchors.verticalCenter: parent.verticalCenter
+						role: "label"
+						tone: "aether"
+						font.letterSpacing: Arc.trackingRubric + 3
+						text: "Arcane Codex"
 					}
 
-					ToolTip.visible: clearMouse.containsMouse && root.aiStreaming && root.inChatMode
-					ToolTip.delay: 500
-					ToolTip.text: "Stop and unload model"
+					ArcMark {
+						anchors.verticalCenter: parent.verticalCenter
+						width: 11
+						height: 11
+						glyph: "star"
+						weight: Arc.ruleThin
+						lineColor: Arc.aether
+					}
+				}
+
+				Row {
+					anchors.horizontalCenter: parent.horizontalCenter
+					anchors.bottom: parent.bottom
+					spacing: Arc.s2
+
+					ArcText {
+						anchors.verticalCenter: parent.verticalCenter
+						role: "label"
+						tone: "muted"
+						text: root.inChatMode ? "Discourse"
+							: root.inOllamaMode ? "Familiars"
+							: root.inAiMode ? "Invocation"
+							: root.inFileMode ? "The Vault"
+							: root.inCalculatorMode ? "Reckoning"
+							: root.inCommandMode ? "Cantrips"
+							: "Spells"
+					}
+
+					ArcText {
+						anchors.verticalCenter: parent.verticalCenter
+						role: "caption"
+						tone: "faint"
+						visible: !root.inCommandMode
+						text: `· ${root.filteredApps.length}`
+					}
 				}
 			}
 
-			Item {
-				id: plate
-				width: parent.width
-				opacity: root.band(1)
-				height: 16
 
-				ArcText {
-					id: plateTitle
-					anchors.left: parent.left
-					anchors.verticalCenter: parent.verticalCenter
-					role: "label"
-					tone: "aether"
-					text: root.inChatMode ? "Discourse"
-						: root.inOllamaMode ? "Familiars"
-						: root.inAiMode ? "Invocation"
-						: root.inFileMode ? "The Vault"
-						: root.inCalculatorMode ? "Reckoning"
-						: root.inCommandMode ? "Cantrips"
-						: "The Index"
-				}
-
-				ArcFlourish {
-					anchors.left: plateTitle.right
-					anchors.right: plateCount.left
-					anchors.leftMargin: Arc.s3
-					anchors.rightMargin: Arc.s3
-					anchors.verticalCenter: parent.verticalCenter
-					height: 12
-					facing: Qt.LeftToRight
-					lineColor: Arc.giltFaint
-					visible: width > 30
-				}
-
-				ArcText {
-					id: plateCount
-					anchors.right: parent.right
-					anchors.verticalCenter: parent.verticalCenter
-					role: "label"
-					tone: "faint"
-					text: root.inCommandMode ? "" : `${root.filteredApps.length} named`
-				}
-			}
-
-			// The spread. The verso is the index — names, in order, with the
-			// number they are entered under in the margin; that is what you
-			// scan. The recto is the illumination: whatever the index is
-			// pointing at, drawn at the size of the thing you are about to
-			// call, with its true name under it.
+			// THE SPELLS.
+			//
+			// One column down the middle of the page, and what is written large
+			// is the *true* name — Portal, Arcane Console, Runic Forge — with
+			// what the thing calls itself underneath in a smaller hand. A thing
+			// with no true name is written under its own. There is no second
+			// column and no preview pane: the reference draws a book with a
+			// list in it, and a list in a book is a list.
 			Item {
 				id: colony
 
@@ -3114,26 +2796,17 @@ Item {
 				ListView {
 					id: appList
 
-					// Kept so the key handlers have something to step by; the
-					// index is one column now, so a step is one row.
 					readonly property int columns: 1
 
+					anchors.fill: parent
 					opacity: root.band(2)
-					transform: Translate {
-						x: (1 - root.band(2)) * -22
-					}
-
-					anchors.left: parent.left
-					anchors.leftMargin: Arc.s5
-					anchors.top: parent.top
-					anchors.bottom: parent.bottom
-					anchors.bottomMargin: 22
-					width: Math.round((parent.width - root.gutter) / 2) - Arc.s5
 					clip: true
 					model: root.filteredApps
 					currentIndex: model.length > 0 ? 0 : -1
 					boundsBehavior: Flickable.StopAtBounds
-					spacing: 0
+					spacing: 2
+					highlightMoveDuration: Arc.turn
+					highlightMoveVelocity: -1
 
 					delegate: Item {
 						id: appTile
@@ -3141,50 +2814,110 @@ Item {
 						required property DesktopEntry modelData
 						required property int index
 						readonly property bool selected: appList.currentIndex === index
+						readonly property string trueName: root.trueName(appTile.modelData)
 
 						width: appList.width
-						height: 32
+						height: 44
 
-						// The vein: the whole selection state in one stroke,
-						// the same one a row uses everywhere else in this style.
-						Rectangle {
+						// The mark of the spell: its own rune, ignited when it
+						// is the one you are on.
+						ArcRune {
+							id: spellRune
 							anchors.left: parent.left
+							anchors.leftMargin: Arc.s2
 							anchors.verticalCenter: parent.verticalCenter
-							width: Arc.rule * 1.6
-							height: parent.height * (appTile.selected ? 0.66 : 0)
-							radius: width / 2
+							width: 14
+							height: 20
+							seed: appTile.index * 7 + 3
+							weight: Arc.ruleThin
+							lineColor: appTile.selected ? Arc.aether : Qt.alpha(Arc.gold, 0.3)
+						}
+
+						ArcHalo {
+							anchors.centerIn: spellRune
+							width: 56
+							height: 56
 							color: Arc.aether
+							strength: 0.34
+							spread: 0.3
+							flicker: true
 							opacity: appTile.selected ? 1 : 0
+							visible: opacity > 0.01
+
+							Behavior on opacity {
+								NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveKindle }
+							}
+						}
+
+						Column {
+							anchors.left: spellRune.right
+							anchors.leftMargin: Arc.s4
+							anchors.right: appMark.left
+							anchors.rightMargin: Arc.s3
+							anchors.verticalCenter: parent.verticalCenter
+							spacing: -3
+
+							transform: Translate {
+								x: appTile.selected ? 5 : 0
+
+								Behavior on x {
+									NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveSnap }
+								}
+							}
+
+							ArcText {
+								width: parent.width
+								role: appTile.trueName !== "" ? "hand" : "display"
+								font.pixelSize: appTile.trueName !== "" ? 20 : 18
+								tone: appTile.selected ? "aether" : "default"
+								text: appTile.trueName !== ""
+									? appTile.trueName
+									: (appTile.modelData.name || appTile.modelData.id || "Spell")
+							}
+
+							ArcText {
+								width: parent.width
+								role: "caption"
+								tone: appTile.selected ? "muted" : "faint"
+								text: appTile.trueName !== ""
+									? (appTile.modelData.name || appTile.modelData.id || "")
+									: (appTile.modelData.comment || appTile.modelData.genericName || "")
+							}
+						}
+
+						// The thing's own mark, small and at the end of the
+						// line, because it is not what you are reading by.
+						Image {
+							id: appMark
+							anchors.right: parent.right
+							anchors.rightMargin: Arc.s2
+							anchors.verticalCenter: parent.verticalCenter
+							width: 22
+							height: 22
+							source: root.iconSource(appTile.modelData)
+							sourceSize: Qt.size(width, height)
+							fillMode: Image.PreserveAspectFit
+							smooth: true
+							mipmap: true
+							opacity: appTile.selected ? 1 : 0.4
 
 							Behavior on opacity {
 								NumberAnimation { duration: Arc.tick }
 							}
-							Behavior on height {
-								NumberAnimation { duration: Arc.turn; easing.type: Easing.OutCubic }
-							}
 						}
 
-						ArcText {
-							id: appRank
-							anchors.left: parent.left
+						// The ley under the line, drawn when it is chosen.
+						Rectangle {
+							anchors.left: spellRune.right
 							anchors.leftMargin: Arc.s4
-							anchors.verticalCenter: parent.verticalCenter
-							role: "mono"
-							tone: appTile.selected ? "aether" : "faint"
-							font.pixelSize: 10
-							text: String(appTile.index + 1).padStart(2, "0")
-						}
+							anchors.bottom: parent.bottom
+							height: Arc.ruleThin
+							width: appTile.selected ? parent.width - spellRune.width - Arc.s6 : 0
+							color: Arc.aether
 
-						ArcText {
-							anchors.left: appRank.right
-							anchors.leftMargin: Arc.s3
-							anchors.right: parent.right
-							anchors.rightMargin: Arc.s4
-							anchors.verticalCenter: parent.verticalCenter
-							role: "heading"
-							font.pixelSize: 14
-							tone: appTile.selected ? "default" : "muted"
-							text: appTile.modelData.name || appTile.modelData.id || "App"
+							Behavior on width {
+								NumberAnimation { duration: Arc.draw; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveInk }
+							}
 						}
 
 						ArcTouch {
@@ -3195,393 +2928,144 @@ Item {
 					}
 				}
 
-				// The ruled margin the entry numbers hang on. A scribe rules
-				// the page before writing on it, and this is the line the
-				// numbers are written against.
-				Rectangle {
-					anchors.left: parent.left
-					anchors.leftMargin: Arc.s5 + 24
-					anchors.top: parent.top
-					anchors.bottom: parent.bottom
-					anchors.bottomMargin: 22
-					width: Arc.ruleThin
-					color: Arc.giltFaint
-				}
+				// Nothing found: the page is not blank, it says so.
+				Column {
+					anchors.centerIn: parent
+					spacing: Arc.s3
+					visible: root.filteredApps.length === 0
+					opacity: 0.8
 
-				// Nothing chosen: the recto is not blank, it is a page waiting
-				// to be written on. An empty state is a page in this style, the
-				// same as a full one.
-				Item {
-					anchors.left: parent.left
-					anchors.leftMargin: Math.round((colony.width + root.gutter) / 2) + Arc.s4
-					anchors.right: parent.right
-					anchors.top: parent.top
-					anchors.bottom: parent.bottom
-					visible: !colony.current
-					opacity: 0.7
-
-					Column {
-						anchors.centerIn: parent
-						spacing: Arc.s4
-
-						ArcMark {
-							anchors.horizontalCenter: parent.horizontalCenter
-							width: 40
-							height: 40
-							glyph: "star"
-							lineColor: Arc.giltFaint
-						}
-
-						ArcText {
-							anchors.horizontalCenter: parent.horizontalCenter
-							role: "hand"
-							tone: "faint"
-							text: root.searchText.trim() === ""
-								? "Nothing is written here yet"
-								: "No such thing is in the index"
-						}
-					}
-				}
-
-				// The head of the recto, so the illumination is on a page and
-				// not floating in the right half of a rectangle.
-				ArcText {
-					id: rectoHead
-					anchors.left: parent.left
-					anchors.leftMargin: Math.round((colony.width + root.gutter) / 2) + Arc.s4
-					anchors.top: parent.top
-					role: "label"
-					tone: "muted"
-					text: colony.current ? "The Calling" : ""
-				}
-
-				ArcFlourish {
-					anchors.left: rectoHead.right
-					anchors.leftMargin: Arc.s3
-					anchors.right: parent.right
-					anchors.verticalCenter: rectoHead.verticalCenter
-					height: 10
-					facing: Qt.LeftToRight
-					lineColor: Arc.giltFaint
-					visible: colony.current && width > 30
-				}
-
-				// The folios: what a page of a book has at the foot of it.
-				ArcText {
-					anchors.left: parent.left
-					anchors.bottom: parent.bottom
-					role: "label"
-					tone: "faint"
-					font.pixelSize: 9
-					text: root.filteredApps.length > 0
-						? `i · ${root.filteredApps.length} entered`
-						: "i"
-				}
-
-				ArcText {
-					anchors.right: parent.right
-					anchors.bottom: parent.bottom
-					role: "label"
-					tone: "faint"
-					font.pixelSize: 9
-					text: colony.current ? "ii · the calling" : "ii"
-				}
-
-				// The specimen itself.
-				Item {
-					id: specimen
-
-					anchors.left: parent.left
-					anchors.leftMargin: Math.round((parent.width + root.gutter) / 2) + Arc.s4
-					anchors.right: parent.right
-					anchors.top: parent.top
-					anchors.bottom: parent.bottom
-					anchors.topMargin: Arc.s6
-					anchors.bottomMargin: 22
-					opacity: colony.current ? root.band(3) : 0
-
-					Behavior on opacity {
-						NumberAnimation { duration: Arc.turn }
+					ArcMark {
+						anchors.horizontalCenter: parent.horizontalCenter
+						width: 34
+						height: 34
+						glyph: "star"
+						lineColor: Arc.goldFaint
 					}
 
-					ArcHalo {
-						anchors.centerIn: specimenMark
-						width: 220
-						height: 220
-						color: Arc.aether
-						strength: 0.24
-						spread: 0.4
-					}
-
-					ArcDial {
-						id: specimenMark
-						anchors.left: parent.left
-						anchors.top: parent.top
-						anchors.topMargin: Arc.s2
-						width: 96
-						height: 96
-						seed: appList.currentIndex % 4
-						weight: Arc.rule * 1.2
-						lineColor: Arc.giltDim
-						intensity: 1
-
-						Image {
-							anchors.centerIn: parent
-							width: 50
-							height: 50
-							source: colony.current ? root.iconSource(colony.current) : ""
-							sourceSize: Qt.size(width, height)
-							fillMode: Image.PreserveAspectFit
-							smooth: true
-							mipmap: true
-						}
-					}
-
-					Column {
-						id: specimenBody
-						anchors.left: parent.left
-						anchors.right: parent.right
-						anchors.rightMargin: Arc.s6
-						anchors.top: parent.top
-						anchors.topMargin: 120
-						spacing: Arc.s2
-
-						ArcText {
-							width: parent.width
-							role: "display"
-							font.pixelSize: 34
-							wrapMode: Text.NoWrap
-							text: colony.current ? (colony.current.name || colony.current.id || "") : ""
-						}
-
-						// What the thing is actually called when it is called.
-						ArcText {
-							width: parent.width
-							role: "hand"
-							tone: "aether"
-							font.pixelSize: 19
-							visible: text !== ""
-							text: colony.current ? root.trueName(colony.current) : ""
-						}
-
-						ArcText {
-							width: parent.width
-							role: "body"
-							tone: "muted"
-							wrapMode: Text.WordWrap
-							maximumLineCount: 3
-							visible: text !== ""
-							text: colony.current
-								? (colony.current.comment || colony.current.genericName || "")
-								: ""
-						}
-
-						Item {
-							width: 1
-							height: Arc.s3
-						}
-
-						ArcFlourish {
-							width: Math.min(parent.width, 220)
-							height: 12
-							facing: Qt.LeftToRight
-							lineColor: Arc.giltFaint
-						}
-
-						ArcText {
-							width: parent.width
-							role: "mono"
-							tone: "faint"
-							font.pixelSize: 11
-							visible: text !== ""
-							text: colony.current
-								? String((colony.current.command || []).join(" ")).slice(0, 120)
-								: ""
-						}
-					}
-
-					// What pressing return will do to it.
-					Row {
-						anchors.left: parent.left
-						anchors.bottom: parent.bottom
-						anchors.bottomMargin: Arc.s3
-						spacing: Arc.s3
-
-						ArcText {
-							role: "label"
-							tone: "aether"
-							text: "Return"
-						}
-
-						ArcText {
-							role: "label"
-							tone: "faint"
-							text: "to call it"
-						}
+					ArcText {
+						anchors.horizontalCenter: parent.horizontalCenter
+						role: "hand"
+						tone: "faint"
+						text: root.searchText.trim() === ""
+							? "The book is open and empty"
+							: "No such spell is written here"
 					}
 				}
 			}
 
-			// The cantrips, on the same spread as everything else: the verbs on
-			// the verso, and whichever one the cursor is on written out on the
-			// recto. A list that spanned both pages would be a list in a book,
-			// not a page of a book.
-			Item {
-				id: cantripSpread
-
+			// The cantrips: the verbs the codex knows, written the way the
+			// spells are — one column, the word you say large, what it does
+			// underneath. There is no facing page; a book of instructions is a
+			// list of instructions.
+			ListView {
+				id: commandList
 				width: parent.width
 				height: dish.viewHeight
-				// Bound to the modes directly, not to the list's own `visible`:
-				// an Item's visible is the *effective* one, so a child of a
-				// hidden parent reads false and the pair would latch off.
 				visible: root.inCommandMode
 					&& !root.inCalculatorMode
 					&& !root.inAiMode
 					&& !root.inChatMode
 					&& !root.inOllamaMode
 					&& !root.inFileMode
-
-				readonly property var chosen: commandList.currentIndex >= 0
-					&& commandList.currentIndex < root.filteredCommands.length
-					? root.filteredCommands[commandList.currentIndex]
-					: null
-
-				ArcText {
-					id: cantripHead
-					anchors.left: parent.left
-					anchors.leftMargin: Math.round((parent.width + root.gutter) / 2) + Arc.s4
-					anchors.top: parent.top
-					role: "label"
-					tone: "muted"
-					text: cantripSpread.chosen ? "The Speaking" : ""
-				}
-
-				Column {
-					anchors.left: parent.left
-					anchors.leftMargin: Math.round((parent.width + root.gutter) / 2) + Arc.s4
-					anchors.right: parent.right
-					anchors.top: cantripHead.bottom
-					anchors.topMargin: Arc.s6
-					spacing: Arc.s3
-					visible: cantripSpread.chosen !== null
-
-					ArcDial {
-						width: 86
-						height: 86
-						seed: commandList.currentIndex % 4
-						weight: Arc.rule * 1.2
-						lineColor: Arc.giltDim
-						intensity: 1
-
-						QQCImpl.IconImage {
-							anchors.centerIn: parent
-							width: 34
-							height: 34
-							source: cantripSpread.chosen ? root.commandIconSource(cantripSpread.chosen) : ""
-							sourceSize: Qt.size(width, height)
-							color: Arc.aether
-						}
-					}
-
-					ArcText {
-						width: parent.width
-						role: "display"
-						font.pixelSize: 32
-						text: cantripSpread.chosen ? (cantripSpread.chosen.name || "Cantrip") : ""
-					}
-
-					ArcText {
-						width: parent.width
-						role: "hand"
-						tone: "aether"
-						font.pixelSize: 18
-						text: cantripSpread.chosen ? `>${cantripSpread.chosen.command || cantripSpread.chosen.id || ""}` : ""
-					}
-
-					ArcText {
-						width: parent.width
-						role: "body"
-						tone: "muted"
-						wrapMode: Text.WordWrap
-						text: cantripSpread.chosen ? (cantripSpread.chosen.description || "") : ""
-					}
-				}
-
-			ListView {
-				id: commandList
-				width: Math.round((parent.width - root.gutter) / 2)
-				height: parent.height
 				clip: true
-				spacing: 6
+				spacing: 2
 				model: root.filteredCommands
 				currentIndex: model.length > 0 ? 0 : -1
 				boundsBehavior: Flickable.StopAtBounds
 
-				// A verb: the word you type in mono, what it does underneath,
-				// and a ring that lights when it is the one under the cursor.
-				delegate: ArcEntry {
+				delegate: Item {
 					id: commandRow
 
 					required property var modelData
 					required property int index
+					readonly property bool selected: commandList.currentIndex === commandRow.index
 
 					width: commandList.width
-					implicitHeight: 48
-					inset: Arc.s3
-					selected: commandList.currentIndex === commandRow.index
-					onClicked: root.launchCommand(commandRow.modelData)
-					onContainsMouseChanged: {
-						if (containsMouse) commandList.currentIndex = commandRow.index;
+					height: 44
+
+					ArcRune {
+						id: verbRune
+						anchors.left: parent.left
+						anchors.leftMargin: Arc.s2
+						anchors.verticalCenter: parent.verticalCenter
+						width: 14
+						height: 20
+						seed: commandRow.index * 5 + 11
+						weight: Arc.ruleThin
+						lineColor: commandRow.selected ? Arc.aether : Qt.alpha(Arc.gold, 0.3)
 					}
 
-					ArcDial {
-						id: commandRing
-						anchors.left: parent.left
-						anchors.verticalCenter: parent.verticalCenter
-						width: 30
-						height: 30
-						seed: commandRow.index % 4
-						lineColor: Arc.giltGhost
-						intensity: commandRow.selected ? 1 : 0
+					ArcHalo {
+						anchors.centerIn: verbRune
+						width: 56
+						height: 56
+						color: Arc.aether
+						strength: 0.34
+						spread: 0.3
+						flicker: true
+						opacity: commandRow.selected ? 1 : 0
+						visible: opacity > 0.01
 
-						QQCImpl.IconImage {
-							anchors.centerIn: parent
-							width: 15
-							height: 15
-							source: root.commandIconSource(commandRow.modelData)
-							sourceSize: Qt.size(width, height)
-							color: commandRow.selected ? Arc.aether : Arc.ink
+						Behavior on opacity {
+							NumberAnimation { duration: Arc.turn }
 						}
 					}
 
 					Column {
-						anchors.left: commandRing.right
-						anchors.leftMargin: Arc.s3
+						anchors.left: verbRune.right
+						anchors.leftMargin: Arc.s4
 						anchors.right: parent.right
+						anchors.rightMargin: Arc.s3
 						anchors.verticalCenter: parent.verticalCenter
-						spacing: -1
+						spacing: -3
+
+						transform: Translate {
+							x: commandRow.selected ? 5 : 0
+
+							Behavior on x {
+								NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveSnap }
+							}
+						}
 
 						ArcText {
 							width: parent.width
-							role: "mono"
-							font.pixelSize: 13
-							color: commandRow.selected ? Arc.aether : Arc.ink
-							text: `>${commandRow.modelData.command || commandRow.modelData.id || "command"}`
+							role: "hand"
+							font.pixelSize: 20
+							tone: commandRow.selected ? "aether" : "default"
+							text: commandRow.modelData.name || "Cantrip"
 						}
 
 						ArcText {
 							width: parent.width
 							role: "caption"
-							tone: "faint"
-							text: `${commandRow.modelData.name || "Command"} · ${commandRow.modelData.description || ""}`
+							tone: commandRow.selected ? "muted" : "faint"
+							text: `>${commandRow.modelData.command || commandRow.modelData.id || ""} · ${commandRow.modelData.description || ""}`
 						}
+					}
+
+					Rectangle {
+						anchors.left: verbRune.right
+						anchors.leftMargin: Arc.s4
+						anchors.bottom: parent.bottom
+						height: Arc.ruleThin
+						width: commandRow.selected ? parent.width - verbRune.width - Arc.s6 : 0
+						color: Arc.aether
+
+						Behavior on width {
+							NumberAnimation { duration: Arc.draw; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveInk }
+						}
+					}
+
+					ArcTouch {
+						onEntered: commandList.currentIndex = commandRow.index
+						onClicked: root.launchCommand(commandRow.modelData)
 					}
 				}
 
 				ScrollBar.vertical: ScrollBar {
 					policy: ScrollBar.AsNeeded
 				}
-			}
 			}
 
 			Item {
@@ -3640,7 +3124,7 @@ Item {
 						anchors.horizontalCenter: parent.horizontalCenter
 						height: 12
 						facing: Qt.LeftToRight
-						lineColor: root.calculatorEvaluation.valid ? Qt.alpha(Arc.aether, 0.6) : Arc.giltGhost
+						lineColor: root.calculatorEvaluation.valid ? Qt.alpha(Arc.aether, 0.6) : Arc.goldGhost
 					}
 
 					ArcText {
@@ -3806,7 +3290,7 @@ Item {
 									ArcDial {
 										anchors.fill: parent
 										seed: fileRow.index % 4
-										lineColor: Arc.giltGhost
+										lineColor: Arc.goldGhost
 										intensity: fileRow.selected ? 1 : 0
 									}
 
@@ -3952,7 +3436,7 @@ Item {
 							anchors.verticalCenter: parent.verticalCenter
 							height: 12
 							facing: Qt.LeftToRight
-							lineColor: Arc.giltFaint
+							lineColor: Arc.goldFaint
 							visible: width > 24
 						}
 
@@ -4048,7 +3532,7 @@ Item {
 								width: 48
 								height: 48
 								seed: 31
-								lineColor: Arc.giltGhost
+								lineColor: Arc.goldGhost
 							}
 
 							ArcText {
@@ -4163,7 +3647,7 @@ Item {
 								anchors.right: parent.right
 								anchors.bottom: parent.bottom
 								height: Arc.ruleThin
-								color: Arc.giltFaint
+								color: Arc.goldFaint
 							}
 
 							Rectangle {
@@ -4288,7 +3772,7 @@ Item {
 						anchors.verticalCenter: parent.verticalCenter
 						height: 12
 						facing: Qt.LeftToRight
-						lineColor: Arc.giltFaint
+						lineColor: Arc.goldFaint
 						visible: width > 24
 					}
 
@@ -4486,7 +3970,7 @@ Item {
 						anchors.right: parent.right
 						anchors.bottom: parent.bottom
 						height: Arc.ruleThin
-						color: Arc.giltGhost
+						color: Arc.goldGhost
 					}
 
 					ArcSeat {
@@ -4894,9 +4378,9 @@ Item {
 								padding: Arc.s4
 								haloStrength: messageRow.fromUser ? 0.14 : 0.06
 								intensity: messageRow.fromUser ? 0.55 : 0
-								lineColor: messageRow.fromUser ? Qt.alpha(Arc.aether, 0.5) : Arc.giltFaint
-								washTop: messageRow.fromUser ? Qt.alpha(Arc.aether, 0.12) : Arc.leaf2
-								washBottom: messageRow.fromUser ? Arc.washDeep : Arc.leaf1
+								lineColor: messageRow.fromUser ? Qt.alpha(Arc.aether, 0.5) : Arc.goldFaint
+								washTop: messageRow.fromUser ? Qt.alpha(Arc.aether, 0.12) : Arc.veil2
+								washBottom: messageRow.fromUser ? Arc.hazeDeep : Arc.veil1
 
 									ArcText {
 										visible: messageRow.loadingModel
@@ -5372,6 +4856,393 @@ Item {
 					elide: Text.ElideRight
 					font.pixelSize: 11
 					font.weight: Font.Medium
+				}
+			}
+
+			// The runes at the foot of the page, as the reference draws them.
+			// They are not decoration: each one lights as far as the list has
+			// been narrowed, so they read as how much of the book is left.
+			Item {
+				id: plate
+				width: parent.width
+				height: 30
+				opacity: root.band(1)
+
+				Canvas {
+					id: footRunes
+					anchors.centerIn: parent
+					width: 200
+					height: 24
+					renderStrategy: Canvas.Cooperative
+
+					readonly property int lit: {
+						const total = Math.max(1, root.allApps.length);
+						const shown = root.filteredApps.length;
+						return Math.max(1, Math.round(5 * (1 - shown / total)));
+					}
+
+					onLitChanged: requestPaint()
+
+					Connections {
+						target: Arc
+						function onGoldChanged() { footRunes.requestPaint(); }
+					}
+
+					onPaint: {
+						const ctx = getContext("2d");
+						ctx.reset();
+						for (let index = 0; index < 5; index++) {
+							Ink.rune(ctx, 20 + index * 40, height / 2, 20, 31 + index * 11,
+								Arc.rule * 1.3,
+								index < footRunes.lit ? Arc.aether : Qt.alpha(Arc.gold, 0.55));
+						}
+					}
+				}
+			}
+
+			Item {
+				id: searchBox
+				width: parent.width
+				opacity: root.band(0)
+				height: root.inChatMode
+					? Math.min(190, Math.max(58, searchField.contentHeight + 24))
+					: 58
+
+				Rectangle {
+					anchors.left: parent.left
+					anchors.right: parent.right
+					anchors.bottom: parent.bottom
+					height: Arc.ruleThin
+					color: Arc.goldFaint
+				}
+
+				Rectangle {
+					anchors.left: parent.left
+					anchors.bottom: parent.bottom
+					width: searchField.activeFocus || root.editingMessageId !== "" ? parent.width : 0
+					height: Arc.rule
+					color: Arc.aether
+
+					Behavior on width {
+						NumberAnimation { duration: Arc.turn; easing.type: Easing.OutCubic }
+					}
+				}
+
+				ArcDial {
+					id: probeRing
+					anchors.left: parent.left
+					anchors.verticalCenter: parent.verticalCenter
+					width: 36
+					height: 36
+					seed: 1
+					lineColor: Arc.goldFaint
+					intensity: searchField.activeFocus ? 0.85 : 0
+
+					QQCImpl.IconImage {
+						id: inputCommandIcon
+						anchors.centerIn: parent
+						width: 17
+						height: 17
+						source: root.inputIconPath
+						sourceSize: Qt.size(width, height)
+						color: searchField.activeFocus ? Arc.aether : Arc.ink
+					}
+				}
+
+				Item {
+					id: commandTokenBox
+					anchors.left: probeRing.right
+					anchors.leftMargin: Arc.s3
+					anchors.verticalCenter: parent.verticalCenter
+					width: visible ? Math.min(140, Math.max(30, commandTokenField.contentWidth + 14)) : 0
+					height: 24
+					visible: root.commandInputActive
+
+					ArcPlate {
+						anchors.fill: parent
+						variant: "capsule"
+						beading: false
+						weight: Arc.ruleThin
+						inset: 1
+						lineColor: Arc.goldFaint
+						liveColor: Arc.aether
+						fillTop: Arc.depth
+						fillBottom: Arc.depth
+						intensity: commandTokenField.activeFocus ? 1 : 0
+					}
+
+					TextInput {
+						id: commandTokenField
+						anchors.fill: parent
+						anchors.leftMargin: 7
+						anchors.rightMargin: 7
+						text: ">"
+						color: commandTokenField.activeFocus ? Arc.aether : Arc.inkMuted
+						selectionColor: Qt.alpha(Arc.aether, 0.35)
+						selectedTextColor: Arc.ink
+						cursorVisible: activeFocus
+						verticalAlignment: Text.AlignVCenter
+						clip: true
+						font.family: Arc.mono
+						font.pixelSize: 12
+
+						onTextChanged: {
+							if (root.commandInputSyncing) return;
+							if (text === "") {
+								root.leaveCommandInput("");
+								return;
+							}
+							if (!text.startsWith(">")) {
+								root.commandInputSyncing = true;
+								text = `>${text.replace(/^>+/, "")}`;
+								cursorPosition = text.length;
+								root.commandInputSyncing = false;
+							}
+							root.syncLauncherSearch();
+						}
+
+						Keys.onEscapePressed: root.closeRequested()
+						Keys.onPressed: event => {
+							if (event.key === Qt.Key_Space) {
+								root.focusCommandArgument();
+								event.accepted = true;
+								return;
+							}
+							if (event.key === Qt.Key_Backspace && commandTokenField.text === ">") {
+								root.leaveCommandInput("");
+								event.accepted = true;
+								return;
+							}
+							if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+								root.activateCurrent();
+								event.accepted = true;
+							}
+						}
+						Keys.onDownPressed: {
+							if (root.inFileMode) {
+								if (root.filteredFileBrowserEntries.length === 0) return;
+								fileBrowserList.currentIndex = Math.min(root.filteredFileBrowserEntries.length - 1, fileBrowserList.currentIndex + 1);
+								fileBrowserList.positionViewAtIndex(fileBrowserList.currentIndex, ListView.Contain);
+								return;
+							}
+							if (root.filteredCommands.length === 0) return;
+							commandList.currentIndex = Math.min(root.filteredCommands.length - 1, commandList.currentIndex + 1);
+							commandList.positionViewAtIndex(commandList.currentIndex, ListView.Contain);
+						}
+						Keys.onUpPressed: {
+							if (root.inFileMode) {
+								if (root.filteredFileBrowserEntries.length === 0) return;
+								fileBrowserList.currentIndex = Math.max(0, fileBrowserList.currentIndex - 1);
+								fileBrowserList.positionViewAtIndex(fileBrowserList.currentIndex, ListView.Contain);
+								return;
+							}
+							if (root.filteredCommands.length === 0) return;
+							commandList.currentIndex = Math.max(0, commandList.currentIndex - 1);
+							commandList.positionViewAtIndex(commandList.currentIndex, ListView.Contain);
+						}
+					}
+				}
+
+				TextArea {
+					id: searchField
+					z: 1
+					anchors.left: root.commandInputActive ? commandTokenBox.right : probeRing.right
+					anchors.leftMargin: Arc.s3
+					anchors.right: attachButton.visible ? attachButton.left : clearButton.left
+					anchors.rightMargin: Arc.s3
+					anchors.top: parent.top
+					anchors.bottom: parent.bottom
+					anchors.bottomMargin: Arc.s2
+					font.family: root.inChatMode ? Arc.book : Arc.cut
+					font.pixelSize: root.inChatMode ? Arc.sizeBody : 28
+					color: Arc.ink
+					placeholderText: root.inChatMode
+						? "Put the question"
+						: (root.inAiMode
+							? "Search the discourses"
+							: (root.inFileMode
+								? "Search the vault"
+								: (root.inCalculatorMode
+									? "Set down the reckoning"
+									: (root.commandInputActive ? "Options" : "Name a thing, or speak a cantrip with >"))))
+					placeholderTextColor: Arc.inkFaint
+					selectedTextColor: Arc.ink
+					selectionColor: Qt.alpha(Arc.aether, 0.3)
+					selectByMouse: true
+					focus: true
+					cursorVisible: activeFocus
+					clip: true
+					wrapMode: root.inChatMode ? TextEdit.Wrap : TextEdit.NoWrap
+					horizontalAlignment: Text.AlignLeft
+					verticalAlignment: Text.AlignVCenter
+					background: Item {}
+					cursorDelegate: ThemedRectangle {
+						visible: searchField.activeFocus
+						width: root.inChatMode ? 1 : 2
+						height: searchField.font.pixelSize + 3
+						color: Arc.aether
+					}
+
+					onTextChanged: {
+						if (root.commandInputSyncing) return;
+						if (!root.commandInputActive && text.startsWith(">")) {
+							root.enterCommandInput(text, false);
+							return;
+						}
+						if (root.commandInputActive && text !== "" && !root.commandInputHasSeparator)
+							root.commandInputHasSeparator = true;
+						root.syncLauncherSearch();
+					}
+
+					onActiveFocusChanged: {
+						if (!activeFocus || !root.commandInputActive || root.commandInputHasSeparator) return;
+						root.commandInputHasSeparator = true;
+						root.syncLauncherSearch();
+					}
+
+					Keys.onEscapePressed: root.closeRequested()
+					Keys.onPressed: event => {
+						if (
+							event.key === Qt.Key_Backspace
+							&& root.commandInputActive
+							&& searchField.text === ""
+							&& searchField.cursorPosition === 0
+						) {
+							event.accepted = root.focusCommandTokenFromEmptyArgument();
+							if (event.accepted) return;
+						}
+						if (event.key !== Qt.Key_Return && event.key !== Qt.Key_Enter) return;
+						if (root.inChatMode && (event.modifiers & Qt.ShiftModifier)) {
+							searchField.insert(searchField.cursorPosition, "\n");
+							event.accepted = true;
+							return;
+						}
+						root.activateCurrent();
+						event.accepted = true;
+					}
+					Keys.onLeftPressed: event => {
+						if (root.inFileMode || root.inCalculatorMode || root.inAiMode || root.inChatMode || root.inOllamaMode || root.inCommandMode || root.filteredApps.length === 0) {
+							event.accepted = false;
+							return;
+						}
+						appList.currentIndex = Math.max(0, appList.currentIndex - 8);
+						appList.positionViewAtIndex(appList.currentIndex, ListView.Contain);
+						event.accepted = true;
+					}
+					Keys.onRightPressed: event => {
+						if (root.inFileMode || root.inCalculatorMode || root.inAiMode || root.inChatMode || root.inOllamaMode || root.inCommandMode || root.filteredApps.length === 0) {
+							event.accepted = false;
+							return;
+						}
+						appList.currentIndex = Math.min(root.filteredApps.length - 1, appList.currentIndex + 8);
+						appList.positionViewAtIndex(appList.currentIndex, ListView.Contain);
+						event.accepted = true;
+					}
+					Keys.onDownPressed: {
+						if (root.inFileMode) {
+							if (root.filteredFileBrowserEntries.length === 0) return;
+							fileBrowserList.currentIndex = Math.min(root.filteredFileBrowserEntries.length - 1, fileBrowserList.currentIndex + 1);
+							fileBrowserList.positionViewAtIndex(fileBrowserList.currentIndex, ListView.Contain);
+							return;
+						}
+						if (root.inCalculatorMode || root.inAiMode || root.inChatMode || root.inOllamaMode) return;
+						if (root.inCommandMode) {
+							if (root.filteredCommands.length === 0) return;
+							commandList.currentIndex = Math.min(root.filteredCommands.length - 1, commandList.currentIndex + 1);
+							commandList.positionViewAtIndex(commandList.currentIndex, ListView.Contain);
+							return;
+						}
+
+						if (root.filteredApps.length === 0) return;
+						appList.currentIndex = Math.min(root.filteredApps.length - 1, appList.currentIndex + appList.columns);
+						appList.positionViewAtIndex(appList.currentIndex, ListView.Contain);
+					}
+					Keys.onUpPressed: {
+						if (root.inFileMode) {
+							if (root.filteredFileBrowserEntries.length === 0) return;
+							fileBrowserList.currentIndex = Math.max(0, fileBrowserList.currentIndex - 1);
+							fileBrowserList.positionViewAtIndex(fileBrowserList.currentIndex, ListView.Contain);
+							return;
+						}
+						if (root.inCalculatorMode || root.inAiMode || root.inChatMode || root.inOllamaMode) return;
+						if (root.inCommandMode) {
+							if (root.filteredCommands.length === 0) return;
+							commandList.currentIndex = Math.max(0, commandList.currentIndex - 1);
+							commandList.positionViewAtIndex(commandList.currentIndex, ListView.Contain);
+							return;
+						}
+
+						if (root.filteredApps.length === 0) return;
+						appList.currentIndex = Math.max(0, appList.currentIndex - appList.columns);
+						appList.positionViewAtIndex(appList.currentIndex, ListView.Contain);
+					}
+				}
+
+				Item {
+					id: attachButton
+					anchors.right: clearButton.left
+					anchors.rightMargin: 4
+					anchors.verticalCenter: parent.verticalCenter
+					width: 22
+					height: 22
+					visible: root.inChatMode && !root.aiStreaming
+
+					MouseArea {
+						id: attachMouse
+						anchors.fill: parent
+						hoverEnabled: true
+						cursorShape: Qt.PointingHandCursor
+						onClicked: root.aiAttachmentPickerOpen
+							? root.closeAttachmentPicker()
+							: root.openAttachmentPicker()
+					}
+
+					QQCImpl.IconImage {
+						anchors.centerIn: parent
+						width: 14
+						height: 14
+						source: root.attachmentIconPath
+						sourceSize: Qt.size(width, height)
+						color: attachMouse.containsMouse || root.aiAttachmentPickerOpen ? Arc.aether : Arc.inkMuted
+					}
+
+					ToolTip.visible: attachMouse.containsMouse
+					ToolTip.delay: 500
+					ToolTip.text: root.selectedAiSupportsVision
+						? "Attach text, document, PDF, or image"
+						: "Attach text, document, or PDF"
+				}
+
+				Item {
+					id: clearButton
+					anchors.right: parent.right
+					anchors.verticalCenter: parent.verticalCenter
+					width: 22
+					height: 22
+					visible: (root.aiStreaming && root.inChatMode) || root.commandInputActive || searchField.text !== ""
+
+					MouseArea {
+						id: clearMouse
+						anchors.fill: parent
+						hoverEnabled: true
+						cursorShape: Qt.PointingHandCursor
+						onClicked: {
+							if (root.aiStreaming && root.inChatMode) root.cancelAiStream();
+							else if (root.editingMessageId !== "") root.cancelMessageEdit();
+							else root.leaveCommandInput("");
+						}
+					}
+
+					ArcText {
+						anchors.centerIn: parent
+						role: "body"
+						tone: clearMouse.containsMouse ? "aether" : "faint"
+						text: root.aiStreaming && root.inChatMode ? "■" : "×"
+					}
+
+					ToolTip.visible: clearMouse.containsMouse && root.aiStreaming && root.inChatMode
+					ToolTip.delay: 500
+					ToolTip.text: "Stop and unload model"
 				}
 			}
 

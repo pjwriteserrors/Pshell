@@ -2,10 +2,12 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 
-// Somewhere to write. No box: the text sits on a ruled line, and taking the
-// keyboard draws an ink line over the rule from the left at the speed a nib
-// travels, with a blot where the nib was set down. Losing the keyboard lifts
-// the nib and the line is taken back the way it came.
+// Somewhere to speak.
+//
+// No box and no rule under it. What you are writing simply glows: a soft light
+// sits behind the line while the field holds the keyboard, and the caret is a
+// mote rather than a bar. Taking the keyboard draws a ley outwards from the
+// middle in both directions, which is how a conjuring opens everywhere else.
 Item {
 	id: field
 
@@ -18,10 +20,24 @@ Item {
 	signal accepted(string value)
 	signal edited(string value)
 
-	implicitHeight: 30
+	implicitHeight: 32
 	implicitWidth: 160
 
 	function take() { input.forceActiveFocus(); }
+
+	ArcHalo {
+		anchors.fill: parent
+		anchors.margins: -10
+		color: Arc.aether
+		strength: 0.16
+		spread: 0.5
+		opacity: input.activeFocus ? 1 : 0
+		visible: opacity > 0.01
+
+		Behavior on opacity {
+			NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveKindle }
+		}
+	}
 
 	TextInput {
 		id: input
@@ -39,31 +55,33 @@ Item {
 		selectByMouse: true
 		clip: true
 
-		// The nib, not a block caret: a wedge that is wide where it touches the
-		// line and narrow at the top, and that stops blinking while you write.
-		cursorDelegate: Canvas {
-			id: nib
-			width: 4
-			renderStrategy: Canvas.Cooperative
+		// A mote for a caret, breathing rather than blinking.
+		cursorDelegate: Item {
+			width: 6
 
-			onPaint: {
-				const ctx = getContext("2d");
-				ctx.reset();
-				ctx.fillStyle = Arc.aether;
-				ctx.beginPath();
-				ctx.moveTo(width * 0.5, 0);
-				ctx.lineTo(width, height - 2);
-				ctx.lineTo(width * 0.5, height);
-				ctx.lineTo(0, height - 2);
-				ctx.closePath();
-				ctx.fill();
+			Rectangle {
+				anchors.centerIn: parent
+				width: 5
+				height: 5
+				radius: 2.5
+				color: Arc.aether
+
+				SequentialAnimation on opacity {
+					running: input.activeFocus
+					loops: Animation.Infinite
+					NumberAnimation { to: 0.3; duration: 620; easing.type: Easing.InOutSine }
+					NumberAnimation { to: 1.0; duration: 620; easing.type: Easing.InOutSine }
+				}
 			}
 
-			SequentialAnimation on opacity {
-				running: input.activeFocus
-				loops: Animation.Infinite
-				NumberAnimation { to: 0.25; duration: 520; easing.type: Easing.InOutSine }
-				NumberAnimation { to: 1.0; duration: 520; easing.type: Easing.InOutSine }
+			ArcHalo {
+				anchors.centerIn: parent
+				width: 26
+				height: 26
+				color: Arc.aether
+				strength: 0.55
+				spread: 0.32
+				flicker: true
 			}
 		}
 
@@ -84,46 +102,33 @@ Item {
 		visible: input.text === ""
 	}
 
-	// The rule the writing sits on.
-	Rectangle {
+	// The ley, drawn outwards from the middle when the field is spoken into.
+	Item {
 		anchors.left: parent.left
 		anchors.right: parent.right
 		anchors.bottom: parent.bottom
-		height: Arc.ruleThin
-		color: Arc.giltFaint
-	}
-
-	// The ink line drawn over it while the field has the keyboard.
-	Rectangle {
-		id: stroke
-		anchors.left: parent.left
-		anchors.bottom: parent.bottom
-		width: input.activeFocus ? parent.width : 0
 		height: Arc.rule
-		color: Arc.aether
 
-		Behavior on width {
-			NumberAnimation {
-				duration: Arc.draw
-				easing.type: Easing.Bezier
-				easing.bezierCurve: Arc.curveInk
-			}
+		Rectangle {
+			anchors.horizontalCenter: parent.horizontalCenter
+			width: parent.width
+			height: Arc.ruleThin
+			color: Arc.goldGhost
 		}
-	}
 
-	// The blot where the nib was set down.
-	Rectangle {
-		anchors.left: parent.left
-		anchors.bottom: parent.bottom
-		anchors.bottomMargin: -1
-		width: 3
-		height: 3
-		rotation: 45
-		color: Arc.aether
-		opacity: input.activeFocus ? 1 : 0
+		Rectangle {
+			anchors.horizontalCenter: parent.horizontalCenter
+			width: input.activeFocus ? parent.width : 0
+			height: Arc.rule
+			color: Arc.aether
 
-		Behavior on opacity {
-			NumberAnimation { duration: Arc.tick }
+			Behavior on width {
+				NumberAnimation {
+					duration: Arc.draw
+					easing.type: Easing.Bezier
+					easing.bezierCurve: Arc.curveInk
+				}
+			}
 		}
 	}
 }

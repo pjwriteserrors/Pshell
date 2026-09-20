@@ -6,6 +6,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Widgets
 import "components"
+import "components/ArcInk.js" as Ink
 
 // Media popup, redesigned around the cava visualizer:
 // a full-width spectrum hero with the cover art and track info floating
@@ -152,76 +153,89 @@ Item {
 		width: parent.width
 		spacing: 14
 
-		// hero: spectrum with cover + titles floating on top
+		// THE CONSORT.
+		//
+		// What is playing is a disc, and it turns while it is playing. The
+		// artwork is cut round; the position is a ring drawn round that; and
+		// the sound itself stands off the rim as rays rather than as a row of
+		// bars along the bottom — so the whole thing is one object with the
+		// music coming out of it, which is what a consort is.
 		Item {
 			id: hero
 			width: parent.width
-			height: 190
+			height: 250
 
-			Row {
-				id: spectrum
-				anchors.fill: parent
-				spacing: 3
+			readonly property real discSize: 132
 
-				readonly property real barWidth: (width - (cava.bars - 1) * 3) / cava.bars
+			// The sound, thrown off the rim.
+			Canvas {
+				id: rays
+				anchors.centerIn: disc
+				width: hero.discSize * 2.4
+				height: hero.discSize * 2.4
+				renderStrategy: Canvas.Cooperative
 
-				Repeater {
-					model: cava.bars
+				property int tick: 0
 
-					delegate: Item {
-						id: barSlot
-						required property int index
-						readonly property real level: cava.values[index] || 0
+				Connections {
+					target: cava
+					function onValuesChanged() { rays.tick += 1; rays.requestPaint(); }
+				}
 
-						width: spectrum.barWidth
-						height: spectrum.height
-
-						// Cilia: the sound as a bed of hairs standing up, lit from
-						// the organ colour through to its neighbour along the row.
-						// Silence has to look like silence, so at rest they all
-						// but disappear instead of lying there as a dotted rule.
-						Rectangle {
-							anchors.bottom: parent.bottom
-							anchors.horizontalCenter: parent.horizontalCenter
-							width: Math.max(2, parent.width * 0.5)
-							height: Math.max(2, barSlot.level * (parent.height - 8))
-							radius: width / 2
-							color: Qt.alpha(
-								Arc.mix(Arc.aether, Arc.aetherAlt, barSlot.index / cava.bars),
-								0.06 + 0.78 * barSlot.level
-							)
-
-							Behavior on height {
-								NumberAnimation {
-									duration: ThemeEngine.duration(70)
-									easing.type: Easing.OutQuad
-								}
-							}
-						}
+				onPaint: {
+					const ctx = getContext("2d");
+					ctx.reset();
+					const cx = width / 2, cy = height / 2;
+					const inner = hero.discSize / 2 + 12;
+					const count = cava.bars;
+					if (!count) return;
+					for (let index = 0; index < count; index++) {
+						const level = cava.values[index] || 0;
+						const angle = -Math.PI / 2 + Math.PI * 2 * index / count;
+						const outer = inner + 6 + level * (width / 2 - inner - 10);
+						const tint = Arc.mix(Arc.aether, Arc.aetherAlt, index / count);
+						Ink.ley(ctx,
+							cx + Math.cos(angle) * inner, cy + Math.sin(angle) * inner,
+							cx + Math.cos(angle) * outer, cy + Math.sin(angle) * outer,
+							2.0, Qt.alpha(tint, 0.10 + level * 0.8), null, -1);
 					}
 				}
 			}
 
-			Row {
-				anchors.left: parent.left
-				anchors.bottom: parent.bottom
-				anchors.bottomMargin: 6
-				spacing: 12
+			ArcHalo {
+				anchors.centerIn: disc
+				width: hero.discSize * 2.1
+				height: hero.discSize * 2.1
+				color: Arc.aether
+				strength: 0.20
+				spread: 0.32
+				flicker: true
+			}
+
+			// The disc.
+			Item {
+				id: disc
+				anchors.horizontalCenter: parent.horizontalCenter
+				anchors.top: parent.top
+				width: hero.discSize
+				height: hero.discSize
+
+				property real spin: 0
+
+				NumberAnimation on spin {
+					running: root.isPlaying
+					loops: Animation.Infinite
+					from: 0
+					to: 360
+					duration: 24000
+				}
 
 				ClippingRectangle {
-					width: 78
-					height: 78
-					radius: 3
-					color: Arc.well
-
-					ArcPlate {
-						anchors.fill: parent
-						z: 2
-						variant: "plate"
-						weight: Arc.ruleThin
-						lineColor: Arc.giltDim
-						liveColor: Arc.aether
-					}
+					anchors.fill: parent
+					anchors.margins: 9
+					radius: width / 2
+					color: Arc.depth
+					rotation: disc.spin
 
 					Image {
 						anchors.fill: parent
@@ -232,90 +246,90 @@ Item {
 						mipmap: true
 					}
 
-					QQCImpl.IconImage {
+					ArcMark {
 						anchors.centerIn: parent
 						visible: root.coverSource === ""
-						width: 30
-						height: 30
-						source: "/usr/share/icons/Adwaita/symbolic/mimetypes/audio-x-generic-symbolic.svg"
-						sourceSize: Qt.size(width, height)
-						color: Qt.alpha(root.foreground, 0.65)
+						width: 40
+						height: 40
+						glyph: "chalice"
+						lineColor: Arc.goldDim
 					}
 				}
 
-				Column {
-					anchors.bottom: parent.bottom
-					anchors.bottomMargin: 4
-					spacing: 2
-					width: hero.width - 78 - 12
+				// The spindle hole, so it reads as a disc and not as a badge.
+				Rectangle {
+					anchors.centerIn: parent
+					width: 14
+					height: 14
+					radius: 7
+					color: Arc.depth
+					border.width: Arc.ruleThin
+					border.color: Arc.goldFaint
+				}
 
-					ArcText {
-						width: parent.width
-						role: "title"
-						font.pixelSize: 17
-						text: root.titleText
-					}
+				// How far through, taken round the rim.
+				ArcDial {
+					id: seekRing
+					anchors.fill: parent
+					lineColor: Qt.alpha(Arc.gold, 0.26)
+					liveColor: Arc.aether
+					weight: Arc.rule * 1.6
+					seed: 1
+					beading: false
+					progress: root.hasProgress ? root.trackPosition / root.trackLength : -1
 
-					ArcText {
-						width: parent.width
-						role: "body"
-						tone: "muted"
-						text: root.artistText
+					MouseArea {
+						anchors.fill: parent
+						cursorShape: root.hasProgress ? Qt.PointingHandCursor : Qt.ArrowCursor
+						acceptedButtons: Qt.LeftButton
+						onClicked: mouse => {
+							if (!root.hasProgress || !(root.player?.canSeek ?? false)) return;
+							// Seeking is turning the disc: the angle you press
+							// at from the twelve is the place in the track.
+							const dx = mouse.x - width / 2, dy = mouse.y - height / 2;
+							if (Math.sqrt(dx * dx + dy * dy) < width / 2 - 18) return;
+							let angle = Math.atan2(dy, dx) + Math.PI / 2;
+							if (angle < 0) angle += Math.PI * 2;
+							root.player.position = angle / (Math.PI * 2) * root.trackLength;
+						}
 					}
 				}
 			}
-		}
 
-		// seekable progress
-		Item {
-			width: parent.width
-			height: 26
-			visible: root.hasPlayer
-
-			ArcText {
-				anchors.left: parent.left
-				anchors.verticalCenter: parent.verticalCenter
-				role: "mono"
-				tone: "faint"
-				font.pixelSize: 10
-				text: root.formatTime(root.trackPosition)
-			}
-
-			ArcText {
-				anchors.right: parent.right
-				anchors.verticalCenter: parent.verticalCenter
-				role: "mono"
-				tone: "faint"
-				font.pixelSize: 10
-				text: root.hasProgress ? root.formatTime(root.trackLength) : "--"
-			}
-
-			Item {
-				id: seekTrack
+			Column {
+				anchors.top: disc.bottom
+				anchors.topMargin: Arc.s4
 				anchors.left: parent.left
 				anchors.right: parent.right
-				anchors.leftMargin: 42
-				anchors.rightMargin: 42
-				anchors.verticalCenter: parent.verticalCenter
-				height: 10
+				spacing: -1
 
-				ArcPhial {
-					anchors.fill: parent
-					value: root.hasProgress ? root.trackPosition / root.trackLength : 0
-					fillColor: Arc.aether
-					trackColor: Arc.giltGhost
+				ArcText {
+					width: parent.width
+					horizontalAlignment: Text.AlignHCenter
+					role: "display"
+					font.pixelSize: 19
+					text: root.titleText
 				}
 
-				MouseArea {
-					anchors.fill: parent
-					anchors.margins: -6
-					cursorShape: Qt.PointingHandCursor
-					onClicked: mouse => {
-						if (!root.hasProgress || !(root.player?.canSeek ?? false))
-							return;
-						const ratio = Math.max(0, Math.min(1, mouse.x / seekTrack.width));
-						root.player.position = ratio * root.trackLength;
-					}
+				ArcText {
+					width: parent.width
+					horizontalAlignment: Text.AlignHCenter
+					role: "hand"
+					tone: "muted"
+					font.pixelSize: 15
+					text: root.artistText
+				}
+
+				ArcText {
+					width: parent.width
+					horizontalAlignment: Text.AlignHCenter
+					role: "mono"
+					tone: "faint"
+					font.pixelSize: 10
+					visible: root.hasPlayer
+					text: root.hasProgress
+						? `${root.formatTime(root.trackPosition)} · ${root.formatTime(root.trackLength)}`
+						: root.formatTime(root.trackPosition)
 				}
 			}
 		}
@@ -400,8 +414,8 @@ Item {
 				ArcPhial {
 					anchors.fill: parent
 					value: Math.min(1, root.sinkVolume)
-					fillColor: root.sinkMuted ? Arc.giltDim : Arc.aether
-					trackColor: Arc.giltGhost
+					fillColor: root.sinkMuted ? Arc.goldDim : Arc.aether
+					trackColor: Arc.goldGhost
 				}
 
 				MouseArea {
@@ -461,10 +475,10 @@ Item {
 
 						Rectangle {
 							anchors.verticalCenter: parent.verticalCenter
-							width: Arc.stud * 2
-							height: Arc.stud * 2
+							width: Arc.mote * 2
+							height: Arc.mote * 2
 							radius: width / 2
-							color: sinkRow.modelData.active ? Arc.aether : Arc.giltFaint
+							color: sinkRow.modelData.active ? Arc.aether : Arc.goldFaint
 						}
 
 						ArcText {

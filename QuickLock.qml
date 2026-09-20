@@ -226,7 +226,7 @@ Scope {
 			// higher line opacity.
 			Rectangle {
 				anchors.fill: parent
-				color: Arc.well
+				color: Arc.depth
 				opacity: 0.62 * lockWindow.reveal
 			}
 
@@ -305,7 +305,7 @@ Scope {
 					anchors.centerIn: parent
 					width: parent.width * 2.1
 					height: parent.height * 2.1
-					color: Arc.well
+					color: Arc.depth
 					strength: 0.94 * ward.inscribe
 					spread: 0.34
 					falloff: 2.8
@@ -330,7 +330,7 @@ Scope {
 
 					Connections {
 						target: Arc
-						function onGiltChanged() { wardCanvas.requestPaint(); }
+						function onGoldChanged() { wardCanvas.requestPaint(); }
 					}
 
 					onPaint: {
@@ -339,23 +339,23 @@ Scope {
 						const cx = width / 2, cy = height / 2;
 						const outer = Math.min(width, height) / 2 - 3;
 						if (outer < 20) return;
-						const shadow = Qt.alpha(Qt.darker(Arc.gilt, 2.4), 0.55);
-						const highlight = Qt.alpha(Qt.lighter(Arc.gilt, 1.8), 0.5);
+						const shadow = Qt.alpha(Qt.darker(Arc.gold, 2.4), 0.55);
+						const highlight = Qt.alpha(Qt.lighter(Arc.gold, 1.8), 0.5);
 
 						Ink.groove(ctx, Ink.arcPoints(cx, cy, outer, 0, Math.PI * 2, 96),
-							Arc.rule * 1.5, Arc.gilt, highlight, shadow, true);
+							Arc.rule * 1.5, Arc.gold, highlight, shadow, true);
 						Ink.cut(ctx, Ink.arcPoints(cx, cy, outer - 28, 0, Math.PI * 2, 96),
-							Arc.ruleThin, Qt.alpha(Arc.gilt, 0.7), true);
+							Arc.ruleThin, Qt.alpha(Arc.gold, 0.7), true);
 						Ink.cut(ctx, Ink.arcPoints(cx, cy, outer * 0.60, 0, Math.PI * 2, 80),
-							Arc.ruleThin, Qt.alpha(Arc.gilt, 0.34), true);
+							Arc.ruleThin, Qt.alpha(Arc.gold, 0.34), true);
 						Ink.graduations(ctx, cx, cy, outer - 4, -Math.PI / 2, Math.PI * 1.5,
-							96, 4, 9, 8, Arc.ruleThin, Qt.alpha(Arc.gilt, 0.5));
+							96, 4, 9, 8, Arc.ruleThin, Qt.alpha(Arc.gold, 0.5));
 
 						for (let index = 0; index < ward.slots; index++) {
 							const angle = -Math.PI / 2 + Math.PI * 2 * index / ward.slots;
 							Ink.rune(ctx, cx + Math.cos(angle) * (outer - 14),
 								cy + Math.sin(angle) * (outer - 14), 16,
-								index * 5 + 3, Arc.rule, Qt.alpha(Arc.gilt, 0.45));
+								index * 5 + 3, Arc.rule, Qt.alpha(Arc.gold, 0.45));
 						}
 					}
 				}
@@ -505,11 +505,11 @@ Scope {
 					ArcLeaf {
 						anchors.fill: parent
 						variant: "plate"
-						washTop: Arc.wash
-						washBottom: Arc.washDeep
+						washTop: Arc.haze
+						washBottom: Arc.hazeDeep
 						lineColor: root.authState === "failed" || root.authState === "max"
 							? Qt.alpha(Arc.bane, 0.6)
-							: Arc.giltDim
+							: Arc.goldDim
 						liveColor: root.authState === "failed" || root.authState === "max"
 							? Arc.bane
 							: Arc.aether
@@ -527,7 +527,7 @@ Scope {
 								width: 18
 								height: 18
 								glyph: "star"
-								lineColor: passwordPam.active ? Arc.aether : Arc.giltDim
+								lineColor: passwordPam.active ? Arc.aether : Arc.goldDim
 							}
 
 							ArcText {

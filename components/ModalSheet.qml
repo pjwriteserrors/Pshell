@@ -1,18 +1,16 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import "ArcInk.js" as Ink
 
-// The wrapper every full-screen modal sits in (power, Studio, the pickers).
+// A great conjuring: the same four movements a panel makes, at the size of the
+// screen and drawn in the middle of it rather than on the horizon.
 //
-// A modal is the book. It is lowered from the chain like every other panel, but
-// it arrives shut: two boards, clasped, with a rune stamped on the front. Then
-// it opens — the boards turn outward about the gutter, in real perspective, and
-// what was underneath them is the page.
-//
-// Closing puts the boards back the way they came and takes the book up. Nothing
-// here fades, and nothing is centred in the air with a drop shadow under it.
-//
-// Place inside a full-screen PanelWindow.
+// The ring inscribes itself around where the work will stand, so it is a
+// circle the reader is looking *down* into rather than a plate; motes gather;
+// the glass condenses out of them from the middle of the ring outward; and the
+// contents ignite last. There are no covers, no boards and nothing that opens
+// on a hinge.
 Item {
 	id: sheet
 
@@ -28,16 +26,12 @@ Item {
 
 	property real openProgress: open ? 1 : 0
 
-	// Two movements, deliberately not one. The book is lowered first and only
-	// then opened, so the reader sees an object arrive and then be used.
-	readonly property real lower: Math.max(0, Math.min(1, openProgress / 0.46))
-	readonly property real turn: Math.max(0, Math.min(1, (openProgress - 0.40) / 0.60))
+	readonly property real inscribed: Math.max(0, Math.min(1, openProgress / 0.36))
+	readonly property real condensed: Math.max(0, Math.min(1, (openProgress - 0.26) / 0.48))
+	readonly property real lit: Math.max(0, Math.min(1, (openProgress - 0.56) / 0.44))
 
 	anchors.fill: parent
 
-	// Every modal answers Escape, whatever is inside it. Unhandled keys travel
-	// up from the focused item, so a search field inside still gets first
-	// refusal.
 	focus: true
 
 	Keys.onEscapePressed: event => {
@@ -47,15 +41,30 @@ Item {
 
 	Behavior on openProgress {
 		NumberAnimation {
-			duration: sheet.open ? Arc.unroll + Arc.turn : Arc.reroll + 60
+			duration: sheet.open ? Arc.conjure + 120 : Arc.dispel + 60
 			easing.type: Easing.Bezier
-			easing.bezierCurve: sheet.open ? Arc.curveUnroll : Arc.curveReroll
+			easing.bezierCurve: sheet.open ? Arc.curveRise : Arc.curveSink
 		}
 	}
 
+	onOpenChanged: {
+		if (sheet.open) gatherTimer.restart();
+	}
+
+	Timer {
+		id: gatherTimer
+		interval: Math.round(Arc.conjure * 0.26)
+		onTriggered: {
+			if (sheet.open) motes.burst(motes.width / 2, motes.height / 2, 34);
+		}
+	}
+
+	// The scrim is an opaque pigment with the opacity doing the work, so a
+	// modal that asks for a full blackout gets one. A translucent pigment at
+	// full opacity would still let a bright window read through it.
 	Rectangle {
 		anchors.fill: parent
-		color: Arc.well
+		color: Qt.rgba(Arc.scrim.r, Arc.scrim.g, Arc.scrim.b, 1)
 		opacity: sheet.open ? sheet.scrimOpacity : 0
 
 		Behavior on opacity {
@@ -72,129 +81,76 @@ Item {
 		}
 	}
 
-	// The candle the open book is read by.
+	// The great ring, inscribed round the work.
+	Canvas {
+		id: circle
+		anchors.centerIn: rig
+		width: Math.max(rig.width, rig.height) * 1.16
+		height: width
+		renderStrategy: Canvas.Cooperative
+
+		readonly property real through: sheet.inscribed
+
+		onThroughChanged: requestPaint()
+
+		onPaint: {
+			const ctx = getContext("2d");
+			ctx.reset();
+			if (width < 40 || circle.through <= 0.002) return;
+			const cx = width / 2, cy = height / 2, r = width / 2 - 6;
+			Ink.ring(ctx, cx, cy, r, 1.6, Qt.alpha(Arc.aether, 0.55), circle.through);
+			Ink.ring(ctx, cx, cy, r - 16, 1.0, Qt.alpha(Arc.gold, 0.26), circle.through);
+			Ink.graduations(ctx, cx, cy, r - 2, 120, 5, 12, 10,
+				Arc.ruleThin, Qt.alpha(Arc.aether, 0.34), circle.through);
+			Ink.runeRing(ctx, cx, cy, r - 34, 16, 23, 17, Arc.ruleThin,
+				Qt.alpha(Arc.gold, 0.22), Arc.aether, Math.round(16 * circle.through));
+		}
+	}
+
 	ArcHalo {
 		anchors.centerIn: rig
-		width: rig.width * 1.45
-		height: rig.height * 1.45
+		width: rig.width * 1.5
+		height: rig.height * 1.5
 		color: Arc.aether
-		strength: 0.15 * sheet.openProgress
+		strength: 0.16 * sheet.openProgress
 		spread: 0.46
 		flicker: true
 		visible: sheet.openProgress > 0.02
 	}
 
+	ArcMotes {
+		id: motes
+		anchors.centerIn: rig
+		width: rig.width
+		height: rig.height
+		color: Arc.aether
+		span: 3.8
+		visible: sheet.openProgress > 0.04 && sheet.openProgress < 0.97
+	}
+
 	Item {
 		id: rig
 
-		width: Math.min(sheet.sheetWidth, sheet.width - Arc.s7 * 2)
-		height: Math.min(sheet.sheetHeight, sheet.height - Arc.gantryDepth - Arc.s6 * 2)
+		width: Math.min(sheet.sheetWidth, sheet.width - Arc.s8 * 2)
+		height: Math.min(sheet.sheetHeight, sheet.height - Arc.horizon - Arc.s6 * 2)
 		x: Math.round((sheet.width - width) / 2)
+		y: Math.round((sheet.height - Arc.horizon - height) / 2)
 
-		readonly property real restY: Math.round(Arc.gantryDepth + Arc.s5
-			+ Math.max(0, (sheet.height - Arc.gantryDepth - Arc.s5 - Arc.s6 - height) / 2))
-
-		// It comes down off the chain rather than appearing where it ends up.
-		y: Math.round(rig.restY - (1 - sheet.lower) * 96)
-		opacity: Math.min(1, sheet.lower * 2.4)
-
-		// The cords it is lowered on.
-		Repeater {
-			model: 2
-			delegate: Rectangle {
-				required property int index
-				x: index === 0 ? Arc.s6 : rig.width - Arc.s6
-				y: -(rig.y - Arc.gantryDepth + Arc.s3)
-				width: Arc.ruleThin
-				height: Math.max(0, rig.y - Arc.gantryDepth + Arc.s3)
-				color: Qt.alpha(Arc.gilt, 0.45 * sheet.lower)
-			}
-		}
-
+		// The glass condenses out of the middle of the ring and spreads to the
+		// edges of the work: clipped from the centre, never scaled.
 		Item {
-			id: container
-			anchors.fill: parent
-		}
+			id: aperture
+			anchors.centerIn: parent
+			width: parent.width
+			height: Math.round(parent.height * sheet.condensed)
+			clip: true
+			opacity: Math.min(1, sheet.condensed * 1.5)
 
-		// The boards. They exist only while the book is being opened or shut,
-		// so an open modal is not paying for them.
-		Repeater {
-			model: 2
-
-			delegate: Item {
-				id: board
-
-				required property int index
-				readonly property bool leftBoard: index === 0
-
-				x: leftBoard ? 0 : rig.width / 2
-				width: rig.width / 2
+			Item {
+				id: container
+				width: rig.width
 				height: rig.height
-				visible: sheet.turn < 0.995 && sheet.openProgress > 0.004
-				z: 10
-
-				transform: Matrix4x4 {
-					// Real perspective, built by hand: Qt Quick's Rotation on
-					// the y axis alone only foreshortens, and a board that
-					// merely squashes does not read as a cover being turned.
-					readonly property real angle: (board.leftBoard ? -1 : 1) * 96 * sheet.turn
-					readonly property real pivotX: board.leftBoard ? board.width : 0
-					readonly property real pivotY: board.height / 2
-
-					matrix: {
-						const d = 1600;
-						const rad = angle * Math.PI / 180;
-						const c = Math.cos(rad), s = Math.sin(rad);
-						const toPivot = Qt.matrix4x4(1, 0, 0, pivotX, 0, 1, 0, pivotY, 0, 0, 1, 0, 0, 0, 0, 1);
-						const persp = Qt.matrix4x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, -1 / d, 1);
-						const rotate = Qt.matrix4x4(c, 0, s, 0, 0, 1, 0, 0, -s, 0, c, 0, 0, 0, 0, 1);
-						const fromPivot = Qt.matrix4x4(1, 0, 0, -pivotX, 0, 1, 0, -pivotY, 0, 0, 1, 0, 0, 0, 0, 1);
-						return toPivot.times(persp).times(rotate).times(fromPivot);
-					}
-				}
-
-				Rectangle {
-					anchors.fill: parent
-					color: Arc.leaf3
-
-					Rectangle {
-						anchors.fill: parent
-						anchors.margins: 5
-						color: "transparent"
-						border.width: Arc.ruleThin
-						border.color: Arc.giltDim
-					}
-				}
-
-				// The stamp on the front board, and the ribs down the spine on
-				// the back of it.
-				ArcRune {
-					anchors.centerIn: parent
-					width: Math.min(parent.width, parent.height) * 0.34
-					height: width
-					seed: 11
-					weight: Arc.ruleHeavy
-					lineColor: Arc.gilt
-					visible: !board.leftBoard
-					opacity: 1 - sheet.turn
-				}
-
-				Column {
-					anchors.right: parent.right
-					anchors.verticalCenter: parent.verticalCenter
-					spacing: 9
-					visible: board.leftBoard
-					opacity: 1 - sheet.turn
-
-					Repeater {
-						model: 4
-						delegate: Rectangle {
-							width: 16
-							height: Arc.rule
-							color: Arc.giltFaint
-						}
-					}
-				}
+				y: Math.round((aperture.height - rig.height) / 2)
 			}
 		}
 	}

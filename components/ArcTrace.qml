@@ -3,12 +3,11 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import "ArcInk.js" as Ink
 
-// A history, plotted on ruled paper.
+// A history, traced on a field of ley lines.
 //
-// A graticule underneath, a plain ink trace on top, a light wash under the
-// trace, and a small circle where the pen is now. This is a chart that was
-// drawn with a pen on a sheet, so the line is one weight all the way along and
-// what varies is where it is.
+// The graticule is drawn as hairlines with nothing on them; the trace itself is
+// light, with a wash falling away underneath it and a mote where the newest
+// sample sits. It reads as something being watched rather than as a chart.
 Item {
 	id: trace
 
@@ -33,22 +32,13 @@ Item {
 			ctx.reset();
 			if (width <= 4 || height <= 4) return;
 
-			// The graticule: four rules across and a tick every eighth, ruled
-			// before anything was plotted on it.
-			ctx.strokeStyle = Arc.giltGhost;
+			ctx.strokeStyle = Arc.goldGhost;
 			ctx.lineWidth = Arc.ruleThin;
-			for (let line = 0; line <= 4; line++) {
+			for (let line = 1; line < 4; line++) {
 				const y = Math.round(height * line / 4) + 0.5;
 				ctx.beginPath();
 				ctx.moveTo(0, y);
 				ctx.lineTo(width, y);
-				ctx.stroke();
-			}
-			for (let mark = 1; mark < 8; mark++) {
-				const x = Math.round(width * mark / 8) + 0.5;
-				ctx.beginPath();
-				ctx.moveTo(x, height - 4);
-				ctx.lineTo(x, height);
 				ctx.stroke();
 			}
 
@@ -66,7 +56,7 @@ Item {
 			}
 
 			const wash = ctx.createLinearGradient(0, top, 0, floor);
-			wash.addColorStop(0, Qt.alpha(trace.traceColor, 0.22));
+			wash.addColorStop(0, Qt.alpha(trace.traceColor, 0.30));
 			wash.addColorStop(1, Qt.alpha(trace.traceColor, 0.0));
 			ctx.fillStyle = wash;
 			ctx.beginPath();
@@ -76,14 +66,14 @@ Item {
 			ctx.closePath();
 			ctx.fill();
 
-			Ink.cut(ctx, points, trace.weight * 1.3, trace.traceColor, false);
+			ctx.strokeStyle = trace.traceColor;
+			ctx.lineWidth = trace.weight * 1.2;
+			ctx.lineJoin = "round";
+			Ink.polyline(ctx, points, false);
+			ctx.stroke();
 
 			const head = points[points.length - 1];
-			ctx.fillStyle = trace.traceColor;
-			ctx.beginPath();
-			ctx.ellipse(head.x - trace.weight * 1.6, head.y - trace.weight * 1.6,
-				trace.weight * 3.2, trace.weight * 3.2);
-			ctx.fill();
+			Ink.mote(ctx, head.x - trace.weight, head.y, trace.weight * 2.0, trace.traceColor);
 		}
 	}
 }

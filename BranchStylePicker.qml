@@ -174,9 +174,9 @@ Item {
 					anchors.fill: parent
 					anchors.margins: 7
 					variant: "plate"
-					washTop: entry.chosen ? Arc.wash : Arc.leaf2
-					washBottom: entry.chosen ? Arc.washDeep : Arc.leaf1
-					lineColor: entry.chosen ? Arc.giltDim : Arc.giltFaint
+					washTop: entry.chosen ? Arc.haze : Arc.veil2
+					washBottom: entry.chosen ? Arc.hazeDeep : Arc.veil1
+					lineColor: entry.chosen ? Arc.goldDim : Arc.goldFaint
 					liveColor: Arc.aether
 					haloStrength: entry.chosen ? 0.22 : 0
 					intensity: entry.chosen ? 1 : (entryMouse.containsMouse ? 0.5 : 0)
@@ -192,11 +192,11 @@ Item {
 
 							Rectangle {
 								anchors.verticalCenter: parent.verticalCenter
-								width: Arc.stud * 2
-								height: Arc.stud * 2
+								width: Arc.mote * 2
+								height: Arc.mote * 2
 								radius: width / 2
 								color: entry.modelData.current ? Arc.aether
-									: entry.modelData.compatible ? Arc.giltFaint : Arc.giltGhost
+									: entry.modelData.compatible ? Arc.goldFaint : Arc.goldGhost
 							}
 
 							ArcText {
@@ -276,9 +276,9 @@ Item {
 			width: parent.width
 			height: 44
 			variant: "plate"
-			washTop: Arc.leaf2
-			washBottom: Arc.leaf1
-			lineColor: Arc.giltFaint
+			washTop: Arc.veil2
+			washBottom: Arc.veil1
+			lineColor: Arc.goldFaint
 			liveColor: Arc.aether
 			haloStrength: 0.12
 			intensity: applyMouse.live
