@@ -1142,15 +1142,11 @@ fi
 						iconColor: Arc.bane
 						iconSource: "/usr/share/icons/Adwaita/symbolic/actions/edit-delete-symbolic.svg"
 						opacity: root.deleteInProgress ? 0.45 : 1
-
-						MouseArea {
-							id: deleteMediaMouse
-							anchors.fill: parent
-							enabled: !root.deleteInProgress
-							hoverEnabled: enabled
-							cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-							onClicked: root.deleteThemeMedia(root.filteredThemes[index])
-						}
+						// The sigil already carries the only touch layer it is
+						// allowed to have. A second one inside it is under its
+						// own and never sees the press — which is exactly how
+						// this button stopped working.
+						onClicked: root.deleteThemeMedia(root.filteredThemes[index])
 					}
 
 						MouseArea {

@@ -3188,14 +3188,7 @@ Item {
 							anchors.verticalCenter: parent.verticalCenter
 							size: 26
 							seed: 3
-
-							MouseArea {
-								id: fileOpenCurrentMouse
-								anchors.fill: parent
-								hoverEnabled: true
-								cursorShape: Qt.PointingHandCursor
-								onClicked: root.openPathWithDefaultApp(root.fileBrowserDirectory)
-							}
+							onClicked: root.openPathWithDefaultApp(root.fileBrowserDirectory)
 
 							QQCImpl.IconImage {
 								anchors.centerIn: parent
@@ -3206,7 +3199,7 @@ Item {
 								color: root.foreground
 							}
 
-							ToolTip.visible: fileOpenCurrentMouse.containsMouse
+							ToolTip.visible: fileOpenCurrentButton.containsMouse
 							ToolTip.delay: 500
 							ToolTip.text: "Open folder"
 						}
@@ -3593,14 +3586,7 @@ Item {
 							text: "↻"
 						}
 
-						MouseArea {
-							id: ollamaRefreshMouse
-							anchors.fill: parent
-							acceptedButtons: Qt.NoButton
-							hoverEnabled: true
-						}
-
-						ToolTip.visible: ollamaRefreshMouse.containsMouse
+						ToolTip.visible: ollamaRefreshButton.containsMouse
 						ToolTip.delay: 500
 						ToolTip.text: "Refresh models"
 					}
@@ -3988,12 +3974,6 @@ Item {
 							text: "←"
 						}
 
-						MouseArea {
-							id: chatBackMouse
-							anchors.fill: parent
-							acceptedButtons: Qt.NoButton
-							hoverEnabled: true
-						}
 					}
 
 					ArcText {
