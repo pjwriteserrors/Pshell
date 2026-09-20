@@ -1901,8 +1901,8 @@ Scope {
 						ctx.reset();
 						const cx = width / 2, cy = height / 2, r = Arc.chronoRadius;
 
-						Ink.runeArc(ctx, cx, cy, r + 10,
-							Arc.chronoFromAt(r + 10), Arc.chronoToAt(r + 10),
+						Ink.runeArc(ctx, cx, cy, r + 6,
+							Arc.chronoFromAt(r + 6), Arc.chronoToAt(r + 6),
 							9, 101 + limb.hour * 17, 12, Arc.ruleThin,
 							Qt.alpha(Arc.gold, 0.32), Arc.aether, 0);
 						Ink.gradsArc(ctx, cx, cy, r + 1,
@@ -1947,8 +1947,8 @@ Scope {
 							Arc.chronoFromAt(minutesR), Arc.chronoToAt(minutesR),
 							2.0, Qt.alpha(Arc.aetherAlt, 0.7), hands.minutes / 60);
 
-						Ink.runeArc(ctx, cx, cy, r + 10,
-							Arc.chronoFromAt(r + 10), Arc.chronoToAt(r + 10),
+						Ink.runeArc(ctx, cx, cy, r + 6,
+							Arc.chronoFromAt(r + 6), Arc.chronoToAt(r + 6),
 							9, 101 + root.now.getHours() * 17, 12, Arc.ruleThin * 1.3,
 							Qt.alpha(Arc.gold, 0), Arc.aether,
 							Math.floor(hands.minutes / 60 * 9) + 1);
