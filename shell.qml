@@ -15,6 +15,7 @@ import Quickshell.Services.Notifications
 import Quickshell.Services.SystemTray
 import Quickshell.Widgets
 import "components"
+import "components/ArcInk.js" as Ink
 
 Scope {
 	id: root
@@ -78,13 +79,13 @@ Scope {
 	// Tissue roles. Every one of them comes out of Bio, which is the only place
 	// the Wallust palette is read and the only place contrast is decided. A
 	// colour is never picked here by palette slot — "color4" is not a role.
-	readonly property color secondaryBoxColor: Bio.tissue2
-	readonly property color secondaryBoxStrongColor: Bio.tissue3
-	readonly property color secondaryInsetColor: Bio.cavity
-	readonly property color surface: Bio.tissue1
-	readonly property color surfaceBorder: Bio.boneDim
-	readonly property color onPrimary: Bio.onOrgan
-	readonly property color danger: Bio.necrosis
+	readonly property color secondaryBoxColor: Arc.leaf2
+	readonly property color secondaryBoxStrongColor: Arc.leaf3
+	readonly property color secondaryInsetColor: Arc.well
+	readonly property color surface: Arc.leaf1
+	readonly property color surfaceBorder: Arc.giltDim
+	readonly property color onPrimary: Arc.onAether
+	readonly property color danger: Arc.bane
 	readonly property var primaryBarScreen: {
 		for (const screen of Quickshell.screens) {
 			if (String(screen.name || "") === "DP-2") return screen;
@@ -115,6 +116,26 @@ Scope {
 	property string weatherSunset: "--"
 	property string weatherMoonPhase: "--"
 	property string weatherObservationTime: ""
+	// What the oracle says. One sentence, built from the readings rather than
+	// from a table of canned phrases, so it changes when the sky does.
+	readonly property string oracleLine: {
+		const text = String(root.weatherDescription || "").toLowerCase();
+		const rain = parseFloat(String(root.weatherPrecipitation || "0"));
+		const wind = parseFloat(String(root.weatherWind || "0"));
+		const degrees = parseFloat(String(root.weatherTemperature || ""));
+		if (text.indexOf("loading") >= 0 || text === "") return "The water has not settled.";
+		if (text.indexOf("thunder") >= 0 || text.indexOf("storm") >= 0) return "Something is angry above the clouds.";
+		if (rain > 2) return "The sky is emptying itself.";
+		if (rain > 0) return "Rain is being considered.";
+		if (text.indexOf("snow") >= 0) return "The air is giving up its water as glass.";
+		if (text.indexOf("fog") >= 0 || text.indexOf("mist") >= 0) return "The world ends forty paces out.";
+		if (wind > 30) return "The wind has an errand of its own.";
+		if (Number.isFinite(degrees) && degrees <= 0) return "Everything outside is holding still.";
+		if (Number.isFinite(degrees) && degrees >= 27) return "The day is burning slowly.";
+		if (text.indexOf("clear") >= 0) return "Nothing at all stands between here and the stars.";
+		if (text.indexOf("cloud") >= 0 || text.indexOf("overcast") >= 0) return "The skies are calm, and keeping something back.";
+		return "The skies are calm.";
+	}
 	property real weatherLatitude: Number.NaN
 	property real weatherLongitude: Number.NaN
 	property string weatherTimezone: "auto"
@@ -1162,13 +1183,13 @@ Scope {
 		running: true
 	}
 
-	readonly property color background: Bio.carapace
-	readonly property color foreground: Bio.text
-	readonly property color primary: Bio.organ
-	readonly property color secondary: Bio.organAlt
-	readonly property color accent: Bio.organAlt
-	readonly property color tertiary: Bio.organThird
-	readonly property color border: Bio.boneFaint
+	readonly property color background: Arc.vellum
+	readonly property color foreground: Arc.ink
+	readonly property color primary: Arc.aether
+	readonly property color secondary: Arc.aetherAlt
+	readonly property color accent: Arc.aetherAlt
+	readonly property color tertiary: Arc.aetherThird
+	readonly property color border: Arc.giltFaint
 
 	Process {
 		id: weatherProcess
@@ -1419,7 +1440,7 @@ Scope {
 		// this stays so a style checkout can push the new colours in before the
 		// first frame instead of waiting for the file watcher to notice.
 		function reload(): void {
-			Bio.colorsFile.reload();
+			Arc.colorsFile.reload();
 		}
 	}
 
@@ -1513,9 +1534,17 @@ Scope {
 		onTriggered: root.osdVisible = false
 	}
 
-	// The reflex: what the desktop does when a key changes the volume or the
-	// brightness. It surfaces low and centred, over the work rather than over
-	// the spine, and it is a reading — a ring that fills — not a slider.
+	// SOUL RESONANCE.
+	//
+	// Volume and brightness are not a slider and not a toast in a corner. A
+	// crystal is let down from the vertex of the chain, directly under the
+	// horologe, and what you are turning is the light inside it. The level is
+	// the depth of what has been poured in; the reading is cut on the facet
+	// above it.
+	//
+	// Every change rings it — the crystal is struck and the ring damps out,
+	// integrated rather than eased, so turning a knob a long way rings louder
+	// than nudging it.
 	PanelWindow {
 		id: osdWindow
 		screen: root.primaryBarScreen
@@ -1533,115 +1562,182 @@ Scope {
 		WlrLayershell.exclusionMode: ExclusionMode.Ignore
 		WlrLayershell.layer: WlrLayer.Overlay
 
-		// Volume and brightness are not a toast in the corner: they are a
-		// vessel standing beside the spine, filling from the floor. The number
-		// is engraved at its head, the organ it belongs to sits at its foot,
-		// and it rises out of the column rather than fading in on top of the
-		// desktop.
+		property real shown: root.osdVisible ? 1 : 0
+
+		Behavior on shown {
+			NumberAnimation {
+				duration: root.osdVisible ? Arc.unroll : Arc.reroll
+				easing.type: Easing.Bezier
+				easing.bezierCurve: root.osdVisible ? Arc.curveUnroll : Arc.curveReroll
+			}
+		}
+
+		// The ring: struck on every change, damped by the stone.
+		property real ring: 0
+		property real ringVelocity: 0
+
+		Connections {
+			target: root
+			function onOsdProgressChanged() {
+				osdWindow.ringVelocity += 0.34;
+				ringClock.running = true;
+			}
+		}
+
+		Timer {
+			id: ringClock
+			interval: 16
+			repeat: true
+			onTriggered: {
+				osdWindow.ringVelocity += -osdWindow.ring * 0.34;
+				osdWindow.ringVelocity *= 0.86;
+				osdWindow.ring += osdWindow.ringVelocity;
+				if (Math.abs(osdWindow.ring) < 0.004 && Math.abs(osdWindow.ringVelocity) < 0.004) {
+					osdWindow.ring = 0;
+					ringClock.running = false;
+				}
+			}
+		}
+
+		// The cord it is let down on, out of the vertex of the chain.
+		Rectangle {
+			anchors.horizontalCenter: parent.horizontalCenter
+			y: Arc.gantryDepth - 6
+			width: Arc.ruleThin
+			height: Math.max(0, crystal.y - (Arc.gantryDepth - 6))
+			color: Qt.alpha(Arc.gilt, 0.4 * osdWindow.shown)
+		}
+
 		Item {
-			id: osdCard
+			id: crystal
 
-			width: 66
-			height: 268
-			x: Math.round(Bio.spine + Bio.dockGap)
-			y: Math.round((parent.height - height) / 2)
-			opacity: root.osdVisible ? 1 : 0
+			readonly property real level: Math.max(0, Math.min(1, root.osdProgress))
 
-			transform: Scale {
-				origin.x: 0
-				origin.y: osdCard.height / 2
-				xScale: root.osdVisible ? 1 : 0.1
-				yScale: root.osdVisible ? 1 : 0.86
+			width: 120
+			height: 188
+			x: Math.round((parent.width - width) / 2)
+			y: Math.round(Arc.gantryDepth + Arc.s6 + (1 - osdWindow.shown) * -70)
+			opacity: Math.min(1, osdWindow.shown * 2.2)
 
-				Behavior on xScale {
-					NumberAnimation { duration: Bio.unfurl; easing.type: Easing.OutQuint }
-				}
-				Behavior on yScale {
-					NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
-				}
-			}
+			scale: 1 + osdWindow.ring * 0.05
 
-			Behavior on opacity {
-				NumberAnimation { duration: Bio.twitch }
-			}
-
-			BioGlow {
+			ArcHalo {
 				anchors.centerIn: parent
-				width: parent.width * 2
-				height: parent.height * 1.1
-				color: Bio.organ
-				strength: 0.3
-				spread: 0.4
+				width: parent.width * 2.4
+				height: parent.height * 1.8
+				color: Arc.aether
+				strength: 0.30 + Math.abs(osdWindow.ring) * 0.3
+				spread: 0.36
+				flicker: true
 			}
 
-			BioFrame {
-				id: osdVessel
+			// The stone. Cut once, filled every frame the level moves: the
+			// facets are static, the light in them is not.
+			Canvas {
+				id: stone
 				anchors.fill: parent
-				variant: "capsule"
-				weight: Bio.rib
-				lineColor: Bio.boneDim
-				liveColor: Bio.organ
-				fillTop: Bio.membrane
-				fillBottom: Bio.cavity
-				intensity: 0.8
-			}
+				renderStrategy: Canvas.Cooperative
 
-			// The fluid: it stands at the reading and settles when the reading
-			// stops moving.
-			Rectangle {
-				id: osdFluid
-				anchors.horizontalCenter: parent.horizontalCenter
-				anchors.bottom: parent.bottom
-				anchors.bottomMargin: 14
-				width: 16
-				height: Math.max(3, (osdCard.height - 74) * Math.min(1, Math.max(0, root.osdProgress)))
-				radius: 8
-				color: Bio.organ
-				opacity: 0.9
+				readonly property real level: crystal.level
+				readonly property real struck: osdWindow.ring
 
-				Behavior on height {
-					NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
+				onLevelChanged: requestPaint()
+				onStruckChanged: requestPaint()
+
+				function facets(w, h) {
+					// A hexagonal bipyramid seen side-on: shoulder, waist,
+					// point. Six sides, because a crystal with four is a
+					// diamond and a crystal with eight is a ball.
+					const cx = w / 2;
+					return [
+						{ x: cx, y: h * 0.02 },
+						{ x: w * 0.90, y: h * 0.24 },
+						{ x: w * 0.90, y: h * 0.70 },
+						{ x: cx, y: h * 0.98 },
+						{ x: w * 0.10, y: h * 0.70 },
+						{ x: w * 0.10, y: h * 0.24 }
+					];
+				}
+
+				onPaint: {
+					const ctx = getContext("2d");
+					ctx.reset();
+					if (width < 8) return;
+					const outline = stone.facets(width, height);
+					const shadow = Qt.alpha(Qt.darker(Arc.gilt, 2.3), 0.6);
+					const highlight = Qt.alpha(Qt.lighter(Arc.gilt, 1.8), 0.55);
+
+					// the body of the stone
+					Ink.polyline(ctx, outline, true);
+					const body = ctx.createLinearGradient(0, 0, 0, height);
+					body.addColorStop(0, Arc.leaf2);
+					body.addColorStop(1, Arc.well);
+					ctx.fillStyle = body;
+					ctx.fill();
+
+					// what has been poured into it
+					const top = height * (0.98 - 0.96 * stone.level);
+					ctx.save();
+					Ink.polyline(ctx, outline, true);
+					ctx.clip();
+					const lit = ctx.createLinearGradient(0, top, 0, height);
+					lit.addColorStop(0, Qt.alpha(Arc.aether, 0.85));
+					lit.addColorStop(1, Qt.alpha(Arc.aether, 0.32));
+					ctx.fillStyle = lit;
+					// the surface tips when the stone is struck
+					const tip = height * 0.035 * stone.struck;
+					ctx.beginPath();
+					ctx.moveTo(0, top + tip);
+					ctx.quadraticCurveTo(width / 2, top - tip * 2.2, width, top + tip);
+					ctx.lineTo(width, height);
+					ctx.lineTo(0, height);
+					ctx.closePath();
+					ctx.fill();
+					ctx.restore();
+
+					// the cut: the girdle, the two table edges and the point
+					Ink.groove(ctx, outline, Arc.rule * 1.4, Arc.gilt, highlight, shadow, true);
+					Ink.cut(ctx, [{ x: width * 0.10, y: height * 0.24 }, { x: width * 0.90, y: height * 0.24 }],
+						Arc.ruleThin, Qt.alpha(Arc.gilt, 0.5), false);
+					Ink.cut(ctx, [{ x: width * 0.10, y: height * 0.70 }, { x: width * 0.90, y: height * 0.70 }],
+						Arc.ruleThin, Qt.alpha(Arc.gilt, 0.5), false);
+					Ink.cut(ctx, [{ x: width / 2, y: height * 0.02 }, { x: width / 2, y: height * 0.98 }],
+						Arc.ruleThin, Qt.alpha(Arc.gilt, 0.28), false);
+					Ink.cut(ctx, [{ x: width * 0.10, y: height * 0.24 }, { x: width / 2, y: height * 0.02 }],
+						Arc.ruleThin, Qt.alpha(Arc.gilt, 0.3), false);
+					Ink.cut(ctx, [{ x: width * 0.90, y: height * 0.24 }, { x: width / 2, y: height * 0.02 }],
+						Arc.ruleThin, Qt.alpha(Arc.gilt, 0.3), false);
 				}
 			}
 
-			Rectangle {
+			// The reading, cut on the table of the stone.
+			Column {
 				anchors.horizontalCenter: parent.horizontalCenter
-				anchors.bottom: parent.bottom
-				anchors.bottomMargin: 14
-				width: 16
-				height: osdCard.height - 74
-				radius: 8
-				color: Qt.alpha(Bio.bone, 0.09)
-				z: -1
+				y: parent.height * 0.29
+				spacing: -3
+
+				ArcText {
+					anchors.horizontalCenter: parent.horizontalCenter
+					role: "reading"
+					font.pixelSize: 22
+					text: root.osdValueText
+				}
+
+				ArcText {
+					anchors.horizontalCenter: parent.horizontalCenter
+					role: "label"
+					tone: "muted"
+					font.pixelSize: 9
+					text: root.osdLabel
+				}
 			}
 
-			BioText {
-				id: osdReading
-				anchors.horizontalCenter: parent.horizontalCenter
-				anchors.top: parent.top
-				anchors.topMargin: 13
-				role: "reading"
-				font.pixelSize: 17
-				text: root.osdValueText
-			}
-
-			BioText {
-				anchors.horizontalCenter: parent.horizontalCenter
-				anchors.top: osdReading.bottom
-				role: "label"
-				tone: "muted"
-				font.pixelSize: 8
-				text: root.osdLabel
-			}
-
-			// The mark of whichever organ is being turned, sunk into the foot
-			// of the vessel.
+			// The mark of whatever is being turned, set at the point.
 			Image {
 				anchors.horizontalCenter: parent.horizontalCenter
-				anchors.bottom: parent.bottom
-				anchors.bottomMargin: -3
-				width: 16
-				height: 16
+				y: parent.height * 0.76
+				width: 17
+				height: 17
 				source: root.osdIconSource
 				fillMode: Image.PreserveAspectFit
 				smooth: true
@@ -1649,263 +1745,351 @@ Scope {
 				layer.enabled: visible
 				layer.effect: MultiEffect {
 					colorization: 1
-					colorizationColor: Bio.organ
+					colorizationColor: Arc.onAether
 				}
 			}
 		}
 	}
 
-	// The spine.
+	// THE CHAIN.
 	//
-	// Not a bar, and not at the top: the shell stands on its edge. Everything
-	// it has to say is read top to bottom in one column down the left of the
-	// screen — what opens things at the head, what the machine is carrying at
-	// the foot, and the hour held in the middle, where the eye rests. Chambers
-	// do not hang off it; they are drawn out of it sideways.
+	// There is no bar. A brass chain is strung across the top of the screen,
+	// fixed at both corners, sagging to its lowest point in the middle — and
+	// every fitting the shell has is seated on that curve, so nothing on it
+	// shares a height with anything else. The grimoire's clasp is at the far
+	// left, the realms hang off the left limb, the horologe hangs at the lowest
+	// point where the eye rests, and everything the machine is carrying runs
+	// back up the right limb to the way out.
+	//
+	// Panels are not attached to this window. They are let down from it: see
+	// components/PopupSurface.qml, which reads the same curve.
 	PanelWindow {
 		id: barWindow
 		screen: root.primaryBarScreen
 
 		anchors {
 			left: true
+			right: true
 			top: true
-			bottom: true
 		}
 
 		margins {
 			left: 0
+			right: 0
 			top: 0
-			bottom: 0
 		}
 
-		exclusiveZone: Math.round(Bio.spine)
-		implicitWidth: Math.round(Bio.spine)
+		exclusiveZone: Math.round(Arc.gantryDepth)
+		implicitHeight: Math.round(Arc.gantryDepth)
 		color: "transparent"
-		mask: Region {
-			x: 0
-			y: 0
-			width: Math.round(Bio.spine)
-			height: barWindow.height
-		}
 
 		Item {
 			id: bar
 			anchors.fill: parent
 
-			// Everything on the column is centred on this line.
-			readonly property real line: width / 2
+			// Where the chain hangs at a given x, and where a fitting of a
+			// given size has to sit to be seated on it.
+			function chainAt(centreX) {
+				return Arc.chainY(centreX / Math.max(1, bar.width));
+			}
 
-			// The carapace edge: the screen's own rim darkening under the
-			// column, so the bone lines survive a pale wallpaper.
+			function seatY(centreX, size) {
+				return Math.round(bar.chainAt(centreX) - size / 2);
+			}
+
+			// The instrument's own shadow on the desktop. Without a plane of
+			// its own the engraving would disappear into a bright wallpaper,
+			// and raising the line opacity until it did not would be uglier
+			// than admitting the instrument casts a shade.
 			Rectangle {
 				anchors.fill: parent
 				gradient: Gradient {
-					orientation: Gradient.Horizontal
-					GradientStop { position: 0.0; color: Qt.alpha(Bio.cavity, 0.94) }
-					GradientStop { position: 0.68; color: Qt.alpha(Bio.cavity, 0.7) }
+					GradientStop { position: 0.0; color: Qt.alpha(Arc.well, Arc.light ? 0.50 : 0.92) }
+					GradientStop { position: 0.62; color: Qt.alpha(Arc.well, Arc.light ? 0.34 : 0.66) }
 					GradientStop { position: 1.0; color: "transparent" }
 				}
 			}
 
-			// The bone itself: one line running the whole height, which every
-			// organ is strung on.
-			Rectangle {
-				id: spineBone
-				x: Math.round(bar.line - width / 2)
-				anchors.top: parent.top
-				anchors.bottom: parent.bottom
-				anchors.topMargin: Bio.s5
-				anchors.bottomMargin: Bio.s5
-				width: Bio.ribThin
-				color: Bio.boneGhost
+			// The chain itself, and the graduations cut along it. Painted once
+			// per resize: this window redraws whenever a clock digit changes
+			// and it must not cost anything to keep on screen.
+			Canvas {
+				id: chain
+				anchors.fill: parent
+				renderStrategy: Canvas.Cooperative
+
+				Connections {
+					target: Arc
+					function onGiltChanged() { chain.requestPaint(); }
+				}
+
+				onPaint: {
+					const ctx = getContext("2d");
+					ctx.reset();
+					if (width <= 8) return;
+					const shadow = Qt.alpha(Qt.darker(Arc.gilt, 2.4), 0.6);
+					const highlight = Qt.alpha(Qt.lighter(Arc.gilt, 1.8), 0.5);
+					// Two straight runs meeting under the horologe, broken
+					// where the dial hangs: the chain goes behind it, and a
+					// line drawn across a dial is a line drawn across a dial.
+					const gap = Arc.horologe * 0.44;
+					Ink.groove(ctx, [
+						{ x: 0, y: Arc.gantryRise },
+						{ x: width / 2 - gap, y: Arc.chainY(0.5 - gap / width) }
+					], Arc.rule * 2.0, Arc.gilt, highlight, shadow, false);
+					Ink.groove(ctx, [
+						{ x: width / 2 + gap, y: Arc.chainY(0.5 + gap / width) },
+						{ x: width, y: Arc.gantryRise }
+					], Arc.rule * 2.0, Arc.gilt, highlight, shadow, false);
+
+					// The limb is graduated, because this is an instrument and
+					// not a rail. Every fifth mark runs long.
+					const spacing = 26;
+					const marks = Math.floor(width / spacing);
+					for (let index = 0; index <= marks; index++) {
+						const x = index * spacing;
+						const y = Arc.chainY(x / width);
+						const long = index % 5 === 0;
+						Ink.cut(ctx, [{ x: x, y: y + 2 }, { x: x, y: y + (long ? 8 : 4) }],
+							Arc.ruleThin, Qt.alpha(Arc.gilt, long ? 0.55 : 0.3), false);
+					}
+
+					// The two anchor plates the chain is bolted to.
+					for (const side of [0, width]) {
+						const dir = side === 0 ? 1 : -1;
+						Ink.groove(ctx, [
+							{ x: side, y: Arc.gantryRise + 16 },
+							{ x: side, y: Arc.gantryRise },
+							{ x: side + dir * 20, y: Arc.gantryRise }
+						], Arc.rule * 1.4, Arc.gilt, highlight, shadow, false);
+						Ink.rivet(ctx, side + dir * 7, Arc.gantryRise, 2.4, Arc.gilt, highlight, shadow);
+					}
+
+
+				}
 			}
 
-			// ------------------------------------------------------- the head
-			// What opens things, and what is running.
-			Column {
-				id: headCluster
+			// ------------------------------------------------------ the left limb
+			// What opens things, and what is already open.
+			Row {
+				id: leftLimb
+				anchors.left: parent.left
+				anchors.leftMargin: 22
 				anchors.top: parent.top
-				anchors.topMargin: Bio.s4
-				anchors.horizontalCenter: parent.horizontalCenter
-				spacing: Bio.s3
+				height: parent.height
+				spacing: Arc.s3
 
-				BioNode {
+				ArcSeat {
 					id: launcherNode
-					anchors.horizontalCenter: parent.horizontalCenter
-					size: 38
+					size: 34
 					seed: 0
 					lit: root.launcherPopupOpen
+					y: bar.seatY(leftLimb.x + x + width / 2, height)
 					onClicked: root.toggleLauncherPopup()
 
-					BioSigil {
+					// The grimoire, drawn rather than fetched: the one thing
+					// on the chain that has no system icon and should not
+					// borrow one.
+					ArcMark {
 						anchors.centerIn: parent
-						width: parent.width * 0.64
-						height: parent.height * 0.64
-						seed: 7
-						detail: 0.6
-						weight: Bio.ribThin
-						lineColor: launcherNode.lit ? Bio.organ : Bio.text
-					}
-				}
-
-				// A vertical tendon: the same ornamental run as everywhere
-				// else, turned on its side to follow the column.
-				Item {
-					anchors.horizontalCenter: parent.horizontalCenter
-					width: bar.width
-					height: 26
-
-					BioTendon {
-						anchors.centerIn: parent
-						width: parent.height
-						height: 14
-						rotation: 90
-						facing: Qt.LeftToRight
-						sag: 1.5
-						weight: Bio.rib * 1.1
-						lineColor: Bio.boneDim
-					}
-				}
-
-				Column {
-					id: trayRow
-					anchors.horizontalCenter: parent.horizontalCenter
-					spacing: Bio.s2
-					visible: trayRepeater.count > 0
-
-					Repeater {
-						id: trayRepeater
-						model: ScriptModel {
-							values: SystemTray.items.values
-						}
-
-						BioNode {
-							id: trayNode
-
-							required property SystemTrayItem modelData
-							required property int index
-
-							anchors.horizontalCenter: parent?.horizontalCenter ?? undefined
-							size: 26
-							seed: trayNode.index + 1
-							acceptedButtons: Qt.LeftButton | Qt.RightButton
-
-							Image {
-								anchors.centerIn: parent
-								width: 14
-								height: 14
-								source: root.resolveIconSource(root.trayIconSource(trayNode.modelData?.icon ?? ""))
-								fillMode: Image.PreserveAspectFit
-								smooth: true
-								mipmap: true
-							}
-
-							onClicked: event => {
-								if (trayNode.modelData.menu) {
-									if (
-										root.trayMenuOpen
-										&& root.trayMenuVisible
-										&& root.trayMenuHandle === trayNode.modelData.menu
-									) {
-										root.closeTrayMenu();
-									} else {
-										root.openTrayMenu(trayNode.modelData.menu, trayNode);
-									}
-								} else {
-									root.closeTrayMenu();
-									if (event.button === Qt.RightButton) trayNode.modelData.secondaryActivate();
-									else trayNode.modelData.activate();
-								}
-							}
-						}
+						width: parent.width * 0.60
+						height: parent.height * 0.60
+						glyph: "book"
+						weight: Arc.rule
+						lineColor: launcherNode.lit ? Arc.aether : Arc.ink
 					}
 				}
 
 				NiriTaskbar {
 					id: taskbarIsland
-					anchors.horizontalCenter: parent.horizontalCenter
 					visible: niriState.tasksForOutput(String(barWindow.screen?.name || "")).length > 0
-					width: bar.width
+					height: barWindow.height
 					niriState: niriState
 					outputName: String(barWindow.screen?.name || "")
-					background: Bio.tissue1
-					foreground: Bio.text
-					secondaryBoxColor: Bio.tissue2
-					secondaryBoxStrongColor: Bio.tissue3
+					originX: leftLimb.x + x
+					chainAt: bar.chainAt
+					background: Arc.leaf1
+					foreground: Arc.ink
+					secondaryBoxColor: Arc.leaf2
+					secondaryBoxStrongColor: Arc.leaf3
 				}
 			}
 
-			// ------------------------------------------------------ the heart
-			// The hour, held at the middle of the column: two readings stacked
-			// on a bone, with the day under them.
-			BioSurface {
-				id: specimenPlate
+			// -------------------------------------------------- the lowest point
+			// The horologe: the hour, held where the chain hangs deepest.
+			// Around it the day is engraved on the left and what is playing on
+			// the right, so the middle of the chain reads as one instrument.
+			Item {
+				id: horologe
 
-				anchors.horizontalCenter: parent.horizontalCenter
-				anchors.verticalCenter: parent.verticalCenter
-				width: bar.width
-				height: specimenColumn.implicitHeight + Bio.s6
-				washTop: Bio.membrane
-				washBottom: Bio.membraneDeep
-				haloStrength: 0.18
-				intensity: Math.max(plateTouch.live, root.clockPopupOpen ? 0.5 : 0)
-				padding: 0
+				width: Arc.horologe
+				height: Arc.horologe
+				x: Math.round((bar.width - width) / 2)
+				y: bar.seatY(bar.width / 2, height)
+
+				readonly property real seconds: root.now.getSeconds() + root.now.getMilliseconds() / 1000
+
+				ArcHalo {
+					anchors.centerIn: parent
+					width: parent.width * 2.3
+					height: parent.height * 2.3
+					color: Arc.aether
+					strength: 0.26
+					spread: 0.34
+					flicker: true
+				}
+
+				// The face. Cast, filled and engine-turned, so the dial is a
+				// thing hanging in front of the wallpaper rather than two rings
+				// drawn on top of it. Painted once.
+				Canvas {
+					id: face
+					anchors.fill: parent
+					renderStrategy: Canvas.Cooperative
+
+					Connections {
+						target: Arc
+						function onGiltChanged() { face.requestPaint(); }
+						function onLeaf1Changed() { face.requestPaint(); }
+					}
+
+					onPaint: {
+						const ctx = getContext("2d");
+						ctx.reset();
+						const cx = width / 2, cy = height / 2;
+						const r = Math.min(width, height) / 2 - 1;
+
+						const cast = ctx.createLinearGradient(0, 0, 0, height);
+						cast.addColorStop(0, Arc.leaf2);
+						cast.addColorStop(1, Arc.well);
+						ctx.fillStyle = cast;
+						ctx.beginPath();
+						ctx.arc(cx, cy, r, 0, Math.PI * 2);
+						ctx.fill();
+
+						// Engine turning: the lathe pattern on an instrument's
+						// face. It is the difference between brass and a circle.
+						Ink.guilloche(ctx, cx, cy, r * 0.74, 22, r * 0.045, 3,
+							Arc.ruleThin * 0.7, Qt.alpha(Arc.gilt, 0.14));
+					}
+				}
+
+				// The limb: the seconds, taken round the outside.
+				ArcDial {
+					id: secondsLimb
+					anchors.fill: parent
+					seed: 0
+					weight: Arc.rule
+					lineColor: Arc.giltDim
+					liveColor: Arc.aether
+					intensity: Math.max(horologeTouch.live, root.clockPopupOpen ? 0.9 : 0)
+					progress: horologe.seconds / 60
+				}
+
+				// The minutes, taken round a second limb inside the first.
+				ArcDial {
+					anchors.centerIn: parent
+					width: parent.width - 13
+					height: parent.height - 13
+					seed: 1
+					weight: Arc.ruleThin
+					beading: false
+					lineColor: Arc.giltGhost
+					liveColor: Arc.aetherAlt
+					progress: (root.now.getMinutes() + horologe.seconds / 60) / 60
+				}
 
 				Column {
-					id: specimenColumn
 					anchors.centerIn: parent
-					spacing: 1
+					spacing: -3
 
-					BioText {
+					ArcText {
 						anchors.horizontalCenter: parent.horizontalCenter
-						role: "specimen"
-						font.pixelSize: 21
-						font.letterSpacing: 0
-						text: Qt.formatDateTime(root.now, "HH")
+						role: "reading"
+						font.pixelSize: 20
+						font.letterSpacing: 0.5
+						text: Qt.formatDateTime(root.now, "HH:mm")
 					}
 
 					Rectangle {
 						anchors.horizontalCenter: parent.horizontalCenter
-						width: 16
-						height: Bio.ribThin
-						color: Bio.boneFaint
+						width: 22
+						height: Arc.ruleThin
+						color: Arc.giltFaint
 					}
 
-					BioText {
+					// The moon, because the instrument is telling you which
+					// part of the night this is and not only the time.
+					Canvas {
+						id: moon
 						anchors.horizontalCenter: parent.horizontalCenter
-						role: "specimen"
-						font.pixelSize: 21
-						font.letterSpacing: 0
-						tone: "organ"
-						text: Qt.formatDateTime(root.now, "mm")
-					}
+						width: 13
+						height: 13
+						renderStrategy: Canvas.Cooperative
 
-					Item {
-						width: 1
-						height: Bio.s2
-					}
+						readonly property real phase: Arc.moonPhase(root.now).fraction
 
-					BioText {
-						anchors.horizontalCenter: parent.horizontalCenter
-						role: "label"
-						tone: "muted"
-						font.pixelSize: 9
-						text: Qt.formatDateTime(root.now, "ddd")
-					}
+						onPhaseChanged: requestPaint()
 
-					BioText {
-						anchors.horizontalCenter: parent.horizontalCenter
-						role: "label"
-						tone: "faint"
-						font.pixelSize: 9
-						font.letterSpacing: 0.4
-						text: Qt.formatDateTime(root.now, "dd MMM")
+						onPaint: {
+							const ctx = getContext("2d");
+							ctx.reset();
+							const r = width / 2 - 1;
+							ctx.strokeStyle = Arc.giltDim;
+							ctx.lineWidth = Arc.ruleThin;
+							ctx.beginPath();
+							ctx.arc(width / 2, height / 2, r, 0, Math.PI * 2);
+							ctx.stroke();
+							// The terminator: the lit limb is a half circle, and
+							// the inner edge is an ellipse whose width is the
+							// cosine of the phase. Waxing lights the right.
+							const waxing = moon.phase < 0.5;
+							const sweep = Math.cos(moon.phase * Math.PI * 2);
+							ctx.fillStyle = Arc.gilt;
+							ctx.beginPath();
+							ctx.arc(width / 2, height / 2, r,
+								waxing ? -Math.PI / 2 : Math.PI / 2,
+								waxing ? Math.PI / 2 : Math.PI * 1.5);
+							ctx.closePath();
+							ctx.fill();
+							ctx.globalCompositeOperation = sweep > 0 ? "destination-out" : "source-over";
+							ctx.beginPath();
+							ctx.ellipse(width / 2 - Math.abs(sweep) * r, height / 2 - r,
+								Math.abs(sweep) * r * 2, r * 2);
+							ctx.fill();
+							ctx.globalCompositeOperation = "source-over";
+						}
 					}
 				}
 
-				BioTouch {
-					id: plateTouch
+				ArcTouch {
+					id: horologeTouch
 					onClicked: root.toggleClockPopup()
+				}
+			}
+
+			// The day, engraved on the chain to the left of the horologe, and
+			// under it the name this hour goes by.
+			Column {
+				id: dayBlock
+				anchors.right: horologe.left
+				anchors.rightMargin: Arc.s4
+				y: Math.round(bar.chainAt(dayBlock.x + dayBlock.width / 2) - dayBlock.height / 2)
+				spacing: -1
+
+				ArcText {
+					anchors.right: parent.right
+					role: "label"
+					tone: "muted"
+					text: Qt.formatDateTime(root.now, "ddd dd MMM")
+				}
+
+				ArcText {
+					anchors.right: parent.right
+					role: "hand"
+					tone: "faint"
+					font.pixelSize: 13
+					text: Arc.hourName(root.now)
 				}
 			}
 
@@ -1916,136 +2100,184 @@ Scope {
 				onTriggered: root.now = new Date()
 			}
 
-			// ------------------------------------------------------- the foot
-			// What is playing, what the machine is carrying, and the way out.
-			Column {
-				id: footCluster
-				anchors.bottom: parent.bottom
-				anchors.bottomMargin: Bio.s4
-				anchors.horizontalCenter: parent.horizontalCenter
-				spacing: Bio.s3
+			// ----------------------------------------------------- the right limb
+			// Laid out from the right edge inwards, so the way out is always
+			// the last fitting on the chain and never moves.
+			Row {
+				id: rightLimb
+				anchors.right: parent.right
+				anchors.rightMargin: 22
+				anchors.top: parent.top
+				height: parent.height
+				layoutDirection: Qt.RightToLeft
+				spacing: Arc.s3
 
-				NowPlaying {
-					id: nowPlayingIsland
-					anchors.horizontalCenter: parent.horizontalCenter
-					width: bar.width
-					foreground: Bio.text
-					secondaryBoxColor: Bio.tissue1
-					progressColor: Bio.organ
-					onClicked: root.toggleMediaPopup()
+				function seatedY(item) {
+					return bar.seatY(rightLimb.x + item.x + item.width / 2, item.height);
 				}
 
-				Column {
-					anchors.horizontalCenter: parent.horizontalCenter
-					spacing: -1
-
-					BioNode {
-						id: weatherNode
-						anchors.horizontalCenter: parent.horizontalCenter
-						size: 26
-						seed: 3
-						lit: root.weatherPopupOpen
-						iconSource: root.resolveIconSource("", [
-							root.weatherIcon,
-							root.weatherIcon.replace("-symbolic", ""),
-							"weather-overcast-symbolic"
-						])
-						iconSize: 13
-						onClicked: root.toggleWeatherPopup()
-					}
-
-					BioText {
-						anchors.horizontalCenter: parent.horizontalCenter
-						role: "reading"
-						font.pixelSize: 13
-						text: root.weatherTemperature
-					}
+				ArcSeat {
+					id: powerNode
+					seed: 2
+					lit: root.powerPopupOpen
+					y: bar.seatY(rightLimb.x + x + width / 2, height)
+					ringColor: Qt.alpha(Arc.bane, 0.5)
+					liveColor: Arc.bane
+					iconColor: powerNode.lit ? Arc.bane : Qt.alpha(Arc.bane, 0.85)
+					iconSource: Arc.icon("system-shutdown-symbolic")
+					onClicked: root.togglePowerPopup()
 				}
 
-				Column {
-					anchors.horizontalCenter: parent.horizontalCenter
-					spacing: Bio.s2
+				Item {
+					id: trayRun
+					width: trayRow.width
+					height: barWindow.height
+					visible: trayRepeater.count > 0
 
-					BioNode {
-						id: notifNode
-						anchors.horizontalCenter: parent.horizontalCenter
-						seed: 1
-						lit: root.notifPopupOpen
-						badge: root.notificationGroups.length > 0 ? String(root.notificationGroups.length) : ""
-						iconSource: root.resolveIconSource("preferences-system-notifications-symbolic", ["dialog-information-symbolic"]) || Bio.icon("preferences-system-notifications-symbolic")
-						onClicked: root.toggleNotifPopup()
-					}
+					Row {
+						id: trayRow
+						spacing: Arc.s2
 
-					BioNode {
-						id: clipboardNode
-						anchors.horizontalCenter: parent.horizontalCenter
-						seed: 2
-						lit: root.clipboardPopupOpen
-						iconSource: root.resolveIconSource("edit-paste-symbolic", ["edit-copy-symbolic"]) || Bio.icon("edit-paste-symbolic")
-						onClicked: root.toggleClipboardPopup()
-					}
+						Repeater {
+							id: trayRepeater
+							model: ScriptModel {
+								values: SystemTray.items.values
+							}
 
-					BioNode {
-						id: bluetoothNode
-						anchors.horizontalCenter: parent.horizontalCenter
-						seed: 3
-						lit: root.bluetoothPopupOpen
-						iconSource: root.resolveIconSource("bluetooth-active-symbolic", ["bluetooth-symbolic"]) || Bio.icon("bluetooth-active-symbolic")
-						onClicked: root.toggleBluetoothPopup()
-					}
+							ArcSeat {
+								id: trayNode
 
-					BioNode {
-						id: networkNode
-						anchors.horizontalCenter: parent.horizontalCenter
-						seed: 0
-						lit: root.networkPopupOpen
-						iconSource: root.networkStatusType === "ethernet"
-							? Bio.icon("network-wired-symbolic")
-							: Bio.icon("network-wireless-signal-excellent-symbolic")
-						onClicked: root.toggleNetworkPopup()
+								required property SystemTrayItem modelData
+								required property int index
+
+								size: 26
+								seed: trayNode.index + 1
+								y: bar.seatY(rightLimb.x + trayRun.x + trayNode.x + width / 2, height)
+								acceptedButtons: Qt.LeftButton | Qt.RightButton
+
+								Image {
+									anchors.centerIn: parent
+									width: 14
+									height: 14
+									source: root.resolveIconSource(root.trayIconSource(trayNode.modelData?.icon ?? ""))
+									fillMode: Image.PreserveAspectFit
+									smooth: true
+									mipmap: true
+								}
+
+								onClicked: event => {
+									if (trayNode.modelData.menu) {
+										if (
+											root.trayMenuOpen
+											&& root.trayMenuVisible
+											&& root.trayMenuHandle === trayNode.modelData.menu
+										) {
+											root.closeTrayMenu();
+										} else {
+											root.openTrayMenu(trayNode.modelData.menu, trayNode);
+										}
+									} else {
+										root.closeTrayMenu();
+										if (event.button === Qt.RightButton) trayNode.modelData.secondaryActivate();
+										else trayNode.modelData.activate();
+									}
+								}
+							}
+						}
 					}
 				}
 
 				TopBarResourceBars {
 					id: resourceBars
-					anchors.horizontalCenter: parent.horizontalCenter
-					width: bar.width
 					lit: root.resourcesPopupOpen
+					y: bar.seatY(rightLimb.x + x + width / 2, height)
 					onClicked: root.toggleResourcesPopup()
 				}
 
-				Item {
-					anchors.horizontalCenter: parent.horizontalCenter
-					width: bar.width
-					height: 22
+				ArcSeat {
+					id: networkNode
+					seed: 0
+					lit: root.networkPopupOpen
+					y: bar.seatY(rightLimb.x + x + width / 2, height)
+					iconSource: root.networkStatusType === "ethernet"
+						? Arc.icon("network-wired-symbolic")
+						: Arc.icon("network-wireless-signal-excellent-symbolic")
+					onClicked: root.toggleNetworkPopup()
+				}
 
-					BioTendon {
-						anchors.centerIn: parent
-						width: parent.height
-						height: 14
-						rotation: 90
-						facing: Qt.RightToLeft
-						sag: 1.5
-						weight: Bio.rib * 1.1
-						lineColor: Bio.boneDim
+				ArcSeat {
+					id: bluetoothNode
+					seed: 3
+					lit: root.bluetoothPopupOpen
+					y: bar.seatY(rightLimb.x + x + width / 2, height)
+					iconSource: root.resolveIconSource("bluetooth-active-symbolic", ["bluetooth-symbolic"]) || Arc.icon("bluetooth-active-symbolic")
+					onClicked: root.toggleBluetoothPopup()
+				}
+
+				ArcSeat {
+					id: clipboardNode
+					seed: 2
+					lit: root.clipboardPopupOpen
+					y: bar.seatY(rightLimb.x + x + width / 2, height)
+					iconSource: root.resolveIconSource("edit-paste-symbolic", ["edit-copy-symbolic"]) || Arc.icon("edit-paste-symbolic")
+					onClicked: root.toggleClipboardPopup()
+				}
+
+				ArcSeat {
+					id: notifNode
+					seed: 1
+					lit: root.notifPopupOpen
+					y: bar.seatY(rightLimb.x + x + width / 2, height)
+					badge: root.notificationGroups.length > 0 ? String(root.notificationGroups.length) : ""
+					iconSource: root.resolveIconSource("preferences-system-notifications-symbolic", ["dialog-information-symbolic"]) || Arc.icon("preferences-system-notifications-symbolic")
+					onClicked: root.toggleNotifPopup()
+				}
+
+				// The oracle: the sky's mark with the reading struck beside it,
+				// because a temperature nobody can see is not a reading.
+				Item {
+					id: weatherRun
+					width: weatherNode.width + weatherReading.implicitWidth + Arc.s1
+					height: barWindow.height
+
+					ArcSeat {
+						id: weatherNode
+						seed: 3
+						size: 28
+						lit: root.weatherPopupOpen
+						y: bar.seatY(rightLimb.x + weatherRun.x + x + width / 2, height)
+						iconSource: root.resolveIconSource("", [
+							root.weatherIcon,
+							root.weatherIcon.replace("-symbolic", ""),
+							"weather-overcast-symbolic"
+						])
+						iconSize: 14
+						onClicked: root.toggleWeatherPopup()
+					}
+
+					ArcText {
+						id: weatherReading
+						anchors.left: weatherNode.right
+						anchors.leftMargin: Arc.s1
+						y: Math.round(bar.chainAt(rightLimb.x + weatherRun.x + x + width / 2) - height / 2)
+						role: "reading"
+						font.pixelSize: 14
+						text: root.weatherTemperature
 					}
 				}
 
-				BioNode {
-					id: powerNode
-					anchors.horizontalCenter: parent.horizontalCenter
-					seed: 2
-					lit: root.powerPopupOpen
-					ringColor: Qt.alpha(Bio.necrosis, 0.45)
-					liveColor: Bio.necrosis
-					iconColor: powerNode.lit ? Bio.necrosis : Qt.alpha(Bio.necrosis, 0.85)
-					iconSource: Bio.icon("system-shutdown-symbolic")
-					onClicked: root.togglePowerPopup()
+				NowPlaying {
+					id: nowPlayingIsland
+					originX: rightLimb.x + x
+					chainAt: bar.chainAt
+					foreground: Arc.ink
+					secondaryBoxColor: Arc.leaf1
+					progressColor: Arc.aether
+					onClicked: root.toggleMediaPopup()
 				}
 			}
 		}
 	}
-
 	Variants {
 		model: root.extraBarScreens
 
@@ -2225,7 +2457,7 @@ Scope {
 
 	PopupSurface {
 		id: clipboardPopup
-		title: "Residue"
+		title: "Palimpsest"
 		screen: root.activePopupScreen
 
 		onDismissRequested: root.closeClipboardPopup()
@@ -2342,40 +2574,40 @@ Scope {
 							width: parent.width
 							height: 20
 
-							BioText {
+							ArcText {
 								id: clipTitle
 								anchors.left: parent.left
 								anchors.verticalCenter: parent.verticalCenter
 								role: "title"
 								font.pixelSize: 15
-								text: "Residue"
+								text: "Scraps"
 							}
 
-							BioTendon {
+							ArcFlourish {
 								anchors.left: clipTitle.right
 								anchors.right: clipWipeLabel.visible ? clipWipeLabel.left : clipCountLabel.left
-								anchors.leftMargin: Bio.s3
-								anchors.rightMargin: Bio.s3
+								anchors.leftMargin: Arc.s3
+								anchors.rightMargin: Arc.s3
 								anchors.verticalCenter: parent.verticalCenter
 								height: 12
 								facing: Qt.LeftToRight
-								lineColor: Bio.boneFaint
+								lineColor: Arc.giltFaint
 								visible: width > 24
 							}
 
-							BioText {
+							ArcText {
 								id: clipWipeLabel
 								anchors.right: clipCountLabel.left
-								anchors.rightMargin: Bio.s3
+								anchors.rightMargin: Arc.s3
 								anchors.verticalCenter: parent.verticalCenter
 								visible: clipboardPopupContent.entries.length > 0
 								role: "label"
 								tone: clipWipeTouch.containsMouse ? "alert" : "muted"
-								text: "Purge"
+								text: "Efface"
 
-								BioTouch {
+								ArcTouch {
 									id: clipWipeTouch
-									anchors.margins: -Bio.s2
+									anchors.margins: -Arc.s2
 									onClicked: {
 										Quickshell.execDetached(["sh", "-lc", "cliphist wipe"]);
 										clipboardPopupContent.entries = [];
@@ -2383,7 +2615,7 @@ Scope {
 								}
 							}
 
-							BioText {
+							ArcText {
 								id: clipCountLabel
 								anchors.right: parent.right
 								anchors.verticalCenter: parent.verticalCenter
@@ -2401,30 +2633,30 @@ Scope {
 								anchors.left: parent.left
 								anchors.right: parent.right
 								anchors.bottom: parent.bottom
-								height: Bio.ribThin
-								color: Bio.boneFaint
+								height: Arc.ruleThin
+								color: Arc.giltFaint
 							}
 
 							Rectangle {
 								anchors.left: parent.left
 								anchors.bottom: parent.bottom
 								width: clipboardSearch.activeFocus ? parent.width : 0
-								height: Bio.rib
-								color: Bio.organ
+								height: Arc.rule
+								color: Arc.aether
 
 								Behavior on width {
-									NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
+									NumberAnimation { duration: Arc.turn; easing.type: Easing.OutCubic }
 								}
 							}
 
-							BioRing {
+							ArcDial {
 								id: clipSearchIcon
 								anchors.left: parent.left
 								anchors.verticalCenter: parent.verticalCenter
 								width: 24
 								height: 24
 								seed: 2
-								lineColor: Bio.boneFaint
+								lineColor: Arc.giltFaint
 								intensity: clipboardSearch.activeFocus ? 0.9 : 0
 
 								QQCImpl.IconImage {
@@ -2433,7 +2665,7 @@ Scope {
 									height: 12
 									source: "/usr/share/icons/Adwaita/symbolic/actions/edit-find-symbolic.svg"
 									sourceSize: Qt.size(width, height)
-									color: clipboardSearch.activeFocus ? Bio.organ : Bio.textMuted
+									color: clipboardSearch.activeFocus ? Arc.aether : Arc.inkMuted
 								}
 							}
 
@@ -2441,14 +2673,14 @@ Scope {
 								id: clipboardSearch
 								anchors.fill: parent
 								anchors.leftMargin: 34
-								anchors.bottomMargin: Bio.s2
-								font.family: Bio.sans
-								font.pixelSize: Bio.sizeBody
-								color: Bio.text
-								placeholderText: "Sift residue"
-								placeholderTextColor: Bio.textFaint
-								selectedTextColor: Bio.text
-								selectionColor: Qt.alpha(Bio.organ, 0.3)
+								anchors.bottomMargin: Arc.s2
+								font.family: Arc.book
+								font.pixelSize: Arc.sizeBody
+								color: Arc.ink
+								placeholderText: "Sift the palimpsest"
+								placeholderTextColor: Arc.inkFaint
+								selectedTextColor: Arc.ink
+								selectionColor: Qt.alpha(Arc.aether, 0.3)
 								selectByMouse: true
 								focus: root.clipboardPopupVisible
 								background: Item {}
@@ -2477,7 +2709,7 @@ Scope {
 							width: parent.width
 							height: 330
 
-							BioText {
+							ArcText {
 								role: "body"
 								anchors.centerIn: parent
 								visible: clipboardPopupContent.filteredEntries.length === 0
@@ -2531,7 +2763,7 @@ Scope {
 
 								// A scrap of residue: text on the membrane with a vein
 								// beside it, or the image itself framed in bone.
-								delegate: BioRow {
+								delegate: ArcEntry {
 									id: clipEntry
 									required property var modelData
 									required property int index
@@ -2539,7 +2771,7 @@ Scope {
 
 									width: ListView.view.width
 									implicitHeight: clipEntry.modelData.isImage ? 104 : 40
-									inset: Bio.s3
+									inset: Arc.s3
 									selected: clipEntry.current
 									onClicked: clipboardPopupContent.selectEntry(clipEntry.modelData)
 									onContainsMouseChanged: {
@@ -2551,11 +2783,11 @@ Scope {
 										imagePreviewProcess.running = true;
 									}
 
-									BioText {
+									ArcText {
 										visible: clipEntry.modelData.isImage
 										anchors.left: parent.left
 										anchors.top: parent.top
-										anchors.topMargin: Bio.s2
+										anchors.topMargin: Arc.s2
 										role: "label"
 										tone: "faint"
 										text: clipEntry.modelData.extension.toUpperCase()
@@ -2567,13 +2799,13 @@ Scope {
 										width: 88
 										height: 88
 
-										BioFrame {
+										ArcPlate {
 											anchors.fill: parent
 											variant: "plate"
 											beading: false
-											weight: Bio.ribThin
-											lineColor: Bio.boneFaint
-											liveColor: Bio.organ
+											weight: Arc.ruleThin
+											lineColor: Arc.giltFaint
+											liveColor: Arc.aether
 											intensity: clipEntry.current ? 1 : 0
 										}
 
@@ -2601,11 +2833,11 @@ Scope {
 										}
 									}
 
-									BioText {
+									ArcText {
 										visible: !clipEntry.modelData.isImage
 										anchors.left: parent.left
 										anchors.right: deleteButton.left
-										anchors.rightMargin: Bio.s3
+										anchors.rightMargin: Arc.s3
 										anchors.verticalCenter: parent.verticalCenter
 										role: "body"
 										tone: clipEntry.current ? "default" : "muted"
@@ -2622,17 +2854,17 @@ Scope {
 										opacity: clipEntry.containsMouse || deleteHover.containsMouse || clipEntry.current ? 1 : 0
 
 										Behavior on opacity {
-											NumberAnimation { duration: Bio.twitch }
+											NumberAnimation { duration: Arc.tick }
 										}
 
-										BioText {
+										ArcText {
 											anchors.centerIn: parent
 											role: "body"
 											tone: deleteHover.containsMouse ? "alert" : "faint"
 											text: "\u00d7"
 										}
 
-										BioTouch {
+										ArcTouch {
 											id: deleteHover
 											onClicked: {
 												Quickshell.execDetached([
@@ -2655,7 +2887,7 @@ Scope {
 
 	PopupSurface {
 		id: bluetoothPopup
-		title: "Tether"
+		title: "Bindings"
 		screen: root.activePopupScreen
 
 		onDismissRequested: root.closeBluetoothPopup()
@@ -2968,28 +3200,28 @@ done`
 							width: parent.width
 							height: 24
 
-							BioText {
+							ArcText {
 								id: btTitle
 								anchors.left: parent.left
 								anchors.verticalCenter: parent.verticalCenter
 								role: "title"
 								font.pixelSize: 15
-								text: "Tether"
+								text: "The Binding"
 							}
 
-							BioTendon {
+							ArcFlourish {
 								anchors.left: btTitle.right
 								anchors.right: btSwitch.left
-								anchors.leftMargin: Bio.s3
-								anchors.rightMargin: Bio.s3
+								anchors.leftMargin: Arc.s3
+								anchors.rightMargin: Arc.s3
 								anchors.verticalCenter: parent.verticalCenter
 								height: 12
 								facing: Qt.LeftToRight
-								lineColor: Bio.boneFaint
+								lineColor: Arc.giltFaint
 								visible: width > 24
 							}
 
-							BioToggle {
+							ArcLever {
 								id: btSwitch
 								anchors.right: parent.right
 								anchors.verticalCenter: parent.verticalCenter
@@ -3006,14 +3238,14 @@ done`
 							height: 30
 							visible: bluetoothPopup.powered
 
-							BioRing {
+							ArcDial {
 								id: scanIcon
 								anchors.left: parent.left
 								anchors.verticalCenter: parent.verticalCenter
 								width: 26
 								height: 26
 								seed: 1
-								lineColor: Bio.boneFaint
+								lineColor: Arc.giltFaint
 								intensity: bluetoothPopup.scanning ? 1 : scanTouch.live
 
 								RotationAnimator on rotation {
@@ -3025,28 +3257,28 @@ done`
 								}
 							}
 
-							BioText {
+							ArcText {
 								id: scanLabel
 								anchors.left: scanIcon.right
-								anchors.leftMargin: Bio.s3
+								anchors.leftMargin: Arc.s3
 								anchors.verticalCenter: parent.verticalCenter
 								role: "label"
-								tone: bluetoothPopup.scanning || scanTouch.containsMouse ? "organ" : "muted"
+								tone: bluetoothPopup.scanning || scanTouch.containsMouse ? "aether" : "muted"
 								text: bluetoothPopup.scanning ? "Sensing" : "Sense"
 							}
 
-							BioTendon {
+							ArcFlourish {
 								anchors.left: scanLabel.right
 								anchors.right: parent.right
-								anchors.leftMargin: Bio.s3
+								anchors.leftMargin: Arc.s3
 								anchors.verticalCenter: parent.verticalCenter
 								height: 12
 								facing: Qt.LeftToRight
-								lineColor: bluetoothPopup.scanning ? Qt.alpha(Bio.organ, 0.55) : Bio.boneGhost
+								lineColor: bluetoothPopup.scanning ? Qt.alpha(Arc.aether, 0.55) : Arc.giltGhost
 								visible: width > 24
 							}
 
-							BioTouch {
+							ArcTouch {
 								id: scanTouch
 								onClicked: bluetoothPopup.startScan()
 							}
@@ -3059,21 +3291,21 @@ done`
 							Column {
 								visible: !bluetoothPopup.powered
 								anchors.centerIn: parent
-								spacing: Bio.s3
+								spacing: Arc.s3
 
-								BioSigil {
+								ArcRune {
 									anchors.horizontalCenter: parent.horizontalCenter
 									width: 46
 									height: 46
 									seed: 17
-									lineColor: Bio.boneGhost
+									lineColor: Arc.giltGhost
 								}
 
-								BioText {
+								ArcText {
 									anchors.horizontalCenter: parent.horizontalCenter
 									role: "label"
 									tone: "faint"
-									text: "Tether dormant"
+									text: "Bindings dormant"
 								}
 							}
 
@@ -3107,7 +3339,7 @@ done`
 									policy: ScrollBar.AsNeeded
 								}
 
-								header: BioText {
+								header: ArcText {
 									visible: bluetoothPopup.devices.length === 0
 									width: ListView.view ? ListView.view.width : 0
 									height: visible ? 30 : 0
@@ -3121,7 +3353,7 @@ done`
 								// A tethered organism: the ring carries its mark and
 								// lights when it is attached, the vein says the row is
 								// live, and its charge is engraved, not chipped.
-								delegate: BioRow {
+								delegate: ArcEntry {
 									id: btDevice
 									required property var modelData
 									readonly property string deviceIcon: {
@@ -3141,18 +3373,18 @@ done`
 
 									width: ListView.view.width
 									implicitHeight: 46
-									inset: Bio.s3
+									inset: Arc.s3
 									selected: Boolean(btDevice.modelData.connected)
 									onClicked: bluetoothPopup.connectDevice(btDevice.modelData.address)
 
-									BioRing {
+									ArcDial {
 										id: btMark
 										anchors.left: parent.left
 										anchors.verticalCenter: parent.verticalCenter
 										width: 30
 										height: 30
 										seed: 2
-										lineColor: Bio.boneGhost
+										lineColor: Arc.giltGhost
 										intensity: btDevice.modelData.connected ? 1 : btDevice.live
 
 										QQCImpl.IconImage {
@@ -3161,26 +3393,26 @@ done`
 											height: 14
 											source: btDevice.deviceIcon
 											sourceSize: Qt.size(width, height)
-											color: btDevice.modelData.connected ? Bio.organ : Bio.text
+											color: btDevice.modelData.connected ? Arc.aether : Arc.ink
 										}
 									}
 
 									Column {
 										anchors.left: btMark.right
-										anchors.leftMargin: Bio.s3
+										anchors.leftMargin: Arc.s3
 										anchors.right: btBatteryChip.visible ? btBatteryChip.left : parent.right
-										anchors.rightMargin: Bio.s3
+										anchors.rightMargin: Arc.s3
 										anchors.verticalCenter: parent.verticalCenter
 										spacing: -1
 
-										BioText {
+										ArcText {
 											width: parent.width
 											role: "bodyStrong"
-											tone: btDevice.modelData.connected ? "organ" : "default"
+											tone: btDevice.modelData.connected ? "aether" : "default"
 											text: btDevice.modelData.name
 										}
 
-										BioText {
+										ArcText {
 											width: parent.width
 											role: "caption"
 											tone: "faint"
@@ -3189,7 +3421,7 @@ done`
 										}
 									}
 
-									BioText {
+									ArcText {
 										id: btBatteryChip
 										visible: btDevice.modelData.connected && String(btDevice.modelData.battery || "") !== ""
 										anchors.right: parent.right
@@ -3208,7 +3440,7 @@ done`
 
 	PopupSurface {
 		id: networkPopup
-		title: "Link"
+		title: "Ley"
 		screen: root.activePopupScreen
 
 		onDismissRequested: root.closeNetworkPopup()
@@ -3426,14 +3658,14 @@ printf 'type=offline\niface=\nip=\n'`
 								anchors.top: parent.top
 								height: 34
 
-								BioRing {
+								ArcDial {
 									id: linkMark
 									anchors.left: parent.left
 									anchors.verticalCenter: parent.verticalCenter
 									width: 32
 									height: 32
 									seed: 0
-									lineColor: Bio.boneFaint
+									lineColor: Arc.giltFaint
 									intensity: networkPopup.currentType === "offline" ? 0 : 1
 
 									QQCImpl.IconImage {
@@ -3441,22 +3673,22 @@ printf 'type=offline\niface=\nip=\n'`
 										width: 15
 										height: 15
 										source: networkPopup.currentType === "ethernet"
-											? Bio.icon("network-wired-symbolic")
-											: Bio.icon("network-wireless-signal-excellent-symbolic")
+											? Arc.icon("network-wired-symbolic")
+											: Arc.icon("network-wireless-signal-excellent-symbolic")
 										sourceSize: Qt.size(width, height)
-										color: networkPopup.currentType === "offline" ? Bio.textMuted : Bio.organ
+										color: networkPopup.currentType === "offline" ? Arc.inkMuted : Arc.aether
 									}
 								}
 
 								Column {
 									anchors.left: linkMark.right
-									anchors.leftMargin: Bio.s3
+									anchors.leftMargin: Arc.s3
 									anchors.right: severLabel.visible ? severLabel.left : parent.right
-									anchors.rightMargin: Bio.s3
+									anchors.rightMargin: Arc.s3
 									anchors.verticalCenter: parent.verticalCenter
 									spacing: -1
 
-									BioText {
+									ArcText {
 										width: parent.width
 										role: "heading"
 										tone: networkPopup.currentType === "offline" ? "muted" : "default"
@@ -3465,7 +3697,7 @@ printf 'type=offline\niface=\nip=\n'`
 											: (networkPopup.currentType === "ethernet" ? "Corded" : "Airborne")
 									}
 
-									BioText {
+									ArcText {
 										width: parent.width
 										role: "caption"
 										tone: "faint"
@@ -3475,7 +3707,7 @@ printf 'type=offline\niface=\nip=\n'`
 									}
 								}
 
-								BioText {
+								ArcText {
 									id: severLabel
 									visible: networkPopup.currentType !== "offline"
 									anchors.right: parent.right
@@ -3484,9 +3716,9 @@ printf 'type=offline\niface=\nip=\n'`
 									tone: severTouch.containsMouse ? "alert" : "muted"
 									text: "Sever"
 
-									BioTouch {
+									ArcTouch {
 										id: severTouch
-										anchors.margins: -Bio.s2
+										anchors.margins: -Arc.s2
 										onClicked: root.disconnectActiveNetwork()
 									}
 								}
@@ -3501,26 +3733,26 @@ printf 'type=offline\niface=\nip=\n'`
 							anchors.left: parent.left
 							anchors.right: parent.right
 							anchors.top: linkHead.bottom
-							anchors.topMargin: Bio.s5
-							height: (parent.height - linkHead.height - Bio.s5 * 2 - Bio.s5) / 2
+							anchors.topMargin: Arc.s5
+							height: (parent.height - linkHead.height - Arc.s5 * 2 - Arc.s5) / 2
 
-							BioSection {
+							ArcRubric {
 								id: outflowHead
 								width: parent.width
 								title: "Outflow"
 								trailing: networkPopup.formatSpeed(networkPopup.currentUploadSpeed)
 							}
 
-							BioPulse {
+							ArcTrace {
 								id: uploadChart
 								anchors.left: parent.left
 								anchors.right: parent.right
 								anchors.top: outflowHead.bottom
-								anchors.topMargin: Bio.s3
+								anchors.topMargin: Arc.s3
 								anchors.bottom: parent.bottom
 								values: networkPopup.uploadHistory || []
 								ceiling: networkPopup.uploadChartMax
-								traceColor: Bio.organ
+								traceColor: Arc.aether
 
 								Connections {
 									target: networkPopup
@@ -3535,26 +3767,26 @@ printf 'type=offline\niface=\nip=\n'`
 							anchors.left: parent.left
 							anchors.right: parent.right
 							anchors.top: outflowBlock.bottom
-							anchors.topMargin: Bio.s5
+							anchors.topMargin: Arc.s5
 							anchors.bottom: parent.bottom
 
-							BioSection {
+							ArcRubric {
 								id: intakeHead
 								width: parent.width
 								title: "Intake"
 								trailing: networkPopup.formatSpeed(networkPopup.currentDownloadSpeed)
 							}
 
-							BioPulse {
+							ArcTrace {
 								id: downloadChart
 								anchors.left: parent.left
 								anchors.right: parent.right
 								anchors.top: intakeHead.bottom
-								anchors.topMargin: Bio.s3
+								anchors.topMargin: Arc.s3
 								anchors.bottom: parent.bottom
 								values: networkPopup.downloadHistory || []
 								ceiling: networkPopup.downloadChartMax
-								traceColor: Bio.organAlt
+								traceColor: Arc.aetherAlt
 
 								Connections {
 									target: networkPopup
@@ -3569,7 +3801,7 @@ printf 'type=offline\niface=\nip=\n'`
 
 	PopupSurface {
 		id: resourcesPopup
-		title: "Vitals"
+		title: "Humours"
 		screen: root.activePopupScreen
 
 		onDismissRequested: root.closeResourcesPopup()
@@ -3579,7 +3811,7 @@ printf 'type=offline\niface=\nip=\n'`
 		anchorItem: resourceBars
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
-		expandedWidth: 300
+		expandedWidth: 420
 		contentPreferredHeight: resourcesPopupColumn.implicitHeight
 
 		onVisibleChanged: {
@@ -3599,37 +3831,54 @@ printf 'type=offline\niface=\nip=\n'`
 							Column {
 								id: resourcesPopupColumn
 								anchors.fill: parent
-								spacing: Bio.s4
+								spacing: Arc.s4
 
-								BioSection {
+								ArcRubric {
 									width: parent.width
-									title: "Vitals"
+									title: "The Rack"
 									trailing: resourceBars.cpuText
 								}
 
+								// The rack, at the size it deserves. The letters on
+								// the chain are these four, spelled out: what the
+								// machine is actually carrying, in glass.
 								Row {
 									anchors.horizontalCenter: parent.horizontalCenter
-									spacing: Bio.s5
+									spacing: Arc.s6
 
-									ArcGauge {
+									ArcMeasure {
 										value: resourceBars.cpuUsage
-										label: "Cortex"
+										label: "Mana"
 										detail: resourceBars.cpuText
-										gaugeColor: resourceBars.cpuUsage > 0.88 ? Bio.necrosis : Bio.organ
 									}
 
-									ArcGauge {
+									ArcMeasure {
 										value: resourceBars.memoryUsage
-										label: "Reserve"
+										label: "Aether"
 										detail: resourceBars.memoryText
-										gaugeColor: resourceBars.memoryUsage > 0.88 ? Bio.necrosis : Bio.organAlt
+										fillColor: Arc.aetherAlt
+									}
+
+									ArcMeasure {
+										value: resourceBars.storageUsage
+										label: "Vault"
+										detail: `${resourceBars.disks.length} stores`
+										fillColor: Arc.aetherThird
+									}
+
+									ArcMeasure {
+										visible: resourceBars.mouseBatteryAvailable
+										value: resourceBars.mouseBatteryUsage
+										label: "Essence"
+										detail: resourceBars.mouseBatteryText
+										inverted: true
 									}
 								}
 
-								BioSection {
+								ArcRubric {
 									width: parent.width
 									visible: resourceBars.mouseBatteryAvailable
-									title: "Limb"
+									title: "Essence"
 									trailing: resourceBars.mouseBatteryStatus
 
 									ResourceRow {
@@ -3641,14 +3890,14 @@ printf 'type=offline\niface=\nip=\n'`
 									}
 								}
 
-								BioSection {
+								ArcRubric {
 									width: parent.width
-									title: "Stores"
+									title: "Vaults"
 									trailing: `${resourceBars.disks.length}`
 
 									Column {
 										width: parent.width
-										spacing: Bio.s3
+										spacing: Arc.s3
 
 										Repeater {
 											model: resourceBars.disks
@@ -3690,22 +3939,30 @@ printf 'type=offline\niface=\nip=\n'`
 		WlrLayershell.layer: WlrLayer.Overlay
 		WlrLayershell.keyboardFocus: root.launcherPopupVisible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
-		// The column is never covered. The bench dims the desktop beside it and
-		// leaves the spine lit and live, so the organ you pulled this out of is
-		// still there to push it back in.
+		// The chain is never covered. The grimoire dims the desktop under it
+		// and leaves the chain lit and live, so the clasp you opened this with
+		// is still there to shut it.
 		mask: Region {
-			x: Math.round(Bio.spine)
-			y: 0
-			width: Math.max(0, launcherPopup.width - Math.round(Bio.spine))
-			height: launcherPopup.height
+			x: 0
+			y: Math.round(Arc.gantryDepth)
+			width: launcherPopup.width
+			height: Math.max(0, launcherPopup.height - Math.round(Arc.gantryDepth))
 		}
 
 		property real progress: root.launcherPopupOpen ? 1 : 0
 
+		// Two movements, in order, the same pair every modal in this style
+		// makes: the volume is lowered off the chain, and only then is it
+		// opened. Reading begins after that, which is what the launcher's own
+		// band stagger is for.
+		readonly property real lower: Math.max(0, Math.min(1, progress / 0.42))
+		readonly property real turned: Math.max(0, Math.min(1, (progress - 0.36) / 0.64))
+
 		Behavior on progress {
 			NumberAnimation {
-				duration: root.launcherPopupOpen ? Bio.unfurl : Bio.furl
-				easing.type: root.launcherPopupOpen ? Easing.OutQuint : Easing.InCubic
+				duration: root.launcherPopupOpen ? Arc.unroll + Arc.turn : Arc.reroll + 70
+				easing.type: Easing.Bezier
+				easing.bezierCurve: root.launcherPopupOpen ? Arc.curveUnroll : Arc.curveReroll
 			}
 		}
 
@@ -3714,59 +3971,294 @@ printf 'type=offline\niface=\nip=\n'`
 			anchors.right: parent.right
 			anchors.top: parent.top
 			anchors.bottom: parent.bottom
-			anchors.leftMargin: Math.round(Bio.spine)
-			color: Bio.cavity
+			anchors.topMargin: Math.round(Arc.gantryDepth)
+			color: Arc.well
 			opacity: 0.985 * launcherPopup.progress
 		}
 
 		MouseArea {
 			anchors.fill: parent
-			anchors.leftMargin: Math.round(Bio.spine)
+			anchors.topMargin: Math.round(Arc.gantryDepth)
 			onClicked: root.closeLauncherPopup()
 		}
 
+		// THE GRIMOIRE.
+		//
+		// The launcher is a book, and it behaves like one. It is lowered off
+		// the chain on two cords, its boards turn outward about the gutter, and
+		// what is underneath them is a two-page spread with a sewn binding down
+		// the middle and the cut edges of the page block showing at the sides.
+		// Nothing here is a panel with a list in it.
 		Item {
-			id: launcherStage
+			id: book
 
-			focus: true
+			readonly property real boardMargin: 9
+			readonly property real typeMargin: 30
 
-			Keys.onEscapePressed: event => {
-				event.accepted = true;
-				root.closeLauncherPopup();
+			width: Math.min(parent.width - Arc.s8 * 2, 1520)
+			height: parent.height - Arc.gantryDepth - Arc.s6 * 2
+			x: Math.round((parent.width - width) / 2)
+			y: Math.round(Arc.gantryDepth + Arc.s6 - (1 - launcherPopup.lower) * 110)
+			opacity: Math.min(1, launcherPopup.lower * 2.2)
+
+			// The cords it hangs on while it is coming down.
+			Repeater {
+				model: 2
+				delegate: Rectangle {
+					required property int index
+					x: index === 0 ? Arc.s8 : book.width - Arc.s8
+					y: -(book.y - Arc.gantryDepth + Arc.s2)
+					width: Arc.ruleThin
+					height: Math.max(0, book.y - Arc.gantryDepth + Arc.s2)
+					color: Qt.alpha(Arc.gilt, 0.4 * (1 - launcherPopup.turned))
+				}
 			}
 
-			// The bench runs from the column out, not across the middle of the
-			// screen, and stops at a width a person can still read across.
-			anchors.left: parent.left
-			anchors.top: parent.top
-			anchors.bottom: parent.bottom
-			anchors.leftMargin: Math.round(Bio.spine + Bio.s7)
-			anchors.topMargin: Bio.s7
-			anchors.bottomMargin: Bio.s6
-			width: Math.min(parent.width - Bio.spine - Bio.s7 * 2, 1400)
-
-			opacity: Math.min(1, launcherPopup.progress * 1.6)
-
-			transform: Translate {
-				x: (1 - launcherPopup.progress) * -70
+			ArcHalo {
+				anchors.centerIn: parent
+				width: parent.width * 1.2
+				height: parent.height * 1.3
+				color: Arc.aether
+				strength: 0.13 * launcherPopup.progress
+				spread: 0.46
+				flicker: true
 			}
 
-			Loader {
-				id: launcherSheetLoader
+			// The page block: the boards around the outside, a tooled brass
+			// line on them, and two leaves of vellum inside.
+			Rectangle {
 				anchors.fill: parent
-				active: true
-				sourceComponent: AppLauncherPopup {
-					foreground: root.foreground
-					background: root.background
-					secondaryBoxColor: root.secondaryBoxColor
-					secondaryBoxStrongColor: root.secondaryBoxStrongColor
-					secondaryInsetColor: root.secondaryInsetColor
-					barColor: root.accent
-					danger: root.danger
-					onCloseRequested: root.closeLauncherPopup()
-					onOpenStudioRequested: page => {
-						root.closeLauncherPopup();
-						root.openStudio(page);
+				color: Arc.leaf3
+
+				Rectangle {
+					anchors.fill: parent
+					color: "transparent"
+					border.width: Arc.rule
+					border.color: Arc.giltDim
+				}
+
+				Rectangle {
+					anchors.fill: parent
+					anchors.margins: 4
+					color: "transparent"
+					border.width: Arc.ruleThin
+					border.color: Arc.giltGhost
+				}
+
+				Rectangle {
+					anchors.fill: parent
+					anchors.margins: book.boardMargin
+					color: Arc.leaf1
+
+					// The leaves are not flat. A page lifts off the board at
+					// its fore-edge and falls away into the binding, and that
+					// is the only reason a spread reads as paper.
+					Rectangle {
+						anchors.fill: parent
+						gradient: Gradient {
+							orientation: Gradient.Horizontal
+							GradientStop { position: 0.00; color: Qt.alpha(Arc.raised, 0.045) }
+							GradientStop { position: 0.36; color: "transparent" }
+							GradientStop { position: 0.64; color: "transparent" }
+							GradientStop { position: 1.00; color: Qt.alpha(Arc.raised, 0.045) }
+						}
+					}
+				}
+			}
+
+			Repeater {
+				model: 2
+
+				delegate: Item {
+					required property int index
+					readonly property bool leftEdge: index === 0
+
+					x: leftEdge ? book.boardMargin : book.width - book.boardMargin - width
+					y: book.boardMargin + 6
+					width: 7
+					height: book.height - book.boardMargin * 2 - 12
+
+					Repeater {
+						model: 4
+						delegate: Rectangle {
+							required property int index
+							x: index * 2
+							width: Arc.ruleThin
+							height: parent.height
+							color: Qt.alpha(Arc.gilt, 0.16 - index * 0.03)
+						}
+					}
+				}
+			}
+
+			// The binding: the gutter shadow, and the thread the sections are
+			// sewn on. This is the line the boards turn about.
+			Rectangle {
+				anchors.horizontalCenter: parent.horizontalCenter
+				anchors.top: parent.top
+				anchors.bottom: parent.bottom
+				anchors.topMargin: book.boardMargin
+				anchors.bottomMargin: book.boardMargin
+				width: Arc.s8
+
+				gradient: Gradient {
+					orientation: Gradient.Horizontal
+					GradientStop { position: 0.00; color: "transparent" }
+					GradientStop { position: 0.34; color: Qt.alpha(Arc.well, 0.55) }
+					GradientStop { position: 0.50; color: Qt.alpha(Arc.well, 0.95) }
+					GradientStop { position: 0.66; color: Qt.alpha(Arc.well, 0.55) }
+					GradientStop { position: 1.00; color: "transparent" }
+				}
+
+				// The sewing: the thread showing through the fold, in pairs,
+				// the way a section is actually sewn onto its cords.
+				Repeater {
+					model: 6
+
+					delegate: Item {
+						required property int index
+						anchors.horizontalCenter: parent.horizontalCenter
+						y: parent.height * (0.07 + index * 0.172)
+						width: Arc.ruleThin
+						height: 22
+
+						Rectangle {
+							width: Arc.ruleThin
+							height: 9
+							color: Qt.alpha(Arc.gilt, 0.34)
+						}
+
+						Rectangle {
+							y: 13
+							width: Arc.ruleThin
+							height: 9
+							color: Qt.alpha(Arc.gilt, 0.34)
+						}
+					}
+				}
+			}
+
+			Item {
+				id: launcherStage
+
+				focus: true
+
+				Keys.onEscapePressed: event => {
+					event.accepted = true;
+					root.closeLauncherPopup();
+				}
+
+				anchors.fill: parent
+				anchors.margins: book.boardMargin + book.typeMargin
+				opacity: Math.max(0, (launcherPopup.turned - 0.45) / 0.55)
+
+				Loader {
+					id: launcherSheetLoader
+					anchors.fill: parent
+					active: true
+					sourceComponent: AppLauncherPopup {
+						foreground: root.foreground
+						background: root.background
+						secondaryBoxColor: root.secondaryBoxColor
+						secondaryBoxStrongColor: root.secondaryBoxStrongColor
+						secondaryInsetColor: root.secondaryInsetColor
+						barColor: root.accent
+						danger: root.danger
+						gutter: Arc.s6
+						onCloseRequested: root.closeLauncherPopup()
+						onOpenStudioRequested: page => {
+							root.closeLauncherPopup();
+							root.openStudio(page);
+						}
+					}
+				}
+			}
+
+			// The boards. They are over everything until they have turned out
+			// of the way, and they cost nothing once the book is open.
+			Repeater {
+				model: 2
+
+				delegate: Item {
+					id: board
+
+					required property int index
+					readonly property bool leftBoard: index === 0
+
+					x: leftBoard ? 0 : book.width / 2
+					width: book.width / 2
+					height: book.height
+					visible: launcherPopup.turned < 0.995 && launcherPopup.progress > 0.004
+					z: 20
+
+					transform: Matrix4x4 {
+						readonly property real angle: (board.leftBoard ? -1 : 1) * 98 * launcherPopup.turned
+						readonly property real pivotX: board.leftBoard ? board.width : 0
+						readonly property real pivotY: board.height / 2
+
+						matrix: {
+							const d = 2200;
+							const rad = angle * Math.PI / 180;
+							const c = Math.cos(rad), s = Math.sin(rad);
+							const toPivot = Qt.matrix4x4(1, 0, 0, pivotX, 0, 1, 0, pivotY, 0, 0, 1, 0, 0, 0, 0, 1);
+							const persp = Qt.matrix4x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, -1 / d, 1);
+							const rotate = Qt.matrix4x4(c, 0, s, 0, 0, 1, 0, 0, -s, 0, c, 0, 0, 0, 0, 1);
+							const fromPivot = Qt.matrix4x4(1, 0, 0, -pivotX, 0, 1, 0, -pivotY, 0, 0, 1, 0, 0, 0, 0, 1);
+							return toPivot.times(persp).times(rotate).times(fromPivot);
+						}
+					}
+
+					// The board: tooled leather over wood, and the only surface
+					// in the style that is neither vellum nor brass.
+					Rectangle {
+						anchors.fill: parent
+						color: Arc.mix(Arc.leaf3, Arc.tan, Arc.light ? 0.16 : 0.10)
+
+						Rectangle {
+							anchors.fill: parent
+							anchors.margins: 7
+							color: "transparent"
+							border.width: Arc.rule
+							border.color: Arc.gilt
+						}
+
+						Rectangle {
+							anchors.fill: parent
+							anchors.margins: 12
+							color: "transparent"
+							border.width: Arc.ruleThin
+							border.color: Arc.giltDim
+						}
+					}
+
+					// The grimoire's own mark, stamped on the front board, and
+					// the raised bands across the spine on the back of it.
+					ArcMark {
+						anchors.centerIn: parent
+						width: Math.min(parent.width, parent.height) * 0.4
+						height: width
+						glyph: "book"
+						weight: Arc.ruleHeavy * 1.4
+						lineColor: Arc.gilt
+						visible: !board.leftBoard
+						opacity: 1 - launcherPopup.turned
+					}
+
+					Column {
+						anchors.right: parent.right
+						anchors.verticalCenter: parent.verticalCenter
+						spacing: 14
+						visible: board.leftBoard
+						opacity: 1 - launcherPopup.turned
+
+						Repeater {
+							model: 5
+							delegate: Rectangle {
+								width: 30
+								height: Arc.ruleHeavy
+								color: Arc.giltDim
+							}
+						}
 					}
 				}
 			}
@@ -3787,9 +4279,9 @@ printf 'type=offline\niface=\nip=\n'`
 
 		ModalSheet {
 			open: root.studioPopupOpen
-			scrimOpacity: 0.985
+			scrimOpacity: 1.0
 			sheetWidth: Math.min(1400, studioPopup.width - 80)
-			sheetHeight: studioPopup.height - Bio.s7 * 2
+			sheetHeight: Math.min(1060, studioPopup.height - Arc.s7 * 2)
 			onDismissRequested: root.closeStudio()
 
 			Loader {
@@ -3830,29 +4322,50 @@ printf 'type=offline\niface=\nip=\n'`
 
 		ModalSheet {
 			open: root.powerPopupOpen
-			scrimOpacity: 0.93
-			sheetWidth: 420
-			sheetHeight: 680
+			scrimOpacity: 1.0
+			sheetWidth: 620
+			sheetHeight: 620
 			onDismissRequested: root.closePowerPopup()
 
-			BioSurface {
+			// RETURN TO THE VOID.
+			//
+			// Ending a session is not a list of four buttons. A circle is laid
+			// out with a station at each of the four quarters, the machine's
+			// own name stands at its centre, and an index arm points at
+			// whichever station is chosen. Moving the choice turns the arm —
+			// the only thing on the screen that moves — and it arrests against
+			// the station the way every brass thing in this shell does.
+			Item {
 				id: powerModal
 				anchors.fill: parent
-				washTop: Bio.membrane
-				washBottom: Bio.membraneDeep
-				lineColor: Qt.alpha(Bio.necrosis, 0.42)
-				liveColor: Bio.necrosis
-				haloStrength: 0.30
-				intensity: 0.5
 				focus: root.powerPopupVisible
 
 				property string statUser: ""
 				property string statKernel: ""
 				property string statUptime: ""
 
+				readonly property real radius: Math.min(width, height) * 0.36
+				// The four quarters, clockwise from the top.
+				readonly property var stations: [
+					{ angle: -90, label: "Seal", sub: "Lock the session", action: "lock",
+					  icon: "/usr/share/icons/Adwaita/symbolic/status/system-lock-screen-symbolic.svg", grave: false },
+					{ angle: 0, label: "Depart", sub: "End the session", action: "logout",
+					  icon: "/usr/share/icons/Adwaita/symbolic/actions/system-log-out-symbolic.svg", grave: false },
+					{ angle: 90, label: "Rekindle", sub: "Restart the machine", action: "reboot",
+					  icon: "/usr/share/icons/Adwaita/symbolic/actions/system-reboot-symbolic.svg", grave: true },
+					{ angle: 180, label: "The Void", sub: "Power off", action: "shutdown",
+					  icon: "/usr/share/icons/Adwaita/symbolic/actions/system-shutdown-symbolic.svg", grave: true }
+				]
+
+				function step(delta) {
+					root.powerSelectionIndex = (root.powerSelectionIndex + delta + 4) % 4;
+				}
+
 				Keys.onEscapePressed: root.closePowerPopup()
-				Keys.onUpPressed: root.powerSelectionIndex = Math.max(0, root.powerSelectionIndex - 1)
-				Keys.onDownPressed: root.powerSelectionIndex = Math.min(3, root.powerSelectionIndex + 1)
+				Keys.onUpPressed: powerModal.step(-1)
+				Keys.onDownPressed: powerModal.step(1)
+				Keys.onLeftPressed: powerModal.step(-1)
+				Keys.onRightPressed: powerModal.step(1)
 				Keys.onReturnPressed: root.runSelectedPowerAction()
 				Keys.onEnterPressed: root.runSelectedPowerAction()
 
@@ -3874,200 +4387,375 @@ printf 'type=offline\niface=\nip=\n'`
 					}
 				}
 
-				// Who is being ended, and how long it has been alive.
-				Column {
-					id: hostColumn
-					anchors.left: parent.left
-					anchors.right: parent.right
-					anchors.top: parent.top
-					anchors.topMargin: Bio.s6
-					spacing: Bio.s3
+				ArcHalo {
+					anchors.centerIn: parent
+					width: parent.width * 1.3
+					height: parent.height * 1.3
+					color: Arc.bane
+					strength: 0.16
+					spread: 0.4
+					flicker: true
+				}
 
-					BioSigil {
-						anchors.horizontalCenter: parent.horizontalCenter
-						width: 72
-						height: 72
-						seed: 5
-						lineColor: Bio.boneDim
+				// The circle, cut once: the limb, its graduations, and the four
+				// quarter marks the stations stand on.
+				Canvas {
+					id: circle
+					anchors.fill: parent
+					renderStrategy: Canvas.Cooperative
+
+					Connections {
+						target: Arc
+						function onGiltChanged() { circle.requestPaint(); }
 					}
 
-					BioText {
+					onPaint: {
+						const ctx = getContext("2d");
+						ctx.reset();
+						const cx = width / 2, cy = height / 2, r = powerModal.radius;
+						if (r < 20) return;
+						const shadow = Qt.alpha(Qt.darker(Arc.gilt, 2.4), 0.55);
+						const highlight = Qt.alpha(Qt.lighter(Arc.gilt, 1.8), 0.5);
+
+						Ink.groove(ctx, Ink.arcPoints(cx, cy, r, 0, Math.PI * 2, 88),
+							Arc.rule * 1.4, Arc.gilt, highlight, shadow, true);
+						Ink.cut(ctx, Ink.arcPoints(cx, cy, r - 12, 0, Math.PI * 2, 88),
+							Arc.ruleThin, Qt.alpha(Arc.gilt, 0.35), true);
+						Ink.graduations(ctx, cx, cy, r - 1, -Math.PI / 2, Math.PI * 1.5,
+							72, 4, 10, 18, Arc.ruleThin, Qt.alpha(Arc.gilt, 0.42));
+
+						// The inner ring the name stands in.
+						Ink.cut(ctx, Ink.arcPoints(cx, cy, r * 0.42, 0, Math.PI * 2, 60),
+							Arc.ruleThin, Qt.alpha(Arc.gilt, 0.25), true);
+					}
+				}
+
+				// The index arm: it turns to the station that is chosen, and
+				// stops against it. This is the whole selection state.
+				Item {
+					id: arm
+					anchors.centerIn: parent
+					width: 2
+					height: powerModal.radius * 2
+
+					readonly property var station: powerModal.stations[Math.max(0, Math.min(3, root.powerSelectionIndex))]
+					rotation: arm.station.angle + 90
+
+					Behavior on rotation {
+						RotationAnimation {
+							direction: RotationAnimation.Shortest
+							duration: Arc.turn + 90
+							easing.type: Easing.Bezier
+							easing.bezierCurve: Arc.curveDetent
+						}
+					}
+
+					Rectangle {
+						anchors.horizontalCenter: parent.horizontalCenter
+						anchors.top: parent.top
+						anchors.topMargin: 10
+						width: Arc.ruleHeavy
+						height: parent.height / 2 - powerModal.radius * 0.42 - 10
+						color: arm.station.grave ? Arc.bane : Arc.aether
+					}
+
+					Rectangle {
+						anchors.horizontalCenter: parent.horizontalCenter
+						y: 4
+						width: 7
+						height: 7
+						rotation: 45
+						color: arm.station.grave ? Arc.bane : Arc.aether
+					}
+				}
+
+				// Who is being ended, and how long it has been awake.
+				Column {
+					anchors.centerIn: parent
+					spacing: Arc.s1
+
+					ArcMark {
+						anchors.horizontalCenter: parent.horizontalCenter
+						width: 40
+						height: 40
+						glyph: "star"
+						lineColor: Arc.giltDim
+					}
+
+					ArcText {
 						anchors.horizontalCenter: parent.horizontalCenter
 						role: "title"
-						font.pixelSize: 17
+						font.pixelSize: 16
 						text: powerModal.statUser
 					}
 
-					Column {
+					ArcText {
 						anchors.horizontalCenter: parent.horizontalCenter
-						spacing: 0
+						role: "hand"
+						tone: "muted"
+						font.pixelSize: 13
+						text: powerModal.statUptime ? `awake ${powerModal.statUptime}` : ""
+					}
 
-						BioText {
-							anchors.horizontalCenter: parent.horizontalCenter
-							role: "label"
-							tone: "faint"
-							text: "Alive"
-						}
-
-						BioText {
-							anchors.horizontalCenter: parent.horizontalCenter
-							role: "caption"
-							tone: "muted"
-							text: powerModal.statUptime
-						}
-
-						BioText {
-							anchors.horizontalCenter: parent.horizontalCenter
-							role: "label"
-							tone: "faint"
-							text: "Strain"
-						}
-
-						BioText {
-							anchors.horizontalCenter: parent.horizontalCenter
-							role: "caption"
-							tone: "muted"
-							text: powerModal.statKernel
-						}
+					ArcText {
+						anchors.horizontalCenter: parent.horizontalCenter
+						role: "caption"
+						tone: "faint"
+						text: powerModal.statKernel
 					}
 				}
 
-				BioTendon {
-					id: powerTendon
-					anchors.left: parent.left
-					anchors.right: parent.right
-					anchors.top: hostColumn.bottom
-					anchors.topMargin: Bio.s5
-					height: 14
-					facing: Qt.LeftToRight
-					sag: 2
-					weight: Bio.rib * 1.15
-					lineColor: Bio.boneDim
-				}
+				// The four stations.
+				Repeater {
+					model: powerModal.stations
 
-				Column {
-					anchors.left: parent.left
-					anchors.right: parent.right
-					anchors.top: powerTendon.bottom
-					anchors.topMargin: Bio.s5
-					anchors.bottom: parent.bottom
-					anchors.bottomMargin: Bio.s5
-					spacing: Bio.s2
+					delegate: Item {
+						id: station
 
-					readonly property real tileHeight: (height - Bio.s2 * 3) / 4
+						required property var modelData
+						required property int index
+						readonly property bool chosen: root.powerSelectionIndex === station.index
+						readonly property color toneColor: station.modelData.grave ? Arc.bane : Arc.aether
+						readonly property real live: Math.max(stationTouch.live, station.chosen ? 0.9 : 0)
+						readonly property real radians: station.modelData.angle * Math.PI / 180
 
-					PowerActionButton {
-						width: parent.width
-						height: parent.tileHeight
-						label: "Seal"
-						sublabel: "Lock the session"
-						iconSource: "/usr/share/icons/Adwaita/symbolic/status/system-lock-screen-symbolic.svg"
-						selectionIndex: 0
-						selected: root.powerSelectionIndex === 0
-						onClicked: root.runPowerAction("lock")
-					}
+						width: 96
+						height: 96
+						x: powerModal.width / 2 + Math.cos(station.radians) * powerModal.radius - width / 2
+						y: powerModal.height / 2 + Math.sin(station.radians) * powerModal.radius - height / 2
 
-					PowerActionButton {
-						width: parent.width
-						height: parent.tileHeight
-						label: "Shed"
-						sublabel: "End the session"
-						iconSource: "/usr/share/icons/Adwaita/symbolic/actions/system-log-out-symbolic.svg"
-						selectionIndex: 1
-						selected: root.powerSelectionIndex === 1
-						onClicked: root.runPowerAction("logout")
-					}
+						ArcHalo {
+							anchors.centerIn: seatDial
+							width: 120
+							height: 120
+							color: station.toneColor
+							strength: 0.34
+							spread: 0.34
+							flicker: true
+							opacity: station.live
+							visible: opacity > 0.01
 
-					PowerActionButton {
-						width: parent.width
-						height: parent.tileHeight
-						label: "Regrow"
-						sublabel: "Restart the machine"
-						iconSource: "/usr/share/icons/Adwaita/symbolic/actions/system-reboot-symbolic.svg"
-						selectionIndex: 2
-						selected: root.powerSelectionIndex === 2
-						dangerous: true
-						onClicked: root.runPowerAction("reboot")
-					}
+							Behavior on opacity {
+								NumberAnimation {
+									duration: Arc.turn
+									easing.type: Easing.Bezier
+									easing.bezierCurve: Arc.curveKindle
+								}
+							}
+						}
 
-					PowerActionButton {
-						width: parent.width
-						height: parent.tileHeight
-						label: "Terminate"
-						sublabel: "Power off"
-						iconSource: "/usr/share/icons/Adwaita/symbolic/actions/system-shutdown-symbolic.svg"
-						selectionIndex: 3
-						selected: root.powerSelectionIndex === 3
-						dangerous: true
-						onClicked: root.runPowerAction("shutdown")
+						// The station plate, sunk into the limb of the circle so
+						// the limb does not run through the mark.
+						Rectangle {
+							anchors.centerIn: seatDial
+							width: 56
+							height: 56
+							radius: 28
+							color: Arc.leaf1
+						}
+
+						ArcDial {
+							id: seatDial
+							anchors.horizontalCenter: parent.horizontalCenter
+							anchors.verticalCenter: parent.verticalCenter
+							width: 54
+							height: 54
+							seed: station.index
+							weight: Arc.rule
+							lineColor: station.modelData.grave ? Qt.alpha(Arc.bane, 0.5) : Arc.giltDim
+							liveColor: station.toneColor
+							intensity: station.live
+
+							QQCImpl.IconImage {
+								anchors.centerIn: parent
+								width: 21
+								height: 21
+								source: station.modelData.icon
+								sourceSize: Qt.size(width, height)
+								color: station.live > 0.3 ? station.toneColor : Arc.ink
+
+								Behavior on color {
+									ColorAnimation { duration: Arc.tick }
+								}
+							}
+						}
+
+						// The name, written outside the circle so the limb stays
+						// clean. Which side it sits on follows the quarter.
+						Column {
+							id: naming
+							spacing: -2
+							width: 190
+
+							readonly property real outward: 46
+
+							x: station.modelData.angle === 0 ? station.width + 8
+								: station.modelData.angle === 180 ? -width - 8
+								: (station.width - width) / 2
+							y: station.modelData.angle === -90 ? -naming.height - 6
+								: station.modelData.angle === 90 ? station.height + 6
+								: (station.height - naming.height) / 2
+
+							ArcText {
+								width: parent.width
+								horizontalAlignment: station.modelData.angle === 180 ? Text.AlignRight
+									: station.modelData.angle === 0 ? Text.AlignLeft : Text.AlignHCenter
+								role: "display"
+								font.pixelSize: 24
+								color: station.live > 0.3 ? station.toneColor : Arc.ink
+								text: station.modelData.label
+
+								Behavior on color {
+									ColorAnimation { duration: Arc.tick }
+								}
+							}
+
+							ArcText {
+								width: parent.width
+								horizontalAlignment: station.modelData.angle === 180 ? Text.AlignRight
+									: station.modelData.angle === 0 ? Text.AlignLeft : Text.AlignHCenter
+								role: "caption"
+								tone: "faint"
+								text: station.modelData.sub
+							}
+						}
+
+						ArcTouch {
+							id: stationTouch
+							anchors.fill: undefined
+							anchors.centerIn: seatDial
+							width: 60
+							height: 60
+							onClicked: root.runPowerAction(station.modelData.action)
+							onContainsMouseChanged: {
+								if (containsMouse) root.powerSelectionIndex = station.index;
+							}
+						}
 					}
 				}
 			}
 		}
 	}
 
-	// A load, as an organ: a ring that fills, the number engraved inside it and
-	// the name of the thing under it. Used wherever a proportion is the reading
-	// — never a bar with a percentage written next to it.
-	component ArcGauge: Item {
-		id: gauge
+	// A quantity, as what is in the glass. Used wherever the reading is a
+	// proportion of something the machine holds — never a bar with a percentage
+	// written beside it. The liquid overruns and rocks back when the reading
+	// jumps, because that is what liquid does.
+	component ArcMeasure: Item {
+		id: measure
 
 		required property real value
 		required property string label
 		property string detail: ""
-		property color gaugeColor: Bio.organ
+		property color fillColor: Arc.aether
+		property bool inverted: false
 
-		width: 108
-		height: 108
+		readonly property bool strained: measure.inverted ? measure.value < 0.2 : measure.value > 0.88
 
-		BioGlow {
-			anchors.centerIn: ring
-			width: ring.width * 1.8
-			height: ring.height * 1.8
-			color: gauge.gaugeColor
-			strength: 0.20
-			spread: 0.36
+		width: 78
+		height: 176
+
+		ArcHalo {
+			anchors.centerIn: glass
+			width: 110
+			height: 220
+			color: measure.strained ? Arc.bane : measure.fillColor
+			strength: 0.18
+			spread: 0.34
 		}
 
-		BioRing {
-			id: ring
+		// The glass: a stoppered phial, cut once.
+		Canvas {
+			id: glass
 			anchors.horizontalCenter: parent.horizontalCenter
 			anchors.top: parent.top
-			width: 78
-			height: 78
-			seed: 1
-			weight: Bio.ribHeavy
-			lineColor: Bio.boneFaint
-			liveColor: gauge.gaugeColor
-			progress: Math.max(0, Math.min(1, gauge.value))
+			width: 40
+			height: 118
+			renderStrategy: Canvas.Cooperative
+
+			Connections {
+				target: Arc
+				function onGiltChanged() { glass.requestPaint(); }
+			}
+
+			onPaint: {
+				const ctx = getContext("2d");
+				ctx.reset();
+				const shadow = Qt.alpha(Qt.darker(Arc.gilt, 2.4), 0.5);
+				const highlight = Qt.alpha(Qt.lighter(Arc.gilt, 1.8), 0.5);
+				const neck = width * 0.30, shoulder = height * 0.16;
+
+				const outline = [
+					{ x: width / 2 - neck, y: 4 },
+					{ x: width / 2 - neck, y: shoulder },
+					{ x: 2, y: shoulder + 12 },
+					{ x: 2, y: height - 6 },
+					{ x: 8, y: height - 1 },
+					{ x: width - 8, y: height - 1 },
+					{ x: width - 2, y: height - 6 },
+					{ x: width - 2, y: shoulder + 12 },
+					{ x: width / 2 + neck, y: shoulder },
+					{ x: width / 2 + neck, y: 4 }
+				];
+
+				Ink.polyline(ctx, outline, true);
+				ctx.fillStyle = Arc.well;
+				ctx.fill();
+				Ink.groove(ctx, outline, Arc.rule * 1.2, Arc.gilt, highlight, shadow, false);
+				// the stopper
+				Ink.groove(ctx, [{ x: width / 2 - neck - 3, y: 3 }, { x: width / 2 + neck + 3, y: 3 }],
+					Arc.ruleHeavy, Arc.gilt, highlight, shadow, false);
+				// the graduations up the side
+				for (let mark = 1; mark <= 4; mark++) {
+					const y = height - 6 - (height - shoulder - 22) * mark / 5;
+					Ink.cut(ctx, [{ x: 4, y: y }, { x: mark === 2 || mark === 4 ? 13 : 9, y: y }],
+						Arc.ruleThin, Qt.alpha(Arc.gilt, 0.4), false);
+				}
+			}
 		}
 
-		BioText {
-			anchors.centerIn: ring
+		ArcPhial {
+			anchors.left: glass.left
+			anchors.right: glass.right
+			anchors.bottom: glass.bottom
+			anchors.leftMargin: 3
+			anchors.rightMargin: 3
+			anchors.bottomMargin: 3
+			height: glass.height * 0.74
+			vertical: true
+			value: measure.value
+			trackColor: "transparent"
+			fillColor: measure.strained ? Arc.bane : measure.fillColor
+		}
+
+		ArcText {
+			anchors.horizontalCenter: glass.horizontalCenter
+			anchors.bottom: glass.bottom
+			anchors.bottomMargin: 18
 			role: "reading"
-			font.pixelSize: 22
-			text: `${Math.round(gauge.value * 100)}%`
+			font.pixelSize: 17
+			text: `${Math.round(measure.value * 100)}%`
 		}
 
 		Column {
 			anchors.horizontalCenter: parent.horizontalCenter
-			anchors.top: ring.bottom
-			anchors.topMargin: Bio.s2
-			spacing: 0
+			anchors.top: glass.bottom
+			anchors.topMargin: Arc.s3
+			spacing: -1
 
-			BioText {
+			ArcText {
 				anchors.horizontalCenter: parent.horizontalCenter
 				role: "label"
-				color: gauge.gaugeColor
-				text: gauge.label
+				color: measure.strained ? Arc.bane : Arc.ink
+				text: measure.label
 			}
 
-			BioText {
+			ArcText {
 				anchors.horizontalCenter: parent.horizontalCenter
 				role: "caption"
 				tone: "faint"
-				visible: gauge.detail !== ""
-				text: gauge.detail
+				visible: measure.detail !== ""
+				text: measure.detail
 			}
 		}
 	}
@@ -4089,7 +4777,7 @@ printf 'type=offline\niface=\nip=\n'`
 		width: parent ? parent.width : 276
 		implicitHeight: 38
 
-		BioText {
+		ArcText {
 			id: rowLabel
 			anchors.left: parent.left
 			anchors.top: parent.top
@@ -4098,16 +4786,16 @@ printf 'type=offline\niface=\nip=\n'`
 			text: resourceRow.label
 		}
 
-		BioText {
+		ArcText {
 			anchors.left: rowLabel.right
-			anchors.leftMargin: Bio.s2
+			anchors.leftMargin: Arc.s2
 			anchors.baseline: rowLabel.baseline
 			role: "caption"
 			tone: "faint"
 			text: resourceRow.detail
 		}
 
-		BioText {
+		ArcText {
 			anchors.right: parent.right
 			anchors.baseline: rowLabel.baseline
 			role: "caption"
@@ -4115,18 +4803,35 @@ printf 'type=offline\niface=\nip=\n'`
 			text: resourceRow.valueText
 		}
 
-		BioMeter {
+		// A channel with something running along it, not a bar: the glass is
+		// cut first and the liquid is put in it.
+		ArcPlate {
+			id: channel
 			anchors.left: parent.left
 			anchors.right: parent.right
 			anchors.top: rowLabel.bottom
-			anchors.topMargin: Bio.s2
-			height: 8
-			value: resourceRow.usage
-			fillColor: resourceRow.strained ? Bio.necrosis : Bio.organ
-			trackColor: Bio.boneGhost
+			anchors.topMargin: Arc.s2
+			height: 10
+			variant: "capsule"
+			beading: false
+			weight: Arc.ruleThin
+			inset: 0
+			lineColor: Arc.giltFaint
+			liveColor: resourceRow.strained ? Arc.bane : Arc.aether
+			fillTop: Arc.well
+			fillBottom: Arc.well
+			intensity: resourceRow.strained ? 0.8 : 0
 		}
 
-		BioText {
+		ArcPhial {
+			anchors.fill: channel
+			anchors.margins: 2
+			value: resourceRow.usage
+			fillColor: resourceRow.strained ? Arc.bane : Arc.aether
+			trackColor: "transparent"
+		}
+
+		ArcText {
 			anchors.right: parent.right
 			anchors.bottom: parent.bottom
 			role: "caption"
@@ -4139,90 +4844,9 @@ printf 'type=offline\niface=\nip=\n'`
 	// One way out of the session. A tile is a chamber with a ring in it; the
 	// dangerous two are outlined in necrosis so the hand knows before the eye
 	// has read the word.
-	component PowerActionButton: Item {
-		id: powerActionButton
-
-		signal clicked
-
-		required property string label
-		required property string iconSource
-		required property int selectionIndex
-		required property bool selected
-		property string sublabel: ""
-		property bool dangerous: false
-
-		readonly property color toneColor: powerActionButton.dangerous ? Bio.necrosis : Bio.organ
-		readonly property real live: Math.max(powerMouse.live, powerActionButton.selected ? 0.85 : 0)
-
-		BioSurface {
-			anchors.fill: parent
-			variant: "plate"
-			lineColor: powerActionButton.dangerous ? Qt.alpha(Bio.necrosis, 0.38) : Bio.boneFaint
-			liveColor: powerActionButton.toneColor
-			washTop: Qt.alpha(powerActionButton.toneColor, 0.07)
-			washBottom: Bio.tissue1
-			haloStrength: 0.18 * powerActionButton.live
-			intensity: powerActionButton.live
-			padding: Bio.s4
-
-			Row {
-				anchors.verticalCenter: parent.verticalCenter
-				anchors.left: parent.left
-				anchors.right: parent.right
-				spacing: Bio.s3
-
-				BioRing {
-					anchors.verticalCenter: parent.verticalCenter
-					width: 42
-					height: 42
-					seed: powerActionButton.selectionIndex
-					lineColor: Bio.boneFaint
-					liveColor: powerActionButton.toneColor
-					intensity: powerActionButton.live
-
-					QQCImpl.IconImage {
-						anchors.centerIn: parent
-						width: 19
-						height: 19
-						source: powerActionButton.iconSource
-						sourceSize: Qt.size(width, height)
-						color: powerActionButton.live > 0.3 ? powerActionButton.toneColor : Bio.text
-					}
-				}
-
-				Column {
-					anchors.verticalCenter: parent.verticalCenter
-					spacing: -2
-
-					BioText {
-						role: "specimen"
-						font.pixelSize: 24
-						color: powerActionButton.live > 0.3 ? powerActionButton.toneColor : Bio.text
-						text: powerActionButton.label
-					}
-
-					BioText {
-						role: "caption"
-						tone: "faint"
-						visible: powerActionButton.sublabel !== ""
-						text: powerActionButton.sublabel
-					}
-				}
-			}
-		}
-
-		BioTouch {
-			id: powerMouse
-			onClicked: powerActionButton.clicked()
-			onContainsMouseChanged: {
-				if (containsMouse) root.powerSelectionIndex = powerActionButton.selectionIndex;
-			}
-		}
-	}
-
 	PopupSurface {
 		id: trayMenuPopup
-		title: "Organ"
+		title: "Sigil"
 		screen: root.activePopupScreen
 
 		onDismissRequested: root.closeTrayMenu()
@@ -4315,13 +4939,13 @@ printf 'type=offline\niface=\nip=\n'`
 						// A menu entry is a row like every other row in this style,
 						// and a separator is a thread of bone rather than a grey
 						// bar.
-						BioRow {
+						ArcEntry {
 							id: menuEntry
 							required property QsMenuEntry modelData
 
 							width: trayMenuColumn.implicitWidth
 							implicitHeight: menuEntry.modelData.isSeparator ? 1 : 30
-							inset: Bio.s3
+							inset: Arc.s3
 							interactive: !menuEntry.modelData.isSeparator && menuEntry.modelData.enabled
 
 							// The row is the target. A second touch layer inside
@@ -4342,13 +4966,13 @@ printf 'type=offline\niface=\nip=\n'`
 							Rectangle {
 								anchors.fill: parent
 								visible: menuEntry.modelData.isSeparator
-								color: Bio.boneGhost
+								color: Arc.giltGhost
 							}
 
 						Row {
 							visible: !menuEntry.modelData.isSeparator
 							anchors.fill: parent
-							spacing: Bio.s3
+							spacing: Arc.s3
 
 							Image {
 								anchors.verticalCenter: parent.verticalCenter
@@ -4359,17 +4983,17 @@ printf 'type=offline\niface=\nip=\n'`
 								fillMode: Image.PreserveAspectFit
 							}
 
-							BioText {
+							ArcText {
 								role: "body"
 								anchors.verticalCenter: parent.verticalCenter
 								width: parent.width - x - (menuEntry.modelData.hasChildren ? 18 : 0)
 								text: menuEntry.modelData.text
-								color: menuEntry.modelData.enabled ? Bio.text : Bio.textFaint
+								color: menuEntry.modelData.enabled ? Arc.ink : Arc.inkFaint
 								font.pixelSize: 13
 								elide: Text.ElideRight
 							}
 
-							BioText {
+							ArcText {
 								role: "heading"
 								anchors.verticalCenter: parent.verticalCenter
 								visible: menuEntry.modelData.hasChildren
@@ -4387,13 +5011,13 @@ printf 'type=offline\niface=\nip=\n'`
 				active: trayMenuColumn.isSubMenu
 				y: menuEntries.implicitHeight + 6
 
-				sourceComponent: BioRow {
+				sourceComponent: ArcEntry {
 					width: trayMenuColumn.implicitWidth
 					implicitHeight: 30
-					inset: Bio.s3
+					inset: Arc.s3
 					onClicked: trayMenuStackLoader.item.pop()
 
-					BioText {
+					ArcText {
 						anchors.centerIn: parent
 						role: "label"
 						tone: "muted"
@@ -4406,7 +5030,7 @@ printf 'type=offline\niface=\nip=\n'`
 
 	PopupSurface {
 		id: mediaPopup
-		title: "Sound"
+		title: "Consort"
 		screen: root.activePopupScreen
 
 		onDismissRequested: root.closeMediaPopup()
@@ -4447,14 +5071,14 @@ printf 'type=offline\niface=\nip=\n'`
 
 	PopupSurface {
 		id: clockPopup
-		title: "Cycle"
+		title: "Ephemeris"
 		screen: root.activePopupScreen
 
 		onDismissRequested: root.closeClockPopup()
 		open: root.clockPopupOpen
 		visible: root.clockPopupVisible
 		barItem: bar
-		anchorItem: specimenPlate
+		anchorItem: horologe
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
 		expandedWidth: 380
@@ -4470,7 +5094,7 @@ printf 'type=offline\niface=\nip=\n'`
 		Column {
 			id: calendarContent
 			anchors.fill: parent
-			spacing: Bio.s4
+			spacing: Arc.s4
 
 			// Today, stated once and large. The spine already carries the time,
 			// so the chamber carries the date.
@@ -4478,16 +5102,16 @@ printf 'type=offline\niface=\nip=\n'`
 				width: parent.width
 				spacing: -2
 
-				BioText {
+				ArcText {
 					anchors.horizontalCenter: parent.horizontalCenter
-					role: "specimen"
+					role: "display"
 					text: Qt.formatDateTime(root.now, "d MMMM")
 				}
 
-				BioText {
+				ArcText {
 					anchors.horizontalCenter: parent.horizontalCenter
 					role: "label"
-					tone: "organ"
+					tone: "aether"
 					text: Qt.formatDateTime(root.now, "dddd")
 				}
 			}
@@ -4496,35 +5120,35 @@ printf 'type=offline\niface=\nip=\n'`
 				width: parent.width
 				height: 30
 
-				BioNode {
+				ArcSeat {
 					anchors.left: parent.left
 					anchors.verticalCenter: parent.verticalCenter
 					size: 26
 					seed: 1
 					onClicked: root.shiftCalendarMonths(-1)
 
-					BioText {
+					ArcText {
 						anchors.centerIn: parent
 						role: "heading"
 						text: "‹"
 					}
 				}
 
-				BioText {
+				ArcText {
 					anchors.centerIn: parent
 					role: "title"
 					font.pixelSize: 16
 					text: Qt.formatDateTime(root.currentDate, "MMMM yyyy")
 				}
 
-				BioNode {
+				ArcSeat {
 					anchors.right: parent.right
 					anchors.verticalCenter: parent.verticalCenter
 					size: 26
 					seed: 3
 					onClicked: root.shiftCalendarMonths(1)
 
-					BioText {
+					ArcText {
 						anchors.centerIn: parent
 						role: "heading"
 						text: "›"
@@ -4546,7 +5170,7 @@ printf 'type=offline\niface=\nip=\n'`
 						width: 44
 						height: 22
 
-						BioText {
+						ArcText {
 							anchors.centerIn: parent
 							role: "label"
 							tone: "faint"
@@ -4571,37 +5195,37 @@ printf 'type=offline\niface=\nip=\n'`
 						width: 44
 						height: 32
 
-						BioGlow {
+						ArcHalo {
 							anchors.centerIn: parent
 							width: 44
 							height: 44
-							color: Bio.organ
+							color: Arc.aether
 							strength: 0.30
 							spread: 0.30
 							visible: dayCell.today
 						}
 
-						BioRing {
+						ArcDial {
 							anchors.centerIn: parent
 							width: 30
 							height: 30
 							seed: dayCell.index % 4
 							visible: dayCell.present
 							lineColor: "transparent"
-							liveColor: Bio.organ
+							liveColor: Arc.aether
 							intensity: dayCell.today ? 1 : dayTouch.live
 						}
 
-						BioText {
+						ArcText {
 							anchors.centerIn: parent
 							role: dayCell.today ? "heading" : "body"
-							tone: dayCell.today ? "organ" : "muted"
+							tone: dayCell.today ? "aether" : "muted"
 							font.pixelSize: 12
 							visible: dayCell.present
 							text: dayCell.present ? dayCell.day : ""
 						}
 
-						BioTouch {
+						ArcTouch {
 							id: dayTouch
 							enabled: dayCell.present
 							cursorShape: Qt.ArrowCursor
@@ -4614,14 +5238,14 @@ printf 'type=offline\niface=\nip=\n'`
 
 	PopupSurface {
 		id: weatherPopup
-		title: "Sky"
+		title: "Oracle"
 		screen: root.activePopupScreen
 
 		onDismissRequested: root.closeWeatherPopup()
 		open: root.weatherPopupOpen
 		visible: root.weatherPopupVisible
 		barItem: bar
-		anchorItem: weatherNode
+		anchorItem: weatherRun
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
 		expandedWidth: 330
@@ -4637,54 +5261,116 @@ printf 'type=offline\niface=\nip=\n'`
 		Column {
 			id: weatherContent
 			anchors.fill: parent
-			spacing: Bio.s4
+			spacing: Arc.s4
 
-			// The reading first, at the size of a thing you glance at, with the
-			// sky's own sigil beside it rather than a boxed-in icon.
-			Row {
+			// THE ORACLE.
+			//
+			// Not a weather widget. A basin of dark water with the sky's own
+			// mark floating in it, the reading cut across it, and under that
+			// the line the oracle gives you — one sentence, in the hand,
+			// because a number is a fact and a sentence is an answer.
+			Item {
 				width: parent.width
-				spacing: Bio.s4
+				height: 128
 
-				BioRing {
-					id: skyRing
+				ArcHalo {
+					anchors.centerIn: basin
+					width: 200
+					height: 200
+					color: Arc.aether
+					strength: 0.22
+					spread: 0.36
+					flicker: true
+				}
+
+				// The basin: a disc of still water, ruled with the horizon and
+				// the meridian, the way a scrying bowl is marked.
+				Canvas {
+					id: basin
+					anchors.left: parent.left
 					anchors.verticalCenter: parent.verticalCenter
-					width: 58
-					height: 58
-					seed: 2
-					weight: Bio.ribHeavy
-					intensity: 0.55
-					lineColor: Bio.boneFaint
+					width: 104
+					height: 104
+					renderStrategy: Canvas.Cooperative
 
-					QQCImpl.IconImage {
-						anchors.centerIn: parent
-						width: 26
-						height: 26
-						source: root.resolveIconSource("", [
-							root.weatherIcon,
-							root.weatherIcon.replace("-symbolic", ""),
-							"weather-overcast-symbolic"
-						])
-						sourceSize: Qt.size(width, height)
-						color: Bio.organ
+					Connections {
+						target: Arc
+						function onGiltChanged() { basin.requestPaint(); }
+					}
+
+					onPaint: {
+						const ctx = getContext("2d");
+						ctx.reset();
+						const cx = width / 2, cy = height / 2;
+						const r = width / 2 - 2;
+						const shadow = Qt.alpha(Qt.darker(Arc.gilt, 2.4), 0.55);
+						const highlight = Qt.alpha(Qt.lighter(Arc.gilt, 1.8), 0.5);
+
+						const water = ctx.createLinearGradient(0, 0, 0, height);
+						water.addColorStop(0, Arc.leaf2);
+						water.addColorStop(1, Arc.well);
+						ctx.fillStyle = water;
+						ctx.beginPath();
+						ctx.arc(cx, cy, r, 0, Math.PI * 2);
+						ctx.fill();
+
+						Ink.groove(ctx, Ink.arcPoints(cx, cy, r, 0, Math.PI * 2, 56),
+							Arc.rule * 1.3, Arc.gilt, highlight, shadow, true);
+						Ink.cut(ctx, [{ x: cx - r * 0.86, y: cy }, { x: cx + r * 0.86, y: cy }],
+							Arc.ruleThin, Qt.alpha(Arc.gilt, 0.26), false);
+						Ink.cut(ctx, [{ x: cx, y: cy - r * 0.86 }, { x: cx, y: cy + r * 0.86 }],
+							Arc.ruleThin, Qt.alpha(Arc.gilt, 0.18), false);
+						Ink.graduations(ctx, cx, cy, r - 3, -Math.PI / 2, Math.PI * 1.5,
+							32, 3, 6, 8, Arc.ruleThin, Qt.alpha(Arc.gilt, 0.35));
+					}
+				}
+
+				// The sky's mark, floating on the water. It drifts, slowly,
+				// which is the only idle motion in this panel.
+				QQCImpl.IconImage {
+					id: skyMark
+					anchors.centerIn: basin
+					width: 40
+					height: 40
+					source: root.resolveIconSource("", [
+						root.weatherIcon,
+						root.weatherIcon.replace("-symbolic", ""),
+						"weather-overcast-symbolic"
+					])
+					sourceSize: Qt.size(width, height)
+					color: Arc.aether
+
+					SequentialAnimation on anchors.verticalCenterOffset {
+						running: root.weatherPopupVisible
+						loops: Animation.Infinite
+						NumberAnimation { to: -3; duration: 3400; easing.type: Easing.InOutSine }
+						NumberAnimation { to: 3; duration: 3400; easing.type: Easing.InOutSine }
 					}
 				}
 
 				Column {
+					anchors.left: basin.right
+					anchors.leftMargin: Arc.s5
+					anchors.right: parent.right
 					anchors.verticalCenter: parent.verticalCenter
-					spacing: -1
+					spacing: -2
 
-					BioText {
-						role: "specimen"
+					ArcText {
+						width: parent.width
+						role: "display"
+						font.pixelSize: 40
 						text: root.weatherTemperature
 					}
 
-					BioText {
-						role: "body"
+					ArcText {
+						width: parent.width
+						role: "label"
 						tone: "muted"
 						text: root.weatherDescription
 					}
 
-					BioText {
+					ArcText {
+						width: parent.width
 						role: "label"
 						tone: "faint"
 						text: root.weatherLocation
@@ -4692,102 +5378,156 @@ printf 'type=offline\niface=\nip=\n'`
 				}
 			}
 
-			BioSection {
+			// What the oracle actually says.
+			ArcText {
 				width: parent.width
-				title: "Atmosphere"
+				role: "hand"
+				tone: "aether"
+				font.pixelSize: 17
+				wrapMode: Text.WordWrap
+				text: root.oracleLine
+			}
 
-				Grid {
-					columns: 2
-					columnSpacing: Bio.s5
-					rowSpacing: Bio.s3
-					width: parent.width
+			ArcFlourish {
+				width: parent.width
+				height: 12
+				facing: Qt.LeftToRight
+				lineColor: Arc.giltFaint
+			}
 
-					Repeater {
-						model: [
-							{ label: "Feels like", value: root.weatherFeelsLike },
-							{ label: "Humidity", value: root.weatherHumidity },
-							{ label: "Wind", value: root.weatherWind },
-							{ label: "Rain", value: root.weatherPrecipitation },
-							{ label: "Pressure", value: root.weatherPressure },
-							{ label: "Sampled", value: root.weatherObservationTime !== "" ? Qt.formatDateTime(new Date(root.weatherObservationTime), "HH:mm") : "--" }
-						]
+			// The readings, ruled in two columns the way a table in a book is.
+			Grid {
+				width: parent.width
+				columns: 2
+				columnSpacing: Arc.s5
+				rowSpacing: Arc.s1
 
-						delegate: Item {
-							required property var modelData
-							width: (weatherContent.width - Bio.s5) / 2
-							height: 34
+				Repeater {
+					model: [
+						{ label: "Feels like", value: root.weatherFeelsLike },
+						{ label: "Humidity", value: root.weatherHumidity },
+						{ label: "Wind", value: root.weatherWind },
+						{ label: "Rain", value: root.weatherPrecipitation },
+						{ label: "Pressure", value: root.weatherPressure },
+						{ label: "Sampled", value: root.weatherObservationTime !== "" ? Qt.formatDateTime(new Date(root.weatherObservationTime), "HH:mm") : "--" }
+					]
 
-							Rectangle {
-								anchors.left: parent.left
-								anchors.verticalCenter: parent.verticalCenter
-								width: Bio.ribThin
-								height: parent.height * 0.62
-								color: Bio.boneGhost
-							}
+					delegate: Item {
+						required property var modelData
+						width: (weatherContent.width - Arc.s5) / 2
+						height: 30
 
-							Column {
-								anchors.left: parent.left
-								anchors.leftMargin: Bio.s3
-								anchors.verticalCenter: parent.verticalCenter
-								spacing: -1
+						ArcText {
+							id: readingName
+							anchors.left: parent.left
+							anchors.verticalCenter: parent.verticalCenter
+							role: "label"
+							tone: "faint"
+							text: modelData.label
+						}
 
-								BioText {
-									role: "label"
-									tone: "faint"
-									text: modelData.label
-								}
+						// Leader dots: what carries the eye from a name to its
+						// value in a printed table.
+						Rectangle {
+							anchors.left: readingName.right
+							anchors.right: readingValue.left
+							anchors.leftMargin: Arc.s2
+							anchors.rightMargin: Arc.s2
+							anchors.verticalCenter: parent.verticalCenter
+							anchors.verticalCenterOffset: 3
+							height: Arc.ruleThin
+							color: Arc.giltGhost
+							visible: width > 8
+						}
 
-								BioText {
-									role: "bodyStrong"
-									text: modelData.value
-								}
-							}
+						ArcText {
+							id: readingValue
+							anchors.right: parent.right
+							anchors.verticalCenter: parent.verticalCenter
+							role: "bodyStrong"
+							text: modelData.value
 						}
 					}
 				}
 			}
 
-			// Sunrise and sunset as the two ends of one run of light.
+			// The horizon: the run of the sun across it, and the moon's face
+			// for the night at the end of it.
 			Item {
 				width: parent.width
-				height: 34
+				height: 44
 
-				BioText {
+				ArcText {
 					id: sunriseLabel
 					anchors.left: parent.left
-					anchors.verticalCenter: parent.verticalCenter
+					anchors.top: parent.top
 					role: "reading"
 					font.pixelSize: 15
 					text: root.weatherSunrise
 				}
 
-				BioText {
+				ArcText {
 					id: sunsetLabel
 					anchors.right: parent.right
-					anchors.verticalCenter: parent.verticalCenter
+					anchors.top: parent.top
 					role: "reading"
 					font.pixelSize: 15
 					text: root.weatherSunset
 				}
 
-				BioTendon {
+				// The sun's arc, with a mark where it stands now.
+				Canvas {
+					id: horizon
 					anchors.left: sunriseLabel.right
 					anchors.right: sunsetLabel.left
-					anchors.leftMargin: Bio.s3
-					anchors.rightMargin: Bio.s3
-					anchors.verticalCenter: parent.verticalCenter
-					height: 14
-					lineColor: Bio.boneFaint
-					facing: Qt.LeftToRight
+					anchors.leftMargin: Arc.s3
+					anchors.rightMargin: Arc.s3
+					anchors.top: parent.top
+					height: 22
+					renderStrategy: Canvas.Cooperative
+
+					readonly property real through: {
+						const rise = String(root.weatherSunrise || "");
+						const set = String(root.weatherSunset || "");
+						if (!/^\d{1,2}:\d{2}$/.test(rise) || !/^\d{1,2}:\d{2}$/.test(set)) return -1;
+						const minutes = value => Number(value.split(":")[0]) * 60 + Number(value.split(":")[1]);
+						const now = root.now.getHours() * 60 + root.now.getMinutes();
+						const span = minutes(set) - minutes(rise);
+						if (span <= 0) return -1;
+						return Math.max(0, Math.min(1, (now - minutes(rise)) / span));
+					}
+
+					onThroughChanged: requestPaint()
+
+					onPaint: {
+						const ctx = getContext("2d");
+						ctx.reset();
+						if (width < 20) return;
+						const path = [];
+						for (let index = 0; index <= 24; index++) {
+							const t = index / 24;
+							path.push({ x: t * width, y: height - Math.sin(t * Math.PI) * (height - 4) });
+						}
+						Ink.cut(ctx, path, Arc.ruleThin, Qt.alpha(Arc.gilt, 0.42), false);
+						Ink.cut(ctx, [{ x: 0, y: height }, { x: width, y: height }],
+							Arc.ruleThin, Qt.alpha(Arc.gilt, 0.22), false);
+						if (horizon.through < 0) return;
+						const at = path[Math.round(horizon.through * 24)];
+						ctx.fillStyle = Arc.aether;
+						ctx.beginPath();
+						ctx.ellipse(at.x - 3.5, at.y - 3.5, 7, 7);
+						ctx.fill();
+					}
 				}
 
-				BioText {
-					anchors.horizontalCenter: parent.horizontalCenter
-					anchors.top: parent.verticalCenter
-					anchors.topMargin: Bio.s1
+				ArcText {
+					anchors.horizontalCenter: horizon.horizontalCenter
+					anchors.top: horizon.bottom
+					anchors.topMargin: 1
 					role: "label"
 					tone: "faint"
-					text: "Light"
+					font.pixelSize: 9
+					text: Arc.moonPhase(root.now).name
 				}
 			}
 		}
@@ -4795,7 +5535,7 @@ printf 'type=offline\niface=\nip=\n'`
 
 	PopupSurface {
 		id: notifPopup
-		title: "Signals"
+		title: "Ravens"
 		screen: root.activePopupScreen
 
 		onDismissRequested: root.closeNotifPopup()
@@ -4823,7 +5563,7 @@ printf 'type=offline\niface=\nip=\n'`
 				Layout.fillWidth: true
 				Layout.preferredHeight: 20
 
-				BioText {
+				ArcText {
 					id: notifTitle
 					anchors.left: parent.left
 					anchors.verticalCenter: parent.verticalCenter
@@ -4832,19 +5572,19 @@ printf 'type=offline\niface=\nip=\n'`
 					text: "Signals"
 				}
 
-				BioTendon {
+				ArcFlourish {
 					anchors.left: notifTitle.right
 					anchors.right: purgeLabel.visible ? purgeLabel.left : parent.right
-					anchors.leftMargin: Bio.s3
-					anchors.rightMargin: Bio.s3
+					anchors.leftMargin: Arc.s3
+					anchors.rightMargin: Arc.s3
 					anchors.verticalCenter: parent.verticalCenter
 					height: 12
 					facing: Qt.LeftToRight
-					lineColor: Bio.boneFaint
+					lineColor: Arc.giltFaint
 					visible: width > 24
 				}
 
-				BioText {
+				ArcText {
 					id: purgeLabel
 					anchors.right: parent.right
 					anchors.verticalCenter: parent.verticalCenter
@@ -4853,9 +5593,9 @@ printf 'type=offline\niface=\nip=\n'`
 					tone: purgeTouch.containsMouse ? "alert" : "muted"
 					text: `Purge ${root.notificationGroups.length}`
 
-					BioTouch {
+					ArcTouch {
 						id: purgeTouch
-						anchors.margins: -Bio.s2
+						anchors.margins: -Arc.s2
 						onClicked: root.dismissAllNotificationGroups()
 					}
 				}
@@ -4868,21 +5608,31 @@ printf 'type=offline\niface=\nip=\n'`
 
 				Column {
 					anchors.centerIn: parent
-					spacing: Bio.s3
+					spacing: Arc.s3
 
-					BioSigil {
+					// An empty page is a page. The bird that is not here is
+					// drawn anyway, faintly, and told what it is waiting for.
+					ArcMark {
 						anchors.horizontalCenter: parent.horizontalCenter
-						width: 56
-						height: 56
-						seed: 21
-						lineColor: Bio.boneGhost
+						width: 54
+						height: 54
+						glyph: "raven"
+						lineColor: Arc.giltGhost
 					}
 
-					BioText {
+					ArcText {
 						anchors.horizontalCenter: parent.horizontalCenter
 						role: "label"
 						tone: "faint"
-						text: "Nothing stirring"
+						text: "No birds"
+					}
+
+					ArcText {
+						anchors.horizontalCenter: parent.horizontalCenter
+						role: "hand"
+						tone: "faint"
+						font.pixelSize: 14
+						text: "Nothing has been sent for you"
 					}
 				}
 			}
@@ -4916,18 +5666,18 @@ printf 'type=offline\niface=\nip=\n'`
 							property bool dismissing: false
 
 							width: notificationList.width
-							height: cardBody.implicitHeight + Bio.s5 * 2
+							height: cardBody.implicitHeight + Arc.s5 * 2
 							// Dismissing pulls the record out sideways; nothing
 							// in this style fades away where it stands.
 							x: dismissing ? -width - 24 : 0
 							opacity: dismissing ? 0 : 1
 
 							Behavior on x {
-								NumberAnimation { duration: Bio.relax; easing.type: Easing.InCubic }
+								NumberAnimation { duration: Arc.recoil; easing.type: Easing.InCubic }
 							}
 
 							Behavior on opacity {
-								NumberAnimation { duration: Bio.relax }
+								NumberAnimation { duration: Arc.recoil }
 							}
 
 							Timer {
@@ -4937,20 +5687,20 @@ printf 'type=offline\niface=\nip=\n'`
 								onTriggered: root.dismissNotificationGroup(notificationCard.modelData.key)
 							}
 
-							BioSurface {
+							ArcLeaf {
 								anchors.fill: parent
 								variant: "plate"
 								lineColor: Qt.alpha(notificationCard.urgencyColor, 0.45)
 								liveColor: notificationCard.urgencyColor
 								washTop: Qt.alpha(notificationCard.urgencyColor, 0.10)
-								washBottom: Bio.tissue1
+								washBottom: Arc.leaf1
 								haloStrength: 0.10
-								padding: Bio.s5
+								padding: Arc.s5
 
 								Column {
 									id: cardBody
 									anchors.fill: parent
-									spacing: Bio.s3
+									spacing: Arc.s3
 
 									// Which organism sent this, and when.
 									Item {
@@ -4961,26 +5711,26 @@ printf 'type=offline\niface=\nip=\n'`
 											id: urgencyBead
 											anchors.left: parent.left
 											anchors.verticalCenter: parent.verticalCenter
-											width: Bio.nodule * 2
-											height: Bio.nodule * 2
+											width: Arc.stud * 2
+											height: Arc.stud * 2
 											radius: width / 2
 											color: notificationCard.urgencyColor
 										}
 
-										BioText {
+										ArcText {
 											id: sourceLabel
 											anchors.left: urgencyBead.right
-											anchors.leftMargin: Bio.s2
+											anchors.leftMargin: Arc.s2
 											anchors.verticalCenter: parent.verticalCenter
 											role: "label"
 											color: notificationCard.urgencyColor
 											text: notificationCard.modelData.appName || "System"
 										}
 
-										BioText {
+										ArcText {
 											id: stampLabel
 											anchors.right: dismissTarget.left
-											anchors.rightMargin: Bio.s2
+											anchors.rightMargin: Arc.s2
 											anchors.verticalCenter: parent.verticalCenter
 											role: "caption"
 											tone: "faint"
@@ -4996,14 +5746,14 @@ printf 'type=offline\niface=\nip=\n'`
 											width: 16
 											height: 16
 
-											BioText {
+											ArcText {
 												anchors.centerIn: parent
 												role: "body"
 												tone: dismissTouch.containsMouse ? "alert" : "faint"
 												text: "×"
 											}
 
-											BioTouch {
+											ArcTouch {
 												id: dismissTouch
 												onClicked: {
 													if (notificationCard.dismissing) return;
@@ -5017,13 +5767,13 @@ printf 'type=offline\niface=\nip=\n'`
 									// What it says, with whatever it came with.
 									Row {
 										width: parent.width
-										spacing: Bio.s3
+										spacing: Arc.s3
 
 										Column {
-											width: parent.width - (specimenImage.visible ? specimenImage.width + Bio.s3 : 0)
-											spacing: Bio.s1
+											width: parent.width - (specimenImage.visible ? specimenImage.width + Arc.s3 : 0)
+											spacing: Arc.s1
 
-											BioText {
+											ArcText {
 												width: parent.width
 												role: "heading"
 												wrapMode: Text.WordWrap
@@ -5033,7 +5783,7 @@ printf 'type=offline\niface=\nip=\n'`
 													: (notificationCard.modelData.appName || "Notification")
 											}
 
-											BioText {
+											ArcText {
 												width: parent.width
 												visible: notificationCard.latestEntry && notificationCard.latestEntry.body !== ""
 												role: "body"
@@ -5050,15 +5800,15 @@ printf 'type=offline\niface=\nip=\n'`
 											height: 50
 											visible: notificationCard.iconSource !== ""
 
-											BioFrame {
+											ArcPlate {
 												anchors.fill: parent
 												variant: "plate"
 												beading: false
-												weight: Bio.ribThin
-												lineColor: Bio.boneFaint
+												weight: Arc.ruleThin
+												lineColor: Arc.giltFaint
 												liveColor: notificationCard.urgencyColor
-												fillTop: Bio.cavity
-												fillBottom: Bio.cavity
+												fillTop: Arc.well
+												fillBottom: Arc.well
 											}
 
 											Image {
@@ -5074,7 +5824,7 @@ printf 'type=offline\niface=\nip=\n'`
 										}
 									}
 
-									BioMeter {
+									ArcPhial {
 										width: parent.width
 										visible: notificationCard.latestEntry
 											&& notificationCard.latestEntry.progressValue >= 0
@@ -5087,12 +5837,12 @@ printf 'type=offline\niface=\nip=\n'`
 									Flow {
 										width: parent.width
 										visible: notificationCard.liveNotification && notificationCard.liveNotification.actions.length > 0
-										spacing: Bio.s2
+										spacing: Arc.s2
 
 										Repeater {
 											model: notificationCard.liveNotification ? notificationCard.liveNotification.actions : []
 
-											delegate: BioButton {
+											delegate: ArcButton {
 												required property var modelData
 
 												implicitHeight: 28
@@ -5105,22 +5855,22 @@ printf 'type=offline\niface=\nip=\n'`
 									Row {
 										width: parent.width
 										visible: notificationCard.liveNotification && notificationCard.liveNotification.hasInlineReply
-										spacing: Bio.s3
+										spacing: Arc.s3
 
-										BioField {
+										ArcQuill {
 											id: inlineReply
-											width: parent.width - sendButton.width - Bio.s3
+											width: parent.width - sendButton.width - Arc.s3
 											placeholder: notificationCard.liveNotification
 												? (notificationCard.liveNotification.inlineReplyPlaceholder || "Reply")
 												: "Reply"
 											onAccepted: root.submitInlineReply(notificationCard.liveNotification, inlineReply.inputItem)
 										}
 
-										BioButton {
+										ArcButton {
 											id: sendButton
 											anchors.verticalCenter: parent.verticalCenter
 											text: "Send"
-											tone: "organ"
+											tone: "aether"
 											onClicked: root.submitInlineReply(notificationCard.liveNotification, inlineReply.inputItem)
 										}
 									}
@@ -5131,29 +5881,29 @@ printf 'type=offline\niface=\nip=\n'`
 										height: 20
 										visible: notificationCard.modelData.notifications.length > 1
 
-										BioText {
+										ArcText {
 											id: foldLabel
 											anchors.left: parent.left
 											anchors.verticalCenter: parent.verticalCenter
 											role: "label"
-											tone: foldTouch.containsMouse ? "organ" : "faint"
+											tone: foldTouch.containsMouse ? "aether" : "faint"
 											text: notificationCard.modelData.expanded
 												? `Fold ${notificationCard.modelData.notifications.length - 1} older`
 												: `Unfold ${notificationCard.modelData.notifications.length - 1} older`
 										}
 
-										BioTendon {
+										ArcFlourish {
 											anchors.left: foldLabel.right
 											anchors.right: parent.right
-											anchors.leftMargin: Bio.s3
+											anchors.leftMargin: Arc.s3
 											anchors.verticalCenter: parent.verticalCenter
 											height: 10
 											facing: Qt.LeftToRight
-											lineColor: foldTouch.containsMouse ? Qt.alpha(Bio.organ, 0.6) : Bio.boneGhost
+											lineColor: foldTouch.containsMouse ? Qt.alpha(Arc.aether, 0.6) : Arc.giltGhost
 											visible: width > 24
 										}
 
-										BioTouch {
+										ArcTouch {
 											id: foldTouch
 											onClicked: root.setNotificationGroupExpanded(
 												notificationCard.modelData.key, !notificationCard.modelData.expanded)
@@ -5174,7 +5924,7 @@ printf 'type=offline\niface=\nip=\n'`
 
 											Behavior on height {
 												NumberAnimation {
-													duration: notificationCard.modelData.expanded ? Bio.swell : Bio.relax
+													duration: notificationCard.modelData.expanded ? Arc.draw : Arc.recoil
 													easing.type: notificationCard.modelData.expanded ? Easing.OutBack : Easing.InCubic
 													easing.overshoot: notificationCard.modelData.expanded ? 1.05 : 0
 												}
@@ -5183,7 +5933,7 @@ printf 'type=offline\niface=\nip=\n'`
 											Column {
 												id: olderColumn
 												width: parent.width
-												spacing: Bio.s2
+												spacing: Arc.s2
 
 												Repeater {
 													model: notificationCard.modelData.notifications.slice(1)
@@ -5194,34 +5944,34 @@ printf 'type=offline\niface=\nip=\n'`
 														required property var modelData
 
 														width: olderColumn.width
-														implicitHeight: olderText.implicitHeight + Bio.s3 * 2
+														implicitHeight: olderText.implicitHeight + Arc.s3 * 2
 
 														Rectangle {
 															anchors.left: parent.left
 															anchors.top: parent.top
 															anchors.bottom: parent.bottom
-															anchors.topMargin: Bio.s2
-															anchors.bottomMargin: Bio.s2
-															width: Bio.ribThin
-															color: Bio.boneGhost
+															anchors.topMargin: Arc.s2
+															anchors.bottomMargin: Arc.s2
+															width: Arc.ruleThin
+															color: Arc.giltGhost
 														}
 
 														Column {
 															id: olderText
 															anchors.left: parent.left
 															anchors.right: parent.right
-															anchors.leftMargin: Bio.s3
+															anchors.leftMargin: Arc.s3
 															anchors.verticalCenter: parent.verticalCenter
 															spacing: 0
 
-															BioText {
+															ArcText {
 																width: parent.width
 																role: "bodyStrong"
 																tone: "muted"
 																text: olderEntry.modelData.summary
 															}
 
-															BioText {
+															ArcText {
 																width: parent.width
 																visible: olderEntry.modelData.body !== ""
 																role: "caption"
@@ -5231,7 +5981,7 @@ printf 'type=offline\niface=\nip=\n'`
 																text: olderEntry.modelData.body
 															}
 
-															BioText {
+															ArcText {
 																role: "caption"
 																tone: "faint"
 																text: root.formatNotificationTime(olderEntry.modelData.timestamp)
@@ -5249,6 +5999,14 @@ printf 'type=offline\niface=\nip=\n'`
 		}
 	}
 
+	// THE RAVEN.
+	//
+	// A notification does not fade up in the corner of the screen. A bird comes
+	// in off the top of the screen, beating, settles on the chain under the
+	// seat that took the message, and the note unrolls out of its claws — the
+	// same let-down every panel in this shell uses, at a smaller size, because
+	// the shell only knows one way of putting something in front of you.
+	// Dismissing rolls the note back up and the bird goes the way it came.
 	Instantiator {
 		model: root.toasts
 
@@ -5273,67 +6031,172 @@ printf 'type=offline\niface=\nip=\n'`
 			property bool dismissing: false
 			property real revealProgress: 0
 
+			// Two movements, in order: the bird arrives, and only then does the
+			// note come down. Never one fade for both.
+			readonly property real flight: Math.max(0, Math.min(1, revealProgress / 0.40))
+			readonly property real letDown: Math.max(0, Math.min(1, (revealProgress - 0.28) / 0.72))
+			readonly property real perch: 34
+
 			visible: true
 			color: "transparent"
 
-			// A signal leaves the column at the organ that received it and
-			// stacks downwards from there, beside the spine — never in a
-			// corner of the screen the spine has nothing to do with.
+			// A message lands under the seat that took it, and the ones behind
+			// it queue downwards from there — never in a corner of the screen
+			// the chain has nothing to do with.
 			anchor {
 				window: barWindow
-				edges: Edges.Right
-				gravity: Edges.Right
+				edges: Edges.Right | Edges.Bottom
+				gravity: Edges.Right | Edges.Bottom
 				adjustment: PopupAdjustment.SlideX | PopupAdjustment.SlideY
 
 				onAnchoring: {
-					const mark = notifNode.mapToItem(null, 0, 0);
-					anchor.rect.x = 0;
-					anchor.rect.y = (mark ? mark.y : barWindow.height / 2)
-						+ index * (toastWindow.implicitHeight + 12);
-					anchor.rect.width = Math.round(Bio.spine + Bio.dockGap);
+					const mark = notifNode.mapToItem(null, notifNode.width / 2, 0);
+					const centre = mark ? mark.x : barWindow.width - 220;
+					anchor.rect.x = Math.round(centre - toastWindow.implicitWidth / 2);
+					anchor.rect.width = 0;
+					anchor.rect.y = Math.round(
+						Arc.chainY(centre / Math.max(1, barWindow.width)) + Arc.seat / 2)
+						+ index * (toastWindow.implicitHeight + 10);
 					anchor.rect.height = 0;
 				}
 			}
 
-			implicitWidth: toastCard.implicitWidth + 40
-			implicitHeight: toastCard.implicitHeight
+			implicitWidth: 380
+			implicitHeight: toastWindow.perch + toastCard.implicitHeight + 6
 
 			NumberAnimation on revealProgress {
 				from: 0
 				to: 1
-				duration: Bio.unfurl
-				easing.type: Easing.OutQuint
+				duration: Arc.unroll + Arc.turn
+				easing.type: Easing.Bezier
+				easing.bezierCurve: Arc.curveUnroll
 			}
 
-			BioSurface {
+			// The bird. It comes in from off the top right, beating, and stops
+			// dead when it has something to stand on.
+			Item {
+				id: raven
+
+				property real beat: 0
+
+				width: 30
+				height: 26
+				x: toastWindow.implicitWidth - 62 + (1 - toastWindow.flight) * 150
+				y: 2 - (1 - toastWindow.flight) * 64
+				opacity: toastWindow.dismissing ? 0 : Math.min(1, toastWindow.flight * 3)
+				rotation: (1 - toastWindow.flight) * -22
+
+				Behavior on opacity {
+					NumberAnimation { duration: Arc.recoil }
+				}
+
+				SequentialAnimation on beat {
+					running: toastWindow.flight < 1 && !toastWindow.dismissing
+					loops: Animation.Infinite
+					NumberAnimation { to: 1; duration: 90; easing.type: Easing.OutQuad }
+					NumberAnimation { to: 0; duration: 130; easing.type: Easing.InQuad }
+				}
+
+				// Wing-beats are a vertical squash on a silhouette. Nothing
+				// more elaborate survives being 26 pixels tall anyway.
+				transform: Scale {
+					origin.x: raven.width / 2
+					origin.y: raven.height
+					yScale: toastWindow.flight < 1 ? 0.55 + raven.beat * 0.7 : 1
+				}
+
+				ArcHalo {
+					anchors.centerIn: parent
+					width: 80
+					height: 80
+					color: toastWindow.urgencyColor
+					strength: 0.28
+					spread: 0.34
+					flicker: true
+				}
+
+				ArcMark {
+					anchors.fill: parent
+					glyph: "raven"
+					lineColor: toastWindow.urgencyColor
+				}
+			}
+
+			// The cord the note hangs on out of the bird's claws.
+			Rectangle {
+				x: toastWindow.implicitWidth - 48
+				y: 24
+				width: Arc.ruleThin
+				height: (toastWindow.perch - 24) * Math.min(1, toastWindow.letDown * 4)
+				color: Qt.alpha(toastWindow.urgencyColor, 0.6)
+				visible: !toastWindow.dismissing
+			}
+
+			// The roller the note is wound on.
+			Rectangle {
+				x: 0
+				y: toastWindow.perch - 3
+				width: toastWindow.implicitWidth * Math.min(1, toastWindow.letDown * 4)
+				height: 3
+				color: Arc.gilt
+				opacity: toastWindow.dismissing ? 0 : 1
+
+				Behavior on opacity {
+					NumberAnimation { duration: Arc.recoil }
+				}
+			}
+
+			// The note itself, revealed from the top as the dowel travels. It
+			// is never scaled and it never fades in.
+			Item {
+				id: noteWindow
+
+				x: 0
+				y: toastWindow.perch
+				width: toastWindow.implicitWidth
+				height: toastCard.implicitHeight * (toastWindow.dismissing ? 0 : toastWindow.letDown)
+				clip: true
+
+				Behavior on height {
+					NumberAnimation {
+						duration: Arc.reroll
+						easing.type: Easing.Bezier
+						easing.bezierCurve: Arc.curveReroll
+					}
+				}
+
+				Rectangle {
+					anchors.left: parent.left
+					anchors.right: parent.right
+					anchors.bottom: parent.bottom
+					height: 12
+					z: 5
+					visible: toastWindow.letDown < 0.99 && toastWindow.letDown > 0.02
+
+					gradient: Gradient {
+						GradientStop { position: 0.0; color: "transparent" }
+						GradientStop { position: 0.6; color: Qt.alpha(Arc.well, 0.7) }
+						GradientStop { position: 1.0; color: Qt.alpha(Arc.gilt, 0.2) }
+					}
+				}
+
+			ArcLeaf {
 				id: toastCard
 
-				implicitWidth: 380
-				implicitHeight: toastContent.implicitHeight + Bio.s5 * 2
+				implicitWidth: toastWindow.implicitWidth
+				implicitHeight: toastContent.implicitHeight + Arc.s5 * 2
 				width: implicitWidth
 				height: implicitHeight
-				// It crawls out of the column, and crawls back into it.
-				x: toastWindow.dismissing
-					? -(implicitWidth + 24)
-					: (1 - toastWindow.revealProgress) * -46
+				x: 0
 				y: 0
-				opacity: toastWindow.dismissing ? 0 : Math.min(1, toastWindow.revealProgress * 2)
 				variant: "plate"
 				lineColor: Qt.alpha(toastWindow.urgencyColor, 0.55)
 				liveColor: toastWindow.urgencyColor
 				washTop: Qt.alpha(toastWindow.urgencyColor, 0.12)
-				washBottom: Bio.membraneDeep
+				washBottom: Arc.washDeep
 				haloStrength: 0.22
 				intensity: 0.55
-				padding: Bio.s5
-
-				Behavior on x {
-					NumberAnimation { duration: Bio.relax; easing.type: Easing.InCubic }
-				}
-
-				Behavior on opacity {
-					NumberAnimation { duration: Bio.relax }
-				}
+				padding: Arc.s5
 
 				Timer {
 					id: toastDismissTimer
@@ -5341,11 +6204,10 @@ printf 'type=offline\niface=\nip=\n'`
 					repeat: false
 					onTriggered: toastWindow.notification.dismiss()
 				}
-
 				Column {
 					id: toastContent
 					anchors.fill: parent
-					spacing: Bio.s3
+					spacing: Arc.s3
 
 					Item {
 						width: parent.width
@@ -5355,15 +6217,15 @@ printf 'type=offline\niface=\nip=\n'`
 							id: toastBead
 							anchors.left: parent.left
 							anchors.verticalCenter: parent.verticalCenter
-							width: Bio.nodule * 2
-							height: Bio.nodule * 2
+							width: Arc.stud * 2
+							height: Arc.stud * 2
 							radius: width / 2
 							color: toastWindow.urgencyColor
 						}
 
-						BioText {
+						ArcText {
 							anchors.left: toastBead.right
-							anchors.leftMargin: Bio.s2
+							anchors.leftMargin: Arc.s2
 							anchors.verticalCenter: parent.verticalCenter
 							role: "label"
 							color: toastWindow.urgencyColor
@@ -5377,14 +6239,14 @@ printf 'type=offline\niface=\nip=\n'`
 							width: 16
 							height: 16
 
-							BioText {
+							ArcText {
 								anchors.centerIn: parent
 								role: "body"
 								tone: toastDismissTouch.containsMouse ? "alert" : "faint"
 								text: "×"
 							}
 
-							BioTouch {
+							ArcTouch {
 								id: toastDismissTouch
 								onClicked: {
 									if (toastWindow.dismissing) return;
@@ -5397,13 +6259,13 @@ printf 'type=offline\niface=\nip=\n'`
 
 					Row {
 						width: parent.width
-						spacing: Bio.s3
+						spacing: Arc.s3
 
 						Column {
-							width: parent.width - (toastImage.visible ? toastImage.width + Bio.s3 : 0)
-							spacing: Bio.s1
+							width: parent.width - (toastImage.visible ? toastImage.width + Arc.s3 : 0)
+							spacing: Arc.s1
 
-							BioText {
+							ArcText {
 								width: parent.width
 								role: "heading"
 								wrapMode: Text.WordWrap
@@ -5411,7 +6273,7 @@ printf 'type=offline\niface=\nip=\n'`
 								text: toastWindow.notification.summary || (toastWindow.notification.appName || "Notification")
 							}
 
-							BioText {
+							ArcText {
 								width: parent.width
 								visible: toastWindow.notification.body !== ""
 								role: "body"
@@ -5429,15 +6291,15 @@ printf 'type=offline\niface=\nip=\n'`
 							height: 50
 							visible: toastWindow.iconSource !== ""
 
-							BioFrame {
+							ArcPlate {
 								anchors.fill: parent
 								variant: "plate"
 								beading: false
-								weight: Bio.ribThin
-								lineColor: Bio.boneFaint
+								weight: Arc.ruleThin
+								lineColor: Arc.giltFaint
 								liveColor: toastWindow.urgencyColor
-								fillTop: Bio.cavity
-								fillBottom: Bio.cavity
+								fillTop: Arc.well
+								fillBottom: Arc.well
 							}
 
 							Image {
@@ -5453,7 +6315,7 @@ printf 'type=offline\niface=\nip=\n'`
 						}
 					}
 
-					BioMeter {
+					ArcPhial {
 						width: parent.width
 						visible: toastWindow.progressValue >= 0 && toastWindow.progressValue <= 100
 						height: 8
@@ -5464,12 +6326,12 @@ printf 'type=offline\niface=\nip=\n'`
 					Flow {
 						width: parent.width
 						visible: toastWindow.notification && toastWindow.notification.actions.length > 0
-						spacing: Bio.s2
+						spacing: Arc.s2
 
 						Repeater {
 							model: toastWindow.notification ? toastWindow.notification.actions : []
 
-							delegate: BioButton {
+							delegate: ArcButton {
 								required property var modelData
 
 								implicitHeight: 28
@@ -5482,22 +6344,22 @@ printf 'type=offline\niface=\nip=\n'`
 					Row {
 						width: parent.width
 						visible: toastWindow.notification && toastWindow.notification.hasInlineReply
-						spacing: Bio.s3
+						spacing: Arc.s3
 
-						BioField {
+						ArcQuill {
 							id: toastInlineReply
-							width: parent.width - toastSend.width - Bio.s3
+							width: parent.width - toastSend.width - Arc.s3
 							placeholder: toastWindow.notification
 								? (toastWindow.notification.inlineReplyPlaceholder || "Reply")
 								: "Reply"
 							onAccepted: root.submitInlineReply(toastWindow.notification, toastInlineReply.inputItem)
 						}
 
-						BioButton {
+						ArcButton {
 							id: toastSend
 							anchors.verticalCenter: parent.verticalCenter
 							text: "Send"
-							tone: "organ"
+							tone: "aether"
 							onClicked: root.submitInlineReply(toastWindow.notification, toastInlineReply.inputItem)
 						}
 					}
@@ -5510,6 +6372,7 @@ printf 'type=offline\niface=\nip=\n'`
 					interval: duration
 					onTriggered: root.removeToast(toastId)
 				}
+			}
 			}
 		}
 

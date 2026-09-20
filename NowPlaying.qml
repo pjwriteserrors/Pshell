@@ -7,19 +7,29 @@ import Quickshell
 import Quickshell.Services.Mpris
 import "components"
 
-// What is playing, as a specimen label.
+// What is playing, hung on the right limb of the chain.
 //
-// A ring that is the transport indicator, the track engraved next to it, and
-// the position running underneath as a vein rather than a bar. With nothing
-// playing it collapses to the ring alone.
+// A dial with how far through the track it is taken round its rim, and under
+// it a beat of three marks that light in turn while something is playing. The
+// name of the track belongs in the scroll this opens; there is no room for it
+// on the chain and no reason to put it there.
 Item {
 	id: root
 
 	signal clicked
 
-	property color foreground: Bio.text
-	property color secondaryBoxColor: Bio.tissue1
-	property color progressColor: Bio.organ
+	property color foreground: Arc.ink
+	property color secondaryBoxColor: Arc.leaf1
+	property color progressColor: Arc.aether
+
+	// The chain this is hung from: where on screen this item starts, and the
+	// curve to read a height off.
+	property real originX: 0
+	property var chainAt: null
+
+	function heightAt(centreX) {
+		return root.chainAt ? root.chainAt(centreX) : Arc.chainY(0.7);
+	}
 	readonly property bool hasMedia: mediaText !== ""
 	readonly property bool hasProgress: !!root.activePlayer && Number(root.activePlayer.length || 0) > 0
 	readonly property real progressValue: root.hasProgress
@@ -97,19 +107,11 @@ Item {
 		return unique;
 	}
 
-	implicitWidth: Bio.spine
-	implicitHeight: root.hasMedia ? 44 : 30
+	implicitWidth: 30
+	implicitHeight: Arc.gantryDepth
 
 	readonly property real live: Math.max(interaction.live, root.activePlayer?.isPlaying ? 0.35 : 0)
-
-	Behavior on implicitHeight {
-		NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
-	}
-
-	BioTouch {
-		id: interaction
-		onClicked: root.clicked()
-	}
+	readonly property real restY: root.heightAt(root.originX + root.x + width / 2)
 
 	onActivePlayerChanged: {
 		if (activePlayer) root.rememberedPlayer = activePlayer;
@@ -123,14 +125,10 @@ Item {
 		onTriggered: root.activePlayer?.positionChanged()
 	}
 
-	// In the column there is no room for a title, and no need for one: the
-	// track's name belongs in the chamber this opens. What stands on the spine
-	// is the organ itself, with how far through the track it is drawn around
-	// its own rim.
-	BioRing {
+	ArcDial {
 		id: transport
 		anchors.horizontalCenter: parent.horizontalCenter
-		anchors.top: parent.top
+		y: Math.round(root.restY - height / 2)
 		width: 28
 		height: 28
 		seed: 1
@@ -148,13 +146,13 @@ Item {
 		}
 	}
 
-	// A beat under the organ while something is playing: three beads that
-	// brighten in turn, so the column shows life without showing words.
+	// The beat: three marks struck in turn under the dial while something is
+	// playing. It is the one thing on the chain that moves to its own time.
 	Row {
 		visible: root.hasMedia
 		anchors.horizontalCenter: parent.horizontalCenter
 		anchors.top: transport.bottom
-		anchors.topMargin: Bio.s2
+		anchors.topMargin: Arc.s1
 		spacing: 4
 
 		Repeater {
@@ -163,22 +161,27 @@ Item {
 			delegate: Rectangle {
 				required property int index
 
-				width: Bio.nodule
-				height: Bio.nodule
-				radius: Bio.nodule / 2
+				width: 3
+				height: 3
+				rotation: 45
 				color: root.progressColor
-				opacity: root.activePlayer?.isPlaying ? 0.25 : 0.18
+				opacity: root.activePlayer?.isPlaying ? 0.22 : 0.16
 
 				SequentialAnimation on opacity {
 					running: root.activePlayer?.isPlaying ?? false
 					loops: Animation.Infinite
 
-					PauseAnimation { duration: index * 180 }
-					NumberAnimation { to: 1; duration: 220; easing.type: Easing.OutCubic }
-					NumberAnimation { to: 0.25; duration: 520; easing.type: Easing.InOutSine }
-					PauseAnimation { duration: 540 - index * 180 }
+					PauseAnimation { duration: index * 170 }
+					NumberAnimation { to: 1; duration: 180; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveKindle }
+					NumberAnimation { to: 0.22; duration: 520; easing.type: Easing.InOutSine }
+					PauseAnimation { duration: 520 - index * 170 }
 				}
 			}
 		}
+	}
+
+	ArcTouch {
+		id: interaction
+		onClicked: root.clicked()
 	}
 }

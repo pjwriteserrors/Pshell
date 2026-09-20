@@ -5,11 +5,13 @@ import Quickshell
 import Quickshell.Io
 import "components"
 
-// The vial rack: the readings stacked down the column, one under the next.
+// The rack: four phials standing side by side on the chain.
 //
-// Not icons with numbers next to them — each load is a vessel filling from its
-// engraved end, so a glance down the stack is the whole status. The initial
-// beside each one says which organ it is.
+// The machine's readings are not numbers with icons next to them here. They are
+// quantities of liquid in glass, each with a letter cut above it, and the
+// glance across the rack is the whole status. What each one is called is on the
+// scroll this opens — Mana, Aether, Vault, Essence — because a letter is enough
+// once you know the instrument and a word is in the way once you do.
 Item {
 	id: root
 
@@ -111,98 +113,96 @@ Item {
 	readonly property string memoryText: `${root.formatStorage(root.memoryUsedKiB)}/${root.formatStorage(root.memoryTotalKiB)}`
 	readonly property string cpuText: root.cpuCores > 0 ? `${root.cpuCores} Cores` : ""
 
-	implicitWidth: Bio.spine
-	implicitHeight: rack.implicitHeight + Bio.s3
+	implicitWidth: rack.implicitWidth
+	implicitHeight: 48
 
 	readonly property real live: Math.max(interaction.live, root.lit ? 0.5 : 0)
 
-	Column {
+	Row {
 		id: rack
 		anchors.centerIn: parent
-		spacing: Bio.s1 + 1
+		spacing: 5
 
-		Vial {
-			label: "C"
+		Phial {
+			letter: "M"
 			value: root.cpuUsage
 		}
 
-		Vial {
-			label: "M"
+		Phial {
+			letter: "A"
 			value: root.memoryUsage
 		}
 
-		Vial {
-			label: "D"
+		Phial {
+			letter: "V"
 			value: root.storageUsage
 		}
 
-		Vial {
+		Phial {
 			visible: root.mouseBatteryAvailable
-			label: "P"
+			letter: "E"
 			value: root.mouseBatteryUsage
-			// A pointer running out of charge is the one reading here that is
-			// bad when it is low rather than when it is high.
+			// A pointer running out of charge is the one reading in the rack
+			// that is bad when it is low rather than when it is high.
 			inverted: true
 		}
 	}
 
-	BioTouch {
+	ArcTouch {
 		id: interaction
 		onClicked: root.clicked()
 	}
 
-	component Vial: Item {
-		id: vial
+	component Phial: Item {
+		id: phial
 
-		property string label: ""
+		property string letter: ""
 		property real value: 0
 		property bool inverted: false
 
-		readonly property bool strained: vial.inverted ? vial.value < 0.2 : vial.value > 0.85
+		readonly property bool strained: phial.inverted ? phial.value < 0.2 : phial.value > 0.85
 
-		width: 42
-		height: 13
+		width: 11
+		height: 44
 
-		BioText {
-			id: vialLabel
-			anchors.left: parent.left
-			anchors.verticalCenter: parent.verticalCenter
+		ArcText {
+			id: mark
+			anchors.horizontalCenter: parent.horizontalCenter
+			anchors.top: parent.top
 			role: "label"
-			font.pixelSize: 8
-			tone: root.live > 0.3 ? "organ" : "faint"
-			text: vial.label
+			font.pixelSize: 10
+			font.letterSpacing: 0
+			tone: phial.strained ? "alert" : root.live > 0.3 ? "aether" : "faint"
+			text: phial.letter
 		}
 
-		// The vessel the reading lies in. Without it a loose vein reads as a
-		// scratch on the wallpaper rather than as an instrument.
-		BioFrame {
-			id: tube
-			anchors.left: vialLabel.right
-			anchors.leftMargin: 3
-			anchors.right: parent.right
-			anchors.verticalCenter: parent.verticalCenter
-			height: parent.height
-			variant: "capsule"
+		// The glass. A phial without one is a stripe on the wallpaper.
+		ArcPlate {
+			id: glass
+			anchors.horizontalCenter: parent.horizontalCenter
+			anchors.top: mark.bottom
+			anchors.topMargin: 1
+			anchors.bottom: parent.bottom
+			width: parent.width
+			variant: "field"
 			beading: false
-			weight: Bio.ribThin
-			inset: 1
-			lineColor: Bio.boneFaint
-			liveColor: vial.strained ? Bio.necrosis : Bio.organ
-			fillTop: Bio.cavity
-			fillBottom: Bio.cavity
-			intensity: Math.max(root.live * 0.8, vial.strained ? 0.75 : 0)
+			weight: Arc.ruleThin
+			inset: 0
+			lineColor: Arc.giltFaint
+			liveColor: phial.strained ? Arc.bane : Arc.aether
+			fillTop: Arc.well
+			fillBottom: Arc.well
+			intensity: Math.max(root.live * 0.8, phial.strained ? 0.8 : 0)
 		}
 
-		BioMeter {
-			anchors.verticalCenter: tube.verticalCenter
-			anchors.left: tube.left
-			anchors.leftMargin: 3
-			width: tube.width - 6
-			height: 5
-			value: vial.value
-			weight: Bio.rib
+		ArcPhial {
+			anchors.fill: glass
+			anchors.margins: 1.5
+			vertical: true
+			value: phial.value
+			weight: Arc.ruleThin
 			trackColor: "transparent"
-			fillColor: vial.strained ? Bio.necrosis : (root.live > 0.3 ? Bio.organ : Bio.organAlt)
+			fillColor: phial.strained ? Arc.bane : (root.live > 0.3 ? Arc.aether : Arc.aetherAlt)
 		}
 	}
 

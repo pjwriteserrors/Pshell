@@ -9,6 +9,7 @@ import Quickshell.Io
 import Quickshell.Services.Pam
 import Quickshell.Wayland
 import "components"
+import "components/ArcInk.js" as Ink
 
 Scope {
 	id: root
@@ -219,93 +220,248 @@ Scope {
 				onClicked: root.focusPasswordInput()
 			}
 
-			// Sealed, the screen keeps the shell's own anatomy: a bone runs
-			// down the left where the spine would be, the hour is cut against
-			// it at the size of the thing it is, and the seal lies across the
-			// foot. Nothing is centred and nothing floats in a box.
+			// The night that falls over the desktop when it is sealed. Thin
+			// engraving over a bright wallpaper is where a style like this
+			// fails, so the ward gets a ground to be cut into rather than a
+			// higher line opacity.
 			Rectangle {
-				id: lockBone
-				x: Math.round(Math.max(Bio.s7, lockWindow.width * 0.085))
-				anchors.top: parent.top
-				anchors.bottom: parent.bottom
-				anchors.topMargin: Bio.s8
-				anchors.bottomMargin: Bio.s8
-				width: Bio.ribThin
-				color: Qt.alpha(Bio.bone, 0.22)
-				opacity: lockWindow.reveal
+				anchors.fill: parent
+				color: Arc.well
+				opacity: 0.62 * lockWindow.reveal
 			}
 
-			BioSigil {
-				id: lockSigil
-				x: Math.round(lockBone.x - width / 2)
-				y: Math.round(lockWindow.height * 0.12)
-				width: 92
-				height: 92
-				seed: 13
-				lineColor: Qt.alpha(Bio.bone, 0.8)
-				weight: Bio.rib
+			// Sealed, the desktop is a ward.
+			//
+			// Not a clock in a corner with a password box under it: a circle is
+			// inscribed in the middle of the screen, the hour stands inside it,
+			// and what you type lights the runes around its rim one at a time,
+			// clockwise, without ever showing a character. Locking draws the
+			// circle rather than fading it in; a wrong word makes the whole ward
+			// shudder and go out.
+			Item {
+				id: ward
+
+				readonly property real span: Math.min(460, Math.min(lockWindow.width, lockWindow.height) * 0.52)
+				readonly property int slots: 16
+
+				width: ward.span
+				height: ward.span
+				anchors.centerIn: parent
+				anchors.verticalCenterOffset: -Arc.s7
 				opacity: lockWindow.reveal
+
+				// The inscription: the circle is drawn, once, at the speed a
+				// hand draws it.
+				property real inscribe: 0
+
+				NumberAnimation on inscribe {
+					id: inscribeAnim
+					running: root.locked
+					from: 0
+					to: 1
+					duration: 1100
+					easing.type: Easing.Bezier
+					easing.bezierCurve: Arc.curveInk
+				}
+
+				// The shudder: a wrong word is answered by the ward itself, as
+				// a damped oscillation rather than a canned shake.
+				property real shudder: 0
+				property real shudderVelocity: 0
+
+				Connections {
+					target: root
+					function onAuthStateChanged() {
+						if (root.authState === "failed" || root.authState === "max") {
+							ward.shudderVelocity = 5.5;
+							shudderClock.running = true;
+						}
+					}
+				}
+
+				Timer {
+					id: shudderClock
+					interval: 16
+					repeat: true
+					onTriggered: {
+						ward.shudderVelocity += -ward.shudder * 0.55;
+						ward.shudderVelocity *= 0.86;
+						ward.shudder += ward.shudderVelocity;
+						if (Math.abs(ward.shudder) < 0.06 && Math.abs(ward.shudderVelocity) < 0.06) {
+							ward.shudder = 0;
+							shudderClock.running = false;
+						}
+					}
+				}
+
+				transform: Translate {
+					x: ward.shudder
+				}
+
+				// The dark the ward is inscribed on: a disc of night with a soft
+				// edge, so the circle has something to be cut into wherever the
+				// wallpaper happens to be bright.
+				ArcHalo {
+					anchors.centerIn: parent
+					width: parent.width * 2.1
+					height: parent.height * 2.1
+					color: Arc.well
+					strength: 0.94 * ward.inscribe
+					spread: 0.34
+					falloff: 2.8
+				}
+
+				ArcHalo {
+					anchors.centerIn: parent
+					width: parent.width * 1.5
+					height: parent.height * 1.5
+					color: root.authState === "failed" || root.authState === "max" ? Arc.bane : Arc.aether
+					strength: 0.22 * ward.inscribe
+					spread: 0.4
+					flicker: true
+				}
+
+				// The ward, cut once: two rings, a graduated limb and sixteen
+				// empty rune slots waiting to be filled.
+				Canvas {
+					id: wardCanvas
+					anchors.fill: parent
+					renderStrategy: Canvas.Cooperative
+
+					Connections {
+						target: Arc
+						function onGiltChanged() { wardCanvas.requestPaint(); }
+					}
+
+					onPaint: {
+						const ctx = getContext("2d");
+						ctx.reset();
+						const cx = width / 2, cy = height / 2;
+						const outer = Math.min(width, height) / 2 - 3;
+						if (outer < 20) return;
+						const shadow = Qt.alpha(Qt.darker(Arc.gilt, 2.4), 0.55);
+						const highlight = Qt.alpha(Qt.lighter(Arc.gilt, 1.8), 0.5);
+
+						Ink.groove(ctx, Ink.arcPoints(cx, cy, outer, 0, Math.PI * 2, 96),
+							Arc.rule * 1.5, Arc.gilt, highlight, shadow, true);
+						Ink.cut(ctx, Ink.arcPoints(cx, cy, outer - 28, 0, Math.PI * 2, 96),
+							Arc.ruleThin, Qt.alpha(Arc.gilt, 0.7), true);
+						Ink.cut(ctx, Ink.arcPoints(cx, cy, outer * 0.60, 0, Math.PI * 2, 80),
+							Arc.ruleThin, Qt.alpha(Arc.gilt, 0.34), true);
+						Ink.graduations(ctx, cx, cy, outer - 4, -Math.PI / 2, Math.PI * 1.5,
+							96, 4, 9, 8, Arc.ruleThin, Qt.alpha(Arc.gilt, 0.5));
+
+						for (let index = 0; index < ward.slots; index++) {
+							const angle = -Math.PI / 2 + Math.PI * 2 * index / ward.slots;
+							Ink.rune(ctx, cx + Math.cos(angle) * (outer - 14),
+								cy + Math.sin(angle) * (outer - 14), 16,
+								index * 5 + 3, Arc.rule, Qt.alpha(Arc.gilt, 0.45));
+						}
+					}
+				}
+
+				// The circle being drawn: the arc that sweeps round as the ward
+				// is inscribed, and turns by itself while the word is tested.
+				ArcDial {
+					id: inscription
+					anchors.fill: parent
+					weight: Arc.ruleThin * 0.9
+					lineColor: "transparent"
+					liveColor: root.authState === "failed" || root.authState === "max" ? Arc.bane : Arc.aether
+					beading: false
+					progress: passwordPam.active ? 0.22 : ward.inscribe
+
+					// While the word is being tested the arc turns on its own —
+					// the one thing on a locked screen that moves.
+					RotationAnimation on rotation {
+						running: passwordPam.active
+						loops: Animation.Infinite
+						from: 0
+						to: 360
+						duration: 1600
+					}
+				}
+
+				// What has been said: one rune lit per character, clockwise,
+				// and nothing else about it shown anywhere.
+				Canvas {
+					id: spoken
+					anchors.fill: parent
+					renderStrategy: Canvas.Cooperative
+
+					readonly property int said: Math.min(passwordBox.inputLength, ward.slots)
+					readonly property real pulse: passwordBox.typePulse
+
+					onSaidChanged: requestPaint()
+					onPulseChanged: requestPaint()
+
+					onPaint: {
+						const ctx = getContext("2d");
+						ctx.reset();
+						const cx = width / 2, cy = height / 2;
+						const outer = Math.min(width, height) / 2 - 3;
+						if (outer < 20) return;
+						for (let index = 0; index < spoken.said; index++) {
+							const angle = -Math.PI / 2 + Math.PI * 2 * index / ward.slots;
+							const newest = index === spoken.said - 1;
+							const size = 15 * (newest ? 1 + spoken.pulse * 0.35 : 1);
+							Ink.rune(ctx, cx + Math.cos(angle) * (outer - 13),
+								cy + Math.sin(angle) * (outer - 13), size,
+								index * 5 + 3, Arc.rule * (newest ? 1.35 : 1),
+								newest ? Arc.aether : Qt.alpha(Arc.aether, 0.62));
+						}
+					}
+				}
+
+				// The hour, standing inside the ward.
+				Column {
+					anchors.centerIn: parent
+					spacing: 0
+					opacity: Math.max(0, (ward.inscribe - 0.45) / 0.55)
+
+					ArcText {
+						anchors.horizontalCenter: parent.horizontalCenter
+						role: "display"
+						font.pixelSize: 74
+						font.letterSpacing: 1
+						text: Qt.formatDateTime(root.lockNow, "HH:mm")
+					}
+
+					ArcText {
+						anchors.horizontalCenter: parent.horizontalCenter
+						role: "hand"
+						tone: "aether"
+						font.pixelSize: 17
+						text: Arc.hourName(root.lockNow)
+					}
+
+					Item {
+						width: 1
+						height: Arc.s3
+					}
+
+					ArcText {
+						anchors.horizontalCenter: parent.horizontalCenter
+						role: "label"
+						tone: "muted"
+						font.pixelSize: 11
+						text: Qt.formatDateTime(root.lockNow, "dddd, dd MMMM yyyy")
+					}
+				}
 			}
 
+			// The seal, under the ward: what state the word is in, and nothing
+			// that could be read over a shoulder.
 			Column {
 				id: lockContent
 
-				width: Math.min(760, Math.max(280, lockWindow.width - lockBone.x - Bio.s8))
-				x: Math.round(lockBone.x + Bio.s7)
-				y: Math.round((lockWindow.height - implicitHeight) / 2)
-				spacing: Bio.s4
-				opacity: lockWindow.reveal
-				transform: Translate {
-					x: (1 - lockWindow.reveal) * -40
-				}
+				anchors.horizontalCenter: parent.horizontalCenter
+				anchors.top: ward.bottom
+				anchors.topMargin: Arc.s6
+				width: Math.min(440, lockWindow.width - Arc.s8 * 2)
+				spacing: Arc.s3
+				opacity: Math.max(0, (ward.inscribe - 0.6) / 0.4) * lockWindow.reveal
 
-				BioText {
-					role: "specimen"
-					width: parent.width
-					text: Qt.formatDateTime(root.lockNow, "HH")
-					horizontalAlignment: Text.AlignLeft
-					font.pixelSize: 132
-					font.letterSpacing: 0
-					lineHeight: 0.84
-				}
-
-				BioText {
-					role: "specimen"
-					width: parent.width
-					tone: "organ"
-					text: Qt.formatDateTime(root.lockNow, "mm")
-					horizontalAlignment: Text.AlignLeft
-					font.pixelSize: 132
-					font.letterSpacing: 0
-					lineHeight: 0.84
-				}
-
-				BioTendon {
-					width: Math.min(parent.width, 300)
-					height: 14
-					facing: Qt.LeftToRight
-					sag: 2
-					weight: Bio.rib * 1.2
-					lineColor: Qt.alpha(Bio.bone, 0.45)
-				}
-
-				BioText {
-					role: "label"
-					tone: "muted"
-					width: parent.width
-					text: Qt.formatDateTime(root.lockNow, "dddd, dd MMMM yyyy")
-					horizontalAlignment: Text.AlignLeft
-					font.pixelSize: 13
-				}
-
-				Item {
-					width: 1
-					height: Bio.s5
-				}
-
-				// The seal. Nothing here shows what was typed — a run of
-				// vertebrae grows along the chamber instead, one per character,
-				// and the ring on the left lights while PAM is thinking.
 				Item {
 					id: passwordBox
 
@@ -323,8 +479,8 @@ Scope {
 						typePulseAnim.restart();
 					}
 
-					width: Math.min(parent.width, 440)
-					height: 58
+					width: parent.width
+					height: 46
 
 					SequentialAnimation {
 						id: typePulseAnim
@@ -333,8 +489,7 @@ Scope {
 							target: passwordBox
 							property: "typePulse"
 							to: 1
-							duration: 60
-							easing.type: Easing.OutCubic
+							duration: 55
 						}
 
 						NumberAnimation {
@@ -342,81 +497,48 @@ Scope {
 							property: "typePulse"
 							to: 0
 							duration: 280
-							easing.type: Easing.OutCubic
+							easing.type: Easing.Bezier
+							easing.bezierCurve: Arc.curveKindle
 						}
 					}
 
-					BioSurface {
+					ArcLeaf {
 						anchors.fill: parent
 						variant: "plate"
-						washTop: Bio.membrane
-						washBottom: Bio.membraneDeep
+						washTop: Arc.wash
+						washBottom: Arc.washDeep
 						lineColor: root.authState === "failed" || root.authState === "max"
-							? Qt.alpha(Bio.necrosis, 0.6)
-							: Bio.boneDim
+							? Qt.alpha(Arc.bane, 0.6)
+							: Arc.giltDim
 						liveColor: root.authState === "failed" || root.authState === "max"
-							? Bio.necrosis
-							: Bio.organ
-						haloStrength: 0.20
+							? Arc.bane
+							: Arc.aether
+						haloStrength: 0.18
 						intensity: Math.max(passwordBox.typePulse,
 							passwordPam.active ? 0.8 : (passwordBox.inputLength > 0 ? 0.45 : 0))
-						padding: Bio.s4
+						padding: Arc.s4
 
-						BioRing {
-							id: sealRing
-							anchors.left: parent.left
-							anchors.verticalCenter: parent.verticalCenter
-							width: 30
-							height: 30
-							seed: 2
-							lineColor: Bio.boneFaint
-							liveColor: passwordPam.active ? Bio.organ : Bio.bone
-							intensity: passwordPam.active ? 1 : passwordBox.typePulse
-
-							QQCImpl.IconImage {
-								anchors.centerIn: parent
-								width: 14
-								height: 14
-								source: "/usr/share/icons/Adwaita/symbolic/status/system-lock-screen-symbolic.svg"
-								sourceSize: Qt.size(width, height)
-								color: passwordPam.active ? Bio.organ : Bio.text
-							}
-						}
-
-						BioText {
-							anchors.left: sealRing.right
-							anchors.leftMargin: Bio.s4
-							anchors.verticalCenter: parent.verticalCenter
-							role: "label"
-							tone: "faint"
-							text: passwordPam.active ? "Testing" : "Sealed"
-							visible: passwordBox.inputLength === 0 || passwordPam.active
-						}
-
-						// One vertebra per character, growing away from the ring.
 						Row {
-							id: inputTrace
-							anchors.left: sealRing.right
-							anchors.leftMargin: Bio.s4
-							anchors.right: parent.right
-							anchors.verticalCenter: parent.verticalCenter
-							spacing: Bio.s2
-							visible: passwordBox.inputLength > 0 && !passwordPam.active
+							anchors.centerIn: parent
+							spacing: Arc.s3
 
-							Repeater {
-								model: Math.min(passwordBox.inputLength, 16)
+							ArcMark {
+								anchors.verticalCenter: parent.verticalCenter
+								width: 18
+								height: 18
+								glyph: "star"
+								lineColor: passwordPam.active ? Arc.aether : Arc.giltDim
+							}
 
-								delegate: Rectangle {
-									required property int index
-
-									anchors.verticalCenter: parent?.verticalCenter ?? undefined
-									width: Bio.nodule * 2
-									height: Bio.nodule * 2 * (index === passwordBox.inputLength - 1
-										? 1 + passwordBox.typePulse * 0.5 : 1)
-									radius: width / 2
-									color: Bio.organ
-									opacity: 0.55 + 0.45 * (index / Math.max(1, passwordBox.inputLength))
-								}
+							ArcText {
+								anchors.verticalCenter: parent.verticalCenter
+								role: "label"
+								tone: passwordPam.active ? "aether" : "faint"
+								text: passwordPam.active
+									? "Testing the word"
+									: passwordBox.inputLength > 0
+										? "Speak on, then Return"
+										: "Sealed"
 							}
 						}
 
@@ -489,7 +611,7 @@ Scope {
 					}
 				}
 
-				BioText {
+				ArcText {
 					role: "label"
 					width: parent.width
 					height: 22
@@ -500,7 +622,7 @@ Scope {
 					opacity: text === "" ? 0 : 1
 
 					Behavior on opacity {
-						NumberAnimation { duration: Bio.grow }
+						NumberAnimation { duration: Arc.turn }
 					}
 				}
 			}

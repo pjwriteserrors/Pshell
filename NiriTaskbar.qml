@@ -4,30 +4,37 @@ import QtQuick
 import Quickshell
 import "components"
 
-// The windows on this output, as a segment of the spine.
+// The realms: the windows on this output, hung along the left limb of the
+// chain.
 //
-// Every window is a vertebra stacked on one bone running down the column. The focused one is a full ring with
-// the application's icon in it; the rest are beads, sized by nothing and
-// meaning only "there is another one". An urgent window flushes.
+// Each window is a stone on a short cord. The focused one is a plate with the
+// application's mark cut into it; the rest are blanks, because there is nothing
+// to read on them — which one is in front is the only question a taskbar
+// answers. An urgent window burns.
 //
-// This replaces a row of rounded buttons on purpose: a taskbar that looks like
-// buttons invites reading each one, and there is nothing to read — the icon is
-// the whole content.
+// A new realm is *hung*: the cord pays out and the stone drops onto the curve
+// and swings once. When one closes the rest slide along the chain to close the
+// gap rather than jumping.
 Item {
 	id: root
 
 	required property var niriState
 	required property string outputName
 
-	// Handed over by the spine so a screen can be re-coloured in one place; the
-	// values themselves come from Bio.
-	property color background: Bio.tissue1
-	property color foreground: Bio.text
-	property color secondaryBoxColor: Bio.tissue2
-	property color secondaryBoxStrongColor: Bio.tissue3
+	// The chain this run is hung from, handed down by the gantry: the x this
+	// item starts at on screen, and the curve to read a height off.
+	property real originX: 0
+	property var chainAt: null
 
-	readonly property int beadSize: 22
-	readonly property int focusedSize: 28
+	// Handed over by the chain so a screen can be re-coloured in one place; the
+	// values themselves come from Arc.
+	property color background: Arc.leaf1
+	property color foreground: Arc.ink
+	property color secondaryBoxColor: Arc.leaf2
+	property color secondaryBoxStrongColor: Arc.leaf3
+
+	readonly property int blankSize: 18
+	readonly property int focusedSize: 27
 
 	function iconSource(appId) {
 		if (!appId) return Quickshell.iconPath("application-x-executable", true);
@@ -42,24 +49,37 @@ Item {
 		return Quickshell.iconPath("application-x-executable", true);
 	}
 
-	implicitWidth: Bio.spine
-	implicitHeight: Math.min(chain.implicitHeight + Bio.s4, 620)
-
-	// The bone the vertebrae are strung on, running with the column.
-	Rectangle {
-		anchors.top: parent.top
-		anchors.bottom: parent.bottom
-		anchors.topMargin: Bio.s3
-		anchors.bottomMargin: Bio.s3
-		anchors.horizontalCenter: parent.horizontalCenter
-		width: Bio.ribThin
-		color: Bio.boneGhost
+	function heightAt(centreX) {
+		return root.chainAt ? root.chainAt(centreX) : Arc.chainY(0.1);
 	}
 
-	Column {
-		id: chain
-		anchors.centerIn: parent
-		spacing: Bio.s2
+	implicitWidth: run.implicitWidth
+	implicitHeight: Arc.gantryDepth
+
+	Row {
+		id: run
+		height: parent.height
+		spacing: Arc.s2
+
+		// The gap closing when a realm is let go: the rest travel along the
+		// chain rather than being re-laid out between frames.
+		move: Transition {
+			NumberAnimation {
+				property: "x"
+				duration: Arc.turn
+				easing.type: Easing.Bezier
+				easing.bezierCurve: Arc.curveDetent
+			}
+		}
+
+		add: Transition {
+			NumberAnimation {
+				property: "x"
+				duration: Arc.turn
+				easing.type: Easing.Bezier
+				easing.bezierCurve: Arc.curveDetent
+			}
+		}
 
 		Repeater {
 			id: taskRepeater
@@ -73,94 +93,131 @@ Item {
 			}
 
 			delegate: Item {
-				id: vertebra
+				id: realm
 
 				required property var modelData
-				readonly property var task: modelData
-				readonly property bool focused: vertebra.task.isFocused
+				readonly property var task: realm.modelData
+				readonly property bool focused: realm.task.isFocused
+				readonly property real size: realm.focused ? root.focusedSize : root.blankSize
 
 				width: root.focusedSize
-				height: vertebra.focused ? root.focusedSize : root.beadSize
-				anchors.horizontalCenter: parent?.horizontalCenter ?? undefined
+				height: root.height
 
-				Behavior on height {
-					NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
+				// Where the stone hangs, and where it is on its way down from.
+				property real drop: 0
+
+				Component.onCompleted: hang.start()
+
+				NumberAnimation {
+					id: hang
+					target: realm
+					property: "drop"
+					from: 0
+					to: 1
+					duration: Arc.unroll
+					easing.type: Easing.Bezier
+					easing.bezierCurve: Arc.curveUnroll
 				}
 
-				BioGlow {
-					anchors.centerIn: parent
-					width: root.focusedSize * 2
-					height: root.focusedSize * 2
-					color: vertebra.task.isUrgent ? Bio.necrosis : Bio.organ
-					strength: 0.28
-					spread: 0.32
-					opacity: vertebra.focused || touch.containsMouse ? 1 : 0
-					visible: opacity > 0.01
+				readonly property real restY: root.heightAt(root.originX + realm.x + width / 2)
 
-					Behavior on opacity {
-						NumberAnimation { duration: Bio.grow }
-					}
-				}
-
-				BioRing {
-					anchors.centerIn: parent
-					width: root.focusedSize
-					height: root.focusedSize
-					seed: vertebra.task.id % 4
-					lineColor: Bio.boneFaint
-					liveColor: vertebra.task.isUrgent ? Bio.necrosis : Bio.organ
-					intensity: vertebra.focused ? 1 : touch.live
-					opacity: vertebra.focused || touch.containsMouse ? 1 : 0.0
-					visible: opacity > 0.01
-
-					Behavior on opacity {
-						NumberAnimation { duration: Bio.twitch }
-					}
-				}
-
-				// The resting state: a bead on the bone, nothing else.
+				// The cord.
 				Rectangle {
-					anchors.centerIn: parent
-					width: Bio.nodule * 2
-					height: Bio.nodule * 2
-					radius: width / 2
-					color: vertebra.task.isUrgent ? Bio.necrosis : Bio.boneDim
-					opacity: vertebra.focused || touch.containsMouse ? 0 : 1
-					visible: opacity > 0.01
-
-					Behavior on opacity {
-						NumberAnimation { duration: Bio.twitch }
-					}
+					x: realm.width / 2
+					y: realm.restY - 12
+					width: Arc.ruleThin
+					height: 12 * realm.drop
+					color: Arc.giltGhost
 				}
 
-				Image {
-					anchors.centerIn: parent
-					source: root.iconSource(vertebra.task.appId)
-					sourceSize.width: 15
-					sourceSize.height: 15
-					width: 15
-					height: 15
-					fillMode: Image.PreserveAspectFit
-					smooth: true
-					mipmap: true
-					asynchronous: true
-					cache: true
-					opacity: vertebra.focused ? 1 : touch.containsMouse ? 0.85 : 0
-					visible: opacity > 0.01
+				Item {
+					id: stone
+					width: realm.size
+					height: realm.size
+					x: (realm.width - width) / 2
+					y: Math.round(realm.restY - height / 2 + (1 - realm.drop) * -14)
+					opacity: realm.drop
 
-					Behavior on opacity {
-						NumberAnimation { duration: Bio.twitch }
+					Behavior on width {
+						NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveDetent }
 					}
-				}
+					Behavior on height {
+						NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveDetent }
+					}
 
-				BioTouch {
-					id: touch
-					acceptedButtons: Qt.LeftButton | Qt.MiddleButton
-					onClicked: event => {
-						if (event.button === Qt.MiddleButton)
-							root.niriState.closeWindow(vertebra.task.id);
-						else
-							root.niriState.focusWindow(vertebra.task.id);
+					ArcHalo {
+						anchors.centerIn: parent
+						width: root.focusedSize * 2.2
+						height: root.focusedSize * 2.2
+						color: realm.task.isUrgent ? Arc.bane : Arc.aether
+						strength: 0.3
+						spread: 0.32
+						flicker: realm.task.isUrgent
+						opacity: realm.focused || touch.containsMouse ? 1 : 0
+						visible: opacity > 0.01
+
+						Behavior on opacity {
+							NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveKindle }
+						}
+					}
+
+					ArcPlate {
+						anchors.fill: parent
+						variant: "plate"
+						weight: Arc.ruleThin
+						inset: 0
+						beading: false
+						lineColor: realm.task.isUrgent ? Qt.alpha(Arc.bane, 0.8) : Arc.giltFaint
+						liveColor: realm.task.isUrgent ? Arc.bane : Arc.aether
+						fillTop: realm.focused ? Arc.leaf2 : Arc.leaf1
+						fillBottom: Arc.leaf0
+						intensity: realm.focused ? 1 : touch.live
+					}
+
+					Image {
+						anchors.centerIn: parent
+						source: root.iconSource(realm.task.appId)
+						sourceSize.width: 15
+						sourceSize.height: 15
+						width: 15
+						height: 15
+						fillMode: Image.PreserveAspectFit
+						smooth: true
+						mipmap: true
+						asynchronous: true
+						cache: true
+						opacity: realm.focused ? 1 : touch.containsMouse ? 0.9 : 0
+						visible: opacity > 0.01
+
+						Behavior on opacity {
+							NumberAnimation { duration: Arc.tick }
+						}
+					}
+
+					// The blank: what a realm you are not in looks like.
+					Rectangle {
+						anchors.centerIn: parent
+						width: Arc.stud * 2
+						height: Arc.stud * 2
+						rotation: 45
+						color: realm.task.isUrgent ? Arc.bane : Arc.giltDim
+						opacity: realm.focused || touch.containsMouse ? 0 : 1
+						visible: opacity > 0.01
+
+						Behavior on opacity {
+							NumberAnimation { duration: Arc.tick }
+						}
+					}
+
+					ArcTouch {
+						id: touch
+						acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+						onClicked: event => {
+							if (event.button === Qt.MiddleButton)
+								root.niriState.closeWindow(realm.task.id);
+							else
+								root.niriState.focusWindow(realm.task.id);
+						}
 					}
 				}
 			}

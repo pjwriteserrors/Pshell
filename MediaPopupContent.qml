@@ -187,7 +187,7 @@ Item {
 							height: Math.max(2, barSlot.level * (parent.height - 8))
 							radius: width / 2
 							color: Qt.alpha(
-								Bio.mix(Bio.organ, Bio.organAlt, barSlot.index / cava.bars),
+								Arc.mix(Arc.aether, Arc.aetherAlt, barSlot.index / cava.bars),
 								0.06 + 0.78 * barSlot.level
 							)
 
@@ -212,15 +212,15 @@ Item {
 					width: 78
 					height: 78
 					radius: 3
-					color: Bio.cavity
+					color: Arc.well
 
-					BioFrame {
+					ArcPlate {
 						anchors.fill: parent
 						z: 2
 						variant: "plate"
-						weight: Bio.ribThin
-						lineColor: Bio.boneDim
-						liveColor: Bio.organ
+						weight: Arc.ruleThin
+						lineColor: Arc.giltDim
+						liveColor: Arc.aether
 					}
 
 					Image {
@@ -249,14 +249,14 @@ Item {
 					spacing: 2
 					width: hero.width - 78 - 12
 
-					BioText {
+					ArcText {
 						width: parent.width
 						role: "title"
 						font.pixelSize: 17
 						text: root.titleText
 					}
 
-					BioText {
+					ArcText {
 						width: parent.width
 						role: "body"
 						tone: "muted"
@@ -272,7 +272,7 @@ Item {
 			height: 26
 			visible: root.hasPlayer
 
-			BioText {
+			ArcText {
 				anchors.left: parent.left
 				anchors.verticalCenter: parent.verticalCenter
 				role: "mono"
@@ -281,7 +281,7 @@ Item {
 				text: root.formatTime(root.trackPosition)
 			}
 
-			BioText {
+			ArcText {
 				anchors.right: parent.right
 				anchors.verticalCenter: parent.verticalCenter
 				role: "mono"
@@ -299,11 +299,11 @@ Item {
 				anchors.verticalCenter: parent.verticalCenter
 				height: 10
 
-				BioMeter {
+				ArcPhial {
 					anchors.fill: parent
 					value: root.hasProgress ? root.trackPosition / root.trackLength : 0
-					fillColor: Bio.organ
-					trackColor: Bio.boneGhost
+					fillColor: Arc.aether
+					trackColor: Arc.giltGhost
 				}
 
 				MouseArea {
@@ -325,7 +325,7 @@ Item {
 			anchors.horizontalCenter: parent.horizontalCenter
 			spacing: 18
 
-			BioNode {
+			ArcSeat {
 				anchors.verticalCenter: parent.verticalCenter
 				size: 38
 				seed: 0
@@ -335,13 +335,13 @@ Item {
 
 			// The heart: the one control in the chamber that is bigger than
 			// the others, and the only one that changes size when it beats.
-			BioNode {
+			ArcSeat {
 				anchors.verticalCenter: parent.verticalCenter
 				size: 54
 				seed: 2
 				lit: root.playing
 				iconSize: 20
-				iconColor: root.playing ? Bio.organ : Bio.text
+				iconColor: root.playing ? Arc.aether : Arc.ink
 				iconSource: root.playing
 					? "/usr/share/icons/Adwaita/symbolic/actions/media-playback-pause-symbolic.svg"
 					: "/usr/share/icons/Adwaita/symbolic/actions/media-playback-start-symbolic.svg"
@@ -350,11 +350,11 @@ Item {
 				scale: root.playing ? 1 : 0.94
 
 				Behavior on scale {
-					NumberAnimation { duration: Bio.grow; easing.type: Easing.OutBack }
+					NumberAnimation { duration: Arc.turn; easing.type: Easing.OutBack }
 				}
 			}
 
-			BioNode {
+			ArcSeat {
 				anchors.verticalCenter: parent.verticalCenter
 				size: 38
 				seed: 3
@@ -368,15 +368,15 @@ Item {
 			width: parent.width
 			height: 40
 
-			BioNode {
+			ArcSeat {
 				id: muteButton
 				size: 32
 				seed: 1
 				anchors.left: parent.left
 				anchors.verticalCenter: parent.verticalCenter
 				lit: root.sinkMuted
-				liveColor: root.sinkMuted ? Bio.necrosis : Bio.organ
-				iconColor: root.sinkMuted ? Bio.necrosis : Bio.text
+				liveColor: root.sinkMuted ? Arc.bane : Arc.aether
+				iconColor: root.sinkMuted ? Arc.bane : Arc.ink
 				onClicked: root.toggleSinkMute()
 
 				iconSource: root.sinkMuted
@@ -397,11 +397,11 @@ Item {
 				anchors.verticalCenter: parent.verticalCenter
 				height: 12
 
-				BioMeter {
+				ArcPhial {
 					anchors.fill: parent
 					value: Math.min(1, root.sinkVolume)
-					fillColor: root.sinkMuted ? Bio.boneDim : Bio.organ
-					trackColor: Bio.boneGhost
+					fillColor: root.sinkMuted ? Arc.giltDim : Arc.aether
+					trackColor: Arc.giltGhost
 				}
 
 				MouseArea {
@@ -415,7 +415,7 @@ Item {
 				}
 			}
 
-			BioText {
+			ArcText {
 				id: volumeLabel
 				anchors.right: parent.right
 				anchors.verticalCenter: parent.verticalCenter
@@ -435,7 +435,7 @@ Item {
 			spacing: 6
 			visible: root.sinks.length > 1
 
-			BioText {
+			ArcText {
 				role: "label"
 				tone: "muted"
 				text: "Outflow"
@@ -444,7 +444,7 @@ Item {
 			Repeater {
 				model: root.sinks
 
-				delegate: BioRow {
+				delegate: ArcEntry {
 					id: sinkRow
 					required property var modelData
 
@@ -457,17 +457,17 @@ Item {
 						anchors.left: parent.left
 						anchors.right: parent.right
 						anchors.verticalCenter: parent.verticalCenter
-						spacing: Bio.s3
+						spacing: Arc.s3
 
 						Rectangle {
 							anchors.verticalCenter: parent.verticalCenter
-							width: Bio.nodule * 2
-							height: Bio.nodule * 2
+							width: Arc.stud * 2
+							height: Arc.stud * 2
 							radius: width / 2
-							color: sinkRow.modelData.active ? Bio.organ : Bio.boneFaint
+							color: sinkRow.modelData.active ? Arc.aether : Arc.giltFaint
 						}
 
-						BioText {
+						ArcText {
 							anchors.verticalCenter: parent.verticalCenter
 							width: parent.width - 20
 							role: sinkRow.modelData.active ? "bodyStrong" : "body"
@@ -488,7 +488,7 @@ Item {
 			Repeater {
 				model: root.players
 
-				delegate: BioButton {
+				delegate: ArcButton {
 					id: playerChip
 					required property var modelData
 					readonly property bool active: modelData === root.player
