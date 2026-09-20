@@ -24,6 +24,41 @@ Item {
 	required property color secondaryInsetColor
 	required property color barColor
 	property color danger: "#d95c5c"
+	// How wide the binding is, handed down by the book this spread is bound
+	// into: the two pages part by exactly that much.
+	property real gutter: Arc.s6
+
+	// True names. An application's own name is what is printed on the tin; a
+	// grimoire lists what the thing actually does when you call it. Both are
+	// searchable, and the true name is what the illumination leads with.
+	readonly property var trueNames: ({
+		"firefox": "Portal", "librewolf": "Portal", "chromium": "Portal", "google-chrome": "Portal",
+		"kitty": "Arcane Console", "alacritty": "Arcane Console", "foot": "Arcane Console",
+		"org.wezfurlong.wezterm": "Arcane Console", "ghostty": "Arcane Console",
+		"code": "Runic Forge", "code-oss": "Runic Forge", "codium": "Runic Forge",
+		"org.gnome.nautilus": "Vault", "nautilus": "Vault", "thunar": "Vault",
+		"org.kde.dolphin": "Vault", "nemo": "Vault", "pcmanfm": "Vault",
+		"steam": "Tavern", "lutris": "Tavern", "heroic": "Tavern",
+		"org.gnome.settings": "Grimoire", "systemsettings": "Grimoire", "gnome-control-center": "Grimoire",
+		"spotify": "Bard's Hall", "org.gnome.rhythmbox3": "Bard's Hall", "mpv": "Scrying Glass",
+		"vlc": "Scrying Glass", "gimp": "Atelier", "org.gimp.gimp": "Atelier",
+		"inkscape": "Atelier", "org.inkscape.inkscape": "Atelier", "krita": "Atelier",
+		"blender": "Wright's Bench", "obs": "Watchtower", "com.obsproject.studio": "Watchtower",
+		"discord": "Sending Stone", "vesktop": "Sending Stone", "telegram": "Sending Stone",
+		"org.telegram.desktop": "Sending Stone", "signal": "Sending Stone",
+		"thunderbird": "Raven Post", "org.gnome.evolution": "Raven Post",
+		"btop": "Haruspex", "htop": "Haruspex", "org.gnome.systemmonitor": "Haruspex",
+		"libreoffice": "Scriptorium", "obsidian": "Codex", "zotero": "Codex",
+		"virt-manager": "Homunculus", "gnome-boxes": "Homunculus"
+	})
+
+	function trueName(entry) {
+		if (!entry) return "";
+		const id = String(entry.id || "").toLowerCase().replace(/\.desktop$/, "");
+		if (root.trueNames[id]) return root.trueNames[id];
+		const tail = id.split(".").pop();
+		return root.trueNames[tail] || "";
+	}
 
 	property string searchText: ""
 	property var usageMap: ({})
@@ -2075,14 +2110,17 @@ Item {
 			name: Fuzzy.prepare(String(entry.name || "")),
 			genericName: Fuzzy.prepare(String(entry.genericName || "")),
 			comment: Fuzzy.prepare(String(entry.comment || "")),
-			id: Fuzzy.prepare(String(entry.id || ""))
+			id: Fuzzy.prepare(String(entry.id || "")),
+			// A thing can be found by what the grimoire calls it as well as by
+			// what it calls itself: typing "portal" finds the browser.
+			trueName: Fuzzy.prepare(root.trueName(entry))
 		}));
 
 		return Fuzzy.go(query, prepared, {
 			all: true,
-			keys: ["name", "genericName", "comment", "id"],
+			keys: ["name", "genericName", "comment", "id", "trueName"],
 			scoreFn: result => {
-				const weights = [1.4, 0.5, 0.35, 0.6];
+				const weights = [1.4, 0.5, 0.35, 0.6, 1.2];
 				let score = 0;
 				for (let i = 0; i < weights.length; i += 1) score += result[i].score * weights[i];
 				score += root.appUsage(result.obj._item) * 100;
@@ -2249,13 +2287,13 @@ Item {
 		property: "reveal"
 		from: 0
 		to: 1
-		duration: Bio.band + Bio.bandStep * 3
+		duration: Arc.band + Arc.bandStep * 3
 		easing.type: Easing.OutCubic
 	}
 
 	function band(index) {
-		const start = Bio.stagger(index) / (Bio.band + Bio.bandStep * 3);
-		const span = Bio.band / (Bio.band + Bio.bandStep * 3);
+		const start = Arc.stagger(index) / (Arc.band + Arc.bandStep * 3);
+		const span = Arc.band / (Arc.band + Arc.bandStep * 3);
 		return Math.max(0, Math.min(1, (root.reveal - start) / span));
 	}
 
@@ -2658,7 +2696,7 @@ Item {
 		Column {
 			id: dish
 			anchors.fill: parent
-			spacing: Bio.s4
+			spacing: Arc.s4
 
 			// How much room the cultures get once the probe and the plate have
 			// taken theirs.
@@ -2680,30 +2718,30 @@ Item {
 					anchors.left: parent.left
 					anchors.right: parent.right
 					anchors.bottom: parent.bottom
-					height: Bio.ribThin
-					color: Bio.boneFaint
+					height: Arc.ruleThin
+					color: Arc.giltFaint
 				}
 
 				Rectangle {
 					anchors.left: parent.left
 					anchors.bottom: parent.bottom
 					width: searchField.activeFocus || root.editingMessageId !== "" ? parent.width : 0
-					height: Bio.rib
-					color: Bio.organ
+					height: Arc.rule
+					color: Arc.aether
 
 					Behavior on width {
-						NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
+						NumberAnimation { duration: Arc.turn; easing.type: Easing.OutCubic }
 					}
 				}
 
-				BioRing {
+				ArcDial {
 					id: probeRing
 					anchors.left: parent.left
 					anchors.verticalCenter: parent.verticalCenter
 					width: 36
 					height: 36
 					seed: 1
-					lineColor: Bio.boneFaint
+					lineColor: Arc.giltFaint
 					intensity: searchField.activeFocus ? 0.85 : 0
 
 					QQCImpl.IconImage {
@@ -2713,29 +2751,29 @@ Item {
 						height: 17
 						source: root.inputIconPath
 						sourceSize: Qt.size(width, height)
-						color: searchField.activeFocus ? Bio.organ : Bio.text
+						color: searchField.activeFocus ? Arc.aether : Arc.ink
 					}
 				}
 
 				Item {
 					id: commandTokenBox
 					anchors.left: probeRing.right
-					anchors.leftMargin: Bio.s3
+					anchors.leftMargin: Arc.s3
 					anchors.verticalCenter: parent.verticalCenter
 					width: visible ? Math.min(140, Math.max(30, commandTokenField.contentWidth + 14)) : 0
 					height: 24
 					visible: root.commandInputActive
 
-					BioFrame {
+					ArcPlate {
 						anchors.fill: parent
 						variant: "capsule"
 						beading: false
-						weight: Bio.ribThin
+						weight: Arc.ruleThin
 						inset: 1
-						lineColor: Bio.boneFaint
-						liveColor: Bio.organ
-						fillTop: Bio.cavity
-						fillBottom: Bio.cavity
+						lineColor: Arc.giltFaint
+						liveColor: Arc.aether
+						fillTop: Arc.well
+						fillBottom: Arc.well
 						intensity: commandTokenField.activeFocus ? 1 : 0
 					}
 
@@ -2745,13 +2783,13 @@ Item {
 						anchors.leftMargin: 7
 						anchors.rightMargin: 7
 						text: ">"
-						color: commandTokenField.activeFocus ? Bio.organ : Bio.textMuted
-						selectionColor: Qt.alpha(Bio.organ, 0.35)
-						selectedTextColor: Bio.text
+						color: commandTokenField.activeFocus ? Arc.aether : Arc.inkMuted
+						selectionColor: Qt.alpha(Arc.aether, 0.35)
+						selectedTextColor: Arc.ink
 						cursorVisible: activeFocus
 						verticalAlignment: Text.AlignVCenter
 						clip: true
-						font.family: Bio.mono
+						font.family: Arc.mono
 						font.pixelSize: 12
 
 						onTextChanged: {
@@ -2815,27 +2853,27 @@ Item {
 					id: searchField
 					z: 1
 					anchors.left: root.commandInputActive ? commandTokenBox.right : probeRing.right
-					anchors.leftMargin: Bio.s3
+					anchors.leftMargin: Arc.s3
 					anchors.right: attachButton.visible ? attachButton.left : clearButton.left
-					anchors.rightMargin: Bio.s3
+					anchors.rightMargin: Arc.s3
 					anchors.top: parent.top
 					anchors.bottom: parent.bottom
-					anchors.bottomMargin: Bio.s2
-					font.family: root.inChatMode ? Bio.sans : Bio.serif
-					font.pixelSize: root.inChatMode ? Bio.sizeBody : 27
-					color: Bio.text
+					anchors.bottomMargin: Arc.s2
+					font.family: root.inChatMode ? Arc.book : Arc.cut
+					font.pixelSize: root.inChatMode ? Arc.sizeBody : 28
+					color: Arc.ink
 					placeholderText: root.inChatMode
-						? "Message"
+						? "Put the question"
 						: (root.inAiMode
-							? "Search chats"
+							? "Search the discourses"
 							: (root.inFileMode
-								? "Search files"
+								? "Search the vault"
 								: (root.inCalculatorMode
-									? "Expression"
-									: (root.commandInputActive ? "Options" : "Search apps or type >c 5+5"))))
-					placeholderTextColor: Bio.textFaint
-					selectedTextColor: Bio.text
-					selectionColor: Qt.alpha(Bio.organ, 0.3)
+									? "Set down the reckoning"
+									: (root.commandInputActive ? "Options" : "Name a thing, or speak a cantrip with >"))))
+					placeholderTextColor: Arc.inkFaint
+					selectedTextColor: Arc.ink
+					selectionColor: Qt.alpha(Arc.aether, 0.3)
 					selectByMouse: true
 					focus: true
 					cursorVisible: activeFocus
@@ -2848,7 +2886,7 @@ Item {
 						visible: searchField.activeFocus
 						width: root.inChatMode ? 1 : 2
 						height: searchField.font.pixelSize + 3
-						color: Bio.organ
+						color: Arc.aether
 					}
 
 					onTextChanged: {
@@ -2971,7 +3009,7 @@ Item {
 						height: 14
 						source: root.attachmentIconPath
 						sourceSize: Qt.size(width, height)
-						color: attachMouse.containsMouse || root.aiAttachmentPickerOpen ? Bio.organ : Bio.textMuted
+						color: attachMouse.containsMouse || root.aiAttachmentPickerOpen ? Arc.aether : Arc.inkMuted
 					}
 
 					ToolTip.visible: attachMouse.containsMouse
@@ -3001,10 +3039,10 @@ Item {
 						}
 					}
 
-					BioText {
+					ArcText {
 						anchors.centerIn: parent
 						role: "body"
-						tone: clearMouse.containsMouse ? "organ" : "faint"
+						tone: clearMouse.containsMouse ? "aether" : "faint"
 						text: root.aiStreaming && root.inChatMode ? "■" : "×"
 					}
 
@@ -3020,48 +3058,48 @@ Item {
 				opacity: root.band(1)
 				height: 16
 
-				BioText {
+				ArcText {
 					id: plateTitle
 					anchors.left: parent.left
 					anchors.verticalCenter: parent.verticalCenter
 					role: "label"
-					tone: "organ"
+					tone: "aether"
 					text: root.inChatMode ? "Discourse"
-						: root.inOllamaMode ? "Strains"
-						: root.inAiMode ? "Culture"
-						: root.inFileMode ? "Specimens"
-						: root.inCalculatorMode ? "Calculus"
-						: root.inCommandMode ? "Verbs"
-						: "Colony"
+						: root.inOllamaMode ? "Familiars"
+						: root.inAiMode ? "Invocation"
+						: root.inFileMode ? "The Vault"
+						: root.inCalculatorMode ? "Reckoning"
+						: root.inCommandMode ? "Cantrips"
+						: "The Index"
 				}
 
-				BioTendon {
+				ArcFlourish {
 					anchors.left: plateTitle.right
 					anchors.right: plateCount.left
-					anchors.leftMargin: Bio.s3
-					anchors.rightMargin: Bio.s3
+					anchors.leftMargin: Arc.s3
+					anchors.rightMargin: Arc.s3
 					anchors.verticalCenter: parent.verticalCenter
 					height: 12
 					facing: Qt.LeftToRight
-					lineColor: Bio.boneFaint
+					lineColor: Arc.giltFaint
 					visible: width > 30
 				}
 
-				BioText {
+				ArcText {
 					id: plateCount
 					anchors.right: parent.right
 					anchors.verticalCenter: parent.verticalCenter
 					role: "label"
 					tone: "faint"
-					text: root.inCommandMode ? "" : `${root.filteredApps.length} held`
+					text: root.inCommandMode ? "" : `${root.filteredApps.length} named`
 				}
 			}
 
-			// The colony, read as an index and a specimen. On the left a plain
-			// list of names with nothing in it but the names — that is what you
-			// scan. On the right, whatever the index is pointing at, blown up
-			// to the size of the thing you are about to open: its mark, its
-			// name cut large, what it is, and the command that will run.
+			// The spread. The verso is the index — names, in order, with the
+			// number they are entered under in the margin; that is what you
+			// scan. The recto is the illumination: whatever the index is
+			// pointing at, drawn at the size of the thing you are about to
+			// call, with its true name under it.
 			Item {
 				id: colony
 
@@ -3086,9 +3124,11 @@ Item {
 					}
 
 					anchors.left: parent.left
+					anchors.leftMargin: Arc.s5
 					anchors.top: parent.top
 					anchors.bottom: parent.bottom
-					width: Math.round(parent.width * 0.36)
+					anchors.bottomMargin: 22
+					width: Math.round((parent.width - root.gutter) / 2) - Arc.s5
 					clip: true
 					model: root.filteredApps
 					currentIndex: model.length > 0 ? 0 : -1
@@ -3110,36 +3150,36 @@ Item {
 						Rectangle {
 							anchors.left: parent.left
 							anchors.verticalCenter: parent.verticalCenter
-							width: Bio.rib * 1.6
+							width: Arc.rule * 1.6
 							height: parent.height * (appTile.selected ? 0.66 : 0)
 							radius: width / 2
-							color: Bio.organ
+							color: Arc.aether
 							opacity: appTile.selected ? 1 : 0
 
 							Behavior on opacity {
-								NumberAnimation { duration: Bio.twitch }
+								NumberAnimation { duration: Arc.tick }
 							}
 							Behavior on height {
-								NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
+								NumberAnimation { duration: Arc.turn; easing.type: Easing.OutCubic }
 							}
 						}
 
-						BioText {
+						ArcText {
 							id: appRank
 							anchors.left: parent.left
-							anchors.leftMargin: Bio.s4
+							anchors.leftMargin: Arc.s4
 							anchors.verticalCenter: parent.verticalCenter
 							role: "mono"
-							tone: appTile.selected ? "organ" : "faint"
+							tone: appTile.selected ? "aether" : "faint"
 							font.pixelSize: 10
 							text: String(appTile.index + 1).padStart(2, "0")
 						}
 
-						BioText {
+						ArcText {
 							anchors.left: appRank.right
-							anchors.leftMargin: Bio.s3
+							anchors.leftMargin: Arc.s3
 							anchors.right: parent.right
-							anchors.rightMargin: Bio.s4
+							anchors.rightMargin: Arc.s4
 							anchors.verticalCenter: parent.verticalCenter
 							role: "heading"
 							font.pixelSize: 14
@@ -3147,7 +3187,7 @@ Item {
 							text: appTile.modelData.name || appTile.modelData.id || "App"
 						}
 
-						BioTouch {
+						ArcTouch {
 							id: tileHover
 							onEntered: appList.currentIndex = appTile.index
 							onClicked: root.launchApp(appTile.modelData)
@@ -3155,59 +3195,140 @@ Item {
 					}
 				}
 
-				// The bone the index is written against.
+				// The ruled margin the entry numbers hang on. A scribe rules
+				// the page before writing on it, and this is the line the
+				// numbers are written against.
 				Rectangle {
-					id: colonySpine
-					anchors.left: appList.right
-					anchors.leftMargin: Bio.s6
+					anchors.left: parent.left
+					anchors.leftMargin: Arc.s5 + 24
 					anchors.top: parent.top
 					anchors.bottom: parent.bottom
-					anchors.topMargin: Bio.s3
-					anchors.bottomMargin: Bio.s3
-					width: Bio.ribThin
-					color: Bio.boneGhost
+					anchors.bottomMargin: 22
+					width: Arc.ruleThin
+					color: Arc.giltFaint
+				}
+
+				// Nothing chosen: the recto is not blank, it is a page waiting
+				// to be written on. An empty state is a page in this style, the
+				// same as a full one.
+				Item {
+					anchors.left: parent.left
+					anchors.leftMargin: Math.round((colony.width + root.gutter) / 2) + Arc.s4
+					anchors.right: parent.right
+					anchors.top: parent.top
+					anchors.bottom: parent.bottom
+					visible: !colony.current
+					opacity: 0.7
+
+					Column {
+						anchors.centerIn: parent
+						spacing: Arc.s4
+
+						ArcMark {
+							anchors.horizontalCenter: parent.horizontalCenter
+							width: 40
+							height: 40
+							glyph: "star"
+							lineColor: Arc.giltFaint
+						}
+
+						ArcText {
+							anchors.horizontalCenter: parent.horizontalCenter
+							role: "hand"
+							tone: "faint"
+							text: root.searchText.trim() === ""
+								? "Nothing is written here yet"
+								: "No such thing is in the index"
+						}
+					}
+				}
+
+				// The head of the recto, so the illumination is on a page and
+				// not floating in the right half of a rectangle.
+				ArcText {
+					id: rectoHead
+					anchors.left: parent.left
+					anchors.leftMargin: Math.round((colony.width + root.gutter) / 2) + Arc.s4
+					anchors.top: parent.top
+					role: "label"
+					tone: "muted"
+					text: colony.current ? "The Calling" : ""
+				}
+
+				ArcFlourish {
+					anchors.left: rectoHead.right
+					anchors.leftMargin: Arc.s3
+					anchors.right: parent.right
+					anchors.verticalCenter: rectoHead.verticalCenter
+					height: 10
+					facing: Qt.LeftToRight
+					lineColor: Arc.giltFaint
+					visible: colony.current && width > 30
+				}
+
+				// The folios: what a page of a book has at the foot of it.
+				ArcText {
+					anchors.left: parent.left
+					anchors.bottom: parent.bottom
+					role: "label"
+					tone: "faint"
+					font.pixelSize: 9
+					text: root.filteredApps.length > 0
+						? `i · ${root.filteredApps.length} entered`
+						: "i"
+				}
+
+				ArcText {
+					anchors.right: parent.right
+					anchors.bottom: parent.bottom
+					role: "label"
+					tone: "faint"
+					font.pixelSize: 9
+					text: colony.current ? "ii · the calling" : "ii"
 				}
 
 				// The specimen itself.
 				Item {
 					id: specimen
 
-					anchors.left: colonySpine.right
-					anchors.leftMargin: Bio.s7
+					anchors.left: parent.left
+					anchors.leftMargin: Math.round((parent.width + root.gutter) / 2) + Arc.s4
 					anchors.right: parent.right
 					anchors.top: parent.top
 					anchors.bottom: parent.bottom
+					anchors.topMargin: Arc.s6
+					anchors.bottomMargin: 22
 					opacity: colony.current ? root.band(3) : 0
 
 					Behavior on opacity {
-						NumberAnimation { duration: Bio.grow }
+						NumberAnimation { duration: Arc.turn }
 					}
 
-					BioGlow {
+					ArcHalo {
 						anchors.centerIn: specimenMark
 						width: 220
 						height: 220
-						color: Bio.organ
+						color: Arc.aether
 						strength: 0.24
 						spread: 0.4
 					}
 
-					BioRing {
+					ArcDial {
 						id: specimenMark
 						anchors.left: parent.left
-						anchors.bottom: specimenBody.top
-						anchors.bottomMargin: Bio.s5
-						width: 84
-						height: 84
+						anchors.top: parent.top
+						anchors.topMargin: Arc.s2
+						width: 96
+						height: 96
 						seed: appList.currentIndex % 4
-						weight: Bio.rib * 1.2
-						lineColor: Bio.boneDim
+						weight: Arc.rule * 1.2
+						lineColor: Arc.giltDim
 						intensity: 1
 
 						Image {
 							anchors.centerIn: parent
-							width: 44
-							height: 44
+							width: 50
+							height: 50
 							source: colony.current ? root.iconSource(colony.current) : ""
 							sourceSize: Qt.size(width, height)
 							fillMode: Image.PreserveAspectFit
@@ -3220,20 +3341,30 @@ Item {
 						id: specimenBody
 						anchors.left: parent.left
 						anchors.right: parent.right
-						anchors.rightMargin: Bio.s6
-						anchors.verticalCenter: parent.verticalCenter
-						anchors.verticalCenterOffset: Bio.s4
-						spacing: Bio.s2
+						anchors.rightMargin: Arc.s6
+						anchors.top: parent.top
+						anchors.topMargin: 120
+						spacing: Arc.s2
 
-						BioText {
+						ArcText {
 							width: parent.width
-							role: "specimen"
+							role: "display"
 							font.pixelSize: 34
 							wrapMode: Text.NoWrap
 							text: colony.current ? (colony.current.name || colony.current.id || "") : ""
 						}
 
-						BioText {
+						// What the thing is actually called when it is called.
+						ArcText {
+							width: parent.width
+							role: "hand"
+							tone: "aether"
+							font.pixelSize: 19
+							visible: text !== ""
+							text: colony.current ? root.trueName(colony.current) : ""
+						}
+
+						ArcText {
 							width: parent.width
 							role: "body"
 							tone: "muted"
@@ -3247,17 +3378,17 @@ Item {
 
 						Item {
 							width: 1
-							height: Bio.s3
+							height: Arc.s3
 						}
 
-						BioTendon {
+						ArcFlourish {
 							width: Math.min(parent.width, 220)
 							height: 12
 							facing: Qt.LeftToRight
-							lineColor: Bio.boneFaint
+							lineColor: Arc.giltFaint
 						}
 
-						BioText {
+						ArcText {
 							width: parent.width
 							role: "mono"
 							tone: "faint"
@@ -3273,34 +3404,113 @@ Item {
 					Row {
 						anchors.left: parent.left
 						anchors.bottom: parent.bottom
-						anchors.bottomMargin: Bio.s3
-						spacing: Bio.s3
+						anchors.bottomMargin: Arc.s3
+						spacing: Arc.s3
 
-						BioText {
+						ArcText {
 							role: "label"
-							tone: "organ"
+							tone: "aether"
 							text: "Return"
 						}
 
-						BioText {
+						ArcText {
 							role: "label"
 							tone: "faint"
-							text: "to grow it"
+							text: "to call it"
 						}
 					}
 				}
 			}
 
-			ListView {
-				id: commandList
-				width: Math.min(parent.width, 860)
+			// The cantrips, on the same spread as everything else: the verbs on
+			// the verso, and whichever one the cursor is on written out on the
+			// recto. A list that spanned both pages would be a list in a book,
+			// not a page of a book.
+			Item {
+				id: cantripSpread
+
+				width: parent.width
 				height: dish.viewHeight
+				// Bound to the modes directly, not to the list's own `visible`:
+				// an Item's visible is the *effective* one, so a child of a
+				// hidden parent reads false and the pair would latch off.
 				visible: root.inCommandMode
 					&& !root.inCalculatorMode
 					&& !root.inAiMode
 					&& !root.inChatMode
 					&& !root.inOllamaMode
 					&& !root.inFileMode
+
+				readonly property var chosen: commandList.currentIndex >= 0
+					&& commandList.currentIndex < root.filteredCommands.length
+					? root.filteredCommands[commandList.currentIndex]
+					: null
+
+				ArcText {
+					id: cantripHead
+					anchors.left: parent.left
+					anchors.leftMargin: Math.round((parent.width + root.gutter) / 2) + Arc.s4
+					anchors.top: parent.top
+					role: "label"
+					tone: "muted"
+					text: cantripSpread.chosen ? "The Speaking" : ""
+				}
+
+				Column {
+					anchors.left: parent.left
+					anchors.leftMargin: Math.round((parent.width + root.gutter) / 2) + Arc.s4
+					anchors.right: parent.right
+					anchors.top: cantripHead.bottom
+					anchors.topMargin: Arc.s6
+					spacing: Arc.s3
+					visible: cantripSpread.chosen !== null
+
+					ArcDial {
+						width: 86
+						height: 86
+						seed: commandList.currentIndex % 4
+						weight: Arc.rule * 1.2
+						lineColor: Arc.giltDim
+						intensity: 1
+
+						QQCImpl.IconImage {
+							anchors.centerIn: parent
+							width: 34
+							height: 34
+							source: cantripSpread.chosen ? root.commandIconSource(cantripSpread.chosen) : ""
+							sourceSize: Qt.size(width, height)
+							color: Arc.aether
+						}
+					}
+
+					ArcText {
+						width: parent.width
+						role: "display"
+						font.pixelSize: 32
+						text: cantripSpread.chosen ? (cantripSpread.chosen.name || "Cantrip") : ""
+					}
+
+					ArcText {
+						width: parent.width
+						role: "hand"
+						tone: "aether"
+						font.pixelSize: 18
+						text: cantripSpread.chosen ? `>${cantripSpread.chosen.command || cantripSpread.chosen.id || ""}` : ""
+					}
+
+					ArcText {
+						width: parent.width
+						role: "body"
+						tone: "muted"
+						wrapMode: Text.WordWrap
+						text: cantripSpread.chosen ? (cantripSpread.chosen.description || "") : ""
+					}
+				}
+
+			ListView {
+				id: commandList
+				width: Math.round((parent.width - root.gutter) / 2)
+				height: parent.height
 				clip: true
 				spacing: 6
 				model: root.filteredCommands
@@ -3309,7 +3519,7 @@ Item {
 
 				// A verb: the word you type in mono, what it does underneath,
 				// and a ring that lights when it is the one under the cursor.
-				delegate: BioRow {
+				delegate: ArcEntry {
 					id: commandRow
 
 					required property var modelData
@@ -3317,21 +3527,21 @@ Item {
 
 					width: commandList.width
 					implicitHeight: 48
-					inset: Bio.s3
+					inset: Arc.s3
 					selected: commandList.currentIndex === commandRow.index
 					onClicked: root.launchCommand(commandRow.modelData)
 					onContainsMouseChanged: {
 						if (containsMouse) commandList.currentIndex = commandRow.index;
 					}
 
-					BioRing {
+					ArcDial {
 						id: commandRing
 						anchors.left: parent.left
 						anchors.verticalCenter: parent.verticalCenter
 						width: 30
 						height: 30
 						seed: commandRow.index % 4
-						lineColor: Bio.boneGhost
+						lineColor: Arc.giltGhost
 						intensity: commandRow.selected ? 1 : 0
 
 						QQCImpl.IconImage {
@@ -3340,26 +3550,26 @@ Item {
 							height: 15
 							source: root.commandIconSource(commandRow.modelData)
 							sourceSize: Qt.size(width, height)
-							color: commandRow.selected ? Bio.organ : Bio.text
+							color: commandRow.selected ? Arc.aether : Arc.ink
 						}
 					}
 
 					Column {
 						anchors.left: commandRing.right
-						anchors.leftMargin: Bio.s3
+						anchors.leftMargin: Arc.s3
 						anchors.right: parent.right
 						anchors.verticalCenter: parent.verticalCenter
 						spacing: -1
 
-						BioText {
+						ArcText {
 							width: parent.width
 							role: "mono"
 							font.pixelSize: 13
-							color: commandRow.selected ? Bio.organ : Bio.text
+							color: commandRow.selected ? Arc.aether : Arc.ink
 							text: `>${commandRow.modelData.command || commandRow.modelData.id || "command"}`
 						}
 
-						BioText {
+						ArcText {
 							width: parent.width
 							role: "caption"
 							tone: "faint"
@@ -3371,6 +3581,7 @@ Item {
 				ScrollBar.vertical: ScrollBar {
 					policy: ScrollBar.AsNeeded
 				}
+			}
 			}
 
 			Item {
@@ -3389,11 +3600,11 @@ Item {
 				// The result is the specimen here: it is engraved at the size
 				// of the thing you came for, with the expression above it as a
 				// label and the outcome of the reaction underneath.
-				BioGlow {
+				ArcHalo {
 					anchors.centerIn: parent
 					width: parent.width * 0.9
 					height: parent.height * 0.7
-					color: root.calculatorEvaluation.valid ? Bio.organ : Bio.necrosis
+					color: root.calculatorEvaluation.valid ? Arc.aether : Arc.bane
 					strength: 0.14
 					spread: 0.4
 				}
@@ -3401,9 +3612,9 @@ Item {
 				Column {
 					width: parent.width
 					anchors.centerIn: parent
-					spacing: Bio.s3
+					spacing: Arc.s3
 
-					BioText {
+					ArcText {
 						width: parent.width
 						role: "label"
 						tone: "muted"
@@ -3412,11 +3623,11 @@ Item {
 						horizontalAlignment: Text.AlignHCenter
 					}
 
-					BioText {
+					ArcText {
 						width: parent.width
-						role: "specimen"
+						role: "display"
 						tone: root.calculatorEvaluation.valid ? "default" : "muted"
-						text: root.calculatorEvaluation.valid ? root.calculatorEvaluation.result : "Calculus"
+						text: root.calculatorEvaluation.valid ? root.calculatorEvaluation.result : "Reckoning"
 						horizontalAlignment: Text.AlignHCenter
 						elide: Text.ElideMiddle
 						font.pixelSize: 56
@@ -3424,19 +3635,19 @@ Item {
 						minimumPixelSize: 24
 					}
 
-					BioTendon {
+					ArcFlourish {
 						width: parent.width * 0.5
 						anchors.horizontalCenter: parent.horizontalCenter
 						height: 12
 						facing: Qt.LeftToRight
-						lineColor: root.calculatorEvaluation.valid ? Qt.alpha(Bio.organ, 0.6) : Bio.boneGhost
+						lineColor: root.calculatorEvaluation.valid ? Qt.alpha(Arc.aether, 0.6) : Arc.giltGhost
 					}
 
-					BioText {
+					ArcText {
 						width: parent.width
 						role: "label"
 						tone: root.calculatorEvaluation.valid ? "faint" : "alert"
-						text: root.calculatorEvaluation.valid ? "Enter to extract" : root.calculatorEvaluation.message
+						text: root.calculatorEvaluation.valid ? "Enter to take it" : root.calculatorEvaluation.message
 						horizontalAlignment: Text.AlignHCenter
 						wrapMode: Text.WordWrap
 					}
@@ -3458,7 +3669,7 @@ Item {
 						width: parent.width
 						height: 32
 
-						BioNode {
+						ArcSeat {
 							id: fileUpButton
 							anchors.left: parent.left
 							anchors.verticalCenter: parent.verticalCenter
@@ -3466,18 +3677,18 @@ Item {
 							seed: 1
 							onClicked: root.fileBrowserDirectory = root.attachmentParentDirectory(root.fileBrowserDirectory)
 
-							BioText {
+							ArcText {
 								anchors.centerIn: parent
 								role: "heading"
 								text: "↑"
 							}
 						}
 
-						BioText {
+						ArcText {
 							anchors.left: fileUpButton.right
-							anchors.leftMargin: Bio.s3
+							anchors.leftMargin: Arc.s3
 							anchors.right: fileOpenCurrentButton.left
-							anchors.rightMargin: Bio.s3
+							anchors.rightMargin: Arc.s3
 							anchors.verticalCenter: parent.verticalCenter
 							role: "mono"
 							tone: "muted"
@@ -3486,7 +3697,7 @@ Item {
 							elide: Text.ElideMiddle
 						}
 
-						BioNode {
+						ArcSeat {
 							id: fileOpenCurrentButton
 							anchors.right: parent.right
 							anchors.verticalCenter: parent.verticalCenter
@@ -3530,7 +3741,7 @@ Item {
 								{ name: "Pictures", path: `${Quickshell.env("HOME")}/Pictures` }
 							]
 
-							delegate: BioButton {
+							delegate: ArcButton {
 								id: fileShortcut
 
 								required property var modelData
@@ -3542,13 +3753,13 @@ Item {
 							}
 						}
 
-						BioText {
+						ArcText {
 							anchors.verticalCenter: parent.verticalCenter
 							width: Math.max(0, parent.width - x)
 							role: "label"
 							tone: "faint"
 							text: root.fileBrowserSearchQuery === ""
-								? `${root.fileBrowserEntries.length} specimens`
+								? `${root.fileBrowserEntries.length} entries`
 								: `${root.filteredFileBrowserEntries.length} matches`
 							horizontalAlignment: Text.AlignRight
 							elide: Text.ElideLeft
@@ -3562,14 +3773,14 @@ Item {
 						ListView {
 							id: fileBrowserList
 							anchors.fill: parent
-							anchors.topMargin: Bio.s2
+							anchors.topMargin: Arc.s2
 							clip: true
 							spacing: 4
 							model: root.filteredFileBrowserEntries
 							currentIndex: model.length > 0 ? 0 : -1
 							boundsBehavior: Flickable.StopAtBounds
 
-							delegate: BioRow {
+							delegate: ArcEntry {
 								id: fileRow
 
 								required property var modelData
@@ -3578,7 +3789,7 @@ Item {
 
 								width: fileBrowserList.width
 								implicitHeight: 40
-								inset: Bio.s2
+								inset: Arc.s2
 								selected: fileBrowserList.currentIndex === fileRow.index
 								onClicked: root.openFileBrowserEntry(fileRow.file)
 								onContainsMouseChanged: {
@@ -3592,10 +3803,10 @@ Item {
 									width: 28
 									height: 28
 
-									BioRing {
+									ArcDial {
 										anchors.fill: parent
 										seed: fileRow.index % 4
-										lineColor: Bio.boneGhost
+										lineColor: Arc.giltGhost
 										intensity: fileRow.selected ? 1 : 0
 									}
 
@@ -3620,32 +3831,32 @@ Item {
 										height: 14
 										source: fileRow.file.isDir ? root.folderIconPath : root.attachmentIconPath
 										sourceSize: Qt.size(width, height)
-										color: fileRow.selected ? Bio.organ : Bio.text
+										color: fileRow.selected ? Arc.aether : Arc.ink
 									}
 								}
 
 								Column {
 									anchors.left: fileMark.right
-									anchors.leftMargin: Bio.s3
+									anchors.leftMargin: Arc.s3
 									anchors.right: fileFolderOpenButton.left
-									anchors.rightMargin: Bio.s2
+									anchors.rightMargin: Arc.s2
 									anchors.verticalCenter: parent.verticalCenter
 									spacing: -1
 
-									BioText {
+									ArcText {
 										width: parent.width
 										role: "bodyStrong"
-										tone: fileRow.selected ? "organ" : "default"
+										tone: fileRow.selected ? "aether" : "default"
 										text: String(fileRow.file.name || "")
 										elide: Text.ElideMiddle
 									}
 
-									BioText {
+									ArcText {
 										width: parent.width
 										role: "caption"
 										tone: "faint"
 										text: fileRow.file.isDir
-											? "Colony"
+											? "Shelf"
 											: `${fileRow.file.suffix || "file"} · ${root.formatAttachmentSize(fileRow.file.size)}`
 									}
 								}
@@ -3690,7 +3901,7 @@ Item {
 							}
 						}
 
-						BioText {
+						ArcText {
 							role: "body"
 							anchors.centerIn: parent
 							width: parent.width - 40
@@ -3724,33 +3935,33 @@ Item {
 						width: parent.width
 						height: 24
 
-						BioText {
+						ArcText {
 							id: chatsHeading
 							anchors.left: parent.left
 							anchors.verticalCenter: parent.verticalCenter
 							role: "label"
 							tone: "muted"
-							text: "Cultures"
+							text: "Invocations"
 						}
 
-						BioTendon {
+						ArcFlourish {
 							anchors.left: chatsHeading.right
 							anchors.right: newChatButton.left
-							anchors.leftMargin: Bio.s3
-							anchors.rightMargin: Bio.s3
+							anchors.leftMargin: Arc.s3
+							anchors.rightMargin: Arc.s3
 							anchors.verticalCenter: parent.verticalCenter
 							height: 12
 							facing: Qt.LeftToRight
-							lineColor: Bio.boneFaint
+							lineColor: Arc.giltFaint
 							visible: width > 24
 						}
 
-						BioButton {
+						ArcButton {
 							id: newChatButton
 							anchors.right: parent.right
 							anchors.verticalCenter: parent.verticalCenter
 							implicitHeight: 24
-							text: "Inoculate"
+							text: "Summon"
 							onClicked: root.startNewChat()
 						}
 					}
@@ -3767,7 +3978,7 @@ Item {
 							model: root.filteredAiChats
 							boundsBehavior: Flickable.StopAtBounds
 
-							delegate: BioRow {
+							delegate: ArcEntry {
 								id: pastChatRow
 
 								required property var modelData
@@ -3776,25 +3987,25 @@ Item {
 
 								width: pastChatList.width
 								implicitHeight: 46
-								inset: Bio.s3
+								inset: Arc.s3
 								selected: pastChatRow.active
 								onClicked: root.openPastChat(pastChatRow.modelData)
 
 								Column {
 									anchors.left: parent.left
 									anchors.right: deleteChatButton.left
-									anchors.rightMargin: Bio.s3
+									anchors.rightMargin: Arc.s3
 									anchors.verticalCenter: parent.verticalCenter
 									spacing: -1
 
-									BioText {
+									ArcText {
 										width: parent.width
 										role: "bodyStrong"
-										tone: pastChatRow.active ? "organ" : "default"
+										tone: pastChatRow.active ? "aether" : "default"
 										text: pastChatRow.modelData.title || "Untitled culture"
 									}
 
-									BioText {
+									ArcText {
 										width: parent.width
 										role: "caption"
 										tone: "faint"
@@ -3811,14 +4022,14 @@ Item {
 									z: 2
 									opacity: root.aiStreaming && String(pastChatRow.modelData.id || "") === root.aiStreamingChatId ? 0.4 : 1
 
-									BioText {
+									ArcText {
 										anchors.centerIn: parent
 										role: "body"
 										tone: deleteChatMouse.containsMouse ? "alert" : "faint"
 										text: "×"
 									}
 
-									BioTouch {
+									ArcTouch {
 										id: deleteChatMouse
 										enabled: !(root.aiStreaming && String(pastChatRow.modelData.id || "") === root.aiStreamingChatId)
 										onClicked: root.deleteChat(pastChatRow.modelData)
@@ -3829,18 +4040,18 @@ Item {
 
 						Column {
 							anchors.centerIn: parent
-							spacing: Bio.s3
+							spacing: Arc.s3
 							visible: root.filteredAiChats.length === 0
 
-							BioSigil {
+							ArcRune {
 								anchors.horizontalCenter: parent.horizontalCenter
 								width: 48
 								height: 48
 								seed: 31
-								lineColor: Bio.boneGhost
+								lineColor: Arc.giltGhost
 							}
 
-							BioText {
+							ArcText {
 								anchors.horizontalCenter: parent.horizontalCenter
 								role: "label"
 								tone: "faint"
@@ -3849,7 +4060,7 @@ Item {
 						}
 					}
 
-					BioText {
+					ArcText {
 						id: aiPanelError
 						width: parent.width
 						visible: root.aiError !== ""
@@ -3876,22 +4087,22 @@ Item {
 					height: 26
 					spacing: 8
 
-					BioText {
+					ArcText {
 						role: "label"
 						tone: "muted"
 						width: parent.width - ollamaRefreshButton.width - parent.spacing
 						anchors.verticalCenter: parent.verticalCenter
-						text: "Strains held"
+						text: "Familiars kept"
 					}
 
-					BioNode {
+					ArcSeat {
 						id: ollamaRefreshButton
 						anchors.verticalCenter: parent.verticalCenter
 						size: 26
 						seed: 2
 						onClicked: root.refreshOllamaOverview()
 
-						BioText {
+						ArcText {
 							anchors.centerIn: parent
 							role: "heading"
 							text: "↻"
@@ -3931,17 +4142,17 @@ Item {
 						id: ollamaPullField
 						anchors.left: parent.left
 						anchors.right: ollamaPullButton.left
-						anchors.rightMargin: Bio.s3
+						anchors.rightMargin: Arc.s3
 						anchors.top: parent.top
 						height: 30
 						text: root.ollamaPullModel
-						font.family: Bio.sans
-						font.pixelSize: Bio.sizeCaption
-						color: Bio.text
-						placeholderText: "Strain to bring in, for example qwen3:4b"
-						placeholderTextColor: Bio.textFaint
-						selectedTextColor: Bio.text
-						selectionColor: Qt.alpha(Bio.organ, 0.3)
+						font.family: Arc.book
+						font.pixelSize: Arc.sizeCaption
+						color: Arc.ink
+						placeholderText: "A familiar to bind, for example qwen3:4b"
+						placeholderTextColor: Arc.inkFaint
+						selectedTextColor: Arc.ink
+						selectionColor: Qt.alpha(Arc.aether, 0.3)
 						enabled: !root.ollamaPulling
 						onTextChanged: root.ollamaPullModel = text
 						onAccepted: root.startOllamaPull(text)
@@ -3951,19 +4162,19 @@ Item {
 								anchors.left: parent.left
 								anchors.right: parent.right
 								anchors.bottom: parent.bottom
-								height: Bio.ribThin
-								color: Bio.boneFaint
+								height: Arc.ruleThin
+								color: Arc.giltFaint
 							}
 
 							Rectangle {
 								anchors.left: parent.left
 								anchors.bottom: parent.bottom
 								width: ollamaPullField.activeFocus ? parent.width : 0
-								height: Bio.rib
-								color: Bio.organ
+								height: Arc.rule
+								color: Arc.aether
 
 								Behavior on width {
-									NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
+									NumberAnimation { duration: Arc.turn; easing.type: Easing.OutCubic }
 								}
 							}
 						}
@@ -3977,17 +4188,17 @@ Item {
 						height: 30
 						opacity: root.ollamaPullModel.trim() !== "" && !root.ollamaPulling ? 1 : 0.45
 
-						BioTouch {
+						ArcTouch {
 							id: ollamaPullMouse
 							enabled: root.ollamaPullModel.trim() !== "" && !root.ollamaPulling
 							cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
 							onClicked: root.startOllamaPull(root.ollamaPullModel)
 						}
 
-						BioText {
+						ArcText {
 							role: "label"
 							anchors.centerIn: parent
-							tone: ollamaPullMouse.containsMouse ? "organ" : "muted"
+							tone: ollamaPullMouse.containsMouse ? "aether" : "muted"
 							text: "Pull"
 							font.pixelSize: 11
 							font.weight: Font.DemiBold
@@ -4004,7 +4215,7 @@ Item {
 						height: 26
 						visible: root.ollamaPulling
 
-						BioText {
+						ArcText {
 							role: "label"
 							anchors.left: parent.left
 							anchors.right: ollamaPullDetails.left
@@ -4017,7 +4228,7 @@ Item {
 							font.weight: Font.Medium
 						}
 
-						BioText {
+						ArcText {
 							role: "label"
 							id: ollamaPullDetails
 							anchors.right: parent.right
@@ -4060,7 +4271,7 @@ Item {
 					anchors.topMargin: 8
 					height: 30
 
-					BioText {
+					ArcText {
 						id: ollamaRunningLabel
 						anchors.left: parent.left
 						anchors.verticalCenter: parent.verticalCenter
@@ -4069,19 +4280,19 @@ Item {
 						text: "Awake"
 					}
 
-					BioTendon {
+					ArcFlourish {
 						anchors.left: ollamaRunningLabel.right
 						anchors.right: ollamaRunningSummary.left
-						anchors.leftMargin: Bio.s3
-						anchors.rightMargin: Bio.s3
+						anchors.leftMargin: Arc.s3
+						anchors.rightMargin: Arc.s3
 						anchors.verticalCenter: parent.verticalCenter
 						height: 12
 						facing: Qt.LeftToRight
-						lineColor: Bio.boneFaint
+						lineColor: Arc.giltFaint
 						visible: width > 24
 					}
 
-					BioText {
+					ArcText {
 						id: ollamaRunningSummary
 						anchors.right: parent.right
 						anchors.verticalCenter: parent.verticalCenter
@@ -4102,7 +4313,7 @@ Item {
 					anchors.bottom: ollamaManagerErrorText.top
 					anchors.bottomMargin: ollamaManagerErrorText.visible ? 6 : 0
 
-					BioText {
+					ArcText {
 						anchors.left: parent.left
 						anchors.top: parent.top
 						role: "label"
@@ -4123,7 +4334,7 @@ Item {
 						model: root.aiModels
 						boundsBehavior: Flickable.StopAtBounds
 
-						delegate: BioRow {
+						delegate: ArcEntry {
 							id: ollamaModelRow
 
 							required property var modelData
@@ -4134,7 +4345,7 @@ Item {
 
 							width: ollamaInstalledList.width
 							implicitHeight: 44
-							inset: Bio.s2
+							inset: Arc.s2
 							selected: ollamaModelRow.running
 							interactive: false
 
@@ -4148,18 +4359,18 @@ Item {
 							Column {
 								anchors.left: parent.left
 								anchors.right: ollamaModelChatButton.left
-								anchors.rightMargin: Bio.s3
+								anchors.rightMargin: Arc.s3
 								anchors.verticalCenter: parent.verticalCenter
 								spacing: -1
 
-								BioText {
+								ArcText {
 									role: "bodyStrong"
-									tone: ollamaModelRow.running ? "organ" : "default"
+									tone: ollamaModelRow.running ? "aether" : "default"
 									width: parent.width
 									text: ollamaModelRow.modelName
 								}
 
-								BioText {
+								ArcText {
 									role: "caption"
 									tone: "faint"
 									width: parent.width
@@ -4175,15 +4386,15 @@ Item {
 								}
 							}
 
-							BioButton {
+							ArcButton {
 								id: ollamaModelChatButton
 								anchors.right: ollamaModelRemoveButton.left
-								anchors.rightMargin: Bio.s2
+								anchors.rightMargin: Arc.s2
 								anchors.verticalCenter: parent.verticalCenter
 								implicitHeight: 26
 								minimumWidth: 70
 								enabled: !root.aiStreaming
-								text: "Culture"
+								text: "Invocation"
 								onClicked: root.startNewChatWithModel(ollamaModelRow.modelName)
 
 								MouseArea {
@@ -4202,14 +4413,14 @@ Item {
 								height: 22
 								opacity: root.aiStreaming || ollamaRemoveProcess.running ? 0.45 : 1
 
-								BioTouch {
+								ArcTouch {
 									id: ollamaModelRemoveMouse
 									enabled: !root.aiStreaming && !ollamaRemoveProcess.running
 									cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
 									onClicked: root.removeOllamaModel(ollamaModelRow.modelName)
 								}
 
-								BioText {
+								ArcText {
 									anchors.centerIn: parent
 									role: "body"
 									tone: ollamaModelRemoveMouse.containsMouse ? "alert" : "faint"
@@ -4227,7 +4438,7 @@ Item {
 						}
 					}
 
-					BioText {
+					ArcText {
 						role: "caption"
 						anchors.centerIn: parent
 						visible: !root.aiModelsLoading && root.aiModels.length === 0
@@ -4238,7 +4449,7 @@ Item {
 					}
 				}
 
-				BioText {
+				ArcText {
 					role: "label"
 					id: ollamaManagerErrorText
 					anchors.left: parent.left
@@ -4274,11 +4485,11 @@ Item {
 						anchors.left: parent.left
 						anchors.right: parent.right
 						anchors.bottom: parent.bottom
-						height: Bio.ribThin
-						color: Bio.boneGhost
+						height: Arc.ruleThin
+						color: Arc.giltGhost
 					}
 
-					BioNode {
+					ArcSeat {
 						id: chatBackButton
 						anchors.left: parent.left
 						anchors.verticalCenter: parent.verticalCenter
@@ -4286,7 +4497,7 @@ Item {
 						seed: 0
 						onClicked: root.openAiOverview()
 
-						BioText {
+						ArcText {
 							anchors.centerIn: parent
 							role: "heading"
 							text: "←"
@@ -4300,15 +4511,15 @@ Item {
 						}
 					}
 
-					BioText {
+					ArcText {
 						anchors.left: chatBackButton.right
-						anchors.leftMargin: Bio.s3
+						anchors.leftMargin: Arc.s3
 						anchors.right: chatControls.left
-						anchors.rightMargin: Bio.s3
+						anchors.rightMargin: Arc.s3
 						anchors.verticalCenter: parent.verticalCenter
 						role: "heading"
 						font.pixelSize: 13
-						text: root.activeChat?.title || (root.aiTemporaryChatEnabled ? "Transient culture" : "New culture")
+						text: root.activeChat?.title || (root.aiTemporaryChatEnabled ? "Transient discourse" : "New discourse")
 					}
 
 						Row {
@@ -4401,7 +4612,7 @@ Item {
 							spacing: 5
 							opacity: root.aiStreaming || !root.selectedAiSupportsThinking ? 0.5 : 1
 
-							BioText {
+							ArcText {
 								role: "label"
 								anchors.verticalCenter: parent.verticalCenter
 								color: Qt.alpha(root.foreground, 0.68)
@@ -4448,7 +4659,7 @@ Item {
 								spacing: 5
 								opacity: root.aiStreaming ? 0.5 : 1
 
-								BioText {
+								ArcText {
 									role: "label"
 									anchors.verticalCenter: parent.verticalCenter
 									color: Qt.alpha(root.foreground, 0.68)
@@ -4495,7 +4706,7 @@ Item {
 								spacing: 5
 								opacity: root.aiStreaming ? 0.5 : 1
 
-								BioText {
+								ArcText {
 									role: "label"
 									anchors.verticalCenter: parent.verticalCenter
 									color: Qt.alpha(root.foreground, 0.68)
@@ -4547,7 +4758,7 @@ Item {
 					height: 20
 					spacing: 8
 
-					BioText {
+					ArcText {
 						role: "label"
 						anchors.verticalCenter: parent.verticalCenter
 						color: Qt.alpha(root.foreground, 0.58)
@@ -4571,7 +4782,7 @@ Item {
 						}
 					}
 
-					BioText {
+					ArcText {
 						role: "label"
 						anchors.verticalCenter: parent.verticalCenter
 						color: Qt.alpha(root.foreground, 0.58)
@@ -4580,7 +4791,7 @@ Item {
 						font.weight: Font.Medium
 					}
 
-					BioText {
+					ArcText {
 						role: "label"
 						anchors.verticalCenter: parent.verticalCenter
 						visible: root.activeResponseTokens > 0
@@ -4590,7 +4801,7 @@ Item {
 						font.weight: Font.Medium
 					}
 
-					BioText {
+					ArcText {
 						role: "label"
 						anchors.verticalCenter: parent.verticalCenter
 						visible: root.chatLoadedTimerText !== ""
@@ -4666,7 +4877,7 @@ Item {
 								// An utterance is a specimen record: what you said is
 								// washed in the organ colour, what answered is bone
 								// on tissue, and the two never share an edge.
-								BioSurface {
+								ArcLeaf {
 									id: messageBubble
 									width: Math.min(
 										messageRow.width * 0.78,
@@ -4680,14 +4891,14 @@ Item {
 									: messageBubbleBody.implicitHeight + 26
 								x: messageRow.fromUser ? messageRow.width - width : 0
 								variant: "plate"
-								padding: Bio.s4
+								padding: Arc.s4
 								haloStrength: messageRow.fromUser ? 0.14 : 0.06
 								intensity: messageRow.fromUser ? 0.55 : 0
-								lineColor: messageRow.fromUser ? Qt.alpha(Bio.organ, 0.5) : Bio.boneFaint
-								washTop: messageRow.fromUser ? Qt.alpha(Bio.organ, 0.12) : Bio.tissue2
-								washBottom: messageRow.fromUser ? Bio.membraneDeep : Bio.tissue1
+								lineColor: messageRow.fromUser ? Qt.alpha(Arc.aether, 0.5) : Arc.giltFaint
+								washTop: messageRow.fromUser ? Qt.alpha(Arc.aether, 0.12) : Arc.leaf2
+								washBottom: messageRow.fromUser ? Arc.washDeep : Arc.leaf1
 
-									BioText {
+									ArcText {
 										visible: messageRow.loadingModel
 										anchors.centerIn: parent
 										width: parent.width
@@ -4705,9 +4916,9 @@ Item {
 									anchors.left: parent.left
 									anchors.right: parent.right
 									anchors.top: parent.top
-										spacing: Bio.s2
+										spacing: Arc.s2
 
-										BioText {
+										ArcText {
 											role: "label"
 											id: responseModelLabel
 											visible: messageRow.responseModelName !== ""
@@ -4734,7 +4945,7 @@ Item {
 											onClicked: root.toggleThinkingExpanded(messageRow.entry.id)
 										}
 
-										BioText {
+										ArcText {
 											role: "label"
 											anchors.left: parent.left
 											anchors.leftMargin: 6
@@ -4747,7 +4958,7 @@ Item {
 											font.weight: Font.Medium
 										}
 
-										BioText {
+										ArcText {
 											role: "label"
 											anchors.right: parent.right
 											anchors.rightMargin: 6
@@ -4806,7 +5017,7 @@ Item {
 														color: root.foreground
 													}
 
-													BioText {
+													ArcText {
 														role: "label"
 														id: sentAttachmentName
 														anchors.left: parent.left
@@ -4956,7 +5167,7 @@ Item {
 														mipmap: true
 													}
 
-													BioText {
+													ArcText {
 														role: "caption"
 														anchors.centerIn: parent
 														width: parent.width - 20
@@ -4967,7 +5178,7 @@ Item {
 														font.pixelSize: 11
 													}
 
-													BioText {
+													ArcText {
 														role: "caption"
 														anchors.centerIn: parent
 														width: parent.width - 20
@@ -5012,7 +5223,7 @@ Item {
 									onClicked: root.beginEditMessage(messageRow.entry)
 								}
 
-								BioText {
+								ArcText {
 									role: "title"
 									anchors.centerIn: parent
 									color: root.foreground
@@ -5024,7 +5235,7 @@ Item {
 						}
 					}
 
-					BioText {
+					ArcText {
 						role: "body"
 						anchors.centerIn: parent
 						width: parent.width - 40
@@ -5100,7 +5311,7 @@ Item {
 								color: root.foreground
 							}
 
-							BioText {
+							ArcText {
 								role: "label"
 								anchors.left: parent.left
 								anchors.leftMargin: 29
@@ -5134,7 +5345,7 @@ Item {
 									onClicked: root.removePendingAttachment(pendingAttachmentChip.modelData.id)
 								}
 
-								BioText {
+								ArcText {
 									role: "caption"
 									anchors.centerIn: parent
 									color: root.foreground
@@ -5147,7 +5358,7 @@ Item {
 					}
 				}
 
-				BioText {
+				ArcText {
 					role: "caption"
 					id: chatError
 					anchors.left: parent.left
@@ -5207,7 +5418,7 @@ Item {
 					onClicked: root.aiAttachmentDirectory = root.attachmentParentDirectory(root.aiAttachmentDirectory)
 				}
 
-				BioText {
+				ArcText {
 					role: "title"
 					anchors.centerIn: parent
 					color: root.foreground
@@ -5217,7 +5428,7 @@ Item {
 				}
 			}
 
-			BioText {
+			ArcText {
 				role: "caption"
 				anchors.left: attachmentUpButton.right
 				anchors.leftMargin: 7
@@ -5249,7 +5460,7 @@ Item {
 					onClicked: root.closeAttachmentPicker()
 				}
 
-				BioText {
+				ArcText {
 					role: "label"
 					anchors.centerIn: parent
 					color: root.foreground
@@ -5298,7 +5509,7 @@ Item {
 						onClicked: root.aiAttachmentDirectory = String(attachmentShortcut.modelData.path)
 					}
 
-					BioText {
+					ArcText {
 						role: "label"
 						id: attachmentShortcutText
 						anchors.centerIn: parent
@@ -5310,7 +5521,7 @@ Item {
 				}
 			}
 
-			BioText {
+			ArcText {
 				role: "label"
 				anchors.verticalCenter: parent.verticalCenter
 				width: Math.max(0, parent.width - x)
@@ -5408,7 +5619,7 @@ Item {
 					anchors.verticalCenter: parent.verticalCenter
 					spacing: 1
 
-					BioText {
+					ArcText {
 						role: "caption"
 						width: parent.width
 						color: root.foreground
@@ -5418,7 +5629,7 @@ Item {
 						font.weight: Font.Medium
 					}
 
-					BioText {
+					ArcText {
 						role: "label"
 						width: parent.width
 						color: Qt.alpha(root.foreground, 0.5)
@@ -5432,7 +5643,7 @@ Item {
 					}
 				}
 
-				BioText {
+				ArcText {
 					role: "title"
 					id: attachmentFileState
 					anchors.right: parent.right
@@ -5452,7 +5663,7 @@ Item {
 			}
 		}
 
-		BioText {
+		ArcText {
 			role: "body"
 			anchors.centerIn: attachmentFileList
 			visible: attachmentFileList.count === 0
