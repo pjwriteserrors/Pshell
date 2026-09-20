@@ -17,6 +17,12 @@ chrome, paper, CRT phosphor, concrete, glass. >>>
 
 **References:** `<<< attach the images here >>>`
 
+**Ideas per surface:** `<<< optional, and usually where the good ones are — a
+concept for the clock, the launcher, the status readouts, the notifications and
+so on. Expect a brief to carry these. They are the starting point for the whole
+shell, not decoration to hang on the layout that is already there; where a
+surface is not covered by one, invent it in the same spirit. >>>`
+
 ## Extra details (optional — delete what you do not need)
 
 - **Must-haves:** `<<< e.g. the clock must be readable from across the room >>>`
@@ -31,26 +37,46 @@ chrome, paper, CRT phosphor, concrete, glass. >>>
 
 # How to build it
 
-## 1. Re-lay it out, do not re-skin it
+## 1. Redesign every surface, do not re-skin any of them
 
-**Nothing may be carried over from the style that is currently checked out.**
-Not as a starting point, not as a fallback, not "for now".
+**Nothing may be carried over from any other style in this repository.** Not
+from the one that is checked out, not from one on another branch, not as a
+starting point, not as a fallback, not "for now". If something you build could
+be lifted into another branch and nobody would notice it had moved, it does not
+belong in either of them.
 
-The *topology* changes, not the ornament:
+Read the checked-out style once, to know what you must not do again. That is
+the only reason to open it.
 
-- the bar moves, changes shape, or stops being a bar
-- popups stop appearing where they appear now, and arrive differently
-- the launcher gets a different arrangement — not the same list with new borders
-- the lock screen, the OSD, the notification toasts and the tray menu are all
-  re-placed, not re-coloured
+**Everything is in scope, and "everything" includes the insides.** The failure
+this rule exists to prevent is quiet and it is the usual outcome: the frame
+changes, the palette changes, a whole component library gets rewritten — and
+every surface still has the same header row at the top, the same search field
+under it and the same list under that, in the same order, because nobody
+decided otherwise, they were simply left alone. That is not a new style. That
+is the old style wearing a coat, and it will be sent back.
 
-If you catch yourself changing `radius`, `border.color` and a font and calling
-it a style, stop: that is the failure this rule exists to prevent. Describe the
-new shell to someone who uses the old one; if they would not have to be told
-where things moved, it is not done.
+So take them one at a time, and give each one an idea of its own:
 
-Read the current style first — to know what you must **not** do again, not to
-borrow from it.
+- **the bar** — it moves, changes shape, or stops being a bar altogether. A
+  strip with things in a line on it is still a bar however it is drawn.
+- **every popup and panel** — where it appears, how it arrives, and *how its
+  contents are arranged inside it*. A calendar does not have to be a grid. A
+  list of devices does not have to be rows. A quantity does not have to be a
+  bar with a percentage beside it. A launcher does not have to be a list with
+  a search box under it.
+- **every widget** — the clock, the launcher, the status readouts, the volume
+  and brightness feedback, the notifications, the workspace or window
+  indicator, the tray, the lock screen, the power menu, and the pages of the
+  settings window.
+
+For each one, ask what the style's central idea says that thing *is*, and build
+that. If the answer comes out as "a list in a box", think again: a list in a
+box is what you get when there is no style.
+
+Describe the new shell to somebody who uses the old one. If they would not have
+to be told where everything moved **and what everything became**, it is not
+done.
 
 ## 2. The motion is half the style, and it has to be invented
 
@@ -262,8 +288,11 @@ all tested.
 ## 9. Before you call it done
 
 - [ ] `quickshell -p ./Validate.qml` passes in the worktree.
-- [ ] Nothing about the layout matches the previous style: bar, launcher, every
+- [ ] Nothing about the layout matches any other style: bar, launcher, every
       popup, lock screen, OSD, toasts.
+- [ ] The *inside* of every popup and widget was redesigned too, not only the
+      frame around it. Open each one next to the same one in another branch: if
+      the same things are in the same order, it was not redesigned.
 - [ ] The motion is this style's own: choreographed, varied per element,
       applied to every surface and every state, and nothing in it would fit
       unnoticed into another style.
@@ -282,5 +311,10 @@ all tested.
 
 I mean the arrangement and the movement, not the decoration. Move things,
 change what shape the containers are, where they live, how they arrive, what
-the launcher is laid out as, and how all of it behaves under the hand. Re-read
-rules 1 and 2 and do it properly rather than adjusting borders again.
+the launcher is laid out as, and how all of it behaves under the hand.
+
+I almost certainly also mean the *contents* of the surfaces and not just their
+frames. Check the popups and the widgets one by one against another branch
+before you answer me: if a panel still holds the same rows in the same order
+with a new border round them, that is what I am looking at. Re-read rules 1 and
+2 and do it properly rather than adjusting borders again.
