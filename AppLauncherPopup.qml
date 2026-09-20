@@ -58,6 +58,10 @@ Item {
 		return root.trueNames[tail] || "";
 	}
 
+	// Apps are summoned from the wheel; the other modes are read from a page.
+	// The book only puts glass behind the ones that need a page.
+	readonly property bool ceremonial: !root.inCommandMode
+
 	property string searchText: ""
 	property var usageMap: ({})
 	property var aiModels: []
@@ -2783,6 +2787,19 @@ Item {
 			// with no true name is written under its own. There is no second
 			// column and no preview pane: the reference draws a book with a
 			// list in it, and a list in a book is a list.
+			// THE SUMMONING WHEEL.
+			//
+			// The launcher is not a list with a box under it. It is a wheel of
+			// sigils that you turn until the spell you want stands under the
+			// index at the top, and what stands there is written out in the
+			// middle of the wheel. Typing turns it for you: the wheel spins to
+			// the closest match and Return calls it.
+			//
+			// Everything is where it is because of the circle. The spells sit
+			// on the limb at an even pitch; the one under the index is larger
+			// and alight and the rest fall away round the ring; the middle is
+			// the only place with words in it. Nothing is boxed, nothing is
+			// stacked, and there is no list anywhere on the screen.
 			Item {
 				id: colony
 
@@ -2790,167 +2807,354 @@ Item {
 				height: dish.viewHeight
 				visible: !root.inCommandMode
 
-				readonly property var current: appList.currentIndex >= 0 && appList.currentIndex < root.filteredApps.length
+				readonly property int count: root.filteredApps.length
+				readonly property var current: appList.currentIndex >= 0 && appList.currentIndex < colony.count
 					? root.filteredApps[appList.currentIndex]
 					: null
 
-				ListView {
+				// The wheel's own geometry.
+				readonly property real span: Math.min(colony.width, colony.height)
+				// Room outside the limb for the graduations, the crown of runes
+				// and the index above them, so nothing is crowded into the
+				// head of the page.
+				readonly property real limb: colony.span * 0.5 - 70
+				readonly property real seats: Math.max(3, Math.min(15, colony.count))
+				readonly property real pitch: 360 / colony.seats
+
+				// Which way round the ring a spell sits from the one under the
+				// index, by the shorter way.
+				function slotOf(index) {
+					if (colony.count === 0) return 0;
+					let slot = index - appList.currentIndex;
+					const half = colony.count / 2;
+					while (slot > half) slot -= colony.count;
+					while (slot < -half) slot += colony.count;
+					return slot;
+				}
+
+				// The selection lives here so every key handler in this file
+				// keeps working; the wheel only draws what it says.
+				Item {
 					id: appList
-
+					property int currentIndex: -1
 					readonly property int columns: 1
+					width: colony.width
+					function positionViewAtIndex(index, mode) {}
+				}
 
-					anchors.fill: parent
+				Item {
+					id: wheel
+
+					anchors.centerIn: parent
+					width: colony.span
+					height: colony.span
 					opacity: root.band(2)
-					clip: true
-					model: root.filteredApps
-					currentIndex: model.length > 0 ? 0 : -1
-					boundsBehavior: Flickable.StopAtBounds
-					spacing: 2
-					highlightMoveDuration: Arc.turn
-					highlightMoveVelocity: -1
 
-					delegate: Item {
-						id: appTile
+					ArcHalo {
+						anchors.centerIn: parent
+						width: colony.span * 1.2
+						height: colony.span * 1.2
+						color: Arc.aether
+						strength: 0.14
+						spread: 0.36
+						flicker: true
+					}
 
-						required property DesktopEntry modelData
-						required property int index
-						readonly property bool selected: appList.currentIndex === index
-						readonly property string trueName: root.trueName(appTile.modelData)
+					// The limb the spells stand on, and the graduations and
+					// runes that make it an instrument rather than a circle.
+					Canvas {
+						id: limbLayer
+						anchors.fill: parent
+						renderStrategy: Canvas.Cooperative
 
-						width: appList.width
-						height: 44
+						readonly property real limb: colony.limb
+						readonly property int seats: colony.seats
 
-						// The mark of the spell: its own rune, ignited when it
-						// is the one you are on.
-						ArcRune {
-							id: spellRune
-							anchors.left: parent.left
-							anchors.leftMargin: Arc.s2
-							anchors.verticalCenter: parent.verticalCenter
-							width: 14
-							height: 20
-							seed: appTile.index * 7 + 3
-							weight: Arc.ruleThin
-							lineColor: appTile.selected ? Arc.aether : Qt.alpha(Arc.gold, 0.3)
+						onLimbChanged: requestPaint()
+						onSeatsChanged: requestPaint()
+
+						Connections {
+							target: Arc
+							function onGoldChanged() { limbLayer.requestPaint(); }
 						}
+
+						onPaint: {
+							const ctx = getContext("2d");
+							ctx.reset();
+							const cx = width / 2, cy = height / 2, r = colony.limb;
+							if (r < 40) return;
+
+							// The ground the wheel stands on: a disc of night with a
+							// soft edge, so the words in the middle and the
+							// sigils on the limb have something to be read
+							// against whatever the desktop happens to be.
+							const night = ctx.createRadialGradient(cx, cy, 0, cx, cy, r + 96);
+							night.addColorStop(0.00, Qt.alpha(Arc.abyss, 0.96));
+							night.addColorStop(0.62, Qt.alpha(Arc.abyss, 0.92));
+							night.addColorStop(0.86, Qt.alpha(Arc.abyss, 0.55));
+							night.addColorStop(1.00, Qt.alpha(Arc.abyss, 0.0));
+							ctx.fillStyle = night;
+							ctx.fillRect(0, 0, width, height);
+
+							Ink.ring(ctx, cx, cy, r + 22, Arc.rule * 1.3, Qt.alpha(Arc.gold, 0.8), 1);
+							Ink.graduations(ctx, cx, cy, r + 21, colony.seats * 4, 5, 13, 4,
+								Arc.ruleThin, Qt.alpha(Arc.gold, 0.6), 1);
+							Ink.ring(ctx, cx, cy, r, Arc.ruleThin, Qt.alpha(Arc.gold, 0.30), 1);
+							Ink.ring(ctx, cx, cy, r - 84, Arc.ruleThin, Qt.alpha(Arc.gold, 0.26), 1);
+							Ink.runeArc(ctx, cx, cy, r + 40, 0, Math.PI * 2, 18, 313, 15,
+								Arc.ruleThin, Qt.alpha(Arc.gold, 0.34), Arc.aether, 0);
+						}
+					}
+
+					// The index: what the wheel is turned against. It does not
+					// move — the wheel does.
+					Item {
+						id: indexMark
+						anchors.horizontalCenter: parent.horizontalCenter
+						y: wheel.height / 2 - colony.limb - 72
+						width: 26
+						height: 30
+						visible: colony.count > 0
 
 						ArcHalo {
-							anchors.centerIn: spellRune
-							width: 56
-							height: 56
+							anchors.centerIn: parent
+							width: 80
+							height: 80
 							color: Arc.aether
-							strength: 0.34
+							strength: 0.4
 							spread: 0.3
 							flicker: true
-							opacity: appTile.selected ? 1 : 0
-							visible: opacity > 0.01
-
-							Behavior on opacity {
-								NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveKindle }
-							}
 						}
 
-						Column {
-							anchors.left: spellRune.right
-							anchors.leftMargin: Arc.s4
-							anchors.right: appMark.left
-							anchors.rightMargin: Arc.s3
-							anchors.verticalCenter: parent.verticalCenter
-							spacing: -3
+						Canvas {
+							anchors.fill: parent
+							renderStrategy: Canvas.Cooperative
+							onPaint: {
+								const ctx = getContext("2d");
+								ctx.reset();
+								Ink.cut(ctx, [{ x: width / 2, y: height },
+									{ x: width / 2 - 7, y: height - 13 },
+									{ x: width / 2 + 7, y: height - 13 }],
+									Arc.rule, Arc.aether, true);
+								ctx.fillStyle = Arc.aether;
+								ctx.fill();
+								Ink.cut(ctx, [{ x: width / 2, y: 0 }, { x: width / 2, y: height - 15 }],
+									Arc.ruleThin, Qt.alpha(Arc.aether, 0.6), false);
+							}
+						}
+					}
 
-							transform: Translate {
-								x: appTile.selected ? 5 : 0
+					// The spells on the limb.
+					Repeater {
+						model: root.filteredApps
 
-								Behavior on x {
-									NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveSnap }
+						delegate: Item {
+							id: spell
+
+							required property DesktopEntry modelData
+							required property int index
+
+							readonly property int slot: colony.slotOf(spell.index)
+							readonly property bool chosen: spell.slot === 0
+							readonly property real away: Math.abs(spell.slot)
+							readonly property real radians: (spell.slot * colony.pitch - 90) * Math.PI / 180
+
+							visible: spell.away <= 7
+							opacity: spell.chosen ? 1 : Math.max(0, 1 - spell.away * 0.13)
+
+							readonly property real seatSize: spell.chosen ? 64 : Math.max(30, 44 - spell.away * 1.8)
+
+							width: spell.seatSize
+							height: spell.seatSize
+							x: wheel.width / 2 + Math.cos(spell.radians) * colony.limb - width / 2
+							y: wheel.height / 2 + Math.sin(spell.radians) * colony.limb - height / 2
+
+							// Turning the wheel is the whole motion of this
+							// screen: every sigil travels to its new place at
+							// once, and arrests there.
+							Behavior on x {
+								NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveSnap }
+							}
+							Behavior on y {
+								NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveSnap }
+							}
+							Behavior on width {
+								NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveSnap }
+							}
+							Behavior on height {
+								NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveSnap }
+							}
+							Behavior on opacity {
+								NumberAnimation { duration: Arc.turn }
+							}
+
+							ArcHalo {
+								anchors.centerIn: parent
+								width: parent.width * 2.4
+								height: parent.height * 2.4
+								color: Arc.aether
+								strength: 0.34
+								spread: 0.3
+								flicker: true
+								opacity: spell.chosen ? 1 : (spellTouch.containsMouse ? 0.7 : 0)
+								visible: opacity > 0.01
+
+								Behavior on opacity {
+									NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveKindle }
 								}
 							}
 
-							ArcText {
-								width: parent.width
-								role: appTile.trueName !== "" ? "hand" : "display"
-								font.pixelSize: appTile.trueName !== "" ? 20 : 18
-								tone: appTile.selected ? "aether" : "default"
-								text: appTile.trueName !== ""
-									? appTile.trueName
-									: (appTile.modelData.name || appTile.modelData.id || "Spell")
+							ArcDial {
+								anchors.fill: parent
+								weight: Arc.ruleThin
+								beading: false
+								seed: spell.index % 4
+								lineColor: spell.chosen ? Qt.alpha(Arc.aether, 0.7) : Qt.alpha(Arc.gold, 0.34)
+								liveColor: Arc.aether
+								intensity: spell.chosen ? 1 : spellTouch.live
 							}
 
-							ArcText {
-								width: parent.width
-								role: "caption"
-								tone: appTile.selected ? "muted" : "faint"
-								text: appTile.trueName !== ""
-									? (appTile.modelData.name || appTile.modelData.id || "")
-									: (appTile.modelData.comment || appTile.modelData.genericName || "")
+							Image {
+								anchors.centerIn: parent
+								width: Math.round(parent.width * 0.56)
+								height: width
+								source: root.iconSource(spell.modelData)
+								sourceSize: Qt.size(48, 48)
+								fillMode: Image.PreserveAspectFit
+								smooth: true
+								mipmap: true
+								asynchronous: true
+							}
+
+							ArcTouch {
+								id: spellTouch
+								onEntered: appList.currentIndex = spell.index
+								onClicked: root.launchApp(spell.modelData)
 							}
 						}
+					}
 
-						// The thing's own mark, small and at the end of the
-						// line, because it is not what you are reading by.
-						Image {
-							id: appMark
-							anchors.right: parent.right
-							anchors.rightMargin: Arc.s2
-							anchors.verticalCenter: parent.verticalCenter
+					// What is standing under the index, written out. This is
+					// the only place on the screen with words on it.
+					Column {
+						anchors.centerIn: parent
+						width: colony.limb * 1.3
+						spacing: 1
+						visible: colony.current !== null
+
+						ArcMark {
+							anchors.horizontalCenter: parent.horizontalCenter
 							width: 22
 							height: 22
-							source: root.iconSource(appTile.modelData)
-							sourceSize: Qt.size(width, height)
-							fillMode: Image.PreserveAspectFit
-							smooth: true
-							mipmap: true
-							opacity: appTile.selected ? 1 : 0.4
+							glyph: "star"
+							weight: Arc.ruleThin
+							lineColor: Arc.goldDim
+						}
 
-							Behavior on opacity {
-								NumberAnimation { duration: Arc.tick }
+						Item { width: 1; height: Arc.s2 }
+
+						ArcText {
+							width: parent.width
+							horizontalAlignment: Text.AlignHCenter
+							role: "hand"
+							tone: "aether"
+							font.pixelSize: 40
+							elide: Text.ElideRight
+							text: colony.current ? (root.trueName(colony.current)
+								|| colony.current.name || colony.current.id || "") : ""
+						}
+
+						ArcText {
+							width: parent.width
+							horizontalAlignment: Text.AlignHCenter
+							role: "display"
+							font.pixelSize: 19
+							elide: Text.ElideRight
+							text: colony.current
+								? (root.trueName(colony.current)
+									? (colony.current.name || colony.current.id || "")
+									: (colony.current.comment || colony.current.genericName || ""))
+								: ""
+						}
+
+						Item { width: 1; height: Arc.s3 }
+
+						ArcFlourish {
+							width: parent.width * 0.6
+							x: parent.width * 0.2
+							height: 10
+							facing: Qt.LeftToRight
+							lineColor: Arc.goldGhost
+						}
+
+						Item { width: 1; height: Arc.s2 }
+
+						ArcText {
+							width: parent.width
+							horizontalAlignment: Text.AlignHCenter
+							role: "mono"
+							tone: "faint"
+							font.pixelSize: 10
+							elide: Text.ElideRight
+							text: colony.current
+								? String((colony.current.command || []).join(" ")).slice(0, 60)
+								: ""
+						}
+
+						Item { width: 1; height: Arc.s3 }
+
+						Row {
+							anchors.horizontalCenter: parent.horizontalCenter
+							spacing: Arc.s2
+
+							ArcText {
+								role: "label"
+								tone: "aether"
+								text: "Return"
+							}
+
+							ArcText {
+								role: "label"
+								tone: "faint"
+								text: "to call it"
 							}
 						}
 
-						// The ley under the line, drawn when it is chosen.
-						Rectangle {
-							anchors.left: spellRune.right
-							anchors.leftMargin: Arc.s4
-							anchors.bottom: parent.bottom
-							height: Arc.ruleThin
-							width: appTile.selected ? parent.width - spellRune.width - Arc.s6 : 0
-							color: Arc.aether
-
-							Behavior on width {
-								NumberAnimation { duration: Arc.draw; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveInk }
-							}
-						}
-
-						ArcTouch {
-							id: tileHover
-							onEntered: appList.currentIndex = appTile.index
-							onClicked: root.launchApp(appTile.modelData)
+						ArcText {
+							width: parent.width
+							horizontalAlignment: Text.AlignHCenter
+							role: "mono"
+							tone: "faint"
+							font.pixelSize: 9
+							text: colony.count > 0
+								? `${appList.currentIndex + 1} of ${colony.count}`
+								: ""
 						}
 					}
-				}
 
-				// Nothing found: the page is not blank, it says so.
-				Column {
-					anchors.centerIn: parent
-					spacing: Arc.s3
-					visible: root.filteredApps.length === 0
-					opacity: 0.8
+					// Nothing to summon: the wheel is empty and says so.
+					Column {
+						anchors.centerIn: parent
+						spacing: Arc.s3
+						visible: colony.count === 0
 
-					ArcMark {
-						anchors.horizontalCenter: parent.horizontalCenter
-						width: 34
-						height: 34
-						glyph: "star"
-						lineColor: Arc.goldFaint
-					}
+						ArcMark {
+							anchors.horizontalCenter: parent.horizontalCenter
+							width: 38
+							height: 38
+							glyph: "star"
+							lineColor: Arc.goldFaint
+						}
 
-					ArcText {
-						anchors.horizontalCenter: parent.horizontalCenter
-						role: "hand"
-						tone: "faint"
-						text: root.searchText.trim() === ""
-							? "The book is open and empty"
-							: "No such spell is written here"
+						ArcText {
+							anchors.horizontalCenter: parent.horizontalCenter
+							role: "hand"
+							tone: "faint"
+							font.pixelSize: 16
+							text: root.searchText.trim() === ""
+								? "The wheel is empty"
+								: "No such spell is written here"
+						}
 					}
 				}
 			}

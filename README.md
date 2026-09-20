@@ -112,10 +112,14 @@ four movements and always in this order: a ring inscribes itself on the floor
 under the sigil that was touched, motes gather off that ring and are thrown up,
 the glass precipitates out of them from the ring upward, and what is written on
 it ignites band by band. Dismissing runs it backwards, twice as fast. The
-launcher is the **codex** — one tall narrow volume standing in the middle of the
-sanctum with the spells listed by their true names (Firefox is *Portal*, a
-terminal is an *Arcane Console*, and those names are searchable), the incantation
-line at its foot and five runes under that. The month is a **wheel**, not a grid.
+launcher is the **summoning wheel** — the spells stand on the limb of a
+graduated circle and you turn it until the one you want is under the index at
+the top, where it is written out by its true name (Firefox is *Portal*, a
+terminal is an *Arcane Console*, and those names are searchable, so typing turns
+the wheel for you). Nothing is boxed on that screen; what makes it readable is a
+pool of night centred on the wheel that is gone again by the edges of the
+desktop. The modes that are genuinely lists — cantrips, the vault, a discourse —
+are pages, and only they get glass. The month is a **wheel** too, not a grid.
 The weather is an **oracle** whose sky is drawn rather than fetched, and whose
 weather happens to the pane: rain runs down the glass, a storm lights the whole
 panel for an instant. A notification is a **raven** that flies in across the

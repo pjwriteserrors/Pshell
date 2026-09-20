@@ -13,6 +13,11 @@ Canvas {
 	property real strength: 0.4
 	property real spread: 0.5
 	property real falloff: 2.2
+	// How much of the radius stays at full strength before it starts to fall
+	// off. A plain power curve leaves nothing flat in the middle, which is
+	// wrong when the light is standing in for a *place* — a pool of night, say
+	// — rather than for a glow.
+	property real core: 0
 	property bool flicker: false
 
 	renderStrategy: Canvas.Cooperative
@@ -21,6 +26,7 @@ Canvas {
 	onColorChanged: requestPaint()
 	onStrengthChanged: requestPaint()
 	onSpreadChanged: requestPaint()
+	onCoreChanged: requestPaint()
 
 	onPaint: {
 		const ctx = getContext("2d");
@@ -29,10 +35,12 @@ Canvas {
 		const cx = width / 2, cy = height / 2;
 		const radius = Math.max(width, height) * Math.max(0.05, halo.spread);
 		const bloom = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-		const steps = 6;
+		const steps = 10;
+		const core = Math.max(0, Math.min(0.9, halo.core));
 		for (let step = 0; step <= steps; step++) {
 			const t = step / steps;
-			bloom.addColorStop(t, Qt.alpha(halo.color, halo.strength * Math.pow(1 - t, halo.falloff)));
+			const fade = t <= core ? 1 : Math.pow((1 - t) / (1 - core), halo.falloff);
+			bloom.addColorStop(t, Qt.alpha(halo.color, halo.strength * fade));
 		}
 		ctx.fillStyle = bloom;
 		ctx.fillRect(0, 0, width, height);

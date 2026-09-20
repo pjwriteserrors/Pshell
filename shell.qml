@@ -4346,6 +4346,23 @@ printf 'type=offline\niface=\nip=\n'`
 		readonly property real inscribed: Math.max(0, Math.min(1, progress / 0.34))
 		readonly property real condensed: Math.max(0, Math.min(1, (progress - 0.26) / 0.48))
 
+		// The night the summoning happens in. Not a curtain across the screen:
+		// a vignette centred on the wheel, all but opaque where the wheel
+		// stands and gone by the edges, so the desktop is still there and the
+		// thing you are looking at is the only lit object in the room.
+		ArcHalo {
+			anchors.centerIn: codex
+			width: Math.max(launcherPopup.width, launcherPopup.height) * 1.1
+			height: width
+			color: Arc.abyss
+			strength: launcherPopup.condensed
+			spread: 0.46
+			core: 0.26
+			falloff: 1.8
+			visible: launcherPopup.progress > 0.02
+			z: -1
+		}
+
 		Behavior on progress {
 			NumberAnimation {
 				duration: root.launcherPopupOpen ? Arc.conjure + 140 : Arc.dispel + 60
@@ -4376,15 +4393,23 @@ printf 'type=offline\niface=\nip=\n'`
 		Item {
 			id: codex
 
-			// A folio when there is a discourse in it, an octavo otherwise. A
-			// book is whatever size the thing bound in it needs.
+			// A folio when there is a discourse in it, an octavo when there is
+			// a page to read, and no page at all when the wheel is turning —
+			// the wheel is its own object and putting glass behind it would be
+			// putting a circle in a box.
 			readonly property bool folio: {
 				const sheet = launcherSheetLoader.item;
 				return !!sheet && (sheet.inChatMode || sheet.inOllamaMode || sheet.inFileMode);
 			}
+			readonly property bool ceremonial: {
+				const sheet = launcherSheetLoader.item;
+				return !!sheet && sheet.ceremonial;
+			}
 
-			width: Math.min(parent.width - Arc.s8 * 2, codex.folio ? 980 : 560)
-			height: Math.min(parent.height - Arc.horizon - Arc.s6 * 2, 760)
+			width: Math.min(parent.width - Arc.s8 * 2,
+				codex.ceremonial ? 900 : codex.folio ? 980 : 560)
+			height: Math.min(parent.height - Arc.horizon - Arc.s6 * 2,
+				codex.ceremonial ? 940 : 760)
 			x: Math.round((parent.width - width) / 2)
 			y: Math.round((parent.height - Arc.horizon - height) / 2)
 
@@ -4392,12 +4417,14 @@ printf 'type=offline\niface=\nip=\n'`
 				NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveSnap }
 			}
 
-			// The ring on the floor under the book.
+			// The ring on the floor. Under a page it is what the page was
+			// conjured out of; under the wheel the wheel's own limb says that
+			// already, so it stays small and out of the way.
 			Canvas {
 				id: codexCircle
 				anchors.horizontalCenter: parent.horizontalCenter
 				y: parent.height - 18
-				width: codex.width * 1.1
+				width: codex.ceremonial ? codex.width * 0.5 : codex.width * 1.1
 				height: width * 0.22
 				renderStrategy: Canvas.Cooperative
 
@@ -4426,16 +4453,6 @@ printf 'type=offline\niface=\nip=\n'`
 			// only thing separating a translucent page from whatever happens
 			// to be behind it, so it is generous — but it falls off inside the
 			// codex's own width and never reads as a curtain.
-			ArcHalo {
-				anchors.centerIn: parent
-				width: codex.width * 2.1
-				height: codex.height * 1.9
-				color: Arc.abyss
-				strength: 0.96 * launcherPopup.condensed
-				spread: 0.30
-				falloff: 2.6
-			}
-
 			ArcHalo {
 				anchors.centerIn: codexCircle
 				width: codexCircle.width * 1.4
@@ -4472,11 +4489,12 @@ printf 'type=offline\niface=\nip=\n'`
 					anchors.bottom: parent.bottom
 					height: codex.height - 14
 					variant: "chamber"
-					crest: true
-					washTop: Arc.haze
-					washBottom: Arc.hazeDeep
-					haloStrength: 0.16 * launcherPopup.condensed
-					padding: Arc.s6
+					crest: !codex.ceremonial
+					washTop: codex.ceremonial ? "transparent" : Arc.haze
+					washBottom: codex.ceremonial ? "transparent" : Arc.hazeDeep
+					beading: !codex.ceremonial
+					haloStrength: codex.ceremonial ? 0 : 0.16 * launcherPopup.condensed
+					padding: codex.ceremonial ? Arc.s4 : Arc.s6
 
 					Item {
 						id: launcherStage
