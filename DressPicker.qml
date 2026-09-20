@@ -155,12 +155,12 @@ Item {
 	}
 
 	// ------------------------------------------------------------- icon index
-	BioText {
+	ArcText {
 		id: iconHeading
 		anchors.left: parent.left
 		anchors.top: parent.top
 		role: "label"
-		tone: root.column === "icons" ? "organ" : "muted"
+		tone: root.column === "icons" ? "aether" : "muted"
 		text: "Marks"
 	}
 
@@ -169,7 +169,7 @@ Item {
 
 		anchors.left: parent.left
 		anchors.top: iconHeading.bottom
-		anchors.topMargin: Bio.s3
+		anchors.topMargin: Arc.s3
 		anchors.bottom: parent.bottom
 		width: Math.round(Math.min(parent.width * 0.30, 320))
 		clip: true
@@ -193,23 +193,23 @@ Item {
 			Rectangle {
 				anchors.left: parent.left
 				anchors.verticalCenter: parent.verticalCenter
-				width: Bio.rib * 1.6
+				width: Arc.rule * 1.6
 				height: parent.height * (iconRow.marked ? 0.6 : 0)
 				radius: width / 2
-				color: iconRow.selected ? Bio.organ : Bio.boneDim
+				color: iconRow.selected ? Arc.aether : Arc.giltDim
 				opacity: iconRow.marked ? 1 : 0
 
 				Behavior on height {
-					NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
+					NumberAnimation { duration: Arc.turn; easing.type: Easing.OutCubic }
 				}
 			}
 
-			BioText {
+			ArcText {
 				id: iconName
 				anchors.left: parent.left
-				anchors.leftMargin: Bio.s4
+				anchors.leftMargin: Arc.s4
 				anchors.right: iconStrip.left
-				anchors.rightMargin: Bio.s3
+				anchors.rightMargin: Arc.s3
 				anchors.verticalCenter: parent.verticalCenter
 				role: "heading"
 				font.pixelSize: 13
@@ -221,7 +221,7 @@ Item {
 			Row {
 				id: iconStrip
 				anchors.right: liveDot.visible ? liveDot.left : parent.right
-				anchors.rightMargin: Bio.s3
+				anchors.rightMargin: Arc.s3
 				anchors.verticalCenter: parent.verticalCenter
 				spacing: 3
 
@@ -246,15 +246,15 @@ Item {
 				id: liveDot
 				visible: iconRow.live
 				anchors.right: parent.right
-				anchors.rightMargin: Bio.s4
+				anchors.rightMargin: Arc.s4
 				anchors.verticalCenter: parent.verticalCenter
-				width: Bio.nodule * 2
-				height: Bio.nodule * 2
+				width: Arc.stud * 2
+				height: Arc.stud * 2
 				radius: width / 2
-				color: Bio.vital
+				color: Arc.ward
 			}
 
-			BioTouch {
+			ArcTouch {
 				onEntered: {
 					root.column = "icons";
 					root.iconIndex = iconRow.index;
@@ -269,12 +269,12 @@ Item {
 	}
 
 	// ----------------------------------------------------------- cursor index
-	BioText {
+	ArcText {
 		id: cursorHeading
 		anchors.left: cursorList.left
 		anchors.top: parent.top
 		role: "label"
-		tone: root.column === "cursors" ? "organ" : "muted"
+		tone: root.column === "cursors" ? "aether" : "muted"
 		text: "Pointer"
 	}
 
@@ -282,9 +282,9 @@ Item {
 		id: cursorList
 
 		anchors.left: iconList.right
-		anchors.leftMargin: Bio.s6
+		anchors.leftMargin: Arc.s6
 		anchors.top: iconHeading.bottom
-		anchors.topMargin: Bio.s3
+		anchors.topMargin: Arc.s3
 		anchors.bottom: parent.bottom
 		width: Math.round(Math.min(parent.width * 0.22, 240))
 		clip: true
@@ -308,21 +308,21 @@ Item {
 			Rectangle {
 				anchors.left: parent.left
 				anchors.verticalCenter: parent.verticalCenter
-				width: Bio.rib * 1.6
+				width: Arc.rule * 1.6
 				height: parent.height * (cursorRow.marked ? 0.6 : 0)
 				radius: width / 2
-				color: cursorRow.selected ? Bio.organ : Bio.boneDim
+				color: cursorRow.selected ? Arc.aether : Arc.giltDim
 				opacity: cursorRow.marked ? 1 : 0
 
 				Behavior on height {
-					NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
+					NumberAnimation { duration: Arc.turn; easing.type: Easing.OutCubic }
 				}
 			}
 
 			Image {
 				id: pointerMark
 				anchors.left: parent.left
-				anchors.leftMargin: Bio.s4
+				anchors.leftMargin: Arc.s4
 				anchors.verticalCenter: parent.verticalCenter
 				width: 18
 				height: 18
@@ -335,11 +335,11 @@ Item {
 				asynchronous: true
 			}
 
-			BioText {
+			ArcText {
 				anchors.left: pointerMark.right
-				anchors.leftMargin: Bio.s3
+				anchors.leftMargin: Arc.s3
 				anchors.right: cursorLiveDot.visible ? cursorLiveDot.left : parent.right
-				anchors.rightMargin: Bio.s3
+				anchors.rightMargin: Arc.s3
 				anchors.verticalCenter: parent.verticalCenter
 				role: "heading"
 				font.pixelSize: 13
@@ -351,15 +351,15 @@ Item {
 				id: cursorLiveDot
 				visible: cursorRow.live
 				anchors.right: parent.right
-				anchors.rightMargin: Bio.s4
+				anchors.rightMargin: Arc.s4
 				anchors.verticalCenter: parent.verticalCenter
-				width: Bio.nodule * 2
-				height: Bio.nodule * 2
+				width: Arc.stud * 2
+				height: Arc.stud * 2
 				radius: width / 2
-				color: Bio.vital
+				color: Arc.ward
 			}
 
-			BioTouch {
+			ArcTouch {
 				onEntered: {
 					root.column = "cursors";
 					root.cursorIndex = cursorRow.index;
@@ -374,42 +374,42 @@ Item {
 	}
 
 	Rectangle {
-		id: dressBone
+		id: dressRule
 		anchors.left: cursorList.right
-		anchors.leftMargin: Bio.s6
+		anchors.leftMargin: Arc.s6
 		anchors.top: parent.top
 		anchors.bottom: parent.bottom
-		anchors.topMargin: Bio.s3
-		anchors.bottomMargin: Bio.s3
-		width: Bio.ribThin
-		color: Bio.boneGhost
+		anchors.topMargin: Arc.s3
+		anchors.bottomMargin: Arc.s3
+		width: Arc.ruleThin
+		color: Arc.giltGhost
 	}
 
 	// --------------------------------------------------------- what is chosen
 	Item {
 		id: specimen
 
-		anchors.left: dressBone.right
-		anchors.leftMargin: Bio.s7
+		anchors.left: dressRule.right
+		anchors.leftMargin: Arc.s7
 		anchors.right: parent.right
 		anchors.top: parent.top
 		anchors.bottom: parent.bottom
 
-		BioText {
+		ArcText {
 			id: specimenName
 			anchors.left: parent.left
 			anchors.top: parent.top
-			role: "specimen"
+			role: "display"
 			font.pixelSize: 26
 			text: root.currentIcon ? String(root.currentIcon.name || root.currentIcon.id) : ""
 		}
 
-		BioText {
+		ArcText {
 			id: specimenComment
 			anchors.left: parent.left
 			anchors.right: parent.right
 			anchors.top: specimenName.bottom
-			anchors.topMargin: Bio.s2
+			anchors.topMargin: Arc.s2
 			role: "body"
 			tone: "muted"
 			wrapMode: Text.WordWrap
@@ -422,10 +422,10 @@ Item {
 			id: sampleGrid
 			anchors.left: parent.left
 			anchors.top: specimenComment.bottom
-			anchors.topMargin: Bio.s6
+			anchors.topMargin: Arc.s6
 			columns: 3
-			columnSpacing: Bio.s6
-			rowSpacing: Bio.s5
+			columnSpacing: Arc.s6
+			rowSpacing: Arc.s5
 
 			Repeater {
 				model: root.currentIcon ? (root.currentIcon.samples || []) : []
@@ -444,15 +444,15 @@ Item {
 			}
 		}
 
-		BioTendon {
+		ArcFlourish {
 			id: specimenRule
 			anchors.left: parent.left
 			anchors.right: parent.right
 			anchors.top: sampleGrid.bottom
-			anchors.topMargin: Bio.s6
+			anchors.topMargin: Arc.s6
 			height: 12
 			facing: Qt.LeftToRight
-			lineColor: Bio.boneFaint
+			lineColor: Arc.giltFaint
 		}
 
 		// The pointer, at the size it will be drawn.
@@ -461,7 +461,7 @@ Item {
 			anchors.left: parent.left
 			anchors.right: parent.right
 			anchors.top: specimenRule.bottom
-			anchors.topMargin: Bio.s5
+			anchors.topMargin: Arc.s5
 			height: 72
 
 			Image {
@@ -481,17 +481,17 @@ Item {
 
 			Column {
 				anchors.left: pointerLarge.right
-				anchors.leftMargin: Bio.s5
+				anchors.leftMargin: Arc.s5
 				anchors.verticalCenter: parent.verticalCenter
 				spacing: -1
 
-				BioText {
+				ArcText {
 					role: "heading"
 					font.pixelSize: 15
 					text: root.currentCursor ? String(root.currentCursor.name || root.currentCursor.id) : ""
 				}
 
-				BioText {
+				ArcText {
 					role: "caption"
 					tone: "faint"
 					text: `${root.liveCursorSize} px`
@@ -505,10 +505,10 @@ Item {
 			anchors.left: parent.left
 			anchors.right: parent.right
 			anchors.top: pointerBlock.bottom
-			anchors.topMargin: Bio.s3
+			anchors.topMargin: Arc.s3
 			height: 30
 
-			BioText {
+			ArcText {
 				id: sizeLabel
 				anchors.left: parent.left
 				anchors.verticalCenter: parent.verticalCenter
@@ -519,22 +519,22 @@ Item {
 
 			Row {
 				anchors.left: sizeLabel.right
-				anchors.leftMargin: Bio.s5
+				anchors.leftMargin: Arc.s5
 				anchors.verticalCenter: parent.verticalCenter
-				spacing: Bio.s4
+				spacing: Arc.s4
 
 				Repeater {
 					model: [16, 24, 32, 48, 64]
 
-					delegate: BioText {
+					delegate: ArcText {
 						required property int modelData
 						role: "mono"
 						font.pixelSize: 12
-						tone: root.liveCursorSize === modelData ? "organ" : "faint"
+						tone: root.liveCursorSize === modelData ? "aether" : "faint"
 						text: String(modelData)
 
-						BioTouch {
-							anchors.margins: -Bio.s2
+						ArcTouch {
+							anchors.margins: -Arc.s2
 							onClicked: root.liveCursorSize = modelData
 						}
 					}
@@ -542,17 +542,17 @@ Item {
 			}
 		}
 
-		BioText {
+		ArcText {
 			anchors.right: parent.right
 			anchors.bottom: parent.bottom
-			anchors.bottomMargin: Bio.s3
+			anchors.bottomMargin: Arc.s3
 			role: "label"
-			tone: dressTouch.containsMouse ? "organ" : "muted"
+			tone: dressTouch.containsMouse ? "aether" : "muted"
 			text: root.loading ? "Looking…" : (root.dressed ? "Worn" : "Dress")
 
-			BioTouch {
+			ArcTouch {
 				id: dressTouch
-				anchors.margins: -Bio.s2
+				anchors.margins: -Arc.s2
 				onClicked: root.apply()
 			}
 		}

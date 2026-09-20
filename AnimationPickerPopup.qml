@@ -193,36 +193,36 @@ fi
 			Rectangle {
 				anchors.left: parent.left
 				anchors.verticalCenter: parent.verticalCenter
-				width: Bio.rib * 1.6
+				width: Arc.rule * 1.6
 				height: parent.height * (optionRow.selected ? 0.66 : 0)
 				radius: width / 2
-				color: Bio.organ
+				color: Arc.aether
 				opacity: optionRow.selected ? 1 : 0
 
 				Behavior on opacity {
-					NumberAnimation { duration: Bio.twitch }
+					NumberAnimation { duration: Arc.tick }
 				}
 				Behavior on height {
-					NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
+					NumberAnimation { duration: Arc.turn; easing.type: Easing.OutCubic }
 				}
 			}
 
-			BioText {
+			ArcText {
 				id: optionKind
 				anchors.left: parent.left
-				anchors.leftMargin: Bio.s4
+				anchors.leftMargin: Arc.s4
 				anchors.verticalCenter: parent.verticalCenter
 				role: "mono"
-				tone: optionRow.selected ? "organ" : "faint"
+				tone: optionRow.selected ? "aether" : "faint"
 				font.pixelSize: 9
 				text: String(optionRow.modelData.kind || "") === "shader" ? "sh" : "bl"
 			}
 
-			BioText {
+			ArcText {
 				anchors.left: optionKind.right
-				anchors.leftMargin: Bio.s3
+				anchors.leftMargin: Arc.s3
 				anchors.right: liveMark.visible ? liveMark.left : parent.right
-				anchors.rightMargin: Bio.s3
+				anchors.rightMargin: Arc.s3
 				anchors.verticalCenter: parent.verticalCenter
 				role: "heading"
 				font.pixelSize: 13
@@ -235,15 +235,15 @@ fi
 				id: liveMark
 				visible: optionRow.live
 				anchors.right: parent.right
-				anchors.rightMargin: Bio.s4
+				anchors.rightMargin: Arc.s4
 				anchors.verticalCenter: parent.verticalCenter
-				width: Bio.nodule * 2
-				height: Bio.nodule * 2
+				width: Arc.stud * 2
+				height: Arc.stud * 2
 				radius: width / 2
-				color: Bio.vital
+				color: Arc.ward
 			}
 
-			BioTouch {
+			ArcTouch {
 				onEntered: root.selectAnimationIndex(optionRow.index)
 				onClicked: root.selectAnimationIndex(optionRow.index)
 				onDoubleClicked: root.applyAnimation()
@@ -252,40 +252,40 @@ fi
 	}
 
 	Rectangle {
-		id: motionBone
+		id: motionRule
 		anchors.left: animationList.right
-		anchors.leftMargin: Bio.s6
+		anchors.leftMargin: Arc.s6
 		anchors.top: parent.top
 		anchors.bottom: parent.bottom
-		anchors.topMargin: Bio.s3
-		anchors.bottomMargin: Bio.s3
-		width: Bio.ribThin
-		color: Bio.boneGhost
+		anchors.topMargin: Arc.s3
+		anchors.bottomMargin: Arc.s3
+		width: Arc.ruleThin
+		color: Arc.giltGhost
 	}
 
 	// ------------------------------------------------------------- the stage
 	Item {
 		id: stageColumn
 
-		anchors.left: motionBone.right
-		anchors.leftMargin: Bio.s7
+		anchors.left: motionRule.right
+		anchors.leftMargin: Arc.s7
 		anchors.right: parent.right
 		anchors.top: parent.top
 		anchors.bottom: parent.bottom
 
-		BioText {
+		ArcText {
 			id: stageName
 			anchors.left: parent.left
 			anchors.top: parent.top
-			role: "specimen"
+			role: "display"
 			font.pixelSize: 26
 			text: root.currentAnimationOption ? String(root.currentAnimationOption.name || "") : ""
 		}
 
-		BioText {
+		ArcText {
 			id: stageKind
 			anchors.left: stageName.right
-			anchors.leftMargin: Bio.s3
+			anchors.leftMargin: Arc.s3
 			anchors.baseline: stageName.baseline
 			role: "label"
 			tone: "faint"
@@ -300,9 +300,9 @@ fi
 			anchors.left: parent.left
 			anchors.right: parent.right
 			anchors.top: stageName.bottom
-			anchors.topMargin: Bio.s5
+			anchors.topMargin: Arc.s5
 			anchors.bottom: readings.top
-			anchors.bottomMargin: Bio.s5
+			anchors.bottomMargin: Arc.s5
 			animationId: root.selectedAnimationId
 			playing: root.visible
 		}
@@ -314,14 +314,14 @@ fi
 			anchors.left: parent.left
 			anchors.right: parent.right
 			anchors.bottom: parent.bottom
-			anchors.bottomMargin: Bio.s3
-			spacing: Bio.s3
+			anchors.bottomMargin: Arc.s3
+			spacing: Arc.s3
 
-			BioTendon {
+			ArcFlourish {
 				width: parent.width
 				height: 12
 				facing: Qt.LeftToRight
-				lineColor: Bio.boneFaint
+				lineColor: Arc.giltFaint
 			}
 
 			Item {
@@ -333,13 +333,13 @@ fi
 					anchors.verticalCenter: parent.verticalCenter
 					spacing: -1
 
-					BioText {
+					ArcText {
 						role: "label"
-						tone: stage.phase === "opening" || stage.phase === "open" ? "organ" : "faint"
+						tone: stage.phase === "opening" || stage.phase === "open" ? "aether" : "faint"
 						text: "Opening"
 					}
 
-					BioText {
+					ArcText {
 						role: "caption"
 						tone: "muted"
 						text: stage.timingLabel(stage.openTiming)
@@ -351,14 +351,14 @@ fi
 					anchors.verticalCenter: parent.verticalCenter
 					spacing: -1
 
-					BioText {
+					ArcText {
 						anchors.horizontalCenter: parent.horizontalCenter
 						role: "label"
-						tone: stage.phase === "closing" || stage.phase === "closed" ? "organ" : "faint"
+						tone: stage.phase === "closing" || stage.phase === "closed" ? "aether" : "faint"
 						text: "Closing"
 					}
 
-					BioText {
+					ArcText {
 						anchors.horizontalCenter: parent.horizontalCenter
 						role: "caption"
 						tone: "muted"
@@ -366,33 +366,33 @@ fi
 					}
 				}
 
-				BioText {
+				ArcText {
 					id: replayLabel
 					anchors.right: graftLabel.left
-					anchors.rightMargin: Bio.s5
+					anchors.rightMargin: Arc.s5
 					anchors.verticalCenter: parent.verticalCenter
 					role: "label"
-					tone: replayTouch.containsMouse ? "organ" : "faint"
+					tone: replayTouch.containsMouse ? "aether" : "faint"
 					text: stage.building ? "Building…" : (stage.buildError !== "" ? stage.buildError : "Replay")
 
-					BioTouch {
+					ArcTouch {
 						id: replayTouch
-						anchors.margins: -Bio.s2
+						anchors.margins: -Arc.s2
 						onClicked: stage.restart()
 					}
 				}
 
-				BioText {
+				ArcText {
 					id: graftLabel
 					anchors.right: parent.right
 					anchors.verticalCenter: parent.verticalCenter
 					role: "label"
-					tone: graftTouch.containsMouse ? "organ" : "muted"
+					tone: graftTouch.containsMouse ? "aether" : "muted"
 					text: root.liveAnimationId === root.selectedAnimationId ? "Grafted" : "Graft"
 
-					BioTouch {
+					ArcTouch {
 						id: graftTouch
-						anchors.margins: -Bio.s2
+						anchors.margins: -Arc.s2
 						onClicked: root.applyAnimation()
 					}
 				}

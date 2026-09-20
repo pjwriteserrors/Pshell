@@ -127,17 +127,17 @@ Item {
 		anchors.margins: 6
 		spacing: 14
 
-		BioText {
-			role: "specimen"
-			text: "Strains"
+		ArcText {
+			role: "display"
+			text: "Volumes"
 			font.pixelSize: 30
 		}
 
-		BioText {
+		ArcText {
 			role: "caption"
 			tone: "muted"
 			width: parent.width
-			text: "One branch, one whole organism.   Growing: " + root.currentBranch
+			text: "One branch, one whole volume.   Open: " + root.currentBranch
 			elide: Text.ElideMiddle
 		}
 
@@ -167,55 +167,55 @@ Item {
 				width: library.cellWidth
 				height: library.cellHeight
 
-				// A branch is a strain in the collection: its own chamber, its
+				// A branch is a volume in the collection: its own plate, its
 				// name engraved, and a bead that says whether it is the one
 				// currently growing.
-				BioSurface {
+				ArcLeaf {
 					anchors.fill: parent
 					anchors.margins: 7
 					variant: "plate"
-					washTop: entry.chosen ? Bio.membrane : Bio.tissue2
-					washBottom: entry.chosen ? Bio.membraneDeep : Bio.tissue1
-					lineColor: entry.chosen ? Bio.boneDim : Bio.boneFaint
-					liveColor: Bio.organ
+					washTop: entry.chosen ? Arc.wash : Arc.leaf2
+					washBottom: entry.chosen ? Arc.washDeep : Arc.leaf1
+					lineColor: entry.chosen ? Arc.giltDim : Arc.giltFaint
+					liveColor: Arc.aether
 					haloStrength: entry.chosen ? 0.22 : 0
 					intensity: entry.chosen ? 1 : (entryMouse.containsMouse ? 0.5 : 0)
-					padding: Bio.s6
+					padding: Arc.s6
 					opacity: entry.modelData.compatible ? 1 : 0.45
 
 					Column {
 						anchors.fill: parent
-						spacing: Bio.s2
+						spacing: Arc.s2
 
 						Row {
-							spacing: Bio.s2
+							spacing: Arc.s2
 
 							Rectangle {
 								anchors.verticalCenter: parent.verticalCenter
-								width: Bio.nodule * 2
-								height: Bio.nodule * 2
+								width: Arc.stud * 2
+								height: Arc.stud * 2
 								radius: width / 2
-								color: entry.modelData.current ? Bio.organ
-									: entry.modelData.compatible ? Bio.boneFaint : Bio.boneGhost
+								color: entry.modelData.current ? Arc.aether
+									: entry.modelData.compatible ? Arc.giltFaint : Arc.giltGhost
 							}
 
-							BioText {
+							ArcText {
 								anchors.verticalCenter: parent.verticalCenter
 								role: "label"
-								tone: entry.modelData.current ? "organ" : "faint"
-								text: entry.modelData.current ? "Growing"
-									: entry.modelData.compatible ? "Viable" : "Not a strain"
+								tone: entry.modelData.current ? "aether" : "faint"
+								text: entry.modelData.current ? "Open"
+									: entry.modelData.compatible ? "Bound" : "Not a volume"
 							}
 						}
 
-						BioText {
+						ArcText {
 							role: "title"
 							width: parent.width
 							font.pixelSize: 26
 							text: entry.modelData.name
 						}
 
-						BioText {
+						ArcText {
 							role: "mono"
 							tone: "faint"
 							width: parent.width
@@ -224,7 +224,7 @@ Item {
 							elide: Text.ElideMiddle
 						}
 
-						BioText {
+						ArcText {
 							role: "caption"
 							tone: "muted"
 							width: parent.width
@@ -259,7 +259,7 @@ Item {
 			ScrollBar.vertical: ScrollBar {}
 		}
 
-		BioText {
+		ArcText {
 			role: "caption"
 			tone: root.dirty || root.errorText ? "alert" : "muted"
 			width: parent.width
@@ -272,32 +272,32 @@ Item {
 			}
 		}
 
-		BioSurface {
+		ArcLeaf {
 			width: parent.width
 			height: 44
 			variant: "plate"
-			washTop: Bio.tissue2
-			washBottom: Bio.tissue1
-			lineColor: Bio.boneFaint
-			liveColor: Bio.organ
+			washTop: Arc.leaf2
+			washBottom: Arc.leaf1
+			lineColor: Arc.giltFaint
+			liveColor: Arc.aether
 			haloStrength: 0.12
 			intensity: applyMouse.live
 			opacity: root.canApply ? 1 : 0.5
 			padding: 0
 
-			BioText {
+			ArcText {
 				anchors.centerIn: parent
 				role: "label"
-				tone: applyMouse.live > 0.3 ? "organ" : "default"
+				tone: applyMouse.live > 0.3 ? "aether" : "default"
 				text: {
 					if (root.switching) return "Grafting";
-					if (root.selected && root.selected.current) return "This strain is growing";
+					if (root.selected && root.selected.current) return "This volume is open";
 					if (root.confirming) return "Confirm the graft";
-					return "Graft the chosen strain";
+					return "Open the chosen volume";
 				}
 			}
 
-			BioTouch {
+			ArcTouch {
 				id: applyMouse
 				enabled: root.canApply
 				cursorShape: root.canApply ? Qt.PointingHandCursor : Qt.ArrowCursor

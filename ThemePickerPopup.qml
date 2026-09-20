@@ -580,30 +580,30 @@ fi
 			anchors.left: parent.left
 			anchors.right: parent.right
 			anchors.bottom: parent.bottom
-			height: Bio.ribThin
-			color: Bio.boneFaint
+			height: Arc.ruleThin
+			color: Arc.giltFaint
 		}
 
 		Rectangle {
 			anchors.left: parent.left
 			anchors.bottom: parent.bottom
 			width: searchField.activeFocus ? parent.width : 0
-			height: Bio.rib
-			color: Bio.organ
+			height: Arc.rule
+			color: Arc.aether
 
 			Behavior on width {
-				NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
+				NumberAnimation { duration: Arc.turn; easing.type: Easing.OutCubic }
 			}
 		}
 
-		BioRing {
+		ArcDial {
 			id: searchMark
 			anchors.left: parent.left
 			anchors.verticalCenter: parent.verticalCenter
 			width: 26
 			height: 26
 			seed: 3
-			lineColor: Bio.boneFaint
+			lineColor: Arc.giltFaint
 			intensity: searchField.activeFocus ? 0.9 : 0
 
 			QQCImpl.IconImage {
@@ -612,24 +612,24 @@ fi
 				height: 13
 				source: "/usr/share/icons/Adwaita/symbolic/actions/system-search-symbolic.svg"
 				sourceSize: Qt.size(width, height)
-				color: searchField.activeFocus ? Bio.organ : Bio.textMuted
+				color: searchField.activeFocus ? Arc.aether : Arc.inkMuted
 			}
 		}
 
 		TextField {
 			id: searchField
 			anchors.left: searchMark.right
-			anchors.leftMargin: Bio.s3
+			anchors.leftMargin: Arc.s3
 			anchors.right: closeButton.left
-			anchors.rightMargin: Bio.s3
+			anchors.rightMargin: Arc.s3
 			anchors.verticalCenter: parent.verticalCenter
-			font.family: Bio.sans
-			font.pixelSize: Bio.sizeBody
-			color: Bio.text
-			placeholderText: "Sift cultures"
-			placeholderTextColor: Bio.textFaint
-			selectedTextColor: Bio.text
-			selectionColor: Qt.alpha(Bio.organ, 0.3)
+			font.family: Arc.book
+			font.pixelSize: Arc.sizeBody
+			color: Arc.ink
+			placeholderText: "Sift the plates"
+			placeholderTextColor: Arc.inkFaint
+			selectedTextColor: Arc.ink
+			selectionColor: Qt.alpha(Arc.aether, 0.3)
 			selectByMouse: true
 			focus: true
 			background: Item {}
@@ -668,21 +668,21 @@ fi
 			width: 24
 			height: 24
 
-			BioText {
+			ArcText {
 				anchors.centerIn: parent
 				role: "body"
 				tone: closeMouse.containsMouse ? "alert" : "faint"
 				text: "×"
 			}
 
-			BioTouch {
+			ArcTouch {
 				id: closeMouse
 				onClicked: root.closeRequested()
 			}
 		}
 	}
 
-	BioSurface {
+	ArcLeaf {
 		visible: root.deleteError !== ""
 		z: 90
 		anchors.top: searchBox.bottom
@@ -691,14 +691,14 @@ fi
 		width: Math.min(deleteErrorText.implicitWidth + 56, root.width - 80)
 		height: deleteErrorText.implicitHeight + 28
 		variant: "plate"
-		lineColor: Qt.alpha(Bio.necrosis, 0.6)
-		liveColor: Bio.necrosis
-		washTop: Qt.alpha(Bio.necrosis, 0.14)
-		washBottom: Bio.membraneDeep
+		lineColor: Qt.alpha(Arc.bane, 0.6)
+		liveColor: Arc.bane
+		washTop: Qt.alpha(Arc.bane, 0.14)
+		washBottom: Arc.washDeep
 		intensity: 0.8
-		padding: Bio.s4
+		padding: Arc.s4
 
-		BioText {
+		ArcText {
 			id: deleteErrorText
 			anchors.centerIn: parent
 			width: Math.min(implicitWidth, root.width - 108)
@@ -771,7 +771,7 @@ fi
 					height: variantSelector.sectionHeight(palettes.length)
 					y: variantSelector.sectionY(sectionName)
 
-					BioText {
+					ArcText {
 						role: "label"
 						tone: "muted"
 						width: parent.width
@@ -798,22 +798,22 @@ fi
 								width: variantSelector.cellWidth
 								height: variantSelector.headerHeight - 4
 
-								BioFrame {
+								ArcPlate {
 									anchors.fill: parent
 									variant: "capsule"
 									beading: false
-									weight: Bio.ribThin
+									weight: Arc.ruleThin
 									inset: 1
-									lineColor: Bio.boneGhost
-									liveColor: Bio.organ
-									fillTop: Bio.cavity
-									fillBottom: Bio.cavity
+									lineColor: Arc.giltGhost
+									liveColor: Arc.aether
+									fillTop: Arc.well
+									fillBottom: Arc.well
 									intensity: root.selectedColorIndex === colorSpaceHead.index ? 1 : 0
 								}
 
-								BioText {
+								ArcText {
 									role: "label"
-									tone: root.selectedColorIndex === colorSpaceHead.index ? "organ" : "faint"
+									tone: root.selectedColorIndex === colorSpaceHead.index ? "aether" : "faint"
 									anchors.fill: parent
 									anchors.leftMargin: 8
 									anchors.rightMargin: 8
@@ -978,7 +978,7 @@ fi
 										}
 									}
 
-									BioText {
+									ArcText {
 										role: "label"
 										anchors.left: parent.left
 										anchors.leftMargin: 10
@@ -1072,11 +1072,11 @@ fi
 				Item {
 					anchors.fill: parent
 
-					BioGlow {
+					ArcHalo {
 						anchors.centerIn: parent
 						width: parent.width * 1.2
 						height: parent.height * 1.3
-						color: Bio.organ
+						color: Arc.aether
 						strength: active ? 0.22 : 0
 						spread: 0.42
 					}
@@ -1085,7 +1085,7 @@ fi
 						anchors.fill: parent
 						anchors.margins: 3
 						radius: 2
-						color: Bio.cavity
+						color: Arc.well
 						clip: true
 
 						Image {
@@ -1108,27 +1108,27 @@ fi
 						}
 					}
 
-					BioFrame {
+					ArcPlate {
 						anchors.fill: parent
 						variant: "plate"
-						weight: active ? Bio.rib : Bio.ribThin
-						lineColor: active ? Bio.boneDim : Bio.boneGhost
-						liveColor: Bio.organ
+						weight: active ? Arc.rule : Arc.ruleThin
+						lineColor: active ? Arc.giltDim : Arc.giltGhost
+						liveColor: Arc.aether
 						intensity: active ? 1 : 0
 					}
 
-					BioText {
+					ArcText {
 						id: mediaTypeBadge
 						z: 6
 						anchors.top: parent.top
 						anchors.right: parent.right
 						anchors.margins: active ? 20 : 16
 						role: "label"
-						color: Bio.text
+						color: Arc.ink
 						text: root.mediaBadgeLabel(root.filteredThemes[index].mediaType)
 					}
 
-					BioNode {
+					ArcSeat {
 						id: deleteMediaButton
 						visible: active
 						z: 8
@@ -1137,9 +1137,9 @@ fi
 						anchors.margins: 16
 						size: 30
 						seed: 2
-						ringColor: Qt.alpha(Bio.necrosis, 0.5)
-						liveColor: Bio.necrosis
-						iconColor: Bio.necrosis
+						ringColor: Qt.alpha(Arc.bane, 0.5)
+						liveColor: Arc.bane
+						iconColor: Arc.bane
 						iconSource: "/usr/share/icons/Adwaita/symbolic/actions/edit-delete-symbolic.svg"
 						opacity: root.deleteInProgress ? 0.45 : 1
 
@@ -1205,7 +1205,7 @@ fi
 										border.width: modelData === 2 ? 0 : 1
 										border.color: Qt.alpha(livePreviewOverlay.previewForeground, 0.24)
 
-										BioText {
+										ArcText {
 											role: "label"
 											anchors.centerIn: parent
 											color: modelData === 2 ? root.readableTextColor(root.paletteSwatch(4)) : Qt.alpha(livePreviewOverlay.previewForeground, 0.72)
@@ -1356,7 +1356,7 @@ fi
 								border.width: 1
 								border.color: Qt.alpha(root.paletteSwatch(4), 0.45)
 
-								BioText {
+								ArcText {
 									role: "label"
 									anchors.fill: parent
 									anchors.leftMargin: 10
@@ -1392,7 +1392,7 @@ fi
 										border.width: 1
 										border.color: Qt.rgba(255, 255, 255, 0.18)
 
-										BioText {
+										ArcText {
 											role: "label"
 											anchors.centerIn: parent
 											color: root.readableTextColor(parent.blockColor)
@@ -1414,7 +1414,7 @@ fi
 							anchors.margins: 24
 							spacing: 6
 
-						BioText {
+						ArcText {
 							role: "bodyStrong"
 							width: parent.width
 							color: "white"
@@ -1424,7 +1424,7 @@ fi
 							text: root.filteredThemes[index].name
 						}
 
-						BioText {
+						ArcText {
 							role: "body"
 							width: parent.width
 							color: Qt.rgba(255, 255, 255, 0.78)
@@ -1456,7 +1456,7 @@ fi
 			anchors.centerIn: parent
 			spacing: 8
 
-			BioText {
+			ArcText {
 				role: "title"
 				horizontalAlignment: Text.AlignHCenter
 				color: root.foreground
@@ -1465,7 +1465,7 @@ fi
 				text: "No themes found"
 			}
 
-			BioText {
+			ArcText {
 				role: "body"
 				horizontalAlignment: Text.AlignHCenter
 				color: Qt.alpha(root.foreground, 0.58)

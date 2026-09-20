@@ -30,7 +30,7 @@ Item {
 	required property color secondaryBoxStrongColor
 	required property color secondaryInsetColor
 	required property color barColor
-	property color danger: Bio.necrosis
+	property color danger: Arc.bane
 
 	property var combinations: []
 	property var currentState: ({})
@@ -147,7 +147,7 @@ Item {
 	}
 
 	// --------------------------------------------------------------- the list
-	BioText {
+	ArcText {
 		id: listHeading
 		anchors.left: parent.left
 		anchors.top: parent.top
@@ -161,9 +161,9 @@ Item {
 
 		anchors.left: parent.left
 		anchors.top: listHeading.bottom
-		anchors.topMargin: Bio.s3
+		anchors.topMargin: Arc.s3
 		anchors.bottom: keepRow.top
-		anchors.bottomMargin: Bio.s5
+		anchors.bottomMargin: Arc.s5
 		width: Math.round(Math.min(parent.width * 0.34, 340))
 		clip: true
 		model: root.combinations
@@ -184,26 +184,26 @@ Item {
 			Rectangle {
 				anchors.left: parent.left
 				anchors.verticalCenter: parent.verticalCenter
-				width: Bio.rib * 1.6
+				width: Arc.rule * 1.6
 				height: parent.height * (comboRow.selected ? 0.62 : 0)
 				radius: width / 2
-				color: Bio.organ
+				color: Arc.aether
 				opacity: comboRow.selected ? 1 : 0
 
 				Behavior on height {
-					NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
+					NumberAnimation { duration: Arc.turn; easing.type: Easing.OutCubic }
 				}
 			}
 
 			Column {
 				anchors.left: parent.left
-				anchors.leftMargin: Bio.s4
+				anchors.leftMargin: Arc.s4
 				anchors.right: parent.right
-				anchors.rightMargin: Bio.s3
+				anchors.rightMargin: Arc.s3
 				anchors.verticalCenter: parent.verticalCenter
 				spacing: -2
 
-				BioText {
+				ArcText {
 					width: parent.width
 					role: "heading"
 					font.pixelSize: 14
@@ -211,7 +211,7 @@ Item {
 					text: String(comboRow.modelData.name || "")
 				}
 
-				BioText {
+				ArcText {
 					width: parent.width
 					role: "caption"
 					tone: "faint"
@@ -223,7 +223,7 @@ Item {
 				}
 			}
 
-			BioTouch {
+			ArcTouch {
 				onEntered: root.selectedIndex = comboRow.index
 				onClicked: root.selectedIndex = comboRow.index
 				onDoubleClicked: root.wear()
@@ -245,16 +245,16 @@ Item {
 
 			anchors.left: parent.left
 			anchors.right: keepLabel.left
-			anchors.rightMargin: Bio.s3
+			anchors.rightMargin: Arc.s3
 			anchors.verticalCenter: parent.verticalCenter
 			height: 28
-			font.family: Bio.sans
-			font.pixelSize: Bio.sizeCaption
-			color: Bio.text
+			font.family: Arc.book
+			font.pixelSize: Arc.sizeCaption
+			color: Arc.ink
 			placeholderText: "Keep what is on as…"
-			placeholderTextColor: Bio.textFaint
-			selectedTextColor: Bio.text
-			selectionColor: Qt.alpha(Bio.organ, 0.3)
+			placeholderTextColor: Arc.inkFaint
+			selectedTextColor: Arc.ink
+			selectionColor: Qt.alpha(Arc.aether, 0.3)
 			onAccepted: root.keep(text)
 
 			background: Item {
@@ -262,35 +262,35 @@ Item {
 					anchors.left: parent.left
 					anchors.right: parent.right
 					anchors.bottom: parent.bottom
-					height: Bio.ribThin
-					color: Bio.boneFaint
+					height: Arc.ruleThin
+					color: Arc.giltFaint
 				}
 
 				Rectangle {
 					anchors.left: parent.left
 					anchors.bottom: parent.bottom
 					width: nameField.activeFocus ? parent.width : 0
-					height: Bio.rib
-					color: Bio.organ
+					height: Arc.rule
+					color: Arc.aether
 
 					Behavior on width {
-						NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
+						NumberAnimation { duration: Arc.turn; easing.type: Easing.OutCubic }
 					}
 				}
 			}
 		}
 
-		BioText {
+		ArcText {
 			id: keepLabel
 			anchors.right: parent.right
 			anchors.verticalCenter: parent.verticalCenter
 			role: "label"
-			tone: keepTouch.containsMouse && nameField.text.trim() !== "" ? "organ" : "faint"
+			tone: keepTouch.containsMouse && nameField.text.trim() !== "" ? "aether" : "faint"
 			text: "Keep"
 
-			BioTouch {
+			ArcTouch {
 				id: keepTouch
-				anchors.margins: -Bio.s2
+				anchors.margins: -Arc.s2
 				enabled: nameField.text.trim() !== ""
 				onClicked: root.keep(nameField.text)
 			}
@@ -298,47 +298,47 @@ Item {
 	}
 
 	Rectangle {
-		id: comboBone
+		id: comboRule
 		anchors.left: combinationList.right
-		anchors.leftMargin: Bio.s6
+		anchors.leftMargin: Arc.s6
 		anchors.top: parent.top
 		anchors.bottom: parent.bottom
-		anchors.topMargin: Bio.s3
-		anchors.bottomMargin: Bio.s3
-		width: Bio.ribThin
-		color: Bio.boneGhost
+		anchors.topMargin: Arc.s3
+		anchors.bottomMargin: Arc.s3
+		width: Arc.ruleThin
+		color: Arc.giltGhost
 	}
 
 	// ----------------------------------------------------------- the specimen
 	Item {
 		id: specimen
 
-		anchors.left: comboBone.right
-		anchors.leftMargin: Bio.s7
+		anchors.left: comboRule.right
+		anchors.leftMargin: Arc.s7
 		anchors.right: parent.right
 		anchors.top: parent.top
 		anchors.bottom: parent.bottom
 		opacity: root.selected ? 1 : 0
 
 		Behavior on opacity {
-			NumberAnimation { duration: Bio.grow }
+			NumberAnimation { duration: Arc.turn }
 		}
 
-		BioText {
+		ArcText {
 			id: specimenName
 			anchors.left: parent.left
 			anchors.top: parent.top
-			role: "specimen"
+			role: "display"
 			font.pixelSize: 30
 			text: root.selected ? String(root.selected.name || "") : ""
 		}
 
-		BioText {
+		ArcText {
 			id: specimenNote
 			anchors.left: parent.left
 			anchors.right: parent.right
 			anchors.top: specimenName.bottom
-			anchors.topMargin: Bio.s2
+			anchors.topMargin: Arc.s2
 			role: "body"
 			tone: "muted"
 			visible: text !== ""
@@ -353,8 +353,8 @@ Item {
 			anchors.left: parent.left
 			anchors.right: parent.right
 			anchors.top: specimenNote.visible ? specimenNote.bottom : specimenName.bottom
-			anchors.topMargin: Bio.s6
-			spacing: Bio.s2
+			anchors.topMargin: Arc.s6
+			spacing: Arc.s2
 
 			Repeater {
 				model: root.partsOf(root.selected)
@@ -366,7 +366,7 @@ Item {
 					width: partList.width
 					height: 30
 
-					BioText {
+					ArcText {
 						id: partLabel
 						anchors.left: parent.left
 						anchors.verticalCenter: parent.verticalCenter
@@ -376,11 +376,11 @@ Item {
 						text: String(partRow.modelData.label)
 					}
 
-					BioText {
+					ArcText {
 						anchors.left: partLabel.right
-						anchors.leftMargin: Bio.s3
+						anchors.leftMargin: Arc.s3
 						anchors.right: partMark.left
-						anchors.rightMargin: Bio.s3
+						anchors.rightMargin: Arc.s3
 						anchors.verticalCenter: parent.verticalCenter
 						role: "body"
 						tone: partRow.modelData.live ? "default" : "muted"
@@ -392,29 +392,29 @@ Item {
 						id: partMark
 						anchors.right: parent.right
 						anchors.verticalCenter: parent.verticalCenter
-						width: Bio.nodule * 2
-						height: Bio.nodule * 2
+						width: Arc.stud * 2
+						height: Arc.stud * 2
 						radius: width / 2
-						color: partRow.modelData.live ? Bio.vital : Bio.boneGhost
+						color: partRow.modelData.live ? Arc.ward : Arc.giltGhost
 					}
 
 					Rectangle {
 						anchors.left: partLabel.left
 						anchors.right: parent.right
 						anchors.bottom: parent.bottom
-						height: Bio.ribThin
-						color: Bio.boneGhost
+						height: Arc.ruleThin
+						color: Arc.giltGhost
 						opacity: 0.6
 					}
 				}
 			}
 		}
 
-		BioText {
+		ArcText {
 			id: noticeLabel
 			anchors.left: parent.left
 			anchors.bottom: parent.bottom
-			anchors.bottomMargin: Bio.s3
+			anchors.bottomMargin: Arc.s3
 			role: "caption"
 			tone: "faint"
 			text: root.notice
@@ -423,43 +423,43 @@ Item {
 		Row {
 			anchors.right: parent.right
 			anchors.bottom: parent.bottom
-			anchors.bottomMargin: Bio.s3
-			spacing: Bio.s6
+			anchors.bottomMargin: Arc.s3
+			spacing: Arc.s6
 
-			BioText {
+			ArcText {
 				role: "label"
-				tone: replaceTouch.containsMouse ? "organ" : "faint"
+				tone: replaceTouch.containsMouse ? "aether" : "faint"
 				text: "Replace"
 
-				BioTouch {
+				ArcTouch {
 					id: replaceTouch
-					anchors.margins: -Bio.s2
+					anchors.margins: -Arc.s2
 					onClicked: {
 						if (root.selected) root.keep(String(root.selected.name));
 					}
 				}
 			}
 
-			BioText {
+			ArcText {
 				role: "label"
 				tone: discardTouch.containsMouse ? "alert" : "faint"
 				text: "Discard"
 
-				BioTouch {
+				ArcTouch {
 					id: discardTouch
-					anchors.margins: -Bio.s2
+					anchors.margins: -Arc.s2
 					onClicked: root.discard()
 				}
 			}
 
-			BioText {
+			ArcText {
 				role: "label"
-				tone: wearTouch.containsMouse ? "organ" : "muted"
+				tone: wearTouch.containsMouse ? "aether" : "muted"
 				text: root.selectedWorn ? "Worn" : "Wear"
 
-				BioTouch {
+				ArcTouch {
 					id: wearTouch
-					anchors.margins: -Bio.s2
+					anchors.margins: -Arc.s2
 					onClicked: root.wear()
 				}
 			}
@@ -470,24 +470,24 @@ Item {
 	Column {
 		anchors.centerIn: specimen
 		visible: !root.selected && !root.busy
-		spacing: Bio.s3
+		spacing: Arc.s3
 
-		BioSigil {
+		ArcRune {
 			anchors.horizontalCenter: parent.horizontalCenter
 			width: 54
 			height: 54
 			seed: 11
-			lineColor: Bio.boneGhost
+			lineColor: Arc.giltGhost
 		}
 
-		BioText {
+		ArcText {
 			anchors.horizontalCenter: parent.horizontalCenter
 			role: "heading"
 			tone: "muted"
 			text: "Nothing kept yet"
 		}
 
-		BioText {
+		ArcText {
 			anchors.horizontalCenter: parent.horizontalCenter
 			role: "caption"
 			tone: "faint"
