@@ -2920,7 +2920,13 @@ Item {
 					// desktop showed straight through the gap.
 					Canvas {
 						id: groundLayer
-						anchors.fill: parent
+
+						// Wider than the wheel, so the edge of the night has
+						// somewhere to happen. Drawn inside the wheel's own
+						// bounds it had nowhere to fade and ended abruptly.
+						anchors.centerIn: parent
+						width: parent.width * 1.8
+						height: parent.height * 1.8
 						renderStrategy: Canvas.Cooperative
 
 						readonly property real limb: colony.limb
@@ -2935,13 +2941,28 @@ Item {
 						onPaint: {
 							const ctx = getContext("2d");
 							ctx.reset();
-							const cx = width / 2, cy = height / 2, r = colony.limb;
-							if (r < 40) return;
-							const night = ctx.createRadialGradient(cx, cy, 0, cx, cy, r + 108);
-							night.addColorStop(0.00, Qt.alpha(Arc.abyss, 0.97));
-							night.addColorStop(0.66, Qt.alpha(Arc.abyss, 0.95));
-							night.addColorStop(0.88, Qt.alpha(Arc.abyss, 0.6));
-							night.addColorStop(1.00, Qt.alpha(Arc.abyss, 0.0));
+							const cx = width / 2, cy = height / 2;
+							const radius = Math.min(width, height) / 2;
+							if (colony.limb < 40) return;
+
+							// Solid out past the crown of runes, then a long
+							// tail. The tail is a smootherstep rather than the
+							// three or four stops a gradient gets by default:
+							// a dark disc over a bright wallpaper shows every
+							// band in a coarse ramp, and the banding is what
+							// made this look like a smudge rather than a shade.
+							// Solid out past the sigils and the crown of runes both,
+							// so nothing on the limb is read against whatever
+							// is behind the wheel.
+							const solid = Math.min(0.74, (colony.limb + 118) / radius);
+							const peak = 0.97;
+							const night = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+							for (let step = 0; step <= 24; step++) {
+								const t = step / 24;
+								const u = t <= solid ? 0 : (t - solid) / (1 - solid);
+								const eased = u * u * u * (u * (u * 6 - 15) + 10);
+								night.addColorStop(t, Qt.alpha(Arc.abyss, peak * (1 - eased)));
+							}
 							ctx.fillStyle = night;
 							ctx.fillRect(0, 0, width, height);
 						}
