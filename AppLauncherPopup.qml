@@ -3108,27 +3108,6 @@ Item {
 						spacing: 1
 						visible: colony.current !== null
 
-						// Narrowing a search changes this several times a
-						// second. Swapping the text between two frames reads as
-						// a flash you cannot catch; writing it in, even this
-						// briefly, reads as the wheel settling on an answer.
-						property string shown: colony.current
-							? String(colony.current.name || colony.current.id || "")
-							: ""
-
-						onShownChanged: settle.restart()
-
-						NumberAnimation {
-							id: settle
-							target: reading
-							property: "opacity"
-							from: 0.25
-							to: 1
-							duration: Arc.turn
-							easing.type: Easing.Bezier
-							easing.bezierCurve: Arc.curveKindle
-						}
-
 						ArcMark {
 							anchors.horizontalCenter: parent.horizontalCenter
 							width: 22
@@ -3151,16 +3130,20 @@ Item {
 								|| colony.current.name || colony.current.id || "") : ""
 						}
 
+						// Only ever the thing's own name under its true name, never
+						// the desktop entry's description. A description is a
+						// whole sentence, and narrowing a search marched a
+						// different sentence through here on every keystroke —
+						// too fast to read and impossible to ignore.
 						ArcText {
 							width: parent.width
 							horizontalAlignment: Text.AlignHCenter
 							role: "display"
 							font.pixelSize: 19
 							elide: Text.ElideRight
-							text: colony.current
-								? (root.trueName(colony.current)
-									? (colony.current.name || colony.current.id || "")
-									: (colony.current.comment || colony.current.genericName || ""))
+							visible: text !== ""
+							text: colony.current && root.trueName(colony.current)
+								? (colony.current.name || colony.current.id || "")
 								: ""
 						}
 
