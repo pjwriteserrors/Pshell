@@ -4,43 +4,50 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 
-// Every chamber the spine opens is docked to it: it stands the full height of
-// the screen, immediately beside the column, and unfurls sideways out of it.
-// Nothing drops, nothing floats, nothing is centred — a chamber is a drawer in
-// the cabinet the spine runs down.
+// THE STRUCTURAL IDEA, and the file that owns it.
+//
+// The shell hangs from a brass chain strung across the top of the screen,
+// fixed at both corners and sagging to its lowest point in the middle. Every
+// panel in the instrument is a scroll hung off that chain, directly under the
+// seat that owns it — so where a panel appears tells you what opened it, and
+// because the chain sags, no two panels start at the same height.
+//
+// Nothing in this shell appears. A scroll is *let down*:
+//
+//   open   the roller slides out of the chain, the cords drop, and the sheet
+//          unrolls downward under the weight of the dowel at its foot — the
+//          sheet is revealed from the top as the dowel travels, never scaled.
+//          It overruns its rest length and swings, and the swing is a real
+//          damped oscillator, not an overshoot curve. Contents are written on
+//          the sheet band by band behind the dowel, each band arriving a beat
+//          after the one above it.
+//   close  the roller takes it back up, faster than it came down, and the
+//          cords go last.
 //
 // Built on PanelWindow (a full-screen overlay) so text fields inside receive
-// keyboard input.
-//
-// Choreography contract, the same for every chamber:
-//   open:  a spur reaches out of the spine at the organ that owns the chamber,
-//          the chamber unrolls horizontally from that edge, and its contents
-//          surface band by band, each one sliding the last few pixels in.
-//   close: it rolls back into the spine, faster than it came out.
-//
-// Clicking outside emits dismissRequested(); the instance decides how to close.
+// keyboard input. Clicking outside emits dismissRequested().
 PanelWindow {
 	id: surface
 
 	// wiring
 	required property bool open
 	required property Item barItem
-	// The organ this chamber belongs to: the spur leaves the column there, and
-	// the chamber opens level with it.
+	// The seat this scroll hangs under. Without one it hangs from the middle
+	// of the chain, which is where the horologe is.
 	property Item anchorItem: null
 
-	// The name engraved down the chamber's outer edge. Every chamber has one —
-	// it is what tells you which drawer is open without reading the contents.
+	// The name struck into the scroll's head rail. Every scroll has one — it is
+	// what tells you which one is down without reading the contents.
 	property string title: ""
 
 	// sizing
 	property real expandedWidth: 300
 	property real contentPreferredHeight: 0
 	property real fixedHeight: -1
-	property real contentMargins: Bio.s4
+	property real contentMargins: Arc.s4
 
 	// style
-	property color surfaceColor: Bio.membrane
+	property color surfaceColor: Arc.wash
 	property color borderColor: "transparent"
 	property bool wantsKeyboard: true
 
@@ -51,24 +58,35 @@ PanelWindow {
 
 	property real openProgress: open ? 1 : 0
 
-	// How far in from the frame content has to stay so the corner bones have
-	// room.
-	readonly property real boneMargin: 11
+	// How far in from the fittings content has to stay.
+	readonly property real mountMargin: 10
+	readonly property real headRail: 24
 
-	readonly property real shellWidth: Math.round(expandedWidth + Bio.nameColumn)
-	// A chamber is as deep as what it holds, never shallower than a drawer
-	// worth pulling and never deeper than the screen. It opens level with the
-	// organ that owns it, so where it appears tells you what pulled it.
-	readonly property real roomHeight: Math.max(120, height - Bio.dockInset * 2)
+	readonly property real shellWidth: Math.round(expandedWidth)
+	readonly property real roomHeight: height - Arc.gantryDepth - Arc.dropInset
 	readonly property real expandedHeight: Math.round(Math.min(
 		roomHeight,
 		fixedHeight > 0
 			? fixedHeight
-			: Math.max(260, contentPreferredHeight + (contentMargins + boneMargin) * 2)
+			: Math.max(220, contentPreferredHeight + headRail + (contentMargins + mountMargin) * 2)
 	))
-	// Contents only surface once the chamber has unrolled far enough to hold a
-	// line of text without it being crushed.
-	readonly property real contentOpacity: Math.max(0, Math.min(1, (openProgress - 0.55) / 0.45))
+
+	// Where on the chain this scroll hangs from, and how far down the chain is
+	// at that point. Clamped so a scroll hung off a seat near the screen edge
+	// still lands on the screen.
+	readonly property real anchorX: {
+		if (!surface.anchorItem || !surface.visible) return surface.width / 2;
+		const p = surface.anchorItem.mapToItem(null, surface.anchorItem.width / 2, 0);
+		return p ? p.x : surface.width / 2;
+	}
+	readonly property real cradleX: Math.round(Math.max(Arc.s4,
+		Math.min(surface.width - surface.shellWidth - Arc.s4, surface.anchorX - surface.shellWidth / 2)))
+	readonly property real cradleY: Math.round(
+		Arc.chainY(surface.anchorX / Math.max(1, surface.width)) + Arc.seat / 2 + Arc.dropGap)
+
+	// The sheet is written on behind the dowel: nothing surfaces until the
+	// roller has let down enough of it to hold a line of text.
+	readonly property real contentOpacity: Math.max(0, Math.min(1, (openProgress - 0.34) / 0.42))
 
 	anchors {
 		left: true
@@ -85,69 +103,89 @@ PanelWindow {
 
 	Behavior on openProgress {
 		NumberAnimation {
-			duration: surface.open ? Bio.unfurl : Bio.furl
-			easing.type: surface.open ? Easing.OutQuint : Easing.InCubic
+			duration: surface.open ? Arc.unroll : Arc.reroll
+			easing.type: Easing.Bezier
+			easing.bezierCurve: surface.open ? Arc.curveUnroll : Arc.curveReroll
 		}
 	}
 
-	// Clicking off a chamber dismisses it — but not while it is still coming
-	// out of the column. A chamber opens under the pointer that opened it, and
-	// a press that is still travelling when the window maps would otherwise
-	// land here and shut it again before it had finished unrolling.
+	// The swing. A scroll that has just been let down is a weight on two cords,
+	// so it rocks and is damped by the cords rather than by an easing curve.
+	// Integrated at 16 ms and stopped dead once it is below a tenth of a degree.
+	property real swing: 0
+	property real swingVelocity: 0
+
+	onOpenChanged: {
+		if (surface.open) {
+			surface.swing = 0;
+			surface.swingVelocity = 0;
+			swingKick.restart();
+		} else {
+			swingClock.running = false;
+			surface.swing = 0;
+		}
+	}
+
+	Timer {
+		id: swingKick
+		interval: Math.round(Arc.unroll * 0.62)
+		onTriggered: {
+			// The kick is the dowel arriving at the end of its travel.
+			surface.swingVelocity = 0.30;
+			swingClock.running = true;
+		}
+	}
+
+	Timer {
+		id: swingClock
+		interval: 16
+		repeat: true
+		onTriggered: {
+			surface.swingVelocity += -surface.swing * 0.16;
+			surface.swingVelocity *= 0.90;
+			surface.swing += surface.swingVelocity;
+			if (Math.abs(surface.swing) < 0.01 && Math.abs(surface.swingVelocity) < 0.01) {
+				surface.swing = 0;
+				swingClock.running = false;
+			}
+		}
+	}
+
+	// Clicking off a scroll rolls it up — but not while it is still coming
+	// down. A scroll is let down under the pointer that pulled it, and a press
+	// still travelling when the window maps would otherwise land here.
 	MouseArea {
 		anchors.fill: parent
 		enabled: surface.openProgress > 0.75
 		onClicked: surface.dismissRequested()
 	}
 
-	// The spur: the short bone that reaches out of the spine at whichever organ
-	// owns this chamber, so an open drawer is traceable back to the thing that
-	// pulled it. Without an anchor it leaves from the middle of the column.
 	Item {
-		id: spur
-		x: Bio.spine
-		width: Bio.dockGap
-		height: 2
-		opacity: Math.min(1, surface.openProgress * 2.4)
+		id: rig
 
-		readonly property real anchorY: {
-			if (!surface.anchorItem || !surface.visible)
-				return -1;
-			const p = surface.anchorItem.mapToItem(null, 0, surface.anchorItem.height / 2);
-			return p ? p.y : -1;
+		x: surface.cradleX
+		y: surface.cradleY
+		width: surface.shellWidth
+		height: surface.expandedHeight
+
+		Behavior on x {
+			NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveDetent }
+		}
+		Behavior on height {
+			NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveUnroll }
 		}
 
-		y: Math.round(spur.anchorY >= 0
-			? Math.max(Bio.dockInset + 12, Math.min(parent.height - Bio.dockInset - 12, spur.anchorY))
-			: parent.height / 2)
-
-		Behavior on y {
-			NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
+		// Everything below the roller hangs off it, so the swing pivots where
+		// the cords meet the chain and not in the middle of the sheet.
+		transform: Rotation {
+			origin.x: rig.width / 2
+			origin.y: -Arc.dropGap
+			angle: surface.swing
 		}
 
-		Rectangle {
-			anchors.fill: parent
-			color: Bio.organ
-			opacity: 0.8
-		}
-
-		Rectangle {
-			width: 5
-			height: 5
-			radius: 2.5
-			anchors.right: parent.right
-			anchors.verticalCenter: parent.verticalCenter
-			color: Bio.organ
-		}
-	}
-
-	Item {
-		id: cardMotion
-
-		// Escape closes every chamber. The handler sits on the card itself, an
+		// Escape rolls every scroll up. The handler sits on the rig, an
 		// ancestor of the content, so an unhandled key from a focused field
-		// inside travels up to here. focus: true only claims the keyboard while
-		// nothing inside the card wants it.
+		// inside travels up to here.
 		focus: true
 
 		Keys.onEscapePressed: event => {
@@ -155,114 +193,153 @@ PanelWindow {
 			surface.dismissRequested();
 		}
 
-		x: Math.round(Bio.spine + Bio.dockGap)
-		y: Math.round(Math.max(Bio.dockInset, Math.min(
-			parent.height - Bio.dockInset - height,
-			(spur.anchorY >= 0 ? spur.anchorY : parent.height / 2) - height / 2
-		)))
-		width: surface.shellWidth
-		height: surface.expandedHeight
-
-		Behavior on y {
-			NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
+		// The cords: the two lines the scroll hangs on, dropped from the chain
+		// before anything else moves.
+		Repeater {
+			model: 2
+			delegate: Rectangle {
+				required property int index
+				x: index === 0 ? Arc.s4 : rig.width - Arc.s4
+				y: -Arc.dropGap
+				width: Arc.ruleThin
+				height: Arc.dropGap * Math.min(1, surface.openProgress * 5)
+				color: Arc.giltDim
+			}
 		}
 
-		Behavior on height {
-			NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
-		}
-		opacity: Math.min(1, surface.openProgress * 2.6)
+		// The roller: the brass rod the sheet is wound on. It comes out of the
+		// chain sideways, which is the first thing that happens.
+		Rectangle {
+			id: roller
+			anchors.horizontalCenter: parent.horizontalCenter
+			y: 0
+			width: rig.width * Math.min(1, surface.openProgress * 4.5)
+			height: 4
+			color: Arc.gilt
 
-		// The chamber unrolls out of the spine: scaled from its left edge only,
-		// so it reads as something being drawn out of the column rather than as
-		// a window appearing.
-		transform: Scale {
-			origin.x: 0
-			origin.y: cardMotion.height / 2
-			xScale: Math.max(0.03, surface.openProgress)
-			yScale: 0.985 + 0.015 * surface.openProgress
-		}
-
-		BioSurface {
-			id: chamber
-			anchors.fill: parent
-			variant: "chamber"
-			lineColor: surface.borderColor.a > 0.01 ? surface.borderColor : Bio.boneDim
-			liveColor: Bio.organ
-			washTop: surface.surfaceColor
-			washBottom: Bio.membraneDeep
-			haloStrength: 0.26 * surface.openProgress
-			padding: 0
-
-			// The name, engraved down the outer edge and read from the bottom
-			// up, with a beaded hairline running out of it to the floor of the
-			// chamber. This column is why a chamber can stand full height with
-			// little in it and still look deliberate.
-			Item {
-				id: nameStrip
+			Rectangle {
+				anchors.verticalCenter: parent.verticalCenter
 				anchors.left: parent.left
-				anchors.top: parent.top
-				anchors.bottom: parent.bottom
-				anchors.leftMargin: surface.boneMargin + Bio.s1
-				anchors.topMargin: surface.boneMargin + Bio.s3
-				anchors.bottomMargin: surface.boneMargin + Bio.s3
-				width: Bio.nameColumn
-				opacity: surface.contentOpacity
+				anchors.leftMargin: -2
+				width: 5
+				height: 8
+				color: Arc.giltDim
+			}
 
-				BioText {
+			Rectangle {
+				anchors.verticalCenter: parent.verticalCenter
+				anchors.right: parent.right
+				anchors.rightMargin: -2
+				width: 5
+				height: 8
+				color: Arc.giltDim
+			}
+		}
+
+		// The let-down sheet. Clipped, so what you see is the sheet being
+		// revealed from the top as the dowel travels — not a rectangle being
+		// scaled into existence.
+		Item {
+			id: window
+			anchors.top: roller.bottom
+			anchors.left: parent.left
+			anchors.right: parent.right
+			height: Math.max(0, (rig.height - roller.height) * surface.openProgress)
+			clip: true
+
+			ArcLeaf {
+				id: sheet
+				y: 0
+				width: window.width
+				height: rig.height - roller.height
+				variant: "chamber"
+				crest: true
+				lineColor: surface.borderColor.a > 0.01 ? surface.borderColor : Arc.giltDim
+				liveColor: Arc.aether
+				washTop: surface.surfaceColor
+				washBottom: Arc.washDeep
+				haloStrength: 0.22 * surface.openProgress
+				padding: 0
+
+				// The name, struck into the head rail across the top of the
+				// sheet. This is why a scroll standing half empty still looks
+				// like a made object.
+				ArcText {
 					id: nameText
-					role: "label"
-					tone: "organ"
-					text: surface.title
-					rotation: -90
-					transformOrigin: Item.Center
-					anchors.horizontalCenter: parent.horizontalCenter
-					// Rotated about its own centre, so its visual top sits at
-					// y + height/2 - width/2. Solve that for a flush start.
-					y: Math.round(width / 2 - height / 2)
-					font.letterSpacing: Bio.trackingEyebrow + 1.4
-				}
-
-				Rectangle {
-					id: nameRule
-					anchors.horizontalCenter: parent.horizontalCenter
+					anchors.left: parent.left
 					anchors.top: parent.top
-					anchors.topMargin: nameText.implicitWidth + Bio.s3
-					anchors.bottom: parent.bottom
-					width: Bio.ribThin
-					color: Bio.boneGhost
+					anchors.leftMargin: surface.mountMargin + Arc.s4
+					anchors.topMargin: surface.mountMargin - 1
+					role: "label"
+					tone: "aether"
+					text: surface.title
+					opacity: surface.contentOpacity
+					font.letterSpacing: Arc.trackingRubric + 1.2
 				}
 
-				Repeater {
-					model: 3
-					delegate: Rectangle {
-						required property int index
-						anchors.horizontalCenter: parent.horizontalCenter
-						y: nameRule.y + nameRule.height * (0.22 + index * 0.28)
-						width: Bio.nodule
-						height: Bio.nodule
-						radius: Bio.nodule / 2
-						color: Bio.boneFaint
+				ArcFlourish {
+					anchors.left: nameText.right
+					anchors.right: parent.right
+					anchors.leftMargin: Arc.s3
+					anchors.rightMargin: surface.mountMargin + Arc.s4
+					anchors.verticalCenter: nameText.verticalCenter
+					height: 10
+					lineColor: Arc.giltFaint
+					facing: Qt.LeftToRight
+					opacity: surface.contentOpacity
+					visible: width > 34
+				}
+
+				Item {
+					id: contentSlot
+					anchors.left: parent.left
+					anchors.right: parent.right
+					anchors.top: parent.top
+					anchors.bottom: parent.bottom
+					anchors.leftMargin: surface.contentMargins + surface.mountMargin
+					anchors.rightMargin: surface.contentMargins + surface.mountMargin
+					anchors.topMargin: surface.contentMargins + surface.mountMargin + surface.headRail
+					anchors.bottomMargin: surface.contentMargins + surface.mountMargin
+					opacity: surface.contentOpacity
+
+					// Writing follows the dowel down, so the page is written as
+					// it is uncovered rather than after it has arrived.
+					transform: Translate {
+						y: (1 - surface.contentOpacity) * -18
 					}
 				}
 			}
 
-			// Contents ride in the last few pixels as they surface, so a
-			// chamber opening reads as one motion instead of two.
-			Item {
-				id: contentSlot
-				anchors.left: nameStrip.right
-				anchors.leftMargin: Bio.s3
+			// The curl at the leading edge, and the shade the turn throws onto
+			// the sheet behind it. It rides the bottom of what has been let
+			// down, which is what makes the motion read as unrolling.
+			Rectangle {
+				anchors.left: parent.left
 				anchors.right: parent.right
-				anchors.top: parent.top
 				anchors.bottom: parent.bottom
-				anchors.rightMargin: surface.contentMargins + surface.boneMargin
-				anchors.topMargin: surface.contentMargins + surface.boneMargin
-				anchors.bottomMargin: surface.contentMargins + surface.boneMargin
-				opacity: surface.contentOpacity
-				transform: Translate {
-					x: (1 - surface.contentOpacity) * 26
+				height: 14
+				visible: surface.openProgress > 0.02 && surface.openProgress < 0.995
+
+				gradient: Gradient {
+					GradientStop { position: 0.0; color: "transparent" }
+					GradientStop { position: 0.55; color: Qt.alpha(Arc.well, 0.7) }
+					GradientStop { position: 0.92; color: Qt.alpha(Arc.gilt, 0.22) }
+					GradientStop { position: 1.0; color: Qt.alpha(Arc.well, 0.5) }
 				}
 			}
+		}
+
+		// The dowel: the weight at the foot of the sheet. It is what the sheet
+		// is falling behind, so it is always at the bottom of what is showing.
+		Rectangle {
+			anchors.top: window.bottom
+			anchors.left: parent.left
+			anchors.right: parent.right
+			anchors.leftMargin: -2
+			anchors.rightMargin: -2
+			height: 3
+			color: Arc.gilt
+			opacity: Math.min(1, surface.openProgress * 6)
 		}
 	}
 }

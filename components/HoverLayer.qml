@@ -1,15 +1,16 @@
 import QtQuick
 
-// What every clickable surface in the shell does when a pointer is on it.
+// What a clickable surface does with a pointer on it.
 //
-// The old contract was a grey tint and a ripple. Here a surface is tissue: it
-// warms with the organ colour and a vein lights along its leading edge. Same
-// API — drop it in, use onClicked — so every call site that already had one
-// reacts correctly without knowing any of this.
+// Same API as before — drop it in, use onClicked — so every call site that
+// already had one answers correctly without knowing any of this. What it does
+// is this style's, not the old one's: the field warms with the aether colour
+// and a registration tick is cut into its top-left corner, sliding in from
+// outside the field the way a mark is made against a rule.
 MouseArea {
 	id: layer
 
-	property color tint: Bio.organ
+	property color tint: Arc.aether
 	property real cornerRadius: parent?.radius ?? 0
 	property bool showHover: true
 	property bool rippleEnabled: false      // kept for source compatibility
@@ -24,28 +25,57 @@ MouseArea {
 	Rectangle {
 		anchors.fill: parent
 		radius: layer.cornerRadius
-		color: Qt.alpha(Bio.organ, 0.13 * layer.live)
+		color: Qt.alpha(Arc.aether, 0.12 * layer.live)
 
 		Behavior on color {
-			ColorAnimation { duration: Bio.twitch }
+			ColorAnimation { duration: Arc.tick }
 		}
 	}
 
-	Rectangle {
-		anchors.left: parent.left
-		anchors.verticalCenter: parent.verticalCenter
+	// The mark. Two short cuts meeting at the corner, arriving from off the
+	// field rather than fading up where they land.
+	Item {
 		visible: layer.veined
-		width: Bio.rib * 1.5
-		height: parent.height * (0.3 + 0.62 * layer.live)
-		radius: width / 2
-		color: Bio.organ
+		anchors.left: parent.left
+		anchors.top: parent.top
+		width: 12
+		height: 12
 		opacity: layer.live
 
-		Behavior on opacity {
-			NumberAnimation { duration: Bio.twitch }
+		transform: Translate {
+			x: (1 - layer.live) * -5
+			y: (1 - layer.live) * -5
+
+			Behavior on x {
+				NumberAnimation {
+					duration: Arc.turn
+					easing.type: Easing.Bezier
+					easing.bezierCurve: Arc.curveDetent
+				}
+			}
+			Behavior on y {
+				NumberAnimation {
+					duration: Arc.turn
+					easing.type: Easing.Bezier
+					easing.bezierCurve: Arc.curveDetent
+				}
+			}
 		}
-		Behavior on height {
-			NumberAnimation { duration: Bio.grow; easing.type: Easing.OutCubic }
+
+		Behavior on opacity {
+			NumberAnimation { duration: Arc.tick }
+		}
+
+		Rectangle {
+			width: parent.width
+			height: Arc.rule
+			color: Arc.aether
+		}
+
+		Rectangle {
+			width: Arc.rule
+			height: parent.height
+			color: Arc.aether
 		}
 	}
 }

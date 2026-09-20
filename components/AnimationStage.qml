@@ -297,13 +297,13 @@ Item {
 
 		Rectangle {
 			anchors.fill: parent
-			color: Bio.tissue1
+			color: Arc.leaf1
 
 			Rectangle {
 				id: mockBar
 				width: parent.width
 				height: 26
-				color: Bio.tissue3
+				color: Arc.leaf3
 
 				Row {
 					anchors.left: parent.left
@@ -319,17 +319,17 @@ Item {
 							width: 8
 							height: 8
 							radius: 4
-							color: index === 0 ? Bio.necrosis : index === 1 ? Bio.enzyme : Bio.vital
+							color: index === 0 ? Arc.bane : index === 1 ? Arc.ember : Arc.ward
 						}
 					}
 				}
 
-				BioText {
+				ArcText {
 					anchors.centerIn: parent
 					role: "label"
 					tone: "muted"
 					font.pixelSize: 9
-					text: "specimen"
+					text: "window"
 				}
 			}
 
@@ -339,7 +339,7 @@ Item {
 				anchors.top: mockBar.bottom
 				anchors.bottom: parent.bottom
 				width: 52
-				color: Bio.tissue2
+				color: Arc.leaf2
 
 				Column {
 					anchors.horizontalCenter: parent.horizontalCenter
@@ -355,7 +355,7 @@ Item {
 							width: 22
 							height: 22
 							radius: 11
-							color: index === 1 ? Qt.alpha(Bio.organ, 0.8) : Bio.tissue3
+							color: index === 1 ? Qt.alpha(Arc.aether, 0.8) : Arc.leaf3
 						}
 					}
 				}
@@ -374,7 +374,7 @@ Item {
 					width: Math.round(parent.width * 0.5)
 					height: 12
 					radius: 2
-					color: Qt.alpha(Bio.organ, 0.75)
+					color: Qt.alpha(Arc.aether, 0.75)
 				}
 
 				Repeater {
@@ -385,7 +385,7 @@ Item {
 						width: Math.round(parent.width * (0.92 - index * 0.13))
 						height: 7
 						radius: 3
-						color: Qt.alpha(Bio.bone, 0.24 - index * 0.025)
+						color: Qt.alpha(Arc.gilt, 0.24 - index * 0.025)
 					}
 				}
 			}

@@ -1,17 +1,23 @@
 import QtQuick
 
-// Bioluminescence. Light leaves a living edge; it does not fall behind it, so
-// this is never offset and never grey — it is the organ colour bleeding into
-// the tissue around whatever it sits behind.
+// Candlelight. It is in front of the page, not behind it, so it never offsets
+// and is never grey — it is the aether colour bleeding outward from whatever it
+// is lighting.
+//
+// The bloom is painted once. `flicker` puts the shell's one shared flame on its
+// opacity instead of its paint, so a room full of lamps guttering together
+// costs one timer and no repaints at all.
 Canvas {
 	id: halo
 
-	property color color: Bio.organ
+	property color color: Arc.aether
 	property real strength: 0.4       // alpha at the centre
 	property real spread: 0.5         // how far out it reaches, as a fraction
 	property real falloff: 2.2
+	property bool flicker: false
 
 	renderStrategy: Canvas.Cooperative
+	opacity: halo.flicker ? Arc.flame : 1
 
 	onColorChanged: requestPaint()
 	onStrengthChanged: requestPaint()

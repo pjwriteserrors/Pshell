@@ -1,26 +1,27 @@
 import QtQuick
 
-// The shell's general-purpose surface, grown over.
+// The shell's general-purpose surface, re-cut.
 //
-// Call sites hand it a colour and a size; what comes back is a chamber with a
-// skeleton around it. Which skeleton is decided here rather than at the call
-// site, from the shape of the thing: a panel gets the full corner bones, a cell
-// or button gets the short ones, a pill gets the beaded capsule, and anything
-// smaller than a fingertip or larger than a window gets none at all — a
-// skeleton drawn around a 10px badge is noise, not anatomy.
+// Call sites hand it a colour and a size; what comes back is a field cut into
+// the instrument. Which fittings it gets is decided here from the shape of the
+// thing, not at the call site: a panel-sized field gets a brass border and
+// registration marks at its corners, a small cell gets the marks alone, a
+// track gets a channel rim, and anything smaller than a fingertip or larger
+// than a window gets nothing — an engraved border around a 10px badge is
+// noise, not an instrument.
 //
-// Hover and press are picked up from whatever MouseArea a call site already put
-// inside, so every existing surface in the shell reacts by lighting up.
+// Corners are square. Everything machined in this style is square or chamfered;
+// only a channel that something runs along is round-ended.
 Rectangle {
 	id: root
 
-	// Kept for source compatibility with the shared components; the bio frames
-	// have no bevels or shadows to switch between.
+	// Kept for source compatibility with the shared components; there are no
+	// bevels or drop shadows in an engraved instrument.
 	property string themeStyle: "auto"
 	property real themeDepth: 0
 	property bool themeEffectsEnabled: true
-	property color boneColor: Bio.boneFaint
-	property color liveColor: Bio.organ
+	property color boneColor: Arc.giltFaint
+	property color liveColor: Arc.aether
 
 	readonly property real shortestSide: Math.min(width, height)
 	readonly property real longestSide: Math.max(width, height)
@@ -29,35 +30,35 @@ Rectangle {
 		&& shortestSide <= 18 && longestSide / Math.max(1, shortestSide) >= 2.4
 	readonly property bool isHugeBackdrop: width >= 720 && height >= 480
 	readonly property bool hasSurfaceColor: root.color.a > 0.015
-	readonly property bool boned: root.themeEffectsEnabled && !root.isTinyDecoration
+	readonly property bool cut: root.themeEffectsEnabled && !root.isTinyDecoration
 		&& !root.isHugeBackdrop && root.themeStyle !== "flat"
 		&& root.shortestSide >= 15
-	readonly property string boneVariant: root.isThinTrack ? "capsule"
-		: (root.shortestSide >= 64 && root.longestSide >= 120) ? "chamber" : "plate"
+	readonly property string plateVariant: root.isThinTrack ? "capsule" : "field"
 
 	readonly property bool themePressed: root.findInteractionState(root, "pressed")
 	readonly property bool themeHovered: root.findInteractionState(root, "containsMouse")
 
 	function findInteractionState(item, propertyName) {
 		for (const child of item.children || []) {
-			if (child === skeleton) continue;
+			if (child === fittings) continue;
 			if (child[propertyName] === true) return true;
 		}
 		return false;
 	}
 
-	radius: root.isTinyDecoration || root.isThinTrack ? Math.min(width, height) / 2 : 3
+	radius: root.isThinTrack ? Math.min(width, height) / 2 : 0
 
-	BioFrame {
-		id: skeleton
+	ArcPlate {
+		id: fittings
 		anchors.fill: parent
-		visible: root.boned && root.hasSurfaceColor
-		variant: root.boneVariant
-		beading: root.boneVariant !== "plate" || root.shortestSide >= 22
+		visible: root.cut && root.hasSurfaceColor
+		variant: root.plateVariant
+		beading: root.shortestSide >= 22
 		crest: false
+		inset: 1
 		lineColor: root.boneColor
 		liveColor: root.liveColor
-		weight: root.shortestSide < 40 ? Bio.ribThin : Bio.rib
-		intensity: root.themePressed ? 1 : root.themeHovered ? 0.62 : 0
+		weight: root.shortestSide < 40 ? Arc.ruleThin : Arc.rule
+		intensity: root.themePressed ? 1 : root.themeHovered ? 0.6 : 0
 	}
 }
