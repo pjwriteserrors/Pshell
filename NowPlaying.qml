@@ -98,8 +98,8 @@ Item {
 		return unique;
 	}
 
-	implicitWidth: 30
-	implicitHeight: 30
+	implicitWidth: 26
+	implicitHeight: 26
 
 	readonly property real live: Math.max(interaction.live, root.activePlayer?.isPlaying ? 0.4 : 0)
 
@@ -117,8 +117,8 @@ Item {
 
 	ArcHalo {
 		anchors.centerIn: parent
-		width: 78
-		height: 78
+		width: 66
+		height: 66
 		color: root.progressColor
 		strength: 0.34
 		spread: 0.32
@@ -135,8 +135,8 @@ Item {
 	// playing: an empty ring would be a promise the shell is not keeping.
 	ArcDial {
 		anchors.centerIn: parent
-		width: 30
-		height: 30
+		width: 26
+		height: 26
 		seed: 1
 		weight: Arc.ruleThin
 		beading: false
@@ -152,8 +152,8 @@ Item {
 
 	ArcMark {
 		anchors.centerIn: parent
-		width: 17
-		height: 17
+		width: 15
+		height: 15
 		glyph: "chalice"
 		weight: Arc.ruleThin
 		lineColor: root.live > 0.25 ? root.progressColor : root.foreground

@@ -1833,18 +1833,27 @@ Scope {
 			}
 
 			// ------------------------------------------------ the chronomancer
+			//
+			// The great circle, nearly all of it under the edge of the screen.
+			// Every ring on it runs only across the part of itself that is
+			// above the horizon, so they all finish on the same line and the
+			// whole thing reads as something rising. The runes crown the
+			// outside and are cut from the name this hour goes by; the seconds
+			// travel the limb under them, the minutes the one under that, and
+			// the hour stands in the space they leave.
 			Item {
 				id: chrono
 
-				width: Arc.chronoRadius * 2
-				height: Arc.chronoRadius * 2
+				readonly property real reach: Arc.chronoRadius + 14
+
+				width: chrono.reach * 2
+				height: chrono.reach * 2
 				x: Math.round((bar.width - width) / 2)
-				y: Math.round(bar.chronoCentreY - Arc.chronoRadius)
+				y: Math.round(bar.chronoCentreY - chrono.reach)
 
 				readonly property real seconds: root.now.getSeconds() + root.now.getMilliseconds() / 1000
 				readonly property int hour: root.now.getHours()
 
-				// The wave that runs round the circle when the hour turns.
 				property real hourWave: 0
 
 				onHourChanged: hourWaveAnim.restart()
@@ -1861,17 +1870,18 @@ Scope {
 				}
 
 				ArcHalo {
-					anchors.centerIn: parent
-					width: parent.width * 1.5
-					height: parent.height * 1.5
+					anchors.horizontalCenter: parent.horizontalCenter
+					y: chrono.reach - Arc.chronoRadius - 20
+					width: 300
+					height: 170
 					color: Arc.aether
-					strength: 0.20
-					spread: 0.30
+					strength: 0.18
+					spread: 0.34
 					flicker: true
 				}
 
-				// The limb: three rings and the runes of this hour, painted
-				// once an hour rather than once a second.
+				// The fixed part: the crown of runes and the graduated limb.
+				// Repainted once an hour, not once a second.
 				Canvas {
 					id: limb
 					anchors.fill: parent
@@ -1890,22 +1900,24 @@ Scope {
 						const ctx = getContext("2d");
 						ctx.reset();
 						const cx = width / 2, cy = height / 2, r = Arc.chronoRadius;
-						// the outer limb the seconds run on
-						Ink.ring(ctx, cx, cy, r - 3, 1.4, Qt.alpha(Arc.gold, 0.34), 1);
-						Ink.graduations(ctx, cx, cy, r - 5, 60, 4, 11, 5,
-							Arc.ruleThin, Qt.alpha(Arc.gold, 0.30), 1);
-						// the minute limb
-						Ink.ring(ctx, cx, cy, r - 26, 1.0, Qt.alpha(Arc.gold, 0.22), 1);
-						// the hour's own runes, cut from the name it goes by
-						Ink.runeRing(ctx, cx, cy, r - 42, 12, 101 + limb.hour * 17, 17,
-							Arc.ruleThin, Qt.alpha(Arc.gold, 0.30), Arc.aether, 0);
-						// the inner limb the reading stands in
-						Ink.ring(ctx, cx, cy, r - 62, 1.0, Qt.alpha(Arc.gold, 0.16), 1);
+
+						Ink.runeArc(ctx, cx, cy, r + 10,
+							Arc.chronoFromAt(r + 10), Arc.chronoToAt(r + 10),
+							9, 101 + limb.hour * 17, 12, Arc.ruleThin,
+							Qt.alpha(Arc.gold, 0.32), Arc.aether, 0);
+						Ink.gradsArc(ctx, cx, cy, r + 1,
+							Arc.chronoFromAt(r + 1), Arc.chronoToAt(r + 1),
+							30, 3, 7, 5, Arc.ruleThin, Qt.alpha(Arc.gold, 0.30));
+						Ink.arcRun(ctx, cx, cy, r - 1,
+							Arc.chronoFromAt(r - 1), Arc.chronoToAt(r - 1),
+							1.2, Qt.alpha(Arc.gold, 0.30), 1);
+						Ink.arcRun(ctx, cx, cy, r - 10,
+							Arc.chronoFromAt(r - 10), Arc.chronoToAt(r - 10),
+							1.0, Qt.alpha(Arc.gold, 0.16), 1);
 					}
 				}
 
-				// The seconds: one light travelling the outer limb, and the
-				// minutes lighting the runes behind it.
+				// The readings, each travelling its own limb west to east.
 				Canvas {
 					id: hands
 					anchors.fill: parent
@@ -1924,101 +1936,99 @@ Scope {
 						const cx = width / 2, cy = height / 2, r = Arc.chronoRadius;
 						const s = hands.seconds / 60;
 
-						Ink.ring(ctx, cx, cy, r - 3, 1.8, Qt.alpha(Arc.aether, 0.85), s);
-						const tip = -Math.PI / 2 + Math.PI * 2 * s;
-						Ink.mote(ctx, cx + Math.cos(tip) * (r - 3), cy + Math.sin(tip) * (r - 3), 3.4, Arc.aether);
+						const secondsR = r - 1;
+						const sFrom = Arc.chronoFromAt(secondsR), sTo = Arc.chronoToAt(secondsR);
+						Ink.arcRun(ctx, cx, cy, secondsR, sFrom, sTo, 1.8, Qt.alpha(Arc.aether, 0.85), s);
+						const tip = sFrom + (sTo - sFrom) * s;
+						Ink.mote(ctx, cx + Math.cos(tip) * secondsR, cy + Math.sin(tip) * secondsR, 3.0, Arc.aether);
 
-						Ink.ring(ctx, cx, cy, r - 26, 2.4, Qt.alpha(Arc.aetherAlt, 0.7), hands.minutes / 60);
+						const minutesR = r - 10;
+						Ink.arcRun(ctx, cx, cy, minutesR,
+							Arc.chronoFromAt(minutesR), Arc.chronoToAt(minutesR),
+							2.0, Qt.alpha(Arc.aetherAlt, 0.7), hands.minutes / 60);
 
-						Ink.runeRing(ctx, cx, cy, r - 42, 12, 101 + root.now.getHours() * 17, 17,
-							Arc.ruleThin * 1.3, Qt.alpha(Arc.gold, 0),
-							Arc.aether, Math.floor(hands.minutes / 60 * 12) + 1);
+						Ink.runeArc(ctx, cx, cy, r + 10,
+							Arc.chronoFromAt(r + 10), Arc.chronoToAt(r + 10),
+							9, 101 + root.now.getHours() * 17, 12, Arc.ruleThin * 1.3,
+							Qt.alpha(Arc.gold, 0), Arc.aether,
+							Math.floor(hands.minutes / 60 * 9) + 1);
 
-						// the wave that runs the whole limb when the hour turns
+						// the light that runs the limb when the hour turns
 						if (hands.wave > 0.001 && hands.wave < 0.999) {
-							const head = hands.wave;
 							ctx.save();
 							ctx.globalAlpha = Math.sin(hands.wave * Math.PI);
-							Ink.ring(ctx, cx, cy, r - 14, 5, Arc.aether,
-								Math.min(0.14, head), -Math.PI / 2 + Math.PI * 2 * head);
+							const waveR = r + 4;
+							const from = Arc.chronoFromAt(waveR)
+								+ (Arc.chronoToAt(waveR) - Arc.chronoFromAt(waveR)) * hands.wave;
+							Ink.arcRun(ctx, cx, cy, waveR, from,
+								from + (Arc.chronoToAt(waveR) - Arc.chronoFromAt(waveR)) * 0.12,
+								4, Arc.aether, 1);
 							ctx.restore();
 						}
 					}
 				}
 
-				// The hour, standing in the cap of the circle.
-				Column {
+				// The hour, on one line in the space the limbs leave. The date
+				// is not out here: the ephemeris has it, and out here it would
+				// only be costing height.
+				Row {
+					id: reading
 					anchors.horizontalCenter: parent.horizontalCenter
-					y: 20
-					spacing: -2
+					y: Math.round(chrono.reach - Arc.chronoRadius + Arc.chronoSunk - 24)
+					spacing: Arc.s2
+
+					Canvas {
+						id: moon
+						anchors.verticalCenter: parent.verticalCenter
+						width: 13
+						height: 13
+						renderStrategy: Canvas.Cooperative
+
+						readonly property real phase: Arc.moonPhase(root.now).fraction
+
+						onPhaseChanged: requestPaint()
+
+						onPaint: {
+							const ctx = getContext("2d");
+							ctx.reset();
+							const r = width / 2 - 1;
+							ctx.strokeStyle = Arc.goldDim;
+							ctx.lineWidth = Arc.ruleThin;
+							ctx.beginPath();
+							ctx.arc(width / 2, height / 2, r, 0, Math.PI * 2);
+							ctx.stroke();
+							const waxing = moon.phase < 0.5;
+							const sweep = Math.cos(moon.phase * Math.PI * 2);
+							ctx.fillStyle = Arc.gold;
+							ctx.beginPath();
+							ctx.arc(width / 2, height / 2, r,
+								waxing ? -Math.PI / 2 : Math.PI / 2,
+								waxing ? Math.PI / 2 : Math.PI * 1.5);
+							ctx.closePath();
+							ctx.fill();
+							ctx.globalCompositeOperation = sweep > 0 ? "destination-out" : "source-over";
+							ctx.beginPath();
+							ctx.ellipse(width / 2 - Math.abs(sweep) * r, height / 2 - r,
+								Math.abs(sweep) * r * 2, r * 2);
+							ctx.fill();
+							ctx.globalCompositeOperation = "source-over";
+						}
+					}
 
 					ArcText {
-						anchors.horizontalCenter: parent.horizontalCenter
+						anchors.verticalCenter: parent.verticalCenter
 						role: "display"
-						font.pixelSize: 38
-						font.letterSpacing: 3
+						font.pixelSize: 25
+						font.letterSpacing: 1.5
 						text: Qt.formatDateTime(root.now, "HH:mm")
 					}
 
 					ArcText {
-						anchors.horizontalCenter: parent.horizontalCenter
+						anchors.verticalCenter: parent.verticalCenter
 						role: "hand"
 						tone: "aether"
-						font.pixelSize: 16
+						font.pixelSize: 14
 						text: Arc.hourName(root.now)
-					}
-
-					Row {
-						anchors.horizontalCenter: parent.horizontalCenter
-						spacing: Arc.s2
-
-						// The moon, because the instrument is telling you which
-						// part of the night this is, not only the time.
-						Canvas {
-							id: moon
-							anchors.verticalCenter: parent.verticalCenter
-							width: 13
-							height: 13
-							renderStrategy: Canvas.Cooperative
-
-							readonly property real phase: Arc.moonPhase(root.now).fraction
-
-							onPhaseChanged: requestPaint()
-
-							onPaint: {
-								const ctx = getContext("2d");
-								ctx.reset();
-								const r = width / 2 - 1;
-								ctx.strokeStyle = Arc.goldDim;
-								ctx.lineWidth = Arc.ruleThin;
-								ctx.beginPath();
-								ctx.arc(width / 2, height / 2, r, 0, Math.PI * 2);
-								ctx.stroke();
-								const waxing = moon.phase < 0.5;
-								const sweep = Math.cos(moon.phase * Math.PI * 2);
-								ctx.fillStyle = Arc.gold;
-								ctx.beginPath();
-								ctx.arc(width / 2, height / 2, r,
-									waxing ? -Math.PI / 2 : Math.PI / 2,
-									waxing ? Math.PI / 2 : Math.PI * 1.5);
-								ctx.closePath();
-								ctx.fill();
-								ctx.globalCompositeOperation = sweep > 0 ? "destination-out" : "source-over";
-								ctx.beginPath();
-								ctx.ellipse(width / 2 - Math.abs(sweep) * r, height / 2 - r,
-									Math.abs(sweep) * r * 2, r * 2);
-								ctx.fill();
-								ctx.globalCompositeOperation = "source-over";
-							}
-						}
-
-						ArcText {
-							anchors.verticalCenter: parent.verticalCenter
-							role: "label"
-							tone: "muted"
-							font.pixelSize: 9
-							text: Qt.formatDateTime(root.now, "ddd dd MMM")
-						}
 					}
 				}
 
@@ -2026,9 +2036,9 @@ Scope {
 					id: chronoTouch
 					anchors.fill: undefined
 					anchors.horizontalCenter: parent.horizontalCenter
-					y: 20
-					width: 230
-					height: Arc.horizon - 20
+					y: chrono.reach - Arc.chronoRadius
+					width: 280
+					height: Arc.horizon - (chrono.reach - Arc.chronoRadius)
 					onClicked: root.toggleClockPopup()
 				}
 			}
@@ -2039,11 +2049,11 @@ Scope {
 			ArcMotes {
 				anchors.horizontalCenter: parent.horizontalCenter
 				anchors.bottom: parent.bottom
-				width: Arc.chronoRadius * 2.2
+				width: Arc.chronoRadius * 2.0
 				height: Arc.horizon
 				color: Arc.aether
 				drifting: true
-				density: 5
+				density: 4
 				drift: -6
 				span: 2.6
 			}
@@ -2059,9 +2069,9 @@ Scope {
 			// What opens the codex, and the realms.
 			ArcSeat {
 				id: launcherNode
-				x: Arc.s6
-				y: Math.round(Arc.horizon * 0.42)
-				size: 38
+				x: Arc.s5
+				y: Math.round(Arc.horizon * 0.40)
+				size: 30
 				seed: 0
 				label: "Codex"
 				lit: root.launcherPopupOpen
@@ -2080,9 +2090,9 @@ Scope {
 			RealmMap {
 				id: realms
 				anchors.left: launcherNode.right
-				anchors.leftMargin: Arc.s6
+				anchors.leftMargin: Arc.s4
 				anchors.bottom: parent.bottom
-				width: Math.max(0, bar.width / 2 - Arc.chronoRadius * 0.86 - x - Arc.s5)
+				width: Math.max(0, bar.width / 2 - Arc.chronoRadius * 1.02 - x - Arc.s4)
 				height: Arc.horizon
 				niriState: niriState
 				outputName: String(barWindow.screen?.name || "")
@@ -2093,7 +2103,7 @@ Scope {
 			// scattered on a line rising away from the circle.
 			ArcCore {
 				id: core
-				x: Math.round(bar.width / 2 + Arc.chronoRadius * 0.80)
+				x: Math.round(bar.width / 2 + Arc.chronoRadius * 1.00)
 				anchors.bottom: parent.bottom
 				height: Arc.horizon
 				lit: root.resourcesPopupOpen
@@ -2108,24 +2118,24 @@ Scope {
 				id: constellation
 
 				anchors.left: core.right
-				anchors.leftMargin: Arc.s6
-				anchors.right: powerNode.left
-				anchors.rightMargin: Arc.s6
+				anchors.leftMargin: Arc.s5
+				anchors.right: trayRow.visible ? trayRow.left : powerNode.left
+				anchors.rightMargin: Arc.s5
 				anchors.bottom: parent.bottom
 				height: Arc.horizon
 
 				// how far along, and how high, each mark sits
 				readonly property var stations: [
-					{ at: 0.00, up: 0.30 },
-					{ at: 0.19, up: 0.56 },
-					{ at: 0.37, up: 0.34 },
-					{ at: 0.55, up: 0.62 },
-					{ at: 0.74, up: 0.38 },
-					{ at: 0.92, up: 0.60 }
+					{ at: 0.00, up: 0.34 },
+					{ at: 0.20, up: 0.62 },
+					{ at: 0.40, up: 0.38 },
+					{ at: 0.60, up: 0.66 },
+					{ at: 0.80, up: 0.40 },
+					{ at: 1.00, up: 0.64 }
 				]
 
 				function placeX(index, w) {
-					return Math.round(constellation.stations[index].at * (constellation.width - 60) + (30 - w / 2));
+					return Math.round(constellation.stations[index].at * (constellation.width - 44) + (22 - w / 2));
 				}
 
 				function placeY(index, h) {
@@ -2151,13 +2161,13 @@ Scope {
 						const points = [];
 						for (const station of constellation.stations)
 							points.push({
-								x: station.at * (width - 60) + 30,
+								x: station.at * (width - 44) + 22,
 								y: Arc.horizon - station.up * Arc.horizon
 							});
 						for (let index = 0; index + 1 < points.length; index++)
 							Ink.leyCurve(ctx, points[index].x, points[index].y,
 								points[index + 1].x, points[index + 1].y,
-								index % 2 === 0 ? 9 : -9, Arc.ruleThin,
+								index % 2 === 0 ? 6 : -6, Arc.ruleThin,
 								Qt.alpha(Arc.gold, 0.14));
 					}
 				}
@@ -2174,7 +2184,7 @@ Scope {
 					id: weatherNode
 					x: constellation.placeX(1, width)
 					y: constellation.placeY(1, height)
-					size: 30
+					size: 26
 					seed: 3
 					label: root.weatherTemperature
 					lit: root.weatherPopupOpen
@@ -2194,7 +2204,7 @@ Scope {
 					id: notifNode
 					x: constellation.placeX(2, width)
 					y: constellation.placeY(2, height)
-					size: 30
+					size: 26
 					seed: 1
 					label: "Ravens"
 					lit: root.notifPopupOpen
@@ -2214,7 +2224,7 @@ Scope {
 					id: clipboardNode
 					x: constellation.placeX(3, width)
 					y: constellation.placeY(3, height)
-					size: 28
+					size: 24
 					seed: 2
 					label: "Palimpsest"
 					lit: root.clipboardPopupOpen
@@ -2226,7 +2236,7 @@ Scope {
 					id: bluetoothNode
 					x: constellation.placeX(4, width)
 					y: constellation.placeY(4, height)
-					size: 28
+					size: 24
 					seed: 3
 					label: "Bindings"
 					lit: root.bluetoothPopupOpen
@@ -2238,7 +2248,7 @@ Scope {
 					id: networkNode
 					x: constellation.placeX(5, width)
 					y: constellation.placeY(5, height)
-					size: 28
+					size: 24
 					seed: 0
 					label: "Ley"
 					lit: root.networkPopupOpen
@@ -2254,10 +2264,10 @@ Scope {
 			Row {
 				id: trayRow
 				anchors.right: powerNode.left
-				anchors.rightMargin: Arc.s6
-				anchors.bottom: parent.bottom
-				anchors.bottomMargin: Arc.s3
-				spacing: Arc.s3
+				anchors.rightMargin: Arc.s5
+				anchors.verticalCenter: parent.verticalCenter
+				anchors.verticalCenterOffset: 4
+				spacing: Arc.s2
 				visible: trayRepeater.count > 0
 
 				Repeater {
@@ -2272,7 +2282,7 @@ Scope {
 						required property SystemTrayItem modelData
 						required property int index
 
-						size: 22
+						size: 20
 						seed: trayNode.index + 1
 						acceptedButtons: Qt.LeftButton | Qt.RightButton
 
@@ -2310,9 +2320,9 @@ Scope {
 			// The way out, alone in the far corner with air round it.
 			ArcSeat {
 				id: powerNode
-				x: bar.width - Arc.s6 - width
-				y: Math.round(Arc.horizon * 0.42)
-				size: 32
+				x: bar.width - Arc.s5 - width
+				y: Math.round(Arc.horizon * 0.40)
+				size: 28
 				seed: 2
 				label: "The Void"
 				lit: root.powerPopupOpen

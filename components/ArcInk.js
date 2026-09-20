@@ -83,6 +83,48 @@ function cut(ctx, points, width, color, close) {
 	ctx.stroke();
 }
 
+// An arc between two angles, inscribed part-way. This is the one a sunken
+// circle needs: when most of a ring is below the edge of the screen, a reading
+// that runs the whole circumference spends most of its time out of sight, so
+// everything on the chronomancer runs across the arc that is actually visible.
+function arcRun(ctx, cx, cy, radius, from, to, width, color, through) {
+	const span = Math.max(0, Math.min(1, through === undefined ? 1 : through));
+	if (span <= 0.001 || radius <= 0.5) return;
+	ctx.strokeStyle = color;
+	ctx.lineWidth = width;
+	ctx.lineCap = "round";
+	ctx.beginPath();
+	ctx.arc(cx, cy, radius, from, from + (to - from) * span);
+	ctx.stroke();
+}
+
+// Graduations along a given arc rather than round a whole circle.
+function gradsArc(ctx, cx, cy, radius, from, to, count, minor, majorLength, major, width, color) {
+	ctx.strokeStyle = color;
+	ctx.lineCap = "butt";
+	for (let index = 0; index <= count; index++) {
+		const angle = from + (to - from) * index / count;
+		const long = major > 0 && index % major === 0;
+		const length = long ? majorLength : minor;
+		ctx.lineWidth = long ? width * 1.6 : width;
+		ctx.beginPath();
+		ctx.moveTo(cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius);
+		ctx.lineTo(cx + Math.cos(angle) * (radius - length), cy + Math.sin(angle) * (radius - length));
+		ctx.stroke();
+	}
+}
+
+// Runes set along an arc, upright.
+function runeArc(ctx, cx, cy, radius, from, to, count, seed, size, width, dim, litColor, lit) {
+	const alight = lit === undefined ? -1 : lit;
+	for (let index = 0; index < count; index++) {
+		const angle = from + (to - from) * (index + 0.5) / count;
+		rune(ctx, cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius,
+			size, seed + index * 7, width,
+			alight >= 0 && index < alight ? litColor : dim);
+	}
+}
+
 // ------------------------------------------------------------------ the rune
 
 // A rune is cut, not written: a stave with branches struck off it at right

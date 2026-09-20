@@ -273,12 +273,26 @@ QtObject {
 	// sunk below the edge like a moon at the horizon. Everything else in the
 	// band is a small light placed in the space around it, and everything the
 	// shell opens rises out of that band.
-	readonly property real horizon: 146      // the band the sanctum reserves
-	readonly property real chronoRadius: 146 // the great circle, mostly below
-	readonly property real chronoSunk: 34    // how far its centre is off-screen
-	readonly property real sigilSize: 30
-	readonly property real riseGap: 18       // horizon to the foot of a panel
-	readonly property real riseInset: 22     // air kept at the top of the screen
+	readonly property real horizon: 72       // the band the sanctum reserves
+	readonly property real chronoRadius: 96  // the great circle, mostly below
+	readonly property real chronoSunk: 40    // how far its centre is off-screen
+	readonly property real sigilSize: 26
+	readonly property real riseGap: 12       // horizon to the foot of a panel
+	readonly property real riseInset: 18     // air kept at the top of the screen
+
+	// Most of the great circle is under the edge of the screen, so nothing on
+	// it may run round the whole circumference — a reading that did would spend
+	// most of its time out of sight. Every ring on the chronomancer runs only
+	// across the part of itself that is above the horizon, and because each
+	// radius meets the horizon at its own angle, they all end on the same
+	// line. That is what makes the thing read as something rising rather than
+	// as a circle with a bite out of it.
+	function chronoHalfAt(radius) {
+		return Math.PI / 2 - Math.asin(Math.min(0.999, chronoSunk / Math.max(1, radius)));
+	}
+
+	function chronoFromAt(radius) { return -Math.PI / 2 - chronoHalfAt(radius); }
+	function chronoToAt(radius) { return -Math.PI / 2 + chronoHalfAt(radius); }
 
 	// ----------------------------------------------------------------- motion
 	// Three things happen in this shell and nothing else does:

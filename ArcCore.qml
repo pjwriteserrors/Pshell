@@ -26,7 +26,7 @@ Item {
 	required property var resources
 	property bool lit: false
 
-	implicitWidth: 132
+	implicitWidth: 104
 	implicitHeight: Arc.horizon
 
 	readonly property real mana: core.resources ? core.resources.cpuUsage : 0
@@ -40,7 +40,7 @@ Item {
 	readonly property bool burning: core.strain > 0.86
 
 	readonly property real centreX: width / 2
-	readonly property real centreY: Arc.horizon * 0.46
+	readonly property real centreY: Arc.horizon * 0.44
 
 	// The orbit turns of its own accord, and faster the harder the machine is
 	// working. This is the only place in the shell where something moves
@@ -70,8 +70,8 @@ Item {
 
 	ArcHalo {
 		anchors.centerIn: orb
-		width: 150
-		height: 150
+		width: 118
+		height: 118
 		color: core.burning ? Arc.bane : Arc.aether
 		strength: 0.16 + core.strain * 0.34
 		spread: 0.34
@@ -152,7 +152,7 @@ Item {
 	ArcText {
 		anchors.horizontalCenter: parent.horizontalCenter
 		anchors.bottom: parent.bottom
-		anchors.bottomMargin: Arc.s3
+		anchors.bottomMargin: 2
 		role: "label"
 		tone: core.burning ? "alert" : (touch.containsMouse || core.lit ? "aether" : "faint")
 		font.pixelSize: 9

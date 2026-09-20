@@ -34,11 +34,11 @@ Item {
 
 	// Where each realm's node sits. They rise gently west to east so the chart
 	// reads as a landscape rather than as a list.
-	readonly property real spread: Math.min(84, Math.max(46, (width - 40) / Math.max(1, root.realms.length)))
-	readonly property real baseY: height * 0.42
+	readonly property real spread: Math.min(58, Math.max(34, (width - 30) / Math.max(1, root.realms.length)))
+	readonly property real baseY: height * 0.44
 
-	function nodeX(index) { return 20 + index * root.spread; }
-	function nodeY(index) { return root.baseY + Math.sin(index * 1.1) * 11; }
+	function nodeX(index) { return 16 + index * root.spread; }
+	function nodeY(index) { return root.baseY + Math.sin(index * 1.1) * 7; }
 
 	// The light travelling the ley when you change realm.
 	property real travel: 1
@@ -88,7 +88,7 @@ Item {
 			for (let index = 0; index + 1 < chart.count; index++) {
 				Ink.leyCurve(ctx, root.nodeX(index), root.nodeY(index),
 					root.nodeX(index + 1), root.nodeY(index + 1),
-					index % 2 === 0 ? 10 : -10, Arc.ruleThin,
+					index % 2 === 0 ? 7 : -7, Arc.ruleThin,
 					Qt.alpha(Arc.gold, 0.34));
 			}
 
@@ -96,7 +96,7 @@ Item {
 				const here = index === chart.here;
 				const x = root.nodeX(index), y = root.nodeY(index);
 				if (here) continue;
-				Ink.ring(ctx, x, y, 9, Arc.ruleThin, Qt.alpha(Arc.gold, 0.6), 1);
+				Ink.ring(ctx, x, y, 6.5, Arc.ruleThin, Qt.alpha(Arc.gold, 0.6), 1);
 				if (root.realms[index] && root.realms[index].urgent)
 					Ink.mote(ctx, x, y, 3, Arc.bane);
 			}
@@ -117,8 +117,8 @@ Item {
 	Item {
 		id: keep
 
-		width: 52
-		height: 52
+		width: 36
+		height: 36
 		x: Math.round(root.nodeX(root.activeIndex) - width / 2)
 		y: Math.round(root.nodeY(root.activeIndex) - height / 2)
 
@@ -131,8 +131,8 @@ Item {
 
 		ArcHalo {
 			anchors.centerIn: parent
-			width: 96
-			height: 96
+			width: 70
+			height: 70
 			color: Arc.aether
 			strength: 0.28
 			spread: 0.3
@@ -154,7 +154,7 @@ Item {
 			anchors.centerIn: parent
 			role: "display"
 			tone: "aether"
-			font.pixelSize: 15
+			font.pixelSize: 12
 			font.letterSpacing: 0
 			text: root.realms.length > 0 ? String(root.realms[root.activeIndex]?.idx ?? "") : ""
 		}
@@ -173,10 +173,10 @@ Item {
 
 			readonly property int total: Math.min(7, root.held.length)
 			readonly property real angle: Math.PI * (1.18 - 0.36 * (holding.total === 1 ? 0.5 : holding.index / (holding.total - 1)))
-			readonly property real orbit: 36
+			readonly property real orbit: 26
 
-			width: 20
-			height: 20
+			width: 18
+			height: 18
 			x: Math.round(root.nodeX(root.activeIndex) + Math.cos(holding.angle) * holding.orbit - width / 2)
 			y: Math.round(root.nodeY(root.activeIndex) - Math.abs(Math.sin(holding.angle)) * holding.orbit * 0.62 - height / 2)
 
@@ -184,8 +184,8 @@ Item {
 
 			ArcHalo {
 				anchors.centerIn: parent
-				width: 44
-				height: 44
+				width: 38
+				height: 38
 				color: holding.modelData.isUrgent ? Arc.bane : Arc.aether
 				strength: 0.30
 				spread: 0.3
@@ -199,8 +199,8 @@ Item {
 
 			Image {
 				anchors.centerIn: parent
-				width: 14
-				height: 14
+				width: 13
+				height: 13
 				source: root.niriState ? Quickshell.iconPath(holding.modelData.appId || "application-x-executable", true) : ""
 				fillMode: Image.PreserveAspectFit
 				smooth: true
@@ -237,10 +237,10 @@ Item {
 			required property int index
 
 			anchors.fill: undefined
-			x: Math.round(root.nodeX(realmTouch.index) - 15)
-			y: Math.round(root.nodeY(realmTouch.index) - 15)
-			width: 30
-			height: 30
+			x: Math.round(root.nodeX(realmTouch.index) - 13)
+			y: Math.round(root.nodeY(realmTouch.index) - 13)
+			width: 26
+			height: 26
 			visible: realmTouch.index !== root.activeIndex
 			onClicked: root.niriState.focusRealm(realmTouch.modelData.idx)
 		}
