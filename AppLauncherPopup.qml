@@ -2907,6 +2907,46 @@ Item {
 						flicker: true
 					}
 
+					// The ground the wheel stands on: a disc of night with a soft
+					// edge, so the words in the middle and the sigils on the
+					// limb have something to be read against whatever the
+					// desktop happens to be.
+					//
+					// It has a canvas to itself on purpose. The limb beside it
+					// is divided by however many spells are left, so it is
+					// repainted on every keystroke — and a repaint clears its
+					// canvas first. Sharing one meant the ground blinked out
+					// for a frame every time a letter was typed, and the
+					// desktop showed straight through the gap.
+					Canvas {
+						id: groundLayer
+						anchors.fill: parent
+						renderStrategy: Canvas.Cooperative
+
+						readonly property real limb: colony.limb
+
+						onLimbChanged: requestPaint()
+
+						Connections {
+							target: Arc
+							function onAbyssChanged() { groundLayer.requestPaint(); }
+						}
+
+						onPaint: {
+							const ctx = getContext("2d");
+							ctx.reset();
+							const cx = width / 2, cy = height / 2, r = colony.limb;
+							if (r < 40) return;
+							const night = ctx.createRadialGradient(cx, cy, 0, cx, cy, r + 108);
+							night.addColorStop(0.00, Qt.alpha(Arc.abyss, 0.97));
+							night.addColorStop(0.66, Qt.alpha(Arc.abyss, 0.95));
+							night.addColorStop(0.88, Qt.alpha(Arc.abyss, 0.6));
+							night.addColorStop(1.00, Qt.alpha(Arc.abyss, 0.0));
+							ctx.fillStyle = night;
+							ctx.fillRect(0, 0, width, height);
+						}
+					}
+
 					// The limb the spells stand on, and the graduations and
 					// runes that make it an instrument rather than a circle.
 					Canvas {
@@ -2931,17 +2971,13 @@ Item {
 							const cx = width / 2, cy = height / 2, r = colony.limb;
 							if (r < 40) return;
 
-							// The ground the wheel stands on: a disc of night with a
-							// soft edge, so the words in the middle and the
-							// sigils on the limb have something to be read
-							// against whatever the desktop happens to be.
-							const night = ctx.createRadialGradient(cx, cy, 0, cx, cy, r + 96);
-							night.addColorStop(0.00, Qt.alpha(Arc.abyss, 0.96));
-							night.addColorStop(0.62, Qt.alpha(Arc.abyss, 0.92));
-							night.addColorStop(0.86, Qt.alpha(Arc.abyss, 0.55));
-							night.addColorStop(1.00, Qt.alpha(Arc.abyss, 0.0));
-							ctx.fillStyle = night;
-							ctx.fillRect(0, 0, width, height);
+							// The ground the wheel stands on is NOT drawn here. This
+							// canvas is repainted whenever the search narrows —
+							// the limb is divided by however many spells are
+							// left — and a repaint clears it first, so anything
+							// painted here blinks out for a frame on every
+							// keystroke and the desktop shows through the gap.
+							// The night is a separate, still layer.
 
 							Ink.ring(ctx, cx, cy, r + 22, Arc.rule * 1.3, Qt.alpha(Arc.gold, 0.8), 1);
 							Ink.graduations(ctx, cx, cy, r + 21, colony.seats * 4, 5, 13, 4,

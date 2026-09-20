@@ -4350,15 +4350,21 @@ printf 'type=offline\niface=\nip=\n'`
 		// a vignette centred on the wheel, all but opaque where the wheel
 		// stands and gone by the edges, so the desktop is still there and the
 		// thing you are looking at is the only lit object in the room.
+		// Painted once, and only its opacity moves. Binding the strength to
+		// the conjuring would repaint a screen-sized canvas on every frame of
+		// the opening, and binding anything in it to the search would repaint
+		// it on every keystroke — which is exactly how the desktop ended up
+		// blinking through the wheel.
 		ArcHalo {
 			anchors.centerIn: codex
 			width: Math.max(launcherPopup.width, launcherPopup.height) * 1.1
 			height: width
 			color: Arc.abyss
-			strength: launcherPopup.condensed
+			strength: 1.0
 			spread: 0.46
-			core: 0.26
+			core: 0.46
 			falloff: 1.8
+			opacity: launcherPopup.condensed
 			visible: launcherPopup.progress > 0.02
 			z: -1
 		}
