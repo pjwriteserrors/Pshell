@@ -115,7 +115,9 @@ clearly apart from the organ's.
 
 One window for everything that changes how the desktop looks. It has five
 pages, and **every style ships all five** — the contract, and the build check
-that enforces it, are in [STUDIO.md](STUDIO.md).
+that enforces it, are in [STUDIO.md](STUDIO.md). To have a new style built,
+[STYLE-PROMPT.md](STYLE-PROMPT.md) is the prompt: fill in the look, attach the
+references, and hand the whole file over.
 
 | Page | What it controls |
 | --- | --- |
