@@ -34,6 +34,7 @@ whole shell - layout, components, motion, the lot.
 | `style/atelier` | **Atelier** - vertical rail, editorial surfaces |
 | `style/meridian` | **Meridian** - panel-based, datum-driven |
 | `style/biopunk` | **Biopunk** - a spine down the left edge, chambers drawn out of it sideways |
+| `style/arcanum` | **Arcanum** - a brass chain across the top, panels let down off it as scrolls |
 | `archive/legacy-main` | not a style; a snapshot of the old unversioned `~/.config/quickshell/main` |
 
 Switch in **Studio → Style** (`Mod+Shift+S`, then `Ctrl+3`), or from a terminal:
@@ -89,27 +90,50 @@ git worktree remove /tmp/port
 A worktree rather than a checkout, so the shell you are running keeps its files
 while you work on another style.
 
-## Biopunk, in one paragraph
+## Arcanum, in one paragraph
 
-The branch `style/biopunk` draws the desktop as a specimen under glass, and it
-stands the shell on its edge. There is no bar: a spine runs down the left of
-every screen, and everything the shell has to say is read top to bottom along
-it - what opens things at the head, the hour held in the middle, what the
-machine is carrying at the foot. Nothing hangs off it and nothing is centred.
-A panel is a drawer in that column: a spur reaches out at the organ that owns
-it, the chamber unrolls sideways, opens level with that organ, and carries its
-name engraved down its outer edge. The launcher and the modals take the whole
-bench beside the column, with the spine left lit and live. Every outline is
-grown rather than stroked - `components/BioInk.js` builds each line as a filled
-ribbon, so a bone swells through a joint and runs out to a point, and a corner
-breaks into vertebrae instead of turning.
+The branch `style/arcanum` draws the desktop as a working instrument and hangs
+it from the ceiling. There is no bar: a brass chain is strung across the top of
+every screen, fixed at both corners and sagging in two straight runs to its
+lowest point in the middle, and every fitting the shell has is seated on that
+curve — so nothing on it shares a height with anything else, which is the whole
+reason it cannot be read as a toolbar. The grimoire's clasp is at the far left,
+the windows on the output hang off the left limb as stones on cords, the
+horologe hangs in the vertex where the eye rests, and everything the machine is
+carrying runs back up the right limb to the way out. Panels are not attached to
+the chain, they are **let down** from it: a roller slides out, two cords drop,
+and the sheet unrolls downward under the weight of the dowel at its foot, is
+written on band by band behind that dowel, overruns its rest length and swings
+once. Closing takes it back up, faster. The launcher is a book — lowered on
+cords, boards turning outward about the gutter in real perspective, a two-page
+spread with a sewn binding and the cut edges of the page block showing — and
+every other full-screen surface is a bound volume of the same kind. Locking the
+session inscribes a warding circle; the volume OSD is a crystal let down from
+the vertex; a notification is a raven that flies in and lets a note down out of
+its claws.
 
-Colour comes from one place. `components/Bio.qml` reads the Wallust palette,
+Three materials and nothing else. Brass turns and stops against a detent,
+overshooting the stop by a hair and settling back into it — `Arc.curveDetent`
+is that stop, and every small thing that takes up a position obeys it. Vellum
+unrolls downward and is taken back up; it is never scaled and never faded.
+Flame kindles fast and then creeps, and never settles: one timer in
+`components/Arc.qml` drives a single guttering value that every lamp in the
+shell multiplies its own strength by, so the room breathes together for the
+cost of one timer and no repaints. Lines are not strokes — `components/ArcInk.js`
+cuts every line as a groove, drawing it three times so one wall of the cut
+catches the light and the other stays in shadow, which is what makes a flat
+canvas read as metal.
+
+Colour comes from one place. `components/Arc.qml` reads the Wallust palette,
 ranks it by hue strength weighted with legibility, and the winner becomes the
-*organ* - the single live colour every edge, reading and selection uses. A light
-wallpaper inverts the specimen (ink on bleached chitin) rather than washing it
-out, and the alert colour is only taken from the palette when its hue sits
-clearly apart from the organ's.
+*aether* — the single live colour every reading, selection and lamp uses. The
+metal is deliberately **not** the accent: it is the palette's warmest pigment
+taken down in saturation and up in lightness, so on a monochrome wallpaper the
+fittings still separate from the live colour by chroma and lightness instead of
+collapsing into it. A light wallpaper turns the instrument over rather than
+washing it out — real cream vellum, dark bronze fittings and brown ink — and the
+alert colour is only taken from the palette when its hue sits clearly apart from
+the aether's.
 
 ## Studio
 
@@ -232,13 +256,14 @@ when a monitor stays black is `wallpaper-runtime.log`.
 ## Layout
 
 ```
-shell.qml                 bar, popups, OSD, IPC handlers
+shell.qml                 the chain, panels, OSD, IPC handlers
 Studio.qml                the look-and-feel window; the three pages below are its tabs
 ThemePickerPopup.qml        wallpaper and colours
 AnimationPickerPopup.qml    niri window animations
 BranchStylePicker.qml       style branches
 AppLauncherPopup.qml      launcher, calculator, files, AI chat
-components/               ThemeEngine (design tokens), PopupSurface, ModalSheet, motion
+components/               Arc (the tokens and the palette), ArcInk.js (the burin),
+                          PopupSurface (the let-down scroll), ModalSheet (the book)
 scripts/                  theme pipeline, wallpaper runtime, style switching
 lighting.json             which RGB devices exist and how they are driven
 themes/<id>/theme.json    geometry and motion tokens for ThemeEngine
