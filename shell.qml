@@ -4461,8 +4461,21 @@ printf 'type=offline\niface=\nip=\n'`
 				anchors.right: parent.right
 				anchors.bottom: parent.bottom
 				anchors.bottomMargin: 14
-				height: Math.max(0, (parent.height - 14) * launcherPopup.condensed)
-				clip: true
+
+				// A page is revealed by growing out of the ring, which needs a
+				// clip. The wheel is not a page: it brings its own dark with
+				// it, and that dark has to reach well past the limb to have
+				// anywhere to fade out. Clipped to the book it was cut off
+				// square on three sides — the hard edges round the shade were
+				// this rectangle, not the gradient.
+				//
+				// So the wheel gets the whole height and no clip at all. Its
+				// arrival is already choreographed inside the codex: the ring
+				// inscribes itself and the contents come up band by band.
+				height: codex.ceremonial
+					? parent.height - 14
+					: Math.max(0, (parent.height - 14) * launcherPopup.condensed)
+				clip: !codex.ceremonial
 				opacity: Math.min(1, launcherPopup.condensed * 1.5)
 
 				ArcLeaf {
