@@ -3050,12 +3050,22 @@ Item {
 
 					// The spells on the limb.
 					Repeater {
-						model: root.filteredApps
+						// Keyed by the entry's own id. A plain array makes the
+						// repeater throw every sigil away and build them again
+						// on each keystroke, which means every icon is loaded
+						// again — and an icon that is still loading is a square
+						// hole with the ground showing through it. Keyed, a
+						// spell that survives the filter keeps the sigil it
+						// already had.
+						model: ScriptModel {
+							objectProp: "id"
+							values: root.filteredApps
+						}
 
 						delegate: Item {
 							id: spell
 
-							required property DesktopEntry modelData
+							required property var modelData
 							required property int index
 
 							readonly property int slot: colony.slotOf(spell.index)
@@ -3066,12 +3076,18 @@ Item {
 							visible: spell.away <= 7
 							opacity: spell.chosen ? 1 : Math.max(0, 1 - spell.away * 0.13)
 
+							// The seat is always the same size and only its
+							// *scale* changes. Animating the width of something
+							// with a canvas in it reallocates that canvas on
+							// every frame of the animation, and a canvas being
+							// reallocated is another way to get a square of
+							// nothing where a sigil should be.
 							readonly property real seatSize: spell.chosen ? 64 : Math.max(30, 44 - spell.away * 1.8)
 
-							width: spell.seatSize
-							height: spell.seatSize
-							x: wheel.width / 2 + Math.cos(spell.radians) * colony.limb - width / 2
-							y: wheel.height / 2 + Math.sin(spell.radians) * colony.limb - height / 2
+							width: 64
+							height: 64
+							x: wheel.width / 2 + Math.cos(spell.radians) * colony.limb - 32
+							y: wheel.height / 2 + Math.sin(spell.radians) * colony.limb - 32
 
 							// Turning the wheel is the whole motion of this
 							// screen: every sigil travels to its new place at
@@ -3082,75 +3098,86 @@ Item {
 							Behavior on y {
 								NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveSnap }
 							}
-							Behavior on width {
-								NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveSnap }
-							}
-							Behavior on height {
-								NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveSnap }
-							}
 							Behavior on opacity {
 								NumberAnimation { duration: Arc.turn }
 							}
 
-							ArcHalo {
-								anchors.centerIn: parent
-								width: parent.width * 2.4
-								height: parent.height * 2.4
-								color: Arc.aether
-								strength: 0.34
-								spread: 0.3
-								flicker: true
-								opacity: spell.chosen ? 1 : (spellTouch.containsMouse ? 0.7 : 0)
-								visible: opacity > 0.01
+							Item {
+								id: seat
 
-								Behavior on opacity {
-									NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveKindle }
-								}
-							}
-
-							ArcDial {
 								anchors.fill: parent
-								weight: Arc.ruleThin
-								beading: false
-								seed: spell.index % 4
-								lineColor: spell.chosen ? Qt.alpha(Arc.aether, 0.7) : Qt.alpha(Arc.gold, 0.34)
-								liveColor: Arc.aether
-								intensity: spell.chosen ? 1 : spellTouch.live
-							}
+								scale: spell.seatSize / 64
 
-							Image {
-								anchors.centerIn: parent
-								width: Math.round(parent.width * 0.56)
-								height: width
-								source: root.iconSource(spell.modelData)
-								sourceSize: Qt.size(48, 48)
-								fillMode: Image.PreserveAspectFit
-								smooth: true
-								mipmap: true
-								asynchronous: true
-							}
-
-							ArcTouch {
-								id: spellTouch
-								onEntered: {
-									if (peekGuard.running) return;
-									colony.peekedIndex = spell.index;
+								Behavior on scale {
+									NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveSnap }
 								}
 
-								onPositionChanged: {
-									// The pointer moving of its own accord is
-									// always worth listening to, cooldown or
-									// not: that is a person pointing at
-									// something rather than the wheel sliding
-									// underneath a resting hand.
-									if (colony.peekedIndex !== spell.index)
+								ArcHalo {
+									anchors.centerIn: parent
+									width: 154
+									height: 154
+									color: Arc.aether
+									strength: 0.34
+									spread: 0.3
+									flicker: true
+									opacity: spell.chosen ? 1 : (spellTouch.containsMouse ? 0.7 : 0)
+									visible: opacity > 0.01
+
+									Behavior on opacity {
+										NumberAnimation { duration: Arc.turn; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveKindle }
+									}
+								}
+
+								ArcDial {
+									anchors.fill: parent
+									weight: Arc.ruleThin
+									beading: false
+									seed: spell.index % 4
+									lineColor: spell.chosen ? Qt.alpha(Arc.aether, 0.7) : Qt.alpha(Arc.gold, 0.34)
+									liveColor: Arc.aether
+									intensity: spell.chosen ? 1 : spellTouch.live
+								}
+
+								Image {
+									anchors.centerIn: parent
+									width: 36
+									height: 36
+									source: root.iconSource(spell.modelData)
+									sourceSize: Qt.size(48, 48)
+									fillMode: Image.PreserveAspectFit
+									smooth: true
+									mipmap: true
+									cache: true
+									// Loaded on the spot. These are small and
+									// already in the icon cache; loading them
+									// off the thread only buys a frame with
+									// nothing in it.
+									asynchronous: false
+								}
+
+								ArcTouch {
+									id: spellTouch
+									onEntered: {
+										if (peekGuard.running) return;
 										colony.peekedIndex = spell.index;
+									}
+
+									onPositionChanged: {
+										// The pointer moving of its own accord
+										// is always worth listening to,
+										// cooldown or not: that is a person
+										// pointing at something rather than the
+										// wheel sliding underneath a resting
+										// hand.
+										if (colony.peekedIndex !== spell.index)
+											colony.peekedIndex = spell.index;
+									}
+									onExited: {
+										if (colony.peekedIndex === spell.index)
+											colony.peekedIndex = -1;
+									}
+									onClicked: root.launchApp(spell.modelData)
 								}
-								onExited: {
-									if (colony.peekedIndex === spell.index)
-										colony.peekedIndex = -1;
-								}
-								onClicked: root.launchApp(spell.modelData)
 							}
 						}
 					}
