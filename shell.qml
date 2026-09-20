@@ -4355,17 +4355,11 @@ printf 'type=offline\niface=\nip=\n'`
 			onTriggered: if (root.launcherPopupOpen) codexMotes.burst(codexMotes.width / 2, codexMotes.height - 10, 30)
 		}
 
-		Rectangle {
-			anchors.fill: parent
-			anchors.bottomMargin: Math.round(Arc.horizon)
-			color: Arc.scrim
-			opacity: launcherPopup.progress
-
-			Behavior on opacity {
-				NumberAnimation { duration: Arc.draw; easing.type: Easing.Bezier; easing.bezierCurve: Arc.curveKindle }
-			}
-		}
-
+		// Nothing is dimmed. The codex is conjured *in* the room rather than
+		// over a curtain drawn across it, so the desktop stays where it was and
+		// the book is simply a lit thing standing in front of it. What keeps it
+		// readable is its own glass and the pool of dark the conjuring brings
+		// with it, not a scrim over everything else.
 		MouseArea {
 			anchors.fill: parent
 			anchors.bottomMargin: Math.round(Arc.horizon)
@@ -4419,6 +4413,20 @@ printf 'type=offline\niface=\nip=\n'`
 						Math.round(12 * codexCircle.through));
 					ctx.restore();
 				}
+			}
+
+			// The dark the book brings with it. Without a scrim this is the
+			// only thing separating a translucent page from whatever happens
+			// to be behind it, so it is generous — but it falls off inside the
+			// codex's own width and never reads as a curtain.
+			ArcHalo {
+				anchors.centerIn: parent
+				width: codex.width * 2.1
+				height: codex.height * 1.9
+				color: Arc.abyss
+				strength: 0.96 * launcherPopup.condensed
+				spread: 0.30
+				falloff: 2.6
 			}
 
 			ArcHalo {
