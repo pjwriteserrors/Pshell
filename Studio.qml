@@ -80,6 +80,38 @@ FocusScope {
 
 	// Section shortcuts are deliberately Ctrl-modified: the sections themselves
 	// use plain arrows, Enter and typing, and must keep them.
+	//
+	// They are Shortcuts and not only key handlers because Tab is claimed by
+	// focus navigation before an unhandled key ever reaches this scope, so
+	// Ctrl+Tab would quietly do nothing. The Keys handler below stays as the
+	// path for the digits, which do arrive.
+	Shortcut {
+		sequences: ["Ctrl+Tab"]
+		context: Qt.WindowShortcut
+		onActivated: root.cyclePage(1)
+	}
+
+	Shortcut {
+		sequences: ["Ctrl+Shift+Tab", "Ctrl+Shift+Backtab"]
+		context: Qt.WindowShortcut
+		onActivated: root.cyclePage(-1)
+	}
+
+	Repeater {
+		model: root.pages
+
+		delegate: Item {
+			required property var modelData
+			required property int index
+
+			Shortcut {
+				sequences: [`Ctrl+${index + 1}`]
+				context: Qt.WindowShortcut
+				onActivated: root.showPage(modelData.id)
+			}
+		}
+	}
+
 	Keys.onPressed: event => {
 		if (!(event.modifiers & Qt.ControlModifier)) return;
 
