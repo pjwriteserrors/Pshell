@@ -2530,7 +2530,11 @@ Scope {
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
 		expandedWidth: 360
-		contentPreferredHeight: clipboardColumn.implicitHeight
+		// A height of its own, not one taken from the column inside it: the
+		// list fills whatever the head and the search line leave, so asking the
+		// column how tall it wants to be would be asking it to answer with the
+		// number it is waiting for.
+		fixedHeight: 560
 
 		onVisibleChanged: {
 			if (!visible && root.clipboardPopupVisible) {
@@ -2633,6 +2637,7 @@ Scope {
 						spacing: 12
 
 						Item {
+							id: clipHead
 							width: parent.width
 							height: 20
 
@@ -2689,7 +2694,8 @@ Scope {
 
 						Item {
 							width: parent.width
-							height: clipboardColumn.height - 34 - 34 - 24
+							height: clipboardColumn.height - clipHead.height
+								- clipSpeak.height - clipboardColumn.spacing * 2
 
 							ArcText {
 								role: "body"
@@ -2865,6 +2871,7 @@ Scope {
 						}
 
 						Item {
+							id: clipSpeak
 							width: parent.width
 							height: 34
 
