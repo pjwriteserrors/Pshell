@@ -5490,7 +5490,7 @@ printf 'type=offline\niface=\nip=\n'`
 		surfaceColor: root.surface
 		borderColor: root.surfaceBorder
 		expandedWidth: 340
-		fixedHeight: 470
+		contentPreferredHeight: oracleColumn.implicitHeight
 
 		onVisibleChanged: {
 			if (!visible && root.weatherPopupVisible) {
@@ -5564,6 +5564,7 @@ printf 'type=offline\niface=\nip=\n'`
 			}
 
 			Column {
+				id: oracleColumn
 				anchors.left: parent.left
 				anchors.right: parent.right
 				anchors.top: parent.top
@@ -5690,130 +5691,126 @@ printf 'type=offline\niface=\nip=\n'`
 					wrapMode: Text.WordWrap
 					text: `“${root.oracleLine}”`
 				}
-			}
 
 			// The particulars, for anyone who does not take the oracle's word
-			// for it. Name on the left, reading on the right, a ley between.
-			Column {
-				anchors.left: parent.left
-				anchors.right: parent.right
-				anchors.bottom: sunRun.top
-				anchors.bottomMargin: Arc.s4
-				spacing: Arc.s1
-
-				Repeater {
-					model: [
-						{ label: "Wind", value: root.weatherWind },
-						{ label: "Aether", value: root.weatherDescription },
-						{ label: "Humour", value: root.weatherHumidity },
-						{ label: "Fall", value: root.weatherPrecipitation },
-						{ label: "Weight", value: root.weatherPressure },
-						{ label: "Seen", value: root.weatherObservationTime !== "" ? Qt.formatDateTime(new Date(root.weatherObservationTime), "HH:mm") : "--" }
-					]
-
-					delegate: Item {
-						required property var modelData
+				// for it. Name on the left, reading on the right, a ley between.
+					Column {
 						width: parent.width
-						height: 24
+						spacing: Arc.s1
 
-						ArcText {
-							id: readingName
-							anchors.left: parent.left
-							anchors.verticalCenter: parent.verticalCenter
-							role: "label"
-							tone: "faint"
-							text: modelData.label
+					Repeater {
+						model: [
+							{ label: "Wind", value: root.weatherWind },
+							{ label: "Aether", value: root.weatherDescription },
+							{ label: "Humour", value: root.weatherHumidity },
+							{ label: "Fall", value: root.weatherPrecipitation },
+							{ label: "Weight", value: root.weatherPressure },
+							{ label: "Seen", value: root.weatherObservationTime !== "" ? Qt.formatDateTime(new Date(root.weatherObservationTime), "HH:mm") : "--" }
+						]
+
+						delegate: Item {
+							required property var modelData
+							width: parent.width
+							height: 24
+
+							ArcText {
+								id: readingName
+								anchors.left: parent.left
+								anchors.verticalCenter: parent.verticalCenter
+								role: "label"
+								tone: "faint"
+								text: modelData.label
+							}
+
+							Rectangle {
+								anchors.left: readingName.right
+								anchors.right: readingValue.left
+								anchors.leftMargin: Arc.s3
+								anchors.rightMargin: Arc.s3
+								anchors.verticalCenter: parent.verticalCenter
+								height: Arc.ruleThin
+								color: Arc.goldGhost
+								visible: width > 8
+							}
+
+							ArcText {
+								id: readingValue
+								anchors.right: parent.right
+								anchors.verticalCenter: parent.verticalCenter
+								width: Math.min(implicitWidth, parent.width * 0.5)
+								horizontalAlignment: Text.AlignRight
+								role: "bodyStrong"
+								text: modelData.value
+							}
+						}
+					}
+				}
+
+					// The sun's passage, and where in it we are.
+					Item {
+						id: sunRun
+						width: parent.width
+						height: 44
+
+					ArcText {
+						id: riseLabel
+						anchors.left: parent.left
+						anchors.bottom: parent.bottom
+						role: "label"
+						tone: "faint"
+						text: root.weatherSunrise
+					}
+
+					ArcText {
+						id: setLabel
+						anchors.right: parent.right
+						anchors.bottom: parent.bottom
+						role: "label"
+						tone: "faint"
+						text: root.weatherSunset
+					}
+
+					Canvas {
+						id: passage
+						anchors.left: riseLabel.right
+						anchors.right: setLabel.left
+						anchors.leftMargin: Arc.s3
+						anchors.rightMargin: Arc.s3
+						anchors.bottom: parent.bottom
+						anchors.bottomMargin: 2
+						height: 30
+						renderStrategy: Canvas.Cooperative
+
+						readonly property real through: {
+							const rise = String(root.weatherSunrise || ""), set = String(root.weatherSunset || "");
+							if (!/^\d{1,2}:\d{2}$/.test(rise) || !/^\d{1,2}:\d{2}$/.test(set)) return -1;
+							const minutes = value => Number(value.split(":")[0]) * 60 + Number(value.split(":")[1]);
+							const now = root.now.getHours() * 60 + root.now.getMinutes();
+							const span = minutes(set) - minutes(rise);
+							if (span <= 0) return -1;
+							return Math.max(0, Math.min(1, (now - minutes(rise)) / span));
 						}
 
-						Rectangle {
-							anchors.left: readingName.right
-							anchors.right: readingValue.left
-							anchors.leftMargin: Arc.s3
-							anchors.rightMargin: Arc.s3
-							anchors.verticalCenter: parent.verticalCenter
-							height: Arc.ruleThin
-							color: Arc.goldGhost
-							visible: width > 8
-						}
+						onThroughChanged: requestPaint()
 
-						ArcText {
-							id: readingValue
-							anchors.right: parent.right
-							anchors.verticalCenter: parent.verticalCenter
-							width: Math.min(implicitWidth, parent.width * 0.5)
-							horizontalAlignment: Text.AlignRight
-							role: "bodyStrong"
-							text: modelData.value
+						onPaint: {
+							const ctx = getContext("2d");
+							ctx.reset();
+							if (width < 24) return;
+							const path = [];
+							for (let index = 0; index <= 28; index++) {
+								const t = index / 28;
+								path.push({ x: t * width, y: height - Math.sin(t * Math.PI) * (height - 5) });
+							}
+							Ink.cut(ctx, path, Arc.ruleThin, Qt.alpha(Arc.gold, 0.34), false);
+							if (passage.through < 0) return;
+							const at = path[Math.round(passage.through * 28)];
+							Ink.mote(ctx, at.x, at.y, 3.4, Arc.ember);
 						}
 					}
 				}
 			}
 
-			// The sun's passage, and where in it we are.
-			Item {
-				id: sunRun
-				anchors.left: parent.left
-				anchors.right: parent.right
-				anchors.bottom: parent.bottom
-				height: 42
-
-				ArcText {
-					id: riseLabel
-					anchors.left: parent.left
-					anchors.bottom: parent.bottom
-					role: "label"
-					tone: "faint"
-					text: root.weatherSunrise
-				}
-
-				ArcText {
-					id: setLabel
-					anchors.right: parent.right
-					anchors.bottom: parent.bottom
-					role: "label"
-					tone: "faint"
-					text: root.weatherSunset
-				}
-
-				Canvas {
-					id: passage
-					anchors.left: riseLabel.right
-					anchors.right: setLabel.left
-					anchors.leftMargin: Arc.s3
-					anchors.rightMargin: Arc.s3
-					anchors.bottom: parent.bottom
-					anchors.bottomMargin: 2
-					height: 30
-					renderStrategy: Canvas.Cooperative
-
-					readonly property real through: {
-						const rise = String(root.weatherSunrise || ""), set = String(root.weatherSunset || "");
-						if (!/^\d{1,2}:\d{2}$/.test(rise) || !/^\d{1,2}:\d{2}$/.test(set)) return -1;
-						const minutes = value => Number(value.split(":")[0]) * 60 + Number(value.split(":")[1]);
-						const now = root.now.getHours() * 60 + root.now.getMinutes();
-						const span = minutes(set) - minutes(rise);
-						if (span <= 0) return -1;
-						return Math.max(0, Math.min(1, (now - minutes(rise)) / span));
-					}
-
-					onThroughChanged: requestPaint()
-
-					onPaint: {
-						const ctx = getContext("2d");
-						ctx.reset();
-						if (width < 24) return;
-						const path = [];
-						for (let index = 0; index <= 28; index++) {
-							const t = index / 28;
-							path.push({ x: t * width, y: height - Math.sin(t * Math.PI) * (height - 5) });
-						}
-						Ink.cut(ctx, path, Arc.ruleThin, Qt.alpha(Arc.gold, 0.34), false);
-						if (passage.through < 0) return;
-						const at = path[Math.round(passage.through * 28)];
-						Ink.mote(ctx, at.x, at.y, 3.4, Arc.ember);
-					}
-				}
-			}
 		}
 	}
 
