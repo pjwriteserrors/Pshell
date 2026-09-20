@@ -2808,9 +2808,56 @@ Item {
 				visible: !root.inCommandMode
 
 				readonly property int count: root.filteredApps.length
-				readonly property var current: appList.currentIndex >= 0 && appList.currentIndex < colony.count
-					? root.filteredApps[appList.currentIndex]
+
+				// What the pointer is resting on, if anything. Hovering a sigil
+				// must NOT turn the wheel: turning it moves the sigils, which
+				// puts a different one under the pointer, which turns it again
+				// — the wheel ends up rocking between two spells for as long as
+				// the pointer sits on it. So the pointer only *reads*: the
+				// middle shows whatever it is over, and the wheel stays where
+				// the keyboard left it.
+				property int peekedIndex: -1
+
+				readonly property int readingIndex: colony.peekedIndex >= 0 && colony.peekedIndex < colony.count
+					? colony.peekedIndex
+					: (appList.currentIndex >= 0 && appList.currentIndex < colony.count ? appList.currentIndex : -1)
+
+				readonly property var current: colony.readingIndex >= 0
+					? root.filteredApps[colony.readingIndex]
 					: null
+
+				// A filter that drops the spell under the pointer must drop the
+				// reading with it, or the middle keeps showing something that
+				// is no longer on the wheel.
+				onCountChanged: colony.peekedIndex = -1
+
+				// The cooldown. Typing and the arrow keys both move sigils
+				// about under a pointer that has not moved at all, and every
+				// one that slides under it would otherwise announce itself. For
+				// a moment after the wheel has been turned by the keyboard, the
+				// pointer is not listened to; it has to actually move to be
+				// heard again.
+				Timer {
+					id: peekGuard
+					interval: 420
+					repeat: false
+				}
+
+				Connections {
+					target: root
+					function onSearchTextChanged() {
+						colony.peekedIndex = -1;
+						peekGuard.restart();
+					}
+				}
+
+				Connections {
+					target: appList
+					function onCurrentIndexChanged() {
+						colony.peekedIndex = -1;
+						peekGuard.restart();
+					}
+				}
 
 				// The wheel's own geometry.
 				readonly property real span: Math.min(colony.width, colony.height)
@@ -3028,7 +3075,24 @@ Item {
 
 							ArcTouch {
 								id: spellTouch
-								onEntered: appList.currentIndex = spell.index
+								onEntered: {
+									if (peekGuard.running) return;
+									colony.peekedIndex = spell.index;
+								}
+
+								onPositionChanged: {
+									// The pointer moving of its own accord is
+									// always worth listening to, cooldown or
+									// not: that is a person pointing at
+									// something rather than the wheel sliding
+									// underneath a resting hand.
+									if (colony.peekedIndex !== spell.index)
+										colony.peekedIndex = spell.index;
+								}
+								onExited: {
+									if (colony.peekedIndex === spell.index)
+										colony.peekedIndex = -1;
+								}
 								onClicked: root.launchApp(spell.modelData)
 							}
 						}
@@ -3037,10 +3101,33 @@ Item {
 					// What is standing under the index, written out. This is
 					// the only place on the screen with words on it.
 					Column {
+						id: reading
+
 						anchors.centerIn: parent
 						width: colony.limb * 1.3
 						spacing: 1
 						visible: colony.current !== null
+
+						// Narrowing a search changes this several times a
+						// second. Swapping the text between two frames reads as
+						// a flash you cannot catch; writing it in, even this
+						// briefly, reads as the wheel settling on an answer.
+						property string shown: colony.current
+							? String(colony.current.name || colony.current.id || "")
+							: ""
+
+						onShownChanged: settle.restart()
+
+						NumberAnimation {
+							id: settle
+							target: reading
+							property: "opacity"
+							from: 0.25
+							to: 1
+							duration: Arc.turn
+							easing.type: Easing.Bezier
+							easing.bezierCurve: Arc.curveKindle
+						}
 
 						ArcMark {
 							anchors.horizontalCenter: parent.horizontalCenter
@@ -3110,7 +3197,7 @@ Item {
 							ArcText {
 								role: "label"
 								tone: "aether"
-								text: "Return"
+								text: colony.peekedIndex >= 0 ? "Click" : "Return"
 							}
 
 							ArcText {
@@ -3127,7 +3214,7 @@ Item {
 							tone: "faint"
 							font.pixelSize: 9
 							text: colony.count > 0
-								? `${appList.currentIndex + 1} of ${colony.count}`
+								? `${colony.readingIndex + 1} of ${colony.count}`
 								: ""
 						}
 					}
