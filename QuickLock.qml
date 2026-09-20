@@ -339,17 +339,12 @@ Scope {
 						const cx = width / 2, cy = height / 2;
 						const outer = Math.min(width, height) / 2 - 3;
 						if (outer < 20) return;
-						const shadow = Qt.alpha(Qt.darker(Arc.gold, 2.4), 0.55);
-						const highlight = Qt.alpha(Qt.lighter(Arc.gold, 1.8), 0.5);
 
-						Ink.groove(ctx, Ink.arcPoints(cx, cy, outer, 0, Math.PI * 2, 96),
-							Arc.rule * 1.5, Arc.gold, highlight, shadow, true);
-						Ink.cut(ctx, Ink.arcPoints(cx, cy, outer - 28, 0, Math.PI * 2, 96),
-							Arc.ruleThin, Qt.alpha(Arc.gold, 0.7), true);
-						Ink.cut(ctx, Ink.arcPoints(cx, cy, outer * 0.60, 0, Math.PI * 2, 80),
-							Arc.ruleThin, Qt.alpha(Arc.gold, 0.34), true);
-						Ink.graduations(ctx, cx, cy, outer - 4, -Math.PI / 2, Math.PI * 1.5,
-							96, 4, 9, 8, Arc.ruleThin, Qt.alpha(Arc.gold, 0.5));
+						Ink.ring(ctx, cx, cy, outer, Arc.rule * 1.4, Qt.alpha(Arc.gold, 0.66), 1);
+						Ink.ring(ctx, cx, cy, outer - 28, Arc.ruleThin, Qt.alpha(Arc.gold, 0.5), 1);
+						Ink.ring(ctx, cx, cy, outer * 0.60, Arc.ruleThin, Qt.alpha(Arc.gold, 0.26), 1);
+						Ink.graduations(ctx, cx, cy, outer - 4, 96, 4, 9, 8,
+							Arc.ruleThin, Qt.alpha(Arc.gold, 0.45), 1);
 
 						for (let index = 0; index < ward.slots; index++) {
 							const angle = -Math.PI / 2 + Math.PI * 2 * index / ward.slots;

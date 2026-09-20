@@ -4664,19 +4664,14 @@ printf 'type=offline\niface=\nip=\n'`
 						ctx.reset();
 						const cx = width / 2, cy = height / 2, r = powerModal.radius;
 						if (r < 20) return;
-						const shadow = Qt.alpha(Qt.darker(Arc.gold, 2.4), 0.55);
-						const highlight = Qt.alpha(Qt.lighter(Arc.gold, 1.8), 0.5);
 
-						Ink.groove(ctx, Ink.arcPoints(cx, cy, r, 0, Math.PI * 2, 88),
-							Arc.rule * 1.4, Arc.gold, highlight, shadow, true);
-						Ink.cut(ctx, Ink.arcPoints(cx, cy, r - 12, 0, Math.PI * 2, 88),
-							Arc.ruleThin, Qt.alpha(Arc.gold, 0.35), true);
-						Ink.graduations(ctx, cx, cy, r - 1, -Math.PI / 2, Math.PI * 1.5,
-							72, 4, 10, 18, Arc.ruleThin, Qt.alpha(Arc.gold, 0.42));
-
-						// The inner ring the name stands in.
-						Ink.cut(ctx, Ink.arcPoints(cx, cy, r * 0.42, 0, Math.PI * 2, 60),
-							Arc.ruleThin, Qt.alpha(Arc.gold, 0.25), true);
+						// The limb the stations stand on, graduated, with the
+						// ring the machine's own name is written inside.
+						Ink.ring(ctx, cx, cy, r, Arc.rule * 1.3, Qt.alpha(Arc.gold, 0.5), 1);
+						Ink.ring(ctx, cx, cy, r - 12, Arc.ruleThin, Qt.alpha(Arc.gold, 0.26), 1);
+						Ink.graduations(ctx, cx, cy, r - 1, 72, 4, 10, 18,
+							Arc.ruleThin, Qt.alpha(Arc.gold, 0.42), 1);
+						Ink.ring(ctx, cx, cy, r * 0.42, Arc.ruleThin, Qt.alpha(Arc.gold, 0.2), 1);
 					}
 				}
 

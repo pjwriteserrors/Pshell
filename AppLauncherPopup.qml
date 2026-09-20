@@ -7,6 +7,7 @@ import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import "components"
+import "components/ArcInk.js" as Ink
 import "caelestia/utils/scripts/fuzzysort.js" as Fuzzy
 
 Item {
