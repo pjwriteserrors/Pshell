@@ -145,6 +145,19 @@ IPC, and by Ctrl+1…5. Draw them however your style draws things; do not drop
 one, do not weaken one. `STUDIO.md` is the contract and `Validate.qml` enforces
 it — the build fails if a page or a script behind one goes missing.
 
+**Studio's capabilities are the same in every style, and stay the same in
+yours.** This is the one place where "redesign everything" does not mean
+"decide for yourself what is in it". Every branch has the same five pages doing
+the same things, behind the same scripts, reachable by the same verbs, through
+the same interface: Studio takes the seven colours and hands them to its pages,
+and a page accepts them, owns its own arrow keys and Enter, and applies nothing
+until the person asks. Draw all of it in your own language — the arrangement,
+the rows, the motion, the words — but if a person switches style and something
+they could do before is gone, moved out of Studio, or now needs a terminal,
+that is a broken style, not a bold one. Adding a page is allowed, and then
+`STUDIO.md` tells you the five places it has to be registered so the *next*
+style cannot drop it either.
+
 Specifically, keep:
 
 - `components/AnimationStage.qml` — Studio's motion page plays the real niri
@@ -300,6 +313,9 @@ all tested.
       frames.
 - [ ] `>studio` opens; all five pages are there and work; `>style` and
       `>combinations` work; Ctrl+1…5 work.
+- [ ] Nothing Studio could do in the previous style needs a terminal in yours:
+      wallpaper, palette, motion, icon theme, cursor theme, cursor size, style
+      branch, and keeping, wearing, replacing and discarding a combination.
 - [ ] Studio's motion page still plays the real niri animation.
 - [ ] Wallust colours drive everything; a light wallpaper and a dark one both
       look deliberate.
