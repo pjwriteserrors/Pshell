@@ -433,6 +433,11 @@ Item {
 		width: mockWindow.width
 		height: mockWindow.height
 
+		// `niri_tex` is what the rewritten niri shaders sample. `source` is what
+		// Qt's own default shader samples, and it is the one that runs while a
+		// preview is still building and for an animation that is switched off -
+		// without it those show an empty stage and warn on every frame.
+		property variant source: mockTexture
 		property variant niri_tex: mockTexture
 		property real niri_clamped_progress: Math.max(0, Math.min(1, stage.progress))
 		property real niri_progress: stage.progress
