@@ -122,6 +122,14 @@ Item {
 			studioPage: "motion"
 		},
 		{
+			id: "style",
+			command: "style",
+			name: "Style",
+			description: "Die ganze Shell auf einen anderen Style-Branch wechseln",
+			icon: "view-grid-symbolic",
+			studioPage: "styles"
+		},
+		{
 			id: "studio-style",
 			command: "studio style",
 			name: "Studio: Styles",
