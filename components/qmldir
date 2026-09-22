@@ -1,14 +1,20 @@
-singleton Motion 1.0 Motion.qml
+singleton Filament 1.0 Filament.qml
+singleton FIconTable 1.0 FIconTable.qml
 singleton ThemeEngine 1.0 ThemeEngine.qml
-Anim 1.0 Anim.qml
-CAnim 1.0 CAnim.qml
-SpatialAnim 1.0 SpatialAnim.qml
-HoverLayer 1.0 HoverLayer.qml
-PopupSurface 1.0 PopupSurface.qml
-ModalSheet 1.0 ModalSheet.qml
-NeumorphicShadow 1.0 NeumorphicShadow.qml
-NeumorphicBevel 1.0 NeumorphicBevel.qml
-ThemeOrnament 1.0 ThemeOrnament.qml
-RpgDialogueText 1.0 RpgDialogueText.qml
-ThemedRectangle 1.0 ThemedRectangle.qml
+Wire 1.0 Wire.qml
+Spark 1.0 Spark.qml
+Bead 1.0 Bead.qml
+Band 1.0 Band.qml
+Lantern 1.0 Lantern.qml
+Veil 1.0 Veil.qml
+FIcon 1.0 FIcon.qml
+FText 1.0 FText.qml
+Chip 1.0 Chip.qml
+FButton 1.0 FButton.qml
+HoldButton 1.0 HoldButton.qml
+FSlider 1.0 FSlider.qml
+FToggle 1.0 FToggle.qml
+FField 1.0 FField.qml
+ThreadLine 1.0 ThreadLine.qml
+ThreadRow 1.0 ThreadRow.qml
 AnimationStage 1.0 AnimationStage.qml
