@@ -745,7 +745,7 @@ Scope {
 
 	function studioPageOrDefault(page) {
 		const name = String(page || "");
-		return [ "wallpaper", "motion", "styles" ].indexOf(name) >= 0 ? name : "wallpaper";
+		return [ "wallpaper", "motion", "dress", "styles", "combinations" ].indexOf(name) >= 0 ? name : "wallpaper";
 	}
 
 	function openStudio(page = "", scr = null) {

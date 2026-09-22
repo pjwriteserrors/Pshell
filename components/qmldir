@@ -11,3 +11,4 @@ NeumorphicBevel 1.0 NeumorphicBevel.qml
 ThemeOrnament 1.0 ThemeOrnament.qml
 RpgDialogueText 1.0 RpgDialogueText.qml
 ThemedRectangle 1.0 ThemedRectangle.qml
+AnimationStage 1.0 AnimationStage.qml

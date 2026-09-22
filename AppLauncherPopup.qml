@@ -121,6 +121,30 @@ Item {
 			studioPage: "motion"
 		},
 		{
+			id: "studio-dress",
+			command: "studio icons",
+			name: "Studio: Icons & Pointer",
+			description: "Icon theme and cursor theme",
+			icon: "preferences-desktop-theme-symbolic",
+			studioPage: "dress"
+		},
+		{
+			id: "studio-combinations",
+			command: "studio combinations",
+			name: "Studio: Combinations",
+			description: "Whole looks, saved under a name",
+			icon: "bookmark-new-symbolic",
+			studioPage: "combinations"
+		},
+		{
+			id: "combinations",
+			command: "combinations",
+			name: "Combinations",
+			description: "Wear a saved look, or keep the one that is on",
+			icon: "bookmark-new-symbolic",
+			studioPage: "combinations"
+		},
+		{
 			id: "style",
 			command: "style",
 			name: "Style",

@@ -14,7 +14,7 @@ import "components"
 // Everything is reachable with the mouse and with the keyboard:
 //   Escape            close
 //   Ctrl+Tab / Ctrl+Shift+Tab  next / previous page
-//   Ctrl+1 .. Ctrl+3  jump to a page
+//   Ctrl+1 .. Ctrl+5  jump to a page
 //   arrows / Enter    handled by the page itself
 FocusScope {
 	id: root
@@ -31,10 +31,15 @@ FocusScope {
 
 	property string page: "wallpaper"
 
+	// The page list is a contract, not a style decision: every style branch
+	// carries all five, because each one is the only way to reach what it
+	// controls. Validate.qml fails the build if one goes missing. See STUDIO.md.
 	readonly property var pages: [
 		{ id: "wallpaper", label: "Wallpaper & Colours", hint: "Ctrl+1" },
 		{ id: "motion", label: "Motion", hint: "Ctrl+2" },
-		{ id: "styles", label: "Style", hint: "Ctrl+3" }
+		{ id: "dress", label: "Icons & Pointer", hint: "Ctrl+3" },
+		{ id: "styles", label: "Style", hint: "Ctrl+4" },
+		{ id: "combinations", label: "Combinations", hint: "Ctrl+5" }
 	]
 
 	readonly property int pageIndex: {
@@ -81,7 +86,9 @@ FocusScope {
 			return;
 		case Qt.Key_1:
 		case Qt.Key_2:
-		case Qt.Key_3: {
+		case Qt.Key_3:
+		case Qt.Key_4:
+		case Qt.Key_5: {
 			const index = event.key - Qt.Key_1;
 			if (index < root.pages.length) {
 				root.showPage(root.pages[index].id);
@@ -175,7 +182,9 @@ FocusScope {
 		readonly property Item activeItem: {
 			if (wallpaperPage.active) return wallpaperPage.item;
 			if (motionPage.active) return motionPage.item;
+			if (dressPage.active) return dressPage.item;
 			if (stylePage.active) return stylePage.item;
+			if (combinationPage.active) return combinationPage.item;
 			return null;
 		}
 
@@ -224,11 +233,44 @@ FocusScope {
 		}
 
 		Loader {
+			id: dressPage
+			anchors.fill: parent
+			active: root.page === "dress"
+			onLoaded: Qt.callLater(root.focusPage)
+			sourceComponent: DressPicker {
+				foreground: root.foreground
+				background: root.background
+				secondaryBoxColor: root.secondaryBoxColor
+				secondaryBoxStrongColor: root.secondaryBoxStrongColor
+				secondaryInsetColor: root.secondaryInsetColor
+				barColor: root.barColor
+				onCloseRequested: root.closeRequested()
+			}
+		}
+
+		Loader {
 			id: stylePage
 			anchors.fill: parent
 			active: root.page === "styles"
 			onLoaded: Qt.callLater(root.focusPage)
 			sourceComponent: BranchStylePicker {
+				foreground: root.foreground
+				background: root.background
+				secondaryBoxColor: root.secondaryBoxColor
+				secondaryBoxStrongColor: root.secondaryBoxStrongColor
+				secondaryInsetColor: root.secondaryInsetColor
+				barColor: root.barColor
+				danger: root.danger
+				onCloseRequested: root.closeRequested()
+			}
+		}
+
+		Loader {
+			id: combinationPage
+			anchors.fill: parent
+			active: root.page === "combinations"
+			onLoaded: Qt.callLater(root.focusPage)
+			sourceComponent: CombinationPicker {
 				foreground: root.foreground
 				background: root.background
 				secondaryBoxColor: root.secondaryBoxColor
