@@ -25,6 +25,9 @@ Item {
 	property var windows: []
 	property var tasks: []
 	property var tasksByOutput: ({})
+	// Workspaces per output, in niri's own order (idx), with the
+	// active one marked - the bar strings them on the wire as knots.
+	property var workspacesByOutput: ({})
 
 	// Raw state, keyed by id, mutated in place by the incremental events.
 	property var windowById: ({})
@@ -101,6 +104,38 @@ Item {
 			? root.buildTasks(windows.filter(window => window.workspace_id === focusedWorkspace.id))
 			: [];
 		root.tasksByOutput = tasksByOutput;
+
+		const workspacesByOutput = ({});
+		for (const workspace of workspaces) {
+			const outputName = String(workspace.output || "");
+			if (!outputName) continue;
+			if (!workspacesByOutput[outputName]) workspacesByOutput[outputName] = [];
+			workspacesByOutput[outputName].push({
+				id: workspace.id,
+				idx: Number(workspace.idx || 0),
+				name: workspace.name || "",
+				isActive: !!workspace.is_active,
+				isFocused: !!workspace.is_focused,
+				isUrgent: !!workspace.is_urgent,
+				windowCount: windows.filter(window => window.workspace_id === workspace.id).length
+			});
+		}
+		for (const outputName of Object.keys(workspacesByOutput))
+			workspacesByOutput[outputName].sort((a, b) => a.idx - b.idx);
+		root.workspacesByOutput = workspacesByOutput;
+	}
+
+	function workspacesForOutput(outputName) {
+		return root.workspacesByOutput[String(outputName || "")] || [];
+	}
+
+	// niri addresses workspaces by index on the focused monitor, so the
+	// monitor is focused first; the two calls are one shell command.
+	function focusWorkspace(outputName, idx) {
+		const output = String(outputName || "").replace(/[^A-Za-z0-9._-]/g, "");
+		const index = Math.max(1, Number(idx) || 1);
+		Quickshell.execDetached([ "sh", "-c",
+			`niri msg action focus-monitor '${output}' >/dev/null 2>&1; niri msg action focus-workspace ${index}` ]);
 	}
 
 	function replaceWorkspaces(list) {
