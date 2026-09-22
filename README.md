@@ -31,6 +31,7 @@ whole shell - layout, components, motion, the lot.
 | Branch | Style |
 | --- | --- |
 | `main` | **Default** - the original layout |
+| `style/filament` | **Filament** - a lit thread along the top; beads on it, lanterns hung from it |
 | `style/atelier` | **Atelier** - vertical rail, editorial surfaces |
 | `style/meridian` | **Meridian** - panel-based, datum-driven |
 | `archive/legacy-main` | not a style; a snapshot of the old unversioned `~/.config/quickshell/main` |
@@ -87,6 +88,50 @@ git worktree remove /tmp/port
 
 A worktree rather than a checkout, so the shell you are running keeps its files
 while you work on another style.
+
+## Filament
+
+The shell is one lit thread across the top of every screen. What sits on it
+is a *bead* (the launcher, the workspace knots, the window beads, the media
+bead, the clock, the tray, weather, bell, clipboard, the radios, resources,
+and the power bead where the thread ends); what opens from it is a *lantern*
+hung under its bead on a stem, and the three big surfaces (launcher, Studio,
+the power thread) hang in a wash over the desktop. Light travels along the
+thread between them: pressing play in the media lantern sends a spark up the
+stem and along the wire into the clock, whose hour digits light for a
+moment; a notification arrives as a spark from the right edge that blooms on
+the bell before the toast unfolds; a launched app sends one to the clock;
+copying from the clipboard lantern blooms its bead; a palette change sends
+one pulse along the whole thread on every screen. Volume, microphone and
+brightness do not pop up in the middle of the screen: the stretch of thread
+beside the clock thickens into a meter for a second.
+
+Every list hangs from a vertical thread and the selection is a light that
+slides along it; every quantity is a lit wire with a spark at its head;
+every destructive verb is a *hold to charge* button whose wire has to fill
+before it fires; the lock screen is the same thread drawn across the middle
+of the screen, and on unlock it lifts to the top and becomes the bar.
+
+`components/Filament.qml` is the only file that reads Wallust. It ranks
+color1-color6 by chroma and legibility on the background and takes the
+strongest as the charge (the light), the next two as supporting charges, and
+the most saturated reddish entry as the alert; a light palette inverts the
+design (a dark thread across a light plane) instead of washing out.
+
+Layout of this style:
+
+```
+shell.qml                 state, windows, IPC, the wiring between surfaces
+WireBar.qml               the bar: the thread, the beads, the meter, the sparks
+components/Filament.qml   tokens: colours from Wallust, type, geometry, motion
+components/Wire, Spark, Bead, Band, Lantern, Veil, F*   the kit
+*Lantern.qml              the inside of each popup
+PowerThread.qml           the power menu
+AppLauncherPopup.qml + LauncherEngine.qml   the launcher
+Studio.qml + the five pages
+QuickLock.qml             the lock screen
+MediaState.qml, ResourceMonitor.qml, NiriState.qml   non-visual state
+```
 
 ## Studio
 
