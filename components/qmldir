@@ -21,3 +21,4 @@ ConnectionPanel 1.0 ConnectionPanel.qml
 ActivityPanel 1.0 ActivityPanel.qml
 AtelierSelect 1.0 AtelierSelect.qml
 ToastSurface 1.0 ToastSurface.qml
+AnimationStage 1.0 AnimationStage.qml

@@ -763,7 +763,7 @@ Scope {
 
 	function studioPageOrDefault(page) {
 		const name = String(page || "");
-		return [ "wallpaper", "motion", "styles", "collection" ].indexOf(name) >= 0 ? name : "wallpaper";
+		return [ "wallpaper", "motion", "dress", "styles", "combinations" ].indexOf(name) >= 0 ? name : "wallpaper";
 	}
 
 	function openStudio(page = "", scr = null) {
@@ -3467,6 +3467,13 @@ printf 'type=offline\niface=\nip=\n'`
 				active: root.studioPopupVisible
 				sourceComponent: Studio {
 					page: root.studioPage
+					foreground: Atelier.text
+					background: Atelier.canvas
+					secondaryBoxColor: Atelier.surface
+					secondaryBoxStrongColor: Atelier.selectedSurface
+					secondaryInsetColor: Atelier.surface
+					barColor: Atelier.accent
+					danger: Atelier.danger
 					onPageChanged: root.studioPage = page
 					onCloseRequested: root.closeStudio()
 				}

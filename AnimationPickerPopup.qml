@@ -2,7 +2,6 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
-import QtMultimedia
 import Quickshell
 import Quickshell.Io
 import "components"
@@ -29,12 +28,10 @@ Item {
 	property string animationStateHint: ""
 	property string selectedAnimationId: ""
 	property int selectedAnimationIndex: 0
-	property real previewProgress: 0
 
 	readonly property string applyScriptPath: `${Quickshell.shellDir}/scripts/apply_niri_animation.sh`
 	readonly property string shaderAnimationsDir: "/home/lu/.config/niri/animations/shaders"
 	readonly property string nirimationAnimationsDir: "/home/lu/.config/niri/animations/nirimation/animations"
-	readonly property string nirimationShowcaseDir: "/home/lu/.config/niri/animations/nirimation/animations/showcase"
 	readonly property string animationStatePath: "/home/lu/.local/state/quickshell-theme/current-animation"
 	readonly property string shaderCurrentPath: "/home/lu/.config/niri/animations/shaders/.current"
 	readonly property color headingColor: Qt.lighter(root.barColor, 1.12)
@@ -83,7 +80,6 @@ Item {
 		if (next === root.selectedAnimationIndex && root.selectedAnimationId === String(root.animationOptions[next].id || "")) return;
 		root.selectedAnimationIndex = next;
 		root.selectedAnimationId = String(root.animationOptions[next].id || "");
-		previewCycle.restart();
 		Qt.callLater(root.ensureSelectedVisible);
 	}
 
@@ -115,65 +111,6 @@ Item {
 		});
 	}
 
-	function easeOut(value) {
-		const v = Math.max(0, Math.min(1, value));
-		return 1 - Math.pow(1 - v, 3);
-	}
-
-	function oscillate(value) {
-		return 0.5 - Math.cos(value * Math.PI * 2) * 0.5;
-	}
-
-	function previewStyle(kind, name) {
-		const key = `${String(kind || "").toLowerCase()}:${String(name || "").toLowerCase()}`;
-		const styles = ({
-			"nirimation:bloom": "pop",
-			"nirimation:burn-ashes": "burn",
-			"nirimation:burn-multicolor": "burn",
-			"nirimation:burn": "burn",
-			"nirimation:fold-window": "fold",
-			"nirimation:glitch": "glitch",
-			"nirimation:pixelate": "pixelate",
-			"nirimation:pop-drop": "pop",
-			"nirimation:ribbons": "ribbons",
-			"nirimation:roll-drop": "roll",
-			"nirimation:swipe-window": "swipe",
-			"nirimation:unravel": "unravel",
-			"shader:bounce": "bounce",
-			"shader:circle": "circle",
-			"shader:colour-distance": "dissolve",
-			"shader:crazy-parametric": "warp",
-			"shader:crosshatch": "dissolve",
-			"shader:crosswarp": "warp",
-			"shader:directional-wipe": "wipe",
-			"shader:directional": "wipe",
-			"shader:dissolve": "dissolve",
-			"shader:fade": "fade",
-			"shader:fadecolor": "fade",
-			"shader:flyeye": "warp",
-			"shader:glitch": "glitch",
-			"shader:heat-melt": "burn",
-			"shader:ink-splash": "dissolve",
-			"shader:inkwell-drop": "dissolve",
-			"shader:morph": "warp",
-			"shader:overexposure": "flash",
-			"shader:perlin": "dissolve",
-			"shader:pixelate": "pixelate",
-			"shader:pixelfade-wave": "pixelate",
-			"shader:plasma-flow": "warp",
-			"shader:polar-function": "circle",
-			"shader:polka-dots-curtain": "squares",
-			"shader:randomsquares": "squares",
-			"shader:ripple": "ripple",
-			"shader:smoke": "dissolve",
-			"shader:snap": "snap",
-			"shader:soft-warp-fade": "warp",
-			"shader:static-fade": "glitch",
-			"shader:voronoi-shatter": "dissolve",
-			"shader:wave-warp": "warp"
-		});
-		return styles[key] || "fade";
-	}
 
 	Component.onCompleted: root.reset()
 	onGridColumnsChanged: Qt.callLater(root.ensureSelectedVisible)
@@ -184,15 +121,9 @@ Item {
 	Keys.onRightPressed: moveSelection(1)
 	Keys.onUpPressed: moveSelection(-root.gridColumns)
 	Keys.onDownPressed: moveSelection(root.gridColumns)
-
-	SequentialAnimation on previewProgress {
-		id: previewCycle
-		running: root.visible
-		loops: Animation.Infinite
-		NumberAnimation { from: 0; to: 1; duration: ThemeEngine.duration(1500); easing.type: Easing.InOutCubic }
-		PauseAnimation { duration: ThemeEngine.duration(280) }
-		ScriptAction { script: root.previewProgress = 0 }
-		PauseAnimation { duration: ThemeEngine.duration(120) }
+	Keys.onSpacePressed: event => {
+		motionStage.restart();
+		event.accepted = true;
 	}
 
 	Process {
@@ -207,13 +138,7 @@ Item {
 	done
 	for file in "${root.nirimationAnimationsDir}"/*.kdl; do
 		[ -f "$file" ] || continue
-		name="$(basename "$file" .kdl)"
-		showcase="${root.nirimationShowcaseDir}/$name.mp4"
-		if [ -f "$showcase" ]; then
-			printf 'nirimation:%s\\tfile://%s\\n' "$name" "$showcase"
-		else
-			printf 'nirimation:%s\\n' "$name"
-		fi
+		printf 'nirimation:%s\\n' "$(basename "$file" .kdl)"
 	done
 } | sort
 `]
@@ -239,41 +164,77 @@ fi
 
     Item {
         id: panel; anchors.fill: parent; anchors.margins: 14
+        // The animation itself, not a sketch of it: the same shader niri would
+        // load, over the same duration, on the same curve or spring, playing on
+        // a mock window until another card is picked. See STUDIO.md.
         Rectangle {
-            id: stage
+            id: stagePanel
             width: parent.width * 0.5; height: parent.height - 62; radius: 28; color: Atelier.ink; clip: true
-            FolioArtwork { anchors.fill: parent; anchors.margins: 20; tint: Atelier.sage }
-            VideoOutput { id: selectedVideo; anchors.fill: parent; fillMode: VideoOutput.PreserveAspectCrop; visible: selectedPlayer.source.toString() !== "" }
-            MediaPlayer {
-                id: selectedPlayer
-                source: root.currentAnimationOption ? root.currentAnimationOption.preview || "" : ""
-                videoOutput: selectedVideo; loops: MediaPlayer.Infinite; autoPlay: true
+
+            AnimationStage {
+                id: motionStage
+                anchors.fill: parent
+                anchors.topMargin: 44
+                anchors.bottomMargin: 96
+                anchors.leftMargin: 24
+                anchors.rightMargin: 24
+                animationId: root.selectedAnimationId
+                playing: root.visible
             }
-            Item {
-                anchors.fill: parent; visible: !selectedVideo.visible
-                Repeater {
-                    model: 5
-                    delegate: Rectangle {
-                        required property int index
-                        width: 58 + index * 12; height: width; radius: width / 2
-                        x: stage.width / 2 - width / 2 + Math.cos(root.previewProgress * Math.PI * 2 + index * 0.8) * stage.width * 0.24
-                        y: stage.height / 2 - height / 2 + Math.sin(root.previewProgress * Math.PI * 2 + index * 0.8) * stage.height * 0.24
-                        color: [Atelier.sage,Atelier.gold,Atelier.accent,Atelier.surface,Atelier.paper][index]
-                        opacity: 0.8
+
+            AtelierText {
+                x: 24; y: 24
+                text: motionStage.building
+                    ? "WIRD GEBAUT"
+                    : motionStage.buildError !== "" ? motionStage.buildError.toUpperCase() : "ECHTE BEWEGUNG"
+                color: Atelier.paper; font.family: Atelier.mono; font.pixelSize: 9
+            }
+
+            AtelierText {
+                x: 24; anchors.bottom: timings.top; anchors.bottomMargin: 10
+                width: parent.width - 48
+                text: root.currentAnimationOption ? root.currentAnimationOption.label : "Bewegung"
+                color: Atelier.paper; display: true; font.pixelSize: 30; wrapMode: Text.WordWrap
+                maximumLineCount: 1; elide: Text.ElideRight
+            }
+
+            // What is happening, in words, under the thing happening.
+            Row {
+                id: timings
+                x: 24; anchors.bottom: parent.bottom; anchors.bottomMargin: 24
+                width: parent.width - 48; spacing: 24
+
+                Column {
+                    spacing: 0
+                    AtelierText { text: "Öffnen"; font.pixelSize: 11; color: Atelier.paper; opacity: motionStage.phase === "opening" || motionStage.phase === "open" ? 1 : 0.5 }
+                    AtelierText { text: motionStage.timingLabel(motionStage.openTiming); font.family: Atelier.mono; font.pixelSize: 9; color: Atelier.paper; opacity: 0.6 }
+                }
+
+                Column {
+                    spacing: 0
+                    AtelierText { text: "Schließen"; font.pixelSize: 11; color: Atelier.paper; opacity: motionStage.phase === "closing" || motionStage.phase === "closed" ? 1 : 0.5 }
+                    AtelierText { text: motionStage.timingLabel(motionStage.closeTiming); font.family: Atelier.mono; font.pixelSize: 9; color: Atelier.paper; opacity: 0.6 }
+                }
+
+                Column {
+                    spacing: 0
+                    AtelierText {
+                        text: "Nochmal"; font.pixelSize: 11; color: Atelier.paper
+                        opacity: replayHover.containsMouse ? 1 : 0.5
+                        MouseArea { id: replayHover; anchors.fill: parent; anchors.margins: -6; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: motionStage.restart() }
                     }
+                    AtelierText { text: "Leertaste"; font.family: Atelier.mono; font.pixelSize: 9; color: Atelier.paper; opacity: 0.6 }
                 }
             }
-            AtelierText { x: 24; y: 24; text: selectedVideo.visible ? "MOTION FILM" : "MOTION SKETCH · NOT A SHADER RENDER"; color: Atelier.paper; font.family: Atelier.mono; font.pixelSize: 9 }
-            AtelierText { x: 24; anchors.bottom: parent.bottom; anchors.bottomMargin: 26; width: parent.width - 48; text: root.currentAnimationOption ? root.currentAnimationOption.label : "Movement"; color: Atelier.paper; display: true; font.pixelSize: 30; wrapMode: Text.WordWrap }
         }
         Rectangle {
-            visible: !root.embedded; y: stage.height + 16; width: stage.width; height: 44; radius: 22; color: Atelier.accent
+            visible: !root.embedded; y: stagePanel.height + 16; width: stagePanel.width; height: 44; radius: 22; color: Atelier.accent
             AtelierText { anchors.centerIn: parent; text: "Set this movement  ↗"; color: Atelier.onAccent; font.pixelSize: 12 }
             MouseArea { anchors.fill: parent; enabled: root.selectedAnimationId !== ""; onClicked: root.applyAnimation() }
         }
         Item {
             id: gridViewport
-            x: stage.width + 24; width: parent.width - x; height: parent.height
+            x: stagePanel.width + 24; width: parent.width - x; height: parent.height
             AtelierText { text: "A library of movement"; display: true; font.pixelSize: 28; width: parent.width; wrapMode: Text.WordWrap }
             GridView {
                 id: animationGridView

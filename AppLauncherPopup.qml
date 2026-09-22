@@ -122,6 +122,30 @@ Item {
 			studioPage: "motion"
 		},
 		{
+			id: "studio-dress",
+			command: "studio symbole",
+			name: "Studio: Symbole & Zeiger",
+			description: "Icon-Theme und Mauszeiger",
+			icon: "preferences-desktop-theme-symbolic",
+			studioPage: "dress"
+		},
+		{
+			id: "studio-combinations",
+			command: "studio kompositionen",
+			name: "Studio: Kompositionen",
+			description: "Ganze Looks, unter einem Namen gespeichert",
+			icon: "bookmark-new-symbolic",
+			studioPage: "combinations"
+		},
+		{
+			id: "combinations",
+			command: "combinations",
+			name: "Kompositionen",
+			description: "Einen gespeicherten Look anlegen, oder den behalten, der an ist",
+			icon: "bookmark-new-symbolic",
+			studioPage: "combinations"
+		},
+		{
 			id: "style",
 			command: "style",
 			name: "Style",
@@ -136,14 +160,6 @@ Item {
 			description: "Das ganze Setup auf einen anderen Style-Branch wechseln",
 			icon: "view-grid-symbolic",
 			studioPage: "styles"
-		},
-		{
-			id: "studio-collection",
-			command: "studio sammlung",
-			name: "Studio: Sammlung",
-			description: "Gespeicherte Kompositionen laden",
-			icon: "view-list-symbolic",
-			studioPage: "collection"
 		},
 		{
 			id: "calculator",
