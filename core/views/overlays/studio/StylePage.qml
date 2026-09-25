@@ -17,6 +17,7 @@ ModalWindow {
 	id: root
 
 	modalId: "styles"
+	exclusiveKeyboard: true
 	onModalOpened: root.reset()
 
 	property var entries: []
@@ -255,17 +256,15 @@ ModalWindow {
 		}
 	}
 
-	StudioTabs {
-		anchors.horizontalCenter: panel.horizontalCenter
-		anchors.bottom: panel.top
-		anchors.bottomMargin: 14
-	}
+	StudioTabs {}
 
 	Rectangle {
 		id: panel
 
-		anchors.centerIn: parent
-		anchors.verticalCenterOffset: 25
+		// hangs right under the tabs like the taller pages, instead of floating mid-screen
+		anchors.horizontalCenter: parent.horizontalCenter
+		anchors.top: parent.top
+		anchors.topMargin: Math.max(85, (parent.height - 900) / 2 + 25)
 		width: Math.min(760, root.width - 120)
 		height: Math.min(root.height - 170, Math.max(420, 22 * 2 + 46 + 20 + 18 * 2 + noticeColumn.height + rowColumn.height + 16))
 		radius: Theme.radius.huge + 6

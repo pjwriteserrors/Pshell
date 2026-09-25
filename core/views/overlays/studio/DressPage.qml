@@ -17,6 +17,7 @@ ModalWindow {
 	id: root
 
 	modalId: "dress"
+	exclusiveKeyboard: true
 	onModalOpened: root.reset()
 
 	property var iconThemes: []
@@ -391,11 +392,7 @@ ModalWindow {
 		}
 	}
 
-	StudioTabs {
-		anchors.horizontalCenter: panel.horizontalCenter
-		anchors.bottom: panel.top
-		anchors.bottomMargin: 14
-	}
+	StudioTabs {}
 
 	Rectangle {
 		id: panel

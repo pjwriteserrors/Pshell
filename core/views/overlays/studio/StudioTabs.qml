@@ -11,6 +11,10 @@ Segmented {
 	options: Popups.studioPages.map(page => ({ value: page.modal, label: page.label, icon: page.icon }))
 	current: Popups.modal
 	implicitWidth: 640
+	// the same spot on every page, whatever the size of its card
+	anchors.horizontalCenter: parent.horizontalCenter
+	anchors.top: parent.top
+	anchors.topMargin: Math.max(24, (parent.height - 900) / 2 - 36)
 	onSelected: value => Popups.openModal(value, Popups.modalScreen)
 
 	Repeater {

@@ -20,6 +20,7 @@ ModalWindow {
 	id: root
 
 	modalId: "animation"
+	exclusiveKeyboard: true
 	onModalOpened: root.reset()
 
 	property string appliedAnimationId: ""
@@ -234,11 +235,7 @@ fi
 		}
 	}
 
-	StudioTabs {
-		anchors.horizontalCenter: panel.horizontalCenter
-		anchors.bottom: panel.top
-		anchors.bottomMargin: 14
-	}
+	StudioTabs {}
 
 	Rectangle {
 		id: panel
