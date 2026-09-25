@@ -105,5 +105,6 @@ and hooks need, the dotfile links and the niri include.
 
 ```
 quickshell -p ./Validate.qml      # compiles the whole shell without a window
+scripts/review_surfaces.sh        # screenshots of every surface, in a nested niri
 python3 scripts/test_branch_styles.py
 ```
