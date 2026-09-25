@@ -104,10 +104,13 @@ Item {
 	property bool fileBrowserDirectoryLoading: false
 	property string fileBrowserDirectoryError: ""
 	property string fileBrowserListTargetDirectory: ""
-	property var commands: [
+	// commands with a `feature` only exist on hosts that have it
+	readonly property var commands: root.allCommands.filter(command => !command.feature || Host.has(command.feature))
+	property var allCommands: [
 		{
 			id: "rpg",
 			command: "rpg",
+			feature: "rpg",
 			prefix: "/",
 			name: "Productivity RPG",
 			description: "Open as a movable game window",
@@ -130,6 +133,7 @@ Item {
 		{
 			id: "display-setup",
 			command: "setup",
+			feature: "display-profiles",
 			name: "Display Setup",
 			description: "Switch the monitor layout",
 			icon: "video-display-symbolic"
@@ -178,6 +182,7 @@ Item {
 		{
 			id: "todo",
 			command: "todo",
+			feature: "todos",
 			name: "Todo",
 			description: "Lists in ~/todo"
 		},
@@ -196,6 +201,7 @@ Item {
 		{
 			id: "phone",
 			command: "phone",
+			feature: "kdeconnect",
 			name: "Phone",
 			description: `${KdeConnect.name} · ${KdeConnect.summary}`
 		},
@@ -271,12 +277,12 @@ Item {
 	readonly property bool inChatMode: root.commandQuery === "chat" || root.commandQuery.startsWith("chat ")
 	readonly property bool inOllamaMode: root.commandQuery === "ollama"
 	readonly property bool inFileMode: root.commandQuery === "file" || root.commandQuery.startsWith("file ")
-	readonly property bool inSetupMode: root.commandQuery === "setup" || root.commandQuery.startsWith("setup ")
+	readonly property bool inSetupMode: Host.has("display-profiles") && (root.commandQuery === "setup" || root.commandQuery.startsWith("setup "))
 	readonly property bool inTranslateMode: root.commandQuery === "t" || root.commandQuery.startsWith("t ")
-	readonly property bool inTodoMode: root.commandQuery === "todo" || root.commandQuery.startsWith("todo ")
+	readonly property bool inTodoMode: Host.has("todos") && (root.commandQuery === "todo" || root.commandQuery.startsWith("todo "))
 	readonly property bool inWebMode: root.commandQuery === "w" || root.commandQuery.startsWith("w ")
 	readonly property bool inAiActionsMode: root.commandQuery === "ai" || root.commandQuery.startsWith("ai ")
-	readonly property bool inPhoneMode: root.commandQuery === "phone" || root.commandQuery.startsWith("phone ")
+	readonly property bool inPhoneMode: Host.has("kdeconnect") && (root.commandQuery === "phone" || root.commandQuery.startsWith("phone "))
 	readonly property bool inShotsMode: root.commandQuery === "shots" || root.commandQuery.startsWith("shots ")
 	readonly property bool inViewMode: root.inTranslateMode || root.inTodoMode || root.inWebMode || root.inAiActionsMode || root.inPhoneMode || root.inShotsMode
 	// what follows the command token, as typed (">t fr hello" → "fr hello")

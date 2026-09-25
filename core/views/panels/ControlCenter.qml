@@ -28,7 +28,7 @@ Drawer {
 		root.page = Popups.page !== "" ? Popups.page : "main";
 		statsProc.running = true;
 		Audio.refreshSinks();
-		Brightness.refresh(false);
+		if (Host.has("backlight")) Brightness.refresh(false);
 		Ddc.refresh();
 		PowerProfile.refresh();
 		KdeConnect.refresh();
@@ -859,7 +859,7 @@ Drawer {
 					model: [
 						{ rule: "tracking", icon: "timer_outline", title: "While tracking time", checked: Notifs.dndWhileTracking },
 						{ rule: "fullscreen", icon: "fullscreen", title: "In fullscreen", checked: Notifs.dndFullscreen }
-					]
+					].filter(rule => rule.rule !== "tracking" || Host.has("qtrack"))
 
 					delegate: ListItem {
 						id: rule

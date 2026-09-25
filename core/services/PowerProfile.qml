@@ -24,7 +24,7 @@ Singleton {
 	}
 
 	function refresh() {
-		if (!readProc.running) readProc.running = true;
+		if (Host.has("power-profiles") && !readProc.running) readProc.running = true;
 	}
 
 	function set(profile) {

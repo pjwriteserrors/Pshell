@@ -29,7 +29,7 @@ Singleton {
 
 	readonly property var primaryScreen: {
 		for (const screen of Quickshell.screens)
-			if (String(screen.name || "") === "DP-2")
+			if (String(screen.name || "") === Host.primaryOutput)
 				return screen;
 		return Quickshell.screens.length > 0 ? Quickshell.screens[0] : null;
 	}

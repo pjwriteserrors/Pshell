@@ -328,7 +328,7 @@ Singleton {
 	}
 
 	Timer {
-		running: true
+		running: Host.has("qtrack")
 		repeat: true
 		triggeredOnStart: true
 		interval: 5000
@@ -343,7 +343,7 @@ Singleton {
 	}
 
 	Timer {
-		running: true
+		running: Host.has("qtrack")
 		repeat: true
 		triggeredOnStart: true
 		interval: 15000

@@ -4,8 +4,8 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Backlight via brightnessctl (laptop panel). External monitors are handled
-// by the niri keybinds (ddcutil) – this service only mirrors the OSD.
+// Brightness keys: the laptop panel via brightnessctl, external monitors
+// via DDC, whichever this host has.
 Singleton {
 	id: root
 
@@ -25,8 +25,12 @@ Singleton {
 	}
 
 	function adjust(direction) {
-		Quickshell.execDetached(["brightnessctl", "set", direction > 0 ? "5%+" : "5%-"]);
-		refreshTimer.restart();
+		if (Host.has("backlight")) {
+			Quickshell.execDetached(["brightnessctl", "set", direction > 0 ? "5%+" : "5%-"]);
+			refreshTimer.restart();
+		}
+		if (Host.has("ddc"))
+			Ddc.adjustAll(direction, !Host.has("backlight"));
 	}
 
 	function set(value) {
@@ -59,5 +63,5 @@ Singleton {
 		}
 	}
 
-	Component.onCompleted: root.refresh(false)
+	Component.onCompleted: if (Host.has("backlight")) root.refresh(false)
 }

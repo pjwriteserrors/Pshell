@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import qs.core.services
 
 Item {
 	id: root
@@ -39,7 +40,7 @@ Item {
 
 	Image {
 		anchors.fill: parent
-		source: Qt.resolvedUrl("assets/rpg/archive-battle-v2.png")
+		source: `${Paths.assets}/rpg/archive-battle-v2.png`
 		fillMode: Image.PreserveAspectCrop
 		smooth: true
 		mipmap: true

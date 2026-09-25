@@ -45,7 +45,7 @@ PanelWindow {
 	readonly property real sideRoom: (barBody.width - root.centerWidth) / 2 - root.edge - root.gap
 	readonly property real sideSlack: root.sideRoom - Math.max(
 		root.leftMin + Math.max(0, Math.min(media.room, media.textWant)),
-		root.rightMin + Math.max(0, Math.min(notes.room, notes.textWant)))
+		root.rightMin + (notes.visible ? Math.max(0, Math.min(notes.room, notes.textWant)) : 0))
 
 	property Item hoverItem: null
 	property Item tooltipItem: null
@@ -199,6 +199,7 @@ PanelWindow {
 				id: notes
 
 				bar: root
+				visible: Host.has("notes")
 				room: root.sideRoom - root.rightMin
 			}
 
@@ -213,6 +214,7 @@ PanelWindow {
 			BarIcon {
 				bar: root
 				panelId: "ssh"
+				visible: Host.has("ssh")
 				icon: "server_network"
 				tooltip: "SSH logins"
 				onClicked: toggle()

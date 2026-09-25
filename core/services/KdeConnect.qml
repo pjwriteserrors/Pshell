@@ -44,7 +44,7 @@ Singleton {
 	}
 
 	function refresh() {
-		if (!statusProc.running) statusProc.running = true;
+		if (Host.has("kdeconnect") && !statusProc.running) statusProc.running = true;
 	}
 
 	function cli(args, doneLabel, event) {
@@ -152,7 +152,7 @@ Singleton {
 	}
 
 	Timer {
-		running: true
+		running: Host.has("kdeconnect")
 		repeat: true
 		triggeredOnStart: true
 		interval: root.watchers > 0 ? 5000 : 60000

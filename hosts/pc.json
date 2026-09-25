@@ -1,0 +1,10 @@
+{
+	"primaryOutput": "DP-2",
+	"weather": { "city": "Paderborn" },
+	"features": {
+		"ddc": true,
+		"mouse-battery": true,
+		"kdeconnect": true,
+		"haptics": true
+	}
+}

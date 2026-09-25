@@ -2,12 +2,8 @@ import QtQuick
 import Quickshell
 // the module scanner follows imports from the entry file, so name every
 // module shell.qml uses
-import qs.style.theme
-import qs.style.bar
-import qs.core.services
-import qs.core.views.panels
-import qs.core.views.overlays
-import qs.core.views.rpg
+import qs.core
+import qs.style
 
 // Compiles shell.qml and everything it pulls in without opening a window.
 // Run: quickshell -p ./Validate.qml

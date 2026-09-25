@@ -1,0 +1,20 @@
+{
+	"primaryOutput": "DP-2",
+	"weather": { "city": "Paderborn" },
+	"features": {
+		"backlight": true,
+		"ddc": true,
+		"power-profiles": true,
+		"battery": true,
+		"mouse-battery": true,
+		"fingerprint": true,
+		"kdeconnect": true,
+		"haptics": true,
+		"ssh": true,
+		"display-profiles": true,
+		"qtrack": true,
+		"notes": true,
+		"todos": true,
+		"rpg": true
+	}
+}

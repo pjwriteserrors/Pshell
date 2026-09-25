@@ -191,7 +191,7 @@ Singleton {
 	}
 
 	Timer {
-		running: true
+		running: Host.has("mouse-battery")
 		repeat: true
 		interval: 60000
 		triggeredOnStart: true

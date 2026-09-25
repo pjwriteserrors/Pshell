@@ -23,9 +23,9 @@ Row {
 			sum += child === clockButton ? clockButton.padding * 2 + time.implicitWidth : child.width;
 			shown += 1;
 		}
-		return sum + timer.fixedWidth + root.spacing * shown;
+		return timer.visible ? sum + timer.fixedWidth + root.spacing * shown : sum + root.spacing * Math.max(0, shown - 1);
 	}
-	readonly property real textWant: timer.textWant
+	readonly property real textWant: timer.visible ? timer.textWant : 0
 	property alias room: timer.room
 	readonly property real dateWidth: date.implicitWidth + 9
 	property bool dateFits: true
@@ -122,6 +122,7 @@ Row {
 		id: timer
 
 		bar: root.bar
+		visible: Host.has("qtrack")
 	}
 
 	RecordingChip {

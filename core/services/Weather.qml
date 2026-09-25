@@ -9,8 +9,8 @@ import Quickshell.Io
 Singleton {
 	id: root
 
-	property string city: "Paderborn"
-	property string location: "Stadtheide"
+	property string city: Host.profile.weather?.city ?? ""
+	property string location: ""
 	property string temperature: "--"
 	property int temperatureValue: 0
 	property bool available: false

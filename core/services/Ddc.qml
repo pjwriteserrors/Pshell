@@ -22,7 +22,7 @@ Singleton {
 	readonly property bool available: root.monitors.length > 0
 
 	function detect() {
-		if (!detectProc.running) detectProc.running = true;
+		if (Host.has("ddc") && !detectProc.running) detectProc.running = true;
 	}
 
 	function refresh() {
@@ -56,6 +56,16 @@ Singleton {
 		const proc = writer.createObject(root, { bus: bus });
 		proc.command = ["ddcutil", "--bus", String(bus), "setvcp", "10", String(level), "--noverify"];
 		proc.running = true;
+	}
+
+	// brightness keys: every monitor one step, the OSD shows the average
+	function adjustAll(direction, showOsd) {
+		if (root.monitors.length === 0) return;
+		for (const monitor of root.monitors)
+			root.set(monitor.bus, monitor.value + direction * 0.05);
+		if (!showOsd) return;
+		const average = root.monitors.reduce((sum, monitor) => sum + monitor.value, 0) / root.monitors.length;
+		Osd.show("brightness", "Brightness", average, `${Math.round(average * 100)}%`, Brightness.icon(average));
 	}
 
 	function label(monitor) {
