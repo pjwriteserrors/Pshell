@@ -76,10 +76,20 @@ A style is a branch `style/<name>` carrying `.quickshell-style.json`
 Studio → Style switches with `scripts/branch_styles.py`, which reloads the
 running shell instead of restarting it and refuses a dirty tree.
 
-A style branch changes `style/` only. It draws the frame and, through the
-widgets and theme in `style/`, the look of every core view. Everything else
-comes from `main` by merge, so new features reach every style without work in
-the style.
+A style branch changes `style/` only:
+
+| | |
+| --- | --- |
+| `style/Frame.qml` | what hangs on the screen edges (bar, rail, …) |
+| `style/theme/`, `style/widgets/` | the kit every core view is drawn with; same file names and properties as on `main`, any look |
+| `style/views/<Surface>.qml` | a surface of its own, replacing the core view of that name (any surface `core/Surfaces.qml` creates) |
+
+Everything else comes from `main` by merge, so a new feature reaches every
+style at once, drawn with the style's widgets, until the style gives it a view
+of its own. `scripts/sync_styles.sh` merges `main` into every style branch in a
+temporary worktree, commits only what compiles, and lists which surfaces each
+style draws itself. Inside `style/`, a file both sides changed keeps the
+style's version (`.gitattributes`).
 
 ## Setup
 

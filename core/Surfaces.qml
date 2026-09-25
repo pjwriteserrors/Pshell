@@ -7,10 +7,12 @@ import qs.core.views.panels
 import qs.core.views.overlays
 import qs.core.views.rpg
 import qs.core.views.overlays.studio
+// last, so a view of the same name in style/views wins
+import qs.style.views
 
-// Every surface of every feature. The style draws the frame they hang from;
-// which features exist is decided here and in the host profile, never by the
-// style.
+// Every surface of every feature. The style draws the frame they hang from
+// and may replace any view (style/views); which features exist is decided
+// here and in the host profile, never by the style.
 Scope {
 	Variants {
 		model: Quickshell.screens

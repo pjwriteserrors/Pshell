@@ -1,0 +1,3 @@
+# style branches own style/: when main and a style both changed a file there,
+# merging main into the style keeps the style's (driver set by scripts/sync_styles.sh)
+style/** merge=keep-style
