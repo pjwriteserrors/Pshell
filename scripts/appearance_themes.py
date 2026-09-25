@@ -29,6 +29,7 @@ import re
 import struct
 import subprocess
 import sys
+import zlib
 from pathlib import Path
 
 HOME = Path(os.environ.get("HOME", "~")).expanduser()
@@ -204,18 +205,28 @@ def cursor_preview(path: Path, name: str) -> str:
 
     width, height, pixels = decoded
     try:
-        from PIL import Image
-    except ImportError:
-        return ""
-
-    try:
-        image = Image.frombytes("RGBA", (width, height), pixels, "raw", "BGRA")
         CURSOR_PREVIEW_DIR.mkdir(parents=True, exist_ok=True)
-        image.save(target)
-    except Exception:
+        target.write_bytes(png_from_bgra(width, height, pixels))
+    except OSError:
         return ""
 
     return str(target)
+
+
+def png_from_bgra(width: int, height: int, pixels: bytes) -> bytes:
+    """Xcursor pixels (BGRA) as an RGBA PNG, without an imaging library."""
+    rows = bytearray()
+    for y in range(height):
+        row = pixels[y * width * 4:(y + 1) * width * 4]
+        rgba = bytearray(len(row))
+        rgba[0::4], rgba[1::4], rgba[2::4], rgba[3::4] = row[2::4], row[1::4], row[0::4], row[3::4]
+        rows += b"\x00" + rgba
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+
+    header = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(bytes(rows), 9)) + chunk(b"IEND", b"")
 
 
 # --------------------------------------------------------------------- listing
