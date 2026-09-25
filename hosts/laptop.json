@@ -1,6 +1,9 @@
 {
 	"primaryOutput": "DP-2",
-	"weather": { "city": "Paderborn" },
+	"weather": {
+		"city": "Paderborn"
+	},
+	"wallpapers": "~/Pictures/Wallpapers",
 	"features": {
 		"backlight": true,
 		"ddc": true,
@@ -16,5 +19,17 @@
 		"notes": true,
 		"todos": true,
 		"rpg": true
+	},
+	"themeHooks": [
+		"sddm",
+		"obsidian",
+		"spicetify",
+		"kitty",
+		"pywalfox"
+	],
+	"hookConfig": {
+		"spicetify": {
+			"generator": "~/.config/spicetify/Themes/custom/generate.py"
+		}
 	}
 }

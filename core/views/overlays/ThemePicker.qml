@@ -51,7 +51,7 @@ ModalWindow {
 	readonly property string themeCatalogScriptPath: `${Quickshell.shellDir}/scripts/theme_catalog.sh`
 	readonly property string applyScriptPath: `${Quickshell.shellDir}/scripts/apply_theme_selection.sh`
 	readonly property string dailyScriptPath: `${Quickshell.shellDir}/scripts/wallpaper_of_day.py`
-	readonly property string dailyThemeDirPath: `${Quickshell.shellDir}/scripts/themes/color_themes/Wallpaper of the day`
+	readonly property string dailyThemeDirPath: `${Host.wallpapers}/Wallpaper of the day`
 	readonly property string wallustConfigPath: `${Quickshell.env("HOME")}/.config/wallust/wallust.toml`
 	readonly property string shaderAnimationsDir: `${Quickshell.env("HOME")}/.config/niri/animations/shaders`
 	readonly property string nirimationAnimationsDir: `${Quickshell.env("HOME")}/.config/niri/animations/nirimation/animations`

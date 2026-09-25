@@ -32,6 +32,7 @@ Singleton {
 	readonly property var features: root.profile.features || {}
 
 	readonly property string primaryOutput: String(root.profile.primaryOutput || "")
+	readonly property string wallpapers: String(root.profile.wallpapers || "~/Pictures/Wallpapers").replace(/^~(?=\/|$)/, Quickshell.env("HOME"))
 
 	function has(feature) {
 		return root.features[feature] === true;

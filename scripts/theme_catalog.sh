@@ -16,37 +16,14 @@ COLOR_SPACE_OPTIONS=("kmeans" "salience" "ansi")
 PALETTE_OPTIONS=("dark" "light")
 PALETTE_CACHE_VERSION="v2-salience-threshold-retry"
 
-pick_theme_media() {
-	local theme_dir="$1"
-	find "$theme_dir" -maxdepth 1 -type f \( \
-		-iname '*.mp4' -o \
-		-iname '*.png' -o \
-		-iname '*.jpg' -o \
-		-iname '*.jpeg' \
-	\) ! -name '.*' -print | sort | head -n 1
-}
-
-theme_media_type() {
-	case "${1##*.}" in
-		[Mm][Pp]4) printf '%s\n' "video" ;;
-		*) printf '%s\n' "image" ;;
-	esac
-}
-
 resolve_theme_dir() {
-	local theme_arg="$1"
-
-	if [[ -d "$theme_arg" ]]; then
-		printf '%s\n' "$theme_arg"
-	else
-		printf '%s/%s\n' "$THEME_LIBRARY_DIR" "$theme_arg"
-	fi
+	theme_resolve_entry "$1" || printf '%s\n' "$1"
 }
 
 theme_preview_path() {
-	local theme_name="$1"
+	local theme_path="$1"
 	local hash
-	hash="$(printf '%s' "$theme_name" | sha1sum | awk '{print $1}')"
+	hash="$(printf '%s' "$theme_path" | sha1sum | awk '{print $1}')"
 	printf '%s/%s.png\n' "$THEME_PREVIEW_DIR" "$hash"
 }
 
@@ -76,19 +53,10 @@ extract_preview() {
 }
 
 theme_palette_cache_dir() {
-	local theme_dir="$1"
-	local fallback_hash fallback_dir theme_cache_dir
-
-	theme_cache_dir="$theme_dir/.wallust-preview-cache"
-	if mkdir -p "$theme_cache_dir" 2>/dev/null; then
-		printf '%s\n' "$theme_cache_dir"
-		return 0
-	fi
-
-	fallback_hash="$(printf '%s' "$theme_dir" | sha1sum | awk '{print $1}')"
-	fallback_dir="$THEME_STATE_DIR/wallust-preview-cache/$fallback_hash"
-	mkdir -p "$fallback_dir"
-	printf '%s\n' "$fallback_dir"
+	local cache_dir
+	cache_dir="$THEME_STATE_DIR/wallust-preview-cache/$(printf '%s' "$1" | sha1sum | awk '{print $1}')"
+	mkdir -p "$cache_dir"
+	printf '%s\n' "$cache_dir"
 }
 
 safe_name() {
@@ -288,7 +256,7 @@ generate_palette_cache() {
 		return 1
 	fi
 
-	theme_name="$(basename "$theme_dir")"
+	theme_name="$(theme_entry_name "$theme_dir")"
 	tmp_cache="${cache_path}.tmp.$$"
 	normalize_palette_json "$tmpdir/out/colors.json" "$tmp_cache" "$theme_name" "$theme_dir" "$preview_path" "$backend" "$color_space" "$palette"
 	mkdir -p "$(dirname "$cache_path")"
@@ -327,7 +295,7 @@ palette_json() {
 	color_space="$4"
 	palette="$5"
 
-	[[ -d "$theme_dir" ]] || {
+	[[ -e "$theme_dir" ]] || {
 		echo "theme not found: $theme_dir" >&2
 		return 1
 	}
@@ -347,7 +315,7 @@ matrix_json() {
 	preview_path="$2"
 	backend="$3"
 
-	[[ -d "$theme_dir" ]] || {
+	[[ -e "$theme_dir" ]] || {
 		echo "theme not found: $theme_dir" >&2
 		return 1
 	}
@@ -365,7 +333,7 @@ matrix_json() {
 		done
 	done
 
-	python3 - "$tsv" "$(basename "$theme_dir")" "$theme_dir" "$preview_path" "$backend" "${COLOR_SPACE_OPTIONS[*]}" "${PALETTE_OPTIONS[*]}" <<'PY'
+	python3 - "$tsv" "$(theme_entry_name "$theme_dir")" "$theme_dir" "$preview_path" "$backend" "${COLOR_SPACE_OPTIONS[*]}" "${PALETTE_OPTIONS[*]}" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -413,18 +381,17 @@ prewarm_theme() {
 }
 
 list_themes() {
-	local theme_name theme_dir media_path media_type preview_path
+	local theme_name theme_path media_path media_type preview_path
 
-	while IFS= read -r theme_name; do
-		[[ -n "$theme_name" ]] || continue
-		theme_dir="$THEME_LIBRARY_DIR/$theme_name"
-		media_path="$(pick_theme_media "$theme_dir")"
+	while IFS= read -r theme_path; do
+		media_path="$(theme_pick_media "$theme_path" 2>/dev/null || true)"
 		[[ -n "$media_path" ]] || continue
 		media_type="$(theme_media_type "$media_path")"
-		preview_path="$(theme_preview_path "$theme_name")"
+		theme_name="$(theme_entry_name "$theme_path")"
+		preview_path="$(theme_preview_path "$theme_path")"
 		extract_preview "$media_path" "$preview_path"
-		printf '%s\t%s\t%s\t%s\t%s\n' "$theme_name" "$theme_dir" "$media_path" "$preview_path" "$media_type"
-	done < <(find "$THEME_LIBRARY_DIR" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
+		printf '%s\t%s\t%s\t%s\t%s\n' "$theme_name" "$theme_path" "$media_path" "$preview_path" "$media_type"
+	done < <(theme_list_entries)
 }
 
 case "${1:-list}" in

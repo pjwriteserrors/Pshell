@@ -81,7 +81,14 @@ MOEWALLS_BLOCKED_PREFERENCES = (
 )
 HOME = Path.home()
 SCRIPT_DIR = Path(__file__).resolve().parent
-THEME_LIBRARY_DIR = Path(os.environ.get("THEME_LIBRARY_DIR", SCRIPT_DIR / "themes" / "color_themes"))
+def library_dir():
+    if os.environ.get("THEME_LIBRARY_DIR"):
+        return Path(os.environ["THEME_LIBRARY_DIR"])
+    result = subprocess.run([sys.executable, str(SCRIPT_DIR / "host.py"), "get", "wallpapers"], capture_output=True, text=True)
+    return Path(result.stdout.strip() or HOME / "Pictures" / "Wallpapers")
+
+
+THEME_LIBRARY_DIR = library_dir()
 STATE_DIR = Path(os.environ.get("THEME_STATE_DIR", HOME / ".local" / "state" / "quickshell-theme"))
 THEME_DIR = THEME_LIBRARY_DIR / "Wallpaper of the day"
 METADATA_FILE = STATE_DIR / "wallpaper-of-day.json"

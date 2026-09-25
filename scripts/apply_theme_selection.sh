@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
 
+# Applies a theme: wallpaper, window animation, wallust colours for the shell
+# and GTK, then the host's theme hooks (scripts/theme-hooks, enabled in
+# hosts/<profile>.json) for everything else that follows the wallpaper.
+#
+#   apply_theme_selection.sh <theme> [--backend B] [--palette P] [--style S] [--animation KIND:NAME]
+#
+# <theme> is a library entry (image, video or a directory holding one), by
+# path or by name.
+
 set -u
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,19 +22,14 @@ WALLUST_STYLE=""
 NIRI_ANIMATION_ID=""
 RUN_ID="$(date +%Y%m%d-%H%M%S)"
 LOG_FILE="$THEME_STATE_DIR/apply-$RUN_ID.log"
-PYWALFOX_BIN="${PYWALFOX_BIN:-}"
-WALLUST_CONFIG_FILE="$HOME/.config/wallust/wallust.toml"
-GTK_WAL_COLORS_FILE="$HOME/.cache/wal/gtk-colors.css"
+GTK_WAL_COLORS_FILE="$WAL_CACHE_DIR/gtk-colors.css"
 GTK3_CSS_FILE="$HOME/.config/gtk-3.0/gtk.css"
 GTK4_CSS_FILE="$HOME/.config/gtk-4.0/gtk.css"
-OBSIDIAN_SNIPPET_DIRS="${OBSIDIAN_SNIPPET_DIRS:-}"
-ANIMATION_APPLY_SCRIPT="$SCRIPT_DIR/apply_niri_animation.sh"
-WALLPAPER_RUNTIME_SCRIPT="$SCRIPT_DIR/apply_wallpaper_runtime.sh"
-SPICETIFY_THEME_GENERATOR="$HOME/.config/spicetify/Themes/custom/generate.py"
 declare -a BG_PIDS=()
 declare -a BG_NAMES=()
 OK_COUNT=0
 FAIL_COUNT=0
+SKIP_COUNT=0
 
 while (($# > 0)); do
 	case "$1" in
@@ -62,36 +66,21 @@ while (($# > 0)); do
 done
 
 if [[ -z "$THEME_ARG" ]]; then
-	echo "usage: $0 <theme-dir-or-name> [--backend VALUE --palette VALUE --style VALUE --animation KIND:NAME]" >&2
+	echo "usage: $0 <theme> [--backend VALUE --palette VALUE --style VALUE --animation KIND:NAME]" >&2
 	exit 1
 fi
 
-if [[ -d "$THEME_ARG" ]]; then
-	THEME_DIR="$THEME_ARG"
-else
-	THEME_DIR="$THEME_LIBRARY_DIR/$THEME_ARG"
-fi
-
-if [[ ! -d "$THEME_DIR" ]]; then
-	echo "theme not found: $THEME_DIR" >&2
+THEME_ENTRY="$(theme_resolve_entry "$THEME_ARG" 2>/dev/null || true)"
+THEME_MEDIA="$(theme_pick_media "$THEME_ENTRY" 2>/dev/null || true)"
+if [[ -z "$THEME_MEDIA" ]]; then
+	echo "theme not found: $THEME_ARG" >&2
 	exit 1
 fi
 
 theme_ensure_runtime_dirs
-
-if [[ -z "$PYWALFOX_BIN" ]]; then
-	PYWALFOX_BIN="$(command -v pywalfox 2>/dev/null || true)"
-fi
-
-pick_theme_media() {
-	local theme_dir="$1"
-	find "$theme_dir" -maxdepth 1 -type f \( \
-		-iname '*.mp4' -o \
-		-iname '*.png' -o \
-		-iname '*.jpg' -o \
-		-iname '*.jpeg' \
-	\) ! -name '.*' -print | sort | head -n 1
-}
+# keep the last twenty logs
+find "$THEME_STATE_DIR" -maxdepth 1 -name 'apply-*.log' -printf '%T@ %p\n' 2>/dev/null \
+	| sort -rn | tail -n +20 | cut -d' ' -f2- | xargs -r -d '\n' rm -f
 
 log() {
 	printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*" >>"$LOG_FILE"
@@ -124,6 +113,7 @@ run_bg() {
 	BG_NAMES+=("$name")
 }
 
+# exit 3 from a hook: the program it drives is not installed
 wait_for_jobs() {
 	local i pid name code
 	for i in "${!BG_PIDS[@]}"; do
@@ -134,6 +124,9 @@ wait_for_jobs() {
 		if (( code == 0 )); then
 			log "OK $name"
 			OK_COUNT=$((OK_COUNT + 1))
+		elif (( code == 3 )); then
+			log "SKIP $name"
+			SKIP_COUNT=$((SKIP_COUNT + 1))
 		else
 			log "FAIL $name exit=$code"
 			FAIL_COUNT=$((FAIL_COUNT + 1))
@@ -141,20 +134,17 @@ wait_for_jobs() {
 	done
 }
 
+# only a real failure is worth a notification; the shell shows the new theme
 finish_report() {
 	local summary
-	summary="Theme apply finished: ${OK_COUNT} ok, ${FAIL_COUNT} failed"
+	summary="Theme apply finished: ${OK_COUNT} ok"
+	(( SKIP_COUNT > 0 )) && summary+=", ${SKIP_COUNT} skipped"
+	(( FAIL_COUNT > 0 )) && summary+=", ${FAIL_COUNT} failed"
 	log "$summary"
 	log "Log file: $LOG_FILE"
 	if (( FAIL_COUNT > 0 )); then
 		notify-send "Theme Apply" "$summary"$'\n'"$LOG_FILE"
-	else
-		notify-send "Theme Apply" "$summary"
 	fi
-}
-
-reload_quickshell_theme() {
-	run_step "quickshell theme reload" "$SCRIPT_DIR/ipc.sh" theme reload
 }
 
 read_wallust_config_value() {
@@ -208,8 +198,6 @@ run_wallust_generation() {
 	return "$code"
 }
 
-# wallust v4 exposes dark/light directly as the "style"; normalise it for the
-# downstream tools (pywalfox etc.) that only understand dark|light.
 palette_mode() {
 	local style_name
 	style_name="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
@@ -221,70 +209,8 @@ palette_mode() {
 	fi
 }
 
-update_pywalfox_theme() {
-	local mode="$1"
-
-	if [[ ! -x "$PYWALFOX_BIN" ]]; then
-		log "SKIP pywalfox update (binary not found in PATH)"
-		return 0
-	fi
-
-	run_bg "pywalfox ${mode}" bash -lc '
-		bin="$1"
-		mode="$2"
-		"$bin" update
-		"$bin" "$mode"
-	' _ "$PYWALFOX_BIN" "$mode"
-}
-
-discover_obsidian_snippet_dirs() {
-	if [[ -n "$OBSIDIAN_SNIPPET_DIRS" ]]; then
-		printf '%s\n' "$OBSIDIAN_SNIPPET_DIRS" | tr ':' '\n'
-		return 0
-	fi
-
-	find "$HOME/Documents" -maxdepth 5 -type d -path '*/.obsidian/snippets' -print 2>/dev/null | sort
-}
-
-update_obsidian_snippets() {
-	local source_file="$HOME/.cache/wal/colors.css"
-	local dir target copied=0
-
-	if [[ ! -f "$source_file" ]]; then
-		log "SKIP obsidian snippets (colors.css not found)"
-		return 0
-	fi
-
-	while IFS= read -r dir; do
-		[[ -n "$dir" ]] || continue
-		[[ -d "$dir" ]] || continue
-		target="$dir/colors.css"
-		if cp "$source_file" "$target" >>"$LOG_FILE" 2>&1; then
-			log "OK obsidian colors $target"
-			copied=$((copied + 1))
-		else
-			log "FAIL obsidian colors $target"
-			FAIL_COUNT=$((FAIL_COUNT + 1))
-		fi
-	done < <(discover_obsidian_snippet_dirs)
-
-	if (( copied == 0 )); then
-		log "SKIP obsidian snippets (no .obsidian/snippets directories found)"
-	else
-		OK_COUNT=$((OK_COUNT + copied))
-	fi
-}
-
-update_spicetify_theme() {
-	[[ -f "$SPICETIFY_THEME_GENERATOR" ]] || return 0
-
-	# regenerates color.ini and refreshes without restarting Spotify; the
-	# running client picks the new colors up through the theme's theme.js
-	run_bg "spicetify theme update" python3 "$SPICETIFY_THEME_GENERATOR"
-}
-
 update_gtk_wal_theme() {
-	[[ -f "$HOME/.cache/wal/colors.json" ]] || return 0
+	[[ -f "$WAL_CACHE_DIR/colors.json" ]] || return 0
 
 	run_step "gtk wal colors update" python3 -c '
 import json
@@ -372,7 +298,7 @@ gtk_css = """@import url("file://GTK_COLORS_PATH");
 for css_path in gtk_css_paths:
     css_path.parent.mkdir(parents=True, exist_ok=True)
     css_path.write_text(gtk_css)
-' "$HOME/.cache/wal/colors.json" "$GTK_WAL_COLORS_FILE" "$GTK3_CSS_FILE" "$GTK4_CSS_FILE"
+' "$WAL_CACHE_DIR/colors.json" "$GTK_WAL_COLORS_FILE" "$GTK3_CSS_FILE" "$GTK4_CSS_FILE"
 }
 
 update_wallust_config() {
@@ -414,29 +340,53 @@ update_wallust_config() {
 	' _ "$WALLUST_CONFIG_FILE" "$WALLUST_BACKEND" "$WALLUST_PALETTE" "$WALLUST_STYLE"
 }
 
-theme_media="$(pick_theme_media "$THEME_DIR")"
-if [[ -z "$theme_media" ]]; then
-	echo "theme does not contain a supported image or video file: $THEME_DIR" >&2
-	exit 1
-fi
+# dark or light for GTK, then the theme bounced so running apps repaint
+update_gtk_color_scheme() {
+	local mode="$1"
+	local gtktheme
+	gsettings set org.gnome.desktop.interface color-scheme "prefer-$mode"
+	gtktheme="$(gsettings get org.gnome.desktop.interface gtk-theme 2>/dev/null || true)"
+	if [[ -n "$gtktheme" ]]; then
+		gsettings set org.gnome.desktop.interface gtk-theme ""
+		sleep 0.5
+		gsettings set org.gnome.desktop.interface gtk-theme "$gtktheme"
+	fi
+}
 
-theme_name="$(basename "$THEME_DIR")"
+run_theme_hooks() {
+	local hook script
+	while IFS= read -r hook; do
+		[[ -n "$hook" ]] || continue
+		script="$SCRIPT_DIR/theme-hooks/$hook.sh"
+		if [[ ! -f "$script" ]]; then
+			log "FAIL hook $hook (no $script)"
+			FAIL_COUNT=$((FAIL_COUNT + 1))
+			continue
+		fi
+		run_bg "hook $hook" bash "$script"
+	done < <(python3 "$SCRIPT_DIR/host.py" hooks)
+}
 
-log "Theme: $THEME_DIR"
-log "Selected source: $theme_media"
-selected_palette_mode="$(palette_mode "$(effective_style)")"
-log "Derived palette mode: $selected_palette_mode"
+theme_name="$(theme_entry_name "$THEME_ENTRY")"
+media_type="$(theme_media_type "$THEME_MEDIA")"
+
+log "Theme: $THEME_ENTRY"
+log "Media: $THEME_MEDIA ($media_type)"
 
 run_step "niri screen transition" niri msg action do-screen-transition --delay-ms 350 || true
 
+if ! run_step "wallpaper runtime" bash "$SCRIPT_DIR/apply_wallpaper_runtime.sh" "$THEME_MEDIA"; then
+	echo "wallpaper runtime failed, see $LOG_FILE" >&2
+	finish_report
+	exit 1
+fi
+
 if [[ -n "$NIRI_ANIMATION_ID" ]]; then
-	run_step "niri animation update" bash "$ANIMATION_APPLY_SCRIPT" --animation "$NIRI_ANIMATION_ID" || true
+	run_step "niri animation update" bash "$SCRIPT_DIR/apply_niri_animation.sh" --animation "$NIRI_ANIMATION_ID" || true
 fi
 
 printf '%s\n' "$theme_name" >"$THEME_CURRENT_NAME_FILE"
-printf '%s\n' "$THEME_DIR" >"$THEME_CURRENT_DIR_FILE"
-
-run_step "wallpaper runtime" bash "$WALLPAPER_RUNTIME_SCRIPT" "$theme_media" || true
+printf '%s\n' "$THEME_ENTRY" >"$THEME_CURRENT_DIR_FILE"
 
 frame_path="$THEME_CURRENT_FRAME_FILE"
 if [[ ! -f "$frame_path" ]]; then
@@ -444,28 +394,23 @@ if [[ ! -f "$frame_path" ]]; then
 	exit 1
 fi
 
-log "Static image: $frame_path"
+selected_palette_mode="$(palette_mode "$(effective_style)")"
+log "Palette mode: $selected_palette_mode"
 
 update_wallust_config
-run_step "wallust" run_wallust_generation "$frame_path" || true
+if ! run_step "wallust" run_wallust_generation "$frame_path"; then
+	echo "wallust failed; keeping the previous colours" >&2
+	finish_report
+	exit 1
+fi
 
 update_gtk_wal_theme
-reload_quickshell_theme
-update_obsidian_snippets
-update_spicetify_theme
-# kitty re-reads kitty.conf (and the included wal colors) on SIGUSR1
-run_bg "kitty colors reload" pkill -USR1 -x kitty
-update_pywalfox_theme "$selected_palette_mode"
+run_step "shell reload" "$SCRIPT_DIR/ipc.sh" theme reload || true
 
-run_bg "gtk theme bounce" bash -lc '
-	gtktheme="$(gsettings get org.gnome.desktop.interface gtk-theme 2>/dev/null || true)"
-	gsettings set org.gnome.desktop.interface color-scheme "prefer-dark" >/dev/null 2>&1 || true
-	if [[ -n "$gtktheme" ]]; then
-		gsettings set org.gnome.desktop.interface gtk-theme "" >/dev/null 2>&1 || true
-		sleep 0.5
-		gsettings set org.gnome.desktop.interface gtk-theme "$gtktheme" >/dev/null 2>&1 || true
-	fi
-'
+export THEME_FRAME="$frame_path" THEME_MEDIA THEME_MEDIA_TYPE="$media_type" \
+	THEME_MODE="$selected_palette_mode" WAL_CACHE_DIR THEME_SCRIPTS_DIR="$SCRIPT_DIR" THEME_STATE_DIR
+run_theme_hooks
+run_bg "gtk colour scheme" update_gtk_color_scheme "$selected_palette_mode"
 
 wait_for_jobs
 finish_report

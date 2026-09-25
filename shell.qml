@@ -18,4 +18,10 @@ ShellRoot {
 		running: true
 		command: ["bash", `${Quickshell.shellDir}/scripts/restore_theme.sh`]
 	}
+
+	// repaints outputs that appear later (hotplug, monitors off at login)
+	Process {
+		running: true
+		command: ["bash", `${Quickshell.shellDir}/scripts/wallpaper_watch.sh`]
+	}
 }

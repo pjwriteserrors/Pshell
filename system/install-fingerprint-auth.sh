@@ -63,7 +63,7 @@ chmod 644 "$PAM_FILE"
 
 # theme: install the current greeter and let it keep the sensor listening
 if [[ -d "$THEME_DIR" ]]; then
-	install -m 644 "$SRC_DIR/sddm-silent/Main.qml" "$THEME_DIR/Main.qml"
+	install -m 644 "$SRC_DIR/sddm/Main.qml" "$THEME_DIR/Main.qml"
 	conf="$THEME_DIR/theme.conf"
 	if grep -q '^fingerprintLoop=' "$conf"; then
 		content="$(sed 's/^fingerprintLoop=.*/fingerprintLoop=true/' "$conf")"

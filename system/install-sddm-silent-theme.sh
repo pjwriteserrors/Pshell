@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-THEME_SRC="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/sddm-silent"
+THEME_SRC="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/sddm"
 THEME_DST="/usr/share/sddm/themes/silent"
 WALLPAPER_DST="$THEME_DST/backgrounds/wallpaper.png"
 VIDEO_DST="$THEME_DST/backgrounds/wallpaper.mp4"
@@ -33,7 +33,7 @@ fi
 
 printf '[Theme]\nCurrent=silent\n' | sudo tee /etc/sddm.conf.d/theme.conf >/dev/null
 
-bash "$(dirname -- "$THEME_SRC")/scripts/sync_sddm_wallpaper.sh"
+bash "$(dirname -- "$(dirname -- "$THEME_SRC")")/scripts/sync_sddm_wallpaper.sh"
 
 echo "Installed and activated SDDM theme: silent"
 echo "Test with: sddm-greeter-qt6 --test-mode --theme $THEME_DST"

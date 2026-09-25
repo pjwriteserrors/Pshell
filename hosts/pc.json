@@ -1,10 +1,34 @@
 {
 	"primaryOutput": "DP-2",
-	"weather": { "city": "Paderborn" },
+	"weather": {
+		"city": "Paderborn"
+	},
+	"wallpapers": "~/Scripts/themes/color_themes",
 	"features": {
 		"ddc": true,
 		"mouse-battery": true,
 		"kdeconnect": true,
 		"haptics": true
+	},
+	"themeHooks": [
+		"sddm",
+		"betterdiscord",
+		"obsidian",
+		"spicetify",
+		"steam",
+		"kitty",
+		"pywalfox",
+		"telegram",
+		"oomox",
+		"openrgb"
+	],
+	"hookConfig": {
+		"spicetify": {
+			"generator": "~/Scripts/themes/changer/spicetify_maker.py",
+			"refresh": true
+		},
+		"steam": {
+			"script": "~/Scripts/themes/changer/update_steam_theme.py"
+		}
 	}
 }
