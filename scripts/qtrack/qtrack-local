@@ -1,0 +1,3701 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import argparse
+import base64
+import json
+import math
+import os
+import shlex
+import shutil
+import sqlite3
+import subprocess
+import sys
+import time
+from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
+from datetime import date, datetime, time as dt_time, timedelta
+from pathlib import Path
+from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+
+
+APP_NAME = "qtrack"
+SCRIPT_ROOT = Path(__file__).resolve().parent.parent
+CONFIG_ROOT = Path(__file__).resolve().parent
+LOCAL_TZ = datetime.now().astimezone().tzinfo
+TRACKING_ROUNDING_STEP_MINUTES = 15
+TRACKING_ROUNDING_STEP_SECONDS = TRACKING_ROUNDING_STEP_MINUTES * 60
+DEFAULT_TEAMWORK_BILLABLE = False
+OBSIDIAN_DAY_EXPORTER = CONFIG_ROOT / "export-qtrack-session-notes.py"
+TEAMWORK_DEFAULT_BASE_URL = ""  # set QTRACK_TEAMWORK_BASE_URL
+ENV_FILE_CANDIDATES = [
+    CONFIG_ROOT / "qtrack.env",
+    CONFIG_ROOT / ".env",
+    Path.home() / ".config" / "qtrack" / "qtrack.env",
+]
+
+
+class TrackerError(RuntimeError):
+    pass
+
+
+def load_env_file(path: Path) -> None:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return
+    except OSError:
+        return
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.startswith("export "):
+            stripped = stripped[len("export "):].strip()
+        if "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        if not key or key in os.environ:
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        os.environ[key] = value
+
+
+def load_env_files() -> None:
+    for path in ENV_FILE_CANDIDATES:
+        load_env_file(path.expanduser())
+
+
+load_env_files()
+
+
+def shell_env_value(name: str) -> str:
+    if not name.startswith("QTRACK_"):
+        return ""
+    shell = os.environ.get("SHELL", "")
+    if not shell:
+        return ""
+    start_marker = f"__QTRACK_ENV_{name}_START__"
+    end_marker = f"__QTRACK_ENV_{name}_END__"
+    command = (
+        f"printf '%s\\n%s\\n%s\\n' "
+        f"{shlex.quote(start_marker)} "
+        f"\"${{{name}:-}}\" "
+        f"{shlex.quote(end_marker)}"
+    )
+    try:
+        output = subprocess.check_output(
+            [shell, "-ic", command],
+            stderr=subprocess.DEVNULL,
+            timeout=3,
+            text=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    start = output.find(start_marker)
+    end = output.find(end_marker, start + len(start_marker))
+    if start < 0 or end < 0:
+        return ""
+    return output[start + len(start_marker):end].strip()
+
+
+def qtrack_env_value(name: str) -> str:
+    value = os.environ.get(name, "").strip()
+    if value:
+        return value
+    value = shell_env_value(name).strip()
+    if value:
+        os.environ[name] = value
+    return value
+
+
+def candidate_state_dirs() -> list[Path]:
+    override = os.environ.get("QTRACK_STATE_DIR")
+    if override:
+        return [Path(override).expanduser()]
+
+    candidates = [
+        Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state")) / APP_NAME,
+        SCRIPT_ROOT / ".local-state" / APP_NAME,
+    ]
+    unique_candidates: list[Path] = []
+    for candidate in candidates:
+        resolved = candidate.expanduser()
+        if resolved not in unique_candidates:
+            unique_candidates.append(resolved)
+    return unique_candidates
+
+
+def resolve_db_path() -> Path:
+    errors: list[str] = []
+    for state_dir in candidate_state_dirs():
+        try:
+            state_dir.mkdir(parents=True, exist_ok=True)
+            probe_path = state_dir / ".write-probe"
+            with probe_path.open("w", encoding="utf-8") as probe:
+                probe.write("ok\n")
+            probe_path.unlink(missing_ok=True)
+            return state_dir / "tracker.db"
+        except OSError as error:
+            errors.append(f"{state_dir}: {error}")
+
+    raise TrackerError("Unable to create tracker state directory. " + " | ".join(errors))
+
+
+@dataclass
+class SessionSnapshot:
+    session_id: int
+    project: str
+    description: str
+    teamwork_task_id: int | None
+    teamwork_project_id: int | None
+    teamwork_task_name: str
+    teamwork_project_name: str
+    teamwork_task_url: str
+    state: str
+    started_ts: int
+    paused_ts: int | None
+    stopped_ts: int | None
+    duration_seconds: int
+
+    @property
+    def is_active(self) -> bool:
+        return self.state == "active"
+
+    @property
+    def is_paused(self) -> bool:
+        return self.state == "paused"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.session_id,
+            "project": self.project,
+            "description": self.description,
+            "teamwork_task_id": self.teamwork_task_id,
+            "teamwork_project_id": self.teamwork_project_id,
+            "teamwork_task_name": self.teamwork_task_name,
+            "teamwork_project_name": self.teamwork_project_name,
+            "teamwork_task_url": self.teamwork_task_url,
+            "state": self.state,
+            "started_ts": self.started_ts,
+            "started_iso": isoformat(self.started_ts),
+            "started_label": format_time_label(self.started_ts),
+            "paused_ts": self.paused_ts,
+            "paused_label": format_time_label(self.paused_ts) if self.paused_ts else "",
+            "stopped_ts": self.stopped_ts,
+            "duration_seconds": self.duration_seconds,
+            "duration_label": format_duration(self.duration_seconds, include_seconds=True),
+            "duration_short": format_duration(self.duration_seconds, include_seconds=False),
+            "duration_clock": format_clock(self.duration_seconds),
+        }
+
+
+def now_ts() -> int:
+    return int(time.time())
+
+
+def isoformat(timestamp: int | None) -> str:
+    if timestamp is None:
+        return ""
+    return datetime.fromtimestamp(timestamp, tz=LOCAL_TZ).isoformat(timespec="seconds")
+
+
+def format_time_label(timestamp: int | None) -> str:
+    if timestamp is None:
+        return ""
+    return datetime.fromtimestamp(timestamp, tz=LOCAL_TZ).strftime("%H:%M")
+
+
+def format_date_label(value: date) -> str:
+    return value.strftime("%Y-%m-%d")
+
+
+def format_clock(total_seconds: int) -> str:
+    total_seconds = max(0, int(total_seconds))
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if hours > 0:
+        return f"{hours}:{minutes:02d}:{seconds:02d}"
+    return f"{minutes:02d}:{seconds:02d}"
+
+
+def format_duration(total_seconds: int, *, include_seconds: bool) -> str:
+    total_seconds = max(0, int(total_seconds))
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+
+    if not include_seconds and total_seconds < 60:
+        return f"{total_seconds}s"
+
+    parts: list[str] = []
+
+    if hours > 0:
+        parts.append(f"{hours}h")
+    if minutes > 0 or hours > 0:
+        parts.append(f"{minutes}m")
+    if include_seconds and hours == 0:
+        parts.append(f"{seconds}s")
+
+    if not parts:
+        parts.append(f"{seconds}s" if include_seconds else "0m")
+
+    return " ".join(parts)
+
+
+def normalize_text(value: str) -> str:
+    return " ".join(str(value or "").strip().split())
+
+
+def format_range_label(start_ts: int, end_ts: int) -> str:
+    start_label = format_time_label(start_ts)
+    end_label = format_time_label(end_ts)
+    return start_label if start_label == end_label else f"{start_label}-{end_label}"
+
+
+def round_half_up(value: float) -> int:
+    return int(math.floor(float(value) + 0.5))
+
+
+def round_timestamp_to_tracking_step(timestamp: float) -> int:
+    return round_half_up(float(timestamp) / TRACKING_ROUNDING_STEP_SECONDS) * TRACKING_ROUNDING_STEP_SECONDS
+
+
+def floor_timestamp_to_tracking_step(timestamp: float) -> int:
+    return int(math.floor(float(timestamp) / TRACKING_ROUNDING_STEP_SECONDS)) * TRACKING_ROUNDING_STEP_SECONDS
+
+
+def ceil_timestamp_to_tracking_step(timestamp: float) -> int:
+    return int(math.ceil(float(timestamp) / TRACKING_ROUNDING_STEP_SECONDS)) * TRACKING_ROUNDING_STEP_SECONDS
+
+
+def format_tracking_minutes(total_minutes: int) -> str:
+    rounded_minutes = max(0, int(total_minutes))
+    hours, minutes = divmod(rounded_minutes, 60)
+    if hours > 0:
+        return f"{hours}h {minutes}m"
+    return f"{minutes}m"
+
+
+def tracking_minute_candidates(total_seconds: int) -> list[int]:
+    raw_seconds = max(0, int(total_seconds))
+    if raw_seconds <= 0:
+        return [0]
+
+    if raw_seconds <= TRACKING_ROUNDING_STEP_SECONDS:
+        return [0, TRACKING_ROUNDING_STEP_MINUTES]
+
+    lower_minutes = max(
+        TRACKING_ROUNDING_STEP_MINUTES,
+        (raw_seconds // TRACKING_ROUNDING_STEP_SECONDS) * TRACKING_ROUNDING_STEP_MINUTES,
+    )
+    upper_minutes = int(math.ceil(raw_seconds / TRACKING_ROUNDING_STEP_SECONDS)) * TRACKING_ROUNDING_STEP_MINUTES
+
+    if upper_minutes == lower_minutes:
+        return [int(lower_minutes)]
+
+    return [int(lower_minutes), int(upper_minutes)]
+
+
+def balanced_tracking_minutes(total_seconds: int, balance_seconds: int) -> int:
+    raw_seconds = max(0, int(total_seconds))
+    candidates = tracking_minute_candidates(raw_seconds)
+    if not candidates:
+        return 0
+
+    return min(
+        candidates,
+        key=lambda minutes: (
+            abs(int(balance_seconds) + minutes * 60 - raw_seconds),
+            abs(minutes * 60 - raw_seconds),
+            minutes,
+        ),
+    )
+
+
+def rounded_tracking_window(
+    start_ts: int,
+    end_ts: int,
+    rounded_minutes: int,
+    *,
+    min_started_ts: int | None = None,
+) -> tuple[int, int]:
+    raw_start = int(start_ts)
+    raw_end = max(raw_start, int(end_ts))
+    rounded_duration_seconds = max(0, int(rounded_minutes)) * 60
+
+    if rounded_duration_seconds <= 0:
+        rounded_point = round_timestamp_to_tracking_step((raw_start + raw_end) / 2)
+        return rounded_point, rounded_point
+
+    ideal_start = ((raw_start + raw_end) - rounded_duration_seconds) / 2
+    rounded_start = round_timestamp_to_tracking_step(ideal_start)
+    if min_started_ts is not None and rounded_start < int(min_started_ts):
+        rounded_start = ceil_timestamp_to_tracking_step(int(min_started_ts))
+    return rounded_start, rounded_start + rounded_duration_seconds
+
+
+def allocate_segment_tracking_minutes(
+    segments: list[dict[str, Any]],
+    total_tracking_minutes: int,
+) -> list[int]:
+    segment_count = len(segments)
+    if segment_count == 0:
+        return []
+
+    total_tracking_minutes = max(0, int(total_tracking_minutes))
+    if total_tracking_minutes == 0:
+        return [0] * segment_count
+
+    total_duration_seconds = sum(max(0, int(segment.get("duration_seconds", 0))) for segment in segments)
+    if total_duration_seconds <= 0:
+        allocations = [0] * segment_count
+        allocations[0] = total_tracking_minutes
+        return allocations
+
+    segment_meta: list[dict[str, Any]] = []
+    allocated_minutes = 0
+
+    for index, segment in enumerate(segments):
+        duration_seconds = max(0, int(segment.get("duration_seconds", 0)))
+        exact_minutes = (duration_seconds / total_duration_seconds) * total_tracking_minutes
+        base_minutes = int(math.floor(exact_minutes / TRACKING_ROUNDING_STEP_MINUTES)) * TRACKING_ROUNDING_STEP_MINUTES
+        allocated_minutes += base_minutes
+        segment_meta.append(
+            {
+                "index": index,
+                "base_minutes": base_minutes,
+                "remainder_minutes": exact_minutes - base_minutes,
+                "duration_seconds": duration_seconds,
+                "started_ts": int(segment.get("started_ts", 0)),
+                "is_running": bool(segment.get("is_running")),
+            }
+        )
+
+    remaining_minutes = total_tracking_minutes - allocated_minutes
+    ordered_meta = sorted(
+        segment_meta,
+        key=lambda item: (
+            -float(item["remainder_minutes"]),
+            -int(item["duration_seconds"]),
+            int(item["started_ts"]),
+            int(item["index"]),
+        ),
+    )
+
+    for item in ordered_meta:
+        if remaining_minutes <= 0:
+            break
+        item["base_minutes"] += TRACKING_ROUNDING_STEP_MINUTES
+        remaining_minutes -= TRACKING_ROUNDING_STEP_MINUTES
+
+    allocations = [0] * segment_count
+    for item in segment_meta:
+        allocations[int(item["index"])] = int(item["base_minutes"])
+
+    for item in segment_meta:
+        if not item.get("is_running") or allocations[int(item["index"])] > 0:
+            continue
+        donor_index = max(
+            range(segment_count),
+            key=lambda index: allocations[index],
+            default=-1,
+        )
+        if donor_index >= 0 and donor_index != int(item["index"]) and allocations[donor_index] > TRACKING_ROUNDING_STEP_MINUTES:
+            allocations[donor_index] -= TRACKING_ROUNDING_STEP_MINUTES
+        allocations[int(item["index"])] = TRACKING_ROUNDING_STEP_MINUTES
+
+    return allocations
+
+
+def rounded_tracking_ranges(entry: dict[str, Any], total_tracking_minutes: int) -> list[tuple[int, int]]:
+    raw_segments = sorted(
+        list(entry.get("segments") or []),
+        key=lambda item: (
+            int(item.get("started_ts", 0)),
+            int(item.get("ended_ts", item.get("started_ts", 0))),
+        ),
+    )
+    if not raw_segments:
+        raw_segments = [
+            {
+                "started_ts": int(entry["first_started_ts"]),
+                "ended_ts": int(entry["last_ended_ts"]),
+                "duration_seconds": int(entry["duration_seconds"]),
+            }
+        ]
+
+    rounded_segments: list[tuple[int, int]] = []
+    previous_segment_end_ts: int | None = None
+    for segment, segment_minutes in zip(
+        raw_segments,
+        allocate_segment_tracking_minutes(raw_segments, total_tracking_minutes),
+    ):
+        segment_started_ts = int(segment["started_ts"])
+        segment_ended_ts = int(segment["ended_ts"])
+        min_started_ts = (
+            segment_started_ts
+            if previous_segment_end_ts is not None and segment_started_ts > previous_segment_end_ts
+            else None
+        )
+        previous_segment_end_ts = max(previous_segment_end_ts or segment_ended_ts, segment_ended_ts)
+        if segment_minutes <= 0:
+            continue
+        rounded_segments.append(
+            rounded_tracking_window(
+                segment_started_ts,
+                segment_ended_ts,
+                segment_minutes,
+                min_started_ts=min_started_ts,
+            )
+        )
+
+    if not rounded_segments:
+        return [
+            rounded_tracking_window(
+                int(entry["first_started_ts"]),
+                int(entry["last_ended_ts"]),
+                0,
+            )
+        ]
+
+    merged_segments: list[list[int]] = []
+    for start_ts, end_ts in sorted(rounded_segments):
+        if not merged_segments or start_ts > merged_segments[-1][1]:
+            merged_segments.append([start_ts, end_ts])
+        else:
+            merged_segments[-1][1] = max(merged_segments[-1][1], end_ts)
+
+    return [(start_ts, end_ts) for start_ts, end_ts in merged_segments]
+
+
+def clamp_running_entry_to_now(entry: dict[str, Any], current_timestamp: int) -> None:
+    if not entry.get("is_running"):
+        return
+    ranges = list(entry.get("rounded_range_timestamps") or [])
+    if not ranges:
+        return
+    latest_end = floor_timestamp_to_tracking_step(int(current_timestamp))
+    if latest_end <= 0:
+        return
+    latest = ranges[-1]
+    preview_duration = max(
+        TRACKING_ROUNDING_STEP_SECONDS,
+        int(math.ceil((int(latest["ended_ts"]) - int(latest["started_ts"])) / TRACKING_ROUNDING_STEP_SECONDS))
+        * TRACKING_ROUNDING_STEP_SECONDS,
+    )
+    latest["started_ts"] = latest_end - preview_duration
+    latest["ended_ts"] = latest_end
+    entry["rounded_range_timestamps"] = ranges
+    refresh_rounded_range_labels(entry)
+
+
+def clamp_entry_ranges_to_latest_step(entry: dict[str, Any], current_timestamp: int) -> None:
+    ranges = list(entry.get("rounded_range_timestamps") or [])
+    if not ranges:
+        return
+    latest_end = floor_timestamp_to_tracking_step(int(current_timestamp))
+    if latest_end <= 0:
+        return
+    last_ended_ts = max(int(item["ended_ts"]) for item in ranges)
+    if last_ended_ts <= latest_end:
+        return
+    delta_seconds = latest_end - last_ended_ts
+    entry["rounded_range_timestamps"] = [
+        {
+            "started_ts": int(item["started_ts"]) + delta_seconds,
+            "ended_ts": int(item["ended_ts"]) + delta_seconds,
+        }
+        for item in ranges
+    ]
+    refresh_rounded_range_labels(entry)
+
+
+def tracking_entry_sort_key(entry: dict[str, Any]) -> tuple[int, int, str, str]:
+    return (
+        int(entry.get("last_ended_ts", 0)),
+        int(entry.get("first_started_ts", 0)),
+        str(entry.get("project", "")).lower(),
+        str(entry.get("description", "")).lower(),
+    )
+
+
+def apply_rounded_tracking_fields(entries: list[dict[str, Any]]) -> None:
+    balance_seconds = 0
+
+    for entry in sorted(entries, key=tracking_entry_sort_key):
+        duration_seconds = max(0, int(entry.get("duration_seconds", 0)))
+        tracking_minutes = balanced_tracking_minutes(duration_seconds, balance_seconds)
+        balance_seconds += tracking_minutes * 60 - duration_seconds
+        rounded_ranges = rounded_tracking_ranges(entry, tracking_minutes)
+        rounded_start_ts = rounded_ranges[0][0]
+        rounded_end_ts = rounded_ranges[-1][1]
+
+        resolved_tracking_minutes = sum(max(0, end_ts - start_ts) for start_ts, end_ts in rounded_ranges) // 60
+        entry["tracking_minutes"] = int(resolved_tracking_minutes)
+        entry["tracking_label"] = format_tracking_minutes(int(resolved_tracking_minutes))
+        entry["rounded_started_ts"] = rounded_start_ts
+        entry["rounded_started_label"] = format_time_label(rounded_start_ts)
+        entry["rounded_ended_ts"] = rounded_end_ts
+        entry["rounded_ended_label"] = format_time_label(rounded_end_ts)
+        entry["rounded_ranges"] = [
+            format_range_label(start_ts, end_ts)
+            for start_ts, end_ts in rounded_ranges
+        ]
+        entry["rounded_range_timestamps"] = [
+            {"started_ts": int(start_ts), "ended_ts": int(end_ts)}
+            for start_ts, end_ts in rounded_ranges
+        ]
+        entry["rounded_range_label"] = ", ".join(entry["rounded_ranges"])
+        entry["tracking_balance_seconds"] = int(balance_seconds)
+
+
+def refresh_rounded_range_labels(entry: dict[str, Any]) -> None:
+    ranges = [
+        (int(item["started_ts"]), int(item["ended_ts"]))
+        for item in entry.get("rounded_range_timestamps") or []
+    ]
+    if not ranges:
+        return
+
+    entry["rounded_started_ts"] = ranges[0][0]
+    entry["rounded_started_label"] = format_time_label(ranges[0][0])
+    entry["rounded_ended_ts"] = ranges[-1][1]
+    entry["rounded_ended_label"] = format_time_label(ranges[-1][1])
+    entry["rounded_ranges"] = [format_range_label(start_ts, end_ts) for start_ts, end_ts in ranges]
+    entry["rounded_range_label"] = ", ".join(entry["rounded_ranges"])
+    tracking_minutes = sum(max(0, end_ts - start_ts) for start_ts, end_ts in ranges) // 60
+    entry["tracking_minutes"] = int(tracking_minutes)
+    entry["tracking_label"] = format_tracking_minutes(int(tracking_minutes))
+
+
+def entry_key(project: str, description: str) -> tuple[str, str]:
+    return (normalize_text(project), normalize_text(description))
+
+
+def day_bounds(day_value: str | None) -> tuple[int, int, date]:
+    if not day_value or day_value == "today":
+        target = datetime.now(tz=LOCAL_TZ).date()
+    else:
+        normalized = str(day_value).strip()
+        if "T" in normalized:
+            normalized = normalized.split("T", 1)[0]
+        target = date.fromisoformat(normalized)
+
+    start_dt = datetime.combine(target, dt_time.min, tzinfo=LOCAL_TZ)
+    end_dt = start_dt + timedelta(days=1)
+    return int(start_dt.timestamp()), int(end_dt.timestamp()), target
+
+
+def parse_optional_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return int(float(text))
+    except (TypeError, ValueError):
+        return None
+
+
+def local_date_time_parts(timestamp: int) -> tuple[str, str]:
+    value = datetime.fromtimestamp(int(timestamp), tz=LOCAL_TZ)
+    return value.strftime("%Y-%m-%d"), value.strftime("%H:%M:%S")
+
+
+def teamwork_base_url() -> str:
+    return (qtrack_env_value("QTRACK_TEAMWORK_BASE_URL") or TEAMWORK_DEFAULT_BASE_URL).rstrip("/")
+
+
+def teamwork_task_url(task_id: int | None) -> str:
+    if not task_id:
+        return ""
+    return f"{teamwork_base_url()}/app/tasks/{task_id}"
+
+
+def resolve_relationship_id(value: Any) -> int | None:
+    if isinstance(value, dict):
+        for key in ("id", "value"):
+            resolved = parse_optional_int(value.get(key))
+            if resolved is not None:
+                return resolved
+    return parse_optional_int(value)
+
+
+class TeamworkClient:
+    def __init__(self) -> None:
+        self.base_url = teamwork_base_url()
+        self.api_key = qtrack_env_value("QTRACK_TEAMWORK_API_KEY")
+        self.bearer_token = qtrack_env_value("QTRACK_TEAMWORK_BEARER_TOKEN")
+        if not self.api_key and not self.bearer_token:
+            raise TrackerError("Set QTRACK_TEAMWORK_API_KEY or QTRACK_TEAMWORK_BEARER_TOKEN for Teamwork sync.")
+
+    def auth_header(self) -> str:
+        if self.bearer_token:
+            return f"Bearer {self.bearer_token}"
+        token = base64.b64encode(f"{self.api_key}:x".encode("utf-8")).decode("ascii")
+        return f"Basic {token}"
+
+    def request(self, method: str, path: str, *, params: dict[str, Any] | None = None, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        query = urlencode(
+            {
+                key: value
+                for key, value in (params or {}).items()
+                if value is not None and str(value) != ""
+            },
+            doseq=True,
+        )
+        url = f"{self.base_url}{path}"
+        if query:
+            url = f"{url}?{query}"
+
+        body = json.dumps(payload).encode("utf-8") if payload is not None else None
+        request = Request(
+            url,
+            data=body,
+            method=method.upper(),
+            headers={
+                "Authorization": self.auth_header(),
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+        )
+
+        try:
+            with urlopen(request, timeout=20) as response:
+                raw = response.read().decode("utf-8")
+        except HTTPError as error:
+            detail = error.read().decode("utf-8", errors="replace").strip()
+            raise TrackerError(f"Teamwork API returned HTTP {error.code}: {detail or error.reason}") from error
+        except URLError as error:
+            raise TrackerError(f"Teamwork API request failed: {error.reason}") from error
+
+        if not raw.strip():
+            return {}
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError as error:
+            raise TrackerError("Teamwork API returned invalid JSON.") from error
+
+    def me(self) -> dict[str, Any]:
+        return self.request("GET", "/projects/api/v3/me.json")
+
+    def current_user(self) -> tuple[int, str]:
+        """Returns the Teamwork user id and the @mention handle (e.g. "PhilippJ")."""
+        user_id = parse_optional_int(qtrack_env_value("QTRACK_TEAMWORK_USER_ID"))
+        handle = qtrack_env_value("QTRACK_TEAMWORK_MENTION").lstrip("@")
+        if user_id is None or not handle:
+            person = self.me().get("person") or {}
+            if user_id is None:
+                user_id = parse_optional_int(person.get("id"))
+            if not handle:
+                first_name = str(person.get("firstName") or "").replace(" ", "")
+                last_name = str(person.get("lastName") or "").strip()
+                handle = f"{first_name}{last_name[:1]}"
+        if user_id is None:
+            raise TrackerError("Could not resolve the current Teamwork user id.")
+        return user_id, handle
+
+    def paged(self, path: str, key: str, params: dict[str, Any], *, max_pages: int = 10) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        for page in range(1, max_pages + 1):
+            payload = self.request("GET", path, params={**params, "page": page})
+            rows.extend(payload.get(key) or [])
+            if not ((payload.get("meta") or {}).get("page") or {}).get("hasMore"):
+                break
+        return rows
+
+    def task_query_params(self) -> dict[str, Any]:
+        return {
+            "include": "projects,tasklists",
+            "projectStatuses": "active,current,late,upcoming",
+            "fields[tasks]": "id,name,status,tasklistId,dueDate",
+            "fields[projects]": "id,name",
+            "fields[tasklists]": "id,name,projectId",
+        }
+
+    def assigned_tasks(self, user_id: int) -> list[dict[str, Any]]:
+        payload = self.request(
+            "GET",
+            "/projects/api/v3/tasks.json",
+            params={
+                **self.task_query_params(),
+                "responsiblePartyIds": str(user_id),
+                "pageSize": 250,
+                "orderBy": "updatedat",
+                "orderMode": "desc",
+            },
+        )
+        return self.normalize_tasks(payload)
+
+    def mentioned_task_ids(self, user_id: int, handle: str) -> set[int]:
+        """Open tasks where the user is @mentioned in a comment or in the description."""
+        if not handle:
+            return set()
+        profile_link = f"/app/people/{user_id}"
+        task_ids: set[int] = set()
+        comments = self.paged(
+            "/projects/api/v3/comments.json",
+            "comments",
+            {"searchTerm": handle, "pageSize": 500, "fields[comments]": "id,objectId,objectType,htmlBody"},
+        )
+        for comment in comments:
+            if str(comment.get("objectType") or "") != "task" or profile_link not in str(comment.get("htmlBody") or ""):
+                continue
+            task_id = resolve_relationship_id(comment.get("objectId") or comment.get("object"))
+            if task_id is not None:
+                task_ids.add(task_id)
+
+        described = self.paged(
+            "/projects/api/v3/tasks.json",
+            "tasks",
+            {"searchTerm": handle, "pageSize": 250, "fields[tasks]": "id,description"},
+            max_pages=2,
+        )
+        for task in described:
+            description = str(task.get("description") or "")
+            if profile_link in description or f"@{handle}" in description:
+                task_id = parse_optional_int(task.get("id"))
+                if task_id is not None:
+                    task_ids.add(task_id)
+        return task_ids
+
+    def tracked_task_ids(self, user_id: int) -> set[int]:
+        timelogs = self.paged(
+            "/projects/api/v3/time.json",
+            "timelogs",
+            {
+                "assignedToUserIds": str(user_id),
+                "pageSize": 500,
+                "orderBy": "date",
+                "orderMode": "desc",
+                "fields[timelogs]": "id,taskId",
+            },
+            max_pages=20,
+        )
+        return {task_id for task_id in (parse_optional_int(log.get("taskId")) for log in timelogs) if task_id is not None}
+
+    def tasks_by_ids(self, task_ids: set[int]) -> list[dict[str, Any]]:
+        ordered_ids = sorted(task_ids)
+        tasks: list[dict[str, Any]] = []
+        for offset in range(0, len(ordered_ids), 100):
+            chunk = ordered_ids[offset:offset + 100]
+            payload = self.request(
+                "GET",
+                "/projects/api/v3/tasks.json",
+                params={**self.task_query_params(), "ids": ",".join(str(task_id) for task_id in chunk), "pageSize": 250},
+            )
+            # an explicit id list also returns completed tasks
+            payload["tasks"] = [
+                task for task in (payload.get("tasks") or [])
+                if str(task.get("status") or "").lower() not in {"completed", "deleted"}
+            ]
+            tasks.extend(self.normalize_tasks(payload))
+        return tasks
+
+    def relevant_tasks(self) -> list[dict[str, Any]]:
+        """Assigned tasks plus open tasks the user was mentioned in or has tracked time on."""
+        user_id, handle = self.current_user()
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            assigned_future = pool.submit(self.assigned_tasks, user_id)
+            mentioned_future = pool.submit(self.mentioned_task_ids, user_id, handle)
+            tracked_future = pool.submit(self.tracked_task_ids, user_id)
+            assigned = assigned_future.result()
+            # the extra sources are a bonus; the assigned list must not fail because of them
+            try:
+                mentioned = mentioned_future.result()
+            except TrackerError:
+                mentioned = set()
+            try:
+                tracked = tracked_future.result()
+            except TrackerError:
+                tracked = set()
+
+        tasks_by_id: dict[int, dict[str, Any]] = {}
+        for task in assigned:
+            tasks_by_id[task["task_id"]] = {**task, "sources": ["assigned"]}
+        missing = (mentioned | tracked) - set(tasks_by_id)
+        if missing:
+            try:
+                extra_tasks = self.tasks_by_ids(missing)
+            except TrackerError:
+                extra_tasks = []
+            for task in extra_tasks:
+                tasks_by_id[task["task_id"]] = {**task, "sources": []}
+        for task_id, task in tasks_by_id.items():
+            if task_id in mentioned:
+                task["sources"].append("mentioned")
+            if task_id in tracked:
+                task["sources"].append("tracked")
+
+        return sorted(
+            tasks_by_id.values(),
+            key=lambda task: (
+                str(task.get("project_name", "")).lower(),
+                str(task.get("tasklist_name", "")).lower(),
+                str(task.get("task_name", "")).lower(),
+            ),
+        )
+
+    def normalize_tasks(self, payload: dict[str, Any]) -> list[dict[str, Any]]:
+        included = payload.get("included") or {}
+        projects = included.get("projects") or {}
+        tasklists = included.get("tasklists") or {}
+        tasks = payload.get("tasks") or payload.get("data") or []
+        normalized_tasks: list[dict[str, Any]] = []
+
+        for task in tasks:
+            task_id = parse_optional_int(task.get("id"))
+            if task_id is None:
+                continue
+            tasklist_id = resolve_relationship_id(task.get("tasklist") or task.get("taskList") or task.get("tasklistId"))
+            tasklist = tasklists.get(str(tasklist_id), {}) if tasklist_id is not None else {}
+            project_id = resolve_relationship_id(task.get("project") or task.get("projectId"))
+            if project_id is None and tasklist:
+                project_id = resolve_relationship_id(tasklist.get("project") or tasklist.get("projectId"))
+            project = projects.get(str(project_id), {}) if project_id is not None else {}
+            task_name = normalize_text(str(task.get("name") or f"Task {task_id}"))
+            project_name = normalize_text(str(project.get("name") or "Teamwork"))
+            tasklist_name = normalize_text(str(tasklist.get("name") or ""))
+            label_parts = [part for part in [project_name, tasklist_name, task_name] if part]
+            normalized_tasks.append(
+                {
+                    "id": task_id,
+                    "task_id": task_id,
+                    "project_id": project_id,
+                    "task_name": task_name,
+                    "project_name": project_name,
+                    "tasklist_name": tasklist_name,
+                    "url": teamwork_task_url(task_id),
+                    "label": " / ".join(label_parts),
+                }
+            )
+
+        return normalized_tasks
+
+    def create_time_entry(
+        self,
+        *,
+        project_id: int,
+        task_id: int,
+        description: str,
+        started_ts: int,
+        minutes: int,
+        billable: bool,
+    ) -> dict[str, Any]:
+        return self.request(
+            "POST",
+            f"/projects/api/v3/projects/{project_id}/time.json",
+            payload=self.timelog_payload(
+                project_id=project_id,
+                task_id=task_id,
+                description=description,
+                started_ts=started_ts,
+                minutes=minutes,
+                billable=billable,
+            ),
+        )
+
+    def update_time_entry(
+        self,
+        *,
+        timelog_id: int,
+        project_id: int,
+        task_id: int,
+        description: str,
+        started_ts: int,
+        minutes: int,
+        billable: bool,
+    ) -> dict[str, Any]:
+        return self.request(
+            "PATCH",
+            f"/projects/api/v3/time/{timelog_id}.json",
+            payload=self.timelog_payload(
+                project_id=project_id,
+                task_id=task_id,
+                description=description,
+                started_ts=started_ts,
+                minutes=minutes,
+                billable=billable,
+            ),
+        )
+
+    def timelog_payload(
+        self,
+        *,
+        project_id: int,
+        task_id: int,
+        description: str,
+        started_ts: int,
+        minutes: int,
+        billable: bool,
+    ) -> dict[str, Any]:
+        date_label, time_label = local_date_time_parts(started_ts)
+        hours_value, minutes_value = divmod(max(0, int(minutes)), 60)
+        return {
+            "tags": [],
+            "timelog": {
+                "projectId": project_id,
+                "taskId": task_id,
+                "description": description,
+                "date": date_label,
+                "time": time_label,
+                "hours": hours_value,
+                "minutes": minutes_value,
+                "hasStartTime": True,
+                "isBillable": bool(billable),
+                "isUtc": False,
+            },
+            "timelogOptions": {},
+        }
+
+
+def color_enabled(mode: str) -> bool:
+    if mode == "always":
+        return True
+    if mode == "never":
+        return False
+    if os.environ.get("NO_COLOR"):
+        return False
+    return sys.stdout.isatty() and os.environ.get("TERM", "") != "dumb"
+
+
+def style(text: str, *codes: str, enabled: bool) -> str:
+    if not enabled or not codes:
+        return text
+    return f"\033[{';'.join(codes)}m{text}\033[0m"
+
+
+def truncate_text(text: str, width: int) -> str:
+    if width <= 0:
+        return ""
+    if len(text) <= width:
+        return text
+    if width <= 3:
+        return text[:width]
+    return text[: width - 3] + "..."
+
+
+def terminal_width() -> int:
+    return max(80, shutil.get_terminal_size((110, 24)).columns)
+
+
+def table_border(widths: list[int]) -> str:
+    return "+" + "+".join("-" * (width + 2) for width in widths) + "+"
+
+
+def table_row(
+    values: list[str],
+    widths: list[int],
+    *,
+    enabled: bool = False,
+    cell_styles: list[tuple[str, ...] | None] | None = None,
+) -> str:
+    padded: list[str] = []
+    styles = cell_styles or [None] * len(values)
+
+    for value, width, codes in zip(values, widths, styles):
+        text = truncate_text(str(value), width).ljust(width)
+        if codes:
+            padded.append(style(text, *codes, enabled=enabled))
+        else:
+            padded.append(text)
+
+    return "| " + " | ".join(padded) + " |"
+
+
+def sort_day_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(
+        entries,
+        key=lambda item: (
+            -int(item["duration_seconds"]),
+            -int(item["last_ended_ts"]),
+            str(item["project"]).lower(),
+            str(item["description"]).lower(),
+        ),
+    )
+
+
+def sort_project_groups(groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(
+        groups,
+        key=lambda item: (
+            -int(item["duration_seconds"]),
+            -int(item["last_ended_ts"]),
+            str(item["project"]).lower(),
+        ),
+    )
+
+
+def build_project_groups(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: "OrderedDict[str, dict[str, Any]]" = OrderedDict()
+
+    for entry in entries:
+        project_name = str(entry["project"])
+        group = grouped.get(project_name)
+        if group is None:
+            group = {
+                "project": project_name,
+                "duration_seconds": 0,
+                "task_count": 0,
+                "checked_count": 0,
+                "open_count": 0,
+                "first_started_ts": int(entry["first_started_ts"]),
+                "last_ended_ts": int(entry["last_ended_ts"]),
+                "entries": [],
+            }
+            grouped[project_name] = group
+
+        group["duration_seconds"] += int(entry["duration_seconds"])
+        group["task_count"] += 1
+        group["checked_count"] += 1 if entry["checked"] else 0
+        group["open_count"] += 0 if entry["checked"] else 1
+        group["first_started_ts"] = min(int(group["first_started_ts"]), int(entry["first_started_ts"]))
+        group["last_ended_ts"] = max(int(group["last_ended_ts"]), int(entry["last_ended_ts"]))
+        group["entries"].append(entry)
+
+    project_groups = list(grouped.values())
+    for group in project_groups:
+        group["entries"] = sort_day_entries(list(group["entries"]))
+        group["duration_label"] = format_duration(group["duration_seconds"], include_seconds=False)
+        group["first_started_label"] = format_time_label(int(group["first_started_ts"]))
+        group["last_ended_label"] = format_time_label(int(group["last_ended_ts"]))
+
+    return sort_project_groups(project_groups)
+
+
+class TrackerStore:
+    def __init__(self, db_path: Path) -> None:
+        self.db_path = db_path
+        self.connection = sqlite3.connect(self.db_path)
+        self.connection.row_factory = sqlite3.Row
+        self.connection.execute("PRAGMA foreign_keys = ON")
+        self.connection.execute("PRAGMA journal_mode = WAL")
+        self.ensure_schema()
+
+    def close(self) -> None:
+        self.connection.close()
+
+    def ensure_schema(self) -> None:
+        self.connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project TEXT NOT NULL,
+                description TEXT NOT NULL,
+                teamwork_task_id INTEGER,
+                teamwork_project_id INTEGER,
+                teamwork_task_name TEXT NOT NULL DEFAULT '',
+                teamwork_project_name TEXT NOT NULL DEFAULT '',
+                teamwork_task_url TEXT NOT NULL DEFAULT '',
+                teamwork_billable INTEGER NOT NULL DEFAULT 0,
+                state TEXT NOT NULL CHECK (state IN ('active', 'paused', 'stopped')),
+                created_ts INTEGER NOT NULL,
+                started_ts INTEGER NOT NULL,
+                paused_ts INTEGER,
+                stopped_ts INTEGER,
+                updated_ts INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS segments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+                started_ts INTEGER NOT NULL,
+                ended_ts INTEGER
+            );
+
+            CREATE TABLE IF NOT EXISTS day_entry_checks (
+                day TEXT NOT NULL,
+                project TEXT NOT NULL,
+                description TEXT NOT NULL,
+                checked_ts INTEGER NOT NULL,
+                PRIMARY KEY (day, project, description)
+            );
+
+            CREATE TABLE IF NOT EXISTS teamwork_time_syncs (
+                day TEXT NOT NULL,
+                project TEXT NOT NULL,
+                description TEXT NOT NULL,
+                teamwork_task_id INTEGER NOT NULL,
+                rounded_started_ts INTEGER NOT NULL,
+                rounded_ended_ts INTEGER NOT NULL,
+                timelog_id INTEGER,
+                synced_ts INTEGER NOT NULL,
+                PRIMARY KEY (
+                    day,
+                    project,
+                    description,
+                    teamwork_task_id,
+                    rounded_started_ts,
+                    rounded_ended_ts
+                )
+            );
+
+            CREATE TABLE IF NOT EXISTS day_entry_time_offsets (
+                day TEXT NOT NULL,
+                project TEXT NOT NULL,
+                description TEXT NOT NULL,
+                offset_minutes INTEGER NOT NULL DEFAULT 0,
+                start_offset_minutes INTEGER NOT NULL DEFAULT 0,
+                end_offset_minutes INTEGER NOT NULL DEFAULT 0,
+                updated_ts INTEGER NOT NULL,
+                PRIMARY KEY (day, project, description)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_sessions_state ON sessions(state);
+            CREATE INDEX IF NOT EXISTS idx_sessions_recent ON sessions(updated_ts DESC);
+            CREATE INDEX IF NOT EXISTS idx_segments_session ON segments(session_id);
+            CREATE INDEX IF NOT EXISTS idx_segments_window ON segments(started_ts, ended_ts);
+            CREATE INDEX IF NOT EXISTS idx_day_entry_checks_day ON day_entry_checks(day, checked_ts DESC);
+            CREATE INDEX IF NOT EXISTS idx_teamwork_time_syncs_day ON teamwork_time_syncs(day, synced_ts DESC);
+            CREATE INDEX IF NOT EXISTS idx_day_entry_time_offsets_day ON day_entry_time_offsets(day, updated_ts DESC);
+            """
+        )
+        self.ensure_session_columns()
+        self.ensure_day_entry_time_offset_columns()
+        self.connection.commit()
+
+    def ensure_session_columns(self) -> None:
+        existing = {
+            str(row["name"])
+            for row in self.connection.execute("PRAGMA table_info(sessions)").fetchall()
+        }
+        columns = {
+            "teamwork_task_id": "INTEGER",
+            "teamwork_project_id": "INTEGER",
+            "teamwork_task_name": "TEXT NOT NULL DEFAULT ''",
+            "teamwork_project_name": "TEXT NOT NULL DEFAULT ''",
+            "teamwork_task_url": "TEXT NOT NULL DEFAULT ''",
+            "teamwork_billable": "INTEGER NOT NULL DEFAULT 1",
+        }
+        for name, definition in columns.items():
+            if name not in existing:
+                self.connection.execute(f"ALTER TABLE sessions ADD COLUMN {name} {definition}")
+
+    def ensure_day_entry_time_offset_columns(self) -> None:
+        existing = {
+            str(row["name"])
+            for row in self.connection.execute("PRAGMA table_info(day_entry_time_offsets)").fetchall()
+        }
+        columns = {
+            "start_offset_minutes": "INTEGER NOT NULL DEFAULT 0",
+            "end_offset_minutes": "INTEGER NOT NULL DEFAULT 0",
+        }
+        for name, definition in columns.items():
+            if name not in existing:
+                self.connection.execute(f"ALTER TABLE day_entry_time_offsets ADD COLUMN {name} {definition}")
+
+    def current_session_row(self) -> sqlite3.Row | None:
+        return self.connection.execute(
+            """
+            SELECT *
+            FROM sessions
+            WHERE state IN ('active', 'paused')
+            ORDER BY updated_ts DESC, id DESC
+            LIMIT 1
+            """
+        ).fetchone()
+
+    def latest_session_row(self) -> sqlite3.Row | None:
+        return self.connection.execute(
+            """
+            SELECT *
+            FROM sessions
+            ORDER BY COALESCE(stopped_ts, paused_ts, started_ts) DESC, id DESC
+            LIMIT 1
+            """
+        ).fetchone()
+
+    def open_segment_row(self, session_id: int) -> sqlite3.Row | None:
+        return self.connection.execute(
+            """
+            SELECT *
+            FROM segments
+            WHERE session_id = ? AND ended_ts IS NULL
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (session_id,),
+        ).fetchone()
+
+    def session_duration_seconds(self, session_id: int, current_timestamp: int) -> int:
+        total = 0
+        rows = self.connection.execute(
+            """
+            SELECT started_ts, ended_ts
+            FROM segments
+            WHERE session_id = ?
+            ORDER BY started_ts ASC
+            """,
+            (session_id,),
+        ).fetchall()
+
+        for row in rows:
+            ended_ts = row["ended_ts"] if row["ended_ts"] is not None else current_timestamp
+            total += max(0, int(ended_ts) - int(row["started_ts"]))
+
+        return total
+
+    def session_snapshot(self, row: sqlite3.Row | None, current_timestamp: int) -> SessionSnapshot | None:
+        if row is None:
+            return None
+
+        started_ts = int(row["started_ts"])
+        if str(row["state"]) == "active":
+            open_segment = self.open_segment_row(int(row["id"]))
+            if open_segment is not None:
+                started_ts = int(open_segment["started_ts"])
+
+        return SessionSnapshot(
+            session_id=int(row["id"]),
+            project=str(row["project"]),
+            description=str(row["description"]),
+            teamwork_task_id=parse_optional_int(row["teamwork_task_id"]),
+            teamwork_project_id=parse_optional_int(row["teamwork_project_id"]),
+            teamwork_task_name=str(row["teamwork_task_name"] or ""),
+            teamwork_project_name=str(row["teamwork_project_name"] or ""),
+            teamwork_task_url=str(row["teamwork_task_url"] or ""),
+            state=str(row["state"]),
+            started_ts=started_ts,
+            paused_ts=int(row["paused_ts"]) if row["paused_ts"] is not None else None,
+            stopped_ts=int(row["stopped_ts"]) if row["stopped_ts"] is not None else None,
+            duration_seconds=self.session_duration_seconds(int(row["id"]), current_timestamp),
+        )
+
+    def stop_paused_session(self, row: sqlite3.Row, effective_stop_ts: int, update_ts: int) -> None:
+        self.connection.execute(
+            """
+            UPDATE sessions
+            SET state = 'stopped',
+                stopped_ts = ?,
+                updated_ts = ?,
+                paused_ts = NULL
+            WHERE id = ?
+            """,
+            (effective_stop_ts, update_ts, int(row["id"])),
+        )
+
+    def start(
+        self,
+        project: str,
+        description: str,
+        current_timestamp: int,
+        *,
+        teamwork_task_id: int | None = None,
+        teamwork_project_id: int | None = None,
+        teamwork_task_name: str = "",
+        teamwork_project_name: str = "",
+        teamwork_task_url: str = "",
+        teamwork_billable: bool = DEFAULT_TEAMWORK_BILLABLE,
+    ) -> dict[str, Any]:
+        project = normalize_text(project)
+        description = normalize_text(description)
+        teamwork_task_name = normalize_text(teamwork_task_name)
+        teamwork_project_name = normalize_text(teamwork_project_name)
+        teamwork_task_url = str(teamwork_task_url or "").strip()
+
+        if not project:
+            raise TrackerError("Project is required.")
+        if not description:
+            raise TrackerError("Description is required.")
+
+        active_or_paused = self.current_session_row()
+        if active_or_paused and active_or_paused["state"] == "active":
+            raise TrackerError("A timer is already running. Pause or stop it first.")
+
+        with self.connection:
+            if active_or_paused and active_or_paused["state"] == "paused":
+                paused_at = int(active_or_paused["paused_ts"] or current_timestamp)
+                self.stop_paused_session(active_or_paused, paused_at, current_timestamp)
+
+            cursor = self.connection.execute(
+                """
+                INSERT INTO sessions (
+                    project,
+                    description,
+                    teamwork_task_id,
+                    teamwork_project_id,
+                    teamwork_task_name,
+                    teamwork_project_name,
+                    teamwork_task_url,
+                    teamwork_billable,
+                    state,
+                    created_ts,
+                    started_ts,
+                    updated_ts
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
+                """,
+                (
+                    project,
+                    description,
+                    teamwork_task_id,
+                    teamwork_project_id,
+                    teamwork_task_name,
+                    teamwork_project_name,
+                    teamwork_task_url,
+                    1 if teamwork_billable else 0,
+                    current_timestamp,
+                    current_timestamp,
+                    current_timestamp,
+                ),
+            )
+            session_id = int(cursor.lastrowid)
+            self.connection.execute(
+                """
+                INSERT INTO segments (session_id, started_ts)
+                VALUES (?, ?)
+                """,
+                (session_id, current_timestamp),
+            )
+
+        return {
+            "ok": True,
+            "message": "Timer started.",
+            "session": self.session_snapshot(self.current_session_row(), current_timestamp).to_dict(),
+        }
+
+    def pause(self, current_timestamp: int) -> dict[str, Any]:
+        row = self.current_session_row()
+        if row is None or row["state"] != "active":
+            raise TrackerError("No active timer to pause.")
+
+        open_segment = self.open_segment_row(int(row["id"]))
+        if open_segment is None:
+            raise TrackerError("Tracker state is inconsistent: active session has no open segment.")
+
+        with self.connection:
+            self.connection.execute(
+                """
+                UPDATE segments
+                SET ended_ts = ?
+                WHERE id = ?
+                """,
+                (current_timestamp, int(open_segment["id"])),
+            )
+            self.connection.execute(
+                """
+                UPDATE sessions
+                SET state = 'paused',
+                    paused_ts = ?,
+                    updated_ts = ?
+                WHERE id = ?
+                """,
+                (current_timestamp, current_timestamp, int(row["id"])),
+            )
+
+        return {
+            "ok": True,
+            "message": "Timer paused.",
+            "session": self.session_snapshot(self.current_session_row(), current_timestamp).to_dict(),
+        }
+
+    def resume(self, current_timestamp: int) -> dict[str, Any]:
+        row = self.current_session_row()
+        if row is None or row["state"] != "paused":
+            raise TrackerError("No paused timer to resume.")
+
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO segments (session_id, started_ts)
+                VALUES (?, ?)
+                """,
+                (int(row["id"]), current_timestamp),
+            )
+            self.connection.execute(
+                """
+                UPDATE sessions
+                SET state = 'active',
+                    paused_ts = NULL,
+                    updated_ts = ?
+                WHERE id = ?
+                """,
+                (current_timestamp, int(row["id"])),
+            )
+
+        return {
+            "ok": True,
+            "message": "Timer resumed.",
+            "session": self.session_snapshot(self.current_session_row(), current_timestamp).to_dict(),
+        }
+
+    def stop(self, current_timestamp: int) -> dict[str, Any]:
+        row = self.current_session_row()
+        if row is None:
+            raise TrackerError("No timer to stop.")
+
+        with self.connection:
+            if row["state"] == "active":
+                open_segment = self.open_segment_row(int(row["id"]))
+                if open_segment is None:
+                    raise TrackerError("Tracker state is inconsistent: active session has no open segment.")
+                self.connection.execute(
+                    """
+                    UPDATE segments
+                    SET ended_ts = ?
+                    WHERE id = ?
+                    """,
+                    (current_timestamp, int(open_segment["id"])),
+                )
+                effective_stop_ts = current_timestamp
+            else:
+                effective_stop_ts = int(row["paused_ts"] or current_timestamp)
+
+            self.connection.execute(
+                """
+                UPDATE sessions
+                SET state = 'stopped',
+                    stopped_ts = ?,
+                    paused_ts = NULL,
+                    updated_ts = ?
+                WHERE id = ?
+                """,
+                (effective_stop_ts, current_timestamp, int(row["id"])),
+            )
+
+        return {
+            "ok": True,
+            "message": "Timer stopped.",
+        }
+
+    def checked_day_entry_timestamps(self, day_label: str) -> dict[tuple[str, str], int]:
+        rows = self.connection.execute(
+            """
+            SELECT project, description, checked_ts
+            FROM day_entry_checks
+            WHERE day = ?
+            """,
+            (day_label,),
+        ).fetchall()
+
+        return {
+            entry_key(str(row["project"]), str(row["description"])): int(row["checked_ts"])
+            for row in rows
+        }
+
+    def resolve_day_entry(
+        self,
+        day_value: str | None,
+        current_timestamp: int,
+        *,
+        entry_number: int | None = None,
+        project: str | None = None,
+        description: str | None = None,
+    ) -> tuple[str, dict[str, Any]]:
+        day_payload = self.day_entries(day_value, current_timestamp)
+        entries = day_payload["entries"]
+
+        if not entries:
+            raise TrackerError(f"No tracked work found for {day_payload['day']}.")
+
+        if entry_number is not None:
+            if entry_number < 1:
+                raise TrackerError("Entry number must be 1 or greater.")
+            if entry_number > len(entries):
+                raise TrackerError(
+                    f"Entry {entry_number} is out of range for {day_payload['day']} (valid: 1-{len(entries)})."
+                )
+            return str(day_payload["day"]), dict(entries[entry_number - 1])
+
+        if project is None or description is None:
+            raise TrackerError("Provide either an entry number or both project and description.")
+
+        expected_key = entry_key(project, description)
+        for entry in entries:
+            if entry_key(str(entry["project"]), str(entry["description"])) == expected_key:
+                return str(day_payload["day"]), dict(entry)
+
+        raise TrackerError(
+            f"No entry matched for {day_payload['day']}: {expected_key[0]} | {expected_key[1]}"
+        )
+
+    def set_day_entry_checked(
+        self,
+        day_value: str | None,
+        current_timestamp: int,
+        *,
+        checked: bool,
+        entry_number: int | None = None,
+        project: str | None = None,
+        description: str | None = None,
+    ) -> dict[str, Any]:
+        day_label, entry = self.resolve_day_entry(
+            day_value,
+            current_timestamp,
+            entry_number=entry_number,
+            project=project,
+            description=description,
+        )
+        project, description = entry_key(str(entry["project"]), str(entry["description"]))
+
+        with self.connection:
+            if checked:
+                self.connection.execute(
+                    """
+                    INSERT INTO day_entry_checks (day, project, description, checked_ts)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(day, project, description)
+                    DO UPDATE SET checked_ts = excluded.checked_ts
+                    """,
+                    (day_label, project, description, current_timestamp),
+                )
+            else:
+                self.connection.execute(
+                    """
+                    DELETE FROM day_entry_checks
+                    WHERE day = ? AND project = ? AND description = ?
+                    """,
+                    (day_label, project, description),
+                )
+
+        action = "Marked" if checked else "Cleared"
+        state_label = "entered" if checked else "open"
+        return {
+            "ok": True,
+            "day": day_label,
+            "entry_number": entry.get("entry_number"),
+            "checked": checked,
+            "entry": {
+                "project": project,
+                "description": description,
+                "duration_label": entry["duration_label"],
+                "range_label": entry["range_label"],
+            },
+            "message": (
+                f"{action} entry {entry.get('entry_number', '?')} for {day_label} as {state_label}: "
+                f"{project} | {description}"
+            ),
+        }
+
+    def toggle_day_entry_checked(
+        self,
+        day_value: str | None,
+        current_timestamp: int,
+        *,
+        entry_number: int | None = None,
+        project: str | None = None,
+        description: str | None = None,
+    ) -> dict[str, Any]:
+        day_label, entry = self.resolve_day_entry(
+            day_value,
+            current_timestamp,
+            entry_number=entry_number,
+            project=project,
+            description=description,
+        )
+        project, description = entry_key(str(entry["project"]), str(entry["description"]))
+        checked_rows = self.checked_day_entry_timestamps(day_label)
+        is_checked = int(checked_rows.get((project, description), 0)) >= int(entry["last_ended_ts"])
+        return self.set_day_entry_checked(
+            day_value,
+            current_timestamp,
+            checked=not is_checked,
+            project=project,
+            description=description,
+        )
+
+    def synced_teamwork_ranges(self, day_label: str) -> set[tuple[str, str, int, int, int]]:
+        rows = self.connection.execute(
+            """
+            SELECT project, description, teamwork_task_id, rounded_started_ts, rounded_ended_ts
+            FROM teamwork_time_syncs
+            WHERE day = ?
+            """,
+            (day_label,),
+        ).fetchall()
+        return {
+            (
+                normalize_text(str(row["project"])),
+                normalize_text(str(row["description"])),
+                int(row["teamwork_task_id"]),
+                int(row["rounded_started_ts"]),
+                int(row["rounded_ended_ts"]),
+            )
+            for row in rows
+        }
+
+    def apply_teamwork_sync_fields(self, day_label: str, entries: list[dict[str, Any]]) -> None:
+        synced_ranges = self.synced_teamwork_ranges(day_label)
+        for entry in entries:
+            task_id = parse_optional_int(entry.get("teamwork_task_id"))
+            ranges = list(entry.get("rounded_range_timestamps") or [])
+            synced_count = 0
+            for tracked_range in ranges:
+                if task_id is None:
+                    continue
+                key = (
+                    normalize_text(str(entry["project"])),
+                    normalize_text(str(entry["description"])),
+                    task_id,
+                    int(tracked_range["started_ts"]),
+                    int(tracked_range["ended_ts"]),
+                )
+                if key in synced_ranges:
+                    synced_count += 1
+
+            entry["teamwork_synced_ranges"] = synced_count
+            entry["teamwork_total_ranges"] = len(ranges)
+            entry["teamwork_synced"] = bool(ranges) and synced_count == len(ranges)
+            entry["teamwork_sync_pending"] = bool(entry.get("checked")) and not entry["teamwork_synced"]
+
+    def day_entry_time_offsets(self, day_label: str) -> dict[tuple[str, str], tuple[int, int]]:
+        rows = self.connection.execute(
+            """
+            SELECT project, description, offset_minutes, start_offset_minutes, end_offset_minutes
+            FROM day_entry_time_offsets
+            WHERE day = ?
+            """,
+            (day_label,),
+        ).fetchall()
+        offsets: dict[tuple[str, str], tuple[int, int]] = {}
+        for row in rows:
+            legacy_offset = int(row["offset_minutes"] or 0)
+            start_offset = int(row["start_offset_minutes"] or 0)
+            end_offset = int(row["end_offset_minutes"] or 0)
+            if legacy_offset and start_offset == 0 and end_offset == 0:
+                start_offset = legacy_offset
+                end_offset = legacy_offset
+            offsets[entry_key(str(row["project"]), str(row["description"]))] = (start_offset, end_offset)
+        return offsets
+
+    def apply_day_entry_time_offsets(self, day_label: str, entries: list[dict[str, Any]], current_timestamp: int | None = None) -> None:
+        offsets = self.day_entry_time_offsets(day_label)
+        for entry in entries:
+            start_offset_minutes, end_offset_minutes = offsets.get(
+                entry_key(str(entry["project"]), str(entry["description"])),
+                (0, 0),
+            )
+            entry["manual_time_start_offset_minutes"] = int(start_offset_minutes)
+            entry["manual_time_end_offset_minutes"] = int(end_offset_minutes)
+            entry["manual_time_offset_minutes"] = (
+                int(start_offset_minutes)
+                if int(start_offset_minutes) == int(end_offset_minutes)
+                else 0
+            )
+            if int(start_offset_minutes) == 0 and int(end_offset_minutes) == 0:
+                continue
+            ranges = [
+                {
+                    "started_ts": int(item["started_ts"]),
+                    "ended_ts": int(item["ended_ts"]),
+                }
+                for item in entry.get("rounded_range_timestamps") or []
+            ]
+            if not ranges:
+                continue
+            ranges[0]["started_ts"] += int(start_offset_minutes) * 60
+            ranges[-1]["ended_ts"] += int(end_offset_minutes) * 60
+            entry["rounded_range_timestamps"] = ranges
+            refresh_rounded_range_labels(entry)
+
+        range_refs: list[dict[str, Any]] = []
+        for entry_index, entry in enumerate(entries):
+            for range_index, item in enumerate(entry.get("rounded_range_timestamps") or []):
+                started_ts = int(item["started_ts"])
+                ended_ts = int(item["ended_ts"])
+                if ended_ts <= started_ts:
+                    continue
+                range_refs.append(
+                    {
+                        "entry": entry,
+                        "entry_index": entry_index,
+                        "range_index": range_index,
+                        "started_ts": started_ts,
+                        "ended_ts": ended_ts,
+                    }
+                )
+
+        range_refs.sort(
+            key=lambda item: (
+                int(item["started_ts"]),
+                int(item["ended_ts"]),
+                int(item["entry_index"]),
+                int(item["range_index"]),
+            )
+        )
+
+        cursor: int | None = None
+        for item in range_refs:
+            if cursor is not None and int(item["started_ts"]) < cursor:
+                duration = int(item["ended_ts"]) - int(item["started_ts"])
+                item["started_ts"] = cursor
+                item["ended_ts"] = cursor + duration
+            cursor = int(item["ended_ts"])
+
+        ranges_by_entry_id: dict[int, list[dict[str, int]]] = {}
+        for item in range_refs:
+            ranges_by_entry_id.setdefault(id(item["entry"]), []).append(
+                {
+                    "started_ts": int(item["started_ts"]),
+                    "ended_ts": int(item["ended_ts"]),
+                }
+            )
+
+        for entry in entries:
+            ranges = ranges_by_entry_id.get(id(entry))
+            if ranges is None:
+                continue
+            entry["rounded_range_timestamps"] = ranges
+            refresh_rounded_range_labels(entry)
+
+        if current_timestamp is not None:
+            for entry in entries:
+                clamp_running_entry_to_now(entry, int(current_timestamp))
+
+    def shift_day_entry_time(
+        self,
+        day_value: str | None,
+        current_timestamp: int,
+        *,
+        minutes: int,
+        edge: str = "both",
+        entry_number: int | None = None,
+        project: str | None = None,
+        description: str | None = None,
+    ) -> dict[str, Any]:
+        if int(minutes) == 0:
+            raise TrackerError("Shift minutes must not be 0.")
+        if int(minutes) % TRACKING_ROUNDING_STEP_MINUTES != 0:
+            raise TrackerError(f"Shift minutes must be a multiple of {TRACKING_ROUNDING_STEP_MINUTES}.")
+        edge = str(edge or "both").strip().lower()
+        if edge not in {"start", "end", "both"}:
+            raise TrackerError("Time edge must be start, end or both.")
+
+        day_label, entry = self.resolve_day_entry(
+            day_value,
+            current_timestamp,
+            entry_number=entry_number,
+            project=project,
+            description=description,
+        )
+        project_name, description_text = entry_key(str(entry["project"]), str(entry["description"]))
+        ranges = list(entry.get("rounded_range_timestamps") or [])
+        if not ranges:
+            raise TrackerError("Entry has no rounded time range to shift.")
+        first_range = ranges[0]
+        last_range = ranges[-1]
+        if edge in {"start", "both"}:
+            next_started_ts = int(first_range["started_ts"]) + int(minutes) * 60
+            if next_started_ts >= int(first_range["ended_ts"]):
+                raise TrackerError("Start time must stay before the end of its time range.")
+        if edge in {"end", "both"}:
+            next_ended_ts = int(last_range["ended_ts"]) + int(minutes) * 60
+            if next_ended_ts <= int(last_range["started_ts"]):
+                raise TrackerError("End time must stay after the start of its time range.")
+
+        existing = self.connection.execute(
+            """
+            SELECT offset_minutes, start_offset_minutes, end_offset_minutes
+            FROM day_entry_time_offsets
+            WHERE day = ? AND project = ? AND description = ?
+            """,
+            (day_label, project_name, description_text),
+        ).fetchone()
+        legacy_offset = int(existing["offset_minutes"] if existing else 0)
+        start_offset = int(existing["start_offset_minutes"] if existing else 0)
+        end_offset = int(existing["end_offset_minutes"] if existing else 0)
+        if legacy_offset and start_offset == 0 and end_offset == 0:
+            start_offset = legacy_offset
+            end_offset = legacy_offset
+        if edge in {"start", "both"}:
+            start_offset += int(minutes)
+        if edge in {"end", "both"}:
+            end_offset += int(minutes)
+
+        with self.connection:
+            if start_offset == 0 and end_offset == 0:
+                self.connection.execute(
+                    """
+                    DELETE FROM day_entry_time_offsets
+                    WHERE day = ? AND project = ? AND description = ?
+                    """,
+                    (day_label, project_name, description_text),
+                )
+            else:
+                self.connection.execute(
+                    """
+                    INSERT INTO day_entry_time_offsets (
+                        day,
+                        project,
+                        description,
+                        offset_minutes,
+                        start_offset_minutes,
+                        end_offset_minutes,
+                        updated_ts
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(day, project, description)
+                    DO UPDATE SET offset_minutes = excluded.offset_minutes,
+                                  start_offset_minutes = excluded.start_offset_minutes,
+                                  end_offset_minutes = excluded.end_offset_minutes,
+                                  updated_ts = excluded.updated_ts
+                    """,
+                    (
+                        day_label,
+                        project_name,
+                        description_text,
+                        0,
+                        start_offset,
+                        end_offset,
+                        current_timestamp,
+                    ),
+                )
+
+        return {
+            "ok": True,
+            "day": day_label,
+            "entry_number": entry.get("entry_number"),
+            "project": project_name,
+            "description": description_text,
+            "shift_minutes": int(minutes),
+            "edge": edge,
+            "start_offset_minutes": start_offset,
+            "end_offset_minutes": end_offset,
+            "message": f"Shifted {edge} for entry {entry.get('entry_number', '?')} by {int(minutes):+d} minutes.",
+        }
+
+    def sync_ready_entries(self, day_payload: dict[str, Any], current_timestamp: int) -> list[dict[str, Any]]:
+        entries: list[dict[str, Any]] = []
+        for entry in day_payload.get("entries", []):
+            if not entry.get("checked"):
+                continue
+            segments = [
+                dict(segment)
+                for segment in list(entry.get("segments") or [])
+                if not segment.get("is_running")
+            ]
+            if not segments:
+                entry_copy = dict(entry)
+                entry_copy["duration_seconds"] = 0
+                entry_copy["is_running"] = False
+                entry_copy["rounded_range_timestamps"] = []
+                entry_copy["rounded_ranges"] = []
+                entry_copy["rounded_range_label"] = ""
+                entry_copy["_qtrack_skip_sync_rounding"] = True
+                entries.append(entry_copy)
+                continue
+            duration_seconds = sum(max(0, int(segment.get("duration_seconds", 0))) for segment in segments)
+            entry_copy = dict(entry)
+            entry_copy["segments"] = segments
+            entry_copy["duration_seconds"] = duration_seconds
+            entry_copy["first_started_ts"] = min(int(segment["started_ts"]) for segment in segments)
+            entry_copy["last_ended_ts"] = max(int(segment["ended_ts"]) for segment in segments)
+            entry_copy["is_running"] = False
+            original_segments = list(entry.get("segments") or [])
+            if len(segments) == len(original_segments):
+                entry_copy["rounded_range_timestamps"] = [
+                    {
+                        "started_ts": int(item["started_ts"]),
+                        "ended_ts": int(item["ended_ts"]),
+                    }
+                    for item in entry.get("rounded_range_timestamps") or []
+                ]
+                entry_copy["_qtrack_preserve_sync_ranges"] = True
+            entries.append(entry_copy)
+
+        roundable_entries = [
+            entry
+            for entry in entries
+            if not entry.get("_qtrack_skip_sync_rounding")
+            and not entry.get("_qtrack_preserve_sync_ranges")
+        ]
+        apply_rounded_tracking_fields(roundable_entries)
+        self.apply_day_entry_time_offsets(str(day_payload["day"]), roundable_entries)
+        for entry in entries:
+            if entry.get("_qtrack_skip_sync_rounding"):
+                entry["rounded_range_timestamps"] = []
+                entry["rounded_ranges"] = []
+                entry["rounded_range_label"] = ""
+                entry["tracking_minutes"] = 0
+                entry["tracking_label"] = "0m"
+                entry.pop("_qtrack_skip_sync_rounding", None)
+                continue
+            entry.pop("_qtrack_preserve_sync_ranges", None)
+            clamp_entry_ranges_to_latest_step(entry, current_timestamp)
+            entry["rounded_range_timestamps"] = [
+                item
+                for item in list(entry.get("rounded_range_timestamps") or [])
+                if int(item["ended_ts"]) > int(item["started_ts"])
+            ]
+            if entry["rounded_range_timestamps"]:
+                refresh_rounded_range_labels(entry)
+            else:
+                entry["rounded_ranges"] = []
+                entry["rounded_range_label"] = ""
+                entry["tracking_minutes"] = 0
+                entry["tracking_label"] = "0m"
+        return entries
+
+    def sync_checked_teamwork_entries(self, day_value: str | None, current_timestamp: int) -> dict[str, Any]:
+        day_payload = self.day_entries(day_value, current_timestamp)
+        day_label = str(day_payload["day"])
+        sync_entries = self.sync_ready_entries(day_payload, current_timestamp)
+        client = TeamworkClient()
+        created: list[dict[str, Any]] = []
+        updated: list[dict[str, Any]] = []
+        skipped: list[dict[str, Any]] = []
+        errors: list[str] = []
+
+        for entry in sync_entries:
+            task_id = parse_optional_int(entry.get("teamwork_task_id"))
+            project_id = parse_optional_int(entry.get("teamwork_project_id"))
+            if task_id is None or project_id is None:
+                errors.append(
+                    f"Entry {entry.get('entry_number', '?')} has no Teamwork task/project mapping."
+                )
+                continue
+
+            sync_identity = (
+                day_label,
+                normalize_text(str(entry["project"])),
+                normalize_text(str(entry["description"])),
+                task_id,
+            )
+            existing_syncs = [
+                dict(row)
+                for row in self.connection.execute(
+                    """
+                    SELECT rounded_started_ts, rounded_ended_ts, timelog_id, synced_ts
+                    FROM teamwork_time_syncs
+                    WHERE day = ?
+                      AND project = ?
+                      AND description = ?
+                      AND teamwork_task_id = ?
+                    ORDER BY rounded_started_ts ASC, rounded_ended_ts ASC, synced_ts ASC
+                    """,
+                    sync_identity,
+                ).fetchall()
+            ]
+            used_existing_indices: set[int] = set()
+            tracked_ranges = []
+            seen_tracked_ranges: set[tuple[int, int]] = set()
+            for tracked_range in sorted(
+                list(entry.get("rounded_range_timestamps") or []),
+                key=lambda item: (int(item["started_ts"]), int(item["ended_ts"])),
+            ):
+                range_key = (int(tracked_range["started_ts"]), int(tracked_range["ended_ts"]))
+                if range_key in seen_tracked_ranges or range_key[1] <= range_key[0]:
+                    continue
+                seen_tracked_ranges.add(range_key)
+                tracked_ranges.append(
+                    {
+                        "started_ts": range_key[0],
+                        "ended_ts": range_key[1],
+                    }
+                )
+            if not tracked_ranges:
+                skipped.append(
+                    {
+                        "entry_number": entry.get("entry_number"),
+                        "project": entry["project"],
+                        "description": entry["description"],
+                        "teamwork_task_id": task_id,
+                        "minutes": 0,
+                        "billable": bool(entry.get("teamwork_billable", True)),
+                        "range_label": "not tracked",
+                    }
+                )
+                continue
+
+            for range_index, tracked_range in enumerate(tracked_ranges):
+                started_ts = int(tracked_range["started_ts"])
+                ended_ts = int(tracked_range["ended_ts"])
+                minutes = max(0, int((ended_ts - started_ts) / 60))
+                if minutes <= 0:
+                    continue
+
+                exact_index = next(
+                    (
+                        index
+                        for index, row in enumerate(existing_syncs)
+                        if index not in used_existing_indices
+                        and int(row["rounded_started_ts"]) == started_ts
+                        and int(row["rounded_ended_ts"]) == ended_ts
+                    ),
+                    None,
+                )
+                if exact_index is not None:
+                    used_existing_indices.add(exact_index)
+                    existing = existing_syncs[exact_index]
+                    skipped.append(
+                        {
+                            "entry_number": entry.get("entry_number"),
+                            "project": entry["project"],
+                            "description": entry["description"],
+                            "teamwork_task_id": task_id,
+                            "timelog_id": existing["timelog_id"],
+                            "minutes": minutes,
+                            "billable": bool(entry.get("teamwork_billable", True)),
+                            "range_label": format_range_label(started_ts, ended_ts),
+                        }
+                    )
+                    continue
+
+                update_index = range_index if range_index < len(existing_syncs) else None
+                if update_index is not None and update_index in used_existing_indices:
+                    update_index = next(
+                        (
+                            index
+                            for index in range(len(existing_syncs))
+                            if index not in used_existing_indices
+                        ),
+                        None,
+                    )
+                update_row = existing_syncs[update_index] if update_index is not None else None
+                update_timelog_id = parse_optional_int(update_row.get("timelog_id")) if update_row else None
+
+                if update_row and update_timelog_id is not None:
+                    response = client.update_time_entry(
+                        timelog_id=update_timelog_id,
+                        project_id=project_id,
+                        task_id=task_id,
+                        description=str(entry["description"]),
+                        started_ts=started_ts,
+                        minutes=minutes,
+                        billable=bool(entry.get("teamwork_billable", True)),
+                    )
+                    response_timelog_id = parse_optional_int(
+                        response.get("id")
+                        or (response.get("timelog") or {}).get("id")
+                        or (response.get("data") or {}).get("id")
+                    ) or update_timelog_id
+                    with self.connection:
+                        self.connection.execute(
+                            """
+                            DELETE FROM teamwork_time_syncs
+                            WHERE day = ?
+                              AND project = ?
+                              AND description = ?
+                              AND teamwork_task_id = ?
+                              AND rounded_started_ts = ?
+                              AND rounded_ended_ts = ?
+                            """,
+                            (
+                                *sync_identity,
+                                int(update_row["rounded_started_ts"]),
+                                int(update_row["rounded_ended_ts"]),
+                            ),
+                        )
+                        self.connection.execute(
+                            """
+                            INSERT OR REPLACE INTO teamwork_time_syncs (
+                                day,
+                                project,
+                                description,
+                                teamwork_task_id,
+                                rounded_started_ts,
+                                rounded_ended_ts,
+                                timelog_id,
+                                synced_ts
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                *sync_identity,
+                                started_ts,
+                                ended_ts,
+                                response_timelog_id,
+                                current_timestamp,
+                            ),
+                        )
+                    used_existing_indices.add(update_index)
+                    updated.append(
+                        {
+                            "entry_number": entry.get("entry_number"),
+                            "project": entry["project"],
+                            "description": entry["description"],
+                            "teamwork_task_id": task_id,
+                            "teamwork_project_id": project_id,
+                            "timelog_id": response_timelog_id,
+                            "minutes": minutes,
+                            "billable": bool(entry.get("teamwork_billable", True)),
+                            "range_label": format_range_label(started_ts, ended_ts),
+                            "previous_range_label": format_range_label(
+                                int(update_row["rounded_started_ts"]),
+                                int(update_row["rounded_ended_ts"]),
+                            ),
+                        }
+                    )
+                    continue
+
+                response = client.create_time_entry(
+                    project_id=project_id,
+                    task_id=task_id,
+                    description=str(entry["description"]),
+                    started_ts=started_ts,
+                    minutes=minutes,
+                    billable=bool(entry.get("teamwork_billable", True)),
+                )
+                timelog_id = parse_optional_int(
+                    response.get("id")
+                    or (response.get("timelog") or {}).get("id")
+                    or (response.get("data") or {}).get("id")
+                )
+                with self.connection:
+                    self.connection.execute(
+                        """
+                        INSERT OR REPLACE INTO teamwork_time_syncs (
+                            day,
+                            project,
+                            description,
+                            teamwork_task_id,
+                            rounded_started_ts,
+                            rounded_ended_ts,
+                            timelog_id,
+                            synced_ts
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (*sync_identity, started_ts, ended_ts, timelog_id, current_timestamp),
+                    )
+                created.append(
+                    {
+                        "entry_number": entry.get("entry_number"),
+                        "project": entry["project"],
+                        "description": entry["description"],
+                        "teamwork_task_id": task_id,
+                        "teamwork_project_id": project_id,
+                        "timelog_id": timelog_id,
+                        "minutes": minutes,
+                        "billable": bool(entry.get("teamwork_billable", True)),
+                        "range_label": format_range_label(started_ts, ended_ts),
+                    }
+                )
+
+        if errors:
+            raise TrackerError("Teamwork sync incomplete: " + " | ".join(errors))
+
+        return {
+            "ok": True,
+            "day": day_label,
+            "created_count": len(created),
+            "updated_count": len(updated),
+            "skipped_count": len(skipped),
+            "created": created,
+            "updated": updated,
+            "skipped": skipped,
+            "message": f"Teamwork sync done: {len(created)} created, {len(updated)} updated, {len(skipped)} already synced.",
+        }
+
+    def assign_teamwork_task_to_day_entry(
+        self,
+        day_value: str | None,
+        current_timestamp: int,
+        *,
+        teamwork_task_id: int,
+        teamwork_project_id: int,
+        teamwork_task_name: str,
+        teamwork_project_name: str,
+        teamwork_task_url: str,
+        entry_number: int | None = None,
+        project: str | None = None,
+        description: str | None = None,
+    ) -> dict[str, Any]:
+        day_label, entry = self.resolve_day_entry(
+            day_value,
+            current_timestamp,
+            entry_number=entry_number,
+            project=project,
+            description=description,
+        )
+        if int(entry.get("teamwork_synced_ranges") or 0) > 0:
+            raise TrackerError("This entry has already been synced to Teamwork. Change the Teamwork timelog there first.")
+
+        day_start_ts, day_end_ts, _ = day_bounds(day_label)
+        project_name, description_text = entry_key(str(entry["project"]), str(entry["description"]))
+        teamwork_task_name = normalize_text(teamwork_task_name)
+        teamwork_project_name = normalize_text(teamwork_project_name)
+        teamwork_task_url = str(teamwork_task_url or "").strip() or f"{teamwork_base_url()}/app/tasks/{teamwork_task_id}"
+        # The project label follows the ticket, so picking another ticket also moves the entry.
+        new_project_name = (
+            normalize_text(f"{teamwork_project_name} / {teamwork_task_name}")
+            if teamwork_project_name and teamwork_task_name
+            else project_name
+        )
+
+        rows = self.connection.execute(
+            """
+            SELECT DISTINCT sessions.id
+            FROM sessions
+            JOIN segments ON segments.session_id = sessions.id
+            WHERE sessions.project = ?
+              AND sessions.description = ?
+              AND segments.started_ts < ?
+              AND COALESCE(segments.ended_ts, ?) > ?
+            """,
+            (project_name, description_text, day_end_ts, current_timestamp, day_start_ts),
+        ).fetchall()
+        session_ids = [int(row["id"]) for row in rows]
+        if not session_ids:
+            raise TrackerError("No matching sessions found for this day entry.")
+
+        with self.connection:
+            self.connection.executemany(
+                """
+                UPDATE sessions
+                SET project = ?,
+                    teamwork_task_id = ?,
+                    teamwork_project_id = ?,
+                    teamwork_task_name = ?,
+                    teamwork_project_name = ?,
+                    teamwork_task_url = ?,
+                    updated_ts = ?
+                WHERE id = ?
+                """,
+                [
+                    (
+                        new_project_name,
+                        teamwork_task_id,
+                        teamwork_project_id,
+                        teamwork_task_name,
+                        teamwork_project_name,
+                        teamwork_task_url,
+                        current_timestamp,
+                        session_id,
+                    )
+                    for session_id in session_ids
+                ],
+            )
+            self.connection.execute(
+                """
+                DELETE FROM teamwork_time_syncs
+                WHERE day = ? AND project = ? AND description = ?
+                """,
+                (day_label, project_name, description_text),
+            )
+            if new_project_name != project_name:
+                self.move_day_entry_state(
+                    day_label,
+                    (project_name, description_text),
+                    (new_project_name, description_text),
+                    current_timestamp,
+                )
+
+        return {
+            "ok": True,
+            "day": day_label,
+            "entry_number": entry.get("entry_number"),
+            "project": new_project_name,
+            "old_project": project_name,
+            "updated_sessions": len(session_ids),
+            "teamwork_task_id": teamwork_task_id,
+            "teamwork_project_id": teamwork_project_id,
+            "teamwork_task_name": teamwork_task_name,
+            "teamwork_project_name": teamwork_project_name,
+            "teamwork_task_url": teamwork_task_url,
+            "message": f"Assigned entry {entry.get('entry_number', '?')} to Teamwork task {teamwork_task_id}.",
+        }
+
+    def move_day_entry_state(
+        self,
+        day_label: str,
+        old_key: tuple[str, str],
+        new_key: tuple[str, str],
+        current_timestamp: int,
+    ) -> None:
+        """Carry the checked marker and manual time offsets over to a renamed day entry."""
+        checked_row = self.connection.execute(
+            "SELECT checked_ts FROM day_entry_checks WHERE day = ? AND project = ? AND description = ?",
+            (day_label, *old_key),
+        ).fetchone()
+        offset_row = self.connection.execute(
+            """
+            SELECT offset_minutes, start_offset_minutes, end_offset_minutes
+            FROM day_entry_time_offsets
+            WHERE day = ? AND project = ? AND description = ?
+            """,
+            (day_label, *old_key),
+        ).fetchone()
+
+        self.connection.execute(
+            "DELETE FROM day_entry_checks WHERE day = ? AND project = ? AND description = ?",
+            (day_label, *old_key),
+        )
+        self.connection.execute(
+            "DELETE FROM day_entry_time_offsets WHERE day = ? AND project = ? AND description = ?",
+            (day_label, *old_key),
+        )
+        if checked_row:
+            self.connection.execute(
+                """
+                INSERT INTO day_entry_checks (day, project, description, checked_ts)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(day, project, description)
+                DO UPDATE SET checked_ts = MAX(day_entry_checks.checked_ts, excluded.checked_ts)
+                """,
+                (day_label, *new_key, int(checked_row["checked_ts"])),
+            )
+        if offset_row:
+            legacy_offset = int(offset_row["offset_minutes"] or 0)
+            start_offset = int(offset_row["start_offset_minutes"] or 0)
+            end_offset = int(offset_row["end_offset_minutes"] or 0)
+            if legacy_offset and start_offset == 0 and end_offset == 0:
+                start_offset = legacy_offset
+                end_offset = legacy_offset
+            self.connection.execute(
+                """
+                INSERT INTO day_entry_time_offsets (
+                    day, project, description, offset_minutes, start_offset_minutes, end_offset_minutes, updated_ts
+                )
+                VALUES (?, ?, ?, 0, ?, ?, ?)
+                ON CONFLICT(day, project, description)
+                DO UPDATE SET offset_minutes = excluded.offset_minutes,
+                              start_offset_minutes = excluded.start_offset_minutes,
+                              end_offset_minutes = excluded.end_offset_minutes,
+                              updated_ts = excluded.updated_ts
+                """,
+                (day_label, *new_key, start_offset, end_offset, current_timestamp),
+            )
+
+    def edit_day_entry_description(
+        self,
+        day_value: str | None,
+        current_timestamp: int,
+        *,
+        new_description: str,
+        entry_number: int | None = None,
+        project: str | None = None,
+        description: str | None = None,
+    ) -> dict[str, Any]:
+        new_description = normalize_text(new_description)
+        if not new_description:
+            raise TrackerError("New description is required.")
+
+        day_label, entry = self.resolve_day_entry(
+            day_value,
+            current_timestamp,
+            entry_number=entry_number,
+            project=project,
+            description=description,
+        )
+        if int(entry.get("teamwork_synced_ranges") or 0) > 0:
+            raise TrackerError("This entry has already been synced to Teamwork. Change the Teamwork timelog there first.")
+
+        day_start_ts, day_end_ts, _ = day_bounds(day_label)
+        project_name, old_description = entry_key(str(entry["project"]), str(entry["description"]))
+        if old_description == new_description:
+            return {
+                "ok": True,
+                "day": day_label,
+                "entry_number": entry.get("entry_number"),
+                "project": project_name,
+                "description": new_description,
+                "updated_sessions": 0,
+                "message": "Description unchanged.",
+            }
+
+        rows = self.connection.execute(
+            """
+            SELECT DISTINCT sessions.id
+            FROM sessions
+            JOIN segments ON segments.session_id = sessions.id
+            WHERE sessions.project = ?
+              AND sessions.description = ?
+              AND segments.started_ts < ?
+              AND COALESCE(segments.ended_ts, ?) > ?
+            """,
+            (project_name, old_description, day_end_ts, current_timestamp, day_start_ts),
+        ).fetchall()
+        session_ids = [int(row["id"]) for row in rows]
+        if not session_ids:
+            raise TrackerError("No matching sessions found for this day entry.")
+
+        checked_row = self.connection.execute(
+            """
+            SELECT checked_ts
+            FROM day_entry_checks
+            WHERE day = ? AND project = ? AND description = ?
+            """,
+            (day_label, project_name, old_description),
+        ).fetchone()
+        offset_row = self.connection.execute(
+            """
+            SELECT offset_minutes, start_offset_minutes, end_offset_minutes
+            FROM day_entry_time_offsets
+            WHERE day = ? AND project = ? AND description = ?
+            """,
+            (day_label, project_name, old_description),
+        ).fetchone()
+
+        with self.connection:
+            self.connection.executemany(
+                """
+                UPDATE sessions
+                SET description = ?,
+                    updated_ts = ?
+                WHERE id = ?
+                """,
+                [(new_description, current_timestamp, session_id) for session_id in session_ids],
+            )
+            self.connection.execute(
+                """
+                DELETE FROM day_entry_checks
+                WHERE day = ? AND project = ? AND description = ?
+                """,
+                (day_label, project_name, old_description),
+            )
+            self.connection.execute(
+                """
+                DELETE FROM day_entry_time_offsets
+                WHERE day = ? AND project = ? AND description = ?
+                """,
+                (day_label, project_name, old_description),
+            )
+            if checked_row:
+                self.connection.execute(
+                    """
+                    INSERT INTO day_entry_checks (day, project, description, checked_ts)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(day, project, description)
+                    DO UPDATE SET checked_ts = MAX(day_entry_checks.checked_ts, excluded.checked_ts)
+                    """,
+                    (day_label, project_name, new_description, int(checked_row["checked_ts"])),
+                )
+            if offset_row:
+                legacy_offset = int(offset_row["offset_minutes"] or 0)
+                start_offset = int(offset_row["start_offset_minutes"] or 0)
+                end_offset = int(offset_row["end_offset_minutes"] or 0)
+                if legacy_offset and start_offset == 0 and end_offset == 0:
+                    start_offset = legacy_offset
+                    end_offset = legacy_offset
+                self.connection.execute(
+                    """
+                    INSERT INTO day_entry_time_offsets (
+                        day,
+                        project,
+                        description,
+                        offset_minutes,
+                        start_offset_minutes,
+                        end_offset_minutes,
+                        updated_ts
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(day, project, description)
+                    DO UPDATE SET offset_minutes = excluded.offset_minutes,
+                                  start_offset_minutes = excluded.start_offset_minutes,
+                                  end_offset_minutes = excluded.end_offset_minutes,
+                                  updated_ts = excluded.updated_ts
+                    """,
+                    (
+                        day_label,
+                        project_name,
+                        new_description,
+                        0,
+                        start_offset,
+                        end_offset,
+                        current_timestamp,
+                    ),
+                )
+
+        return {
+            "ok": True,
+            "day": day_label,
+            "entry_number": entry.get("entry_number"),
+            "project": project_name,
+            "old_description": old_description,
+            "description": new_description,
+            "updated_sessions": len(session_ids),
+            "message": f"Updated entry {entry.get('entry_number', '?')} description.",
+        }
+
+    def set_day_entry_billable(
+        self,
+        day_value: str | None,
+        current_timestamp: int,
+        *,
+        billable: bool,
+        entry_number: int | None = None,
+        project: str | None = None,
+        description: str | None = None,
+    ) -> dict[str, Any]:
+        day_label, entry = self.resolve_day_entry(
+            day_value,
+            current_timestamp,
+            entry_number=entry_number,
+            project=project,
+            description=description,
+        )
+        if int(entry.get("teamwork_synced_ranges") or 0) > 0:
+            raise TrackerError("This entry has already been synced to Teamwork. Change the Teamwork timelog there first.")
+
+        day_start_ts, day_end_ts, _ = day_bounds(day_label)
+        project_name, description_text = entry_key(str(entry["project"]), str(entry["description"]))
+        rows = self.connection.execute(
+            """
+            SELECT DISTINCT sessions.id
+            FROM sessions
+            JOIN segments ON segments.session_id = sessions.id
+            WHERE sessions.project = ?
+              AND sessions.description = ?
+              AND segments.started_ts < ?
+              AND COALESCE(segments.ended_ts, ?) > ?
+            """,
+            (project_name, description_text, day_end_ts, current_timestamp, day_start_ts),
+        ).fetchall()
+        session_ids = [int(row["id"]) for row in rows]
+        if not session_ids:
+            raise TrackerError("No matching sessions found for this day entry.")
+
+        with self.connection:
+            self.connection.executemany(
+                """
+                UPDATE sessions
+                SET teamwork_billable = ?,
+                    updated_ts = ?
+                WHERE id = ?
+                """,
+                [(1 if billable else 0, current_timestamp, session_id) for session_id in session_ids],
+            )
+
+        return {
+            "ok": True,
+            "day": day_label,
+            "entry_number": entry.get("entry_number"),
+            "project": project_name,
+            "description": description_text,
+            "billable": bool(billable),
+            "updated_sessions": len(session_ids),
+            "message": f"Marked entry {entry.get('entry_number', '?')} as {'billable' if billable else 'non-billable'}.",
+        }
+
+    def remove_day_time(
+        self,
+        day_start_ts: int,
+        day_end_ts: int,
+        current_timestamp: int,
+        *,
+        project: str,
+        description: str | None = None,
+    ) -> dict[str, Any]:
+        project = normalize_text(project)
+        description = normalize_text(description) if description is not None else None
+
+        if not project:
+            raise TrackerError("Project is required.")
+        if description is not None and not description:
+            raise TrackerError("Description is required.")
+
+        if description is None:
+            rows = self.connection.execute(
+                """
+                SELECT
+                    segments.id,
+                    segments.session_id,
+                    segments.started_ts,
+                    segments.ended_ts,
+                    sessions.state
+                FROM segments
+                JOIN sessions ON sessions.id = segments.session_id
+                WHERE sessions.project = ?
+                  AND segments.started_ts < ?
+                  AND COALESCE(segments.ended_ts, ?) > ?
+                ORDER BY segments.id ASC
+                """,
+                (project, day_end_ts, current_timestamp, day_start_ts),
+            ).fetchall()
+        else:
+            rows = self.connection.execute(
+                """
+                SELECT
+                    segments.id,
+                    segments.session_id,
+                    segments.started_ts,
+                    segments.ended_ts,
+                    sessions.state
+                FROM segments
+                JOIN sessions ON sessions.id = segments.session_id
+                WHERE sessions.project = ?
+                  AND sessions.description = ?
+                  AND segments.started_ts < ?
+                  AND COALESCE(segments.ended_ts, ?) > ?
+                ORDER BY segments.id ASC
+                """,
+                (project, description, day_end_ts, current_timestamp, day_start_ts),
+            ).fetchall()
+
+        if not rows:
+            raise TrackerError("No matching tracked time found to delete.")
+
+        open_rows = [row for row in rows if row["ended_ts"] is None]
+        rows = [row for row in rows if row["ended_ts"] is not None]
+
+        if not rows:
+            raise TrackerError("Stop the matching timer before deleting it.")
+
+        affected_session_ids = {int(row["session_id"]) for row in rows}
+        removed_seconds = 0
+        deleted_segments = 0
+        adjusted_segments = 0
+        split_segments = 0
+        deleted_sessions = 0
+
+        with self.connection:
+            for row in rows:
+                segment_id = int(row["id"])
+                session_id = int(row["session_id"])
+                started_ts = int(row["started_ts"])
+                ended_ts = int(row["ended_ts"])
+                removed_seconds += max(
+                    0,
+                    min(day_end_ts, ended_ts) - max(day_start_ts, started_ts),
+                )
+
+                if started_ts >= day_start_ts and ended_ts <= day_end_ts:
+                    self.connection.execute(
+                        "DELETE FROM segments WHERE id = ?",
+                        (segment_id,),
+                    )
+                    deleted_segments += 1
+                elif started_ts < day_start_ts and ended_ts > day_end_ts:
+                    self.connection.execute(
+                        """
+                        UPDATE segments
+                        SET ended_ts = ?
+                        WHERE id = ?
+                        """,
+                        (day_start_ts, segment_id),
+                    )
+                    self.connection.execute(
+                        """
+                        INSERT INTO segments (session_id, started_ts, ended_ts)
+                        VALUES (?, ?, ?)
+                        """,
+                        (session_id, day_end_ts, ended_ts),
+                    )
+                    split_segments += 1
+                elif started_ts < day_start_ts:
+                    self.connection.execute(
+                        """
+                        UPDATE segments
+                        SET ended_ts = ?
+                        WHERE id = ?
+                        """,
+                        (day_start_ts, segment_id),
+                    )
+                    adjusted_segments += 1
+                else:
+                    self.connection.execute(
+                        """
+                        UPDATE segments
+                        SET started_ts = ?
+                        WHERE id = ?
+                        """,
+                        (day_end_ts, segment_id),
+                    )
+                    adjusted_segments += 1
+
+            for session_id in affected_session_ids:
+                bounds = self.connection.execute(
+                    """
+                    SELECT
+                        COUNT(*) AS segment_count,
+                        MIN(started_ts) AS first_started_ts,
+                        MAX(ended_ts) AS last_ended_ts,
+                        SUM(CASE WHEN ended_ts IS NULL THEN 1 ELSE 0 END) AS open_segment_count
+                    FROM segments
+                    WHERE session_id = ?
+                    """,
+                    (session_id,),
+                ).fetchone()
+                session = self.connection.execute(
+                    """
+                    SELECT state
+                    FROM sessions
+                    WHERE id = ?
+                    """,
+                    (session_id,),
+                ).fetchone()
+
+                if int(bounds["segment_count"]) == 0:
+                    self.connection.execute(
+                        "DELETE FROM sessions WHERE id = ?",
+                        (session_id,),
+                    )
+                    deleted_sessions += 1
+                elif int(bounds["open_segment_count"] or 0) > 0:
+                    self.connection.execute(
+                        """
+                        UPDATE sessions
+                        SET started_ts = ?,
+                            updated_ts = ?
+                        WHERE id = ?
+                        """,
+                        (
+                            int(bounds["first_started_ts"]),
+                            current_timestamp,
+                            session_id,
+                        ),
+                    )
+                elif session and str(session["state"]) == "paused":
+                    self.connection.execute(
+                        """
+                        UPDATE sessions
+                        SET started_ts = ?,
+                            paused_ts = ?,
+                            updated_ts = ?
+                        WHERE id = ?
+                        """,
+                        (
+                            int(bounds["first_started_ts"]),
+                            int(bounds["last_ended_ts"]),
+                            current_timestamp,
+                            session_id,
+                        ),
+                    )
+                else:
+                    self.connection.execute(
+                        """
+                        UPDATE sessions
+                        SET started_ts = ?,
+                            stopped_ts = ?,
+                            updated_ts = ?
+                        WHERE id = ?
+                        """,
+                        (
+                            int(bounds["first_started_ts"]),
+                            int(bounds["last_ended_ts"]),
+                            current_timestamp,
+                            session_id,
+                        ),
+                    )
+
+        return {
+            "removed_seconds": removed_seconds,
+            "removed_label": format_duration(removed_seconds, include_seconds=False),
+            "deleted_segments": deleted_segments,
+            "adjusted_segments": adjusted_segments,
+            "split_segments": split_segments,
+            "deleted_sessions": deleted_sessions,
+            "skipped_open_segments": len(open_rows),
+        }
+
+    def delete_day_entry(
+        self,
+        day_value: str | None,
+        current_timestamp: int,
+        *,
+        entry_number: int | None = None,
+        project: str | None = None,
+        description: str | None = None,
+    ) -> dict[str, Any]:
+        day_label, entry = self.resolve_day_entry(
+            day_value,
+            current_timestamp,
+            entry_number=entry_number,
+            project=project,
+            description=description,
+        )
+        day_start_ts, day_end_ts, _ = day_bounds(day_label)
+        project, description = entry_key(str(entry["project"]), str(entry["description"]))
+
+        deletion = self.remove_day_time(
+            day_start_ts,
+            day_end_ts,
+            current_timestamp,
+            project=project,
+            description=description,
+        )
+
+        with self.connection:
+            self.connection.execute(
+                """
+                DELETE FROM day_entry_checks
+                WHERE day = ? AND project = ? AND description = ?
+                """,
+                (day_label, project, description),
+            )
+            self.connection.execute(
+                """
+                DELETE FROM teamwork_time_syncs
+                WHERE day = ? AND project = ? AND description = ?
+                """,
+                (day_label, project, description),
+            )
+            self.connection.execute(
+                """
+                DELETE FROM day_entry_time_offsets
+                WHERE day = ? AND project = ? AND description = ?
+                """,
+                (day_label, project, description),
+            )
+
+        return {
+            "ok": True,
+            "day": day_label,
+            "entry_number": entry.get("entry_number"),
+            "entry": {
+                "project": project,
+                "description": description,
+                "duration_label": entry["duration_label"],
+                "range_label": entry["range_label"],
+            },
+            "deleted": deletion,
+            "message": (
+                f"Deleted entry {entry.get('entry_number', '?')} for {day_label}: "
+                f"{project} | {description} ({deletion['removed_label']})"
+            ),
+        }
+
+    def resolve_day_project(
+        self,
+        day_value: str | None,
+        current_timestamp: int,
+        *,
+        project: str,
+    ) -> tuple[str, dict[str, Any]]:
+        day_payload = self.day_entries(day_value, current_timestamp)
+        project_name = normalize_text(project)
+
+        if not project_name:
+            raise TrackerError("Project is required.")
+
+        for project_group in day_payload["project_groups"]:
+            if normalize_text(str(project_group["project"])) == project_name:
+                return str(day_payload["day"]), dict(project_group)
+
+        raise TrackerError(f"No project matched for {day_payload['day']}: {project_name}")
+
+    def delete_day_project(
+        self,
+        day_value: str | None,
+        current_timestamp: int,
+        *,
+        project: str,
+    ) -> dict[str, Any]:
+        day_label, project_group = self.resolve_day_project(
+            day_value,
+            current_timestamp,
+            project=project,
+        )
+        day_start_ts, day_end_ts, _ = day_bounds(day_label)
+        project_name = normalize_text(str(project_group["project"]))
+
+        deletion = self.remove_day_time(
+            day_start_ts,
+            day_end_ts,
+            current_timestamp,
+            project=project_name,
+        )
+
+        with self.connection:
+            self.connection.execute(
+                """
+                DELETE FROM day_entry_checks
+                WHERE day = ? AND project = ?
+                """,
+                (day_label, project_name),
+            )
+            self.connection.execute(
+                """
+                DELETE FROM teamwork_time_syncs
+                WHERE day = ? AND project = ?
+                """,
+                (day_label, project_name),
+            )
+            self.connection.execute(
+                """
+                DELETE FROM day_entry_time_offsets
+                WHERE day = ? AND project = ?
+                """,
+                (day_label, project_name),
+            )
+
+        return {
+            "ok": True,
+            "day": day_label,
+            "project": project_name,
+            "task_count": int(project_group["task_count"]),
+            "duration_label": project_group["duration_label"],
+            "deleted": deletion,
+            "message": (
+                f"Deleted project for {day_label}: {project_name} "
+                f"({project_group['task_count']} tasks, {deletion['removed_label']})"
+            ),
+        }
+
+    def today_started_tasks(
+        self,
+        day_value: str | None,
+        entry_lookup: dict[tuple[str, str], dict[str, Any]] | None = None,
+    ) -> list[dict[str, Any]]:
+        day_start_ts, day_end_ts, _ = day_bounds(day_value)
+
+        rows = self.connection.execute(
+            """
+            SELECT
+                project,
+                description,
+                teamwork_task_id,
+                teamwork_project_id,
+                teamwork_task_name,
+                teamwork_project_name,
+                teamwork_task_url,
+                MIN(started_ts) AS first_started_ts,
+                MAX(started_ts) AS last_started_ts
+            FROM sessions
+            WHERE started_ts >= ?
+              AND started_ts < ?
+            GROUP BY project, description, teamwork_task_id, teamwork_project_id
+            ORDER BY last_started_ts DESC, project COLLATE NOCASE ASC, description COLLATE NOCASE ASC
+            """
+            ,
+            (day_start_ts, day_end_ts),
+        ).fetchall()
+
+        tasks: list[dict[str, Any]] = []
+
+        for row in rows:
+            project = str(row["project"])
+            description = str(row["description"])
+            entry = (entry_lookup or {}).get(entry_key(project, description), {})
+            rounded_range_label = str(entry.get("rounded_range_label") or "")
+            tracking_label = str(entry.get("tracking_label") or "")
+
+            tasks.append(
+                {
+                    "project": project,
+                    "description": description,
+                    "teamwork_task_id": parse_optional_int(row["teamwork_task_id"]),
+                    "teamwork_project_id": parse_optional_int(row["teamwork_project_id"]),
+                    "teamwork_task_name": str(row["teamwork_task_name"] or ""),
+                    "teamwork_project_name": str(row["teamwork_project_name"] or ""),
+                    "teamwork_task_url": str(row["teamwork_task_url"] or ""),
+                    "first_started_ts": int(row["first_started_ts"]),
+                    "first_started_label": format_time_label(int(row["first_started_ts"])),
+                    "last_started_ts": int(row["last_started_ts"]),
+                    "last_started_label": format_time_label(int(row["last_started_ts"])),
+                    "rounded_range_label": rounded_range_label,
+                    "tracking_label": tracking_label,
+                    "label": f"{format_time_label(int(row['last_started_ts']))}  ·  {project}  ·  {description}",
+                }
+            )
+
+        return tasks
+
+    def day_entries(self, day_value: str | None, current_timestamp: int) -> dict[str, Any]:
+        day_start_ts, day_end_ts, target_day = day_bounds(day_value)
+        day_label = format_date_label(target_day)
+
+        rows = self.connection.execute(
+            """
+            SELECT
+                sessions.project,
+                sessions.description,
+                sessions.teamwork_task_id,
+                sessions.teamwork_project_id,
+                sessions.teamwork_task_name,
+                sessions.teamwork_project_name,
+                sessions.teamwork_task_url,
+                sessions.teamwork_billable,
+                sessions.state,
+                segments.started_ts,
+                segments.ended_ts AS raw_ended_ts,
+                COALESCE(segments.ended_ts, ?) AS ended_ts
+            FROM segments
+            JOIN sessions ON sessions.id = segments.session_id
+            WHERE segments.started_ts < ?
+              AND COALESCE(segments.ended_ts, ?) > ?
+            ORDER BY segments.started_ts ASC, segments.id ASC
+            """,
+            (current_timestamp, day_end_ts, current_timestamp, day_start_ts),
+        ).fetchall()
+
+        total_seconds = 0
+        grouped: "OrderedDict[tuple[str, str], dict[str, Any]]" = OrderedDict()
+
+        for row in rows:
+            clipped_start = max(day_start_ts, int(row["started_ts"]))
+            clipped_end = min(day_end_ts, int(row["ended_ts"]))
+            if clipped_end <= clipped_start:
+                continue
+
+            duration_seconds = clipped_end - clipped_start
+            total_seconds += duration_seconds
+
+            key = (str(row["project"]), str(row["description"]))
+            if key not in grouped:
+                grouped[key] = {
+                    "project": key[0],
+                    "description": key[1],
+                    "teamwork_task_id": parse_optional_int(row["teamwork_task_id"]),
+                    "teamwork_project_id": parse_optional_int(row["teamwork_project_id"]),
+                    "teamwork_task_name": str(row["teamwork_task_name"] or ""),
+                    "teamwork_project_name": str(row["teamwork_project_name"] or ""),
+                    "teamwork_task_url": str(row["teamwork_task_url"] or ""),
+                    "teamwork_billable": bool(int(row["teamwork_billable"] if row["teamwork_billable"] is not None else 1)),
+                    "duration_seconds": 0,
+                    "ranges": [],
+                    "segments": [],
+                    "first_started_ts": clipped_start,
+                    "last_ended_ts": clipped_end,
+                    "last_completed_ended_ts": 0,
+                    "is_running": False,
+                }
+
+            group = grouped[key]
+            group["duration_seconds"] += duration_seconds
+            const_range = format_range_label(clipped_start, clipped_end)
+            if const_range not in group["ranges"]:
+                group["ranges"].append(const_range)
+            if group.get("teamwork_task_id") is None:
+                group["teamwork_task_id"] = parse_optional_int(row["teamwork_task_id"])
+                group["teamwork_project_id"] = parse_optional_int(row["teamwork_project_id"])
+                group["teamwork_task_name"] = str(row["teamwork_task_name"] or "")
+                group["teamwork_project_name"] = str(row["teamwork_project_name"] or "")
+                group["teamwork_task_url"] = str(row["teamwork_task_url"] or "")
+            if int(row["teamwork_billable"] if row["teamwork_billable"] is not None else 1) == 0:
+                group["teamwork_billable"] = False
+            group["segments"].append(
+                {
+                    "started_ts": clipped_start,
+                    "ended_ts": clipped_end,
+                    "duration_seconds": duration_seconds,
+                    "is_running": row["raw_ended_ts"] is None and str(row["state"]) == "active",
+                }
+            )
+            group["first_started_ts"] = min(group["first_started_ts"], clipped_start)
+            group["last_ended_ts"] = max(group["last_ended_ts"], clipped_end)
+            if row["raw_ended_ts"] is not None:
+                group["last_completed_ended_ts"] = max(
+                    int(group.get("last_completed_ended_ts") or 0),
+                    clipped_end,
+                )
+            if row["raw_ended_ts"] is None and str(row["state"]) == "active":
+                group["is_running"] = True
+
+        grouped_entries = []
+        checked_rows = self.checked_day_entry_timestamps(day_label)
+        for entry in grouped.values():
+            checked_ts = int(
+                checked_rows.get(entry_key(str(entry["project"]), str(entry["description"])), 0)
+            )
+            check_target_ts = int(entry.get("last_completed_ended_ts") or entry["last_ended_ts"])
+            is_checked = checked_ts >= check_target_ts
+            was_checked = checked_ts > 0
+            grouped_entries.append(
+                {
+                    **entry,
+                    "checked": is_checked,
+                    "checked_ts": checked_ts,
+                    "check_target_ts": check_target_ts,
+                    "checked_once": was_checked,
+                    "stale_checked": was_checked and not is_checked,
+                    "checkbox": "[x]" if is_checked else "[ ]",
+                    "duration_label": format_duration(entry["duration_seconds"], include_seconds=False),
+                    "range_label": ", ".join(entry["ranges"]),
+                    "first_started_label": format_time_label(entry["first_started_ts"]),
+                    "last_ended_label": format_time_label(entry["last_ended_ts"]),
+                }
+            )
+
+        apply_rounded_tracking_fields(grouped_entries)
+        self.apply_day_entry_time_offsets(day_label, grouped_entries, current_timestamp)
+        self.apply_teamwork_sync_fields(day_label, grouped_entries)
+        project_groups = build_project_groups(grouped_entries)
+        ordered_entries: list[dict[str, Any]] = []
+        next_entry_number = 1
+
+        for project_group in project_groups:
+            for entry in project_group["entries"]:
+                entry["entry_number"] = next_entry_number
+                ordered_entries.append(entry)
+                next_entry_number += 1
+
+        checked_count = sum(1 for entry in ordered_entries if entry["checked"])
+
+        return {
+            "day": day_label,
+            "total_seconds": total_seconds,
+            "total_label": format_duration(total_seconds, include_seconds=False),
+            "project_count": len(project_groups),
+            "task_count": len(ordered_entries),
+            "checked_count": checked_count,
+            "open_count": len(ordered_entries) - checked_count,
+            "entries": ordered_entries,
+            "project_groups": project_groups,
+        }
+
+    def status_payload(self, current_timestamp: int) -> dict[str, Any]:
+        current = self.session_snapshot(self.current_session_row(), current_timestamp)
+        latest = self.session_snapshot(self.latest_session_row(), current_timestamp)
+
+        return {
+            "now_ts": current_timestamp,
+            "state": current.state if current else "idle",
+            "tracking": bool(current and current.is_active),
+            "paused": bool(current and current.is_paused),
+            "can_resume": bool(current and current.is_paused),
+            "session": current.to_dict() if current else None,
+            "last_session": latest.to_dict() if latest else None,
+            "status_message": (
+                "Tracking"
+                if current and current.is_active
+                else "Paused"
+                if current and current.is_paused
+                else "Idle"
+            ),
+        }
+
+    def snapshot_payload(self, day_value: str | None, current_timestamp: int) -> dict[str, Any]:
+        payload = self.status_payload(current_timestamp)
+        selected_day = day_value or "today"
+        today_payload = self.day_entries(selected_day, current_timestamp)
+        payload["today"] = today_payload
+        payload["today_tasks"] = self.today_started_tasks(
+            selected_day,
+            {
+                entry_key(str(entry["project"]), str(entry["description"])): entry
+                for entry in today_payload["entries"]
+            },
+        )
+        return payload
+
+
+def print_status(payload: dict[str, Any]) -> None:
+    session = payload.get("session")
+    today = payload.get("today")
+    lines = []
+
+    if session:
+        lines.append(f"{payload['status_message']}  {session['duration_clock']}")
+        lines.append(f"Project: {session['project']}")
+        lines.append(f"What:    {session['description']}")
+        lines.append(f"Since:   {session['started_label']}")
+    else:
+        lines.append("Idle")
+
+    if today:
+        lines.append(
+            f"Today:   {today['total_label']} across {today['task_count']} tasks in {today.get('project_count', 0)} projects"
+        )
+
+    print("\n".join(lines))
+
+
+def render_report(payload: dict[str, Any], *, color_mode: str) -> str:
+    enabled = color_enabled(color_mode)
+    today = payload["today"]
+    session = payload.get("session")
+    entries = list(today["entries"])
+    project_groups = list(today.get("project_groups") or build_project_groups(entries))
+
+    term_width = terminal_width()
+    index_width = 3
+    checked_width = 4
+    duration_width = 8
+    time_width = 22
+    description_width = max(18, min(54, term_width - 45))
+    widths = [index_width, checked_width, duration_width, description_width, time_width]
+
+    title = style("QTRACK TODAY", "1", "96", enabled=enabled)
+    date_label = style(today["day"], "1", enabled=enabled)
+    muted_rule = style("=" * min(96, max(64, sum(widths) + 14)), "90", enabled=enabled)
+    summary_total = style(today["total_label"], "1", "32", enabled=enabled)
+    summary_projects = style(str(today.get("project_count", len(project_groups))), "1", "35", enabled=enabled)
+    summary_tasks = style(str(today["task_count"]), "1", "33", enabled=enabled)
+    summary_checked = style(str(today.get("checked_count", 0)), "1", "32", enabled=enabled)
+    summary_open = style(str(today.get("open_count", 0)), "1", "31", enabled=enabled)
+
+    lines = [
+        f"{title}  {date_label}",
+        muted_rule,
+        f"{style('Total', '1', '36', enabled=enabled)} {summary_total}   "
+        f"{style('Projects', '1', '36', enabled=enabled)} {summary_projects}   "
+        f"{style('Tasks', '1', '36', enabled=enabled)} {summary_tasks}   "
+        f"{style('Done', '1', '36', enabled=enabled)} {summary_checked}   "
+        f"{style('Open', '1', '36', enabled=enabled)} {summary_open}",
+    ]
+
+    if session:
+        state_text = payload["status_message"].upper()
+        state_color = "32" if payload["status_message"] == "Tracking" else "33"
+        lines.append(
+            f"{style('Current', '1', '36', enabled=enabled)} "
+            f"{style(state_text, '1', state_color, enabled=enabled)}   "
+            f"{style(session['duration_clock'], '1', enabled=enabled)}   "
+            f"{session['project']}  |  {session['description']}"
+        )
+
+        lines.append("")
+
+    border = style(table_border(widths), "90", enabled=enabled)
+    if not entries:
+        lines.append(border)
+        lines.append(
+            table_row(
+                ["#", "DONE", "TIME", "DESCRIPTION", "WINDOW"],
+                widths,
+                enabled=enabled,
+                cell_styles=[("1", "36"), ("1", "36"), ("1", "36"), ("1", "36"), ("1", "36")],
+            )
+        )
+        lines.append(border)
+        lines.append(
+            table_row(
+                [
+                    "-",
+                    "[ ]",
+                    "0s",
+                    "No tracked work today.",
+                    "-",
+                ],
+                widths,
+                enabled=enabled,
+                cell_styles=[None, ("31",), ("1", "32"), ("90",), None],
+            )
+        )
+        lines.append(border)
+        return "\n".join(lines)
+
+    for project_group in project_groups:
+        task_count_label = f"{project_group['task_count']} tasks"
+        checked_count_label = f"{project_group['checked_count']} done"
+        lines.append(
+            f"{style('Project', '1', '36', enabled=enabled)} "
+            f"{style(project_group['project'], '1', '35', enabled=enabled)}   "
+            f"{style(project_group['duration_label'], '1', '32', enabled=enabled)}   "
+            f"{style(task_count_label, '90', enabled=enabled)}   "
+            f"{style(checked_count_label, '90', enabled=enabled)}"
+        )
+        lines.append(border)
+        lines.append(
+            table_row(
+                [
+                    "#",
+                    "DONE",
+                    "TIME",
+                    "DESCRIPTION",
+                    "WINDOW",
+                ],
+                widths,
+                enabled=enabled,
+                cell_styles=[
+                    ("1", "36"),
+                    ("1", "36"),
+                    ("1", "36"),
+                    ("1", "36"),
+                    ("1", "36"),
+                ],
+            )
+        )
+        lines.append(border)
+
+        for entry in project_group["entries"]:
+            checkbox = str(entry.get("checkbox", "[ ]"))
+            is_checked = bool(entry.get("checked"))
+            lines.append(
+                table_row(
+                    [
+                        str(entry.get("entry_number", "")),
+                        checkbox,
+                        entry["duration_label"],
+                        entry["description"],
+                        entry.get("rounded_range_label", entry["range_label"]),
+                    ],
+                    widths,
+                    enabled=enabled,
+                    cell_styles=[
+                        ("1", "90"),
+                        ("1", "32") if is_checked else ("1", "31"),
+                        ("1", "32"),
+                        ("90",) if is_checked else None,
+                        ("90",),
+                    ],
+                )
+            )
+
+        lines.append(border)
+        lines.append("")
+
+    lines.append("")
+    lines.append(
+        f"{style('Mark entered:', '1', '36', enabled=enabled)} {APP_NAME} check <#>   "
+        f"{style('Undo:', '1', '36', enabled=enabled)} {APP_NAME} uncheck <#>   "
+        f"{style('Toggle:', '1', '36', enabled=enabled)} {APP_NAME} toggle <#>   "
+        f"{style('Delete:', '1', '36', enabled=enabled)} {APP_NAME} delete <#>"
+    )
+    return "\n".join(lines)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(prog=APP_NAME, description="Compact local time tracker for Quickshell.")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    start_parser = subparsers.add_parser("start", help="Start a new timer.")
+    start_parser.add_argument("-p", "--project", required=True)
+    start_parser.add_argument("-d", "--description", required=True)
+    start_parser.add_argument("--teamwork-task-id", type=int)
+    start_parser.add_argument("--teamwork-project-id", type=int)
+    start_parser.add_argument("--teamwork-task-name", default="")
+    start_parser.add_argument("--teamwork-project-name", default="")
+    start_parser.add_argument("--teamwork-task-url", default="")
+
+    subparsers.add_parser("pause", help="Pause the active timer.")
+    subparsers.add_parser("resume", help="Resume the paused timer.")
+    subparsers.add_parser("stop", help="Stop the current timer.")
+
+    for command_name, help_text in [
+        ("check", "Mark a day entry as already entered externally."),
+        ("uncheck", "Clear the entered marker for a day entry."),
+        ("toggle", "Toggle the entered marker for a day entry."),
+    ]:
+        check_parser = subparsers.add_parser(command_name, help=help_text)
+        check_parser.add_argument("entry", nargs="?", type=int, help="Entry number from `qtrack today` or `qtrack report`.")
+        check_parser.add_argument("--day", default="today")
+        check_parser.add_argument("--project")
+        check_parser.add_argument("--description")
+        check_parser.add_argument("--json", action="store_true")
+
+    delete_parser = subparsers.add_parser("delete", help="Delete a day entry and its tracked time.")
+    delete_parser.add_argument("entry", nargs="?", type=int, help="Entry number from `qtrack today` or `qtrack report`.")
+    delete_parser.add_argument("--day", default="today")
+    delete_parser.add_argument("--project")
+    delete_parser.add_argument("--description")
+    delete_parser.add_argument("--json", action="store_true")
+
+    delete_project_parser = subparsers.add_parser("delete-project", help="Delete all day entries for a project.")
+    delete_project_parser.add_argument("--day", default="today")
+    delete_project_parser.add_argument("--project", required=True)
+    delete_project_parser.add_argument("--json", action="store_true")
+
+    status_parser = subparsers.add_parser("status", help="Print current tracker status.")
+    status_parser.add_argument("--json", action="store_true")
+
+    snapshot_parser = subparsers.add_parser("snapshot", help="Return status, suggestions and day summary.")
+    snapshot_parser.add_argument("--json", action="store_true")
+    snapshot_parser.add_argument("--day", default="today")
+
+    teamwork_tasks_parser = subparsers.add_parser("teamwork-tasks", help="Return open Teamwork tasks that are assigned to, mention or were tracked by the authenticated user.")
+    teamwork_tasks_parser.add_argument("--json", action="store_true")
+
+    sync_teamwork_parser = subparsers.add_parser("sync-teamwork", help="Create Teamwork timelogs for checked day entries.")
+    sync_teamwork_parser.add_argument("--day", default="today")
+    sync_teamwork_parser.add_argument("--json", action="store_true")
+
+    assign_teamwork_parser = subparsers.add_parser("assign-teamwork", help="Assign a day entry to a Teamwork task before syncing.")
+    assign_teamwork_parser.add_argument("entry", nargs="?", type=int, help="Entry number from `qtrack today` or `qtrack report`.")
+    assign_teamwork_parser.add_argument("--day", default="today")
+    assign_teamwork_parser.add_argument("--project")
+    assign_teamwork_parser.add_argument("--description")
+    assign_teamwork_parser.add_argument("--teamwork-task-id", required=True, type=int)
+    assign_teamwork_parser.add_argument("--teamwork-project-id", required=True, type=int)
+    assign_teamwork_parser.add_argument("--teamwork-task-name", default="")
+    assign_teamwork_parser.add_argument("--teamwork-project-name", default="")
+    assign_teamwork_parser.add_argument("--teamwork-task-url", default="")
+    assign_teamwork_parser.add_argument("--json", action="store_true")
+
+    edit_description_parser = subparsers.add_parser("edit-description", help="Edit a day entry description before syncing.")
+    edit_description_parser.add_argument("entry", nargs="?", type=int, help="Entry number from `qtrack today` or `qtrack report`.")
+    edit_description_parser.add_argument("--day", default="today")
+    edit_description_parser.add_argument("--project")
+    edit_description_parser.add_argument("--description")
+    edit_description_parser.add_argument("--new-description", required=True)
+    edit_description_parser.add_argument("--json", action="store_true")
+
+    set_billable_parser = subparsers.add_parser("set-billable", help="Set whether a day entry should be synced as billable.")
+    set_billable_parser.add_argument("entry", nargs="?", type=int, help="Entry number from `qtrack today` or `qtrack report`.")
+    set_billable_parser.add_argument("--day", default="today")
+    set_billable_parser.add_argument("--project")
+    set_billable_parser.add_argument("--description")
+    billable_group = set_billable_parser.add_mutually_exclusive_group(required=True)
+    billable_group.add_argument("--billable", action="store_true")
+    billable_group.add_argument("--non-billable", action="store_true")
+    set_billable_parser.add_argument("--json", action="store_true")
+
+    shift_time_parser = subparsers.add_parser("shift-time", help="Shift a day entry's rounded tracking window.")
+    shift_time_parser.add_argument("entry", nargs="?", type=int, help="Entry number from `qtrack today` or `qtrack report`.")
+    shift_time_parser.add_argument("--day", default="today")
+    shift_time_parser.add_argument("--project")
+    shift_time_parser.add_argument("--description")
+    shift_time_parser.add_argument("--minutes", required=True, type=int)
+    shift_time_parser.add_argument("--edge", choices=["start", "end", "both"], default="both")
+    shift_time_parser.add_argument("--json", action="store_true")
+
+    for command_name, help_text in [
+        ("report", "Render a grouped daily report."),
+        ("today", "Render a pretty grouped summary for today."),
+    ]:
+        report_parser = subparsers.add_parser(command_name, help=help_text)
+        report_parser.add_argument("--json", action="store_true")
+        report_parser.add_argument("--day", default="today")
+        report_parser.add_argument("--color", choices=["auto", "always", "never"], default="auto")
+
+    return parser.parse_args()
+
+
+def day_entry_selector_from_args(args: argparse.Namespace) -> dict[str, Any]:
+    entry_number = getattr(args, "entry", None)
+    project = getattr(args, "project", None)
+    description = getattr(args, "description", None)
+
+    if entry_number is not None:
+        if project or description:
+            raise TrackerError("Use either an entry number or --project/--description, not both.")
+        return {"entry_number": entry_number}
+
+    if project and description:
+        return {"project": project, "description": description}
+
+    raise TrackerError("Provide either an entry number or both --project and --description.")
+
+
+def try_export_obsidian_day(day_value: str | None) -> None:
+    if not OBSIDIAN_DAY_EXPORTER.exists():
+        return
+
+    _, _, target_day = day_bounds(day_value)
+
+    try:
+        subprocess.run(
+            [sys.executable, str(OBSIDIAN_DAY_EXPORTER), "--day", format_date_label(target_day)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=10,
+        )
+    except OSError:
+        return
+    except subprocess.TimeoutExpired:
+        return
+
+
+def main() -> int:
+    args = parse_args()
+    current_timestamp = now_ts()
+    store: TrackerStore | None = None
+
+    try:
+        if args.command == "teamwork-tasks":
+            entries = TeamworkClient().relevant_tasks()
+            payload = {
+                "ok": True,
+                "base_url": teamwork_base_url(),
+                "entries": entries,
+                "task_count": len(entries),
+            }
+            if args.json:
+                print(json.dumps(payload, ensure_ascii=True))
+            else:
+                for entry in entries:
+                    print(entry["label"])
+            return 0
+
+        store = TrackerStore(resolve_db_path())
+
+        if args.command == "start":
+            payload = store.start(
+                args.project,
+                args.description,
+                current_timestamp,
+                teamwork_task_id=args.teamwork_task_id,
+                teamwork_project_id=args.teamwork_project_id,
+                teamwork_task_name=args.teamwork_task_name,
+                teamwork_project_name=args.teamwork_project_name,
+                teamwork_task_url=args.teamwork_task_url,
+            )
+            try_export_obsidian_day("today")
+            print(payload["message"])
+            return 0
+
+        if args.command == "pause":
+            payload = store.pause(current_timestamp)
+            try_export_obsidian_day("today")
+            print(payload["message"])
+            return 0
+
+        if args.command == "resume":
+            payload = store.resume(current_timestamp)
+            try_export_obsidian_day("today")
+            print(payload["message"])
+            return 0
+
+        if args.command == "stop":
+            payload = store.stop(current_timestamp)
+            try_export_obsidian_day("today")
+            print(payload["message"])
+            return 0
+
+        if args.command == "check":
+            payload = store.set_day_entry_checked(
+                args.day,
+                current_timestamp,
+                checked=True,
+                **day_entry_selector_from_args(args),
+            )
+            try_export_obsidian_day(args.day)
+            if args.json:
+                print(json.dumps(payload, ensure_ascii=True))
+            else:
+                print(payload["message"])
+            return 0
+
+        if args.command == "uncheck":
+            payload = store.set_day_entry_checked(
+                args.day,
+                current_timestamp,
+                checked=False,
+                **day_entry_selector_from_args(args),
+            )
+            try_export_obsidian_day(args.day)
+            if args.json:
+                print(json.dumps(payload, ensure_ascii=True))
+            else:
+                print(payload["message"])
+            return 0
+
+        if args.command == "toggle":
+            payload = store.toggle_day_entry_checked(
+                args.day,
+                current_timestamp,
+                **day_entry_selector_from_args(args),
+            )
+            try_export_obsidian_day(args.day)
+            if args.json:
+                print(json.dumps(payload, ensure_ascii=True))
+            else:
+                print(payload["message"])
+            return 0
+
+        if args.command == "delete":
+            payload = store.delete_day_entry(
+                args.day,
+                current_timestamp,
+                **day_entry_selector_from_args(args),
+            )
+            try_export_obsidian_day(args.day)
+            if args.json:
+                print(json.dumps(payload, ensure_ascii=True))
+            else:
+                print(payload["message"])
+            return 0
+
+        if args.command == "delete-project":
+            payload = store.delete_day_project(
+                args.day,
+                current_timestamp,
+                project=args.project,
+            )
+            try_export_obsidian_day(args.day)
+            if args.json:
+                print(json.dumps(payload, ensure_ascii=True))
+            else:
+                print(payload["message"])
+            return 0
+
+        if args.command == "status":
+            payload = store.status_payload(current_timestamp)
+            if args.json:
+                print(json.dumps(payload, ensure_ascii=True))
+            else:
+                print_status(payload)
+            return 0
+
+        if args.command == "snapshot":
+            payload = store.snapshot_payload(args.day, current_timestamp)
+            if args.json:
+                print(json.dumps(payload, ensure_ascii=True))
+            else:
+                print_status(payload)
+            return 0
+
+        if args.command == "sync-teamwork":
+            payload = store.sync_checked_teamwork_entries(args.day, current_timestamp)
+            try_export_obsidian_day(args.day)
+            if args.json:
+                print(json.dumps(payload, ensure_ascii=True))
+            else:
+                print(payload["message"])
+            return 0
+
+        if args.command == "assign-teamwork":
+            payload = store.assign_teamwork_task_to_day_entry(
+                args.day,
+                current_timestamp,
+                teamwork_task_id=args.teamwork_task_id,
+                teamwork_project_id=args.teamwork_project_id,
+                teamwork_task_name=args.teamwork_task_name,
+                teamwork_project_name=args.teamwork_project_name,
+                teamwork_task_url=args.teamwork_task_url,
+                **day_entry_selector_from_args(args),
+            )
+            try_export_obsidian_day(args.day)
+            if args.json:
+                print(json.dumps(payload, ensure_ascii=True))
+            else:
+                print(payload["message"])
+            return 0
+
+        if args.command == "edit-description":
+            payload = store.edit_day_entry_description(
+                args.day,
+                current_timestamp,
+                new_description=args.new_description,
+                **day_entry_selector_from_args(args),
+            )
+            try_export_obsidian_day(args.day)
+            if args.json:
+                print(json.dumps(payload, ensure_ascii=True))
+            else:
+                print(payload["message"])
+            return 0
+
+        if args.command == "set-billable":
+            payload = store.set_day_entry_billable(
+                args.day,
+                current_timestamp,
+                billable=bool(args.billable),
+                **day_entry_selector_from_args(args),
+            )
+            try_export_obsidian_day(args.day)
+            if args.json:
+                print(json.dumps(payload, ensure_ascii=True))
+            else:
+                print(payload["message"])
+            return 0
+
+        if args.command == "shift-time":
+            payload = store.shift_day_entry_time(
+                args.day,
+                current_timestamp,
+                minutes=args.minutes,
+                edge=args.edge,
+                **day_entry_selector_from_args(args),
+            )
+            try_export_obsidian_day(args.day)
+            if args.json:
+                print(json.dumps(payload, ensure_ascii=True))
+            else:
+                print(payload["message"])
+            return 0
+
+        if args.command in {"report", "today"}:
+            status_payload = store.status_payload(current_timestamp)
+            payload = {
+                "session": status_payload.get("session"),
+                "status_message": status_payload.get("status_message"),
+                "today": store.day_entries(args.day, current_timestamp),
+            }
+            if args.json:
+                print(json.dumps(payload, ensure_ascii=True))
+            else:
+                print(render_report(payload, color_mode=args.color))
+            return 0
+
+        raise TrackerError(f"Unsupported command: {args.command}")
+    except TrackerError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    finally:
+        if store is not None:
+            store.close()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

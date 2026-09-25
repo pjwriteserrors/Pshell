@@ -1,0 +1,38 @@
+// display profile: office
+
+output "DVI-I-2" {
+    mode "1920x1080@59.950"
+    position x=0 y=0
+    scale 1.0
+}
+
+output "eDP-1" {
+    mode "1920x1200@59.950"
+    position x=1920 y=1000
+    scale 1.0
+}
+
+output "DVI-I-1" {
+    mode "1920x1200@60.003"
+    position x=-1920 y=0
+    scale 1.0
+}
+
+window-rule {
+    match app-id="floorp"
+    match app-id="firefox"
+    open-on-output "DVI-I-2"
+    open-maximized true
+}
+
+window-rule {
+    match app-id="obsidian"
+    open-on-output "eDP-1"
+    open-maximized true
+}
+
+window-rule {
+    match app-id="orchestration"
+    open-on-output "DVI-I-1"
+    open-maximized true
+}

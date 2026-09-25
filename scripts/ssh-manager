@@ -1,0 +1,815 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import argparse
+import base64
+import configparser
+import json
+import os
+import pty
+import select
+import shutil
+import subprocess
+import sys
+import termios
+import time
+import tty
+import uuid
+from pathlib import Path
+from typing import Any
+
+
+APP_NAME = "quickshell-ssh-manager"
+SCRIPT_PATH = Path(__file__).resolve()
+SCRIPT_ROOT = SCRIPT_PATH.parent.parent
+PROMPT_TOKENS = (b"password:", b"passwort:")
+SECRET_BACKEND_SECRET_TOOL = "secret-tool"
+SECRET_BACKEND_KWALLET = "kwallet"
+SECRET_BACKEND_OPENSSL_FILE = "openssl-file"
+SECRET_BACKENDS = (SECRET_BACKEND_SECRET_TOOL, SECRET_BACKEND_OPENSSL_FILE, SECRET_BACKEND_KWALLET)
+AUTH_PASSWORD = "password"
+AUTH_KEY = "key"
+AUTH_TYPES = (AUTH_PASSWORD, AUTH_KEY)
+
+
+class SshManagerError(RuntimeError):
+    pass
+
+
+def state_dir() -> Path:
+    override = os.environ.get("SSH_MANAGER_STATE_DIR")
+    if override:
+        return Path(override).expanduser()
+
+    base = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state"))
+    return base / APP_NAME
+
+
+def entries_path() -> Path:
+    return state_dir() / "entries.json"
+
+
+def secrets_dir() -> Path:
+    return state_dir() / "secrets"
+
+
+def local_key_path() -> Path:
+    override = os.environ.get("SSH_MANAGER_LOCAL_KEY_PATH")
+    if override:
+        return Path(override).expanduser()
+    return state_dir() / "vault.key"
+
+
+def kwalletrc_path() -> Path:
+    override = os.environ.get("SSH_MANAGER_KWALLETRC")
+    if override:
+        return Path(override).expanduser()
+    return Path.home() / ".config" / "kwalletrc"
+
+
+def kwallet_dir() -> Path:
+    override = os.environ.get("SSH_MANAGER_KWALLET_DIR")
+    if override:
+        return Path(override).expanduser()
+    return Path.home() / ".local" / "share" / "kwalletd"
+
+
+def secret_tool() -> str:
+    override = os.environ.get("SSH_MANAGER_SECRET_TOOL")
+    command = override or shutil.which("secret-tool")
+    if not command:
+        raise SshManagerError("secret-tool is required for encrypted password storage.")
+    return command
+
+
+def kwallet_query() -> str:
+    override = os.environ.get("SSH_MANAGER_KWALLET_QUERY")
+    command = override or shutil.which("kwallet-query")
+    if not command:
+        raise SshManagerError("kwallet-query is required for KWallet password storage.")
+    return command
+
+
+def kwallet_wallet() -> str:
+    override = os.environ.get("SSH_MANAGER_KWALLET_WALLET")
+    if override:
+        return override
+
+    config_path = kwalletrc_path()
+    if config_path.exists():
+        parser = configparser.ConfigParser()
+        try:
+            parser.read(config_path, encoding="utf-8")
+            configured = parser.get("Wallet", "Default Wallet", fallback="").strip()
+            if configured:
+                return configured
+        except (configparser.Error, OSError):
+            pass
+
+    return "kdewallet"
+
+
+def kwallet_folder() -> str:
+    return os.environ.get("SSH_MANAGER_KWALLET_FOLDER") or APP_NAME
+
+
+def openssl_command() -> str:
+    override = os.environ.get("SSH_MANAGER_OPENSSL")
+    command = override or shutil.which("openssl")
+    if not command:
+        raise SshManagerError("openssl is required for local encrypted password storage.")
+    return command
+
+
+def read_entries() -> list[dict[str, Any]]:
+    path = entries_path()
+    if not path.exists():
+        return []
+
+    try:
+        parsed = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise SshManagerError(f"Could not read SSH manager entries: {error}") from error
+
+    if not isinstance(parsed, list):
+        raise SshManagerError("SSH manager entries file is invalid.")
+
+    entries: list[dict[str, Any]] = []
+    for item in parsed:
+        if not isinstance(item, dict):
+            continue
+        entry_id = str(item.get("id") or "").strip()
+        host = str(item.get("host") or "").strip()
+        user = str(item.get("user") or "").strip()
+        name = str(item.get("name") or "").strip()
+        auth_type = str(item.get("auth_type") or AUTH_PASSWORD).strip()
+        if auth_type not in AUTH_TYPES:
+            auth_type = AUTH_PASSWORD
+        identity_file = str(item.get("identity_file") or "").strip()
+        secret_backend = str(item.get("secret_backend") or "").strip()
+        if secret_backend not in SECRET_BACKENDS:
+            secret_backend = SECRET_BACKEND_SECRET_TOOL
+        if entry_id and host and user and (auth_type == AUTH_PASSWORD or identity_file):
+            entries.append({
+                "id": entry_id,
+                "name": name,
+                "host": host,
+                "user": user,
+                "auth_type": auth_type,
+                "identity_file": identity_file,
+                "secret_backend": secret_backend,
+                "created_at": int(item.get("created_at") or 0),
+            })
+
+    return entries
+
+
+def write_entries(entries: list[dict[str, Any]]) -> None:
+    directory = state_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    directory.chmod(0o700)
+
+    path = entries_path()
+    temp_path = path.with_suffix(".json.tmp")
+    payload = json.dumps(entries, ensure_ascii=True, indent=2) + "\n"
+    temp_path.write_text(payload, encoding="utf-8")
+    temp_path.chmod(0o600)
+    temp_path.replace(path)
+
+
+def public_entry(entry: dict[str, Any]) -> dict[str, Any]:
+    host = str(entry["host"])
+    user = str(entry["user"])
+    name = str(entry.get("name") or "").strip()
+    target = f"{user}@{host}"
+    return {
+        "id": str(entry["id"]),
+        "name": name,
+        "host": host,
+        "user": user,
+        "target": target,
+        "display_name": name or target,
+        "auth_type": str(entry.get("auth_type") or AUTH_PASSWORD),
+        "identity_file": str(entry.get("identity_file") or ""),
+        "created_at": int(entry.get("created_at") or 0),
+    }
+
+
+def find_entry(entry_id: str) -> dict[str, Any]:
+    expected_id = str(entry_id or "").strip()
+    for entry in read_entries():
+        if str(entry["id"]) == expected_id:
+            return entry
+    raise SshManagerError("SSH entry was not found.")
+
+
+def normalize_required(value: str, label: str) -> str:
+    normalized = " ".join(str(value or "").strip().split())
+    if not normalized:
+        raise SshManagerError(f"{label} is required.")
+    return normalized
+
+
+def validate_host(host: str) -> str:
+    host = normalize_required(host, "Host")
+    if any(ch.isspace() for ch in host):
+        raise SshManagerError("Host must not contain whitespace.")
+    return host
+
+
+def validate_user(user: str) -> str:
+    user = normalize_required(user, "Username")
+    if any(ch.isspace() for ch in user):
+        raise SshManagerError("Username must not contain whitespace.")
+    return user
+
+
+def normalize_name(name: str) -> str:
+    return " ".join(str(name or "").strip().split())
+
+
+def validate_identity_file(identity_file: str) -> str:
+    value = str(identity_file or "").strip()
+    if not value:
+        raise SshManagerError("SSH key is required.")
+    path = Path(value).expanduser()
+    if not path.is_file():
+        raise SshManagerError(f"SSH key was not found: {path}")
+    return str(path.resolve())
+
+
+def sort_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(
+        entries,
+        key=lambda entry: (
+            str(entry.get("name") or f"{entry['user']}@{entry['host']}").lower(),
+            str(entry["host"]).lower(),
+            str(entry["user"]).lower(),
+        ),
+    )
+
+
+def backend_candidates(preferred_backend: str = "") -> list[str]:
+    override = os.environ.get("SSH_MANAGER_SECRET_BACKEND", "").strip()
+    if override:
+        if override not in SECRET_BACKENDS:
+            raise SshManagerError(f"Unsupported password backend: {override}")
+        return [override]
+
+    candidates: list[str] = []
+    if preferred_backend in SECRET_BACKENDS:
+        candidates.append(preferred_backend)
+
+    for backend in SECRET_BACKENDS:
+        if backend == SECRET_BACKEND_KWALLET and not kwallet_is_usable():
+            continue
+        if backend not in candidates:
+            candidates.append(backend)
+
+    return candidates
+
+
+def process_detail(result: subprocess.CompletedProcess[str]) -> str:
+    return (result.stderr or result.stdout or "").strip()
+
+
+def bytes_detail(result: subprocess.CompletedProcess[bytes]) -> str:
+    detail = result.stderr or result.stdout or b""
+    return detail.decode("utf-8", errors="replace").strip()
+
+
+def kwallet_is_usable() -> bool:
+    if not shutil.which("kwallet-query"):
+        return False
+
+    wallet_name = kwallet_wallet().strip()
+    if wallet_name == "":
+        return False
+
+    directory = kwallet_dir()
+    if not directory.exists():
+        return False
+
+    for suffix in (".kwl", ".kwlx", ".salt", ".key"):
+        if (directory / f"{wallet_name}{suffix}").exists():
+            return True
+
+    return False
+
+
+def store_secret_tool(entry_id: str, host: str, user: str, password: str) -> None:
+    label = f"SSH password for {user}@{host}"
+    result = subprocess.run(
+        [
+            secret_tool(),
+            "store",
+            "--label",
+            label,
+            "app",
+            APP_NAME,
+            "id",
+            entry_id,
+        ],
+        input=password,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = process_detail(result)
+        raise SshManagerError(detail or "Could not store password in Secret Service.")
+
+
+def lookup_secret_tool(entry_id: str) -> str:
+    result = subprocess.run(
+        [secret_tool(), "lookup", "app", APP_NAME, "id", entry_id],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = process_detail(result)
+        raise SshManagerError(detail or "Could not read password from Secret Service.")
+
+    return result.stdout.rstrip("\n")
+
+
+def clear_secret_tool(entry_id: str) -> None:
+    subprocess.run(
+        [secret_tool(), "clear", "app", APP_NAME, "id", entry_id],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+
+
+def kwallet_command(action: str, entry_id: str) -> list[str]:
+    return [
+        kwallet_query(),
+        "--folder",
+        kwallet_folder(),
+        action,
+        entry_id,
+        kwallet_wallet(),
+    ]
+
+
+def store_kwallet_secret(entry_id: str, password: str) -> None:
+    result = subprocess.run(
+        kwallet_command("--write-password", entry_id),
+        input=password,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = process_detail(result)
+        raise SshManagerError(detail or "Could not store password in KWallet.")
+
+
+def lookup_kwallet_secret(entry_id: str) -> str:
+    result = subprocess.run(
+        kwallet_command("--read-password", entry_id),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = process_detail(result)
+        raise SshManagerError(detail or "Could not read password from KWallet.")
+
+    return result.stdout.rstrip("\n")
+
+
+def clear_kwallet_secret(entry_id: str) -> None:
+    subprocess.run(
+        kwallet_command("--write-password", entry_id),
+        input="",
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+
+
+def safe_secret_filename(entry_id: str) -> str:
+    safe = "".join(ch for ch in str(entry_id) if ch.isalnum() or ch in "-_")
+    if not safe:
+        raise SshManagerError("Secret id is invalid.")
+    return f"{safe}.enc"
+
+
+def local_secret_path(entry_id: str) -> Path:
+    return secrets_dir() / safe_secret_filename(entry_id)
+
+
+def ensure_local_key() -> Path:
+    key_path = local_key_path()
+    if key_path.exists():
+        key_path.chmod(0o600)
+        return key_path
+
+    key_path.parent.mkdir(parents=True, exist_ok=True)
+    key_path.parent.chmod(0o700)
+    key = base64.urlsafe_b64encode(os.urandom(48)).decode("ascii")
+    key_path.write_text(key, encoding="ascii")
+    key_path.chmod(0o600)
+    return key_path
+
+
+def store_openssl_file_secret(entry_id: str, password: str) -> None:
+    key_path = ensure_local_key()
+    directory = secrets_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    directory.chmod(0o700)
+
+    path = local_secret_path(entry_id)
+    temp_path = path.with_suffix(".enc.tmp")
+    result = subprocess.run(
+        [
+            openssl_command(),
+            "enc",
+            "-aes-256-cbc",
+            "-pbkdf2",
+            "-salt",
+            "-pass",
+            f"file:{key_path}",
+            "-out",
+            str(temp_path),
+        ],
+        input=password.encode("utf-8"),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if result.returncode != 0:
+        try:
+            temp_path.unlink()
+        except FileNotFoundError:
+            pass
+        detail = bytes_detail(result)
+        raise SshManagerError(detail or "Could not store password in local encrypted file.")
+
+    temp_path.chmod(0o600)
+    temp_path.replace(path)
+    path.chmod(0o600)
+
+
+def lookup_openssl_file_secret(entry_id: str) -> str:
+    key_path = ensure_local_key()
+    path = local_secret_path(entry_id)
+    if not path.exists():
+        raise SshManagerError("Local encrypted password file was not found.")
+
+    result = subprocess.run(
+        [
+            openssl_command(),
+            "enc",
+            "-d",
+            "-aes-256-cbc",
+            "-pbkdf2",
+            "-pass",
+            f"file:{key_path}",
+            "-in",
+            str(path),
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = bytes_detail(result)
+        raise SshManagerError(detail or "Could not read local encrypted password file.")
+
+    return result.stdout.decode("utf-8")
+
+
+def clear_openssl_file_secret(entry_id: str) -> None:
+    try:
+        local_secret_path(entry_id).unlink()
+    except FileNotFoundError:
+        pass
+
+
+def store_secret(entry_id: str, host: str, user: str, password: str, preferred_backend: str = "") -> str:
+    if password == "":
+        raise SshManagerError("Password is required.")
+
+    errors: list[str] = []
+    for backend in backend_candidates(preferred_backend):
+        try:
+            if backend == SECRET_BACKEND_SECRET_TOOL:
+                store_secret_tool(entry_id, host, user, password)
+            elif backend == SECRET_BACKEND_KWALLET:
+                store_kwallet_secret(entry_id, password)
+            elif backend == SECRET_BACKEND_OPENSSL_FILE:
+                store_openssl_file_secret(entry_id, password)
+            else:
+                continue
+            return backend
+        except SshManagerError as error:
+            errors.append(f"{backend}: {error}")
+
+    detail = "; ".join(errors)
+    raise SshManagerError(
+        f"Could not store password in an encrypted backend. {detail}"
+        if detail
+        else "Could not store password in an encrypted backend."
+    )
+
+
+def lookup_secret(entry_id: str, preferred_backend: str = "") -> str:
+    errors: list[str] = []
+    for backend in backend_candidates(preferred_backend):
+        try:
+            if backend == SECRET_BACKEND_SECRET_TOOL:
+                return lookup_secret_tool(entry_id)
+            if backend == SECRET_BACKEND_KWALLET:
+                return lookup_kwallet_secret(entry_id)
+            if backend == SECRET_BACKEND_OPENSSL_FILE:
+                return lookup_openssl_file_secret(entry_id)
+        except SshManagerError as error:
+            errors.append(f"{backend}: {error}")
+
+    detail = "; ".join(errors)
+    raise SshManagerError(
+        f"Could not read password from an encrypted backend. {detail}"
+        if detail
+        else "Could not read password from an encrypted backend."
+    )
+
+
+def clear_secret(entry_id: str, preferred_backend: str = "") -> None:
+    for backend in backend_candidates(preferred_backend):
+        try:
+            if backend == SECRET_BACKEND_SECRET_TOOL:
+                clear_secret_tool(entry_id)
+            elif backend == SECRET_BACKEND_KWALLET:
+                clear_kwallet_secret(entry_id)
+            elif backend == SECRET_BACKEND_OPENSSL_FILE:
+                clear_openssl_file_secret(entry_id)
+        except SshManagerError:
+            pass
+
+
+def add_entry(
+    host: str,
+    user: str,
+    password: str = "",
+    name: str = "",
+    identity_file: str = "",
+) -> dict[str, Any]:
+    host = validate_host(host)
+    user = validate_user(user)
+    name = normalize_name(name)
+    auth_type = AUTH_KEY if identity_file else AUTH_PASSWORD
+    identity_file = validate_identity_file(identity_file) if auth_type == AUTH_KEY else ""
+    entries = read_entries()
+
+    existing = next((entry for entry in entries if entry["host"] == host and entry["user"] == user), None)
+    entry_id = str(existing["id"]) if existing else uuid.uuid4().hex
+    display_name = name
+    if existing and display_name == "":
+        display_name = str(existing.get("name") or "").strip()
+
+    secret_backend = ""
+    if auth_type == AUTH_PASSWORD:
+        secret_backend = store_secret(
+            entry_id,
+            host,
+            user,
+            password,
+            str(existing.get("secret_backend") or "") if existing else "",
+        )
+    elif existing and str(existing.get("auth_type") or AUTH_PASSWORD) == AUTH_PASSWORD:
+        clear_secret(entry_id, str(existing.get("secret_backend") or ""))
+
+    next_entry = {
+        "id": entry_id,
+        "name": display_name,
+        "host": host,
+        "user": user,
+        "auth_type": auth_type,
+        "identity_file": identity_file,
+        "secret_backend": secret_backend,
+        "created_at": int(existing.get("created_at") if existing else time.time()),
+    }
+
+    entries = [entry for entry in entries if str(entry["id"]) != entry_id]
+    entries.append(next_entry)
+    write_entries(sort_entries(entries))
+
+    return {
+        "ok": True,
+        "entry": public_entry(next_entry),
+        "message": f"Saved {display_name or f'{user}@{host}'}.",
+    }
+
+
+def delete_entry(entry_id: str) -> dict[str, Any]:
+    entry = find_entry(entry_id)
+    entries = [item for item in read_entries() if str(item["id"]) != str(entry["id"])]
+    write_entries(entries)
+    if str(entry.get("auth_type") or AUTH_PASSWORD) == AUTH_PASSWORD:
+        clear_secret(str(entry["id"]), str(entry.get("secret_backend") or ""))
+
+    return {
+        "ok": True,
+        "entry": public_entry(entry),
+        "message": f"Deleted {entry['user']}@{entry['host']}.",
+    }
+
+
+def list_entries() -> dict[str, Any]:
+    entries = [public_entry(entry) for entry in sort_entries(read_entries())]
+    return {"ok": True, "entries": entries}
+
+
+def launch_kitty(entry_id: str) -> dict[str, Any]:
+    entry = find_entry(entry_id)
+    kitty = os.environ.get("SSH_MANAGER_KITTY") or shutil.which("kitty")
+    if not kitty:
+        raise SshManagerError("kitty was not found.")
+
+    target = f"{entry['user']}@{entry['host']}"
+    subprocess.Popen(
+        [
+            kitty,
+            "--title",
+            f"ssh: {target}",
+            "--hold",
+            sys.executable,
+            str(SCRIPT_PATH),
+            "session",
+            "--id",
+            str(entry["id"]),
+        ],
+        start_new_session=True,
+    )
+
+    return {
+        "ok": True,
+        "entry": public_entry(entry),
+        "message": f"Opening {target}.",
+    }
+
+
+def run_ssh_session(entry_id: str) -> int:
+    entry = find_entry(entry_id)
+    auth_type = str(entry.get("auth_type") or AUTH_PASSWORD)
+    password = ""
+    if auth_type == AUTH_PASSWORD:
+        password = lookup_secret(str(entry["id"]), str(entry.get("secret_backend") or ""))
+    target = f"{entry['user']}@{entry['host']}"
+    argv = ["ssh", "-tt"]
+    if auth_type == AUTH_KEY:
+        argv.extend(["-i", validate_identity_file(str(entry.get("identity_file") or ""))])
+    preferred_authentications = (
+        "publickey"
+        if auth_type == AUTH_KEY
+        else "password,keyboard-interactive,publickey"
+    )
+    argv.extend([
+        "-o",
+        "NumberOfPasswordPrompts=1",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "-o",
+        f"PreferredAuthentications={preferred_authentications}",
+        target,
+    ])
+
+    print(f"Connecting to {target} ...", flush=True)
+    pid, fd = pty.fork()
+    if pid == 0:
+        child_env = os.environ.copy()
+        child_env["TERM"] = "xterm-256color"
+        os.execvpe("ssh", argv, child_env)
+
+    stdin_fd = sys.stdin.fileno()
+    stdout_fd = sys.stdout.fileno()
+    old_tty = None
+    if os.isatty(stdin_fd):
+        old_tty = termios.tcgetattr(stdin_fd)
+        tty.setraw(stdin_fd)
+
+    sent_password = False
+    prompt_buffer = b""
+
+    try:
+        while True:
+            readers = [fd]
+            if os.isatty(stdin_fd):
+                readers.append(stdin_fd)
+
+            readable, _, _ = select.select(readers, [], [])
+            if fd in readable:
+                try:
+                    data = os.read(fd, 4096)
+                except OSError:
+                    break
+
+                if not data:
+                    break
+
+                os.write(stdout_fd, data)
+                prompt_buffer = (prompt_buffer + data.lower())[-4096:]
+                if not sent_password and any(token in prompt_buffer for token in PROMPT_TOKENS):
+                    os.write(fd, password.encode("utf-8") + b"\n")
+                    sent_password = True
+
+            if stdin_fd in readable:
+                data = os.read(stdin_fd, 4096)
+                if not data:
+                    break
+                os.write(fd, data)
+    finally:
+        if old_tty is not None:
+            termios.tcsetattr(stdin_fd, termios.TCSADRAIN, old_tty)
+
+    _, status = os.waitpid(pid, 0)
+    if os.WIFEXITED(status):
+        return os.WEXITSTATUS(status)
+    if os.WIFSIGNALED(status):
+        return 128 + os.WTERMSIG(status)
+    return 1
+
+
+def print_payload(payload: dict[str, Any], *, as_json: bool) -> None:
+    if as_json:
+        print(json.dumps(payload, ensure_ascii=True))
+    else:
+        print(payload.get("message") or json.dumps(payload, ensure_ascii=True))
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(prog="ssh-manager")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    list_parser = subparsers.add_parser("list", help="List saved SSH entries.")
+    list_parser.add_argument("--json", action="store_true")
+
+    add_parser = subparsers.add_parser("add", help="Add or update an SSH entry.")
+    add_parser.add_argument("--name", default="")
+    add_parser.add_argument("--host", required=True)
+    add_parser.add_argument("--user", required=True)
+    credentials = add_parser.add_mutually_exclusive_group(required=True)
+    credentials.add_argument("--password")
+    credentials.add_argument("--identity-file")
+    add_parser.add_argument("--json", action="store_true")
+
+    delete_parser = subparsers.add_parser("delete", help="Delete an SSH entry.")
+    delete_parser.add_argument("--id", required=True)
+    delete_parser.add_argument("--json", action="store_true")
+
+    connect_parser = subparsers.add_parser("connect", help="Open an SSH entry in kitty.")
+    connect_parser.add_argument("--id", required=True)
+    connect_parser.add_argument("--json", action="store_true")
+
+    session_parser = subparsers.add_parser("session", help="Run an SSH session.")
+    session_parser.add_argument("--id", required=True)
+
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+
+    try:
+        if args.command == "list":
+            print_payload(list_entries(), as_json=args.json)
+            return 0
+        if args.command == "add":
+            print_payload(
+                add_entry(
+                    args.host,
+                    args.user,
+                    args.password or "",
+                    args.name,
+                    args.identity_file or "",
+                ),
+                as_json=args.json,
+            )
+            return 0
+        if args.command == "delete":
+            print_payload(delete_entry(args.id), as_json=args.json)
+            return 0
+        if args.command == "connect":
+            print_payload(launch_kitty(args.id), as_json=args.json)
+            return 0
+        if args.command == "session":
+            return run_ssh_session(args.id)
+
+        raise SshManagerError(f"Unsupported command: {args.command}")
+    except SshManagerError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

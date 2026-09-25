@@ -1,0 +1,166 @@
+pragma ComponentBehavior: Bound
+
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+import Quickshell
+import qs.style.theme
+import qs.core.services
+import qs.style.widgets
+
+// Hangs from the clock: notification center on the left, date, calendar and
+// weather on the right.
+Drawer {
+	id: root
+
+	panelId: "today"
+	panelWidth: 790
+	contentHeight: Math.max(side.implicitHeight, 420)
+
+	SystemClock {
+		id: clock
+		precision: SystemClock.Minutes
+	}
+
+	onPanelOpened: calendar.reset()
+
+	RowLayout {
+		anchors.fill: parent
+		spacing: 20
+
+		// notifications
+		ColumnLayout {
+			Layout.fillWidth: true
+			Layout.fillHeight: true
+			spacing: 12
+
+			RowLayout {
+				Layout.fillWidth: true
+				spacing: 8
+
+				StyledText {
+					text: "Notifications"
+					font.pixelSize: Theme.size.heading
+					font.weight: Font.Bold
+				}
+
+				Badge {
+					count: Notifs.count
+				}
+
+				Item {
+					Layout.fillWidth: true
+				}
+
+				IconButton {
+					icon: Notifs.dnd ? "bell_sleep" : "bell_sleep_outline"
+					checked: Notifs.dnd
+					variant: "tonal"
+					onClicked: Notifs.toggleDnd()
+				}
+
+				TextButton {
+					visible: Notifs.count > 0
+					text: "Clear all"
+					icon: "broom"
+					variant: "ghost"
+					confirm: Notifs.count > 3
+					confirmText: "Clear all?"
+					onActivated: Notifs.dismissAll()
+				}
+			}
+
+			Item {
+				Layout.fillWidth: true
+				Layout.fillHeight: true
+
+				EmptyState {
+					anchors.centerIn: parent
+					visible: Notifs.count === 0
+					icon: "bell_sleep"
+					title: "All caught up"
+					subtitle: "New notifications land here. Swipe one sideways to dismiss it."
+				}
+
+				ListView {
+					id: list
+
+					anchors.fill: parent
+					visible: Notifs.count > 0
+					clip: true
+					spacing: 8
+					model: Notifs.groups
+					boundsBehavior: Flickable.StopAtBounds
+					ScrollBar.vertical: ThinScrollBar {}
+
+					add: Transition {
+						ParallelAnimation {
+							Anim {
+								property: "opacity"
+								from: 0
+								to: 1
+							}
+							SpatialAnim {
+								property: "y"
+								from: -30
+							}
+						}
+					}
+					displaced: Transition {
+						SpatialAnim {
+							property: "y"
+						}
+					}
+
+					delegate: NotificationCard {
+						required property var modelData
+						width: ListView.view.width
+						group: modelData
+					}
+				}
+			}
+		}
+
+		Rectangle {
+			Layout.fillHeight: true
+			Layout.preferredWidth: 1
+			color: Theme.outline
+		}
+
+		// date, calendar, weather
+		ColumnLayout {
+			id: side
+
+			Layout.preferredWidth: 320
+			Layout.alignment: Qt.AlignTop
+			spacing: 14
+
+			ColumnLayout {
+				spacing: 0
+
+				StyledText {
+					text: Qt.formatDateTime(clock.date, "dddd")
+					tone: Theme.primary
+					font.pixelSize: Theme.size.title
+					font.weight: Font.Bold
+				}
+
+				StyledText {
+					text: Qt.formatDateTime(clock.date, "d. MMMM")
+					font.pixelSize: Theme.size.display
+					font.weight: Font.Bold
+				}
+			}
+
+			CalendarView {
+				id: calendar
+				Layout.fillWidth: true
+			}
+
+			WeatherCard {
+				Layout.fillWidth: true
+				visible: Weather.available
+			}
+		}
+	}
+}

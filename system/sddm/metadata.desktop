@@ -1,0 +1,12 @@
+[SddmGreeterTheme]
+Name=Silent
+Description=Quickshell lock-screen styled SDDM theme with dynamic wallpaper frame
+Type=sddm-theme
+Author=philippjung
+Copyright=2026, philippjung
+License=MIT
+Version=1.0
+MainScript=Main.qml
+ConfigFile=theme.conf
+Theme-Id=silent
+Theme-API=2.0
