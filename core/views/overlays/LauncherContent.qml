@@ -291,33 +291,6 @@ Item {
 		{ profile: "office", name: "Office", description: "DVI-I-1 · DVI-I-2 · eDP-1" },
 		{ profile: "home", name: "Home", description: "DP-3 · DP-2 · HDMI-A-1 · eDP-1" }
 	]
-	readonly property string inputIconName: {
-		if (root.editingMessageId !== "") return "document-edit-symbolic";
-		if (root.inCalculatorMode) return "accessories-calculator-symbolic";
-		if (root.inFileMode) return "file-browser";
-		if (root.inChatMode) return "chat-symbolic";
-		if (root.inAiMode) return "view-list-symbolic";
-		if (root.inOllamaMode) return "ollama";
-		return "system-search-symbolic";
-	}
-	readonly property string inputIconPath: {
-		switch (root.inputIconName) {
-		case "document-edit-symbolic":
-			return "/usr/share/icons/Adwaita/symbolic/actions/document-edit-symbolic.svg";
-		case "accessories-calculator-symbolic":
-			return "/usr/share/icons/Adwaita/symbolic/legacy/accessories-calculator-symbolic.svg";
-		case "file-browser":
-			return root.folderIconPath;
-		case "chat-symbolic":
-			return "/usr/share/icons/Gruvbox-Plus-Dark/actions/symbolic/comment-symbolic.svg";
-		case "view-list-symbolic":
-			return "/usr/share/icons/Adwaita/symbolic/actions/view-list-symbolic.svg";
-		case "ollama":
-			return `${Quickshell.shellDir}/assets/ollama-symbolic.png`;
-		default:
-			return "/usr/share/icons/Adwaita/symbolic/actions/system-search-symbolic.svg";
-		}
-	}
 	readonly property string commandInputToken: root.commandInputActive ? commandTokenField.text : ""
 	readonly property string commandInputArgument: root.commandInputActive ? searchField.text : ""
 	readonly property string highlightedCommandInput: root.commandInputHighlight(root.searchText)
@@ -356,9 +329,6 @@ Item {
 	readonly property bool pendingAttachmentsCompatible: root.aiPendingAttachments.every(
 		attachment => String(attachment?.kind || "") !== "image" || root.selectedAiSupportsVision
 	)
-	readonly property string attachmentIconPath: "/usr/share/icons/breeze-dark/actions/16/mail-attachment-symbolic.svg"
-	readonly property string folderIconPath: "/usr/share/icons/breeze-dark/places/16/folder-symbolic.svg"
-	readonly property string folderOpenIconPath: "/usr/share/icons/breeze-dark/actions/16/document-open-folder-symbolic.svg"
 	readonly property int aiRequestContextWindow: Math.min(
 		root.aiModelContextWindow > 0 ? root.aiModelContextWindow : 4096,
 		8192
@@ -1532,6 +1502,28 @@ Item {
 		});
 	}
 
+	// Tab / Shift+Tab: apps → calculator → files → chat → chats → ollama
+	readonly property var modeCycle: [
+		{ mode: "apps", query: "" },
+		{ mode: "calc", query: ">c " },
+		{ mode: "files", query: ">file " },
+		{ mode: "chat", query: ">chat " },
+		{ mode: "chats", query: ">chats " },
+		{ mode: "ollama", query: ">ollama " }
+	]
+
+	function cycleMode(delta) {
+		const count = root.modeCycle.length;
+		const index = Math.max(0, root.modeCycle.findIndex(entry => entry.mode === root.mode));
+		root.setLauncherSearch(root.modeCycle[(index + delta + count) % count].query);
+	}
+
+	function handleModeCycleKey(event) {
+		if (event.key !== Qt.Key_Tab && event.key !== Qt.Key_Backtab) return false;
+		root.cycleMode(event.key === Qt.Key_Backtab || (event.modifiers & Qt.ShiftModifier) ? -1 : 1);
+		return true;
+	}
+
 	function setLauncherSearch(text) {
 		const value = String(text || "");
 		if (value.startsWith(">")) root.enterCommandInput(value, /\s/.test(value));
@@ -2286,47 +2278,11 @@ Item {
 
 		root.recordLaunch(entry);
 		root.closeRequested();
-		if (entry.runInTerminal) {
-			Quickshell.execDetached({
-				command: ["app2unit", "--", ...entry.command],
-				workingDirectory: entry.workingDirectory
-			});
-		} else {
-			Quickshell.execDetached({
-				command: ["app2unit", "--", ...entry.command],
-				workingDirectory: entry.workingDirectory
-			});
-		}
+		Quickshell.execDetached({
+			command: entry.runInTerminal ? ["app2unit", "--", "kitty", "-e", ...entry.command] : ["app2unit", "--", ...entry.command],
+			workingDirectory: entry.workingDirectory
+		});
 		root.launchRequested();
-	}
-
-	function commandIconSource(command) {
-		switch (String(command?.id || "")) {
-		case "rpg":
-			return "/usr/share/icons/Adwaita/symbolic/categories/applications-games-symbolic.svg";
-		case "studio":
-		case "studio-page":
-			return "/usr/share/icons/Adwaita/symbolic/legacy/preferences-desktop-wallpaper-symbolic.svg";
-		case "calculator":
-		case "calculator-result":
-			return "/usr/share/icons/Adwaita/symbolic/legacy/accessories-calculator-symbolic.svg";
-		case "file-browser":
-			return root.folderIconPath;
-		case "chat":
-			return "/usr/share/icons/Gruvbox-Plus-Dark/actions/symbolic/comment-symbolic.svg";
-		case "chats":
-			return "/usr/share/icons/Adwaita/symbolic/actions/view-list-symbolic.svg";
-		case "ollama":
-			return `${Quickshell.shellDir}/assets/ollama-symbolic.png`;
-		}
-		const iconName = String(command?.icon || "");
-		if (iconName.startsWith("/")) return iconName;
-		if (iconName !== "") {
-			const resolved = Quickshell.iconPath(iconName, true);
-			if (resolved !== "") return resolved;
-		}
-
-		return "/usr/share/icons/Adwaita/symbolic/actions/system-search-symbolic.svg";
 	}
 
 	function launchCommand(command) {
@@ -3202,6 +3158,10 @@ Item {
 							event.accepted = true;
 							return;
 						}
+						if (root.handleModeCycleKey(event)) {
+							event.accepted = true;
+							return;
+						}
 						if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
 							root.activateCurrent(event.modifiers);
 							event.accepted = true;
@@ -3312,6 +3272,10 @@ Item {
 						if (event.accepted) return;
 					}
 					if (root.activeModeView && root.activeModeView.handleKey(event)) {
+						event.accepted = true;
+						return;
+					}
+					if (root.handleModeCycleKey(event)) {
 						event.accepted = true;
 						return;
 					}
