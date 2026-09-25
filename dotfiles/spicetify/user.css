@@ -1,0 +1,621 @@
+/*
+ * Quickshell look for Spotify.
+ *
+ * Colors come from color.ini (generated from the wallust palette by
+ * generate.py) and follow ~/.config/quickshell/main/theme/Theme.qml:
+ * flat surfaces, elevation through foreground tints over the background,
+ * no hairline borders, pill buttons and chunky sliders.
+ */
+
+:root {
+	--qs-font: "Adwaita Sans", var(--fallback-fonts, sans-serif);
+	--qs-radius-small: 8px;
+	--qs-radius-medium: 12px;
+	--qs-radius-large: 16px;
+	--qs-radius-panel: 18px;
+	--qs-gap: 8px;
+	--qs-ease: cubic-bezier(0.2, 0, 0, 1);
+
+	--qs-text-muted: rgba(var(--spice-rgb-text), 0.64);
+	--qs-text-subtle: rgba(var(--spice-rgb-text), 0.42);
+	--qs-wash-hover: rgba(var(--spice-rgb-text), 0.07);
+	--qs-wash-press: rgba(var(--spice-rgb-text), 0.12);
+	--qs-primary-soft: rgba(var(--spice-rgb-primary), 0.14);
+	--qs-shadow: 0 12px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* ── type ────────────────────────────────────────────────────────────────── */
+:root,
+.encore-layout-themes,
+body {
+	--encore-body-font-stack: var(--qs-font) !important;
+	--encore-title-font-stack: var(--qs-font) !important;
+	--encore-variable-font-stack: var(--qs-font) !important;
+	--encore-corner-radius-smaller: 4px !important;
+	--encore-corner-radius-base: var(--qs-radius-small) !important;
+	--encore-corner-radius-larger: var(--qs-radius-medium) !important;
+	--encore-list-row-border-radius: var(--qs-radius-medium) !important;
+	--panel-gap: var(--qs-gap) !important;
+	font-family: var(--qs-font);
+}
+
+::selection {
+	background: rgba(var(--spice-rgb-primary), 0.35);
+	color: var(--spice-text);
+}
+
+/* ── encore color tokens ─────────────────────────────────────────────────── */
+:root .encore-dark-theme,
+:root .encore-dark-theme .encore-base-set,
+:root .encore-light-theme,
+:root .encore-light-theme .encore-base-set {
+	--background-base: var(--spice-layer1);
+	--background-highlight: var(--spice-layer2);
+	--background-press: var(--spice-base);
+	--background-elevated-base: var(--spice-layer2);
+	--background-elevated-highlight: var(--spice-layer3);
+	--background-elevated-press: var(--spice-layer1);
+	--background-tinted-base: rgba(var(--spice-rgb-text), 0.085);
+	--background-tinted-highlight: rgba(var(--spice-rgb-text), 0.13);
+	--background-tinted-press: rgba(var(--spice-rgb-text), 0.18);
+	--text-base: var(--spice-text);
+	--text-subdued: var(--spice-text-muted);
+	--text-bright-accent: var(--spice-primary);
+	--text-negative: var(--spice-danger);
+	--text-warning: var(--spice-warning);
+	--text-positive: var(--spice-success);
+	--text-announcement: var(--spice-secondary);
+	--essential-base: var(--spice-text);
+	--essential-subdued: var(--spice-text-subtle);
+	--essential-bright-accent: var(--spice-primary);
+	--essential-negative: var(--spice-danger);
+	--essential-warning: var(--spice-warning);
+	--essential-positive: var(--spice-success);
+	--essential-announcement: var(--spice-secondary);
+	--decorative-base: var(--spice-text);
+	--decorative-subdued: var(--spice-layer3);
+}
+
+:root .encore-dark-theme .encore-app-frame-set,
+:root .encore-dark-theme .encore-muted-accent-set {
+	--background-base: var(--spice-base);
+	--background-highlight: var(--spice-layer1);
+	--background-press: var(--spice-layer2);
+	--background-elevated-base: var(--spice-layer2);
+	--background-elevated-highlight: var(--spice-layer3);
+	--background-elevated-press: var(--spice-layer1);
+	--background-tinted-base: rgba(var(--spice-rgb-text), 0.085);
+	--background-tinted-highlight: rgba(var(--spice-rgb-text), 0.13);
+	--background-tinted-press: rgba(var(--spice-rgb-text), 0.18);
+	--text-base: var(--spice-text);
+	--text-subdued: var(--spice-text-muted);
+	--text-bright-accent: var(--spice-primary);
+	--essential-base: var(--spice-text);
+	--essential-subdued: var(--spice-text-subtle);
+	--essential-bright-accent: var(--spice-primary);
+	--decorative-base: var(--spice-text);
+	--decorative-subdued: var(--spice-layer2);
+}
+
+:root .encore-dark-theme .encore-bright-accent-set,
+:root .encore-dark-theme .encore-positive-set {
+	--background-base: var(--spice-primary);
+	--background-highlight: var(--spice-button-active);
+	--background-press: var(--spice-primary);
+	--background-elevated-base: var(--spice-button-active);
+	--background-elevated-highlight: var(--spice-button-active);
+	--background-elevated-press: var(--spice-primary);
+	--background-tinted-base: var(--spice-primary);
+	--background-tinted-highlight: var(--spice-button-active);
+	--background-tinted-press: var(--spice-primary);
+	--text-base: var(--spice-on-primary);
+	--text-subdued: var(--spice-on-primary);
+	--text-bright-accent: var(--spice-on-primary);
+	--essential-base: var(--spice-on-primary);
+	--essential-subdued: var(--spice-on-primary);
+	--essential-bright-accent: var(--spice-on-primary);
+	--decorative-base: var(--spice-on-primary);
+	--decorative-subdued: var(--spice-button-active);
+}
+
+:root .encore-dark-theme .encore-bright-accent-set > *,
+:root .encore-dark-theme .encore-positive-set > * {
+	--parents-essential-base: var(--spice-on-primary);
+}
+
+:root .encore-dark-theme .encore-inverted-set,
+:root .encore-dark-theme .encore-inverted-light-set {
+	--background-base: var(--spice-text);
+	--background-highlight: var(--spice-text);
+	--background-press: var(--spice-text-muted);
+	--background-elevated-base: var(--spice-text);
+	--background-elevated-highlight: var(--spice-text);
+	--background-elevated-press: var(--spice-text-muted);
+	--text-base: var(--spice-base);
+	--text-subdued: var(--spice-layer3);
+	--essential-base: var(--spice-base);
+	--essential-subdued: var(--spice-layer3);
+	--decorative-base: var(--spice-base);
+	--decorative-subdued: var(--spice-text-muted);
+}
+
+:root .encore-dark-theme .encore-announcement-set {
+	--background-base: var(--spice-secondary);
+	--background-highlight: var(--spice-secondary);
+	--background-press: var(--spice-secondary);
+	--background-elevated-base: var(--spice-secondary);
+	--background-elevated-highlight: var(--spice-secondary);
+	--text-base: var(--spice-base);
+	--essential-base: var(--spice-base);
+}
+
+:root .encore-dark-theme .encore-negative-set {
+	--background-base: var(--spice-danger);
+	--background-highlight: var(--spice-danger);
+	--background-press: var(--spice-danger);
+	--text-base: var(--spice-base);
+	--essential-base: var(--spice-base);
+}
+
+:root .encore-dark-theme .encore-negative-subdued-set {
+	--background-base: var(--spice-danger-container);
+	--background-highlight: var(--spice-danger-container);
+	--text-base: var(--spice-danger);
+	--essential-base: var(--spice-danger);
+}
+
+:root .encore-dark-theme .encore-warning-set {
+	--background-base: var(--spice-warning);
+	--background-highlight: var(--spice-warning);
+	--text-base: var(--spice-base);
+	--essential-base: var(--spice-base);
+}
+
+/* ── frame and panels ────────────────────────────────────────────────────── */
+body,
+.Root,
+.Root__top-container,
+.Root__globalNav,
+.Root__now-playing-bar {
+	background-color: var(--spice-base) !important;
+}
+
+.Root__nav-bar {
+	background-color: var(--spice-layer1) !important;
+}
+
+/* resize bars sit outside the panels, so only the content gets clipped */
+.Root__nav-bar,
+.Root__main-view,
+.main-yourLibraryX-entryPoints,
+.Root__right-sidebar > :not(.LayoutResizer__resize-bar),
+.Root__right-sidebar-peek,
+.Root__right-sidebar-overlay,
+.main-nowPlayingView-mainWrapper {
+	border-radius: var(--qs-radius-panel) !important;
+}
+
+.Root__right-sidebar > :not(.LayoutResizer__resize-bar) {
+	overflow: hidden;
+}
+
+.LayoutResizer__resize-bar--resizing::after,
+.LayoutResizer__resize-bar:hover::after {
+	background-color: var(--spice-primary) !important;
+	width: 2px !important;
+}
+
+/* cover-art tints in page headers become the shell's accent wash */
+.main-topBar-background,
+.main-entityHeader-backgroundColor,
+.main-actionBarBackground-background,
+.main-home-homeHeader {
+	background-color: var(--spice-primary-container) !important;
+	background-image: none !important;
+}
+
+.main-entityHeader-backgroundColor + .main-entityHeader-background,
+.main-entityHeader-gradient,
+.main-entityHeader-mermaidGradientOverlay {
+	background: linear-gradient(transparent 0, var(--spice-layer1) 100%) !important;
+}
+
+.main-actionBarBackground-background {
+	background: linear-gradient(var(--spice-primary-soft) 0, var(--spice-layer1) 232px) !important;
+}
+
+.main-home-homeHeader {
+	background: linear-gradient(var(--spice-primary-container) 0, var(--spice-layer1) 100%) !important;
+}
+
+/* ── global nav ──────────────────────────────────────────────────────────── */
+.main-globalNav-searchInputContainer input,
+.main-globalNav-searchInputSection input,
+.x-searchInput-searchInputInput,
+.search-modal-input {
+	background-color: var(--spice-layer2) !important;
+	border-radius: 999px !important;
+	box-shadow: none !important;
+	border: 0 !important;
+	color: var(--spice-text) !important;
+}
+
+.main-globalNav-searchInputContainer input:hover,
+.x-searchInput-searchInputInput:hover {
+	background-color: var(--spice-layer3) !important;
+}
+
+.main-globalNav-searchInputContainer input:focus,
+.x-searchInput-searchInputInput:focus {
+	background-color: var(--spice-layer3) !important;
+	box-shadow: inset 0 0 0 2px rgba(var(--spice-rgb-primary), 0.6) !important;
+}
+
+.main-globalNav-historyButtons button,
+.main-globalNav-link-icon,
+.main-globalNav-navLink {
+	background-color: var(--spice-layer2) !important;
+	color: var(--spice-text) !important;
+}
+
+.main-globalNav-navLinkActive {
+	background-color: var(--spice-primary) !important;
+	color: var(--spice-on-primary) !important;
+}
+
+.main-globalNav-navLinkActive svg {
+	fill: var(--spice-on-primary) !important;
+}
+
+/* ── buttons ─────────────────────────────────────────────────────────────── */
+button[data-encore-id="buttonPrimary"] > span,
+button[data-encore-id="buttonSecondary"],
+button[data-encore-id="buttonSecondary"] > span,
+a[data-encore-id="buttonSecondary"],
+button[data-encore-id="chip"],
+button[data-encore-id="chip"] > span,
+[role="checkbox"][data-encore-id="chip"] > span {
+	border-radius: 999px;
+}
+
+button[data-encore-id="buttonPrimary"] > span,
+.main-playButton-PlayButton > span,
+.main-playButton-primary {
+	background-color: var(--spice-primary) !important;
+	color: var(--spice-on-primary) !important;
+	box-shadow: none !important;
+}
+
+button[data-encore-id="buttonPrimary"]:hover > span,
+.main-playButton-PlayButton:hover > span {
+	background-color: var(--spice-button-active) !important;
+}
+
+.main-playButton-PlayButton svg,
+button[data-encore-id="buttonPrimary"] svg {
+	fill: var(--spice-on-primary) !important;
+}
+
+button[data-encore-id="buttonSecondary"],
+a[data-encore-id="buttonSecondary"] {
+	background-color: var(--spice-layer2) !important;
+	border: 0 !important;
+	box-shadow: none !important;
+	color: var(--spice-text) !important;
+}
+
+button[data-encore-id="buttonSecondary"]:hover,
+a[data-encore-id="buttonSecondary"]:hover {
+	background-color: var(--spice-layer3) !important;
+}
+
+/* chips (library filters, home filters) */
+button[data-encore-id="chip"] > span,
+[role="checkbox"][data-encore-id="chip"] > span {
+	background-color: var(--spice-layer2) !important;
+	color: var(--spice-text) !important;
+}
+
+button[data-encore-id="chip"]:hover > span,
+[role="checkbox"][data-encore-id="chip"]:hover > span {
+	background-color: var(--spice-layer3) !important;
+}
+
+button[data-encore-id="chip"][aria-checked="true"] > span,
+button[data-encore-id="chip"][aria-pressed="true"] > span,
+[role="checkbox"][data-encore-id="chip"][aria-checked="true"] > span {
+	background-color: var(--spice-primary) !important;
+	color: var(--spice-on-primary) !important;
+	font-weight: 600;
+}
+
+/* ── player bar ──────────────────────────────────────────────────────────── */
+.main-nowPlayingBar-container,
+.main-nowPlayingBar-nowPlayingBar {
+	background-color: transparent !important;
+	border: 0 !important;
+}
+
+.main-nowPlayingWidget-coverArt img,
+.main-nowPlayingWidget-coverArt .cover-art {
+	border-radius: var(--qs-radius-small) !important;
+}
+
+.player-controls__buttons button {
+	border-radius: 999px;
+}
+
+.main-playPauseButton-button,
+.player-controls__buttons button[data-testid="control-button-playpause"] {
+	background-color: var(--spice-primary) !important;
+	color: var(--spice-on-primary) !important;
+	transition: transform 0.2s var(--qs-ease), background-color 0.2s var(--qs-ease);
+}
+
+.main-playPauseButton-button svg,
+.player-controls__buttons button[data-testid="control-button-playpause"] svg {
+	fill: var(--spice-on-primary) !important;
+}
+
+.main-playPauseButton-button:hover,
+.player-controls__buttons button[data-testid="control-button-playpause"]:hover {
+	background-color: var(--spice-button-active) !important;
+	transform: scale(1.06);
+}
+
+.main-shuffleButton-active,
+.main-repeatButton-active,
+.main-shuffleButton-active svg,
+.main-repeatButton-active svg {
+	color: var(--spice-primary) !important;
+	fill: var(--spice-primary) !important;
+}
+
+.main-shuffleButton-active::after,
+.main-repeatButton-active::after {
+	background-color: var(--spice-primary) !important;
+}
+
+/* pill sliders: the fill is the handle, the track swells on hover */
+.progress-bar {
+	--bg-color: var(--spice-layer3) !important;
+	--fg-color: var(--spice-primary) !important;
+	--mg-color: rgba(var(--spice-rgb-primary), 0.45) !important;
+	--is-active-fg-color: var(--spice-primary) !important;
+	--progress-bar-height: 6px !important;
+	--progress-bar-radius: 999px !important;
+}
+
+.progress-bar__slider {
+	display: none !important;
+}
+
+.playback-bar__progress-time-elapsed,
+.main-playbackBarRemainingTime-container {
+	color: var(--qs-text-muted) !important;
+	font-variant-numeric: tabular-nums;
+}
+
+/* ── lists ───────────────────────────────────────────────────────────────── */
+.main-trackList-trackListRow {
+	border-radius: var(--qs-radius-medium) !important;
+	transition: background-color 0.15s var(--qs-ease);
+}
+
+.main-trackList-trackListRow:hover,
+.main-trackList-trackListRow:focus-within {
+	background-color: var(--spice-layer2) !important;
+}
+
+.main-trackList-selected,
+.main-trackList-selected:hover,
+.main-trackList-trackListRow[aria-selected="true"] {
+	background-color: var(--qs-primary-soft) !important;
+}
+
+.main-trackList-active .main-trackList-rowTitle,
+.main-trackList-active .main-trackList-number,
+.main-trackList-playingIcon {
+	color: var(--spice-primary) !important;
+	fill: var(--spice-primary) !important;
+}
+
+.main-yourLibraryX-listItem,
+.main-yourLibraryX-listItem > div,
+.main-rootlist-rootlistItem {
+	border-radius: var(--qs-radius-medium) !important;
+}
+
+.main-yourLibraryX-listItem [aria-selected="true"],
+.main-rootlist-rootlistItemLinkActive {
+	background-color: var(--qs-primary-soft) !important;
+}
+
+.main-yourLibraryX-listRowEntityImage,
+.main-yourLibraryX-listRowIconWrapper,
+.x-entityImage-square,
+.x-entityImage-imageContainer:not(.x-entityImage-circle) {
+	border-radius: var(--qs-radius-small) !important;
+}
+
+.x-entityImage-circle {
+	border-radius: 50% !important;
+}
+
+/* ── cards ───────────────────────────────────────────────────────────────── */
+.main-card-card {
+	background-color: transparent !important;
+	border-radius: var(--qs-radius-large) !important;
+	box-shadow: none !important;
+	transition: background-color 0.2s var(--qs-ease);
+}
+
+.main-card-card:hover,
+.main-card-card:focus-within {
+	background-color: var(--spice-layer2) !important;
+}
+
+.main-card-imageContainer,
+.main-cardImage-imageWrapper,
+.main-cardImage-image:not(.main-cardImage-circular) {
+	border-radius: var(--qs-radius-medium) !important;
+	box-shadow: none !important;
+}
+
+.main-cardImage-circular {
+	border-radius: 50% !important;
+}
+
+.main-entityHeader-image,
+.main-entityHeader-imageContainer:not(.main-entityHeader-circle) {
+	border-radius: var(--qs-radius-large) !important;
+	box-shadow: var(--qs-shadow) !important;
+}
+
+.main-shelf-seeAll,
+.main-shelf-showAll,
+.main-cardHeader-link:hover {
+	color: var(--spice-primary) !important;
+}
+
+/* ── menus, dialogs, tooltips ────────────────────────────────────────────── */
+.main-contextMenu-menu,
+.main-devicePicker-devices,
+.main-dropDown-dropDown,
+.GenericModal,
+.main-confirmDialog-container,
+.main-playlistEditDetailsModal-container,
+.search-modal-modalBase {
+	background-color: var(--spice-layer2) !important;
+	border: 0 !important;
+	border-radius: var(--qs-radius-large) !important;
+	box-shadow: var(--qs-shadow) !important;
+	color: var(--spice-text) !important;
+}
+
+.main-contextMenu-menu {
+	padding: 6px !important;
+}
+
+.main-contextMenu-menuItemButton,
+.main-contextMenu-menuItem > a,
+.main-contextMenu-menuItem > button {
+	border-radius: var(--qs-radius-small) !important;
+	color: var(--spice-text) !important;
+}
+
+.main-contextMenu-menuItemButton:hover,
+.main-contextMenu-menuItemButton:focus,
+.main-contextMenu-menuItem > a:hover,
+.main-contextMenu-menuItem > button:hover {
+	background-color: var(--qs-wash-hover) !important;
+}
+
+.main-contextMenu-dividerAfter::after,
+.main-contextMenu-dividerBefore::before {
+	border-color: rgba(var(--spice-rgb-text), 0.08) !important;
+}
+
+.GenericModal__overlay,
+.main-confirmDialog-overlay {
+	background-color: rgba(0, 0, 0, 0.42) !important;
+}
+
+.main-dropDown-dropDown {
+	border-radius: 999px !important;
+	padding-inline: 14px !important;
+}
+
+[role="tooltip"],
+.main-contextMenu-tippy [data-tippy-root] > div:not(.main-contextMenu-menu) {
+	background-color: var(--spice-layer3) !important;
+	color: var(--spice-text) !important;
+	border-radius: var(--qs-radius-small) !important;
+	box-shadow: var(--qs-shadow) !important;
+}
+
+/* toggles */
+.x-toggle-indicatorWrapper {
+	background-color: var(--spice-layer3) !important;
+}
+
+.x-toggle-input:checked ~ .x-toggle-indicatorWrapper {
+	background-color: var(--spice-primary) !important;
+}
+
+.x-toggle-indicator {
+	background-color: var(--spice-text) !important;
+}
+
+.x-toggle-input:checked ~ .x-toggle-indicatorWrapper .x-toggle-indicator {
+	background-color: var(--spice-on-primary) !important;
+}
+
+/* inputs */
+input[type="text"],
+input[type="search"],
+textarea,
+.x-filterBox-filterInput,
+.main-playlistEditDetailsModal-textElement {
+	background-color: var(--spice-layer3) !important;
+	color: var(--spice-text) !important;
+	border: 0 !important;
+	box-shadow: none !important;
+	border-radius: var(--qs-radius-medium);
+}
+
+.x-filterBox-filterInput {
+	border-radius: 999px !important;
+}
+
+/* ── lyrics ──────────────────────────────────────────────────────────────── */
+.lyrics-lyrics-container,
+.lyrics-lyrics-contentWrapper,
+.lyrics-lyrics-background {
+	--lyrics-color-background: var(--spice-layer1) !important;
+	--lyrics-color-active: var(--spice-text) !important;
+	--lyrics-color-passed: var(--spice-primary) !important;
+	--lyrics-color-inactive: rgba(var(--spice-rgb-text), 0.35) !important;
+	background-color: var(--spice-layer1) !important;
+}
+
+/* ── scrollbars ──────────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+}
+
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	background-color: rgba(var(--spice-rgb-text), 0.18);
+	border: 3px solid transparent;
+	border-radius: 999px;
+	background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background-color: rgba(var(--spice-rgb-text), 0.32);
+}
+
+.os-scrollbar-handle {
+	background: rgba(var(--spice-rgb-text), 0.18) !important;
+	border-radius: 999px !important;
+}
+
+.os-scrollbar-handle:hover,
+.os-scrollbar-handle.active {
+	background: rgba(var(--spice-rgb-text), 0.32) !important;
+}
+
+/* ── live palette switch (theme.js adds this class for a moment) ─────────── */
+html.qs-palette-fade,
+html.qs-palette-fade * {
+	transition:
+		background-color 0.45s var(--qs-ease),
+		color 0.45s var(--qs-ease),
+		fill 0.45s var(--qs-ease),
+		border-color 0.45s var(--qs-ease) !important;
+}

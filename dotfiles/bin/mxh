@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+fifo="${MXH_FIFO:-${XDG_RUNTIME_DIR:-/tmp}/mx4-haptic.fifo}"
+
+if [[ ! -p "$fifo" ]]; then
+  echo "mxh: FIFO nicht gefunden: $fifo" >&2
+  exit 1
+fi
+
+printf '%s\n' "${*:-SUBTLE COLLISION}" > "$fifo"

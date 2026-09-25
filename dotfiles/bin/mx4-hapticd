@@ -1,0 +1,151 @@
+#!/usr/bin/env python3
+import errno
+import os
+import selectors
+import stat
+import sys
+import time
+import traceback
+from types import SimpleNamespace
+
+# verhindert zumindest die Wayland-Warnung im Daemon
+os.environ.pop("WAYLAND_DISPLAY", None)
+os.environ["XDG_SESSION_TYPE"] = "x11"
+
+DEVICE_NAME = os.environ.get("MXH_DEVICE", "mx master 4").lower()
+SETTING_NAME = os.environ.get("MXH_SETTING", "haptic-play").lower()
+RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
+FIFO = os.environ.get("MXH_FIFO") or os.path.join(RUNTIME_DIR, "mx4-haptic.fifo")
+
+dev = None
+setting = None
+cli_config = None
+
+
+def log(msg):
+    print(f"[mx4-hapticd] {msg}", file=sys.stderr, flush=True)
+
+
+def init_solaar():
+    global dev, setting, cli_config
+
+    from solaar.cli import _receivers_and_devices, _find_device
+    from solaar.cli import config as _cli_config
+    from logitech_receiver import settings_templates
+
+    receivers = list(_receivers_and_devices())
+    if not receivers:
+        raise RuntimeError("no Solaar receivers/devices found")
+
+    found = None
+    for candidate in _find_device(receivers, DEVICE_NAME):
+        try:
+            if candidate.ping():
+                found = candidate
+                break
+        except Exception:
+            pass
+
+    if found is None:
+        raise RuntimeError(f"no online device matching {DEVICE_NAME!r}")
+
+    s = settings_templates.check_feature_setting(found, SETTING_NAME)
+
+    if s is None and getattr(found, "descriptor", None) and getattr(found.descriptor, "settings", None):
+        for sclass in found.descriptor.settings:
+            if getattr(sclass, "name", None) == SETTING_NAME:
+                try:
+                    s = sclass.build(found)
+                    break
+                except Exception:
+                    pass
+
+    if s is None:
+        raise RuntimeError(f"setting {SETTING_NAME!r} not found on {found.name}")
+
+    dev = found
+    setting = s
+    cli_config = _cli_config
+    log(f"ready: device={dev.name!r}, setting={setting.name!r}, fifo={FIFO}")
+
+
+def play(effect):
+    global dev, setting, cli_config
+
+    effect = effect.strip() or "SUBTLE COLLISION"
+
+    for attempt in range(2):
+        try:
+            args = SimpleNamespace(value_key=effect, extra_subkey=None, extra2=None)
+            result, _message, _value = cli_config.set(dev, setting, args, False)
+
+            if result is not None:
+                return True
+
+            log(f"write returned no result for {effect!r}; refreshing device")
+            init_solaar()
+
+        except Exception as e:
+            log(f"error playing {effect!r}: {e}")
+            if attempt == 0:
+                try:
+                    init_solaar()
+                except Exception as refresh_error:
+                    log(f"refresh failed: {refresh_error}")
+            else:
+                traceback.print_exc(file=sys.stderr)
+
+    return False
+
+
+def ensure_fifo():
+    if os.path.exists(FIFO):
+        st = os.stat(FIFO)
+        if not stat.S_ISFIFO(st.st_mode):
+            raise RuntimeError(f"{FIFO} exists but is not a FIFO")
+    else:
+        os.mkfifo(FIFO, 0o600)
+
+
+def main():
+    ensure_fifo()
+    init_solaar()
+
+    # Nonblocking FIFO + dummy writer: verhindert EOF-Spam und stale-open-Probleme.
+    rfd = os.open(FIFO, os.O_RDONLY | os.O_NONBLOCK)
+    wfd = os.open(FIFO, os.O_WRONLY | os.O_NONBLOCK)
+
+    sel = selectors.DefaultSelector()
+    sel.register(rfd, selectors.EVENT_READ)
+
+    buf = b""
+
+    while True:
+        for _key, _mask in sel.select():
+            try:
+                chunk = os.read(rfd, 4096)
+            except BlockingIOError:
+                continue
+
+            if not chunk:
+                time.sleep(0.01)
+                continue
+
+            buf += chunk
+
+            while b"\n" in buf:
+                line, buf = buf.split(b"\n", 1)
+                effect = line.decode("utf-8", "replace").strip()
+                if effect:
+                    play(effect)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
+    except Exception as e:
+        log(f"fatal: {e}")
+        traceback.print_exc(file=sys.stderr)
+        sys.exit(1)

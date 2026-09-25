@@ -1,0 +1,25 @@
+// The shell's part of the niri config. Linked to ~/.config/niri/pshell.kdl
+// by install.sh and pulled in with `include "pshell.kdl"`; everything that
+// differs per machine (outputs, input, window rules) stays in config.kdl.
+
+spawn-at-startup "quickshell" "-c" "shell"
+spawn-sh-at-startup "wl-paste --watch cliphist store"
+
+binds {
+    Mod+D { spawn "qs" "-c" "shell" "ipc" "call" "launcher" "toggle"; }
+    Super+Ctrl+L { spawn "qs" "-c" "shell" "ipc" "call" "lock" "lock"; }
+    Ctrl+Mod+V { spawn "qs" "-c" "shell" "ipc" "call" "clipboard" "toggle"; }
+    Mod+Shift+S { spawn "qs" "-c" "shell" "ipc" "call" "studio" "toggle" ""; }
+    Ctrl+Alt+Delete { spawn "qs" "-c" "shell" "ipc" "call" "power" "open"; }
+
+    XF86AudioRaiseVolume allow-when-locked=true { spawn "qs" "-c" "shell" "ipc" "call" "volume" "raise"; }
+    XF86AudioLowerVolume allow-when-locked=true { spawn "qs" "-c" "shell" "ipc" "call" "volume" "lower"; }
+    XF86AudioMute allow-when-locked=true { spawn "qs" "-c" "shell" "ipc" "call" "volume" "muteToggle"; }
+    XF86AudioMicMute allow-when-locked=true { spawn "qs" "-c" "shell" "ipc" "call" "volume" "micMuteToggle"; }
+    // the laptop panel and DDC monitors, whichever the host has
+    XF86MonBrightnessUp allow-when-locked=true cooldown-ms=250 { spawn "qs" "-c" "shell" "ipc" "call" "brightness" "raise"; }
+    XF86MonBrightnessDown allow-when-locked=true cooldown-ms=250 { spawn "qs" "-c" "shell" "ipc" "call" "brightness" "lower"; }
+
+    Ctrl+Mod+S { spawn "qs" "-c" "shell" "ipc" "call" "screenshot" "region"; }
+    Ctrl+Mod+R { spawn-sh "~/.local/bin/record"; }
+}

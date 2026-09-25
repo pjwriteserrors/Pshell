@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Runs as root from the pacman hook after spotify or spicetify-cli changed.
+# Grants the theme owner write access to Spotify's app files (a package
+# update resets them to root:root 644), then re-applies the theme as that
+# user. Spotify is never restarted and pacman never fails because of this.
+
+SPOTIFY_DIR=/opt/spotify
+THEME_USER=@THEME_USER@
+
+[[ -d "$SPOTIFY_DIR/Apps" ]] || exit 0
+
+setfacl -m "u:$THEME_USER:rwx" "$SPOTIFY_DIR"
+setfacl -R -m "u:$THEME_USER:rwX" "$SPOTIFY_DIR/Apps"
+setfacl -d -m "u:$THEME_USER:rwX" "$SPOTIFY_DIR/Apps"
+
+home="$(getent passwd "$THEME_USER" | cut -d: -f6)"
+generator="$home/.config/spicetify/Themes/custom/generate.py"
+[[ -f "$generator" ]] || exit 0
+
+uid="$(id -u "$THEME_USER")"
+runuser -u "$THEME_USER" -- env \
+	HOME="$home" \
+	XDG_RUNTIME_DIR="/run/user/$uid" \
+	PATH=/usr/local/bin:/usr/bin \
+	timeout 300 python3 "$generator" || echo "spicetify re-apply failed for $THEME_USER"
+
+exit 0

@@ -1,0 +1,12 @@
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = spotify
+Target = spicetify-cli
+
+[Action]
+Description = Re-applying Spicetify theme...
+When = PostTransaction
+Depends = spicetify-cli
+Exec = /usr/local/libexec/spicetify-reapply
