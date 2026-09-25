@@ -107,6 +107,28 @@ Singleton {
 		root.modal = "";
 	}
 
+	// ── Studio: the look-and-feel pages, each a full-screen modal ─────────
+	readonly property var studioPages: [
+		{ id: "wallpaper", modal: "theme", label: "Wallpaper", icon: "palette" },
+		{ id: "motion", modal: "animation", label: "Motion", icon: "animation_play" },
+		{ id: "dress", modal: "dress", label: "Icons & Pointer", icon: "cursor_default_outline" },
+		{ id: "styles", modal: "styles", label: "Style", icon: "source_branch" },
+		{ id: "combinations", modal: "combinations", label: "Combinations", icon: "bookmark_outline" }
+	]
+	readonly property int studioIndex: root.studioPages.findIndex(page => page.modal === root.modal)
+
+	function openStudio(page, screen) {
+		const target = root.studioPages.find(entry => entry.id === page || entry.modal === page) ?? root.studioPages[0];
+		root.openModal(target.modal, screen || root.modalScreen);
+	}
+
+	// Ctrl+Tab and friends: pages wrap around
+	function stepStudio(delta) {
+		const count = root.studioPages.length;
+		const index = root.studioIndex < 0 ? 0 : (root.studioIndex + delta + count) % count;
+		root.openModal(root.studioPages[index].modal, root.modalScreen);
+	}
+
 	function closeAll() {
 		root.current = "";
 		root.modal = "";

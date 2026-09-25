@@ -6,6 +6,7 @@ import qs.core.services
 import qs.core.views.panels
 import qs.core.views.overlays
 import qs.core.views.rpg
+import qs.core.views.overlays.studio
 
 // Every surface of every feature. The style draws the frame they hang from;
 // which features exist is decided here and in the host profile, never by the
@@ -48,8 +49,14 @@ Scope {
 
 	// full-screen overlays
 	PowerMenu {}
+
+	// Studio
 	ThemePicker {}
 	AnimationPicker {}
+	DressPage {}
+	StylePage {}
+	CombinationsPage {}
+
 	LockScreen {}
 
 	LazyLoader {

@@ -125,13 +125,13 @@ Drawer {
 					IconButton {
 						icon: "palette"
 						variant: "tonal"
-						onClicked: Popups.withFocusedScreen(screen => Popups.openModal("theme", screen))
+						onClicked: Popups.openStudio("wallpaper", root.targetScreen)
 					}
 
 					IconButton {
 						icon: "animation_play"
 						variant: "tonal"
-						onClicked: Popups.openModal("animation", root.targetScreen)
+						onClicked: Popups.openStudio("motion", root.targetScreen)
 					}
 
 					IconButton {

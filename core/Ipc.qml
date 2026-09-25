@@ -11,6 +11,57 @@ import qs.core.services
 Scope {
 	id: root
 
+	// identity of the checked-out style branch, read once per load; a reload
+	// that fails keeps the old config and so still reports the old style,
+	// which is how scripts/branch_styles.py notices and rolls back
+	readonly property string styleId: {
+		try {
+			return String(JSON.parse(styleManifest.text() || "{}").name || "");
+		} catch (error) {
+			return "";
+		}
+	}
+	property bool styleSwitching: false
+
+	FileView {
+		id: styleManifest
+
+		path: `${Quickshell.shellDir}/.quickshell-style.json`
+		blockLoading: true
+	}
+
+	IpcHandler {
+		target: "styleSession"
+
+		function state(): string {
+			return JSON.stringify({
+				locked: Session.locked,
+				style: root.styleId,
+				shellDir: Quickshell.shellDir,
+				switching: root.styleSwitching
+			});
+		}
+		function freeze(): void {
+			root.styleSwitching = true;
+			Quickshell.watchFiles = false;
+		}
+		function thaw(): void {
+			root.styleSwitching = false;
+		}
+		// never reload from inside the call being answered: the handler is
+		// part of the tree that is about to be torn down
+		function reload(): void {
+			styleReload.restart();
+		}
+	}
+
+	Timer {
+		id: styleReload
+
+		interval: 1
+		onTriggered: Quickshell.reload(true)
+	}
+
 	function drawerOnFocused(id, page) {
 		if (Popups.current === id && (page === undefined || page === "" || Popups.page === page)) {
 			Popups.close();
@@ -312,17 +363,21 @@ Scope {
 		}
 	}
 
+	// Studio: wallpaper, motion, dress, styles, combinations
 	IpcHandler {
-		target: "animationPicker"
+		target: "studio"
 
-		function open(): void {
-			Popups.withFocusedScreen(screen => Popups.openModal("animation", screen));
+		function open(page: string): void {
+			Popups.withFocusedScreen(screen => Popups.openStudio(page, screen));
 		}
 		function close(): void {
-			if (Popups.modal === "animation") Popups.closeModal();
+			if (Popups.studioIndex >= 0) Popups.closeModal();
 		}
-		function toggle(): void {
-			root.modalOnFocused("animation");
+		function toggle(page: string): void {
+			if (Popups.studioIndex >= 0 && (page === "" || Popups.studioPages[Popups.studioIndex].id === page))
+				Popups.closeModal();
+			else
+				Popups.withFocusedScreen(screen => Popups.openStudio(page, screen));
 		}
 	}
 }

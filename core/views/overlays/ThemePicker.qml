@@ -8,6 +8,7 @@ import Quickshell.Widgets
 import qs.style.theme
 import qs.core.services
 import qs.style.widgets
+import qs.core.views.overlays.studio
 import "../../lib/NiriAnimation.js" as NiriAnimation
 
 // Theme picker. A large live preview renders the candidate palette on top of
@@ -572,7 +573,7 @@ fi
 		}
 	}
 	readonly property real panelWidth: Math.min(1440, root.width - 120)
-	readonly property real panelHeight: Math.min(900, root.height - 100)
+	readonly property real panelHeight: Math.min(900, root.height - 170)
 	readonly property color previewBg: root.previewPaletteData && root.previewPaletteData.background ? root.previewPaletteData.background : Theme.layer2
 	readonly property color previewFg: root.previewPaletteData && root.previewPaletteData.foreground ? root.previewPaletteData.foreground : Theme.text
 	readonly property bool paletteReady: root.previewPaletteStatus === "ready"
@@ -607,10 +608,17 @@ fi
 		}
 	}
 
+	StudioTabs {
+		anchors.horizontalCenter: panel.horizontalCenter
+		anchors.bottom: panel.top
+		anchors.bottomMargin: 14
+	}
+
 	Rectangle {
 		id: panel
 
 		anchors.centerIn: parent
+		anchors.verticalCenterOffset: 25
 		width: root.panelWidth
 		height: root.panelHeight
 		radius: Theme.radius.huge + 6

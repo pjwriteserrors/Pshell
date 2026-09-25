@@ -47,8 +47,7 @@ Drawer {
 
 		anchors.fill: parent
 		onCloseRequested: Popups.close()
-		onOpenThemePickerRequested: Popups.withFocusedScreen(screen => Popups.openModal("theme", screen))
-		onOpenAnimationPickerRequested: Popups.openModal("animation", root.targetScreen)
+		onOpenStudioRequested: page => Popups.openStudio(page, root.targetScreen)
 		onOpenRpgRequested: Popups.rpgWindowRequested()
 		onOpenUpdatesRequested: Popups.open("updates", root.targetScreen)
 	}

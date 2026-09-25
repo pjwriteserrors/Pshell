@@ -10,6 +10,7 @@ import Quickshell.Io
 import qs.style.theme
 import qs.core.services
 import qs.style.widgets
+import qs.core.views.overlays.studio
 import "../../lib/NiriAnimation.js" as NiriAnimation
 
 // Window animation picker for niri. Every card plays a looping sketch of its
@@ -233,12 +234,19 @@ fi
 		}
 	}
 
+	StudioTabs {
+		anchors.horizontalCenter: panel.horizontalCenter
+		anchors.bottom: panel.top
+		anchors.bottomMargin: 14
+	}
+
 	Rectangle {
 		id: panel
 
 		anchors.centerIn: parent
+		anchors.verticalCenterOffset: 25
 		width: Math.min(1400, root.width - 120)
-		height: Math.min(860, root.height - 100)
+		height: Math.min(860, root.height - 170)
 		radius: Theme.radius.huge + 6
 		color: Theme.base
 

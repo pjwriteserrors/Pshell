@@ -23,8 +23,7 @@ Item {
 
 	signal closeRequested
 	signal launchRequested
-	signal openThemePickerRequested
-	signal openAnimationPickerRequested
+	signal openStudioRequested(string page)
 	signal openRpgRequested
 	signal openUpdatesRequested
 
@@ -117,18 +116,11 @@ Item {
 			icon: "applications-games-symbolic"
 		},
 		{
-			id: "theme-picker",
-			command: "theme",
-			name: "Theme Picker",
-			description: "Browse color themes and choose a video",
+			id: "studio",
+			command: "studio",
+			name: "Studio",
+			description: "Wallpaper, motion, icons, style, combinations",
 			icon: "preferences-desktop-wallpaper-symbolic"
-		},
-		{
-			id: "animation-picker",
-			command: "animation",
-			name: "Animation Picker",
-			description: "Change Niri window animations only",
-			icon: "preferences-desktop-effects-symbolic"
 		},
 		{
 			id: "display-setup",
@@ -420,6 +412,20 @@ Item {
 				}));
 		}
 		if (root.commandQuery === "") return root.commands;
+		// ">studio [page]" lists the pages themselves
+		if (root.commandQuery === "studio" || root.commandQuery.startsWith("studio ")) {
+			const filter = root.commandQuery.slice(6).trim();
+			return Popups.studioPages
+				.filter(page => filter === "" || `${page.id} ${page.label}`.toLowerCase().includes(filter))
+				.map(page => ({
+					id: "studio-page",
+					page: page.id,
+					command: `studio ${page.id}`,
+					name: `Studio: ${page.label}`,
+					description: "",
+					glyph: page.icon
+				}));
+		}
 
 		return root.commands.filter(command => {
 			const haystack = [
@@ -2298,10 +2304,9 @@ Item {
 		switch (String(command?.id || "")) {
 		case "rpg":
 			return "/usr/share/icons/Adwaita/symbolic/categories/applications-games-symbolic.svg";
-		case "theme-picker":
+		case "studio":
+		case "studio-page":
 			return "/usr/share/icons/Adwaita/symbolic/legacy/preferences-desktop-wallpaper-symbolic.svg";
-		case "animation-picker":
-			return "/usr/share/icons/Adwaita/symbolic/categories/applications-graphics-symbolic.svg";
 		case "calculator":
 		case "calculator-result":
 			return "/usr/share/icons/Adwaita/symbolic/legacy/accessories-calculator-symbolic.svg";
@@ -2332,13 +2337,13 @@ Item {
 			root.closeRequested();
 			root.openRpgRequested();
 			break;
-		case "theme-picker":
+		case "studio":
 			root.closeRequested();
-			root.openThemePickerRequested();
+			root.openStudioRequested("wallpaper");
 			break;
-		case "animation-picker":
+		case "studio-page":
 			root.closeRequested();
-			root.openAnimationPickerRequested();
+			root.openStudioRequested(command.page);
 			break;
 		case "display-setup":
 			root.setLauncherSearch(">setup");
@@ -2920,8 +2925,8 @@ Item {
 	function commandGlyph(command) {
 		switch (String(command?.id || "")) {
 		case "rpg": return "gamepad_variant";
-		case "theme-picker": return "palette";
-		case "animation-picker": return "animation_play";
+		case "studio": return "palette";
+		case "studio-page": return command.glyph;
 		case "display-setup": return "monitor_multiple";
 		case "display-profile": return command.profile === "home" ? "home" : "office_building";
 		case "calculator":
