@@ -2,7 +2,8 @@
 // by install.sh and pulled in with `include "pshell.kdl"`; everything that
 // differs per machine (outputs, input, window rules) stays in config.kdl.
 
-spawn-at-startup "quickshell" "-c" "shell"
+// gtk3 platform theme: without it Qt ignores the GTK icon theme (Papirus-Wal)
+spawn-at-startup "env" "QT_QPA_PLATFORMTHEME=gtk3" "quickshell" "-c" "shell"
 spawn-sh-at-startup "wl-paste --watch cliphist store"
 
 binds {
