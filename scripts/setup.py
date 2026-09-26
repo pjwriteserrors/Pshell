@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Sets the shell up on a machine and checks that everything it needs is there.
 
-  setup.py install [--host PROFILE] [--dry-run]
+  setup.py install [--host PROFILE] [--dry-run] [--migrate-from DIR]
       links the dotfiles (dotfiles/manifest), maps this machine to a host
       profile, moves runtime state of the old ~/.config/quickshell/main over
       and enables the user services, then runs `doctor`.
@@ -240,7 +240,7 @@ def link(source, target, dry_run):
         target.symlink_to(source)
 
 
-def install(profile_arg, dry_run):
+def install(profile_arg, dry_run, old_shell=OLD_SHELL):
     hostname = Path("/etc/hostname").read_text().strip()
     machines_path = ROOT / "hosts" / "machines.json"
     machines = json.loads(machines_path.read_text())
@@ -278,14 +278,14 @@ def install(profile_arg, dry_run):
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source, target)
 
-    moved = [file for file in OLD_STATE_FILES if (OLD_SHELL / file).exists() and not (STATE_DIR / file).exists()]
+    moved = [file for file in OLD_STATE_FILES if (old_shell / file).exists() and not (STATE_DIR / file).exists()]
     if moved:
-        print(f"state from {OLD_SHELL}")
+        print(f"state from {old_shell}")
         for file in moved:
             print(f"  copy   {file}")
             if not dry_run:
                 STATE_DIR.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(OLD_SHELL / file, STATE_DIR / file)
+                shutil.copy2(old_shell / file, STATE_DIR / file)
 
     units = [target.name for mode, _, target, when in manifest_entries()
              if target.suffix == ".service" and applies(when, name, profile)]
@@ -305,10 +305,12 @@ def main():
     install_parser = sub.add_parser("install")
     install_parser.add_argument("--host", default="")
     install_parser.add_argument("--dry-run", action="store_true")
+    install_parser.add_argument("--migrate-from", type=Path, default=OLD_SHELL,
+                                help="old shell directory whose state files move over")
     sub.add_parser("doctor")
     args = parser.parse_args()
     if args.command == "install":
-        return install(args.host, args.dry_run)
+        return install(args.host, args.dry_run, args.migrate_from.expanduser())
     return doctor()
 
 
