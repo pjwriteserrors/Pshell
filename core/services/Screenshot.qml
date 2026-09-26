@@ -16,6 +16,10 @@ import qs.style.theme
 // Pins float a capture above all windows until they are closed (the image
 // stays in tmpfs as long as the pin lives, nothing survives a restart).
 //
+// While selecting, scripts/detect_boxes.py finds the boxes on the frozen
+// frames (cards, buttons, images, panels, see `boxes`); the overlay offers
+// the one under the cursor for a click instead of a drag.
+//
 // Also: delayed captures (a countdown that is never part of the frame), QR/
 // barcode reading, a colour history (color-history.json) and palettes of a
 // dragged region, scroll screenshots (a region grabbed repeatedly while the
@@ -57,6 +61,8 @@ Singleton {
 	property real surfaceClosedAt: 0
 	// output name → frozen frame (file path)
 	property var frozen: ({})
+	// output name → boxes found on its frozen frame, native px [[x, y, w, h], ...]
+	property var boxes: ({})
 	// output that owns the keyboard while selecting
 	property string activeScreen: ""
 
@@ -106,6 +112,10 @@ Singleton {
 
 	function frozenFor(name) {
 		return root.frozen[String(name)] ?? "";
+	}
+
+	function boxesFor(name) {
+		return root.boxes[String(name)] ?? [];
 	}
 
 	// ── entry points (IPC) ────────────────────────────────────────────────
@@ -164,6 +174,7 @@ Singleton {
 
 	function begin(mode) {
 		root.session = String(Date.now());
+		root.boxes = {};
 		root.mode = mode;
 		root.phase = "freezing";
 		// surfaces of the shell would end up in the frozen frame while they fade out
@@ -284,6 +295,42 @@ Singleton {
 				Haptics.play("captured");
 			} else {
 				root.phase = "select";
+				root.detectBoxes(freezeProc.outputs, map);
+			}
+		}
+	}
+
+	// the frames are searched in parallel, each one reports as soon as it is done
+	function detectBoxes(outputs, map) {
+		const args = [];
+		for (const output of outputs) {
+			const screen = Quickshell.screens.find(s => String(s.name) === output);
+			args.push(output, map[output], String(screen?.devicePixelRatio || 1));
+		}
+		// a search of the previous capture may still be running
+		boxesProc.running = false;
+		boxesProc.tag = root.session;
+		boxesProc.command = ["python3", `${Quickshell.shellDir}/scripts/detect_boxes.py`].concat(args);
+		Qt.callLater(() => {
+			if (boxesProc.tag === root.session) boxesProc.running = true;
+		});
+	}
+
+	Process {
+		id: boxesProc
+
+		property string tag: ""
+		stdout: SplitParser {
+			onRead: line => {
+				if (boxesProc.tag !== root.session || root.phase !== "select") return;
+				const tab = line.indexOf("\t");
+				if (tab < 0) return;
+				try {
+					const found = JSON.parse(line.slice(tab + 1));
+					const next = Object.assign({}, root.boxes);
+					next[line.slice(0, tab)] = found;
+					root.boxes = next;
+				} catch (e) {}
 			}
 		}
 	}
@@ -1000,6 +1047,7 @@ Singleton {
 		onTriggered: {
 			if (root.phase !== "idle" && root.phase !== "countdown") return;
 			root.frozen = {};
+			root.boxes = {};
 			// a pin that was taken back into the editor, a stitched scroll shot
 			if (root.editSource.indexOf("/pin-") >= 0 || root.editSource.indexOf("/scroll-") >= 0) Quickshell.execDetached(["rm", "-f", root.editSource]);
 			root.editSource = "";

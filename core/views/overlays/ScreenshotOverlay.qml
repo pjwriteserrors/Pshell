@@ -19,6 +19,11 @@ import qs.core.views.overlays.screenshot
 // l = scroll), Shift keeps the region square, Space held moves it, Esc
 // cancels. Picker mode: click picks a colour, a drag extracts a palette.
 //
+// Smart select (modes that take a region): hovering highlights the box under
+// the cursor that was found on the frame (a card, button, image, panel), a
+// click takes it. The wheel or Up/Down walk out to the boxes around it and
+// finally the whole screen; Enter takes the highlighted box.
+//
 // Without a frozen frame the window also carries the countdown pill of a
 // delayed capture and the frame + stop control of a scroll capture; input
 // then only reaches those controls (the mask), the rest stays usable.
@@ -187,8 +192,12 @@ PanelWindow {
 				Screenshot.mode = "scroll";
 			} else if (key === Qt.Key_Space) {
 				selector.moving = true;
+			} else if (key === Qt.Key_Up || key === Qt.Key_Down) {
+				if (!selector.snapping) return;
+				selector.stepSnap(key === Qt.Key_Up ? 1 : -1);
 			} else if (key === Qt.Key_Return || key === Qt.Key_Enter) {
-				selector.takeScreen(Screenshot.activeScreen);
+				if (selector.snapping) selector.takeSnap(selector.snap);
+				else selector.takeScreen(Screenshot.activeScreen);
 			} else {
 				return;
 			}
@@ -222,9 +231,22 @@ PanelWindow {
 			readonly property real selH: Math.abs(selector.by - selector.ay)
 			readonly property bool hasSelection: selector.dragging && (selector.selW >= 2 || selector.selH >= 2)
 			readonly property bool hovered: hover.hovered
+			// smart select: the boxes under the cursor (logical px), smallest
+			// first and the whole screen last; `snapIndex` is the one offered
+			readonly property var boxes: root.selecting && selector.regionMode ? Screenshot.boxesFor(root.name) : []
+			readonly property point cursor: hover.point.position
+			property var snapStack: []
+			property int snapIndex: 0
+			// the box a press started on, taken when the press ends as a click
+			property var pressSnap: null
+			// the highlight jumps instead of gliding when it appears
+			property bool snapJump: true
+			readonly property bool snapping: selector.regionMode && selector.hovered && !selector.hasSelection && selector.snapStack.length > 0
+			readonly property rect snap: selector.snapping ? selector.snapStack[Math.min(selector.snapIndex, selector.snapStack.length - 1)] : Qt.rect(0, 0, 0, 0)
 			// the "hole" in the dim layer
 			readonly property rect hole: {
 				if ((selector.regionMode || selector.paletteDrag) && selector.hasSelection) return Qt.rect(selector.selX, selector.selY, selector.selW, selector.selH);
+				if (selector.snapping) return Qt.rect(snapFrame.x, snapFrame.y, snapFrame.width, snapFrame.height);
 				if (root.mode === "screen" && selector.hovered) return Qt.rect(0, 0, root.width, root.height);
 				return Qt.rect(0, 0, 0, 0);
 			}
@@ -232,7 +254,14 @@ PanelWindow {
 				if (root.mode === "picker") return selector.paletteDrag ? 0.5 : 0;
 				if (root.mode === "screen") return selector.hovered ? 0 : 0.5;
 				if (root.mode === "window") return selector.hovered ? 0.35 : 0.55;
-				return selector.hasSelection ? 0.5 : 0.3;
+				return selector.hasSelection || selector.snapping ? 0.5 : 0.3;
+			}
+
+			onCursorChanged: selector.updateSnap()
+			onBoxesChanged: selector.updateSnap()
+			onSnappingChanged: {
+				if (selector.snapping) return;
+				selector.snapJump = true;
 			}
 
 			anchors.fill: parent
@@ -240,6 +269,46 @@ PanelWindow {
 			function reset() {
 				selector.dragging = false;
 				selector.moving = false;
+				selector.pressSnap = null;
+				selector.snapStack = [];
+				selector.snapIndex = 0;
+			}
+
+			function sameRect(a, b) {
+				return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+			}
+
+			function updateSnap() {
+				const d = root.density;
+				const px = selector.cursor.x;
+				const py = selector.cursor.y;
+				const stack = [];
+				for (const b of selector.boxes) {
+					const box = Qt.rect(b[0] / d, b[1] / d, b[2] / d, b[3] / d);
+					if (px >= box.x && px < box.x + box.width && py >= box.y && py < box.y + box.height) stack.push(box);
+				}
+				if (stack.length > 0) {
+					stack.sort((a, b) => a.width * a.height - b.width * b.height);
+					stack.push(Qt.rect(0, 0, root.width, root.height));
+				}
+				// the box walked out to stays while the cursor is inside it
+				const current = selector.snapping ? selector.snap : null;
+				const kept = current ? stack.findIndex(box => selector.sameRect(box, current)) : -1;
+				selector.snapStack = stack;
+				selector.snapIndex = Math.max(0, kept);
+				if (selector.snapJump && selector.snapping) Qt.callLater(() => selector.snapJump = false);
+			}
+
+			// +1 walks out to the box around the offered one, -1 back in
+			function stepSnap(step) {
+				selector.snapIndex = selector.clamp(selector.snapIndex + step, 0, selector.snapStack.length - 1);
+			}
+
+			function takeSnap(box) {
+				const d = root.density;
+				const x = Math.round(box.x * d);
+				const y = Math.round(box.y * d);
+				Screenshot.selectRegion(root.name, Qt.rect(x, y, Math.min(frozen.implicitWidth - x, Math.round(box.width * d)), Math.min(frozen.implicitHeight - y, Math.round(box.height * d))), Qt.rect(box.x, box.y, box.width, box.height));
 			}
 
 			function clamp(v, lo, hi) {
@@ -259,7 +328,8 @@ PanelWindow {
 			function finish() {
 				const d = root.density;
 				if (selector.selW < 4 && selector.selH < 4) {
-					selector.takeScreen(root.name);
+					if (selector.pressSnap) selector.takeSnap(selector.pressSnap);
+					else selector.takeScreen(root.name);
 					return;
 				}
 				const x = Math.round(selector.selX * d);
@@ -314,7 +384,7 @@ PanelWindow {
 			// crosshair guides before the drag starts
 			Item {
 				anchors.fill: parent
-				visible: selector.regionMode && !selector.dragging && selector.hovered
+				visible: selector.regionMode && !selector.dragging && selector.hovered && !selector.snapping
 
 				Rectangle {
 					x: 0
@@ -329,6 +399,74 @@ PanelWindow {
 					width: 1
 					height: parent.height
 					color: Qt.alpha(Theme.primary, 0.55)
+				}
+			}
+
+			// smart select: the box a click would take
+			Item {
+				id: snapFrame
+
+				readonly property bool glide: !selector.snapJump
+
+				visible: selector.snapping
+				x: selector.snap.x
+				y: selector.snap.y
+				width: selector.snap.width
+				height: selector.snap.height
+
+				Behavior on x {
+					enabled: snapFrame.glide
+					Anim {
+						duration: Motion.short
+					}
+				}
+				Behavior on y {
+					enabled: snapFrame.glide
+					Anim {
+						duration: Motion.short
+					}
+				}
+				Behavior on width {
+					enabled: snapFrame.glide
+					Anim {
+						duration: Motion.short
+					}
+				}
+				Behavior on height {
+					enabled: snapFrame.glide
+					Anim {
+						duration: Motion.short
+					}
+				}
+
+				Rectangle {
+					anchors.fill: parent
+					anchors.margins: -2
+					color: "transparent"
+					radius: 4
+					border.width: 2
+					border.color: Theme.primary
+				}
+
+				Rectangle {
+					readonly property bool below: snapFrame.y + snapFrame.height + height + 12 < root.height
+					x: selector.clamp(snapFrame.width / 2 - width / 2, -snapFrame.x + 8, root.width - snapFrame.x - width - 8)
+					y: below ? snapFrame.height + 10 : snapFrame.height - height - 10
+					width: snapText.implicitWidth + 20
+					height: 26
+					radius: 13
+					color: Qt.alpha(Theme.base, 0.92)
+
+					StyledText {
+						id: snapText
+
+						anchors.centerIn: parent
+						tabular: true
+						// how many boxes lie around this one (the wheel walks out)
+						text: `${Math.round(selector.snap.width * root.density)} × ${Math.round(selector.snap.height * root.density)}` + (selector.snapStack.length > 1 ? `  ·  ${selector.snapIndex + 1}/${selector.snapStack.length}` : "")
+						font.pixelSize: Theme.size.label
+						font.weight: Font.DemiBold
+					}
 				}
 			}
 
@@ -626,6 +764,7 @@ PanelWindow {
 						return;
 					}
 					if (!selector.regionMode && root.mode !== "picker") return;
+					selector.pressSnap = selector.snapping ? selector.snap : null;
 					selector.ax = mouse.x;
 					selector.ay = mouse.y;
 					selector.bx = mouse.x;
@@ -666,6 +805,14 @@ PanelWindow {
 					}
 					selector.finish();
 					selector.dragging = false;
+					selector.pressSnap = null;
+				}
+				onWheel: wheel => {
+					if (!selector.snapping || wheel.angleDelta.y === 0) {
+						wheel.accepted = false;
+						return;
+					}
+					selector.stepSnap(wheel.angleDelta.y > 0 ? 1 : -1);
 				}
 			}
 
