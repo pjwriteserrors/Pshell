@@ -11,6 +11,8 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/theme_paths.sh"
 
 theme_ensure_runtime_dirs
+# held only while deciding; closed on exec so long-running wallpaper
+# processes never inherit it (they would hold it for the whole session)
 exec 9>"$THEME_STATE_DIR/theme-startup.lock"
 flock -n 9 || exit 0
 
@@ -39,12 +41,12 @@ if [[ "$(theme_entry_name "$theme_path")" == "Wallpaper of the day" ]]; then
 	fi
 	after="$(theme_pick_media "$theme_path" 2>/dev/null | xargs -r -d '\n' stat -c %Y 2>/dev/null || true)"
 	if [[ "$before" != "$after" ]]; then
-		exec bash "$SCRIPT_DIR/apply_theme_selection.sh" "$theme_path"
+		exec bash "$SCRIPT_DIR/apply_theme_selection.sh" "$theme_path" 9>&-
 	fi
 fi
 
 if [[ ! -f "$WAL_CACHE_DIR/colors.json" || ! -f "$THEME_CURRENT_FRAME_FILE" ]]; then
-	exec bash "$SCRIPT_DIR/apply_theme_selection.sh" "$theme_path"
+	exec bash "$SCRIPT_DIR/apply_theme_selection.sh" "$theme_path" 9>&-
 fi
 
-exec bash "$SCRIPT_DIR/restore_theme_wallpaper.sh"
+exec bash "$SCRIPT_DIR/restore_theme_wallpaper.sh" 9>&-
