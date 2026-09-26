@@ -56,6 +56,23 @@ class Layout(unittest.TestCase):
 		self.assertLess(check_style.likeness(own, main), check_style.COPY_LIMIT)
 
 
+class Palette(unittest.TestCase):
+	def test_distance(self):
+		self.assertAlmostEqual(check_style.delta("#336699", "#336699"), 0)
+		self.assertGreater(check_style.delta("#000000", "#ffffff"), 0.9)
+		# alpha is ignored, only the colour counts
+		self.assertAlmostEqual(check_style.delta("#80336699", "#336699"), 0)
+
+	def test_probe_palettes_differ(self):
+		red, blue = (check_style.probe_palette(h, True) for h in (8, 215))
+		self.assertGreater(check_style.delta(red["colors"]["color1"], blue["colors"]["color1"]), 0.2)
+
+	def test_main_follows_the_wallpaper(self):
+		report = check_style.Report()
+		check_style.check_palette(check_style.Tree("main"), check_style.Tree("main"), report)
+		self.assertEqual(report.failures, [])
+
+
 class Contract(unittest.TestCase):
 	def test_main_meets_its_own_contract(self):
 		base = check_style.Tree("main")

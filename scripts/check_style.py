@@ -25,6 +25,9 @@ Checks:
                has a view of its own, and neither those views nor the frame
                (Frame.qml, everything outside theme/, widgets/, views/,
                animations/) are main's files or close copies of them
+  palette      the Theme still follows the wallpaper: under several test
+               palettes its colour roles stay close to main's and change as
+               much as main's do (ThemeProbe.qml; skipped with --no-palette)
   animations   a style branch ships at least one window animation in
                style/animations/<name>/ (config, open.glsl, close.glsl), and it
                compiles
@@ -34,7 +37,12 @@ Exit status 1 when a check fails.
 from __future__ import annotations
 
 import argparse
+import colorsys
 import difflib
+import itertools
+import math
+import os
+import shutil
 import json
 import re
 import subprocess
@@ -202,7 +210,8 @@ class Report:
         self.notes.append(f"{area:<11} {message}")
 
 
-def check(base: Tree, style: Tree, is_style_branch: bool, compile_animations: bool) -> Report:
+def check(base: Tree, style: Tree, is_style_branch: bool, compile_animations: bool,
+          check_colours: bool = True) -> Report:
     report = Report()
 
     raw = style.read(MANIFEST)
@@ -273,6 +282,8 @@ def check(base: Tree, style: Tree, is_style_branch: bool, compile_animations: bo
 
     if is_style_branch:
         check_layout(base, style, base_surfaces, report)
+        if check_colours:
+            check_palette(base, style, report)
 
     animations = [p for p in style.files("style/animations")]
     names = sorted({Path(p).parts[2] for p in animations if len(Path(p).parts) > 3})
@@ -347,6 +358,139 @@ def check_layout(base: Tree, style: Tree, base_surfaces: dict, report: Report):
             report.fail("layout", f"{path} is {share:.0%} main's – the frame must be this style's own")
 
 
+# ------------------------------------------------------------------ palette
+
+# Test wallpapers: a dominant hue each, one of them light.
+PROBE_PALETTES = [(8, True), (130, True), (215, True), (285, False)]
+# Role groups and how far (OKLab ΔE, averaged over the test palettes) a style
+# may pull each of their roles away from the colour main derives from the
+# wallpaper.
+ROLE_LIMITS = {
+    "surfaces": (("base", "layer1", "layer2", "layer3"), 0.04),
+    "accents": (("primary", "secondary", "tertiary"), 0.08),
+    "text": (("text",), 0.04),
+}
+# How much of main's change across wallpapers a role must keep to count as
+# following the wallpaper.
+FOLLOW_MIN = 0.6
+# Share of all colour uses in a style that may go to roles which do not follow
+# the wallpaper (signature tones such as gold or ember).
+SIGNATURE_MAX = 0.2
+# Stable on purpose, on main as well: they neither count for nor against.
+SEMANTIC = {"danger", "warning", "success", "dangerContainer", "onPrimary", "scrim", "shadow"}
+
+
+def hsl(h: float, s: float, l: float) -> str:
+    r, g, b = colorsys.hls_to_rgb((h % 360) / 360, l, s)
+    return "#{:02x}{:02x}{:02x}".format(*(round(c * 255) for c in (r, g, b)))
+
+
+def probe_palette(hue: float, dark: bool) -> dict:
+    bg = hsl(hue, 0.28, 0.09 if dark else 0.92)
+    fg = hsl(hue, 0.18, 0.88 if dark else 0.14)
+    colors = {"color0": bg, "color7": fg, "color8": hsl(hue, 0.14, 0.32 if dark else 0.7), "color15": fg}
+    for i in range(1, 7):
+        colors[f"color{i}"] = hsl(hue + (i - 1) * 28, 0.62, 0.56 if dark else 0.42)
+        colors[f"color{i + 8}"] = hsl(hue + (i - 1) * 28, 0.66, 0.66 if dark else 0.34)
+    return {"special": {"background": bg, "foreground": fg, "cursor": fg}, "colors": colors}
+
+
+def oklab(hex_color: str) -> tuple:
+    value = hex_color.lstrip("#")[-6:]
+    rgb = [int(value[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+    r, g, b = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in rgb]
+    l = (0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b) ** (1 / 3)
+    m = (0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b) ** (1 / 3)
+    s = (0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b) ** (1 / 3)
+    return (0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+            1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+            0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s)
+
+
+def delta(a: str, b: str) -> float:
+    return math.dist(oklab(a), oklab(b))
+
+
+def checkout(tree: Tree, into: Path, probe_source: str):
+    """A copy of `tree` at `into` that quickshell can load, with the probe."""
+    head = tree.ref or "HEAD"
+    git("worktree", "add", "--quiet", "--detach", str(into), head)
+    if tree.ref is None:
+        shutil.rmtree(into / "style")
+        shutil.copytree(REPO / "style", into / "style")
+    (into / "ThemeProbe.qml").write_text(probe_source)
+
+
+def probe_roles(root: Path, palettes: list[dict], cache: Path) -> list[dict] | None:
+    out = []
+    for index, palette in enumerate(palettes):
+        wal = cache / str(index) / "wal"
+        wal.mkdir(parents=True, exist_ok=True)
+        (wal / "colors.json").write_text(json.dumps(palette))
+        env = {**os.environ, "XDG_CACHE_HOME": str(wal.parent)}
+        result = subprocess.run(["quickshell", "-p", str(root / "ThemeProbe.qml")], env=env,
+                                capture_output=True, text=True, timeout=60)
+        match = re.search(r"THEME_PROBE (\{.*\})", result.stdout + result.stderr)
+        if not match:
+            return None
+        out.append(json.loads(match.group(1)))
+    return out
+
+
+def check_palette(base: Tree, style: Tree, report: Report):
+    """Signature tones may colour the style; the wallpaper must still show."""
+    probe_source = base.read("ThemeProbe.qml")
+    if probe_source is None:
+        report.note("palette", "no ThemeProbe.qml on the base, skipped")
+        return
+    palettes = [probe_palette(h, d) for h, d in PROBE_PALETTES]
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        try:
+            checkout(base, tmp / "base", probe_source)
+            checkout(style, tmp / "style", probe_source)
+            main_roles = probe_roles(tmp / "base", palettes, tmp / "cache-base")
+            own_roles = probe_roles(tmp / "style", palettes, tmp / "cache-style")
+        finally:
+            for name in ("base", "style"):
+                git("worktree", "remove", "--force", str(tmp / name), check=False)
+    if not main_roles or not own_roles:
+        report.fail("palette", "Theme could not be probed (does the style compile?)")
+        return
+
+    pairs = len(palettes) * (len(palettes) - 1) / 2
+    spread = lambda rows, role: sum(delta(a[role], b[role]) for a, b in itertools.combinations(rows, 2)) / pairs
+    accents = ROLE_LIMITS["accents"][0]
+    reference = sum(spread(main_roles, r) for r in accents) / len(accents)
+
+    for group, (roles, limit) in ROLE_LIMITS.items():
+        for role in roles:
+            drift = sum(delta(o[role], m[role]) for o, m in zip(own_roles, main_roles)) / len(palettes)
+            if drift > limit:
+                report.fail("palette", f"`{role}` is {drift:.3f} away from the wallpaper's colour (limit {limit}) – "
+                                       "mix the signature tone in more lightly")
+        follow = sum(spread(own_roles, r) for r in roles) / max(sum(spread(main_roles, r) for r in roles), 1e-6)
+        if follow < FOLLOW_MIN:
+            report.fail("palette", f"{group} keep {follow:.0%} of the wallpaper's change (need {FOLLOW_MIN:.0%})")
+
+    # How often the style paints with colours that ignore the wallpaper.
+    uses = {}
+    for path in style.files("style"):
+        if path.endswith(".qml") and not path.startswith("style/theme/"):
+            for name in re.findall(r"\bTheme\.(\w+)", style.read(path) or ""):
+                if name in own_roles[0] and name not in SEMANTIC:
+                    uses[name] = uses.get(name, 0) + 1
+    fixed = {r: n for r, n in uses.items() if spread(own_roles, r) / max(reference, 1e-6) < FOLLOW_MIN}
+    total = sum(uses.values())
+    share = sum(fixed.values()) / total if total else 0.0
+    listing = ", ".join(f"{r} ×{n}" for r, n in sorted(fixed.items(), key=lambda kv: -kv[1])) or "none"
+    if share > SIGNATURE_MAX:
+        report.fail("palette", f"{share:.0%} of colour uses ignore the wallpaper (limit {SIGNATURE_MAX:.0%}): {listing} – "
+                               "use the wallpaper roles more, keep signature tones for highlights")
+    else:
+        report.note("palette", f"{share:.0%} of colour uses are signature tones ({listing})")
+
+
 def catch_up(base: Tree, style: Tree, since: str) -> list[str]:
     """What main changed since `since` that this style draws itself."""
     lines = []
@@ -399,6 +543,7 @@ def main() -> int:
     parser.add_argument("--since", help="list what main changed since this commit that the style must port")
     parser.add_argument("--contract", action="store_true", help="print the contract and exit")
     parser.add_argument("--no-compile", action="store_true", help="skip compiling style animations")
+    parser.add_argument("--no-palette", action="store_true", help="skip probing the Theme's colours")
     args = parser.parse_args()
 
     base = Tree(args.base)
@@ -410,7 +555,7 @@ def main() -> int:
     head = args.ref or git("rev-parse", "--abbrev-ref", "HEAD")
     is_style_branch = git("rev-parse", head, check=False) != git("rev-parse", args.base, check=False) \
         or (args.ref is None and head != args.base)
-    report = check(base, style, is_style_branch, not args.no_compile)
+    report = check(base, style, is_style_branch, not args.no_compile, not args.no_palette)
 
     if args.since:
         lines = catch_up(base, style, args.since)

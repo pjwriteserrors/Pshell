@@ -118,5 +118,6 @@ quickshell -p ./Validate.qml      # compiles the whole shell without a window
 scripts/review_surfaces.sh        # screenshots of every surface, in a nested niri
 python3 scripts/test_branch_styles.py
 python3 scripts/check_style.py        # the style contract (on a style branch)
+quickshell -p ./ThemeProbe.qml       # the Theme's colours for the current palette
 python3 scripts/test_check_style.py
 ```

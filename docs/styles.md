@@ -133,35 +133,47 @@ style/
     `~/.cache/wal/colors.json`.
 - **Frei** sind Form, Farbe, Material, Schatten, Tiefe, Typografie, Maße,
   Übergänge, Choreografie und Zusatzebenen (Texturen, Muster, Effekte).
-- **Farben kommen aus dem Wallpaper, Charakter aus dem Style.** Die Basis ist
-  immer die wallust-Palette (`wal`, `palette`, `ranked`, `legible` …), damit
-  der Style mit jedem Wallpaper mitgeht. wallust würfelt die Töne aber aus dem
-  Bild. Braucht das Theme bestimmte Töne (Messing, Pergament, Neon-Cyan,
-  Blutrot …), mischst du sie in die Palette, statt sie fest zu setzen:
-  - **Signaturton als Ziel:** Leg die Töne, die das Theme ausmachen, als
-    Konstanten in `Theme.qml` an und mische sie per RGB mit der Palette:
-    `Qt.tint(paletteColor, Qt.alpha(signature, amount))` oder eine eigene
-    `mix(a, b, t)`, die `r`, `g`, `b` linear überblendet. `amount` ist der
-    Regler: 0 bedeutet reines Wallpaper, 1 den festen Ton. Rollen, die den
-    Charakter tragen (Akzent, Metall, Leuchten), ziehen stark zum Signaturton,
-    Flächen und Text schwach.
-  - **Tönung statt Ersatz:** Hintergründe und Ebenen behalten die Helligkeit
-    der Palette und bekommen nur den Farbstich des Themes. Die Nähe zum
-    Wallpaper bleibt dadurch sichtbar.
+- **Die Farben gehören dem Wallpaper.** Man muss jedem Style sofort ansehen,
+  dass er sich an das Wallpaper anpasst. Grundlage aller Rollen ist die
+  wallust-Palette (`wal`, `palette`, `ranked`, `legible` …), so wie auf `main`.
+  Der Style entscheidet, wie er daraus Rollen macht (Kontrast, Sättigung,
+  welcher Ton Akzent wird, Glas oder deckend), aber nicht, dass sie
+  wallpaper-unabhängig werden.
+  - **Hintergründe bleiben wallpaper-spezifisch.** `base`, `layer1`–`layer3`
+    und der Text kommen aus dem Wallpaper. Ein Signaturton darf sie höchstens
+    leicht tönen, sodass derselbe Style auf einem blauen und auf einem roten
+    Wallpaper deutlich verschieden aussieht.
+  - **Signaturtöne sparsam.** Weil wallust die Töne aus dem Bild würfelt, darf
+    ein Theme bestimmte Töne (Messing, Glut, Neon-Cyan …) per RGB-Mischung
+    erreichen: `Qt.tint(paletteColor, Qt.alpha(signature, amount))` oder eine
+    eigene `mix(a, b, t)`. Aber selten: höchstens zwei Signaturtöne, und nur
+    für Akzente und Hervorhebungen, also Ränder aktiver Elemente, Leuchten,
+    Ornamente, einzelne Zustände. Flächen, Text und die meisten Widgets malen
+    mit den Wallpaper-Rollen.
+  - **Grenzen, die `check_style.py` misst** (`palette`): Es lädt das Theme mit
+    vier Test-Wallpapern und vergleicht es mit `main`.
+    - `base`, `layer1`–`layer3`, `text` weichen höchstens 0.04 (OKLab ΔE)
+      von der Farbe ab, die `main` aus dem Wallpaper ableitet,
+      `primary`/`secondary`/`tertiary` höchstens 0.08. Praktisch heißt das:
+      Mischanteile von etwa 10–15 % bei Flächen und 20–30 % bei Akzenten,
+      nicht mehr.
+    - Jede Gruppe behält mindestens 60 % der Veränderung, die `main` zwischen
+      den Wallpapern zeigt.
+    - Höchstens 20 % aller Farbverwendungen im Style (`Theme.<rolle>` in
+      Widgets, Frame und Views) gehen an Rollen, die dem Wallpaper nicht
+      folgen. Eigene Rollen wie `metal` oder `glow` zählen dazu, wenn sie
+      überwiegend aus einem festen Ton bestehen. Warn-, Fehler- und
+      Erfolgsfarben zählen nicht.
   - **Lesbarkeit zuletzt sichern:** Jede gemischte Farbe, auf der Text steht
     oder die Text ist, geht am Ende durch `legible(color, ratio)` bzw. wird mit
-    `contrast(a, b)` geprüft. Die Mischung darf den Kontrast nie unter den von
-    `main` drücken.
+    `contrast(a, b)` geprüft.
   - **Hell und dunkel:** Signaturtöne brauchen je eine Fassung für
     `Theme.dark` und hell, oder einen Mischanteil, der mit der Helligkeit des
     Hintergrunds skaliert.
-  - Reine feste Farben gibt es nur für Dinge, die bewusst unabhängig vom
-    Wallpaper sind (Warnrot, Erfolgsgrün dürfen trotzdem leicht zur Palette
-    getönt sein, wie auf `main`), und als Rückfall.
 
-  Das Ergebnis muss mit jedem Wallpaper lesbar und erkennbar derselbe Style
-  bleiben. Prüf es mit mindestens einem hellen, einem dunklen und einem
-  knallbunten Wallpaper.
+  Prüf das Ergebnis mit mindestens einem hellen, einem dunklen und einem
+  knallbunten Wallpaper: Es muss lesbar sein, erkennbar derselbe Style
+  bleiben und trotzdem jedes Mal deutlich nach dem Wallpaper aussehen.
 - **Schriften** müssen installiert sein (`fc-list`). Wähl sie passend zum Theme
   und nenn im Abschluss, welche du vorausgesetzt hast.
 
@@ -344,7 +356,8 @@ wallust-Palette und bei jedem Theme-Wechsel neu geschrieben
 Tinte in der Hintergrundfarbe zerlaufen. Braucht der Effekt einen bestimmten
 Ton, gilt dieselbe Regel wie im Theme: den Signaturton als Konstante
 anlegen und mit der Palette mischen, z. B.
-`vec3 ember = mix(@color1@, vec3(1.0, 0.45, 0.1), 0.6);`.
+`vec3 ember = mix(@color1@, vec3(1.0, 0.45, 0.1), 0.3);`. Auch hier trägt
+die Palette den größeren Teil.
 
 ```glsl
 vec4 open_color(vec3 coords_geo, vec3 size_geo) {
@@ -454,7 +467,8 @@ keine offene `port`-Zeile mehr hat, die du nicht bewusst geprüft hast, und
       Benachrichtigungen, Tray-Menü
 - [ ] Mit einem hellen, einem dunklen und einem knallbunten Wallpaper geprüft:
       lesbar, und erkennbar derselbe Style
-- [ ] Signaturtöne sind mit der Palette gemischt, nicht fest gesetzt
+- [ ] Signaturtöne sind selten und mit der Palette gemischt; kein
+      `palette`-Fehler, das Wallpaper ist jeder Oberfläche anzusehen
 - [ ] Features, die der Host nicht hat, hinterlassen keine Lücken
 - [ ] Die eigene Fenster-Animation in Studio → Motion angesehen und angewendet
 - [ ] `style/BRIEF.md` beschreibt das Theme so, dass jemand anderes den Style
