@@ -84,6 +84,11 @@ A style branch changes `style/` only:
 | `style/theme/`, `style/widgets/` | the kit every core view is drawn with; same file names and properties as on `main`, any look |
 | `style/views/<Surface>.qml` | a surface of its own, replacing the core view of that name (any surface `core/Surfaces.qml` creates) |
 
+The Motion page plays the animation itself, not a clip or a sketch:
+`scripts/build_animation_preview.py` compiles the niri shader with `qsb` and
+writes its timing, `core/views/overlays/studio/AnimationStage.qml` runs it on a
+mock window. A style that draws its own Motion page keeps that stage.
+
 Everything else comes from `main` by merge, so a new feature reaches every
 style at once, drawn with the style's widgets, until the style gives it a view
 of its own. `scripts/sync_styles.sh` merges `main` into every style branch in a
