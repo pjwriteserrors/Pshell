@@ -44,6 +44,18 @@ class Interface(unittest.TestCase):
 		self.assertIsNotNone(check_style.LOGIC.search(check_style.strip("Quickshell.execDetached([])")))
 
 
+class Layout(unittest.TestCase):
+	def test_recoloured_copy_counts_as_main(self):
+		main = "Row {\n\tspacing: 8\n\tWorkspaces {}\n\tClock {}\n\tStatus {}\n}\n"
+		recoloured = main.replace("spacing: 8", "spacing: 12")
+		self.assertGreater(check_style.likeness(recoloured, main), check_style.COPY_LIMIT)
+
+	def test_new_arrangement_does_not(self):
+		main = "Row {\n\tspacing: 8\n\tWorkspaces {}\n\tClock {}\n\tStatus {}\n}\n"
+		own = "Column {\n\tanchors.left: parent.left\n\tSigil {}\n\tLedger {\n\t\tmodel: Niri.workspaces\n\t}\n}\n"
+		self.assertLess(check_style.likeness(own, main), check_style.COPY_LIMIT)
+
+
 class Contract(unittest.TestCase):
 	def test_main_meets_its_own_contract(self):
 		base = check_style.Tree("main")

@@ -33,13 +33,16 @@ der Shell ändert. Er muss am Ende:
 
 1. jede Funktion der Shell genauso enthalten wie `main`. Nichts fehlt, nichts
    ist nur Attrappe, nichts ist fest verdrahtet, was `main` dynamisch macht;
-2. das beschriebene Theme konsequent umsetzen, bis in jedes Widget, jede
+2. **komplett neu erfunden sein**: Die Positionierung von allem, also Leiste,
+   Popups, Text und Kacheln oder Knöpfe in den Popups, stammt aus dem Theme
+   und nicht aus der Default-Shell (Abschnitt 3.4);
+3. das beschriebene Theme konsequent umsetzen, bis in jedes Widget, jede
    Oberfläche und jede Bewegung;
-3. komplexe, theme-abhängige Animationen haben (Abschnitt 5);
-4. mindestens eine eigene niri-Animation für das Öffnen und Schließen von
+4. komplexe, theme-abhängige Animationen haben (Abschnitt 5);
+5. mindestens eine eigene niri-Animation für das Öffnen und Schließen von
    Fenstern mitbringen, die zum Theme passt (Abschnitt 6);
-5. `scripts/check_style.py` und `quickshell -p ./Validate.qml` bestehen;
-6. später automatisch nachgezogen werden können, wenn sich die Logik auf
+6. `scripts/check_style.py` und `quickshell -p ./Validate.qml` bestehen;
+7. später automatisch nachgezogen werden können, wenn sich die Logik auf
    `main` ändert (Abschnitt 8).
 
 Lies vor dem Schreiben `docs/architecture.md` und führe
@@ -58,11 +61,12 @@ style/    Look: Frame (was an den Bildschirmrändern hängt), Theme, Motion,
           dem Style.
 ```
 
-Jede Oberfläche der Shell wird mit den Widgets aus `style/widgets` gezeichnet.
-Tauscht ein Style `Drawer`, `ModalWindow`, `Clickable`, `ListItem` usw. aus,
-sieht damit auch jede Core-View anders aus, ohne dass er sie kopiert. Das ist
-der wichtigste Hebel: **Der größte Teil eines Styles entsteht im Kit, nicht in
-eigenen Views.**
+Die Core-Views sind der Rückfall: Sie zeigen, **was** eine Oberfläche kann,
+nicht **wie** ein Style sie anordnet. Ein Style zeichnet jede Oberfläche, die
+der Vertrag als `replaceable` führt, als eigene View neu, mit eigener
+Anordnung. Das Kit (`style/widgets`) gibt allem das Material: die Oberflächen,
+die noch Logik tragen und deshalb nicht ersetzt werden können, sehen allein
+dadurch anders aus.
 
 Daraus folgt:
 
@@ -174,7 +178,8 @@ Pflicht:
   `check_style.py` vergleicht das (`frame`).
 - Knöpfe, die ein Panel öffnen, melden ihre Position mit
   `Popups.registerAnchor(screen, panelId, x)`, damit das Panel dort aufgeht.
-  Vorbild: `style/bar/BarButton.qml`.
+  Wie das technisch geht, zeigt `style/bar/BarButton.qml`; übernimm nur die
+  Mechanik, nicht die Optik.
 - Legt sich der Frame an einen anderen Rand als oben, passen `Drawer` und
   `Theme.barHeight` dazu (Panels wachsen aus dem Frame).
 - Die Workspaces, Tray, Status, Uhr, Medien usw. kommen aus Services
@@ -183,9 +188,11 @@ Pflicht:
 
 ### 3.3 Eigene Views
 
-`style/views/<Surface>.qml` ersetzt die Core-View gleichen Namens. Ersetzen
-darfst du nur Oberflächen, die der Vertrag als `replaceable` führt. Die
-anderen tragen noch eigene Logik: Die bekommen ihren Look allein über das Kit.
+`style/views/<Surface>.qml` ersetzt die Core-View gleichen Namens. **Jede**
+Oberfläche, die der Vertrag als `replaceable` führt, bekommt eine eigene View.
+Die anderen tragen noch eigene Logik; sie bekommen ihren Look über das Kit,
+bis ihre Logik in den Core gewandert ist. Danach führt der Vertrag sie als
+`replaceable`, und der Style muss sie ebenfalls neu zeichnen.
 
 Eine eigene View:
 
@@ -197,8 +204,45 @@ Eine eigene View:
   im Launcher, `AnimationStage` auf der Motion-Seite),
 - enthält keine Logik (`Process`, `FileView`, `execDetached` …).
 
-Ersetze eine View nur, wenn das Theme es wirklich verlangt (eine andere
-Anordnung, eine andere Metapher). Sonst reicht das Kit.
+### 3.4 Neu erfinden, nicht umfärben
+
+Ein Style ist ein neuer Entwurf. Die Default-Shell ist **keine Vorlage**:
+Ihre Anordnung darf in keinem Teil des Styles wieder auftauchen, auch nicht in
+anderen Farben, mit anderen Schriften oder runderen Ecken.
+
+Das gilt für die Positionierung von allem:
+
+- **Leiste bzw. Frame:** an welchem Rand oder frei schwebend, welche Form, was
+  gruppiert wird, in welcher Reihenfolge, wie viel davon sichtbar ist und was
+  erst auf Anfrage erscheint. Die Aufteilung der Default-Leiste (links
+  Workspaces, Mitte Uhr, rechts Status) ist tabu.
+- **Popups und Panels:** wo sie erscheinen, woraus sie entstehen, wie groß
+  sie sind, welche Form sie haben, ob sie andocken, schweben, den Bildschirm
+  teilen oder überlagern.
+- **Inhalt der Popups:** Raster oder Liste oder Fläche, Kacheln, Knöpfe,
+  Regler, Überschriften, Text, Werte: Anordnung, Hierarchie, Ausrichtung,
+  Gruppierung und Reihenfolge folgen dem Theme.
+- **Text:** wo Titel, Labels, Werte und Hinweise stehen, wie sie ausgerichtet
+  und gesetzt sind.
+
+So arbeitest du:
+
+1. **Erst entwerfen, dann bauen.** Leg in `style/BRIEF.md` für den Frame und
+   jede Oberfläche fest, wie sie in diesem Theme aufgebaut ist: eine kurze
+   Beschreibung oder eine ASCII-Skizze. Die Metapher des Themes gibt die
+   Anordnung vor (ein Grimoire blättert, eine Werkbank hat Schubladen, ein
+   Cockpit hat Instrumente).
+2. **Core-Views nur als Inventar lesen:** Welche Zustände, Aktionen, Werte und
+   Sonderfälle gibt es? Schreib sie als Liste auf. Die Anordnung der Core-View
+   nimmst du nicht mit.
+3. **Views und Frame von Grund auf schreiben.** Kopier keine Core-View und
+   keine Datei aus `style/bar/` als Ausgangspunkt. `check_style.py` misst die
+   Ähnlichkeit zu `main` und lässt Kopien durchfallen (`layout`).
+
+Nur die Kit-Dateien (`theme/`, `widgets/`) startest du mit der Version von
+`main`, weil sie Verhalten enthalten, das bleiben muss (3.1). Ihr Inneres,
+also Aufbau, Form und Anordnung der Teile, darfst und sollst du trotzdem neu
+gestalten.
 
 ## 4. Die Funktion dynamisch widerspiegeln
 
@@ -332,13 +376,14 @@ python3 scripts/check_style.py --contract      # der Vertrag
 
 1. `style/BRIEF.md` schreiben: Theme, Referenzen, Regeln für Farbe, Form,
    Typografie und Bewegung, dazu die Signaturtöne mit ihrem Mischanteil pro
-   Rolle.
+   Rolle, und den Entwurf von Frame und jeder Oberfläche (3.4).
 2. `.quickshell-style.json` anpassen.
 3. `theme/Theme.qml`, `theme/Motion.qml`, danach die Widgets, zuerst
    `Drawer`, `ModalWindow`, `Clickable`, `StateLayer`, `ListItem`, `StyledText`.
    Damit sitzt der Großteil.
-4. `Frame.qml` und `style/bar/`.
-5. Eigene Views, nur wo das Theme es verlangt.
+4. `Frame.qml` und die Bausteine des Frames, von Grund auf neu.
+5. Eine eigene View für jede Oberfläche, die der Vertrag als `replaceable`
+   führt, nach dem Entwurf aus dem Brief.
 6. `style/animations/<name>/`.
 7. Nach jedem Schritt:
    ```
@@ -393,11 +438,16 @@ keine offene `port`-Zeile mehr hat, die du nicht bewusst geprüft hast, und
 - Absolute Home-Pfade. Nimm `Paths`, `Quickshell.env("HOME")`.
 - Erklärtexte in der UI. Labels sind kurz und selbsterklärend.
 - Den Arbeitsbaum dreckig lassen. Der Style-Wechsler verweigert dann.
+- Die Default-Shell als Vorlage nehmen: ihre Leiste, ihre Popup-Positionen,
+  ihre Anordnung von Kacheln, Knöpfen und Text, auch nicht umgefärbt.
 
 ## 10. Abnahme
 
 - [ ] `quickshell -p ./Validate.qml` → `VALIDATE: ok`
-- [ ] `python3 scripts/check_style.py` → `contract ok`, jede Animation `compiles`
+- [ ] `python3 scripts/check_style.py` → `contract ok`, jede Animation `compiles`,
+      kein `layout`-Fehler
+- [ ] Nebeneinander mit der Default-Shell verglichen: Keine Oberfläche ist
+      an derselben Stelle gleich aufgebaut
 - [ ] `python3 scripts/test_branch_styles.py` → OK
 - [ ] Jede Oberfläche aus dem Vertrag live angesehen: Launcher, alle Panels,
       Studio (alle Seiten), Power-Menü, Sperrbildschirm, Screenshot, OSD,

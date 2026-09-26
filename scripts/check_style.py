@@ -21,6 +21,10 @@ Checks:
                needs a way in on every style)
   views        style/views/<Surface>.qml replaces a real surface, keeps its
                root type and modalId/panelId, and carries no logic of its own
+  layout       a style branch invents its own layout: every replaceable surface
+               has a view of its own, and neither those views nor the frame
+               (Frame.qml, everything outside theme/, widgets/, views/,
+               animations/) are main's files or close copies of them
   animations   a style branch ships at least one window animation in
                style/animations/<name>/ (config, open.glsl, close.glsl), and it
                compiles
@@ -30,6 +34,7 @@ Exit status 1 when a check fails.
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
 import re
 import subprocess
@@ -266,6 +271,9 @@ def check(base: Tree, style: Tree, is_style_branch: bool, compile_animations: bo
             report.fail("views", f"{path}: {core['path']} still carries logic; replacing it would copy that logic – "
                                  "restyle it through the kit instead, or move its logic into core first (on main)")
 
+    if is_style_branch:
+        check_layout(base, style, base_surfaces, report)
+
     animations = [p for p in style.files("style/animations")]
     names = sorted({Path(p).parts[2] for p in animations if len(Path(p).parts) > 3})
     if is_style_branch and not names:
@@ -299,6 +307,44 @@ def check(base: Tree, style: Tree, is_style_branch: bool, compile_animations: bo
                 else:
                     report.note("animations", f"style:{name} compiles")
     return report
+
+
+# Above this share of identical lines a file counts as main's layout, recoloured.
+COPY_LIMIT = 0.55
+OWN_AREAS = ("style/theme/", "style/widgets/", "style/views/", "style/animations/")
+
+
+def likeness(a: str, b: str) -> float:
+    """Share of lines two QML files have in common, whitespace ignored."""
+    lines = lambda s: [l.strip() for l in strip(s).splitlines() if l.strip() not in ("", "{", "}")]
+    return difflib.SequenceMatcher(None, lines(a), lines(b), autojunk=False).ratio()
+
+
+def check_layout(base: Tree, style: Tree, base_surfaces: dict, report: Report):
+    """A style is a new design, not main's arrangement in other colours."""
+    for name, core in base_surfaces.items():
+        path = f"style/views/{name}.qml"
+        own = style.read(path)
+        if core["logic"]:
+            if own is None:
+                report.note("layout", f"{name} keeps main's layout until its logic moves into core")
+            continue
+        if own is None:
+            report.fail("layout", f"{name} is drawn in main's layout – give it {path}")
+            continue
+        share = likeness(own, base.read(core["path"]) or "")
+        if share > COPY_LIMIT:
+            report.fail("layout", f"{path} is {share:.0%} {core['path']} – invent its layout, don't recolour main's")
+
+    for path in style.files("style"):
+        if not path.endswith(".qml") or path.startswith(OWN_AREAS):
+            continue
+        theirs = base.read(path)
+        if theirs is None:
+            continue
+        share = likeness(style.read(path) or "", theirs)
+        if share > COPY_LIMIT:
+            report.fail("layout", f"{path} is {share:.0%} main's – the frame must be this style's own")
 
 
 def catch_up(base: Tree, style: Tree, since: str) -> list[str]:
