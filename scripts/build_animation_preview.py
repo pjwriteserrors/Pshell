@@ -29,7 +29,8 @@ use:
 Usage:
     build_animation_preview.py <animation-id> [--out-dir DIR] [--force]
 
-    <animation-id> is `shader:<name>` or `nirimation:<name>`, exactly as the
+    <animation-id> is `style:<name>`, `shader:<name>` or `nirimation:<name>`,
+    exactly as the
     rest of the shell spells it.
 
 Prints the path of the written meta.json on success.
@@ -278,8 +279,36 @@ def extract_timing(block: str) -> dict:
 
 # ----------------------------------------------------------------- sources
 
-def shader_sources(animations_root: Path, name: str) -> dict:
-    root = animations_root / "shaders" / name
+REPO = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO / "scripts"))
+import shader_palette  # noqa: E402
+
+
+def source_path(kind: str, animations_root: Path, name: str) -> Path:
+    """Where an animation's files are: a shader directory or a nirimation block."""
+    if kind == "style":
+        return REPO / "style" / "animations" / name
+    if kind == "shader":
+        return animations_root / "shaders" / name
+    if kind == "nirimation":
+        return animations_root / "nirimation" / "animations" / f"{name}.kdl"
+    raise SystemExit(f"unsupported animation type: {kind}")
+
+
+def built_from(source_root: Path) -> float:
+    """Newest input of a preview: its files, and the palette when it uses one."""
+    files = [p for p in source_root.iterdir() if p.is_file()] if source_root.is_dir() else (
+        [source_root] if source_root.is_file() else [])
+    newest = max((p.stat().st_mtime for p in files), default=0.0)
+    if any(shader_palette.uses_palette(p.read_text(errors="ignore")) for p in files):
+        try:
+            newest = max(newest, shader_palette.colors_path().stat().st_mtime)
+        except OSError:
+            pass
+    return newest
+
+
+def shader_sources(root: Path) -> dict:
     config = (root / "config").read_text() if (root / "config").is_file() else ""
     timing = extract_timing(config)
 
@@ -289,7 +318,7 @@ def shader_sources(animations_root: Path, name: str) -> dict:
         if not path.is_file():
             continue
         phases[phase] = {
-            "glsl": path.read_text(),
+            "glsl": shader_palette.fill(path.read_text()),
             "entry": entry,
             "timing": dict(timing),
         }
@@ -380,30 +409,17 @@ def main() -> int:
     if meta_path.is_file() and not args.force:
         try:
             cached = json.loads(meta_path.read_text())
-            newest = 0.0
-            source_root = (
-                animations_root / "shaders" / name
-                if kind == "shader"
-                else animations_root / "nirimation" / "animations" / f"{name}.kdl"
-            )
-            if source_root.is_dir():
-                newest = max((p.stat().st_mtime for p in source_root.iterdir()), default=0.0)
-            elif source_root.is_file():
-                newest = source_root.stat().st_mtime
-            if cached.get("builtFrom", 0) >= newest:
+            if cached.get("builtFrom", 0) >= built_from(source_path(kind, animations_root, name)):
                 print(meta_path)
                 return 0
         except (ValueError, OSError):
             pass
 
-    if kind == "shader":
-        phases = shader_sources(animations_root, name)
-        source_root = animations_root / "shaders" / name
-    elif kind == "nirimation":
+    source_root = source_path(kind, animations_root, name)
+    if kind == "nirimation":
         phases = nirimation_sources(animations_root, name)
-        source_root = animations_root / "nirimation" / "animations" / f"{name}.kdl"
     else:
-        raise SystemExit(f"unsupported animation type: {kind}")
+        phases = shader_sources(source_root)
 
     out_dir.mkdir(parents=True, exist_ok=True)
     qsb = find_qsb()
@@ -424,12 +440,7 @@ def main() -> int:
             "off": timing.get("off", False),
         }
 
-    if source_root.is_dir():
-        meta["builtFrom"] = max((p.stat().st_mtime for p in source_root.iterdir()), default=0.0)
-    elif source_root.is_file():
-        meta["builtFrom"] = source_root.stat().st_mtime
-    else:
-        meta["builtFrom"] = 0.0
+    meta["builtFrom"] = built_from(source_root)
 
     meta_path.write_text(json.dumps(meta, indent=2) + "\n")
     print(meta_path)

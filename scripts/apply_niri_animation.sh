@@ -30,11 +30,11 @@ while (($# > 0)); do
 done
 
 if [[ -z "$ANIMATION_ID" ]]; then
-	echo "usage: $0 --animation <shader:name|nirimation:name>" >&2
+	echo "usage: $0 --animation <style:name|shader:name|nirimation:name>" >&2
 	exit 1
 fi
 
-python3 - "$NIRI_CONFIG_FILE" "$NIRI_ANIMATIONS_ROOT" "$NIRI_ANIMATION_STATE_FILE" "$ANIMATION_ID" <<'PY'
+python3 - "$NIRI_CONFIG_FILE" "$NIRI_ANIMATIONS_ROOT" "$NIRI_ANIMATION_STATE_FILE" "$ANIMATION_ID" "$SCRIPT_DIR/.." <<'PY'
 import re
 import sys
 from pathlib import Path
@@ -43,6 +43,9 @@ config_path = Path(sys.argv[1]).expanduser()
 animations_root = Path(sys.argv[2]).expanduser()
 state_path = Path(sys.argv[3]).expanduser()
 animation_id = sys.argv[4].strip()
+repo_root = Path(sys.argv[5]).resolve()
+sys.path.insert(0, str(repo_root / "scripts"))
+import shader_palette  # noqa: E402
 
 
 def split_animation_id(value: str) -> tuple[str, str]:
@@ -202,8 +205,9 @@ def indent_block(text: str, prefix: str) -> str:
 
 def build_shader_entries(spec: str, shader_name: str, shader_root: Path) -> str:
     config_text = (shader_root / "config").read_text().strip()
-    open_shader = (shader_root / "open.glsl").read_text().strip("\n")
-    close_shader = (shader_root / "close.glsl").read_text().strip("\n")
+    # @color4@ and friends become the wallpaper's colours (shader_palette.py)
+    open_shader = shader_palette.fill((shader_root / "open.glsl").read_text()).strip("\n")
+    close_shader = shader_palette.fill((shader_root / "close.glsl").read_text()).strip("\n")
 
     open_config = indent_block(config_text, "        ")
     close_config = indent_block(config_text, "        ")
@@ -274,18 +278,20 @@ def replace_shader_animation_block(config_text: str, spec: str, shader_name: str
 kind, name = split_animation_id(animation_id)
 config_text = config_path.read_text()
 
-if kind == "shader":
-    shader_root = animations_root / "shaders" / name
+if kind in ("shader", "style"):
+    # a style ships its own in style/animations/<name>/, same layout as a shader
+    shader_root = (repo_root / "style" / "animations" / name) if kind == "style" else animations_root / "shaders" / name
     required = [shader_root / "config", shader_root / "open.glsl", shader_root / "close.glsl"]
     missing = [str(path) for path in required if not path.is_file()]
     if missing:
         raise SystemExit(f"missing shader files: {', '.join(missing)}")
     result = replace_shader_animation_block(config_text, animation_id, name, shader_root)
-    current_path = animations_root / "shaders" / ".current"
-    try:
-        current_path.write_text(name + "\n")
-    except OSError:
-        pass
+    if kind == "shader":
+        current_path = animations_root / "shaders" / ".current"
+        try:
+            current_path.write_text(name + "\n")
+        except OSError:
+            pass
 elif kind == "nirimation":
     full_block = animations_root / "nirimation" / "animations" / f"{name}.kdl"
     if not full_block.is_file():

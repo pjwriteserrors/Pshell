@@ -10,6 +10,7 @@ function displayLabel(value) {
 	if (!parts.id) return "";
 	if (parts.kind === "shader") return `${parts.name}  shader`;
 	if (parts.kind === "nirimation") return `${parts.name}  block`;
+	if (parts.kind === "style") return `${parts.name}  style`;
 	return parts.name;
 }
 

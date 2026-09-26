@@ -11,7 +11,7 @@ A combination records:
     backend      wallust backend, palette and style, because the same wallpaper
     palette      with a different palette is a different look
     style
-    animation    `shader:<name>` or `nirimation:<name>`
+    animation    `style:<name>`, `shader:<name>` or `nirimation:<name>`
     icons        icon theme id
     cursor       cursor theme id, and its size
     cursorSize

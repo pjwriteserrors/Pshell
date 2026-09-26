@@ -25,7 +25,7 @@ import qs.style.widgets
 Item {
 	id: stage
 
-	// `shader:<name>` or `nirimation:<name>`
+	// `style:<name>`, `shader:<name>` or `nirimation:<name>`
 	property string animationId: ""
 	property bool playing: true
 

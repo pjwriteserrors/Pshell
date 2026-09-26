@@ -407,6 +407,13 @@ fi
 update_gtk_wal_theme
 run_step "shell reload" "$SCRIPT_DIR/ipc.sh" theme reload || true
 
+# a style's window animation may be painted in the palette (@color4@ …): write
+# it again with the new colours
+current_animation="$(cat "$NIRI_ANIMATION_STATE_FILE" 2>/dev/null || true)"
+if [[ "$current_animation" == style:* && -d "$SCRIPT_DIR/../style/animations/${current_animation#style:}" ]]; then
+	run_step "niri animation colours" bash "$SCRIPT_DIR/apply_niri_animation.sh" --animation "$current_animation" || true
+fi
+
 export THEME_FRAME="$frame_path" THEME_MEDIA THEME_MEDIA_TYPE="$media_type" \
 	THEME_MODE="$selected_palette_mode" WAL_CACHE_DIR THEME_SCRIPTS_DIR="$SCRIPT_DIR" THEME_STATE_DIR
 run_theme_hooks

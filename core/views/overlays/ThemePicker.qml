@@ -55,7 +55,6 @@ ModalWindow {
 	readonly property string dailyThemeDirPath: `${Host.wallpapers}/Wallpaper of the day`
 	readonly property string wallustConfigPath: `${Quickshell.env("HOME")}/.config/wallust/wallust.toml`
 	readonly property string shaderAnimationsDir: `${Quickshell.env("HOME")}/.config/niri/animations/shaders`
-	readonly property string nirimationAnimationsDir: `${Quickshell.env("HOME")}/.config/niri/animations/nirimation/animations`
 	readonly property string animationStatePath: `${Quickshell.env("HOME")}/.local/state/quickshell-theme/current-animation`
 	readonly property string shaderCurrentPath: `${root.shaderAnimationsDir}/.current`
 	readonly property var backendOptions: ["full", "resized", "wal", "thumb", "fastresize"]
@@ -540,20 +539,7 @@ ModalWindow {
 
 	Process {
 		id: listAnimationOptionsProcess
-		command: ["sh", "-lc", `
-{
-	for dir in "${root.shaderAnimationsDir}"/*; do
-		[ -d "$dir" ] || continue
-		[ -f "$dir/open.glsl" ] || continue
-		[ -f "$dir/close.glsl" ] || continue
-		printf 'shader:%s\\n' "$(basename "$dir")"
-	done
-	for file in "${root.nirimationAnimationsDir}"/*.kdl; do
-		[ -f "$file" ] || continue
-		printf 'nirimation:%s\\n' "$(basename "$file" .kdl)"
-	done
-} | sort
-`]
+		command: ["bash", `${Quickshell.shellDir}/scripts/list_animations.sh`]
 		stdout: StdioCollector {
 			onStreamFinished: root.setAnimationOptions(text)
 		}

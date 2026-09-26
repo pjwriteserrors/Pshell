@@ -30,7 +30,6 @@ ModalWindow {
 
 	readonly property string applyScriptPath: `${Quickshell.shellDir}/scripts/apply_niri_animation.sh`
 	readonly property string shaderAnimationsDir: `${Quickshell.env("HOME")}/.config/niri/animations/shaders`
-	readonly property string nirimationAnimationsDir: `${Quickshell.env("HOME")}/.config/niri/animations/nirimation/animations`
 	readonly property string animationStatePath: `${Quickshell.env("HOME")}/.local/state/quickshell-theme/current-animation`
 	readonly property string shaderCurrentPath: `${root.shaderAnimationsDir}/.current`
 	readonly property int gridColumns: Math.max(2, Math.min(6, Math.floor((gridViewport.width + gridGap) / 190)))
@@ -119,20 +118,7 @@ ModalWindow {
 
 	Process {
 		id: listAnimationOptionsProcess
-		command: ["sh", "-lc", `
-{
-	for dir in "${root.shaderAnimationsDir}"/*; do
-		[ -d "$dir" ] || continue
-		[ -f "$dir/open.glsl" ] || continue
-		[ -f "$dir/close.glsl" ] || continue
-		printf 'shader:%s\\n' "$(basename "$dir")"
-	done
-	for file in "${root.nirimationAnimationsDir}"/*.kdl; do
-		[ -f "$file" ] || continue
-		printf 'nirimation:%s\\n' "$(basename "$file" .kdl)"
-	done
-} | sort
-`]
+		command: ["bash", `${Quickshell.shellDir}/scripts/list_animations.sh`]
 		stdout: StdioCollector {
 			onStreamFinished: root.setAnimationOptions(text)
 		}
@@ -373,7 +359,7 @@ fi
 						visible: root.animationOptions.length === 0
 						icon: "animation"
 						title: "No animations found"
-						subtitle: "Add shaders to ~/.config/niri/animations/shaders or nirimation presets."
+						subtitle: "Add shaders to style/animations, ~/.config/niri/animations/shaders or nirimation presets."
 					}
 
 					Flickable {
@@ -413,7 +399,7 @@ fi
 
 									readonly property bool selected: card.index === root.selectedAnimationIndex
 									readonly property bool applied: String(card.modelData.id || "") === root.appliedAnimationId
-									readonly property color accent: modelData.kind === "shader" ? Theme.primary : Theme.secondary
+									readonly property color accent: modelData.kind === "style" ? Theme.tertiary : modelData.kind === "shader" ? Theme.primary : Theme.secondary
 
 									width: root.cardWidth
 									height: root.cardHeight
