@@ -2,7 +2,8 @@
 
 # Brings main ($BASE) into every style branch (style/*), each in a temporary worktree
 # so the running shell keeps its files. A branch is only committed when the
-# merged shell compiles. Prints which core views each style draws itself.
+# merged shell compiles. Then scripts/check_style.py checks the contract and
+# lists what main changed that the style draws itself and has to port.
 #
 #   scripts/sync_styles.sh [style/<name>...]
 
@@ -30,6 +31,8 @@ for branch in "${branches[@]}"; do
 	echo "== $branch"
 	worktree="$(mktemp -d)"
 	git worktree add --quiet "$worktree" "$branch" || { status=1; continue; }
+	# where the style last met main: everything main did since then is news to it
+	since="$(git merge-base "$branch" "$BASE")"
 
 	if ! git -C "$worktree" merge --no-edit --quiet "$BASE"; then
 		echo "   merge conflict outside style/ – resolve in $worktree, then commit and remove the worktree"
@@ -54,6 +57,9 @@ for branch in "${branches[@]}"; do
 	done
 	echo "   own views (${#own[@]}): ${own[*]:-none}"
 	echo "   core views drawn with this style's widgets (${#fallback[@]}): ${fallback[*]:-none}"
+
+	(cd "$worktree" && python3 scripts/check_style.py --ref HEAD --base "$BASE" --since "$since") \
+		| sed 's/^/   /' || status=1
 
 	git worktree remove --force "$worktree"
 done
