@@ -16,6 +16,7 @@ DEVICE_NAME = os.environ.get("MXH_DEVICE", "mx master 4").lower()
 SETTING_NAME = os.environ.get("MXH_SETTING", "haptic-play").lower()
 RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
 FIFO = os.environ.get("MXH_FIFO") or os.path.join(RUNTIME_DIR, "mx4-haptic.fifo")
+RETRY_SECONDS = float(os.environ.get("MXH_RETRY_SECONDS", "5"))
 
 dev = None
 setting = None
@@ -69,6 +70,16 @@ def init_solaar():
     log(f"ready: device={dev.name!r}, setting={setting.name!r}, fifo={FIFO}")
 
 
+def wait_for_solaar():
+    while True:
+        try:
+            init_solaar()
+            return
+        except Exception as exc:
+            log(f"waiting for receiver/device: {exc}; retrying in {RETRY_SECONDS:g}s")
+            time.sleep(RETRY_SECONDS)
+
+
 def play(effect):
     global dev, setting, cli_config
 
@@ -109,7 +120,7 @@ def ensure_fifo():
 
 def main():
     ensure_fifo()
-    init_solaar()
+    wait_for_solaar()
 
     # Nonblocking FIFO + dummy writer: verhindert EOF-Spam und stale-open-Probleme.
     rfd = os.open(FIFO, os.O_RDONLY | os.O_NONBLOCK)

@@ -1,10 +1,12 @@
 [Unit]
 Description=MX Master 4 haptic FIFO daemon
 After=graphical-session.target
+StartLimitIntervalSec=0
 
 [Service]
 ExecStart=%h/.local/bin/mx4-hapticd
 Restart=on-failure
+RestartSec=5s
 Environment=PYTHONUNBUFFERED=1
 
 [Install]

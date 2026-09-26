@@ -1,9 +1,32 @@
-#!/usr/bin/env bash
-fifo="${MXH_FIFO:-${XDG_RUNTIME_DIR:-/tmp}/mx4-haptic.fifo}"
+#!/usr/bin/env python3
+import errno
+import os
+import stat
+import sys
 
-if [[ ! -p "$fifo" ]]; then
-  echo "mxh: FIFO nicht gefunden: $fifo" >&2
-  exit 1
-fi
 
-printf '%s\n' "${*:-SUBTLE COLLISION}" > "$fifo"
+fifo = os.environ.get("MXH_FIFO") or os.path.join(
+    os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "mx4-haptic.fifo"
+)
+effect = " ".join(sys.argv[1:]) or "SUBTLE COLLISION"
+
+try:
+    mode = os.stat(fifo).st_mode
+except FileNotFoundError:
+    print(f"mxh: FIFO nicht gefunden: {fifo}", file=sys.stderr)
+    sys.exit(1)
+
+if not stat.S_ISFIFO(mode):
+    print(f"mxh: kein FIFO: {fifo}", file=sys.stderr)
+    sys.exit(1)
+
+try:
+    fd = os.open(fifo, os.O_WRONLY | os.O_NONBLOCK)
+except OSError as exc:
+    if exc.errno == errno.ENXIO:
+        print("mxh: Haptik-Dienst ist nicht bereit", file=sys.stderr)
+        sys.exit(1)
+    raise
+
+with os.fdopen(fd, "w", encoding="utf-8") as stream:
+    stream.write(effect + "\n")
