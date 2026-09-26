@@ -1,0 +1,13 @@
+[Unit]
+Description=OpenRGB SDK server for Quickshell theme integration
+# Devices come up dark whenever this server (re)starts, so put the last saved
+# colours back afterwards.
+Wants=quickshell-lighting.service
+
+[Service]
+ExecStart=/usr/bin/openrgb --server --server-host 127.0.0.1 --server-port 6742 --loglevel 3
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

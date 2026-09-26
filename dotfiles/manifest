@@ -18,3 +18,8 @@ link    spicetify/generate.py         ~/.config/spicetify/Themes/custom/generate
 link    spicetify/theme.js            ~/.config/spicetify/Themes/custom/theme.js      host:laptop
 link    spicetify/user.css            ~/.config/spicetify/Themes/custom/user.css      host:laptop
 link    spicetify/pacman              ~/.config/spicetify/Themes/custom/pacman        host:laptop
+link    pc/spicetify_maker.py         ~/Scripts/themes/changer/spicetify_maker.py     host:pc
+link    pc/update_steam_theme.py      ~/Scripts/themes/changer/update_steam_theme.py  host:pc
+link    systemd/openrgb-theme.service ~/.config/systemd/user/openrgb-theme.service    hook:openrgb
+link    systemd/quickshell-lighting.service ~/.config/systemd/user/quickshell-lighting.service hook:openrgb
+seed    oomox/wal                     ~/.config/oomox/colors/wal                      hook:oomox

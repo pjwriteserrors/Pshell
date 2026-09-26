@@ -1,0 +1,13 @@
+[Unit]
+Description=Restore the wallpaper's colours on keyboard, GPU and ARGB headers
+# The devices only exist once the SDK server has detected them, and they come up
+# dark: without this the keyboard stays black until the next theme change.
+After=openrgb-theme.service
+Wants=openrgb-theme.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/.config/quickshell/shell/scripts/apply_lighting.py --restore --wait
+
+[Install]
+WantedBy=default.target
