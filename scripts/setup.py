@@ -116,8 +116,14 @@ def applies(when, profile_name, profile):
     raise ValueError(f"unknown condition in dotfiles/manifest: {when}")
 
 
+# Qt keeps its tools outside PATH; build_animation_preview.py looks here too
+QT_TOOL_DIRS = ["/usr/lib/qt6/bin", "/usr/lib/qt/bin", "/usr/local/lib/qt6/bin"]
+
+
 def installed(program):
-    return shutil.which(program) is not None
+    if shutil.which(program):
+        return True
+    return any(os.access(f"{d}/{program}", os.X_OK) for d in QT_TOOL_DIRS)
 
 
 def module_available(name):
