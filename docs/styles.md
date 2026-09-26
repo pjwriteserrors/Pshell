@@ -129,12 +129,35 @@ style/
     `~/.cache/wal/colors.json`.
 - **Frei** sind Form, Farbe, Material, Schatten, Tiefe, Typografie, Maße,
   Übergänge, Choreografie und Zusatzebenen (Texturen, Muster, Effekte).
-- **Farben kommen aus dem Wallpaper.** Das Theme leitet seine Tokens aus der
-  wallust-Palette ab (`wal`, `palette`, `ranked`, `legible` …). Wie ein Style
-  daraus Rollen macht, bestimmt er selbst: Kontrast, Sättigung, welcher Ton
-  Akzent wird, Glas oder deckend. Feste Hex-Farben gibt es nur als Rückfall
-  oder für Dinge, die bewusst unabhängig vom Wallpaper sind. Das Ergebnis muss
-  mit jedem Wallpaper lesbar bleiben, hell wie dunkel (`Theme.dark`).
+- **Farben kommen aus dem Wallpaper, Charakter aus dem Style.** Die Basis ist
+  immer die wallust-Palette (`wal`, `palette`, `ranked`, `legible` …), damit
+  der Style mit jedem Wallpaper mitgeht. wallust würfelt die Töne aber aus dem
+  Bild. Braucht das Theme bestimmte Töne (Messing, Pergament, Neon-Cyan,
+  Blutrot …), mischst du sie in die Palette, statt sie fest zu setzen:
+  - **Signaturton als Ziel:** Leg die Töne, die das Theme ausmachen, als
+    Konstanten in `Theme.qml` an und mische sie per RGB mit der Palette:
+    `Qt.tint(paletteColor, Qt.alpha(signature, amount))` oder eine eigene
+    `mix(a, b, t)`, die `r`, `g`, `b` linear überblendet. `amount` ist der
+    Regler: 0 bedeutet reines Wallpaper, 1 den festen Ton. Rollen, die den
+    Charakter tragen (Akzent, Metall, Leuchten), ziehen stark zum Signaturton,
+    Flächen und Text schwach.
+  - **Tönung statt Ersatz:** Hintergründe und Ebenen behalten die Helligkeit
+    der Palette und bekommen nur den Farbstich des Themes. Die Nähe zum
+    Wallpaper bleibt dadurch sichtbar.
+  - **Lesbarkeit zuletzt sichern:** Jede gemischte Farbe, auf der Text steht
+    oder die Text ist, geht am Ende durch `legible(color, ratio)` bzw. wird mit
+    `contrast(a, b)` geprüft. Die Mischung darf den Kontrast nie unter den von
+    `main` drücken.
+  - **Hell und dunkel:** Signaturtöne brauchen je eine Fassung für
+    `Theme.dark` und hell, oder einen Mischanteil, der mit der Helligkeit des
+    Hintergrunds skaliert.
+  - Reine feste Farben gibt es nur für Dinge, die bewusst unabhängig vom
+    Wallpaper sind (Warnrot, Erfolgsgrün dürfen trotzdem leicht zur Palette
+    getönt sein, wie auf `main`), und als Rückfall.
+
+  Das Ergebnis muss mit jedem Wallpaper lesbar und erkennbar derselbe Style
+  bleiben. Prüf es mit mindestens einem hellen, einem dunklen und einem
+  knallbunten Wallpaper.
 - **Schriften** müssen installiert sein (`fc-list`). Wähl sie passend zum Theme
   und nenn im Abschluss, welche du vorausgesetzt hast.
 
@@ -274,7 +297,10 @@ Farbe, nicht nur Alpha.
 `@color0@` … `@color15@` werden beim Anwenden zu `vec3(...)` der aktuellen
 wallust-Palette und bei jedem Theme-Wechsel neu geschrieben
 (`scripts/shader_palette.py`). So kann ein Rand im Akzentton glühen oder eine
-Tinte in der Hintergrundfarbe zerlaufen.
+Tinte in der Hintergrundfarbe zerlaufen. Braucht der Effekt einen bestimmten
+Ton, gilt dieselbe Regel wie im Theme: den Signaturton als Konstante
+anlegen und mit der Palette mischen, z. B.
+`vec3 ember = mix(@color1@, vec3(1.0, 0.45, 0.1), 0.6);`.
 
 ```glsl
 vec4 open_color(vec3 coords_geo, vec3 size_geo) {
@@ -305,7 +331,8 @@ python3 scripts/check_style.py --contract      # der Vertrag
 ```
 
 1. `style/BRIEF.md` schreiben: Theme, Referenzen, Regeln für Farbe, Form,
-   Typografie und Bewegung.
+   Typografie und Bewegung, dazu die Signaturtöne mit ihrem Mischanteil pro
+   Rolle.
 2. `.quickshell-style.json` anpassen.
 3. `theme/Theme.qml`, `theme/Motion.qml`, danach die Widgets, zuerst
    `Drawer`, `ModalWindow`, `Clickable`, `StateLayer`, `ListItem`, `StyledText`.
@@ -375,7 +402,9 @@ keine offene `port`-Zeile mehr hat, die du nicht bewusst geprüft hast, und
 - [ ] Jede Oberfläche aus dem Vertrag live angesehen: Launcher, alle Panels,
       Studio (alle Seiten), Power-Menü, Sperrbildschirm, Screenshot, OSD,
       Benachrichtigungen, Tray-Menü
-- [ ] Mit einem hellen und einem dunklen Wallpaper geprüft
+- [ ] Mit einem hellen, einem dunklen und einem knallbunten Wallpaper geprüft:
+      lesbar, und erkennbar derselbe Style
+- [ ] Signaturtöne sind mit der Palette gemischt, nicht fest gesetzt
 - [ ] Features, die der Host nicht hat, hinterlassen keine Lücken
 - [ ] Die eigene Fenster-Animation in Studio → Motion angesehen und angewendet
 - [ ] `style/BRIEF.md` beschreibt das Theme so, dass jemand anderes den Style
