@@ -3,3 +3,4 @@ __pycache__/
 *.log
 *.part.*
 .wallust-preview-cache/
+dotfiles/spicetify/color.ini

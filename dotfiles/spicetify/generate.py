@@ -22,7 +22,9 @@ from pathlib import Path
 
 THEME_NAME = "custom"
 SCHEME_NAME = "Base"
-THEME_DIR = Path(__file__).resolve().parent
+# not resolved: the script is linked into the spicetify theme, which is where
+# color.ini belongs (resolving would write it into the dotfiles repo)
+THEME_DIR = Path(__file__).absolute().parent
 CACHE_HOME = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
 WAL_PATH = CACHE_HOME / "wal" / "colors.json"
 COLOR_INI = THEME_DIR / "color.ini"
