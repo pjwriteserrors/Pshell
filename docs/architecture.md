@@ -82,7 +82,8 @@ A style branch changes `style/` only:
 | --- | --- |
 | `style/Frame.qml` | what hangs on the screen edges (bar, rail, …) |
 | `style/theme/`, `style/widgets/` | the kit every core view is drawn with; same file names and properties as on `main`, any look |
-| `style/views/<Surface>.qml` | a surface of its own, replacing the core view of that name (any surface `core/Surfaces.qml` creates) |
+| `style/views/<Surface>.qml` | a surface of its own, replacing the core view of that name (only surfaces without logic of their own) |
+| `style/animations/<name>/` | niri window open/close animations of the style (`style:<name>` in Studio → Motion); `@color4@` etc. become the palette |
 
 The Motion page plays the animation itself, not a clip or a sketch:
 `scripts/build_animation_preview.py` compiles the niri shader with `qsb` and
@@ -95,6 +96,10 @@ of its own. `scripts/sync_styles.sh` merges `main` into every style branch in a
 temporary worktree, commits only what compiles, and lists which surfaces each
 style draws itself. Inside `style/`, a file both sides changed keeps the
 style's version (`.gitattributes`).
+
+How to build one, and how to keep one in step with main: `docs/styles.md`.
+`scripts/check_style.py` checks the contract (`--contract` prints it), derived
+from main each time, so it moves with the logic.
 
 ## Setup
 
@@ -112,4 +117,6 @@ and hooks need, the dotfile links and the niri include.
 quickshell -p ./Validate.qml      # compiles the whole shell without a window
 scripts/review_surfaces.sh        # screenshots of every surface, in a nested niri
 python3 scripts/test_branch_styles.py
+python3 scripts/check_style.py        # the style contract (on a style branch)
+python3 scripts/test_check_style.py
 ```
