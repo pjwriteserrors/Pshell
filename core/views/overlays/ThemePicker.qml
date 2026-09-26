@@ -625,7 +625,7 @@ fi
 					spacing: 0
 
 					StyledText {
-						text: "Themes"
+						text: Words.of("wallpaper.title", "Themes")
 						font.pixelSize: Theme.size.heading
 						font.weight: Font.Bold
 					}
@@ -733,7 +733,7 @@ fi
 						spacing: 6
 
 						SectionLabel {
-							text: "Wallpaper of the day"
+							text: Words.of("wallpaper.daily", "Wallpaper of the day")
 							Layout.rightMargin: 4
 						}
 
@@ -1128,7 +1128,7 @@ fi
 						spacing: 1
 
 						StyledText {
-							text: "Palette"
+							text: Words.of("wallpaper.palette", "Palette")
 							font.pixelSize: Theme.size.title
 							font.weight: Font.Bold
 						}
@@ -1351,7 +1351,7 @@ fi
 								spacing: 0
 
 								SectionLabel {
-									text: "Window animation"
+									text: Words.of("wallpaper.animation", "Window animation")
 								}
 
 								StyledText {

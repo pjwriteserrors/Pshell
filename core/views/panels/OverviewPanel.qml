@@ -149,7 +149,7 @@ Drawer {
 			}
 
 			StyledText {
-				text: "Overview"
+				text: Words.of("overview.title", "Overview")
 				font.pixelSize: Theme.size.title
 				font.weight: Font.Bold
 			}

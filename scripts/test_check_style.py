@@ -79,6 +79,11 @@ class Contract(unittest.TestCase):
 		report = check_style.check(base, base, is_style_branch=False, compile_animations=False)
 		self.assertEqual(report.failures, [])
 
+	def test_words_are_found(self):
+		found = check_style.words(check_style.Tree("main"))
+		self.assertEqual(found["clipboard.title"], "Clipboard")
+		self.assertEqual(found["studio.motion"], "Motion")
+
 	def test_every_surface_is_found(self):
 		found = check_style.surfaces(check_style.Tree("main"))
 		self.assertIn("ControlCenter", found)

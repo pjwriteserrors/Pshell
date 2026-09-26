@@ -37,7 +37,7 @@ der Shell ändert. Er muss am Ende:
    Popups, Text und Kacheln oder Knöpfe in den Popups, stammt aus dem Theme
    und nicht aus der Default-Shell (Abschnitt 3.4);
 3. das beschriebene Theme konsequent umsetzen, bis in jedes Widget, jede
-   Oberfläche und jede Bewegung;
+   Oberfläche, jede Bewegung und die wichtigsten Texte (Abschnitt 3.5);
 4. komplexe, theme-abhängige Animationen haben (Abschnitt 5);
 5. mindestens eine eigene niri-Animation für das Öffnen und Schließen von
    Fenstern mitbringen, die zum Theme passt (Abschnitt 6);
@@ -97,6 +97,7 @@ style/
   theme/Theme.qml      Farben, Typografie, Maße
   theme/Motion.qml     Bewegungssprache: Kurven und Dauern
   theme/Icons.qml      Symbole
+  theme/Words.qml      die Sprache des Styles: Titel und Überschriften
   widgets/*.qml        das Kit, mit dem jede Oberfläche gezeichnet wird
   views/<Surface>.qml  optional: eine Oberfläche ganz selbst zeichnen
   animations/<name>/   niri-Fenster-Animationen dieses Styles
@@ -256,6 +257,44 @@ Nur die Kit-Dateien (`theme/`, `widgets/`) startest du mit der Version von
 also Aufbau, Form und Anordnung der Teile, darfst und sollst du trotzdem neu
 gestalten.
 
+### 3.5 Eigene Sprache
+
+Die wichtigsten Texte sprechen die Sprache des Themes. In einem
+Fantasy-Style heißt die Zwischenablage nicht „Clipboard“, sondern etwa
+„Arcane Library“, die Benachrichtigungen „Missives“, das Power-Menü bietet
+„Seal the Tome“ statt „Lock“.
+
+- **Core-Views** fragen ihre Titel, Abschnittsüberschriften, Leer-Zustände,
+  Studio-Reiter und Power-Aktionen über `Words.of("<schlüssel>", "<text von
+  main>")` ab. Dein Style benennt sie in `style/theme/Words.qml` um:
+  ```qml
+  readonly property var words: ({
+      "clipboard.title": "Arcane Library",
+      "today.title": "Missives",
+      "today.empty": "No ravens today",
+      "power.lock": "Seal the Tome",
+      "studio.motion": "Rites of Motion"
+  })
+  ```
+  Alle Schlüssel mit dem Text von `main` zeigt
+  `python3 scripts/check_style.py --contract` unter „Words“. Ein Schlüssel,
+  den kein Core-Code abfragt, ist ein Fehler (`words`); ein fehlender behält
+  den Text von `main`.
+- **Eigene Views und der Frame** schreiben ihre Texte selbst im selben Ton.
+  Für alles, was es als Schlüssel gibt, nehmen sie ebenfalls
+  `Words.of(...)`, damit dieselbe Sache überall gleich heißt.
+- **Was umbenannt wird:** Titel, Überschriften, Leer-Zustände, markante
+  Aktionen. **Was bleibt:** Werte, Einheiten, Namen von Geräten, Apps,
+  Dateien und Paketen, Fachbegriffe, bei denen man sonst nicht mehr weiß,
+  was gemeint ist (CPU, Bluetooth, SSH dürfen einen Beinamen bekommen, aber
+  erkennbar bleiben).
+- Kurz und klar. Stimmung ja, Rätsel nein: Jeder Text muss auf den ersten
+  Blick verraten, was dahinter ist.
+- Halte die Wortwahl im `BRIEF.md` fest.
+
+Fehlt ein Text als Schlüssel, der für das Theme wichtig wäre, meldest du ihn.
+Neue Schlüssel entstehen auf `main`.
+
 ## 4. Die Funktion dynamisch widerspiegeln
 
 Der Style zeigt, was die Shell gerade kann und was gerade los ist. Nichts
@@ -393,20 +432,21 @@ python3 scripts/check_style.py --contract      # der Vertrag
 2. `.quickshell-style.json` anpassen.
 3. `theme/Theme.qml`, `theme/Motion.qml`, danach die Widgets, zuerst
    `Drawer`, `ModalWindow`, `Clickable`, `StateLayer`, `ListItem`, `StyledText`.
-   Damit sitzt der Großteil.
+   Damit steht das Material, aus dem alles gebaut wird.
 4. `Frame.qml` und die Bausteine des Frames, von Grund auf neu.
 5. Eine eigene View für jede Oberfläche, die der Vertrag als `replaceable`
    führt, nach dem Entwurf aus dem Brief.
-6. `style/animations/<name>/`.
-7. Nach jedem Schritt:
+6. `theme/Words.qml`: die wichtigsten Texte in der Sprache des Themes.
+7. `style/animations/<name>/`.
+8. Nach jedem Schritt:
    ```
    quickshell -p ./Validate.qml          # muss "VALIDATE: ok" ausgeben
    python3 scripts/check_style.py         # muss "contract ok" ausgeben
    ```
-8. Committen (nur `style/`, `.quickshell-style.json`), dann live ansehen:
+9. Committen (nur `style/`, `.quickshell-style.json`), dann live ansehen:
    Studio (Mod+Shift+S) → Style → deinen Style wählen. Zurück über dieselbe
    Seite zu „Default“. Der Wechsel verlangt einen sauberen Arbeitsbaum.
-9. Am Schluss zusätzlich `python3 scripts/test_branch_styles.py`.
+10. Am Schluss zusätzlich `python3 scripts/test_branch_styles.py`.
 
 Nicht gegen den echten Zustand testen: `scripts/review_surfaces.sh` legt
 Dateien in `~/.local/state/pshell` an, `wallust run` färbt alle offenen
@@ -471,6 +511,8 @@ keine offene `port`-Zeile mehr hat, die du nicht bewusst geprüft hast, und
       `palette`-Fehler, das Wallpaper ist jeder Oberfläche anzusehen
 - [ ] Features, die der Host nicht hat, hinterlassen keine Lücken
 - [ ] Die eigene Fenster-Animation in Studio → Motion angesehen und angewendet
+- [ ] Titel, Überschriften und Leer-Zustände sprechen die Sprache des Themes
+      (`Words.qml`), bleiben aber verständlich
 - [ ] `style/BRIEF.md` beschreibt das Theme so, dass jemand anderes den Style
       nachziehen kann
 - [ ] Abschlussbericht: was wie umgesetzt ist, welche Schriften vorausgesetzt

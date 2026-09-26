@@ -227,7 +227,7 @@ fi
 					spacing: 0
 
 					SectionLabel {
-						text: "Window animation"
+						text: Words.of("motion.title", "Window animation")
 					}
 
 					StyledText {
@@ -358,7 +358,7 @@ fi
 						anchors.centerIn: parent
 						visible: root.animationOptions.length === 0
 						icon: "animation"
-						title: "No animations found"
+						title: Words.of("motion.empty", "No animations found")
 						subtitle: "Add shaders to style/animations, ~/.config/niri/animations/shaders or nirimation presets."
 					}
 

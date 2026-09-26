@@ -71,7 +71,7 @@ Drawer {
 			Layout.topMargin: 2
 			Layout.bottomMargin: 4
 			visible: root.stack.length === 0
-			text: "Tray"
+			text: Words.of("tray.title", "Tray")
 		}
 
 		Repeater {

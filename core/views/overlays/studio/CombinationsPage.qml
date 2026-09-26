@@ -506,7 +506,7 @@ ModalWindow {
 					spacing: 0
 
 					SectionLabel {
-						text: "Combinations"
+						text: Words.of("combinations.title", "Combinations")
 					}
 
 					StyledText {
@@ -571,7 +571,7 @@ ModalWindow {
 					anchors.centerIn: parent
 					visible: root.loaded && root.combinations.length === 0 && !root.naming
 					icon: "bookmark_outline"
-					title: "No combinations"
+					title: Words.of("combinations.empty", "No combinations")
 				}
 
 				RowLayout {

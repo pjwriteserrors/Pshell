@@ -103,7 +103,7 @@ Drawer {
 					}
 
 					StyledText {
-						text: "Updates"
+						text: Words.of("updates.title", "Updates")
 						font.pixelSize: Theme.size.title
 						font.weight: Font.Bold
 					}
@@ -234,7 +234,7 @@ Drawer {
 
 							SectionLabel {
 								Layout.fillWidth: true
-								text: "Arch news"
+								text: Words.of("updates.news", "Arch news")
 								tone: Theme.primary
 							}
 
@@ -547,7 +547,7 @@ Drawer {
 
 				PageHeader {
 					Layout.fillWidth: true
-					title: "Maintenance"
+					title: Words.of("updates.maintenance", "Maintenance")
 					onBack: root.page = "main"
 
 					IconButton {

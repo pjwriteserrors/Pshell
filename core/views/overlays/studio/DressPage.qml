@@ -470,7 +470,7 @@ ModalWindow {
 					spacing: 0
 
 					SectionLabel {
-						text: "Icons & Pointer"
+						text: Words.of("dress.title", "Icons & Pointer")
 					}
 
 					StyledText {
@@ -525,7 +525,7 @@ ModalWindow {
 
 					ColumnHeader {
 						icon: "apps"
-						title: "Icons"
+						title: Words.of("dress.icons", "Icons")
 						count: root.iconThemes.length
 						active: root.column === "icons"
 					}
@@ -652,7 +652,7 @@ ModalWindow {
 
 					ColumnHeader {
 						icon: "cursor_default_outline"
-						title: "Pointer"
+						title: Words.of("dress.pointer", "Pointer")
 						count: root.cursorThemes.length
 						active: root.column === "cursors"
 					}

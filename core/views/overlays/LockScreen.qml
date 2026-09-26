@@ -367,7 +367,7 @@ Scope {
 					StyledText {
 						anchors.centerIn: parent
 						visible: pill.count === 0 && !root.passwordActive
-						text: "Password"
+						text: Words.of("lock.password", "Password")
 						tone: Qt.rgba(1, 1, 1, 0.5)
 						font.pixelSize: Theme.size.title
 					}

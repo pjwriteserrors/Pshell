@@ -8,7 +8,7 @@ import qs.style.widgets
 Segmented {
 	id: root
 
-	options: Popups.studioPages.map(page => ({ value: page.modal, label: page.label, icon: page.icon }))
+	options: Popups.studioPages.map(page => ({ value: page.modal, label: Words.of(`studio.${page.id}`, page.label), icon: page.icon }))
 	current: Popups.modal
 	implicitWidth: 640
 	// the same spot on every page, whatever the size of its card

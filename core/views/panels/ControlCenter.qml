@@ -169,7 +169,7 @@ Drawer {
 					QuickTile {
 						Layout.fillWidth: true
 						icon: Bluetooth.icon
-						title: "Bluetooth"
+						title: Words.of("control.bluetooth", "Bluetooth")
 						subtitle: Bluetooth.summary
 						active: Bluetooth.powered
 						onClicked: Bluetooth.togglePower()
@@ -189,7 +189,7 @@ Drawer {
 					QuickTile {
 						Layout.fillWidth: true
 						icon: Audio.micIcon
-						title: "Microphone"
+						title: Words.of("control.microphone", "Microphone")
 						subtitle: Audio.micMuted ? "Muted" : `${Math.round(Audio.micVolume * 100)}%`
 						active: !Audio.micMuted
 						hasDetails: false
@@ -199,7 +199,7 @@ Drawer {
 					QuickTile {
 						Layout.fillWidth: true
 						icon: Notifs.dnd ? "bell_sleep" : "bell_outline"
-						title: "Silence"
+						title: Words.of("control.silence", "Silence")
 						subtitle: Notifs.dndReason
 						active: Notifs.dnd
 						onClicked: Notifs.toggleDnd()
@@ -209,7 +209,7 @@ Drawer {
 					QuickTile {
 						Layout.fillWidth: true
 						icon: KeepAwake.active ? "coffee" : "coffee_outline"
-						title: "Keep awake"
+						title: Words.of("control.keepAwake", "Keep awake")
 						subtitle: KeepAwake.active ? "On" : "Off"
 						active: KeepAwake.active
 						hasDetails: false
@@ -220,7 +220,7 @@ Drawer {
 						Layout.fillWidth: true
 						visible: PowerProfile.available
 						icon: PowerProfile.icon(PowerProfile.current)
-						title: "Power"
+						title: Words.of("control.power", "Power")
 						subtitle: PowerProfile.label(PowerProfile.current)
 						active: PowerProfile.current !== "balanced"
 						onClicked: PowerProfile.cycle()
@@ -467,7 +467,7 @@ Drawer {
 
 				PageHeader {
 					Layout.fillWidth: true
-					title: "Bluetooth"
+					title: Words.of("control.bluetooth", "Bluetooth")
 					subtitle: Bluetooth.summary
 					onBack: root.page = "main"
 
@@ -723,7 +723,7 @@ Drawer {
 
 				PageHeader {
 					Layout.fillWidth: true
-					title: "Sound"
+					title: Words.of("control.sound", "Sound")
 					subtitle: Audio.muted ? "Muted" : `${Math.round(Audio.volume * 100)}% · ${Audio.shortSinkName(Audio.sinkName)}`
 					onBack: root.page = "main"
 				}
@@ -845,7 +845,7 @@ Drawer {
 
 				PageHeader {
 					Layout.fillWidth: true
-					title: "Do not disturb"
+					title: Words.of("control.dnd", "Do not disturb")
 					subtitle: Notifs.dndReason
 					onBack: root.page = "main"
 
@@ -891,7 +891,7 @@ Drawer {
 
 				PageHeader {
 					Layout.fillWidth: true
-					title: "Power profile"
+					title: Words.of("control.powerProfile", "Power profile")
 					subtitle: PowerProfile.label(PowerProfile.current)
 					onBack: root.page = "main"
 				}
@@ -1097,7 +1097,7 @@ Drawer {
 
 				PageHeader {
 					Layout.fillWidth: true
-					title: "System"
+					title: Words.of("control.system", "System")
 					subtitle: SysStats.cpuText
 					onBack: root.page = "main"
 				}

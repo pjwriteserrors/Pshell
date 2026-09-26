@@ -39,7 +39,7 @@ Drawer {
 				spacing: 8
 
 				StyledText {
-					text: "Notifications"
+					text: Words.of("today.title", "Notifications")
 					font.pixelSize: Theme.size.heading
 					font.weight: Font.Bold
 				}
@@ -78,7 +78,7 @@ Drawer {
 					anchors.centerIn: parent
 					visible: Notifs.count === 0
 					icon: "bell_sleep"
-					title: "All caught up"
+					title: Words.of("today.empty", "All caught up")
 					subtitle: "New notifications land here. Swipe one sideways to dismiss it."
 				}
 

@@ -328,7 +328,7 @@ ModalWindow {
 					spacing: 0
 
 					SectionLabel {
-						text: "Style"
+						text: Words.of("styles.title", "Style")
 					}
 
 					StyledText {

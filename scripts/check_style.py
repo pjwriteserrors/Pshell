@@ -21,6 +21,7 @@ Checks:
                needs a way in on every style)
   views        style/views/<Surface>.qml replaces a real surface, keeps its
                root type and modalId/panelId, and carries no logic of its own
+  words        every key in style/theme/Words.qml is one the core asks for
   layout       a style branch invents its own layout: every replaceable surface
                has a view of its own, and neither those views nor the frame
                (Frame.qml, everything outside theme/, widgets/, views/,
@@ -193,6 +194,20 @@ def reached(tree: Tree, ids: set[str]) -> set[str]:
     return found
 
 
+def words(tree: Tree) -> dict:
+    """Texts the core lets a style rename: key -> main's text."""
+    found = {}
+    for path in tree.files("core"):
+        if path.endswith(".qml"):
+            for key, text in re.findall(r'Words\.of\("([\w.]+)",\s*"([^"]*)"\)', tree.read(path) or ""):
+                found[key] = text
+    # Studio tabs: Words.of(`studio.${page.id}`, page.label)
+    popups = tree.read("core/services/Popups.qml") or ""
+    for page_id, label in re.findall(r'\{\s*id:\s*"(\w+)",\s*modal:\s*"\w+",\s*label:\s*"([^"]+)"', popups):
+        found[f"studio.{page_id}"] = label
+    return dict(sorted(found.items()))
+
+
 def kit(tree: Tree) -> dict:
     return {p: interface(tree.read(p) or "") for d in KIT_DIRS for p in tree.files(d) if p.endswith(".qml")}
 
@@ -279,6 +294,12 @@ def check(base: Tree, style: Tree, is_style_branch: bool, compile_animations: bo
         if core["logic"]:
             report.fail("views", f"{path}: {core['path']} still carries logic; replacing it would copy that logic – "
                                  "restyle it through the kit instead, or move its logic into core first (on main)")
+
+    known = words(base)
+    own_words = strip_keep_strings(style.read("style/theme/Words.qml") or "")
+    for key in re.findall(r'"([\w]+(?:\.[\w]+)+)"\s*:', own_words):
+        if key not in known:
+            report.fail("words", f"style/theme/Words.qml names `{key}`, which no core view asks for")
 
     if is_style_branch:
         check_layout(base, style, base_surfaces, report)
@@ -527,6 +548,10 @@ def contract(base: Tree) -> str:
         out.append(f"{path}: {info['root']}{singleton}")
         if info["members"]:
             out.append("    " + ", ".join(sorted(info["members"])))
+    out.append("")
+    out.append("## Words – keys for style/theme/Words.qml, with main's text")
+    for key, text in words(base).items():
+        out.append(f"{key:<24} {text}")
     out.append("")
     out.append("## Surfaces – style/views/<Name>.qml may replace the ones marked `replaceable`")
     for name, info in surfaces(base).items():

@@ -19,10 +19,10 @@ ModalWindow {
 	property string uptime: ""
 
 	readonly property var actions: [
-		{ id: "lock", label: "Lock", icon: "lock", hold: false },
-		{ id: "logout", label: "Log out", icon: "logout", hold: true },
-		{ id: "reboot", label: "Restart", icon: "restart", hold: true },
-		{ id: "shutdown", label: "Shut down", icon: "power", hold: true }
+		{ id: "lock", label: Words.of("power.lock", "Lock"), icon: "lock", hold: false },
+		{ id: "logout", label: Words.of("power.logout", "Log out"), icon: "logout", hold: true },
+		{ id: "reboot", label: Words.of("power.reboot", "Restart"), icon: "restart", hold: true },
+		{ id: "shutdown", label: Words.of("power.shutdown", "Shut down"), icon: "power", hold: true }
 	]
 
 	modalId: "power"

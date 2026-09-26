@@ -58,7 +58,7 @@ Drawer {
 			spacing: 8
 
 			StyledText {
-				text: "Clipboard"
+				text: Words.of("clipboard.title", "Clipboard")
 				font.pixelSize: Theme.size.heading
 				font.weight: Font.Bold
 			}

@@ -63,7 +63,7 @@ Drawer {
 				spacing: 0
 
 				StyledText {
-					text: "SSH"
+					text: Words.of("ssh.title", "SSH")
 					font.pixelSize: Theme.size.heading
 					font.weight: Font.Bold
 				}

@@ -202,7 +202,7 @@ Drawer {
 				Layout.bottomMargin: 12
 				visible: root.todayTasks.length === 0
 				icon: "timer_outline"
-				title: "Nothing tracked today"
+				title: Words.of("timer.empty", "Nothing tracked today")
 				subtitle: "Start a new timer — it will show up here to resume later."
 			}
 
@@ -423,7 +423,7 @@ Drawer {
 
 					ColumnLayout {
 						spacing: 0
-						SectionLabel { text: "Today" }
+						SectionLabel { text: Words.of("timer.today", "Today") }
 						StyledText {
 							text: Tmpo.todayTotal
 							tabular: true
@@ -434,7 +434,7 @@ Drawer {
 
 					ColumnLayout {
 						spacing: 0
-						SectionLabel { text: "Tasks" }
+						SectionLabel { text: Words.of("timer.tasks", "Tasks") }
 						StyledText {
 							text: Tmpo.todayEntries
 							tabular: true
