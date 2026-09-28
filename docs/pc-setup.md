@@ -163,6 +163,12 @@ Dann prüfen:
 
 ## Bekannte Fallstricke
 
+- **Aufrufe der alten Shell von außen.** Befehle wie `qs -c main …` oder Pfade in die alte
+  Shell stehen auch außerhalb der niri-Config, z. B. in den KDE-Connect-Befehlen
+  (`~/.config/kdeconnect/*/kdeconnect_runcommand/config`). Suchen mit
+  `grep -rIl -e '-c main' -e 'quickshell/' ~/.config ~/.local/bin`. Nach dem Ändern
+  `kdeconnectd` neu starten, denn die Befehle hält er im Speicher.
+
 - **Tests nie gegen den echten Zustand laufen lassen.**
   - `scripts/review_surfaces.sh` startet die Shell in einem verschachtelten niri, legt
     aber Dateien in `~/.local/state/pshell` an. Das ist am Laptop einmal passiert, und
