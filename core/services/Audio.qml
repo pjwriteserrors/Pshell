@@ -9,6 +9,8 @@ import Quickshell.Services.Pipewire
 // (proven with every sink here) and report through the OSD. Default sink
 // switching uses pactl because wpctl refuses some internal sinks (EVO4).
 // `streams` are the apps playing right now, for the per-app mixer.
+// headphonesLost fires when the output moves from headphones (a headset,
+// Bluetooth, the headphone jack) to anything else.
 Singleton {
 	id: root
 
@@ -22,6 +24,10 @@ Singleton {
 
 	property var sinks: []
 	property string requestKind: "volume"
+	property bool onHeadphones: false
+	property bool sinksKnown: false
+
+	signal headphonesLost
 
 	PwObjectTracker {
 		objects: [root.sink, root.source]
@@ -111,6 +117,14 @@ Singleton {
 		sinkRefresh.restart();
 	}
 
+	function isHeadphones(sink) {
+		const props = sink.properties ?? {};
+		const factor = String(props["device.form_factor"] ?? "");
+		const port = String(sink.active_port ?? "");
+		return factor === "headphone" || factor === "headset" || String(props["device.bus"] ?? "") === "bluetooth"
+			|| /headphone|headset/i.test(port) || /headphone|headset/i.test(String(sink.description ?? ""));
+	}
+
 	function shortSinkName(name) {
 		const n = String(name || "").replace(/ Analog Stereo| Digital Stereo.*| Pro \d+.*/g, "");
 		return n.length > 40 ? n.slice(0, 40) + "…" : n;
@@ -160,11 +174,16 @@ Singleton {
 				const next = [];
 				try {
 					for (const sink of JSON.parse(raw.slice(0, sep)))
-						next.push({ active: sink.name === defaultName, name: sink.name, description: sink.description || sink.name });
+						next.push({ active: sink.name === defaultName, name: sink.name, description: sink.description || sink.name, headphones: root.isHeadphones(sink) });
 				} catch (e) {
 					return;
 				}
 				root.sinks = next;
+				const active = next.find(sink => sink.active);
+				const headphones = !!active && active.headphones;
+				if (root.sinksKnown && root.onHeadphones && !headphones) root.headphonesLost();
+				root.onHeadphones = headphones;
+				root.sinksKnown = true;
 			}
 		}
 	}
@@ -174,6 +193,26 @@ Singleton {
 		function onDefaultAudioSinkChanged() {
 			sinkRefresh.restart();
 		}
+	}
+
+	// a plug pulled from the jack only switches the port of the same sink
+	Process {
+		id: sinkEvents
+
+		running: true
+		command: ["pactl", "subscribe"]
+		stdout: SplitParser {
+			onRead: line => {
+				if (/ on (sink|card|server) /.test(line)) sinkRefresh.restart();
+			}
+		}
+		onExited: sinkEventsRestart.restart()
+	}
+
+	Timer {
+		id: sinkEventsRestart
+		interval: 5000
+		onTriggered: sinkEvents.running = true
 	}
 
 	Component.onCompleted: root.refreshSinks()

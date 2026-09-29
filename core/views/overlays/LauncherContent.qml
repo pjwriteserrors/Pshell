@@ -216,6 +216,24 @@ Item {
 			description: "Keep a screen region on top"
 		},
 		{
+			id: "live",
+			command: "live",
+			name: "Live Pin",
+			description: "Keep a region of a window on top, live"
+		},
+		{
+			id: "shelf",
+			command: "shelf",
+			name: "Shelf",
+			description: Shelf.shelves.length > 0 ? `${Shelf.shelves.length} open` : "Stash files and text"
+		},
+		{
+			id: "shelf-clipboard",
+			command: "shelfclip",
+			name: "Shelf from Clipboard",
+			description: "A new shelf with what is copied"
+		},
+		{
 			id: "qr",
 			command: "qr",
 			name: "QR Code",
@@ -2353,6 +2371,18 @@ Item {
 			root.closeRequested();
 			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "screenshot", "pin"]);
 			break;
+		case "live":
+			root.closeRequested();
+			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "screenshot", "live"]);
+			break;
+		case "shelf":
+			root.closeRequested();
+			Shelf.toggle();
+			break;
+		case "shelf-clipboard":
+			root.closeRequested();
+			Shelf.fromClipboard();
+			break;
 		case "qr":
 			root.closeRequested();
 			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "screenshot", "qr"]);
@@ -2899,6 +2929,9 @@ Item {
 		case "color-picker": return "eyedropper";
 		case "ocr": return "text_recognition";
 		case "pin": return "pin_outline";
+		case "live": return "cast";
+		case "shelf": return "tray_full";
+		case "shelf-clipboard": return "content_paste";
 		case "qr": return "qrcode_scan";
 		case "delay": return "timer_outline";
 		case "scroll": return "arrow_expand_vertical";

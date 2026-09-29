@@ -275,15 +275,31 @@ Drawer {
 					Repeater {
 						model: Ddc.monitors
 
-						delegate: PillSlider {
+						delegate: RowLayout {
+							id: monitor
+
 							required property var modelData
 
 							Layout.fillWidth: true
-							icon: Brightness.icon(modelData.value)
-							label: Ddc.label(modelData)
-							value: modelData.value
-							dimmed: !modelData.known
-							onMoved: value => Ddc.set(modelData.bus, value)
+							spacing: 8
+
+							PillSlider {
+								Layout.fillWidth: true
+								icon: Brightness.icon(monitor.modelData.value)
+								label: Ddc.label(monitor.modelData)
+								value: monitor.modelData.value
+								dimmed: !monitor.modelData.known
+								onMoved: value => Ddc.set(monitor.modelData.bus, value)
+							}
+
+							Segmented {
+								visible: monitor.modelData.inputs.length > 1
+								implicitWidth: monitor.modelData.inputs.length * 58
+								Layout.preferredHeight: 34
+								current: monitor.modelData.input
+								options: monitor.modelData.inputs.map(input => ({ value: input.code, label: input.label }))
+								onSelected: value => Ddc.setInput(monitor.modelData.bus, value)
+							}
 						}
 					}
 				}
@@ -774,7 +790,7 @@ Drawer {
 
 						Layout.fillWidth: true
 						implicitHeight: 46
-						icon: /headphone|headset|arctis/i.test(sink.modelData.description) ? "headphones" : "speaker"
+						icon: sink.modelData.headphones || /arctis/i.test(sink.modelData.description) ? "headphones" : "speaker"
 						title: Audio.shortSinkName(sink.modelData.description)
 						selected: sink.modelData.active
 						onClicked: Audio.setDefaultSink(sink.modelData.name)
@@ -842,6 +858,35 @@ Drawer {
 						}
 					}
 				}
+
+				SectionLabel {
+					Layout.topMargin: 4
+					text: "Pause media"
+				}
+
+				Repeater {
+					model: [
+						{ rule: "lock", icon: "lock_outline", title: "When locked", checked: Media.pauseOnLock },
+						{ rule: "headphones", icon: "headphones", title: "When headphones disconnect", checked: Media.pauseOnHeadphones }
+					]
+
+					delegate: ListItem {
+						id: pauseRule
+
+						required property var modelData
+
+						Layout.fillWidth: true
+						implicitHeight: 46
+						icon: pauseRule.modelData.icon
+						title: pauseRule.modelData.title
+						onClicked: Media.setRule(pauseRule.modelData.rule, !pauseRule.modelData.checked)
+
+						Toggle {
+							checked: pauseRule.modelData.checked
+							onToggled: on => Media.setRule(pauseRule.modelData.rule, on)
+						}
+					}
+				}
 			}
 		}
 
@@ -868,7 +913,8 @@ Drawer {
 				Repeater {
 					model: [
 						{ rule: "tracking", icon: "timer_outline", title: "While tracking time", checked: Notifs.dndWhileTracking },
-						{ rule: "fullscreen", icon: "fullscreen", title: "In fullscreen", checked: Notifs.dndFullscreen }
+						{ rule: "fullscreen", icon: "fullscreen", title: "In fullscreen", checked: Notifs.dndFullscreen },
+						{ rule: "sharing", icon: "monitor_share", title: "While sharing the screen", checked: Notifs.dndSharing }
 					].filter(rule => rule.rule !== "tracking" || Host.has("qtrack"))
 
 					delegate: ListItem {

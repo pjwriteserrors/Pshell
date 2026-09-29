@@ -135,6 +135,9 @@ Scope {
 		function pin(): void {
 			Screenshot.pinMode();
 		}
+		function live(): void {
+			Screenshot.liveMode();
+		}
 		function unpinAll(): void {
 			Screenshot.unpinAll();
 		}
@@ -274,6 +277,36 @@ Scope {
 
 	// ~/.local/bin/record reports here so the bar can show the recording
 	IpcHandler {
+		target: "shelf"
+
+		function toggle(): void {
+			Shelf.toggle();
+		}
+		// a new shelf with what the clipboard holds
+		function clipboard(): void {
+			Shelf.fromClipboard();
+		}
+		function reopen(): void {
+			Shelf.reopen("");
+		}
+		function closeAll(): void {
+			Shelf.closeAll();
+		}
+		function add(path: string): void {
+			Shelf.arrived(path);
+		}
+	}
+
+	IpcHandler {
+		target: "agents"
+
+		// scripts/agent_hook.py: state is "busy" or "idle"
+		function report(window: int, state: string, agent: string): void {
+			Agents.report(window, state, agent);
+		}
+	}
+
+	IpcHandler {
 		target: "recording"
 
 		function started(file: string): void {
@@ -313,38 +346,6 @@ Scope {
 	}
 
 	IpcHandler {
-		target: "phone"
-		enabled: Host.has("kdeconnect")
-
-		function sendClipboard(): void {
-			KdeConnect.sendClipboard();
-		}
-		function sendText(text: string): void {
-			KdeConnect.sendText(text);
-		}
-		function ring(): void {
-			KdeConnect.ring();
-		}
-	}
-
-	IpcHandler {
-		target: "volume"
-
-		function raise(): void {
-			Audio.adjust(1);
-		}
-		function lower(): void {
-			Audio.adjust(-1);
-		}
-		function muteToggle(): void {
-			Audio.toggleMute();
-		}
-		function micMuteToggle(): void {
-			Audio.toggleMicMute();
-		}
-	}
-
-	IpcHandler {
 		target: "breaks"
 
 		function toggle(): void {
@@ -373,6 +374,38 @@ Scope {
 		}
 		function toggleReminders(): void {
 			Breaks.setEnabled(!Breaks.enabled);
+		}
+	}
+
+	IpcHandler {
+		target: "phone"
+		enabled: Host.has("kdeconnect")
+
+		function sendClipboard(): void {
+			KdeConnect.sendClipboard();
+		}
+		function sendText(text: string): void {
+			KdeConnect.sendText(text);
+		}
+		function ring(): void {
+			KdeConnect.ring();
+		}
+	}
+
+	IpcHandler {
+		target: "volume"
+
+		function raise(): void {
+			Audio.adjust(1);
+		}
+		function lower(): void {
+			Audio.adjust(-1);
+		}
+		function muteToggle(): void {
+			Audio.toggleMute();
+		}
+		function micMuteToggle(): void {
+			Audio.toggleMicMute();
 		}
 	}
 

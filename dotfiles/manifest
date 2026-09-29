@@ -11,6 +11,7 @@ link    niri/pshell.kdl               ~/.config/niri/pshell.kdl                 
 link    bin/record                    ~/.local/bin/record                             all
 link    wallust/templates             ~/.config/wallust/templates                     all
 seed    wallust/wallust.toml          ~/.config/wallust/wallust.toml                  all
+seed    codex/hooks.json              ~/.codex/hooks.json                             all
 link    bin/mxh                       ~/.local/bin/mxh                                feature:haptics
 link    bin/mx4-hapticd               ~/.local/bin/mx4-hapticd                        feature:haptics
 link    systemd/mx4-hapticd.service   ~/.config/systemd/user/mx4-hapticd.service      feature:haptics

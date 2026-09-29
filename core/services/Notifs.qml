@@ -23,12 +23,20 @@ Singleton {
 	property bool dndManual: false
 	property bool dndWhileTracking: true
 	property bool dndFullscreen: true
+	property bool dndSharing: true
 	readonly property bool trackingNow: Tmpo.tracking && !Tmpo.paused
-	readonly property bool dndAuto: (root.dndWhileTracking && root.trackingNow) || (root.dndFullscreen && Niri.focusedFullscreen)
+	// a screencast of someone else than the shell's own live pins
+	readonly property bool sharing: Niri.casts.some(cast => cast.is_active && !Screenshot.liveNodes.includes(Number(cast.pw_node_id)))
+	readonly property bool dndAuto: (root.dndWhileTracking && root.trackingNow) || (root.dndFullscreen && Niri.focusedFullscreen) || (root.dndSharing && root.sharing)
 	// switched off by hand while a rule applied: stays off until the rule ends
 	property bool dndAutoSuppressed: false
 	readonly property bool dnd: root.dndManual || (root.dndAuto && !root.dndAutoSuppressed)
-	readonly property string dndReason: root.dndManual ? "On" : (!root.dnd ? "Off" : (root.dndFullscreen && Niri.focusedFullscreen ? "Fullscreen" : "Tracking"))
+	readonly property string dndReason: {
+		if (root.dndManual) return "On";
+		if (!root.dnd) return "Off";
+		if (root.dndSharing && root.sharing) return "Sharing";
+		return root.dndFullscreen && Niri.focusedFullscreen ? "Fullscreen" : "Tracking";
+	}
 
 	onDndAutoChanged: if (!root.dndAuto) root.dndAutoSuppressed = false
 
@@ -51,6 +59,7 @@ Singleton {
 	function setDndRule(rule, on) {
 		if (rule === "tracking") root.dndWhileTracking = !!on;
 		else if (rule === "fullscreen") root.dndFullscreen = !!on;
+		else if (rule === "sharing") root.dndSharing = !!on;
 		root.persist();
 	}
 
@@ -58,7 +67,8 @@ Singleton {
 		settings.setText(JSON.stringify({
 			dnd: root.dndManual,
 			whileTracking: root.dndWhileTracking,
-			fullscreen: root.dndFullscreen
+			fullscreen: root.dndFullscreen,
+			sharing: root.dndSharing
 		}, null, 2));
 	}
 
@@ -74,6 +84,7 @@ Singleton {
 				root.dndManual = data.dnd === true;
 				root.dndWhileTracking = data.whileTracking !== false;
 				root.dndFullscreen = data.fullscreen !== false;
+				root.dndSharing = data.sharing !== false;
 			} catch (error) {}
 		}
 	}

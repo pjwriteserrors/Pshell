@@ -14,9 +14,10 @@ import qs.style.widgets
 // so dragging works in stable screen coordinates and the pin stays exactly
 // under the pointer.
 //
-// Drag moves · wheel zooms around the pointer · Ctrl+wheel fades
-// double-click edits · middle click closes · Ctrl+C / Ctrl+S / Esc act on
-// the pin that was clicked last.
+// Drag moves, also onto another screen · edges and corners resize · wheel
+// zooms around the pointer · Ctrl+wheel fades · double-click edits · middle
+// click closes · Ctrl+C / Ctrl+S / Esc act on the pin that was clicked last.
+// Live pins show the newest frame of their region and a dot while streaming.
 PanelWindow {
 	id: root
 
@@ -66,16 +67,29 @@ PanelWindow {
 			let known = false;
 			for (let i = 0; i < pinModel.count; i += 1)
 				if (pinModel.get(i).pinId === p.id) known = true;
-			if (!known) pinModel.append({ pinId: p.id, path: p.path, x0: p.x, y0: p.y, w0: p.width, h0: p.height });
+			if (!known) pinModel.append({ pinId: p.id, path: p.path, live: !!p.live, x0: p.x, y0: p.y, w0: p.width, h0: p.height, f0: p.opacity ?? 1 });
 		}
 	}
 
 	onOwnChanged: root.sync()
 	Component.onCompleted: root.sync()
 
+	function pathOf(id) {
+		const pin = Screenshot.pins.find(p => p.id === id);
+		if (!pin) return "";
+		return pin.live ? (Screenshot.liveFrames[id] ?? "") : pin.path;
+	}
+
 	function activePath() {
-		const pin = Screenshot.pins.find(p => p.id === root.activePin);
-		return pin ? pin.path : "";
+		return root.pathOf(root.activePin);
+	}
+
+	// the screen under a point in global logical coordinates
+	function screenAt(gx, gy) {
+		for (const screen of Quickshell.screens)
+			if (gx >= screen.x && gx < screen.x + screen.width && gy >= screen.y && gy < screen.y + screen.height)
+				return screen;
+		return null;
 	}
 
 	Item {
@@ -103,19 +117,22 @@ PanelWindow {
 
 				required property int pinId
 				required property string path
+				required property bool live
 				required property real x0
 				required property real y0
 				required property real w0
 				required property real h0
+				required property real f0
 
 				readonly property alias region: area
 				readonly property bool active: root.activePin === pin.pinId
-				readonly property bool hovered: mouse.containsMouse || tools.hovered
-				// size on screen at 100 %
+				readonly property bool hovered: mouse.containsMouse || tools.hovered || handles.hovered
+				readonly property string current: pin.live ? (Screenshot.liveFrames[pin.pinId] ?? "") : pin.path
+				// size on screen at 100 %; a live frame may be cut to the window, so it keeps its own aspect
 				readonly property real baseW: pin.w0 > 0 ? pin.w0 : Math.min(image.implicitWidth, root.width * 0.7, image.implicitWidth * root.height * 0.7 / Math.max(1, image.implicitHeight))
-				readonly property real baseH: pin.h0 > 0 ? pin.h0 : pin.baseW * image.implicitHeight / Math.max(1, image.implicitWidth)
+				readonly property real baseH: pin.h0 > 0 && !pin.live ? pin.h0 : pin.baseW * image.implicitHeight / Math.max(1, image.implicitWidth)
 				property real zoom: 1
-				property real fade: 1
+				property real fade: pin.f0
 				property bool placed: false
 				property real appear: 0
 
@@ -191,7 +208,7 @@ PanelWindow {
 							id: image
 
 							anchors.fill: parent
-							source: Screenshot.fileUrl(pin.path)
+							source: Screenshot.fileUrl(pin.current)
 							fillMode: Image.Stretch
 							asynchronous: false
 							cache: false
@@ -230,6 +247,15 @@ PanelWindow {
 						mouse.grabX = event.x;
 						mouse.grabY = event.y;
 					}
+					// dropped with its middle on another screen: it moves there
+					onReleased: event => {
+						if (event.button !== Qt.LeftButton) return;
+						const gx = root.modelData.x + pin.x + pin.width / 2;
+						const gy = root.modelData.y + pin.y + pin.height / 2;
+						const target = root.screenAt(gx, gy);
+						if (!target || target === root.modelData) return;
+						Screenshot.movePin(pin.pinId, target.name, root.modelData.x + pin.x - target.x, root.modelData.y + pin.y - target.y, pin.width, pin.height, pin.fade);
+					}
 					// the layer does not move, so screen coordinates stay stable
 					onPositionChanged: event => {
 						if (!pressed || !(event.buttons & Qt.LeftButton)) return;
@@ -249,6 +275,104 @@ PanelWindow {
 							zoomBadge.flash();
 						} else {
 							pin.zoomAt(up ? 1.1 : 1 / 1.1, wheel.x, wheel.y);
+						}
+					}
+				}
+
+				// streaming
+				Rectangle {
+					anchors.left: parent.left
+					anchors.top: parent.top
+					anchors.margins: 8
+					width: 8
+					height: 8
+					radius: 4
+					color: Theme.danger
+					visible: pin.live && pin.placed && Screenshot.isLive(pin.pinId)
+
+					SequentialAnimation on opacity {
+						running: parent.visible
+						loops: Animation.Infinite
+
+						Anim {
+							to: 0.35
+							duration: 900
+						}
+						Anim {
+							to: 1
+							duration: 900
+						}
+					}
+				}
+
+				// edges and corners resize, the opposite side stays put
+				Item {
+					id: handles
+
+					readonly property bool hovered: {
+						for (let i = 0; i < handleRepeater.count; i += 1) {
+							const item = handleRepeater.itemAt(i);
+							if (item && (item.containsMouse || item.pressed)) return true;
+						}
+						return false;
+					}
+
+					anchors.fill: parent
+					z: 2
+					visible: pin.placed
+
+					Repeater {
+						id: handleRepeater
+
+						// [hx, hy]: which edges a handle moves (-1 left/top, 1 right/bottom)
+						model: [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]]
+
+						delegate: MouseArea {
+							id: handle
+
+							required property var modelData
+							readonly property int hx: handle.modelData[0]
+							readonly property int hy: handle.modelData[1]
+							readonly property real edge: 10
+							readonly property real corner: 18
+							property point start
+							property real startX: 0
+							property real startY: 0
+							property real startW: 1
+							property real startH: 1
+							property real startZoom: 1
+
+							x: handle.hx < 0 ? 0 : (handle.hx > 0 ? pin.width - width : handle.corner)
+							y: handle.hy < 0 ? 0 : (handle.hy > 0 ? pin.height - height : handle.corner)
+							width: handle.hx === 0 ? Math.max(0, pin.width - 2 * handle.corner) : (handle.hy === 0 ? handle.edge : handle.corner)
+							height: handle.hy === 0 ? Math.max(0, pin.height - 2 * handle.corner) : (handle.hx === 0 ? handle.edge : handle.corner)
+							hoverEnabled: true
+							cursorShape: handle.hx === 0 ? Qt.SizeVerCursor : (handle.hy === 0 ? Qt.SizeHorCursor : (handle.hx === handle.hy ? Qt.SizeFDiagCursor : Qt.SizeBDiagCursor))
+
+							onPressed: event => {
+								root.activePin = pin.pinId;
+								handle.start = handle.mapToItem(null, event.x, event.y);
+								handle.startX = pin.x;
+								handle.startY = pin.y;
+								handle.startW = pin.width;
+								handle.startH = pin.height;
+								handle.startZoom = pin.zoom;
+							}
+							onPositionChanged: event => {
+								if (!pressed) return;
+								const p = handle.mapToItem(null, event.x, event.y);
+								const fw = (handle.startW + handle.hx * (p.x - handle.start.x)) / handle.startW;
+								const fh = (handle.startH + handle.hy * (p.y - handle.start.y)) / handle.startH;
+								let f = handle.hx !== 0 && handle.hy !== 0 ? Math.max(fw, fh) : (handle.hx !== 0 ? fw : fh);
+								const zoom = Math.max(0.1, Math.min(6, handle.startZoom * f), 48 / Math.max(1, Math.min(pin.baseW, pin.baseH)));
+								f = zoom / handle.startZoom;
+								const w = handle.startW * f;
+								const h = handle.startH * f;
+								pin.zoom = zoom;
+								pin.x = Math.round(handle.hx < 0 ? handle.startX + handle.startW - w : (handle.hx === 0 ? handle.startX + (handle.startW - w) / 2 : handle.startX));
+								pin.y = Math.round(handle.hy < 0 ? handle.startY + handle.startH - h : (handle.hy === 0 ? handle.startY + (handle.startH - h) / 2 : handle.startY));
+								zoomBadge.flash();
+							}
 						}
 					}
 				}
@@ -300,6 +424,7 @@ PanelWindow {
 
 					readonly property bool hovered: toolsHover.hovered
 
+					z: 3
 					anchors.top: parent.top
 					anchors.right: parent.right
 					anchors.margins: 6
@@ -330,8 +455,8 @@ PanelWindow {
 
 						Repeater {
 							model: [
-								{ icon: "content_copy", run: () => Screenshot.copyFile(pin.path) },
-								{ icon: "content_save", run: () => Screenshot.saveCopyOf(pin.path) },
+								{ icon: "content_copy", run: () => Screenshot.copyFile(pin.current) },
+								{ icon: "content_save", run: () => Screenshot.saveCopyOf(pin.current) },
 								{ icon: "pencil", run: () => Screenshot.editPin(pin.pinId) },
 								{ icon: "close", run: () => Screenshot.unpin(pin.pinId) }
 							]

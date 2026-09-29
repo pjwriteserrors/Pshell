@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# External monitor brightness over DDC/CI for the quick settings.
+# External monitor brightness and input source over DDC/CI for the quick
+# settings.
 #
-#   ddc_brightness.sh detect  -> bus <TAB> connector <TAB> model   (one per monitor)
-#   ddc_brightness.sh get N…  -> bus <TAB> current <TAB> max       (VCP 0x10)
+#   ddc_brightness.sh detect     -> bus <TAB> connector <TAB> model   (one per monitor)
+#   ddc_brightness.sh get N…     -> bus <TAB> current <TAB> max       (VCP 0x10)
+#   ddc_brightness.sh inputs N…  -> bus <TAB> current <TAB> code: name,code: name…  (VCP 0x60)
 set -uo pipefail
 
 case "${1:-}" in
@@ -23,6 +25,18 @@ get)
 		# "VCP 10 C 50 100"
 		read -r _ _ _ current max < <(ddcutil --bus "$bus" getvcp 10 --brief 2>/dev/null) || continue
 		[[ -n "${max:-}" ]] && printf '%s\t%s\t%s\n' "$bus" "$current" "$max"
+	done
+	;;
+inputs)
+	shift
+	for bus in "$@"; do
+		# "VCP 60 SNC x11"
+		read -r _ _ _ current < <(ddcutil --bus "$bus" getvcp 60 --brief 2>/dev/null) || continue
+		options=$(ddcutil --bus "$bus" capabilities 2>/dev/null | awk '
+			/Feature: 60/ { inside = 1; next }
+			inside && /Feature:/ { inside = 0 }
+			inside && /^ +[0-9a-fA-F][0-9a-fA-F]:/ { sub(/^ +/, ""); printf "%s%s", sep, $0; sep = "," }')
+		printf '%s\t%s\t%s\n' "$bus" "${current#x}" "$options"
 	done
 	;;
 esac

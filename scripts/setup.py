@@ -63,6 +63,7 @@ PROGRAMS = {
 OPTIONAL_PROGRAMS = [
     ("ollama", "launcher chat and >ollama"), ("pdftotext", "chat attachments"), ("pandoc", "chat attachments"),
     ("upower", "mouse battery"), ("qsb", "shader animation previews"),
+    ("gst-inspect-1.0", "live pins (with gst-plugin-pipewire)"),
 ]
 HOOK_PROGRAMS = {
     "kitty": [("kitty", "")], "pywalfox": [("pywalfox", "")], "telegram": [("wal-telegram", "")],
@@ -70,9 +71,10 @@ HOOK_PROGRAMS = {
     "spicetify": [("spicetify", "")],
 }
 PYTHON_MODULES = {
-    "core": [("numpy", "scrolling screenshots"), ("dbus", "bluetooth pairing"), ("gi", "bluetooth pairing")],
+    "core": [("numpy", "scrolling screenshots, live pins"), ("dbus", "bluetooth pairing, live pins"), ("gi", "bluetooth pairing, live pins")],
     "hook:openrgb": [("PIL", "lighting")],
 }
+OPTIONAL_MODULES = [("cv2", "smart select finds cards, fields and panels (python-opencv)")]
 FONTS = [("Symbols Nerd Font", "icons"), ("Adwaita Sans", "text")]
 
 
@@ -173,6 +175,9 @@ def doctor():
     missing = [(module, why) for group in groups for module, why in PYTHON_MODULES.get(group, []) if not module_available(module)]
     for module, why in missing:
         report.fail(f"{module} – {why}")
+    for module, why in OPTIONAL_MODULES:
+        if not module_available(module):
+            report.warn(f"{module} – {why}")
     if not missing:
         report.ok("all present")
 

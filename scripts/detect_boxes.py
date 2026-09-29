@@ -14,12 +14,24 @@ the margin between two cards) or one long edge across the whole region (a
 border or a change of background, like a sidebar). Every region on the way is
 a box. Photos and videos have no empty rows and no straight edges, so they
 stay whole. `scale` is the output scale; gaps and sizes are in logical px.
+
+XY-cut needs layouts that split cleanly; a popup over a page, a sidebar next
+to cards of different heights or a card in the middle of a form do not. So
+rectangles are also looked for directly (with OpenCV, when it is installed):
+closed outlines in the edge map whose four sides are really carried by an
+edge (rounded corners allowed) are cards, fields, buttons and panels, and
+each of them is split with XY-cut again for what lies inside.
 """
 import json
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import numpy as np
+
+try:
+    import cv2
+except ImportError:
+    cv2 = None
 
 CONTENT = 14  # channel step that counts as content (text, icons, borders)
 EDGE = 8  # channel step along a border or a change of background
@@ -38,6 +50,9 @@ MIN_H = 18
 SAME = 4  # boxes whose sides are all this close count as one (logical px)
 MAX_DEPTH = 12
 PEEL = 3  # border lines on the sides of a box that are stripped before splitting it (logical px)
+RECT_EDGE = 9  # channel step that draws an outline (a light border on white is ~20)
+RECT_SIDE = 0.72  # share of each side of a rectangle an edge has to follow
+RECT_CORNER = 14  # rounded corners: this much of each end of a side is not asked for (logical px)
 
 
 def read_ppm(path):
@@ -71,6 +86,11 @@ class Frame:
         content[1:] |= dy > CONTENT
         content[:, :-1] |= dx > CONTENT
         content[:, 1:] |= dx > CONTENT
+        edges = np.zeros((h, w), dtype=bool)
+        edges[:-1] |= dy > RECT_EDGE
+        edges[:, :-1] |= dx > RECT_EDGE
+        self.edges = edges
+        self.scale = scale
         hline = np.zeros((h, w), dtype=bool)
         hline[:-1] = dy > EDGE
         vline = np.zeros((h, w), dtype=bool)
@@ -211,9 +231,144 @@ class Frame:
         self.boxes.append((x0, y0, x1, y1))
 
 
+def carried(edges, x0, y0, x1, y1, corner):
+    """Share of the least covered side of the rectangle that runs along an
+    edge (within a pixel), leaving out the rounded ends of each side."""
+    h, w = edges.shape
+    def band(ys, xs):
+        return edges[max(0, ys[0]):min(h, ys[1]), max(0, xs[0]):min(w, xs[1])]
+    cx = min(corner, (x1 - x0) // 4)
+    cy = min(corner, (y1 - y0) // 4)
+    sides = (
+        band((y0 - 1, y0 + 2), (x0 + cx, x1 - cx)).any(axis=0),
+        band((y1 - 2, y1 + 1), (x0 + cx, x1 - cx)).any(axis=0),
+        band((y0 + cy, y1 - cy), (x0 - 1, x0 + 2)).any(axis=1),
+        band((y0 + cy, y1 - cy), (x1 - 2, x1 + 1)).any(axis=1),
+    )
+    return min((side.mean() if side.size else 0.0) for side in sides)
+
+
+def chains(surfaces, slack):
+    """Unions of surfaces stacked on each other with the same left and right
+    sides (or side by side with the same top and bottom)."""
+    out = []
+    for axis in (0, 1):
+        # (start, end) across the axis groups them, the rest orders them
+        key = (lambda r: (r[0], r[0] + r[2])) if axis == 0 else (lambda r: (r[1], r[1] + r[3]))
+        pos = (lambda r: (r[1], r[1] + r[3])) if axis == 0 else (lambda r: (r[0], r[0] + r[2]))
+        rest = sorted(surfaces, key=lambda r: pos(r)[0])
+        used = [False] * len(rest)
+        for i, first in enumerate(rest):
+            if used[i]:
+                continue
+            a0, a1 = key(first)
+            b0, b1 = pos(first)
+            members = 1
+            for j in range(i + 1, len(rest)):
+                c0, c1 = key(rest[j])
+                d0, d1 = pos(rest[j])
+                if d0 - b1 > slack * 3:
+                    if d0 > b1 + slack * 40:
+                        break
+                    continue
+                # the next one starts further down, inside or right after the chain
+                if abs(c0 - a0) <= slack and abs(c1 - a1) <= slack and d0 > b0:
+                    b1 = max(b1, d1)
+                    used[j] = True
+                    members += 1
+            if members > 1:
+                out.append((a0, b0, a1 - a0, b1 - b0) if axis == 0 else (b0, a0, b1 - b0, a1 - a0))
+    return out
+
+
+def snap_out(edges, x, y, w, h, reach, corner):
+    """The surface grown on every side to the nearest line that runs along
+    that whole side (a header or footer flush with the panel's outline sits
+    between the surface and the outline)."""
+    H, W = edges.shape
+    cx = min(corner, w // 4)
+    cy = min(corner, h // 4)
+    x0, y0, x1, y1 = x, y, x + w, y + h
+
+    def nearest(cover, order):
+        for i in order:
+            if cover[i] >= RECT_SIDE:
+                return i
+        return None
+
+    top = edges[max(0, y0 - reach):y0 + 1, x0 + cx:x1 - cx].mean(axis=1) if x1 - x0 > 2 * cx else None
+    if top is not None and top.size:
+        i = nearest(top, range(top.size - 1, -1, -1))
+        if i is not None:
+            y0 = max(0, y0 - reach) + i
+    bottom = edges[y1 - 1:min(H, y1 + reach), x0 + cx:x1 - cx].mean(axis=1) if x1 - x0 > 2 * cx else None
+    if bottom is not None and bottom.size:
+        i = nearest(bottom, range(bottom.size))
+        if i is not None:
+            y1 = y1 - 1 + i + 1
+    left = edges[y0 + cy:y1 - cy, max(0, x0 - reach):x0 + 1].mean(axis=0) if y1 - y0 > 2 * cy else None
+    if left is not None and left.size:
+        i = nearest(left, range(left.size - 1, -1, -1))
+        if i is not None:
+            x0 = max(0, x0 - reach) + i
+    right = edges[y0 + cy:y1 - cy, x1 - 1:min(W, x1 + reach)].mean(axis=0) if y1 - y0 > 2 * cy else None
+    if right is not None and right.size:
+        i = nearest(right, range(right.size))
+        if i is not None:
+            x1 = x1 - 1 + i + 1
+    return x0, y0, x1 - x0, y1 - y0
+
+
+def rectangles(frame):
+    """Outlined or filled rectangles: closed contours of the edge map that
+    are carried by an edge on all four sides."""
+    if cv2 is None:
+        return []
+    mask = frame.edges.astype(np.uint8) * 255
+    corner = round(RECT_CORNER * frame.scale)
+    full = frame.width * frame.height
+    candidates = set()
+    # outlines; they merge with whatever edge touches them (a popup over a tab bar)
+    contours, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    for contour in contours:
+        candidates.add(cv2.boundingRect(contour))
+    # so also the surfaces inside outlines: a panel's background is one piece
+    # without edges, whatever touches its outline from outside
+    # (thickened, so the soft steps of a rounded corner do not leak)
+    closed = cv2.dilate(mask, np.ones((3, 3), np.uint8))
+    count, _, stats, _ = cv2.connectedComponentsWithStats(255 - closed, connectivity=4)
+    surfaces = [tuple(int(v) for v in stats[i, :4]) for i in range(1, count)
+                if stats[i, 2] >= frame.min_w // 2 and stats[i, 3] >= 3]
+    # a row that runs from edge to edge (a highlight, a divider) cuts a
+    # surface in pieces: pieces with the same sides that follow each other
+    # are one surface again
+    surfaces += chains(surfaces, frame.same + 2)
+    reach = round(64 * frame.scale)
+    for x, y, w, h in surfaces:
+        for grow in (1, 2):
+            candidates.add((x - grow, y - grow, w + 2 * grow, h + 2 * grow))
+        if w >= 2 * frame.min_w and h >= 2 * frame.min_h:
+            candidates.add(snap_out(frame.edges, x, y, w, h, reach, corner))
+    found = []
+    for x, y, w, h in candidates:
+        if w < frame.min_w or h < frame.min_h or w * h >= 0.9 * full:
+            continue
+        if carried(frame.edges, x, y, x + w, y + h, corner) >= RECT_SIDE:
+            found.append((max(0, x), max(0, y), min(frame.width, x + w), min(frame.height, y + h)))
+    # largest first, so what lies inside is split after its container
+    found.sort(key=lambda r: -(r[2] - r[0]) * (r[3] - r[1]))
+    return found
+
+
 def detect(img, scale=1.0):
     frame = Frame(img, scale)
     frame.split(0, 0, frame.width, frame.height, 0)
+    for x0, y0, x1, y1 in rectangles(frame):
+        known = len(frame.boxes)
+        frame.add(x0, y0, x1, y1)
+        # a new container: what is inside it gets its own boxes
+        if len(frame.boxes) > known:
+            frame.split(x0, y0, x1, y1, 1)
     full = frame.width * frame.height
     out = []
     for x0, y0, x1, y1 in frame.boxes:

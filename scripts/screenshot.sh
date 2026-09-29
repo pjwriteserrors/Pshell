@@ -12,7 +12,7 @@
 #   ocr-tsv <file> x y w h scale  word boxes (tesseract TSV) of the scaled crop
 #   swatch <hex> <file>          small colour strip for the toast
 #   crop <in> <x> <y> <w> <h> <out>  cut a region out of a frozen frame (pins)
-#   unpin-all                    drop the images of pinned screenshots
+#   unpin-all                    drop the images of pinned screenshots (and live pins)
 #   clean [keep-tag]             drop frozen frames of other sessions
 #   qr <file> [x y w h]          crop (optional) and print the decoded QR/barcodes
 #   palette <file> x y w h <out> print the dominant colours (hex, most common
@@ -116,7 +116,7 @@ crop)
 	magick "$2" -crop "${5}x${6}+${3}+${4}" +repage "$7"
 	;;
 unpin-all)
-	rm -f "$dir"/pin-*
+	rm -rf "$dir"/pin-*
 	;;
 ocr-tsv)
 	# ocr-tsv <file> <x> <y> <w> <h> <scale>: word boxes as tesseract TSV,

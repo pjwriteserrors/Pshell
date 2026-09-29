@@ -42,9 +42,17 @@ system/          root-level setup: SDDM theme, fingerprint PAM
 | `wallpapers` | the wallpaper library (outside the repo) |
 | `themeHooks` | theme hooks in the order they run |
 | `hookConfig.<hook>` | settings of a hook |
+| `shelf.watch` | folders whose new files land on a shelf (default: Downloads, Pictures/Screenshots, Videos/Recordings) |
 
 QML asks `Host.has("feature")`, scripts `scripts/host.py has feature`. A
 disabled feature neither shows up nor polls; its IPC target is disabled.
+
+Shaking the pointer to open a shelf reads the mouse and touchpad event
+devices; the session gets read access to them with
+`scripts/setup-rpg-input-access.sh` (once per machine). Codex reports its
+turns through `~/.codex/hooks.json` (seeded by install.sh, trusted once in
+Codex with `/hooks`); Claude Code needs nothing, its window title says when
+it works.
 
 Optional features: `backlight`, `ddc`, `power-profiles`, `battery`,
 `mouse-battery`, `fingerprint`, `kdeconnect`, `haptics`, `ssh`,

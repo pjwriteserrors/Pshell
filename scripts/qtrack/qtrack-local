@@ -1363,7 +1363,7 @@ class TrackerStore:
             "session": self.session_snapshot(self.current_session_row(), current_timestamp).to_dict(),
         }
 
-    def pause(self, current_timestamp: int) -> dict[str, Any]:
+    def pause(self, current_timestamp: int, at_timestamp: int | None = None) -> dict[str, Any]:
         row = self.current_session_row()
         if row is None or row["state"] != "active":
             raise TrackerError("No active timer to pause.")
@@ -1371,6 +1371,11 @@ class TrackerStore:
         open_segment = self.open_segment_row(int(row["id"]))
         if open_segment is None:
             raise TrackerError("Tracker state is inconsistent: active session has no open segment.")
+
+        # pausing in the past (time away): the segment ends there, never
+        # before it started
+        if at_timestamp is not None:
+            current_timestamp = max(int(open_segment["started_ts"]), min(int(at_timestamp), current_timestamp))
 
         with self.connection:
             self.connection.execute(
@@ -3337,7 +3342,8 @@ def parse_args() -> argparse.Namespace:
     start_parser.add_argument("--teamwork-project-name", default="")
     start_parser.add_argument("--teamwork-task-url", default="")
 
-    subparsers.add_parser("pause", help="Pause the active timer.")
+    pause_parser = subparsers.add_parser("pause", help="Pause the active timer.")
+    pause_parser.add_argument("--at", type=int, help="Unix timestamp in the past the timer was paused at.")
     subparsers.add_parser("resume", help="Resume the paused timer.")
     subparsers.add_parser("stop", help="Stop the current timer.")
 
@@ -3505,7 +3511,7 @@ def main() -> int:
             return 0
 
         if args.command == "pause":
-            payload = store.pause(current_timestamp)
+            payload = store.pause(current_timestamp, args.at)
             try_export_obsidian_day("today")
             print(payload["message"])
             return 0

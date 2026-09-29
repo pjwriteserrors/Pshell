@@ -18,6 +18,8 @@ Singleton {
 	property string tasksKey: ""
 	// the focused window covers its whole output (fullscreen video, games …)
 	property bool focusedFullscreen: false
+	// screencasts: [{ session_id, target: { Output | Window }, is_active, pw_node_id, … }]
+	property var casts: []
 
 	function parseJson(raw, fallback) {
 		try {
@@ -194,12 +196,37 @@ Singleton {
 	}
 
 	Process {
+		id: castsProc
+
+		command: ["niri", "msg", "-j", "casts"]
+		stdout: StdioCollector {
+			onStreamFinished: {
+				try {
+					const parsed = JSON.parse(text);
+					if (Array.isArray(parsed)) root.casts = parsed;
+				} catch (error) {}
+			}
+		}
+	}
+
+	Process {
 		id: events
 
 		running: true
 		command: ["niri", "msg", "-j", "event-stream"]
 		stdout: SplitParser {
 			onRead: data => {
+				if (data.startsWith('{"CastsChanged"')) {
+					try {
+						root.casts = JSON.parse(data).CastsChanged.casts ?? [];
+					} catch (error) {}
+					return;
+				}
+				// single cast events: ask for the whole list
+				if (data.startsWith('{"Cast')) {
+					if (!castsProc.running) castsProc.running = true;
+					return;
+				}
 				if (data.indexOf("Workspace") >= 0 || data.indexOf("Window") >= 0)
 					debounce.restart();
 			}

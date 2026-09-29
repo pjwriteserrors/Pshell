@@ -14,7 +14,9 @@ import qs.style.theme
 // screen they were taken on. Copied images only ever touch tmpfs and are
 // deleted as soon as their toast is gone; saved ones go to ~/Pictures/Screenshots.
 // Pins float a capture above all windows until they are closed (the image
-// stays in tmpfs as long as the pin lives, nothing survives a restart).
+// stays in tmpfs as long as the pin lives, nothing survives a restart). Live
+// pins keep streaming the selected region of the window under it, also when
+// that window is on another workspace (scripts/live_pin.py).
 //
 // While selecting, scripts/detect_boxes.py finds the boxes on the frozen
 // frames (cards, buttons, images, panels, see `boxes`); the overlay offers
@@ -53,7 +55,7 @@ Singleton {
 	// ── session state ──────────────────────────────────────────────────────
 	// idle | countdown | freezing | select | scroll | edit
 	property string phase: "idle"
-	// region | screen | window | pin | picker | ocr | qr | scroll
+	// region | screen | window | pin | live | picker | ocr | qr | scroll
 	property string mode: "region"
 	// unique per capture, names the temp files (so no stale image cache hits)
 	property string session: ""
@@ -73,7 +75,7 @@ Singleton {
 	// whether the source is the frozen frame of editScreen (morphs out of it)
 	property bool editFromFrozen: false
 
-	readonly property var modes: ["region", "screen", "window", "pin", "picker", "ocr", "qr", "scroll"]
+	readonly property var modes: ["region", "screen", "window", "pin", "live", "picker", "ocr", "qr", "scroll"]
 
 	// delayed capture: the delay the current frame was taken with (0 = none)
 	property int delaySeconds: 0
@@ -96,9 +98,17 @@ Singleton {
 	readonly property int shotsSize: 20
 	readonly property string historyDir: `${root.tmpDir}/history`
 
-	// pinned captures: [{ id, path, output, x, y, width, height }], logical px
+	// pinned captures: [{ id, path, output, x, y, width, height, opacity, live, dir }], logical px
 	property var pins: []
 	property int pinCounter: 0
+	// live pins: pin id → latest frame, pin id → helper process
+	property var liveFrames: ({})
+	property var liveProcs: ({})
+	// PipeWire nodes of the screencasts behind live pins
+	property var liveNodes: []
+
+	// a capture went to the clipboard (the file is deleted with its toast)
+	signal shotCopied(string path)
 
 	// temp files shown in toasts: toastId → path, deleted when the toast leaves
 	property var toastFiles: ({})
@@ -136,6 +146,9 @@ Singleton {
 	}
 	function pinMode() {
 		root.start("pin");
+	}
+	function liveMode() {
+		root.start("live");
 	}
 	function qr() {
 		root.start("qr");
@@ -426,6 +439,10 @@ Singleton {
 			root.pinRegion(output, source, rect, logical);
 			return;
 		}
+		if (root.mode === "live") {
+			root.livePinRegion(output, source, rect, logical);
+			return;
+		}
 		if (root.mode === "ocr") {
 			root.phase = "idle";
 			root.runOcr(source, rect, false);
@@ -679,21 +696,126 @@ Singleton {
 		const pin = root.pins.find(p => p.id === id);
 		if (!pin) return;
 		root.pins = root.pins.filter(p => p.id !== id);
-		Quickshell.execDetached(["rm", "-f", pin.path]);
+		if (pin.live) {
+			root.stopLive(id);
+			Quickshell.execDetached(["rm", "-rf", pin.dir]);
+		} else {
+			Quickshell.execDetached(["rm", "-f", pin.path]);
+		}
 	}
 
 	function unpinAll() {
+		for (const pin of root.pins)
+			if (pin.live) root.stopLive(pin.id);
 		root.pins = [];
+		root.liveFrames = {};
 		Quickshell.execDetached(["bash", root.script, "unpin-all"]);
+	}
+
+	// dropped on another screen, or resized: the pin keeps its look there
+	function movePin(id, output, x, y, width, height, opacity) {
+		root.pins = root.pins.map(p => p.id !== id ? p : Object.assign({}, p, { output: String(output), x: x, y: y, width: width, height: height, opacity: opacity }));
 	}
 
 	// a pin back into the editor (the pin goes away, the editor takes over)
 	function editPin(id) {
 		const pin = root.pins.find(p => p.id === id);
 		if (!pin || root.phase !== "idle") return;
+		const path = pin.live ? (root.liveFrames[id] ?? "") : pin.path;
+		if (path === "") return;
 		root.pins = root.pins.filter(p => p.id !== id);
+		if (pin.live) {
+			root.stopLive(id);
+			Quickshell.execDetached(["rm", "-f", `${pin.dir}/frozen.ppm`]);
+		}
 		root.session = String(Date.now());
-		root.openEditor(pin.output, pin.path, null, false);
+		root.openEditor(pin.output, path, null, false);
+	}
+
+	// ── live pins ──────────────────────────────────────────────────────────
+	// The region is looked up in a screencast of every window on the active
+	// workspace of that output; the helper keeps the one that shows it.
+	function livePinRegion(output, source, rect, logical) {
+		const ws = Niri.workspaces.find(w => String(w.output) === String(output) && w.is_active);
+		const windows = ws ? Niri.windows.filter(w => Number(w.workspace_id) === Number(ws.id)).map(w => String(w.id)) : [];
+		root.phase = "idle";
+		if (windows.length === 0) {
+			root.cleanup();
+			root.fail("No window under the selection", "");
+			return;
+		}
+		root.pinCounter += 1;
+		const id = root.pinCounter;
+		const dir = `${root.tmpDir}/pin-live-${root.session}-${id}`;
+		const r = logical ?? Qt.rect(0, 0, 0, 0);
+		root.pins = root.pins.concat([{ id: id, path: "", output: String(output), x: r.x, y: r.y, width: r.width, height: r.height, live: true, dir: dir }]);
+		const helper = liveHelper.createObject(root, { pinId: id });
+		// a hard link keeps the frozen frame for the helper when the capture is cleaned up
+		helper.command = ["bash", "-c", 'dir=$1 src=$2 script=$3; shift 3; mkdir -p "$dir" && ln -f "$src" "$dir/frozen.ppm" && exec python3 "$script" "$dir/frozen.ppm" "$1" "$2" "$3" "$4" "$dir" "${@:5}"',
+			"sh", dir, source, `${Quickshell.shellDir}/scripts/live_pin.py`].concat([rect.x, rect.y, Math.max(1, rect.width), Math.max(1, rect.height)].map(v => String(Math.round(v)))).concat(windows);
+		helper.running = true;
+		const procs = Object.assign({}, root.liveProcs);
+		procs[id] = helper;
+		root.liveProcs = procs;
+		root.cleanup();
+		Haptics.play("pinned");
+	}
+
+	function isLive(id) {
+		return !!root.liveProcs[id];
+	}
+
+	function stopLive(id) {
+		const helper = root.liveProcs[id];
+		if (helper) helper.running = false;
+	}
+
+	function liveLine(helper, line) {
+		const space = line.indexOf(" ");
+		const kind = space < 0 ? line : line.slice(0, space);
+		const value = space < 0 ? "" : line.slice(space + 1);
+		if (kind === "frame") {
+			const frames = Object.assign({}, root.liveFrames);
+			frames[helper.pinId] = value;
+			root.liveFrames = frames;
+		} else if (kind === "node") {
+			helper.nodes = helper.nodes.concat([Number(value)]);
+			root.liveNodes = root.liveNodes.concat([Number(value)]);
+		} else if (kind === "drop") {
+			helper.nodes = helper.nodes.filter(node => node !== Number(value));
+			root.liveNodes = root.liveNodes.filter(node => node !== Number(value));
+		} else if (kind === "lost" && !root.liveFrames[helper.pinId]) {
+			root.unpin(helper.pinId);
+			Haptics.play("taskFailed");
+			Notifs.pushInternal("error", "No window under the selection", "", { icon: "alert_circle" });
+		}
+	}
+
+	// the helper is gone (window closed, pin removed): the pin keeps its last frame
+	function liveEnded(helper) {
+		root.liveNodes = root.liveNodes.filter(node => !helper.nodes.includes(node));
+		const procs = Object.assign({}, root.liveProcs);
+		delete procs[helper.pinId];
+		root.liveProcs = procs;
+		helper.destroy();
+	}
+
+	Component {
+		id: liveHelper
+
+		Process {
+			id: helper
+
+			property int pinId: -1
+			property var nodes: []
+
+			// the helper stops its cast when stdin closes, so it stays open
+			stdinEnabled: true
+			stdout: SplitParser {
+				onRead: line => root.liveLine(helper, line)
+			}
+			onExited: root.liveEnded(helper)
+		}
 	}
 
 	function copyFile(path) {
@@ -727,6 +849,7 @@ Singleton {
 		root.remember(path);
 		Quickshell.execDetached(["bash", root.script, "copy", path]);
 		Haptics.play("copied");
+		root.shotCopied(path);
 		const id = Notifs.pushInternal("done", "Screenshot copied", "", {
 			icon: "content_copy",
 			image: root.fileUrl(path),
@@ -857,6 +980,7 @@ Singleton {
 	function copyShot(path) {
 		Quickshell.execDetached(["bash", root.script, "copy", path]);
 		Haptics.play("copied");
+		root.shotCopied(path);
 		Notifs.pushInternal("done", "Screenshot copied", "", { icon: "content_copy", image: root.fileUrl(path) });
 	}
 

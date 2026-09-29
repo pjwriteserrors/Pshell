@@ -182,6 +182,8 @@ PanelWindow {
 				Screenshot.mode = "window";
 			} else if (key === Qt.Key_P) {
 				Screenshot.mode = "pin";
+			} else if (key === Qt.Key_V) {
+				Screenshot.mode = "live";
 			} else if (key === Qt.Key_C) {
 				Screenshot.mode = "picker";
 			} else if (key === Qt.Key_T || key === Qt.Key_O) {
@@ -213,7 +215,7 @@ PanelWindow {
 		Item {
 			id: selector
 
-			readonly property bool regionMode: root.mode === "region" || root.mode === "ocr" || root.mode === "pin" || root.mode === "qr" || root.mode === "scroll"
+			readonly property bool regionMode: root.mode === "region" || root.mode === "ocr" || root.mode === "pin" || root.mode === "live" || root.mode === "qr" || root.mode === "scroll"
 			// picker mode: a drag takes a palette instead of a single colour
 			readonly property bool paletteDrag: root.mode === "picker" && selector.hasSelection
 			property bool dragging: false
@@ -239,15 +241,12 @@ PanelWindow {
 			property int snapIndex: 0
 			// the box a press started on, taken when the press ends as a click
 			property var pressSnap: null
-			// the highlight jumps instead of gliding when it appears
-			property bool snapJump: true
 			readonly property bool snapping: selector.regionMode && selector.hovered && !selector.hasSelection && selector.snapStack.length > 0
 			readonly property rect snap: selector.snapping ? selector.snapStack[Math.min(selector.snapIndex, selector.snapStack.length - 1)] : Qt.rect(0, 0, 0, 0)
 			// the "hole" in the dim layer
 			readonly property rect hole: {
-				if ((selector.regionMode || selector.paletteDrag) && selector.hasSelection) return Qt.rect(selector.selX, selector.selY, selector.selW, selector.selH);
-				if (selector.snapping) return Qt.rect(snapFrame.x, snapFrame.y, snapFrame.width, snapFrame.height);
 				if (root.mode === "screen" && selector.hovered) return Qt.rect(0, 0, root.width, root.height);
+				if (selector.regionMode || selector.paletteDrag) return Qt.rect(shown.x, shown.y, shown.width, shown.height);
 				return Qt.rect(0, 0, 0, 0);
 			}
 			readonly property real dimAlpha: {
@@ -259,10 +258,6 @@ PanelWindow {
 
 			onCursorChanged: selector.updateSnap()
 			onBoxesChanged: selector.updateSnap()
-			onSnappingChanged: {
-				if (selector.snapping) return;
-				selector.snapJump = true;
-			}
 
 			anchors.fill: parent
 
@@ -296,7 +291,6 @@ PanelWindow {
 				const kept = current ? stack.findIndex(box => selector.sameRect(box, current)) : -1;
 				selector.snapStack = stack;
 				selector.snapIndex = Math.max(0, kept);
-				if (selector.snapJump && selector.snapping) Qt.callLater(() => selector.snapJump = false);
 			}
 
 			// +1 walks out to the box around the offered one, -1 back in
@@ -402,38 +396,70 @@ PanelWindow {
 				}
 			}
 
+			// what is on offer, drawn by the frames below: the dragged region,
+			// the box a click would take, or – with neither – a point at the
+			// cursor, so a frame grows out of it and shrinks back into it. It
+			// follows on a spring: tight while dragging, softer between boxes.
+			Item {
+				id: shown
+
+				readonly property bool region: (selector.regionMode || selector.paletteDrag) && selector.hasSelection
+				readonly property bool active: shown.region || selector.snapping
+				readonly property rect target: {
+					if (shown.region) return Qt.rect(selector.selX, selector.selY, selector.selW, selector.selH);
+					if (selector.snapping) return selector.snap;
+					return Qt.rect(selector.cursor.x, selector.cursor.y, 0, 0);
+				}
+				readonly property real stiffness: shown.region ? 16 : 5.5
+				readonly property real damping: shown.region ? 0.95 : 0.55
+
+				x: shown.target.x
+				y: shown.target.y
+				width: shown.target.width
+				height: shown.target.height
+
+				Behavior on x {
+					SpringAnimation {
+						spring: shown.stiffness
+						damping: shown.damping
+						epsilon: 0.25
+					}
+				}
+				Behavior on y {
+					SpringAnimation {
+						spring: shown.stiffness
+						damping: shown.damping
+						epsilon: 0.25
+					}
+				}
+				Behavior on width {
+					SpringAnimation {
+						spring: shown.stiffness
+						damping: shown.damping
+						epsilon: 0.25
+					}
+				}
+				Behavior on height {
+					SpringAnimation {
+						spring: shown.stiffness
+						damping: shown.damping
+						epsilon: 0.25
+					}
+				}
+			}
+
 			// smart select: the box a click would take
 			Item {
 				id: snapFrame
 
-				readonly property bool glide: !selector.snapJump
+				opacity: selector.snapping && shown.width > 1 ? 1 : 0
+				visible: opacity > 0.01
+				x: shown.x
+				y: shown.y
+				width: shown.width
+				height: shown.height
 
-				visible: selector.snapping
-				x: selector.snap.x
-				y: selector.snap.y
-				width: selector.snap.width
-				height: selector.snap.height
-
-				Behavior on x {
-					enabled: snapFrame.glide
-					Anim {
-						duration: Motion.short
-					}
-				}
-				Behavior on y {
-					enabled: snapFrame.glide
-					Anim {
-						duration: Motion.short
-					}
-				}
-				Behavior on width {
-					enabled: snapFrame.glide
-					Anim {
-						duration: Motion.short
-					}
-				}
-				Behavior on height {
-					enabled: snapFrame.glide
+				Behavior on opacity {
 					Anim {
 						duration: Motion.short
 					}
@@ -474,11 +500,18 @@ PanelWindow {
 			Item {
 				id: frame
 
-				visible: (selector.regionMode || selector.paletteDrag) && selector.hasSelection
-				x: selector.selX
-				y: selector.selY
-				width: selector.selW
-				height: selector.selH
+				opacity: shown.region ? 1 : 0
+				visible: opacity > 0.01
+				x: shown.x
+				y: shown.y
+				width: shown.width
+				height: shown.height
+
+				Behavior on opacity {
+					Anim {
+						duration: Motion.short
+					}
+				}
 
 				Rectangle {
 					anchors.fill: parent
@@ -859,7 +892,7 @@ PanelWindow {
 					Segmented {
 						id: modes
 
-						implicitWidth: 8 * 92
+						implicitWidth: 9 * 92
 						height: 36
 						current: root.mode
 						options: [
@@ -867,6 +900,7 @@ PanelWindow {
 							{ value: "screen", label: "Screen", icon: "monitor" },
 							{ value: "window", label: "Window", icon: "window_maximize" },
 							{ value: "pin", label: "Pin", icon: "pin" },
+							{ value: "live", label: "Live", icon: "cast" },
 							{ value: "picker", label: "Colour", icon: "eyedropper" },
 							{ value: "ocr", label: "Text", icon: "text_recognition" },
 							{ value: "qr", label: "QR", icon: "qrcode_scan" },

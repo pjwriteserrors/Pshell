@@ -4,17 +4,18 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Brightness of external monitors over DDC/CI (ddcutil). Monitors are
-// detected at start and whenever the screen setup changes; levels are read
-// when quick settings open. ddcutil is slow, so while a slider is dragged
-// only the latest value per monitor is written once the previous write is
-// done.
+// Brightness and input source of external monitors over DDC/CI (ddcutil).
+// Monitors are detected at start and whenever the screen setup changes;
+// levels are read when quick settings open. ddcutil is slow, so while a
+// slider is dragged only the latest value per monitor is written once the
+// previous write is done. Inputs are the DisplayPort and HDMI sources a
+// monitor lists in its capabilities.
 Singleton {
 	id: root
 
 	readonly property string script: `${Quickshell.shellDir}/scripts/ddc_brightness.sh`
 
-	// [{ bus, connector, model, value (0..1), known }]
+	// [{ bus, connector, model, value (0..1), known, input, inputs: [{ code, label }] }]
 	property var monitors: []
 	property var pending: ({})
 	property var writing: ({})
@@ -73,6 +74,19 @@ Singleton {
 		Osd.show("brightness", "Brightness", average, `${Math.round(average * 100)}%`, Brightness.icon(average));
 	}
 
+	// "0f" / "11": VCP 0x60 values
+	function setInput(bus, code) {
+		root.update(bus, { input: code });
+		Quickshell.execDetached(["ddcutil", "--bus", String(bus), "setvcp", "60", `0x${code}`, "--noverify"]);
+	}
+
+	function inputLabel(name) {
+		const match = String(name).match(/^(DisplayPort|HDMI)-?(\d*)/i);
+		if (!match) return "";
+		const kind = /^d/i.test(match[1]) ? "DP" : "HDMI";
+		return match[2] && match[2] !== "1" ? `${kind} ${match[2]}` : kind;
+	}
+
 	function label(monitor) {
 		return monitor.model || monitor.connector || `Bus ${monitor.bus}`;
 	}
@@ -104,13 +118,37 @@ Singleton {
 					const parts = line.split("\t");
 					if (parts.length < 3 || parts[0] === "") continue;
 					const old = root.monitors.find(m => m.bus === parts[0]);
-					found.push({ bus: parts[0], connector: parts[1], model: parts[2].trim(), value: old?.value ?? 0.5, known: old?.known ?? false });
+					found.push({ bus: parts[0], connector: parts[1], model: parts[2].trim(), value: old?.value ?? 0.5, known: old?.known ?? false, input: old?.input ?? "", inputs: old?.inputs ?? [] });
 				}
 				// left to right like the monitors are arranged
 				const order = connector => Quickshell.screens.find(s => String(s.name) === connector)?.x ?? 1e9;
 				found.sort((a, b) => order(a.connector) - order(b.connector));
 				root.monitors = found;
 				root.refresh();
+				if (found.length > 0 && !inputsProc.running) {
+					inputsProc.command = ["bash", root.script, "inputs"].concat(found.map(m => String(m.bus)));
+					inputsProc.running = true;
+				}
+			}
+		}
+	}
+
+	Process {
+		id: inputsProc
+
+		stdout: StdioCollector {
+			onStreamFinished: {
+				for (const line of String(text).split("\n")) {
+					const parts = line.split("\t");
+					if (parts.length < 3) continue;
+					const inputs = [];
+					for (const option of parts[2].split(",")) {
+						const colon = option.indexOf(":");
+						const label = root.inputLabel(option.slice(colon + 1).trim());
+						if (colon > 0 && label !== "") inputs.push({ code: option.slice(0, colon).trim().toLowerCase(), label: label });
+					}
+					root.update(parts[0], { input: parts[1].trim().toLowerCase(), inputs: inputs });
+				}
 			}
 		}
 	}

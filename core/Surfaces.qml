@@ -14,6 +14,9 @@ import qs.style.views
 // and may replace any view (style/views); which features exist is decided
 // here and in the host profile, never by the style.
 Scope {
+	// services that act on their own, without a surface to pull them in
+	readonly property var background: [Agents, TimerGuard, ClipboardHints]
+
 	Variants {
 		model: Quickshell.screens
 
@@ -37,6 +40,13 @@ Scope {
 		model: Quickshell.screens
 
 		ScreenshotPins {}
+	}
+
+	// shelves (Dropover-like stashes), above the windows
+	Variants {
+		model: Quickshell.screens
+
+		Shelves {}
 	}
 
 	// panels (one instance each, they follow the screen they are opened on)

@@ -2,12 +2,17 @@ pragma Singleton
 
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import Quickshell.Services.Mpris
 
 // MPRIS player selection: the playing player wins, otherwise the one the
-// user picked or the last one that played.
+// user picked or the last one that played. Playback pauses when the screen
+// locks or the headphones go away (both can be switched off, media.json).
 Singleton {
 	id: root
+
+	property bool pauseOnLock: true
+	property bool pauseOnHeadphones: true
 
 	property var rememberedPlayer: null
 	property var selectedPlayer: null
@@ -66,6 +71,46 @@ Singleton {
 		const m = Math.floor(total / 60);
 		const s = total % 60;
 		return `${m}:${s < 10 ? "0" : ""}${s}`;
+	}
+
+	function pauseAll() {
+		for (const player of Mpris.players.values)
+			if (player.isPlaying && player.canPause) player.pause();
+	}
+
+	function setRule(rule, on) {
+		if (rule === "lock") root.pauseOnLock = !!on;
+		else if (rule === "headphones") root.pauseOnHeadphones = !!on;
+		settings.setText(JSON.stringify({ pauseOnLock: root.pauseOnLock, pauseOnHeadphones: root.pauseOnHeadphones }, null, 2));
+	}
+
+	Connections {
+		target: Session
+		function onLockedChanged() {
+			if (Session.locked && root.pauseOnLock) root.pauseAll();
+		}
+	}
+
+	Connections {
+		target: Audio
+		function onHeadphonesLost() {
+			if (root.pauseOnHeadphones) root.pauseAll();
+		}
+	}
+
+	FileView {
+		id: settings
+
+		path: Paths.stateFile("media.json")
+		blockLoading: true
+		printErrors: false
+		onLoaded: {
+			try {
+				const data = JSON.parse(String(text() || "{}"));
+				root.pauseOnLock = data.pauseOnLock !== false;
+				root.pauseOnHeadphones = data.pauseOnHeadphones !== false;
+			} catch (error) {}
+		}
 	}
 
 	function seek(ratio) {

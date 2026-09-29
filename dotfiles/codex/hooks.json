@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$HOME/.config/quickshell/shell/scripts/agent_hook.py\" busy Codex",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$HOME/.config/quickshell/shell/scripts/agent_hook.py\" idle Codex",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

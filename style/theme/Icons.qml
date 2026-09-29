@@ -378,7 +378,9 @@ Singleton {
 		"update": "󰚰",
 		"shield_check": "󰕥",
 		"arrow_right": "󰁔",
-		"wifi_strength_outline": "󰤯"
+		"wifi_strength_outline": "󰤯",
+		"cast": "󰄘",
+		"monitor_share": "󱒃"
 	})
 
 	function get(name) {
