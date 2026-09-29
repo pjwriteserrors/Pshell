@@ -218,6 +218,16 @@ Drawer {
 
 					QuickTile {
 						Layout.fillWidth: true
+						icon: "cup_water"
+						title: Words.of("control.water", "Water")
+						subtitle: `${Breaks.formatLitres(Breaks.waterMl)} / ${Breaks.formatLitres(Breaks.goalMl)}`
+						active: Breaks.waterMl >= Breaks.goalMl
+						onClicked: Popups.open("breaks", root.targetScreen)
+						onDetailsRequested: Popups.open("breaks", root.targetScreen)
+					}
+
+					QuickTile {
+						Layout.fillWidth: true
 						visible: PowerProfile.available
 						icon: PowerProfile.icon(PowerProfile.current)
 						title: Words.of("control.power", "Power")

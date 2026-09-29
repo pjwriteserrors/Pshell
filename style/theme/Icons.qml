@@ -11,6 +11,14 @@ Singleton {
 
 	readonly property var glyphs: ({
 		"dialpad": "󰘜",
+		"cup_water": "󰆫",
+		"walk": "󰖃",
+		"eye_outline": "󰛐",
+		"arrow_bottom_right": "󰁁",
+		"water_plus_outline": "󱔋",
+		"water_minus_outline": "󱔇",
+		"head_outline": "󱍟",
+		"head_alert_outline": "󱌹",
 		"image_outline": "󰥶",
 		"apple": "󰀵",
 		"border_outside": "󰃎",

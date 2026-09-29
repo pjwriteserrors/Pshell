@@ -43,6 +43,7 @@ Scope {
 	Launcher {}
 	ControlCenter {}
 	TodayPanel {}
+	BreaksPanel {}
 	MediaPanel {}
 	ClipboardPanel {}
 	TrayMenuPanel {}
@@ -51,6 +52,7 @@ Scope {
 
 	// full-screen overlays
 	PowerMenu {}
+	EyeRest {}
 
 	// Studio
 	ThemePicker {}

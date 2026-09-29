@@ -345,6 +345,38 @@ Scope {
 	}
 
 	IpcHandler {
+		target: "breaks"
+
+		function toggle(): void {
+			root.drawerOnFocused("breaks");
+		}
+		function drink(): void {
+			Breaks.drinkGlass();
+		}
+		function undrink(): void {
+			Breaks.removeGlass();
+		}
+		function refill(): void {
+			Breaks.refill();
+		}
+		function uncount(): void {
+			Breaks.uncount();
+		}
+		function bottle(left: int): void {
+			Breaks.setBottleLevel(left);
+		}
+		function headache(): void {
+			Breaks.logHeadache();
+		}
+		function eyes(): void {
+			Breaks.startEyeRest();
+		}
+		function toggleReminders(): void {
+			Breaks.setEnabled(!Breaks.enabled);
+		}
+	}
+
+	IpcHandler {
 		target: "brightness"
 
 		function raise(): void {

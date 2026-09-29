@@ -26,6 +26,8 @@ Singleton {
 	property string observationTime: ""
 	property var hourly: []
 	property var daily: []
+	// hourly sea-level pressure from today 00:00 on: [{ at (ms), hPa }]
+	property var pressureHours: []
 	property real latitude: Number.NaN
 	property real longitude: Number.NaN
 	property string requestKind: ""
@@ -64,7 +66,7 @@ Singleton {
 		return "https://api.open-meteo.com/v1/forecast?latitude=" + root.latitude
 			+ "&longitude=" + root.longitude
 			+ "&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,pressure_msl,wind_speed_10m,weather_code,is_day"
-			+ "&hourly=temperature_2m,weather_code,is_day,precipitation_probability"
+			+ "&hourly=temperature_2m,weather_code,is_day,precipitation_probability,pressure_msl"
 			+ "&daily=sunrise,sunset,weather_code,temperature_2m_max,temperature_2m_min"
 			+ "&timezone=auto&forecast_days=5";
 	}
@@ -95,6 +97,7 @@ Singleton {
 		root.observationTime = "";
 		root.hourly = [];
 		root.daily = [];
+		root.pressureHours = [];
 	}
 
 	function applyForecast(raw) {
@@ -135,6 +138,13 @@ Singleton {
 				}
 			}
 			root.hourly = hours;
+
+			const pressure = [];
+			for (let i = 0; i < (hourly?.time?.length ?? 0); i += 1) {
+				const value = Number(hourly.pressure_msl?.[i]);
+				if (isFinite(value)) pressure.push({ at: new Date(hourly.time[i]).getTime(), hPa: value });
+			}
+			root.pressureHours = pressure;
 
 			const days = [];
 			if (daily?.time) {
