@@ -25,8 +25,13 @@ Singleton {
 		if (Host.has("ddc") && !detectProc.running) detectProc.running = true;
 	}
 
+	// nothing found yet (ddcutil failed at start): look again
 	function refresh() {
-		if (root.monitors.length === 0 || readProc.running) return;
+		if (root.monitors.length === 0) {
+			root.detect();
+			return;
+		}
+		if (readProc.running) return;
 		readProc.command = ["bash", root.script, "get"].concat(root.monitors.map(m => String(m.bus)));
 		readProc.running = true;
 	}
