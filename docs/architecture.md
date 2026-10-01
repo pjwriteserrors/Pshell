@@ -56,7 +56,13 @@ it works.
 
 Optional features: `backlight`, `ddc`, `power-profiles`, `battery`,
 `mouse-battery`, `fingerprint`, `kdeconnect`, `haptics`, `ssh`,
-`display-profiles`, `qtrack`, `notes`, `todos`, `rpg`.
+`display-profiles`, `qtrack`, `notes`, `todos`, `rpg`, `microsoft-calendar`.
+
+`microsoft-calendar` signs in to Microsoft 365 with a device code (Today
+panel) and keeps the refresh token in `~/.local/state/pshell/microsoft.json`.
+It uses Microsoft Office's public client; `PSHELL_MS_CLIENT_ID` and
+`PSHELL_MS_TENANT` in the shell's environment point it at an own app
+registration.
 
 ## Theme pipeline
 

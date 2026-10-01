@@ -32,6 +32,9 @@ Singleton {
 	readonly property string duration: root.tracking ? root.tick(root.rawDuration, (root.now - root.rawAt) / 1000) : root.rawDuration
 	property string description: ""
 	property string todayTotal: "--"
+	property int todaySeconds: 0
+	// today's tracked stretches: [{ start, end }] in ms, the running one ends now
+	property var todaySegments: []
 	property string todayEntries: "0"
 	property string statusMessage: "Idle"
 	readonly property bool teamworkRefreshing: teamworkTasksProcess.running
@@ -213,6 +216,12 @@ Singleton {
 		root.applyStatusPayload(parsed);
 		const today = parsed.today || {};
 		root.todayTotal = String(today.total_label || "--");
+		root.todaySeconds = Number(today.total_seconds) || 0;
+		const segments = [];
+		for (const entry of Array.isArray(today.entries) ? today.entries : [])
+			for (const segment of Array.isArray(entry.segments) ? entry.segments : [])
+				if (segment.started_ts) segments.push({ start: segment.started_ts * 1000, end: segment.ended_ts ? segment.ended_ts * 1000 : Date.now() });
+		root.todaySegments = segments.sort((a, b) => a.start - b.start);
 		root.todayEntries = String(today.task_count !== undefined ? today.task_count : 0);
 		root.todayTasks = Array.isArray(parsed.today_tasks) ? parsed.today_tasks : [];
 		root.syncSelectionFromDraft();
@@ -285,6 +294,23 @@ Singleton {
 			return;
 		}
 		if (root.canResume) root.runAction(["resume"]);
+	}
+
+	// starts a task of today; a running timer is paused first, as qtrack
+	// refuses to start over one
+	function switchTo(task) {
+		if (!task || actionProcess.running) return;
+		if (root.paused && root.taskKey(task.project, task.description) === root.taskKey(root.project, root.description)) {
+			root.runAction(["resume"]);
+			return;
+		}
+		const start = root.buildStartArgs(task.project, task.description, task);
+		if (!root.tracking) {
+			root.runAction(start);
+			return;
+		}
+		actionProcess.command = ["sh", "-c", 'python3 "$0" pause >/dev/null && exec python3 "$0" "$@"', root.cliPath].concat(start);
+		actionProcess.running = true;
 	}
 
 	function syncTeamwork() {

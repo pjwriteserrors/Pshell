@@ -49,6 +49,13 @@ Scope {
 		Shelves {}
 	}
 
+	// commands for what is being dragged, around the pointer
+	Variants {
+		model: Quickshell.screens
+
+		CommandRing {}
+	}
+
 	// panels (one instance each, they follow the screen they are opened on)
 	Launcher {}
 	ControlCenter {}
@@ -62,7 +69,9 @@ Scope {
 
 	// full-screen overlays
 	PowerMenu {}
+	RadialMenu {}
 	EyeRest {}
+	StretchBreak {}
 
 	// Studio
 	ThemePicker {}
@@ -90,6 +99,9 @@ Scope {
 
 		NotesPanel {}
 	}
+
+	// the story of Bing's image of the day, on the wallpaper
+	DailyCaption {}
 
 	// todo lists pinned to the desktop (bottom layer, primary screen)
 	LazyLoader {

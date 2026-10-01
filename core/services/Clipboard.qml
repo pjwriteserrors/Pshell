@@ -11,6 +11,8 @@ Singleton {
 
 	property var entries: []
 	readonly property bool loading: listProc.running
+	// "image" or "text": put back on the clipboard once the list is in
+	property string pendingLatest: ""
 
 	function shellEscape(value) {
 		return String(value).replace(/'/g, `'"'"'`);
@@ -47,10 +49,21 @@ Singleton {
 			});
 		}
 		root.entries = next;
+		if (root.pendingLatest === "") return;
+		const image = root.pendingLatest === "image";
+		root.pendingLatest = "";
+		const entry = next.find(e => image ? e.isImage : !e.preview.startsWith("[[ binary data"));
+		if (entry) root.restore(entry);
 	}
 
 	function refresh() {
 		listProc.running = true;
+	}
+
+	// the newest image or text of the history becomes the clipboard again
+	function restoreLatest(kind) {
+		root.pendingLatest = kind;
+		root.refresh();
 	}
 
 	function restore(entry) {

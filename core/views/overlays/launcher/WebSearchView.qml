@@ -55,13 +55,13 @@ ColumnLayout {
 			return;
 		}
 		root.closeRequested();
-		Quickshell.execDetached(["floorp", "--search", root.query]);
+		Browser.search(root.query);
 	}
 
 	function openUrl(url) {
 		if (!url) return;
 		root.closeRequested();
-		Quickshell.execDetached(["floorp", "--new-tab", String(url)]);
+		Browser.open(url);
 	}
 
 	function fetch() {

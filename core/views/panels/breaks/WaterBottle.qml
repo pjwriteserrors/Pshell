@@ -5,7 +5,10 @@ import qs.style.widgets
 // The water bottle. Its level is what is left in the real bottle: drag it
 // (or scroll, 25 ml a step) to where the real one stands. The marks sit at
 // the quarters. The surface waves while it is on screen and sloshes when
-// the level changes; what was drunk rises out of the bottle.
+// the level changes; what was drunk rises out of the bottle. Each size has
+// a bottle of its own (a small PET bottle with a grip, a long-necked glass
+// bottle, a big sports bottle with a loop); switching morphs one into the
+// other.
 Item {
 	id: root
 
@@ -23,19 +26,49 @@ Item {
 	property real phase: 0
 	property real amplitude: 2
 
+	readonly property var shapes: ({
+		500: { w: 70, h: 158, cap: 12, capExtra: 4, neck: 0.46, neckH: 7, shoulder: 18, corner: 12, waist: 5, loop: 0, ridges: 1 },
+		750: { w: 92, h: 196, cap: 14, capExtra: 6, neck: 0.36, neckH: 12, shoulder: 26, corner: 16, waist: 0, loop: 0, ridges: 0 },
+		1000: { w: 108, h: 216, cap: 20, capExtra: 10, neck: 0.5, neckH: 5, shoulder: 14, corner: 22, waist: 0, loop: 1, ridges: 0 }
+	})
+	readonly property var shape: root.shapes[root.size] || root.shapes[750]
+
+	property real shapeWidth: root.shape.w
+	property real shapeHeight: root.shape.h
+	property real capHeight: root.shape.cap
+	property real capExtra: root.shape.capExtra
+	property real neckRatio: root.shape.neck
+	property real neckHeight: root.shape.neckH
+	property real shoulder: root.shape.shoulder
+	property real corner: root.shape.corner
+	property real waist: root.shape.waist
+	property real loop: root.shape.loop
+	property real ridges: root.shape.ridges
+
+	Behavior on shapeWidth { SpatialAnim { duration: Motion.extraLong + 200 } }
+	Behavior on shapeHeight { SpatialAnim { duration: Motion.extraLong + 200 } }
+	Behavior on capHeight { SpatialAnim { duration: Motion.extraLong + 200 } }
+	Behavior on capExtra { SpatialAnim { duration: Motion.extraLong + 200 } }
+	Behavior on neckRatio { SpatialAnim { duration: Motion.extraLong + 200 } }
+	Behavior on neckHeight { SpatialAnim { duration: Motion.extraLong + 200 } }
+	Behavior on shoulder { SpatialAnim { duration: Motion.extraLong + 200 } }
+	Behavior on corner { SpatialAnim { duration: Motion.extraLong + 200 } }
+	Behavior on waist { SpatialAnim { duration: Motion.extraLong + 200 } }
+	Behavior on loop { Anim { duration: Motion.extraLong } }
+	Behavior on ridges { Anim { duration: Motion.extraLong } }
+
 	readonly property real wall: 3
-	readonly property real capHeight: 14
-	readonly property real neckHeight: 12
-	readonly property real shoulder: 26
-	readonly property real neckWidth: root.width * 0.36
-	readonly property real bodyTop: root.capHeight + root.neckHeight + root.shoulder
+	// room above the cap for the loop
+	readonly property real loopRoom: root.loop * 12
+	readonly property real neckWidth: root.width * root.neckRatio
+	readonly property real bodyTop: root.loopRoom + root.capHeight + root.neckHeight + root.shoulder
 	readonly property real bodyBottom: root.height - root.wall
 	// the level runs over the straight body; full is where the shoulder starts
 	readonly property real fillTop: root.bodyTop + 4
 	readonly property real fillBottom: root.bodyBottom - 2
 
-	implicitWidth: 92
-	implicitHeight: 196
+	implicitWidth: root.shapeWidth
+	implicitHeight: root.shapeHeight
 
 	function snap(ml) {
 		return Math.max(0, Math.min(root.size, Math.round(ml / 25) * 25));
@@ -101,6 +134,39 @@ Item {
 
 		Connections {
 			target: root
+			function onWidthChanged() {
+				canvas.requestPaint();
+			}
+			function onHeightChanged() {
+				canvas.requestPaint();
+			}
+			function onCapHeightChanged() {
+				canvas.requestPaint();
+			}
+			function onCapExtraChanged() {
+				canvas.requestPaint();
+			}
+			function onNeckRatioChanged() {
+				canvas.requestPaint();
+			}
+			function onNeckHeightChanged() {
+				canvas.requestPaint();
+			}
+			function onShoulderChanged() {
+				canvas.requestPaint();
+			}
+			function onCornerChanged() {
+				canvas.requestPaint();
+			}
+			function onWaistChanged() {
+				canvas.requestPaint();
+			}
+			function onLoopChanged() {
+				canvas.requestPaint();
+			}
+			function onRidgesChanged() {
+				canvas.requestPaint();
+			}
 			function onPhaseChanged() {
 				canvas.requestPaint();
 			}
@@ -117,17 +183,25 @@ Item {
 			const half = root.wall / 2;
 			const neckLeft = (w - root.neckWidth) / 2;
 			const neckRight = neckLeft + root.neckWidth;
-			const neckTop = root.capHeight;
+			const neckTop = root.loopRoom + root.capHeight;
 			const shoulderTop = neckTop + root.neckHeight;
-			const radius = 16;
+			const radius = root.corner;
+			// the grip: the sides draw in around the middle of the body
+			const gripTop = root.bodyTop + (root.bodyBottom - root.bodyTop) * 0.34;
+			const gripBottom = root.bodyTop + (root.bodyBottom - root.bodyTop) * 0.66;
+			const gripMid = (gripTop + gripBottom) / 2;
 			ctx.beginPath();
 			ctx.moveTo(neckLeft, neckTop);
 			ctx.lineTo(neckLeft, shoulderTop);
 			ctx.bezierCurveTo(neckLeft, shoulderTop + root.shoulder * 0.6, half, shoulderTop + root.shoulder * 0.4, half, root.bodyTop);
+			ctx.lineTo(half, gripTop);
+			ctx.quadraticCurveTo(half + root.waist * 2, gripMid, half, gripBottom);
 			ctx.lineTo(half, root.bodyBottom - radius);
 			ctx.quadraticCurveTo(half, root.bodyBottom, half + radius, root.bodyBottom);
 			ctx.lineTo(w - half - radius, root.bodyBottom);
 			ctx.quadraticCurveTo(w - half, root.bodyBottom, w - half, root.bodyBottom - radius);
+			ctx.lineTo(w - half, gripBottom);
+			ctx.quadraticCurveTo(w - half - root.waist * 2, gripMid, w - half, gripTop);
 			ctx.lineTo(w - half, root.bodyTop);
 			ctx.bezierCurveTo(w - half, shoulderTop + root.shoulder * 0.4, neckRight, shoulderTop + root.shoulder * 0.6, neckRight, shoulderTop);
 			ctx.lineTo(neckRight, neckTop);
@@ -151,12 +225,31 @@ Item {
 			ctx.reset();
 			const w = root.width;
 
-			// cap
+			// cap, with a carrying loop and grip ridges where the bottle has them
+			const capWidth = root.neckWidth + root.capExtra;
+			const capLeft = (w - capWidth) / 2;
+			if (root.loop > 0.01) {
+				ctx.strokeStyle = Qt.alpha(canvas.glass, canvas.glass.a * root.loop);
+				ctx.lineWidth = 3;
+				ctx.beginPath();
+				ctx.moveTo(w / 2 - capWidth * 0.3, root.loopRoom + 2);
+				ctx.bezierCurveTo(w / 2 - capWidth * 0.34, root.loopRoom - 14 * root.loop, w / 2 + capWidth * 0.34, root.loopRoom - 14 * root.loop, w / 2 + capWidth * 0.3, root.loopRoom + 2);
+				ctx.stroke();
+			}
 			ctx.fillStyle = canvas.glass;
-			const capWidth = root.neckWidth + 6;
 			ctx.beginPath();
-			ctx.roundedRect((w - capWidth) / 2, 0, capWidth, root.capHeight - 2, 3, 3);
+			ctx.roundedRect(capLeft, root.loopRoom, capWidth, root.capHeight - 2, 3, 3);
 			ctx.fill();
+			if (root.ridges > 0.01) {
+				ctx.strokeStyle = Qt.alpha(Theme.base, 0.5 * root.ridges);
+				ctx.lineWidth = 1;
+				for (let x = capLeft + 4; x < capLeft + capWidth - 3; x += 4) {
+					ctx.beginPath();
+					ctx.moveTo(x, root.loopRoom + 2);
+					ctx.lineTo(x, root.loopRoom + root.capHeight - 4);
+					ctx.stroke();
+				}
+			}
 
 			// body, water clipped to it
 			ctx.save();

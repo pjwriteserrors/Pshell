@@ -7,7 +7,7 @@
 #   scripts/review_surfaces.sh [--host PROFILE] [--out DIR] [surface...]
 #
 # Surfaces: bar launcher control network bluetooth system today media
-# clipboard tray overview updates timer ssh notes power wallpaper motion dress
+# clipboard tray overview updates timer ssh notes power radial wallpaper motion dress
 # styles combinations lock (default: all of them the host has).
 #
 # The copy that runs skips the theme restore and the Bluetooth agent, which
@@ -33,7 +33,7 @@ if ((${#SURFACES[@]} == 0)); then
 	for optional in qtrack:timer ssh:ssh notes:notes; do
 		PSHELL_HOST="$PROFILE" python3 "$REPO/scripts/host.py" has "${optional%%:*}" && SURFACES+=("${optional##*:}")
 	done
-	SURFACES+=(power wallpaper motion dress styles combinations lock)
+	SURFACES+=(power radial wallpaper motion dress styles combinations lock)
 fi
 
 work="$(mktemp -d)"
@@ -75,6 +75,7 @@ ipc="quickshell ipc -p $work/shell call"
 			ssh) echo "$ipc ssh open" ;;
 			notes) echo "$ipc panels toggle notes" ;;
 			power) echo "$ipc power open" ;;
+			radial) echo "$ipc radial open" ;;
 			wallpaper | motion | dress | styles | combinations) echo "$ipc studio open $surface" ;;
 			lock) echo "$ipc lock lock" ;;
 			*) echo "unknown surface: $surface" >&2; exit 1 ;;

@@ -16,6 +16,8 @@ Item {
 	property bool rightFillet: true
 	// seamless with the translucent bar at the top, solid below
 	property real fadeLength: 90
+	// opacity at the top edge; a panel growing out of another one starts solid
+	property real topOpacity: Theme.barOpacity
 
 	readonly property real fl: root.leftFillet ? Math.max(0, Math.min(root.fillet, root.height)) : 0
 	readonly property real fr: root.rightFillet ? Math.max(0, Math.min(root.fillet, root.height)) : 0
@@ -41,7 +43,7 @@ Item {
 				y2: root.fadeLength
 				GradientStop {
 					position: 0
-					color: Qt.alpha(root.color, Theme.barOpacity)
+					color: Qt.alpha(root.color, root.topOpacity)
 				}
 				GradientStop {
 					position: 1

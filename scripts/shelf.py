@@ -10,6 +10,12 @@
                                        when no pointer device can be read
     shelf.py describe <path>...        JSON: [{ path, name, dir, size, mime, width, height }]
     shelf.py clip <stash dir>          JSON: what the clipboard holds, as shelf items
+    shelf.py thumb <path> <size> <cache dir>
+                                       JSON: { image } a picture of the file (first
+                                       PDF page, a video frame, an album cover, a
+                                       freedesktop thumbnail) or { text } the start
+                                       of a text file; {} when there is none
+    shelf.py copyimage <path>          put an image on the clipboard as PNG data
     shelf.py zip <out.zip> <path>...   pack files and folders, prints the archive's path
     shelf.py image <resize|png|jpg> <in> <out dir>
                                        prints the path of the new image
@@ -26,6 +32,7 @@ that were only opened stay out.
 import ctypes
 import ctypes.util
 import glob
+import hashlib
 import json
 import mimetypes
 import os
@@ -298,6 +305,89 @@ def clip(stash):
     print(json.dumps([{"kind": "text", "text": text}] if text.strip() else []))
 
 
+# ── previews ───────────────────────────────────────────────────────────────
+TEXTY = ("json", "xml", "javascript", "x-sh", "x-shellscript", "x-python", "yaml", "toml", "x-php", "sql")
+
+
+def thumb(path, size, cache):
+    size = int(size)
+    try:
+        stat = os.stat(path)
+    except OSError:
+        print("{}")
+        return
+    mime = mimetypes.guess_type(path)[0] or ""
+    if mime.startswith("text/") or any(t in mime for t in TEXTY) or (not mime and stat.st_size < 512 * 1024 and is_text(path)):
+        with open(path, "rb") as f:
+            head = f.read(6000 if size <= 512 else 40000)
+        print(json.dumps({"text": head.decode("utf-8", errors="replace")}))
+        return
+    key = hashlib.sha1(f"{path}\0{stat.st_mtime_ns}\0{stat.st_size}\0{size}".encode()).hexdigest()
+    out = os.path.join(cache, key + ".png")
+    if not os.path.exists(out):
+        os.makedirs(cache, exist_ok=True)
+        render(path, mime, size, out)
+    if not os.path.exists(out):
+        out = freedesktop_thumb(path)
+    print(json.dumps({"image": out} if out else {}))
+
+
+def is_text(path):
+    with open(path, "rb") as f:
+        chunk = f.read(2048)
+    if b"\0" in chunk:
+        return False
+    try:
+        chunk.decode("utf-8")
+    except UnicodeDecodeError as error:
+        return error.start > len(chunk) - 4
+    return True
+
+
+def render(path, mime, size, out):
+    quiet = {"capture_output": True, "timeout": 20}
+    try:
+        if mime == "application/pdf":
+            subprocess.run(["pdftoppm", "-png", "-singlefile", "-f", "1", "-l", "1", "-scale-to", str(size), path, out[:-4]], **quiet)
+        elif mime.startswith("video/"):
+            for at in ("00:00:01", "00:00:00"):
+                subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", at, "-i", path, "-frames:v", "1",
+                                "-vf", f"scale='min({size},iw)':-2", out], **quiet)
+                if os.path.exists(out) and os.path.getsize(out) > 0:
+                    break
+        elif mime.startswith("audio/"):
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", path, "-an", "-frames:v", "1",
+                            "-vf", f"scale='min({size},iw)':-2", out], **quiet)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    if os.path.exists(out) and os.path.getsize(out) == 0:
+        os.remove(out)
+
+
+def freedesktop_thumb(path):
+    uri = "file://" + urllib.parse.quote(os.path.abspath(path))
+    name = hashlib.md5(uri.encode()).hexdigest() + ".png"
+    base = os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")), "thumbnails")
+    for folder in ("xx-large", "x-large", "large", "normal"):
+        candidate = os.path.join(base, folder, name)
+        if os.path.exists(candidate) and os.path.getmtime(candidate) >= os.path.getmtime(path):
+            return candidate
+    return ""
+
+
+def copy_image(path):
+    """chats (Teams, Slack …) paste image data inline; a file would be uploaded"""
+    if (mimetypes.guess_type(path)[0] or "") == "image/png":
+        with open(path, "rb") as f:
+            data = f.read()
+    else:
+        result = subprocess.run(["magick", path + "[0]", "png:-"], capture_output=True, timeout=30)
+        if result.returncode != 0:
+            return 1
+        data = result.stdout
+    return subprocess.run(["wl-copy", "--type", "image/png"], input=data).returncode
+
+
 # ── zip / images ───────────────────────────────────────────────────────────
 def pack(out, paths):
     os.makedirs(os.path.dirname(out), exist_ok=True)
@@ -354,6 +444,10 @@ def main():
         return describe(args)
     if command == "clip":
         return clip(args[0])
+    if command == "thumb":
+        return thumb(args[0], args[1], args[2])
+    if command == "copyimage":
+        return copy_image(args[0])
     if command == "zip":
         return pack(args[0], args[1:])
     if command == "image":

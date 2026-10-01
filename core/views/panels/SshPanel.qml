@@ -311,6 +311,22 @@ Drawer {
 
 				TextButton {
 					implicitHeight: 30
+					visible: !login.usesKey
+					text: ""
+					icon: "content_copy"
+					variant: "ghost"
+					opacity: login.hovered ? 1 : 0
+					onActivated: Ssh.copyPassword(String(login.modelData.id || ""))
+
+					Behavior on opacity {
+						Anim {
+							duration: Motion.short
+						}
+					}
+				}
+
+				TextButton {
+					implicitHeight: 30
 					text: ""
 					icon: "delete_outline"
 					variant: "danger"

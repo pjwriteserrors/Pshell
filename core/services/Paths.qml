@@ -14,6 +14,7 @@ Singleton {
 	readonly property string assets: `${root.shell}/assets`
 	readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME") || `${root.home}/.config`
 	readonly property string state: `${Quickshell.env("XDG_STATE_HOME") || root.home + "/.local/state"}/pshell`
+	readonly property string cache: `${Quickshell.env("XDG_CACHE_HOME") || root.home + "/.cache"}/pshell`
 
 	function stateFile(name) {
 		return `${root.state}/${name}`;

@@ -15,6 +15,7 @@ Row {
 
 	required property var bar
 
+	anchors.verticalCenter: parent ? parent.verticalCenter : undefined
 	spacing: 6
 
 	Repeater {

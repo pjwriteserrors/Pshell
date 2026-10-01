@@ -18,7 +18,8 @@
 		"qtrack": true,
 		"notes": true,
 		"todos": true,
-		"rpg": true
+		"rpg": true,
+		"microsoft-calendar": true
 	},
 	"themeHooks": [
 		"sddm",

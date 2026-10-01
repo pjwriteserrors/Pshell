@@ -23,7 +23,6 @@ Item {
 	signal menuRequested(real x, real y)
 	signal renamed(string name)
 
-	readonly property bool image: Shelf.isImage(root.item)
 	readonly property bool hovered: pointer.containsMouse || copy.hovered
 
 	Rectangle {
@@ -55,36 +54,10 @@ Item {
 			}
 		}
 
-		Image {
+		ShelfPreview {
 			anchors.fill: parent
-			visible: root.image
-			source: root.image ? Shelf.fileUri(root.item.path) : ""
-			sourceSize: Qt.size(root.grid ? 256 : 96, root.grid ? 256 : 96)
-			fillMode: Image.PreserveAspectCrop
-			asynchronous: true
-			cache: false
-		}
-
-		Glyph {
-			anchors.centerIn: parent
-			visible: !root.image && root.item.kind !== "text"
-			icon: Shelf.iconFor(root.item)
-			size: root.grid ? 40 : 20
-			color: root.item.kind === "file" ? Theme.primary : Theme.text
-		}
-
-		// text shows itself in the tile
-		StyledText {
-			anchors.fill: parent
-			anchors.margins: root.grid ? 10 : 6
-			visible: root.item.kind === "text"
-			text: root.grid ? root.item.text : "Aa"
-			tone: Theme.textMuted
-			wrapMode: Text.Wrap
-			elide: Text.ElideRight
-			horizontalAlignment: root.grid ? Text.AlignLeft : Text.AlignHCenter
-			verticalAlignment: root.grid ? Text.AlignTop : Text.AlignVCenter
-			font.pixelSize: root.grid ? Theme.size.small : Theme.size.label
+			item: root.item
+			mode: root.grid ? "tile" : "row"
 		}
 
 		// how many go along

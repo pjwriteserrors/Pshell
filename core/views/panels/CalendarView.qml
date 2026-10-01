@@ -5,13 +5,16 @@ import QtQuick.Layouts
 import Quickshell
 import qs.style.theme
 import qs.style.widgets
+import qs.core.services
 
 // Month grid. Scroll over it (or use the arrows) to flip months; the grid
 // slides in the direction you flipped. Clicking the title jumps back to today.
+// Days with calendar events carry dots; clicking a day selects it.
 ColumnLayout {
 	id: root
 
 	property date shown: new Date()
+	property date selected: new Date()
 	property int direction: 1
 	readonly property var weekdays: ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
 
@@ -28,6 +31,18 @@ ColumnLayout {
 
 	function reset() {
 		root.shown = new Date();
+		root.selected = new Date();
+	}
+
+	onShownChanged: Outlook.ensure(root.shown)
+	Component.onCompleted: Outlook.ensure(root.shown)
+
+	Connections {
+		target: Outlook
+
+		function onSignedInChanged() {
+			Outlook.ensure(root.shown);
+		}
 	}
 
 	function offset() {
@@ -107,6 +122,8 @@ ColumnLayout {
 				readonly property date date: root.cell(index)
 				readonly property bool inMonth: day.date.getMonth() === root.shown.getMonth()
 				readonly property bool today: day.date.toDateString() === clock.date.toDateString()
+				readonly property bool picked: !day.today && day.date.toDateString() === root.selected.toDateString()
+				readonly property var events: Outlook.eventsOn(day.date).filter(event => Outlook.active(event))
 
 				Layout.fillWidth: true
 				Layout.preferredHeight: 34
@@ -117,7 +134,9 @@ ColumnLayout {
 					width: 32
 					height: 32
 					radius: day.today ? 11 : 16
-					color: day.today ? Theme.primary : (dayHover.containsMouse ? Theme.layer2 : "transparent")
+					color: day.today ? Theme.primary : (day.picked ? Theme.primarySoft : (dayHover.containsMouse ? Theme.layer2 : "transparent"))
+					border.width: day.picked ? 1 : 0
+					border.color: Qt.alpha(Theme.primary, 0.5)
 					scale: dayHover.containsMouse && !day.today ? 1.08 : 1
 
 					Behavior on scale {
@@ -140,10 +159,33 @@ ColumnLayout {
 					font.weight: day.today ? Font.Bold : Font.Medium
 				}
 
+				Row {
+					anchors.horizontalCenter: parent.horizontalCenter
+					anchors.bottom: parent.bottom
+					anchors.bottomMargin: 3
+					spacing: 2
+
+					Repeater {
+						model: Math.min(3, day.events.length)
+
+						delegate: Rectangle {
+							width: 4
+							height: 4
+							radius: 2
+							color: day.today ? Theme.onPrimary : Theme.primary
+						}
+					}
+				}
+
 				MouseArea {
 					id: dayHover
 					anchors.fill: parent
 					hoverEnabled: true
+					onClicked: {
+						root.selected = day.date;
+						if (!day.inMonth)
+							root.shift(day.date < root.shown ? -1 : 1);
+					}
 				}
 			}
 		}

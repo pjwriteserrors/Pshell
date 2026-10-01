@@ -7,9 +7,11 @@ import Quickshell
 import qs.style.theme
 import qs.core.services
 import qs.style.widgets
+import qs.core.views.panels.calendar
 
-// Hangs from the clock: notification center on the left, date, calendar and
-// weather on the right.
+// Hangs from the clock: notification center on the left, date, calendar,
+// the day's Microsoft events and weather on the right. A picked event opens
+// a panel that grows out of this one's bottom edge.
 Drawer {
 	id: root
 
@@ -22,7 +24,27 @@ Drawer {
 		precision: SystemClock.Minutes
 	}
 
-	onPanelOpened: calendar.reset()
+	onPanelOpened: {
+		// opened from a reminder: show that event's day
+		const event = Outlook.selected;
+		calendar.reset();
+		if (event) {
+			calendar.shown = new Date(event.start);
+			calendar.selected = new Date(event.start);
+			Outlook.selected = event;
+		}
+		Outlook.refresh();
+	}
+	onPanelClosed: Outlook.selected = null
+
+	belowOpen: Outlook.selected !== null
+	belowContentHeight: details.implicitHeight
+	below: EventDetails {
+		id: details
+
+		anchors.fill: parent
+		event: Outlook.selected
+	}
 
 	RowLayout {
 		anchors.fill: parent
@@ -155,6 +177,15 @@ Drawer {
 			CalendarView {
 				id: calendar
 				Layout.fillWidth: true
+				onSelectedChanged: {
+					if (Outlook.selected && !Outlook.selected.days.includes(Outlook.dayKey(calendar.selected)))
+						Outlook.selected = null;
+				}
+			}
+
+			Agenda {
+				Layout.fillWidth: true
+				day: calendar.selected
 			}
 
 			WeatherCard {

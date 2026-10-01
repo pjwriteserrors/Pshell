@@ -160,6 +160,7 @@ def read_entries() -> list[dict[str, Any]]:
                 "identity_file": identity_file,
                 "secret_backend": secret_backend,
                 "created_at": int(item.get("created_at") or 0),
+                "last_used_at": int(item.get("last_used_at") or 0),
             })
 
     return entries
@@ -193,6 +194,7 @@ def public_entry(entry: dict[str, Any]) -> dict[str, Any]:
         "auth_type": str(entry.get("auth_type") or AUTH_PASSWORD),
         "identity_file": str(entry.get("identity_file") or ""),
         "created_at": int(entry.get("created_at") or 0),
+        "last_used_at": int(entry.get("last_used_at") or 0),
     }
 
 
@@ -202,6 +204,15 @@ def find_entry(entry_id: str) -> dict[str, Any]:
         if str(entry["id"]) == expected_id:
             return entry
     raise SshManagerError("SSH entry was not found.")
+
+
+def mark_used(entry_id: str) -> None:
+    entries = read_entries()
+    for entry in entries:
+        if entry["id"] == entry_id:
+            entry["last_used_at"] = int(time.time())
+            write_entries(entries)
+            return
 
 
 def normalize_required(value: str, label: str) -> str:
@@ -598,6 +609,7 @@ def add_entry(
         "identity_file": identity_file,
         "secret_backend": secret_backend,
         "created_at": int(existing.get("created_at") if existing else time.time()),
+        "last_used_at": int(existing.get("last_used_at") or 0) if existing else 0,
     }
 
     entries = [entry for entry in entries if str(entry["id"]) != entry_id]
@@ -622,6 +634,33 @@ def delete_entry(entry_id: str) -> dict[str, Any]:
         "ok": True,
         "entry": public_entry(entry),
         "message": f"Deleted {entry['user']}@{entry['host']}.",
+    }
+
+
+def copy_password(entry_id: str) -> dict[str, Any]:
+    entry = find_entry(entry_id)
+    if str(entry.get("auth_type") or AUTH_PASSWORD) != AUTH_PASSWORD:
+        raise SshManagerError("This login uses an SSH key.")
+    wl_copy = shutil.which("wl-copy")
+    if not wl_copy:
+        raise SshManagerError("wl-copy was not found.")
+    password = lookup_secret(str(entry["id"]), str(entry.get("secret_backend") or ""))
+    # --sensitive keeps the password out of the clipboard history
+    result = subprocess.run(
+        [wl_copy, "--sensitive"],
+        input=password.encode("utf-8"),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise SshManagerError("Could not copy the password.")
+    mark_used(str(entry["id"]))
+
+    return {
+        "ok": True,
+        "entry": public_entry(entry),
+        "message": f"Copied password for {entry['user']}@{entry['host']}.",
     }
 
 
@@ -651,6 +690,7 @@ def launch_kitty(entry_id: str) -> dict[str, Any]:
         ],
         start_new_session=True,
     )
+    mark_used(str(entry["id"]))
 
     return {
         "ok": True,
@@ -767,6 +807,10 @@ def parse_args() -> argparse.Namespace:
     delete_parser.add_argument("--id", required=True)
     delete_parser.add_argument("--json", action="store_true")
 
+    copy_parser = subparsers.add_parser("copy-password", help="Copy the password of an SSH entry.")
+    copy_parser.add_argument("--id", required=True)
+    copy_parser.add_argument("--json", action="store_true")
+
     connect_parser = subparsers.add_parser("connect", help="Open an SSH entry in kitty.")
     connect_parser.add_argument("--id", required=True)
     connect_parser.add_argument("--json", action="store_true")
@@ -798,6 +842,9 @@ def main() -> int:
             return 0
         if args.command == "delete":
             print_payload(delete_entry(args.id), as_json=args.json)
+            return 0
+        if args.command == "copy-password":
+            print_payload(copy_password(args.id), as_json=args.json)
             return 0
         if args.command == "connect":
             print_payload(launch_kitty(args.id), as_json=args.json)

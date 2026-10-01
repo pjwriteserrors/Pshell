@@ -14,10 +14,12 @@ BarButton {
 	readonly property bool hasTrack: Media.barText !== ""
 	// width without the title, and what the title would add
 	readonly property real fixedWidth: root.padding * 2 + 16
-	readonly property real textWant: root.hasTrack ? 9 + Math.min(220, label.implicitWidth) : 0
+	// do not disturb keeps the bars but drops the title
+	readonly property bool showTitle: root.hasTrack && !Notifs.dnd
+	readonly property real textWant: root.showTitle ? 9 + Math.min(220, label.implicitWidth) : 0
 	// extra width the bar can spare for the title
 	property real room: 1e6
-	readonly property real textWidth: root.hasTrack && root.room >= 9 + 48 ? Math.min(220, label.implicitWidth, root.room - 9) : 0
+	readonly property real textWidth: root.showTitle && root.room >= 9 + 48 ? Math.min(220, label.implicitWidth, root.room - 9) : 0
 
 	panelId: "media"
 	tooltip: Media.hasPlayer ? "Media · middle-click play/pause · right-click next" : "Media"
@@ -88,7 +90,7 @@ BarButton {
 			id: viewport
 
 			anchors.verticalCenter: parent.verticalCenter
-			visible: root.hasTrack && width > 0.5
+			visible: root.showTitle && width > 0.5
 			width: root.textWidth
 			height: label.implicitHeight
 			clip: true

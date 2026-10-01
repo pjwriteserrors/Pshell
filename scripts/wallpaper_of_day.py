@@ -15,6 +15,7 @@ import sys
 import time
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -22,6 +23,9 @@ from pathlib import Path
 USER_AGENT = "quickshell-wallpaper-of-the-day/1.0"
 SELECTION_VERSION = 8
 PROVIDERS = ("bing", "wallhaven", "moewalls")
+# Providers whose pick can change during the day and is rechecked on every run.
+CHANGING_PROVIDERS = ("bing",)
+BING_MARKETS = ("de-DE", "en-GB", "en-US", "en-CA", "en-IN", "fr-FR", "ja-JP", "zh-CN")
 WALLHAVEN_PREFERENCES = ("fantasy landscape", "landscape", "minimal", "minimalistic")
 MOEWALLS_SFW_PREFERENCES = (
     "abstract",
@@ -115,23 +119,79 @@ def get_text(url: str) -> str:
         return response.read().decode("utf-8", "replace")
 
 
-def bing_candidate() -> dict[str, object]:
-    query = urllib.parse.urlencode({
-        "resolution": "UHD",
-        "format": "json",
-        "index": "0",
-        "mkt": "de-DE",
-    })
-    data = get_json(f"https://bing.biturl.top/?{query}")
-    if not isinstance(data, dict) or not data.get("url"):
-        raise RuntimeError("Bing returned no wallpaper URL")
+def bing_market_image(market: str) -> dict[str, object]:
+    query = urllib.parse.urlencode({"format": "js", "idx": "0", "n": "1", "mkt": market})
+    data = get_json(f"https://www.bing.com/HPImageArchive.aspx?{query}")
+    images = data.get("images", []) if isinstance(data, dict) else []
+    if not images or not isinstance(images[0], dict) or not images[0].get("urlbase"):
+        raise RuntimeError(f"Bing returned no image for {market}")
+    return {**images[0], "market": market}
+
+
+def bing_details(market: str, name: str) -> dict[str, object]:
+    """The texts Bing's homepage shows around its image; empty when unavailable."""
+    query = urllib.parse.urlencode({"mkt": market})
+    try:
+        data = get_json(f"https://www.bing.com/hp/api/model?{query}")
+    except Exception:
+        return {}
+    contents = data.get("MediaContents", []) if isinstance(data, dict) else []
+    content = next(
+        (item for item in contents if isinstance(item, dict) and item.get("Name") == name), None
+    )
+    if not content:
+        return {}
+    image = content.get("ImageContent") or {}
+
+    def absolute(link: object) -> str:
+        return urllib.parse.urljoin("https://www.bing.com/", str(link)) if link else ""
+
+    fact = image.get("QuickFact") or {}
+    map_link = image.get("MapLink") or {}
     return {
+        "headline": str(image.get("Headline") or ""),
+        "image_title": str(image.get("Title") or ""),
+        "credit": str(image.get("Copyright") or ""),
+        "description": str(image.get("Description") or ""),
+        "quick_fact": str(fact.get("MainText") or ""),
+        "map_url": absolute(map_link.get("Link") or map_link.get("Url")),
+        "quiz_url": absolute(image.get("TriviaUrl")),
+        "backstage_url": absolute(image.get("BackstageUrl")),
+        "date_label": str(content.get("FullDateString") or ""),
+        "market": market,
+    }
+
+
+def bing_candidate() -> dict[str, object]:
+    # Every market has its own daily image and switches at its own midnight,
+    # so the newest image of the day is the latest start across markets.
+    with ThreadPoolExecutor(len(BING_MARKETS)) as pool:
+        futures = [pool.submit(bing_market_image, market) for market in BING_MARKETS]
+    images = []
+    for future in futures:
+        try:
+            images.append(future.result())
+        except Exception:
+            continue
+    if not images:
+        raise RuntimeError("Bing returned no wallpaper")
+
+    def name(image: dict[str, object]) -> str:
+        return str(image["urlbase"]).split("OHR.", 1)[-1].split("_", 1)[0]
+
+    newest = max(images, key=lambda image: str(image.get("fullstartdate") or ""))
+    # The same image appears under every market; take the earliest listed
+    # market so its download URL and title stay stable between runs.
+    image = next(image for image in images if name(image) == name(newest))
+    link = str(image.get("copyrightlink") or "")
+    return {
+        **bing_details(str(image["market"]), name(image)),
         "provider": "bing",
-        "title": data.get("copyright") or "Bing image of the day",
-        "source_url": data.get("copyright_link") or "https://www.bing.com/",
-        "download_url": str(data["url"]),
+        "title": image.get("copyright") or "Bing image of the day",
+        "source_url": urllib.parse.urljoin("https://www.bing.com/", link) if link else "https://www.bing.com/",
+        "download_url": f"https://www.bing.com{image['urlbase']}_UHD.jpg",
         "views": None,
-        "candidate_id": str(data.get("start_date") or data["url"]),
+        "candidate_id": name(image),
     }
 
 
@@ -580,6 +640,8 @@ def update(provider: str, force: bool, resolve_only: bool, retries: int) -> dict
     selections = load_selections()
     media = current_media(metadata)
     today = date.today().isoformat()
+    changing = provider in CHANGING_PROVIDERS
+    candidate: dict[str, object] | None = None
     if (
         not force
         and metadata.get("date") == today
@@ -587,20 +649,37 @@ def update(provider: str, force: bool, resolve_only: bool, retries: int) -> dict
         and metadata.get("selection_version") == SELECTION_VERSION
         and media
     ):
-        if provider not in selections:
-            record_selection(provider, metadata)
-        return metadata
+        if changing:
+            try:
+                candidate = resolve(provider)
+            except Exception:
+                candidate = None
+        if candidate is not None and candidate.get("candidate_id") == metadata.get("candidate_id"):
+            # same image, but its texts may have been added or corrected since
+            refreshed = {**metadata, **{k: v for k, v in candidate.items() if k != "download_url"}}
+            if refreshed != metadata:
+                metadata = refreshed
+                write_json_atomic(METADATA_FILE, metadata)
+                record_selection(provider, metadata)
+            candidate = None
+        if candidate is None:
+            if provider not in selections:
+                record_selection(provider, metadata)
+            return metadata
 
     saved_selection = selections.get(provider, {})
     reuse_saved_selection = (
-        not force
+        candidate is None
+        and not changing
+        and not force
         and saved_selection.get("date") == today
         and saved_selection.get("selection_version") == SELECTION_VERSION
         and bool(saved_selection.get("download_url"))
     )
 
     last_error: Exception | None = None
-    candidate: dict[str, object] | None = dict(saved_selection) if reuse_saved_selection else None
+    if reuse_saved_selection:
+        candidate = dict(saved_selection)
     if candidate is None:
         for attempt in range(max(1, retries)):
             try:

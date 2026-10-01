@@ -6,8 +6,9 @@ import Quickshell
 import Quickshell.Io
 
 // Shelves: floating stashes for files, folders, links and text, like
-// Dropover. A shelf opens by shaking the pointer while dragging, by keybind
-// (`shelf toggle`, `shelf clipboard`) or when a new file lands in a watched
+// Dropover. A shelf opens by keybind (`shelf toggle`, `shelf clipboard`), as
+// one of the commands that shaking the pointer mid-drag brings up
+// (DropCommands), or when a new file lands in a watched
 // folder (Downloads, screenshots, recordings; host profile "shelf.watch").
 // Items only point at their files; dropped image data, clipboard images and
 // collected screenshots are kept in the state directory (files nothing
@@ -30,6 +31,9 @@ Singleton {
 	property var recent: []
 	property bool hidden: false
 	property int counter: 0
+	// a shelf that just opened and waits for the pointer to say where; the
+	// screen that sees the pointer first puts it there (Shelves)
+	property string locating: ""
 
 	property bool shake: true
 	property bool openOnNew: true
@@ -64,9 +68,31 @@ Singleton {
 	}
 
 	// ── opening ──────────────────────────────────────────────────────────
-	// a new shelf on the focused screen, cascaded from the right edge
-	function create(items, name) {
+	function locate(id) {
+		root.locating = id;
+		locateTimeout.restart();
+	}
+
+	// no screen saw the pointer: the shelf stays where it was put
+	Timer {
+		id: locateTimeout
+
+		interval: 500
+		onTriggered: root.locating = ""
+	}
+
+	// a new shelf at the pointer; cascaded from the right edge of the focused
+	// screen when the pointer does not show up. `at` ({ output, x, y }) puts
+	// it there instead.
+	function create(items, name, at) {
 		const id = root.nextId();
+		if (at) {
+			root.shelves = root.shelves.concat([{ id: id, name: name ?? "", output: at.output, x: at.x, y: at.y, docked: false, grid: true, items: [] }]);
+			root.hidden = false;
+			root.addItems(id, items ?? []);
+			root.save();
+			return id;
+		}
 		Popups.withFocusedScreen(screen => {
 			const count = root.shelves.filter(s => s.output === String(screen?.name ?? "")).length;
 			const width = screen?.width ?? 1920;
@@ -82,23 +108,31 @@ Singleton {
 				items: []
 			}]);
 			root.hidden = false;
+			root.locate(id);
 			root.addItems(id, items ?? []);
 			root.save();
 		});
 		return id;
 	}
 
-	// shaking: an empty shelf that is already open is enough
+	// shaking mid-drag brings up the commands; the shelf is one of them
 	function shaken() {
 		if (!root.shake) return;
-		const empty = root.shelves.find(shelf => shelf.items.length === 0);
-		if (empty) {
-			root.hidden = false;
-			root.update(empty.id, { docked: false });
-			return;
-		}
-		root.create([]);
+		DropCommands.summon();
 		Haptics.play("pinned");
+	}
+
+	// the shelf things go to: the one opened last, or a new one at `at`
+	function current(at) {
+		const last = root.shelves[root.shelves.length - 1];
+		if (!last) return root.create([], "", at);
+		root.hidden = false;
+		if (last.docked) root.update(last.id, { docked: false });
+		return last.id;
+	}
+
+	function keep(items, at) {
+		root.addItems(root.current(at), items);
 	}
 
 	function toggle() {
@@ -314,16 +348,47 @@ Singleton {
 		root.copyText(values.join("\n"), items.length === 1 ? "Path copied" : `${items.length} paths copied`);
 	}
 
-	// files as files: they paste into file managers and uploads
+	// files as files: they paste into file managers and uploads. A single
+	// image goes as picture data instead: chats like Teams upload pasted
+	// files to cloud storage (and refuse where sharing is locked down) but
+	// show pasted pictures inline.
 	function copyItems(items) {
 		const files = items.filter(item => item.kind === "file");
 		if (files.length === 0) {
-			root.copyPaths(items);
+			if (items.length > 0) root.copyText(root.textOf(items), items.every(item => item.kind === "link") ? "Link copied" : "Text copied");
+			return;
+		}
+		if (files.length === 1 && root.isImage(files[0])) {
+			Quickshell.execDetached(["python3", root.helper, "copyimage", files[0].path]);
+			Notifs.pushInternal("done", "Image copied", "", { icon: "content_copy", duration: 2000 });
 			return;
 		}
 		const uris = files.map(item => root.fileUri(item.path)).join("\n");
 		Quickshell.execDetached(["sh", "-c", 'printf "%s" "$1" | wl-copy --type text/uri-list', "sh", uris]);
 		Notifs.pushInternal("done", files.length === 1 ? "File copied" : `${files.length} files copied`, "", { icon: "content_copy", duration: 2000 });
+	}
+
+	// what text actions work on: texts and links as they are, files by name
+	function textOf(items) {
+		return items.map(item => item.kind === "file" ? (item.name || item.path.split("/").pop()) : (item.kind === "link" ? item.url : item.text)).join("\n\n");
+	}
+
+	// links open as they are, anything else is searched for
+	function search(items) {
+		for (const item of items.filter(item => item.kind === "link"))
+			Browser.open(item.url);
+		const rest = items.filter(item => item.kind !== "link");
+		if (rest.length > 0) Browser.search(root.textOf(rest));
+	}
+
+	// an action of AiActions on the items, as a temporary chat in the launcher
+	function askAi(items, prompt) {
+		const text = root.textOf(items.filter(item => item.kind !== "file")).replace(/\r\n/g, "\n");
+		if (text.trim() === "") {
+			Notifs.pushInternal("error", "No text to work on", "", { icon: "creation" });
+			return;
+		}
+		Popups.withFocusedScreen(screen => Popups.open("launcher", screen, "", { aiPrompt: prompt, aiText: text }));
 	}
 
 	function open(item) {

@@ -36,6 +36,9 @@ Drawer {
 		// Popups.open("launcher", screen, "", ">file ") opens on a preset query
 		if (typeof Popups.payload === "string" && Popups.payload !== "")
 			content.setLauncherSearch(Popups.payload);
+		// a shelf hands over an AI action on its text
+		else if (Popups.payload?.aiPrompt)
+			content.runClipboardAction(Popups.payload.aiPrompt, Popups.payload.aiText);
 		Qt.callLater(() => content.focusSearch());
 	}
 

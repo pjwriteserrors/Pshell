@@ -10,6 +10,7 @@ binds {
     Mod+D { spawn "qs" "-c" "shell" "ipc" "call" "launcher" "toggle"; }
     Super+Ctrl+L { spawn "qs" "-c" "shell" "ipc" "call" "lock" "lock"; }
     Ctrl+Mod+V { spawn "qs" "-c" "shell" "ipc" "call" "clipboard" "toggle"; }
+    Mod+X { spawn "qs" "-c" "shell" "ipc" "call" "radial" "toggle"; }
     Mod+A { spawn "qs" "-c" "shell" "ipc" "call" "shelf" "toggle"; }
     Mod+Shift+A { spawn "qs" "-c" "shell" "ipc" "call" "shelf" "clipboard"; }
     Mod+Shift+S { spawn "qs" "-c" "shell" "ipc" "call" "studio" "toggle" ""; }

@@ -6,19 +6,24 @@ import Quickshell.Io
 import Quickshell.Wayland
 
 // Keeps headaches away: screen time is counted while the machine is in use,
-// and after a while a toast asks to rest the eyes (20-20-20), to get up, or
-// to drink something. Five minutes away from the screen (idle,
+// and after a while it asks to rest the eyes (20-20-20), to stretch, or to
+// drink something. Five minutes away from the screen (idle,
 // locked, suspended) count as a break. Nothing pops up in fullscreen, while
 // sharing the screen or with manual do not disturb; it waits until then.
 //
 // The eye rest is guided: a calm overlay with a 20 second ring, shown in
-// the first pause of typing so no keys get lost.
+// the first pause of typing so no keys get lost. Every hour a five minute
+// stretch is offered, guided the same way once started.
 //
 // Water is read off the bottle: its level is set to what is left, the
 // difference is what was drunk. Setting it again within two minutes corrects
 // that reading instead of adding a new one, and until then the reading can
 // be taken as a mere setting ("Don't count"), e.g. for the bottle a day
 // starts with. Glasses count on top and can be taken back.
+//
+// The numbers are for an 8 hour workday tracked in qtrack: 1.5 l of water
+// (two bottles) over the eight hours, so the target grows with the tracked
+// time. Without qtrack the whole goal counts at once.
 //
 // Every day keeps millilitres, screen time, breaks, the air pressure swing and
 // logged headaches (breaks.json), so the days with a headache can be told
@@ -28,13 +33,15 @@ Singleton {
 
 	readonly property int sampleSeconds: 30
 	readonly property int eyesSeconds: 20 * 60
-	readonly property int moveSeconds: 50 * 60
+	readonly property int moveSeconds: 60 * 60
 	readonly property int waterSeconds: 45 * 60
 	readonly property int awaySeconds: 5 * 60
 	readonly property int snoozeSeconds: 10 * 60
-	readonly property int bottleSize: 750
+	readonly property var bottleSizes: [500, 750, 1000]
+	property int bottleSize: 750
 	readonly property int glassSize: 250
-	readonly property int goalMl: 2250
+	readonly property int goalMl: 1500
+	readonly property int workdaySeconds: 8 * 3600
 	readonly property int eyeRestSeconds: 20
 	// hPa within six hours that count as a fast fall
 	readonly property real pressureFall: 6
@@ -60,6 +67,12 @@ Singleton {
 	readonly property var todayEntry: root.days[root.today] || root.emptyDay()
 	readonly property int waterMl: root.todayEntry.ml
 	readonly property int screenSeconds: root.todayEntry.screen
+	// ── workday (qtrack) ─────────────────────────────────────────────────
+	readonly property bool workKnown: Host.has("qtrack") && Tmpo.todaySegments.length > 0
+	readonly property int workedSeconds: root.workKnown ? Tmpo.todaySeconds : 0
+	// what should be drunk by now
+	readonly property int paceMl: root.workKnown ? Math.round(Math.min(1, root.workedSeconds / root.workdaySeconds) * root.goalMl) : root.goalMl
+
 	readonly property bool quiet: Notifs.dndManual || Niri.focusedFullscreen || Notifs.sharing
 
 	// ── air pressure ─────────────────────────────────────────────────────
@@ -121,12 +134,15 @@ Singleton {
 			root.recordPressure();
 		}
 	}
-	readonly property var recent: {
+	// this work week, Monday to Friday; days still ahead are marked
+	readonly property var week: {
+		const now = new Date();
+		const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (now.getDay() + 6) % 7);
 		const out = [];
-		for (let i = 0; i < 7; i += 1) {
-			const date = new Date(Date.now() - i * 24 * 3600 * 1000);
+		for (let i = 0; i < 5; i += 1) {
+			const date = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
 			const key = root.dayKey(date);
-			out.push(Object.assign({ key: key, date: date }, root.days[key] || root.emptyDay()));
+			out.push(Object.assign({ key: key, date: date, ahead: key > root.today }, root.days[key] || root.emptyDay()));
 		}
 		return out;
 	}
@@ -224,6 +240,16 @@ Singleton {
 		return drunk;
 	}
 
+	// another bottle: it starts full, nothing is counted
+	function setBottleSize(ml) {
+		if (!root.bottleSizes.includes(ml) || ml === root.bottleSize) return;
+		root.bottleSize = ml;
+		root.bottleLeft = ml;
+		root.lastSip = null;
+		sipWindow.stop();
+		saveDelay.restart();
+	}
+
 	function refill() {
 		root.bottleLeft = root.bottleSize;
 		root.lastSip = null;
@@ -300,17 +326,20 @@ Singleton {
 		if (root.sinceMove >= root.moveSeconds) {
 			root.sinceMove = 0;
 			root.sinceEyes = 0;
-			Notifs.pushInternal("running", "Time for a break", `${root.formatDuration(root.moveSeconds)} at the screen · get up, stretch, move`, {
-				icon: "walk",
+			Notifs.pushInternal("running", "Time to stretch", "5 min · stand up, stretch, walk", {
+				icon: "human_handsup",
 				duration: 60000,
 				actions: [
-					{ label: "Lock screen", icon: "lock", run: () => Session.lock() },
+					{ label: "Start", icon: "play", run: () => root.startStretch() },
 					{ label: "Later", icon: "timer_outline", run: () => root.sinceMove = root.moveSeconds - root.snoozeSeconds }
 				]
 			});
+		} else if (root.sinceWater >= root.waterSeconds && root.waterMl >= root.paceMl + root.glassSize) {
+			// well ahead of the day's pace: no need to ask
+			root.sinceWater = 0;
 		} else if (root.sinceWater >= root.waterSeconds) {
 			root.sinceWater = 0;
-			Notifs.pushInternal("running", "Drink something", `${root.formatLitres(root.waterMl)} / ${root.formatLitres(root.goalMl)} today`, {
+			Notifs.pushInternal("running", "Drink something", root.workKnown ? `${root.formatLitres(root.waterMl)} of ${root.formatLitres(root.paceMl)} by now` : `${root.formatLitres(root.waterMl)} / ${root.formatLitres(root.goalMl)} today`, {
 				icon: "cup_water",
 				duration: 30000,
 				actions: [
@@ -323,6 +352,18 @@ Singleton {
 			root.eyesDueAt = Date.now();
 			root.tryEyeRest();
 		}
+	}
+
+	// ── guided stretch ───────────────────────────────────────────────────
+	function startStretch() {
+		root.sinceMove = 0;
+		root.sinceEyes = 0;
+		Popups.withFocusedScreen(screen => Popups.openModal("stretch", screen));
+	}
+
+	function finishStretch(done) {
+		if (done) root.change(entry => entry.breaks += 1);
+		if (Popups.modal === "stretch") Popups.closeModal();
 	}
 
 	// ── guided eye rest ──────────────────────────────────────────────────
@@ -391,7 +432,7 @@ Singleton {
 		id: saveDelay
 
 		interval: 5000
-		onTriggered: store.setText(JSON.stringify({ enabled: root.enabled, warnedFallDay: root.warnedFallDay, bottleLeft: root.bottleLeft, days: root.days }))
+		onTriggered: store.setText(JSON.stringify({ enabled: root.enabled, warnedFallDay: root.warnedFallDay, bottleSize: root.bottleSize, bottleLeft: root.bottleLeft, days: root.days }))
 	}
 
 	FileView {
@@ -405,7 +446,8 @@ Singleton {
 				const data = JSON.parse(String(text() || "{}")) || {};
 				root.enabled = data.enabled !== false;
 				root.warnedFallDay = data.warnedFallDay || "";
-				root.bottleLeft = Number.isFinite(data.bottleLeft) ? data.bottleLeft : root.bottleSize;
+				root.bottleSize = root.bottleSizes.includes(data.bottleSize) ? data.bottleSize : 750;
+				root.bottleLeft = Number.isFinite(data.bottleLeft) ? Math.min(data.bottleLeft, root.bottleSize) : root.bottleSize;
 				// glasses before the bottle counted 250 ml each
 				const days = data.days || {};
 				for (const key of Object.keys(days)) {

@@ -24,10 +24,11 @@ Singleton {
 	property bool dndWhileTracking: true
 	property bool dndFullscreen: true
 	property bool dndSharing: true
+	property bool dndMeetings: true
 	readonly property bool trackingNow: Tmpo.tracking && !Tmpo.paused
 	// a screencast of someone else than the shell's own live pins
 	readonly property bool sharing: Niri.casts.some(cast => cast.is_active && !Screenshot.liveNodes.includes(Number(cast.pw_node_id)))
-	readonly property bool dndAuto: (root.dndWhileTracking && root.trackingNow) || (root.dndFullscreen && Niri.focusedFullscreen) || (root.dndSharing && root.sharing)
+	readonly property bool dndAuto: (root.dndWhileTracking && root.trackingNow) || (root.dndFullscreen && Niri.focusedFullscreen) || (root.dndSharing && root.sharing) || (root.dndMeetings && Outlook.inMeeting)
 	// switched off by hand while a rule applied: stays off until the rule ends
 	property bool dndAutoSuppressed: false
 	readonly property bool dnd: root.dndManual || (root.dndAuto && !root.dndAutoSuppressed)
@@ -35,6 +36,7 @@ Singleton {
 		if (root.dndManual) return "On";
 		if (!root.dnd) return "Off";
 		if (root.dndSharing && root.sharing) return "Sharing";
+		if (root.dndMeetings && Outlook.inMeeting) return "Meeting";
 		return root.dndFullscreen && Niri.focusedFullscreen ? "Fullscreen" : "Tracking";
 	}
 
@@ -60,6 +62,7 @@ Singleton {
 		if (rule === "tracking") root.dndWhileTracking = !!on;
 		else if (rule === "fullscreen") root.dndFullscreen = !!on;
 		else if (rule === "sharing") root.dndSharing = !!on;
+		else if (rule === "meetings") root.dndMeetings = !!on;
 		root.persist();
 	}
 
@@ -68,7 +71,8 @@ Singleton {
 			dnd: root.dndManual,
 			whileTracking: root.dndWhileTracking,
 			fullscreen: root.dndFullscreen,
-			sharing: root.dndSharing
+			sharing: root.dndSharing,
+			meetings: root.dndMeetings
 		}, null, 2));
 	}
 
@@ -85,6 +89,7 @@ Singleton {
 				root.dndWhileTracking = data.whileTracking !== false;
 				root.dndFullscreen = data.fullscreen !== false;
 				root.dndSharing = data.sharing !== false;
+				root.dndMeetings = data.meetings !== false;
 			} catch (error) {}
 		}
 	}

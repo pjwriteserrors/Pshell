@@ -30,7 +30,7 @@ PanelWindow {
 	readonly property bool menuOpen: root.menuEntries.length > 0
 
 	screen: root.modelData
-	visible: shelfModel.count > 0
+	visible: shelfModel.count > 0 || Shelf.locating !== ""
 	color: "transparent"
 	anchors {
 		top: true
@@ -46,7 +46,7 @@ PanelWindow {
 
 	mask: Region {
 		regions: {
-			if (root.menuOpen || root.previewItem) return [everything];
+			if (root.menuOpen || root.previewItem || Shelf.locating !== "") return [everything];
 			const out = [];
 			for (let i = 0; i < cards.count; i += 1) {
 				const card = cards.itemAt(i);
@@ -106,6 +106,37 @@ PanelWindow {
 		});
 	}
 
+	// a shelf that just opened goes next to the pointer: centred below it, so
+	// what is being dragged only has to move down a little
+	function locate(x, y) {
+		const id = Shelf.locating;
+		if (id === "") return;
+		Shelf.locating = "";
+		Shelf.update(id, {
+			output: root.name,
+			x: Math.round(Math.max(8, Math.min(root.width - 348, x - 170))),
+			y: Math.round(Math.max(8, Math.min(root.height - 360, y + 18)))
+		});
+	}
+
+	// the whole layer takes input for a moment to learn where the pointer is,
+	// with or without something being dragged
+	MouseArea {
+		anchors.fill: parent
+		visible: Shelf.locating !== ""
+		hoverEnabled: true
+		acceptedButtons: Qt.NoButton
+		onEntered: root.locate(mouseX, mouseY)
+		onPositionChanged: mouse => root.locate(mouse.x, mouse.y)
+	}
+
+	DropArea {
+		anchors.fill: parent
+		visible: Shelf.locating !== ""
+		onEntered: drag => root.locate(drag.x, drag.y)
+		onPositionChanged: drag => root.locate(drag.x, drag.y)
+	}
+
 	Repeater {
 		id: cards
 
@@ -113,6 +144,9 @@ PanelWindow {
 
 		delegate: ShelfCard {
 			id: card
+
+			// not shown at the fallback place while the pointer is looked for
+			opacity: Shelf.locating === card.shelfId ? 0 : 1
 
 			readonly property Region boxRegion: Region {
 				item: card.boxArea
@@ -166,11 +200,9 @@ PanelWindow {
 	Rectangle {
 		id: preview
 
-		readonly property bool image: !!root.previewItem && Shelf.isImage(root.previewItem)
-
 		anchors.centerIn: parent
-		width: Math.min(root.width * 0.7, preview.image ? Math.max(200, previewImage.paintedWidth + 24) : 640)
-		height: Math.min(root.height * 0.75, preview.image ? Math.max(120, previewImage.paintedHeight + 24) : previewText.implicitHeight + 48)
+		width: Math.min(root.width * 0.7, previewContent.preferredWidth + 24)
+		height: Math.min(root.height * 0.75, previewContent.preferredHeight + 24)
 		visible: !!root.previewItem
 		radius: Theme.radius.huge
 		color: Theme.base
@@ -192,35 +224,15 @@ PanelWindow {
 			onClicked: root.previewItem = null
 		}
 
-		Image {
-			id: previewImage
+		ShelfPreview {
+			id: previewContent
 
-			anchors.centerIn: parent
-			width: root.width * 0.7 - 24
-			height: root.height * 0.75 - 24
-			visible: preview.image
-			source: preview.image ? Shelf.fileUri(root.previewItem.path) : ""
-			fillMode: Image.PreserveAspectFit
-			asynchronous: true
-			sourceSize: Qt.size(root.width, root.height)
-		}
-
-		Flickable {
 			anchors.fill: parent
-			anchors.margins: 24
-			visible: !preview.image
-			contentHeight: previewText.implicitHeight
-			clip: true
-
-			StyledText {
-				id: previewText
-
-				width: parent.width
-				text: root.previewItem?.kind === "text" ? root.previewItem.text : ""
-				wrapMode: Text.Wrap
-				font.pixelSize: Theme.size.body
-				font.family: Theme.monoFamily
-			}
+			anchors.margins: 12
+			item: root.previewItem
+			mode: "large"
+			maxWidth: root.width * 0.7 - 24
+			maxHeight: root.height * 0.75 - 24
 		}
 
 		Item {

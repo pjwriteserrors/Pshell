@@ -114,6 +114,21 @@ Scope {
 		}
 	}
 
+	// quick actions around the pointer
+	IpcHandler {
+		target: "radial"
+
+		function open(): void {
+			Popups.withFocusedScreen(screen => Popups.openModal("radial", screen));
+		}
+		function close(): void {
+			if (Popups.modal === "radial") Popups.closeModal();
+		}
+		function toggle(): void {
+			root.modalOnFocused("radial");
+		}
+	}
+
 	IpcHandler {
 		target: "screenshot"
 
@@ -371,6 +386,10 @@ Scope {
 		}
 		function eyes(): void {
 			Breaks.startEyeRest();
+		}
+		function stretch(): void {
+			if (Popups.modal === "stretch") Breaks.finishStretch(false);
+			else Breaks.startStretch();
 		}
 		function toggleReminders(): void {
 			Breaks.setEnabled(!Breaks.enabled);

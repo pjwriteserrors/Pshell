@@ -10,7 +10,8 @@ import qs.core.views.panels.breaks
 // Breaks against headaches. The glass fills with the day's water (click:
 // one more), the rings run towards the next eye rest, glass and break, the
 // week shows screen time, water and headaches side by side, and the days
-// with a headache are compared with the others.
+// with a headache are compared with the others. With qtrack the water bar
+// marks what should be drunk by now in the tracked workday.
 Drawer {
 	id: root
 
@@ -20,7 +21,7 @@ Drawer {
 	contentHeight: layout.implicitHeight
 
 	readonly property var reminders: [
-		{ key: "move", icon: "walk", title: "Break", since: Breaks.sinceMove, every: Breaks.moveSeconds, color: Theme.primary },
+		{ key: "move", icon: "human_handsup", title: "Stretch", since: Breaks.sinceMove, every: Breaks.moveSeconds, color: Theme.primary },
 		{ key: "water", icon: "cup_water", title: "Water", since: Breaks.sinceWater, every: Breaks.waterSeconds, color: Theme.secondary },
 		{ key: "eyes", icon: "eye_outline", title: "Eyes", since: Breaks.sinceEyes, every: Breaks.eyesSeconds, color: Theme.tertiary }
 	]
@@ -139,6 +140,15 @@ Drawer {
 						onClicked: Breaks.drinkGlass()
 					}
 				}
+
+				Segmented {
+					Layout.alignment: Qt.AlignHCenter
+					implicitWidth: 138
+					Layout.preferredHeight: 28
+					current: String(Breaks.bottleSize)
+					options: Breaks.bottleSizes.map(ml => ({ value: String(ml), label: ({ 500: "½ L", 750: "¾ L", 1000: "1 L" })[ml] }))
+					onSelected: value => Breaks.setBottleSize(Number(value))
+				}
 			}
 
 			Item {
@@ -199,13 +209,13 @@ Drawer {
 						opacity: root.shown ? 1 : 0
 
 						HoverHandler {
-							enabled: reminder.modelData.key === "eyes"
+							enabled: reminder.modelData.key !== "water"
 							cursorShape: Qt.PointingHandCursor
 						}
 
 						TapHandler {
-							enabled: reminder.modelData.key === "eyes"
-							onTapped: Breaks.startEyeRest()
+							enabled: reminder.modelData.key !== "water"
+							onTapped: reminder.modelData.key === "eyes" ? Breaks.startEyeRest() : Breaks.startStretch()
 						}
 						transform: Translate {
 							x: root.shown ? 0 : 16
@@ -257,7 +267,8 @@ Drawer {
 			}
 		}
 
-		// the day's water: one segment per bottle up to the goal
+		// the day's water: one segment per bottle up to the goal; the tick is
+		// what should be drunk by now
 		RowLayout {
 			Layout.fillWidth: true
 			spacing: 12
@@ -283,6 +294,16 @@ Drawer {
 					text: `/ ${Breaks.formatLitres(Breaks.goalMl)}`
 					tone: Theme.textSubtle
 					font.pixelSize: Theme.size.label
+					tabular: true
+				}
+
+				StyledText {
+					anchors.baseline: parent.children[0].baseline
+					visible: Breaks.workKnown && Breaks.paceMl - Breaks.waterMl >= 100
+					text: `−${Math.round((Breaks.paceMl - Breaks.waterMl) / 50) * 50} ml`
+					tone: Theme.warning
+					font.pixelSize: Theme.size.label
+					font.weight: Font.DemiBold
 					tabular: true
 				}
 			}
@@ -333,6 +354,24 @@ Drawer {
 							color: segment.index * Breaks.bottleSize >= Breaks.goalMl ? Theme.secondary : Theme.primary
 							visible: width > 1
 						}
+
+						Rectangle {
+							readonly property real at: (Breaks.paceMl - segment.index * Breaks.bottleSize) / Breaks.bottleSize
+
+							visible: Breaks.workKnown && at > 0 && at <= 1 && Breaks.paceMl < Breaks.goalMl
+							x: Math.round(parent.width * at * (root.shown ? 1 : 0)) - 1
+							anchors.verticalCenter: parent.verticalCenter
+							width: 2
+							height: 18
+							radius: 1
+							color: Breaks.waterMl >= Breaks.paceMl ? Theme.textMuted : Theme.warning
+
+							Behavior on x {
+								SpatialAnim {
+									duration: Motion.extraLong + 200
+								}
+							}
+						}
 					}
 				}
 			}
@@ -357,7 +396,7 @@ Drawer {
 
 				anchors.fill: parent
 				anchors.margins: 14
-				days: Breaks.recent
+				days: Breaks.week
 			}
 		}
 

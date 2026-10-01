@@ -59,6 +59,7 @@ PROGRAMS = {
     "fingerprint": [("fprintd-list", "fingerprint unlock")],
     "ssh": [("secret-tool", "SSH passwords")],
     "display-profiles": [("jq", "display profiles")],
+    "microsoft-calendar": [("wl-copy", "sign-in code"), ("xdg-open", "sign-in page, joining meetings")],
 }
 OPTIONAL_PROGRAMS = [
     ("ollama", "launcher chat and >ollama"), ("pdftotext", "chat attachments"), ("pandoc", "chat attachments"),

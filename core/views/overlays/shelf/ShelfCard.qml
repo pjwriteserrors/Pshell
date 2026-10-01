@@ -12,9 +12,7 @@ import qs.style.widgets
 // One shelf, laid over the whole screen layer; `box` is the card and `tab`
 // the docked form, both offered to the layer's input mask. The header moves
 // the card (and onto another screen), the stack at its left drags
-// everything out at once. While something is dragged over it, instant
-// actions appear below: dropping there acts on the dragged things without
-// keeping them. It pops in when it opens, slides into a tab at the screen
+// everything out at once. It pops in when it opens, slides into a tab at the screen
 // edge when docked and back out when undocked. The tab moves up and down the
 // edge; pulled away from it, the shelf opens where it is let go.
 Item {
@@ -31,6 +29,39 @@ Item {
 	property bool moving: false
 	property real dragX: 0
 	property real dragY: 0
+	// where the card is drawn: it glides after the pointer and settles
+	property real glideX: root.moving ? root.dragX : root.shelf.x
+	property real glideY: root.moving ? root.dragY : root.shelf.y
+	readonly property bool gliding: root.moving || settle.running
+
+	Behavior on glideX {
+		enabled: root.gliding
+
+		SpringAnimation {
+			spring: 4.2
+			damping: 0.52
+			mass: 0.7
+			epsilon: 0.2
+		}
+	}
+
+	Behavior on glideY {
+		enabled: root.gliding
+
+		SpringAnimation {
+			spring: 4.2
+			damping: 0.52
+			mass: 0.7
+			epsilon: 0.2
+		}
+	}
+
+	// after letting go the card still swings into its place
+	Timer {
+		id: settle
+
+		interval: 700
+	}
 
 	// the tab while it is dragged: along the edge, and how far it is pulled out
 	property bool tabMoving: false
@@ -45,9 +76,7 @@ Item {
 	property real dock: root.shelf.docked ? 1 : 0
 
 	readonly property var selectedItems: root.items.filter(item => root.selection.includes(item.id))
-	property int actionHover: 0
-	readonly property bool dragOver: drop.containsDrag || tabDrop.containsDrag || root.actionHover > 0
-	readonly property bool actionsShown: root.dock < 0.5 && (root.dragOver || linger.running)
+	readonly property bool dragOver: drop.containsDrag || tabDrop.containsDrag
 	// cards unless the list was picked for this shelf
 	readonly property bool grid: root.shelf.grid !== false
 	readonly property real cardWidth: root.grid ? 340 : 310
@@ -109,30 +138,6 @@ Item {
 		root.animateAppear(0);
 	}
 
-	// how many of the action targets (and the gap above them) hold the drag
-	function recountActions() {
-		let count = gapDrop.containsDrag ? 1 : 0;
-		for (let i = 0; i < actionTargets.count; i += 1)
-			if (actionTargets.itemAt(i)?.containsDrag) count += 1;
-		root.actionHover = count;
-	}
-
-	Timer {
-		running: root.actionHover > 0
-		repeat: true
-		interval: 400
-		onTriggered: root.recountActions()
-	}
-
-	// the drag left the card on the way to the actions: keep them a moment
-	Timer {
-		id: linger
-
-		interval: 350
-	}
-
-	onDragOverChanged: if (!root.dragOver) linger.restart()
-
 	// ── items as a model, so rows survive changes of the shelf ────────────
 	ListModel {
 		id: itemModel
@@ -165,7 +170,7 @@ Item {
 		if (!many) {
 			entries.push({ label: "Open", icon: "open_in_new", run: () => Shelf.open(item) });
 			if (item.kind === "file") entries.push({ label: "Show in folder", icon: "folder_open", run: () => Shelf.showInFolder(item) });
-			if (Shelf.isImage(item) || item.kind === "text") entries.push({ label: "Preview", icon: "eye", run: () => root.previewRequested(item) });
+			if (!item.dir && item.kind !== "link") entries.push({ label: "Preview", icon: "eye", run: () => root.previewRequested(item) });
 			entries.push({ separator: true });
 		}
 		entries.push({ label: many ? `Copy ${targets.length} files` : "Copy", icon: "content_copy", run: () => Shelf.copyItems(targets) });
@@ -173,6 +178,12 @@ Item {
 		if (!many && item.kind === "file") entries.push({ label: "Rename", icon: "pencil", run: () => root.renamingItem = item.id });
 		if (KdeConnect.available) entries.push({ label: `Send to ${KdeConnect.name}`, icon: "cellphone_arrow_down", run: () => Shelf.sendToPhone(targets) });
 		if (targets.some(t => t.kind === "file")) entries.push({ label: "Compress to ZIP", icon: "package_variant", run: () => Shelf.zip(root.shelfId, targets) });
+		if (targets.every(t => t.kind !== "file")) {
+			entries.push({ label: targets.every(t => t.kind === "link") ? "Open in browser" : "Search", icon: "magnify", run: () => Shelf.search(targets) });
+			entries.push({ separator: true });
+			for (const action of AiActions.fixed)
+				entries.push({ label: action.title, icon: action.icon, run: () => Shelf.askAi(targets, action.prompt) });
+		}
 		if (!many && Shelf.isImage(item)) {
 			entries.push({ separator: true });
 			entries.push({ label: "Extract text", icon: "text_recognition", run: () => Shelf.extractText(item) });
@@ -279,13 +290,18 @@ Item {
 	Item {
 		id: box
 
-		readonly property real homeX: root.moving ? root.dragX : root.shelf.x
+		readonly property real homeX: root.glideX
 
 		// docking slides it past the screen edge, where the tab comes from
 		x: box.homeX + root.dock * (root.width - box.homeX + 24)
-		y: root.moving ? root.dragY : root.shelf.y
+		y: root.glideY
 		width: root.cardWidth
-		height: card.height + (root.actionsShown ? actions.height + 10 : 0)
+		// it leans into the pull while it trails behind
+		transform: Rotation {
+			origin.x: box.width / 2
+			angle: root.gliding ? Math.max(-4, Math.min(4, (root.dragX - root.glideX) * 0.035)) : 0
+		}
+		height: card.height
 		visible: root.dock < 1
 		opacity: root.appear * (1 - root.dock)
 		scale: (0.86 + 0.14 * root.appear) * (1 - 0.12 * root.dock)
@@ -341,12 +357,15 @@ Item {
 				MouseArea {
 					id: mover
 
+					// in the layer's coordinates: the card itself trails behind
 					property point grab
+					property point start
 
 					anchors.fill: parent
 					cursorShape: pressed ? Qt.ClosedHandCursor : Qt.ArrowCursor
 					onPressed: event => {
-						mover.grab = Qt.point(event.x, event.y);
+						mover.grab = mover.mapToItem(root, event.x, event.y);
+						mover.start = Qt.point(root.shelf.x, root.shelf.y);
 						root.dragX = root.shelf.x;
 						root.dragY = root.shelf.y;
 						root.moving = true;
@@ -354,10 +373,12 @@ Item {
 					}
 					onPositionChanged: event => {
 						if (!pressed) return;
-						root.dragX += event.x - mover.grab.x;
-						root.dragY += event.y - mover.grab.y;
+						const at = mover.mapToItem(root, event.x, event.y);
+						root.dragX = mover.start.x + at.x - mover.grab.x;
+						root.dragY = mover.start.y + at.y - mover.grab.y;
 					}
 					onReleased: {
+						settle.restart();
 						root.moving = false;
 						root.moved(root.dragX, root.dragY);
 					}
@@ -640,122 +661,6 @@ Item {
 						onSelect: add => root.select(tile.item, add)
 						onMenuRequested: (mx, my) => root.openItemMenu(tile, tile.item, mx, my)
 						onRenamed: name => root.finishRename(tile.item, name)
-					}
-				}
-			}
-		}
-
-		// the gap between card and actions still counts as over the shelf
-		DropArea {
-			id: gapDrop
-
-			x: 0
-			y: card.height
-			width: card.width
-			height: 10
-			visible: root.actionsShown
-			onEntered: Qt.callLater(root.recountActions)
-			onExited: Qt.callLater(root.recountActions)
-		}
-
-		// ── instant actions: drop on one to act without keeping ──────────
-		Rectangle {
-			id: actions
-
-			readonly property var entries: [
-				{ label: "Copy path", icon: "clipboard_text", run: items => Shelf.copyPaths(items) },
-				{ label: "ZIP", icon: "package_variant", run: items => Shelf.zip(root.shelfId, items) },
-				{ label: "Text", icon: "text_recognition", run: items => items.filter(i => Shelf.isImage(i)).forEach(i => Shelf.extractText(i)) }
-			].concat(KdeConnect.available ? [{ label: "Phone", icon: "cellphone_arrow_down", run: items => Shelf.sendToPhone(items) }] : [])
-
-			anchors.top: card.bottom
-			anchors.topMargin: 10
-			anchors.horizontalCenter: card.horizontalCenter
-			width: actionRow.implicitWidth + 12
-			height: 64
-			radius: Theme.radius.huge
-			color: Theme.base
-			border.width: 1
-			border.color: Theme.outline
-			opacity: root.actionsShown ? 1 : 0
-			visible: opacity > 0.01
-			scale: root.actionsShown ? 1 : 0.9
-			transformOrigin: Item.Top
-
-			Behavior on opacity {
-				Anim {
-					duration: Motion.short
-				}
-			}
-
-			Behavior on scale {
-				SpatialAnim {
-					duration: Motion.medium
-				}
-			}
-
-			Row {
-				id: actionRow
-
-				anchors.centerIn: parent
-				spacing: 4
-
-				Repeater {
-					id: actionTargets
-
-					model: actions.entries
-
-					delegate: DropArea {
-						id: target
-
-						required property var modelData
-
-						width: 62
-						height: 52
-
-						onEntered: Qt.callLater(root.recountActions)
-						onExited: Qt.callLater(root.recountActions)
-						onDropped: event => {
-							target.modelData.run(Shelf.itemsOfDrop(event));
-							event.accept(Qt.CopyAction);
-							Qt.callLater(root.recountActions);
-						}
-
-						Rectangle {
-							anchors.fill: parent
-							radius: Theme.radius.large
-							color: target.containsDrag ? Theme.primary : Theme.layer1
-							scale: target.containsDrag ? 1.06 : 1
-
-							Behavior on color {
-								ColorAnim {}
-							}
-
-							Behavior on scale {
-								SpatialAnim {
-									duration: Motion.short
-								}
-							}
-
-							ColumnLayout {
-								anchors.centerIn: parent
-								spacing: 2
-
-								Glyph {
-									Layout.alignment: Qt.AlignHCenter
-									icon: target.modelData.icon
-									size: 18
-									color: target.containsDrag ? Theme.onPrimary : Theme.text
-								}
-
-								StyledText {
-									Layout.alignment: Qt.AlignHCenter
-									text: target.modelData.label
-									tone: target.containsDrag ? Theme.onPrimary : Theme.textMuted
-									font.pixelSize: Theme.size.tiny
-								}
-							}
-						}
 					}
 				}
 			}

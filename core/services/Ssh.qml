@@ -23,6 +23,12 @@ Singleton {
 	property string actionError: ""
 	property string actionMode: ""
 	readonly property bool actionRunning: actionProcess.running
+	// a copy started away from the panel reports as a toast
+	property bool actionToast: false
+	// most recently used first; logins never used keep their place at the end
+	readonly property var recent: root.entries.filter(entry => Number(entry.last_used_at) > 0)
+		.sort((a, b) => Number(b.last_used_at) - Number(a.last_used_at))
+		.concat(root.entries.filter(entry => !(Number(entry.last_used_at) > 0)))
 	readonly property bool loading: listProcess.running
 
 	readonly property bool canAdd: root.draftHost.trim() !== ""
@@ -83,6 +89,17 @@ Singleton {
 		actionProcess.running = true;
 	}
 
+	function copyPassword(entryId, toast = false) {
+		const id = String(entryId || "");
+		if (id === "" || actionProcess.running) return;
+		root.actionToast = toast;
+		root.actionMode = "copy";
+		root.actionMessage = "";
+		root.actionError = "";
+		actionProcess.command = ["python3", root.cliPath, "copy-password", "--id", id, "--json"];
+		actionProcess.running = true;
+	}
+
 	function connect(entryId) {
 		const id = String(entryId || "");
 		if (id === "") return;
@@ -99,10 +116,12 @@ Singleton {
 				root.draftPassword = "";
 				root.draftKeyPath = "";
 			}
-			root.refresh(false);
+			if (root.actionMode !== "copy") root.refresh(false);
 		} else {
 			root.statusMessage = root.actionError.trim() || "SSH manager action failed.";
 		}
+		if (root.actionToast) Notifs.pushInternal(exitCode === 0 ? "done" : "error", root.statusMessage, "", { icon: "key_variant" });
+		root.actionToast = false;
 		root.actionMode = "";
 		root.actionMessage = "";
 		root.actionError = "";

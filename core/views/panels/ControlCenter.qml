@@ -914,8 +914,9 @@ Drawer {
 					model: [
 						{ rule: "tracking", icon: "timer_outline", title: "While tracking time", checked: Notifs.dndWhileTracking },
 						{ rule: "fullscreen", icon: "fullscreen", title: "In fullscreen", checked: Notifs.dndFullscreen },
-						{ rule: "sharing", icon: "monitor_share", title: "While sharing the screen", checked: Notifs.dndSharing }
-					].filter(rule => rule.rule !== "tracking" || Host.has("qtrack"))
+						{ rule: "sharing", icon: "monitor_share", title: "While sharing the screen", checked: Notifs.dndSharing },
+						{ rule: "meetings", icon: "calendar_clock", title: "In meetings", checked: Notifs.dndMeetings }
+					].filter(rule => (rule.rule !== "tracking" || Host.has("qtrack")) && (rule.rule !== "meetings" || Host.has("microsoft-calendar")))
 
 					delegate: ListItem {
 						id: rule
