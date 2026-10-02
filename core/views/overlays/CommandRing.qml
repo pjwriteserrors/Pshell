@@ -86,6 +86,8 @@ PanelWindow {
 		root.chosen = -1;
 		root.index = -1;
 		root.origin = -90;
+		gone.stop();
+		heldIdle.stop();
 		enterAnim.restart();
 	}
 
@@ -223,21 +225,26 @@ PanelWindow {
 		shape: RegionShape.Ellipse
 	}
 
-	DropArea {
+	// a new one for every summon: one that was hidden mid-drag never hears
+	// the drag leave, and takes no other after that
+	Loader {
 		id: catcher
 
 		anchors.fill: parent
-		onEntered: drag => {
-			gone.stop();
-			if (root.waiting) root.claim(drag.x, drag.y, drag.formats);
-			root.pointer(drag.x, drag.y);
-		}
-		onPositionChanged: drag => root.pointer(drag.x, drag.y)
-		onExited: gone.restart()
-		onDropped: event => {
-			const items = Shelf.itemsOfDrop(event);
-			event.accept(Qt.CopyAction);
-			root.commit(items);
+		active: DropCommands.active
+		sourceComponent: DropArea {
+			onEntered: drag => {
+				gone.stop();
+				if (root.waiting) root.claim(drag.x, drag.y, drag.formats);
+				root.pointer(drag.x, drag.y);
+			}
+			onPositionChanged: drag => root.pointer(drag.x, drag.y)
+			onExited: gone.restart()
+			onDropped: event => {
+				const items = Shelf.itemsOfDrop(event);
+				event.accept(Qt.CopyAction);
+				root.commit(items);
+			}
 		}
 	}
 

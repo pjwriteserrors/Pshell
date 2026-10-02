@@ -8,6 +8,7 @@ import Quickshell.Services.Mpris
 import qs.style.theme
 import qs.core.services
 import qs.style.widgets
+import qs.core.views.panels.media
 
 // Now playing. The blurred cover tints the panel, the live spectrum breathes
 // behind the controls, the seek bar thickens under the pointer and shows the
@@ -205,6 +206,15 @@ Drawer {
 						tone: Theme.textMuted
 						font.pixelSize: Theme.size.body
 					}
+				}
+
+				IconButton {
+					Layout.alignment: Qt.AlignTop
+					visible: Plugins.on("song-detection")
+					icon: "waveform"
+					iconSize: 18
+					checked: SongDetect.listening
+					onClicked: SongDetect.toggle()
 				}
 			}
 
@@ -457,6 +467,112 @@ Drawer {
 						selected: sinkRow.modelData.active
 						onClicked: Audio.setDefaultSink(sinkRow.modelData.name)
 					}
+				}
+			}
+
+			// what song detection heard
+			Rectangle {
+				Layout.fillWidth: true
+				visible: Plugins.on("song-detection") && SongDetect.state !== ""
+				implicitHeight: (SongDetect.listening ? listening.implicitHeight : heard.implicitHeight) + 24
+				radius: Theme.radius.large
+				color: Theme.layer1
+
+				RowLayout {
+					id: heard
+
+					readonly property bool found: SongDetect.state === "found" && !!SongDetect.song
+
+					anchors.fill: parent
+					anchors.margins: 12
+					spacing: 12
+					visible: !SongDetect.listening
+
+					ClippingRectangle {
+						Layout.preferredWidth: 72
+						Layout.preferredHeight: 72
+						Layout.alignment: Qt.AlignTop
+						visible: heard.found
+						radius: Theme.radius.medium
+						color: Theme.layer2
+
+						Glyph {
+							anchors.centerIn: parent
+							icon: "music"
+							size: 28
+							color: Theme.textSubtle
+						}
+
+						Image {
+							anchors.fill: parent
+							source: heard.found ? SongDetect.song.cover : ""
+							sourceSize.width: 144
+							sourceSize.height: 144
+							fillMode: Image.PreserveAspectCrop
+							asynchronous: true
+						}
+					}
+
+					ColumnLayout {
+						Layout.fillWidth: true
+						spacing: 3
+
+						StyledText {
+							Layout.fillWidth: true
+							text: heard.found ? SongDetect.song.title : SongDetect.message
+							font.pixelSize: heard.found ? Theme.size.title : Theme.size.body
+							font.weight: heard.found ? Font.Bold : Font.Medium
+							wrapMode: Text.WordWrap
+							maximumLineCount: 2
+							elide: Text.ElideRight
+						}
+
+						StyledText {
+							Layout.fillWidth: true
+							visible: heard.found && text !== ""
+							text: heard.found ? [SongDetect.song.artist, SongDetect.song.album].filter(part => !!part).join(" · ") : ""
+							tone: Theme.textMuted
+							font.pixelSize: Theme.size.label
+							wrapMode: Text.WordWrap
+							maximumLineCount: 2
+							elide: Text.ElideRight
+						}
+
+						Flow {
+							Layout.fillWidth: true
+							Layout.topMargin: 6
+							visible: heard.found
+							spacing: 6
+
+							Repeater {
+								model: heard.found ? SongDetect.song.links : []
+
+								delegate: Chip {
+									required property var modelData
+									text: modelData.name
+									icon: modelData.icon
+									onClicked: SongDetect.open(modelData.url)
+								}
+							}
+						}
+					}
+
+					IconButton {
+						Layout.alignment: Qt.AlignTop
+						implicitWidth: 28
+						implicitHeight: 28
+						icon: "close"
+						onClicked: SongDetect.dismiss()
+					}
+				}
+
+				SongListening {
+					id: listening
+
+					anchors.fill: parent
+					anchors.margins: 12
+					visible: SongDetect.listening
+					active: root.shown && SongDetect.listening
 				}
 			}
 

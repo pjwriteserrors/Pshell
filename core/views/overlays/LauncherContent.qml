@@ -291,6 +291,13 @@ Item {
 			description: "Close all pinned screenshots"
 		},
 		{
+			id: "song",
+			plugin: "song-detection",
+			command: "song",
+			name: "Song Detection",
+			description: "Name the song that is playing"
+		},
+		{
 			id: "updates",
 			plugin: "updates",
 			command: "updates",
@@ -2437,6 +2444,10 @@ Item {
 			Screenshot.unpinAll();
 			root.closeRequested();
 			break;
+		case "song":
+			root.closeRequested();
+			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "song", "detect"]);
+			break;
 		case "updates":
 			root.openUpdatesRequested();
 			break;
@@ -2974,6 +2985,7 @@ Item {
 		case "scroll": return "arrow_expand_vertical";
 		case "shots": return "image_multiple";
 		case "unpin": return "pin_off_outline";
+		case "song": return "waveform";
 		case "updates": return "package_up";
 		case "dnd": return "minus_circle";
 		}

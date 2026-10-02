@@ -265,6 +265,20 @@ Scope {
 		}
 	}
 
+	// names the song that is playing, in the media panel
+	IpcHandler {
+		target: "song"
+		enabled: Plugins.on("song-detection")
+
+		function detect(): void {
+			if (Popups.current !== "media") Popups.withFocusedScreen(screen => Popups.open("media", screen));
+			SongDetect.detect();
+		}
+		function cancel(): void {
+			SongDetect.cancel();
+		}
+	}
+
 	IpcHandler {
 		target: "updates"
 		enabled: Plugins.on("updates")

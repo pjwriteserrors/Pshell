@@ -52,6 +52,7 @@ PROGRAMS = {
         ("notify-send", "failure notices"), ("gsettings", "GTK, icons, cursor"),
         ("flock", "theme scripts"), ("git", "style switching"),
     ],
+    "song-detection": [("parec", "listening to what plays")],
     "backlight": [("brightnessctl", "screen brightness")],
     "ddc": [("ddcutil", "monitor brightness")],
     "power-profiles": [("powerprofilesctl", "power profiles")],
@@ -72,7 +73,7 @@ HOOK_PROGRAMS = {
     "spicetify": [("spicetify", "")],
 }
 PYTHON_MODULES = {
-    "core": [("numpy", "scrolling screenshots, live pins"), ("dbus", "bluetooth pairing, live pins"), ("gi", "bluetooth pairing, live pins")],
+    "core": [("numpy", "scrolling screenshots, live pins, song detection"), ("dbus", "bluetooth pairing, live pins"), ("gi", "bluetooth pairing, live pins")],
     "hook:openrgb": [("PIL", "lighting")],
 }
 OPTIONAL_MODULES = [("cv2", "smart select finds cards, fields and panels (python-opencv)")]

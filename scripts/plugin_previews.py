@@ -318,6 +318,11 @@ def prepare(work: Path):
         {"id": "1", "title": "Groceries", "body": "- Oat milk\n- Coffee\n- Lemons", "pinned": True},
         {"id": "2", "title": "Release", "body": "## Friday\nTag, changelog, announce", "pinned": True},
     ]))
+    (state / "song.json").write_text(json.dumps({
+        "title": "Get Lucky", "artist": "Daft Punk", "album": "Random Access Memories", "cover": "",
+        "links": [{"name": "Apple Music", "icon": "apple", "url": ""}, {"name": "Spotify", "icon": "music", "url": ""},
+                  {"name": "YouTube", "icon": "play_circle", "url": ""}, {"name": "Shazam", "icon": "open_in_new", "url": ""}],
+    }))
     env = environment(work)
     for line in ["https://quickshell.org/docs", "git rebase --onto main feature~3", "Paderborn, 14:30, room 2"]:
         subprocess.run(["cliphist", "store"], input=line, text=True, env=env)

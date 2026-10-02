@@ -29,6 +29,7 @@
 	{ "id": "qtrack", "name": "Time tracking", "category": "Panels", "default": false },
 	{ "id": "notes", "name": "Notes", "category": "Panels", "default": false },
 	{ "id": "ssh", "name": "SSH logins", "category": "Panels", "default": false },
+	{ "id": "song-detection", "name": "Song detection", "category": "Panels", "requires": ["media"], "preview": {"on": ["bar", "media"], "ipc": ["panels toggleMedia"], "base": "off"} },
 
 	{ "id": "apps", "name": "Apps", "category": "Launcher" },
 	{ "id": "calculator", "name": "Calculator", "category": "Launcher" },

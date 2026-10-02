@@ -296,6 +296,7 @@ Singleton {
 		"office_building": "󰦑",
 		"mouse": "󰍽",
 		"music": "󰝚",
+		"waveform": "󱑽",
 		"music_note": "󰎇",
 		"note_edit": "󱞁",
 		"note_multiple": "󰚸",

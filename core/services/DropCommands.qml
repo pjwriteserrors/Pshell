@@ -52,6 +52,8 @@ Singleton {
 	readonly property var commands: root.page === "ai" ? root.ai : root.main
 
 	function summon() {
+		// off first: the rings start over, also when one is still up
+		root.active = false;
 		root.output = "";
 		root.page = "";
 		root.offered = "";
