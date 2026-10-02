@@ -7,7 +7,7 @@
       and enables the user services, then runs `doctor`.
   setup.py doctor
       programs, python modules, fonts, dotfiles and config the enabled
-      features and theme hooks rely on. Exit 1 when something required is
+      plugins and theme hooks rely on. Exit 1 when something required is
       missing.
 """
 
@@ -36,7 +36,7 @@ OLD_STATE_FILES = [
 sys.path.insert(0, str(ROOT / "scripts"))
 import host  # noqa: E402
 
-# (program, why) per feature; "core" is every machine
+# (program, why) per plugin; "core" is every machine
 PROGRAMS = {
     "core": [
         ("quickshell", "the shell"), ("niri", "compositor"), ("python3", "scripts"),
@@ -112,8 +112,8 @@ def applies(when, profile_name, profile):
     kind, _, value = when.partition(":")
     if kind == "host":
         return value == profile_name
-    if kind == "feature":
-        return profile.get("features", {}).get(value) is True
+    if kind == "plugin":
+        return host.plugins().get(value) is True
     if kind == "hook":
         return value in profile.get("themeHooks", [])
     raise ValueError(f"unknown condition in dotfiles/manifest: {when}")
@@ -150,20 +150,19 @@ def doctor():
     elif not profile:
         report.fail(f"hosts/{name}.json is missing or not valid JSON")
     else:
-        enabled = sorted(key for key, on in profile.get("features", {}).items() if on)
-        report.ok(f"profile {name}: {', '.join(enabled) or 'no optional features'}")
+        report.ok(f"profile {name}")
 
     if ROOT != CONFIG_DIR.resolve():
         report.warn(f"repository is at {ROOT}; `quickshell -c shell` expects {CONFIG_DIR}")
 
     report.section("Programs")
     before = report.failures
-    features = ["core"] + [key for key, on in profile.get("features", {}).items() if on]
-    for feature in features:
-        for program, why in PROGRAMS.get(feature, []):
+    plugins = ["core"] + [key for key, on in host.plugins().items() if on]
+    for plugin in plugins:
+        for program, why in PROGRAMS.get(plugin, []):
             if installed(program):
                 continue
-            label = why if feature == "core" else f"{why} ({feature})"
+            label = why if plugin == "core" else f"{why} ({plugin})"
             report.fail(f"{program} – {label}")
     for program, why in OPTIONAL_PROGRAMS:
         if not installed(program):

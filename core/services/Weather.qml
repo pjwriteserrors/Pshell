@@ -194,7 +194,7 @@ Singleton {
 	}
 
 	Timer {
-		running: true
+		running: Plugins.on("weather")
 		repeat: true
 		interval: 300000
 		triggeredOnStart: true

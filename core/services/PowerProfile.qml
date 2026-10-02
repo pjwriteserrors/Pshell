@@ -10,7 +10,8 @@ Singleton {
 
 	property string current: ""
 	property var profiles: []
-	readonly property bool available: root.profiles.length > 0
+	readonly property bool wanted: Plugins.on("power-profiles")
+	readonly property bool available: root.wanted && root.profiles.length > 0
 
 	readonly property var labels: ({ "power-saver": "Power saver", "balanced": "Balanced", "performance": "Performance" })
 	readonly property var icons: ({ "power-saver": "leaf", "balanced": "scale_balance", "performance": "speedometer" })
@@ -24,7 +25,7 @@ Singleton {
 	}
 
 	function refresh() {
-		if (Host.has("power-profiles") && !readProc.running) readProc.running = true;
+		if (root.wanted && !readProc.running) readProc.running = true;
 	}
 
 	function set(profile) {
@@ -66,5 +67,6 @@ Singleton {
 		}
 	}
 
+	onWantedChanged: root.refresh()
 	Component.onCompleted: root.refresh()
 }

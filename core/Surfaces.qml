@@ -11,12 +11,13 @@ import qs.core.views.overlays.studio
 import qs.style.views
 
 // Every surface of every feature. The style draws the frame they hang from
-// and may replace any view (style/views); which features exist is decided
-// here and in the host profile, never by the style.
+// and may replace any view (style/views); which of them exist is decided
+// here and by the plugin switches, never by the style.
 Scope {
 	// services that act on their own, without a surface to pull them in
 	readonly property var background: [Agents, TimerGuard, ClipboardHints]
 
+	// notifications and the shell's own messages
 	Variants {
 		model: Quickshell.screens
 
@@ -24,94 +25,187 @@ Scope {
 	}
 
 	Variants {
-		model: Quickshell.screens
+		model: Plugins.on("osd") ? Quickshell.screens : []
 
 		OsdPanel {}
 	}
 
 	Variants {
-		model: Quickshell.screens
+		model: Plugins.on("screenshot") ? Quickshell.screens : []
 
 		ScreenshotOverlay {}
 	}
 
 	// pinned screenshots, always on top
 	Variants {
-		model: Quickshell.screens
+		model: Plugins.on("pins") ? Quickshell.screens : []
 
 		ScreenshotPins {}
 	}
 
 	// shelves (Dropover-like stashes), above the windows
 	Variants {
-		model: Quickshell.screens
+		model: Plugins.on("shelves") ? Quickshell.screens : []
 
 		Shelves {}
 	}
 
 	// commands for what is being dragged, around the pointer
 	Variants {
-		model: Quickshell.screens
+		model: Plugins.on("drop-commands") ? Quickshell.screens : []
 
 		CommandRing {}
 	}
 
 	// panels (one instance each, they follow the screen they are opened on)
 	Launcher {}
-	ControlCenter {}
-	TodayPanel {}
-	BreaksPanel {}
-	MediaPanel {}
-	ClipboardPanel {}
-	TrayMenuPanel {}
-	OverviewPanel {}
-	UpdatesPanel {}
-
-	// full-screen overlays
-	PowerMenu {}
-	RadialMenu {}
-	EyeRest {}
-	StretchBreak {}
-
-	// Studio
-	ThemePicker {}
-	AnimationPicker {}
-	DressPage {}
-	StylePage {}
-	CombinationsPage {}
-
-	LockScreen {}
 
 	LazyLoader {
-		active: Host.has("qtrack")
+		active: Plugins.on("quick-settings")
+
+		ControlCenter {}
+	}
+
+	LazyLoader {
+		active: Plugins.on("notifications") || Plugins.on("calendar") || Plugins.on("weather")
+
+		TodayPanel {}
+	}
+
+	LazyLoader {
+		active: Plugins.on("breaks")
+
+		BreaksPanel {}
+	}
+
+	LazyLoader {
+		active: Plugins.on("media")
+
+		MediaPanel {}
+	}
+
+	LazyLoader {
+		active: Plugins.on("clipboard")
+
+		ClipboardPanel {}
+	}
+
+	LazyLoader {
+		active: Plugins.on("tray")
+
+		TrayMenuPanel {}
+	}
+
+	LazyLoader {
+		active: Plugins.on("overview")
+
+		OverviewPanel {}
+	}
+
+	LazyLoader {
+		active: Plugins.on("updates")
+
+		UpdatesPanel {}
+	}
+
+	LazyLoader {
+		active: Plugins.on("qtrack")
 
 		TimerPanel {}
 	}
 
 	LazyLoader {
-		active: Host.has("ssh")
+		active: Plugins.on("ssh")
 
 		SshPanel {}
 	}
 
 	LazyLoader {
-		active: Host.has("notes")
+		active: Plugins.on("notes")
 
 		NotesPanel {}
 	}
 
+	// full-screen overlays
+	PluginsWindow {}
+
+	LazyLoader {
+		active: Plugins.on("power-menu")
+
+		PowerMenu {}
+	}
+
+	LazyLoader {
+		active: Plugins.on("radial-menu")
+
+		RadialMenu {}
+	}
+
+	LazyLoader {
+		active: Plugins.on("eye-rest")
+
+		EyeRest {}
+	}
+
+	LazyLoader {
+		active: Plugins.on("stretch")
+
+		StretchBreak {}
+	}
+
+	// Studio
+	LazyLoader {
+		active: Plugins.on("studio-wallpaper")
+
+		ThemePicker {}
+	}
+
+	LazyLoader {
+		active: Plugins.on("studio-motion")
+
+		AnimationPicker {}
+	}
+
+	LazyLoader {
+		active: Plugins.on("studio-dress")
+
+		DressPage {}
+	}
+
+	LazyLoader {
+		active: Plugins.on("studio-styles")
+
+		StylePage {}
+	}
+
+	LazyLoader {
+		active: Plugins.on("studio-combinations")
+
+		CombinationsPage {}
+	}
+
+	LazyLoader {
+		active: Plugins.on("lock-screen")
+
+		LockScreen {}
+	}
+
 	// the story of Bing's image of the day, on the wallpaper
-	DailyCaption {}
+	LazyLoader {
+		active: Plugins.on("daily-caption")
+
+		DailyCaption {}
+	}
 
 	// todo lists pinned to the desktop (bottom layer, primary screen)
 	LazyLoader {
-		active: Host.has("todos")
+		active: Plugins.on("todos")
 
 		TodoWidgets {}
 	}
 
 	LazyLoader {
-		active: Host.has("rpg")
+		active: Plugins.on("rpg")
 
 		Rpg {}
 	}

@@ -10,7 +10,10 @@ Singleton {
 	id: root
 
 	property real value: 0
-	property bool available: false
+	// the panel answered brightnessctl
+	property bool found: false
+	readonly property bool wanted: Plugins.on("backlight")
+	readonly property bool available: root.wanted && root.found
 	property bool showOsdOnRead: false
 
 	function icon(progress) {
@@ -25,12 +28,12 @@ Singleton {
 	}
 
 	function adjust(direction) {
-		if (Host.has("backlight")) {
+		if (Plugins.on("backlight")) {
 			Quickshell.execDetached(["brightnessctl", "set", direction > 0 ? "5%+" : "5%-"]);
 			refreshTimer.restart();
 		}
-		if (Host.has("ddc"))
-			Ddc.adjustAll(direction, !Host.has("backlight"));
+		if (Plugins.on("ddc"))
+			Ddc.adjustAll(direction, !Plugins.on("backlight"));
 	}
 
 	function set(value) {
@@ -53,7 +56,7 @@ Singleton {
 				const match = String(text).trim().match(/^(\d+)\/(\d+)$/);
 				if (!match) return;
 				const max = Number(match[2]);
-				root.available = max > 0;
+				root.found = max > 0;
 				const progress = Number(match[1]) / Math.max(1, max);
 				root.value = progress;
 				if (root.showOsdOnRead)
@@ -63,5 +66,6 @@ Singleton {
 		}
 	}
 
-	Component.onCompleted: if (Host.has("backlight")) root.refresh(false)
+	onWantedChanged: if (root.wanted) root.refresh(false)
+	Component.onCompleted: if (root.wanted) root.refresh(false)
 }

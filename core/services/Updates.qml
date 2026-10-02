@@ -396,14 +396,17 @@ Singleton {
 		onExited: root.fetchingNews = false
 	}
 
+	readonly property bool wanted: Plugins.on("updates")
+
 	Timer {
-		running: true
+		running: root.wanted
 		repeat: true
 		interval: 600000
 		onTriggered: root.scan()
 	}
 
-	Component.onCompleted: root.scan()
+	onWantedChanged: if (root.wanted) root.scan()
+	Component.onCompleted: if (root.wanted) root.scan()
 
 	Process {
 		id: terminal
@@ -479,7 +482,7 @@ Singleton {
 	Timer {
 		id: scheduler
 
-		running: root.autoCheck
+		running: root.autoCheck && root.wanted
 		repeat: false
 		interval: Math.max(60000, root.dueIn() || 60000)
 		onTriggered: {

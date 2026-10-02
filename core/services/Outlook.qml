@@ -14,7 +14,7 @@ import Quickshell.Io
 Singleton {
 	id: root
 
-	readonly property bool enabled: Host.has("microsoft-calendar")
+	readonly property bool enabled: Plugins.on("microsoft-calendar")
 	readonly property string script: `${Paths.scripts}/ms_calendar.py`
 
 	property bool signedIn: false
@@ -228,7 +228,7 @@ Singleton {
 	}
 
 	function meetingStarted(event, fromAnother) {
-		if (!Host.has("qtrack")) return;
+		if (!Plugins.on("qtrack")) return;
 		if (!fromAnother) root.trackedBefore = Tmpo.tracking && !Tmpo.paused ? { project: Tmpo.project, description: Tmpo.description } : null;
 		if (Tmpo.tracking && !Tmpo.paused && Tmpo.description === event.subject) return;
 		Notifs.pushInternal("running", event.subject, Tmpo.tracking && !Tmpo.paused ? `Timer: ${Tmpo.description || Tmpo.project}` : "No timer running", {
@@ -247,7 +247,7 @@ Singleton {
 	function meetingEnded() {
 		const before = root.trackedBefore;
 		root.trackedBefore = null;
-		if (!Host.has("qtrack") || !before) return;
+		if (!Plugins.on("qtrack") || !before) return;
 		if (Tmpo.tracking && !Tmpo.paused && Tmpo.project === before.project && Tmpo.description === before.description) return;
 		const label = before.description || before.project;
 		Notifs.pushInternal("running", "Meeting over", Tmpo.tracking && !Tmpo.paused ? `Timer: ${Tmpo.description || Tmpo.project}` : "No timer running", {

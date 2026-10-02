@@ -904,7 +904,7 @@ FocusScope {
 
 	// render and float the result above all windows where it was taken
 	function pin() {
-		if (editor.busy) return;
+		if (editor.busy || !Plugins.on("pins")) return;
 		const path = Screenshot.nextTempPath("pin");
 		const c = editor.rectCopy(editor.crop);
 		const logical = editor.fromFrozen ? Qt.rect(c.x / editor.density, c.y / editor.density, c.width / editor.density, c.height / editor.density) : Qt.rect(0, 0, 0, 0);
@@ -2107,6 +2107,7 @@ FocusScope {
 			}
 
 			BarButton {
+				visible: Plugins.on("pins")
 				icon: "pin_outline"
 				tipLabel: "Pin on top  Ctrl+P"
 				onClicked: editor.pin()

@@ -127,7 +127,7 @@ Singleton {
 	}
 
 	Timer {
-		running: true
+		running: Plugins.on("network")
 		repeat: true
 		interval: 2000
 		triggeredOnStart: true

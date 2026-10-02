@@ -68,7 +68,7 @@ Singleton {
 	readonly property int waterMl: root.todayEntry.ml
 	readonly property int screenSeconds: root.todayEntry.screen
 	// ── workday (qtrack) ─────────────────────────────────────────────────
-	readonly property bool workKnown: Host.has("qtrack") && Tmpo.todaySegments.length > 0
+	readonly property bool workKnown: Plugins.on("qtrack") && Tmpo.todaySegments.length > 0
 	readonly property int workedSeconds: root.workKnown ? Tmpo.todaySeconds : 0
 	// what should be drunk by now
 	readonly property int paceMl: root.workKnown ? Math.round(Math.min(1, root.workedSeconds / root.workdaySeconds) * root.goalMl) : root.goalMl
@@ -118,7 +118,7 @@ Singleton {
 
 	function warnFall() {
 		const fall = root.pressureFallAhead;
-		if (!root.enabled || !fall || root.warnedFallDay === root.today || root.quiet) return;
+		if (!root.enabled || !Plugins.on("headache-log") || !fall || root.warnedFallDay === root.today || root.quiet) return;
 		root.warnedFallDay = root.today;
 		saveDelay.restart();
 		Notifs.pushInternal("running", "Air pressure falls", `−${fall.drop.toFixed(0)} hPa until ${Qt.formatTime(new Date(fall.at), "HH:mm")}`, {
@@ -266,6 +266,7 @@ Singleton {
 	}
 
 	function logHeadache() {
+		if (!Plugins.on("headache-log")) return;
 		const since = Math.round(root.sinceMove / 60);
 		const hPa = root.pressureNow ? root.pressureNow.hPa : null;
 		const change3h = hPa !== null ? Math.round(root.pressureChange3h * 10) / 10 : null;
@@ -276,7 +277,7 @@ Singleton {
 			actions: [
 				{ label: "Bottle", icon: "cup_water", run: () => root.openPanel() },
 				{ label: "Lock screen", icon: "lock", run: () => Session.lock() }
-			],
+			].filter(action => (action.icon !== "cup_water" || Plugins.on("water")) && (action.icon !== "lock" || Plugins.on("lock-screen"))),
 			duration: 12000
 		});
 	}
@@ -323,7 +324,7 @@ Singleton {
 
 	// one toast at a time: moving covers the eyes, too
 	function remind() {
-		if (root.sinceMove >= root.moveSeconds) {
+		if (Plugins.on("stretch") && root.sinceMove >= root.moveSeconds) {
 			root.sinceMove = 0;
 			root.sinceEyes = 0;
 			Notifs.pushInternal("running", "Time to stretch", "5 min · stand up, stretch, walk", {
@@ -334,6 +335,9 @@ Singleton {
 					{ label: "Later", icon: "timer_outline", run: () => root.sinceMove = root.moveSeconds - root.snoozeSeconds }
 				]
 			});
+		} else if (!Plugins.on("water")) {
+			root.sinceWater = 0;
+			root.remindEyes();
 		} else if (root.sinceWater >= root.waterSeconds && root.waterMl >= root.paceMl + root.glassSize) {
 			// well ahead of the day's pace: no need to ask
 			root.sinceWater = 0;
@@ -348,14 +352,20 @@ Singleton {
 					{ label: "Later", icon: "timer_outline", run: () => root.sinceWater = root.waterSeconds - root.snoozeSeconds }
 				]
 			});
-		} else if (root.sinceEyes >= root.eyesSeconds && root.eyesDueAt === 0) {
-			root.eyesDueAt = Date.now();
-			root.tryEyeRest();
+		} else {
+			root.remindEyes();
 		}
+	}
+
+	function remindEyes() {
+		if (!Plugins.on("eye-rest") || root.sinceEyes < root.eyesSeconds || root.eyesDueAt !== 0) return;
+		root.eyesDueAt = Date.now();
+		root.tryEyeRest();
 	}
 
 	// ── guided stretch ───────────────────────────────────────────────────
 	function startStretch() {
+		if (!Plugins.on("stretch")) return;
 		root.sinceMove = 0;
 		root.sinceEyes = 0;
 		Popups.withFocusedScreen(screen => Popups.openModal("stretch", screen));
@@ -385,6 +395,7 @@ Singleton {
 	}
 
 	function startEyeRest() {
+		if (!Plugins.on("eye-rest")) return;
 		root.eyesDueAt = 0;
 		root.sinceEyes = 0;
 		Popups.withFocusedScreen(screen => Popups.openModal("eyerest", screen));
@@ -415,7 +426,7 @@ Singleton {
 	}
 
 	Timer {
-		running: true
+		running: Plugins.on("breaks")
 		repeat: true
 		interval: root.sampleSeconds * 1000
 		onTriggered: root.tick()

@@ -67,6 +67,7 @@ Item {
 			Screenshot.copyShot(path);
 			break;
 		case "pin":
+			if (!Plugins.on("pins")) return;
 			root.closeRequested();
 			Screenshot.pinShot(path);
 			break;
@@ -186,7 +187,7 @@ Item {
 							{ action: "edit", icon: "pencil" },
 							{ action: "save", icon: "content_save" },
 							{ action: "delete", icon: "delete_outline" }
-						]
+						].filter(entry => entry.action !== "pin" || Plugins.on("pins"))
 
 						delegate: IconButton {
 							required property var modelData

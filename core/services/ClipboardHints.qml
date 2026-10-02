@@ -16,6 +16,10 @@ Singleton {
 	property string ownCopy: ""
 	// wl-paste reports the clipboard it finds at start, which nobody just copied
 	readonly property real startedAt: Date.now()
+	readonly property bool wanted: Plugins.on("clipboard-hints")
+
+	onWantedChanged: watcher.running = root.wanted
+	Component.onCompleted: watcher.running = root.wanted
 
 	// Base64 (also the URL-safe kind) → byte array, null when it is none
 	function bytes(text) {
@@ -176,7 +180,6 @@ Singleton {
 	Process {
 		id: watcher
 
-		running: true
 		// one line per copy: the text as Base64 (it may span lines)
 		command: ["wl-paste", "--type", "text/plain;charset=utf-8", "--watch", "sh", "-c",
 			"wl-paste --list-types | grep -q passwordManagerHint && exit 0; head -c 20001 | base64 -w0; echo"]
@@ -185,13 +188,13 @@ Singleton {
 				if (line !== "" && Date.now() - root.startedAt > 3000) root.offer(line);
 			}
 		}
-		onExited: restart.restart()
+		onExited: if (root.wanted) restart.restart()
 	}
 
 	Timer {
 		id: restart
 
 		interval: 5000
-		onTriggered: watcher.running = true
+		onTriggered: watcher.running = root.wanted
 	}
 }

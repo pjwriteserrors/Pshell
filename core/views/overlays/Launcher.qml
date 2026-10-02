@@ -53,5 +53,6 @@ Drawer {
 		onOpenStudioRequested: page => Popups.openStudio(page, root.targetScreen)
 		onOpenRpgRequested: Popups.rpgWindowRequested()
 		onOpenUpdatesRequested: Popups.open("updates", root.targetScreen)
+		onOpenPluginsRequested: Popups.openModal("plugins", root.targetScreen)
 	}
 }

@@ -155,6 +155,7 @@ PanelWindow {
 
 			LauncherButton {
 				bar: root
+				visible: Plugins.on("launcher-button")
 			}
 
 			Workspaces {
@@ -167,12 +168,14 @@ PanelWindow {
 
 			Taskbar {
 				bar: root
+				visible: Plugins.on("taskbar")
 			}
 
 			MediaChip {
 				id: media
 
 				bar: root
+				visible: Plugins.on("media")
 				room: root.sideRoom - root.leftMin
 			}
 		}
@@ -199,13 +202,14 @@ PanelWindow {
 				id: notes
 
 				bar: root
-				visible: Host.has("notes")
+				visible: Plugins.on("notes")
 				room: root.sideRoom - root.rightMin
 			}
 
 			BarIcon {
 				bar: root
 				panelId: "clipboard"
+				visible: Plugins.on("clipboard")
 				icon: "clipboard_text_multiple_outline"
 				tooltip: "Clipboard history"
 				onClicked: toggle()
@@ -214,7 +218,7 @@ PanelWindow {
 			BarIcon {
 				bar: root
 				panelId: "ssh"
-				visible: Host.has("ssh")
+				visible: Plugins.on("ssh")
 				icon: "server_network"
 				tooltip: "SSH logins"
 				onClicked: toggle()
@@ -222,14 +226,17 @@ PanelWindow {
 
 			StatusCluster {
 				bar: root
+				visible: Plugins.on("status")
 			}
 
 			BellButton {
 				bar: root
+				visible: Plugins.on("notifications")
 			}
 
 			BarIcon {
 				bar: root
+				visible: Plugins.on("power-menu")
 				icon: "power"
 				tooltip: "Session"
 				iconColor: hovered ? Theme.danger : Theme.textMuted

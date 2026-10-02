@@ -25,8 +25,8 @@ Singleton {
 		const phones = root.devices.filter(d => d.type === "phone" || d.type === "tablet");
 		return phones.find(d => d.reachable) ?? root.devices.find(d => d.reachable) ?? phones[0] ?? null;
 	}
-	readonly property bool available: !!root.device
-	readonly property bool reachable: !!root.device?.reachable
+	readonly property bool available: Plugins.on("kdeconnect") && !!root.device
+	readonly property bool reachable: root.available && !!root.device?.reachable
 	readonly property string name: root.device?.name ?? "Phone"
 	readonly property int battery: root.device?.battery ?? -1
 	readonly property bool charging: !!root.device?.charging
@@ -44,7 +44,7 @@ Singleton {
 	}
 
 	function refresh() {
-		if (Host.has("kdeconnect") && !statusProc.running) statusProc.running = true;
+		if (Plugins.on("kdeconnect") && !statusProc.running) statusProc.running = true;
 	}
 
 	function cli(args, doneLabel, event) {
@@ -152,7 +152,7 @@ Singleton {
 	}
 
 	Timer {
-		running: Host.has("kdeconnect")
+		running: Plugins.on("kdeconnect")
 		repeat: true
 		triggeredOnStart: true
 		interval: root.watchers > 0 ? 5000 : 60000

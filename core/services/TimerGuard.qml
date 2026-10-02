@@ -17,7 +17,7 @@ import Quickshell.Wayland
 Singleton {
 	id: root
 
-	readonly property bool enabled: Host.has("qtrack")
+	readonly property bool enabled: Plugins.on("timer-guard")
 	readonly property int nudgeSeconds: 10 * 60
 	readonly property int snoozeSeconds: 30 * 60
 	readonly property int awaySeconds: 15 * 60

@@ -4,7 +4,7 @@
 		"city": "Paderborn"
 	},
 	"wallpapers": "~/Pictures/Wallpapers",
-	"features": {
+	"plugins": {
 		"backlight": true,
 		"ddc": true,
 		"power-profiles": true,

@@ -117,7 +117,7 @@ Singleton {
 
 	// shaking mid-drag brings up the commands; the shelf is one of them
 	function shaken() {
-		if (!root.shake) return;
+		if (!root.shake || !Plugins.on("drop-commands")) return;
 		DropCommands.summon();
 		Haptics.play("pinned");
 	}
@@ -136,6 +136,7 @@ Singleton {
 	}
 
 	function toggle() {
+		if (!Plugins.on("shelves")) return;
 		if (root.shelves.length === 0) {
 			root.create([]);
 			return;
@@ -144,7 +145,7 @@ Singleton {
 	}
 
 	function fromClipboard() {
-		clipProc.running = true;
+		if (Plugins.on("shelves")) clipProc.running = true;
 	}
 
 	function close(id) {
@@ -512,6 +513,7 @@ Singleton {
 
 	// ── watched folders ──────────────────────────────────────────────────
 	function arrived(path) {
+		if (!Plugins.on("shelves")) return;
 		const target = root.shelves[root.shelves.length - 1] ?? null;
 		if (target) {
 			root.addItems(target.id, [{ kind: "file", path: path }]);
@@ -653,7 +655,7 @@ Singleton {
 	Process {
 		id: watcher
 
-		running: root.watchDirs.length > 0
+		running: Plugins.on("shelves") && root.watchDirs.length > 0
 		command: ["python3", root.helper, "watch"].concat(root.watchDirs)
 		stdout: SplitParser {
 			onRead: line => root.arrived(line)
@@ -663,7 +665,7 @@ Singleton {
 	Process {
 		id: shaker
 
-		running: root.shake
+		running: Plugins.on("drop-commands") && root.shake
 		command: ["python3", root.helper, "shake"]
 		stdout: SplitParser {
 			onRead: line => {

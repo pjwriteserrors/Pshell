@@ -16,7 +16,7 @@ import qs.style.widgets
 Scope {
 	id: root
 
-	property bool enableFingerprint: Host.has("fingerprint")
+	property bool enableFingerprint: Plugins.on("fingerprint")
 	property int maxFingerprintTries: 5
 	property int screenSleepDelay: 100000
 

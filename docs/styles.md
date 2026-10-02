@@ -54,7 +54,7 @@ widersprechen, gilt die Ausgabe.
 
 ```
 core/     Logik: Services (Zustand + Aktionen), IPC, welche Oberflächen es gibt,
-          Host-Profile, Core-Views als Rückfall. Gehört main. Ein Style fasst
+          Plugins, Core-Views als Rückfall. Gehört main. Ein Style fasst
           es nie an.
 style/    Look: Frame (was an den Bildschirmrändern hängt), Theme, Motion,
           Icons, Widgets, eigene Views, eigene Fenster-Animationen. Gehört
@@ -122,7 +122,7 @@ style/
 - Name, Grundtyp, `pragma Singleton` und jedes öffentliche Member bleiben.
   Du darfst Members hinzufügen.
 - Trenne Optik von Verhalten. **Verhalten bleibt wörtlich erhalten:**
-  - alles, was Services liest oder aufruft (`Popups`, `Host`, `Media`, …),
+  - alles, was Services liest oder aufruft (`Popups`, `Plugins`, `Media`, …),
   - Signale und wann sie ausgelöst werden,
   - Eingabe: MouseArea-Handler, `Keys.*`, Fokus, `acceptedButtons`,
   - Layer-Shell: `WlrLayershell.*`, `exclusiveZone`, `screen`, `anchors` von
@@ -300,10 +300,10 @@ Neue Schlüssel entstehen auf `main`.
 Der Style zeigt, was die Shell gerade kann und was gerade los ist. Nichts
 davon wird im Style festgelegt.
 
-- **Features pro Rechner:** `Host.has("<feature>")` entscheidet, ob es etwas
-  gibt (Akku, Helligkeit, KDE Connect, Notizen, …). Ist es aus, zeigt der Style
-  keine Lücke und keinen toten Knopf. Die Liste der Features steht in
-  `docs/architecture.md`, die Profile in `hosts/`.
+- **Plugins:** `Plugins.on("<id>")` entscheidet, ob es etwas gibt (Akku,
+  Helligkeit, KDE Connect, Notizen, aber auch jedes Element des Frames). Ist
+  es aus, zeigt der Style keine Lücke und keinen toten Knopf. Die Liste steht
+  in `core/plugins.json`, geschaltet wird in `>plugins`.
 - **Modelle statt Listen:** Workspaces, Fenster, Tray-Icons, Benachrichtigungen,
   Geräte, Medienspieler, Studio-Seiten (`Popups.studioPages`) kommen als Modelle
   aus Services. Zeichne sie mit `Repeater`/`ListView`, nie als feste Einträge.
@@ -509,7 +509,7 @@ keine offene `port`-Zeile mehr hat, die du nicht bewusst geprüft hast, und
       lesbar, und erkennbar derselbe Style
 - [ ] Signaturtöne sind selten und mit der Palette gemischt; kein
       `palette`-Fehler, das Wallpaper ist jeder Oberfläche anzusehen
-- [ ] Features, die der Host nicht hat, hinterlassen keine Lücken
+- [ ] Plugins, die aus sind, hinterlassen keine Lücken
 - [ ] Die eigene Fenster-Animation in Studio → Motion angesehen und angewendet
 - [ ] Titel, Überschriften und Leer-Zustände sprechen die Sprache des Themes
       (`Words.qml`), bleiben aber verständlich

@@ -180,13 +180,13 @@ Item {
 		if (targets.some(t => t.kind === "file")) entries.push({ label: "Compress to ZIP", icon: "package_variant", run: () => Shelf.zip(root.shelfId, targets) });
 		if (targets.every(t => t.kind !== "file")) {
 			entries.push({ label: targets.every(t => t.kind === "link") ? "Open in browser" : "Search", icon: "magnify", run: () => Shelf.search(targets) });
-			entries.push({ separator: true });
-			for (const action of AiActions.fixed)
+			if (Plugins.on("ai-actions")) entries.push({ separator: true });
+			for (const action of Plugins.on("ai-actions") ? AiActions.fixed : [])
 				entries.push({ label: action.title, icon: action.icon, run: () => Shelf.askAi(targets, action.prompt) });
 		}
 		if (!many && Shelf.isImage(item)) {
 			entries.push({ separator: true });
-			entries.push({ label: "Extract text", icon: "text_recognition", run: () => Shelf.extractText(item) });
+			if (Plugins.on("ocr")) entries.push({ label: "Extract text", icon: "text_recognition", run: () => Shelf.extractText(item) });
 			entries.push({ label: "Half size", icon: "aspect_ratio", run: () => Shelf.convertImage(root.shelfId, item, "resize") });
 			if (item.mime !== "image/png") entries.push({ label: "Convert to PNG", icon: "image", run: () => Shelf.convertImage(root.shelfId, item, "png") });
 			if (item.mime !== "image/jpeg") entries.push({ label: "Convert to JPG", icon: "image", run: () => Shelf.convertImage(root.shelfId, item, "jpg") });

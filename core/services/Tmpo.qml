@@ -354,7 +354,7 @@ Singleton {
 	}
 
 	Timer {
-		running: Host.has("qtrack")
+		running: Plugins.on("qtrack")
 		repeat: true
 		triggeredOnStart: true
 		interval: 5000
@@ -369,7 +369,7 @@ Singleton {
 	}
 
 	Timer {
-		running: Host.has("qtrack")
+		running: Plugins.on("qtrack")
 		repeat: true
 		triggeredOnStart: true
 		interval: 15000

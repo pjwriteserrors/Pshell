@@ -58,6 +58,7 @@ Singleton {
 
 	// the hook of an agent that shows no spinner (Codex)
 	function report(windowId, state, agent) {
+		if (!Plugins.on("agents")) return;
 		const id = Number(windowId);
 		if (!Niri.windows.some(w => Number(w.id) === id)) return;
 		if (state === "busy") root.start(id, agent || "Agent", "hook");
@@ -65,6 +66,7 @@ Singleton {
 	}
 
 	function sync() {
+		if (!Plugins.on("agents")) return;
 		const seen = {};
 		for (const window of Niri.windows) {
 			const id = Number(window.id);

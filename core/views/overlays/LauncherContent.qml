@@ -26,6 +26,7 @@ Item {
 	signal openStudioRequested(string page)
 	signal openRpgRequested
 	signal openUpdatesRequested
+	signal openPluginsRequested
 
 
 	property string searchText: ""
@@ -103,13 +104,19 @@ Item {
 	property bool fileBrowserDirectoryLoading: false
 	property string fileBrowserDirectoryError: ""
 	property string fileBrowserListTargetDirectory: ""
-	// commands with a `feature` only exist on hosts that have it
-	readonly property var commands: root.allCommands.filter(command => !command.feature || Host.has(command.feature))
+	// a command with a `plugin` only exists while that plugin is on
+	readonly property var commands: root.allCommands.filter(command => command.shown !== false && (!command.plugin || Plugins.on(command.plugin)))
 	property var allCommands: [
+		{
+			id: "plugins",
+			command: "plugins",
+			name: "Plugins",
+			description: `${Plugins.list.filter(plugin => Plugins.on(plugin.id)).length} of ${Plugins.list.length} on`
+		},
 		{
 			id: "rpg",
 			command: "rpg",
-			feature: "rpg",
+			plugin: "rpg",
 			prefix: "/",
 			name: "Productivity RPG",
 			description: "Open as a movable game window",
@@ -117,6 +124,7 @@ Item {
 		},
 		{
 			id: "studio",
+			shown: Popups.studioPages.length > 0,
 			command: "studio",
 			name: "Studio",
 			description: "Wallpaper, motion, icons, style, combinations",
@@ -125,13 +133,14 @@ Item {
 		{
 			id: "display-setup",
 			command: "setup",
-			feature: "display-profiles",
+			plugin: "display-profiles",
 			name: "Display Setup",
 			description: "Switch the monitor layout",
 			icon: "video-display-symbolic"
 		},
 		{
 			id: "calculator",
+			plugin: "calculator",
 			command: "c",
 			name: "Calculator",
 			description: "Type >c 5+5",
@@ -139,6 +148,7 @@ Item {
 		},
 		{
 			id: "file-browser",
+			plugin: "files",
 			command: "file",
 			name: "Files",
 			description: "Browse and open files",
@@ -146,6 +156,7 @@ Item {
 		},
 		{
 			id: "chat",
+			plugin: "chat",
 			command: "chat",
 			name: "Chat",
 			description: "Start or continue an AI chat",
@@ -153,6 +164,7 @@ Item {
 		},
 		{
 			id: "chats",
+			plugin: "chat",
 			command: "chats",
 			name: "Chats",
 			description: "Browse saved chats",
@@ -160,6 +172,7 @@ Item {
 		},
 		{
 			id: "ollama",
+			plugin: "ollama",
 			command: "ollama",
 			name: "Ollama",
 			description: "Manage installed and running models",
@@ -167,6 +180,7 @@ Item {
 		},
 		{
 			id: "translate",
+			plugin: "translate",
 			command: "t",
 			name: "Translate",
 			description: "Type >t text or >t fr text"
@@ -174,18 +188,20 @@ Item {
 		{
 			id: "todo",
 			command: "todo",
-			feature: "todos",
+			plugin: "todos",
 			name: "Todo",
 			description: "Lists in ~/todo"
 		},
 		{
 			id: "web-search",
+			plugin: "web-search",
 			command: "w",
 			name: "Web Search",
 			description: "Search in Floorp"
 		},
 		{
 			id: "ai-actions",
+			plugin: "ai-actions",
 			command: "ai",
 			name: "AI Actions",
 			description: "Explain, summarize or translate the clipboard"
@@ -193,84 +209,97 @@ Item {
 		{
 			id: "phone",
 			command: "phone",
-			feature: "kdeconnect",
+			plugin: "kdeconnect",
 			name: "Phone",
 			description: `${KdeConnect.name} · ${KdeConnect.summary}`
 		},
 		{
 			id: "color-picker",
+			plugin: "color-picker",
 			command: "color",
 			name: "Color Picker",
 			description: "Pick a color from the screen"
 		},
 		{
 			id: "ocr",
+			plugin: "ocr",
 			command: "ocr",
 			name: "Text from Screen",
 			description: "Copy text from a screen region"
 		},
 		{
 			id: "pin",
+			plugin: "pins",
 			command: "pin",
 			name: "Pin Screenshot",
 			description: "Keep a screen region on top"
 		},
 		{
 			id: "live",
+			plugin: "live-pins",
 			command: "live",
 			name: "Live Pin",
 			description: "Keep a region of a window on top, live"
 		},
 		{
 			id: "shelf",
+			plugin: "shelves",
 			command: "shelf",
 			name: "Shelf",
 			description: Shelf.shelves.length > 0 ? `${Shelf.shelves.length} open` : "Stash files and text"
 		},
 		{
 			id: "shelf-clipboard",
+			plugin: "shelves",
 			command: "shelfclip",
 			name: "Shelf from Clipboard",
 			description: "A new shelf with what is copied"
 		},
 		{
 			id: "qr",
+			plugin: "qr",
 			command: "qr",
 			name: "QR Code",
 			description: "Read a QR code or barcode from the screen"
 		},
 		{
 			id: "delay",
+			plugin: "delayed-screenshot",
 			command: "delay",
 			name: "Delayed Screenshot",
 			description: "Capture after 5 seconds"
 		},
 		{
 			id: "scroll",
+			plugin: "scroll-screenshot",
 			command: "scroll",
 			name: "Scroll Screenshot",
 			description: "Capture a scrolling region"
 		},
 		{
 			id: "shots",
+			plugin: "screenshot-history",
 			command: "shots",
 			name: "Screenshot History",
 			description: Screenshot.shots.length > 0 ? `${Screenshot.shots.length} this session` : "Captures of this session"
 		},
 		{
 			id: "unpin",
+			plugin: "pins",
 			command: "unpin",
 			name: "Remove Pins",
 			description: "Close all pinned screenshots"
 		},
 		{
 			id: "updates",
+			plugin: "updates",
 			command: "updates",
 			name: "Updates",
 			description: Updates.count > 0 ? `${Updates.count} available` : "Arch packages"
 		},
 		{
 			id: "dnd",
+			plugin: "dnd",
 			command: "dnd",
 			name: "Do Not Disturb",
 			description: Notifs.dnd ? "On" : "Off",
@@ -282,18 +311,19 @@ Item {
 	readonly property string aiStateFilePath: Paths.stateFile("launcher-ai-state.json")
 	readonly property bool inCommandMode: root.searchText.trim().startsWith(">") || root.searchText.trim().startsWith("/")
 	readonly property string commandQuery: root.searchText.trim().slice(1).trim().toLowerCase()
-	readonly property bool inCalculatorMode: root.isCalculatorQuery(root.commandQuery)
-	readonly property bool inAiMode: root.commandQuery === "chats" || root.commandQuery.startsWith("chats ")
-	readonly property bool inChatMode: root.commandQuery === "chat" || root.commandQuery.startsWith("chat ")
-	readonly property bool inOllamaMode: root.commandQuery === "ollama"
-	readonly property bool inFileMode: root.commandQuery === "file" || root.commandQuery.startsWith("file ")
-	readonly property bool inSetupMode: Host.has("display-profiles") && (root.commandQuery === "setup" || root.commandQuery.startsWith("setup "))
-	readonly property bool inTranslateMode: root.commandQuery === "t" || root.commandQuery.startsWith("t ")
-	readonly property bool inTodoMode: Host.has("todos") && (root.commandQuery === "todo" || root.commandQuery.startsWith("todo "))
-	readonly property bool inWebMode: root.commandQuery === "w" || root.commandQuery.startsWith("w ")
-	readonly property bool inAiActionsMode: root.commandQuery === "ai" || root.commandQuery.startsWith("ai ")
-	readonly property bool inPhoneMode: Host.has("kdeconnect") && (root.commandQuery === "phone" || root.commandQuery.startsWith("phone "))
-	readonly property bool inShotsMode: root.commandQuery === "shots" || root.commandQuery.startsWith("shots ")
+	readonly property bool inCalculatorMode: Plugins.on("calculator") && root.isCalculatorQuery(root.commandQuery)
+	readonly property bool inAiMode: Plugins.on("chat") && (root.commandQuery === "chats" || root.commandQuery.startsWith("chats "))
+	readonly property bool inChatMode: Plugins.on("chat") && (root.commandQuery === "chat" || root.commandQuery.startsWith("chat "))
+	readonly property bool inOllamaMode: Plugins.on("ollama") && root.commandQuery === "ollama"
+	// the phone and the chat pick their files here as well
+	readonly property bool inFileMode: (Plugins.on("files") || KdeConnect.pickingFile) && (root.commandQuery === "file" || root.commandQuery.startsWith("file "))
+	readonly property bool inSetupMode: Plugins.on("display-profiles") && (root.commandQuery === "setup" || root.commandQuery.startsWith("setup "))
+	readonly property bool inTranslateMode: Plugins.on("translate") && (root.commandQuery === "t" || root.commandQuery.startsWith("t "))
+	readonly property bool inTodoMode: Plugins.on("todos") && (root.commandQuery === "todo" || root.commandQuery.startsWith("todo "))
+	readonly property bool inWebMode: Plugins.on("web-search") && (root.commandQuery === "w" || root.commandQuery.startsWith("w "))
+	readonly property bool inAiActionsMode: Plugins.on("ai-actions") && (root.commandQuery === "ai" || root.commandQuery.startsWith("ai "))
+	readonly property bool inPhoneMode: Plugins.on("kdeconnect") && (root.commandQuery === "phone" || root.commandQuery.startsWith("phone "))
+	readonly property bool inShotsMode: Plugins.on("screenshot-history") && (root.commandQuery === "shots" || root.commandQuery.startsWith("shots "))
 	readonly property bool inViewMode: root.inTranslateMode || root.inTodoMode || root.inWebMode || root.inAiActionsMode || root.inPhoneMode || root.inShotsMode
 	// what follows the command token, as typed (">t fr hello" → "fr hello")
 	readonly property string modeArgument: {
@@ -2189,6 +2219,7 @@ Item {
 	}
 
 	readonly property var filteredApps: {
+		if (!Plugins.on("apps")) return [];
 		const query = root.searchText.trim().toLowerCase();
 		const entries = root.allApps.slice();
 		if (query === "") {
@@ -2307,6 +2338,10 @@ Item {
 		if (!command) return;
 
 		switch (String(command.id || "")) {
+		case "plugins":
+			root.closeRequested();
+			root.openPluginsRequested();
+			break;
 		case "rpg":
 			root.closeRequested();
 			root.openRpgRequested();
@@ -2435,6 +2470,7 @@ Item {
 	// >ai: a new temporary chat with the clipboard attached, streaming in the chat view
 	function runClipboardAction(prompt, text) {
 		const content = String(text || "");
+		if (!Plugins.on("ai-actions")) return;
 		if (content.trim() === "" || root.aiStreaming) return;
 		if (content.length > 500000) {
 			root.aiError = "Clipboard text is too long";
@@ -2910,6 +2946,7 @@ Item {
 
 	function commandGlyph(command) {
 		switch (String(command?.id || "")) {
+		case "plugins": return "puzzle";
 		case "rpg": return "gamepad_variant";
 		case "studio": return "palette";
 		case "studio-page": return command.glyph;

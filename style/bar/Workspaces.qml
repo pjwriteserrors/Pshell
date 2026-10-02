@@ -13,7 +13,7 @@ import qs.style.widgets
 BarButton {
 	id: root
 
-	visible: Niri.workspaceGroups.length > 0
+	visible: Plugins.on("workspaces") && Niri.workspaceGroups.length > 0
 	panelId: "overview"
 	tooltip: "Workspaces · scroll to switch · right-click for overview"
 	acceptedButtons: Qt.RightButton

@@ -42,7 +42,7 @@ Singleton {
 	})
 
 	function play(event) {
-		if (!Host.has("haptics")) return;
+		if (!Plugins.on("haptics")) return;
 		const effect = root.effects[event] ?? event;
 		if (!effect) return;
 		Quickshell.execDetached([root.mxhPath, String(effect)]);

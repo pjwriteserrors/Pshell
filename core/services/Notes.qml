@@ -85,7 +85,7 @@ Singleton {
 	FileView {
 		id: file
 		// a machine without notes never reads the file
-		path: Host.has("notes") ? Paths.stateFile("notes.json") : ""
+		path: Plugins.on("notes") ? Paths.stateFile("notes.json") : ""
 		printErrors: false
 		onLoaded: root.load(text())
 	}

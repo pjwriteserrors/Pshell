@@ -100,8 +100,37 @@ Scope {
 		}
 	}
 
+	// the plugin switches (>plugins)
+	IpcHandler {
+		target: "plugins"
+
+		function open(): void {
+			Popups.withFocusedScreen(screen => Popups.openModal("plugins", screen));
+		}
+		function close(): void {
+			if (Popups.modal === "plugins") Popups.closeModal();
+		}
+		function toggle(): void {
+			root.modalOnFocused("plugins");
+		}
+		function enable(id: string): void {
+			Plugins.set(id, true);
+		}
+		function disable(id: string): void {
+			Plugins.set(id, false);
+		}
+		function isOn(id: string): bool {
+			return Plugins.on(id);
+		}
+		// every plugin that is on, one per line
+		function list(): string {
+			return Plugins.list.filter(plugin => Plugins.on(plugin.id)).map(plugin => plugin.id).join("\n");
+		}
+	}
+
 	IpcHandler {
 		target: "power"
+		enabled: Plugins.on("power-menu")
 
 		function open(): void {
 			Popups.withFocusedScreen(screen => Popups.openModal("power", screen));
@@ -117,6 +146,7 @@ Scope {
 	// quick actions around the pointer
 	IpcHandler {
 		target: "radial"
+		enabled: Plugins.on("radial-menu")
 
 		function open(): void {
 			Popups.withFocusedScreen(screen => Popups.openModal("radial", screen));
@@ -131,6 +161,7 @@ Scope {
 
 	IpcHandler {
 		target: "screenshot"
+		enabled: Plugins.on("screenshot")
 
 		function region(): void {
 			Screenshot.region();
@@ -175,6 +206,7 @@ Scope {
 
 	IpcHandler {
 		target: "lock"
+		enabled: Plugins.on("lock-screen")
 
 		function lock(): void {
 			Session.lock();
@@ -200,12 +232,15 @@ Scope {
 			root.drawerOnFocused("media");
 		}
 		function toggleBluetooth(): void {
+			if (!Plugins.on("bluetooth")) return;
 			root.drawerOnFocused("control", "bluetooth");
 		}
 		function toggleNetwork(): void {
+			if (!Plugins.on("network")) return;
 			root.drawerOnFocused("control", "network");
 		}
 		function toggleResources(): void {
+			if (!Plugins.on("system-monitor")) return;
 			root.drawerOnFocused("control", "system");
 		}
 		function toggleControl(): void {
@@ -224,10 +259,15 @@ Scope {
 		function toggle(name: string): void {
 			root.drawerOnFocused(name);
 		}
+		// a page of a panel, e.g. control audio
+		function togglePage(name: string, page: string): void {
+			root.drawerOnFocused(name, page);
+		}
 	}
 
 	IpcHandler {
 		target: "updates"
+		enabled: Plugins.on("updates")
 
 		function open(): void {
 			root.drawerOnFocused("updates");
@@ -248,6 +288,7 @@ Scope {
 
 	IpcHandler {
 		target: "clipboard"
+		enabled: Plugins.on("clipboard")
 
 		function open(): void {
 			Popups.withFocusedScreen(screen => Popups.open("clipboard", screen));
@@ -262,7 +303,7 @@ Scope {
 
 	IpcHandler {
 		target: "qtrack"
-		enabled: Host.has("qtrack")
+		enabled: Plugins.on("qtrack")
 
 		function open(): void {
 			Popups.withFocusedScreen(screen => Popups.open("timer", screen));
@@ -277,7 +318,7 @@ Scope {
 
 	IpcHandler {
 		target: "ssh"
-		enabled: Host.has("ssh")
+		enabled: Plugins.on("ssh")
 
 		function open(): void {
 			Popups.withFocusedScreen(screen => Popups.open("ssh", screen));
@@ -293,6 +334,7 @@ Scope {
 	// ~/.local/bin/record reports here so the bar can show the recording
 	IpcHandler {
 		target: "shelf"
+		enabled: Plugins.on("shelves")
 
 		function toggle(): void {
 			Shelf.toggle();
@@ -314,6 +356,7 @@ Scope {
 
 	IpcHandler {
 		target: "agents"
+		enabled: Plugins.on("agents")
 
 		// scripts/agent_hook.py: state is "busy" or "idle"
 		function report(window: int, state: string, agent: string): void {
@@ -323,6 +366,7 @@ Scope {
 
 	IpcHandler {
 		target: "recording"
+		enabled: Plugins.on("recording")
 
 		function started(file: string): void {
 			Recorder.started(file);
@@ -337,6 +381,7 @@ Scope {
 
 	IpcHandler {
 		target: "dnd"
+		enabled: Plugins.on("dnd")
 
 		function toggle(): void {
 			Notifs.toggleDnd();
@@ -354,6 +399,7 @@ Scope {
 
 	IpcHandler {
 		target: "keepawake"
+		enabled: Plugins.on("keep-awake")
 
 		function toggle(): void {
 			KeepAwake.toggle();
@@ -362,6 +408,7 @@ Scope {
 
 	IpcHandler {
 		target: "breaks"
+		enabled: Plugins.on("breaks")
 
 		function toggle(): void {
 			root.drawerOnFocused("breaks");
@@ -398,7 +445,7 @@ Scope {
 
 	IpcHandler {
 		target: "phone"
-		enabled: Host.has("kdeconnect")
+		enabled: Plugins.on("kdeconnect")
 
 		function sendClipboard(): void {
 			KdeConnect.sendClipboard();
@@ -413,6 +460,7 @@ Scope {
 
 	IpcHandler {
 		target: "volume"
+		enabled: Plugins.on("sound")
 
 		function raise(): void {
 			Audio.adjust(1);

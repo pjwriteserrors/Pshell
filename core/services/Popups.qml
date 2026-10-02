@@ -63,7 +63,38 @@ Singleton {
 		return root.current === id;
 	}
 
+	// the plugin behind a panel or modal; what is not named here always exists
+	readonly property var providers: ({
+		control: "quick-settings",
+		breaks: "breaks",
+		media: "media",
+		clipboard: "clipboard",
+		tray: "tray",
+		overview: "overview",
+		updates: "updates",
+		timer: "qtrack",
+		ssh: "ssh",
+		notes: "notes",
+		power: "power-menu",
+		radial: "radial-menu",
+		eyerest: "eye-rest",
+		stretch: "stretch",
+		theme: "studio-wallpaper",
+		animation: "studio-motion",
+		dress: "studio-dress",
+		styles: "studio-styles",
+		combinations: "studio-combinations"
+	})
+
+	function exists(id) {
+		if (id === "today")
+			return Plugins.on("notifications") || Plugins.on("calendar") || Plugins.on("weather");
+		const plugin = root.providers[id];
+		return plugin === undefined || Plugins.on(plugin);
+	}
+
 	function open(id, screen, page, payload, opener) {
+		if (!root.exists(id)) return;
 		root.modal = "";
 		root.opener = opener ?? null;
 		root.screen = screen || root.screen || root.primaryScreen;
@@ -91,6 +122,7 @@ Singleton {
 	}
 
 	function openModal(kind, screen) {
+		if (!root.exists(kind)) return;
 		root.current = "";
 		root.modalScreen = screen || root.primaryScreen;
 		root.modal = kind;
@@ -114,17 +146,19 @@ Singleton {
 		{ id: "dress", modal: "dress", label: "Icons & Pointer", icon: "cursor_default_outline" },
 		{ id: "styles", modal: "styles", label: "Style", icon: "source_branch" },
 		{ id: "combinations", modal: "combinations", label: "Combinations", icon: "bookmark_outline" }
-	]
+	].filter(page => root.exists(page.modal))
 	readonly property int studioIndex: root.studioPages.findIndex(page => page.modal === root.modal)
 
 	function openStudio(page, screen) {
 		const target = root.studioPages.find(entry => entry.id === page || entry.modal === page) ?? root.studioPages[0];
+		if (!target) return;
 		root.openModal(target.modal, screen || root.modalScreen);
 	}
 
 	// Ctrl+Tab and friends: pages wrap around
 	function stepStudio(delta) {
 		const count = root.studioPages.length;
+		if (count === 0) return;
 		const index = root.studioIndex < 0 ? 0 : (root.studioIndex + delta + count) % count;
 		root.openModal(root.studioPages[index].modal, root.modalScreen);
 	}

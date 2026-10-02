@@ -75,7 +75,18 @@ Singleton {
 	// whether the source is the frozen frame of editScreen (morphs out of it)
 	property bool editFromFrozen: false
 
-	readonly property var modes: ["region", "screen", "window", "pin", "live", "picker", "ocr", "qr", "scroll"]
+	// the plugin behind a mode; region, screen and window are the screenshot itself
+	readonly property var modePlugins: ({ pin: "pins", live: "live-pins", picker: "color-picker", ocr: "ocr", qr: "qr", scroll: "scroll-screenshot" })
+	readonly property var modes: ["region", "screen", "window", "pin", "live", "picker", "ocr", "qr", "scroll"].filter(mode => root.offers(mode))
+
+	function offers(mode) {
+		const plugin = root.modePlugins[mode];
+		return Plugins.on("screenshot") && (plugin === undefined || Plugins.on(plugin));
+	}
+
+	function setMode(mode) {
+		if (root.offers(mode)) root.mode = mode;
+	}
 
 	// delayed capture: the delay the current frame was taken with (0 = none)
 	property int delaySeconds: 0
@@ -157,10 +168,12 @@ Singleton {
 		root.start("scroll");
 	}
 	function delayed(seconds) {
+		if (!Plugins.on("delayed-screenshot")) return;
 		root.startDelayed(root.phase === "select" ? root.mode : "region", seconds);
 	}
 
 	function start(mode) {
+		if (!root.offers(mode)) return;
 		if (root.phase === "select") {
 			if (root.mode === mode) root.cancel();
 			else root.mode = mode;
@@ -705,6 +718,7 @@ Singleton {
 	}
 
 	function unpinAll() {
+		if (!Plugins.on("pins")) return;
 		for (const pin of root.pins)
 			if (pin.live) root.stopLive(pin.id);
 		root.pins = [];
@@ -931,7 +945,7 @@ Singleton {
 	property var historyQueue: []
 
 	function remember(path) {
-		if (!path) return;
+		if (!path || !Plugins.on("screenshot-history")) return;
 		root.shotCounter += 1;
 		root.historyQueue = root.historyQueue.concat([{
 			id: root.shotCounter,

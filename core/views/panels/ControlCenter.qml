@@ -24,11 +24,19 @@ Drawer {
 	panelWidth: 430
 	contentHeight: pages.implicitHeight
 
+	// the plugin behind a page
+	readonly property var pagePlugins: ({ network: "network", bluetooth: "bluetooth", audio: "sound", dnd: "dnd", power: "power-profiles", phone: "kdeconnect", system: "system-monitor" })
+
+	function offers(page) {
+		const plugin = root.pagePlugins[page];
+		return plugin === undefined || Plugins.on(plugin);
+	}
+
 	onPanelOpened: {
-		root.page = Popups.page !== "" ? Popups.page : "main";
+		root.page = Popups.page !== "" && root.offers(Popups.page) ? Popups.page : "main";
 		statsProc.running = true;
 		Audio.refreshSinks();
-		if (Host.has("backlight")) Brightness.refresh(false);
+		if (Plugins.on("backlight")) Brightness.refresh(false);
 		Ddc.refresh();
 		PowerProfile.refresh();
 		KdeConnect.refresh();
@@ -37,7 +45,7 @@ Drawer {
 	Connections {
 		target: Popups
 		function onPageChanged() {
-			if (root.shown && Popups.page !== "") root.page = Popups.page;
+			if (root.shown && Popups.page !== "" && root.offers(Popups.page)) root.page = Popups.page;
 		}
 	}
 
@@ -123,18 +131,21 @@ Drawer {
 					}
 
 					IconButton {
+						visible: Plugins.on("studio-wallpaper")
 						icon: "palette"
 						variant: "tonal"
 						onClicked: Popups.openStudio("wallpaper", root.targetScreen)
 					}
 
 					IconButton {
+						visible: Plugins.on("studio-motion")
 						icon: "animation_play"
 						variant: "tonal"
 						onClicked: Popups.openStudio("motion", root.targetScreen)
 					}
 
 					IconButton {
+						visible: Plugins.on("lock-screen")
 						icon: "lock"
 						variant: "tonal"
 						onClicked: {
@@ -144,6 +155,7 @@ Drawer {
 					}
 
 					IconButton {
+						visible: Plugins.on("power-menu")
 						icon: "power"
 						variant: "danger"
 						onClicked: Popups.openModal("power", root.targetScreen)
@@ -158,6 +170,7 @@ Drawer {
 
 					QuickTile {
 						Layout.fillWidth: true
+						visible: Plugins.on("network")
 						icon: Network.icon
 						title: Network.label
 						subtitle: Network.online ? (Network.ip || Network.iface) : "Not connected"
@@ -168,6 +181,7 @@ Drawer {
 
 					QuickTile {
 						Layout.fillWidth: true
+						visible: Plugins.on("bluetooth")
 						icon: Bluetooth.icon
 						title: Words.of("control.bluetooth", "Bluetooth")
 						subtitle: Bluetooth.summary
@@ -178,6 +192,7 @@ Drawer {
 
 					QuickTile {
 						Layout.fillWidth: true
+						visible: Plugins.on("sound")
 						icon: Audio.icon
 						title: Audio.muted ? "Muted" : "Sound"
 						subtitle: Audio.shortSinkName(Audio.sinkName)
@@ -188,6 +203,7 @@ Drawer {
 
 					QuickTile {
 						Layout.fillWidth: true
+						visible: Plugins.on("sound")
 						icon: Audio.micIcon
 						title: Words.of("control.microphone", "Microphone")
 						subtitle: Audio.micMuted ? "Muted" : `${Math.round(Audio.micVolume * 100)}%`
@@ -198,6 +214,7 @@ Drawer {
 
 					QuickTile {
 						Layout.fillWidth: true
+						visible: Plugins.on("dnd")
 						icon: Notifs.dnd ? "bell_sleep" : "bell_outline"
 						title: Words.of("control.silence", "Silence")
 						subtitle: Notifs.dndReason
@@ -208,6 +225,7 @@ Drawer {
 
 					QuickTile {
 						Layout.fillWidth: true
+						visible: KeepAwake.available
 						icon: KeepAwake.active ? "coffee" : "coffee_outline"
 						title: Words.of("control.keepAwake", "Keep awake")
 						subtitle: KeepAwake.active ? "On" : "Off"
@@ -218,6 +236,7 @@ Drawer {
 
 					QuickTile {
 						Layout.fillWidth: true
+						visible: Plugins.on("water")
 						icon: "cup_water"
 						title: Words.of("control.water", "Water")
 						subtitle: `${Breaks.formatLitres(Breaks.waterMl)} / ${Breaks.formatLitres(Breaks.goalMl)}`
@@ -255,6 +274,7 @@ Drawer {
 
 					PillSlider {
 						Layout.fillWidth: true
+						visible: Plugins.on("sound")
 						icon: Audio.icon
 						iconInteractive: true
 						dimmed: Audio.muted
@@ -273,7 +293,7 @@ Drawer {
 					}
 
 					Repeater {
-						model: Ddc.monitors
+						model: Ddc.available ? Ddc.monitors : []
 
 						delegate: RowLayout {
 							id: monitor
@@ -306,6 +326,8 @@ Drawer {
 
 				Clickable {
 					Layout.fillWidth: true
+					visible: Plugins.on("system-monitor") || SysStats.batteryAvailable || SysStats.mouseAvailable
+					interactive: Plugins.on("system-monitor")
 					implicitHeight: 72
 					radius: Theme.radius.large
 					color: Theme.layer1
@@ -319,10 +341,10 @@ Drawer {
 						spacing: 14
 
 						Repeater {
-							model: [
+							model: Plugins.on("system-monitor") ? [
 								{ label: "CPU", value: SysStats.cpu, color: Theme.primary },
 								{ label: "RAM", value: SysStats.memory, color: Theme.secondary }
-							]
+							] : []
 
 							delegate: RowLayout {
 								id: stat
@@ -395,6 +417,7 @@ Drawer {
 						}
 
 						Glyph {
+							visible: Plugins.on("system-monitor")
 							icon: "chevron_right"
 							size: 18
 							color: Theme.textSubtle
@@ -916,7 +939,7 @@ Drawer {
 						{ rule: "fullscreen", icon: "fullscreen", title: "In fullscreen", checked: Notifs.dndFullscreen },
 						{ rule: "sharing", icon: "monitor_share", title: "While sharing the screen", checked: Notifs.dndSharing },
 						{ rule: "meetings", icon: "calendar_clock", title: "In meetings", checked: Notifs.dndMeetings }
-					].filter(rule => (rule.rule !== "tracking" || Host.has("qtrack")) && (rule.rule !== "meetings" || Host.has("microsoft-calendar")))
+					].filter(rule => (rule.rule !== "tracking" || Plugins.on("qtrack")) && (rule.rule !== "meetings" || Plugins.on("microsoft-calendar")))
 
 					delegate: ListItem {
 						id: rule

@@ -16,8 +16,11 @@ Drawer {
 	id: root
 
 	panelId: "today"
-	panelWidth: 790
-	contentHeight: Math.max(side.implicitHeight, 420)
+	readonly property bool hasNotifications: Plugins.on("notifications")
+	readonly property bool hasSide: Plugins.on("calendar") || Plugins.on("weather")
+
+	panelWidth: root.hasNotifications && root.hasSide ? 790 : (root.hasSide ? 360 : 450)
+	contentHeight: root.hasSide ? Math.max(side.implicitHeight, 420) : 420
 
 	SystemClock {
 		id: clock
@@ -54,6 +57,7 @@ Drawer {
 		ColumnLayout {
 			Layout.fillWidth: true
 			Layout.fillHeight: true
+			visible: root.hasNotifications
 			spacing: 12
 
 			RowLayout {
@@ -75,6 +79,7 @@ Drawer {
 				}
 
 				IconButton {
+					visible: Plugins.on("dnd")
 					icon: Notifs.dnd ? "bell_sleep" : "bell_sleep_outline"
 					checked: Notifs.dnd
 					variant: "tonal"
@@ -146,6 +151,7 @@ Drawer {
 		Rectangle {
 			Layout.fillHeight: true
 			Layout.preferredWidth: 1
+			visible: root.hasNotifications && root.hasSide
 			color: Theme.outline
 		}
 
@@ -155,9 +161,11 @@ Drawer {
 
 			Layout.preferredWidth: 320
 			Layout.alignment: Qt.AlignTop
+			visible: root.hasSide
 			spacing: 14
 
 			ColumnLayout {
+				visible: Plugins.on("calendar")
 				spacing: 0
 
 				StyledText {
@@ -177,6 +185,7 @@ Drawer {
 			CalendarView {
 				id: calendar
 				Layout.fillWidth: true
+				visible: Plugins.on("calendar")
 				onSelectedChanged: {
 					if (Outlook.selected && !Outlook.selected.days.includes(Outlook.dayKey(calendar.selected)))
 						Outlook.selected = null;
@@ -185,12 +194,13 @@ Drawer {
 
 			Agenda {
 				Layout.fillWidth: true
+				visible: Plugins.on("microsoft-calendar")
 				day: calendar.selected
 			}
 
 			WeatherCard {
 				Layout.fillWidth: true
-				visible: Weather.available
+				visible: Plugins.on("weather") && Weather.available
 			}
 		}
 	}

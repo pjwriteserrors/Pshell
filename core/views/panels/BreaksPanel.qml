@@ -24,7 +24,7 @@ Drawer {
 		{ key: "move", icon: "human_handsup", title: "Stretch", since: Breaks.sinceMove, every: Breaks.moveSeconds, color: Theme.primary },
 		{ key: "water", icon: "cup_water", title: "Water", since: Breaks.sinceWater, every: Breaks.waterSeconds, color: Theme.secondary },
 		{ key: "eyes", icon: "eye_outline", title: "Eyes", since: Breaks.sinceEyes, every: Breaks.eyesSeconds, color: Theme.tertiary }
-	]
+	].filter(reminder => Plugins.on({ move: "stretch", water: "water", eyes: "eye-rest" }[reminder.key]))
 
 	function remaining(reminder) {
 		if (!Breaks.enabled) return "Off";
@@ -103,6 +103,7 @@ Drawer {
 			spacing: 22
 
 			ColumnLayout {
+				visible: Plugins.on("water")
 				spacing: 8
 
 				WaterBottle {
@@ -271,6 +272,7 @@ Drawer {
 		// what should be drunk by now
 		RowLayout {
 			Layout.fillWidth: true
+			visible: Plugins.on("water")
 			spacing: 12
 
 			Glyph {
@@ -379,6 +381,7 @@ Drawer {
 
 		TextButton {
 			Layout.fillWidth: true
+			visible: Plugins.on("headache-log")
 			icon: "head_alert_outline"
 			text: "Headache"
 			onActivated: Breaks.logHeadache()
@@ -403,7 +406,7 @@ Drawer {
 		// ── headache days vs. the others ──────────────────────────────────
 		RowLayout {
 			Layout.fillWidth: true
-			visible: Breaks.insights.headache.days > 0 && Breaks.insights.other.days > 0
+			visible: Plugins.on("headache-log") && Breaks.insights.headache.days > 0 && Breaks.insights.other.days > 0
 			spacing: 10
 
 			Repeater {

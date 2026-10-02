@@ -1,7 +1,8 @@
 # Architecture
 
-One repository, every machine, every style. What a machine has is decided by
-its host profile; what the shell looks like is decided by the style branch.
+One repository, every machine, every style. What the shell does on a setup is
+decided by its plugin switches; what it looks like is decided by the style
+branch.
 
 ```
 shell.qml        wires the three parts below, nothing else
@@ -9,7 +10,8 @@ core/            features: services, IPC, every surface, the views styles fall b
   services/      singletons with the state and actions (Host, Paths, Popups, Media, …)
   views/         the default view of every surface (panels, overlays, Studio pages)
   Ipc.qml        every IPC target; a style can never drop one
-  Surfaces.qml   instantiates every surface, gated by the host profile
+  plugins.json   the plugins: everything that can be switched on or off
+  Surfaces.qml   instantiates every surface, gated by its plugin
 style/           the look: Frame.qml (what hangs on the screen edges), theme/, widgets/, bar/
 scripts/         theme pipeline, wallpaper runtime, style switching, setup
 hosts/           machines.json (hostname → profile) and one profile per machine
@@ -22,12 +24,50 @@ system/          root-level setup: SDDM theme, fingerprint PAM
 - **Features live in the core.** A service holds state and actions; views only
   read and call them. IPC, surface instantiation and host gating are core
   concerns, so every style has every feature.
+- **Everything is a plugin.** A widget, a panel, a command or an automation
+  belongs to a plugin in `core/plugins.json` and asks `Plugins.on("<id>")`.
+  Only the launcher's `>plugins` is always there.
 - **Runtime state never lives in the repository.** Shell state is in
   `~/.local/state/pshell`, theme state in `~/.local/state/quickshell-theme`.
   A clean tree is what makes style switching possible.
 - **Nothing addresses the shell by config name from scripts.** Scripts use
   `scripts/ipc.sh <target> <function>`; niri binds use `qs -c shell`.
 - **No absolute home paths.** `$HOME`, `Paths`, `Host`.
+
+## Plugins
+
+`core/plugins.json` lists every plugin: `id`, `name`, `category`, optionally
+`default: false` (off until switched on), `requires` (plugins it cannot work
+without) and `icon` (shown while it has no preview picture).
+
+`>plugins` (or `scripts/ipc.sh plugins toggle`) opens the window with all of
+them. A switch is stored per setup in `~/.local/state/pshell/plugins.json`,
+never in the repository. Until a plugin is switched there, the host profile's
+`plugins` apply, then the registry's `default`.
+
+QML asks `Plugins.on("id")`, scripts `scripts/host.py has id`. A plugin that
+is off neither shows up nor polls; its IPC target is disabled.
+`scripts/ipc.sh plugins enable|disable <id>` switches from a script.
+
+A new plugin goes through `scripts/plugin.py`:
+
+```
+scripts/plugin.py new pomodoro --name "Pomodoro" --category Panels \
+    --on bar,clock --ipc "panels toggle pomodoro"     # registers it
+# gate it: Plugins.on("pomodoro") at its surface (core/Surfaces.qml), bar
+# element, launcher command (`plugin: "pomodoro"`), IPC target, timers
+scripts/plugin.py check                               # complete?
+scripts/plugin.py preview pomodoro                    # its picture
+```
+
+A `--category` that does not exist yet becomes a new tab of `>plugins`; tabs
+appear in the order of the registry. `--ipc`, `--on` and `--base` are the
+scene its preview picture (`assets/plugins/<id>.png`) is taken with, in a
+nested niri (`scripts/plugin_previews.py` explains the keys); a plugin that
+cannot be shown gets `--icon` instead. `check` fails when a plugin is
+registered but nothing asks `Plugins.on()` for it, when the shell asks for one
+that is not registered, when `requires` or a host profile name an unknown one,
+or when a plugin has neither picture, scene nor icon.
 
 ## Host profiles
 
@@ -36,7 +76,7 @@ system/          root-level setup: SDDM theme, fingerprint PAM
 
 | Key | |
 | --- | --- |
-| `features` | optional features that are on; anything not named is off |
+| `plugins` | what a fresh setup of this machine starts with, where it differs from the registry's defaults |
 | `primaryOutput` | output for desktop widgets and the default screen |
 | `weather.city` | |
 | `wallpapers` | the wallpaper library (outside the repo) |
@@ -44,19 +84,12 @@ system/          root-level setup: SDDM theme, fingerprint PAM
 | `hookConfig.<hook>` | settings of a hook |
 | `shelf.watch` | folders whose new files land on a shelf (default: Downloads, Pictures/Screenshots, Videos/Recordings) |
 
-QML asks `Host.has("feature")`, scripts `scripts/host.py has feature`. A
-disabled feature neither shows up nor polls; its IPC target is disabled.
-
 Shaking the pointer to open a shelf reads the mouse and touchpad event
 devices; the session gets read access to them with
 `scripts/setup-rpg-input-access.sh` (once per machine). Codex reports its
 turns through `~/.codex/hooks.json` (seeded by install.sh, trusted once in
 Codex with `/hooks`); Claude Code needs nothing, its window title says when
 it works.
-
-Optional features: `backlight`, `ddc`, `power-profiles`, `battery`,
-`mouse-battery`, `fingerprint`, `kdeconnect`, `haptics`, `ssh`,
-`display-profiles`, `qtrack`, `notes`, `todos`, `rpg`, `microsoft-calendar`.
 
 `microsoft-calendar` signs in to Microsoft 365 with a device code (Today
 panel) and keeps the refresh token in `~/.local/state/pshell/microsoft.json`.
@@ -122,7 +155,7 @@ from main each time, so it moves with the logic.
 python3 scripts/setup.py doctor
 ```
 
-`doctor` checks the programs, python modules and fonts the enabled features
+`doctor` checks the programs, python modules and fonts the enabled plugins
 and hooks need, the dotfile links and the niri include.
 
 ## Checks
@@ -130,6 +163,7 @@ and hooks need, the dotfile links and the niri include.
 ```
 quickshell -p ./Validate.qml      # compiles the whole shell without a window
 scripts/review_surfaces.sh        # screenshots of every surface, in a nested niri
+python3 scripts/plugin.py check   # every plugin registered, gated and pictured
 python3 scripts/test_branch_styles.py
 python3 scripts/check_style.py        # the style contract (on a style branch)
 quickshell -p ./ThemeProbe.qml       # the Theme's colours for the current palette

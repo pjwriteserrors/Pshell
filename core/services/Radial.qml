@@ -24,14 +24,14 @@ Singleton {
 		{ id: "region", label: "Region", icon: "selection_drag", run: () => Screenshot.region() },
 		{ id: "screen", label: "Screen", icon: "monitor", run: () => Screenshot.screen() },
 		{ id: "window", label: "Window", icon: "application_outline", run: () => Screenshot.window() },
-		{ id: "pin", label: "Pin", icon: "pin_outline", run: () => Screenshot.pinMode() },
-		{ id: "live", label: "Live", icon: "cast", run: () => Screenshot.liveMode() },
-		{ id: "color", label: "Color", icon: "eyedropper", run: () => Screenshot.picker() },
-		{ id: "text", label: "Text", icon: "text_recognition", run: () => Screenshot.ocr() },
-		{ id: "qr", label: "QR", icon: "qrcode_scan", run: () => Screenshot.qr() },
-		{ id: "scroll", label: "Scroll", icon: "arrow_expand_vertical", run: () => Screenshot.scroll() },
+		{ id: "pin", label: "Pin", icon: "pin_outline", shown: Screenshot.offers("pin"), run: () => Screenshot.pinMode() },
+		{ id: "live", label: "Live", icon: "cast", shown: Screenshot.offers("live"), run: () => Screenshot.liveMode() },
+		{ id: "color", label: "Color", icon: "eyedropper", shown: Screenshot.offers("picker"), run: () => Screenshot.picker() },
+		{ id: "text", label: "Text", icon: "text_recognition", shown: Screenshot.offers("ocr"), run: () => Screenshot.ocr() },
+		{ id: "qr", label: "QR", icon: "qrcode_scan", shown: Screenshot.offers("qr"), run: () => Screenshot.qr() },
+		{ id: "scroll", label: "Scroll", icon: "arrow_expand_vertical", shown: Screenshot.offers("scroll"), run: () => Screenshot.scroll() },
 		{
-			id: "delay", label: "Timer", icon: "timer_outline",
+			id: "delay", label: "Timer", icon: "timer_outline", shown: Plugins.on("delayed-screenshot"),
 			children: [3, 5, 10].map(seconds => ({
 				id: `delay${seconds}`,
 				label: `${seconds} s`,
@@ -39,7 +39,7 @@ Singleton {
 				run: () => Screenshot.delayed(seconds)
 			}))
 		}
-	]
+	].filter(entry => entry.shown !== false)
 
 	readonly property var clipboardEntries: [
 		{ id: "image", label: "Last image", icon: "image_outline", run: () => Clipboard.restoreLatest("image") },
@@ -47,11 +47,11 @@ Singleton {
 	]
 
 	readonly property var powerEntries: [
-		{ id: "lock", label: Words.of("power.lock", "Lock"), icon: "lock", run: () => Session.run("lock") },
+		{ id: "lock", label: Words.of("power.lock", "Lock"), icon: "lock", shown: Plugins.on("lock-screen"), run: () => Session.run("lock") },
 		{ id: "logout", label: Words.of("power.logout", "Log out"), icon: "logout", hold: true, danger: true, run: () => Session.run("logout") },
 		{ id: "reboot", label: Words.of("power.reboot", "Restart"), icon: "restart", hold: true, danger: true, run: () => Session.run("reboot") },
 		{ id: "shutdown", label: Words.of("power.shutdown", "Shut down"), icon: "power", hold: true, danger: true, run: () => Session.run("shutdown") }
-	]
+	].filter(entry => entry.shown !== false)
 
 	readonly property int hostLimit: 8
 	readonly property var sshEntries: Ssh.recent.slice(0, root.hostLimit).map(entry => {
@@ -84,16 +84,19 @@ Singleton {
 	]
 
 	readonly property var tree: {
-		const entries = [
-			{ id: "capture", label: Words.of("radial.capture", "Capture"), icon: "selection_drag", children: root.captureEntries },
-			{ id: "clipboard", label: Words.of("radial.clipboard", "Clipboard"), icon: "clipboard_outline", children: root.clipboardEntries },
-			{ id: "dnd", label: Words.of("radial.dnd", "Do not disturb"), icon: Notifs.dnd ? "bell_off_outline" : "bell_outline", active: Notifs.dnd, run: () => Notifs.toggleDnd() },
-			{ id: "mic", label: Words.of("radial.mic", "Microphone"), icon: Audio.micIcon, active: Audio.micMuted, run: () => Audio.toggleMicMute() },
-			{ id: "power", label: Words.of("radial.power", "Power"), icon: "power", children: root.powerEntries }
-		];
-		if (Host.has("ssh"))
+		const entries = [];
+		if (Plugins.on("screenshot"))
+			entries.push({ id: "capture", label: Words.of("radial.capture", "Capture"), icon: "selection_drag", children: root.captureEntries });
+		if (Plugins.on("clipboard"))
+			entries.push({ id: "clipboard", label: Words.of("radial.clipboard", "Clipboard"), icon: "clipboard_outline", children: root.clipboardEntries });
+		if (Plugins.on("dnd"))
+			entries.push({ id: "dnd", label: Words.of("radial.dnd", "Do not disturb"), icon: Notifs.dnd ? "bell_off_outline" : "bell_outline", active: Notifs.dnd, run: () => Notifs.toggleDnd() });
+		if (Plugins.on("sound"))
+			entries.push({ id: "mic", label: Words.of("radial.mic", "Microphone"), icon: Audio.micIcon, active: Audio.micMuted, run: () => Audio.toggleMicMute() });
+		entries.push({ id: "power", label: Words.of("radial.power", "Power"), icon: "power", children: root.powerEntries });
+		if (Plugins.on("ssh"))
 			entries.push({ id: "ssh", label: Words.of("radial.ssh", "SSH"), icon: "console", enabled: root.sshEntries.length > 0, children: root.sshEntries });
-		if (Host.has("qtrack"))
+		if (Plugins.on("qtrack"))
 			entries.push({ id: "qtrack", label: Words.of("radial.timer", "Timer"), icon: "timer_outline", active: Tmpo.tracking, children: root.timerEntries });
 		return entries;
 	}
@@ -117,7 +120,7 @@ Singleton {
 	// the path is dropped on closing, so the view fades out as it was
 	onOpenChanged: {
 		if (!root.open) root.path = [];
-		else if (Host.has("ssh")) Ssh.refresh(false);
+		else if (Plugins.on("ssh")) Ssh.refresh(false);
 	}
 
 

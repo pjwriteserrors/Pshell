@@ -4,7 +4,7 @@
 		"city": "Paderborn"
 	},
 	"wallpapers": "~/Scripts/themes/color_themes",
-	"features": {
+	"plugins": {
 		"ddc": true,
 		"mouse-battery": true,
 		"kdeconnect": true,

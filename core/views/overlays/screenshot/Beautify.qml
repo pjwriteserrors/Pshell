@@ -458,6 +458,7 @@ png(sys.argv[2], 16, lambda x, y: bytes((244, 244, 246, 255)) if (x < 8) == (y <
 	}
 
 	function pin() {
+		if (!Plugins.on("pins")) return;
 		const path = Screenshot.nextTempPath("pin");
 		const output = view.output;
 		view.render(path, ok => {
@@ -737,6 +738,7 @@ png(sys.argv[2], 16, lambda x, y: bytes((244, 244, 246, 255)) if (x < 8) == (y <
 			Divider {}
 
 			BarButton {
+				visible: Plugins.on("pins")
 				icon: "pin_outline"
 				onClicked: view.pin()
 			}

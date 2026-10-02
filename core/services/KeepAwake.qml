@@ -10,10 +10,13 @@ import Quickshell.Io
 Singleton {
 	id: root
 
+	readonly property bool available: Plugins.on("keep-awake")
 	property bool active: false
 
+	onAvailableChanged: if (!root.available) root.active = false
+
 	function toggle() {
-		root.active = !root.active;
+		root.active = root.available && !root.active;
 	}
 
 	Process {

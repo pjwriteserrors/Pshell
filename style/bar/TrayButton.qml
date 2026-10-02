@@ -15,7 +15,7 @@ BarButton {
 	readonly property var items: SystemTray.items.values
 
 	panelId: "tray"
-	visible: root.items.length > 0
+	visible: Plugins.on("tray") && root.items.length > 0
 	tooltip: `${root.items.length} tray apps`
 	padding: 8
 	onClicked: {

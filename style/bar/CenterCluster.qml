@@ -44,6 +44,7 @@ Row {
 		panelId: "today"
 		tooltip: "Calendar & notifications"
 		padding: 12
+		visible: Plugins.on("clock")
 		onClicked: toggle()
 
 		Row {
@@ -94,7 +95,7 @@ Row {
 		primaryAnchor: false
 		tooltip: `${Weather.description} · ${Weather.location}`
 		padding: 8
-		visible: Weather.available
+		visible: Plugins.on("weather") && Weather.available
 		onClicked: toggle()
 
 		Row {
@@ -122,7 +123,7 @@ Row {
 		id: timer
 
 		bar: root.bar
-		visible: Host.has("qtrack")
+		visible: Plugins.on("qtrack")
 	}
 
 	RecordingChip {

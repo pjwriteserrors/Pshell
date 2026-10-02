@@ -32,13 +32,13 @@ Singleton {
 	readonly property bool words: root.kind !== "file"
 
 	readonly property var main: [
-		{ id: "shelf", label: "Shelf", icon: "tray_arrow_down", run: (items, at) => Shelf.keep(items, at) },
+		{ id: "shelf", label: "Shelf", icon: "tray_arrow_down", shown: Plugins.on("shelves"), run: (items, at) => Shelf.keep(items, at) },
 		{ id: "copy", label: "Copy", icon: "content_copy", run: items => Shelf.copyItems(items) },
 		{ id: "search", label: root.kind === "link" ? "Open" : "Search", icon: root.kind === "link" ? "web" : "magnify", shown: root.words, run: items => Shelf.search(items) },
-		{ id: "ai", label: "AI", icon: "creation", shown: root.words, opens: "ai" },
+		{ id: "ai", label: "AI", icon: "creation", shown: root.words && Plugins.on("ai-actions"), opens: "ai" },
 		{ id: "path", label: "Copy path", icon: "clipboard_text", shown: root.files, run: items => Shelf.copyPaths(items) },
 		{ id: "zip", label: "ZIP", icon: "package_variant", shown: root.files, run: (items, at) => Shelf.zip(Shelf.current(at), items) },
-		{ id: "ocr", label: "Text", icon: "text_recognition", shown: root.files, run: items => items.filter(item => Shelf.isImage(item)).forEach(item => Shelf.extractText(item)) },
+		{ id: "ocr", label: "Text", icon: "text_recognition", shown: root.files && Plugins.on("ocr"), run: items => items.filter(item => Shelf.isImage(item)).forEach(item => Shelf.extractText(item)) },
 		{ id: "phone", label: "Phone", icon: "cellphone_arrow_down", shown: KdeConnect.available, run: items => Shelf.sendToPhone(items) }
 	].filter(command => command.shown !== false)
 

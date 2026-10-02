@@ -20,10 +20,11 @@ Singleton {
 	property var pending: ({})
 	property var writing: ({})
 
-	readonly property bool available: root.monitors.length > 0
+	readonly property bool wanted: Plugins.on("ddc")
+	readonly property bool available: root.wanted && root.monitors.length > 0
 
 	function detect() {
-		if (Host.has("ddc") && !detectProc.running) detectProc.running = true;
+		if (root.wanted && !detectProc.running) detectProc.running = true;
 	}
 
 	// nothing found yet (ddcutil failed at start): look again
@@ -124,7 +125,8 @@ Singleton {
 				const order = connector => Quickshell.screens.find(s => String(s.name) === connector)?.x ?? 1e9;
 				found.sort((a, b) => order(a.connector) - order(b.connector));
 				root.monitors = found;
-				root.refresh();
+				// not with nothing found: refresh would detect again, endlessly
+				if (found.length > 0) root.refresh();
 				if (found.length > 0 && !inputsProc.running) {
 					inputsProc.command = ["bash", root.script, "inputs"].concat(found.map(m => String(m.bus)));
 					inputsProc.running = true;
@@ -182,5 +184,6 @@ Singleton {
 		onTriggered: root.detect()
 	}
 
+	onWantedChanged: root.detect()
 	Component.onCompleted: root.detect()
 }

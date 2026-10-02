@@ -11,7 +11,7 @@ BarButton {
 
 	tooltip: "Stop recording"
 	padding: 4
-	visible: width > 0.5
+	visible: Plugins.on("recording") && width > 0.5
 	implicitWidth: Recorder.active ? capsule.width + root.padding * 2 : 0
 	clip: true
 	onClicked: Recorder.stop()

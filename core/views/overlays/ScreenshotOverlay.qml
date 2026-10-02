@@ -175,23 +175,23 @@ PanelWindow {
 				const step = key === Qt.Key_Backtab || (event.modifiers & Qt.ShiftModifier) ? -1 : 1;
 				Screenshot.mode = order[(order.indexOf(root.mode) + step + order.length) % order.length];
 			} else if (key === Qt.Key_R) {
-				Screenshot.mode = "region";
+				Screenshot.setMode("region");
 			} else if (key === Qt.Key_S) {
-				Screenshot.mode = "screen";
+				Screenshot.setMode("screen");
 			} else if (key === Qt.Key_W) {
-				Screenshot.mode = "window";
+				Screenshot.setMode("window");
 			} else if (key === Qt.Key_P) {
-				Screenshot.mode = "pin";
+				Screenshot.setMode("pin");
 			} else if (key === Qt.Key_V) {
-				Screenshot.mode = "live";
+				Screenshot.setMode("live");
 			} else if (key === Qt.Key_C) {
-				Screenshot.mode = "picker";
+				Screenshot.setMode("picker");
 			} else if (key === Qt.Key_T || key === Qt.Key_O) {
-				Screenshot.mode = "ocr";
+				Screenshot.setMode("ocr");
 			} else if (key === Qt.Key_B) {
-				Screenshot.mode = "qr";
+				Screenshot.setMode("qr");
 			} else if (key === Qt.Key_L) {
-				Screenshot.mode = "scroll";
+				Screenshot.setMode("scroll");
 			} else if (key === Qt.Key_Space) {
 				selector.moving = true;
 			} else if (key === Qt.Key_Up || key === Qt.Key_Down) {
@@ -892,7 +892,7 @@ PanelWindow {
 					Segmented {
 						id: modes
 
-						implicitWidth: 9 * 92
+						implicitWidth: options.length * 92
 						height: 36
 						current: root.mode
 						options: [
@@ -905,13 +905,14 @@ PanelWindow {
 							{ value: "ocr", label: "Text", icon: "text_recognition" },
 							{ value: "qr", label: "QR", icon: "qrcode_scan" },
 							{ value: "scroll", label: "Scroll", icon: "arrow_expand_vertical" }
-						]
-						onSelected: value => Screenshot.mode = value
+						].filter(option => Screenshot.offers(option.value))
+						onSelected: value => Screenshot.setMode(value)
 					}
 
 					// delayed capture: picking a delay drops this frame and
 					// freezes again once the countdown is over
 					Segmented {
+						visible: Plugins.on("delayed-screenshot")
 						implicitWidth: 4 * 46
 						height: 36
 						current: String(Screenshot.delaySeconds)

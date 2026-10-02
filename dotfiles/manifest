@@ -4,7 +4,7 @@
 #   seed  – copy once, only when the target does not exist yet (files the
 #           system keeps rewriting, like wallust.toml)
 #
-# when: all | host:<profile> | feature:<feature> | hook:<theme hook>
+# when: all | host:<profile> | plugin:<plugin> | hook:<theme hook>
 #
 # mode  source                        target                                          when
 link    niri/pshell.kdl               ~/.config/niri/pshell.kdl                       all
@@ -12,9 +12,9 @@ link    bin/record                    ~/.local/bin/record                       
 link    wallust/templates             ~/.config/wallust/templates                     all
 seed    wallust/wallust.toml          ~/.config/wallust/wallust.toml                  all
 seed    codex/hooks.json              ~/.codex/hooks.json                             all
-link    bin/mxh                       ~/.local/bin/mxh                                feature:haptics
-link    bin/mx4-hapticd               ~/.local/bin/mx4-hapticd                        feature:haptics
-link    systemd/mx4-hapticd.service   ~/.config/systemd/user/mx4-hapticd.service      feature:haptics
+link    bin/mxh                       ~/.local/bin/mxh                                plugin:haptics 
+link    bin/mx4-hapticd               ~/.local/bin/mx4-hapticd                        plugin:haptics 
+link    systemd/mx4-hapticd.service   ~/.config/systemd/user/mx4-hapticd.service      plugin:haptics 
 link    spicetify/generate.py         ~/.config/spicetify/Themes/custom/generate.py   host:laptop
 link    spicetify/theme.js            ~/.config/spicetify/Themes/custom/theme.js      host:laptop
 link    spicetify/user.css            ~/.config/spicetify/Themes/custom/user.css      host:laptop

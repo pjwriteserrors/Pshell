@@ -17,7 +17,9 @@ Singleton {
 	property var cpuHistory: root.zeros()
 	property var memoryHistory: root.zeros()
 	property var disks: []
-	property bool mouseAvailable: false
+	// the mouse reported a level
+	property bool mouseFound: false
+	readonly property bool mouseAvailable: Plugins.on("mouse-battery") && root.mouseFound
 	property real mouseLevel: 0
 	property string mouseText: ""
 	property string mouseName: "Mouse"
@@ -30,7 +32,7 @@ Singleton {
 
 	readonly property string memoryText: `${root.formatStorage(root.memoryUsedKiB)} / ${root.formatStorage(root.memoryTotalKiB)}`
 	readonly property string cpuText: root.cpuCores > 0 ? `${root.cpuCores} cores` : ""
-	readonly property bool batteryAvailable: root.batteryPercent >= 0
+	readonly property bool batteryAvailable: Plugins.on("battery") && root.batteryPercent >= 0
 	readonly property bool charging: String(root.batteryStatus).toLowerCase() === "charging"
 	readonly property bool charged: String(root.batteryStatus).toLowerCase() === "full"
 	readonly property string batteryIcon: {
@@ -105,8 +107,8 @@ Singleton {
 			if (index > 0) values[line.slice(0, index).trim()] = line.slice(index + 1).trim();
 		}
 		const percent = Math.max(0, Math.min(100, Number(values.percent)));
-		root.mouseAvailable = values.available === "1" && Number.isFinite(percent);
-		if (!root.mouseAvailable) {
+		root.mouseFound = values.available === "1" && Number.isFinite(percent);
+		if (!root.mouseFound) {
 			root.mouseText = "";
 			root.mouseLevel = 0;
 			root.mouseStatus = "";
@@ -169,7 +171,7 @@ Singleton {
 	}
 
 	Timer {
-		running: true
+		running: Plugins.on("system-monitor")
 		repeat: true
 		interval: 2000
 		triggeredOnStart: true
@@ -180,7 +182,7 @@ Singleton {
 	}
 
 	Timer {
-		running: true
+		running: Plugins.on("system-monitor") || Plugins.on("battery")
 		repeat: true
 		interval: 30000
 		triggeredOnStart: true
@@ -191,7 +193,7 @@ Singleton {
 	}
 
 	Timer {
-		running: Host.has("mouse-battery")
+		running: Plugins.on("mouse-battery")
 		repeat: true
 		interval: 60000
 		triggeredOnStart: true

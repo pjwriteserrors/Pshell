@@ -31,7 +31,7 @@ Singleton {
 	readonly property bool dndAuto: (root.dndWhileTracking && root.trackingNow) || (root.dndFullscreen && Niri.focusedFullscreen) || (root.dndSharing && root.sharing) || (root.dndMeetings && Outlook.inMeeting)
 	// switched off by hand while a rule applied: stays off until the rule ends
 	property bool dndAutoSuppressed: false
-	readonly property bool dnd: root.dndManual || (root.dndAuto && !root.dndAutoSuppressed)
+	readonly property bool dnd: Plugins.on("dnd") && (root.dndManual || (root.dndAuto && !root.dndAutoSuppressed))
 	readonly property string dndReason: {
 		if (root.dndManual) return "On";
 		if (!root.dnd) return "Off";
@@ -43,7 +43,7 @@ Singleton {
 	onDndAutoChanged: if (!root.dndAuto) root.dndAutoSuppressed = false
 
 	function setDnd(on) {
-		if (!!on === root.dnd) return;
+		if (!Plugins.on("dnd") || !!on === root.dnd) return;
 		if (on) {
 			root.dndManual = true;
 		} else {
@@ -306,20 +306,23 @@ Singleton {
 		return true;
 	}
 
-	NotificationServer {
-		id: server
+	// without the plugin the name on the bus is free for another daemon
+	LazyLoader {
+		active: Plugins.on("notifications")
 
-		actionsSupported: true
-		bodySupported: true
-		bodyMarkupSupported: false
-		inlineReplySupported: true
-		persistenceSupported: true
-		imageSupported: true
+		NotificationServer {
+			actionsSupported: true
+			bodySupported: true
+			bodyMarkupSupported: false
+			inlineReplySupported: true
+			persistenceSupported: true
+			imageSupported: true
 
-		onNotification: notification => {
-			notification.tracked = true;
-			root.register(notification);
-			notification.closed.connect(() => root.markClosed(notification.id));
+			onNotification: notification => {
+				notification.tracked = true;
+				root.register(notification);
+				notification.closed.connect(() => root.markClosed(notification.id));
+			}
 		}
 	}
 }

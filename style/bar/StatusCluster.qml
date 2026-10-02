@@ -24,6 +24,7 @@ BarButton {
 
 		Row {
 			anchors.verticalCenter: parent.verticalCenter
+			visible: Plugins.on("system-monitor")
 			spacing: 2.5
 
 			Repeater {
@@ -55,6 +56,7 @@ BarButton {
 
 		Glyph {
 			anchors.verticalCenter: parent.verticalCenter
+			visible: Plugins.on("network")
 			icon: Network.icon
 			size: 17
 			color: Network.online ? Theme.text : Theme.textSubtle
@@ -62,13 +64,14 @@ BarButton {
 
 		Glyph {
 			anchors.verticalCenter: parent.verticalCenter
-			visible: Bluetooth.powered
+			visible: Plugins.on("bluetooth") && Bluetooth.powered
 			icon: Bluetooth.icon
 			size: 16
 		}
 
 		Glyph {
 			anchors.verticalCenter: parent.verticalCenter
+			visible: Plugins.on("sound")
 			icon: Audio.icon
 			size: 17
 			color: Audio.muted ? Theme.textSubtle : Theme.text
@@ -76,7 +79,7 @@ BarButton {
 
 		Glyph {
 			anchors.verticalCenter: parent.verticalCenter
-			visible: Audio.micMuted
+			visible: Plugins.on("sound") && Audio.micMuted
 			icon: "microphone_off"
 			size: 16
 			color: Theme.danger
@@ -92,7 +95,7 @@ BarButton {
 
 		Glyph {
 			anchors.verticalCenter: parent.verticalCenter
-			visible: PowerProfile.current !== "" && PowerProfile.current !== "balanced"
+			visible: PowerProfile.available && PowerProfile.current !== "balanced"
 			icon: PowerProfile.icon(PowerProfile.current)
 			size: 16
 			color: PowerProfile.current === "power-saver" ? Theme.success : Theme.warning

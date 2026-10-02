@@ -19,11 +19,11 @@ ModalWindow {
 	property string uptime: ""
 
 	readonly property var actions: [
-		{ id: "lock", label: Words.of("power.lock", "Lock"), icon: "lock", hold: false },
+		{ id: "lock", label: Words.of("power.lock", "Lock"), icon: "lock", hold: false, shown: Plugins.on("lock-screen") },
 		{ id: "logout", label: Words.of("power.logout", "Log out"), icon: "logout", hold: true },
 		{ id: "reboot", label: Words.of("power.reboot", "Restart"), icon: "restart", hold: true },
 		{ id: "shutdown", label: Words.of("power.shutdown", "Shut down"), icon: "power", hold: true }
-	]
+	].filter(action => action.shown !== false)
 
 	modalId: "power"
 	scrimColor: Qt.rgba(0, 0, 0, 0.62)
@@ -50,9 +50,9 @@ ModalWindow {
 		anchors.fill: parent
 		focus: true
 
-		Keys.onLeftPressed: root.selection = (root.selection + 3) % 4
-		Keys.onRightPressed: root.selection = (root.selection + 1) % 4
-		Keys.onTabPressed: root.selection = (root.selection + 1) % 4
+		Keys.onLeftPressed: root.selection = (root.selection + root.actions.length - 1) % root.actions.length
+		Keys.onRightPressed: root.selection = (root.selection + 1) % root.actions.length
+		Keys.onTabPressed: root.selection = (root.selection + 1) % root.actions.length
 		Keys.onReturnPressed: Session.run(root.actions[root.selection].id)
 		Keys.onEnterPressed: Session.run(root.actions[root.selection].id)
 

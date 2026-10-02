@@ -16,6 +16,7 @@ Singleton {
 	property int serial: 0
 
 	function show(kind, label, progress, valueText, icon) {
+		if (!Plugins.on("osd")) return;
 		root.kind = kind;
 		root.label = label;
 		root.progress = Math.max(0, Math.min(1.5, progress));
