@@ -160,7 +160,7 @@ Drawer {
 					pressedScale: 0.98
 					color: entry.current ? Theme.primaryContainer : (entry.hovered ? Theme.layer1 : "transparent")
 					showHover: false
-					onEntered: root.selected = entry.index
+					onPointed: root.selected = entry.index
 					onClicked: root.activate(entry.modelData)
 
 					Rectangle {

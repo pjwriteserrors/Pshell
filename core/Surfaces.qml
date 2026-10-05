@@ -15,7 +15,7 @@ import qs.style.views
 // here and by the plugin switches, never by the style.
 Scope {
 	// services that act on their own, without a surface to pull them in
-	readonly property var background: [Agents, TimerGuard, ClipboardHints, Phone]
+	readonly property var background: [Agents, TimerGuard, ClipboardHints, Phone, Mail, Autocorrect]
 
 	// notifications and the shell's own messages
 	Variants {
@@ -124,6 +124,18 @@ Scope {
 		active: Plugins.on("notes")
 
 		NotesPanel {}
+	}
+
+	LazyLoader {
+		active: Plugins.on("messages")
+
+		MessagesPanel {}
+	}
+
+	LazyLoader {
+		active: Plugins.on("fast-reader")
+
+		ReaderPanel {}
 	}
 
 	// full-screen overlays

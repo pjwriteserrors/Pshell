@@ -48,10 +48,7 @@ class Daemon:
         self.hub.spawn(self.session())
         socket = await local.serve(self.hub)
         await self.server.start()
-        try:
-            await self.discovery.start()
-        except Exception as error:  # no mDNS is no reason not to serve
-            print(f"phone: mDNS unavailable: {error!r}", flush=True)
+        self.hub.spawn(self.discovery.watch())
         self.hub.spawn(self.hub.watch_plugins())
         for function in self.background:
             self.hub.spawn(function())

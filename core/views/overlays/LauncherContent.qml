@@ -14,7 +14,8 @@ import "../../lib/fuzzysort.js" as Fuzzy
 
 // Launcher content: apps, commands (>), calculator (>c), files (>file),
 // Ollama chats (>chat, >chats), model manager (>ollama), display setup
-// (>setup), translator (>t), todo lists (>todo), web search (>w), Ollama
+// (>setup), translator (>t), converter (>conv), todo lists (>todo), web
+// search (>w), Ollama
 // actions on the clipboard (>ai) and KDE Connect (>phone). The newer modes
 // live in overlays/launcher/*View.qml and share one small interface
 // (move, activate, handleKey, cancel) that the input fields route to.
@@ -186,6 +187,13 @@ Item {
 			description: "Type >t text or >t fr text"
 		},
 		{
+			id: "converter",
+			plugin: "converter",
+			command: "conv",
+			name: "Convert",
+			description: "Type >conv 5 kg in lb or >conv 100 usd eur"
+		},
+		{
 			id: "todo",
 			command: "todo",
 			plugin: "todos",
@@ -298,6 +306,27 @@ Item {
 			description: "Name the song that is playing"
 		},
 		{
+			id: "lyrics",
+			plugin: "lyrics",
+			command: "lyrics",
+			name: "Lyrics",
+			description: "The words of the song that is playing"
+		},
+		{
+			id: "messages",
+			plugin: "messages",
+			command: "messages",
+			name: "Messages",
+			description: Messages.unread > 0 ? `${Messages.unread} unread` : "Mail as chats"
+		},
+		{
+			id: "mail",
+			plugin: "mail",
+			command: "mail",
+			name: "New Mail",
+			description: "Start a chat"
+		},
+		{
 			id: "updates",
 			plugin: "updates",
 			command: "updates",
@@ -326,12 +355,13 @@ Item {
 	readonly property bool inFileMode: (Plugins.on("files") || Phone.pickingFile) && (root.commandQuery === "file" || root.commandQuery.startsWith("file "))
 	readonly property bool inSetupMode: Plugins.on("display-profiles") && (root.commandQuery === "setup" || root.commandQuery.startsWith("setup "))
 	readonly property bool inTranslateMode: Plugins.on("translate") && (root.commandQuery === "t" || root.commandQuery.startsWith("t "))
+	readonly property bool inConvertMode: Plugins.on("converter") && (root.commandQuery === "conv" || root.commandQuery.startsWith("conv "))
 	readonly property bool inTodoMode: Plugins.on("todos") && (root.commandQuery === "todo" || root.commandQuery.startsWith("todo "))
 	readonly property bool inWebMode: Plugins.on("web-search") && (root.commandQuery === "w" || root.commandQuery.startsWith("w "))
 	readonly property bool inAiActionsMode: Plugins.on("ai-actions") && (root.commandQuery === "ai" || root.commandQuery.startsWith("ai "))
 	readonly property bool inPhoneMode: Phone.offered && (root.commandQuery === "phone" || root.commandQuery.startsWith("phone "))
 	readonly property bool inShotsMode: Plugins.on("screenshot-history") && (root.commandQuery === "shots" || root.commandQuery.startsWith("shots "))
-	readonly property bool inViewMode: root.inTranslateMode || root.inTodoMode || root.inWebMode || root.inAiActionsMode || root.inPhoneMode || root.inShotsMode || root.inSetupMode
+	readonly property bool inViewMode: root.inTranslateMode || root.inConvertMode || root.inTodoMode || root.inWebMode || root.inAiActionsMode || root.inPhoneMode || root.inShotsMode || root.inSetupMode
 	// what follows the command token, as typed (">t fr hello" → "fr hello")
 	readonly property string modeArgument: {
 		const match = /^>\S+\s([\s\S]*)$/.exec(root.searchText);
@@ -2367,6 +2397,9 @@ Item {
 		case "translate":
 			root.setLauncherSearch(">t ");
 			break;
+		case "converter":
+			root.setLauncherSearch(">conv ");
+			break;
 		case "todo":
 			root.setLauncherSearch(">todo ");
 			break;
@@ -2425,6 +2458,18 @@ Item {
 		case "song":
 			root.closeRequested();
 			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "song", "detect"]);
+			break;
+		case "lyrics":
+			root.closeRequested();
+			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "lyrics", "open"]);
+			break;
+		case "messages":
+			root.closeRequested();
+			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "messages", "open"]);
+			break;
+		case "mail":
+			root.closeRequested();
+			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "messages", "compose", ""]);
 			break;
 		case "updates":
 			root.openUpdatesRequested();
@@ -2881,6 +2926,7 @@ Item {
 
 	readonly property string mode: {
 		if (root.inTranslateMode) return "translate";
+		if (root.inConvertMode) return "convert";
 		if (root.inTodoMode) return "todo";
 		if (root.inWebMode) return "web";
 		if (root.inAiActionsMode) return "ai";
@@ -2902,6 +2948,7 @@ Item {
 		case "calc": return "calculator";
 		case "files": return Phone.pickingFile ? "cellphone" : "folder";
 		case "translate": return "translate";
+		case "convert": return "swap_horizontal";
 		case "todo": return "format_list_checks";
 		case "web": return "web";
 		case "ai": return "creation";
@@ -2931,6 +2978,7 @@ Item {
 		case "chats": return "forum";
 		case "ollama": return "robot";
 		case "translate": return "translate";
+		case "converter": return "swap_horizontal";
 		case "todo": return "format_list_checks";
 		case "web-search": return "web";
 		case "ai-actions": return "creation";
@@ -2947,6 +2995,9 @@ Item {
 		case "shots": return "image_multiple";
 		case "unpin": return "pin_off_outline";
 		case "song": return "waveform";
+		case "lyrics": return "microphone_variant";
+		case "messages": return "forum_outline";
+		case "mail": return "email_plus_outline";
 		case "updates": return "package_up";
 		case "dnd": return "minus_circle";
 		}
@@ -2957,6 +3008,7 @@ Item {
 	readonly property var activeModeView: {
 		switch (root.mode) {
 		case "translate": return translateView;
+		case "convert": return convertView;
 		case "todo": return todoView;
 		case "web": return webSearchView;
 		case "ai": return aiActionsView;
@@ -2969,6 +3021,7 @@ Item {
 	readonly property string modePlaceholder: {
 		switch (root.mode) {
 		case "translate": return "Text";
+		case "convert": return "5 kg in lb";
 		case "todo": return todoView.naming ? "List name" : "New task";
 		case "web": return "Search the web";
 		case "ai": return "Instruction";
@@ -2981,6 +3034,7 @@ Item {
 		switch (root.mode) {
 		case "chat": return root.editingMessageId !== "" ? "resend" : "send";
 		case "calc":
+		case "convert":
 		case "translate": return "copy";
 		case "todo": return todoView.naming ? "create" : "add";
 		case "web": return webSearchView.showingResults ? "open" : "search";
@@ -3612,7 +3666,8 @@ Item {
 								anchors.fill: parent
 								hoverEnabled: true
 								cursorShape: Qt.PointingHandCursor
-								onEntered: appList.currentIndex = app.index
+								onEntered: if (Pointer.moved(hover, mouseX, mouseY)) appList.currentIndex = app.index
+								onPositionChanged: if (Pointer.moved(hover, mouseX, mouseY)) appList.currentIndex = app.index
 								onClicked: root.launchApp(app.modelData)
 							}
 						}
@@ -3663,7 +3718,7 @@ Item {
 						pressedScale: 0.98
 						showHover: false
 						color: commandRow.selected ? Theme.primaryContainer : (commandRow.hovered ? Theme.layer1 : "transparent")
-						onEntered: commandList.currentIndex = commandRow.index
+						onPointed: commandList.currentIndex = commandRow.index
 						onClicked: root.launchCommand(commandRow.modelData)
 
 						RowLayout {
@@ -3847,6 +3902,24 @@ Item {
 						root.launchRequested();
 					}
 					onArgumentRequested: text => root.setLauncherSearch(`>t ${text}`)
+				}
+			}
+
+			// converter
+			ModeLayer {
+				current: root.mode === "convert"
+
+				ConvertView {
+					id: convertView
+
+					anchors.fill: parent
+					active: root.mode === "convert"
+					argument: root.modeArgument
+					onCloseRequested: {
+						root.closeRequested();
+						root.launchRequested();
+					}
+					onArgumentRequested: text => root.setLauncherSearch(`>conv ${text}`)
 				}
 			}
 
@@ -4101,7 +4174,7 @@ Item {
 								pressedScale: 0.98
 								showHover: false
 								color: fileRow.selected ? Theme.primaryContainer : (fileRow.hovered ? Theme.layer1 : "transparent")
-								onEntered: fileBrowserList.currentIndex = fileRow.index
+								onPointed: fileBrowserList.currentIndex = fileRow.index
 								onClicked: root.openFileBrowserEntry(fileRow.file)
 
 								RowLayout {
@@ -5510,7 +5583,7 @@ Item {
 						interactive: attachRow.file.isDir || (attachRow.supported && root.aiAttachmentLoadingId === "")
 						opacity: attachRow.supported ? 1 : 0.4
 						color: attachRow.picked ? Theme.primaryContainer : (attachRow.current || attachRow.hovered ? Theme.layer1 : "transparent")
-						onEntered: attachmentFileList.currentIndex = attachRow.index
+						onPointed: attachmentFileList.currentIndex = attachRow.index
 						onClicked: root.openAttachmentEntry(attachRow.file)
 
 						RowLayout {

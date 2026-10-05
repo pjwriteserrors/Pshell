@@ -28,6 +28,12 @@ Drawer {
 		Audio.refreshSinks();
 	}
 
+	Binding {
+		target: Lyrics
+		property: "watching"
+		value: root.shown
+	}
+
 	Item {
 		anchors.fill: parent
 		clip: true
@@ -208,13 +214,25 @@ Drawer {
 					}
 				}
 
-				IconButton {
+				ColumnLayout {
 					Layout.alignment: Qt.AlignTop
-					visible: Plugins.on("song-detection")
-					icon: "waveform"
-					iconSize: 18
-					checked: SongDetect.listening
-					onClicked: SongDetect.toggle()
+					spacing: 4
+
+					IconButton {
+						visible: Plugins.on("song-detection")
+						icon: "waveform"
+						iconSize: 18
+						checked: SongDetect.listening
+						onClicked: SongDetect.toggle()
+					}
+
+					IconButton {
+						visible: Plugins.on("lyrics")
+						icon: "microphone_variant"
+						iconSize: 18
+						checked: Lyrics.open
+						onClicked: Lyrics.toggle()
+					}
 				}
 			}
 
@@ -468,6 +486,11 @@ Drawer {
 						onClicked: Audio.setDefaultSink(sinkRow.modelData.name)
 					}
 				}
+			}
+
+			LyricsView {
+				Layout.fillWidth: true
+				visible: Lyrics.active
 			}
 
 			// what song detection heard

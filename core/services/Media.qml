@@ -118,6 +118,10 @@ Singleton {
 		root.player.position = Math.max(0, Math.min(1, ratio)) * root.length;
 	}
 
+	function seekTo(seconds) {
+		if (root.length > 0) root.seek(seconds / root.length);
+	}
+
 	Timer {
 		running: root.playing
 		repeat: true

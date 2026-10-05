@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import importlib.util
+import glob
 import json
 import os
 import re
@@ -46,7 +47,7 @@ PROGRAMS = {
         ("magick", "screenshot editor"), ("tesseract", "OCR"), ("zbarimg", "QR codes"),
         ("ffmpeg", "wallpaper frames"), ("wallust", "colours"), ("swaybg", "wallpaper"),
         ("awww", "image wallpapers"), ("awww-daemon", "image wallpapers"), ("mpvpaper", "video wallpapers"),
-        ("app2unit", "launching apps"), ("curl", "weather, updates"), ("nmcli", "network"),
+        ("app2unit", "launching apps"), ("curl", "weather, updates, exchange rates"), ("nmcli", "network"),
         ("wpctl", "audio"), ("pactl", "audio"), ("cava", "media spectrum"),
         ("pacman", "updates"), ("yay", "AUR updates"), ("fakeroot", "update check"),
         ("kitty", "terminal for updates and SSH"), ("gio", "moving wallpapers to the trash"),
@@ -64,9 +65,11 @@ PROGRAMS = {
     "fingerprint": [("fprintd-list", "fingerprint unlock")],
     "ssh": [("secret-tool", "SSH passwords")],
     "display-profiles": [("jq", "display profiles")],
+    "mail": [("secret-tool", "mail passwords"), ("xdg-open", "attachments, sign-in page"), ("wl-copy", "sign-in code")],
     "microsoft-calendar": [("wl-copy", "sign-in code"), ("xdg-open", "sign-in page, joining meetings")],
 }
 OPTIONAL_PROGRAMS = [
+    ("chromium", "mails and signatures drawn as they were laid out"),
     ("ollama", "launcher chat and >ollama"), ("pdftotext", "chat attachments"), ("pandoc", "chat attachments"),
     ("upower", "mouse battery"), ("qsb", "shader animation previews"),
     ("gst-inspect-1.0", "live pins (with gst-plugin-pipewire)"),
@@ -208,6 +211,26 @@ def doctor():
             report.fail("pshell-phone.service is not running (systemctl --user enable --now pshell-phone)")
         if report.failures == before:
             report.ok("daemon running, everything it needs is there")
+
+    if "autocorrect" in plugins:
+        import autocorrect
+
+        report.section("Autocorrect")
+        before = report.failures
+        if not module_available("evdev"):
+            report.fail("evdev – reading the keyboard (python-evdev)")
+        for language, package in (("de", "hunspell-de"), ("en", "hunspell-en_us")):
+            if not autocorrect.dictionary_path(language):
+                report.fail(f"no hunspell dictionary for {language} ({package})")
+        keyboards = glob.glob("/dev/input/by-path/*-event-kbd") + glob.glob("/dev/input/by-id/*-event-kbd")
+        if not any(os.access(path, os.R_OK) for path in keyboards):
+            report.fail("the keyboard is not readable (scripts/setup-rpg-input-access.sh)")
+        if not os.access("/dev/uinput", os.W_OK):
+            report.fail("/dev/uinput is not writable – typing the corrections (a udev rule or the input group)")
+        if not any(autocorrect.usage_file(language).exists() for language in autocorrect.LANGUAGES):
+            report.warn("no word usage lists yet (fetched when it first runs); the likely word is a guess without them")
+        if report.failures == before:
+            report.ok("dictionaries, keyboard and uinput are there")
 
     report.section("Fonts")
     for family, why in FONTS:

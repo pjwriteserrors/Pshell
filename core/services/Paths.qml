@@ -16,6 +16,9 @@ Singleton {
 	readonly property string state: `${Quickshell.env("XDG_STATE_HOME") || root.home + "/.local/state"}/pshell`
 	readonly property string cache: `${Quickshell.env("XDG_CACHE_HOME") || root.home + "/.cache"}/pshell`
 
+	// sockets; PSHELL_RUNTIME_DIR moves them for a shell beside the real one
+	readonly property string runtime: Quickshell.env("PSHELL_RUNTIME_DIR") || `${Quickshell.env("XDG_RUNTIME_DIR") || "/tmp"}/pshell`
+
 	function stateFile(name) {
 		return `${root.state}/${name}`;
 	}

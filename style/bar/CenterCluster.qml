@@ -129,4 +129,8 @@ Row {
 	RecordingChip {
 		bar: root.bar
 	}
+
+	DownloadChip {
+		bar: root.bar
+	}
 }

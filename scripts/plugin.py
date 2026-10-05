@@ -2,11 +2,13 @@
 """Registers plugins and checks that every plugin is complete.
 
   plugin.py new <id> --name NAME --category TAB [--off] [--requires a,b]
-                [--icon ICON] [--ipc "target function" ...] [--on a,b]
+                [--group FOLDER] [--icon ICON] [--ipc "target function" ...]
+                [--on a,b]
                 [--base closed|off|none] [--dry-run]
       adds the plugin to core/plugins.json, next to the others of its
       category. A category that does not exist yet becomes a new tab of
-      >plugins. --ipc/--on/--base describe how its preview picture is taken
+      >plugins. There it sits in the folder of the plugin of its tab it
+      requires, or in the folder --group names. --ipc/--on/--base describe how its preview picture is taken
       (see plugin_previews.py); --icon is shown while there is none.
   plugin.py check
       the registry is sound, every plugin is asked for somewhere in the
@@ -76,6 +78,8 @@ def new(args):
         plugin["default"] = False
     if requires:
         plugin["requires"] = requires
+    if args.group:
+        plugin["group"] = args.group
     if args.icon:
         plugin["icon"] = args.icon
     if args.ipc or needs or args.base:
@@ -235,6 +239,7 @@ def main():
     add.add_argument("--category", required=True)
     add.add_argument("--off", action="store_true", help="off until switched on")
     add.add_argument("--requires", default="")
+    add.add_argument("--group", default="", help="folder it shares with others of its tab")
     add.add_argument("--icon", default="")
     add.add_argument("--ipc", action="append", default=[], help="call that brings it on the screen for the picture")
     add.add_argument("--on", default="", help="plugins its picture needs")

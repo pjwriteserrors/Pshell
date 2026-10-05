@@ -267,7 +267,7 @@ ColumnLayout {
 				pressedScale: 0.98
 				showHover: false
 				color: resultRow.picked ? Theme.primaryContainer : (resultRow.hovered ? Theme.layer1 : "transparent")
-				onEntered: resultList.currentIndex = resultRow.index
+				onPointed: resultList.currentIndex = resultRow.index
 				onClicked: root.openUrl(resultRow.modelData.url)
 
 				RowLayout {

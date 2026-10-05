@@ -8,6 +8,7 @@ import Quickshell.Io
 import qs.style.theme
 import qs.core.services
 import qs.style.widgets
+import qs.core.views.panels.network
 
 // Quick settings: tiles for network / bluetooth / sound / mic, do not
 // disturb, keep awake, power profile and the phone (KDE Connect); volume,
@@ -232,6 +233,17 @@ Drawer {
 						active: KeepAwake.active
 						hasDetails: false
 						onClicked: KeepAwake.toggle()
+					}
+
+					QuickTile {
+						Layout.fillWidth: true
+						visible: Autocorrect.available
+						icon: "keyboard"
+						title: Words.of("control.autocorrect", "Autocorrect")
+						subtitle: Autocorrect.on ? "On" : "Off"
+						active: Autocorrect.on
+						hasDetails: false
+						onClicked: Autocorrect.toggle()
 					}
 
 					QuickTile {
@@ -502,6 +514,13 @@ Drawer {
 							}
 						}
 					}
+				}
+
+				DownloadList {
+					Layout.fillWidth: true
+					Layout.topMargin: 4
+					visible: Plugins.on("downloads")
+					shown: root.shown && root.page === "network"
 				}
 			}
 		}

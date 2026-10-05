@@ -35,6 +35,7 @@ LAUNCHER = ["bar", "launcher-button"]
 # id: on    – plugins that are on (the plugin itself always is)
 #     ipc   – calls that bring the plugin on the screen
 #     run   – shell commands before the picture (in the nested session)
+#             ({shell} is the copy of the shell)
 #     base  – "closed": the same plugins with nothing opened (default)
 #             "off": the same scene with the plugin switched off
 #             "none": the whole screen
@@ -194,7 +195,7 @@ class Stage:
 
     def open(self, scene):
         for command in scene.get("run", []):
-            subprocess.run(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(command.replace("{shell}", str(self.shell)), shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for call in scene.get("ipc", []):
             self.ipc(call.format(home=self.work / "home"))
             time.sleep(0.25)
@@ -273,6 +274,107 @@ def inside(work: Path, names):
         sh("niri msg action quit --skip-confirmation")
 
 
+# a song for the scenes that need one playing, and its lyrics
+SONG = {"title": "Paper Lanterns", "artist": "The Quiet Hours", "album": "Harbour Lights", "seconds": 214, "from": 31}
+LYRICS = [
+    (12.4, "The harbour sleeps beneath a copper sky"), (17.1, "We fold the day in paper, you and I"),
+    (21.8, "A match, a breath, a little flame"), (26.3, "And every lantern gets a name"), (30.6, ""),
+    (33.2, "Let them rise, let them rise"), (37.5, "Over rooftops, over tides"),
+    (41.9, "All the wishes we could not say"), (46.4, "Glowing as they drift away"), (51.0, ""),
+    (55.3, "The river keeps them for a while"), (59.8, "Then lets them go, mile after mile"),
+]
+
+
+def player():
+    """An MPRIS player that plays SONG for half a minute (`--player`)."""
+    import dbus
+    import dbus.service
+    from dbus.mainloop.glib import DBusGMainLoop
+    from gi.repository import GLib
+
+    DBusGMainLoop(set_as_default=True)
+    bus = dbus.SessionBus()
+    name = "org.mpris.MediaPlayer2.preview"
+    if bus.name_has_owner(name):
+        return
+    owned = dbus.service.BusName(name, bus)
+    started = time.time()
+
+    def properties(interface):
+        if interface == "org.mpris.MediaPlayer2":
+            return {"Identity": "Music", "DesktopEntry": "", "CanQuit": False, "CanRaise": False, "HasTrackList": False,
+                    "SupportedUriSchemes": dbus.Array([], signature="s"), "SupportedMimeTypes": dbus.Array([], signature="s")}
+        return {
+            "PlaybackStatus": "Playing", "LoopStatus": "None", "Shuffle": False, "Rate": 1.0, "MinimumRate": 1.0, "MaximumRate": 1.0, "Volume": 1.0,
+            "Position": dbus.Int64((SONG["from"] + time.time() - started) * 1e6),
+            "Metadata": dbus.Dictionary({
+                "mpris:trackid": dbus.ObjectPath("/org/mpris/MediaPlayer2/preview/1"), "mpris:length": dbus.Int64(SONG["seconds"] * 1e6),
+                "xesam:title": SONG["title"], "xesam:artist": dbus.Array([SONG["artist"]], signature="s"), "xesam:album": SONG["album"],
+            }, signature="sv"),
+            "CanGoNext": True, "CanGoPrevious": True, "CanPlay": True, "CanPause": True, "CanSeek": True, "CanControl": True,
+        }
+
+    class Player(dbus.service.Object):
+        @dbus.service.method("org.freedesktop.DBus.Properties", in_signature="ss", out_signature="v")
+        def Get(self, interface, name):
+            return properties(interface)[name]
+
+        @dbus.service.method("org.freedesktop.DBus.Properties", in_signature="s", out_signature="a{sv}")
+        def GetAll(self, interface):
+            return properties(interface)
+
+    Player(owned, "/org/mpris/MediaPlayer2")
+    loop = GLib.MainLoop()
+    GLib.timeout_add_seconds(30, loop.quit)
+    loop.run()
+
+
+def downloads():
+    """A browser with three downloads, for half a minute (`--downloads`)."""
+    import fcntl
+    import struct
+    import threading
+
+    # one browser, however often the scene is opened
+    lock = open(Path(os.environ.get("PSHELL_RUNTIME_DIR") or tempfile.gettempdir()) / "preview-browser.lock", "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return
+    host = subprocess.Popen([sys.executable, str(REPO / "scripts" / "downloads_host.py")], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    home = Path.home() / "Downloads"
+    started = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
+    items = [
+        {"id": 1, "file": str(home / "archlinux-2026.10.01-x86_64.iso"), "state": "in_progress", "received": 520e6, "total": 1.3e9},
+        {"id": 2, "file": str(home / "harbour-lights.flac"), "state": "interrupted", "paused": True, "canResume": True, "received": 21e6, "total": 34e6},
+        {"id": 3, "file": str(home / "invoice-2026-09.pdf"), "state": "complete", "received": 184e3, "total": 184e3},
+    ]
+    for item in items:
+        item.update({"url": "https://example.org/" + Path(item["file"]).name, "mime": "", "error": "", "started": started})
+
+    def send(message):
+        data = json.dumps(message).encode()
+        host.stdin.write(struct.pack("=I", len(data)) + data)
+        host.stdin.flush()
+
+    def listen():
+        while True:
+            head = host.stdout.read(4)
+            if len(head) < 4:
+                return
+            message = json.loads(host.stdout.read(struct.unpack("=I", head)[0]))
+            if message.get("type") == "sync":
+                send({"type": "snapshot", "browser": "Browser", "items": items[:2]})
+                send({"type": "item", "item": items[2]})
+
+    threading.Thread(target=listen, daemon=True).start()
+    for _ in range(30):
+        time.sleep(1)
+        items[0]["received"] += 8.4e6
+        send({"type": "item", "item": items[0]})
+    host.stdin.close()
+
+
 # ── outside ─────────────────────────────────────────────────────────────────
 def prepare(work: Path):
     shell = work / "shell"
@@ -318,11 +420,17 @@ def prepare(work: Path):
         {"id": "1", "title": "Groceries", "body": "- Oat milk\n- Coffee\n- Lemons", "pinned": True},
         {"id": "2", "title": "Release", "body": "## Friday\nTag, changelog, announce", "pinned": True},
     ]))
+    # a mailbox that does not exist (scripts/messages/demo.py)
+    (state / "messages.json").write_text(json.dumps({"demo": True, "accounts": []}))
     (state / "song.json").write_text(json.dumps({
         "title": "Get Lucky", "artist": "Daft Punk", "album": "Random Access Memories", "cover": "",
         "links": [{"name": "Apple Music", "icon": "apple", "url": ""}, {"name": "Spotify", "icon": "music", "url": ""},
                   {"name": "YouTube", "icon": "play_circle", "url": ""}, {"name": "Shazam", "icon": "open_in_new", "url": ""}],
     }))
+    import lyrics
+    answer = home / ".cache" / "pshell" / "lyrics" / lyrics.kept(SONG["title"], SONG["artist"], SONG["seconds"]).name
+    answer.parent.mkdir(parents=True)
+    answer.write_text(json.dumps({"state": "found", "synced": True, "lines": [{"t": t, "text": text} for t, text in LYRICS]}))
     env = environment(work)
     for line in ["https://quickshell.org/docs", "git rebase --onto main feature~3", "Paderborn, 14:30, room 2"]:
         subprocess.run(["cliphist", "store"], input=line, text=True, env=env)
@@ -337,6 +445,7 @@ def environment(work: Path):
         "HOME": str(home), "USER": "user",
         "PSHELL_HOST": sh(f"python3 {REPO}/scripts/host.py name").stdout.strip(),
         "XDG_STATE_HOME": str(work / "state"), "XDG_CACHE_HOME": str(home / ".cache"),
+        "PSHELL_RUNTIME_DIR": str(work / "run"),
         "XDG_CONFIG_HOME": str(home / ".config"),
         # fonts and icon themes of the real user
         "XDG_DATA_HOME": os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share"),
@@ -384,6 +493,12 @@ def outside(names):
 
 
 def main(args):
+    if args[:1] == ["--player"]:
+        player()
+        return 0
+    if args[:1] == ["--downloads"]:
+        downloads()
+        return 0
     if args[:1] == ["--inside"]:
         inside(Path(args[1]), args[2:])
         return 0

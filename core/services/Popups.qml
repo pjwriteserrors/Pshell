@@ -75,6 +75,8 @@ Singleton {
 		timer: "qtrack",
 		ssh: "ssh",
 		notes: "notes",
+		messages: "messages",
+		reader: "fast-reader",
 		power: "power-menu",
 		radial: "radial-menu",
 		eyerest: "eye-rest",

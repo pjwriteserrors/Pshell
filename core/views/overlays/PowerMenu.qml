@@ -188,7 +188,8 @@ ModalWindow {
 								anchors.fill: parent
 								hoverEnabled: true
 								cursorShape: Qt.PointingHandCursor
-								onEntered: root.selection = action.index
+								onEntered: if (Pointer.moved(mouse, mouseX, mouseY)) root.selection = action.index
+								onPositionChanged: if (Pointer.moved(mouse, mouseX, mouseY)) root.selection = action.index
 								onPressed: {
 									if (!action.modelData.hold) return;
 									releaseAnim.stop();

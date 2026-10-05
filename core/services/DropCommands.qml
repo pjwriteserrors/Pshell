@@ -35,6 +35,7 @@ Singleton {
 		{ id: "shelf", label: "Shelf", icon: "tray_arrow_down", shown: Plugins.on("shelves"), run: (items, at) => Shelf.keep(items, at) },
 		{ id: "copy", label: "Copy", icon: "content_copy", run: items => Shelf.copyItems(items) },
 		{ id: "search", label: root.kind === "link" ? "Open" : "Search", icon: root.kind === "link" ? "web" : "magnify", shown: root.words, run: items => Shelf.search(items) },
+		{ id: "read", label: "Read", icon: "book_open_page_variant", shown: root.words && root.kind !== "link" && Plugins.on("fast-reader"), run: (items, at) => Reader.readItems(items, at) },
 		{ id: "ai", label: "AI", icon: "creation", shown: root.words && Plugins.on("ai-actions"), opens: "ai" },
 		{ id: "path", label: "Copy path", icon: "clipboard_text", shown: root.files, run: items => Shelf.copyPaths(items) },
 		{ id: "zip", label: "ZIP", icon: "package_variant", shown: root.files, run: (items, at) => Shelf.zip(Shelf.current(at), items) },

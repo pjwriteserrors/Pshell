@@ -224,6 +224,11 @@ PanelWindow {
 				onClicked: toggle()
 			}
 
+			MessagesButton {
+				bar: root
+				visible: Plugins.on("messages")
+			}
+
 			StatusCluster {
 				bar: root
 				visible: Plugins.on("status")

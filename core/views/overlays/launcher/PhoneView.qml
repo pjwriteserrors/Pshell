@@ -159,7 +159,7 @@ ColumnLayout {
 			title: actionRow.modelData.title
 			selected: root.currentIndex === actionRow.index
 			opacity: Phone.reachable || actionRow.modelData.id === "pair" ? 1 : 0.5
-			onEntered: root.currentIndex = actionRow.index
+			onPointed: root.currentIndex = actionRow.index
 			onClicked: root.run(actionRow.modelData)
 		}
 	}

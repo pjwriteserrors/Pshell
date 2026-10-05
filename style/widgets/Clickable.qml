@@ -1,5 +1,6 @@
 import QtQuick
 import qs.style.theme
+import qs.core.services
 
 // Base for every pressable surface. Presses sink the surface slightly and it
 // springs back with a small overshoot when released.
@@ -16,6 +17,8 @@ Rectangle {
 	signal scrolled(var wheel)
 	signal entered
 	signal exited
+	// the pointer came or moved here itself (Pointer): what hover selects on
+	signal pointed
 
 	// stays true over nested controls, unlike the layer's containsMouse
 	readonly property bool hovered: hoverHandler.hovered && root.interactive
@@ -67,7 +70,11 @@ Rectangle {
 			}
 			root.scrolled(wheel);
 		}
-		onEntered: root.entered()
+		onEntered: {
+			root.entered();
+			if (Pointer.moved(layer, layer.mouseX, layer.mouseY)) root.pointed();
+		}
+		onPositionChanged: if (Pointer.moved(layer, layer.mouseX, layer.mouseY)) root.pointed()
 		onExited: root.exited()
 	}
 

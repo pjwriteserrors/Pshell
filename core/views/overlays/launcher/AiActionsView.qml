@@ -175,7 +175,7 @@ ColumnLayout {
 			selected: root.currentIndex === actionRow.index
 			enabled: root.ready
 			opacity: root.ready ? 1 : 0.45
-			onEntered: root.currentIndex = actionRow.index
+			onPointed: root.currentIndex = actionRow.index
 			onClicked: root.run(actionRow.modelData)
 		}
 	}

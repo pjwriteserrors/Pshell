@@ -30,6 +30,8 @@
 	{ "id": "notes", "name": "Notes", "category": "Panels", "default": false },
 	{ "id": "ssh", "name": "SSH logins", "category": "Panels", "default": false },
 	{ "id": "song-detection", "name": "Song detection", "category": "Panels", "requires": ["media"], "preview": {"on": ["bar", "media"], "ipc": ["panels toggleMedia"], "base": "off"} },
+	{ "id": "lyrics", "name": "Lyrics", "category": "Panels", "requires": ["media"], "preview": {"on": ["bar", "media"], "run": ["python3 {shell}/scripts/plugin_previews.py --player & sleep 1.5"], "ipc": ["panels toggleMedia", "lyrics open"], "base": "off", "wait": 3} },
+	{ "id": "downloads", "name": "Browser downloads", "category": "Panels", "requires": ["network"], "preview": {"on": ["bar", "clock", "status", "quick-settings"], "run": ["python3 {shell}/scripts/plugin_previews.py --downloads & sleep 4"], "ipc": ["panels toggleNetwork"], "base": "off", "wait": 3} },
 
 	{ "id": "apps", "name": "Apps", "category": "Launcher" },
 	{ "id": "calculator", "name": "Calculator", "category": "Launcher" },
@@ -41,6 +43,7 @@
 	{ "id": "web-search", "name": "Web search", "category": "Launcher" },
 	{ "id": "todos", "name": "Todo lists", "category": "Launcher", "default": false },
 	{ "id": "display-profiles", "name": "Display setup", "category": "Launcher", "default": false },
+	{ "id": "converter", "name": "Converter", "category": "Launcher", "preview": {"on": ["bar", "launcher-button"], "ipc": ["launcher search '>conv 5 kg in lb'"]} },
 
 	{ "id": "screenshot", "name": "Screenshot", "category": "Capture" },
 	{ "id": "pins", "name": "Pinned screenshots", "category": "Capture", "requires": ["screenshot"] },
@@ -62,26 +65,28 @@
 	{ "id": "daily-caption", "name": "Wallpaper caption", "category": "Desktop", "icon": "text_box" },
 	{ "id": "keep-awake", "name": "Keep awake", "category": "Desktop" },
 	{ "id": "rpg", "name": "Productivity RPG", "category": "Desktop", "default": false, "icon": "gamepad_variant" },
+	{ "id": "fast-reader", "name": "Fast reader", "category": "Desktop", "requires": ["drop-commands"], "preview": {"on": ["bar", "clock"], "ipc": ["reader read 'Vielen Dank für die Aufmerksamkeit. Ein Wort nach dem anderen, immer an derselben Stelle.'"], "wait": 4.3} },
 
 	{ "id": "clipboard-hints", "name": "Clipboard hints", "category": "Automation" },
 	{ "id": "agents", "name": "Agent status", "category": "Automation", "icon": "robot" },
 	{ "id": "timer-guard", "name": "Timer guard", "category": "Automation", "requires": ["qtrack"], "icon": "shield_check" },
+	{ "id": "autocorrect", "name": "Autocorrect", "category": "Automation", "default": false, "icon": "keyboard" },
 
 	{ "id": "studio-wallpaper", "name": "Wallpaper", "category": "Studio" },
 	{ "id": "studio-motion", "name": "Motion", "category": "Studio" },
 	{ "id": "studio-dress", "name": "Icons & pointer", "category": "Studio" },
 	{ "id": "studio-styles", "name": "Style", "category": "Studio" },
 	{ "id": "studio-combinations", "name": "Combinations", "category": "Studio" },
-	{ "id": "hook-sddm", "name": "SDDM login screen", "category": "Studio", "hook": "sddm", "icon": "login", "default": false },
-	{ "id": "hook-betterdiscord", "name": "Discord (BetterDiscord)", "category": "Studio", "hook": "betterdiscord", "icon": "chat", "default": false },
-	{ "id": "hook-obsidian", "name": "Obsidian", "category": "Studio", "hook": "obsidian", "icon": "notebook", "default": false },
-	{ "id": "hook-spicetify", "name": "Spotify (Spicetify)", "category": "Studio", "hook": "spicetify", "icon": "music", "default": false },
-	{ "id": "hook-steam", "name": "Steam", "category": "Studio", "hook": "steam", "icon": "gamepad_variant", "default": false },
-	{ "id": "hook-kitty", "name": "Kitty", "category": "Studio", "hook": "kitty", "icon": "console", "default": false },
-	{ "id": "hook-pywalfox", "name": "Firefox & Floorp (Pywalfox)", "category": "Studio", "hook": "pywalfox", "icon": "web", "default": false },
-	{ "id": "hook-telegram", "name": "Telegram", "category": "Studio", "hook": "telegram", "icon": "send", "default": false },
-	{ "id": "hook-oomox", "name": "GTK theme & Papirus icons (Oomox)", "category": "Studio", "hook": "oomox", "icon": "palette_swatch", "default": false },
-	{ "id": "hook-openrgb", "name": "Keyboard & RGB lighting (OpenRGB)", "category": "Studio", "hook": "openrgb", "icon": "keyboard", "default": false },
+	{ "id": "hook-sddm", "name": "SDDM login screen", "category": "Studio", "group": "Theme hooks", "hook": "sddm", "icon": "login", "default": false },
+	{ "id": "hook-betterdiscord", "name": "Discord (BetterDiscord)", "category": "Studio", "group": "Theme hooks", "hook": "betterdiscord", "icon": "chat", "default": false },
+	{ "id": "hook-obsidian", "name": "Obsidian", "category": "Studio", "group": "Theme hooks", "hook": "obsidian", "icon": "notebook", "default": false },
+	{ "id": "hook-spicetify", "name": "Spotify (Spicetify)", "category": "Studio", "group": "Theme hooks", "hook": "spicetify", "icon": "music", "default": false },
+	{ "id": "hook-steam", "name": "Steam", "category": "Studio", "group": "Theme hooks", "hook": "steam", "icon": "gamepad_variant", "default": false },
+	{ "id": "hook-kitty", "name": "Kitty", "category": "Studio", "group": "Theme hooks", "hook": "kitty", "icon": "console", "default": false },
+	{ "id": "hook-pywalfox", "name": "Firefox & Floorp (Pywalfox)", "category": "Studio", "group": "Theme hooks", "hook": "pywalfox", "icon": "web", "default": false },
+	{ "id": "hook-telegram", "name": "Telegram", "category": "Studio", "group": "Theme hooks", "hook": "telegram", "icon": "send", "default": false },
+	{ "id": "hook-oomox", "name": "GTK theme & Papirus icons (Oomox)", "category": "Studio", "group": "Theme hooks", "hook": "oomox", "icon": "palette_swatch", "default": false },
+	{ "id": "hook-openrgb", "name": "Keyboard & RGB lighting (OpenRGB)", "category": "Studio", "group": "Theme hooks", "hook": "openrgb", "icon": "keyboard", "default": false },
 
 	{ "id": "backlight", "name": "Screen brightness", "category": "Hardware", "default": false, "icon": "brightness_6" },
 	{ "id": "ddc", "name": "Monitor brightness", "category": "Hardware", "default": false, "icon": "monitor" },
@@ -108,5 +113,9 @@
 	{ "id": "phone-presence", "name": "Presence", "category": "Phone", "default": false, "requires": ["phone"], "icon": "cellphone" },
 	{ "id": "phone-unlock", "name": "Unlock by phone", "category": "Phone", "default": false, "requires": ["phone", "lock-screen"], "icon": "fingerprint" },
 	{ "id": "phone-terminal", "name": "Terminal on the phone", "category": "Phone", "requires": ["phone"], "icon": "console" },
-	{ "id": "phone-screen", "name": "Screen on the phone", "category": "Phone", "default": false, "requires": ["phone"], "icon": "monitor" }
+	{ "id": "phone-screen", "name": "Screen on the phone", "category": "Phone", "default": false, "requires": ["phone"], "icon": "monitor" },
+
+	{ "id": "messages", "name": "Messages", "category": "Messages", "default": false, "preview": {"on": ["bar", "mail"], "ipc": ["messages chat 'demo|relaunch'"], "wait": 4} },
+	{ "id": "mail", "name": "Mail", "category": "Messages", "requires": ["messages"], "icon": "email_outline" },
+	{ "id": "mail-notifications", "name": "Mail notifications", "category": "Messages", "requires": ["mail", "notifications"], "icon": "bell_outline" }
 ]

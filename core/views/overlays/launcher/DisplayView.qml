@@ -609,7 +609,7 @@ ColumnLayout {
 			HoverHandler {
 				id: cardHover
 
-				onHoveredChanged: if (cardHover.hovered) root.currentIndex = card.index
+				onPointChanged: if (cardHover.hovered && Pointer.moved(card, point.position.x, point.position.y)) root.currentIndex = card.index
 			}
 
 			MouseArea {

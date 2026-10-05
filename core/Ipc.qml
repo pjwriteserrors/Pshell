@@ -279,6 +279,24 @@ Scope {
 		}
 	}
 
+	// the words of the song that is playing, in the media panel
+	IpcHandler {
+		target: "lyrics"
+		enabled: Plugins.on("lyrics")
+
+		function toggle(): void {
+			if (Popups.current === "media" && Lyrics.open) Lyrics.show(false);
+			else open();
+		}
+		function open(): void {
+			Lyrics.show(true);
+			if (Popups.current !== "media") Popups.withFocusedScreen(screen => Popups.open("media", screen));
+		}
+		function close(): void {
+			Lyrics.show(false);
+		}
+	}
+
 	IpcHandler {
 		target: "updates"
 		enabled: Plugins.on("updates")
@@ -342,6 +360,56 @@ Scope {
 		}
 		function toggle(): void {
 			root.drawerOnFocused("ssh");
+		}
+	}
+
+	// the fast reader: a text one word at a time
+	IpcHandler {
+		target: "reader"
+		enabled: Plugins.on("fast-reader")
+
+		function read(text: string): void {
+			Reader.read(text);
+		}
+		// plays and pauses while the reader is up
+		function toggle(): void {
+			if (Popups.current === "reader") Reader.toggle();
+		}
+		function close(): void {
+			if (Popups.current === "reader") Popups.close();
+		}
+	}
+
+	// mail and whatever else reaches the user, as chats
+	IpcHandler {
+		target: "messages"
+		enabled: Plugins.on("messages")
+
+		function open(): void {
+			Popups.withFocusedScreen(screen => Popups.open("messages", screen));
+		}
+		function close(): void {
+			if (Popups.current === "messages") Popups.close();
+		}
+		function toggle(): void {
+			root.drawerOnFocused("messages");
+		}
+		// a chat by its id, as notifications name it
+		function chat(id: string): void {
+			Mail.show(id);
+		}
+		// a new mail; `to` may be empty
+		function compose(to: string): void {
+			Popups.withFocusedScreen(screen => Popups.open("messages", screen, to === "" ? "new" : `new:${to}`));
+		}
+		function settings(): void {
+			Popups.withFocusedScreen(screen => Popups.open("messages", screen, "settings"));
+		}
+		function refresh(): void {
+			Mail.refresh();
+		}
+		function unread(): int {
+			return Messages.unread;
 		}
 	}
 
@@ -417,6 +485,15 @@ Scope {
 
 		function toggle(): void {
 			KeepAwake.toggle();
+		}
+	}
+
+	IpcHandler {
+		target: "autocorrect"
+		enabled: Autocorrect.available
+
+		function toggle(): void {
+			Autocorrect.toggle();
 		}
 	}
 

@@ -128,7 +128,7 @@ Item {
 			HoverHandler {
 				id: cellHover
 
-				onHoveredChanged: if (cellHover.hovered) root.currentIndex = cell.index
+				onPointChanged: if (cellHover.hovered && Pointer.moved(cell, point.position.x, point.position.y)) root.currentIndex = cell.index
 			}
 
 			ClippingRectangle {
