@@ -1,0 +1,103 @@
+#!/usr/bin/python3
+"""Talks to the phone daemon from a terminal or a script.
+
+  phonectl pair                      show a pairing code (QR) in the terminal
+  phonectl devices                   the paired phones
+  phonectl remove <id prefix>        un-pair one
+  phonectl call <topic> <action> [json args] [--timeout s]
+  phonectl watch <topic>…            print a topic whenever it changes
+"""
+
+import json
+import os
+import socket
+import subprocess
+import sys
+from pathlib import Path
+
+SOCKET = Path(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}") / "pshell" / "phone.sock"
+
+
+class Client:
+    def __init__(self):
+        self.socket = socket.socket(socket.AF_UNIX)
+        try:
+            self.socket.connect(str(SOCKET))
+        except OSError:
+            sys.exit("The phone daemon is not running (systemctl --user start pshell-phone).")
+        self.file = self.socket.makefile("rw")
+        self.send({"type": "hello", "role": "cli"})
+        self.count = 0
+
+    def send(self, message):
+        self.file.write(json.dumps(message) + "\n")
+        self.file.flush()
+
+    def messages(self):
+        for line in self.file:
+            yield json.loads(line)
+
+    def call(self, topic, action, args=None, timeout=15):
+        self.count += 1
+        call_id = f"c{self.count}"
+        self.send({"type": "call", "id": call_id, "topic": topic, "action": action, "args": args or {}, "timeout": timeout})
+        for message in self.messages():
+            if message.get("type") == "result" and message.get("id") == call_id:
+                if not message.get("ok"):
+                    error = message.get("error", {})
+                    sys.exit(f"{error.get('code')}: {error.get('message')}")
+                return message.get("data")
+        sys.exit("The daemon closed the connection.")
+
+    def state(self, topic):
+        self.send({"type": "sub", "topics": [topic]})
+        for message in self.messages():
+            if message.get("type") == "state" and message.get("topic") == topic:
+                return message.get("data")
+
+
+def main(args):
+    if not args or args[0] in ("-h", "--help"):
+        print(__doc__.strip())
+        return 0
+    command, rest = args[0], args[1:]
+    client = Client()
+    if command == "pair":
+        state = client.call("pairing", "start")
+        subprocess.run(["qrencode", "-t", "ANSIUTF8", "-m", "2", state["uri"]], check=False)
+        print(state["uri"])
+        print("Scan it with the app within two minutes.")
+    elif command == "devices":
+        for device in client.state("devices") or []:
+            mark = "●" if device["connected"] else "○"
+            print(f"{mark} {device['name']}  {device.get('model', '')}  {device['id'][:16]}  {device.get('address', '')}")
+    elif command == "remove" and rest:
+        matches = [d for d in client.state("devices") or [] if d["id"].startswith(rest[0])]
+        if len(matches) != 1:
+            sys.exit("No single device with that id.")
+        client.call("devices", "remove", {"id": matches[0]["id"]})
+        print(f"Removed {matches[0]['name']}.")
+    elif command == "call" and len(rest) >= 2:
+        timeout = 15
+        if "--timeout" in rest:
+            index = rest.index("--timeout")
+            timeout = float(rest[index + 1])
+            del rest[index:index + 2]
+        data = client.call(rest[0], rest[1], json.loads(rest[2]) if len(rest) > 2 else {}, timeout)
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+    elif command == "watch" and rest:
+        client.send({"type": "sub", "topics": rest})
+        for message in client.messages():
+            if message.get("type") in ("state", "event"):
+                print(json.dumps(message, indent=2, ensure_ascii=False), flush=True)
+    else:
+        print(__doc__.strip(), file=sys.stderr)
+        return 2
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except (KeyboardInterrupt, BrokenPipeError):
+        pass

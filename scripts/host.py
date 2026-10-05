@@ -5,7 +5,7 @@
   host.py has <plugin>      exit 0 when the plugin is on
   host.py plugins           the plugins that are on, one per line
   host.py get <key.path>    a value; strings plain, everything else as JSON
-  host.py hooks             enabled theme hooks, one per line, in order
+  host.py hooks             the theme hooks that are on (plugins hook-<name>), one per line
 """
 
 import json
@@ -52,10 +52,15 @@ def plugins():
         switches = {}
     state = {}
 
+    hooks_of_profile = profile().get("themeHooks")
+
     def wanted(plugin):
         for source in (switches, defaults):
             if plugin["id"] in source:
                 return source[plugin["id"]] is True
+        # a theme hook starts on when the profile lists it under themeHooks
+        if "hook" in plugin and isinstance(hooks_of_profile, list):
+            return plugin["hook"] in hooks_of_profile
         return plugin.get("default") is not False
 
     def resolve(name):
@@ -69,6 +74,21 @@ def plugins():
     for name in by_id:
         resolve(name)
     return state
+
+
+def hooks():
+    """The theme hooks that are on: every plugin with a `hook` whose state is on.
+
+    Each hook is a plugin (hook-<name> in core/plugins.json), switched like any
+    other in >plugins; a host profile's themeHooks only says which ones a
+    fresh setup starts with. The profile's order is kept, hooks switched on
+    beyond it follow in registry order.
+    """
+    registry = load(ROOT / "core" / "plugins.json") or []
+    state = plugins()
+    on = [plugin["hook"] for plugin in registry if "hook" in plugin and state.get(plugin["id"]) is True]
+    listed = [hook for hook in profile().get("themeHooks", []) if hook in on]
+    return listed + [hook for hook in on if hook not in listed]
 
 
 def lookup(data, key):
@@ -101,7 +121,7 @@ def main(args):
         print(os.path.expanduser(value) if isinstance(value, str) else json.dumps(value))
         return 0
     if command == "hooks":
-        for hook in profile().get("themeHooks", []):
+        for hook in hooks():
             print(hook)
         return 0
     print(__doc__.strip(), file=sys.stderr)

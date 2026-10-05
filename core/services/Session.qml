@@ -9,9 +9,15 @@ Singleton {
 
 	property bool locked: false
 	signal lockRequested
+	// the phone proved itself (docs/mobile.md, unlock); the lock screen decides
+	signal unlockRequested
 
 	function lock() {
 		root.lockRequested();
+	}
+
+	function unlock() {
+		root.unlockRequested();
 	}
 
 	function logout() {

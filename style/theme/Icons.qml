@@ -10,6 +10,9 @@ Singleton {
 	readonly property string family: "Symbols Nerd Font"
 
 	readonly property var glyphs: ({
+		"cellphone_play": "󱀟",
+		"file_download_outline": "󰥦",
+		"folder_outline": "󰉖",
 		"dialpad": "󰘜",
 		"cup_water": "󰆫",
 		"walk": "󰖃",
@@ -18,6 +21,7 @@ Singleton {
 		"water_plus_outline": "󱔋",
 		"water_minus_outline": "󱔇",
 		"human_handsup": "󰙌",
+		"rotate_left": "󰑥",
 		"rotate_right": "󰑧",
 		"hand_back_right_outline": "󱠭",
 		"head_outline": "󱍟",
@@ -379,6 +383,7 @@ Singleton {
 		"weather_sunset_up": "󰖜",
 		"weather_windy": "󰖝",
 		"web": "󰖟",
+		"youtube": "󰗃",
 		"white_balance_sunny": "󰖨",
 		"wifi": "󰖩",
 		"wifi_off": "󰖪",

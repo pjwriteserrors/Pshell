@@ -326,6 +326,31 @@ PanelWindow {
 							}
 						}
 					}
+
+					// a message that can be answered (a chat on the phone, say) is answered right here
+					RowLayout {
+						Layout.fillWidth: true
+						visible: !toast.internal && !!toast.notification?.hasInlineReply
+						spacing: 6
+
+						Field {
+							id: toastReply
+
+							Layout.fillWidth: true
+							implicitHeight: 34
+							icon: "reply"
+							placeholder: toast.notification?.inlineReplyPlaceholder || "Reply"
+							onAccepted: if (Notifs.sendReply(toast.notification, toastReply.text)) toast.leave(1)
+						}
+
+						IconButton {
+							icon: "send"
+							variant: "filled"
+							implicitWidth: 34
+							implicitHeight: 34
+							onClicked: if (Notifs.sendReply(toast.notification, toastReply.text)) toast.leave(1)
+						}
+					}
 				}
 			}
 		}

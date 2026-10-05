@@ -15,6 +15,10 @@ import "../../lib/NiriAnimation.js" as NiriAnimation
 // the wallpaper as a miniature shell; themes run along a film strip below,
 // the wallust palette/style matrix sits in a side sheet. ↑↓ browse themes,
 // → steps into the palette matrix, ← steps back out, Enter applies.
+//
+// The palettes come from scripts/theme_catalog.sh: one `matrix-all` run per
+// opening brings every theme's matrix (cached on disk, generated in parallel
+// where missing), so browsing never waits on a process.
 ModalWindow {
 	id: root
 
@@ -35,13 +39,23 @@ ModalWindow {
 	property var animationOptions: []
 	property string animationStateHint: ""
 	property string selectedAnimationId: ""
-	property var previewPaletteData: ({})
-	property string previewPaletteStatus: "idle"
-	property string previewPaletteRequestKey: ""
-	property var previewMatrixItems: []
-	property var previewMatrixMap: ({})
+	// Every theme's palette matrix (the wallust colours per palette x style)
+	// by matrixKey, filled by one `matrix-all` run after the list and by a
+	// `matrix-json` run for the theme in front when it is not there yet.
+	// Stepping through the library then costs no process at all.
+	property var matrixCache: ({})
 	property string previewMatrixRequestKey: ""
-	property bool previewMatrixLoading: false
+	readonly property var previewMatrix: root.matrixCache[root.previewMatrixRequestKey] ?? null
+	readonly property var previewMatrixItems: root.previewMatrix ? root.previewMatrix.items : []
+	readonly property var previewMatrixMap: root.previewMatrix ? root.previewMatrix.map : ({})
+	readonly property bool previewMatrixLoading: root.currentTheme !== null && root.previewMatrix === null
+	// the cell of the matrix that is selected: what the preview is painted in
+	readonly property var previewPaletteData: root.matrixCell(root.selectedColorSpace, root.selectedPalette) ?? ({})
+	readonly property string previewPaletteStatus: {
+		if (!root.currentTheme) return "idle";
+		if (root.previewMatrix === null) return "loading";
+		return root.matrixCell(root.selectedColorSpace, root.selectedPalette) ? "ready" : "error";
+	}
 	property int currentThemeIndex: 0
 	property string selectedDailyProvider: "bing"
 	property string dailyStatusText: ""
@@ -107,8 +121,8 @@ ModalWindow {
 		}
 		root.themes = entries;
 		Qt.callLater(function() {
-			root.reloadPreviewPalette();
-			previewMatrixReloadTimer.restart();
+			root.reloadPreviewMatrix();
+			root.prewarmMatrices();
 		});
 	}
 
@@ -178,63 +192,32 @@ ModalWindow {
 		return [String(theme.path || ""), String(theme.previewPath || ""), backend].join("\u001f");
 	}
 
-	function reloadPreviewPalette() {
-		const theme = root.currentTheme;
-		if (!theme) {
-			root.previewPaletteData = {};
-			root.previewPaletteStatus = "idle";
-			root.previewPaletteRequestKey = "";
-			return;
-		}
-
-		const key = root.previewKey(theme, root.selectedBackend, root.selectedColorSpace, root.selectedPalette);
-		root.previewPaletteRequestKey = key;
-		root.previewPaletteStatus = "loading";
-		root.previewPaletteData = {};
-		loadPreviewPaletteProcess.running = false;
-		loadPreviewPaletteProcess.command = [
-			"bash", root.themeCatalogScriptPath, "palette-json",
-			theme.path, theme.previewPath,
-			root.selectedBackend, root.selectedColorSpace, root.selectedPalette
-		];
-		loadPreviewPaletteProcess.running = true;
+	function storeMatrix(data) {
+		const items = Array.isArray(data.items) ? data.items : [];
+		const map = {};
+		for (const item of items)
+			map[`${item.colorSpace}|${item.palette}`] = item;
+		const key = root.matrixKey({ path: data.themePath, previewPath: data.previewPath }, data.backend);
+		const next = Object.assign({}, root.matrixCache);
+		next[key] = { items: items, map: map };
+		root.matrixCache = next;
+		return key;
 	}
 
-	function setPreviewPalette(raw) {
-		const text = String(raw || "").trim();
-		if (text === "") {
-			root.previewPaletteData = {};
-			root.previewPaletteStatus = "error";
-			return;
-		}
-
-		try {
-			const data = JSON.parse(text);
-			const key = root.previewKey({ path: data.themePath, previewPath: data.previewPath }, data.backend, data.colorSpace, data.palette);
-			if (key !== root.previewPaletteRequestKey) return;
-			root.previewPaletteData = data;
-			root.previewPaletteStatus = "ready";
-		} catch (error) {
-			console.warn(`Could not parse theme preview palette: ${error}`);
-			root.previewPaletteStatus = "error";
-		}
-	}
-
+	// the matrix of the theme in front: from the cache, or asked for
 	function reloadPreviewMatrix() {
 		const theme = root.currentTheme;
 		if (!theme) {
-			root.previewMatrixItems = [];
-			root.previewMatrixMap = {};
 			root.previewMatrixRequestKey = "";
-			root.previewMatrixLoading = false;
 			return;
 		}
 
 		const key = root.matrixKey(theme, root.selectedBackend);
 		root.previewMatrixRequestKey = key;
-		root.previewMatrixLoading = true;
-		root.previewMatrixItems = [];
-		root.previewMatrixMap = {};
+		if (root.matrixCache[key] !== undefined) {
+			root.settleVariant();
+			return;
+		}
 		loadPreviewMatrixProcess.running = false;
 		loadPreviewMatrixProcess.command = [
 			"bash", root.themeCatalogScriptPath, "matrix-json",
@@ -246,32 +229,56 @@ ModalWindow {
 	function setPreviewMatrix(raw) {
 		const text = String(raw || "").trim();
 		if (text === "") {
-			root.previewMatrixItems = [];
-			root.previewMatrixMap = {};
-			root.previewMatrixLoading = false;
+			// wallust could not read this one: an empty matrix, so the cells
+			// show n/a instead of a spinner forever
+			if (root.previewMatrixRequestKey !== "")
+				root.storeMatrix({ themePath: root.currentTheme?.path, previewPath: root.currentTheme?.previewPath, backend: root.selectedBackend, items: [] });
 			return;
 		}
 
 		try {
-			const data = JSON.parse(text);
-			const key = root.matrixKey({ path: data.themePath, previewPath: data.previewPath }, data.backend);
-			if (key !== root.previewMatrixRequestKey) return;
-			const items = Array.isArray(data.items) ? data.items : [];
-			const map = {};
-			for (const item of items)
-				map[`${item.colorSpace}|${item.palette}`] = item;
-			root.previewMatrixItems = items;
-			root.previewMatrixMap = map;
-			root.previewMatrixLoading = false;
-			if (items.length > 0 && !root.isVariantAvailable(root.selectedColorSpace, root.selectedPalette)) {
-				const preferred = root.findPreferredVariant(items);
-				if (preferred) root.selectVariant(preferred.colorSpace, preferred.palette);
-			}
+			const key = root.storeMatrix(JSON.parse(text));
+			if (key === root.previewMatrixRequestKey) root.settleVariant();
 		} catch (error) {
 			console.warn(`Could not parse theme preview matrix: ${error}`);
-			root.previewMatrixItems = [];
-			root.previewMatrixMap = {};
-			root.previewMatrixLoading = false;
+		}
+	}
+
+	// every theme's matrix in one go, so the other themes are ready before
+	// they are stepped to; what the current theme asked for is shared
+	function prewarmMatrices() {
+		if (root.themes.length === 0) return;
+		prewarmMatricesProcess.running = false;
+		prewarmMatricesProcess.command = ["bash", root.themeCatalogScriptPath, "matrix-all", root.selectedBackend];
+		prewarmMatricesProcess.running = true;
+	}
+
+	function setAllMatrices(raw) {
+		const text = String(raw || "").trim();
+		if (text === "") return;
+		try {
+			const data = JSON.parse(text);
+			const next = Object.assign({}, root.matrixCache);
+			for (const matrix of (Array.isArray(data.matrices) ? data.matrices : [])) {
+				const items = Array.isArray(matrix.items) ? matrix.items : [];
+				const map = {};
+				for (const item of items)
+					map[`${item.colorSpace}|${item.palette}`] = item;
+				next[root.matrixKey({ path: matrix.themePath, previewPath: matrix.previewPath }, matrix.backend)] = { items: items, map: map };
+			}
+			root.matrixCache = next;
+			root.settleVariant();
+		} catch (error) {
+			console.warn(`Could not parse the theme matrices: ${error}`);
+		}
+	}
+
+	// a variant the theme does not have falls back to the nearest one it has
+	function settleVariant() {
+		const items = root.previewMatrixItems;
+		if (items.length > 0 && !root.isVariantAvailable(root.selectedColorSpace, root.selectedPalette)) {
+			const preferred = root.findPreferredVariant(items);
+			if (preferred) root.selectVariant(preferred.colorSpace, preferred.palette);
 		}
 	}
 
@@ -453,22 +460,10 @@ ModalWindow {
 	}
 
 	onFilteredThemesChanged: syncCurrentThemeIndex()
-	onCurrentThemeChanged: {
-		root.reloadPreviewPalette();
-		previewMatrixReloadTimer.restart();
-	}
+	onCurrentThemeChanged: root.reloadPreviewMatrix()
 	onSelectedBackendChanged: {
-		root.reloadPreviewPalette();
-		previewMatrixReloadTimer.restart();
-	}
-	onSelectedColorSpaceChanged: root.reloadPreviewPalette()
-	onSelectedPaletteChanged: root.reloadPreviewPalette()
-
-	Timer {
-		id: previewMatrixReloadTimer
-		interval: 260
-		repeat: false
-		onTriggered: root.reloadPreviewMatrix()
+		root.reloadPreviewMatrix();
+		root.prewarmMatrices();
 	}
 
 	Process {
@@ -481,7 +476,7 @@ ModalWindow {
 
 	Process {
 		id: readWallustConfigProcess
-		command: ["sh", "-lc", `cat '${root.wallustConfigPath}'`]
+		command: ["cat", root.wallustConfigPath]
 		stdout: StdioCollector {
 			onStreamFinished: root.setWallustConfig(text)
 		}
@@ -522,18 +517,18 @@ ModalWindow {
 	}
 
 	Process {
-		id: loadPreviewPaletteProcess
-		command: ["true"]
-		stdout: StdioCollector {
-			onStreamFinished: root.setPreviewPalette(text)
-		}
-	}
-
-	Process {
 		id: loadPreviewMatrixProcess
 		command: ["true"]
 		stdout: StdioCollector {
 			onStreamFinished: root.setPreviewMatrix(text)
+		}
+	}
+
+	Process {
+		id: prewarmMatricesProcess
+		command: ["true"]
+		stdout: StdioCollector {
+			onStreamFinished: root.setAllMatrices(text)
 		}
 	}
 
@@ -547,7 +542,7 @@ ModalWindow {
 
 	Process {
 		id: readAnimationStateProcess
-		command: ["sh", "-lc", `
+		command: ["sh", "-c", `
 if [ -f "${root.animationStatePath}" ]; then
 	cat "${root.animationStatePath}"
 elif [ -f "${root.shaderCurrentPath}" ]; then

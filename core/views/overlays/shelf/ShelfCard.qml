@@ -176,7 +176,7 @@ Item {
 		entries.push({ label: many ? `Copy ${targets.length} files` : "Copy", icon: "content_copy", run: () => Shelf.copyItems(targets) });
 		entries.push({ label: many ? "Copy paths" : "Copy path", icon: "clipboard_text", run: () => Shelf.copyPaths(targets) });
 		if (!many && item.kind === "file") entries.push({ label: "Rename", icon: "pencil", run: () => root.renamingItem = item.id });
-		if (KdeConnect.available) entries.push({ label: `Send to ${KdeConnect.name}`, icon: "cellphone_arrow_down", run: () => Shelf.sendToPhone(targets) });
+		if (Phone.available) entries.push({ label: `Send to ${Phone.name}`, icon: "cellphone_arrow_down", run: () => Shelf.sendToPhone(targets) });
 		if (targets.some(t => t.kind === "file")) entries.push({ label: "Compress to ZIP", icon: "package_variant", run: () => Shelf.zip(root.shelfId, targets) });
 		if (targets.every(t => t.kind !== "file")) {
 			entries.push({ label: targets.every(t => t.kind === "link") ? "Open in browser" : "Search", icon: "magnify", run: () => Shelf.search(targets) });
@@ -203,7 +203,7 @@ Item {
 			entries.push({ label: "Copy all", icon: "content_copy", run: () => Shelf.copyItems(root.items) });
 			entries.push({ label: "Copy all paths", icon: "clipboard_text", run: () => Shelf.copyPaths(root.items) });
 			if (root.items.some(t => t.kind === "file")) entries.push({ label: "Compress to ZIP", icon: "package_variant", run: () => Shelf.zip(root.shelfId, root.items) });
-			if (KdeConnect.available) entries.push({ label: `Send all to ${KdeConnect.name}`, icon: "cellphone_arrow_down", run: () => Shelf.sendToPhone(root.items) });
+			if (Phone.available) entries.push({ label: `Send all to ${Phone.name}`, icon: "cellphone_arrow_down", run: () => Shelf.sendToPhone(root.items) });
 			entries.push({ separator: true });
 		}
 		entries.push({ label: "Paste", icon: "content_paste", run: () => Shelf.pasteInto(root.shelfId) });
@@ -423,8 +423,8 @@ Item {
 
 								Image {
 									anchors.fill: parent
-									visible: Shelf.isImage(sheet.modelData)
-									source: visible ? Shelf.fileUri(sheet.modelData.path) : ""
+									visible: Shelf.pictureOf(sheet.modelData) !== ""
+									source: visible ? Shelf.fileUri(Shelf.pictureOf(sheet.modelData)) : ""
 									sourceSize: Qt.size(60, 60)
 									fillMode: Image.PreserveAspectCrop
 									asynchronous: true
@@ -432,7 +432,7 @@ Item {
 
 								Glyph {
 									anchors.centerIn: parent
-									visible: !Shelf.isImage(sheet.modelData)
+									visible: Shelf.pictureOf(sheet.modelData) === ""
 									icon: Shelf.iconFor(sheet.modelData)
 									size: 15
 									color: Theme.primary

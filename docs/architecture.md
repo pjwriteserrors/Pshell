@@ -13,7 +13,10 @@ core/            features: services, IPC, every surface, the views styles fall b
   plugins.json   the plugins: everything that can be switched on or off
   Surfaces.qml   instantiates every surface, gated by its plugin
 style/           the look: Frame.qml (what hangs on the screen edges), theme/, widgets/, bar/
+  phone/         what the shell publishes to the phone app, one topic a file
 scripts/         theme pipeline, wallpaper runtime, style switching, setup
+  phone/         the daemon between the phone app and the shell (docs/mobile.md)
+mobile/          the Android app and the protocol both ends speak
 hosts/           machines.json (hostname → profile) and one profile per machine
 dotfiles/        files outside the repo, placed by install.sh (see manifest)
 system/          root-level setup: SDDM theme, fingerprint PAM
@@ -80,9 +83,10 @@ or when a plugin has neither picture, scene nor icon.
 | `primaryOutput` | output for desktop widgets and the default screen |
 | `weather.city` | |
 | `wallpapers` | the wallpaper library (outside the repo) |
-| `themeHooks` | theme hooks in the order they run |
+| `themeHooks` | the theme hooks a fresh setup of this machine starts with; each hook is a plugin `hook-<name>` in the Studio tab of `>plugins`, switched on and off there like any other |
 | `hookConfig.<hook>` | settings of a hook |
 | `shelf.watch` | folders whose new files land on a shelf (default: Downloads, Pictures/Screenshots, Videos/Recordings) |
+| `phone` | the phone app's daemon: `port`, `bind`, `addresses` (a VPN name for pairing codes), `downloads`, `files` (the folder the phone may browse), `editCommands`, `presence` (docs/mobile.md) |
 
 Shaking the pointer to open a shelf reads the mouse and touchpad event
 devices; the session gets read access to them with
@@ -101,11 +105,15 @@ registration.
 
 `scripts/apply_theme_selection.sh <theme>`:
 
-1. wallpaper runtime (`apply_wallpaper_runtime.sh`: swaybg still frame, awww
-   for images, mpvpaper for videos, as systemd user units)
-2. niri window animation, if given
-3. wallust (`~/.cache/wal`), GTK colours, shell reload
-4. the host's theme hooks (`scripts/theme-hooks/<hook>.sh`), in parallel
+1. a still frame of the media (`theme_write_frame` in `theme_paths.sh`)
+2. the wallpaper runtime in the background (`apply_wallpaper_runtime.sh`:
+   swaybg still frame, awww for images, mpvpaper for videos, as systemd user
+   units), beside
+3. niri window animation, if given, then wallust (`~/.cache/wal`), GTK
+   colours, shell reload: the shell wears the palette about a second after
+   the choice, while the wallpaper is still coming up
+4. the theme hooks that are on (`scripts/theme-hooks/<hook>.sh`, plugins
+   `hook-<name>`), in parallel, once the wallpaper is painted
 5. GTK colour scheme follows the palette's dark/light mode
 
 A hook that finds its program missing exits 3 and is logged as skipped. Only

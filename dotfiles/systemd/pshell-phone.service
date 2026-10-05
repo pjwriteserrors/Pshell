@@ -1,0 +1,13 @@
+[Unit]
+Description=pshell phone daemon (link to the Android app)
+After=graphical-session.target network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+ExecStart=%h/.config/quickshell/shell/scripts/phone/pshell-phone
+Restart=on-failure
+RestartSec=5s
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

@@ -18,7 +18,8 @@ Diese Datei ist für einen neuen AI-Chat auf dem PC. Gib ihr einfach:
   - aktiv sind KDE Connect, Haptik, DDC-Helligkeit und Maus-Akku
   - Notizen, Todos, qtrack, RPG, SSH-Manager, Power-Profile und `>setup` sind aus
   - Theme-Hooks: sddm, betterdiscord, obsidian, spicetify, steam, kitty, pywalfox,
-    telegram, oomox und openrgb
+    telegram, oomox und openrgb (jeder ein Plugin `hook-<name>`, im Studio-Reiter
+    von `>plugins` ein- und ausschaltbar)
   - Wallpaper-Bibliothek: `~/Scripts/themes/color_themes`
 - Auf dem PC gilt vorerst der Default-Style (der Laptop-Look). Arcanum wird später als
   eigener Branch `style/arcanum` neu aufgebaut. Das ist **nicht** Teil dieser Aufgabe.

@@ -39,11 +39,11 @@ extract_preview() {
 	rm -f "$tmp_path"
 	if [[ "$(theme_media_type "$media_path")" == "image" ]]; then
 		ffmpeg -nostdin -hide_banner -loglevel error -y -i "$media_path" -frames:v 1 \
-			-vf "scale=1920:-1:force_original_aspect_ratio=decrease" "$tmp_path"
+			-vf "scale=1920:-1:force_original_aspect_ratio=decrease" "${THEME_PNG_OPTS[@]}" "$tmp_path"
 	elif ! ffmpeg -nostdin -hide_banner -loglevel error -y -ss 00:00:01 -i "$media_path" -frames:v 1 \
-		-vf "scale=1920:-1:force_original_aspect_ratio=decrease" "$tmp_path"; then
+		-vf "scale=1920:-1:force_original_aspect_ratio=decrease" "${THEME_PNG_OPTS[@]}" "$tmp_path"; then
 		ffmpeg -nostdin -hide_banner -loglevel error -y -i "$media_path" -frames:v 1 \
-			-vf "scale=1920:-1:force_original_aspect_ratio=decrease" "$tmp_path"
+			-vf "scale=1920:-1:force_original_aspect_ratio=decrease" "${THEME_PNG_OPTS[@]}" "$tmp_path"
 	fi
 	if [[ ! -f "$tmp_path" ]]; then
 		echo "failed to extract preview: $media_path" >&2
@@ -80,22 +80,34 @@ wallust_preview_config_hash() {
 	fi
 }
 
+# the folder of a theme's cells for one backend; the config hash is the same
+# for the whole run and computed once
+WALLUST_PREVIEW_CONFIG_KEY=""
+palette_cache_root() {
+	local theme_dir="$1"
+	local preview_path="$2"
+	local backend="$3"
+	local cache_dir preview_key
+
+	[[ -n "$WALLUST_PREVIEW_CONFIG_KEY" ]] || WALLUST_PREVIEW_CONFIG_KEY="$(safe_name "$(wallust_preview_config_hash)")"
+	cache_dir="$(theme_palette_cache_dir "$theme_dir")"
+	preview_key="$(basename "${preview_path%.*}")"
+	printf '%s/%s/%s/%s\n' \
+		"$cache_dir" \
+		"$(safe_name "$preview_key")" \
+		"$WALLUST_PREVIEW_CONFIG_KEY" \
+		"$(safe_name "$backend")"
+}
+
 palette_cache_path() {
 	local theme_dir="$1"
 	local preview_path="$2"
 	local backend="$3"
 	local color_space="$4"
 	local palette="$5"
-	local cache_dir preview_key config_key
 
-	cache_dir="$(theme_palette_cache_dir "$theme_dir")"
-	preview_key="$(basename "${preview_path%.*}")"
-	config_key="$(wallust_preview_config_hash)"
-	printf '%s/%s/%s/%s/%s/%s.json\n' \
-		"$cache_dir" \
-		"$(safe_name "$preview_key")" \
-		"$(safe_name "$config_key")" \
-		"$(safe_name "$backend")" \
+	printf '%s/%s/%s.json\n' \
+		"$(palette_cache_root "$theme_dir" "$preview_path" "$backend")" \
 		"$(safe_name "$color_space")" \
 		"$(safe_name "$palette")"
 }
@@ -278,12 +290,56 @@ ensure_palette_cache() {
 		return 0
 	fi
 
-	if generate_palette_cache "$theme_dir" "$preview_path" "$backend" "$color_space" "$palette" "$cache_path"; then
-		printf '%s\n' "$cache_path"
-		return 0
-	fi
+	# one generator per cell: the picker asks for the current theme while the
+	# prewarm of the whole library runs, and the second asker waits for the
+	# first instead of running wallust again
+	mkdir -p "$(dirname "$cache_path")"
+	(
+		exec 8>"${cache_path}.lock"
+		flock 8
+		if [[ -s "$cache_path" && "$cache_path" -nt "$preview_path" ]]; then
+			exit 0
+		fi
+		generate_palette_cache "$theme_dir" "$preview_path" "$backend" "$color_space" "$palette" "$cache_path"
+	) || return 1
+	rm -f "${cache_path}.lock"
+	printf '%s\n' "$cache_path"
+}
 
-	return 1
+# the six cells of a theme generated side by side; every cell is a wallust
+# run of a few hundred milliseconds, and the matrix is wanted whole
+ensure_palette_matrix() {
+	local theme_dir="$1"
+	local preview_path="$2"
+	local backend="$3"
+	local color_space palette
+
+	for palette in "${PALETTE_OPTIONS[@]}"; do
+		for color_space in "${COLOR_SPACE_OPTIONS[@]}"; do
+			ensure_palette_cache "$theme_dir" "$preview_path" "$backend" "$color_space" "$palette" >/dev/null 2>&1 &
+		done
+	done
+	wait
+}
+
+# the rows of a matrix: color_space, palette, cache path per cell that is
+# there (ensure_palette_matrix has run; a cell wallust could not make is left
+# out, and the picker shows it as n/a)
+matrix_rows() {
+	local theme_dir="$1"
+	local preview_path="$2"
+	local backend="$3"
+	local root color_space palette cache_path
+
+	root="$(palette_cache_root "$theme_dir" "$preview_path" "$backend")"
+	for palette in "${PALETTE_OPTIONS[@]}"; do
+		for color_space in "${COLOR_SPACE_OPTIONS[@]}"; do
+			cache_path="$root/$color_space/$palette.json"
+			if [[ -s "$cache_path" && "$cache_path" -nt "$preview_path" ]]; then
+				printf '%s\t%s\t%s\n' "$color_space" "$palette" "$cache_path"
+			fi
+		done
+	done
 }
 
 palette_json() {
@@ -325,13 +381,8 @@ matrix_json() {
 	}
 
 	tsv="$(mktemp "$THEME_RUNTIME_DIR/wallust-matrix.XXXXXX.tsv")"
-	for palette in "${PALETTE_OPTIONS[@]}"; do
-		for color_space in "${COLOR_SPACE_OPTIONS[@]}"; do
-			if cache_path="$(ensure_palette_cache "$theme_dir" "$preview_path" "$backend" "$color_space" "$palette")"; then
-				printf '%s\t%s\t%s\n' "$color_space" "$palette" "$cache_path" >>"$tsv"
-			fi
-		done
-	done
+	ensure_palette_matrix "$theme_dir" "$preview_path" "$backend"
+	matrix_rows "$theme_dir" "$preview_path" "$backend" >"$tsv"
 
 	python3 - "$tsv" "$(theme_entry_name "$theme_dir")" "$theme_dir" "$preview_path" "$backend" "${COLOR_SPACE_OPTIONS[*]}" "${PALETTE_OPTIONS[*]}" <<'PY'
 import json
@@ -367,17 +418,75 @@ PY
 }
 
 prewarm_theme() {
-	local theme_dir preview_path backend color_space palette
+	local theme_dir preview_path backend
 
 	theme_dir="$(resolve_theme_dir "$1")"
 	preview_path="$2"
 	backend="$3"
 
-	for palette in "${PALETTE_OPTIONS[@]}"; do
-		for color_space in "${COLOR_SPACE_OPTIONS[@]}"; do
-			ensure_palette_cache "$theme_dir" "$preview_path" "$backend" "$color_space" "$palette" >/dev/null || true
-		done
-	done
+	ensure_palette_matrix "$theme_dir" "$preview_path" "$backend"
+}
+
+# Every theme's matrix in one answer, generating what is missing with as many
+# wallust runs side by side as there are cores. The picker asks for this once
+# per opening, after the list, so stepping through the library never waits.
+matrix_all_json() {
+	local backend="$1"
+	local jobs=0 limit tsv theme_name theme_path media_path preview_path media_type
+
+	limit="$(( $(nproc 2>/dev/null || echo 6) / 6 + 1 ))"
+	tsv="$(mktemp "$THEME_RUNTIME_DIR/wallust-matrix-all.XXXXXX.tsv")"
+
+	while IFS=$'\t' read -r theme_name theme_path media_path preview_path media_type; do
+		[[ -n "$theme_path" ]] || continue
+		ensure_palette_matrix "$theme_path" "$preview_path" "$backend" &
+		jobs=$((jobs + 1))
+		if (( jobs >= limit )); then
+			wait -n
+			jobs=$((jobs - 1))
+		fi
+	done < <(list_themes)
+	wait
+
+	while IFS=$'\t' read -r theme_name theme_path media_path preview_path media_type; do
+		[[ -n "$theme_path" ]] || continue
+		while IFS= read -r row; do
+			printf '%s\t%s\t%s\t%s\n' "$theme_name" "$theme_path" "$preview_path" "$row" >>"$tsv"
+		done < <(matrix_rows "$theme_path" "$preview_path" "$backend")
+	done < <(list_themes)
+
+	python3 - "$tsv" "$backend" "${COLOR_SPACE_OPTIONS[*]}" "${PALETTE_OPTIONS[*]}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+tsv_path = Path(sys.argv[1])
+backend = sys.argv[2]
+color_spaces = sys.argv[3].split()
+palettes = sys.argv[4].split()
+matrices = {}
+
+for line in tsv_path.read_text().splitlines():
+    if not line.strip():
+        continue
+    theme_name, theme_dir, preview_path, color_space, palette, path = line.split("\t", 5)
+    matrix = matrices.setdefault((theme_dir, preview_path), {
+        "theme": theme_name,
+        "themePath": theme_dir,
+        "previewPath": preview_path,
+        "backend": backend,
+        "colorSpaces": color_spaces,
+        "palettes": palettes,
+        "items": [],
+    })
+    data = json.loads(Path(path).read_text())
+    data["colorSpace"] = color_space
+    data["palette"] = palette
+    matrix["items"].append(data)
+
+print(json.dumps({"backend": backend, "matrices": list(matrices.values())}, separators=(",", ":")))
+PY
+	rm -f "$tsv"
 }
 
 list_themes() {
@@ -422,8 +531,16 @@ case "${1:-list}" in
 		fi
 		prewarm_theme "$@"
 		;;
+	matrix-all)
+		shift
+		if (($# != 1)); then
+			echo "usage: $0 matrix-all <backend>" >&2
+			exit 1
+		fi
+		matrix_all_json "$@"
+		;;
 	*)
-		echo "usage: $0 [list|palette-json|matrix-json|prewarm]" >&2
+		echo "usage: $0 [list|palette-json|matrix-json|matrix-all|prewarm]" >&2
 		exit 1
 		;;
 esac

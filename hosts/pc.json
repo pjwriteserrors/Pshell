@@ -7,7 +7,7 @@
 	"plugins": {
 		"ddc": true,
 		"mouse-battery": true,
-		"kdeconnect": true,
+		"phone": true,
 		"haptics": true
 	},
 	"themeHooks": [

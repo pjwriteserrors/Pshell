@@ -135,7 +135,7 @@ Item {
 			command: "setup",
 			plugin: "display-profiles",
 			name: "Display Setup",
-			description: "Switch the monitor layout",
+			description: "Arrange the monitors, switch and save setups",
 			icon: "video-display-symbolic"
 		},
 		{
@@ -209,9 +209,9 @@ Item {
 		{
 			id: "phone",
 			command: "phone",
-			plugin: "kdeconnect",
+			plugin: Phone.plugin,
 			name: "Phone",
-			description: `${KdeConnect.name} · ${KdeConnect.summary}`
+			description: `${Phone.name} · ${Phone.summary}`
 		},
 		{
 			id: "color-picker",
@@ -323,15 +323,15 @@ Item {
 	readonly property bool inChatMode: Plugins.on("chat") && (root.commandQuery === "chat" || root.commandQuery.startsWith("chat "))
 	readonly property bool inOllamaMode: Plugins.on("ollama") && root.commandQuery === "ollama"
 	// the phone and the chat pick their files here as well
-	readonly property bool inFileMode: (Plugins.on("files") || KdeConnect.pickingFile) && (root.commandQuery === "file" || root.commandQuery.startsWith("file "))
+	readonly property bool inFileMode: (Plugins.on("files") || Phone.pickingFile) && (root.commandQuery === "file" || root.commandQuery.startsWith("file "))
 	readonly property bool inSetupMode: Plugins.on("display-profiles") && (root.commandQuery === "setup" || root.commandQuery.startsWith("setup "))
 	readonly property bool inTranslateMode: Plugins.on("translate") && (root.commandQuery === "t" || root.commandQuery.startsWith("t "))
 	readonly property bool inTodoMode: Plugins.on("todos") && (root.commandQuery === "todo" || root.commandQuery.startsWith("todo "))
 	readonly property bool inWebMode: Plugins.on("web-search") && (root.commandQuery === "w" || root.commandQuery.startsWith("w "))
 	readonly property bool inAiActionsMode: Plugins.on("ai-actions") && (root.commandQuery === "ai" || root.commandQuery.startsWith("ai "))
-	readonly property bool inPhoneMode: Plugins.on("kdeconnect") && (root.commandQuery === "phone" || root.commandQuery.startsWith("phone "))
+	readonly property bool inPhoneMode: Phone.offered && (root.commandQuery === "phone" || root.commandQuery.startsWith("phone "))
 	readonly property bool inShotsMode: Plugins.on("screenshot-history") && (root.commandQuery === "shots" || root.commandQuery.startsWith("shots "))
-	readonly property bool inViewMode: root.inTranslateMode || root.inTodoMode || root.inWebMode || root.inAiActionsMode || root.inPhoneMode || root.inShotsMode
+	readonly property bool inViewMode: root.inTranslateMode || root.inTodoMode || root.inWebMode || root.inAiActionsMode || root.inPhoneMode || root.inShotsMode || root.inSetupMode
 	// what follows the command token, as typed (">t fr hello" → "fr hello")
 	readonly property string modeArgument: {
 		const match = /^>\S+\s([\s\S]*)$/.exec(root.searchText);
@@ -340,12 +340,6 @@ Item {
 	// true while reset() clears the input, so leaving file mode then does not
 	// cancel a file pick another surface just asked for
 	property bool resetting: false
-	readonly property string displayProfileScript: `${Quickshell.shellDir}/scripts/display_profile.sh`
-	property string activeDisplayProfile: ""
-	readonly property var displayProfiles: [
-		{ profile: "office", name: "Office", description: "DVI-I-1 · DVI-I-2 · eDP-1" },
-		{ profile: "home", name: "Home", description: "DP-3 · DP-2 · HDMI-A-1 · eDP-1" }
-	]
 	readonly property string commandInputToken: root.commandInputActive ? commandTokenField.text : ""
 	readonly property string commandInputArgument: root.commandInputActive ? searchField.text : ""
 	readonly property string highlightedCommandInput: root.commandInputHighlight(root.searchText)
@@ -426,16 +420,6 @@ Item {
 		if (!root.inCommandMode) return [];
 		if (root.inAiMode || root.inChatMode || root.inOllamaMode || root.inFileMode || root.inViewMode) return [];
 		if (root.inCalculatorMode) return [root.calculatorCommand()];
-		if (root.inSetupMode) {
-			const filter = root.commandQuery.slice(5).trim();
-			return root.displayProfiles
-				.filter(entry => entry.profile.includes(filter))
-				.map(entry => Object.assign({}, entry, {
-					id: "display-profile",
-					command: `setup ${entry.profile}`,
-					active: entry.profile === root.activeDisplayProfile
-				}));
-		}
 		if (root.commandQuery === "") return root.commands;
 		// ">studio [page]" lists the pages themselves
 		if (root.commandQuery === "studio" || root.commandQuery.startsWith("studio ")) {
@@ -783,9 +767,9 @@ Item {
 			root.refreshFileBrowserDirectory();
 			return;
 		}
-		if (KdeConnect.pickingFile) {
-			KdeConnect.shareFile(entry.path);
-			KdeConnect.pickingFile = false;
+		if (Phone.pickingFile) {
+			Phone.shareFile(entry.path);
+			Phone.pickingFile = false;
 			root.closeRequested();
 			root.launchRequested();
 			return;
@@ -2364,12 +2348,6 @@ Item {
 		case "display-setup":
 			root.setLauncherSearch(">setup");
 			break;
-		case "display-profile":
-			root.activeDisplayProfile = command.profile;
-			Quickshell.execDetached([root.displayProfileScript, "apply", command.profile]);
-			root.closeRequested();
-			root.launchRequested();
-			break;
 		case "calculator":
 			root.setLauncherSearch(">c ");
 			break;
@@ -2504,7 +2482,7 @@ Item {
 	}
 
 	function pickFileForPhone() {
-		KdeConnect.pickingFile = true;
+		Phone.pickingFile = true;
 		root.setLauncherSearch(">file ");
 	}
 
@@ -2549,7 +2527,7 @@ Item {
 
 	onInFileModeChanged: {
 		if (!inFileMode) {
-			if (!root.resetting) KdeConnect.pickingFile = false;
+			if (!root.resetting) Phone.pickingFile = false;
 			return;
 		}
 		root.aiAttachmentPickerOpen = false;
@@ -2558,24 +2536,6 @@ Item {
 			Qt.callLater(function() {
 				searchField.forceActiveFocus();
 			});
-	}
-
-	onInSetupModeChanged: {
-		if (inSetupMode) displayProfileProcess.running = true;
-	}
-
-	Process {
-		id: displayProfileProcess
-
-		command: [root.displayProfileScript, "current"]
-		stdout: StdioCollector {
-			onStreamFinished: {
-				root.activeDisplayProfile = String(text || "").trim();
-				// preselect the other layout so Enter toggles
-				const other = root.filteredCommands.findIndex(command => command.id === "display-profile" && !command.active);
-				if (other >= 0) commandList.currentIndex = other;
-			}
-		}
 	}
 
 	onInOllamaModeChanged: {
@@ -2926,6 +2886,7 @@ Item {
 		if (root.inAiActionsMode) return "ai";
 		if (root.inPhoneMode) return "phone";
 		if (root.inShotsMode) return "shots";
+		if (root.inSetupMode) return "setup";
 		if (root.inChatMode) return "chat";
 		if (root.inAiMode) return "chats";
 		if (root.inOllamaMode) return "ollama";
@@ -2939,13 +2900,14 @@ Item {
 		if (root.editingMessageId !== "") return "pencil";
 		switch (root.mode) {
 		case "calc": return "calculator";
-		case "files": return KdeConnect.pickingFile ? "cellphone" : "folder";
+		case "files": return Phone.pickingFile ? "cellphone" : "folder";
 		case "translate": return "translate";
 		case "todo": return "format_list_checks";
 		case "web": return "web";
 		case "ai": return "creation";
 		case "phone": return "cellphone";
 		case "shots": return "image_multiple";
+		case "setup": return "monitor_multiple";
 		case "chat": return "chat";
 		case "chats": return "forum";
 		case "ollama": return "robot";
@@ -2962,7 +2924,6 @@ Item {
 		case "studio": return "palette";
 		case "studio-page": return command.glyph;
 		case "display-setup": return "monitor_multiple";
-		case "display-profile": return command.profile === "home" ? "home" : "office_building";
 		case "calculator":
 		case "calculator-result": return "calculator";
 		case "file-browser": return "folder";
@@ -3001,6 +2962,7 @@ Item {
 		case "ai": return aiActionsView;
 		case "phone": return phoneView;
 		case "shots": return shotsView;
+		case "setup": return displayView;
 		default: return null;
 		}
 	}
@@ -3011,6 +2973,7 @@ Item {
 		case "web": return "Search the web";
 		case "ai": return "Instruction";
 		case "phone": return "Text to send";
+		case "setup": return "Name to save the arrangement as";
 		default: return "";
 		}
 	}
@@ -3024,6 +2987,7 @@ Item {
 		case "ai": return "run";
 		case "phone": return "send";
 		case "shots": return "copy";
+		case "setup": return displayView.enterHint;
 		default: return "open";
 		}
 	}
@@ -3966,6 +3930,21 @@ Item {
 					active: root.mode === "shots"
 					argument: root.modeArgument
 					onCloseRequested: root.closeRequested()
+				}
+			}
+
+			// monitor arrangement and desk setups
+			ModeLayer {
+				current: root.mode === "setup"
+
+				DisplayView {
+					id: displayView
+
+					anchors.fill: parent
+					active: root.mode === "setup"
+					argument: root.modeArgument
+					onCloseRequested: root.closeRequested()
+					onArgumentRequested: text => root.setLauncherSearch(`>setup ${text}`)
 				}
 			}
 

@@ -1,0 +1,577 @@
+/* Pshell for Floorp: the browser window drawn like the shell's default style.
+ *
+ * Loaded by Floorp's own CSS loader (<profile>/chrome/CSS/, toggled under
+ * ☰ → userChrome CSS), placed by scripts/floorp_theme.py. Only colours,
+ * corners, spacing and type change here: nothing is hidden, moved or
+ * reordered, so every Floorp feature (panel sidebar, workspaces, split view,
+ * tab stacks, status bar, …) keeps working as before.
+ *
+ * The colours follow the wallpaper live, through Pywalfox: its theme puts the
+ * wallust colours into the browser's theme variables, the shell's roles
+ * (style/theme/Theme.qml) are derived from those here. Which slot carries
+ * what depends on Pywalfox's mode, which the theme hook keeps on the shell's
+ * dark/light (it also decides whether pages are dark):
+ *
+ *            background (color0)        foreground                accent
+ *   dark     --lwt-accent-color         --lwt-text-color (15)     icons_attention (13)
+ *   light    --tab-text-color-selected  --toolbarbutton-          icons_attention (5)
+ *                                       background-color-hover (7)
+ *
+ * The root keeps those sources untouched; the two light ones are only
+ * replaced below the root (body), where the browser reads them.
+ *
+ * A user sheet loses to the browser's own rules unless it is !important,
+ * hence the !important throughout. */
+
+@-moz-document url("chrome://browser/content/browser.xhtml") {
+
+/* ── palette ────────────────────────────────────────────────────────────── */
+:root {
+	--ps-bg: var(--lwt-accent-color, #141414);
+	--ps-fg: var(--lwt-text-color, #e6e6e6);
+	--ps-accent-raw: var(--toolbarbutton-icon-fill-attention, #6f9fd8);
+
+	/* Theme.qml: layers are the foreground tinted over the background */
+	--ps-layer1: color-mix(in srgb, var(--ps-fg) 4.5%, var(--ps-bg));
+	--ps-layer2: color-mix(in srgb, var(--ps-fg) 8.5%, var(--ps-bg));
+	--ps-layer3: color-mix(in srgb, var(--ps-fg) 13%, var(--ps-bg));
+	--ps-text: var(--ps-fg);
+	--ps-text-muted: color-mix(in srgb, var(--ps-fg) 64%, transparent);
+	--ps-text-subtle: color-mix(in srgb, var(--ps-fg) 42%, transparent);
+	--ps-text-faint: color-mix(in srgb, var(--ps-fg) 24%, transparent);
+	--ps-outline: color-mix(in srgb, var(--ps-fg) 8%, transparent);
+
+	/* the accent pushed until it reads on the background (Theme.legible) */
+	--ps-primary: oklch(from var(--ps-accent-raw) min(l, 0.5) max(c, 0.08) h);
+	--ps-on-primary: var(--ps-bg);
+	--ps-primary-soft: color-mix(in srgb, var(--ps-primary) 14%, transparent);
+	--ps-primary-container: color-mix(in srgb, var(--ps-primary) 20%, var(--ps-bg));
+	--ps-danger: #e5484d;
+
+	--ps-radius-small: 8px;
+	--ps-radius-medium: 12px;
+	--ps-radius-large: 16px;
+	--ps-radius-panel: 18px; /* niri's geometry-corner-radius, like the shell's panels */
+	--ps-radius-full: 999px;
+	--ps-font: "Adwaita Sans", sans-serif;
+	--ps-shadow: rgba(0, 0, 0, 0.28);
+
+	/* Motion.qml: panels bloom open on the spatial curve and snap shut */
+	--ps-spatial: cubic-bezier(0.38, 1.21, 0.22, 1);
+	--ps-accel: cubic-bezier(0.3, 0, 0.8, 0.15);
+	--ps-standard: cubic-bezier(0.2, 0, 0, 1);
+	--ps-micro: 100ms;
+	--ps-short: 160ms;
+	--ps-medium: 250ms;
+	--ps-long: 360ms;
+}
+
+:root[lwtheme-brighttext] {
+	--ps-primary: oklch(from var(--ps-accent-raw) max(l, 0.72) max(c, 0.08) h);
+	--ps-shadow: rgba(0, 0, 0, 0.55);
+}
+
+/* Pywalfox's light mode: it builds its own frame and text, the wallpaper's
+   come through other slots */
+:root[lwtheme]:not([lwtheme-brighttext]) {
+	--ps-bg: var(--tab-text-color-selected, #f0ede5);
+	--ps-fg: var(--toolbarbutton-background-color-hover, #2a261d);
+}
+
+/* the browser reads these two directly; replaced below the root so the
+   palette above still sees Pywalfox's values */
+:root > body {
+	--toolbarbutton-background-color-hover: var(--ps-layer2) !important;
+	--toolbarbutton-background-color-active: var(--ps-layer3) !important;
+	--tab-text-color-selected: var(--ps-text) !important;
+}
+
+/* ── browser tokens ─────────────────────────────────────────────────────── */
+:root {
+	background-color: var(--ps-bg) !important;
+	--toolbox-background-color: var(--ps-bg) !important;
+	--toolbox-background-color-inactive: var(--ps-bg) !important;
+	--toolbox-text-color: var(--ps-text) !important;
+	--toolbox-text-color-inactive: var(--ps-text-muted) !important;
+	--toolbar-background-color: var(--ps-bg) !important;
+	--toolbar-bgcolor: var(--ps-bg) !important;
+	--toolbar-text-color: var(--ps-text) !important;
+	--toolbar-color: var(--ps-text) !important;
+	--chrome-content-separator-color: transparent !important;
+	--tabs-navbar-separator-color: transparent !important;
+	--content-area-shadow: none !important;
+
+	--focus-outline-color: var(--ps-primary) !important;
+	--color-accent-primary: var(--ps-primary) !important;
+	--color-accent-primary-hover: color-mix(in srgb, var(--ps-primary) 88%, var(--ps-fg)) !important;
+	--color-accent-primary-active: color-mix(in srgb, var(--ps-primary) 76%, var(--ps-fg)) !important;
+	--button-text-color-primary: var(--ps-on-primary) !important;
+	--link-color: var(--ps-primary) !important;
+	--link-color-hover: var(--ps-primary) !important;
+	--link-color-active: var(--ps-primary) !important;
+	--tab-attention-dot-color: var(--ps-primary) !important;
+	--toolbarbutton-icon-fill: var(--ps-text) !important;
+
+	/* buttons in the toolbars: round, tinted on hover like the bar's pills */
+	--toolbarbutton-border-radius: var(--ps-radius-full) !important;
+	--toolbarbutton-hover-background: var(--ps-layer2) !important;
+	--toolbarbutton-active-background: var(--ps-layer3) !important;
+	--button-background-color-ghost-hover: var(--ps-layer2) !important;
+	--button-background-color-ghost-active: var(--ps-layer3) !important;
+	--button-background-color: var(--ps-layer2) !important;
+	--button-background-color-hover: var(--ps-layer3) !important;
+	--button-background-color-active: color-mix(in srgb, var(--ps-fg) 18%, var(--ps-bg)) !important;
+	--button-text-color: var(--ps-text) !important;
+	--button-border-color: transparent !important;
+	--border-color-interactive: var(--ps-outline) !important;
+	--border-color: var(--ps-outline) !important;
+	--border-color-deemphasized: var(--ps-outline) !important;
+	--text-color-deemphasized: var(--ps-text-muted) !important;
+
+	/* tabs */
+	--tab-border-radius: var(--ps-radius-full) !important;
+	--tab-background-color-hover: var(--ps-layer1) !important;
+	--tab-background-color-selected: var(--ps-layer2) !important;
+	--tab-selected-bgcolor: var(--ps-layer2) !important;
+	--tab-selected-textcolor: var(--ps-text) !important;
+	--tab-box-shadow-selected: none !important;
+	--tab-border-color-selected: transparent !important;
+	--tab-loading-fill: var(--ps-primary) !important;
+	--tabstrip-inner-border: 1px solid transparent !important;
+	--tab-close-button-background-color-hover: var(--ps-layer2) !important;
+	--tab-close-button-background-color-active: var(--ps-layer3) !important;
+	--arrowscrollbox-scrollicon-hover-background-color: var(--ps-layer2) !important;
+	--arrowscrollbox-scrollicon-active-background-color: var(--ps-layer3) !important;
+	--urlbarview-background-color-hover: var(--ps-layer1) !important;
+	--urlbarview-background-color-selected: var(--ps-primary-soft) !important;
+	--urlbarview-text-color-selected: var(--ps-text) !important;
+
+	/* address bar: a pill on the bar */
+	--toolbar-field-background-color: var(--ps-layer1) !important;
+	--toolbar-field-background-color-focus: var(--ps-layer2) !important;
+	--toolbar-field-text-color: var(--ps-text) !important;
+	--toolbar-field-text-color-focus: var(--ps-text) !important;
+	--toolbar-field-border-color: transparent !important;
+	--toolbar-field-border-color-focus: transparent !important;
+	--toolbar-field-focus-border-color: var(--ps-primary) !important;
+	--urlbar-box-bgcolor: var(--ps-layer2) !important;
+	--urlbar-box-hover-bgcolor: var(--ps-layer3) !important;
+	--urlbar-box-text-color: var(--ps-text) !important;
+	--urlbar-box-hover-text-color: var(--ps-text) !important;
+
+	/* menus and panels: the shell's panels, base colour with a faint outline */
+	--panel-background-color: var(--ps-bg) !important;
+	--panel-text-color: var(--ps-text) !important;
+	--panel-border-color: var(--ps-outline) !important;
+	--panel-border-radius: var(--ps-radius-panel) !important;
+	--panel-separator-color: var(--ps-outline) !important;
+	--panel-banner-item-background-color: var(--ps-primary-container) !important;
+	--panel-banner-item-hover-bgcolor: var(--ps-primary-container) !important;
+	--arrowpanel-background: var(--ps-bg) !important;
+	--arrowpanel-color: var(--ps-text) !important;
+	--arrowpanel-border-color: var(--ps-outline) !important;
+	--arrowpanel-border-radius: var(--ps-radius-panel) !important;
+	--arrowpanel-dimmed: var(--ps-layer2) !important;
+	--menu-background-color: var(--ps-bg) !important;
+	--menu-color: var(--ps-text) !important;
+	--menu-border-color: var(--ps-outline) !important;
+	--menu-disabled-color: var(--ps-text-subtle) !important;
+	--menuitem-hover-background-color: var(--ps-layer2) !important;
+	--menuitem-border-radius: var(--ps-radius-small) !important;
+	--menuitem-padding-inline: 10px !important;
+
+	/* sidebars */
+	--sidebar-background-color: var(--ps-bg) !important;
+	--sidebar-text-color: var(--ps-text) !important;
+	--sidebar-border-color: transparent !important;
+	--lwt-sidebar-background-color: var(--ps-bg) !important;
+	--lwt-sidebar-text-color: var(--ps-text) !important;
+
+	/* new tab page and the browser behind a page that has not painted yet */
+	--tabpanel-background-color: var(--ps-bg) !important;
+}
+
+/* ── type ───────────────────────────────────────────────────────────────── */
+#navigator-toolbox,
+#sidebar-box,
+#panel-sidebar-box,
+#nora-statusbar,
+findbar,
+menupopup,
+panel {
+	font-family: var(--ps-font) !important;
+}
+
+/* ── the bar ────────────────────────────────────────────────────────────── */
+#navigator-toolbox {
+	background-color: var(--ps-bg) !important;
+	color: var(--ps-text) !important;
+	border-bottom: none !important;
+}
+
+#navigator-toolbox toolbar,
+#TabsToolbar,
+#nav-bar,
+#PersonalToolbar {
+	background: transparent !important;
+	border: none !important;
+	box-shadow: none !important;
+}
+
+/* address bar: Firefox builds it from variables scoped to the bar itself */
+.urlbar,
+#searchbar {
+	--urlbarview-border-radius: var(--ps-radius-large) !important;
+	--urlbar-background-color: var(--ps-layer1) !important;
+	--urlbar-background-color-focus: var(--ps-layer2) !important;
+	--toolbar-field-border-color: var(--ps-outline) !important;
+	--toolbar-field-border-color-focus: var(--ps-primary) !important;
+	--urlbar-background-outline-focused: none !important;
+	--urlbar-background-border-focused: 1.5px solid var(--ps-primary) !important;
+	--urlbar-background-border-open: 1px solid var(--ps-outline) !important;
+	--urlbar-background-box-shadow-open: 0 12px 32px var(--ps-shadow) !important;
+	--urlbarview-background-color-selected: var(--ps-primary-soft) !important;
+	--urlbarview-text-color-selected: var(--ps-text) !important;
+}
+
+.urlbar-background {
+	transition: background-color var(--ps-short) var(--ps-standard),
+		border-color var(--ps-short) var(--ps-standard) !important;
+}
+
+#urlbar ::selection,
+#searchbar ::selection,
+findbar ::selection {
+	background-color: var(--ps-primary) !important;
+	color: var(--ps-on-primary) !important;
+}
+
+.urlbarView-row {
+	border-radius: var(--ps-radius-medium) !important;
+}
+
+.urlbarView-row:is([selected], [aria-selected="true"]) {
+	background-color: var(--ps-primary-soft) !important;
+	color: var(--ps-text) !important;
+}
+
+/* tabs: pills on the bar; the selected one gets the shell's focus mark,
+   a short accent line under it */
+.tabbrowser-tab {
+	color: var(--ps-text-muted) !important;
+}
+
+.tabbrowser-tab[selected],
+.tabbrowser-tab[multiselected],
+.tabbrowser-tab:is([selected], [multiselected]) .tab-label {
+	color: var(--ps-text) !important;
+}
+
+.tab-background {
+	border-radius: var(--ps-radius-full) !important;
+	box-shadow: none !important;
+	outline: none !important;
+	/* the focus mark grows from the middle like the bar's (spatial curve) */
+	background-image: linear-gradient(var(--ps-primary), var(--ps-primary)) !important;
+	background-size: 0 2px !important;
+	background-position: 50% calc(100% - 2px) !important;
+	background-repeat: no-repeat !important;
+	transition: background-color var(--ps-short) var(--ps-standard),
+		background-size var(--ps-long) var(--ps-spatial) !important;
+}
+
+.tabbrowser-tab:not([selected], [multiselected]) > .tab-stack > .tab-background {
+	background-color: transparent !important;
+}
+
+.tabbrowser-tab:not([selected], [multiselected]):hover > .tab-stack > .tab-background {
+	background-color: var(--ps-layer1) !important;
+}
+
+.tabbrowser-tab:is([selected], [multiselected]) > .tab-stack > .tab-background {
+	background-color: var(--ps-layer2) !important;
+}
+
+.tabbrowser-tab[selected] > .tab-stack > .tab-background {
+	background-size: 16px 2px !important;
+}
+
+.tabbrowser-tab[multiselected]:not([selected]) > .tab-stack > .tab-background {
+	background-color: var(--ps-primary-soft) !important;
+}
+
+.tab-throbber[busy]::before,
+.tab-throbber[progress]::before {
+	fill: var(--ps-primary) !important;
+}
+
+.tab-close-button {
+	border-radius: var(--ps-radius-full) !important;
+}
+
+/* the hairlines between tabs: the bar separates by spacing, not lines */
+.tabbrowser-tab > .tab-stack::before {
+	background-color: transparent !important;
+}
+
+/* toolbar buttons */
+toolbarbutton .toolbarbutton-icon,
+toolbarbutton .toolbarbutton-badge-stack,
+toolbarbutton .toolbarbutton-text {
+	border-radius: var(--ps-radius-full) !important;
+}
+
+toolbarbutton[checked] > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack),
+toolbarbutton[open] > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
+	background-color: var(--ps-layer3) !important;
+}
+
+.toolbarbutton-badge {
+	background-color: var(--ps-primary) !important;
+	color: var(--ps-on-primary) !important;
+	box-shadow: none !important;
+}
+
+/* bookmarks */
+#PersonalToolbar toolbarbutton.bookmark-item {
+	border-radius: var(--ps-radius-full) !important;
+}
+
+/* ── the page: a panel of the shell, with its corners ─────────────────── */
+#browser,
+#tabbrowser-tabbox,
+#tabbrowser-tabpanels {
+	background-color: var(--ps-bg) !important;
+}
+
+/* the page sits under the bar like the desktop under the shell's bar: its
+   top corners are rounded, so the bar's colour curves down into them (the
+   shell's inverted screen corners). The sides and bottom stay flush; niri
+   rounds the window there. Each pane of a split view gets its own. */
+.browserStack {
+	border-start-start-radius: var(--ps-radius-panel) !important;
+	border-start-end-radius: var(--ps-radius-panel) !important;
+	overflow: clip !important;
+}
+
+/* ── menus ──────────────────────────────────────────────────────────────── */
+/* popups set their colours on themselves (the GTK theme's Menu colour by
+   default), so the root's values never reach them */
+menupopup,
+panel {
+	--panel-background-color: var(--ps-bg) !important;
+	--panel-text-color: var(--ps-text) !important;
+	--panel-border-color: var(--ps-outline) !important;
+	--background-color-canvas: var(--ps-bg) !important;
+	--arrowpanel-background: var(--ps-bg) !important;
+	--arrowpanel-color: var(--ps-text) !important;
+	--arrowpanel-border-color: var(--ps-outline) !important;
+	--menuitem-border-radius: var(--ps-radius-small) !important;
+	--menuitem-padding-inline: 10px !important;
+	--menuitem-hover-background-color: var(--ps-layer2) !important;
+	--menu-disabled-color: var(--ps-text-subtle) !important;
+}
+
+menupopup {
+	--panel-padding: 6px !important;
+	--panel-border-radius: var(--ps-radius-medium) !important;
+	color: var(--ps-text) !important;
+}
+
+menupopup > menuitem,
+menupopup > menu {
+	border-radius: var(--ps-radius-small) !important;
+	margin-inline: 4px !important;
+}
+
+/* Floorp's "icons in menus" paints the icon as a background at the start of
+   the item; leave room for it so it does not run into the label */
+:not(menu, #ContentSelectDropdown, #context-navigation)
+	> menupopup:not(.in-menulist)
+	> :is(menuitem:not(.menuitem-iconic), menu:not(.menu-iconic)) {
+	padding-inline-start: 34px !important;
+	background-position: var(--uc-menu-background-position, left) 10px center !important;
+}
+
+menupopup > :is(menuitem, menu)[_moz-menuactive]:not([disabled]) {
+	background-color: var(--ps-layer2) !important;
+	color: var(--ps-text) !important;
+}
+
+menupopup > :is(menuitem, menu)[disabled] {
+	color: var(--ps-text-subtle) !important;
+}
+
+menupopup > menuseparator {
+	border-color: var(--ps-outline) !important;
+	margin-inline: 10px !important;
+}
+
+menupopup > menuseparator::before {
+	border-color: var(--ps-outline) !important;
+}
+
+menuitem[checked]::before,
+menuitem[type="checkbox"][checked] > .menu-icon,
+menuitem[type="radio"][checked] > .menu-icon {
+	fill: var(--ps-primary) !important;
+	color: var(--ps-primary) !important;
+}
+
+/* ── panels (app menu, extensions, downloads, …) ─────────────────────────── */
+panel {
+	--panel-border-radius: var(--ps-radius-panel) !important;
+}
+
+panelview .toolbarbutton-1,
+.subviewbutton,
+.widget-overflow-list .toolbarbutton-1,
+.toolbaritem-combined-buttons > .subviewbutton {
+	border-radius: var(--ps-radius-small) !important;
+}
+
+.subviewbutton:not([disabled], [open], :active):is(:hover) {
+	background-color: var(--ps-layer2) !important;
+}
+
+toolbarseparator,
+panelview toolbarseparator {
+	border-color: var(--ps-outline) !important;
+}
+
+.panel-header {
+	color: var(--ps-text) !important;
+}
+
+/* primary buttons in panels and notifications */
+button.primary,
+.popup-notification-primary-button,
+.panel-footer > button.primary {
+	background-color: var(--ps-primary) !important;
+	color: var(--ps-on-primary) !important;
+	border-radius: var(--ps-radius-full) !important;
+}
+
+button.primary:hover {
+	background-color: var(--color-accent-primary-hover) !important;
+}
+
+/* ── sidebars ───────────────────────────────────────────────────────────── */
+#sidebar-box,
+#sidebar-header,
+#sidebar-main,
+#sidebar-splitter {
+	background-color: var(--ps-bg) !important;
+	color: var(--ps-text) !important;
+	border-color: transparent !important;
+}
+
+/* Floorp's panel sidebar: the icon rail like the shell's rail of pills */
+#panel-sidebar-select-box,
+#panel-sidebar-box,
+#panel-sidebar-header {
+	background-color: var(--ps-bg) !important;
+	color: var(--ps-text) !important;
+	border-color: transparent !important;
+}
+
+#panel-sidebar-browser-box {
+	border-radius: var(--ps-radius-panel) !important;
+	overflow: clip !important;
+}
+
+/* its panel buttons; a container's colour mark (inline border) stays */
+#panel-sidebar-select-box :is(toolbarbutton, .panel-sidebar-panel) {
+	border-radius: var(--ps-radius-full) !important;
+}
+
+#panel-sidebar-select-box :is(toolbarbutton, .panel-sidebar-panel):hover {
+	background-color: var(--ps-layer2) !important;
+}
+
+#panel-sidebar-select-box :is(toolbarbutton[checked], .panel-sidebar-panel[data-checked="true"]) {
+	background-color: var(--ps-primary-soft) !important;
+}
+
+#panel-sidebar-splitter {
+	background-color: transparent !important;
+	border: none !important;
+}
+
+/* ── find bar, status bar, notifications ─────────────────────────────── */
+findbar,
+#nora-statusbar {
+	background-color: var(--ps-bg) !important;
+	color: var(--ps-text) !important;
+	border-top: none !important;
+	box-shadow: none !important;
+}
+
+findbar .findbar-textbox {
+	background-color: var(--ps-layer1) !important;
+	color: var(--ps-text) !important;
+	border: 1px solid var(--ps-outline) !important;
+	border-radius: var(--ps-radius-full) !important;
+}
+
+findbar .findbar-textbox:focus {
+	outline: 1.5px solid var(--ps-primary) !important;
+	outline-offset: -1.5px !important;
+}
+
+notification-message,
+.notificationbox-stack notification-message {
+	--message-bar-background-color: var(--ps-layer2) !important;
+	--message-bar-text-color: var(--ps-text) !important;
+	border-radius: var(--ps-radius-medium) !important;
+}
+
+/* toggles and checkboxes in panels */
+input[type="checkbox"],
+input[type="radio"],
+moz-toggle {
+	accent-color: var(--ps-primary) !important;
+}
+
+
+/* ── motion ─────────────────────────────────────────────────────────────── */
+/* popups grow out of the bar: open on the spatial curve (Motion.long), close
+   on the accelerating one, shorter (Motion.medium - 60) */
+panel[type="arrow"],
+.animatable-menupopup {
+	transition-duration: 190ms !important;
+	transition-timing-function: var(--ps-accel) !important;
+	transform-origin: top center !important;
+
+	@media not (prefers-reduced-motion) {
+		transform: translateY(-10px) scale(0.96) !important;
+
+		&:where([side="bottom"]) {
+			transform: translateY(10px) scale(0.96) !important;
+			transform-origin: bottom center !important;
+		}
+	}
+
+	&:is([animate="false"], [animate="open"]) {
+		transform: none !important;
+		transition-duration: var(--ps-long), var(--ps-medium) !important;
+		transition-timing-function: var(--ps-spatial), var(--ps-standard) !important;
+	}
+
+	&[animate="cancel"] {
+		transform: none !important;
+	}
+}
+
+/* colour changes: Motion.short on the standard curve */
+toolbarbutton,
+toolbarbutton > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack, .toolbarbutton-text),
+.subviewbutton,
+menupopup > :is(menuitem, menu),
+.urlbarView-row,
+#panel-sidebar-select-box :is(toolbarbutton, .panel-sidebar-panel) {
+	transition: background-color var(--ps-short) var(--ps-standard),
+		color var(--ps-short) var(--ps-standard) !important;
+}
+
+}

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+	<string name="app_name">pshell</string>
+	<string name="share_label">Send to PC</string>
+	<string name="process_send">Send to PC</string>
+	<string name="process_ask">Ask AI</string>
+	<string name="process_translate">Translate (AI)</string>
+	<string name="tile_clipboard">Clipboard to PC</string>
+	<string name="tile_lock">Lock PC</string>
+	<string name="tile_play">PC play / pause</string>
+	<string name="tile_unlock">Unlock PC</string>
+	<string name="widget_commands">Commands</string>
+	<string name="widget_commands_description">Your commands as buttons: one tap runs one on the PC</string>
+	<string name="widget_media">PC media</string>
+	<string name="widget_media_description">What plays on the PC, with play, skip and volume</string>
+	<string name="widget_status">PC</string>
+	<string name="widget_status_description">Whether the PC is reachable, the timer, and lock</string>
+</resources>

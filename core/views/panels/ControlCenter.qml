@@ -25,7 +25,7 @@ Drawer {
 	contentHeight: pages.implicitHeight
 
 	// the plugin behind a page
-	readonly property var pagePlugins: ({ network: "network", bluetooth: "bluetooth", audio: "sound", dnd: "dnd", power: "power-profiles", phone: "kdeconnect", system: "system-monitor" })
+	readonly property var pagePlugins: ({ network: "network", bluetooth: "bluetooth", audio: "sound", dnd: "dnd", power: "power-profiles", phone: Phone.plugin, system: "system-monitor" })
 
 	function offers(page) {
 		const plugin = root.pagePlugins[page];
@@ -39,7 +39,7 @@ Drawer {
 		if (Plugins.on("backlight")) Brightness.refresh(false);
 		Ddc.refresh();
 		PowerProfile.refresh();
-		KdeConnect.refresh();
+		Phone.refresh();
 	}
 
 	Connections {
@@ -258,11 +258,11 @@ Drawer {
 
 					QuickTile {
 						Layout.fillWidth: true
-						visible: KdeConnect.available
-						icon: KdeConnect.reachable ? "cellphone" : "cellphone_off"
-						title: KdeConnect.name
-						subtitle: KdeConnect.summary
-						active: KdeConnect.reachable
+						visible: Phone.available
+						icon: Phone.reachable ? "cellphone" : "cellphone_off"
+						title: Phone.name
+						subtitle: Phone.summary
+						active: Phone.reachable
 						onClicked: root.page = "phone"
 						onDetailsRequested: root.page = "phone"
 					}
@@ -995,7 +995,7 @@ Drawer {
 			}
 		}
 
-		// ── phone (KDE Connect) ───────────────────────────────────────────
+		// ── phone ─────────────────────────────────────────────────────────
 		// files dragged onto the page are sent to the phone
 		Page {
 			pageName: "phone"
@@ -1008,19 +1008,19 @@ Drawer {
 
 				PageHeader {
 					Layout.fillWidth: true
-					title: KdeConnect.name
-					subtitle: KdeConnect.summary
+					title: Phone.name
+					subtitle: Phone.summary
 					onBack: root.page = "main"
 
 					IconButton {
 						icon: "refresh"
-						onClicked: KdeConnect.refresh()
+						onClicked: Phone.refresh()
 					}
 				}
 
 				Rectangle {
 					Layout.fillWidth: true
-					visible: KdeConnect.reachable && KdeConnect.battery >= 0
+					visible: Phone.reachable && Phone.battery >= 0
 					implicitHeight: 64
 					radius: Theme.radius.large
 					color: Theme.layer1
@@ -1034,19 +1034,19 @@ Drawer {
 						Ring {
 							Layout.preferredWidth: 40
 							Layout.preferredHeight: 40
-							value: KdeConnect.battery / 100
+							value: Phone.battery / 100
 							thickness: 4.5
-							color: KdeConnect.charging ? Theme.success : (KdeConnect.battery <= 20 ? Theme.danger : Theme.primary)
+							color: Phone.charging ? Theme.success : (Phone.battery <= 20 ? Theme.danger : Theme.primary)
 
 							Glyph {
 								anchors.centerIn: parent
-								icon: KdeConnect.charging ? "flash" : "cellphone"
+								icon: Phone.charging ? "flash" : "cellphone"
 								size: 16
 							}
 						}
 
 						StyledText {
-							text: `${KdeConnect.battery}%`
+							text: `${Phone.battery}%`
 							tabular: true
 							font.pixelSize: Theme.size.heading
 							font.weight: Font.Bold
@@ -1058,7 +1058,7 @@ Drawer {
 
 						StyledText {
 							visible: text !== ""
-							text: KdeConnect.device?.network ?? ""
+							text: Phone.network ?? ""
 							tone: Theme.textMuted
 							font.pixelSize: Theme.size.small
 							font.weight: Font.DemiBold
@@ -1068,21 +1068,21 @@ Drawer {
 
 				GridLayout {
 					Layout.fillWidth: true
-					columns: 3
+					columns: Phone.legacy || !Plugins.on("phone-handoff") ? 3 : 4
 					columnSpacing: 8
 					rowSpacing: 8
-					enabled: KdeConnect.reachable
-					opacity: KdeConnect.reachable ? 1 : 0.4
+					enabled: Phone.reachable
+					opacity: Phone.reachable ? 1 : 0.4
 
 					Repeater {
 						model: [
-							{ icon: "content_paste", label: "Clipboard", run: () => KdeConnect.sendClipboard() },
+							{ icon: "content_paste", label: "Clipboard", run: () => Phone.sendClipboard() },
 							{ icon: "file_send_outline", label: "File", run: () => {
-								KdeConnect.pickingFile = true;
+								Phone.pickingFile = true;
 								Popups.open("launcher", root.targetScreen, "", ">file ");
 							} },
-							{ icon: "phone_ring", label: "Ring", run: () => KdeConnect.ring() }
-						]
+							{ icon: "phone_ring", label: "Ring", run: () => Phone.ring() }
+						].concat(Phone.legacy || !Plugins.on("phone-handoff") ? [] : [{ icon: "cellphone_play", label: "Continue", run: () => Phone.handoffMedia() }])
 
 						delegate: Clickable {
 							id: action
@@ -1122,13 +1122,20 @@ Drawer {
 					id: phoneText
 
 					Layout.fillWidth: true
-					enabled: KdeConnect.reachable
+					enabled: Phone.reachable
 					icon: "send"
 					placeholder: "Send text"
 					onAccepted: {
-						KdeConnect.sendText(phoneText.text);
+						Phone.sendText(phoneText.text);
 						phoneText.text = "";
 					}
+				}
+
+				Loader {
+					Layout.fillWidth: true
+					active: !Phone.legacy
+					visible: active
+					sourceComponent: PhonePairing {}
 				}
 			}
 
@@ -1137,10 +1144,10 @@ Drawer {
 
 				width: phonePage.width
 				height: phonePage.implicitHeight
-				enabled: KdeConnect.reachable
+				enabled: Phone.reachable
 				keys: ["text/uri-list"]
 				onDropped: event => {
-					for (const url of event.urls) KdeConnect.shareFile(String(url));
+					for (const url of event.urls) Phone.shareFile(String(url));
 					event.accept();
 				}
 

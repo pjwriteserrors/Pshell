@@ -8,8 +8,10 @@ import Quickshell.Io
 // panel, a command, an automation. Whether one is on is decided per setup:
 // the switches live in ~/.local/state/pshell/plugins.json, outside the
 // repository. Until a plugin is switched there, the host profile's `plugins`
-// and then the registry's `default` apply. A plugin whose `requires` are off
-// is off as well. QML asks Plugins.on("<id>"), scripts `host.py has <id>`.
+// and then the registry's `default` apply (a theme hook, `hook-<name>`, falls
+// back to the profile's `themeHooks`). A plugin whose `requires` are off is
+// off as well. QML asks Plugins.on("<id>"), scripts `host.py has <id>`; the
+// theme pipeline runs the hooks `host.py hooks` lists.
 Singleton {
 	id: root
 
@@ -60,6 +62,12 @@ Singleton {
 	function fallback(id) {
 		const fromProfile = root.profile[id];
 		if (fromProfile !== undefined) return fromProfile === true;
+		// a theme hook (hook-<name>) starts on when the host profile lists it
+		// under themeHooks, which is how hosts named their hooks before they
+		// were plugins
+		const hook = root.byId[id]?.hook;
+		if (hook !== undefined && Array.isArray(Host.profile.themeHooks))
+			return Host.profile.themeHooks.includes(hook);
 		return root.byId[id]?.default !== false;
 	}
 

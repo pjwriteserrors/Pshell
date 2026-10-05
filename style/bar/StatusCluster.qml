@@ -103,7 +103,7 @@ BarButton {
 
 		Glyph {
 			anchors.verticalCenter: parent.verticalCenter
-			visible: KdeConnect.reachable && KdeConnect.battery >= 0 && KdeConnect.battery <= 20 && !KdeConnect.charging
+			visible: Phone.reachable && Phone.battery >= 0 && Phone.battery <= 20 && !Phone.charging
 			icon: "cellphone"
 			size: 16
 			color: Theme.danger

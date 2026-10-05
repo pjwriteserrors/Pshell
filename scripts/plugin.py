@@ -166,8 +166,24 @@ def check(_args):
             for match in re.finditer(r'Plugins\.(?:on|wanted|set|toggle)\("([a-z0-9-]+)"', text):
                 asked.setdefault(match.group(1), path.relative_to(ROOT))
             quoted |= set(re.findall(r'"([a-z][a-z0-9-]*)"', text))
+    # the phone app's topics are gated by the catalogue (Phone.allowed, and the daemon)
+    protocol = host.load(ROOT / "mobile" / "protocol" / "protocol.json")
+    for topic, spec in (protocol.get("topics") or {}).items():
+        for name in spec.get("plugins", []):
+            asked.setdefault(name, Path("mobile/protocol/protocol.json"))
+            if name not in by_id:
+                problems.append(f"mobile/protocol/protocol.json: topic {topic} needs {name}, which is not registered")
+    # theme hooks are asked for by apply_theme_selection.sh through `host.py hooks`
+    for name, plugin in by_id.items():
+        if "hook" in plugin:
+            asked.setdefault(name, Path("scripts/apply_theme_selection.sh"))
+            if not (ROOT / "scripts" / "theme-hooks" / f"{plugin['hook']}.sh").is_file():
+                problems.append(f"{name}: no scripts/theme-hooks/{plugin['hook']}.sh")
+    for script in sorted((ROOT / "scripts" / "theme-hooks").glob("*.sh")):
+        if script.stem != "lib" and not any(plugin.get("hook") == script.stem for plugin in by_id.values()):
+            problems.append(f"scripts/theme-hooks/{script.name}: no plugin hook-{script.stem} registers it")
     for name, path in asked.items():
-        if name not in by_id:
+        if name not in by_id and path.suffix == ".qml":
             problems.append(f"{path}: asks for {name}, which is not registered")
     for name in by_id:
         # maps like Popups.providers name a plugin without calling Plugins.on

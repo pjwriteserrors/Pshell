@@ -54,20 +54,38 @@ lines += [key + "=" + value.lstrip("#").upper() for key, value in mapping.items(
 preset_path.write_text("\n".join(lines) + "\n")
 PY
 
-if command -v oomox-cli >/dev/null; then
+# the GTK theme and the icons are independent: built side by side, the hook
+# takes as long as the slower of the two
+gtk_theme() {
+	command -v oomox-cli >/dev/null || return 0
 	no_jokes=1 oomox-cli "$preset"
-fi
+}
 
-theme_dir="$HOME/.local/share/icons/Papirus-Wal"
-exec 9>"${THEME_STATE_DIR:-$HOME/.local/state/quickshell-theme}/papirus-icons.lock"
-flock 9
-bash "$THEME_SCRIPTS_DIR/export_papirus_theme.sh" "$preset" Papirus-Wal "$theme_dir" || skip "oomox Papirus plugin not installed"
-gtk-update-icon-cache -f -t "$theme_dir" >/dev/null 2>&1 || true
+papirus_icons() {
+	local theme_dir="$HOME/.local/share/icons/Papirus-Wal"
+	local current
 
-# only when it is the icon theme in use: bounce it so GTK reloads the icons
-current="$(gsettings get org.gnome.desktop.interface icon-theme 2>/dev/null | tr -d "'")"
-if [[ "$current" == "Papirus-Wal" ]]; then
-	gsettings set org.gnome.desktop.interface icon-theme Papirus
-	sleep 0.15
-	gsettings set org.gnome.desktop.interface icon-theme Papirus-Wal
-fi
+	exec 9>"${THEME_STATE_DIR:-$HOME/.local/state/quickshell-theme}/papirus-icons.lock"
+	flock 9
+	bash "$THEME_SCRIPTS_DIR/export_papirus_theme.sh" "$preset" Papirus-Wal "$theme_dir" || return 3
+	gtk-update-icon-cache -f -t "$theme_dir" >/dev/null 2>&1 || true
+
+	# only when it is the icon theme in use: bounce it so GTK reloads the icons
+	current="$(gsettings get org.gnome.desktop.interface icon-theme 2>/dev/null | tr -d "'")"
+	if [[ "$current" == "Papirus-Wal" ]]; then
+		gsettings set org.gnome.desktop.interface icon-theme Papirus
+		sleep 0.15
+		gsettings set org.gnome.desktop.interface icon-theme Papirus-Wal
+	fi
+}
+
+gtk_theme &
+gtk_pid=$!
+papirus_icons &
+icons_pid=$!
+
+wait "$gtk_pid" || exit $?
+wait "$icons_pid"
+code=$?
+(( code == 3 )) && skip "oomox Papirus plugin not installed"
+exit "$code"

@@ -140,7 +140,7 @@ FocusScope {
 	}
 
 	Component.onCompleted: {
-		KdeConnect.refresh();
+		Phone.refresh();
 		const initial = editor.initialCrop.width > 0 && editor.initialCrop.height > 0 ? editor.initialCrop : Qt.rect(0, 0, editor.srcW, editor.srcH);
 		editor.crop = initial;
 		editor.cropDraft = initial;
@@ -1075,7 +1075,7 @@ FocusScope {
 
 	// hand the rendered image to the phone; the file goes away a bit later
 	function sendToPhone() {
-		if (editor.busy || !KdeConnect.reachable) return;
+		if (editor.busy || !Phone.reachable) return;
 		const path = `${Screenshot.tmpDir}/${Screenshot.filePrefix}${Qt.formatDateTime(new Date(), Screenshot.fileDateFormat)}.png`;
 		editor.render(path, ok => {
 			if (!ok) {
@@ -1083,7 +1083,7 @@ FocusScope {
 				editor.notify("error", "Screenshot could not be rendered", "", "cellphone_arrow_down");
 				return;
 			}
-			KdeConnect.shareFile(path);
+			Phone.shareFile(path);
 			Quickshell.execDetached(["sh", "-c", 'sleep 180; rm -f "$1"', "sh", path]);
 		});
 	}
@@ -2100,9 +2100,9 @@ FocusScope {
 			}
 
 			BarButton {
-				visible: KdeConnect.reachable
+				visible: Phone.reachable
 				icon: "cellphone_arrow_down"
-				tipLabel: `Send to ${KdeConnect.name}  Ctrl+M`
+				tipLabel: `Send to ${Phone.name}  Ctrl+M`
 				onClicked: editor.sendToPhone()
 			}
 

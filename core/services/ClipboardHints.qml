@@ -14,6 +14,9 @@ Singleton {
 	id: root
 
 	property string ownCopy: ""
+	// what was last looked at, and when
+	property string lastText: ""
+	property real lastAt: 0
 	// wl-paste reports the clipboard it finds at start, which nobody just copied
 	readonly property real startedAt: Date.now()
 	readonly property bool wanted: Plugins.on("clipboard-hints")
@@ -168,6 +171,12 @@ Singleton {
 			root.ownCopy = "";
 			return;
 		}
+		// browsers set the clipboard twice for one copy
+		const now = Date.now();
+		const again = text === root.lastText && now - root.lastAt < 2000;
+		root.lastText = text;
+		root.lastAt = now;
+		if (again) return;
 		const options = root.options(text);
 		if (options.length === 0 || Notifs.dnd) return;
 		Notifs.pushInternal("done", options[0].label, root.preview(options[0].value), {

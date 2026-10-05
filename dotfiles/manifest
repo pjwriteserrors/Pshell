@@ -24,3 +24,4 @@ link    pc/update_steam_theme.py      ~/Scripts/themes/changer/update_steam_them
 link    systemd/openrgb-theme.service ~/.config/systemd/user/openrgb-theme.service    hook:openrgb
 link    systemd/quickshell-lighting.service ~/.config/systemd/user/quickshell-lighting.service hook:openrgb
 seed    oomox/wal                     ~/.config/oomox/colors/wal                      hook:oomox
+link    systemd/pshell-phone.service  ~/.config/systemd/user/pshell-phone.service     plugin:phone

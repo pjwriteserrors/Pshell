@@ -26,7 +26,8 @@ Singleton {
 	readonly property int recentSize: 10
 
 	// [{ id, name, output, x, y, docked, grid, items: [item] }]
-	// item: { id, kind: "file" | "text" | "link", path, name, text, url, dir, size, mime, width, height }
+	// item: { id, kind: "file" | "text" | "link", path, name, text, url, dir, size, mime, width, height,
+	//         preview (a picture for a link, in the stash), site }
 	property var shelves: []
 	property var recent: []
 	property bool hidden: false
@@ -200,6 +201,53 @@ Singleton {
 		if (fresh.length === 0) return;
 		root.update(id, { items: shelf.items.concat(fresh), docked: false });
 		if (files.length > 0) root.describe(id, files);
+		root.previewLinks(id, fresh.filter(item => item.kind === "link"));
+		// what lies in /tmp or the runtime dir is gone after a reboot: a copy goes into the stash
+		const volatile = files.filter(path => root.isVolatile(path));
+		if (volatile.length > 0) root.keepCopies(id, volatile);
+	}
+
+	readonly property var volatileRoots: ["/tmp/", "/dev/shm/", "/run/", `${Quickshell.env("XDG_RUNTIME_DIR") || "/run/user"}/`]
+
+	function isVolatile(path) {
+		const p = String(path);
+		return !p.startsWith(root.stash) && root.volatileRoots.some(prefix => p.startsWith(prefix));
+	}
+
+	function keepCopies(id, paths) {
+		const proc = stashCopier.createObject(root, { shelfId: id });
+		proc.command = ["python3", root.helper, "keep", root.stash].concat(paths);
+		proc.running = true;
+	}
+
+	// the copies take the originals' place on the shelf
+	function applyKept(id, text) {
+		let moved = [];
+		try {
+			moved = JSON.parse(text);
+		} catch (error) {
+			return;
+		}
+		const shelf = root.shelfById(id);
+		if (!shelf || moved.length === 0) return;
+		const to = {};
+		for (const entry of moved) to[entry.from] = entry.to;
+		root.update(id, { items: shelf.items.map(item => item.kind === "file" && to[item.path] ? Object.assign({}, item, { path: to[item.path] }) : item) });
+	}
+
+	Component {
+		id: stashCopier
+
+		Process {
+			id: copyProc
+
+			property string shelfId: ""
+
+			stdout: StdioCollector {
+				onStreamFinished: root.applyKept(copyProc.shelfId, text)
+			}
+			onExited: copyProc.destroy()
+		}
 	}
 
 	// Qt hands over drops as URLs and text; files get a first guess at
@@ -264,6 +312,37 @@ Singleton {
 		proc.running = true;
 	}
 
+	// links to things with a picture (YouTube videos) get it, and their title
+	function previewLinks(id, items) {
+		const urls = items.filter(item => root.hasLinkPreview(item.url) && !item.preview).map(item => item.url);
+		if (urls.length === 0) return;
+		const proc = linkPreviewer.createObject(root, { shelfId: id });
+		proc.command = ["python3", root.helper, "linkpreview", root.stash].concat(urls);
+		proc.running = true;
+	}
+
+	function hasLinkPreview(url) {
+		return /(?:youtube\.com\/(?:watch\?|shorts\/|live\/|embed\/)|youtu\.be\/)/.test(String(url));
+	}
+
+	function applyLinkPreview(id, text) {
+		let found = [];
+		try {
+			found = JSON.parse(text);
+		} catch (error) {
+			return;
+		}
+		const shelf = root.shelfById(id);
+		if (!shelf || !Array.isArray(found)) return;
+		const byUrl = {};
+		for (const entry of found) byUrl[entry.url] = entry;
+		root.update(id, { items: shelf.items.map(item => {
+			const entry = item.kind === "link" ? byUrl[item.url] : null;
+			if (!entry) return item;
+			return Object.assign({}, item, { preview: String(entry.image || ""), site: String(entry.site || ""), name: entry.title ? String(entry.title) : item.name });
+		}) });
+	}
+
 	function applyDescription(id, paths, text) {
 		let found = [];
 		try {
@@ -289,9 +368,15 @@ Singleton {
 		return item.kind === "file" && String(item.mime).startsWith("image/");
 	}
 
+	// the picture that stands for an item: an image file itself, a link's preview
+	function pictureOf(item) {
+		if (root.isImage(item)) return String(item.path);
+		return item.kind === "link" ? String(item.preview ?? "") : "";
+	}
+
 	function iconFor(item) {
 		if (item.kind === "text") return "text_box";
-		if (item.kind === "link") return "web";
+		if (item.kind === "link") return item.site === "YouTube" ? "youtube" : "web";
 		if (item.dir) return "folder";
 		const mime = String(item.mime);
 		if (mime.startsWith("image/")) return "image";
@@ -421,9 +506,9 @@ Singleton {
 
 	function sendToPhone(items) {
 		for (const item of items) {
-			if (item.kind === "file") KdeConnect.shareFile(item.path);
-			else if (item.kind === "link") KdeConnect.shareUrl(item.url);
-			else KdeConnect.sendText(item.text);
+			if (item.kind === "file") Phone.shareFile(item.path);
+			else if (item.kind === "link") Phone.shareUrl(item.url);
+			else Phone.sendText(item.text);
 		}
 	}
 
@@ -560,10 +645,12 @@ Singleton {
 			} catch (error) {}
 			root.loaded = true;
 			root.prune();
-			// files may have moved while the shell was away
+			// files may have moved while the shell was away; links from before
+			// there were previews get theirs
 			for (const shelf of root.shelves) {
 				const paths = shelf.items.filter(item => item.kind === "file").map(item => item.path);
 				if (paths.length > 0) root.describe(shelf.id, paths);
+				root.previewLinks(shelf.id, shelf.items.filter(item => item.kind === "link" && item.preview === undefined));
 			}
 		}
 		onLoadFailed: root.loaded = true
@@ -574,7 +661,8 @@ Singleton {
 		const kept = [];
 		for (const shelf of root.shelves.concat(root.recent))
 			for (const item of shelf.items ?? [])
-				if (item.kind === "file" && item.path.startsWith(root.stash)) kept.push(item.path);
+				for (const path of [item.kind === "file" ? item.path : "", item.preview ?? ""])
+					if (path !== "" && path.startsWith(root.stash)) kept.push(path);
 		Quickshell.execDetached(["python3", root.helper, "prune", root.stash].concat(kept));
 	}
 
@@ -590,6 +678,21 @@ Singleton {
 
 			stdout: StdioCollector {
 				onStreamFinished: root.applyDescription(proc.shelfId, proc.paths, text)
+			}
+			onExited: proc.destroy()
+		}
+	}
+
+	Component {
+		id: linkPreviewer
+
+		Process {
+			id: proc
+
+			property string shelfId: ""
+
+			stdout: StdioCollector {
+				onStreamFinished: root.applyLinkPreview(proc.shelfId, text)
 			}
 			onExited: proc.destroy()
 		}

@@ -459,16 +459,27 @@ Scope {
 
 	IpcHandler {
 		target: "phone"
-		enabled: Plugins.on("kdeconnect")
+		enabled: Phone.offered
 
 		function sendClipboard(): void {
-			KdeConnect.sendClipboard();
+			Phone.sendClipboard();
 		}
 		function sendText(text: string): void {
-			KdeConnect.sendText(text);
+			Phone.sendText(text);
 		}
 		function ring(): void {
-			KdeConnect.ring();
+			Phone.ring();
+		}
+		// what plays here continues on the phone
+		function handoff(): void {
+			Phone.handoffMedia();
+		}
+		function sendFile(path: string): void {
+			Phone.shareFile(path);
+		}
+		function pair(): void {
+			Phone.startPairing();
+			Popups.withFocusedScreen(screen => Popups.open("control", screen, "phone"));
 		}
 	}
 

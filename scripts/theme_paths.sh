@@ -28,6 +28,54 @@ theme_ensure_runtime_dirs() {
 	mkdir -p "$THEME_STATE_DIR" "$THEME_PREVIEW_DIR" "$THEME_RUNTIME_DIR" "$THEME_CURRENT_DIR"
 }
 
+# "device:inode:size:mtime" of a file, following symlinks
+theme_media_signature() {
+	stat -Lc '%d:%i:%s:%Y' -- "$1"
+}
+
+# PNG at the lowest zlib level: a 4K frame takes 0.4 s instead of 2 s to
+# write, and a fifth more disk; every reader decodes it just as fast
+THEME_PNG_OPTS=(-compression_level 1)
+
+# A still frame of the media as PNG: the first frame of an image, the frame
+# at one second of a video. Next to it, <frame>.source says which media the
+# frame was taken from, so a second caller for the same media (the wallpaper
+# runtime right after the theme apply) finds it ready and skips the work.
+theme_frame_is_current() {
+	local media_path="$1"
+	local frame_path="$2"
+	local stamp_path="${frame_path}.source"
+
+	[[ -s "$frame_path" && -f "$stamp_path" ]] || return 1
+	[[ "$(<"$stamp_path")" == "$(realpath -e -- "$media_path")"$'\n'"$(theme_media_signature "$media_path")" ]]
+}
+
+theme_write_frame() {
+	local media_path="$1"
+	local frame_path="$2"
+	local tmp_path="${frame_path}.tmp.png"
+	local media_type
+
+	theme_frame_is_current "$media_path" "$frame_path" && return 0
+	media_type="$(theme_media_type "$media_path" 2>/dev/null || true)"
+
+	rm -f "$tmp_path"
+	if [[ "$media_type" == "video" ]]; then
+		ffmpeg -nostdin -hide_banner -loglevel error -y -ss 00:00:01 -i "$media_path" -frames:v 1 -update 1 \
+			"${THEME_PNG_OPTS[@]}" "$tmp_path" || true
+	fi
+	if [[ ! -s "$tmp_path" ]]; then
+		ffmpeg -nostdin -hide_banner -loglevel error -y -i "$media_path" -frames:v 1 -update 1 \
+			"${THEME_PNG_OPTS[@]}" "$tmp_path"
+	fi
+	if [[ ! -s "$tmp_path" ]]; then
+		echo "could not extract a real wallpaper frame from: $media_path" >&2
+		return 1
+	fi
+	mv -f "$tmp_path" "$frame_path"
+	printf '%s\n%s\n' "$(realpath -e -- "$media_path")" "$(theme_media_signature "$media_path")" >"${frame_path}.source"
+}
+
 theme_media_type() {
 	local path="${1:-}"
 	local extension="${path##*.}"

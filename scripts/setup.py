@@ -18,6 +18,7 @@ import datetime
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -57,6 +58,9 @@ PROGRAMS = {
     "ddc": [("ddcutil", "monitor brightness")],
     "power-profiles": [("powerprofilesctl", "power profiles")],
     "kdeconnect": [("kdeconnect-cli", "phone")],
+    "phone": [("qrencode", "pairing code"), ("ip", "finding this PC's addresses")],
+    "phone-keyboard": [("wtype", "typing from the phone")],
+    "phone-presence": [("playerctl", "pausing when the phone leaves")],
     "fingerprint": [("fprintd-list", "fingerprint unlock")],
     "ssh": [("secret-tool", "SSH passwords")],
     "display-profiles": [("jq", "display profiles")],
@@ -76,6 +80,9 @@ PYTHON_MODULES = {
     "core": [("numpy", "scrolling screenshots, live pins, song detection"), ("dbus", "bluetooth pairing, live pins"), ("gi", "bluetooth pairing, live pins")],
     "hook:openrgb": [("PIL", "lighting")],
 }
+# the phone daemon runs with the system's python, whatever `python3` is in the shell
+PHONE_PYTHON = "/usr/bin/python3"
+PHONE_MODULES = [("aiohttp", "the port phones talk to"), ("zeroconf", "being found on the LAN"), ("cryptography", "certificates"), ("PIL", "wallpaper for the app")]
 OPTIONAL_MODULES = [("cv2", "smart select finds cards, fields and panels (python-opencv)")]
 FONTS = [("Symbols Nerd Font", "icons"), ("Adwaita Sans", "text")]
 
@@ -116,7 +123,7 @@ def applies(when, profile_name, profile):
     if kind == "plugin":
         return host.plugins().get(value) is True
     if kind == "hook":
-        return value in profile.get("themeHooks", [])
+        return value in host.hooks()
     raise ValueError(f"unknown condition in dotfiles/manifest: {when}")
 
 
@@ -172,7 +179,8 @@ def doctor():
         report.ok("everything required is installed")
 
     report.section("Python modules")
-    groups = ["core"] + [f"hook:{hook}" for hook in profile.get("themeHooks", [])]
+    hooks = host.hooks()
+    groups = ["core"] + [f"hook:{hook}" for hook in hooks]
     missing = [(module, why) for group in groups for module, why in PYTHON_MODULES.get(group, []) if not module_available(module)]
     for module, why in missing:
         report.fail(f"{module} – {why}")
@@ -181,6 +189,25 @@ def doctor():
             report.warn(f"{module} – {why}")
     if not missing:
         report.ok("all present")
+
+    if "phone" in plugins:
+        report.section("Phone app")
+        before = report.failures
+        for module, why in PHONE_MODULES + ([("evdev", "the touchpad")] if "phone-touchpad" in plugins else []):
+            if subprocess.run([PHONE_PYTHON, "-c", f"import {module}"], capture_output=True).returncode != 0:
+                report.fail(f"{module} for {PHONE_PYTHON} – {why}")
+        if "phone-touchpad" in plugins:
+            if not os.access("/dev/uinput", os.W_OK):
+                report.fail("/dev/uinput is not writable – the touchpad (a udev rule or the input group)")
+            config = Path(os.path.expanduser("~/.config/niri/config.kdl"))
+            block = re.search(r"^\s*touchpad\s*\{(.*?)^\s*\}", config.read_text() if config.exists() else "", re.S | re.M)
+            if block and re.search(r"^\s*off\b", block.group(1), re.M):
+                report.warn("niri has `touchpad { off }` – it ignores the phone's touchpad as well")
+        active = subprocess.run(["systemctl", "--user", "is-active", "pshell-phone.service"], capture_output=True, text=True).stdout.strip()
+        if active != "active":
+            report.fail("pshell-phone.service is not running (systemctl --user enable --now pshell-phone)")
+        if report.failures == before:
+            report.ok("daemon running, everything it needs is there")
 
     report.section("Fonts")
     for family, why in FONTS:
@@ -192,7 +219,7 @@ def doctor():
         report.ok(f"wallpapers in {library}")
     else:
         report.fail(f"no wallpapers in {library}")
-    for hook in profile.get("themeHooks", []):
+    for hook in hooks:
         script = ROOT / "scripts" / "theme-hooks" / f"{hook}.sh"
         if not script.exists():
             report.fail(f"theme hook {hook}: no {script.relative_to(ROOT)}")
@@ -205,6 +232,14 @@ def doctor():
             report.warn(f"theme hook {hook}: missing {', '.join(absent + gone)} (skipped when applying)")
         else:
             report.ok(f"theme hook {hook}")
+    if "pywalfox" in hooks:
+        state = subprocess.run([sys.executable, str(ROOT / "scripts" / "floorp_theme.py"), "status"],
+                               capture_output=True, text=True).stdout
+        started = next((line for line in state.splitlines() if "(starts with Floorp)" in line), "")
+        if started.endswith(": installed"):
+            report.ok("Floorp in the shell's look")
+        elif started:
+            report.warn("Floorp has its own look (scripts/floorp_theme.py install for the shell's)")
 
     report.section("Dotfiles")
     before = report.failures

@@ -1,0 +1,330 @@
+{
+	"version": 1,
+	"port": 47700,
+	"service": "_pshell._tcp.local.",
+	"topics": {
+		"link": {
+			"owner": "daemon",
+			"plugins": []
+		},
+		"plugins": {
+			"owner": "daemon",
+			"plugins": []
+		},
+		"theme": {
+			"owner": "daemon",
+			"plugins": []
+		},
+		"devices": {
+			"owner": "daemon",
+			"plugins": [],
+			"local": true
+		},
+		"pairing": {
+			"owner": "daemon",
+			"plugins": [],
+			"local": true
+		},
+		"phone.status": {
+			"owner": "phone",
+			"plugins": [
+				"phone-status"
+			]
+		},
+		"media": {
+			"owner": "shell",
+			"plugins": [
+				"media"
+			]
+		},
+		"sound": {
+			"owner": "shell",
+			"plugins": [
+				"sound"
+			]
+		},
+		"system": {
+			"owner": "shell",
+			"plugins": [
+				"system-monitor"
+			]
+		},
+		"session": {
+			"owner": "shell",
+			"plugins": []
+		},
+		"timer": {
+			"owner": "shell",
+			"plugins": [
+				"qtrack"
+			]
+		},
+		"breaks": {
+			"owner": "shell",
+			"plugins": [
+				"breaks"
+			]
+		},
+		"agents": {
+			"owner": "shell",
+			"plugins": [
+				"agents"
+			]
+		},
+		"updates": {
+			"owner": "shell",
+			"plugins": [
+				"updates"
+			]
+		},
+		"touchpad": {
+			"owner": "daemon",
+			"plugins": [
+				"phone-touchpad"
+			]
+		},
+		"keyboard": {
+			"owner": "daemon",
+			"plugins": [
+				"phone-keyboard"
+			]
+		},
+		"notifications": {
+			"owner": "shell",
+			"plugins": [
+				"phone-mirror"
+			]
+		},
+		"phone.notifications": {
+			"owner": "phone",
+			"plugins": [
+				"phone-notifications"
+			]
+		},
+		"phone.telephony": {
+			"owner": "phone",
+			"plugins": [
+				"phone-telephony"
+			]
+		},
+		"phone.find": {
+			"owner": "phone",
+			"plugins": [
+				"phone-find"
+			]
+		},
+		"phone.ask": {
+			"owner": "phone",
+			"plugins": []
+		},
+		"clipboard": {
+			"owner": "daemon",
+			"plugins": [
+				"phone-clipboard"
+			]
+		},
+		"files": {
+			"owner": "daemon",
+			"plugins": [
+				"phone-files"
+			]
+		},
+		"handoff": {
+			"owner": "daemon",
+			"plugins": [
+				"phone-handoff"
+			]
+		},
+		"commands": {
+			"owner": "daemon",
+			"plugins": [
+				"phone-commands"
+			]
+		},
+		"phone.files": {
+			"owner": "phone",
+			"plugins": [
+				"phone-files"
+			]
+		},
+		"phone.handoff": {
+			"owner": "phone",
+			"plugins": [
+				"phone-handoff"
+			]
+		},
+		"windows": {
+			"owner": "shell",
+			"plugins": [
+				"overview"
+			]
+		},
+		"apps": {
+			"owner": "shell",
+			"plugins": [
+				"apps"
+			]
+		},
+		"radial": {
+			"owner": "shell",
+			"plugins": [
+				"radial-menu"
+			]
+		},
+		"quick": {
+			"owner": "shell",
+			"plugins": [
+				"quick-settings"
+			]
+		},
+		"notes": {
+			"owner": "shell",
+			"plugins": [
+				"notes"
+			]
+		},
+		"ssh": {
+			"owner": "shell",
+			"plugins": [
+				"ssh"
+			]
+		},
+		"recording": {
+			"owner": "shell",
+			"plugins": [
+				"recording"
+			]
+		},
+		"todos": {
+			"owner": "daemon",
+			"plugins": [
+				"todos"
+			]
+		},
+		"capture": {
+			"owner": "daemon",
+			"plugins": [
+				"screenshot"
+			]
+		},
+		"screen": {
+			"owner": "daemon",
+			"plugins": [
+				"phone-screen"
+			]
+		},
+		"studio": {
+			"owner": "daemon",
+			"plugins": [
+				"studio-wallpaper"
+			]
+		},
+		"chat": {
+			"owner": "daemon",
+			"plugins": [
+				"chat"
+			]
+		},
+		"rpg": {
+			"owner": "daemon",
+			"plugins": [
+				"rpg"
+			]
+		},
+		"presence": {
+			"owner": "daemon",
+			"plugins": [
+				"phone-presence"
+			]
+		},
+		"fs": {
+			"owner": "daemon",
+			"plugins": [
+				"phone-fs"
+			]
+		},
+		"unlock": {
+			"owner": "daemon",
+			"plugins": [
+				"phone-unlock"
+			]
+		},
+		"terminal": {
+			"owner": "daemon",
+			"plugins": [
+				"phone-terminal"
+			]
+		},
+		"song": {
+			"owner": "shell",
+			"plugins": [
+				"song-detection"
+			]
+		},
+		"weather": {
+			"owner": "shell",
+			"plugins": [
+				"weather"
+			]
+		},
+		"calendar": {
+			"owner": "shell",
+			"plugins": [
+				"calendar"
+			]
+		},
+		"shelves": {
+			"owner": "shell",
+			"plugins": [
+				"shelves"
+			]
+		},
+		"translate": {
+			"owner": "shell",
+			"plugins": [
+				"translate"
+			]
+		},
+		"screenshot": {
+			"owner": "shell",
+			"plugins": [
+				"screenshot"
+			]
+		},
+		"search": {
+			"owner": "shell",
+			"plugins": [
+				"web-search"
+			]
+		},
+		"display": {
+			"owner": "daemon",
+			"plugins": [
+				"display-profiles"
+			]
+		},
+		"transcript": {
+			"owner": "daemon",
+			"plugins": [
+				"agents"
+			]
+		},
+		"phone.unlock": {
+			"owner": "phone",
+			"plugins": [
+				"phone-unlock"
+			]
+		}
+	},
+	"features": [
+		{
+			"id": "link",
+			"title": "Connection",
+			"icon": "lan_connect",
+			"plugins": [],
+			"topics": [
+				"link"
+			]
+		}
+	]
+}

@@ -102,7 +102,7 @@ fi
 MEDIA_PATH="$(realpath -e -- "$MEDIA_PATH")"
 
 media_signature() {
-	stat -Lc '%d:%i:%s:%Y' -- "$1"
+	theme_media_signature "$1"
 }
 
 current_media_path() {
@@ -135,25 +135,10 @@ selection_is_unchanged() {
 	[[ "$(<"$THEME_CURRENT_MEDIA_SIGNATURE_FILE")" == "$(media_signature "$MEDIA_PATH")" ]]
 }
 
+# the frame theme_write_frame (theme_paths.sh) keeps; apply_theme_selection.sh
+# writes it before starting this script, so wallust and the painting overlap
 extract_frame() {
-	local input="$1"
-	local output="$2"
-	local tmp_output="${output}.tmp.png"
-
-	rm -f "$tmp_output"
-	if [[ "$MEDIA_TYPE" == "video" ]]; then
-		ffmpeg -nostdin -hide_banner -loglevel error -y -ss 00:00:01 -i "$input" -frames:v 1 -update 1 \
-			"$tmp_output" || true
-	fi
-	if [[ ! -s "$tmp_output" ]]; then
-		ffmpeg -nostdin -hide_banner -loglevel error -y -i "$input" -frames:v 1 -update 1 \
-			"$tmp_output"
-	fi
-	if [[ ! -s "$tmp_output" ]]; then
-		echo "could not extract a real wallpaper frame from: $input" >&2
-		return 1
-	fi
-	mv -f "$tmp_output" "$output"
+	theme_write_frame "$1" "$2"
 }
 
 sanitize_output_name() {

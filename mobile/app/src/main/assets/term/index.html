@@ -1,0 +1,46 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<link rel="stylesheet" href="xterm.css">
+<style>
+	@font-face { font-family: "mono"; src: url("mono.ttf"); }
+	html, body { margin: 0; height: 100%; background: #151312; overflow: hidden; }
+	/* kitty's window_padding_width 5 */
+	#t { position: absolute; inset: 0; padding: 5px; }
+	.xterm .xterm-viewport { background: transparent !important; }
+</style>
+</head>
+<body>
+<div id="t"></div>
+<script src="xterm.js"></script>
+<script src="addon-fit.js"></script>
+<script>
+	// The terminal itself; bytes come and go through the Android side, which
+	// holds the connection to the PC (Bridge.*), never this page.
+	// Fira Code, as kitty on the PC
+	const term = new Terminal({ fontFamily: "mono, monospace", fontSize: 12, lineHeight: 1.2, cursorBlink: true, scrollback: 4000, allowProposedApi: true });
+	const fit = new FitAddon.FitAddon();
+	term.loadAddon(fit);
+	term.open(document.getElementById("t"));
+	const encoder = new TextEncoder();
+	function b64(bytes) { let s = ""; for (const b of bytes) s += String.fromCharCode(b); return btoa(s); }
+	term.onData(d => Bridge.input(b64(encoder.encode(d))));
+	term.onBinary(d => Bridge.input(btoa(d)));
+	function refit() { fit.fit(); Bridge.resize(term.cols, term.rows); }
+	window.addEventListener("resize", refit);
+	function write(data) { term.write(Uint8Array.from(atob(data), c => c.charCodeAt(0))); }
+	function setTheme(json) {
+		const t = JSON.parse(json);
+		document.body.style.background = t.background;
+		term.options.theme = t;
+	}
+	function focus() { term.focus(); }
+	function send(seq) { Bridge.input(b64(encoder.encode(seq))); }
+	// phone keyboards like to correct and capitalise; a shell wants neither
+	for (const [k, v] of [["autocapitalize", "off"], ["autocorrect", "off"], ["autocomplete", "off"], ["spellcheck", "false"]]) term.textarea.setAttribute(k, v);
+	setTimeout(refit, 50);
+</script>
+</body>
+</html>

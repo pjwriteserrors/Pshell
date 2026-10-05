@@ -279,6 +279,38 @@ def keyboard_matrix(layout: str) -> list[list[int]]:
     return matrix
 
 
+# Samples per key and axis before a key's colour is chosen: a key covers a
+# patch of the picture, and the patch is looked at as 5x5 points.
+KEY_SAMPLES = 5
+
+
+def key_columns(matrix: list[list[int]]) -> tuple[int, int]:
+    """The first and last column of the matrix that has a key on this layout."""
+    present = [column for column in range(MATRIX_WIDTH)
+               if any(matrix[row][column] != NA for row in range(MATRIX_HEIGHT))]
+    return (present[0], present[-1] + 1) if present else (0, MATRIX_WIDTH)
+
+
+def medoid(samples: list[tuple[int, int, int]]) -> tuple[int, int, int]:
+    """The sample closest to all the others: a colour that is in the patch.
+
+    The mean of a patch that is half orange and half blue is grey, and the
+    mean of a bright patch with a dark edge is a pale wash - colours the
+    picture never had. The medoid is one of the pixels, so a key shows what
+    most of its patch shows.
+    """
+    best, best_cost = samples[0], float("inf")
+    for candidate in samples:
+        cost = 0
+        for other in samples:
+            cost += (candidate[0] - other[0]) ** 2 + (candidate[1] - other[1]) ** 2 + (candidate[2] - other[2]) ** 2
+            if cost >= best_cost:
+                break
+        if cost < best_cost:
+            best, best_cost = candidate, cost
+    return best
+
+
 def sampled_colors(image_path: Path, settings: dict) -> list[str]:
     with Image.open(image_path) as source:
         source.seek(0)
@@ -286,28 +318,46 @@ def sampled_colors(image_path: Path, settings: dict) -> list[str]:
         background = Image.new("RGBA", rgba.size, (0, 0, 0, 255))
         image = Image.alpha_composite(background, rgba).convert("RGB")
 
-    # Keep the full-resolution source until the final projection. Reducing only
-    # once avoids throwing away detail before it reaches the keyboard matrix.
-    image = ImageOps.fit(
-        image,
-        (MATRIX_WIDTH, MATRIX_HEIGHT),
-        method=Image.Resampling.LANCZOS,
-        centering=(0.5, 0.5),
+    matrix = keyboard_matrix(settings.get("layout", "us-tkl"))
+    first, last = key_columns(matrix)
+    columns = last - first
+
+    # The whole picture over the keys that exist: the top row of keys shows
+    # the top of the wallpaper, the bottom row its bottom, the left and right
+    # edges its edges. Fitting the picture into the matrix' aspect ratio
+    # instead cropped it to a band through the middle, so the sky or the
+    # ground was never on the keyboard; and the columns of a layout without
+    # a numpad used to take the right fifth of the picture with them.
+    patches = image.resize(
+        (columns * KEY_SAMPLES, MATRIX_HEIGHT * KEY_SAMPLES),
+        resample=Image.Resampling.BOX,
     )
-    image = ImageEnhance.Color(image).enhance(float(settings.get("saturation", 1.35)))
-    image = ImageEnhance.Brightness(image).enhance(float(settings.get("brightness", 0.95)))
-    image = ImageEnhance.Contrast(image).enhance(float(settings.get("contrast", 1.45)))
-    image = ImageEnhance.Sharpness(image).enhance(float(settings.get("sharpness", 2.0)))
+    keys = Image.new("RGB", (columns, MATRIX_HEIGHT))
+    pixels = patches.load()
+    for row in range(MATRIX_HEIGHT):
+        for column in range(columns):
+            samples = [
+                pixels[column * KEY_SAMPLES + dx, row * KEY_SAMPLES + dy]
+                for dy in range(KEY_SAMPLES)
+                for dx in range(KEY_SAMPLES)
+            ]
+            keys.putpixel((column, row), medoid(samples))
+
+    # the same grading as before: the contrast is what makes a backlit key
+    # read at all, so it is left to the settings
+    keys = ImageEnhance.Color(keys).enhance(float(settings.get("saturation", 1.35)))
+    keys = ImageEnhance.Brightness(keys).enhance(float(settings.get("brightness", 0.95)))
+    keys = ImageEnhance.Contrast(keys).enhance(float(settings.get("contrast", 1.45)))
+    keys = ImageEnhance.Sharpness(keys).enhance(float(settings.get("sharpness", 2.0)))
 
     colors = ["000000"] * LED_COUNT
-    matrix = keyboard_matrix(settings.get("layout", "us-tkl"))
-    pixels = image.load()
+    graded = keys.load()
     for row in range(MATRIX_HEIGHT):
-        for column in range(MATRIX_WIDTH):
+        for column in range(first, last):
             led = matrix[row][column]
             if led == NA:
                 continue
-            red, green, blue = pixels[column, row]
+            red, green, blue = graded[column - first, row]
             colors[led] = f"{red:02X}{green:02X}{blue:02X}"
     return colors
 

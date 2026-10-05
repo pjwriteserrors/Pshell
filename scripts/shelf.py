@@ -19,6 +19,8 @@
     shelf.py zip <out.zip> <path>...   pack files and folders, prints the archive's path
     shelf.py image <resize|png|jpg> <in> <out dir>
                                        prints the path of the new image
+    shelf.py keep <stash> <path>...    copy files that live in /tmp or the runtime dir
+                                       into the stash; JSON [{from, to}]
     shelf.py prune <stash> <kept>...   delete stash files older than a day
                                        that are not in <kept>
 
@@ -36,6 +38,7 @@ import hashlib
 import json
 import mimetypes
 import os
+import re
 import selectors
 import struct
 import subprocess
@@ -302,7 +305,12 @@ def clip(stash):
         print(json.dumps([{"kind": "file", "path": path}]))
         return
     text = run("--type", "text/plain;charset=utf-8").stdout.decode(errors="replace") or run().stdout.decode(errors="replace")
-    print(json.dumps([{"kind": "text", "text": text}] if text.strip() else []))
+    if not text.strip():
+        print("[]")
+    elif re.fullmatch(r"https?://\S+", text.strip()):
+        print(json.dumps([{"kind": "link", "url": text.strip()}]))
+    else:
+        print(json.dumps([{"kind": "text", "text": text}]))
 
 
 # ── previews ───────────────────────────────────────────────────────────────
@@ -421,6 +429,76 @@ def image(action, path, outdir):
     return 0
 
 
+def keep(stash, paths):
+    """Files in places that do not survive a reboot are copied into the stash,
+    so a shelf still holds them tomorrow."""
+    import shutil
+
+    os.makedirs(stash, exist_ok=True)
+    moved = []
+    for source in paths:
+        if not os.path.isfile(source):
+            continue
+        name = os.path.basename(source)
+        target = os.path.join(stash, name)
+        stem, extension = os.path.splitext(name)
+        count = 1
+        while os.path.exists(target):
+            target = os.path.join(stash, f"{stem} ({count}){extension}")
+            count += 1
+        try:
+            shutil.copy2(source, target)
+            moved.append({"from": source, "to": target})
+        except OSError:
+            continue
+    print(json.dumps(moved))
+    return 0
+
+
+# ── links ──────────────────────────────────────────────────────────────────
+YOUTUBE = re.compile(r"(?:youtube\.com/(?:watch\?(?:.*&)?v=|shorts/|live/|embed/)|youtu\.be/)([A-Za-z0-9_-]{11})")
+
+
+def youtube_id(url):
+    found = YOUTUBE.search(url)
+    return found.group(1) if found else ""
+
+
+def link_preview(stash, urls):
+    """A picture (and a title) for links that have one: YouTube videos get
+    their thumbnail, copied into the stash so a shelf keeps it offline."""
+    import urllib.request
+
+    os.makedirs(stash, exist_ok=True)
+    out = []
+    for url in urls:
+        video = youtube_id(url)
+        if not video:
+            continue
+        target = os.path.join(stash, f"youtube-{video}.jpg")
+        if not os.path.exists(target):
+            for name in ("maxresdefault", "hqdefault"):
+                try:
+                    with urllib.request.urlopen(f"https://i.ytimg.com/vi/{video}/{name}.jpg", timeout=8) as response:
+                        data = response.read()
+                except Exception:
+                    continue
+                # a missing maxres picture is a tiny grey placeholder, not an error
+                if len(data) < 4000:
+                    continue
+                with open(target, "wb") as handle:
+                    handle.write(data)
+                break
+        title = ""
+        try:
+            with urllib.request.urlopen("https://www.youtube.com/oembed?format=json&url=" + urllib.parse.quote(url, safe=""), timeout=8) as response:
+                title = json.loads(response.read().decode("utf-8", errors="replace")).get("title", "")
+        except Exception:
+            pass
+        out.append({"url": url, "image": target if os.path.exists(target) else "", "title": title, "site": "YouTube"})
+    print(json.dumps(out))
+
+
 def prune(stash, kept):
     kept = set(kept)
     if not os.path.isdir(stash):
@@ -454,6 +532,10 @@ def main():
         return image(args[0], args[1], args[2])
     if command == "prune":
         return prune(args[0], args[1:])
+    if command == "linkpreview":
+        return link_preview(args[0], args[1:])
+    if command == "keep":
+        return keep(args[0], args[1:])
     print(__doc__, file=sys.stderr)
     return 2
 

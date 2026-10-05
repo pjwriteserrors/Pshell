@@ -113,6 +113,24 @@ run_bg() {
 	BG_NAMES+=("$name")
 }
 
+# the wallpaper runtime runs beside wallust and is awaited once, before the
+# hooks that need the painted desktop and the frame
+WALLPAPER_PID=""
+WALLPAPER_CODE=""
+await_wallpaper_runtime() {
+	[[ -n "$WALLPAPER_CODE" ]] && return "$WALLPAPER_CODE"
+	wait "$WALLPAPER_PID"
+	WALLPAPER_CODE=$?
+	if (( WALLPAPER_CODE == 0 )); then
+		log "OK wallpaper runtime"
+		OK_COUNT=$((OK_COUNT + 1))
+	else
+		log "FAIL wallpaper runtime exit=$WALLPAPER_CODE"
+		FAIL_COUNT=$((FAIL_COUNT + 1))
+	fi
+	return "$WALLPAPER_CODE"
+}
+
 # exit 3 from a hook: the program it drives is not installed
 wait_for_jobs() {
 	local i pid name code
@@ -340,11 +358,16 @@ update_wallust_config() {
 	' _ "$WALLUST_CONFIG_FILE" "$WALLUST_BACKEND" "$WALLUST_PALETTE" "$WALLUST_STYLE"
 }
 
-# dark or light for GTK, then the theme bounced so running apps repaint
+# dark or light for GTK
 update_gtk_color_scheme() {
-	local mode="$1"
+	gsettings set org.gnome.desktop.interface color-scheme "prefer-$1"
+}
+
+# the theme bounced so running apps repaint; only after the hooks, since oomox
+# rebuilds the theme in place and an app reloading it mid-build is left with
+# no styles (transparent menus and selection in Firefox)
+bounce_gtk_theme() {
 	local gtktheme
-	gsettings set org.gnome.desktop.interface color-scheme "prefer-$mode"
 	gtktheme="$(gsettings get org.gnome.desktop.interface gtk-theme 2>/dev/null || true)"
 	if [[ -n "$gtktheme" ]]; then
 		gsettings set org.gnome.desktop.interface gtk-theme ""
@@ -375,11 +398,20 @@ log "Media: $THEME_MEDIA ($media_type)"
 
 run_step "niri screen transition" niri msg action do-screen-transition --delay-ms 350 || true
 
-if ! run_step "wallpaper runtime" bash "$SCRIPT_DIR/apply_wallpaper_runtime.sh" "$THEME_MEDIA"; then
-	echo "wallpaper runtime failed, see $LOG_FILE" >&2
+# The frame first: wallust reads it, and so does the wallpaper runtime, which
+# then paints in the background while the colours are generated. The shell
+# wears the new palette about a second after the choice instead of waiting
+# for swaybg, awww and mpvpaper to come up.
+frame_path="$THEME_CURRENT_FRAME_FILE"
+if ! run_step "wallpaper frame" theme_write_frame "$THEME_MEDIA" "$frame_path"; then
+	echo "wallpaper frame was not created: $frame_path" >&2
 	finish_report
 	exit 1
 fi
+
+log "START wallpaper runtime"
+(bash "$SCRIPT_DIR/apply_wallpaper_runtime.sh" "$THEME_MEDIA") >>"$LOG_FILE" 2>&1 &
+WALLPAPER_PID=$!
 
 if [[ -n "$NIRI_ANIMATION_ID" ]]; then
 	run_step "niri animation update" bash "$SCRIPT_DIR/apply_niri_animation.sh" --animation "$NIRI_ANIMATION_ID" || true
@@ -388,18 +420,13 @@ fi
 printf '%s\n' "$theme_name" >"$THEME_CURRENT_NAME_FILE"
 printf '%s\n' "$THEME_ENTRY" >"$THEME_CURRENT_DIR_FILE"
 
-frame_path="$THEME_CURRENT_FRAME_FILE"
-if [[ ! -f "$frame_path" ]]; then
-	echo "wallpaper frame was not created: $frame_path" >&2
-	exit 1
-fi
-
 selected_palette_mode="$(palette_mode "$(effective_style)")"
 log "Palette mode: $selected_palette_mode"
 
 update_wallust_config
 if ! run_step "wallust" run_wallust_generation "$frame_path"; then
 	echo "wallust failed; keeping the previous colours" >&2
+	await_wallpaper_runtime || true
 	finish_report
 	exit 1
 fi
@@ -414,10 +441,19 @@ if [[ "$current_animation" == style:* && -d "$SCRIPT_DIR/../style/animations/${c
 	run_step "niri animation colours" bash "$SCRIPT_DIR/apply_niri_animation.sh" --animation "$current_animation" || true
 fi
 
+# the hooks want the painted desktop (sddm links the frame, the GTK bounce
+# repaints over the wallpaper), so the runtime is awaited here
+if ! await_wallpaper_runtime; then
+	echo "wallpaper runtime failed, see $LOG_FILE" >&2
+	finish_report
+	exit 1
+fi
+
 export THEME_FRAME="$frame_path" THEME_MEDIA THEME_MEDIA_TYPE="$media_type" \
 	THEME_MODE="$selected_palette_mode" WAL_CACHE_DIR THEME_SCRIPTS_DIR="$SCRIPT_DIR" THEME_STATE_DIR
 run_theme_hooks
 run_bg "gtk colour scheme" update_gtk_color_scheme "$selected_palette_mode"
 
 wait_for_jobs
+run_step "gtk theme reload" bounce_gtk_theme || true
 finish_report

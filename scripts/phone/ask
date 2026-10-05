@@ -1,0 +1,52 @@
+#!/usr/bin/python3
+"""Asks the phone something and prints the answer as JSON.
+
+  ask "Deploy to production?" --action yes:Deploy --action no:"Not now"
+  ask "Commit message" "For the staged changes" --field MSG:Message
+  ask "Release" --field TAG:Tag --field KIND:Kind:choice:patch,minor,major --field PUSH:Push:toggle
+
+The question shows as a notification on the phone: buttons or one text field
+are answered right there, a larger form opens in the app. Prints
+{"action": …, "values": {…}}; exits 1 when it was dismissed or nobody answered.
+
+  --timeout SECONDS   how long to wait (default 600)
+"""
+
+import argparse
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("title")
+    parser.add_argument("body", nargs="?", default="")
+    parser.add_argument("--field", action="append", default=[], metavar="ID:Label[:type[:a,b,c]]")
+    parser.add_argument("--action", action="append", default=[], metavar="id:Label")
+    parser.add_argument("--timeout", type=int, default=600)
+    args = parser.parse_args()
+
+    fields = []
+    for spec in args.field:
+        parts = spec.split(":", 3)
+        field = {"id": parts[0], "label": parts[1] if len(parts) > 1 else parts[0], "type": parts[2] if len(parts) > 2 else "text"}
+        if len(parts) > 3:
+            field["options"] = parts[3].split(",")
+        fields.append(field)
+    actions = [{"id": spec.split(":", 1)[0], "label": spec.split(":", 1)[-1]} for spec in args.action]
+    request = {"title": args.title, "body": args.body, "fields": fields, "actions": actions, "timeout": args.timeout}
+    result = subprocess.run(
+        [str(Path(__file__).resolve().parent / "phonectl"), "call", "phone.ask", "ask", json.dumps(request), "--timeout", str(args.timeout + 5)],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        print(result.stderr.strip() or result.stdout.strip(), file=sys.stderr)
+        return 1
+    print(json.dumps(json.loads(result.stdout), ensure_ascii=False))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

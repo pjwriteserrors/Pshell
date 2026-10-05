@@ -5,4 +5,5 @@ source "$(dirname -- "${BASH_SOURCE[0]}")/lib.sh"
 bin="/usr/bin/pywalfox"
 [[ -x "$bin" ]] || bin="$(command -v pywalfox)" || skip "no pywalfox"
 "$bin" update
+# dotfiles/floorp/pshell.css reads its colours from the slots of this mode
 "$bin" "$THEME_MODE"

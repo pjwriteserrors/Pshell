@@ -29,7 +29,8 @@ Item {
 	property string thumbText: ""
 	property string result: ""
 
-	readonly property bool pictured: root.fileKind === "image" || root.fileKind === "gif" || root.thumbImage !== ""
+	readonly property string linkPicture: String(root.item?.preview ?? "")
+	readonly property bool pictured: root.fileKind === "image" || root.fileKind === "gif" || root.thumbImage !== "" || root.linkPicture !== ""
 	readonly property bool coded: root.textKind.type === "code" || root.thumbText !== ""
 	readonly property string shown: {
 		if (root.pictured) return "picture";
@@ -65,7 +66,7 @@ Item {
 		width: root.large ? root.maxWidth : undefined
 		height: root.large ? root.maxHeight : undefined
 		visible: root.shown === "picture" && root.fileKind !== "gif"
-		source: !visible ? "" : (root.fileKind === "image" ? Shelf.fileUri(root.item.path) : Shelf.fileUri(root.thumbImage))
+		source: !visible ? "" : Shelf.fileUri(root.fileKind === "image" ? root.item.path : (root.linkPicture !== "" ? root.linkPicture : root.thumbImage))
 		sourceSize: root.large ? Qt.size(root.maxWidth * 1.5, root.maxHeight * 1.5) : Qt.size(root.row ? 96 : 256, root.row ? 96 : 256)
 		fillMode: root.large ? Image.PreserveAspectFit : Image.PreserveAspectCrop
 		// a page reads from its top
@@ -259,6 +260,7 @@ Item {
 				if (root.shown === "code") return root.lang !== "" && root.lang !== "code" ? Peek.langName(root.lang) : "";
 				if (root.fileKind === "pdf" && root.shown === "picture") return "PDF";
 				if (root.fileKind === "gif") return "GIF";
+				if (root.linkPicture !== "") return String(root.item?.site || "Link");
 				if (root.shown === "latex") return "LaTeX";
 				return "";
 			}
@@ -297,7 +299,7 @@ Item {
 	}
 
 	// items are replaced whenever the shelf learns more about them
-	readonly property string key: `${root.fileKind}|${root.item?.path ?? ""}|${root.item?.text ?? ""}|${root.mode}`
+	readonly property string key: `${root.fileKind}|${root.item?.path ?? ""}|${root.item?.text ?? ""}|${root.linkPicture}|${root.mode}`
 
 	function load() {
 		root.thumbImage = "";

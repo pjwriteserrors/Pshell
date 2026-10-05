@@ -34,6 +34,15 @@ for color in "$ICONS_LIGHT_FOLDER" "$ICONS_MEDIUM" "$ICONS_DARK" \
 	[[ -z "$color" || "$color" =~ ^[[:xdigit:]]{6}$ ]] || { echo "invalid icon colour: $color" >&2; exit 2; }
 done
 
+# the colours and the template the theme on disk was made from; the same
+# palette again (a theme re-applied, a wallpaper with the same accent) is a
+# no-op instead of ten seconds of copying and recolouring
+STAMP="$THEME_NAME $ICONS_LIGHT_FOLDER $ICONS_MEDIUM $ICONS_DARK $ICONS_SYMBOLIC_ACTION $ICONS_SYMBOLIC_PANEL $(stat -c %Y -- "$TEMPLATE_DIR/index.theme")"
+if [[ -f "$DESTINATION/index.theme" && -f "$DESTINATION/.pshell-stamp" && "$(<"$DESTINATION/.pshell-stamp")" == "$STAMP" ]]; then
+	echo "Papirus theme unchanged in $DESTINATION"
+	exit 0
+fi
+
 WORK_DIR="$(mktemp -d)"
 BACKUP_DIR="${DESTINATION}.old.$$"
 cleanup() {
@@ -58,17 +67,20 @@ for size in 22x22 24x24 32x32 48x48 64x64; do
 	done
 done
 
+# one sed per few hundred files, on every core: the seven thousand icons
+# took a sed each before, ten seconds of forking
 replace_in_tree() {
 	local old_color="$1"
 	local new_color="$2"
 	shift 2
+	local -a trees=()
 	[[ -n "$new_color" ]] || return 0
 	for tree in "$@"; do
-		[[ -d "$tree" ]] || continue
-		while IFS= read -r -d '' icon_path; do
-			sed -i "s/$old_color/$new_color/g" "$icon_path"
-		done < <(find "$tree" -type f -name '*.svg' -print0)
+		[[ -d "$tree" ]] && trees+=("$tree")
 	done
+	(( ${#trees[@]} )) || return 0
+	find "${trees[@]}" -type f -name '*.svg' -print0 \
+		| xargs -0 -r -P "$(nproc)" -n 200 sed -i "s/$old_color/$new_color/g"
 }
 
 replace_in_tree 444444 "$ICONS_SYMBOLIC_ACTION" \
@@ -81,6 +93,7 @@ replace_in_tree dfdfdf "$ICONS_SYMBOLIC_PANEL" \
 	"$WORK_DIR/Papirus/24x24/animations"
 
 sed -i "s/^Name=Papirus$/Name=$THEME_NAME/" "$WORK_DIR/Papirus/index.theme"
+printf '%s\n' "$STAMP" >"$WORK_DIR/Papirus/.pshell-stamp"
 mkdir -p -- "$(dirname "$DESTINATION")"
 [[ ! -e "$BACKUP_DIR" ]] || { echo "backup destination already exists: $BACKUP_DIR" >&2; exit 1; }
 

@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+
+	<uses-permission android:name="android.permission.INTERNET" />
+	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+	<uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+	<uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+	<uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+	<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+	<uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+	<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+	<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+	<uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+	<uses-permission android:name="android.permission.VIBRATE" />
+	<uses-permission android:name="android.permission.USE_BIOMETRIC" />
+	<uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+	<!-- headphones that follow the music from the PC -->
+	<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+	<!-- calls: asked for when "Calls" is opened the first time -->
+	<uses-permission android:name="android.permission.READ_PHONE_STATE" />
+	<uses-permission android:name="android.permission.READ_CALL_LOG" />
+	<uses-permission android:name="android.permission.READ_CONTACTS" />
+	<!-- lets a link of the PC open while the app is in the background -->
+	<uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+	<!-- to offer the installed YouTube apps to choose from -->
+	<queries>
+		<intent>
+			<action android:name="android.intent.action.VIEW" />
+			<data android:scheme="https" android:host="youtu.be" />
+		</intent>
+	</queries>
+
+	<uses-feature android:name="android.hardware.camera" android:required="false" />
+
+	<application
+		android:name=".App"
+		android:allowBackup="false"
+		android:icon="@mipmap/ic_launcher"
+		android:label="@string/app_name"
+		android:supportsRtl="true"
+		android:theme="@style/Theme.Pshell"
+		android:usesCleartextTraffic="false">
+
+		<activity
+			android:name=".MainActivity"
+			android:exported="true"
+			android:launchMode="singleTask"
+			android:windowSoftInputMode="adjustResize">
+			<intent-filter>
+				<action android:name="android.intent.action.MAIN" />
+				<category android:name="android.intent.category.LAUNCHER" />
+			</intent-filter>
+			<!-- a pairing code as a link: pshell://pair?… -->
+			<intent-filter>
+				<action android:name="android.intent.action.VIEW" />
+				<category android:name="android.intent.category.DEFAULT" />
+				<category android:name="android.intent.category.BROWSABLE" />
+				<data android:scheme="pshell" android:host="pair" />
+			</intent-filter>
+		</activity>
+
+		<!-- the fingerprint prompt alone: from a notification, a tile, a request of the PC -->
+		<activity
+			android:name=".UnlockActivity"
+			android:exported="false"
+			android:excludeFromRecents="true"
+			android:launchMode="singleTop"
+			android:noHistory="true"
+			android:showWhenLocked="true"
+			android:turnScreenOn="true"
+			android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+		<!-- "Share → pshell", and the clipboard tile -->
+		<activity
+			android:name=".ShareActivity"
+			android:exported="true"
+			android:excludeFromRecents="true"
+			android:label="@string/share_label"
+			android:noHistory="true"
+			android:theme="@android:style/Theme.Translucent.NoTitleBar">
+			<intent-filter>
+				<action android:name="android.intent.action.SEND" />
+				<action android:name="android.intent.action.SEND_MULTIPLE" />
+				<category android:name="android.intent.category.DEFAULT" />
+				<data android:mimeType="*/*" />
+			</intent-filter>
+		</activity>
+
+		<!-- in the menu that appears over marked text, next to Copy -->
+		<activity-alias android:name=".ProcessSend" android:exported="true" android:label="@string/process_send" android:targetActivity=".ShareActivity">
+			<intent-filter>
+				<action android:name="android.intent.action.PROCESS_TEXT" />
+				<category android:name="android.intent.category.DEFAULT" />
+				<data android:mimeType="text/plain" />
+			</intent-filter>
+		</activity-alias>
+		<activity-alias android:name=".ProcessAsk" android:exported="true" android:label="@string/process_ask" android:targetActivity=".MainActivity">
+			<intent-filter>
+				<action android:name="android.intent.action.PROCESS_TEXT" />
+				<category android:name="android.intent.category.DEFAULT" />
+				<data android:mimeType="text/plain" />
+			</intent-filter>
+		</activity-alias>
+		<activity-alias android:name=".ProcessTranslate" android:exported="true" android:label="@string/process_translate" android:targetActivity=".MainActivity">
+			<intent-filter>
+				<action android:name="android.intent.action.PROCESS_TEXT" />
+				<category android:name="android.intent.category.DEFAULT" />
+				<data android:mimeType="text/plain" />
+			</intent-filter>
+		</activity-alias>
+
+		<!-- the scanner follows the phone instead of forcing landscape -->
+		<activity
+			android:name="com.journeyapps.barcodescanner.CaptureActivity"
+			android:screenOrientation="fullSensor"
+			tools:replace="android:screenOrientation" />
+
+		<service
+			android:name=".service.LinkService"
+			android:exported="false"
+			android:foregroundServiceType="connectedDevice" />
+
+		<service
+			android:name=".service.PhoneNotificationListener"
+			android:exported="true"
+			android:label="@string/app_name"
+			android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+			<intent-filter>
+				<action android:name="android.service.notification.NotificationListenerService" />
+			</intent-filter>
+		</service>
+
+		<!-- quick settings tiles -->
+		<service android:name=".service.ClipboardTile" android:exported="true" android:icon="@drawable/ic_tile_clipboard" android:label="@string/tile_clipboard" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+			<intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
+		</service>
+		<service android:name=".service.LockTile" android:exported="true" android:icon="@drawable/ic_tile_lock" android:label="@string/tile_lock" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+			<intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
+		</service>
+		<service android:name=".service.UnlockTile" android:exported="true" android:icon="@drawable/ic_tile_fingerprint" android:label="@string/tile_unlock" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+			<intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
+		</service>
+		<service android:name=".service.PlayTile" android:exported="true" android:icon="@drawable/ic_tile_play" android:label="@string/tile_play" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+			<intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
+		</service>
+
+		<!-- which PC a widget shows -->
+		<activity android:name=".widget.WidgetConfigActivity" android:exported="true" android:excludeFromRecents="true" android:theme="@style/Theme.Pshell">
+			<intent-filter><action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" /></intent-filter>
+		</activity>
+
+		<!-- home screen widgets -->
+		<receiver android:name=".widget.CommandsWidgetReceiver" android:exported="true" android:label="@string/widget_commands">
+			<intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+			<meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_commands" />
+		</receiver>
+		<receiver android:name=".widget.MediaWidgetReceiver" android:exported="true" android:label="@string/widget_media">
+			<intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+			<meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_media" />
+		</receiver>
+		<receiver android:name=".widget.StatusWidgetReceiver" android:exported="true" android:label="@string/widget_status">
+			<intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+			<meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_status" />
+		</receiver>
+
+		<receiver android:name=".service.Actions" android:exported="false" />
+
+		<receiver android:name=".service.Telephony" android:exported="true" android:permission="android.permission.READ_PHONE_STATE">
+			<intent-filter>
+				<action android:name="android.intent.action.PHONE_STATE" />
+			</intent-filter>
+		</receiver>
+
+		<receiver android:name=".service.BootReceiver" android:exported="false">
+			<intent-filter>
+				<action android:name="android.intent.action.BOOT_COMPLETED" />
+				<action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+			</intent-filter>
+		</receiver>
+	</application>
+</manifest>

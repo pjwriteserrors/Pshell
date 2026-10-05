@@ -242,11 +242,11 @@ Drawer {
 						IconButton {
 							Layout.preferredWidth: 30
 							Layout.preferredHeight: 30
-							visible: KdeConnect.reachable
+							visible: Phone.reachable
 							icon: "cellphone_arrow_down"
 							iconSize: 16
 							opacity: entry.hovered || entry.current ? 1 : 0
-							onClicked: KdeConnect.sendClipboardEntry(entry.modelData)
+							onClicked: Phone.sendClipboardEntry(entry.modelData)
 
 							Behavior on opacity {
 								Anim {

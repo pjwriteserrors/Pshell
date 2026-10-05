@@ -39,7 +39,7 @@ Singleton {
 		{ id: "path", label: "Copy path", icon: "clipboard_text", shown: root.files, run: items => Shelf.copyPaths(items) },
 		{ id: "zip", label: "ZIP", icon: "package_variant", shown: root.files, run: (items, at) => Shelf.zip(Shelf.current(at), items) },
 		{ id: "ocr", label: "Text", icon: "text_recognition", shown: root.files && Plugins.on("ocr"), run: items => items.filter(item => Shelf.isImage(item)).forEach(item => Shelf.extractText(item)) },
-		{ id: "phone", label: "Phone", icon: "cellphone_arrow_down", shown: KdeConnect.available, run: items => Shelf.sendToPhone(items) }
+		{ id: "phone", label: "Phone", icon: "cellphone_arrow_down", shown: Phone.available, run: items => Shelf.sendToPhone(items) }
 	].filter(command => command.shown !== false)
 
 	readonly property var ai: AiActions.fixed.map(action => ({

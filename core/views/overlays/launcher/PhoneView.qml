@@ -8,9 +8,10 @@ import qs.style.theme
 import qs.core.services
 import qs.style.widgets
 
-// Launcher >phone: KDE Connect. Typed text is sent as text; otherwise the
-// clipboard, ring and "send file" (which switches to the file browser in
-// picking mode).
+// Launcher >phone: the phone app (or KDE Connect). Typed text is sent as
+// text; otherwise the clipboard, ring, "send file" (which switches to the
+// file browser in picking mode), what plays here continued on the phone,
+// and pairing.
 ColumnLayout {
 	id: root
 
@@ -23,7 +24,10 @@ ColumnLayout {
 			{ id: "clipboard", icon: "content_paste", title: "Send clipboard" },
 			{ id: "ring", icon: "phone_ring", title: "Ring" },
 			{ id: "file", icon: "file_send", title: "Send file" }
-		];
+		].concat(Phone.legacy ? [] : [
+			{ id: "continue", icon: "cellphone_play", title: "Continue on the phone what plays here" },
+			{ id: "pair", icon: "qrcode_scan", title: "Pair a phone" }
+		].filter(action => action.id !== "continue" || Plugins.on("phone-handoff")));
 		if (root.text === "") return fixed;
 		return [{ id: "text", icon: "send", title: root.text }].concat(fixed);
 	}
@@ -36,7 +40,7 @@ ColumnLayout {
 	onActiveChanged: {
 		if (!root.active) return;
 		root.currentIndex = 0;
-		KdeConnect.refresh();
+		Phone.refresh();
 	}
 	onTextChanged: root.currentIndex = 0
 
@@ -60,19 +64,28 @@ ColumnLayout {
 		if (!action) return;
 		switch (action.id) {
 		case "text":
-			KdeConnect.sendText(root.text);
+			Phone.sendText(root.text);
 			root.closeRequested();
 			break;
 		case "clipboard":
-			KdeConnect.sendClipboard();
+			Phone.sendClipboard();
 			root.closeRequested();
 			break;
 		case "ring":
-			KdeConnect.ring();
+			Phone.ring();
 			root.closeRequested();
 			break;
 		case "file":
 			root.pickFileRequested();
+			break;
+		case "continue":
+			Phone.handoffMedia();
+			root.closeRequested();
+			break;
+		case "pair":
+			root.closeRequested();
+			Phone.startPairing();
+			Popups.withFocusedScreen(screen => Popups.open("control", screen, "phone"));
 			break;
 		}
 	}
@@ -86,13 +99,13 @@ ColumnLayout {
 			Layout.preferredWidth: 42
 			Layout.preferredHeight: 42
 			radius: 21
-			color: KdeConnect.reachable ? Qt.alpha(Theme.success, 0.22) : Theme.layer2
+			color: Phone.reachable ? Qt.alpha(Theme.success, 0.22) : Theme.layer2
 
 			Glyph {
 				anchors.centerIn: parent
-				icon: KdeConnect.reachable ? "cellphone" : "cellphone_off"
+				icon: Phone.reachable ? "cellphone" : "cellphone_off"
 				size: 20
-				color: KdeConnect.reachable ? Theme.text : Theme.textMuted
+				color: Phone.reachable ? Theme.text : Theme.textMuted
 			}
 		}
 
@@ -102,22 +115,22 @@ ColumnLayout {
 
 			StyledText {
 				Layout.fillWidth: true
-				text: KdeConnect.name
+				text: Phone.name
 				font.pixelSize: Theme.size.title
 				font.weight: Font.Bold
 			}
 
 			StyledText {
 				Layout.fillWidth: true
-				text: KdeConnect.summary
+				text: Phone.summary
 				tone: Theme.textMuted
 				font.pixelSize: Theme.size.small
 			}
 		}
 
 		Glyph {
-			visible: KdeConnect.battery >= 0
-			icon: KdeConnect.batteryIcon
+			visible: Phone.battery >= 0
+			icon: Phone.batteryIcon
 			size: 18
 			color: Theme.textMuted
 		}
@@ -145,7 +158,7 @@ ColumnLayout {
 			icon: actionRow.modelData.icon
 			title: actionRow.modelData.title
 			selected: root.currentIndex === actionRow.index
-			opacity: KdeConnect.reachable ? 1 : 0.5
+			opacity: Phone.reachable || actionRow.modelData.id === "pair" ? 1 : 0.5
 			onEntered: root.currentIndex = actionRow.index
 			onClicked: root.run(actionRow.modelData)
 		}

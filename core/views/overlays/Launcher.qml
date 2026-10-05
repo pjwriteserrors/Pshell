@@ -43,7 +43,7 @@ Drawer {
 	}
 
 	// a file pick for the phone ends with the launcher
-	onPanelClosed: KdeConnect.pickingFile = false
+	onPanelClosed: Phone.pickingFile = false
 
 	LauncherContent {
 		id: content

@@ -84,6 +84,9 @@ Scope {
 
 	Connections {
 		target: Session
+		function onUnlockRequested() {
+			if (Plugins.on("phone-unlock") && root.locked) root.unlock();
+		}
 		function onLockRequested() {
 			root.lock();
 		}
