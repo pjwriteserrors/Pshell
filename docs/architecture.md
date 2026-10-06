@@ -117,7 +117,9 @@ extension (once per machine); Floorp installs the unsigned package once
 
 `autocorrect` corrects what is typed in windows the way a phone keyboard
 does, in German and English: typos and spelling, capitals (sentences, German
-nouns), a space that slipped into a word, a full stop for two spaces. `scripts/autocorrect.py` reads the
+nouns), a space that slipped into a word, a full stop for two spaces, the
+comma in front of *dass*, *weil*, *ob*, *wenn* and the like (not after *und*,
+*nur*, *als* …). `scripts/autocorrect.py` reads the
 keyboards, checks every word a space ends against the hunspell dictionaries
 (`hunspell-de`, `hunspell-en_us`) and types what was wrong again through a
 keyboard of its own (`/dev/uinput`); which of two close words is meant is
@@ -128,10 +130,34 @@ back what was typed, and a word whose spelling was brought back is kept from
 then on (`~/.local/state/pshell/autocorrect.json`). It sees keys, not text
 fields: a click, a shortcut or a cursor key makes it forget what it followed,
 and a word no space follows (a password) is never touched. The shell tells it
-where to work (`core/services/Autocorrect.qml`); a tile of the quick settings
+where to work (`core/services/Autocorrect.qml`): in windows, and of the shell
+itself only in fields that ask for it with `autocorrect: true` (`Field`,
+`AreaField`) – what is written in Messages. A tile of the quick settings
 and `scripts/ipc.sh autocorrect toggle` switch it off and on. The session reads the
 keyboards with `scripts/setup-rpg-input-access.sh`.
 `scripts/autocorrect.py try "text"` shows what typing a text leaves.
+Typing does not wait for a correction: every key pressed since the one that
+called for it is followed, what it typed is put behind the word again, and
+what stands there is compared with what should before the next key is
+answered. So several words corrected in a row at any speed leave the text as
+slow typing would.
+A correction can be animated; each animation is a plugin of its own, and of
+several that are on one is picked each time: `autocorrect-scramble` (other
+letters stand in place of the word a few times), `autocorrect-decode` (the
+letters settle from the left) and `autocorrect-typewriter` (the wrong letters
+go and the right ones come one by one). All of it is typed, a text field of
+another program shows nothing else, so nothing fades. What is typed on while
+an animation runs ends it and is put behind the word again; a click, a
+shortcut or Enter in that moment (a quarter of a second at most) leaves its
+letters standing.
+
+`qtrack` tracks time with `scripts/qtrack/qtrack-local`, which keeps
+everything in `~/.local/state/qtrack/tracker.db`. The timer hangs under the
+bar (`scripts/ipc.sh qtrack toggle`); "All days" in it, or `qtrack days`,
+opens the day board: every tracked day on the left, the chosen one with its
+numbers and its entries by project. An entry opens to change its
+description, ticket, start and end and whether it is billable; the checkbox
+queues it and "Send to Teamwork" writes what is queued.
 
 `microsoft-calendar` signs in to Microsoft 365 with a device code (Today
 panel) and keeps the refresh token in `~/.local/state/pshell/microsoft.json`.
@@ -140,14 +166,64 @@ It uses Microsoft Office's public client; `PSHELL_MS_CLIENT_ID` and
 registration.
 
 `messages` is the panel for what reaches the user, provider by provider, as
-chats (`scripts/ipc.sh messages toggle`, `>messages`). A provider is a plugin
+chats (`scripts/ipc.sh messages toggle`, `>messages`). It hangs under the
+bar, or is popped out into a window of its own (`messages window`). A provider is a plugin
 of the Messages tab (`mail`) with a second one for its notifications
 (`mail-notifications`); a new provider adds both and an entry in
 `core/services/Messages.qml`.
 
+Where the surface is too narrow for the list and the chat side by side, one
+of them is shown; a mail drawn as a picture that would have to shrink there
+is shown as chat text instead, so its type keeps its size.
+
 Customers (`core/services/Customers.qml`, `customers.json`) put people
 together under a name to keep the panel to the chats with them; they are
-local and no provider knows about them.
+local and no provider knows about them. The customer bar above the chats
+opens the list of them, one to a row; the one that is picked shows its
+people on top of its chats, each to be written to.
+
+An answer goes to whoever the mail it refers to went to; the chips above the
+field take people out and put others in, and a click turns To into Cc into
+Bcc. The field is rich text: marked words are made bold, italic or underlined
+(Ctrl+B, I, U), and a picture – pasted (`paste.py`), dropped or picked –
+stands where the cursor is and travels inside the mail; other files are
+attached. `content.from_editor` turns what Qt hands over into the HTML a mail
+carries. The eye draws the mail as it would arrive, on white paper with every
+mail it quotes (`preview` of the daemon; Outlook builds the draft for it and
+discards it), before anything is sent.
+
+A mail that is sent goes into the outbox (`Mail.outbox`) and leaves eight
+seconds later; until then it can be taken back and is a draft again. One
+that could not be sent stays there, to be sent once more or taken back.
+What is being written is kept per chat, and with the outbox and the chats
+put away until later in `mail-kept.json`; nothing that waited is sent on its
+own after a restart. A chat put away comes back as unread when its time is
+up, or at once when it is answered. Snippets (`core/services/Snippets.qml`,
+`snippets.json`) are texts put into a message with a click, for everyone or
+for one customer; `{name}` becomes the first name of who is written to.
+
+Someone whose address has the domain of exactly one customer's people is
+offered for that customer in the chat (never added unasked; a no is kept
+with the customer). Picking a customer shows it at a glance: its people, its
+chats, what is unread.
+
+`mail-ai` is the assistant: a local model (Ollama, `scripts/messages/assist.py`,
+`core/services/MailAssist.qml`). The models installed (up to 10 GB) are the
+steps of a slider from fast to good, the fastest unless another was picked
+(`mail-ai.json`); the frame is always the fastest one's. In a panel of its own beside the
+chat it is told what was done and how the mail should read, and writes the
+answer; the wand in the field puts a greeting, a sentence of thanks and a
+last sentence around what was written, each of the two sentences to be
+unticked. A mail always reads "Hallo <name>," – thanks – content – offer of
+further help; the signature follows on its own. Who is greeted, du or Sie
+and the language are worked out in code from how people sign and write, as
+that is too much to ask of a small model. Everything it writes is a
+proposal: taken, it is text in the field like any other.
+
+Ctrl+K brings up the customers, Ctrl+F searches the open chat, Alt+Up and
+Alt+Down walk the chats; with the keyboard in the list, j and k do the same,
+r answers, e archives and / searches. `scripts/messages/test_messages.py`
+tests what needs no mailbox.
 
 `mail` shows mail as chats: a conversation is a chat, more than one other
 person makes it a group, a reply quotes the mail it answers. Signatures and
@@ -155,6 +231,9 @@ quoted older mails are folded away (`scripts/messages/content.py`). A mail
 with a layout of its own (a newsletter) and a signature built from tables
 and pictures are drawn by a headless Chromium into a picture, links
 included (`scripts/messages/render.py`); the mail's own scripts never run.
+One browser stays up while mails are drawn and is spoken to over its
+DevTools pipe; only the mails on the screen are drawn, and a mail's pictures
+are waited for a few seconds at most.
 The picture wears the shell's palette: white turns see-through, greys and
 black become the shades between background and text, blue links the accent,
 and what has a colour of its own keeps it; a new palette draws it again.

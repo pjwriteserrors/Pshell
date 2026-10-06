@@ -3127,6 +3127,49 @@ class TrackerStore:
             "project_groups": project_groups,
         }
 
+    def tracked_days(self, current_timestamp: int) -> dict[str, Any]:
+        rows = self.connection.execute(
+            """
+            SELECT started_ts, COALESCE(ended_ts, ?) AS ended_ts
+            FROM segments
+            """,
+            (current_timestamp,),
+        ).fetchall()
+
+        today = datetime.fromtimestamp(current_timestamp, tz=LOCAL_TZ).date()
+        found: set[date] = {today}
+        for row in rows:
+            started_ts = int(row["started_ts"])
+            current = datetime.fromtimestamp(started_ts, tz=LOCAL_TZ).date()
+            last = datetime.fromtimestamp(max(started_ts, int(row["ended_ts"]) - 1), tz=LOCAL_TZ).date()
+            while current <= last:
+                found.add(current)
+                current += timedelta(days=1)
+
+        days: list[dict[str, Any]] = []
+        for target in sorted(found, reverse=True):
+            payload = self.day_entries(format_date_label(target), current_timestamp)
+            entries = payload["entries"]
+            if not entries and target != today:
+                continue
+            sent = sum(1 for entry in entries if entry.get("teamwork_synced"))
+            days.append(
+                {
+                    "day": payload["day"],
+                    "total_seconds": payload["total_seconds"],
+                    "tracking_minutes": sum(int(entry.get("tracking_minutes") or 0) for entry in entries),
+                    "task_count": len(entries),
+                    "project_count": payload["project_count"],
+                    "queued_count": sum(
+                        1 for entry in entries if entry.get("checked") and not entry.get("teamwork_synced")
+                    ),
+                    "sent_count": sent,
+                    "unsent_count": len(entries) - sent,
+                }
+            )
+
+        return {"ok": True, "today": format_date_label(today), "days": days}
+
     def status_payload(self, current_timestamp: int) -> dict[str, Any]:
         current = self.session_snapshot(self.current_session_row(), current_timestamp)
         latest = self.session_snapshot(self.latest_session_row(), current_timestamp)
@@ -3433,6 +3476,9 @@ def parse_args() -> argparse.Namespace:
         report_parser.add_argument("--day", default="today")
         report_parser.add_argument("--color", choices=["auto", "always", "never"], default="auto")
 
+    days_parser = subparsers.add_parser("days", help="List every day with tracked work.")
+    days_parser.add_argument("--json", action="store_true")
+
     return parser.parse_args()
 
 
@@ -3692,6 +3738,18 @@ def main() -> int:
                 print(json.dumps(payload, ensure_ascii=True))
             else:
                 print(render_report(payload, color_mode=args.color))
+            return 0
+
+        if args.command == "days":
+            payload = store.tracked_days(current_timestamp)
+            if args.json:
+                print(json.dumps(payload, ensure_ascii=True))
+            else:
+                for day in payload["days"]:
+                    print(
+                        f"{day['day']}  {format_tracking_minutes(day['tracking_minutes'])}  "
+                        f"{day['sent_count']}/{day['task_count']} sent"
+                    )
             return 0
 
         raise TrackerError(f"Unsupported command: {args.command}")

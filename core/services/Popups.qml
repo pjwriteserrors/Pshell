@@ -73,6 +73,7 @@ Singleton {
 		overview: "overview",
 		updates: "updates",
 		timer: "qtrack",
+		tracking: "qtrack",
 		ssh: "ssh",
 		notes: "notes",
 		messages: "messages",

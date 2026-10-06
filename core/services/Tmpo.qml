@@ -33,6 +33,9 @@ Singleton {
 	property string description: ""
 	property string todayTotal: "--"
 	property int todaySeconds: 0
+	// … as of the last snapshot; in between a running timer adds to it
+	property real todayAt: 0
+	readonly property int todayLive: root.todaySeconds + (root.tracking ? Math.max(0, Math.floor((root.now - root.todayAt) / 1000)) : 0)
 	// today's tracked stretches: [{ start, end }] in ms, the running one ends now
 	property var todaySegments: []
 	property string todayEntries: "0"
@@ -217,6 +220,8 @@ Singleton {
 		const today = parsed.today || {};
 		root.todayTotal = String(today.total_label || "--");
 		root.todaySeconds = Number(today.total_seconds) || 0;
+		root.todayAt = Date.now();
+		root.now = root.todayAt;
 		const segments = [];
 		for (const entry of Array.isArray(today.entries) ? today.entries : [])
 			for (const segment of Array.isArray(entry.segments) ? entry.segments : [])

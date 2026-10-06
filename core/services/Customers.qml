@@ -10,8 +10,11 @@ import Quickshell.Io
 Singleton {
 	id: root
 
-	// [{ id, name, people: [address] }]
+	// [{ id, name, people: [address], declined: [address] }]
 	property var list: []
+	// where everybody has an address: no sign of who someone belongs to
+	readonly property var common: ["gmail.com", "googlemail.com", "outlook.com", "outlook.de", "hotmail.com", "hotmail.de", "live.com", "live.de", "yahoo.com", "yahoo.de",
+		"icloud.com", "me.com", "gmx.de", "gmx.net", "gmx.at", "gmx.ch", "web.de", "t-online.de", "freenet.de", "posteo.de", "mailbox.org", "proton.me", "protonmail.com", "aol.com"]
 
 	function find(id) {
 		return root.list.find(customer => customer.id === id) ?? null;
@@ -19,6 +22,21 @@ Singleton {
 
 	function has(id, email) {
 		return root.find(id)?.people.includes(email) ?? false;
+	}
+
+	// The customer someone with this address most likely belongs to: the only one with
+	// people at the same domain, unless it was said no to. `own`: domains that are the user's.
+	function suggest(email, own) {
+		const domain = String(email).split("@")[1] ?? "";
+		if (domain === "" || root.common.includes(domain) || (own ?? []).includes(domain)) return null;
+		if (root.list.some(customer => customer.people.includes(email))) return null;
+		const fitting = root.list.filter(customer => customer.people.some(entry => entry.endsWith(`@${domain}`)));
+		if (fitting.length !== 1 || (fitting[0].declined ?? []).includes(email)) return null;
+		return fitting[0];
+	}
+
+	function decline(id, email) {
+		root.save(root.list.map(customer => customer.id === id ? Object.assign({}, customer, { declined: (customer.declined ?? []).concat([email]) }) : customer));
 	}
 
 	function create(name) {

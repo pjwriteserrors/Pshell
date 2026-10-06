@@ -318,6 +318,7 @@ ColumnLayout {
 							Layout.fillWidth: true
 							Layout.preferredHeight: 92
 							visible: card.reply?.available ?? false
+							autocorrect: true
 							text: card.reply?.text ?? ""
 							onEdited: text => card.replyText = text
 						}

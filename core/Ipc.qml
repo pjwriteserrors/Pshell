@@ -346,6 +346,10 @@ Scope {
 		function toggle(): void {
 			root.drawerOnFocused("timer");
 		}
+		// the day board: every tracked day, to edit and send to Teamwork
+		function days(): void {
+			root.drawerOnFocused("tracking");
+		}
 	}
 
 	IpcHandler {
@@ -386,13 +390,18 @@ Scope {
 		enabled: Plugins.on("messages")
 
 		function open(): void {
-			Popups.withFocusedScreen(screen => Popups.open("messages", screen));
+			Messages.open("");
 		}
 		function close(): void {
-			if (Popups.current === "messages") Popups.close();
+			Messages.close();
 		}
 		function toggle(): void {
-			root.drawerOnFocused("messages");
+			Messages.toggle();
+		}
+		// a window of its own, or back under the bar
+		function window(): void {
+			if (Messages.windowed) Messages.dock();
+			else Messages.popOut();
 		}
 		// a chat by its id, as notifications name it
 		function chat(id: string): void {
@@ -400,10 +409,10 @@ Scope {
 		}
 		// a new mail; `to` may be empty
 		function compose(to: string): void {
-			Popups.withFocusedScreen(screen => Popups.open("messages", screen, to === "" ? "new" : `new:${to}`));
+			Messages.open(to === "" ? "new" : `new:${to}`);
 		}
 		function settings(): void {
-			Popups.withFocusedScreen(screen => Popups.open("messages", screen, "settings"));
+			Messages.open("settings");
 		}
 		function refresh(): void {
 			Mail.refresh();

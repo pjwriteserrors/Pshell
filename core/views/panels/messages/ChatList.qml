@@ -9,20 +9,32 @@ import qs.core.services
 import qs.style.widgets
 
 // Every chat, newest first. The field searches chats and people; picking a
-// person keeps only the chats with them, picking a customer the chats with
-// anyone who was put into it. The pencil turns the list into the customer's
-// people, to put them in and take them out.
+// person keeps only the chats with them. The customer bar opens the list of
+// customers; picking one keeps the chats with anyone who was put into it and
+// shows its people on top, to be written to. The pencil turns the list into
+// the customer's people, to put them in and take them out.
 ColumnLayout {
 	id: root
 
 	property string query: ""
 	// the address of the person the list is narrowed to
 	property string person: ""
-	// "all" | "unread" | "flagged"
+	// "all" | "unread" | "flagged" | "later" (the chats put away)
 	property string mode: "all"
+	readonly property int later: Mail.chats.reduce((sum, chat) => sum + (Mail.snoozed[chat.id] !== undefined ? 1 : 0), 0)
+	// mails on their way that the open chat does not show
+	readonly property var leaving: Mail.outbox.filter(entry => entry.state !== "sent" && (entry.key !== Mail.openId || entry.key === "new"))
+
+	onLaterChanged: if (root.later === 0 && root.mode === "later") root.mode = "all"
 	// the customer the list is narrowed to, and whether its people are being picked
 	property string customer: ""
 	property bool editing: false
+	// the list of customers is up
+	property bool picking: false
+	// every one of the customer's people is listed, not only the first few
+	property bool allPeople: false
+	// the chat opened from the unread ones stays among them until another is
+	property string kept: ""
 	readonly property var customerEntry: Customers.find(root.customer)
 	readonly property string needle: root.query.trim().toLowerCase()
 	readonly property var personEntry: Mail.people.find(entry => entry.email === root.person) ?? null
@@ -39,7 +51,9 @@ ColumnLayout {
 		const members = root.customerEntry?.people ?? null;
 		return Mail.chats.filter(chat => {
 			if (members && !chat.people.some(entry => members.includes(entry.email))) return false;
-			if (root.mode === "unread" && chat.unread === 0 && chat.id !== Mail.openId) return false;
+			// what was put away shows under Later, and in a search
+			if ((Mail.snoozed[chat.id] !== undefined) !== (root.mode === "later") && needle === "") return false;
+			if (root.mode === "unread" && chat.unread === 0 && chat.id !== root.kept) return false;
 			if (root.mode === "flagged" && !chat.flagged) return false;
 			if (root.person !== "" && !chat.people.some(entry => entry.email === root.person)) return false;
 			if (needle === "" || hits[chat.id]) return true;
@@ -56,10 +70,88 @@ ColumnLayout {
 		const all = members.map(email => known[email] ?? { email: email, name: email }).concat(Mail.people.filter(entry => !members.includes(entry.email)));
 		return all.filter(entry => root.needle === "" || entry.name.toLowerCase().includes(root.needle) || entry.email.includes(root.needle));
 	}
-	readonly property var matches: root.needle === "" || root.editing ? [] : Mail.people.filter(entry => entry.email !== root.person
+	// the customer's people, as the mailbox knows them
+	readonly property var members: {
+		if (!root.customerEntry) return [];
+		const known = {};
+		for (const entry of Mail.people) known[entry.email] = entry;
+		return root.customerEntry.people.map(email => known[email] ?? { email: email, name: email, chats: 0, unread: 0 });
+	}
+	readonly property var customers: Customers.list.filter(customer => {
+		if (root.needle === "") return true;
+		return customer.name.toLowerCase().includes(root.needle) || customer.people.some(email => email.includes(root.needle) || Mail.nameOf(email).toLowerCase().includes(root.needle));
+	})
+	readonly property var matches: root.needle === "" || root.editing || root.picking ? [] : Mail.people.filter(entry => entry.email !== root.person
 		&& (entry.name.toLowerCase().includes(root.needle) || entry.email.includes(root.needle))).slice(0, 4)
 
 	signal picked(string id)
+	// a new mail to these addresses
+	signal compose(string recipients)
+	// a customer was picked: what there is to know about it
+	signal overview(string id)
+	// keys the list does not use itself: "reply", "archive"
+	signal key(string name)
+
+	onModeChanged: root.kept = ""
+	onCustomerChanged: root.allPeople = false
+
+	// the surface came up
+	function entered() {
+		root.kept = "";
+	}
+
+	function pick(id) {
+		root.kept = root.mode === "unread" ? id : "";
+		root.picked(id);
+	}
+
+	function clearSearch() {
+		root.query = "";
+		search.text = "";
+		Mail.search("");
+	}
+
+	function choose(id) {
+		root.customer = id;
+		root.picking = false;
+		root.clearSearch();
+		if (id !== "") root.overview(id);
+	}
+
+	// the list of customers, from the keyboard
+	function showCustomers() {
+		root.editing = false;
+		root.picking = true;
+		root.clearSearch();
+		search.focusInput();
+	}
+
+	// the chat before (-1) or after (1) the open one
+	function step(by) {
+		if (root.shown.length === 0) return;
+		const at = root.shown.indexOf(Mail.openId);
+		const next = Math.max(0, Math.min(root.shown.length - 1, at < 0 ? 0 : at + by));
+		list.currentIndex = next;
+		list.positionViewAtIndex(next, ListView.Contain);
+		if (root.shown[next] !== Mail.openId) root.pick(root.shown[next]);
+	}
+
+	function whose(entry) {
+		if (entry.key === "new") return (entry.draft.to ?? []).map(email => Mail.nameOf(email)).join(", ");
+		return Mail.chats.find(chat => chat.id === entry.key)?.subject ?? "";
+	}
+
+	// when a customer's people last wrote or were written to, and in how many chats
+	function activity(customer) {
+		let last = 0;
+		let count = 0;
+		for (const chat of Mail.chats) {
+			if (!chat.people.some(entry => customer.people.includes(entry.email))) continue;
+			count += 1;
+			last = Math.max(last, chat.date);
+		}
+		return { last: last, count: count };
+	}
 
 	function focusSearch() {
 		search.focusInput();
@@ -78,6 +170,7 @@ ColumnLayout {
 
 	function edit(id) {
 		root.customer = id;
+		root.picking = false;
 		root.editing = true;
 		root.query = "";
 		search.text = "";
@@ -115,10 +208,10 @@ ColumnLayout {
 		placeholder: "Search"
 		onEdited: text => {
 			root.query = text;
-			if (!root.editing) ask.restart();
+			if (!root.editing && !root.picking) ask.restart();
 		}
 		onAccepted: {
-			if (root.editing) return;
+			if (root.editing || root.picking) return;
 			ask.stop();
 			Mail.search(root.query);
 		}
@@ -146,6 +239,13 @@ ColumnLayout {
 			onClicked: root.person = ""
 		}
 
+		Chip {
+			visible: root.person !== ""
+			implicitWidth: 34
+			icon: "email_plus_outline"
+			onClicked: root.compose(root.person)
+		}
+
 		Repeater {
 			model: root.matches
 
@@ -159,39 +259,244 @@ ColumnLayout {
 		}
 	}
 
-	// customers
-	Flow {
+	// the customer the list is kept to; a click brings up all of them
+	Clickable {
+		id: bar
+
 		Layout.fillWidth: true
 		visible: !root.editing
-		spacing: 6
+		implicitHeight: 40
+		radius: Theme.radius.large
+		pressedScale: 0.98
+		color: root.customerEntry && !root.picking ? Theme.primaryContainer : Theme.layer1
+		onClicked: {
+			root.picking = !root.picking;
+			root.clearSearch();
+			search.focusInput();
+		}
 
-		Repeater {
-			model: Customers.list
+		RowLayout {
+			anchors.fill: parent
+			anchors.leftMargin: 13
+			anchors.rightMargin: 4
+			spacing: 8
 
-			delegate: Chip {
-				id: tag
-
-				required property var modelData
-				readonly property int unread: root.unreadOf(tag.modelData)
-
-				selected: root.customer === tag.modelData.id
+			Glyph {
 				icon: "office_building"
-				text: tag.unread > 0 ? `${tag.modelData.name}  ${tag.unread}` : tag.modelData.name
-				onClicked: root.customer = tag.selected ? "" : tag.modelData.id
+				size: 17
+				color: root.customerEntry ? Theme.primary : Theme.textSubtle
+			}
+
+			StyledText {
+				Layout.fillWidth: true
+				text: root.customerEntry ? (root.customerEntry.name || "Customer") : "Customers"
+				tone: root.customerEntry ? Theme.text : Theme.textMuted
+				elide: Text.ElideRight
+				font.pixelSize: Theme.size.body
+				font.weight: root.customerEntry ? Font.DemiBold : Font.Normal
+			}
+
+			Badge {
+				count: root.customerEntry && !root.picking ? root.unreadOf(root.customerEntry) : 0
+			}
+
+			IconButton {
+				visible: root.customerEntry !== null && !root.picking
+				implicitWidth: 30
+				implicitHeight: 30
+				icon: "email_plus_outline"
+				onClicked: root.compose(root.customerEntry.people.join(", "))
+			}
+
+			IconButton {
+				visible: root.customerEntry !== null && !root.picking
+				implicitWidth: 30
+				implicitHeight: 30
+				icon: "pencil"
+				onClicked: root.edit(root.customer)
+			}
+
+			IconButton {
+				visible: root.customerEntry !== null && !root.picking
+				implicitWidth: 30
+				implicitHeight: 30
+				icon: "close"
+				onClicked: root.choose("")
+			}
+
+			Item {
+				visible: root.customerEntry === null || root.picking
+				implicitWidth: 30
+				implicitHeight: 30
+
+				Glyph {
+					anchors.centerIn: parent
+					icon: "chevron_right"
+					size: 18
+					color: Theme.textSubtle
+					rotation: root.picking ? 90 : 0
+
+					Behavior on rotation {
+						SpatialAnim {
+							duration: Motion.medium
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// every customer, one to a row
+	ListView {
+		id: picker
+
+		Layout.fillWidth: true
+		Layout.fillHeight: true
+		visible: root.picking && !root.editing
+		clip: true
+		spacing: 2
+		boundsBehavior: Flickable.StopAtBounds
+		ScrollBar.vertical: ThinScrollBar {}
+		model: ScriptModel {
+			values: root.customers.map(customer => customer.id)
+		}
+
+		add: Transition {
+			Anim {
+				property: "opacity"
+				from: 0
+				to: 1
+			}
+		}
+		displaced: Transition {
+			SpatialAnim {
+				property: "y"
+				duration: Motion.medium
 			}
 		}
 
-		Chip {
-			visible: root.customer !== ""
-			icon: "pencil"
-			implicitWidth: 34
-			onClicked: root.edit(root.customer)
+		header: Clickable {
+			width: picker.width
+			implicitHeight: 46
+			radius: Theme.radius.medium
+			pressedScale: 0.98
+			showHover: false
+			color: hovered ? Theme.layer1 : "transparent"
+			onClicked: root.edit(Customers.create(""))
+
+			RowLayout {
+				anchors.fill: parent
+				anchors.leftMargin: 10
+				anchors.rightMargin: 12
+				spacing: 10
+
+				Rectangle {
+					implicitWidth: 36
+					implicitHeight: 36
+					radius: 18
+					color: Theme.layer2
+
+					Glyph {
+						anchors.centerIn: parent
+						icon: "plus"
+						size: 18
+						color: Theme.primary
+					}
+				}
+
+				StyledText {
+					Layout.fillWidth: true
+					text: "New customer"
+					font.pixelSize: Theme.size.body
+					font.weight: Font.DemiBold
+				}
+			}
 		}
 
-		Chip {
-			icon: "plus"
-			implicitWidth: 34
-			onClicked: root.edit(Customers.create(""))
+		delegate: Clickable {
+			id: entry
+
+			required property string modelData
+			readonly property var customer: Customers.find(entry.modelData) ?? { id: entry.modelData, name: "", people: [] }
+			readonly property bool current: root.customer === entry.modelData
+
+			width: ListView.view.width
+			implicitHeight: 54
+			radius: Theme.radius.medium
+			pressedScale: 0.98
+			showHover: false
+			color: entry.current ? Theme.primaryContainer : (entry.hovered ? Theme.layer1 : "transparent")
+			onClicked: root.choose(entry.modelData)
+
+			RowLayout {
+				anchors.fill: parent
+				anchors.leftMargin: 10
+				anchors.rightMargin: 6
+				spacing: 10
+
+				ChatAvatar {
+					visible: entry.customer.people.length > 0
+					people: entry.customer.people.slice(0, 2).map(email => ({ email: email, name: Mail.nameOf(email) }))
+					size: 36
+					surface: entry.current ? Theme.primaryContainer : (entry.hovered ? Theme.layer1 : Theme.base)
+				}
+
+				Rectangle {
+					visible: entry.customer.people.length === 0
+					implicitWidth: 36
+					implicitHeight: 36
+					radius: 18
+					color: Theme.layer2
+
+					Glyph {
+						anchors.centerIn: parent
+						icon: "office_building"
+						size: 17
+						color: Theme.textSubtle
+					}
+				}
+
+				ColumnLayout {
+					Layout.fillWidth: true
+					spacing: 1
+
+					StyledText {
+						Layout.fillWidth: true
+						text: entry.customer.name || "Customer"
+						elide: Text.ElideRight
+						font.pixelSize: Theme.size.body
+						font.weight: Font.DemiBold
+					}
+
+					StyledText {
+						readonly property var activity: root.activity(entry.customer)
+
+						Layout.fillWidth: true
+						text: activity.count > 0 ? `${activity.count} ${activity.count === 1 ? "chat" : "chats"} · ${root.stamp(activity.last)}` : entry.customer.people.map(email => Mail.nameOf(email)).join(", ")
+						tone: Theme.textMuted
+						elide: Text.ElideRight
+						font.pixelSize: Theme.size.small
+					}
+				}
+
+				Badge {
+					count: root.unreadOf(entry.customer)
+				}
+
+				IconButton {
+					implicitWidth: 30
+					implicitHeight: 30
+					icon: "pencil"
+					opacity: entry.hovered ? 1 : 0
+					onClicked: root.edit(entry.modelData)
+
+					Behavior on opacity {
+						Anim {
+							duration: Motion.short
+						}
+					}
+				}
+			}
 		}
 	}
 
@@ -305,14 +610,14 @@ ColumnLayout {
 
 	Segmented {
 		Layout.fillWidth: true
-		visible: !root.editing
+		visible: !root.editing && !root.picking
 		implicitHeight: 32
 		current: root.mode
 		options: [
 			{ value: "all", label: "All" },
 			{ value: "unread", label: Mail.unread > 0 ? `Unread ${Mail.unread}` : "Unread" },
 			{ value: "flagged", label: "Starred" }
-		]
+		].concat(root.later > 0 ? [{ value: "later", label: `Later ${root.later}` }] : [])
 		onSelected: value => root.mode = value
 	}
 
@@ -321,7 +626,7 @@ ColumnLayout {
 
 		Layout.fillWidth: true
 		Layout.fillHeight: true
-		visible: !root.editing
+		visible: !root.editing && !root.picking
 		clip: true
 		spacing: 2
 		boundsBehavior: Flickable.StopAtBounds
@@ -329,10 +634,168 @@ ColumnLayout {
 		model: ScriptModel {
 			values: root.shown
 		}
+
+		add: Transition {
+			Anim {
+				property: "opacity"
+				from: 0
+				to: 1
+			}
+		}
+		remove: Transition {
+			Anim {
+				property: "opacity"
+				to: 0
+				duration: Motion.short
+			}
+		}
+		move: Transition {
+			SpatialAnim {
+				property: "y"
+				duration: Motion.medium
+			}
+		}
+		displaced: Transition {
+			SpatialAnim {
+				property: "y"
+				duration: Motion.medium
+			}
+			Anim {
+				property: "opacity"
+				to: 1
+				duration: Motion.short
+			}
+		}
+
+		// the customer's people: a click keeps the list to the chats with one, the letter writes to them
+		header: Column {
+			width: list.width
+			visible: root.customerEntry !== null
+			height: visible ? implicitHeight : 0
+			spacing: 2
+
+			Repeater {
+				model: ScriptModel {
+					values: (root.allPeople ? root.members : root.members.slice(0, 4)).map(entry => entry.email)
+				}
+
+				delegate: Clickable {
+					id: member
+
+					required property string modelData
+					readonly property var who: root.members.find(entry => entry.email === member.modelData) ?? { email: member.modelData, name: member.modelData, unread: 0 }
+					readonly property bool current: root.person === member.modelData
+
+					width: list.width
+					implicitHeight: 44
+					radius: Theme.radius.medium
+					pressedScale: 0.98
+					showHover: false
+					color: member.current ? Theme.primaryContainer : (member.hovered ? Theme.layer1 : "transparent")
+					onClicked: {
+						if (member.current) root.person = "";
+						else root.pickPerson(member.modelData);
+					}
+
+					RowLayout {
+						anchors.fill: parent
+						anchors.leftMargin: 14
+						anchors.rightMargin: 6
+						spacing: 10
+
+						Avatar {
+							size: 30
+							name: member.who.name
+							email: member.who.email
+						}
+
+						ColumnLayout {
+							Layout.fillWidth: true
+							spacing: 0
+
+							StyledText {
+								Layout.fillWidth: true
+								text: member.who.name
+								elide: Text.ElideRight
+								font.pixelSize: Theme.size.label
+								font.weight: Font.DemiBold
+							}
+
+							StyledText {
+								Layout.fillWidth: true
+								visible: member.who.name !== member.who.email
+								text: member.who.email
+								tone: Theme.textMuted
+								elide: Text.ElideRight
+								font.pixelSize: Theme.size.small
+							}
+						}
+
+						Badge {
+							count: member.who.unread ?? 0
+						}
+
+						IconButton {
+							implicitWidth: 30
+							implicitHeight: 30
+							icon: "email_plus_outline"
+							onClicked: root.compose(member.modelData)
+						}
+					}
+				}
+			}
+
+			Clickable {
+				visible: root.members.length > 4
+				width: list.width
+				implicitHeight: 26
+				radius: Theme.radius.medium
+				showHover: false
+				onClicked: root.allPeople = !root.allPeople
+
+				Glyph {
+					anchors.centerIn: parent
+					icon: "chevron_down"
+					size: 16
+					color: Theme.textSubtle
+					rotation: root.allPeople ? 180 : 0
+
+					Behavior on rotation {
+						SpatialAnim {
+							duration: Motion.medium
+						}
+					}
+				}
+			}
+
+			Item {
+				width: list.width
+				height: 9
+
+				Rectangle {
+					y: 4
+					x: 10
+					width: parent.width - 20
+					height: 1
+					color: Theme.outline
+				}
+			}
+		}
 		// older mail is fetched as the end comes near
 		onAtYEndChanged: if (atYEnd && contentHeight > height && root.needle === "" && root.mode === "all") Mail.older()
 
-		Keys.onReturnPressed: if (currentIndex >= 0 && currentIndex < root.shown.length) root.picked(root.shown[currentIndex])
+		Keys.onReturnPressed: if (currentIndex >= 0 && currentIndex < root.shown.length) root.pick(root.shown[currentIndex])
+		// with the keyboard in the list: j and k walk the chats, r answers, e archives, / searches
+		Keys.onPressed: event => {
+			if (event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)) return;
+			if (event.key === Qt.Key_J) root.step(1);
+			else if (event.key === Qt.Key_K) root.step(-1);
+			else if (event.key === Qt.Key_R) root.key("reply");
+			else if (event.key === Qt.Key_E) root.key("archive");
+			else if (event.key === Qt.Key_Slash) search.focusInput();
+			else return;
+			event.accepted = true;
+		}
 
 		delegate: Clickable {
 			id: item
@@ -349,7 +812,14 @@ ColumnLayout {
 			pressedScale: 0.98
 			showHover: false
 			color: item.current ? Theme.primaryContainer : (item.hovered ? Theme.layer1 : "transparent")
-			onClicked: root.picked(item.modelData)
+			// where the keyboard is
+			border.width: list.activeFocus && ListView.isCurrentItem ? 1.5 : 0
+			border.color: Qt.alpha(Theme.primary, 0.85)
+			onClicked: {
+				list.currentIndex = item.index;
+				list.forceActiveFocus();
+				root.pick(item.modelData);
+			}
 
 			RowLayout {
 				anchors.fill: parent
@@ -428,9 +898,107 @@ ColumnLayout {
 
 		EmptyState {
 			anchors.centerIn: parent
+			anchors.verticalCenterOffset: (list.headerItem?.height ?? 0) / 2
 			visible: list.count === 0 && Mail.known
 			icon: Mail.searching || Mail.syncing ? "sync" : "forum_outline"
 			title: Mail.searching ? "Searching" : (Mail.syncing ? "Loading" : "No chats")
+		}
+	}
+
+	// mails on their way that no open chat shows: taken back, sent again
+	Repeater {
+		model: ScriptModel {
+			values: root.leaving.map(entry => entry.id)
+		}
+
+		delegate: Rectangle {
+			id: strip
+
+			required property string modelData
+			readonly property var entry: root.leaving.find(entry => entry.id === strip.modelData) ?? { id: "", key: "", state: "sending", error: "", at: 0, draft: {} }
+			readonly property bool failed: strip.entry.state === "failed"
+
+			Layout.fillWidth: true
+			implicitHeight: 44
+			radius: Theme.radius.medium
+			color: strip.failed ? Theme.dangerContainer : Theme.layer1
+			clip: true
+
+			// what is left of the moment it can be taken back in
+			Rectangle {
+				visible: strip.entry.state === "waiting"
+				anchors.bottom: parent.bottom
+				width: parent.width * Math.max(0, Math.min(1, 1 - (Mail.now - strip.entry.at) / Mail.grace))
+				height: 2
+				color: Theme.primary
+			}
+
+			RowLayout {
+				anchors.fill: parent
+				anchors.leftMargin: 12
+				anchors.rightMargin: 4
+				spacing: 8
+
+				Glyph {
+					visible: strip.entry.state !== "sending"
+					icon: strip.failed ? "alert_circle" : "send"
+					size: 15
+					color: strip.failed ? Theme.danger : Theme.primary
+				}
+
+				Spinner {
+					visible: strip.entry.state === "sending"
+					Layout.preferredWidth: 14
+					Layout.preferredHeight: 14
+				}
+
+				ColumnLayout {
+					Layout.fillWidth: true
+					spacing: 0
+
+					StyledText {
+						Layout.fillWidth: true
+						text: root.whose(strip.entry) || strip.entry.draft.subject || ""
+						elide: Text.ElideRight
+						font.pixelSize: Theme.size.label
+						font.weight: Font.DemiBold
+					}
+
+					StyledText {
+						Layout.fillWidth: true
+						visible: text !== ""
+						text: strip.failed ? strip.entry.error : (strip.entry.text ?? "")
+						tone: strip.failed ? Theme.danger : Theme.textMuted
+						elide: Text.ElideRight
+						font.pixelSize: Theme.size.small
+					}
+				}
+
+				IconButton {
+					visible: strip.failed
+					implicitWidth: 30
+					implicitHeight: 30
+					icon: "refresh"
+					onClicked: Mail.dispatch(strip.modelData)
+				}
+
+				IconButton {
+					visible: strip.failed
+					implicitWidth: 30
+					implicitHeight: 30
+					icon: "pencil"
+					onClicked: Mail.undo(strip.modelData)
+				}
+
+				TextButton {
+					visible: strip.entry.state === "waiting"
+					implicitHeight: 30
+					text: "Undo"
+					icon: "undo"
+					variant: "ghost"
+					onActivated: Mail.undo(strip.modelData)
+				}
+			}
 		}
 	}
 }

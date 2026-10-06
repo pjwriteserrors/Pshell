@@ -1,5 +1,6 @@
 import QtQuick
 import qs.style.theme
+import qs.core.services
 
 // Single-line input. Focus lights the leading glyph and draws an accent
 // ring; the placeholder drifts away as you type; a clear button pops in.
@@ -13,7 +14,17 @@ Rectangle {
 	property bool password: false
 	property bool clearable: true
 	property int fontSize: Theme.size.body
+	// what is typed here is corrected (Autocorrect)
+	property bool autocorrect: false
 	readonly property bool focused: input.activeFocus
+	// the keyboard is here: a field keeps its focus in a panel that is closed
+	readonly property bool typing: root.autocorrect && root.focused && Window.active
+
+	onTypingChanged: {
+		if (root.typing) Autocorrect.enter(root);
+		else Autocorrect.leave(root);
+	}
+	Component.onDestruction: Autocorrect.leave(root)
 
 	signal accepted
 	signal edited(string text)

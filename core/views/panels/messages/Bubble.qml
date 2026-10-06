@@ -18,6 +18,8 @@ Item {
 	property bool group: false
 	// set for a moment when a quote jumped here
 	property bool flash: false
+	// the mail the answer being written refers to
+	property bool picked: false
 
 	readonly property bool mine: root.message.mine
 	readonly property date when: new Date(root.message.date * 1000)
@@ -28,9 +30,19 @@ Item {
 	readonly property bool whole: root.page !== null && root.message.designed
 	readonly property bool folded: (root.message.signature !== "" && !root.whole) || root.message.quote !== ""
 	property bool expanded: false
+	// what was picked for this mail: its layout (true) or chat text (false); null takes what fits
+	property var choice: null
+	// a layout that would have to shrink is too small to read: where the chat is narrow, mails are chat text
+	readonly property bool fits: !root.message.page || root.message.page.width * 0.85 <= root.width - (root.group ? 36 : 0) - 24
 	// shown as the sender laid it out (a picture) instead of as chat text
-	property bool drawn: true
+	readonly property bool drawn: root.choice ?? root.fits
 	readonly property var page: root.drawn ? (root.message.page ?? null) : null
+	// a bubble that is on the screen asks for its picture, and for its signature's once that is unfolded
+	readonly property bool lacking: root.message.loaded && ((root.drawn && root.message.drawable && !root.message.page)
+		|| (root.expanded && root.message.signatureRich && !root.message.signaturePage))
+
+	onLackingChanged: if (root.lacking) Mail.draw(root.message.id)
+	Component.onCompleted: if (root.lacking) Mail.draw(root.message.id)
 	readonly property real maxWidth: Math.min(620, root.width * 0.74)
 	// a drawn mail is shown pixel for pixel: it gets the width it was drawn at where the chat has it
 	readonly property real sheetWidth: Math.max(root.page?.width ?? 0, root.expanded && !root.whole ? (root.message.signaturePage?.width ?? 0) : 0)
@@ -210,7 +222,7 @@ Item {
 					height: inner.implicitHeight + 16
 					radius: Theme.radius.large
 					color: root.surface
-					border.width: root.flash ? 2 : 0
+					border.width: root.flash || root.picked ? 2 : 0
 					border.color: Theme.primary
 
 					Behavior on border.width {
@@ -588,10 +600,7 @@ Item {
 						implicitWidth: 28
 						implicitHeight: 28
 						icon: root.drawn ? "text" : "image_outline"
-						onClicked: {
-							root.drawn = !root.drawn;
-							if (root.drawn && !root.message.page) Mail.draw(root.message.id);
-						}
+						onClicked: root.choice = !root.drawn
 					}
 
 					IconButton {

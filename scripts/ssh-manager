@@ -9,12 +9,15 @@ import json
 import os
 import pty
 import select
+import shlex
 import shutil
+import stat
 import subprocess
 import sys
 import termios
 import time
 import tty
+import urllib.parse
 import uuid
 from pathlib import Path
 from typing import Any
@@ -31,6 +34,8 @@ SECRET_BACKENDS = (SECRET_BACKEND_SECRET_TOOL, SECRET_BACKEND_OPENSSL_FILE, SECR
 AUTH_PASSWORD = "password"
 AUTH_KEY = "key"
 AUTH_TYPES = (AUTH_PASSWORD, AUTH_KEY)
+# set for the ssh this script starts: it then runs the script as its askpass
+ASKPASS_ENV = "SSH_MANAGER_ASKPASS_ID"
 
 
 class SshManagerError(RuntimeError):
@@ -780,6 +785,179 @@ def run_ssh_session(entry_id: str) -> int:
     return 1
 
 
+def ssh_target(entry: dict[str, Any]) -> str:
+    return f"{entry['user']}@{entry['host']}"
+
+
+def ssh_options(entry: dict[str, Any]) -> list[str]:
+    """Options for ssh and scp when nobody sits at a terminal."""
+    options: list[str] = []
+    if str(entry.get("auth_type") or AUTH_PASSWORD) == AUTH_KEY:
+        options.extend(["-i", validate_identity_file(str(entry.get("identity_file") or ""))])
+        preferred_authentications = "publickey"
+    else:
+        preferred_authentications = "password,keyboard-interactive,publickey"
+    options.extend([
+        "-o",
+        "NumberOfPasswordPrompts=1",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "-o",
+        f"PreferredAuthentications={preferred_authentications}",
+        "-o",
+        "ConnectTimeout=10",
+    ])
+    return options
+
+
+def ssh_env(entry: dict[str, Any]) -> dict[str, str]:
+    """Lets ssh ask this script for the saved password (see answer_askpass)."""
+    env = os.environ.copy()
+    if str(entry.get("auth_type") or AUTH_PASSWORD) == AUTH_PASSWORD:
+        env["SSH_ASKPASS"] = str(SCRIPT_PATH)
+        env["SSH_ASKPASS_REQUIRE"] = "force"
+        env[ASKPASS_ENV] = str(entry["id"])
+    return env
+
+
+def answer_askpass(entry_id: str, prompt: str) -> int:
+    if not any(token.decode() in prompt.lower() for token in PROMPT_TOKENS):
+        return 1
+    entry = find_entry(entry_id)
+    sys.stdout.write(lookup_secret(str(entry["id"]), str(entry.get("secret_backend") or "")) + "\n")
+    return 0
+
+
+def ssh_failure(result: subprocess.CompletedProcess[str], fallback: str) -> str:
+    lines = [line.strip() for line in (result.stderr or "").splitlines() if line.strip()]
+    # the host key notice of a first connection is not the reason
+    lines = [line for line in lines if not line.startswith("Warning: Permanently added")]
+    return lines[-1] if lines else fallback
+
+
+def clean_local_path(value: str) -> str:
+    """A path as it is typed or pasted: quoted, as a file:// URI, with ~."""
+    text = str(value or "").strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in "'\"":
+        text = text[1:-1]
+    if text.startswith("file://"):
+        text = urllib.parse.unquote(text[7:])
+    return text
+
+
+def directory_rows(directory: Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    with os.scandir(directory) as scan:
+        for item in scan:
+            try:
+                info = item.stat()
+            except OSError:
+                continue
+            is_dir = stat.S_ISDIR(info.st_mode)
+            if not is_dir and not stat.S_ISREG(info.st_mode):
+                continue
+            rows.append({"name": item.name, "dir": is_dir, "size": 0 if is_dir else int(info.st_size)})
+    return sort_rows(rows)
+
+
+def sort_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(rows, key=lambda row: (not row["dir"], str(row["name"]).lower()))
+
+
+def list_local(path: str) -> dict[str, Any]:
+    text = clean_local_path(path)
+    target = Path(text).expanduser() if text else Path.home()
+    if not target.is_absolute():
+        target = Path.home() / target
+    target = Path(os.path.normpath(target))
+    # the path of a file opens its folder and names the file
+    selected = ""
+    if target.is_file():
+        selected = str(target)
+        target = target.parent
+    if not target.is_dir():
+        raise SshManagerError(f"Not found: {target}")
+    try:
+        rows = directory_rows(target)
+    except OSError as error:
+        raise SshManagerError(error.strerror or str(error)) from error
+    return {"ok": True, "path": str(target), "selected": selected, "entries": rows}
+
+
+def remote_cd(path: str) -> str:
+    text = str(path or "").strip()
+    if text in ("", "~"):
+        return "cd"
+    if text.startswith("~/"):
+        return f"cd -- ~/{shlex.quote(text[2:])}"
+    return f"cd -- {shlex.quote(text)}"
+
+
+def list_remote(entry_id: str, path: str) -> dict[str, Any]:
+    entry = find_entry(entry_id)
+    # -p marks folders, -L also those behind a link
+    command = f"{remote_cd(path)} && pwd && LC_ALL=C ls -1ApL"
+    result = subprocess.run(
+        ["ssh", "-T", *ssh_options(entry), ssh_target(entry), command],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        errors="replace",
+        env=ssh_env(entry),
+        check=False,
+    )
+    lines = result.stdout.splitlines()
+    # ls fails on a dangling link and still lists the rest
+    if not lines or not lines[0].startswith("/"):
+        raise SshManagerError(ssh_failure(result, "Could not list the folder."))
+    rows = [
+        {"name": line.rstrip("/"), "dir": line.endswith("/"), "size": 0}
+        for line in lines[1:]
+        if line.rstrip("/")
+    ]
+    return {"ok": True, "path": lines[0], "selected": "", "entries": sort_rows(rows)}
+
+
+def send_files(entry_id: str, files: list[str], destination: str) -> dict[str, Any]:
+    entry = find_entry(entry_id)
+    sources: list[str] = []
+    for value in files:
+        source = Path(clean_local_path(value)).expanduser()
+        if not source.is_file():
+            raise SshManagerError(f"Not a file: {source}")
+        sources.append(str(source))
+    if not sources:
+        raise SshManagerError("No file chosen.")
+    folder = str(destination or "").strip()
+    if not folder.startswith("/"):
+        raise SshManagerError("The destination must be a folder on the server.")
+
+    host = str(entry["host"])
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    result = subprocess.run(
+        ["scp", "-q", *ssh_options(entry), "--", *sources, f"{entry['user']}@{host}:{folder.rstrip('/')}/"],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        errors="replace",
+        env=ssh_env(entry),
+        check=False,
+    )
+    if result.returncode != 0:
+        raise SshManagerError(ssh_failure(result, "Could not send the files."))
+    mark_used(str(entry["id"]))
+
+    what = Path(sources[0]).name if len(sources) == 1 else f"{len(sources)} files"
+    return {
+        "ok": True,
+        "entry": public_entry(entry),
+        "message": f"Sent {what} to {entry.get('name') or ssh_target(entry)}.",
+    }
+
+
 def print_payload(payload: dict[str, Any], *, as_json: bool) -> None:
     if as_json:
         print(json.dumps(payload, ensure_ascii=True))
@@ -818,10 +996,32 @@ def parse_args() -> argparse.Namespace:
     session_parser = subparsers.add_parser("session", help="Run an SSH session.")
     session_parser.add_argument("--id", required=True)
 
+    local_parser = subparsers.add_parser("ls-local", help="List a folder of this machine.")
+    local_parser.add_argument("--path", default="")
+    local_parser.add_argument("--json", action="store_true")
+
+    remote_parser = subparsers.add_parser("ls-remote", help="List a folder of an SSH entry.")
+    remote_parser.add_argument("--id", required=True)
+    remote_parser.add_argument("--path", default="")
+    remote_parser.add_argument("--json", action="store_true")
+
+    send_parser = subparsers.add_parser("send", help="Copy files to an SSH entry with scp.")
+    send_parser.add_argument("--id", required=True)
+    send_parser.add_argument("--dest", required=True)
+    send_parser.add_argument("--json", action="store_true")
+    send_parser.add_argument("files", nargs="+")
+
     return parser.parse_args()
 
 
 def main() -> int:
+    askpass_id = os.environ.get(ASKPASS_ENV)
+    if askpass_id:
+        try:
+            return answer_askpass(askpass_id, sys.argv[1] if len(sys.argv) > 1 else "")
+        except SshManagerError:
+            return 1
+
     args = parse_args()
 
     try:
@@ -851,6 +1051,15 @@ def main() -> int:
             return 0
         if args.command == "session":
             return run_ssh_session(args.id)
+        if args.command == "ls-local":
+            print_payload(list_local(args.path), as_json=args.json)
+            return 0
+        if args.command == "ls-remote":
+            print_payload(list_remote(args.id, args.path), as_json=args.json)
+            return 0
+        if args.command == "send":
+            print_payload(send_files(args.id, args.files, args.dest), as_json=args.json)
+            return 0
 
         raise SshManagerError(f"Unsupported command: {args.command}")
     except SshManagerError as error:

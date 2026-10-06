@@ -112,14 +112,31 @@ class Outlook(Provider):
             url = page.get("@odata.nextLink")
         return items
 
-    def batch(self, requests):
+    def batch(self, requests, missing=False):
+        """Carries the requests out together. With `missing`, mails the mailbox no longer has
+        are no failure: their places in `requests` are returned."""
+        gone = []
         for start in range(0, len(requests), 20):
             chunk = [dict(entry, id=str(index), headers={"Content-Type": "application/json"}) for index, entry in enumerate(requests[start:start + 20])]
             answers = self.request("POST", "/$batch", {"requests": chunk}).get("responses", [])
-            failed = next((answer for answer in answers if int(answer.get("status", 200)) >= 400), None)
-            if failed:
-                detail = ((failed.get("body") or {}).get("error") or {}).get("message", "")
-                raise Failure(detail or f"Microsoft Graph: HTTP {failed.get('status')}")
+            for answer in answers:
+                status = int(answer.get("status", 200))
+                if status == 404 and missing:
+                    gone.append(start + int(answer.get("id", 0)))
+                elif status >= 400:
+                    detail = ((answer.get("body") or {}).get("error") or {}).get("message", "")
+                    raise Failure(detail or f"Microsoft Graph: HTTP {status}")
+        return gone
+
+    def change(self, idents, request, **changes):
+        """One request per mail; what went through is kept, a mail that is gone is forgotten."""
+        idents = list(idents)
+        gone = {idents[index] for index in self.batch([request(ident) for ident in idents], missing=True)}
+        for ident in idents:
+            if ident not in gone:
+                self.store.patch(self.id, ident, **changes)
+        if gone:
+            self.store.remove(self.id, sorted(gone))
 
     def connect(self):
         if ms_calendar.token() is None:
@@ -357,33 +374,29 @@ class Outlook(Provider):
 
     # ── actions ─────────────────────────────────────────────────────────
     def set_read(self, idents, value):
-        self.batch([{"method": "PATCH", "url": f"/me/messages/{ident}", "body": {"isRead": bool(value)}} for ident in idents])
-        for ident in idents:
-            self.store.patch(self.id, ident, read=bool(value))
+        self.change(idents, lambda ident: {"method": "PATCH", "url": f"/me/messages/{ident}", "body": {"isRead": bool(value)}}, read=bool(value))
 
     def set_flag(self, idents, value):
-        self.batch([{"method": "PATCH", "url": f"/me/messages/{ident}", "body": {"flag": {"flagStatus": "flagged" if value else "notFlagged"}}} for ident in idents])
-        for ident in idents:
-            self.store.patch(self.id, ident, flagged=bool(value))
+        self.change(idents, lambda ident: {"method": "PATCH", "url": f"/me/messages/{ident}", "body": {"flag": {"flagStatus": "flagged" if value else "notFlagged"}}}, flagged=bool(value))
 
     def move(self, idents, where):
         target = {"archive": "archive", "trash": "deleteditems", "inbox": "inbox"}[where]
-        self.batch([{"method": "POST", "url": f"/me/messages/{ident}/move", "body": {"destinationId": target}} for ident in idents])
-        for ident in idents:
-            self.store.patch(self.id, ident, folder=where)
+        self.change(idents, lambda ident: {"method": "POST", "url": f"/me/messages/{ident}/move", "body": {"destinationId": target}}, folder=where)
 
-    def attach(self, draft_id, path):
+    def attach(self, draft_id, path, cid=None):
+        """Adds a file to the draft; with `cid` as a picture inside the mail."""
         size = os.path.getsize(path)
         name = os.path.basename(path)
+        inside = {"isInline": True, "contentId": cid} if cid else {}
         if size <= INLINE_LIMIT:
             with open(path, "rb") as handle:
                 self.request("POST", f"/me/messages/{draft_id}/attachments", {
                     "@odata.type": "#microsoft.graph.fileAttachment", "name": name, "contentType": file_type(path),
-                    "contentBytes": base64.b64encode(handle.read()).decode(),
+                    "contentBytes": base64.b64encode(handle.read()).decode(), **inside,
                 })
             return
         session = self.request("POST", f"/me/messages/{draft_id}/attachments/createUploadSession", {
-            "AttachmentItem": {"attachmentType": "file", "name": name, "size": size, "contentType": file_type(path)},
+            "AttachmentItem": {"attachmentType": "file", "name": name, "size": size, "contentType": file_type(path), **inside},
         })
         step = 320 * 1024 * 10
         with open(path, "rb") as handle:
@@ -400,55 +413,88 @@ class Outlook(Provider):
                     raise Failure(f"{name}: upload failed (HTTP {error.code})")
                 offset += len(chunk)
 
-    def send(self, draft):
-        written = content.to_html(draft.get("text", "")) + self.signature_html()
+    def discard(self, draft_id):
+        """Nothing half-written stays in the drafts."""
+        try:
+            self.request("DELETE", f"/me/messages/{draft_id}")
+        except Failure:
+            pass
+        self.store.remove(self.id, [draft_id])
+
+    def begin(self, draft):
+        """The mail as a draft in the mailbox, as Outlook will send it: recipients, subject and
+        body with the mails it quotes."""
+        written = self.written(draft)
         mode = draft.get("mode") or "new"
         reply = draft.get("reply")
         fields = {}
         for key, name in (("to", "toRecipients"), ("cc", "ccRecipients"), ("bcc", "bccRecipients")):
             if draft.get(key) is not None:
                 fields[name] = recipients(draft[key])
-        if reply and mode in ("reply", "replyAll", "forward"):
-            verb = {"reply": "createReply", "replyAll": "createReplyAll", "forward": "createForward"}[mode]
-            made = self.request("POST", f"/me/messages/{reply}/{verb}", {})
-            quoted = (made.get("body") or {}).get("content") or ""
-            marker = quoted.lower().find("<body")
-            if marker >= 0:
-                end = quoted.find(">", marker) + 1
-                merged = quoted[:end] + written + quoted[end:]
-            else:
-                merged = written + quoted
-            # a reply keeps the recipients Outlook worked out unless they were changed
-            if mode != "forward":
-                fields = {name: value for name, value in fields.items() if value}
-            fields["body"] = {"contentType": "html", "content": merged}
-            if draft.get("subject") and mode == "forward":
-                fields["subject"] = draft["subject"]
-        else:
+        if not (reply and mode in ("reply", "replyAll", "forward")):
             fields["subject"] = draft.get("subject") or ""
             fields["body"] = {"contentType": "html", "content": f"<html><body>{written}</body></html>"}
-            made = self.request("POST", "/me/messages", fields)
-            fields = None
+            return self.request("POST", "/me/messages", fields)
+        verb = {"reply": "createReply", "replyAll": "createReplyAll", "forward": "createForward"}[mode]
+        made = self.request("POST", f"/me/messages/{reply}/{verb}", {})
+        quoted = (made.get("body") or {}).get("content") or ""
+        marker = quoted.lower().find("<body")
+        if marker >= 0:
+            end = quoted.find(">", marker) + 1
+            merged = quoted[:end] + written + quoted[end:]
+        else:
+            merged = written + quoted
+        # a reply keeps the recipients Outlook worked out unless they were picked
+        if mode != "forward" and not fields.get("toRecipients"):
+            fields = {}
+        fields["body"] = {"contentType": "html", "content": merged}
+        if draft.get("subject") and mode == "forward":
+            fields["subject"] = draft["subject"]
         try:
-            if fields:
-                self.request("PATCH", f"/me/messages/{made['id']}", fields)
+            return self.request("PATCH", f"/me/messages/{made['id']}", fields)
+        except Failure:
+            self.discard(made["id"])
+            raise
+
+    def send(self, draft):
+        made = self.begin(draft)
+        try:
             for path in draft.get("files") or []:
                 self.attach(made["id"], path)
-            # the pictures the signature shows travel inside the mail
-            for cid, path in self.signature_images().items():
-                with open(path, "rb") as handle:
-                    self.request("POST", f"/me/messages/{made['id']}/attachments", {
-                        "@odata.type": "#microsoft.graph.fileAttachment", "name": os.path.basename(path), "contentType": file_type(path),
-                        "contentBytes": base64.b64encode(handle.read()).decode(), "isInline": True, "contentId": cid,
-                    })
+            # the pictures put into the text and the ones the signature shows travel inside the mail
+            for cid, path in {**self.inline_images(draft), **self.signature_images()}.items():
+                self.attach(made["id"], path, cid)
             self.request("POST", f"/me/messages/{made['id']}/send")
         except Failure:
-            # nothing half-written stays in the drafts
-            try:
-                self.request("DELETE", f"/me/messages/{made['id']}")
-            except Failure:
-                pass
+            self.discard(made["id"])
             raise
+
+    def preview(self, draft):
+        made = self.begin(draft)
+        try:
+            html = (made.get("body") or {}).get("content") or ""
+            images = {}
+            # the pictures of the mails quoted below came along into the draft
+            if "cid:" in html.lower():
+                try:
+                    listed = self.request("GET", f"/me/messages/{made['id']}/attachments?$select=id,name,size,contentType,isInline,microsoft.graph.fileAttachment/contentId").get("value", [])
+                except Failure:
+                    listed = []
+                for entry in listed:
+                    cid = entry.get("contentId") or ""
+                    if cid and entry.get("contentType", "").startswith("image/") and f"cid:{cid}".lower() in html.lower() and entry.get("size", 0) < 8 * 1024 * 1024:
+                        try:
+                            images[cid] = str(self.fetch_picture(made["id"], entry, cid))
+                        except Failure:
+                            pass
+            images.update(self.signature_images())
+            images.update(self.inline_images(draft))
+            return {
+                "to": [address(entry) for entry in made.get("toRecipients") or []], "cc": [address(entry) for entry in made.get("ccRecipients") or []],
+                "bcc": [address(entry) for entry in made.get("bccRecipients") or []], "subject": made.get("subject") or "", "html": html, "images": images,
+            }
+        finally:
+            self.discard(made["id"])
 
     # ── around the mails ────────────────────────────────────────────────
     def search(self, query):

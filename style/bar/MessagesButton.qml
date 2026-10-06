@@ -10,7 +10,8 @@ BarButton {
 	panelId: "messages"
 	tooltip: Messages.unread > 0 ? `${Messages.unread} unread` : "Messages"
 	padding: 9
-	onClicked: toggle()
+	// popped out, the button brings up and puts away the window
+	onClicked: Messages.windowed ? Messages.toggle() : toggle()
 
 	Item {
 		anchors.verticalCenter: parent.verticalCenter

@@ -12,10 +12,13 @@ Rectangle {
 	implicitWidth: Math.max(16, label.implicitWidth + 9)
 	radius: height / 2
 	color: root.accent
-	scale: root.count > 0 ? 1 : 0
+	// there or not, and the bump on top of it: a bump that is still running must not bring back a badge that left
+	property real shown: root.count > 0 ? 1 : 0
+	property real bumped: 1
+	scale: root.shown * root.bumped
 	visible: scale > 0.01
 
-	Behavior on scale {
+	Behavior on shown {
 		SpatialAnim {
 			duration: Motion.medium
 		}
@@ -28,14 +31,14 @@ Rectangle {
 
 		NumberAnimation {
 			target: root
-			property: "scale"
+			property: "bumped"
 			to: 1.3
 			duration: Motion.micro
 			easing.type: Easing.OutCubic
 		}
 		NumberAnimation {
 			target: root
-			property: "scale"
+			property: "bumped"
 			to: 1
 			duration: Motion.medium
 			easing.type: Easing.BezierSpline

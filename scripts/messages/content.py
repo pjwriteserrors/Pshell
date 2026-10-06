@@ -502,3 +502,118 @@ def to_html(text):
         escaped = URL.sub(lambda match: f'<a href="{match.group(1) if match.group(1).lower().startswith("http") else "https://" + match.group(1)}">{match.group(1)}</a>', escaped)
         lines.append(escaped or "&nbsp;")
     return "".join(f"<div>{line}</div>" for line in lines)
+
+
+class Editor(HTMLParser):
+    """What the field a mail is written in holds (Qt's rich text), as the HTML a mail carries.
+
+    A paragraph becomes a line, bold, italic and underlined runs keep their
+    look, and a picture in the text is named by a content id: `pictures`
+    says which file each one is.
+    """
+
+    def __init__(self, width):
+        super().__init__(convert_charrefs=True)
+        self.out = []
+        self.open = []
+        self.pictures = {}
+        self.width = width
+        self.skip = 0
+        self.link = 0
+        # the paragraph that is open and whether anything stands in it
+        self.line = None
+
+    def start(self):
+        if self.line is None:
+            self.out.append("<div>")
+            self.line = False
+
+    def end(self):
+        if self.line is not None:
+            self.out.append("</div>" if self.line else "<br></div>")
+            self.line = None
+
+    def handle_starttag(self, tag, attrs):
+        attrs = {name.lower(): value or "" for name, value in attrs}
+        if tag in ("head", "style", "script", "title"):
+            self.skip += 1
+            return
+        if self.skip or tag in ("html", "body", "meta"):
+            return
+        if tag in ("p", "div", "li", "ul", "ol"):
+            self.end()
+            if tag in ("ul", "ol"):
+                self.out.append(f"<{tag}>")
+            elif tag == "li":
+                self.out.append("<li>")
+                self.line = True
+                self.open.append(["li"])
+            else:
+                self.start()
+            return
+        self.start()
+        if tag == "br":
+            # the break Qt puts into an empty paragraph is the paragraph's own
+            if self.line:
+                self.out.append("<br>")
+        elif tag == "img":
+            source = attrs.get("src", "")
+            if source.startswith("file://"):
+                path = source[7:]
+                cid = next((cid for cid, known in self.pictures.items() if known == path), None) or f"inline{len(self.pictures)}@pshell"
+                self.pictures[cid] = path
+                self.out.append(f'<img src="cid:{cid}" width="{self.width(path)}" style="max-width:100%">')
+                self.line = True
+        elif tag == "a" and re.match(r"(?:https?:|mailto:|tel:)", attrs.get("href", ""), re.I):
+            self.out.append(f'<a href="{htmllib.escape(attrs["href"], quote=True)}">')
+            self.open.append(["a"])
+            self.link += 1
+        elif tag in ("span", "b", "strong", "i", "em", "u", "a"):
+            style = attrs.get("style", "").replace(" ", "").lower()
+            weight = re.search(r"font-weight:(\d+|bold)", style)
+            marks = [mark for mark, wanted in (
+                ("b", tag in ("b", "strong") or (weight is not None and (weight.group(1) == "bold" or int(weight.group(1)) >= 600))),
+                ("i", tag in ("i", "em") or "font-style:italic" in style),
+                ("u", tag == "u" or "text-decoration:underline" in style),
+            ) if wanted]
+            self.out.extend(f"<{mark}>" for mark in marks)
+            self.open.append(marks)
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)
+
+    def handle_endtag(self, tag):
+        if tag in ("head", "style", "script", "title"):
+            self.skip = max(0, self.skip - 1)
+        elif self.skip:
+            return
+        elif tag in ("p", "div"):
+            self.end()
+        elif tag in ("ul", "ol"):
+            self.out.append(f"</{tag}>")
+        elif tag in ("li", "span", "b", "strong", "i", "em", "u", "a") and self.open:
+            marks = self.open.pop()
+            if marks == ["a"]:
+                self.link -= 1
+            if marks == ["li"]:
+                self.line = None
+            self.out.extend(f"</{mark}>" for mark in reversed(marks))
+
+    def handle_data(self, data):
+        if self.skip or (self.line is None and not data.strip()):
+            return
+        self.start()
+        escaped = htmllib.escape(data.replace("\n", " "), quote=False).replace("  ", "&nbsp; ")
+        if not self.link:
+            escaped = URL.sub(lambda match: f'<a href="{match.group(1) if match.group(1).lower().startswith("http") else "https://" + match.group(1)}">{match.group(1)}</a>', escaped)
+        self.out.append(escaped)
+        self.line = True
+
+
+def from_editor(markup, width=lambda path: 320):
+    """(HTML, {content id: file}) of what was written in the shell's own field."""
+    editor = Editor(width)
+    editor.feed(str(markup or ""))
+    editor.close()
+    editor.end()
+    return "".join(editor.out), editor.pictures

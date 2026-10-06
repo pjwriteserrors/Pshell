@@ -95,7 +95,12 @@ Item {
 	implicitWidth: root.page?.width ?? 0
 	implicitHeight: root.page ? Math.ceil(root.page.height * root.factor) : 0
 
-	onPageChanged: {
+	// The chat is handed over anew whenever anything in it changes, the same picture
+	// with it: only another picture is another text. (Its words are read once, so
+	// dropping them for the same picture left nothing to mark.)
+	readonly property string image: root.page?.image ?? ""
+
+	onImageChanged: {
 		root.clear();
 		root.words = [];
 	}
@@ -121,7 +126,7 @@ Item {
 	}
 
 	FileView {
-		path: root.wanted && root.page?.text ? root.page.text : ""
+		path: root.wanted && root.image !== "" ? (root.page?.text ?? "") : ""
 		printErrors: false
 		onLoaded: {
 			try {

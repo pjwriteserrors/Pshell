@@ -12,15 +12,17 @@ state) runs on a thread of its own:
 Commands ({"cmd": …}):
   open chat [read]      a chat's mails, bodies loaded; marks them read
   read|flag chat value  · archive|delete chat · deleteMessage id
-  send {account, mode, reply, to, cc, bcc, subject, text, files, req}
+  close                 no chat is looked at any more
+  send {account, mode, reply, to, cc, bcc, subject, text, html, files, images, req}
+  preview {…as send}    the mail as it would arrive, drawn on white, unsent
   attachment {message, attachment, action: open|save} · original {message}
   search query · older · refresh · settings
   addAccount {kind, …} · removeAccount id · signature {account, text}
   suggestSignature account · autoReply {account, enabled, text}
   login · cancelLogin   Microsoft's device code sign-in
 
-Events ({"event": …}): accounts, chats, chat, incoming, sent, search, login,
-signature, saved, error.
+Events ({"event": …}): accounts, chats, chat, incoming, sent, preview, search,
+login, signature, saved, error.
 """
 
 from __future__ import annotations
@@ -122,6 +124,7 @@ class Worker(threading.Thread):
         arrived = self.provider.sync()
         self.set_state("ok")
         self.owner.publish()
+        self.owner.follow(self)
         for message in arrived:
             emit("incoming", chat=f"{message['account']}|{message['chat']}", account=message["account"],
                  name=message["from"]["name"], email=message["from"]["email"], subject=content.clean_subject(message["subject"]), preview=message.get("preview", ""))
@@ -162,6 +165,10 @@ class Daemon:
         self.sent_chats = ""
         self.login_stop = None
         self.opened = ""
+        # what the panel was last told of the chat it looks at
+        self.told = None
+        # mails whose picture is asked for and not made yet
+        self.drawing = set()
 
     # ── accounts ────────────────────────────────────────────────────────
     def load(self):
@@ -196,6 +203,8 @@ class Daemon:
             worker = self.workers.get(account["id"])
             accounts.append({
                 "id": account["id"], "kind": account["kind"], "address": account.get("address", ""), "name": account.get("name", ""),
+                # every address that is the account's own
+                "own": sorted(worker.provider.own) if worker else [],
                 "signature": account.get("signature", ""),
                 # a signature with a layout of its own, as the shell draws it
                 "signatureRich": signature_preview(account.get("signatureHtml", ""), account.get("signatureImages")),
@@ -365,10 +374,31 @@ class Daemon:
                     "text": content.preview((parent.get("body") or {}).get("text") or parent.get("preview", ""), 160),
                 },
             })
+        if self.opened == f"{worker.account['id']}|{key}":
+            self.told = self.mark(stored)
         event = {"id": f"{worker.account['id']}|{key}", "messages": out}
         if tips is not None:
             event["tips"] = tips
         emit("chat", **event)
+
+    @staticmethod
+    def mark(mails):
+        return [(message["id"], message["read"], message.get("flagged", False), message["folder"], "body" in message) for message in mails]
+
+    def follow(self, worker):
+        """The chat that is looked at shows what the mailbox brought since: a mail that arrived, one read elsewhere."""
+        if not self.opened.startswith(worker.account["id"] + "|"):
+            return
+        key = self.opened.partition("|")[2]
+        mails = self.store.chat_messages(worker.account["id"], key)
+        if self.mark(mails) == self.told:
+            return
+        if any("body" not in message for message in mails):
+            try:
+                worker.provider.load(key)
+            except Failure:
+                pass
+        self.chat_event(worker, key)
 
     def open(self, worker, key, read):
         ident = f"{worker.account['id']}|{key}"
@@ -390,23 +420,23 @@ class Daemon:
         if avatars:
             emit("avatars", avatars=avatars)
         self.chat_event(worker, key, tips)
-        self.dress(worker, key)
 
-    def dress(self, worker, key):
-        """Draws what the open chat shows as it was laid out, in the palette the shell wears now."""
-        ident = f"{worker.account['id']}|{key}"
-        mails = self.store.chat_messages(worker.account["id"], key)
-        if any([worker.provider.restyle(message["id"]) for message in mails]):
+    def draw(self, worker, key, ident):
+        """One mail as it was laid out, and its signature, in the palette the shell wears now.
+
+        The panel asks for the mails it shows, so a long chat or a new
+        palette costs what is looked at, not everything.
+        """
+        try:
+            changed = worker.provider.restyle(ident)
+            try:
+                changed = worker.provider.draw(ident) or changed
+            except Failure:
+                pass
+        finally:
+            self.drawing.discard((worker.account["id"], ident))
+        if changed and self.opened == f"{worker.account['id']}|{key}":
             self.chat_event(worker, key)
-        # every mail as it was laid out, the newest (the ones in view) first
-        for message in reversed(mails):
-            body = (self.store.message(worker.account["id"], message["id"]) or {}).get("body") or {}
-            if body.get("pageSource") and not render.current(body.get("page")) and self.opened == ident:
-                try:
-                    worker.provider.draw(message["id"])
-                except Failure:
-                    continue
-                self.chat_event(worker, key)
 
     def chat_ids(self, worker, key, received=False):
         mails = self.store.chat_messages(worker.account["id"], key)
@@ -417,6 +447,13 @@ class Daemon:
         if name == "open":
             worker, key = self.split(command["chat"])
             worker.do(self.open, worker, key, bool(command.get("read")))
+        elif name == "close":
+            self.opened, self.told = "", None
+        elif name == "preview":
+            worker = self.workers.get(command.get("account"))
+            if worker is None:
+                raise Failure("The account is gone")
+            worker.do(self.preview, worker, command)
         elif name == "read":
             worker, key = self.split(command["chat"])
             worker.do(self.then_publish, worker, key, lambda: worker.provider.set_read(self.chat_ids(worker, key, received=True), bool(command.get("value"))))
@@ -444,13 +481,18 @@ class Daemon:
         elif name == "theme":
             # the shell changed its colours: what is on the screen follows
             if render.set_theme(command):
-                self.publish_accounts()
+                # the signatures in the settings are drawn off this thread, which listens
+                threading.Thread(target=self.publish_accounts, daemon=True).start()
                 if self.opened:
+                    # the pictures of the old palette leave; the panel asks for the ones it shows
                     worker, key = self.split(self.opened)
-                    worker.do(self.dress, worker, key)
+                    worker.do(self.chat_event, worker, key)
         elif name == "draw":
             worker, key = self.split(command["chat"])
-            worker.do(self.then_publish, worker, key, lambda: worker.provider.draw(command["message"]))
+            wanted = (worker.account["id"], command["message"])
+            if wanted not in self.drawing:
+                self.drawing.add(wanted)
+                worker.do(self.draw, worker, key, command["message"])
         elif name == "original":
             worker, _key = self.split(command["chat"])
             worker.do(self.original, worker, command["message"])
@@ -516,12 +558,36 @@ class Daemon:
             if key is not None and self.opened == f"{worker.account['id']}|{key}":
                 self.chat_event(worker, key)
 
+    @staticmethod
+    def check_files(worker, command):
+        for path in [*(command.get("files") or []), *worker.provider.inline_images(command).values()]:
+            if not os.path.isfile(path):
+                raise Failure(f"{os.path.basename(path)}: no such file")
+
+    def preview(self, worker, command):
+        """The mail as it would reach who it goes to: everything in it, the quoted mails below
+        included, drawn on white paper. Nothing is sent."""
+        request = command.get("req", 0)
+        try:
+            self.check_files(worker, command)
+            mail = worker.provider.preview(command)
+            folder = storage.files_dir(worker.account["id"], "preview")
+            # the pictures of earlier looks
+            for old in folder.glob("page-*"):
+                if time.time() - old.stat().st_mtime > 600:
+                    old.unlink(missing_ok=True)
+            source = folder / "page.html"
+            source.write_text(render.page_source(mail["html"], mail["images"]))
+            page = render.render(source, folder / f"page-{request}.png", plain=True)
+        except (Failure, RuntimeError, OSError) as error:
+            emit("preview", req=request, ok=False, error=str(error)[:200])
+            return
+        emit("preview", req=request, ok=True, to=mail["to"], cc=mail["cc"], bcc=mail["bcc"], subject=mail["subject"], page=page)
+
     def send(self, worker, command):
         request = command.get("req", 0)
         try:
-            for path in command.get("files") or []:
-                if not os.path.isfile(path):
-                    raise Failure(f"{os.path.basename(path)}: no such file")
+            self.check_files(worker, command)
             worker.provider.send(command)
         except Failure as error:
             emit("sent", req=request, ok=False, error=str(error))

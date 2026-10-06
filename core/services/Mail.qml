@@ -18,7 +18,7 @@ Singleton {
 	readonly property bool notifies: Plugins.on("mail-notifications")
 	readonly property bool running: daemon.running
 
-	// [{ id, kind, address, name, signature, state, error, autoReply }]
+	// [{ id, kind, address, name, own: [address], signature, state, error, autoReply }]
 	// state: "connecting" | "syncing" | "ok" | "error" | "signedOut"
 	property var accounts: []
 	property bool known: false
@@ -51,11 +51,37 @@ Singleton {
 	property string loginError: ""
 
 	property int request: 0
-	property bool sending: false
+	// what is wrong with the mailbox, in a few words, or ""
+	readonly property string trouble: {
+		if (!root.enabled || !root.known) return "";
+		const broken = root.accounts.find(account => account.state === "error" || account.state === "signedOut");
+		if (!broken) return "";
+		return broken.state === "signedOut" ? `${broken.address}: signed out` : (broken.error || `${broken.address}: not reachable`);
+	}
+
+	// What is being written, by chat ("new" for a new one), kept across restarts:
+	// { html, files } and for a new chat { to, cc, bcc, subject } as well
+	property var drafts: ({})
+
+	// Mails on their way. One waits a few seconds first, so it can be taken back;
+	// one that could not be sent stays until it is sent again or taken back.
+	// [{ id, key, draft, written, text, state: "waiting" | "sending" | "sent" | "failed", error, at, req, mine }]
+	property var outbox: []
+	readonly property int grace: 8000
+	readonly property bool sending: root.outbox.some(entry => entry.state === "sending")
+	// ticks while something waits
+	property real now: Date.now()
+
+	// Chats put away until later: { id: when they come back, in ms }
+	property var snoozed: ({})
+
+	// a mail was taken back: what was written is in drafts[key] again
+	signal undone(string key)
 	property bool adding: false
 	property string accountError: ""
 
-	signal sent(int request, bool ok, string error)
+	// mail: { to, cc, bcc: [{ name, email }], subject, page } – or { error }
+	signal previewed(int request, bool ok, var mail)
 	signal accountAdded(string id)
 	// what the account's last sent mails end with; `rich` when it has a layout of its own
 	// rich: { rich, page } – what Qt draws of it, and its picture
@@ -85,12 +111,23 @@ Singleton {
 		root.openId = "";
 		root.messages = [];
 		root.tips = {};
+		root.command("close");
+	}
+
+	// whether the address is one of the account's own
+	function own(id, email) {
+		const account = root.account(id);
+		return account !== null && (account.address === email || (account.own ?? []).includes(email));
+	}
+
+	function nameOf(email) {
+		return root.people.find(person => person.email === email)?.name ?? email;
 	}
 
 	// from a notification or a command: the panel with the chat in it
 	function show(id) {
 		root.open(id);
-		Popups.withFocusedScreen(screen => Popups.open("messages", screen));
+		Messages.open("chat");
 	}
 
 	function setRead(id, value) {
@@ -115,12 +152,102 @@ Singleton {
 		root.command("deleteMessage", { chat: root.openId, id: id });
 	}
 
-	// draft: { account, mode, reply, to, cc, bcc, subject, text, files }
-	function send(draft) {
+	// the draft as it would reach who it goes to, drawn and unsent; answered by previewed()
+	function preview(draft) {
 		root.request += 1;
-		root.sending = true;
-		root.command("send", Object.assign({ req: root.request }, draft));
+		root.command("preview", Object.assign({ req: root.request }, draft));
 		return root.request;
+	}
+
+	// ── drafts ───────────────────────────────────────────────────────────
+	function keep(key, written) {
+		const next = Object.assign({}, root.drafts);
+		if (written) next[key] = written;
+		else if (next[key] === undefined) return;
+		else delete next[key];
+		root.drafts = next;
+		save.restart();
+	}
+
+	// ── outbox ───────────────────────────────────────────────────────────
+	// draft: { account, mode, reply, to, cc, bcc, subject, text, html, files }
+	// key: the chat it is written in, or "new"; written: what the field held; text: how it begins
+	function post(key, draft, written, text) {
+		const id = `${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+		const mine = key === root.openId ? root.messages.filter(message => message.mine).length : -1;
+		root.outbox = root.outbox.concat([{ id: id, key: key, draft: draft, written: written, text: text, state: "waiting", error: "", at: Date.now(), req: 0, mine: mine }]);
+		root.keep(key, null);
+		root.now = Date.now();
+		save.restart();
+		return id;
+	}
+
+	function change(id, changes) {
+		root.outbox = root.outbox.map(entry => entry.id === id ? Object.assign({}, entry, changes) : entry);
+		save.restart();
+	}
+
+	function forget(id) {
+		root.outbox = root.outbox.filter(entry => entry.id !== id);
+		save.restart();
+	}
+
+	// now, without waiting any longer; also: once more
+	function dispatch(id) {
+		const entry = root.outbox.find(entry => entry.id === id);
+		if (!entry || entry.state === "sending" || entry.state === "sent") return;
+		if (!daemon.running) {
+			root.change(id, { state: "failed", error: "Mail is not running" });
+			return;
+		}
+		root.request += 1;
+		root.change(id, { state: "sending", error: "", req: root.request });
+		root.command("send", Object.assign({ req: root.request }, entry.draft));
+	}
+
+	// taken back: it is a draft again
+	function undo(id) {
+		const entry = root.outbox.find(entry => entry.id === id);
+		if (!entry || entry.state === "sending" || entry.state === "sent") return;
+		root.forget(id);
+		root.keep(entry.key, entry.written);
+		root.undone(entry.key);
+	}
+
+	function delivered(request, ok, error) {
+		const entry = root.outbox.find(entry => entry.req === request && entry.state === "sending");
+		if (!entry) return;
+		if (!ok) root.change(entry.id, { state: "failed", error: error || "Not sent" });
+		// in its chat it stays until the mailbox shows it
+		else if (entry.key === root.openId && entry.mine >= 0) root.change(entry.id, { state: "sent", at: Date.now() });
+		else root.forget(entry.id);
+	}
+
+	// ── later ────────────────────────────────────────────────────────────
+	function snooze(id, until) {
+		const next = Object.assign({}, root.snoozed);
+		next[id] = until;
+		root.snoozed = next;
+		save.restart();
+		if (root.openId === id) root.close();
+	}
+
+	// back among the chats; `unread`: as something new
+	function wake(id, unread) {
+		if (root.snoozed[id] === undefined) return;
+		const next = Object.assign({}, root.snoozed);
+		delete next[id];
+		root.snoozed = next;
+		save.restart();
+		if (unread && root.chats.some(chat => chat.id === id)) root.setRead(id, false);
+	}
+
+	function store() {
+		kept.setText(JSON.stringify({
+			drafts: root.drafts,
+			outbox: root.outbox.filter(entry => entry.state !== "sent"),
+			snoozed: root.snoozed
+		}, null, "\t") + "\n");
 	}
 
 	function openAttachment(message, attachment) {
@@ -220,6 +347,10 @@ Singleton {
 		case "chat":
 			if (data.id !== root.openId) break;
 			root.messages = data.messages ?? [];
+			// what was sent from here has arrived in its chat
+			const own = root.messages.filter(message => message.mine).length;
+			if (root.outbox.some(entry => entry.state === "sent" && entry.key === data.id && own > entry.mine))
+				root.outbox = root.outbox.filter(entry => !(entry.state === "sent" && entry.key === data.id && own > entry.mine));
 			if (data.tips !== undefined) {
 				root.tips = data.tips;
 				root.loading = false;
@@ -232,8 +363,10 @@ Singleton {
 			root.arrived(data);
 			break;
 		case "sent":
-			root.sending = false;
-			root.sent(data.req ?? 0, data.ok === true, data.error ?? "");
+			root.delivered(data.req ?? 0, data.ok === true, data.error ?? "");
+			break;
+		case "preview":
+			root.previewed(data.req ?? 0, data.ok === true, data.ok === true ? data : { error: data.error ?? "" });
 			break;
 		case "search":
 			if (data.query !== root.searched) break;
@@ -280,9 +413,11 @@ Singleton {
 	}
 
 	function arrived(mail) {
+		// an answer brings a chat back at once
+		root.wake(mail.chat, false);
 		if (!root.notifies || Notifs.dnd) return;
 		// the chat on the screen shows it already
-		if (Popups.current === "messages" && root.openId === mail.chat) return;
+		if (Messages.shown && root.openId === mail.chat) return;
 		Notifs.pushInternal("running", mail.name, mail.preview ? `${mail.subject}\n${mail.preview}` : mail.subject, {
 			icon: "email_outline",
 			image: root.avatars[mail.email] ?? "",
@@ -315,7 +450,7 @@ Singleton {
 	Timer {
 		id: palette
 
-		interval: 400
+		interval: 1500
 		onTriggered: root.dress()
 	}
 
@@ -337,9 +472,60 @@ Singleton {
 			onRead: line => root.handle(line)
 		}
 		onExited: {
-			root.sending = false;
+			root.outbox = root.outbox.map(entry => entry.state === "sending" ? Object.assign({}, entry, { state: "failed", error: "Not sent" }) : entry);
 			root.loading = false;
 			if (root.enabled) revive.restart();
+		}
+	}
+
+	// what waits is sent when its time is up, what was sent leaves after a while
+	Timer {
+		interval: 200
+		repeat: true
+		running: root.outbox.some(entry => entry.state === "waiting" || entry.state === "sent")
+		onTriggered: {
+			root.now = Date.now();
+			for (const entry of root.outbox) {
+				if (entry.state === "waiting" && root.now - entry.at >= root.grace) root.dispatch(entry.id);
+				else if (entry.state === "sent" && root.now - entry.at > 30000) root.forget(entry.id);
+			}
+		}
+	}
+
+	// chats put away come back as unread when their time is up
+	Timer {
+		interval: 20000
+		repeat: true
+		running: root.enabled && Object.keys(root.snoozed).length > 0
+		triggeredOnStart: true
+		onTriggered: {
+			if (!root.known || root.chats.length === 0) return;
+			for (const id of Object.keys(root.snoozed))
+				if (root.snoozed[id] <= Date.now()) root.wake(id, true);
+		}
+	}
+
+	Timer {
+		id: save
+
+		interval: 400
+		onTriggered: root.store()
+	}
+
+	FileView {
+		id: kept
+
+		path: Paths.stateFile("mail-kept.json")
+		blockLoading: true
+		printErrors: false
+		onLoaded: {
+			try {
+				const data = JSON.parse(String(text() || "{}"));
+				root.drafts = data.drafts ?? {};
+				root.snoozed = data.snoozed ?? {};
+				// what did not go out before the shell left is not sent behind the user's back
+				root.outbox = (data.outbox ?? []).map(entry => Object.assign({}, entry, { state: "failed", error: entry.error || "Not sent" }));
+			} catch (error) {}
 		}
 	}
 

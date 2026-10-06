@@ -526,7 +526,7 @@ class Imap(Provider):
         text = draft.get("text", "")
         signature = str(self.account.get("signature") or "").strip()
         plain = text + (f"\n\n-- \n{signature}" if signature else "")
-        rich = content.to_html(text) + self.signature_html()
+        rich = self.written(draft)
         if origin is not None and mode in ("reply", "replyAll"):
             if not to:
                 to = [entry["email"] for entry in (origin["to"] if origin["mine"] else [origin["from"]])]
@@ -560,7 +560,7 @@ class Imap(Provider):
         mail.set_content(plain)
         mail.add_alternative(f"<html><body>{rich}</body></html>", subtype="html")
         # the pictures the signature shows travel inside the mail
-        for cid, path in self.signature_images().items():
+        for cid, path in {**self.inline_images(draft), **self.signature_images()}.items():
             main, _, sub = file_type(path).partition("/")
             with open(path, "rb") as handle:
                 mail.get_payload()[-1].add_related(handle.read(), maintype=main, subtype=sub or "png", cid=f"<{cid}>", filename=path.rsplit("/", 1)[-1])
@@ -578,6 +578,18 @@ class Imap(Provider):
         if not everyone:
             raise Failure("No recipient")
         return mail, everyone
+
+    def preview(self, draft):
+        mail, _everyone = self.compose(draft)
+
+        def named(header):
+            return [person(name, address) for name, address in email.utils.getaddresses([str(mail.get(header) or "")]) if address]
+
+        return {
+            "to": named("To"), "cc": named("Cc"), "bcc": [person("", address) for address in draft.get("bcc") or []],
+            "subject": str(mail.get("Subject") or ""), "html": mail.get_body(("html",)).get_content(),
+            "images": {**self.signature_images(), **self.inline_images(draft)},
+        }
 
     def send(self, draft):
         mail, everyone = self.compose(draft)

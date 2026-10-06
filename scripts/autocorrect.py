@@ -11,17 +11,24 @@ types it right through a keyboard of its own (uinput):
 
   typos and spelling       teh → the, vieleicht → vielleicht, strasse → Straße
   capitals                 the start of a sentence, German nouns, I, HAllo
-  punctuation              two spaces end the sentence, no space before , . ! ?
+  punctuation              two spaces end the sentence, no space before , . ! ?,
+                           the comma in front of dass, weil, ob, wenn …
 
 Backspace right after a correction brings back what was typed, and a word
 whose spelling was brought back is left alone from then on (autocorrect.json
 in the shell's state). Nothing else that is typed is ever stored or sent
 anywhere.
 
+A correction can be animated: other letters stand in place of the word for a
+moment (scramble, decode), or it is taken back and typed letter by letter
+(typewriter). It is all typed, a text field shows nothing else, and what is
+typed on in the meantime ends the animation and is put behind the word again.
+
 It cannot see the text field, only the keys. So it only touches the word that
 was just typed, forgets everything on a click, a shortcut or a cursor key, and
 never changes a word that is not followed by a space (a password, a command).
-The shell tells it on stdin where typing may be corrected: {"active": bool}.
+The shell tells it on stdin where typing may be corrected and how:
+{"active": bool, "animations": [name, …]} (one of several is picked each time).
 """
 
 from __future__ import annotations
@@ -29,7 +36,9 @@ from __future__ import annotations
 import ctypes
 import ctypes.util
 import json
+import math
 import os
+import random
 import re
 import selectors
 import subprocess
@@ -47,6 +56,10 @@ USAGE = "https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/cont
 # seconds between two typed keys of a correction; none, so that no key of the
 # real keyboard gets in between
 KEY_DELAY = 0.0
+# the animations of a correction, and the seconds one picture of each stands
+ANIMATIONS = {"scramble": 0.04, "decode": 0.035, "typewriter": 0.03}
+# pictures of an animation at most: it is over before the next word is
+PICTURES = 8
 # how much of the text in front of the cursor is followed
 MEMORY = 240
 
@@ -89,6 +102,18 @@ im am zum zur vom beim ins ans aufs fürs ums viel viele vielen wenig wenige ein
 SINGULAR = set("ein einem einen eines kein keinem keinen mein meinem meinen dein deinem deinen unserem dem im am zum beim vom ins".split())
 # a verb follows these
 SUBJECTS = {"ich", "du", "er", "sie", "es", "wir", "man", "zu", "nicht"}
+# a subordinate clause starts with these: a comma in front
+COMMA = set("""
+dass weil obwohl ob sodass falls wenn bevor nachdem sobald solange obgleich indem wohingegen
+wieso weshalb weswegen warum
+""".split())
+# unless one of these stands in front: the comma belongs before it (nur weil,
+# als ob, kurz bevor) or nowhere (und dass)
+NO_COMMA = COMMA | set("""
+und oder aber sondern denn doch nur auch als so erst selbst sogar besonders insbesondere außer ausser
+sowie bzw kurz lange noch gleich immer allem je gerade eben schon zumal zwar ohne statt anstatt wie
+einfach bloß allein eher genau ja na
+""".split())
 # rows of the keyboard: a finger lands on the key next to the one it was meant for
 ROWS = ("qwertzuiopü", "asdfghjklöä", "yxcvbnm")
 
@@ -491,11 +516,14 @@ class Corrector:
 # ── the text in front of the cursor ──────────────────────────────────────────
 
 class Edit:
-    """Take back `delete` characters, then type `text`."""
+    """Take back `delete` characters, then type `text`. `kept` stands in
+    front and stays, `gone` is what is taken back."""
 
-    def __init__(self, delete: int, text: str):
+    def __init__(self, delete: int, text: str, kept: str = "", gone: str = ""):
         self.delete = delete
         self.text = text
+        self.kept = kept
+        self.gone = gone
 
     def __repr__(self):
         return f"Edit({self.delete}, {self.text!r})"
@@ -506,7 +534,84 @@ def replace(before: str, after: str) -> Edit:
     same = 0
     while same < min(len(before), len(after)) and before[same] == after[same]:
         same += 1
-    return Edit(len(before) - same, after[same:])
+    return Edit(len(before) - same, after[same:], after[:same], before[same:])
+
+
+# ── animations ───────────────────────────────────────────────────────────────
+
+def pictures(name: str, old: str, word: str, letters: str, rng=random) -> list[str]:
+    """What stands in place of `old` before `word` does, one picture after the other."""
+
+    def noise(start: int) -> str:
+        return "".join(rng.choice(letters).upper() if char.isupper() else rng.choice(letters) for char in word[start:])
+
+    if name == "typewriter":
+        shown = [old[:length] for length in range(len(old) - 1, -1, -1)] + [word[:length] for length in range(1, len(word))]
+    elif name == "decode":
+        shown = [word[:length] + noise(length) for length in range(len(word))]
+    else:
+        shown = [noise(0) for _ in range(5)]
+    return shown[::math.ceil(len(shown) / PICTURES)]
+
+
+class Stand:
+    """Where an animation stands (see landed)."""
+
+    def __init__(self, screen: str, wanted: str, more: str, cut: bool, shift: bool):
+        # what stands there, from the start of what the edit keeps
+        self.screen = screen
+        # what should stand there in the end
+        self.wanted = wanted
+        # what was typed behind it since
+        self.more = more
+        # Backspace took something of the correction itself
+        self.cut = cut
+        # Shift is held
+        self.shift = shift
+
+
+def landed(edit: Edit, typed: list[tuple[float, Edit]], keys: list, faces: dict[tuple[int, bool], str]) -> Stand | None:
+    """Where an animation stands with the keys of the real keyboard that got into it.
+
+    `typed` is what the animation typed and when, `keys` what was pressed
+    since it began. None when a key did more than type or take back a
+    character: what is on the screen is unknown then.
+    """
+    steps = sorted([(when, 0, step) for when, step in typed] + [(key.timestamp(), 1, key) for key in keys], key=lambda step: step[:2])
+    screen = list(edit.kept + edit.gone)
+    wanted = list(edit.kept + edit.text)
+    more: list[str] = []
+    cut = False
+    shift = 0
+    for _, real, step in steps:
+        if not real:
+            if step.delete > len(screen):
+                return None
+            screen[len(screen) - step.delete:] = step.text
+        elif step.code in (42, 54):
+            shift = max(0, shift + {0: -1, 1: 1}.get(step.value, 0))
+        elif step.code in MODIFIERS or step.code >= 0x100 or step.value == 2:
+            return None
+        elif step.value == 0:
+            continue
+        elif step.code == BACKSPACE:
+            # with nothing there it is the start of the field, as far as anyone knows
+            if screen:
+                screen.pop()
+            if wanted:
+                wanted.pop()
+            if more:
+                more.pop()
+            else:
+                cut = True
+        else:
+            char = faces.get((step.code, shift > 0))
+            if not char:
+                return None
+            screen.append(char)
+            wanted.append(char)
+            more.append(char)
+    return Stand("".join(screen), "".join(wanted), "".join(more), cut, shift > 0)
 
 
 class Typist:
@@ -622,10 +727,20 @@ class Typist:
         fixed = self.corrector.word(core, opens, self.context(before))
         if not lead and not trail:
             self.last = (core, fixed or core)
-        if fixed is None:
+        comma = not lead and self.comma(before, fixed or core)
+        if fixed is None and not comma:
             return None
-        learned = core.lower() if fixed.lower() != core.lower() else None
+        learned = core.lower() if fixed and fixed.lower() != core.lower() else None
+        if comma:
+            return self.apply(before[-1:] + token + " ", ", " + (fixed or core) + trail + " ", learned)
         return self.apply(token + " ", lead + fixed + trail + " ", learned)
+
+    def comma(self, before: str, word: str) -> bool:
+        """Whether a comma belongs in front of the word: it opens a subordinate clause."""
+        if word not in COMMA or not before.endswith(" ") or self.corrector.writing("en"):
+            return False
+        previous = before[:-1].split(" ")[-1]
+        return bool(WORD.fullmatch(previous)) and previous.lower() not in NO_COMMA
 
     def apply(self, typed: str, shown: str, word: str | None) -> Edit:
         self.text = self.text[:len(self.text) - len(typed)] + shown
@@ -698,7 +813,12 @@ class Keymap:
             raise ValueError(f"no keymap for {names}")
         self.layout = layout
         self.state = self.fresh(caps, numlock)
+        # (key, with Shift) → character
+        self.faces: dict[tuple[int, bool], str] = {}
         self.keys = self.table()
+        # what an animation shows in place of a letter
+        self.letters = "".join(sorted(char for char, (_, shift, altgr) in self.keys.items()
+                                      if char.islower() and not shift and not altgr and char.upper() in self.keys))
 
     def fresh(self, caps: bool = False, numlock: bool = False):
         state = self.xkb.xkb_state_new(self.keymap)
@@ -727,8 +847,10 @@ class Keymap:
             # the typing keys, not the numpad
             for code in list(range(2, 14)) + list(range(16, 28)) + list(range(30, 42)) + list(range(43, 54)) + [57, 86]:
                 char = self.char(state, code)
-                if len(char) == 1 and char.isprintable() and char not in keys:
-                    keys[char] = (code, shift, altgr)
+                if len(char) == 1 and char.isprintable():
+                    keys.setdefault(char, (code, shift, altgr))
+                    if not altgr:
+                        self.faces[(code, shift)] = char
             self.xkb.xkb_state_unref(state)
         return keys
 
@@ -811,6 +933,8 @@ class Daemon:
             emit(type="error", reason="uinput")
             raise SystemExit(2)
         self.active = False
+        # the animations a correction is typed with; one of them each time
+        self.animations: list[str] = []
         self.said = b""
         # an edit waiting for Shift to be let go
         self.waiting: Edit | None = None
@@ -875,6 +999,8 @@ class Daemon:
                 continue
             if isinstance(message, dict):
                 self.active = message.get("active") is True
+                if isinstance(message.get("animations"), list):
+                    self.animations = [name for name in message["animations"] if name in ANIMATIONS]
                 # another window, another text
                 self.typist.reset(opening=True)
                 self.waiting = None
@@ -895,40 +1021,111 @@ class Daemon:
                 self.drop(key.data)
         return pressed
 
-    def typed_on(self) -> str | None:
-        """What was typed while a correction was looked up; None when it was more than letters."""
-        chars = ""
-        for event in self.queue:
-            if event.code in MODIFIERS or event.code >= 0x100 or event.value == 2:
-                return None
-            if event.value == 1:
-                char = self.keymap.char(self.keymap.state, event.code)
-                if len(char) != 1 or not char.isprintable():
-                    return None
-                chars += char
-        return chars
-
-    def type(self, edit: Edit):
-        if self.pending():
-            # typed on already: those letters are taken back and typed again as well
-            more = self.typed_on()
-            if more is None:
-                self.typist.reset(partial=True)
-                return
-            edit = Edit(edit.delete + len(more), edit.text + more)
+    def strike(self, edit: Edit) -> bool:
+        """Types an edit; False when a character of it has no key."""
         strokes = self.keymap.strokes(edit)
-        if strokes is None or self.keymap.caps():
-            self.typist.reset(partial=True)
-            return
+        if strokes is None:
+            return False
         ecodes = self.evdev.ecodes
         for code, value in strokes:
             self.keyboard.write(ecodes.EV_KEY, code, value)
             self.keyboard.syn()
             if value == 0 and KEY_DELAY:
                 time.sleep(KEY_DELAY)
-        if self.pending():
-            # a key got in between after all: what is on the screen is unknown
+        return True
+
+    def wait(self, seconds: float | None, released: bool = False) -> str:
+        """Reads the keyboards for that long. Ends early with "control" when
+        the shell says something and with "key" when a key goes down, or
+        comes up as well when `released` is asked for."""
+        until = None if seconds is None else time.monotonic() + seconds
+        while True:
+            left = None if until is None else until - time.monotonic()
+            if left is not None and left <= 0:
+                return ""
+            came = False
+            for ready, _ in self.selector.select(left):
+                if ready.data == "control":
+                    # another window, most likely: read by run()
+                    return "control"
+                try:
+                    for event in self.devices[ready.data].read():
+                        if event.type == self.evdev.ecodes.EV_KEY:
+                            self.queue.append(event)
+                            came = came or released or event.value != 0
+                except (OSError, KeyError):
+                    self.drop(ready.data)
+            if came:
+                return "key"
+
+    def shots(self, edit: Edit, name: str) -> tuple[Edit, list[str], str]:
+        """An edit as an animation: the edit it is the pictures of, the
+        pictures, and what stands behind its word. No pictures without a word."""
+        wide = edit
+        if name != "typewriter":
+            # the whole word, not only the letters that change
+            stays = re.search(r"[^\W\d_]*$", edit.kept).group()
+            wide = Edit(edit.delete + len(stays), stays + edit.text, edit.kept[:len(edit.kept) - len(stays)], stays + edit.gone)
+        word = WORD.match(wide.text)
+        if not word or len(word.group()) < 2 or self.keymap.strokes(wide) is None:
+            return edit, [], ""
+        rest = wide.text[word.end():]
+        old = wide.gone[:len(wide.gone) - len(rest)] if rest and wide.gone.endswith(rest) else wide.gone
+        return wide, pictures(name, old, word.group(), self.keymap.letters), rest
+
+    def type(self, edit: Edit, animated: bool = True):
+        """Types an edit, and sees to it that the text is right afterwards
+        whatever was typed meanwhile: every key since the one that called for
+        the edit is followed (landed), what it typed is put behind the word
+        again, and what stands there is compared with what should."""
+        if self.keymap.strokes(edit) is None or self.keymap.caps():
             self.typist.reset(partial=True)
+            return
+        # the text in front, as far as it was followed: Backspace reaches into it
+        shown = edit.kept + edit.text
+        front = self.typist.text[:len(self.typist.text) - len(shown)] if animated and self.typist.text.endswith(shown) else ""
+        name = random.choice(self.animations) if animated and self.animations else ""
+        edit, shots, rest = self.shots(edit, name) if name else (edit, [], "")
+        edit = Edit(edit.delete, edit.text, front + edit.kept, edit.gone)
+        typed: list[tuple[float, Edit]] = []
+        shot = settled = 0
+        while True:
+            self.pending()
+            # the keys in the queue came after the one that is being answered
+            stand = landed(edit, typed, list(self.queue), self.keymap.faces)
+            if stand is None or (stand.cut and not typed):
+                # a click, a shortcut, Enter: what is on the screen is unknown.
+                # Or Backspace before anything was typed: the word is being changed
+                break
+            # typed on: the word comes at once, with what was typed behind it
+            last = stand.cut or stand.more != "" or shot >= len(shots)
+            if last:
+                target = stand.wanted
+                if stand.screen == target:
+                    return
+            else:
+                # the space comes with the word, unless something stands behind it already
+                target = edit.kept + shots[shot] + (rest if rest.strip() else "")
+            if stand.shift:
+                # typed now it would come out in capitals
+                if self.wait(None, released=True) == "control":
+                    break
+                continue
+            step = replace(stand.screen, target)
+            if step.delete or step.text:
+                typed.append((time.time(), step))
+                if not self.strike(step):
+                    break
+            if last:
+                # a key got into the last strokes: once more
+                settled += 1
+                if settled > 3:
+                    break
+            else:
+                shot += 1
+                if self.wait(ANIMATIONS[name]) == "control":
+                    break
+        self.typist.reset(partial=True)
 
     def handle(self, event):
         code, value = event.code, event.value
@@ -960,6 +1157,8 @@ class Daemon:
             self.typist.reset(partial=True)
             return
         edit = None
+        # what Backspace brings back is not animated
+        animated = code != BACKSPACE
         if code == BACKSPACE:
             edit = self.typist.backspace()
         elif code in (ENTER, KEYPAD_ENTER):
@@ -978,7 +1177,7 @@ class Daemon:
         if self.keymap.held(b"Shift", b"Mod5"):
             self.waiting = edit
         else:
-            self.type(edit)
+            self.type(edit, animated)
 
     def run(self):
         rescan = time.monotonic() + 5

@@ -7,8 +7,9 @@ import Quickshell.Io
 // Corrects what is typed the way a phone keyboard does, in German and
 // English: typos, capitals, punctuation (scripts/autocorrect.py). The daemon
 // sees keys, not windows, so the shell tells it where typing may be
-// corrected: in windows only, and in none where a word is a command, a
-// password or a key of a game.
+// corrected: in windows, and in none where a word is a command, a password
+// or a key of a game. Of the shell itself only the fields that ask for it
+// are corrected: what is written in Messages.
 Singleton {
 	id: root
 
@@ -33,8 +34,19 @@ Singleton {
 
 	readonly property var window: Niri.windows.find(w => w.is_focused) ?? null
 	readonly property int windowId: root.window ? Number(root.window.id) : -1
+	// a window of the shell: Messages popped out, the studio
+	readonly property bool own: root.window !== null && String(root.window.app_id || "") === "org.quickshell"
+	// the field of the shell that is being written in (enter, leave)
+	property var field: null
 	// no window has the keyboard while it is in the launcher or a panel
-	readonly property bool active: root.enabled && root.window !== null && !Session.locked && !root.skips(root.window.app_id)
+	readonly property bool active: root.enabled && !Session.locked
+		&& (root.field !== null || (root.window !== null && !root.own && !root.skips(root.window.app_id)))
+	// how a correction is typed; of several one is picked each time
+	readonly property var animations: [
+		Plugins.on("autocorrect-scramble") ? "scramble" : "",
+		Plugins.on("autocorrect-decode") ? "decode" : "",
+		Plugins.on("autocorrect-typewriter") ? "typewriter" : ""
+	].filter(name => name !== "")
 	// the daemon cannot work here; said once
 	property bool failed: false
 
@@ -51,6 +63,14 @@ Singleton {
 		settings.setText(JSON.stringify({ on: root.on }) + "\n");
 	}
 
+	function enter(item) {
+		root.field = item;
+	}
+
+	function leave(item) {
+		if (root.field === item) root.field = null;
+	}
+
 	function skips(appId) {
 		const id = String(appId || "");
 		return root.excluded.some(pattern => {
@@ -64,7 +84,7 @@ Singleton {
 
 	// every change of window as well: the text in front of the cursor is another one
 	function tell() {
-		if (daemon.running) daemon.write(JSON.stringify({ active: root.active }) + "\n");
+		if (daemon.running) daemon.write(JSON.stringify({ active: root.active, animations: root.animations }) + "\n");
 	}
 
 	function handle(line) {
@@ -84,6 +104,8 @@ Singleton {
 
 	onActiveChanged: root.tell()
 	onWindowIdChanged: root.tell()
+	onFieldChanged: root.tell()
+	onAnimationsChanged: root.tell()
 	onEnabledChanged: root.failed = false
 
 	FileView {

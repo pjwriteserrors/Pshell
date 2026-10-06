@@ -3,9 +3,10 @@
 The shell has no browser engine of its own, so a mail whose look matters – a
 newsletter, a signature built from tables and pictures – is drawn by a
 headless Chromium into a picture, with the places of its links beside it.
-The mail's own scripts never run (a content security policy admits only the
-one that measures and recolours the page); its pictures are loaded, as a mail
-program does when it shows a mail in full.
+The mail's own scripts never run (its content security policy admits none;
+the page is measured and recoloured from outside, over the browser's
+DevTools pipe); its pictures are loaded, as a mail program does when it
+shows a mail in full, but not waited for longer than a few seconds.
 
 Mails are made for white paper. Before the picture is taken the page is
 recoloured for the shell's palette: white becomes see-through, so the bubble
@@ -17,15 +18,17 @@ pushed as far as it takes to stay readable.
 
 from __future__ import annotations
 
+import base64
 import hashlib
-import html
 import json
 import os
 import re
-import secrets
+import select
 import shutil
+import signal
 import subprocess
 import threading
+import time
 from pathlib import Path
 
 from store import CACHE
@@ -35,11 +38,10 @@ BROWSERS = ("chromium", "google-chrome-stable", "google-chrome", "chromium-brows
 WIDTH = 600
 # the tallest picture a graphics card takes, in its own pixels
 MAX_PIXELS = 16000
-MARKER = (1, 254, 3)
 # pictures an older way of drawing made are drawn again
-REVISION = 2
+REVISION = 3
 
-# one browser at a time: they share a profile
+# one mail at a time
 BUSY = threading.Lock()
 
 SCALE = [2.0]
@@ -48,7 +50,7 @@ SCALE = [2.0]
 THEME = {}
 
 SCRIPT = r"""
-const T = __THEME__, ZOOM = __ZOOM__, MARK = __MARK__, WORDS = __WORDS__;
+const T = __THEME__, WIDTH = __WIDTH__, PLAIN = __PLAIN__;
 const rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
 const BG = rgb(T.bg), FG = rgb(T.fg), AC = rgb(T.primary);
 const parse = c => { const m = /rgba?\(([^)]+)\)/.exec(c || ""); if (!m) return null; const p = m[1].split(/[,\s\/]+/).filter(x => x !== "").map(Number); return { c: [p[0], p[1], p[2]], a: p.length > 3 ? p[3] : 1 }; };
@@ -105,25 +107,20 @@ function recolour() {
 	for (const plan of plans) for (const [name, value] of plan.set) plan.el.style.setProperty(name, value, "important");
 }
 
-addEventListener("load", () => {
+(() => {
 	// a mail wider than the bubble is drawn smaller, by the browser itself, so it stays sharp
-	if (ZOOM !== 1) document.body.style.zoom = ZOOM;
-	try { recolour(); } catch (error) {}
+	if (document.documentElement.scrollWidth > WIDTH + 2) document.body.style.zoom = Math.max(0.4, WIDTH / document.documentElement.scrollWidth);
+	// the paper a recipient sees keeps the colours it was sent in
+	if (!PLAIN) try { recolour(); } catch (error) {}
 	const root = document.documentElement;
 	// where the mail really ends: the lowest edge of anything in it
 	let bottom = document.body.getBoundingClientRect().bottom;
 	for (const el of document.body.querySelectorAll("*")) { const r = el.getBoundingClientRect(); if (r.width > 0 && r.height > 0 && r.bottom > bottom) bottom = r.bottom; }
 	bottom = Math.ceil(bottom + scrollY);
-	if (MARK) {
-		// a line the picture is cut at, so nothing depends on a height measured in another run
-		const line = document.createElement("div");
-		line.style.cssText = `position:absolute;left:0;top:${bottom}px;width:12px;height:6px;background:rgb(1,254,3);z-index:2147483647`;
-		root.appendChild(line);
-	}
 	const links = [...document.querySelectorAll("a[href]")].map(a => { const r = a.getBoundingClientRect(); return { x: r.x + scrollX, y: r.y + scrollY, w: r.width, h: r.height, href: a.href }; }).filter(l => l.w > 0 && l.h > 0 && /^(https?|mailto|tel):/.test(l.href));
 	// every word with its place, in reading order, so the picture's text can be marked: [x, y, w, h, word, block]
 	const words = [];
-	if (WORDS) {
+	{
 		const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT), range = document.createRange(), tenth = v => Math.round(v * 10) / 10;
 		const blockOf = n => { for (let e = n.parentElement; e; e = e.parentElement) { const d = getComputedStyle(e).display; if (!d.startsWith("inline") && d !== "contents") return e; } return document.body; };
 		let node, block = null, count = 0;
@@ -144,8 +141,8 @@ addEventListener("load", () => {
 			}
 		}
 	}
-	root.setAttribute("data-pshell", JSON.stringify({ w: root.scrollWidth, h: bottom, links, words }));
-});
+	return JSON.stringify({ h: bottom, links, words });
+})()
 """
 
 
@@ -200,97 +197,191 @@ def page_source(body, images=None):
     return re.sub(r"""cid:([^"'\s>)]+)""", picture, str(body or ""))
 
 
-def page(body, zoom=1.0, mark=False, words=False):
-    """A page of its own: no script but the measuring and recolouring one."""
-    nonce = secrets.token_hex(12)
-    script = SCRIPT.replace("__THEME__", json.dumps(theme())).replace("__ZOOM__", f"{zoom:.4f}").replace("__MARK__", "true" if mark else "false").replace("__WORDS__", "true" if words else "false")
+def page(body, plain=False):
+    """A page of its own, in which no script runs. `plain`: on white paper, as a mail program shows it."""
     return (
         "<!doctype html><meta charset=\"utf-8\">"
-        f"<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src https: http: file: data:; style-src 'unsafe-inline' https:; font-src https: data:; script-src 'nonce-{nonce}'\">"
+        "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src https: http: file: data:; style-src 'unsafe-inline' https:; font-src https: data:; script-src 'none'\">"
         "<style>html,body{margin:0;background:transparent;color:#000}body{padding:2px;font-family:'Adwaita Sans',sans-serif;font-size:13px;overflow-wrap:anywhere}img{max-width:100%}</style>"
-        f"<script nonce=\"{nonce}\">{script}</script>" + body
+        + ("<style>html,body{background:#fff}body{padding:14px}</style>" if plain else "")
+        + body
     )
 
 
-def run(arguments, timeout=40):
-    program = browser()
-    if program is None:
-        raise RuntimeError("Chromium is needed to draw this mail")
-    command = [
-        program, "--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--disable-extensions",
-        "--hide-scrollbars", "--virtual-time-budget=5000", "--default-background-color=00000000", f"--user-data-dir={CACHE / 'chromium'}", *arguments,
-    ]
-    with BUSY:
-        return subprocess.run(command, capture_output=True, text=True, timeout=timeout, errors="replace")
+class Browser:
+    """One headless Chromium that stays up while mails are drawn, spoken to over its DevTools pipe.
 
-
-def measure(shown):
-    # a low window: the page's height is its own, not the window's
-    done = run([f"--window-size={WIDTH},100", "--dump-dom", f"file://{shown}"])
-    found = re.search(r'data-pshell="([^"]*)"', done.stdout)
-    if not found:
-        raise RuntimeError("The mail could not be drawn")
-    return json.loads(html.unescape(found.group(1)))
-
-
-def cut(target, factor):
-    """Cuts the picture at the line the page drew under itself and takes the empty paper off its right.
-
-    Returns (width, height) in points, or None when the line is not on it.
+    Starting a browser per mail took most of the time, and one started for a
+    single picture waits for every picture of the mail, however long its
+    server takes. This one is told to go on after a few seconds.
     """
+
+    IDLE = 120
+    # how long a mail's pictures are waited for
+    PATIENCE = 3
+
+    def __init__(self):
+        self.process = None
+        self.session = None
+        self.writer = self.reader = -1
+        self.buffer = b""
+        self.count = 0
+        self.events = []
+        self.closer = None
+
+    def start(self):
+        program = browser()
+        if program is None:
+            raise RuntimeError("Chromium is needed to draw this mail")
+        command_read, self.writer = os.pipe()
+        self.reader, answer_write = os.pipe()
+        self.process = subprocess.Popen(
+            ["sh", "-c", f'exec "$0" "$@" 3<&{command_read} 4>&{answer_write}', program, "--headless=new", "--remote-debugging-pipe",
+             "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--disable-extensions", "--hide-scrollbars",
+             f"--user-data-dir={CACHE / 'chromium'}", "about:blank"],
+            pass_fds=(command_read, answer_write), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        os.close(command_read)
+        os.close(answer_write)
+        self.buffer, self.events, self.session = b"", [], None
+        target = self.call("Target.createTarget", {"url": "about:blank"}, timeout=20)["targetId"]
+        self.session = self.call("Target.attachToTarget", {"targetId": target, "flatten": True})["sessionId"]
+        self.call("Page.enable")
+        self.call("Emulation.setDefaultBackgroundColorOverride", {"color": {"r": 0, "g": 0, "b": 0, "a": 0}})
+
+    def stop(self):
+        process, self.process = self.process, None
+        for descriptor in (self.writer, self.reader):
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+        self.writer = self.reader = -1
+        if process is not None:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+                process.wait(timeout=5)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+
+    def read(self, deadline):
+        """The next message, or None when the time is up."""
+        while b"\0" not in self.buffer:
+            left = deadline - time.monotonic()
+            if left <= 0 or not select.select([self.reader], [], [], left)[0]:
+                return None
+            chunk = os.read(self.reader, 1 << 20)
+            if not chunk:
+                raise RuntimeError("The browser went away")
+            self.buffer += chunk
+        raw, _, self.buffer = self.buffer.partition(b"\0")
+        return json.loads(raw)
+
+    def call(self, method, params=None, timeout=20):
+        self.count += 1
+        message = {"id": self.count, "method": method, "params": params or {}}
+        if self.session:
+            message["sessionId"] = self.session
+        os.write(self.writer, json.dumps(message).encode() + b"\0")
+        deadline = time.monotonic() + timeout
+        while True:
+            answer = self.read(deadline)
+            if answer is None:
+                raise RuntimeError("The browser does not answer")
+            if answer.get("id") == self.count:
+                if "error" in answer:
+                    raise RuntimeError(answer["error"].get("message", "The browser refused"))
+                return answer.get("result", {})
+            if "method" in answer:
+                self.events.append(answer["method"])
+
+    def wait(self, event, timeout):
+        deadline = time.monotonic() + timeout
+        while event not in self.events:
+            answer = self.read(deadline)
+            if answer is None:
+                return False
+            if "method" in answer:
+                self.events.append(answer["method"])
+        return True
+
+    def draw(self, shown, factor, limit, plain=False):
+        """The page as PNG bytes and what the script measured."""
+        if self.process is None or self.process.poll() is not None:
+            self.stop()
+            self.start()
+        self.call("Emulation.setDeviceMetricsOverride", {"width": WIDTH, "height": 200, "deviceScaleFactor": factor, "mobile": False})
+        self.events.clear()
+        self.call("Page.navigate", {"url": f"file://{shown}"})
+        self.wait("Page.loadEventFired", self.PATIENCE)
+        script = SCRIPT.replace("__THEME__", json.dumps(theme())).replace("__WIDTH__", str(WIDTH)).replace("__PLAIN__", "true" if plain else "false")
+        measured = json.loads(self.call("Runtime.evaluate", {"expression": script, "returnByValue": True})["result"]["value"])
+        height = max(4, min(limit, int(measured["h"])))
+        shot = self.call("Page.captureScreenshot", {
+            "format": "png", "captureBeyondViewport": True, "clip": {"x": 0, "y": 0, "width": WIDTH, "height": height, "scale": 1},
+        }, timeout=40)
+        return base64.b64decode(shot["data"]), measured, height
+
+    def rest(self):
+        """Leaves when nothing was drawn for a while."""
+        if self.closer is not None:
+            self.closer.cancel()
+
+        def close():
+            with BUSY:
+                self.stop()
+
+        self.closer = threading.Timer(self.IDLE, close)
+        self.closer.daemon = True
+        self.closer.start()
+
+
+BROWSER = Browser()
+
+
+def trim(target, factor):
+    """Takes the empty paper off the picture's right: a short note is as wide as its words."""
     from PIL import Image
     with Image.open(target) as picture:
         picture = picture.convert("RGBA")
-        column = picture.crop((int(3 * factor), 0, int(3 * factor) + 1, picture.height)).getdata()
-        row = next((index for index, pixel in enumerate(column) if pixel[:3] == MARKER and pixel[3] == 255), None)
-        if row is None:
-            return None
-        picture = picture.crop((0, 0, picture.width, max(1, row)))
-        # a short note is as wide as its words, not as the page
         inked = picture.getchannel("A").getbbox()
         right = min(picture.width, max(int(40 * factor), (inked[2] if inked else 0) + int(2 * factor)))
-        picture = picture.crop((0, 0, right, picture.height))
-        picture.save(target)
-    return picture.width / factor, picture.height / factor
+        if right < picture.width:
+            picture.crop((0, 0, right, picture.height)).save(target)
+        return right / factor
 
 
-def render(source, target):
-    """Draws the markup in `source`; returns {"image", "width", "height", "links", "theme"} in points."""
+def render(source, target, plain=False):
+    """Draws the markup in `source`; returns {"image", "width", "height", "links", "text", "theme"} in points.
+
+    `plain` draws it the way it reaches someone else: on white, in its own colours.
+    """
     source = Path(source)
-    worn, factor = theme_key(), scale()
+    worn, factor = (f"plain@{scale():g}/{REVISION}" if plain else theme_key()), scale()
     # a picture per palette: one that is replaced must not be shown from a cache
     target = Path(target).with_name(f"{Path(target).stem}-{hashlib.sha1(worn.encode()).hexdigest()[:8]}.png")
     shown = source.with_name("shown.html")
-    limit = int(MAX_PIXELS / factor)
-    try:
-        body = source.read_text()
-        shown.write_text(page(body))
-        measured = measure(shown)
-        zoom = 1.0
-        if measured["w"] > WIDTH + 2:
-            zoom = max(0.4, WIDTH / measured["w"])
-            shown.write_text(page(body, zoom))
-            measured = measure(shown)
-        size = None
-        # pictures of the mail may arrive between two runs and move its end: room to spare, then the cut
-        for window in dict.fromkeys([min(limit, int(measured["h"]) + 1200), limit]):
-            shown.write_text(page(body, zoom, mark=True))
-            run([f"--window-size={WIDTH},{window}", f"--force-device-scale-factor={factor:g}", f"--screenshot={target}", f"file://{shown}"])
-            if not target.exists() or target.stat().st_size == 0:
-                raise RuntimeError("The mail could not be drawn")
-            size = cut(target, factor)
-            if size is not None:
-                break
-        # longer than a picture can be: what fits is shown
-        width, height = size if size is not None else (WIDTH, limit)
-        # links and words as the picture has them: its pictures are loaded by now
-        shown.write_text(page(body, zoom, words=True))
-        measured = measure(shown)
-        text = target.with_suffix(".json")
-        text.write_text(json.dumps([word for word in measured.get("words", []) if word[1] < height], ensure_ascii=False))
-    except (OSError, subprocess.TimeoutExpired, ValueError) as error:
-        raise RuntimeError(f"The mail could not be drawn ({type(error).__name__})")
-    links = [{"x": link["x"], "y": link["y"], "w": link["w"], "h": link["h"], "href": link["href"]} for link in measured.get("links", [])[:300] if link["y"] < height]
+    with BUSY:
+        try:
+            shown.write_text(page(source.read_text(), plain))
+            try:
+                data, measured, height = BROWSER.draw(shown, factor, int(MAX_PIXELS / factor), plain)
+            except (RuntimeError, OSError, ValueError, KeyError):
+                # a browser that hung or died gets one fresh start
+                BROWSER.stop()
+                data, measured, height = BROWSER.draw(shown, factor, int(MAX_PIXELS / factor), plain)
+            target.write_bytes(data)
+            width = WIDTH if plain else trim(target, factor)
+        except (OSError, ValueError, KeyError) as error:
+            BROWSER.stop()
+            raise RuntimeError(f"The mail could not be drawn ({type(error).__name__})")
+        except RuntimeError:
+            BROWSER.stop()
+            raise
+        finally:
+            BROWSER.rest()
+    text = target.with_suffix(".json")
+    text.write_text(json.dumps([word for word in measured.get("words", []) if word[1] < height], ensure_ascii=False))
+    links = [link for link in measured.get("links", [])[:300] if link["y"] < height]
     return {"image": str(target), "width": width, "height": height, "links": links, "text": str(text), "theme": worn}
 
 

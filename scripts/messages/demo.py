@@ -7,7 +7,7 @@ from __future__ import annotations
 import time
 
 import content
-from provider import Provider, person
+from provider import Failure, Provider, person
 
 ME = person("You", "me@example.org")
 ANNA = person("Anna Weber", "anna.weber@example.org")
@@ -84,20 +84,39 @@ class Demo(Provider):
             self.store.patch(self.id, ident, folder=where)
 
     def send(self, draft):
+        if "fail" in (draft.get("subject") or "") or "fail@" in " ".join(draft.get("to") or []):
+            raise Failure("Offline (demo)")
         origin = self.store.message(self.id, draft["reply"]) if draft.get("reply") else None
         ident = f"demo-sent-{time.time()}"
-        body = self.body_of(content.to_html(draft.get("text", "")), True, "", None, ident)
+        written, pictures = self.composed(draft)
+        body = self.body_of(written, True, "", {cid: path for cid, path in pictures.items()}, ident)
         body["attachments"] = [{"id": str(index), "name": path.rsplit("/", 1)[-1], "size": 0, "type": ""} for index, path in enumerate(draft.get("files") or [])]
         message = {
             "account": self.id, "id": ident, "chat": origin["chat"] if origin else ident, "mid": f"<{ident}@example.org>",
             "replyTo": origin["mid"] if origin else "", "refs": [], "from": ME,
             "to": [person("", email) for email in draft.get("to") or []] or ([origin["from"]] if origin else []),
-            "cc": [], "bcc": [], "subject": draft.get("subject") or (origin["subject"] if origin else ""), "date": time.time(),
+            "cc": [person("", email) for email in draft.get("cc") or []], "bcc": [person("", email) for email in draft.get("bcc") or []],
+            "subject": draft.get("subject") or (origin["subject"] if origin else ""), "date": time.time(),
             "read": True, "flagged": False, "draft": False, "mine": True, "folder": "sent", "preview": content.preview(body["text"]),
             "hasAttachments": bool(body["attachments"]), "importance": "normal", "focused": True, "auto": False, "invite": False, "link": "",
         }
         self.store.put([message])
         self.store.put_body(self.id, ident, body)
+
+    def preview(self, draft):
+        origin = self.store.message(self.id, draft["reply"]) if draft.get("reply") else None
+        html = self.written(draft)
+        # the chain below, as a mail program quotes it
+        at, depth = origin, 0
+        while at is not None and depth < 20:
+            when = time.strftime("%d.%m.%Y %H:%M", time.localtime(at["date"]))
+            html += (f'<hr style="border:none;border-top:solid #e1e1e1 1px;margin:14px 0 8px"><div style="color:#555"><b>From:</b> {at["from"]["name"]} &lt;{at["from"]["email"]}&gt;<br>'
+                     f'<b>Sent:</b> {when}<br><b>To:</b> {", ".join(entry["name"] for entry in at["to"])}<br><b>Subject:</b> {at["subject"]}</div><br>{(at.get("body") or {}).get("html", "")}')
+            at, depth = self.store.by_mid(self.id, at.get("replyTo")), depth + 1
+        to = [person("", email) for email in draft.get("to") or []] or ([origin["from"]] if origin else [])
+        subject = draft.get("subject") or (f"Re: {content.clean_subject(origin['subject'])}" if origin else "")
+        return {"to": to, "cc": [person("", email) for email in draft.get("cc") or []], "bcc": [person("", email) for email in draft.get("bcc") or []],
+                "subject": subject, "html": html, "images": self.inline_images(draft)}
 
     def tips(self, emails):
         return {SHOP["email"]: "Thank you for your message. We answer within two working days."} if SHOP["email"] in emails else {}

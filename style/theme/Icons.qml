@@ -11,6 +11,9 @@ Singleton {
 
 	readonly property var glyphs: ({
 		"email_outline": "󰇰",
+		"format_bold": "󰉤",
+		"format_italic": "󰉷",
+		"format_underline": "󰊇",
 		"email": "󰇮",
 		"email_open_outline": "󰗯",
 		"email_plus_outline": "󰧬",

@@ -110,13 +110,38 @@ class Provider:
         text = str(self.account.get("signature") or "").strip()
         return f'<div><br></div><div id="Signature">{content.to_html(text)}</div>' if text else ""
 
+    def composed(self, draft):
+        """(what was written as HTML, {content id: file} of the pictures in it).
+
+        `html` is what the shell's field holds, pictures where they were put;
+        without it `text` is taken, with `images` below it.
+        """
+        if draft.get("html"):
+            written, pictures = content.from_editor(draft["html"], lambda path: picture_width(path, 600))
+        else:
+            written, pictures = content.to_html(draft.get("text", "")), {}
+        for path in draft.get("images") or []:
+            cid = f"inline{len(pictures)}@pshell"
+            pictures[cid] = path
+            written += f'<div><img src="cid:{cid}" style="max-width:100%"></div>'
+        return written, pictures
+
+    def inline_images(self, draft):
+        """{content id: file} of the pictures that go inside what was written."""
+        return self.composed(draft)[1]
+
+    def written(self, draft):
+        """What was written, the pictures put into it and the signature, as the mail carries them."""
+        return self.composed(draft)[0] + self.signature_html()
+
     def body_of(self, raw, is_html, subject, images=None, ident=None):
         """The mail taken apart; with `ident` the page that draws it in full is kept beside it."""
         body = content.split(raw, is_html, subject, images, raw=ident is not None)
         end = body.pop("pageEnd")
         # a signature with a layout of its own is drawn as it was made
         body["signaturePiece"] = render.page_source(body.pop("signatureRaw", ""), images)
-        body["signaturePage"] = render.fragment(body["signaturePiece"])
+        # drawn when it is unfolded
+        body["signaturePage"] = None
         body["page"] = None
         body["pageSource"] = ""
         if ident is not None:
@@ -132,7 +157,7 @@ class Provider:
         message = self.store.message(self.id, ident)
         body = (message or {}).get("body")
         if not body or render.current(body.get("page")):
-            return bool(body)
+            return False
         source = body.get("pageSource") or ""
         if not source or not os.path.isfile(source):
             raise Failure("This mail has no layout of its own")
@@ -187,6 +212,13 @@ class Provider:
         raise Failure("Not supported")
 
     def send(self, draft):
+        raise Failure("Not supported")
+
+    def preview(self, draft):
+        """The mail as `send` would send it, unsent: {"to", "cc", "bcc", "subject", "html", "images"}.
+
+        `html` is all of it, the mails quoted below included; `images` the files of the pictures inside it.
+        """
         raise Failure("Not supported")
 
     def attachment(self, message, ident):

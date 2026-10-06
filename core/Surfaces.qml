@@ -115,6 +115,12 @@ Scope {
 	}
 
 	LazyLoader {
+		active: Plugins.on("qtrack")
+
+		TrackingPanel {}
+	}
+
+	LazyLoader {
 		active: Plugins.on("ssh")
 
 		SshPanel {}
@@ -130,6 +136,13 @@ Scope {
 		active: Plugins.on("messages")
 
 		MessagesPanel {}
+	}
+
+	// … and the same as a window of its own
+	LazyLoader {
+		active: Plugins.on("messages")
+
+		MessagesWindow {}
 	}
 
 	LazyLoader {

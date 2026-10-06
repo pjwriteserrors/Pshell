@@ -6,22 +6,43 @@ import QtQuick.Layouts
 import qs.style.theme
 import qs.core.services
 import qs.style.widgets
+import qs.core.views.panels.ssh
 
 // SSH logins. Saved hosts come first – one click connects in kitty. The add
-// form folds out from the plus button.
+// form folds out from the plus button; the upload button of a login swaps
+// the list for sending files to it (ssh/Transfer.qml).
 Drawer {
 	id: root
 
 	property bool adding: false
+	readonly property bool sending: Ssh.transferEntry !== null
 
 	panelId: "ssh"
-	panelWidth: 460
-	contentHeight: layout.implicitHeight
+	panelWidth: root.sending ? 880 : 460
+	contentHeight: root.sending ? transfer.implicitHeight : layout.implicitHeight
+
+	Behavior on panelWidth {
+		SpatialAnim {
+			duration: Motion.medium
+		}
+	}
 
 	onPanelOpened: {
 		root.adding = false;
+		// a transfer that still runs is what the panel comes back to
+		if (!Ssh.sending) Ssh.closeTransfer();
 		Ssh.refresh();
-		Qt.callLater(() => search.focusInput());
+		Qt.callLater(() => root.sending ? transfer.focusPath() : search.focusInput());
+	}
+
+	onSendingChanged: Qt.callLater(() => root.sending ? transfer.focusPath() : search.focusInput())
+
+	Transfer {
+		id: transfer
+
+		anchors.left: parent.left
+		anchors.right: parent.right
+		visible: root.sending
 	}
 
 	Connections {
@@ -52,6 +73,7 @@ Drawer {
 
 		anchors.left: parent.left
 		anchors.right: parent.right
+		visible: !root.sending
 		spacing: 12
 
 		RowLayout {
@@ -306,6 +328,21 @@ Drawer {
 						tone: Theme.textMuted
 						font.pixelSize: Theme.size.tiny
 						font.weight: Font.Bold
+					}
+				}
+
+				TextButton {
+					implicitHeight: 30
+					text: ""
+					icon: "upload"
+					variant: "ghost"
+					opacity: login.hovered ? 1 : 0
+					onActivated: Ssh.openTransfer(login.modelData)
+
+					Behavior on opacity {
+						Anim {
+							duration: Motion.short
+						}
 					}
 				}
 

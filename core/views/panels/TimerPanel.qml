@@ -7,8 +7,8 @@ import qs.style.theme
 import qs.core.services
 import qs.style.widgets
 
-// qtrack. The hero shows the running clock inside a ring that fills once per
-// hour and a morphing play/pause button. Below: resume one of today's tasks
+// qtrack. The hero shows the running clock inside a ring that fills over the
+// 8h of a day and a morphing play/pause button. Below: resume one of today's tasks
 // or pick a Teamwork task from an inline, searchable list and start fresh.
 Drawer {
 	id: root
@@ -86,7 +86,7 @@ Drawer {
 				Ring {
 					anchors.fill: parent
 					thickness: 7
-					value: Tmpo.tracking || Tmpo.paused ? (Tmpo.elapsedSeconds % 3600) / 3600 : 0
+					value: Math.min(1, Tmpo.todayLive / (8 * 3600))
 					color: Tmpo.tracking ? Theme.primary : Theme.textSubtle
 					trackColor: Theme.layer2
 				}
@@ -445,6 +445,12 @@ Drawer {
 
 					Item {
 						Layout.fillWidth: true
+					}
+
+					TextButton {
+						text: "All days"
+						icon: "calendar_month"
+						onActivated: Popups.open("tracking", root.targetScreen)
 					}
 				}
 			}
