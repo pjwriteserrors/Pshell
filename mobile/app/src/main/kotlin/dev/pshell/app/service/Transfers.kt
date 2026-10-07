@@ -106,7 +106,7 @@ object Transfers {
 	 * opened right here: what another app shared may only be read while the
 	 * activity that received it lives, and that one closes at once.
 	 */
-	fun upload(uris: List<Uri>, endpoint: String = "upload", query: String = "") {
+	fun upload(uris: List<Uri>, endpoint: String = "upload", query: String = "", onUploaded: ((name: String, path: String) -> Unit)? = null) {
 		for (uri in uris) {
 			val (name, size) = runCatching { nameOf(app, uri) }.getOrDefault((uri.lastPathSegment ?: "file") to -1L)
 			val type = runCatching { app.contentResolver.getType(uri) }.getOrNull() ?: mime(name)
@@ -116,11 +116,11 @@ object Transfers {
 				list.value = listOf(Transfer(name, true, size, state = "failed", error = error.message ?: "No access to the file")) + list.value.take(30)
 				continue
 			}
-			send(name, size, type, opened, endpoint, query)
+			send(name, size, type, opened, endpoint, query, onUploaded)
 		}
 	}
 
-	private fun send(name: String, size: Long, type: String, opened: android.os.ParcelFileDescriptor, endpoint: String, query: String) {
+	private fun send(name: String, size: Long, type: String, opened: android.os.ParcelFileDescriptor, endpoint: String, query: String, onUploaded: ((String, String) -> Unit)? = null) {
 		app.link.scope.launch(Dispatchers.IO) {
 			list.value = listOf(Transfer(name, true, size)) + list.value.take(30)
 			val body = object : RequestBody() {
@@ -146,10 +146,14 @@ object Transfers {
 			}
 			try {
 				val url = "https://pc.pshell/$endpoint/${Uri.encode(name)}$query"
+				var path = ""
 				app.link.http.newCall(Request.Builder().url(url).put(body).build()).execute().use { response ->
 					if (!response.isSuccessful) throw java.io.IOException(if (response.code == 403) "Files are switched off on the PC" else "The PC answered ${response.code}")
+					// where the PC put it, for whoever needs the file there next
+					path = runCatching { kotlinx.serialization.json.Json.parseToJsonElement(response.body?.string().orEmpty()).let { (it as? kotlinx.serialization.json.JsonObject)?.get("path")?.let { p -> (p as? kotlinx.serialization.json.JsonPrimitive)?.content } } }.getOrNull().orEmpty()
 				}
 				update(name, true) { it.copy(state = "done", done = size) }
+				onUploaded?.invoke(name, path)
 			} catch (error: Exception) {
 				runCatching { opened.close() }
 				update(name, true) { it.copy(state = "failed", error = error.message.orEmpty()) }

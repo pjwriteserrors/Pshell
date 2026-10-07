@@ -30,6 +30,12 @@ Scope {
 	TranslateTopic { link: root.link }
 	ScreenshotTopic { link: root.link }
 	SearchTopic { link: root.link }
+	MessagesTopic { link: root.link }
+	TrackingTopic { link: root.link }
+	DownloadsTopic { link: root.link }
+	LyricsTopic { link: root.link }
+	ReaderTopic { link: root.link }
+	ConvertTopic { link: root.link }
 
 	Incoming { link: root.link }
 }

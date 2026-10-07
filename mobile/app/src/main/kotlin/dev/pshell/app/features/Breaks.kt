@@ -48,6 +48,8 @@ import kotlinx.serialization.json.JsonElement
 
 val BreaksFeature = Feature(
 	id = "breaks",
+	group = Group.Work,
+	keywords = listOf("pausen", "water", "wasser", "eyes", "augen", "stretch", "headache"),
 	title = "Breaks",
 	icon = "cup_water",
 	plugins = listOf("breaks"),

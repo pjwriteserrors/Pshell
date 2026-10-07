@@ -61,6 +61,9 @@ import okio.ByteString.Companion.toByteString
 
 val TerminalFeature = Feature(
 	id = "terminal",
+	group = Group.Remote,
+	keywords = listOf("shell", "zsh", "console", "konsole"),
+	bare = true,
 	title = "Terminal",
 	icon = "console_line",
 	plugins = listOf("phone-terminal"),

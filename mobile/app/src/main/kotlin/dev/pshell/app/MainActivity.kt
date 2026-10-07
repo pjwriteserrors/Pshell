@@ -81,6 +81,11 @@ class MainActivity : ComponentActivity() {
 				if (intent.component?.className.orEmpty().endsWith("ProcessTranslate")) {
 					dev.pshell.app.features.Chat.ask(dev.pshell.app.features.TextAction.Translate, text)
 					nav.open("feature/chat")
+				} else if (intent.component?.className.orEmpty().endsWith("ProcessRead")) {
+					// marked text, read one word at a time on the phone
+					dev.pshell.app.features.Reader.text = text
+					dev.pshell.app.features.Reader.start = true
+					nav.open("feature/reader")
 				} else markedText.value = text
 			}
 		}

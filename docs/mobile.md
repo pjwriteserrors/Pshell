@@ -31,7 +31,20 @@ core/services/Phone.qml   the shell's end; core/phone/ holds one file per topic
   (control centre, `>phone`, bar): with the `phone` plugin off and
   `kdeconnect` on, it hands everything to `KdeConnect`.
 - **App.** One foreground service holds the connection; screens subscribe to
-  topics and send calls.
+  topics and send calls. The features fall into groups (`features/Feature.kt`):
+  **Remote** (touchpad, keyboard, commands, terminal, windows, launcher,
+  radial menu, screen), **Media** (player, sound, lyrics, what plays,
+  continue), **Work** (messages, timer, days, agents, todos, notes, calendar,
+  shelves, downloads, reader, AI chat, translate, converter, breaks,
+  weather), **PC** (unlock, system, updates, quick settings, capture, Studio,
+  displays, SSH, PC files, RPG, session) and **Phone & PC** (notifications,
+  clipboard, files, calls, find). Each group is a tab of the bar: it opens on
+  the group's first feature, the rest sit in a row of chips at the top. The
+  home screen is a control centre (what is going on, what is changed most)
+  followed by every group under its own heading; a search field at the top
+  finds a feature by name, group or a keyword in German or English, a
+  command of the grid by its label, and answers a conversion like `5 kg in
+  lb` on the spot.
 
 ## Security
 
@@ -97,13 +110,19 @@ the phone alone have plugins of their own in the tab **Phone**, all requiring
 
 | App | Plugins | Shows | Does |
 | --- | --- | --- | --- |
-| Home | `phone` | a control centre: player and volume, timer, agents, the quick settings, brightness, the first commands, system load; below it everything else as icons | wake on LAN while unreachable |
+| Home | `phone` | a control centre: player and volume, timer, agents, unread mail, downloads, the quick settings, brightness, the first commands, system load; below it every group with its features as icons | search; wake on LAN while unreachable |
 | Media | `media`, `sound` | player, cover, position, players | play, seek, volume; the phone's media controls and volume keys |
 | Touchpad | `phone-touchpad` | | a multitouch touchpad, three buttons |
 | Keyboard | `phone-keyboard` | | typing, special keys, sticky modifiers |
 | Commands | `phone-commands` | a grid of tiles with state | run, with a form or output, or in the terminal; edit the grid |
 | Terminal | `phone-terminal` | your login shell on the PC, with what it loads (xterm.js, kitty's colours and font) | type, a line at a time or straight in; the update, to enter the password |
 | Timer | `qtrack` | running timer, today | pause, resume, switch, start |
+| Days | `qtrack` | the day board: every tracked day, its entries by project, what is queued for and sent to Teamwork | check an entry for Teamwork, change its description, billable, shift start or end, pick a ticket, delete, send the day |
+| Messages | `messages`, `mail` | mail as chats: who, subject, preview, unread; a chat's mails as bubbles with attachments; the outbox | open (marks it read on the PC too), reply to all or write a new mail (plain text, sent after the PC's grace period, with undo), snippets, flag, mark unread, snooze, archive, delete, search, older mails; an attachment opens on the PC or comes to the phone; the mail assistant (`mail-ai`) drafts and summarises |
+| Downloads | `downloads` | what the browser on the PC downloads, with progress and speed | pause, resume, cancel; a finished file opens on the PC, shows in its folder, or comes to the phone |
+| Lyrics | `lyrics`, `media` | the words of the song that plays, the sung line following the player | tap a line to seek there |
+| Reader | `fast-reader` | a text one word at a time, on the phone (pasted, or marked in another app → *Read fast*) | speed; the same text on the PC's reader, with play, pause and steps while it runs |
+| Converter | `converter` | | `5 kg in lb`, `72 f c`, `100 usd eur`, `0xff`: the launcher's converter, also from the home screen's search |
 | Agents | `agents` | agents working or waiting | answer, focus the window |
 | Breaks | `breaks` (+ `eye-rest`, `stretch`, `water`, `headache-log`) | next breaks, water, the week | log water, a headache, a break |
 | System | `system-monitor` | CPU, memory, disks, graphs | |
@@ -112,7 +131,7 @@ the phone alone have plugins of their own in the tab **Phone**, all requiring
 | Todos, Notes | `todos`, `notes` | lists, notes | tick, add, edit |
 | Windows | `overview` | the monitors where they stand, their workspaces, the windows where they sit | tap to focus, hold and drag to another workspace or monitor, close |
 | Launcher, Radial menu | `apps`, `radial-menu`, `web-search` | programs, the menu's entries | start, run, search the web on the PC |
-| Quick settings | `quick-settings` (+ `dnd`, `keep-awake`, `power-profiles`, `ddc`, `backlight`, `bluetooth`, `network`) | each tile | toggle, brightness, monitor input, Bluetooth devices |
+| Quick settings | `quick-settings` (+ `dnd`, `keep-awake`, `power-profiles`, `ddc`, `backlight`, `bluetooth`, `network`, `autocorrect`) | each tile | toggle, brightness, monitor input, Bluetooth devices, autocorrect on or off |
 | Capture | `screenshot`, `recording`, `screenshot-history` | a screenshot on the phone; the PC's recent shots | shoot, start the PC's capture modes (region, window, OCR, QR, pin, …), fetch or copy a shot, record an output |
 | Screen | `phone-screen` | an output, a few pictures a second | pinch to zoom |
 | Studio | `studio-wallpaper`, `studio-styles`, `studio-motion`, `studio-dress`, `studio-combinations` | the wallpaper library; the shell in miniature in each palette wallust makes of a wallpaper; animations, icon and cursor themes, saved combinations | apply a wallpaper with a palette; fetch the wallpaper of the day; a phone photo becomes the wallpaper; switch style, animation, icons, pointer, or a whole combination |
@@ -124,7 +143,8 @@ the phone alone have plugins of their own in the tab **Phone**, all requiring
 | Displays | `display-profiles` | the desk setups | switch |
 | Agents | `agents` | agents working or waiting; the last answer from the transcript | answer, focus the window, read or copy the last answer |
 | AI chat | `chat` | | chat with a model on the PC (Ollama), with pictures and text files; edit, ask again |
-| SSH logins, RPG | `ssh`, `rpg` | saved hosts; level and XP | open a session on the PC |
+| SSH | `ssh` | saved hosts; a host's folders, listed by the PC over SSH | open a session on the PC; files of the phone go to a folder of the host (up to the PC, then scp) |
+| RPG | `rpg` | level and XP | |
 | Notifications | `phone-notifications`, `phone-mirror` | | phone → PC with actions and replies; PC → phone; questions both ways |
 | Clipboard | `phone-clipboard` (+ `clipboard`) | the PC's clipboard and history | sync, send, copy an entry |
 | Files | `phone-files` | transfers | send, receive, "Share → Send to PC" |
@@ -150,7 +170,8 @@ widgets (commands as buttons, the player, a status line with timer and
 lock; each is told which PC it shows when it is placed) and three entries in
 the menu over marked text: *Send to PC* (a link opens there, text lands in
 its clipboard), *Ask AI* (explain, summarise, translate, improve, or a
-question of your own) and *Translate (AI)*.
+question of your own), *Translate (AI)* and *Read fast* (the marked text,
+one word at a time, in the app).
 
 Several PCs can be paired; the app keeps a connection to each. What it
 shows is the PC in front: the preferred one while it is connected, otherwise
@@ -238,6 +259,24 @@ for the password (checked with `unix_chkpwd`): whichever comes first counts,
 and the request vanishes from the phone. A wrong password, no phone or no
 answer within 45 s, and pam_unix asks for the password as before.
 `--remove` takes it out.
+
+**Messages.** The topic `messages` publishes what `Mail.qml` holds: the
+chats (200 newest), the open chat with its mails as plain text and their
+attachments, the outbox, snippets. The open chat is the shell's
+(`Mail.openId`): opening one on the phone marks it read and shows the same
+chat in the Messages panel when that is open. A reply or new mail from the
+phone is plain text, turned into the same draft the panel posts, and waits
+the same eight seconds in the outbox (undo, send now). An attachment asked
+for comes as a file (`Mail.attachmentPath` → `fileReady`). Incoming mails
+reach the phone as the shell's notifications do (mirroring).
+
+**Days.** `tracking` is the day board of `Tracking.qml`; the day it shows is
+the shell's too. Entries are addressed by project and description, as
+`qtrack-local` does.
+
+**Lyrics.** Looking from the phone counts as looking (`Lyrics.remote`), so
+the words are fetched although the media panel is closed. The phone works
+out the sung line from the media topic's position; nothing is sent per line.
 
 **Presence.** `"phone": { "presence": { "after": 120, "leave": ["lock",
 "pause", "timer"], "arrive": [] } }` in the host profile.

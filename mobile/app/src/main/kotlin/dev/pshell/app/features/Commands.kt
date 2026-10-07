@@ -71,10 +71,11 @@ import kotlinx.serialization.json.JsonObject
 
 val CommandsFeature = Feature(
 	id = "commands",
+	group = Group.Remote,
+	keywords = listOf("befehle", "run", "scripts", "tiles"),
 	title = "Commands",
 	icon = "console",
 	plugins = listOf("phone-commands"),
-	tab = 3,
 	screen = { CommandsScreen() },
 )
 

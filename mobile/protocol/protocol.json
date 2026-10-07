@@ -314,6 +314,44 @@
 			"plugins": [
 				"phone-unlock"
 			]
+		},
+		"messages": {
+			"owner": "shell",
+			"plugins": [
+				"messages",
+				"mail"
+			]
+		},
+		"tracking": {
+			"owner": "shell",
+			"plugins": [
+				"qtrack"
+			]
+		},
+		"downloads": {
+			"owner": "shell",
+			"plugins": [
+				"downloads"
+			]
+		},
+		"lyrics": {
+			"owner": "shell",
+			"plugins": [
+				"lyrics",
+				"media"
+			]
+		},
+		"reader": {
+			"owner": "shell",
+			"plugins": [
+				"fast-reader"
+			]
+		},
+		"convert": {
+			"owner": "shell",
+			"plugins": [
+				"converter"
+			]
 		}
 	},
 	"features": [

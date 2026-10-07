@@ -98,6 +98,8 @@ import okio.ByteString
 // ── capture ────────────────────────────────────────────────────────────────
 val CaptureFeature = Feature(
 	id = "capture",
+	group = Group.Pc,
+	keywords = listOf("screenshot", "record", "aufnahme", "ocr", "qr"),
 	title = "Capture",
 	icon = "camera_outline",
 	plugins = listOf("screenshot"),
@@ -201,6 +203,8 @@ private fun CaptureScreen() {
 // ── studio ─────────────────────────────────────────────────────────────────
 val StudioFeature = Feature(
 	id = "studio",
+	group = Group.Pc,
+	keywords = listOf("wallpaper", "hintergrund", "theme", "colours", "farben", "style", "icons", "cursor"),
 	title = "Studio",
 	icon = "palette_outline",
 	plugins = listOf("studio-wallpaper"),
@@ -528,6 +532,8 @@ private fun StudioScreen() {
 // ── the PC's screen ────────────────────────────────────────────────────────
 val ScreenFeature = Feature(
 	id = "screen",
+	group = Group.Remote,
+	keywords = listOf("bildschirm", "view", "mirror", "look"),
 	title = "Screen",
 	icon = "monitor_eye",
 	plugins = listOf("phone-screen"),

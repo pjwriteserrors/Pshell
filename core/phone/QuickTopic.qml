@@ -3,7 +3,7 @@ import Quickshell
 import qs.core.services
 
 // quick: the quick settings: do not disturb, keep awake, power profile,
-// brightness and monitor inputs, Bluetooth, the network.
+// brightness and monitor inputs, Bluetooth, the network, autocorrect.
 Topic {
 	id: topic
 
@@ -51,7 +51,8 @@ Topic {
 				battery: device.battery
 			}))
 		} : null,
-		network: Plugins.on("network") ? { label: Network.label, icon: Network.icon, ip: Network.ip, online: Network.online, signal: Network.signal } : null
+		network: Plugins.on("network") ? { label: Network.label, icon: Network.icon, ip: Network.ip, online: Network.online, signal: Network.signal } : null,
+		autocorrect: Autocorrect.available ? { on: Autocorrect.on, active: Autocorrect.active, failed: Autocorrect.failed } : null
 	}) : null
 
 	function call(action, args, done) {
@@ -75,6 +76,10 @@ Topic {
 		case "bluetooth":
 			if (args.address !== undefined) Bluetooth.toggleDevice(String(args.address));
 			else Bluetooth.togglePower();
+			return {};
+		case "autocorrect":
+			if (!Autocorrect.available) throw new Error("Autocorrect is off");
+			if (args.on === undefined || !!args.on !== Autocorrect.on) Autocorrect.toggle();
 			return {};
 		}
 		throw new Error("unknown-action");

@@ -77,6 +77,10 @@ Singleton {
 
 	// a mail was taken back: what was written is in drafts[key] again
 	signal undone(string key)
+	// a mail came in (before the question whether to show it here)
+	signal incoming(var mail)
+	// an attachment's file, asked for with attachmentPath()
+	signal fileReady(int request, string path)
 	property bool adding: false
 	property string accountError: ""
 
@@ -258,6 +262,11 @@ Singleton {
 		root.command("attachment", { chat: root.openId, message: message, attachment: attachment, action: "save" });
 	}
 
+	// where the attachment lies on disk; the answer comes as fileReady(request, path)
+	function attachmentPath(chat, message, attachment, request) {
+		root.command("attachment", { chat: chat, message: message, attachment: attachment, action: "path", req: request });
+	}
+
 	// the mail as its sender laid it out, as a picture
 	function draw(message) {
 		root.command("draw", { chat: root.openId, message: message });
@@ -394,6 +403,9 @@ Singleton {
 		case "signature":
 			root.signatureFound(data.account, data.text ?? "", data.rich ?? { rich: "", page: null });
 			break;
+		case "file":
+			root.fileReady(Number(data.req) || 0, String(data.path || ""));
+			break;
 		case "saved":
 			Notifs.pushInternal("success", String(data.path).split("/").pop(), "Downloads", {
 				icon: "download",
@@ -413,6 +425,7 @@ Singleton {
 	}
 
 	function arrived(mail) {
+		root.incoming(mail);
 		// an answer brings a chat back at once
 		root.wake(mail.chat, false);
 		if (!root.notifies || Notifs.dnd) return;

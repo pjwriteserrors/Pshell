@@ -23,6 +23,8 @@ import dev.pshell.app.ui.widgets.Tile
 
 val SessionFeature = Feature(
 	id = "session",
+	group = Group.Pc,
+	keywords = listOf("lock", "sperren", "suspend", "shutdown", "herunterfahren", "reboot", "neustart", "logout", "power"),
 	title = "Session",
 	icon = "power",
 	summary = { if (topic("session")["locked"].bool) "Locked" else "" },

@@ -48,10 +48,23 @@ fun pluginOn(vararg plugins: String): Boolean {
 /** The floating tab bar's manners: gone while the content scrolls down, a mere handle where every pixel counts. */
 object Chrome {
 	var hidden by androidx.compose.runtime.mutableStateOf(false)
-	/** routes on which the bar is only a handle until it is tapped */
-	val compactRoutes = setOf("feature/touchpad", "feature/terminal")
+	/** features on which the bar is only a handle until it is tapped */
+	val compactFeatures = setOf("touchpad", "terminal")
 	var expanded by androidx.compose.runtime.mutableStateOf(false)
+	/** which feature each group's tab shows, once the user picked one */
+	val hubSelection = androidx.compose.runtime.mutableStateMapOf<String, String>()
+
+	/** the feature a route shows, if it is one feature: "feature/x" or a tab with x selected */
+	fun featureOf(route: String, fallback: (String) -> String?): String? = when {
+		route.startsWith("feature/") -> route.removePrefix("feature/").substringBefore('/')
+		route.startsWith("hub/") -> route.removePrefix("hub/").let { hubSelection[it] ?: fallback(it) }
+		route.startsWith("terminal/") -> "terminal"
+		else -> null
+	}
 }
+
+/** Set by a group's tab: the chips that pick its feature, drawn by Screen in place of the title. */
+val LocalHubChips = androidx.compose.runtime.compositionLocalOf<(@Composable () -> Unit)?> { null }
 
 /** Where the user is: a stack of routes ("home", "feature/media", "settings", …). */
 class Nav {

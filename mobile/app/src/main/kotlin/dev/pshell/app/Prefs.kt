@@ -64,4 +64,6 @@ class Prefs(context: Context) {
 	val lastCommands = Setting("lastCommands", "")
 	/** the model the chat used last */
 	val chatModel = Setting("chatModel", "")
+	/** words per minute of the fast reader on the phone */
+	val readerWpm = Setting("readerWpm", 300)
 }

@@ -14,6 +14,8 @@ Singleton {
 	property bool open: false
 	// the media panel is on the screen
 	property bool watching: false
+	// phones that look at the lyrics (core/phone/LyricsTopic.qml)
+	property int remote: 0
 
 	// "" | "loading" | "found" | "none" | "error"
 	property string state: ""
@@ -25,7 +27,7 @@ Singleton {
 	readonly property string key: root.title === "" ? "" : [root.title, Media.artist, Media.player?.trackAlbum || "", Math.round(Media.length)].join("\n")
 	// the song the state and the lines belong to
 	property string loaded: ""
-	readonly property bool active: Plugins.on("lyrics") && root.open && root.watching && root.key !== ""
+	readonly property bool active: Plugins.on("lyrics") && ((root.open && root.watching) || root.remote > 0) && root.key !== ""
 	readonly property bool following: root.active && root.synced && root.state === "found"
 
 	// the line that is sung, -1 before the first

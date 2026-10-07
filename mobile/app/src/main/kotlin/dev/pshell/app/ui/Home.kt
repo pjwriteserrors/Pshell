@@ -41,6 +41,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.PaddingValues
+import dev.pshell.app.ui.widgets.EmptyState
+import dev.pshell.app.ui.widgets.ListRow
+import dev.pshell.app.ui.widgets.Field
+import dev.pshell.app.features.Group
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import dev.pshell.app.features.Feature
@@ -157,39 +163,100 @@ fun Home() {
 			val ids = features.map { it.id }.toSet()
 			fun open(id: String) = nav.open("feature/$id")
 
+			// ── search: a feature by name or kind, a command, a conversion ──
+			var query by rememberSaveable { mutableStateOf("") }
+			Field(query, placeholder = "Find anything · 5 kg in lb", icon = "magnify", action = androidx.compose.ui.text.input.ImeAction.Search, trailing = {
+				if (query.isNotEmpty()) IconButton("close", size = 36.dp, color = Theme.colors.layer2) { query = "" }
+			}) { query = it }
+			if (query.isNotBlank()) {
+				SearchResults(query.trim(), features) { open(it) }
+				return@Column
+			}
+
 			// ── the control centre: what is going on, and what is changed most ──
 			for (id in listOf("unlock", "media")) features.firstOrNull { it.id == id }?.card?.invoke { open(id) }
 			if ("sound" in ids) dev.pshell.app.features.VolumeSlider()
-			for (id in listOf("timer", "agents")) features.firstOrNull { it.id == id }?.card?.invoke { open(id) }
+			for (id in listOf("timer", "agents", "messages", "downloads")) features.firstOrNull { it.id == id }?.card?.invoke { open(id) }
 			if ("quick" in ids || "session" in ids) Toggles(showQuick = "quick" in ids)
 			if ("commands" in ids) Shortcuts { open("commands") }
 			for (id in listOf("system", "breaks")) features.firstOrNull { it.id == id }?.card?.invoke { open(id) }
 
-			// ── everything else: tools one goes to, rather than glances at ──
-			if (features.isNotEmpty()) {
-				SectionLabel("Everything")
-				for (row in features.chunked(4)) {
-					Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-						for (feature in row) {
-							Column(
-								Modifier.weight(1f).pressable(shape = RoundedCornerShape(22.dp), pressedScale = 0.92f, haptic = true) { open(feature.id) }.padding(vertical = 8.dp),
-								horizontalAlignment = Alignment.CenterHorizontally,
-							) {
-								Box(Modifier.size(56.dp).clip(RoundedCornerShape(20.dp)).background(Theme.colors.layer1), contentAlignment = Alignment.Center) {
-									Glyph(feature.icon, size = 26.dp)
-								}
-								Spacer(Modifier.height(6.dp))
-								Label(feature.title, style = Theme.Type.tiny.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium), color = Theme.colors.textMuted, align = androidx.compose.ui.text.style.TextAlign.Center)
-								val summary = feature.summary()
-								if (summary.isNotEmpty()) Label(summary, style = Theme.Type.tiny, color = Theme.colors.primary, align = androidx.compose.ui.text.style.TextAlign.Center)
-							}
-						}
-						repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
-					}
+			// ── everything else, by group: tools one goes to, rather than glances at ──
+			for (group in Group.entries) {
+				val members = features.filter { it.group == group }
+				if (members.isEmpty()) continue
+				Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+					SectionLabel(group.title, Modifier.weight(1f))
+					if (group.tab) Label("Open tab", Modifier.pressable(shape = CircleShape, pressedScale = 0.95f) { nav.switchTo("hub/${group.id}") }.padding(horizontal = 10.dp, vertical = 4.dp), style = Theme.Type.tiny, color = Theme.colors.primary)
 				}
+				FeatureGrid(members) { open(it) }
 			}
 		}
 	}
+}
+
+/** Four features to a row: icon, name and, when cheap to know, a live word under it. */
+@Composable
+private fun FeatureGrid(features: List<Feature>, open: (String) -> Unit) {
+	for (row in features.chunked(4)) {
+		Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+			for (feature in row) {
+				Column(
+					Modifier.weight(1f).pressable(shape = RoundedCornerShape(22.dp), pressedScale = 0.92f, haptic = true) { open(feature.id) }.padding(vertical = 8.dp),
+					horizontalAlignment = Alignment.CenterHorizontally,
+				) {
+					Box(Modifier.size(56.dp).clip(RoundedCornerShape(20.dp)).background(Theme.colors.layer1), contentAlignment = Alignment.Center) {
+						Glyph(feature.icon, size = 26.dp)
+					}
+					Spacer(Modifier.height(6.dp))
+					Label(feature.title, style = Theme.Type.tiny.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium), color = Theme.colors.textMuted, align = androidx.compose.ui.text.style.TextAlign.Center)
+					val summary = feature.summary()
+					if (summary.isNotEmpty()) Label(summary, style = Theme.Type.tiny, color = Theme.colors.primary, align = androidx.compose.ui.text.style.TextAlign.Center)
+				}
+			}
+			repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
+		}
+	}
+}
+
+/**
+ * What the search field finds: features whose name, group or keywords
+ * contain the words, commands of the grid by their label, and, when the
+ * query has a number in it, the converter's answer.
+ */
+@Composable
+private fun SearchResults(query: String, features: List<Feature>, open: (String) -> Unit) {
+	val link = link
+	val nav = LocalNav.current
+	val words = query.lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
+	val found = features.filter { feature -> words.all { word -> feature.terms.any { it.contains(word) } } }
+	val commands = if (features.any { it.id == "commands" }) topic("commands")["tiles"].list.filter { tile -> words.all { tile["label"].string.lowercase().contains(it) } }.take(6) else emptyList()
+	val convertible = features.any { it.id == "convert" } && query.any { it.isDigit() }
+	if (convertible) {
+		val result = dev.pshell.app.features.rememberConversion(query)
+		if (result != null) dev.pshell.app.features.ConversionCard(result, compact = true)
+	}
+	if (found.isNotEmpty()) {
+		SectionLabel("Features")
+		Panel(padding = PaddingValues(6.dp)) {
+			for (feature in found.take(12)) ListRow(feature.title, icon = feature.icon, subtitle = feature.group.title, onClick = { open(feature.id) }) {
+				val summary = feature.summary()
+				if (summary.isNotEmpty()) Label(summary, style = Theme.Type.small, color = Theme.colors.primary)
+			}
+		}
+	}
+	if (commands.isNotEmpty()) {
+		SectionLabel("Commands")
+		Panel(padding = PaddingValues(6.dp)) {
+			for (tile in commands) {
+				val direct = !tile["confirm"].bool && tile["fields"].list.isEmpty() && !tile["output"].bool && !tile["terminal"].bool
+				ListRow(tile["label"].string, icon = tile["icon"].string.ifEmpty { "console" }, subtitle = if (direct) "Runs on the PC" else "Opens in Commands", onClick = {
+					if (tile["terminal"].bool) nav.open("terminal/run/${tile["id"].string}") else if (direct) link.run("commands", "run", json("id" to tile["id"].string)) else open("commands")
+				})
+			}
+		}
+	}
+	if (found.isEmpty() && commands.isEmpty() && !convertible) EmptyState("magnify", "Nothing found", text = "Try another word, a group like \"media\", or a conversion like 72 f c.")
 }
 
 /** The quick settings of the PC: lock, silence, keep awake, Bluetooth, and the monitors' brightness. */
@@ -210,6 +277,9 @@ private fun Toggles(showQuick: Boolean) {
 	}
 	quick["bluetooth"]?.let { bluetooth ->
 		tiles.add { modifier -> Tile(if (bluetooth["powered"].bool) "bluetooth" else "bluetooth_off", "Bluetooth", modifier, subtitle = bluetooth["summary"].string, active = bluetooth["powered"].bool) { link.run("quick", "bluetooth") } }
+	}
+	quick["autocorrect"]?.let { auto ->
+		tiles.add { modifier -> Tile("keyboard", "Autocorrect", modifier, subtitle = if (auto["failed"].bool) "Failed" else if (auto["on"].bool) "On" else "Off", active = auto["on"].bool) { link.run("quick", "autocorrect") } }
 	}
 	quick["power"]?.let { power ->
 		val profiles = power["profiles"].list

@@ -5,6 +5,7 @@
 	<string name="process_send">Send to PC</string>
 	<string name="process_ask">Ask AI</string>
 	<string name="process_translate">Translate (AI)</string>
+	<string name="process_read">Read fast</string>
 	<string name="tile_clipboard">Clipboard to PC</string>
 	<string name="tile_lock">Lock PC</string>
 	<string name="tile_play">PC play / pause</string>

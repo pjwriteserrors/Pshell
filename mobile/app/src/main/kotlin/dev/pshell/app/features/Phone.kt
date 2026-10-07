@@ -92,6 +92,8 @@ private fun Access(title: String, granted: Boolean, explanation: String, icon: S
 // ── notifications ──────────────────────────────────────────────────────────
 val NotificationsFeature = Feature(
 	id = "notifications",
+	group = Group.Link,
+	keywords = listOf("benachrichtigungen", "mirror", "alerts"),
 	title = "Notifications",
 	icon = "bell_outline",
 	plugins = listOf("notifications"),
@@ -144,6 +146,8 @@ private fun NotificationsScreen() {
 // ── clipboard ──────────────────────────────────────────────────────────────
 val ClipboardFeature = Feature(
 	id = "clipboard",
+	group = Group.Link,
+	keywords = listOf("zwischenablage", "copy", "paste", "kopieren"),
 	title = "Clipboard",
 	icon = "content_paste",
 	plugins = listOf("phone-clipboard"),
@@ -201,6 +205,8 @@ private fun ClipboardScreen() {
 // ── files ──────────────────────────────────────────────────────────────────
 val FilesFeature = Feature(
 	id = "files",
+	group = Group.Link,
+	keywords = listOf("dateien", "send", "senden", "share", "teilen", "transfer"),
 	title = "Files",
 	icon = "file_send_outline",
 	plugins = listOf("phone-files"),
@@ -256,6 +262,8 @@ private fun FilesScreen() {
 // ── links and hand-off ─────────────────────────────────────────────────────
 val HandoffFeature = Feature(
 	id = "handoff",
+	group = Group.Media,
+	keywords = listOf("continue", "weiter", "youtube", "headphones", "kopfhörer", "links"),
 	title = "Continue",
 	icon = "cellphone_link",
 	plugins = listOf("phone-handoff"),
@@ -328,6 +336,8 @@ private fun HandoffScreen() {
 // ── calls, and finding each other ──────────────────────────────────────────
 val CallsFeature = Feature(
 	id = "calls",
+	group = Group.Link,
+	keywords = listOf("anrufe", "phone", "telefon", "ring"),
 	title = "Calls",
 	icon = "phone_outline",
 	plugins = listOf("phone-telephony"),
@@ -353,6 +363,8 @@ private fun CallsScreen() {
 
 val FindFeature = Feature(
 	id = "find",
+	group = Group.Link,
+	keywords = listOf("finden", "ring", "klingeln", "locate"),
 	title = "Find my PC",
 	icon = "crosshairs_gps",
 	plugins = listOf("phone-find"),

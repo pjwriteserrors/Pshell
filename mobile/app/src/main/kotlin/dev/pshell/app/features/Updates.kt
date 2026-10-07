@@ -32,6 +32,8 @@ import dev.pshell.app.ui.widgets.SectionLabel
 
 val UpdatesFeature = Feature(
 	id = "updates",
+	group = Group.Pc,
+	keywords = listOf("pacman", "packages", "pakete", "upgrade"),
 	title = "Updates",
 	icon = "package_up",
 	plugins = listOf("updates"),

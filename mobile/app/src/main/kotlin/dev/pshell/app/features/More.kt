@@ -74,6 +74,8 @@ import kotlinx.serialization.json.JsonElement
 // ── song detection ─────────────────────────────────────────────────────────
 val SongFeature = Feature(
 	id = "song",
+	group = Group.Media,
+	keywords = listOf("shazam", "detect", "erkennen", "song"),
 	title = "What plays?",
 	icon = "waveform",
 	plugins = listOf("song-detection", "media"),
@@ -147,6 +149,8 @@ private fun SongScreen() {
 // ── weather ────────────────────────────────────────────────────────────────
 val WeatherFeature = Feature(
 	id = "weather",
+	group = Group.Work,
+	keywords = listOf("wetter", "forecast", "temperature"),
 	title = "Weather",
 	icon = "weather_partly_cloudy",
 	plugins = listOf("weather"),
@@ -219,6 +223,8 @@ private fun WeatherScreen() {
 // ── calendar ───────────────────────────────────────────────────────────────
 val CalendarFeature = Feature(
 	id = "calendar",
+	group = Group.Work,
+	keywords = listOf("kalender", "meetings", "termine", "events"),
 	title = "Calendar",
 	icon = "calendar_month_outline",
 	plugins = listOf("calendar"),
@@ -296,6 +302,8 @@ private fun CalendarScreen() {
 // ── shelves ────────────────────────────────────────────────────────────────
 val ShelvesFeature = Feature(
 	id = "shelves",
+	group = Group.Work,
+	keywords = listOf("ablage", "stash", "drop", "files"),
 	title = "Shelves",
 	icon = "tray_full",
 	plugins = listOf("shelves"),
@@ -368,6 +376,8 @@ private fun ShelvesScreen() {
 // ── translate ──────────────────────────────────────────────────────────────
 val TranslateFeature = Feature(
 	id = "translate",
+	group = Group.Work,
+	keywords = listOf("übersetzen", "language", "sprache"),
 	title = "Translate",
 	icon = "translate",
 	plugins = listOf("translate"),
@@ -421,6 +431,8 @@ private fun TranslateScreen() {
 // ── display profiles ───────────────────────────────────────────────────────
 val DisplayFeature = Feature(
 	id = "display",
+	group = Group.Pc,
+	keywords = listOf("monitors", "bildschirme", "layout", "profiles"),
 	title = "Displays",
 	icon = "monitor_multiple",
 	plugins = listOf("display-profiles"),

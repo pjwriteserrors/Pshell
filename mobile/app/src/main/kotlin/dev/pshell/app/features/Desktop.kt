@@ -84,6 +84,8 @@ fun AppIcon(path: String, size: Dp = 40.dp, fallback: String = "application_outl
 // ── windows ────────────────────────────────────────────────────────────────
 val WindowsFeature = Feature(
 	id = "windows",
+	group = Group.Remote,
+	keywords = listOf("fenster", "workspaces", "overview", "focus"),
 	title = "Windows",
 	icon = "dock_window",
 	plugins = listOf("overview"),
@@ -282,6 +284,8 @@ private fun WindowsScreen() {
 // ── launcher ───────────────────────────────────────────────────────────────
 val AppsFeature = Feature(
 	id = "apps",
+	group = Group.Remote,
+	keywords = listOf("launcher", "programs", "programme", "start", "search", "web"),
 	title = "Launcher",
 	icon = "apps",
 	plugins = listOf("apps"),
@@ -316,6 +320,8 @@ private fun AppsScreen() {
 // ── radial menu ────────────────────────────────────────────────────────────
 val RadialFeature = Feature(
 	id = "radial",
+	group = Group.Remote,
+	keywords = listOf("menu", "menü", "pie"),
 	title = "Radial menu",
 	icon = "chart_donut",
 	plugins = listOf("radial-menu"),
@@ -361,6 +367,8 @@ private fun RadialScreen() {
 // ── quick settings ─────────────────────────────────────────────────────────
 val QuickFeature = Feature(
 	id = "quick",
+	group = Group.Pc,
+	keywords = listOf("settings", "einstellungen", "dnd", "silence", "bluetooth", "brightness", "helligkeit", "power", "autocorrect"),
 	title = "Quick settings",
 	icon = "tune_variant",
 	plugins = listOf("quick-settings"),
@@ -384,6 +392,9 @@ private fun QuickScreen() {
 		}
 		quick["network"]?.let { network ->
 			tiles.add { modifier -> Tile(network["icon"].string.takeIf { Icons.has(it) } ?: "lan", network["label"].string, modifier, subtitle = network["ip"].string, active = network["online"].bool) {} }
+		}
+		quick["autocorrect"]?.let { auto ->
+			tiles.add { modifier -> Tile("keyboard", "Autocorrect", modifier, subtitle = if (auto["failed"].bool) "Failed to start" else if (auto["on"].bool) (if (auto["active"].bool) "Correcting what is typed" else "On") else "Off", active = auto["on"].bool) { link.run("quick", "autocorrect") } }
 		}
 		for (pair in tiles.chunked(2)) {
 			Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

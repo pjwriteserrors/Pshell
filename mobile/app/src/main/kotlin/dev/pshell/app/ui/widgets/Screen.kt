@@ -1,6 +1,7 @@
 package dev.pshell.app.ui.widgets
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -22,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import dev.pshell.app.ui.LocalHubChips
 import dev.pshell.app.ui.LocalNav
 import dev.pshell.app.ui.theme.Theme
 
@@ -42,18 +44,23 @@ fun Screen(
 ) {
 	val nav = LocalNav.current
 	val root = nav.stack.size <= 1
+	val chips = LocalHubChips.current
 	Column(Modifier.fillMaxSize().padding(WindowInsets.statusBars.asPaddingValues()).imePadding()) {
-		Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+		Row(Modifier.fillMaxWidth().padding(start = if (chips != null) 8.dp else 16.dp, end = 12.dp, top = 12.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
 			if (!root) {
 				IconButton("arrow_left", color = Theme.colors.layer2, onClick = { nav.back() })
 				Spacer(Modifier.width(12.dp))
 			}
-			Column(Modifier.weight(1f)) {
+			if (chips != null) {
+				// in a group's tab the chips say where one is; the title would say it twice
+				Box(Modifier.weight(1f)) { chips() }
+			} else Column(Modifier.weight(1f)) {
 				Label(title, style = if (root) Theme.Type.display else Theme.Type.heading)
 				if (subtitle.isNotEmpty()) Label(subtitle, style = Theme.Type.small, color = Theme.colors.textMuted)
 			}
 			actions()
 		}
+		if (chips != null && subtitle.isNotEmpty()) Label(subtitle, Modifier.padding(start = 16.dp, end = 16.dp, bottom = 4.dp), style = Theme.Type.small, color = Theme.colors.textMuted)
 		Column(
 			Modifier
 				.fillMaxSize()

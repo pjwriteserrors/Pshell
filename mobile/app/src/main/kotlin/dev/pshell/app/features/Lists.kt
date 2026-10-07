@@ -55,6 +55,8 @@ import kotlinx.serialization.json.JsonElement
 // ── todos ──────────────────────────────────────────────────────────────────
 val TodosFeature = Feature(
 	id = "todos",
+	group = Group.Work,
+	keywords = listOf("tasks", "aufgaben", "list", "liste"),
 	title = "Todos",
 	icon = "checkbox_marked_circle_outline",
 	plugins = listOf("todos"),
@@ -126,6 +128,8 @@ private fun TodosScreen() {
 // ── notes ──────────────────────────────────────────────────────────────────
 val NotesFeature = Feature(
 	id = "notes",
+	group = Group.Work,
+	keywords = listOf("notizen", "memo"),
 	title = "Notes",
 	icon = "note_text_outline",
 	plugins = listOf("notes"),
@@ -169,33 +173,11 @@ private fun NotesScreen() {
 	}
 }
 
-// ── ssh ────────────────────────────────────────────────────────────────────
-val SshFeature = Feature(
-	id = "ssh",
-	title = "SSH logins",
-	icon = "console_network_outline",
-	plugins = listOf("ssh"),
-	screen = {
-		val entries = topic("ssh")["entries"].list
-		val link = link
-		Screen("SSH logins", subtitle = "Opens a session in a terminal on the PC") {
-			if (entries.isEmpty()) EmptyState("console_network_outline", "No saved logins")
-			else Panel(padding = PaddingValues(6.dp)) {
-				for (entry in entries) {
-					ListRow(entry["name"].string, icon = "server", subtitle = listOf(entry["user"].string, entry["host"].string).filter { it.isNotEmpty() }.joinToString("@"), onClick = {
-						link.run("ssh", "connect", json("id" to entry["id"].string))
-					}) {
-						Glyph("chevron_right", size = 20.dp, color = Theme.colors.textSubtle)
-					}
-				}
-			}
-		}
-	},
-)
-
 // ── rpg ────────────────────────────────────────────────────────────────────
 val RpgFeature = Feature(
 	id = "rpg",
+	group = Group.Pc,
+	keywords = listOf("game", "spiel", "level", "xp"),
 	title = "RPG",
 	icon = "sword_cross",
 	plugins = listOf("rpg"),

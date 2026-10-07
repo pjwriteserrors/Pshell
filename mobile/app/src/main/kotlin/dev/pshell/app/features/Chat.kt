@@ -65,6 +65,8 @@ import kotlinx.coroutines.launch
 
 val ChatFeature = Feature(
 	id = "chat",
+	group = Group.Work,
+	keywords = listOf("ai", "ki", "ollama", "llm", "ask", "frage"),
 	title = "AI chat",
 	icon = "creation",
 	plugins = listOf("chat"),

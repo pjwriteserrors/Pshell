@@ -67,6 +67,8 @@ import kotlinx.serialization.json.JsonElement
 // ── the PC's files ─────────────────────────────────────────────────────────
 val PcFilesFeature = Feature(
 	id = "pcfiles",
+	group = Group.Pc,
+	keywords = listOf("dateien", "folders", "ordner", "browse", "download", "upload"),
 	title = "PC files",
 	icon = "folder_network_outline",
 	plugins = listOf("phone-fs"),
@@ -231,6 +233,8 @@ suspend fun unlockPc(context: Context, link: Link): String = try {
 
 val UnlockFeature = Feature(
 	id = "unlock",
+	group = Group.Pc,
+	keywords = listOf("entsperren", "fingerprint", "lock", "sudo"),
 	title = "Unlock",
 	icon = "fingerprint",
 	plugins = listOf("phone-unlock", "lock-screen"),

@@ -82,15 +82,19 @@ import okio.Buffer
 
 val TouchpadFeature = Feature(
 	id = "touchpad",
+	group = Group.Remote,
+	keywords = listOf("mouse", "maus", "pointer", "cursor", "trackpad"),
+	bare = true,
 	title = "Touchpad",
 	icon = "gesture_tap",
 	plugins = listOf("phone-touchpad"),
-	tab = 2,
 	screen = { TouchpadScreen() },
 )
 
 val KeyboardFeature = Feature(
 	id = "keyboard",
+	group = Group.Remote,
+	keywords = listOf("typing", "tastatur", "type", "text"),
 	title = "Keyboard",
 	icon = "keyboard_outline",
 	plugins = listOf("phone-keyboard"),

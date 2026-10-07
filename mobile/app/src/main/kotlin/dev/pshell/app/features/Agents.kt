@@ -44,6 +44,8 @@ import kotlinx.serialization.json.JsonElement
 
 val AgentsFeature = Feature(
 	id = "agents",
+	group = Group.Work,
+	keywords = listOf("claude", "ai", "ki", "codex", "answer"),
 	title = "Agents",
 	icon = "robot",
 	plugins = listOf("agents"),

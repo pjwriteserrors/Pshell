@@ -50,6 +50,8 @@ import kotlinx.serialization.json.JsonElement
 
 val TimerFeature = Feature(
 	id = "timer",
+	group = Group.Work,
+	keywords = listOf("zeit", "time", "tracking", "qtrack", "stopwatch"),
 	title = "Timer",
 	icon = "timer_outline",
 	plugins = listOf("qtrack"),
@@ -99,7 +101,11 @@ private fun TimerScreen() {
 	val timer = topic("timer")
 	val link = link
 	var starting by remember { mutableStateOf(false) }
-	Screen("Timer", subtitle = "Today ${timer["todayTotal"].string}") {
+	val nav = dev.pshell.app.ui.LocalNav.current
+	Screen("Timer", subtitle = "Today ${timer["todayTotal"].string}", actions = {
+		// the day board: every tracked day, to check and send to Teamwork
+		IconButton("calendar_clock", color = Theme.colors.layer2) { nav.open("feature/tracking") }
+	}) {
 		val tracking = timer["tracking"].bool
 		Panel(color = if (tracking) Theme.colors.primaryContainer else Theme.colors.layer1, padding = PaddingValues(20.dp)) {
 			Label(

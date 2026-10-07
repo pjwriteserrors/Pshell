@@ -9,7 +9,8 @@ adb=("$here/adb.sh" "$@")
 features="$(grep -oE 'id = "[a-z]+"' "$here"/../app/src/main/kotlin/dev/pshell/app/features/*.kt | sed -E 's/.*"(.*)"/\1/' | sort -u)"
 failed=0
 "${adb[@]}" logcat -c
-for route in home settings pairing $(printf 'feature/%s ' $features); do
+groups="$(grep -oE '^\s+[A-Z][a-z]+\("[a-z]+"' "$here"/../app/src/main/kotlin/dev/pshell/app/features/Feature.kt | sed -E 's/.*"(.*)"/\1/')"
+for route in home settings pairing $(printf 'hub/%s ' $groups) $(printf 'feature/%s ' $features); do
 	"${adb[@]}" open "$route" 2>/dev/null
 	sleep 2.5
 	if "${adb[@]}" logcat -d -s AndroidRuntime:E | grep -q "FATAL EXCEPTION"; then

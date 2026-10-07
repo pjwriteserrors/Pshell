@@ -38,6 +38,8 @@ import kotlinx.serialization.json.JsonElement
 
 val SystemFeature = Feature(
 	id = "system",
+	group = Group.Pc,
+	keywords = listOf("cpu", "memory", "ram", "disk", "load", "monitor"),
 	title = "System",
 	icon = "chip",
 	plugins = listOf("system-monitor"),

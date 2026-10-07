@@ -43,6 +43,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
+import dev.pshell.app.features.Group
+import dev.pshell.app.features.Feature
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import dev.pshell.app.App
 import dev.pshell.app.MainActivity
 import dev.pshell.app.features.feature
@@ -172,7 +178,7 @@ fun Root(app: App, nav: Nav, activity: MainActivity) {
 	}
 }
 
-private fun tabRoutes(app: App): List<String> = listOf("home") + dev.pshell.app.features.Features.filter { it.tab > 0 }.map { "feature/${it.id}" }
+private fun tabRoutes(app: App): List<String> = listOf("home") + dev.pshell.app.features.Group.entries.filter { it.tab }.map { "hub/${it.id}" }
 
 @Composable
 private fun Route(route: String) {
@@ -180,6 +186,8 @@ private fun Route(route: String) {
 		route == "home" -> Home()
 		route == "settings" -> Settings()
 		route == "pairing" -> Pairing(first = false)
+		// a group's tab: its chips above the feature that is picked
+		route.startsWith("hub/") -> Hub(route.removePrefix("hub/"))
 		// terminal/run/<tile id> types a command of the grid, terminal/cmd/<base64> one as it is
 		route.startsWith("terminal/") -> {
 			if (!pluginOn("phone-terminal")) Screen("Terminal") { EmptyState("toggle_switch_off_outline", "Switched off", text = "The terminal is off on this PC. Switch it on in >plugins.") }
@@ -190,11 +198,14 @@ private fun Route(route: String) {
 			}
 		}
 		route.startsWith("feature/") -> {
-			val found = feature(route.removePrefix("feature/"))
+			val rest = route.removePrefix("feature/")
+			val found = feature(rest.substringBefore('/'))
+			val arg = rest.substringAfter('/', "")
 			if (found == null) Screen("Unknown") { EmptyState("help_circle_outline", "Nothing here") }
 			else if (!pluginOn(*found.plugins.toTypedArray())) Screen(found.title) {
 				EmptyState("toggle_switch_off_outline", "Switched off", text = "${found.title} is off on this PC. Switch it on in >plugins.")
 			}
+			else if (arg.isNotEmpty() && found.page != null) found.page.invoke(android.net.Uri.decode(arg))
 			else found.screen()
 		}
 	}
@@ -208,9 +219,11 @@ private fun Route(route: String) {
 @Composable
 private fun TabBar() {
 	val nav = LocalNav.current
-	val tabs = enabledFeatures().filter { it.tab > 0 }.sortedBy { it.tab }
+	val enabled = enabledFeatures()
+	val tabs = enabled.filter { it.group.tab }
 	if (tabs.isEmpty()) return
-	val compact = (nav.current in Chrome.compactRoutes || nav.current.startsWith("terminal/")) && !Chrome.expanded
+	val shown = Chrome.featureOf(nav.current) { group -> tabs.firstOrNull { it.group.id == group }?.id }
+	val compact = shown in Chrome.compactFeatures && !Chrome.expanded
 	LaunchedEffect(Chrome.expanded) {
 		if (Chrome.expanded) {
 			delay(3500)
@@ -226,7 +239,8 @@ private fun TabBar() {
 		}
 		return
 	}
-	val entries = listOf(Triple("home", "home_variant", "Home")) + tabs.map { Triple("feature/${it.id}", it.icon, it.title) }
+	val groups = Group.entries.filter { group -> group.tab && tabs.any { it.group == group } }
+	val entries = listOf(Triple("home", "home_variant", "Home")) + groups.map { Triple("hub/${it.id}", it.icon, it.title) }
 	Row(
 		Modifier
 			.navigationBarsPadding()
@@ -258,6 +272,52 @@ private fun TabBar() {
 				}
 			}
 		}
+	}
+}
+
+/** The first feature of a group that is switched on: what its tab opens with. */
+@Composable
+private fun firstEnabled(group: Group): Feature? = enabledFeatures().firstOrNull { it.group == group }
+
+/**
+ * A group's tab: a row of chips, one per feature of the group that is on,
+ * above the feature picked. Features that draw their own surface (touchpad,
+ * terminal) get the chips above them; the others draw them in their header.
+ */
+@Composable
+private fun Hub(groupId: String) {
+	val group = Group.entries.firstOrNull { it.id == groupId }
+	val features = enabledFeatures().filter { it.group == group }
+	if (group == null || features.isEmpty()) {
+		Screen(group?.title ?: "Nothing here") { EmptyState("toggle_switch_off_outline", "Nothing switched on", text = "Every feature of this group is off on the PC. Switch them on in >plugins.") }
+		return
+	}
+	val picked = features.firstOrNull { it.id == Chrome.hubSelection[groupId] } ?: features.first()
+	val chips: @Composable () -> Unit = {
+		val scroll = rememberScrollState()
+		Row(Modifier.horizontalScroll(scroll).padding(end = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+			for (feature in features) {
+				val active = feature.id == picked.id
+				val background by animateColorAsState(if (active) Theme.colors.primary else Theme.colors.layer1, label = "hubChip")
+				Row(
+					Modifier.height(40.dp).pressable(shape = CircleShape, pressedScale = 0.94f, haptic = true) { Chrome.hubSelection[groupId] = feature.id }.background(background).padding(horizontal = if (active) 14.dp else 12.dp),
+					verticalAlignment = Alignment.CenterVertically,
+				) {
+					Glyph(feature.icon, size = 18.dp, color = if (active) Theme.colors.onPrimary else Theme.colors.textMuted)
+					if (active) {
+						Spacer(Modifier.width(6.dp))
+						Label(feature.title, style = Theme.Type.label, color = Theme.colors.onPrimary)
+					}
+				}
+			}
+		}
+	}
+	val holder = rememberSaveableStateHolder()
+	if (picked.bare) Column(Modifier.fillMaxSize()) {
+		Box(Modifier.fillMaxWidth().statusBarsPadding().padding(start = 8.dp, top = 10.dp, bottom = 6.dp)) { chips() }
+		Box(Modifier.weight(1f)) { holder.SaveableStateProvider("hub/${picked.id}") { picked.screen() } }
+	} else CompositionLocalProvider(LocalHubChips provides chips) {
+		holder.SaveableStateProvider("hub/${picked.id}") { picked.screen() }
 	}
 }
 

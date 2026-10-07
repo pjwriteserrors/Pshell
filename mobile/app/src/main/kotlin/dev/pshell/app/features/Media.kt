@@ -75,10 +75,11 @@ import kotlinx.serialization.json.JsonElement
 
 val MediaFeature = Feature(
 	id = "media",
+	group = Group.Media,
+	keywords = listOf("player", "musik", "music", "play", "pause", "spotify", "video"),
 	title = "Media",
 	icon = "music",
 	plugins = listOf("media"),
-	tab = 1,
 	card = { open -> MediaCard(open) },
 	screen = { MediaScreen() },
 )
@@ -233,7 +234,11 @@ fun VolumeSlider(modifier: Modifier = Modifier) {
 private fun MediaScreen() {
 	val media = topic("media")
 	val link = link
-	Screen("Media", subtitle = media["player"].string) {
+	val nav = dev.pshell.app.ui.LocalNav.current
+	Screen("Media", subtitle = media["player"].string, actions = {
+		// the words of the song, when the lyrics plugin is on
+		if (pluginOn("lyrics") && media["has"].bool) IconButton("music_note", color = Theme.colors.layer2) { nav.open("feature/lyrics") }
+	}) {
 		if (!media["has"].bool) {
 			EmptyState("music", "Nothing playing", text = "A player that runs on the PC shows up here.")
 			if (pluginOn("sound")) VolumeSlider()
@@ -281,6 +286,8 @@ private fun MediaScreen() {
 
 val SoundFeature = Feature(
 	id = "sound",
+	group = Group.Media,
+	keywords = listOf("volume", "lautstärke", "audio", "output", "mute"),
 	title = "Sound",
 	icon = "volume_high",
 	plugins = listOf("sound"),
