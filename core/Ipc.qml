@@ -558,6 +558,35 @@ Scope {
 		}
 	}
 
+	// a made-up person with a mailbox and a number, to sign up with
+	IpcHandler {
+		target: "identity"
+		enabled: Plugins.on("identities")
+
+		// opens with a new one
+		function create(): void {
+			Identities.create();
+		}
+		function open(): void {
+			Identities.open("");
+		}
+		// the saved ones
+		function list(): void {
+			Identities.open("list");
+		}
+		function close(): void {
+			Identities.close();
+		}
+		function toggle(): void {
+			Identities.toggle();
+		}
+		// a window of its own, or back under the bar
+		function window(): void {
+			if (Identities.windowed) Identities.dock();
+			else Identities.popOut();
+		}
+	}
+
 	IpcHandler {
 		target: "screentime"
 		enabled: Plugins.on("screentime")
@@ -667,6 +696,9 @@ Scope {
 
 		function reload(): void {
 			Theme.reload();
+		}
+		function painted(): void {
+			Popups.wallpaperPainted();
 		}
 	}
 

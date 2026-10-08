@@ -24,6 +24,8 @@ Singleton {
 
 	// asks the shell to open the standalone RPG window (launcher "/rpg")
 	signal rpgWindowRequested
+	// the wallpaper's surfaces are up again (scripts/apply_wallpaper_runtime.sh)
+	signal wallpaperPainted
 	// emitted right before a panel opens so the bar can report its button position
 	signal anchorRequested(var screen, string id)
 
@@ -79,6 +81,7 @@ Singleton {
 		messages: "messages",
 		reader: "fast-reader",
 		screentime: "screentime",
+		identity: "identities",
 		niri: "niri-settings",
 		power: "power-menu",
 		radial: "radial-menu",

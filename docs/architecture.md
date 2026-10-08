@@ -89,6 +89,7 @@ or when a plugin has neither picture, scene nor icon.
 | `themeHooks` | the theme hooks a fresh setup of this machine starts with; each hook is a plugin `hook-<name>` in the Studio tab of `>plugins`, switched on and off there like any other |
 | `hookConfig.<hook>` | settings of a hook |
 | `autocorrect.exclude` | app ids typing is not corrected in, as regular expressions, besides terminals, code editors, password managers and games |
+| `identities.nat` | where the people of `identities` are from, a nationality of randomuser.me (default `de`) |
 | `shelf.watch` | folders whose new files land on a shelf (default: Downloads, Pictures/Screenshots, Videos/Recordings) |
 | `phone` | the phone app's daemon: `port`, `bind`, `addresses` (a VPN name for pairing codes), `downloads`, `files` (the folder the phone may browse), `editCommands`, `presence` (docs/mobile.md) |
 
@@ -216,6 +217,27 @@ and again when it is two months old; no address leaves the machine. Home is
 the weather's city, or where the time zone is at home. The land is
 `assets/globe/land.json`, a grid of dots made from Natural Earth by
 `scripts/globe_land.py`.
+
+`identities` makes up people to sign up with where an account is asked for
+(`>identity` opens with a new one, `>identities` with the saved ones;
+`scripts/ipc.sh identity create|list|toggle|window`). `scripts/identity.py`
+fetches a person from randomuser.me, a mailbox from mail.tm and a public
+phone number of sms-online.co or receive-sms.cc, none of them with a key.
+The panel under the bar shows who it is, each part with a button that copies
+it (the picture too), and beside it what the mailbox and the number receive;
+a code a message is about stands beside it to be copied. Popped out it is a
+window of its own, to keep beside the form. A new identity is a draft: the
+next new one takes its place and its mailbox is deleted. Saved, with a title
+that says what it was for, it stays in the list
+(`~/.local/state/pshell/identities.json`, readable by the user only – it
+holds the passwords). The inboxes are read every 15 seconds while the surface
+is up, the mailbox for ten minutes more (a mail that comes then is a toast
+with its code), and the saved ones every six hours. What was received is kept
+with the identity, so it can be read after mail.tm dropped the mail or the
+number went away. When the mailbox no longer signs in or the number's page is
+gone, its row says so and offers a new one; a failing network never counts as
+gone. The numbers are public: everyone can read their SMS, and a site may
+refuse them.
 
 `downloads` shows what the browser downloads (network panel, and a chip in
 the bar) and pauses, resumes and cancels from there. The browser reports

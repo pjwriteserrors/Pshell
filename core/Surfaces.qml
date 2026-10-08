@@ -158,6 +158,19 @@ Scope {
 	}
 
 	LazyLoader {
+		active: Plugins.on("identities")
+
+		IdentityPanel {}
+	}
+
+	// … and the same as a window of its own
+	LazyLoader {
+		active: Plugins.on("identities")
+
+		IdentityWindow {}
+	}
+
+	LazyLoader {
 		active: Plugins.on("fast-reader")
 
 		ReaderPanel {}

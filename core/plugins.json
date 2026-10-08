@@ -46,6 +46,7 @@
 	{ "id": "web-search", "name": "Web search", "category": "Launcher" },
 	{ "id": "todos", "name": "Todo lists", "category": "Launcher", "default": false },
 	{ "id": "converter", "name": "Converter", "category": "Launcher", "preview": {"on": ["bar", "launcher-button"], "ipc": ["launcher search '>conv 5 kg in lb'"]} },
+	{ "id": "identities", "name": "Fake identities", "category": "Launcher", "icon": "account_circle" },
 
 	{ "id": "screenshot", "name": "Screenshot", "category": "Capture" },
 	{ "id": "pins", "name": "Pinned screenshots", "category": "Capture", "requires": ["screenshot"] },

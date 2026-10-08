@@ -141,6 +141,8 @@ Item {
 		{ id: "todo", plugin: "todos", group: "tools", command: "todo", name: "Todo", aliases: ["todos"], keywords: "lists tasks" },
 		{ id: "shelf", plugin: "shelves", group: "tools", command: "shelf", name: "Shelf", keywords: "stash files text", status: Shelf.shelves.length > 0 ? String(Shelf.shelves.length) : "" },
 		{ id: "shelf-clipboard", plugin: "shelves", group: "tools", command: "shelfclip", name: "Shelf from Clipboard", aliases: ["clipshelf"], keywords: "stash copied" },
+		{ id: "identity", plugin: "identities", group: "tools", command: "identity", name: "Fake Identity", aliases: ["fake", "account"], keywords: "new person sign up mail sms phone temporary" },
+		{ id: "identities", plugin: "identities", group: "tools", command: "identities", name: "Identities", keywords: "saved fake accounts", status: Identities.saved.length > 0 ? String(Identities.saved.length) : "" },
 		{ id: "phone", plugin: Phone.plugin, group: "tools", command: "phone", name: "Phone", keywords: `send ${Phone.name}` },
 		{ id: "chat", plugin: "chat", group: "ai", command: "chat", name: "Chat", keywords: "ai assistant" },
 		{ id: "chats", plugin: "chat", group: "ai", command: "chats", name: "Chats", keywords: "saved history" },
@@ -2445,6 +2447,14 @@ Item {
 		case "updates":
 			root.openUpdatesRequested();
 			break;
+		case "identity":
+			root.closeRequested();
+			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "identity", "create"]);
+			break;
+		case "identities":
+			root.closeRequested();
+			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "identity", "list"]);
+			break;
 		case "screentime":
 			root.closeRequested();
 			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "screentime", "open"]);
@@ -2981,6 +2991,8 @@ Item {
 		case "mail": return "email_plus_outline";
 		case "updates": return "package_up";
 		case "screentime": return "progress_clock";
+		case "identity": return "account_circle";
+		case "identities": return "account_multiple";
 		case "dnd": return "minus_circle";
 		}
 		return "console";
