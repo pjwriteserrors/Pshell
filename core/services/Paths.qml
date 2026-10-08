@@ -25,6 +25,6 @@ Singleton {
 
 	Process {
 		running: true
-		command: ["mkdir", "-p", root.state]
+		command: ["mkdir", "-p", root.state, root.runtime]
 	}
 }

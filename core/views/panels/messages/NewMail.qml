@@ -33,7 +33,8 @@ Item {
 		root.error = "";
 		root.more = cc.text !== "" || bcc.text !== "";
 		preview.close();
-		if (kept?.account && Mail.account(kept.account)) root.account = kept.account;
+		// from the mailbox that is looked at, unless it was begun in another
+		root.account = kept?.account && Mail.account(kept.account) ? kept.account : Mail.shown;
 		if (!Mail.account(root.account)) root.account = Mail.accounts[0]?.id ?? "";
 		Qt.callLater(() => (to.text !== "" ? (subject.text !== "" ? composer : subject) : to).focusInput());
 	}

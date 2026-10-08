@@ -375,6 +375,42 @@ def downloads():
     host.stdin.close()
 
 
+def screentime():
+    """Three weeks at the screen, the same every time."""
+    import datetime
+    import random
+
+    dice = random.Random(7)
+    apps = [("floorp", 0.34), ("kitty", 0.27), ("code", 0.16), ("md.obsidian.Obsidian", 0.09), ("spotify", 0.05),
+            ("org.gnome.Nautilus", 0.04), ("discord", 0.03), ("org.gnome.Calculator", 0.02)]
+    windows = [("kitty\nnvim shell.qml", 0.17), ("floorp\nQuickshell – Documentation", 0.14), ("code\nscreentime – Visual Studio Code", 0.16),
+               ("kitty\ngit log", 0.1), ("floorp\nniri – Configuration", 0.11), ("md.obsidian.Obsidian\nRelease notes", 0.09),
+               ("floorp\nInbox", 0.09), ("spotify\nSpotify", 0.05)]
+    spaces = [("DP-1\n1", 0.46), ("DP-1\n2", 0.3), ("DP-1\n3", 0.15), ("DP-1\n4", 0.09)]
+    links = [("quickshell.org", "/docs", "Quickshell – Documentation", 0.12), ("github.com", "/YaLTeR/niri", "niri – Configuration", 0.1),
+             ("mail.example.org", "/inbox", "Inbox", 0.06), ("doc.qt.io", "/qt-6/qml-qtquick-shapes-shape.html", "Shape QML Type", 0.04),
+             ("news.ycombinator.com", "/", "Hacker News", 0.02)]
+    days = {}
+    today = datetime.date.today()
+    for back in range(20, -1, -1):
+        date = today - datetime.timedelta(days=back)
+        total = int(dice.uniform(1.5, 3.5) * 3600) if date.weekday() >= 5 else int(dice.uniform(5.5, 9.5) * 3600)
+        if back == 0:
+            total = int(5.7 * 3600)
+        share = lambda part: int(total * part * dice.uniform(0.8, 1.2))
+        hours = [0] * 24
+        for hour, weight in zip(range(8, 20), [0.5, 1, 1, 0.9, 0.4, 0.8, 1, 1, 0.9, 0.6, 0.3, 0.2]):
+            hours[hour] = int(total * weight / 8.6)
+        days[date.isoformat()] = {
+            "total": total, "longest": int(total * dice.uniform(0.18, 0.3)),
+            "longestEnd": int(time.mktime(date.timetuple()) + 11.6 * 3600) * 1000, "hours": hours,
+            "apps": {name: share(part) for name, part in apps}, "windows": {name: share(part) for name, part in windows},
+            "spaces": {name: share(part) for name, part in spaces}, "links": {host: share(part) for host, _, _, part in links},
+            "pages": {host + path: [share(part), title] for host, path, title, part in links},
+        }
+    return days
+
+
 # ── outside ─────────────────────────────────────────────────────────────────
 def prepare(work: Path):
     shell = work / "shell"
@@ -420,6 +456,7 @@ def prepare(work: Path):
         {"id": "1", "title": "Groceries", "body": "- Oat milk\n- Coffee\n- Lemons", "pinned": True},
         {"id": "2", "title": "Release", "body": "## Friday\nTag, changelog, announce", "pinned": True},
     ]))
+    (state / "screentime.json").write_text(json.dumps({"days": screentime()}))
     # a mailbox that does not exist (scripts/messages/demo.py)
     (state / "messages.json").write_text(json.dumps({"demo": True, "accounts": []}))
     (state / "song.json").write_text(json.dumps({

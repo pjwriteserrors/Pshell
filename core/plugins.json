@@ -6,6 +6,7 @@
 	{ "id": "taskbar", "name": "Taskbar", "category": "Bar", "requires": ["bar"] },
 	{ "id": "clock", "name": "Clock", "category": "Bar", "requires": ["bar"] },
 	{ "id": "status", "name": "Status", "category": "Bar", "requires": ["bar"] },
+	{ "id": "bottom-corners", "name": "Bottom corners", "category": "Bar", "default": false, "icon": "rounded_corner" },
 
 	{ "id": "quick-settings", "name": "Quick settings", "category": "Panels" },
 	{ "id": "network", "name": "Network", "category": "Panels" },
@@ -32,6 +33,7 @@
 	{ "id": "song-detection", "name": "Song detection", "category": "Panels", "requires": ["media"], "preview": {"on": ["bar", "media"], "ipc": ["panels toggleMedia"], "base": "off"} },
 	{ "id": "lyrics", "name": "Lyrics", "category": "Panels", "requires": ["media"], "preview": {"on": ["bar", "media"], "run": ["python3 {shell}/scripts/plugin_previews.py --player & sleep 1.5"], "ipc": ["panels toggleMedia", "lyrics open"], "base": "off", "wait": 3} },
 	{ "id": "downloads", "name": "Browser downloads", "category": "Panels", "requires": ["network"], "preview": {"on": ["bar", "clock", "status", "quick-settings"], "run": ["python3 {shell}/scripts/plugin_previews.py --downloads & sleep 4"], "ipc": ["panels toggleNetwork"], "base": "off", "wait": 3} },
+	{ "id": "screentime", "name": "Screen time", "category": "Panels", "default": false, "preview": {"on": ["bar", "clock"], "ipc": ["screentime toggle"]} },
 
 	{ "id": "apps", "name": "Apps", "category": "Launcher" },
 	{ "id": "calculator", "name": "Calculator", "category": "Launcher" },
@@ -74,6 +76,7 @@
 	{ "id": "autocorrect-scramble", "name": "Scramble correction", "category": "Automation", "default": false, "requires": ["autocorrect"], "icon": "keyboard" },
 	{ "id": "autocorrect-decode", "name": "Decode correction", "category": "Automation", "default": false, "requires": ["autocorrect"], "icon": "keyboard" },
 	{ "id": "autocorrect-typewriter", "name": "Typewriter correction", "category": "Automation", "default": false, "requires": ["autocorrect"], "icon": "keyboard" },
+	{ "id": "multicursor", "name": "Multicursor", "category": "Automation", "default": false, "icon": "cursor_text" },
 
 	{ "id": "studio-wallpaper", "name": "Wallpaper", "category": "Studio" },
 	{ "id": "studio-motion", "name": "Motion", "category": "Studio" },

@@ -92,9 +92,32 @@ SettingsPage {
 
 	property string note: ""
 
+	// a monitor that changes its size keeps its corner; its neighbours follow
 	function change(name, changes, note) {
-		const list = root.draft.map(o => o.name === name ? DisplayGeometry.sized(Object.assign({}, o, changes)) : o);
-		root.tryOut(list, note);
+		const old = root.draft.find(o => o.name === name);
+		if (!old) return;
+		const next = DisplayGeometry.sized(Object.assign({}, old, changes));
+		const list = DisplayGeometry.resized(root.draft, name, next);
+		if (next.off) {
+			root.tryOut(list, note);
+			return;
+		}
+		const others = list.filter(o => o.name !== name && !o.off);
+		const placed = DisplayGeometry.separate(next, others);
+		root.tryOut(list.map(o => o.name === name ? placed : o), note);
+	}
+
+	// moves a monitor to x, y; niri places overlapping monitors itself, so it
+	// stops at the others
+	function place(name, x, y) {
+		const o = root.draft.find(d => d.name === name);
+		if (!o || o.off) return;
+		const others = root.draft.filter(d => d.name !== name && !d.off);
+		const placed = DisplayGeometry.separate(Object.assign({}, o, { x: Math.round(x), y: Math.round(y) }), others);
+		if (others.some(d => DisplayGeometry.overlaps(placed, d)) || (placed.x === o.x && placed.y === o.y)) return;
+		root.setDraft(root.draft.map(d => d.name === name ? placed : d));
+		moveLater.moved = name;
+		moveLater.restart();
 	}
 
 	// kept: the arrangement goes into display-profile.kdl
@@ -103,9 +126,9 @@ SettingsPage {
 		root.pending = false;
 		const blocks = NiriSettings.clone(NiriSettings.outputs);
 		for (const o of DisplayGeometry.normalized(root.draft)) {
-			let block = blocks.find(b => String(b.args?.[0]) === o.name);
+			let block = NiriSettings.blockOf(blocks, o.name);
 			if (!block) {
-				block = { name: "output", args: [o.name], props: {}, children: [] };
+				block = { name: "output", args: [NiriSettings.outputId(o.name)], props: {}, children: [] };
 				blocks.push(block);
 			}
 			const rest = (block.children || []).filter(c => !["off", "mode", "scale", "transform", "position"].includes(c.name));
@@ -130,31 +153,17 @@ SettingsPage {
 	function run(commands) {
 		root.failure = "";
 		root.busy = true;
+		if (runner.running) {
+			runner.queue = runner.queue.concat(commands);
+			return;
+		}
 		runner.queue = commands;
 		runner.next();
 	}
 
-	function rotate(clockwise) {
-		const o = root.picked;
-		if (!o || o.off) return;
-		const turned = DisplayGeometry.sized(Object.assign({}, o, { transform: DisplayGeometry.rotate(o.transform, clockwise) }));
-		turned.x = Math.round(o.x + (o.width - turned.width) / 2);
-		turned.y = Math.round(o.y + (o.height - turned.height) / 2);
-		const others = root.draft.filter(other => other.name !== o.name && !other.off);
-		const reach = Math.abs(o.width - turned.width) / 2 + 1;
-		const placed = DisplayGeometry.separate(DisplayGeometry.snap(turned, others, reach), others);
-		root.tryOut(root.draft.map(other => other.name === o.name ? Object.assign({}, turned, { x: placed.x, y: placed.y }) : other), `${o.name} turned`);
-	}
-
 	function setTransform(transform) {
-		const o = root.picked;
-		if (!o) return;
-		const turned = DisplayGeometry.sized(Object.assign({}, o, { transform: transform }));
-		turned.x = Math.round(o.x + (o.width - turned.width) / 2);
-		turned.y = Math.round(o.y + (o.height - turned.height) / 2);
-		const others = root.draft.filter(other => other.name !== o.name && !other.off);
-		const placed = DisplayGeometry.separate(DisplayGeometry.snap(turned, others, Math.abs(o.width - turned.width) / 2 + 1), others);
-		root.tryOut(root.draft.map(other => other.name === o.name ? Object.assign({}, turned, { x: placed.x, y: placed.y }) : other), `${o.name} turned`);
+		if (!root.picked || root.picked.off) return;
+		root.change(root.selected, { transform: transform }, `${root.selected} turned`);
 	}
 
 	function applyProfile(profile) {
@@ -247,6 +256,16 @@ SettingsPage {
 		}
 	}
 
+	// steps of the keys and the number fields, tried live once they stop
+	Timer {
+		id: moveLater
+
+		property string moved: ""
+
+		interval: 300
+		onTriggered: root.tryOut(root.draft, `${moveLater.moved} moved`)
+	}
+
 	Timer {
 		id: refreshLater
 
@@ -324,7 +343,7 @@ SettingsPage {
 	SettingCard {
 		anchor: "arrangement"
 		title: root.matching ? `Setup “${root.matching.name}”` : "Arrangement"
-		subtitle: root.failure !== "" ? root.failure : (root.busy ? "Applying…" : "Drag a monitor to move it; it clicks onto the edges of the others. Click one to set it up below.")
+		subtitle: root.failure !== "" ? root.failure : (root.busy ? "Applying…" : "Drag a monitor to move it. Click one to set it up below.")
 		icon: "monitor_multiple"
 
 		Rectangle {
@@ -345,6 +364,16 @@ SettingsPage {
 			}
 			onFittedChanged: if (!canvas.dragging) canvas.view = canvas.fitted
 			onDraggingChanged: if (!canvas.dragging) canvas.view = canvas.fitted
+
+			Keys.onPressed: event => {
+				const o = root.picked;
+				const step = (event.modifiers & Qt.ShiftModifier) ? 10 : 1;
+				const dx = event.key === Qt.Key_Left ? -step : (event.key === Qt.Key_Right ? step : 0);
+				const dy = event.key === Qt.Key_Up ? -step : (event.key === Qt.Key_Down ? step : 0);
+				if (!o || (dx === 0 && dy === 0)) return;
+				event.accepted = true;
+				root.place(o.name, o.x + dx, o.y + dy);
+			}
 
 			EmptyState {
 				anchors.centerIn: parent
@@ -472,6 +501,7 @@ SettingsPage {
 						preventStealing: true
 						onPressed: mouse => {
 							root.selected = screen.modelData;
+							canvas.forceActiveFocus();
 							if (!screen.output || screen.output.off || screen.factor <= 0) return;
 							dragArea.start = mapToItem(canvas, mouse.x, mouse.y);
 							dragArea.startX = screen.output.x;
@@ -485,18 +515,18 @@ SettingsPage {
 							if (!screen.held) return;
 							const point = mapToItem(canvas, mouse.x, mouse.y);
 							const moved = Object.assign({}, screen.output, {
-								x: dragArea.startX + (point.x - dragArea.start.x) / screen.factor,
-								y: dragArea.startY + (point.y - dragArea.start.y) / screen.factor
+								x: Math.round(dragArea.startX + (point.x - dragArea.start.x) / screen.factor),
+								y: Math.round(dragArea.startY + (point.y - dragArea.start.y) / screen.factor)
 							});
 							const others = root.draft.filter(o => o.name !== screen.modelData && !o.off);
-							const snapped = DisplayGeometry.snap(moved, others, 16 / screen.factor);
-							screen.heldX = snapped.x;
-							screen.heldY = snapped.y;
+							const placed = DisplayGeometry.separate(moved, others);
+							if (others.some(o => DisplayGeometry.overlaps(placed, o))) return;
+							screen.heldX = placed.x;
+							screen.heldY = placed.y;
 						}
 						onReleased: {
 							if (!screen.held) return;
-							const others = root.draft.filter(o => o.name !== screen.modelData && !o.off);
-							const placed = DisplayGeometry.separate(Object.assign({}, screen.output, { x: Math.round(screen.heldX), y: Math.round(screen.heldY) }), others);
+							const placed = { x: screen.heldX, y: screen.heldY };
 							screen.held = false;
 							canvas.dragging = false;
 							if (placed.x !== screen.output.x || placed.y !== screen.output.y)
@@ -532,6 +562,32 @@ SettingsPage {
 				Layout.fillWidth: true
 			}
 
+			Repeater {
+				model: ["x", "y"]
+
+				delegate: RowLayout {
+					id: axis
+
+					required property string modelData
+
+					visible: !!root.picked && !root.picked.off
+					spacing: 6
+
+					StyledText {
+						text: axis.modelData.toUpperCase()
+						tone: Theme.textMuted
+						font.pixelSize: Theme.size.label
+					}
+
+					NumberScrub {
+						from: -100000
+						to: 100000
+						value: root.picked?.[axis.modelData] ?? 0
+						onMoved: v => root.place(root.selected, axis.modelData === "x" ? v : root.picked.x, axis.modelData === "y" ? v : root.picked.y)
+					}
+				}
+			}
+
 			IconButton {
 				icon: "refresh"
 				variant: "tonal"
@@ -563,7 +619,9 @@ SettingsPage {
 				id: setup
 
 				required property var modelData
-				readonly property bool isActive: setup.modelData.name === root.current
+				// only while the monitors stand the way it was saved
+				readonly property bool isActive: root.matches(setup.modelData, root.live)
+				readonly property bool changed: !setup.isActive && !root.pending && setup.modelData.name === root.current
 
 				width: 186
 				height: cards.height - 8
@@ -605,6 +663,15 @@ SettingsPage {
 						text: setup.modelData.name
 						font.pixelSize: Theme.size.label
 						font.weight: setup.isActive ? Font.Bold : Font.Medium
+					}
+
+					IconButton {
+						implicitWidth: 24
+						implicitHeight: 24
+						iconSize: 13
+						visible: setup.changed
+						icon: "content_save_outline"
+						onClicked: root.saveProfile(setup.modelData.name)
 					}
 
 					IconButton {

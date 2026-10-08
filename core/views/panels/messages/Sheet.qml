@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.style.theme
+import qs.core.services
 
 // A mail, or a piece of one, as its sender laid it out: the picture a
 // browser drew of it (scripts/messages/render.py), with its links where they
@@ -15,7 +16,8 @@ import qs.style.theme
 // word stands. Dragging marks from word to word, a double click one word,
 // Ctrl+A all of it; Ctrl+C copies, and what is marked is in the primary
 // selection at once.
-// `page`: { image, width, height, links: [{ x, y, w, h, href }], text }
+// A click on a picture inside it shows that picture large.
+// `page`: { image, width, height, links: [{ x, y, w, h, href }], images: [{ x, y, w, h, src }], text }
 Item {
 	id: root
 
@@ -191,6 +193,21 @@ Item {
 			root.caret = root.anchor;
 			dragged = true;
 			root.copy(true);
+		}
+	}
+
+	Repeater {
+		model: root.page?.images ?? []
+
+		delegate: MouseArea {
+			required property var modelData
+
+			x: modelData.x * root.factor
+			y: modelData.y * root.factor
+			width: modelData.w * root.factor
+			height: modelData.h * root.factor
+			cursorShape: Qt.PointingHandCursor
+			onClicked: Mail.view(modelData.src)
 		}
 	}
 

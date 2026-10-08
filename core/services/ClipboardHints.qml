@@ -167,6 +167,8 @@ Singleton {
 	function offer(encoded) {
 		const text = root.base64(encoded);
 		if (text === null) return;
+		// what Multicursor reads out of a text field is not a copy
+		if (Multicursor.available && Multicursor.quiet()) return;
 		if (text === root.ownCopy) {
 			root.ownCopy = "";
 			return;

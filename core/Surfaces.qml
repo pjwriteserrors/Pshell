@@ -15,7 +15,7 @@ import qs.style.views
 // here and by the plugin switches, never by the style.
 Scope {
 	// services that act on their own, without a surface to pull them in
-	readonly property var background: [Agents, TimerGuard, ClipboardHints, Phone, Mail, Autocorrect]
+	readonly property var background: [Agents, TimerGuard, ClipboardHints, Phone, Mail, Autocorrect, Screentime, Multicursor]
 
 	// notifications and the shell's own messages
 	Variants {
@@ -28,6 +28,12 @@ Scope {
 		model: Plugins.on("osd") ? Quickshell.screens : []
 
 		OsdPanel {}
+	}
+
+	Variants {
+		model: Plugins.on("multicursor") ? Quickshell.screens : []
+
+		CursorCount {}
 	}
 
 	Variants {
@@ -76,6 +82,12 @@ Scope {
 		active: Plugins.on("breaks")
 
 		BreaksPanel {}
+	}
+
+	LazyLoader {
+		active: Plugins.on("screentime")
+
+		ScreentimePanel {}
 	}
 
 	LazyLoader {

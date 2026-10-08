@@ -141,6 +141,13 @@ Scope {
 		function toggle(): void {
 			root.modalOnFocused("power");
 		}
+		// reboot or shutdown once a process is gone: `power after shutdown 1234`
+		function after(kind: string, pid: int): void {
+			Session.after(kind, { what: "process", pid: pid, start: 0, name: `Process ${pid}` });
+		}
+		function cancelAfter(): void {
+			Session.cancelAfter();
+		}
 	}
 
 	// quick actions around the pointer
@@ -539,6 +546,27 @@ Scope {
 
 		function toggle(): void {
 			Autocorrect.toggle();
+		}
+	}
+
+	IpcHandler {
+		target: "multicursor"
+		enabled: Multicursor.available
+
+		function toggle(): void {
+			Multicursor.setOn(!Multicursor.on);
+		}
+	}
+
+	IpcHandler {
+		target: "screentime"
+		enabled: Plugins.on("screentime")
+
+		function toggle(): void {
+			root.drawerOnFocused("screentime");
+		}
+		function open(): void {
+			Popups.withFocusedScreen(screen => Popups.open("screentime", screen));
 		}
 	}
 

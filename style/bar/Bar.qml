@@ -252,6 +252,8 @@ PanelWindow {
 
 	// rounded screen corners under the bar
 	Shape {
+		// the frame around the screen has its own
+		visible: !Corners.all
 		x: 0
 		y: Theme.barHeight
 		width: Theme.screenCorner
@@ -278,6 +280,7 @@ PanelWindow {
 	}
 
 	Shape {
+		visible: !Corners.all
 		x: root.width - Theme.screenCorner
 		y: Theme.barHeight
 		width: Theme.screenCorner

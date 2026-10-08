@@ -277,8 +277,19 @@ Singleton {
 	}
 
 	// ── monitors ───────────────────────────────────────────────────────────
+	// Blocks are written by make, model and serial (scripts/niri_outputs.py),
+	// the shell talks of monitors by connector.
+	function outputId(name) {
+		return (root.live.outputs || []).find(o => o.name === name)?.id ?? name;
+	}
+
+	function blockOf(blocks, name) {
+		const wanted = [String(name).toLowerCase(), String(root.outputId(name)).toLowerCase()];
+		return (blocks || []).find(block => wanted.includes(String(block.args?.[0]).toLowerCase())) ?? null;
+	}
+
 	function output(name) {
-		return root.outputs.find(block => String(block.args?.[0]) === name) ?? null;
+		return root.blockOf(root.outputs, name);
 	}
 
 	function outputNode(name, path) {
@@ -299,9 +310,9 @@ Singleton {
 	// `fn(block)` changes a copy of that monitor's block (made when missing)
 	function editOutput(name, note, key, fn) {
 		const draft = root.clone(root.outputs);
-		let block = draft.find(item => String(item.args?.[0]) === name);
+		let block = root.blockOf(draft, name);
 		if (!block) {
-			block = { name: "output", args: [name], props: {}, children: [] };
+			block = { name: "output", args: [root.outputId(name)], props: {}, children: [] };
 			draft.push(block);
 		}
 		if (!block.children) block.children = [];
@@ -377,6 +388,18 @@ Singleton {
 		root.saving = true;
 		writer.command = ["python3", root.script, "write", JSON.stringify(payload)];
 		writer.running = true;
+	}
+
+	// ── exporting ──────────────────────────────────────────────────────────
+	// the chosen settings as one KDL file in the downloads folder or on the
+	// clipboard; `what` is niri_settings.py's export payload
+	signal exported(string file)
+	signal exportFailed(string message)
+
+	function exportSettings(what) {
+		if (exporter.running) return;
+		exporter.command = ["python3", root.script, "export", JSON.stringify(what)];
+		exporter.running = true;
 	}
 
 	// what a change is called in the note at the bottom
@@ -493,6 +516,23 @@ Singleton {
 					root.lastKey = "";
 				}
 				if (writer.nodesDirty || writer.outputsDirty) flush.restart();
+			}
+		}
+	}
+
+	Process {
+		id: exporter
+
+		stdout: StdioCollector {
+			onStreamFinished: {
+				let result = null;
+				try {
+					result = JSON.parse(text);
+				} catch (error) {
+					result = { ok: false, error: String(text || "niri_settings.py export failed") };
+				}
+				if (result.ok) root.exported(String(result.file || ""));
+				else root.exportFailed(String(result.error || "Could not export"));
 			}
 		}
 	}

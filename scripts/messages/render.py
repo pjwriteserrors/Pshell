@@ -36,10 +36,14 @@ from store import CACHE
 BROWSERS = ("chromium", "google-chrome-stable", "google-chrome", "chromium-browser", "brave", "vivaldi-stable")
 # a page is as wide as a bubble shows it, pixel for pixel
 WIDTH = 600
+# a mail laid out wider than that is drawn as wide as it is, up to this: shrunk to fit, its type was too small to read
+MAX_WIDTH = 960
+# the smallest type a drawn mail shows, in points of the screen
+SMALLEST = 12
 # the tallest picture a graphics card takes, in its own pixels
 MAX_PIXELS = 16000
 # pictures an older way of drawing made are drawn again
-REVISION = 3
+REVISION = 5
 
 # one mail at a time
 BUSY = threading.Lock()
@@ -50,7 +54,7 @@ SCALE = [2.0]
 THEME = {}
 
 SCRIPT = r"""
-const T = __THEME__, WIDTH = __WIDTH__, PLAIN = __PLAIN__;
+const T = __THEME__, WIDTH = __WIDTH__, PLAIN = __PLAIN__, SMALLEST = __SMALLEST__;
 const rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
 const BG = rgb(T.bg), FG = rgb(T.fg), AC = rgb(T.primary);
 const parse = c => { const m = /rgba?\(([^)]+)\)/.exec(c || ""); if (!m) return null; const p = m[1].split(/[,\s\/]+/).filter(x => x !== "").map(Number); return { c: [p[0], p[1], p[2]], a: p.length > 3 ? p[3] : 1 }; };
@@ -108,8 +112,18 @@ function recolour() {
 }
 
 (() => {
-	// a mail wider than the bubble is drawn smaller, by the browser itself, so it stays sharp
-	if (document.documentElement.scrollWidth > WIDTH + 2) document.body.style.zoom = Math.max(0.4, WIDTH / document.documentElement.scrollWidth);
+	// a mail still wider than the widest page is drawn a little smaller, by the browser itself, so it stays sharp
+	let zoom = 1;
+	if (document.documentElement.scrollWidth > WIDTH + 2) document.body.style.zoom = zoom = Math.max(0.8, WIDTH / document.documentElement.scrollWidth);
+	// type too small to read is set in the smallest size that is; what a recipient sees keeps its sizes
+	if (!PLAIN) for (const el of document.body.querySelectorAll("*")) {
+		if (![...el.childNodes].some(node => node.nodeType === 3 && node.nodeValue.trim())) continue;
+		const style = getComputedStyle(el), least = SMALLEST / zoom;
+		if (!(parseFloat(style.fontSize) < least)) continue;
+		const tight = style.lineHeight.endsWith("px") && parseFloat(style.lineHeight) < least * 1.25;
+		el.style.setProperty("font-size", `${least}px`, "important");
+		if (tight) el.style.setProperty("line-height", "1.3", "important");
+	}
 	// the paper a recipient sees keeps the colours it was sent in
 	if (!PLAIN) try { recolour(); } catch (error) {}
 	const root = document.documentElement;
@@ -141,7 +155,9 @@ function recolour() {
 			}
 		}
 	}
-	return JSON.stringify({ h: bottom, links, words });
+	// the pictures in it that are worth a closer look: not the small ones, not the ones that are a link
+	const images = [...document.querySelectorAll("img")].filter(i => !i.closest("a[href]") && i.naturalWidth > 1).map(i => { const r = i.getBoundingClientRect(); return { x: r.x + scrollX, y: r.y + scrollY, w: r.width, h: r.height, src: i.currentSrc || i.src }; }).filter(i => i.w >= 48 && i.h >= 48 && /^(https?|file):/.test(i.src));
+	return JSON.stringify({ h: bottom, links, images, words });
 })()
 """
 
@@ -305,7 +321,7 @@ class Browser:
         return True
 
     def draw(self, shown, factor, limit, plain=False):
-        """The page as PNG bytes and what the script measured."""
+        """The page as PNG bytes, what the script measured, and its height and width."""
         if self.process is None or self.process.poll() is not None:
             self.stop()
             self.start()
@@ -313,13 +329,19 @@ class Browser:
         self.events.clear()
         self.call("Page.navigate", {"url": f"file://{shown}"})
         self.wait("Page.loadEventFired", self.PATIENCE)
-        script = SCRIPT.replace("__THEME__", json.dumps(theme())).replace("__WIDTH__", str(WIDTH)).replace("__PLAIN__", "true" if plain else "false")
+        # a mail with a layout wider than the page gets the room it was made for
+        needed = int(self.call("Runtime.evaluate", {"expression": "document.documentElement.scrollWidth", "returnByValue": True})["result"].get("value") or WIDTH)
+        width = WIDTH if needed <= WIDTH + 2 else min(MAX_WIDTH, needed)
+        if width != WIDTH:
+            self.call("Emulation.setDeviceMetricsOverride", {"width": width, "height": 200, "deviceScaleFactor": factor, "mobile": False})
+        script = (SCRIPT.replace("__THEME__", json.dumps(theme())).replace("__WIDTH__", str(width))
+                  .replace("__PLAIN__", "true" if plain else "false").replace("__SMALLEST__", str(SMALLEST)))
         measured = json.loads(self.call("Runtime.evaluate", {"expression": script, "returnByValue": True})["result"]["value"])
         height = max(4, min(limit, int(measured["h"])))
         shot = self.call("Page.captureScreenshot", {
-            "format": "png", "captureBeyondViewport": True, "clip": {"x": 0, "y": 0, "width": WIDTH, "height": height, "scale": 1},
+            "format": "png", "captureBeyondViewport": True, "clip": {"x": 0, "y": 0, "width": width, "height": height, "scale": 1},
         }, timeout=40)
-        return base64.b64decode(shot["data"]), measured, height
+        return base64.b64decode(shot["data"]), measured, height, width
 
     def rest(self):
         """Leaves when nothing was drawn for a while."""
@@ -351,7 +373,7 @@ def trim(target, factor):
 
 
 def render(source, target, plain=False):
-    """Draws the markup in `source`; returns {"image", "width", "height", "links", "text", "theme"} in points.
+    """Draws the markup in `source`; returns {"image", "width", "height", "links", "images", "text", "theme"} in points.
 
     `plain` draws it the way it reaches someone else: on white, in its own colours.
     """
@@ -364,13 +386,13 @@ def render(source, target, plain=False):
         try:
             shown.write_text(page(source.read_text(), plain))
             try:
-                data, measured, height = BROWSER.draw(shown, factor, int(MAX_PIXELS / factor), plain)
+                data, measured, height, drawn = BROWSER.draw(shown, factor, int(MAX_PIXELS / factor), plain)
             except (RuntimeError, OSError, ValueError, KeyError):
                 # a browser that hung or died gets one fresh start
                 BROWSER.stop()
-                data, measured, height = BROWSER.draw(shown, factor, int(MAX_PIXELS / factor), plain)
+                data, measured, height, drawn = BROWSER.draw(shown, factor, int(MAX_PIXELS / factor), plain)
             target.write_bytes(data)
-            width = WIDTH if plain else trim(target, factor)
+            width = drawn if plain else trim(target, factor)
         except (OSError, ValueError, KeyError) as error:
             BROWSER.stop()
             raise RuntimeError(f"The mail could not be drawn ({type(error).__name__})")
@@ -382,7 +404,8 @@ def render(source, target, plain=False):
     text = target.with_suffix(".json")
     text.write_text(json.dumps([word for word in measured.get("words", []) if word[1] < height], ensure_ascii=False))
     links = [link for link in measured.get("links", [])[:300] if link["y"] < height]
-    return {"image": str(target), "width": width, "height": height, "links": links, "text": str(text), "theme": worn}
+    images = [image for image in measured.get("images", [])[:80] if image["y"] < height]
+    return {"image": str(target), "width": width, "height": height, "links": links, "images": images, "text": str(text), "theme": worn}
 
 
 def current(drawn):

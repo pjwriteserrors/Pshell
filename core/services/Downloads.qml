@@ -9,11 +9,14 @@ import Quickshell.Io
 // reports through scripts/downloads_host.py, which the browser starts and
 // which connects to the socket here; pause, resume and cancel go back the
 // same way. Nothing listens on the network. Finished downloads stay
-// (downloads.json) until they are dismissed.
+// (downloads.json) until they are dismissed. The same link tells Screentime
+// which page is in front.
 Singleton {
 	id: root
 
 	readonly property bool enabled: Plugins.on("downloads")
+	// the socket is there for either of the two
+	readonly property bool listening: root.enabled || Screentime.enabled
 
 	// keys in the order they are shown: what runs first, then the newest
 	property var order: []
@@ -86,6 +89,8 @@ Singleton {
 			return;
 		}
 		if (link.source === "") return;
+		if (message.type === "tab") return Screentime.tab(link.source, message);
+		if (!root.enabled) return;
 		if (message.type === "snapshot") {
 			// what the browser no longer has under way is gone
 			const stays = {};
@@ -168,6 +173,7 @@ Singleton {
 		const next = Object.assign({}, root.links);
 		delete next[link.source];
 		root.links = next;
+		Screentime.tabGone(link.source);
 		// its browser is gone, and with it what it was downloading
 		root.active.filter(item => item.source === link.source).forEach(item => root.drop(item.key));
 	}
@@ -278,9 +284,9 @@ Singleton {
 	Process {
 		id: folder
 
-		running: root.enabled
+		running: root.listening
 		command: ["mkdir", "-p", Paths.runtime]
-		onExited: server.active = Qt.binding(() => root.enabled)
+		onExited: server.active = Qt.binding(() => root.listening)
 	}
 
 	SocketServer {

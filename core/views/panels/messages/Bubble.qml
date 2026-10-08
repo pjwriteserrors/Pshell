@@ -33,7 +33,7 @@ Item {
 	// what was picked for this mail: its layout (true) or chat text (false); null takes what fits
 	property var choice: null
 	// a layout that would have to shrink is too small to read: where the chat is narrow, mails are chat text
-	readonly property bool fits: !root.message.page || root.message.page.width * 0.85 <= root.width - (root.group ? 36 : 0) - 24
+	readonly property bool fits: !root.message.page || root.message.page.width * 0.95 <= root.width - (root.group ? 36 : 0) - 24
 	// shown as the sender laid it out (a picture) instead of as chat text
 	readonly property bool drawn: root.choice ?? root.fits
 	readonly property var page: root.drawn ? (root.message.page ?? null) : null
@@ -74,9 +74,15 @@ Item {
 		return "file_outline";
 	}
 
-	// links wear the accent
+	// links wear the accent, and a picture is a link to itself: a click shows it large
 	function tinted(html) {
-		return String(html).replace(/<a href=/g, `<a style="color:${Theme.primary}" href=`);
+		return String(html).replace(/<a href=/g, `<a style="color:${Theme.primary}" href=`)
+			.replace(/<img src="file:\/\/([^"]+)"[^>]*>/g, (image, path) => `<a href="pshell-picture:${path}">${image}</a>`);
+	}
+
+	function follow(link) {
+		if (link.startsWith("pshell-picture:")) Mail.view(link.slice(15));
+		else Qt.openUrlExternally(link);
 	}
 
 	implicitHeight: column.implicitHeight
@@ -336,7 +342,7 @@ Item {
 							font.family: Theme.fontFamily
 							font.pixelSize: Theme.size.body
 							text: root.tinted(root.message.html)
-							onLinkActivated: link => Qt.openUrlExternally(link)
+							onLinkActivated: link => root.follow(link)
 
 							HoverHandler {
 								cursorShape: body.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.IBeamCursor
@@ -362,7 +368,7 @@ Item {
 							page: root.page
 						}
 
-						// attached pictures are looked at here; a click opens them
+						// attached pictures are looked at here; a click shows them large
 						Repeater {
 							model: root.message.attachments.filter(entry => entry.preview)
 
@@ -381,7 +387,7 @@ Item {
 								MouseArea {
 									anchors.fill: parent
 									cursorShape: Qt.PointingHandCursor
-									onClicked: Mail.openAttachment(root.message.id, picture.modelData.id)
+									onClicked: Mail.view(picture.modelData.preview)
 								}
 							}
 						}
@@ -492,7 +498,7 @@ Item {
 							font.family: Theme.fontFamily
 							font.pixelSize: Theme.size.small
 							text: root.expanded ? root.tinted(folded) : ""
-							onLinkActivated: link => Qt.openUrlExternally(link)
+							onLinkActivated: link => root.follow(link)
 						}
 
 						RowLayout {

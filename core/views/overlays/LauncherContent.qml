@@ -105,262 +105,232 @@ Item {
 	property bool fileBrowserDirectoryLoading: false
 	property string fileBrowserDirectoryError: ""
 	property string fileBrowserListTargetDirectory: ""
-	// a command with a `plugin` only exists while that plugin is on
-	readonly property var commands: root.allCommands.filter(command => command.shown !== false && (!command.plugin || Plugins.on(command.plugin)))
-	property var allCommands: [
-		{
-			id: "plugins",
-			command: "plugins",
-			name: "Plugins",
-			description: `${Plugins.list.filter(plugin => Plugins.on(plugin.id)).length} of ${Plugins.list.length} on`
-		},
-		{
-			id: "rpg",
-			command: "rpg",
-			plugin: "rpg",
-			prefix: "/",
-			name: "Productivity RPG",
-			description: "Open as a movable game window",
-			icon: "applications-games-symbolic"
-		},
-		{
-			id: "studio",
-			shown: Popups.studioPages.length > 0,
-			command: "studio",
-			name: "Studio",
-			description: "Wallpaper, motion, icons, style, combinations",
-			icon: "preferences-desktop-wallpaper-symbolic"
-		},
-		{
-			id: "niri-settings",
-			plugin: "niri-settings",
-			command: "niri",
-			page: "",
-			name: "niri Settings",
-			description: "Layout, borders, input, rules, workspaces – everything niri does",
-			icon: "preferences-system-symbolic"
-		},
-		{
-			id: "niri-settings",
-			plugin: "niri-settings",
-			command: "keys",
-			page: "keys",
-			name: "Key Binds",
-			description: Keybinds.loaded ? `${Keybinds.binds.filter(bind => !bind.disabled).length} niri binds` : "niri shortcuts, recorded and picked",
-			icon: "input-keyboard-symbolic"
-		},
-		{
-			id: "niri-settings",
-			plugin: "niri-settings",
-			command: "setup",
-			page: "displays",
-			name: "Display Setup",
-			description: "Arrange the monitors, switch and save setups",
-			icon: "video-display-symbolic"
-		},
-		{
-			id: "calculator",
-			plugin: "calculator",
-			command: "c",
-			name: "Calculator",
-			description: "Type >c 5+5",
-			icon: "accessories-calculator-symbolic"
-		},
-		{
-			id: "file-browser",
-			plugin: "files",
-			command: "file",
-			name: "Files",
-			description: "Browse and open files",
-			icon: "folder-symbolic"
-		},
-		{
-			id: "chat",
-			plugin: "chat",
-			command: "chat",
-			name: "Chat",
-			description: "Start or continue an AI chat",
-			icon: "chat-symbolic"
-		},
-		{
-			id: "chats",
-			plugin: "chat",
-			command: "chats",
-			name: "Chats",
-			description: "Browse saved chats",
-			icon: "view-list-symbolic"
-		},
-		{
-			id: "ollama",
-			plugin: "ollama",
-			command: "ollama",
-			name: "Ollama",
-			description: "Manage installed and running models",
-			icon: `${Quickshell.shellDir}/assets/ollama-symbolic.png`
-		},
-		{
-			id: "translate",
-			plugin: "translate",
-			command: "t",
-			name: "Translate",
-			description: "Type >t text or >t fr text"
-		},
-		{
-			id: "converter",
-			plugin: "converter",
-			command: "conv",
-			name: "Convert",
-			description: "Type >conv 5 kg in lb or >conv 100 usd eur"
-		},
-		{
-			id: "todo",
-			command: "todo",
-			plugin: "todos",
-			name: "Todo",
-			description: "Lists in ~/todo"
-		},
-		{
-			id: "web-search",
-			plugin: "web-search",
-			command: "w",
-			name: "Web Search",
-			description: "Search in Floorp"
-		},
-		{
-			id: "ai-actions",
-			plugin: "ai-actions",
-			command: "ai",
-			name: "AI Actions",
-			description: "Explain, summarize or translate the clipboard"
-		},
-		{
-			id: "phone",
-			command: "phone",
-			plugin: Phone.plugin,
-			name: "Phone",
-			description: `${Phone.name} · ${Phone.summary}`
-		},
-		{
-			id: "color-picker",
-			plugin: "color-picker",
-			command: "color",
-			name: "Color Picker",
-			description: "Pick a color from the screen"
-		},
-		{
-			id: "ocr",
-			plugin: "ocr",
-			command: "ocr",
-			name: "Text from Screen",
-			description: "Copy text from a screen region"
-		},
-		{
-			id: "pin",
-			plugin: "pins",
-			command: "pin",
-			name: "Pin Screenshot",
-			description: "Keep a screen region on top"
-		},
-		{
-			id: "live",
-			plugin: "live-pins",
-			command: "live",
-			name: "Live Pin",
-			description: "Keep a region of a window on top, live"
-		},
-		{
-			id: "shelf",
-			plugin: "shelves",
-			command: "shelf",
-			name: "Shelf",
-			description: Shelf.shelves.length > 0 ? `${Shelf.shelves.length} open` : "Stash files and text"
-		},
-		{
-			id: "shelf-clipboard",
-			plugin: "shelves",
-			command: "shelfclip",
-			name: "Shelf from Clipboard",
-			description: "A new shelf with what is copied"
-		},
-		{
-			id: "qr",
-			plugin: "qr",
-			command: "qr",
-			name: "QR Code",
-			description: "Read a QR code or barcode from the screen"
-		},
-		{
-			id: "delay",
-			plugin: "delayed-screenshot",
-			command: "delay",
-			name: "Delayed Screenshot",
-			description: "Capture after 5 seconds"
-		},
-		{
-			id: "scroll",
-			plugin: "scroll-screenshot",
-			command: "scroll",
-			name: "Scroll Screenshot",
-			description: "Capture a scrolling region"
-		},
-		{
-			id: "shots",
-			plugin: "screenshot-history",
-			command: "shots",
-			name: "Screenshot History",
-			description: Screenshot.shots.length > 0 ? `${Screenshot.shots.length} this session` : "Captures of this session"
-		},
-		{
-			id: "unpin",
-			plugin: "pins",
-			command: "unpin",
-			name: "Remove Pins",
-			description: "Close all pinned screenshots"
-		},
-		{
-			id: "song",
-			plugin: "song-detection",
-			command: "song",
-			name: "Song Detection",
-			description: "Name the song that is playing"
-		},
-		{
-			id: "lyrics",
-			plugin: "lyrics",
-			command: "lyrics",
-			name: "Lyrics",
-			description: "The words of the song that is playing"
-		},
-		{
-			id: "messages",
-			plugin: "messages",
-			command: "messages",
-			name: "Messages",
-			description: Messages.unread > 0 ? `${Messages.unread} unread` : "Mail as chats"
-		},
-		{
-			id: "mail",
-			plugin: "mail",
-			command: "mail",
-			name: "New Mail",
-			description: "Start a chat"
-		},
-		{
-			id: "updates",
-			plugin: "updates",
-			command: "updates",
-			name: "Updates",
-			description: Updates.count > 0 ? `${Updates.count} available` : "Arch packages"
-		},
-		{
-			id: "dnd",
-			plugin: "dnd",
-			command: "dnd",
-			name: "Do Not Disturb",
-			description: Notifs.dnd ? "On" : "Off",
-			active: Notifs.dnd
-		}
+	// a command with a `plugin` only exists while that plugin is on, a group
+	// (`children`) while one of its commands does
+	readonly property var commands: {
+		const on = root.allCommands.filter(command => command.shown !== false && (!command.plugin || Plugins.on(command.plugin)));
+		return on.map(command => command.children && command.children.length === 0 ? Object.assign({}, command, { children: on.filter(child => child.parent === command.command) }) : command)
+			.filter(command => !command.children || command.children.length > 0);
+	}
+	// the bands of the palette; a command without one is found by typing only
+	readonly property var commandGroups: [
+		{ id: "tools", label: "Tools" },
+		{ id: "ai", label: "AI" },
+		{ id: "panels", label: "Panels" },
+		{ id: "system", label: "System" }
 	]
+	// command: what is typed after ">", aliases: what else may be typed (it
+	// becomes the command once a space follows), keywords: words it is found
+	// by, status: what there is to know right now, parent: the group it is in
+	property var allCommands: [
+		{ id: "capture", command: "shot", group: "tools", name: "Capture", aliases: ["capture", "screenshot"], children: [] },
+		{ id: "pin", plugin: "pins", parent: "shot", command: "pin", name: "Pin Screenshot", keywords: "keep on top" },
+		{ id: "live", plugin: "live-pins", parent: "shot", command: "live", name: "Live Pin", keywords: "window region on top" },
+		{ id: "ocr", plugin: "ocr", parent: "shot", command: "ocr", name: "Text from Screen", aliases: ["text"], keywords: "copy recognise" },
+		{ id: "qr", plugin: "qr", parent: "shot", command: "qr", name: "QR Code", keywords: "barcode read scan" },
+		{ id: "color-picker", plugin: "color-picker", parent: "shot", command: "color", name: "Color Picker", aliases: ["picker", "colour"], keywords: "pick" },
+		{ id: "delay", plugin: "delayed-screenshot", parent: "shot", command: "delay", name: "Delayed Screenshot", keywords: "5 seconds timer" },
+		{ id: "scroll", plugin: "scroll-screenshot", parent: "shot", command: "scroll", name: "Scroll Screenshot", keywords: "long page" },
+		{ id: "shots", plugin: "screenshot-history", parent: "shot", command: "shots", name: "Screenshot History", aliases: ["history"], status: Screenshot.shots.length > 0 ? String(Screenshot.shots.length) : "" },
+		{ id: "unpin", plugin: "pins", parent: "shot", command: "unpin", name: "Remove Pins", keywords: "close pinned" },
+		{ id: "calculator", plugin: "calculator", group: "tools", command: "c", name: "Calculator", aliases: ["calc", "calculator"], keywords: "math" },
+		{ id: "converter", plugin: "converter", group: "tools", command: "conv", name: "Convert", aliases: ["convert"], keywords: "units currency" },
+		{ id: "translate", plugin: "translate", group: "tools", command: "t", name: "Translate", aliases: ["translate", "tr"], keywords: "language" },
+		{ id: "web-search", plugin: "web-search", group: "tools", command: "w", name: "Web Search", aliases: ["web", "search"], keywords: "browser" },
+		{ id: "file-browser", plugin: "files", group: "tools", command: "file", name: "Files", aliases: ["files"], keywords: "browse open folder" },
+		{ id: "todo", plugin: "todos", group: "tools", command: "todo", name: "Todo", aliases: ["todos"], keywords: "lists tasks" },
+		{ id: "shelf", plugin: "shelves", group: "tools", command: "shelf", name: "Shelf", keywords: "stash files text", status: Shelf.shelves.length > 0 ? String(Shelf.shelves.length) : "" },
+		{ id: "shelf-clipboard", plugin: "shelves", group: "tools", command: "shelfclip", name: "Shelf from Clipboard", aliases: ["clipshelf"], keywords: "stash copied" },
+		{ id: "phone", plugin: Phone.plugin, group: "tools", command: "phone", name: "Phone", keywords: `send ${Phone.name}` },
+		{ id: "chat", plugin: "chat", group: "ai", command: "chat", name: "Chat", keywords: "ai assistant" },
+		{ id: "chats", plugin: "chat", group: "ai", command: "chats", name: "Chats", keywords: "saved history" },
+		{ id: "ai-actions", plugin: "ai-actions", group: "ai", command: "ai", name: "AI Actions", aliases: ["actions"], keywords: "explain summarize translate clipboard" },
+		{ id: "ollama", plugin: "ollama", group: "ai", command: "ollama", name: "Ollama", aliases: ["models"], keywords: "installed running" },
+		{ id: "messages", plugin: "messages", group: "panels", command: "messages", name: "Messages", aliases: ["msg"], keywords: "mail chats inbox", status: Messages.unread > 0 ? String(Messages.unread) : "" },
+		{ id: "mail", plugin: "mail", group: "panels", command: "mail", name: "New Mail", aliases: ["compose"], keywords: "write" },
+		{ id: "updates", plugin: "updates", group: "panels", command: "updates", name: "Updates", aliases: ["update"], keywords: "arch packages", status: Updates.count > 0 ? String(Updates.count) : "" },
+		{ id: "screentime", plugin: "screentime", group: "panels", command: "screentime", name: "Screen Time", aliases: ["time", "usage"], keywords: "statistics", status: Screentime.clock(Screentime.total(Screentime.today)) },
+		{ id: "lyrics", plugin: "lyrics", group: "panels", command: "lyrics", name: "Lyrics", keywords: "song words" },
+		{ id: "song", plugin: "song-detection", group: "panels", command: "song", name: "Song Detection", aliases: ["detect"], keywords: "name music" },
+		{ id: "plugins", group: "system", command: "plugins", name: "Plugins", keywords: "switch features", status: `${Plugins.list.filter(plugin => Plugins.on(plugin.id)).length}/${Plugins.list.length}` },
+		{
+			id: "studio", shown: Popups.studioPages.length > 0, group: "system", command: "studio", name: "Studio", aliases: ["theme"],
+			// its pages are what it leads to
+			children: Popups.studioPages.map(page => ({ id: "studio-page", page: page.id, command: `studio ${page.id}`, name: page.label, glyph: page.icon, keywords: "" }))
+		},
+		{ id: "niri-settings", plugin: "niri-settings", group: "system", command: "niri", page: "", name: "niri Settings", aliases: ["settings"], keywords: "layout borders input rules workspaces" },
+		{ id: "niri-settings", plugin: "niri-settings", group: "system", command: "keys", page: "keys", name: "Key Binds", aliases: ["binds", "keybinds", "shortcuts"], keywords: "niri" },
+		{ id: "niri-settings", plugin: "niri-settings", group: "system", command: "setup", page: "displays", name: "Display Setup", aliases: ["display", "displays", "monitors"], keywords: "arrange" },
+		{ id: "dnd", plugin: "dnd", group: "system", command: "dnd", name: "Do Not Disturb", aliases: ["quiet", "silent"], keywords: "notifications", status: Notifs.dnd ? "On" : "" },
+		{ id: "rpg", plugin: "rpg", group: "system", command: "rpg", prefix: "/", name: "Productivity RPG", keywords: "game" }
+	]
+
+	// ── the palette ─────────────────────────────────────────────────────────
+	// commands kept on top, by what is typed for them (launcher-commands.json)
+	property var commandPins: []
+	// the tile that is picked, an index into `paletteCells`
+	property int paletteIndex: 0
+	// a command picked from the app search: an index into `appCommands`, -1 for the apps
+	property int commandFocus: -1
+
+	// every command once, those of a group behind it
+	readonly property var flatCommands: root.commands.filter(command => !command.parent).reduce((all, command) => all.concat(command.children ? [command].concat(command.children.filter(child => child.id !== "studio-page")) : [command]), [])
+	// the group whose commands are shown: ">shot", ">studio wall"
+	readonly property var openGroup: {
+		if (!root.inCommandMode) return null;
+		const token = root.commandQuery.split(/\s+/)[0];
+		return root.commands.find(command => command.children && command.command === token) || null;
+	}
+	readonly property string paletteFilter: root.openGroup ? root.commandQuery.slice(root.openGroup.command.length).trim() : root.commandQuery
+
+	function commandUsage(command) {
+		return Number(root.usageMap[`>${command.command}`] || 0);
+	}
+
+	// how well a command answers what is typed; 0 when it does not, 60 and
+	// more when a word of it starts that way
+	function commandScore(command, query) {
+		if (query === "") return 1;
+		const token = String(command.command || "").toLowerCase();
+		const name = String(command.name || "").toLowerCase();
+		const aliases = command.aliases || [];
+		let score = 0;
+		if (token === query) score = 100;
+		else if (aliases.includes(query)) score = 95;
+		else if (token.startsWith(query)) score = 80;
+		else if (name.startsWith(query)) score = 75;
+		else if (aliases.some(alias => alias.startsWith(query))) score = 70;
+		else if (name.split(/\s+/).some(word => word.startsWith(query))) score = 60;
+		else if (query.length > 1 && name.includes(query)) score = 40;
+		else if (query.length > 2 && String(command.keywords || "").toLowerCase().includes(query)) score = 25;
+		else if (query.length > 2) {
+			const fuzzy = Fuzzy.single(query, name);
+			if (fuzzy && fuzzy.score > 0.35) score = 5 + fuzzy.score * 15;
+		}
+		return score > 0 ? score + Math.min(9, root.commandUsage(command)) : 0;
+	}
+
+	// [{ label, cells: [{ index, row, column, command, glyph, match, score, pinned }] }]
+	readonly property var paletteSections: {
+		if (root.mode !== "commands") return [];
+		const filter = root.paletteFilter;
+		const sections = [];
+		let index = 0;
+		let row = 0;
+		const add = (label, list, pinned) => {
+			if (list.length === 0) return;
+			const cells = list.map((command, at) => {
+				let shown = command;
+				let score = root.commandScore(command, filter);
+				// a group answers for its commands: the best of them takes its place
+				if (command.children && filter !== "" && !root.openGroup) {
+					for (const child of command.children) {
+						const each = root.commandScore(child, filter);
+						if (each > score) {
+							score = each;
+							shown = child;
+						}
+					}
+				}
+				return { index: index++, row: row + Math.floor(at / 4), column: at % 4, command: shown, glyph: root.commandGlyph(shown), match: score > 0, score: score, pinned: pinned && root.commandPins.includes(shown.command) };
+			});
+			row += Math.ceil(list.length / 4);
+			sections.push({ label: label, cells: cells });
+		};
+		if (root.openGroup) {
+			add(root.openGroup.name, root.openGroup.children, false);
+			return sections;
+		}
+		// what is pinned, filled up to a row with what is used most
+		const pinned = root.commandPins.map(token => root.flatCommands.find(command => command.command === token)).filter(command => command);
+		const used = root.flatCommands.filter(command => !command.children && root.commandUsage(command) > 0 && !root.commandPins.includes(command.command))
+			.sort((a, b) => root.commandUsage(b) - root.commandUsage(a));
+		add("Favourites", pinned.concat(used.slice(0, Math.max(0, 4 - pinned.length))), true);
+		for (const group of root.commandGroups)
+			add(group.label, root.commands.filter(command => command.group === group.id), false);
+		return sections;
+	}
+	// what the tiles take, for the launcher's height (the palette's own measures)
+	readonly property real paletteHeight: root.paletteSections.reduce((sum, section) => sum + Math.ceil(section.cells.length / 4) * 52 - 6, 0) + Math.max(0, root.paletteSections.length - 1) * 14
+	readonly property var paletteCells: root.paletteSections.reduce((all, section) => all.concat(section.cells), [])
+	readonly property var paletteCommand: root.paletteCells[root.paletteIndex]?.match ? root.paletteCells[root.paletteIndex].command : null
+
+	// the tile that answers best
+	function pickPaletteCell() {
+		let best = -1;
+		root.paletteCells.forEach(cell => {
+			if (cell.match && (best < 0 || cell.score > root.paletteCells[best].score)) best = cell.index;
+		});
+		root.paletteIndex = best;
+	}
+
+	// to the next tile that matches: sideways through all of them, up and
+	// down to the nearest one of the next row that has any
+	function movePalette(dx, dy) {
+		const cells = root.paletteCells.filter(cell => cell.match);
+		if (cells.length === 0) return;
+		const current = root.paletteCells[root.paletteIndex];
+		if (!current || !current.match) {
+			root.paletteIndex = cells[0].index;
+			return;
+		}
+		if (dx !== 0) {
+			const at = cells.findIndex(cell => cell.index === current.index);
+			root.paletteIndex = cells[Math.max(0, Math.min(cells.length - 1, at + dx))].index;
+			return;
+		}
+		const beyond = cells.filter(cell => dy > 0 ? cell.row > current.row : cell.row < current.row);
+		if (beyond.length === 0) return;
+		const row = dy > 0 ? Math.min(...beyond.map(cell => cell.row)) : Math.max(...beyond.map(cell => cell.row));
+		root.paletteIndex = beyond.filter(cell => cell.row === row)
+			.reduce((best, cell) => Math.abs(cell.column - current.column) < Math.abs(best.column - current.column) ? cell : best).index;
+	}
+
+	function togglePin(command) {
+		if (!command || command.id === "studio-page") return;
+		const token = String(command.command);
+		root.commandPins = root.commandPins.includes(token) ? root.commandPins.filter(each => each !== token) : root.commandPins.concat([token]);
+		commandStateFile.setText(JSON.stringify({ pins: root.commandPins }));
+	}
+
+	// what is typed for a command instead of its token becomes the token
+	function canonicalToken(text) {
+		const typed = String(text || "").slice(1).toLowerCase();
+		const command = root.flatCommands.find(each => (each.aliases || []).includes(typed) && !root.flatCommands.some(other => other.command === typed));
+		return command ? `>${command.command}` : String(text || "");
+	}
+
+	// commands that answer the app search, best first
+	readonly property var appCommands: {
+		const query = root.searchText.trim().toLowerCase();
+		if (root.mode !== "apps" || query.length < 2) return [];
+		return root.flatCommands.map(command => ({ command: command, score: root.commandScore(command, query) }))
+			.filter(entry => entry.score >= 40).sort((a, b) => b.score - a.score).slice(0, 4);
+	}
+
+	// a command is picked ahead of the apps when a word of it starts with
+	// what is typed and no app's name does
+	function pickSearchResult() {
+		const query = root.searchText.trim().toLowerCase();
+		const best = root.appCommands[0];
+		const app = root.filteredApps[0];
+		root.commandFocus = best && best.score >= 60 && !(app && String(app.name || "").toLowerCase().startsWith(query)) ? 0 : -1;
+		appList.currentIndex = root.filteredApps.length > 0 ? 0 : -1;
+	}
+
+	FileView {
+		id: commandStateFile
+
+		path: Paths.stateFile("launcher-commands.json")
+		blockLoading: true
+		printErrors: false
+		onLoaded: {
+			try {
+				const pins = (JSON.parse(String(text() || "{}")) || {}).pins;
+				root.commandPins = Array.isArray(pins) ? pins.map(String) : [];
+			} catch (error) {}
+		}
+	}
 
 	readonly property string usageFilePath: Paths.stateFile("launcher-usage.json")
 	readonly property string aiStateFilePath: Paths.stateFile("launcher-ai-state.json")
@@ -464,37 +434,6 @@ Item {
 		|| root.versionBefore(root.ollamaVersion, 0, 12, 0)
 	readonly property string calculatorExpression: root.calculatorExpressionFromQuery(root.searchText.trim().slice(1).trim())
 	readonly property var calculatorEvaluation: root.evaluateCalculatorExpression(root.calculatorExpression)
-	readonly property var filteredCommands: {
-		if (!root.inCommandMode) return [];
-		if (root.inAiMode || root.inChatMode || root.inOllamaMode || root.inFileMode || root.inViewMode) return [];
-		if (root.inCalculatorMode) return [root.calculatorCommand()];
-		if (root.commandQuery === "") return root.commands;
-		// ">studio [page]" lists the pages themselves
-		if (root.commandQuery === "studio" || root.commandQuery.startsWith("studio ")) {
-			const filter = root.commandQuery.slice(6).trim();
-			return Popups.studioPages
-				.filter(page => filter === "" || `${page.id} ${page.label}`.toLowerCase().includes(filter))
-				.map(page => ({
-					id: "studio-page",
-					page: page.id,
-					command: `studio ${page.id}`,
-					name: `Studio: ${page.label}`,
-					description: "",
-					glyph: page.icon
-				}));
-		}
-
-		return root.commands.filter(command => {
-			const haystack = [
-				String(command.command || ""),
-				String(command.name || ""),
-				String(command.description || ""),
-				String(command.id || "")
-			].join(" ").toLowerCase();
-			return haystack.includes(root.commandQuery);
-		});
-	}
-
 	ListModel {
 		id: chatMessageModel
 		dynamicRoles: true
@@ -1531,9 +1470,9 @@ Item {
 			? `${commandTokenField.text}${root.commandInputHasSeparator ? ` ${searchField.text}` : ""}`
 			: searchField.text;
 		if (root.inCommandMode)
-			commandList.currentIndex = root.filteredCommands.length > 0 ? 0 : -1;
+			root.pickPaletteCell();
 		else
-			appList.currentIndex = root.filteredApps.length > 0 ? 0 : -1;
+			root.pickSearchResult();
 	}
 
 	function enterCommandInput(text, focusArgument) {
@@ -1543,7 +1482,8 @@ Item {
 		root.commandInputSyncing = true;
 		root.commandInputActive = true;
 		root.commandInputHasSeparator = Boolean(focusArgument) || /\s/.test(value);
-		commandTokenField.text = String(match[1] || ">");
+		// an alias with something behind it is the command already
+		commandTokenField.text = root.commandInputHasSeparator ? root.canonicalToken(match[1]) : String(match[1] || ">");
 		searchField.text = String(match[2] || "");
 		root.commandInputSyncing = false;
 		root.syncLauncherSearch();
@@ -1560,6 +1500,12 @@ Item {
 
 	function focusCommandArgument() {
 		if (!root.commandInputActive) return;
+		const token = root.canonicalToken(commandTokenField.text);
+		if (token !== commandTokenField.text) {
+			root.commandInputSyncing = true;
+			commandTokenField.text = token;
+			root.commandInputSyncing = false;
+		}
 		root.commandInputHasSeparator = true;
 		root.syncLauncherSearch();
 		searchField.cursorPosition = searchField.text.length;
@@ -2352,8 +2298,12 @@ Item {
 		}
 
 		if (root.inCommandMode) {
-			if (commandList.currentIndex < 0 || commandList.currentIndex >= root.filteredCommands.length) return;
-			root.launchCommand(root.filteredCommands[commandList.currentIndex]);
+			root.launchCommand(root.paletteCommand);
+			return;
+		}
+
+		if (root.commandFocus >= 0 && root.commandFocus < root.appCommands.length) {
+			root.launchCommand(root.appCommands[root.commandFocus].command);
 			return;
 		}
 
@@ -2375,6 +2325,12 @@ Item {
 
 	function launchCommand(command) {
 		if (!command) return;
+		if (command.id !== "calculator-result" && command.id !== "studio-page") root.recordLaunch({ id: `>${command.command}` });
+		// a group shows what is in it
+		if (command.children) {
+			root.setLauncherSearch(`>${command.command} `);
+			return;
+		}
 
 		switch (String(command.id || "")) {
 		case "plugins":
@@ -2384,10 +2340,6 @@ Item {
 		case "rpg":
 			root.closeRequested();
 			root.openRpgRequested();
-			break;
-		case "studio":
-			root.closeRequested();
-			root.openStudioRequested("wallpaper");
 			break;
 		case "studio-page":
 			root.closeRequested();
@@ -2493,6 +2445,10 @@ Item {
 		case "updates":
 			root.openUpdatesRequested();
 			break;
+		case "screentime":
+			root.closeRequested();
+			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "screentime", "open"]);
+			break;
 		case "dnd":
 			Notifs.toggleDnd();
 			root.closeRequested();
@@ -2513,6 +2469,14 @@ Item {
 		root.leaveCommandInput("");
 		root.resetting = false;
 		appList.currentIndex = root.filteredApps.length > 0 ? 0 : -1;
+	}
+
+	// Ctrl+P keeps the picked command on top, or lets it go again
+	function handlePinKey(event) {
+		if (root.mode !== "commands" || event.key !== Qt.Key_P || !(event.modifiers & Qt.ControlModifier)) return false;
+		root.togglePin(root.paletteCommand);
+		event.accepted = true;
+		return true;
 	}
 
 	// screen tools start once the launcher has left the screen
@@ -2552,15 +2516,14 @@ Item {
 
 	onFilteredAppsChanged: {
 		if (root.inCommandMode) return;
+		if (filteredApps.length === 0 && root.commandFocus < 0 && root.appCommands.length > 0) root.commandFocus = 0;
 		if (filteredApps.length === 0) appList.currentIndex = -1;
 		else if (appList.currentIndex < 0 || appList.currentIndex >= filteredApps.length) appList.currentIndex = 0;
 	}
 
-	onFilteredCommandsChanged: {
-		if (!root.inCommandMode || root.inAiMode || root.inChatMode || root.inOllamaMode || root.inFileMode) return;
-		if (filteredCommands.length === 0) commandList.currentIndex = -1;
-		else if (commandList.currentIndex < 0 || commandList.currentIndex >= filteredCommands.length) commandList.currentIndex = 0;
-	}
+	// a tile that went (a plugin switched off) takes the pick with it
+	onPaletteCellsChanged: if (root.paletteIndex >= root.paletteCells.length) root.pickPaletteCell()
+	onAppCommandsChanged: if (root.commandFocus >= root.appCommands.length) root.commandFocus = root.appCommands.length - 1
 
 	onFilteredFileBrowserEntriesChanged: {
 		if (!root.inFileMode) return;
@@ -2983,6 +2946,7 @@ Item {
 
 	function commandGlyph(command) {
 		switch (String(command?.id || "")) {
+		case "capture": return "monitor_screenshot";
 		case "plugins": return "puzzle";
 		case "rpg": return "gamepad_variant";
 		case "studio": return "palette";
@@ -3016,6 +2980,7 @@ Item {
 		case "messages": return "forum_outline";
 		case "mail": return "email_plus_outline";
 		case "updates": return "package_up";
+		case "screentime": return "progress_clock";
 		case "dnd": return "minus_circle";
 		}
 		return "console";
@@ -3257,7 +3222,16 @@ Item {
 					Keys.onEscapePressed: {
 						if (!root.activeModeView || !root.activeModeView.cancel()) root.closeRequested();
 					}
+					Keys.onLeftPressed: event => {
+						if (root.mode === "commands") root.movePalette(-1, 0);
+						else event.accepted = false;
+					}
+					Keys.onRightPressed: event => {
+						if (root.mode === "commands") root.movePalette(1, 0);
+						else event.accepted = false;
+					}
 					Keys.onPressed: event => {
+						if (root.handlePinKey(event)) return;
 						if (event.key === Qt.Key_Space) {
 							root.focusCommandArgument();
 							event.accepted = true;
@@ -3292,9 +3266,7 @@ Item {
 							fileBrowserList.positionViewAtIndex(fileBrowserList.currentIndex, ListView.Contain);
 							return;
 						}
-						if (root.filteredCommands.length === 0) return;
-						commandList.currentIndex = Math.min(root.filteredCommands.length - 1, commandList.currentIndex + 1);
-						commandList.positionViewAtIndex(commandList.currentIndex, ListView.Contain);
+						root.movePalette(0, 1);
 					}
 					Keys.onUpPressed: {
 						if (root.activeModeView) {
@@ -3307,9 +3279,7 @@ Item {
 							fileBrowserList.positionViewAtIndex(fileBrowserList.currentIndex, ListView.Contain);
 							return;
 						}
-						if (root.filteredCommands.length === 0) return;
-						commandList.currentIndex = Math.max(0, commandList.currentIndex - 1);
-						commandList.positionViewAtIndex(commandList.currentIndex, ListView.Contain);
+						root.movePalette(0, -1);
 					}
 				}
 			}
@@ -3337,7 +3307,7 @@ Item {
 							? "Filter this folder"
 							: (root.inCalculatorMode
 								? "Expression, e.g. 12*(3+4)"
-								: (root.commandInputActive ? "Arguments" : "Search apps  ·  > for commands  ·  /rpg"))))
+								: (root.mode === "commands" ? "" : (root.commandInputActive ? "Arguments" : "Search apps  ·  > for commands  ·  /rpg")))))
 				placeholderTextColor: Theme.textSubtle
 				selectedTextColor: Theme.text
 				selectionColor: Qt.alpha(Theme.primary, 0.35)
@@ -3381,6 +3351,7 @@ Item {
 					else if (!root.activeModeView || !root.activeModeView.cancel()) root.closeRequested();
 				}
 				Keys.onPressed: event => {
+					if (root.handlePinKey(event)) return;
 					if (event.key === Qt.Key_Backspace && root.commandInputActive && searchField.text === "" && searchField.cursorPosition === 0) {
 						event.accepted = root.focusCommandTokenFromEmptyArgument();
 						if (event.accepted) return;
@@ -3403,6 +3374,14 @@ Item {
 					event.accepted = true;
 				}
 				Keys.onLeftPressed: event => {
+					if (root.mode === "commands") {
+						root.movePalette(-1, 0);
+						return;
+					}
+					if (root.mode === "apps" && root.commandFocus >= 0) {
+						root.commandFocus = Math.max(0, root.commandFocus - 1);
+						return;
+					}
 					if (root.mode !== "apps" || root.filteredApps.length === 0 || appList.columns === 1) {
 						event.accepted = false;
 						return;
@@ -3412,6 +3391,14 @@ Item {
 					event.accepted = true;
 				}
 				Keys.onRightPressed: event => {
+					if (root.mode === "commands") {
+						root.movePalette(1, 0);
+						return;
+					}
+					if (root.mode === "apps" && root.commandFocus >= 0) {
+						root.commandFocus = Math.min(root.appCommands.length - 1, root.commandFocus + 1);
+						return;
+					}
 					if (root.mode !== "apps" || root.filteredApps.length === 0 || appList.columns === 1) {
 						event.accepted = false;
 						return;
@@ -3433,12 +3420,15 @@ Item {
 					}
 					if (root.inCalculatorMode || root.inAiMode || root.inChatMode || root.inOllamaMode) return;
 					if (root.inCommandMode) {
-						if (root.filteredCommands.length === 0) return;
-						commandList.currentIndex = Math.min(root.filteredCommands.length - 1, commandList.currentIndex + 1);
-						commandList.positionViewAtIndex(commandList.currentIndex, ListView.Contain);
+						root.movePalette(0, 1);
 						return;
 					}
 					if (root.filteredApps.length === 0) return;
+					// from the commands above the list back into it
+					if (root.commandFocus >= 0) {
+						root.commandFocus = -1;
+						return;
+					}
 					appList.currentIndex = Math.min(root.filteredApps.length - 1, appList.currentIndex + appList.columns);
 					appList.positionViewAtIndex(appList.currentIndex, GridView.Contain);
 				}
@@ -3455,12 +3445,14 @@ Item {
 					}
 					if (root.inCalculatorMode || root.inAiMode || root.inChatMode || root.inOllamaMode) return;
 					if (root.inCommandMode) {
-						if (root.filteredCommands.length === 0) return;
-						commandList.currentIndex = Math.max(0, commandList.currentIndex - 1);
-						commandList.positionViewAtIndex(commandList.currentIndex, ListView.Contain);
+						root.movePalette(0, -1);
 						return;
 					}
-					if (root.filteredApps.length === 0) return;
+					if (root.commandFocus < 0 && root.appCommands.length > 0 && appList.currentIndex < appList.columns) {
+						root.commandFocus = 0;
+						return;
+					}
+					if (root.filteredApps.length === 0 || root.commandFocus >= 0) return;
 					appList.currentIndex = Math.max(0, appList.currentIndex - appList.columns);
 					appList.positionViewAtIndex(appList.currentIndex, GridView.Contain);
 				}
@@ -3522,12 +3514,41 @@ Item {
 			ModeLayer {
 				current: root.mode === "apps"
 
+				// commands that answer the search, ahead of the apps
+				Row {
+					id: commandStrip
+
+					width: parent.width
+					spacing: 6
+					visible: root.appCommands.length > 0
+
+					Repeater {
+						model: root.appCommands.length
+
+						delegate: CommandTile {
+							id: found
+
+							required property int index
+
+							readonly property var entry: root.appCommands[found.index] || null
+
+							width: (commandStrip.width - 3 * commandStrip.spacing) / 4
+							command: found.entry?.command ?? null
+							glyph: root.commandGlyph(found.entry?.command)
+							selected: root.commandFocus === found.index
+							onPointed: root.commandFocus = found.index
+							onClicked: if (found.entry) root.launchCommand(found.entry.command)
+						}
+					}
+				}
+
 				GridView {
 					id: appList
 
 					readonly property int columns: root.browsingApps ? 6 : 1
 
 					anchors.fill: parent
+					anchors.topMargin: commandStrip.visible ? commandStrip.height + 8 : 0
 					clip: true
 					cellWidth: Math.floor(width / columns)
 					cellHeight: root.browsingApps ? 112 : 58
@@ -3551,8 +3572,13 @@ Item {
 
 						required property DesktopEntry modelData
 						required property int index
-						readonly property bool selected: appList.currentIndex === app.index
+						readonly property bool selected: appList.currentIndex === app.index && root.commandFocus < 0
 						readonly property string subtitle: String(app.modelData.genericName || app.modelData.comment || "")
+
+						function point() {
+							root.commandFocus = -1;
+							appList.currentIndex = app.index;
+						}
 
 						width: appList.cellWidth
 						height: appList.cellHeight
@@ -3680,8 +3706,8 @@ Item {
 								anchors.fill: parent
 								hoverEnabled: true
 								cursorShape: Qt.PointingHandCursor
-								onEntered: if (Pointer.moved(hover, mouseX, mouseY)) appList.currentIndex = app.index
-								onPositionChanged: if (Pointer.moved(hover, mouseX, mouseY)) appList.currentIndex = app.index
+								onEntered: if (Pointer.moved(hover, mouseX, mouseY)) app.point()
+								onPositionChanged: if (Pointer.moved(hover, mouseX, mouseY)) app.point()
 								onClicked: root.launchApp(app.modelData)
 							}
 						}
@@ -3690,10 +3716,9 @@ Item {
 
 				EmptyState {
 					anchors.centerIn: parent
-					visible: root.filteredApps.length === 0
+					visible: root.filteredApps.length === 0 && root.appCommands.length === 0
 					icon: "magnify"
 					title: "No apps match"
-					subtitle: "Type > to see commands, or >c 5+5 to calculate."
 				}
 			}
 
@@ -3701,137 +3726,22 @@ Item {
 			ModeLayer {
 				current: root.mode === "commands"
 
-				ListView {
-					id: commandList
+				CommandPalette {
+					id: palette
 
 					anchors.fill: parent
-					clip: true
-					spacing: 4
-					model: root.filteredCommands
-					currentIndex: model.length > 0 ? 0 : -1
-					boundsBehavior: Flickable.StopAtBounds
-					ScrollBar.vertical: ThinScrollBar {}
-
-					displaced: Transition {
-						SpatialAnim {
-							property: "y"
-							duration: Motion.medium
-						}
-					}
-
-					delegate: Clickable {
-						id: commandRow
-
-						required property var modelData
-						required property int index
-						readonly property bool selected: commandList.currentIndex === commandRow.index
-
-						width: commandList.width
-						implicitHeight: 60
-						radius: Theme.radius.large
-						pressedScale: 0.98
-						showHover: false
-						color: commandRow.selected ? Theme.primaryContainer : (commandRow.hovered ? Theme.layer1 : "transparent")
-						onPointed: commandList.currentIndex = commandRow.index
-						onClicked: root.launchCommand(commandRow.modelData)
-
-						RowLayout {
-							anchors.fill: parent
-							anchors.leftMargin: 10
-							anchors.rightMargin: 16
-							spacing: 14
-
-							Rectangle {
-								Layout.preferredWidth: 42
-								Layout.preferredHeight: 42
-								radius: commandRow.selected ? Theme.radius.medium : 21
-								color: commandRow.selected ? Theme.primary : Theme.layer2
-
-								Behavior on radius {
-									SpatialAnim {
-										duration: Motion.medium
-									}
-								}
-								Behavior on color {
-									ColorAnim {}
-								}
-
-								Glyph {
-									anchors.centerIn: parent
-									icon: root.commandGlyph(commandRow.modelData)
-									size: 20
-									color: commandRow.selected ? Theme.onPrimary : Theme.text
-								}
-							}
-
-							ColumnLayout {
-								Layout.fillWidth: true
-								spacing: 1
-
-								RowLayout {
-									spacing: 8
-
-									StyledText {
-										text: commandRow.modelData.name || "Command"
-										font.pixelSize: Theme.size.body
-										font.weight: Font.DemiBold
-									}
-
-									Rectangle {
-										Layout.preferredHeight: 20
-										Layout.preferredWidth: token.implicitWidth + 12
-										radius: 10
-										color: Theme.layer2
-
-										StyledText {
-											id: token
-											anchors.centerIn: parent
-											text: `${commandRow.modelData.prefix || ">"}${commandRow.modelData.command || commandRow.modelData.id || ""}`
-											font.family: Theme.monoFamily
-											font.pixelSize: Theme.size.tiny
-											font.weight: Font.Bold
-											tone: Theme.primary
-										}
-									}
-								}
-
-								StyledText {
-									Layout.fillWidth: true
-									text: commandRow.modelData.description || ""
-									tone: Theme.textMuted
-									font.pixelSize: Theme.size.small
-								}
-							}
-
-							Glyph {
-								visible: Boolean(commandRow.modelData.active)
-								icon: "check"
-								size: 18
-								color: Theme.primary
-							}
-
-							Glyph {
-								icon: "keyboard_return"
-								size: 16
-								color: Theme.primary
-								opacity: commandRow.selected ? 1 : 0
-
-								Behavior on opacity {
-									Anim {
-										duration: Motion.short
-									}
-								}
-							}
-						}
-					}
+					sections: root.paletteSections
+					current: root.paletteIndex
+					onPointed: index => root.paletteIndex = index
+					onActivated: index => root.launchCommand(root.paletteCells[index].command)
+					onPinRequested: index => root.togglePin(root.paletteCells[index].command)
 				}
 
 				EmptyState {
 					anchors.centerIn: parent
-					visible: root.filteredCommands.length === 0
+					visible: root.paletteCells.length > 0 && !root.paletteCells.some(cell => cell.match)
 					icon: "console"
 					title: "Unknown command"
-					subtitle: "Try >chat, >file, >ollama, >c or /rpg."
 				}
 			}
 
@@ -5408,7 +5318,7 @@ Item {
 
 			KeyHint {
 				visible: !root.inChatMode && !root.inCalculatorMode && root.mode !== "translate"
-				key: root.browsingApps ? "←↑↓→" : "↑↓"
+				key: root.browsingApps || root.mode === "commands" ? "←↑↓→" : "↑↓"
 				label: root.mode === "todo" ? "lists" : "move"
 			}
 
@@ -5416,6 +5326,12 @@ Item {
 				visible: root.inChatMode
 				key: "⇧↵"
 				label: "new line"
+			}
+
+			KeyHint {
+				visible: root.mode === "commands" && root.paletteCommand !== null && root.paletteCommand.id !== "studio-page"
+				key: "^P"
+				label: root.commandPins.includes(root.paletteCommand?.command) ? "unpin" : "pin"
 			}
 
 			KeyHint {
@@ -5437,7 +5353,7 @@ Item {
 				text: {
 					switch (root.mode) {
 					case "apps": return root.browsingApps ? "Most used" : `${root.filteredApps.length} results`;
-					case "commands": return `${root.filteredCommands.length} commands`;
+					case "commands": return root.paletteCommand ? `${root.paletteCommand.prefix || ">"}${root.paletteCommand.command}` : "";
 					case "chat": return root.aiStreaming ? "Generating…" : "";
 					default: return "";
 					}

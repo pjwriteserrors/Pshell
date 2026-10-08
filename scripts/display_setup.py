@@ -10,6 +10,12 @@
                                       (display-profile.kdl): its monitors take
                                       the setup's arrangement and keep the rest
                                       of what they had (VRR, hot corners, …)
+  display_setup.py connector <name> -> the connector of the plugged-in monitor
+                                      an output name means
+
+Monitors are named by connector here and for the shell; the files name them
+by make, model and serial (niri_outputs.py), so a setup finds its monitors on
+whatever port they hang.
 
 Built-in setups live in scripts/display-profiles, saved ones in
 $XDG_STATE_HOME/pshell/display-profiles and win over built-ins of the same
@@ -17,11 +23,15 @@ name. display_profile.sh applies either.
 """
 
 import json
+import math
 import os
 import re
 import subprocess
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import niri_outputs  # noqa: E402
 
 BUILTIN = Path(__file__).resolve().parent / "display-profiles"
 SAVED = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state") / "pshell" / "display-profiles"
@@ -78,12 +88,20 @@ def parse(path):
     return outputs, rules
 
 
-def live():
-    try:
-        raw = subprocess.run(["niri", "msg", "-j", "outputs"], capture_output=True, text=True, timeout=5).stdout
-        data = json.loads(raw)
-    except (OSError, ValueError, subprocess.TimeoutExpired):
-        return []
+def by_connector(outputs, plugged):
+    """Parsed outputs named by the connector their monitor hangs on now; a
+    monitor that is away keeps the name the file gives it."""
+    result, seen = [], set()
+    for output in outputs:
+        name = niri_outputs.connector(output["name"], plugged) or output["name"]
+        if name.lower() not in seen:
+            seen.add(name.lower())
+            result.append(dict(output, name=name))
+    return result
+
+
+def live(data=None):
+    data = niri_outputs.connected() if data is None else data
     result = []
     for output in data.values():
         current_mode = output.get("current_mode")
@@ -92,6 +110,7 @@ def live():
         modes = sorted({(m["width"], m["height"]) for m in output.get("modes") or []}, reverse=True)
         result.append({
             "name": output["name"],
+            "id": output["id"],
             "label": " ".join(part for part in (output.get("make"), output.get("model")) if part and part != "Unknown"),
             "x": logical["x"] if logical else 0,
             "y": logical["y"] if logical else 0,
@@ -117,8 +136,9 @@ def with_size(output, connected):
     width, height = mode_size(output, connected)
     if output["transform"].endswith(("90", "270")):
         width, height = height, width
-    scale = output["scale"] or 1.0
-    return dict(output, width=round(width / scale), height=round(height / scale), connected=output["name"] in connected)
+    # the way niri lays it out: scales are 120ths, a part of a pixel counts as one
+    scale = round((output["scale"] or 1.0) * 120) / 120
+    return dict(output, width=math.ceil(width / scale), height=math.ceil(height / scale), connected=output["name"] in connected)
 
 
 def profiles():
@@ -141,7 +161,8 @@ def current():
 
 
 def cmd_list():
-    outputs = live()
+    plugged = niri_outputs.connected()
+    outputs = live(plugged)
     connected = {o["name"]: o for o in outputs}
     result = []
     for name, (path, builtin) in profiles().items():
@@ -149,6 +170,7 @@ def cmd_list():
             parsed, rules = parse(path)
         except OSError:
             continue
+        parsed = by_connector(parsed, plugged)
         result.append({
             "name": name,
             "builtin": builtin,
@@ -198,15 +220,16 @@ def cmd_live(outputs):
 def cmd_save(name, outputs):
     if not NAME.match(name):
         sys.exit(f"invalid name: {name}")
+    plugged = niri_outputs.connected()
     existing = profiles().get(name)
     kept, rules = parse(existing[0]) if existing else ([], [])
     # monitors of the old version that are not plugged in now stay as they were
     named = {o["name"] for o in outputs}
-    outputs = outputs + [o for o in kept if o["name"] not in named]
+    outputs = outputs + [o for o in by_connector(kept, plugged) if o["name"] not in named]
 
     lines = [f"// display profile: {name}", ""]
     for output in outputs:
-        lines.append(f'output "{output["name"]}" {{')
+        lines.append(f'output "{niri_outputs.canonical(output["name"], plugged)}" {{')
         if output.get("off"):
             lines.append("    off")
         if output.get("mode"):
@@ -243,22 +266,31 @@ ARRANGEMENT = {"mode", "position", "scale", "transform", "off"}
 
 
 def cmd_activate(source, name):
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
     import niri_kdl as kdl
 
+    plugged = niri_outputs.connected()
     wanted = [n for n in kdl.parse(Path(source).read_text()) if not n.disabled]
     try:
         active = [n for n in kdl.parse(ACTIVE.read_text()) if not n.disabled]
     except OSError:
         active = []
-    kept = {str(n.args[0]): kdl.to_json(n) for n in active if n.name == "output" and n.args}
-    outputs = []
+    kept = {}
+    for node in active:
+        if node.name == "output" and node.args:
+            block = kdl.to_json(node)
+            block["args"][0] = niri_outputs.canonical(node.args[0], plugged)
+            kept.setdefault(block["args"][0].lower(), block)
+    outputs, done = [], set()
     for node in wanted:
         if node.name != "output" or not node.args:
             continue
         block = kdl.to_json(node)
         block.pop("comment", None)
-        before = kept.pop(str(node.args[0]), None)
+        block["args"][0] = niri_outputs.canonical(node.args[0], plugged)
+        if block["args"][0].lower() in done:
+            continue
+        done.add(block["args"][0].lower())
+        before = kept.pop(block["args"][0].lower(), None)
         if before:
             block["children"] = [c for c in block.get("children") or [] if c["name"] in ARRANGEMENT] + \
                 [c for c in before.get("children") or [] if c["name"] not in ARRANGEMENT]
@@ -286,6 +318,11 @@ def main():
         cmd_save(args[1], json.loads(args[2]))
     elif len(args) == 3 and args[0] == "activate":
         cmd_activate(args[1], args[2])
+    elif len(args) == 2 and args[0] == "connector":
+        found = niri_outputs.connector(args[1], niri_outputs.connected())
+        if not found:
+            sys.exit(1)
+        print(found)
     elif len(args) == 2 and args[0] == "delete":
         cmd_delete(args[1])
     else:

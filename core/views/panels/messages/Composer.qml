@@ -33,7 +33,7 @@ ColumnLayout {
 	property bool snippets: false
 	readonly property var offered: Snippets.offered(root.people.map(person => person.email))
 	// the customer the chat is with: a snippet can be kept for it alone
-	readonly property var customer: Customers.list.find(customer => root.people.some(person => customer.people.includes(person.email))) ?? null
+	readonly property var customer: Customers.of(Mail.shown).find(customer => root.people.some(person => customer.people.includes(person.email))) ?? null
 	property bool forCustomer: false
 	// the assistant is there: the wand asks it for a greeting, thanks and a last sentence
 	property bool assist: false
@@ -211,7 +211,7 @@ ColumnLayout {
 						spacing: 8
 
 						Glyph {
-							icon: row.snippet.customer ? "office_building" : "text_box"
+							icon: row.snippet.customer ? Mail.grouping(Mail.shown).icon : "text_box"
 							size: 15
 							color: Theme.textSubtle
 						}
@@ -258,7 +258,7 @@ ColumnLayout {
 				Chip {
 					visible: root.customer !== null
 					implicitHeight: 32
-					icon: "office_building"
+					icon: Mail.grouping(Mail.shown).icon
 					text: root.customer?.name ?? ""
 					selected: root.forCustomer
 					onClicked: root.forCustomer = !root.forCustomer

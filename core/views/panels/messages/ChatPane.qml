@@ -94,7 +94,7 @@ Item {
 		const account = Mail.account(root.chat.account);
 		const own = [account?.address ?? ""].concat(account?.own ?? []).map(address => address.split("@")[1] ?? "");
 		for (const person of root.chat.people) {
-			const customer = Customers.suggest(person.email, own);
+			const customer = Customers.suggest(person.email, own, root.chat.account);
 			if (customer) return { person: person, customer: customer };
 		}
 		return null;
@@ -516,7 +516,7 @@ Item {
 				spacing: 8
 
 				Glyph {
-					icon: "office_building"
+					icon: Mail.grouping(Mail.shown).icon
 					size: 15
 					color: Theme.primary
 				}
@@ -593,18 +593,25 @@ Item {
 					}
 				}
 
-				add: Transition {
+				delegate: Bubble {
+					id: entry
+
+					required property string modelData
+					required property int index
+
+					// A new mail fades in by itself. (As a transition of the list the fade was cut
+					// short when the view jumped to the newest mail, and left the first mails unseen.)
+					ListView.onAdd: appear.restart()
+
 					Anim {
+						id: appear
+
+						target: entry
 						property: "opacity"
 						from: 0
 						to: 1
 						duration: Motion.medium
 					}
-				}
-
-				delegate: Bubble {
-					required property string modelData
-					required property int index
 
 					width: ListView.view.width - 12
 					message: Mail.messages[root.byId[modelData]] ?? root.blank

@@ -232,6 +232,19 @@ def doctor():
         if report.failures == before:
             report.ok("dictionaries, keyboard and uinput are there")
 
+    if "multicursor" in plugins:
+        report.section("Multicursor")
+        before = report.failures
+        if not module_available("evdev"):
+            report.fail("evdev – taking the keyboard (python-evdev)")
+        keyboards = glob.glob("/dev/input/by-path/*-event-kbd") + glob.glob("/dev/input/by-id/*-event-kbd")
+        if not any(os.access(path, os.R_OK) for path in keyboards):
+            report.fail("the keyboard is not readable (scripts/setup-rpg-input-access.sh)")
+        if not os.access("/dev/uinput", os.W_OK):
+            report.fail("/dev/uinput is not writable – handing the keys on (a udev rule or the input group)")
+        if report.failures == before:
+            report.ok("keyboard and uinput are there")
+
     report.section("Fonts")
     for family, why in FONTS:
         (report.ok if font_available(family) else report.fail)(f"{family} – {why}")

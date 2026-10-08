@@ -26,11 +26,14 @@ ModalWindow {
 		NiriSettings.error = "";
 		Keybinds.error = "";
 		search.text = "";
+		root.exportError = "";
+		exportSheet.close();
 		root.go(NiriSettings.page || root.current || "displays", "");
 	}
 
 	property string current: "displays"
 	property var visited: ({})
+	property string exportError: ""
 	readonly property string query: search.text.trim().toLowerCase()
 
 	readonly property var pages: [
@@ -39,66 +42,72 @@ ModalWindow {
 		{ id: "looks", label: "Borders & shadows", icon: "border_style", hint: "Focus ring, border, shadow, tabs" },
 		{ id: "input", label: "Input", icon: "mouse", hint: "Keyboard, mouse, touchpad, tablet" },
 		{ id: "keys", label: "Key binds", icon: "keyboard", hint: "Shortcuts and switches" },
+		{ id: "multicursor", label: "Multicursor", icon: "cursor_text", hint: "Lines and cursors in every text field", plugin: "multicursor" },
 		{ id: "rules", label: "Window rules", icon: "application_cog_outline", hint: "Per app: size, place, look" },
 		{ id: "workspaces", label: "Workspaces", icon: "view_grid_outline", hint: "Named workspaces" },
 		{ id: "overview", label: "Overview & gestures", icon: "gesture_swipe", hint: "Overview, hot corners, Alt-Tab" },
 		{ id: "system", label: "System", icon: "cog_outline", hint: "Startup, environment, screenshots, blur" },
 		{ id: "debug", label: "Debug", icon: "bug_outline", hint: "Rendering and driver switches" }
-	]
+	].filter(page => !page.plugin || Plugins.on(page.plugin))
 
-	// what search finds: a card on a page
+	// what search finds: a card on a page. `take` is what an export of the card
+	// holds: paths in settings.kdl, `output:<setting>` of every monitor,
+	// `@binds` (keybinds.kdl), `@corners` (the window rule without a match)
 	readonly property var index: [
-		{ page: "displays", anchor: "arrangement", title: "Monitor arrangement", words: "position drag monitors outputs place" },
-		{ page: "displays", anchor: "mode", title: "Resolution and refresh rate", words: "mode hz refresh resolution custom modeline" },
-		{ page: "displays", anchor: "scale", title: "Scale", words: "scale hidpi zoom size" },
-		{ page: "displays", anchor: "rotation", title: "Rotation", words: "transform rotate flip portrait" },
-		{ page: "displays", anchor: "vrr", title: "Variable refresh rate", words: "vrr freesync gsync adaptive sync" },
-		{ page: "displays", anchor: "monitor-extras", title: "Startup focus, backdrop, hot corners of a monitor", words: "focus-at-startup backdrop color hot corners" },
+		{ page: "displays", anchor: "arrangement", title: "Monitor arrangement", words: "position drag monitors outputs place", take: ["output:position", "output:off"] },
+		{ page: "displays", anchor: "mode", title: "Resolution and refresh rate", words: "mode hz refresh resolution custom modeline", take: ["output:mode", "output:modeline"] },
+		{ page: "displays", anchor: "scale", title: "Scale", words: "scale hidpi zoom size", take: ["output:scale"] },
+		{ page: "displays", anchor: "rotation", title: "Rotation", words: "transform rotate flip portrait", take: ["output:transform"] },
+		{ page: "displays", anchor: "vrr", title: "Variable refresh rate", words: "vrr freesync gsync adaptive sync", take: ["output:variable-refresh-rate"] },
+		{ page: "displays", anchor: "monitor-extras", title: "Startup focus, backdrop, hot corners of a monitor", words: "focus-at-startup backdrop color hot corners", take: ["output:focus-at-startup", "output:backdrop-color", "output:background-color", "output:hot-corners", "output:layout"] },
 		{ page: "displays", anchor: "setups", title: "Display setups", words: "profile setup save home office" },
-		{ page: "layout", anchor: "gaps", title: "Gaps", words: "gaps spacing margin" },
-		{ page: "layout", anchor: "struts", title: "Struts", words: "struts outer gaps edge" },
-		{ page: "layout", anchor: "centering", title: "Centering columns", words: "center-focused-column always-center-single-column" },
-		{ page: "layout", anchor: "widths", title: "Column widths", words: "preset-column-widths default-column-width proportion fixed" },
-		{ page: "layout", anchor: "heights", title: "Window heights", words: "preset-window-heights default height" },
-		{ page: "layout", anchor: "columns", title: "New columns and workspaces", words: "default-column-display tabbed empty-workspace-above-first" },
-		{ page: "layout", anchor: "background", title: "Workspace background", words: "background-color" },
-		{ page: "looks", anchor: "focus-ring", title: "Focus ring", words: "focus ring active color gradient" },
-		{ page: "looks", anchor: "border", title: "Border", words: "border width color gradient" },
-		{ page: "looks", anchor: "shadow", title: "Shadow", words: "shadow softness spread offset" },
-		{ page: "looks", anchor: "tab-indicator", title: "Tab indicator", words: "tab indicator tabbed column" },
-		{ page: "looks", anchor: "insert-hint", title: "Insert hint", words: "insert hint drag move" },
-		{ page: "looks", anchor: "corners", title: "Window corners", words: "geometry-corner-radius rounded clip-to-geometry" },
-		{ page: "input", anchor: "layouts", title: "Keyboard layouts", words: "xkb layout variant language" },
-		{ page: "input", anchor: "xkb-options", title: "Keyboard options", words: "xkb options compose caps ctrl" },
-		{ page: "input", anchor: "repeat", title: "Key repeat", words: "repeat-delay repeat-rate" },
-		{ page: "input", anchor: "keyboard-more", title: "Num Lock, layout per window", words: "numlock track-layout" },
-		{ page: "input", anchor: "pointer", title: "Mouse, touchpad, trackpoint, trackball", words: "accel speed natural scroll tap dwt left-handed middle-emulation scroll-factor" },
-		{ page: "input", anchor: "tablet", title: "Tablet and touch screen", words: "tablet touch map-to-output calibration" },
-		{ page: "input", anchor: "focus", title: "Focus follows mouse", words: "focus-follows-mouse warp-mouse-to-focus" },
-		{ page: "input", anchor: "mod", title: "Mod key", words: "mod-key mod-key-nested super alt" },
-		{ page: "input", anchor: "input-more", title: "Power key, workspace back and forth, cursor", words: "disable-power-key-handling workspace-auto-back-and-forth hide-when-typing hide-after-inactive-ms cursor" },
-		{ page: "keys", anchor: "binds", title: "Key binds", words: "keys shortcuts binds hotkeys" },
-		{ page: "keys", anchor: "switches", title: "Lid and tablet mode", words: "switch-events lid-close lid-open tablet-mode" },
-		{ page: "rules", anchor: "rules", title: "Window rules", words: "window-rule match app-id title open-floating opacity" },
-		{ page: "rules", anchor: "layer-rules", title: "Layer rules", words: "layer-rule namespace bar notifications" },
-		{ page: "workspaces", anchor: "workspaces", title: "Named workspaces", words: "workspace named open-on-output" },
-		{ page: "overview", anchor: "overview", title: "Overview", words: "overview zoom backdrop workspace-shadow" },
-		{ page: "overview", anchor: "hot-corners", title: "Hot corners", words: "hot-corners corner overview" },
-		{ page: "overview", anchor: "dnd-edge", title: "Scrolling while dragging", words: "dnd-edge-view-scroll dnd-edge-workspace-switch trigger" },
-		{ page: "overview", anchor: "recent", title: "Window switcher (Alt-Tab)", words: "recent-windows alt tab switcher debounce previews highlight" },
-		{ page: "system", anchor: "startup", title: "Startup programs", words: "spawn-at-startup autostart" },
-		{ page: "system", anchor: "environment", title: "Environment variables", words: "environment variables env" },
-		{ page: "system", anchor: "screenshots", title: "Screenshot path", words: "screenshot-path pictures" },
-		{ page: "system", anchor: "decorations", title: "Title bars (CSD)", words: "prefer-no-csd decorations title bar" },
-		{ page: "system", anchor: "blur", title: "Blur", words: "blur passes offset noise saturation" },
-		{ page: "system", anchor: "system-more", title: "Clipboard, hotkey overlay, notifications, Xwayland", words: "clipboard disable-primary hotkey-overlay config-notification xwayland-satellite" },
-		{ page: "debug", anchor: "debug", title: "Debug options", words: "debug preview-render drm overlay planes scanout" }
+		{ page: "layout", anchor: "gaps", title: "Gaps", words: "gaps spacing margin", take: ["layout/gaps"] },
+		{ page: "layout", anchor: "struts", title: "Struts", words: "struts outer gaps edge", take: ["layout/struts"] },
+		{ page: "layout", anchor: "centering", title: "Centering columns", words: "center-focused-column always-center-single-column", take: ["layout/center-focused-column", "layout/always-center-single-column"] },
+		{ page: "layout", anchor: "widths", title: "Column widths", words: "preset-column-widths default-column-width proportion fixed", take: ["layout/preset-column-widths", "layout/default-column-width"] },
+		{ page: "layout", anchor: "heights", title: "Window heights", words: "preset-window-heights default height", take: ["layout/preset-window-heights"] },
+		{ page: "layout", anchor: "columns", title: "New columns and workspaces", words: "default-column-display tabbed empty-workspace-above-first", take: ["layout/default-column-display", "layout/empty-workspace-above-first"] },
+		{ page: "layout", anchor: "background", title: "Workspace background", words: "background-color", take: ["layout/background-color"] },
+		{ page: "looks", anchor: "focus-ring", title: "Focus ring", words: "focus ring active color gradient", take: ["layout/focus-ring"] },
+		{ page: "looks", anchor: "border", title: "Border", words: "border width color gradient", take: ["layout/border"] },
+		{ page: "looks", anchor: "shadow", title: "Shadow", words: "shadow softness spread offset", take: ["layout/shadow"] },
+		{ page: "looks", anchor: "tab-indicator", title: "Tab indicator", words: "tab indicator tabbed column", take: ["layout/tab-indicator"] },
+		{ page: "looks", anchor: "insert-hint", title: "Insert hint", words: "insert hint drag move", take: ["layout/insert-hint"] },
+		{ page: "looks", anchor: "corners", title: "Window corners", words: "geometry-corner-radius rounded clip-to-geometry", take: ["@corners"] },
+		{ page: "input", anchor: "layouts", title: "Keyboard layouts", words: "xkb layout variant language", take: ["input/keyboard/xkb/layout", "input/keyboard/xkb/variant", "input/keyboard/xkb/model", "input/keyboard/xkb/rules", "input/keyboard/xkb/file"] },
+		{ page: "input", anchor: "xkb-options", title: "Keyboard options", words: "xkb options compose caps ctrl", take: ["input/keyboard/xkb/options"] },
+		{ page: "input", anchor: "repeat", title: "Key repeat", words: "repeat-delay repeat-rate", take: ["input/keyboard/repeat-delay", "input/keyboard/repeat-rate"] },
+		{ page: "input", anchor: "keyboard-more", title: "Num Lock, layout per window", words: "numlock track-layout", take: ["input/keyboard/numlock", "input/keyboard/track-layout"] },
+		{ page: "input", anchor: "pointer", title: "Mouse, touchpad, trackpoint, trackball", words: "accel speed natural scroll tap dwt left-handed middle-emulation scroll-factor", take: ["input/mouse", "input/touchpad", "input/trackpoint", "input/trackball"] },
+		{ page: "input", anchor: "tablet", title: "Tablet and touch screen", words: "tablet touch map-to-output calibration", take: ["input/tablet", "input/touch"] },
+		{ page: "input", anchor: "focus", title: "Focus follows mouse", words: "focus-follows-mouse warp-mouse-to-focus", take: ["input/focus-follows-mouse", "input/warp-mouse-to-focus"] },
+		{ page: "input", anchor: "mod", title: "Mod key", words: "mod-key mod-key-nested super alt", take: ["input/mod-key", "input/mod-key-nested"] },
+		{ page: "input", anchor: "input-more", title: "Power key, workspace back and forth, cursor", words: "disable-power-key-handling workspace-auto-back-and-forth hide-when-typing hide-after-inactive-ms cursor", take: ["input/disable-power-key-handling", "input/workspace-auto-back-and-forth", "cursor/hide-when-typing", "cursor/hide-after-inactive-ms"] },
+		{ page: "keys", anchor: "binds", title: "Key binds", words: "keys shortcuts binds hotkeys", take: ["@binds"] },
+		{ page: "keys", anchor: "switches", title: "Lid and tablet mode", words: "switch-events lid-close lid-open tablet-mode", take: ["switch-events"] },
+		{ page: "multicursor", anchor: "multicursor", title: "Multicursor shortcuts", words: "move copy duplicate line add cursor above below click multi" },
+		{ page: "multicursor", anchor: "multicursor-apps", title: "Multicursor: excluded apps", words: "apps exclude leave alone" },
+		{ page: "rules", anchor: "rules", title: "Window rules", words: "window-rule match app-id title open-floating opacity", take: ["window-rule"] },
+		{ page: "rules", anchor: "layer-rules", title: "Layer rules", words: "layer-rule namespace bar notifications", take: ["layer-rule"] },
+		{ page: "workspaces", anchor: "workspaces", title: "Named workspaces", words: "workspace named open-on-output", take: ["workspace"] },
+		{ page: "overview", anchor: "overview", title: "Overview", words: "overview zoom backdrop workspace-shadow", take: ["overview"] },
+		{ page: "overview", anchor: "hot-corners", title: "Hot corners", words: "hot-corners corner overview", take: ["gestures/hot-corners"] },
+		{ page: "overview", anchor: "dnd-edge", title: "Scrolling while dragging", words: "dnd-edge-view-scroll dnd-edge-workspace-switch trigger", take: ["gestures/dnd-edge-view-scroll", "gestures/dnd-edge-workspace-switch"] },
+		{ page: "overview", anchor: "recent", title: "Window switcher (Alt-Tab)", words: "recent-windows alt tab switcher debounce previews highlight", take: ["recent-windows"] },
+		{ page: "system", anchor: "startup", title: "Startup programs", words: "spawn-at-startup autostart", take: ["spawn-at-startup", "spawn-sh-at-startup"] },
+		{ page: "system", anchor: "environment", title: "Environment variables", words: "environment variables env", take: ["environment"] },
+		{ page: "system", anchor: "screenshots", title: "Screenshot path", words: "screenshot-path pictures", take: ["screenshot-path"] },
+		{ page: "system", anchor: "decorations", title: "Title bars (CSD)", words: "prefer-no-csd decorations title bar", take: ["prefer-no-csd"] },
+		{ page: "system", anchor: "blur", title: "Blur", words: "blur passes offset noise saturation", take: ["blur"] },
+		{ page: "system", anchor: "system-more", title: "Clipboard, hotkey overlay, notifications, Xwayland", words: "clipboard disable-primary hotkey-overlay config-notification xwayland-satellite", take: ["clipboard", "hotkey-overlay", "config-notification", "xwayland-satellite"] },
+		{ page: "debug", anchor: "debug", title: "Debug options", words: "debug preview-render drm overlay planes scanout", take: ["debug"] }
 	]
 
 	readonly property var results: {
 		if (root.query === "") return [];
 		const words = root.query.split(/\s+/);
 		return root.index.filter(entry => {
+			if (!root.pages.some(page => page.id === entry.page)) return false;
 			const hay = `${entry.title} ${entry.words} ${root.pageOf(entry.page).label}`.toLowerCase();
 			return words.every(word => hay.includes(word));
 		}).slice(0, 9);
@@ -152,7 +161,7 @@ ModalWindow {
 
 	Shortcut {
 		sequence: "Ctrl+Z"
-		enabled: root.shown && !(root.currentPage && root.currentPage.recording)
+		enabled: root.shown && root.current !== "multicursor" && !(root.currentPage && root.currentPage.recording)
 		onActivated: root.current === "keys" ? Keybinds.undo() : NiriSettings.undo()
 	}
 
@@ -484,7 +493,7 @@ ModalWindow {
 								}
 
 								StyledText {
-									text: root.current === "keys" ? "keybinds.kdl" : (root.current === "displays" ? "display-profile.kdl" : "settings.kdl")
+									text: root.current === "keys" ? "keybinds.kdl" : (root.current === "displays" ? "display-profile.kdl" : (root.current === "multicursor" ? "multicursor.json" : "settings.kdl"))
 									font.weight: Font.DemiBold
 									font.pixelSize: Theme.size.label
 								}
@@ -492,20 +501,35 @@ ModalWindow {
 
 							StyledText {
 								Layout.fillWidth: true
+								visible: root.current !== "multicursor"
 								text: "niri takes every change at once. What it would not accept is never written."
 								tone: Theme.textSubtle
 								font.pixelSize: Theme.size.small
 								wrapMode: Text.WordWrap
 							}
 
-							TextButton {
+							RowLayout {
 								Layout.topMargin: 2
-								implicitHeight: 28
-								variant: "ghost"
-								icon: "undo"
-								text: "Undo"
-								enabled: root.current === "keys" ? Keybinds.history.length > 0 : NiriSettings.history.length > 0
-								onActivated: root.current === "keys" ? Keybinds.undo() : NiriSettings.undo()
+								spacing: 2
+
+								TextButton {
+									implicitHeight: 28
+									variant: "ghost"
+									icon: "undo"
+									text: "Undo"
+									visible: root.current !== "multicursor"
+									enabled: root.current === "keys" ? Keybinds.history.length > 0 : NiriSettings.history.length > 0
+									onActivated: root.current === "keys" ? Keybinds.undo() : NiriSettings.undo()
+								}
+
+								TextButton {
+									implicitHeight: 28
+									variant: "ghost"
+									icon: "tray_arrow_down"
+									text: "Export"
+									enabled: NiriSettings.loaded
+									onActivated: exportSheet.show(root.current)
+								}
 							}
 						}
 					}
@@ -555,6 +579,7 @@ ModalWindow {
 							case "looks": return looksPage;
 							case "input": return inputPage;
 							case "keys": return keysPage;
+							case "multicursor": return multicursorPage;
 							case "rules": return rulesPage;
 							case "workspaces": return workspacesPage;
 							case "overview": return overviewPage;
@@ -574,6 +599,14 @@ ModalWindow {
 			}
 		}
 
+		ExportSheet {
+			id: exportSheet
+
+			anchors.fill: parent
+			pages: root.pages
+			index: root.index
+		}
+
 		// what the last change did, with a way back
 		Rectangle {
 			id: note
@@ -581,6 +614,7 @@ ModalWindow {
 			property bool up: false
 			property string text: ""
 			property bool keys: false
+			property bool undo: true
 
 			anchors.horizontalCenter: parent.horizontalCenter
 			anchors.horizontalCenterOffset: 131
@@ -607,11 +641,23 @@ ModalWindow {
 				function onSavedCountChanged() {
 					note.text = NiriSettings.savedNote;
 					note.keys = false;
+					note.undo = true;
 					note.up = true;
 					hide.restart();
 				}
 				function onErrorChanged() {
 					if (NiriSettings.error !== "") note.up = false;
+				}
+				function onExported(file) {
+					root.exportError = "";
+					note.text = file === "" ? "Copied" : `Exported to ${file.replace(Paths.home, "~")}`;
+					note.undo = false;
+					note.up = true;
+					hide.restart();
+				}
+				function onExportFailed(message) {
+					note.up = false;
+					root.exportError = message;
 				}
 			}
 
@@ -621,6 +667,7 @@ ModalWindow {
 				function onSavedCountChanged() {
 					note.text = Keybinds.savedNote;
 					note.keys = true;
+					note.undo = true;
 					note.up = true;
 					hide.restart();
 				}
@@ -654,7 +701,7 @@ ModalWindow {
 				}
 
 				TextButton {
-					visible: note.keys ? Keybinds.history.length > 0 : NiriSettings.history.length > 0
+					visible: note.undo && (note.keys ? Keybinds.history.length > 0 : NiriSettings.history.length > 0)
 					implicitHeight: 30
 					variant: "ghost"
 					icon: "undo"
@@ -672,7 +719,8 @@ ModalWindow {
 		Rectangle {
 			id: failure
 
-			readonly property string message: NiriSettings.error !== "" ? NiriSettings.error : Keybinds.error
+			readonly property bool refused: NiriSettings.error !== "" || Keybinds.error !== ""
+			readonly property string message: NiriSettings.error !== "" ? NiriSettings.error : (Keybinds.error !== "" ? Keybinds.error : root.exportError)
 			readonly property bool up: failure.message !== ""
 
 			anchors.horizontalCenter: parent.horizontalCenter
@@ -714,7 +762,7 @@ ModalWindow {
 
 					StyledText {
 						Layout.fillWidth: true
-						text: "niri said no – the last working settings are back"
+						text: failure.refused ? "niri said no – the last working settings are back" : "Could not export"
 						tone: Theme.danger
 						font.weight: Font.DemiBold
 					}
@@ -737,6 +785,7 @@ ModalWindow {
 					onClicked: {
 						NiriSettings.error = "";
 						Keybinds.error = "";
+						root.exportError = "";
 					}
 				}
 			}
@@ -771,6 +820,12 @@ ModalWindow {
 		id: keysPage
 
 		KeysPage {}
+	}
+
+	Component {
+		id: multicursorPage
+
+		MulticursorPage {}
 	}
 
 	Component {

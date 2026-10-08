@@ -17,12 +17,12 @@ Item {
 	readonly property var customer: Customers.find(root.customerId)
 	readonly property var people: {
 		const known = {};
-		for (const entry of Mail.people) known[entry.email] = entry;
+		for (const entry of Mail.shownPeople) known[entry.email] = entry;
 		return (root.customer?.people ?? []).map(email => known[email] ?? { email: email, name: email, chats: 0, unread: 0, date: 0 });
 	}
 	readonly property var chats: {
 		const members = root.customer?.people ?? [];
-		const theirs = Mail.chats.filter(chat => chat.people.some(entry => members.includes(entry.email)));
+		const theirs = Mail.shownChats.filter(chat => chat.people.some(entry => members.includes(entry.email)));
 		// what is unread comes first, the rest stays newest first
 		return theirs.filter(chat => chat.unread > 0).concat(theirs.filter(chat => chat.unread === 0));
 	}
@@ -57,7 +57,7 @@ Item {
 
 			StyledText {
 				Layout.fillWidth: true
-				text: root.customer?.name || "Customer"
+				text: root.customer?.name || Mail.grouping(Mail.shown).one
 				elide: Text.ElideRight
 				font.pixelSize: Theme.size.title
 				font.weight: Font.Bold

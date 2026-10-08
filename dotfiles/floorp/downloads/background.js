@@ -5,6 +5,8 @@
 // to the shell:   { type: "snapshot", browser, items }   everything under way
 //                 { type: "item", item }                 one download changed
 //                 { type: "gone", id }                   it left the browser's list
+//                 { type: "tab", host, path, title }     the page in front, for the
+//                                                        shell's screen time
 // from the shell: { type: "sync" }                       → snapshot
 //                 { type: "cmd", cmd: "pause" | "resume" | "cancel", id }
 
@@ -47,6 +49,17 @@ async function unfinished() {
 async function snapshot() {
 	send({ type: "snapshot", browser: browserName, items: (await unfinished()).map(plain) });
 	watch();
+	reportTab();
+}
+
+// only where it is, never what follows a ? or #, and nothing of a private window
+async function reportTab() {
+	const [tab] = await browser.tabs.query({ active: true, lastFocusedWindow: true });
+	let page = null;
+	try {
+		if (tab && !tab.incognito && /^https?:/.test(tab.url || "")) page = new URL(tab.url);
+	} catch (error) {}
+	send({ type: "tab", host: page ? page.host : "", path: page ? page.pathname : "", title: page ? tab.title || "" : "" });
 }
 
 // bytes arrive without an event: look every second while something runs
@@ -101,6 +114,14 @@ function connect() {
 browser.downloads.onCreated.addListener(download => report(download.id));
 browser.downloads.onChanged.addListener(delta => report(delta.id));
 browser.downloads.onErased.addListener(id => send({ type: "gone", id }));
+
+browser.tabs.onActivated.addListener(reportTab);
+browser.tabs.onUpdated.addListener((id, change, tab) => {
+	if (tab.active && (change.url || change.title)) reportTab();
+});
+browser.windows.onFocusChanged.addListener(id => {
+	if (id !== browser.windows.WINDOW_ID_NONE) reportTab();
+});
 
 browser.runtime.getBrowserInfo().then(info => {
 	browserName = info.name;

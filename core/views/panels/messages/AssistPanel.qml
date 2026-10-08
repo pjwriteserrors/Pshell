@@ -100,19 +100,22 @@ Rectangle {
 			onCountChanged: Qt.callLater(list.positionViewAtEnd)
 			onContentHeightChanged: Qt.callLater(list.positionViewAtEnd)
 
-			add: Transition {
-				Anim {
-					property: "opacity"
-					from: 0
-					to: 1
-				}
-			}
-
 			delegate: Item {
 				id: entry
 
 				required property var modelData
 				readonly property bool draft: entry.modelData.role === "assistant"
+
+				ListView.onAdd: appear.restart()
+
+				Anim {
+					id: appear
+
+					target: entry
+					property: "opacity"
+					from: 0
+					to: 1
+				}
 
 				width: list.width - 10
 				height: entry.draft ? sheet.height : note.height

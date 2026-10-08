@@ -42,32 +42,18 @@ function quarterTurned(transform) {
 	return /(90|270)$/.test(String(transform || ""));
 }
 
-// the output with width/height recomputed for its transform and scale
+// the output with width/height recomputed for its transform and scale, the
+// way niri lays it out: scales are 120ths, a part of a pixel counts as one
 function sized(output) {
-	const scale = Number(output.scale) || 1;
+	const scale = Math.round((Number(output.scale) || 1) * 120) / 120;
 	let width = output.modeWidth || output.width;
 	let height = output.modeHeight || output.height;
 	if (quarterTurned(output.transform)) [width, height] = [height, width];
-	return Object.assign({}, output, { width: Math.round(width / scale), height: Math.round(height / scale) });
+	return Object.assign({}, output, { width: Math.ceil(width / scale), height: Math.ceil(height / scale) });
 }
 
 function overlaps(a, b) {
 	return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
-}
-
-// pulls the rect's edges onto nearby edges of the others (within `reach`)
-function snap(rect, others, reach) {
-	let bestX = null;
-	let bestY = null;
-	for (const other of others) {
-		const xs = [other.x + other.width, other.x - rect.width, other.x, other.x + other.width - rect.width];
-		const ys = [other.y + other.height, other.y - rect.height, other.y, other.y + other.height - rect.height];
-		for (const x of xs)
-			if (Math.abs(x - rect.x) <= reach && (bestX === null || Math.abs(x - rect.x) < Math.abs(bestX - rect.x))) bestX = x;
-		for (const y of ys)
-			if (Math.abs(y - rect.y) <= reach && (bestY === null || Math.abs(y - rect.y) < Math.abs(bestY - rect.y))) bestY = y;
-	}
-	return Object.assign({}, rect, { x: bestX === null ? rect.x : bestX, y: bestY === null ? rect.y : bestY });
 }
 
 // pushes the rect out of any monitor it overlaps, the shortest way
@@ -86,6 +72,48 @@ function separate(rect, others) {
 		result = Object.assign(result, moves[0]);
 	}
 	return result;
+}
+
+// how far two rects are apart, 0 when they touch
+function distance(a, b) {
+	return Math.max(0, a.x - b.x - b.width, b.x - a.x - a.width) + Math.max(0, a.y - b.y - b.height, b.y - a.y - a.height);
+}
+
+// the names of what stands right of the rect (or below it, `down`), next to
+// it or next to something that does; a pixel into it still counts, older
+// arrangements were rounded down
+function behind(rect, others, down) {
+	const pos = down ? "y" : "x", size = down ? "height" : "width";
+	const side = down ? "x" : "y", span = down ? "width" : "height";
+	const chain = [rect];
+	for (let grown = true; grown;) {
+		grown = false;
+		for (const o of others) {
+			if (chain.includes(o)) continue;
+			if (!chain.some(m => o[pos] >= m[pos] + m[size] - 1 && o[side] < m[side] + m[span] && m[side] < o[side] + o[span])) continue;
+			chain.push(o);
+			grown = true;
+		}
+	}
+	return chain.slice(1).map(o => o.name);
+}
+
+// the outputs with `name` replaced by `next`, which has another size at the
+// same corner: what stands right of it or below moves along, and nothing
+// ends up overlapping
+function resized(outputs, name, next) {
+	const old = outputs.find(o => o.name === name);
+	if (!old || old.off || next.off) return outputs.map(o => o.name === name ? next : o);
+	const others = outputs.filter(o => o.name !== name && !o.off);
+	const right = behind(old, others, false);
+	const below = behind(old, others, true);
+	const moved = others.map(o => Object.assign({}, o, {
+		x: o.x + (right.includes(o.name) ? next.width - old.width : 0),
+		y: o.y + (below.includes(o.name) ? next.height - old.height : 0)
+	})).sort((a, b) => distance(a, next) - distance(b, next));
+	const settled = [next];
+	for (const o of moved) settled.push(separate(o, settled));
+	return outputs.map(o => settled.find(placed => placed.name === o.name) || o);
 }
 
 // shifts everything so the arrangement starts at 0,0

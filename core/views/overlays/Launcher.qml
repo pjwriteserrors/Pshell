@@ -21,6 +21,9 @@ Drawer {
 			return 380;
 		case "chat":
 			return 660;
+		// as tall as its tiles
+		case "commands":
+			return Math.max(360, content.paletteHeight + 124);
 		default:
 			return 560;
 		}

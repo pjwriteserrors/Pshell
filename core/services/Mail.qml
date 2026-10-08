@@ -31,6 +31,24 @@ Singleton {
 	property var avatars: ({})
 	readonly property bool syncing: root.accounts.some(account => account.state === "syncing" || account.state === "connecting")
 
+	// The mailbox that is looked at: one at a time, each with its own chats, people and groups
+	property string current: ""
+	readonly property string shown: root.account(root.current) ? root.current : (root.accounts[0]?.id ?? "")
+	readonly property var shownChats: root.chats.filter(chat => chat.account === root.shown)
+	// [{ email, name, chats, unread, date }] of the mailbox that is looked at, who wrote last first
+	readonly property var shownPeople: {
+		const known = {};
+		for (const chat of root.shownChats) {
+			for (const person of chat.people) {
+				const entry = known[person.email] ?? (known[person.email] = { email: person.email, name: person.name, chats: 0, unread: 0, date: 0 });
+				entry.chats += 1;
+				entry.unread += chat.unread;
+				entry.date = Math.max(entry.date, chat.date);
+			}
+		}
+		return Object.values(known).sort((a, b) => b.date - a.date);
+	}
+
 	// the chat that is looked at
 	property string openId: ""
 	readonly property var openChat: root.chats.find(chat => chat.id === root.openId) ?? null
@@ -75,6 +93,12 @@ Singleton {
 	// Chats put away until later: { id: when they come back, in ms }
 	property var snoozed: ({})
 
+	// the picture that is looked at closely: a file or an address, or ""
+	property string picture: ""
+
+	// a picture went to the clipboard
+	signal pictureCopied
+
 	// a mail was taken back: what was written is in drafts[key] again
 	signal undone(string key)
 	// a mail came in (before the question whether to show it here)
@@ -98,6 +122,33 @@ Singleton {
 
 	function account(id) {
 		return root.accounts.find(account => account.id === id) ?? null;
+	}
+
+	// another mailbox comes up; a chat of the one that leaves is closed
+	function pick(id) {
+		if (id === root.shown || !root.account(id)) return;
+		root.current = id;
+		if (root.openId !== "" && !root.openId.startsWith(id + "|")) root.close();
+		save.restart();
+	}
+
+	function unreadOf(id) {
+		return root.chats.reduce((sum, chat) => sum + (chat.account === id ? chat.unread : 0), 0);
+	}
+
+	// what a mailbox is called for short: where it is, or whose it is when two are at the same place
+	function label(account) {
+		const [who, where] = String(account.address).split("@");
+		const place = String(where ?? "").split(".")[0];
+		const shared = root.accounts.filter(other => String(other.address).split("@")[1] === where).length > 1;
+		return shared || place === "" ? (who || account.id) : place.charAt(0).toUpperCase() + place.slice(1);
+	}
+
+	// People put together under a name are customers in the mailbox of work (Outlook), groups in any other
+	function grouping(id) {
+		return root.account(id)?.kind === "outlook"
+			? { one: "Customer", many: "Customers", fresh: "New customer", icon: "office_building" }
+			: { one: "Group", many: "Groups", fresh: "New group", icon: "account_multiple" };
 	}
 
 	// ── chats ────────────────────────────────────────────────────────────
@@ -130,6 +181,7 @@ Singleton {
 
 	// from a notification or a command: the panel with the chat in it
 	function show(id) {
+		root.pick(String(id).split("|")[0]);
 		root.open(id);
 		Messages.open("chat");
 	}
@@ -161,6 +213,18 @@ Singleton {
 		root.request += 1;
 		root.command("preview", Object.assign({ req: root.request }, draft));
 		return root.request;
+	}
+
+	// ── pictures ─────────────────────────────────────────────────────────
+	function view(source) {
+		root.picture = String(source).startsWith("file://") ? decodeURIComponent(String(source).slice(7)) : String(source);
+	}
+
+	// action: "copy" (to the clipboard) | "save" (into the downloads)
+	function withPicture(action, source) {
+		if (pictures.running || source === "") return;
+		pictures.command = ["python3", `${Paths.scripts}/messages/picture.py`, action, source];
+		pictures.running = true;
 	}
 
 	// ── drafts ───────────────────────────────────────────────────────────
@@ -248,6 +312,7 @@ Singleton {
 
 	function store() {
 		kept.setText(JSON.stringify({
+			account: root.current,
 			drafts: root.drafts,
 			outbox: root.outbox.filter(entry => entry.state !== "sent"),
 			snoozed: root.snoozed
@@ -491,6 +556,22 @@ Singleton {
 		}
 	}
 
+	Process {
+		id: pictures
+
+		stdout: SplitParser {
+			onRead: line => {
+				let data = {};
+				try {
+					data = JSON.parse(line);
+				} catch (error) {}
+				if (data.copied) root.pictureCopied();
+				else if (data.saved) root.handle(JSON.stringify({ event: "saved", path: data.saved }));
+				else if (data.error) Notifs.pushInternal("error", "Mail", data.error, { icon: "image_outline" });
+			}
+		}
+	}
+
 	// what waits is sent when its time is up, what was sent leaves after a while
 	Timer {
 		interval: 200
@@ -534,6 +615,7 @@ Singleton {
 		onLoaded: {
 			try {
 				const data = JSON.parse(String(text() || "{}"));
+				root.current = String(data.account ?? "");
 				root.drafts = data.drafts ?? {};
 				root.snoozed = data.snoozed ?? {};
 				// what did not go out before the shell left is not sent behind the user's back

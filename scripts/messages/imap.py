@@ -48,6 +48,9 @@ def secret(action, ident, value=None, label=""):
     except (OSError, subprocess.TimeoutExpired):
         raise Failure("The keyring does not answer (secret-tool)")
     if action == "store" and done.returncode != 0:
+        # no program on this desktop keeps secrets (org.freedesktop.secrets)
+        if "not activatable" in done.stderr or "ServiceUnknown" in done.stderr:
+            raise Failure("No keyring is running to keep the password in (gnome-keyring, KeePassXC or KWallet)")
         raise Failure("The password could not be kept in the keyring")
     return done.stdout.strip("\n")
 

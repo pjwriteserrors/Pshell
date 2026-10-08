@@ -9,7 +9,8 @@ import qs.core.services
 import qs.style.widgets
 
 // Every chat, newest first. The field searches chats and people; picking a
-// person keeps only the chats with them. The customer bar opens the list of
+// person keeps only the chats with them. With more than one mailbox, one is
+// shown at a time. The customer bar (groups, outside the mailbox of work) opens the list of
 // customers; picking one keeps the chats with anyone who was put into it and
 // shows its people on top, to be written to. The pencil turns the list into
 // the customer's people, to put them in and take them out.
@@ -19,9 +20,15 @@ ColumnLayout {
 	property string query: ""
 	// the address of the person the list is narrowed to
 	property string person: ""
+	// the mailbox that is looked at: its chats, its people, and what its groups are called
+	readonly property var chats: Mail.shownChats
+	readonly property var people: Mail.shownPeople
+	readonly property var words: Mail.grouping(Mail.shown)
+	readonly property int unread: root.chats.reduce((sum, chat) => sum + chat.unread, 0)
+
 	// "all" | "unread" | "flagged" | "later" (the chats put away)
 	property string mode: "all"
-	readonly property int later: Mail.chats.reduce((sum, chat) => sum + (Mail.snoozed[chat.id] !== undefined ? 1 : 0), 0)
+	readonly property int later: root.chats.reduce((sum, chat) => sum + (Mail.snoozed[chat.id] !== undefined ? 1 : 0), 0)
 	// mails on their way that the open chat does not show
 	readonly property var leaving: Mail.outbox.filter(entry => entry.state !== "sent" && (entry.key !== Mail.openId || entry.key === "new"))
 
@@ -37,11 +44,11 @@ ColumnLayout {
 	property string kept: ""
 	readonly property var customerEntry: Customers.find(root.customer)
 	readonly property string needle: root.query.trim().toLowerCase()
-	readonly property var personEntry: Mail.people.find(entry => entry.email === root.person) ?? null
+	readonly property var personEntry: root.people.find(entry => entry.email === root.person) ?? null
 
 	readonly property var byId: {
 		const map = {};
-		for (const chat of Mail.chats) map[chat.id] = chat;
+		for (const chat of root.chats) map[chat.id] = chat;
 		return map;
 	}
 	readonly property var shown: {
@@ -49,7 +56,7 @@ ColumnLayout {
 		for (const id of Mail.hits ?? []) hits[id] = true;
 		const needle = root.needle;
 		const members = root.customerEntry?.people ?? null;
-		return Mail.chats.filter(chat => {
+		return root.chats.filter(chat => {
 			if (members && !chat.people.some(entry => members.includes(entry.email))) return false;
 			// what was put away shows under Later, and in a search
 			if ((Mail.snoozed[chat.id] !== undefined) !== (root.mode === "later") && needle === "") return false;
@@ -66,22 +73,22 @@ ColumnLayout {
 		if (!root.editing || !root.customerEntry) return [];
 		const members = root.customerEntry.people;
 		const known = {};
-		for (const entry of Mail.people) known[entry.email] = entry;
-		const all = members.map(email => known[email] ?? { email: email, name: email }).concat(Mail.people.filter(entry => !members.includes(entry.email)));
+		for (const entry of root.people) known[entry.email] = entry;
+		const all = members.map(email => known[email] ?? { email: email, name: email }).concat(root.people.filter(entry => !members.includes(entry.email)));
 		return all.filter(entry => root.needle === "" || entry.name.toLowerCase().includes(root.needle) || entry.email.includes(root.needle));
 	}
 	// the customer's people, as the mailbox knows them
 	readonly property var members: {
 		if (!root.customerEntry) return [];
 		const known = {};
-		for (const entry of Mail.people) known[entry.email] = entry;
+		for (const entry of root.people) known[entry.email] = entry;
 		return root.customerEntry.people.map(email => known[email] ?? { email: email, name: email, chats: 0, unread: 0 });
 	}
-	readonly property var customers: Customers.list.filter(customer => {
+	readonly property var customers: Customers.of(Mail.shown).filter(customer => {
 		if (root.needle === "") return true;
 		return customer.name.toLowerCase().includes(root.needle) || customer.people.some(email => email.includes(root.needle) || Mail.nameOf(email).toLowerCase().includes(root.needle));
 	})
-	readonly property var matches: root.needle === "" || root.editing || root.picking ? [] : Mail.people.filter(entry => entry.email !== root.person
+	readonly property var matches: root.needle === "" || root.editing || root.picking ? [] : root.people.filter(entry => entry.email !== root.person
 		&& (entry.name.toLowerCase().includes(root.needle) || entry.email.includes(root.needle))).slice(0, 4)
 
 	signal picked(string id)
@@ -145,7 +152,7 @@ ColumnLayout {
 	function activity(customer) {
 		let last = 0;
 		let count = 0;
-		for (const chat of Mail.chats) {
+		for (const chat of root.chats) {
 			if (!chat.people.some(entry => customer.people.includes(entry.email))) continue;
 			count += 1;
 			last = Math.max(last, chat.date);
@@ -165,7 +172,7 @@ ColumnLayout {
 	}
 
 	function unreadOf(customer) {
-		return Mail.chats.reduce((sum, chat) => sum + (chat.people.some(entry => customer.people.includes(entry.email)) ? chat.unread : 0), 0);
+		return root.chats.reduce((sum, chat) => sum + (chat.people.some(entry => customer.people.includes(entry.email)) ? chat.unread : 0), 0);
 	}
 
 	function edit(id) {
@@ -199,6 +206,31 @@ ColumnLayout {
 	}
 
 	spacing: 8
+
+	// another mailbox shows nothing of this one's
+	Connections {
+		target: Mail
+		function onShownChanged() {
+			root.editing = false;
+			root.picking = false;
+			root.customer = "";
+			root.person = "";
+			root.clearSearch();
+		}
+	}
+
+	// the mailboxes, one at a time
+	Segmented {
+		Layout.fillWidth: true
+		visible: Mail.accounts.length > 1
+		implicitHeight: 34
+		current: Mail.shown
+		options: Mail.accounts.map(account => {
+			const unread = Mail.unreadOf(account.id);
+			return { value: account.id, label: unread > 0 ? `${Mail.label(account)}  ${unread}` : Mail.label(account) };
+		})
+		onSelected: value => Mail.pick(value)
+	}
 
 	Field {
 		id: search
@@ -282,14 +314,14 @@ ColumnLayout {
 			spacing: 8
 
 			Glyph {
-				icon: "office_building"
+				icon: root.words.icon
 				size: 17
 				color: root.customerEntry ? Theme.primary : Theme.textSubtle
 			}
 
 			StyledText {
 				Layout.fillWidth: true
-				text: root.customerEntry ? (root.customerEntry.name || "Customer") : "Customers"
+				text: root.customerEntry ? (root.customerEntry.name || root.words.one) : root.words.many
 				tone: root.customerEntry ? Theme.text : Theme.textMuted
 				elide: Text.ElideRight
 				font.pixelSize: Theme.size.body
@@ -361,13 +393,6 @@ ColumnLayout {
 			values: root.customers.map(customer => customer.id)
 		}
 
-		add: Transition {
-			Anim {
-				property: "opacity"
-				from: 0
-				to: 1
-			}
-		}
 		displaced: Transition {
 			SpatialAnim {
 				property: "y"
@@ -382,7 +407,7 @@ ColumnLayout {
 			pressedScale: 0.98
 			showHover: false
 			color: hovered ? Theme.layer1 : "transparent"
-			onClicked: root.edit(Customers.create(""))
+			onClicked: root.edit(Customers.create("", Mail.shown))
 
 			RowLayout {
 				anchors.fill: parent
@@ -406,7 +431,7 @@ ColumnLayout {
 
 				StyledText {
 					Layout.fillWidth: true
-					text: "New customer"
+					text: root.words.fresh
 					font.pixelSize: Theme.size.body
 					font.weight: Font.DemiBold
 				}
@@ -415,6 +440,18 @@ ColumnLayout {
 
 		delegate: Clickable {
 			id: entry
+
+			// fades in by itself: a transition of the list can be cut short and leave a row unseen
+			ListView.onAdd: entryIn.restart()
+
+			Anim {
+				id: entryIn
+
+				target: entry
+				property: "opacity"
+				from: 0
+				to: 1
+			}
 
 			required property string modelData
 			readonly property var customer: Customers.find(entry.modelData) ?? { id: entry.modelData, name: "", people: [] }
@@ -450,7 +487,7 @@ ColumnLayout {
 
 					Glyph {
 						anchors.centerIn: parent
-						icon: "office_building"
+						icon: root.words.icon
 						size: 17
 						color: Theme.textSubtle
 					}
@@ -462,7 +499,7 @@ ColumnLayout {
 
 					StyledText {
 						Layout.fillWidth: true
-						text: entry.customer.name || "Customer"
+						text: entry.customer.name || root.words.one
 						elide: Text.ElideRight
 						font.pixelSize: Theme.size.body
 						font.weight: Font.DemiBold
@@ -509,8 +546,8 @@ ColumnLayout {
 			id: customerName
 
 			Layout.fillWidth: true
-			icon: "office_building"
-			placeholder: "Customer"
+			icon: root.words.icon
+			placeholder: root.words.one
 			onEdited: text => Customers.rename(root.customer, text)
 			onAccepted: search.focusInput()
 		}
@@ -615,7 +652,7 @@ ColumnLayout {
 		current: root.mode
 		options: [
 			{ value: "all", label: "All" },
-			{ value: "unread", label: Mail.unread > 0 ? `Unread ${Mail.unread}` : "Unread" },
+			{ value: "unread", label: root.unread > 0 ? `Unread ${root.unread}` : "Unread" },
 			{ value: "flagged", label: "Starred" }
 		].concat(root.later > 0 ? [{ value: "later", label: `Later ${root.later}` }] : [])
 		onSelected: value => root.mode = value
@@ -635,13 +672,6 @@ ColumnLayout {
 			values: root.shown
 		}
 
-		add: Transition {
-			Anim {
-				property: "opacity"
-				from: 0
-				to: 1
-			}
-		}
 		remove: Transition {
 			Anim {
 				property: "opacity"
@@ -799,6 +829,18 @@ ColumnLayout {
 
 		delegate: Clickable {
 			id: item
+
+			// fades in by itself: a transition of the list can be cut short and leave a row unseen
+			ListView.onAdd: itemIn.restart()
+
+			Anim {
+				id: itemIn
+
+				target: item
+				property: "opacity"
+				from: 0
+				to: 1
+			}
 
 			required property string modelData
 			required property int index

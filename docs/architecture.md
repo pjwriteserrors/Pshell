@@ -106,12 +106,48 @@ dropping it on *Read* opens the reader from the top
 pause at punctuation and the countdown are kept in
 `~/.local/state/pshell/reader.json`.
 
+`multicursor` brings the line and cursor keys of a code editor to every text
+field: move a line up or down (Alt+↑/↓), copy it (Ctrl+Alt+Shift+↑/↓), a
+cursor above or below (Alt+Shift+↑/↓), a cursor where a click lands
+(Alt+click; the first click only marks a place, the second makes it two
+cursors). With several cursors letters, Backspace, Delete, the arrows, Home,
+End, Ctrl for words, Shift for selections and Ctrl+V go to each of them;
+Escape, a click or any other key ends it. A pill at the bottom of the screen
+counts the cursors: a text field draws only its own. The keys and the apps
+that are left alone are set on the *Multicursor* page of the niri settings
+(`scripts/ipc.sh niri open multicursor`, kept in
+`~/.local/state/pshell/multicursor.json`); terminals, code editors, password
+prompts and games (the list of autocorrect) never get it, file managers not
+unless taken off the list. `scripts/ipc.sh multicursor toggle` switches it.
+
+`scripts/multicursor.py` does it with what a text field understands, keys and
+the clipboard: it reads by selecting and copying, moves by arrow keys, writes
+by pasting or by the keys that were typed, and compares what it selected with
+what it read before anything is pasted over or typed at another cursor – a
+field that answers differently is left as it is. The clipboard gets back what
+it held, in every format, and what was read is taken out of cliphist again.
+To see a shortcut before the window does the daemon takes the keyboards
+(evdev grab) and hands every key on through one of its own (uinput), only
+while a window has the keyboard that is not left alone; both Shift keys and
+Escape together switch it off. `multicursor.py try "one\ntw|o" move-up`
+shows what steps leave in a text field, without one;
+`scripts/multicursor_test.py` runs it and the daemon's key handling against
+such a field. What it cannot do: rich
+text editors that copy something else than they show (the comparison fails,
+nothing happens), dead keys and Enter with several cursors (they end it), and
+on a laptop the touchpad no longer pauses while typing, since libinput does
+not know the keyboard of the daemon as the built-in one.
+
 `niri-settings` is a window for every niri setting but the ones Studio looks
 after (cursor theme and size, animations): `>niri` (`>keys` and `>setup` open
 its key bind and display pages), `scripts/ipc.sh niri open <page>`. Every
 change applies at once and is written a moment later; `scripts/niri_settings.py`
 does the file work and lets nothing through that `niri validate` rejects, and
 niri reloads the files itself. Ctrl+Z takes changes back.
+
+"Export" in its sidebar writes settings as one KDL file into the downloads
+folder or copies them: everything, whole pages or single cards, the key binds
+(`keybinds.kdl`) and the monitors among them (`niri_settings.py export`).
 
 The first time it opens it takes over what `config.kdl` sets: its sections
 move into `~/.config/niri/settings.kdl` (included where the first of them
@@ -135,6 +171,33 @@ included last so that it wins; `scripts/keybinds.py` took over the binds of
 `config.kdl` and copies the shell's binds of `pshell.kdl`, which keeps them
 for machines without the plugin – one that is deleted or moved is covered in
 `keybinds.kdl` by a bind to `spawn "true"`.
+
+The launcher's commands (`allCommands` in
+`core/views/overlays/LauncherContent.qml`) are shown by `>` as a palette of
+tiles: a band a group (`group`: tools, ai, panels, system), on top what is
+pinned (Ctrl+P or a right click, `launcher-commands.json`) filled up with
+what is used most. What is typed leaves the tiles where they are and dims
+those that do not answer; the arrows walk the ones that do. A command with
+`children` is a group that opens (`>shot`, `>studio`), and while something is
+typed its best command stands in its place. `aliases` are what else may be
+typed (`>translate` becomes `>t` with the space), `keywords` what a command
+is found by, `status` what its tile says right now. The app search shows the
+commands that answer above the apps, and picks one ahead of them when a word
+of it starts with what is typed and no app's name does.
+
+`screentime` counts where the time at the screen goes (`>screentime`,
+`scripts/ipc.sh screentime toggle`): every few seconds the time since the
+last look goes to the focused window, its app, its workspace and, in a
+browser, the page in front (`core/services/Screentime.qml`,
+`~/.local/state/pshell/screentime.json`). Idle, locked and asleep count for
+nothing. The panel under the bar shows a day as a ring cut by apps, windows,
+workspaces or links, the week of that day (a click on a bar picks the day)
+and what stands out: top app, the day against the one before, the busiest
+day and the average of the week, the longest stretch. The page in front
+comes from the downloads extension (version 1.1, permission `tabs`) over the
+same host and socket, with or without the `downloads` plugin; only host and
+path are kept, nothing of a private window. Without the extension the links
+stay empty and everything else works.
 
 `downloads` shows what the browser downloads (network panel, and a chip in
 the bar) and pauses, resumes and cancels from there. The browser reports
@@ -206,9 +269,15 @@ Where the surface is too narrow for the list and the chat side by side, one
 of them is shown; a mail drawn as a picture that would have to shrink there
 is shown as chat text instead, so its type keeps its size.
 
+With more than one mailbox, one is shown at a time (the switch above the
+search; `Mail.shown`): its chats, its people, its groups. The count in the
+bar is that of all of them.
+
 Customers (`core/services/Customers.qml`, `customers.json`) put people
 together under a name to keep the panel to the chats with them; they are
-local and no provider knows about them. The customer bar above the chats
+local and no provider knows about them. Each belongs to a mailbox; in the
+mailbox of work (Outlook) they are called customers, in any other groups
+(`Mail.grouping`). The customer bar above the chats
 opens the list of them, one to a row; the one that is picked shows its
 people on top of its chats, each to be written to.
 
@@ -263,7 +332,12 @@ and pictures are drawn by a headless Chromium into a picture, links
 included (`scripts/messages/render.py`); the mail's own scripts never run.
 One browser stays up while mails are drawn and is spoken to over its
 DevTools pipe; only the mails on the screen are drawn, and a mail's pictures
-are waited for a few seconds at most.
+are waited for a few seconds at most. A mail laid out wider than the page is
+drawn as wide as it is (up to 960), and type smaller than 12 is set in 12:
+shrunk to fit, or as small as its sender set it, it could not be read.
+A click on a picture – attached, or inside a mail – shows it large over
+Messages, from where it is copied, kept in the downloads
+(`scripts/messages/picture.py`) or handed to the picture viewer.
 The picture wears the shell's palette: white turns see-through, greys and
 black become the shades between background and text, blue links the accent,
 and what has a colour of its own keeps it; a new palette draws it again.

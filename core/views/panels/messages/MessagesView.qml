@@ -79,6 +79,10 @@ Item {
 		function onChatsChanged() {
 			root.see();
 		}
+		// another mailbox: the customer that was looked at is not its own
+		function onShownChanged() {
+			if (root.view === "customer") root.leave();
+		}
 		// a new mail was taken back: it is written on
 		function onUndone(key) {
 			if (key === "new" && Messages.shown) root.compose("");
@@ -356,5 +360,11 @@ Item {
 				}
 			}
 		}
+	}
+
+	// a picture of a mail, large
+	PictureView {
+		anchors.fill: parent
+		radius: Theme.radius.large
 	}
 }

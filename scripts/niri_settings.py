@@ -18,6 +18,10 @@ startup commands become switched-off ones (`/-`).
     niri_settings.py adopt           takes over the current settings
     niri_settings.py write [json]    {nodes, outputs?}: writes them, validated;
                                      the JSON comes as argument or on stdin
+    niri_settings.py export [json]   {all | paths, outputs, corners, binds, title,
+                                     name, to}: the chosen settings as one KDL
+                                     file in the downloads folder (to: "file")
+                                     or on the clipboard (to: "clipboard")
     niri_settings.py live            open windows, layer surfaces, workspaces,
                                      outputs (for rules and pickers)
     niri_settings.py xkb             keyboard layouts, variants and options
@@ -37,6 +41,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import niri_kdl as kdl  # noqa: E402
+import niri_outputs  # noqa: E402
 
 HOME = Path.home()
 CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME") or HOME / ".config") / "niri"
@@ -283,7 +288,7 @@ def merge_outputs(config_nodes, profile_nodes):
             # switched off: keep where it stood
             arrangement += [c for c in block.get("children") or [] if c["name"] in ARRANGEMENT - {"off"}]
         block["children"] = arrangement + rest
-    return [blocks[name] for name in order]
+    return niri_outputs.canonical_blocks([blocks[name] for name in order], niri_outputs.connected())
 
 
 def remove_spans(text, spans):
@@ -430,7 +435,7 @@ def write(payload):
         nodes = [checked(n) for n in payload["nodes"]]
         changes[str(SETTINGS)] = kdl.render(nodes, HEADER)
     if payload.get("outputs") is not None:
-        outputs = [checked(n) for n in payload["outputs"]]
+        outputs = niri_outputs.canonical_blocks([checked(n) for n in payload["outputs"]], niri_outputs.connected())
         others = [kdl.to_json(n) for n in read_nodes(PROFILE) if n.name != "output"]
         changes[str(PROFILE)] = render_profile(profile_name(), outputs, others)
     if not changes:
@@ -443,13 +448,114 @@ def write(payload):
     return {"ok": True}
 
 
+# ── exporting ──────────────────────────────────────────────────────────────
+
+CORNERS = ("geometry-corner-radius", "clip-to-geometry")
+
+
+def pruned(nodes, paths):
+    """The nodes the paths name, inside their sections (a path is a list of names)."""
+    out = []
+    for node in nodes:
+        mine = [path for path in paths if path and path[0] == node["name"]]
+        if not mine:
+            continue
+        if any(len(path) == 1 for path in mine):
+            out.append(node)
+            continue
+        kids = pruned(node.get("children") or [], [path[1:] for path in mine])
+        if kids:
+            out.append(dict(node, children=kids))
+    return out
+
+
+def corner_rules(nodes):
+    """The corners of every window: the rules without a match, down to the corners."""
+    out = []
+    for node in nodes:
+        kids = node.get("children") or []
+        if node["name"] != "window-rule" or node.get("disabled") or any(k["name"] in ("match", "exclude") for k in kids):
+            continue
+        kept = [k for k in kids if k["name"] in CORNERS]
+        if kept:
+            out.append(dict(node, children=kept))
+    return out
+
+
+def output_blocks(parts):
+    """The monitors: whole (True) or only these settings of each."""
+    blocks = [kdl.to_json(n) for n in read_nodes(PROFILE) if n.name == "output"]
+    if parts is True:
+        return blocks
+    out = []
+    for block in blocks:
+        kids = [k for k in block.get("children") or [] if k["name"] in parts]
+        if kids:
+            out.append(dict(block, children=kids))
+    return out
+
+
+def binds_text():
+    import keybinds
+    binds = keybinds.collect()[1]
+    if not binds:
+        return ""
+    text = keybinds.render(binds, set())
+    return text[text.index("binds {"):]
+
+
+def export_file(name):
+    # without a user-dirs.dirs xdg-user-dir answers with the home folder
+    folder = Path(run("xdg-user-dir", "DOWNLOAD").strip() or HOME)
+    if folder == HOME:
+        folder = HOME / "Downloads"
+    folder.mkdir(parents=True, exist_ok=True)
+    slug = re.sub(r"[^a-z0-9]+", "-", str(name).lower()).strip("-") or "settings"
+    stem = f"niri-{slug}-{time.strftime('%Y-%m-%d')}"
+    target, n = folder / f"{stem}.kdl", 1
+    while target.exists():
+        n += 1
+        target = folder / f"{stem}-{n}.kdl"
+    return target
+
+
+def export(payload):
+    everything = bool(payload.get("all"))
+    settings = [kdl.to_json(n) for n in read_nodes(SETTINGS)]
+    nodes = output_blocks(True if everything else [str(part) for part in payload.get("outputs") or []])
+    if everything:
+        nodes += settings
+    else:
+        paths = [[str(name) for name in path] for path in payload.get("paths") or []]
+        nodes += pruned(settings, paths)
+        if payload.get("corners") and ["window-rule"] not in paths:
+            nodes += corner_rules(settings)
+    binds = binds_text() if everything or payload.get("binds") else ""
+    if not nodes and not binds:
+        return {"ok": False, "error": "None of that is set"}
+    title = "Everything" if everything else str(payload.get("title") or "").replace("\n", " ")
+    header = [f"niri settings, exported from the shell (>niri) on {time.strftime('%Y-%m-%d')}."]
+    if title:
+        header.append(title)
+    text = kdl.render(nodes, header)
+    if binds:
+        text += "\n" + binds
+    if payload.get("to") == "clipboard":
+        subprocess.run(["wl-copy"], input=text, text=True, timeout=5, check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return {"ok": True, "file": ""}
+    target = export_file("settings" if everything else payload.get("name") or "selection")
+    kdl.atomic_write(target, text)
+    return {"ok": True, "file": str(target)}
+
+
 # ── what the pickers offer ─────────────────────────────────────────────────
 
 def cmd_live():
     windows = niri_json("windows") or []
     layers = niri_json("layers") or []
     workspaces = niri_json("workspaces") or []
-    outputs = niri_json("outputs") or {}
+    outputs = niri_outputs.connected()
     return {
         "windows": [{"id": w.get("id"), "appId": w.get("app_id") or "", "title": w.get("title") or "",
                      "floating": bool(w.get("is_floating")), "focused": bool(w.get("is_focused"))} for w in windows],
@@ -458,6 +564,7 @@ def cmd_live():
                         "active": bool(w.get("is_active"))} for w in workspaces],
         "outputs": [{
             "name": name,
+            "id": o["id"],
             "make": o.get("make") or "",
             "model": o.get("model") or "",
             "serial": o.get("serial") or "",
@@ -555,6 +662,14 @@ def main():
             payload = json.loads(sys.argv[2]) if len(sys.argv) > 2 else json.load(sys.stdin)
             result = write(payload)
         except (ValueError, OSError) as error:
+            result = {"ok": False, "error": str(error)}
+        print(json.dumps(result))
+        return 0 if result["ok"] else 1
+    elif cmd == "export":
+        try:
+            payload = json.loads(sys.argv[2]) if len(sys.argv) > 2 else json.load(sys.stdin)
+            result = export(payload)
+        except (ValueError, OSError, subprocess.SubprocessError) as error:
             result = {"ok": False, "error": str(error)}
         print(json.dumps(result))
         return 0 if result["ok"] else 1
