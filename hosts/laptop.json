@@ -14,7 +14,7 @@
 		"kdeconnect": true,
 		"haptics": true,
 		"ssh": true,
-		"display-profiles": true,
+		"niri-settings": true,
 		"qtrack": true,
 		"notes": true,
 		"todos": true,

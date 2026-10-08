@@ -162,7 +162,9 @@ def keyboard_layout():
         import re
         from pathlib import Path
 
-        text = (Path.home() / ".config" / "niri" / "config.kdl").read_text()
+        niri = Path.home() / ".config" / "niri"
+        # settings.kdl (the niri-settings plugin) holds it once taken over
+        text = "".join(p.read_text() for p in (niri / "settings.kdl", niri / "config.kdl") if p.exists())
         match = re.search(r'^\s*layout\s+"([a-z]+)', text, re.M)
         return match.group(1) if match else "us"
     except OSError:

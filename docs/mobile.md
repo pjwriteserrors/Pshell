@@ -140,7 +140,7 @@ the phone alone have plugins of their own in the tab **Phone**, all requiring
 | Calendar | `calendar`, `microsoft-calendar` | the next two weeks of the Microsoft 365 calendar | sign in with the device code, join a meeting here or on the PC |
 | Shelves | `shelves` | the stashes on the desktop and what lies on them | a thing to the phone, files from the phone onto a shelf, the PC's clipboard onto one, close, reopen |
 | Translate | `translate` | | the PC's translator, for a text of the phone |
-| Displays | `display-profiles` | the desk setups | switch |
+| Displays | `niri-settings` | the desk setups | switch |
 | Agents | `agents` | agents working or waiting; the last answer from the transcript | answer, focus the window, read or copy the last answer |
 | AI chat | `chat` | | chat with a model on the PC (Ollama), with pictures and text files; edit, ask again |
 | SSH | `ssh` | saved hosts; a host's folders, listed by the PC over SSH | open a session on the PC; files of the phone go to a folder of the host (up to the PC, then scp) |

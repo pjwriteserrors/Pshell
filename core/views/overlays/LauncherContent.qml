@@ -14,7 +14,7 @@ import "../../lib/fuzzysort.js" as Fuzzy
 
 // Launcher content: apps, commands (>), calculator (>c), files (>file),
 // Ollama chats (>chat, >chats), model manager (>ollama), display setup
-// (>setup), translator (>t), converter (>conv), todo lists (>todo), web
+// (>setup), niri settings (>niri, >keys), translator (>t), converter (>conv), todo lists (>todo), web
 // search (>w), Ollama
 // actions on the clipboard (>ai) and KDE Connect (>phone). The newer modes
 // live in overlays/launcher/*View.qml and share one small interface
@@ -132,9 +132,28 @@ Item {
 			icon: "preferences-desktop-wallpaper-symbolic"
 		},
 		{
-			id: "display-setup",
+			id: "niri-settings",
+			plugin: "niri-settings",
+			command: "niri",
+			page: "",
+			name: "niri Settings",
+			description: "Layout, borders, input, rules, workspaces – everything niri does",
+			icon: "preferences-system-symbolic"
+		},
+		{
+			id: "niri-settings",
+			plugin: "niri-settings",
+			command: "keys",
+			page: "keys",
+			name: "Key Binds",
+			description: Keybinds.loaded ? `${Keybinds.binds.filter(bind => !bind.disabled).length} niri binds` : "niri shortcuts, recorded and picked",
+			icon: "input-keyboard-symbolic"
+		},
+		{
+			id: "niri-settings",
+			plugin: "niri-settings",
 			command: "setup",
-			plugin: "display-profiles",
+			page: "displays",
 			name: "Display Setup",
 			description: "Arrange the monitors, switch and save setups",
 			icon: "video-display-symbolic"
@@ -353,7 +372,6 @@ Item {
 	readonly property bool inOllamaMode: Plugins.on("ollama") && root.commandQuery === "ollama"
 	// the phone and the chat pick their files here as well
 	readonly property bool inFileMode: (Plugins.on("files") || Phone.pickingFile) && (root.commandQuery === "file" || root.commandQuery.startsWith("file "))
-	readonly property bool inSetupMode: Plugins.on("display-profiles") && (root.commandQuery === "setup" || root.commandQuery.startsWith("setup "))
 	readonly property bool inTranslateMode: Plugins.on("translate") && (root.commandQuery === "t" || root.commandQuery.startsWith("t "))
 	readonly property bool inConvertMode: Plugins.on("converter") && (root.commandQuery === "conv" || root.commandQuery.startsWith("conv "))
 	readonly property bool inTodoMode: Plugins.on("todos") && (root.commandQuery === "todo" || root.commandQuery.startsWith("todo "))
@@ -361,7 +379,7 @@ Item {
 	readonly property bool inAiActionsMode: Plugins.on("ai-actions") && (root.commandQuery === "ai" || root.commandQuery.startsWith("ai "))
 	readonly property bool inPhoneMode: Phone.offered && (root.commandQuery === "phone" || root.commandQuery.startsWith("phone "))
 	readonly property bool inShotsMode: Plugins.on("screenshot-history") && (root.commandQuery === "shots" || root.commandQuery.startsWith("shots "))
-	readonly property bool inViewMode: root.inTranslateMode || root.inConvertMode || root.inTodoMode || root.inWebMode || root.inAiActionsMode || root.inPhoneMode || root.inShotsMode || root.inSetupMode
+	readonly property bool inViewMode: root.inTranslateMode || root.inConvertMode || root.inTodoMode || root.inWebMode || root.inAiActionsMode || root.inPhoneMode || root.inShotsMode
 	// what follows the command token, as typed (">t fr hello" → "fr hello")
 	readonly property string modeArgument: {
 		const match = /^>\S+\s([\s\S]*)$/.exec(root.searchText);
@@ -2375,8 +2393,9 @@ Item {
 			root.closeRequested();
 			root.openStudioRequested(command.page);
 			break;
-		case "display-setup":
-			root.setLauncherSearch(">setup");
+		case "niri-settings":
+			root.closeRequested();
+			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "niri", "open", command.page || ""]);
 			break;
 		case "calculator":
 			root.setLauncherSearch(">c ");
@@ -2932,7 +2951,6 @@ Item {
 		if (root.inAiActionsMode) return "ai";
 		if (root.inPhoneMode) return "phone";
 		if (root.inShotsMode) return "shots";
-		if (root.inSetupMode) return "setup";
 		if (root.inChatMode) return "chat";
 		if (root.inAiMode) return "chats";
 		if (root.inOllamaMode) return "ollama";
@@ -2954,7 +2972,6 @@ Item {
 		case "ai": return "creation";
 		case "phone": return "cellphone";
 		case "shots": return "image_multiple";
-		case "setup": return "monitor_multiple";
 		case "chat": return "chat";
 		case "chats": return "forum";
 		case "ollama": return "robot";
@@ -2970,7 +2987,7 @@ Item {
 		case "rpg": return "gamepad_variant";
 		case "studio": return "palette";
 		case "studio-page": return command.glyph;
-		case "display-setup": return "monitor_multiple";
+		case "niri-settings": return command.page === "keys" ? "keyboard" : (command.page === "displays" ? "monitor_multiple" : "tune_variant");
 		case "calculator":
 		case "calculator-result": return "calculator";
 		case "file-browser": return "folder";
@@ -3014,7 +3031,6 @@ Item {
 		case "ai": return aiActionsView;
 		case "phone": return phoneView;
 		case "shots": return shotsView;
-		case "setup": return displayView;
 		default: return null;
 		}
 	}
@@ -3026,7 +3042,6 @@ Item {
 		case "web": return "Search the web";
 		case "ai": return "Instruction";
 		case "phone": return "Text to send";
-		case "setup": return "Name to save the arrangement as";
 		default: return "";
 		}
 	}
@@ -3041,7 +3056,6 @@ Item {
 		case "ai": return "run";
 		case "phone": return "send";
 		case "shots": return "copy";
-		case "setup": return displayView.enterHint;
 		default: return "open";
 		}
 	}
@@ -4003,21 +4017,6 @@ Item {
 					active: root.mode === "shots"
 					argument: root.modeArgument
 					onCloseRequested: root.closeRequested()
-				}
-			}
-
-			// monitor arrangement and desk setups
-			ModeLayer {
-				current: root.mode === "setup"
-
-				DisplayView {
-					id: displayView
-
-					anchors.fill: parent
-					active: root.mode === "setup"
-					argument: root.modeArgument
-					onCloseRequested: root.closeRequested()
-					onArgumentRequested: text => root.setLauncherSearch(`>setup ${text}`)
 				}
 			}
 

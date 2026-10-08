@@ -367,6 +367,42 @@ Scope {
 		}
 	}
 
+	// niri's settings, edited in the shell (>niri); a page: displays, layout,
+	// looks, input, keys, rules, workspaces, overview, system, debug
+	IpcHandler {
+		target: "niri"
+		enabled: Plugins.on("niri-settings")
+
+		function open(page: string): void {
+			if (page !== "") NiriSettings.page = page;
+			Popups.withFocusedScreen(screen => Popups.openModal("niri", screen));
+		}
+		function close(): void {
+			if (Popups.modal === "niri") Popups.closeModal();
+		}
+		function toggle(): void {
+			root.modalOnFocused("niri");
+		}
+	}
+
+	// the key binds page of it, under its old name
+	IpcHandler {
+		target: "keybinds"
+		enabled: Plugins.on("niri-settings")
+
+		function open(): void {
+			NiriSettings.page = "keys";
+			Popups.withFocusedScreen(screen => Popups.openModal("niri", screen));
+		}
+		function close(): void {
+			if (Popups.modal === "niri") Popups.closeModal();
+		}
+		function toggle(): void {
+			NiriSettings.page = "keys";
+			root.modalOnFocused("niri");
+		}
+	}
+
 	// the fast reader: a text one word at a time
 	IpcHandler {
 		target: "reader"

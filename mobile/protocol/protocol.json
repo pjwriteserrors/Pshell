@@ -300,7 +300,7 @@
 		"display": {
 			"owner": "daemon",
 			"plugins": [
-				"display-profiles"
+				"niri-settings"
 			]
 		},
 		"transcript": {

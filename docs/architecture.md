@@ -106,6 +106,36 @@ dropping it on *Read* opens the reader from the top
 pause at punctuation and the countdown are kept in
 `~/.local/state/pshell/reader.json`.
 
+`niri-settings` is a window for every niri setting but the ones Studio looks
+after (cursor theme and size, animations): `>niri` (`>keys` and `>setup` open
+its key bind and display pages), `scripts/ipc.sh niri open <page>`. Every
+change applies at once and is written a moment later; `scripts/niri_settings.py`
+does the file work and lets nothing through that `niri validate` rejects, and
+niri reloads the files itself. Ctrl+Z takes changes back.
+
+The first time it opens it takes over what `config.kdl` sets: its sections
+move into `~/.config/niri/settings.kdl` (included where the first of them
+stood; window rule comments become rule names, commented-out startup commands
+switched-off ones), its output blocks into `display-profile.kdl` with the
+arrangement that is live. `config.kdl` is backed up once as
+`config.kdl.bak-before-niri-settings`; what stays there is Studio's cursor
+and animations and the includes. niri uses the *first* output block of a
+monitor, so the old blocks in `config.kdl` used to hide the display setup.
+
+Monitors: changes to where a monitor is and how it runs are tried live first
+and go back by themselves after 15 seconds unless kept; kept, they land in
+`display-profile.kdl`, the active setup. Applying a saved setup
+(`display_profile.sh apply`, also from the phone) changes only the
+arrangement of its monitors and keeps their other settings (VRR, hot corners,
+layout). Key binds: a bind's keys are recorded as they are pressed (wheel and
+side buttons too; niri passes its own shortcuts through while recording),
+what it does is picked from the shell's IPC calls, the apps, a command line
+or niri's own actions. The binds live in `~/.config/niri/keybinds.kdl`,
+included last so that it wins; `scripts/keybinds.py` took over the binds of
+`config.kdl` and copies the shell's binds of `pshell.kdl`, which keeps them
+for machines without the plugin – one that is deleted or moved is covered in
+`keybinds.kdl` by a bind to `spawn "true"`.
+
 `downloads` shows what the browser downloads (network panel, and a chip in
 the bar) and pauses, resumes and cancels from there. The browser reports
 through an extension (`dotfiles/floorp/downloads`) that starts

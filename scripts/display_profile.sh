@@ -9,7 +9,8 @@
 # own output blocks on first use, so the setup overrides them.
 set -euo pipefail
 
-profiles_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/display-profiles"
+scripts_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+profiles_dir="$scripts_dir/display-profiles"
 saved_dir="${XDG_STATE_HOME:-$HOME/.local/state}/pshell/display-profiles"
 niri_dir="${XDG_CONFIG_HOME:-$HOME/.config}/niri"
 target="$niri_dir/display-profile.kdl"
@@ -40,8 +41,8 @@ apply() {
 	[[ -f $src ]] || { echo "unknown profile: $1" >&2; exit 1; }
 
 	niri validate -c "$src" >/dev/null 2>&1 || { echo "invalid profile: $src" >&2; exit 1; }
-	cp "$src" "$target.tmp"
-	mv "$target.tmp" "$target"
+	# the monitors take the setup's arrangement and keep their other settings
+	python3 "$scripts_dir/display_setup.py" activate "$src" "$1"
 	ensure_include
 	niri msg action load-config-file >/dev/null
 

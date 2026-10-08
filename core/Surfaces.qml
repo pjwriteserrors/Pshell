@@ -155,6 +155,12 @@ Scope {
 	PluginsWindow {}
 
 	LazyLoader {
+		active: Plugins.on("niri-settings")
+
+		NiriSettingsWindow {}
+	}
+
+	LazyLoader {
 		active: Plugins.on("power-menu")
 
 		PowerMenu {}

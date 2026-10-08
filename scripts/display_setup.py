@@ -6,6 +6,10 @@
   display_setup.py live <json>     -> applies outputs right away (until niri reloads)
   display_setup.py save <name> <json> -> writes the outputs as a setup
   display_setup.py delete <name>   -> removes a saved setup, hides a built-in one
+  display_setup.py activate <file> <name> -> makes a setup the active one
+                                      (display-profile.kdl): its monitors take
+                                      the setup's arrangement and keep the rest
+                                      of what they had (VRR, hot corners, …)
 
 Built-in setups live in scripts/display-profiles, saved ones in
 $XDG_STATE_HOME/pshell/display-profiles and win over built-ins of the same
@@ -235,6 +239,43 @@ def cmd_delete(name):
         (SAVED / f"{name}.hidden").touch()
 
 
+ARRANGEMENT = {"mode", "position", "scale", "transform", "off"}
+
+
+def cmd_activate(source, name):
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import niri_kdl as kdl
+
+    wanted = [n for n in kdl.parse(Path(source).read_text()) if not n.disabled]
+    try:
+        active = [n for n in kdl.parse(ACTIVE.read_text()) if not n.disabled]
+    except OSError:
+        active = []
+    kept = {str(n.args[0]): kdl.to_json(n) for n in active if n.name == "output" and n.args}
+    outputs = []
+    for node in wanted:
+        if node.name != "output" or not node.args:
+            continue
+        block = kdl.to_json(node)
+        block.pop("comment", None)
+        before = kept.pop(str(node.args[0]), None)
+        if before:
+            block["children"] = [c for c in block.get("children") or [] if c["name"] in ARRANGEMENT] + \
+                [c for c in before.get("children") or [] if c["name"] not in ARRANGEMENT]
+        outputs.append(block)
+    # a monitor the setup does not name is placed by niri, as before
+    for block in kept.values():
+        block["children"] = [c for c in block.get("children") or [] if c["name"] not in ARRANGEMENT]
+        if block["children"]:
+            outputs.append(block)
+    rules = [kdl.to_json(n) for n in wanted if n.name != "output"]
+    text = kdl.render(outputs + rules, [f"display profile: {name}"])
+    error = kdl.validate(ACTIVE.parent / "config.kdl", {str(ACTIVE): text}) if (ACTIVE.parent / "config.kdl").exists() else None
+    if error:
+        sys.exit(f"niri rejected the setup:\n{error}")
+    kdl.atomic_write(ACTIVE, text)
+
+
 def main():
     args = sys.argv[1:]
     if args == ["list"]:
@@ -243,6 +284,8 @@ def main():
         cmd_live(json.loads(args[1]))
     elif len(args) == 3 and args[0] == "save":
         cmd_save(args[1], json.loads(args[2]))
+    elif len(args) == 3 and args[0] == "activate":
+        cmd_activate(args[1], args[2])
     elif len(args) == 2 and args[0] == "delete":
         cmd_delete(args[1])
     else:

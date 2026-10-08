@@ -42,7 +42,6 @@
 	{ "id": "translate", "name": "Translate", "category": "Launcher" },
 	{ "id": "web-search", "name": "Web search", "category": "Launcher" },
 	{ "id": "todos", "name": "Todo lists", "category": "Launcher", "default": false },
-	{ "id": "display-profiles", "name": "Display setup", "category": "Launcher", "default": false },
 	{ "id": "converter", "name": "Converter", "category": "Launcher", "preview": {"on": ["bar", "launcher-button"], "ipc": ["launcher search '>conv 5 kg in lb'"]} },
 
 	{ "id": "screenshot", "name": "Screenshot", "category": "Capture" },
@@ -66,6 +65,7 @@
 	{ "id": "keep-awake", "name": "Keep awake", "category": "Desktop" },
 	{ "id": "rpg", "name": "Productivity RPG", "category": "Desktop", "default": false, "icon": "gamepad_variant" },
 	{ "id": "fast-reader", "name": "Fast reader", "category": "Desktop", "requires": ["drop-commands"], "preview": {"on": ["bar", "clock"], "ipc": ["reader read 'Vielen Dank für die Aufmerksamkeit. Ein Wort nach dem anderen, immer an derselben Stelle.'"], "wait": 4.3} },
+	{ "id": "niri-settings", "name": "niri settings", "category": "Desktop", "default": false, "icon": "tune_variant" },
 
 	{ "id": "clipboard-hints", "name": "Clipboard hints", "category": "Automation" },
 	{ "id": "agents", "name": "Agent status", "category": "Automation", "icon": "robot" },

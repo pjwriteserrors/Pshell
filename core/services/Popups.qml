@@ -78,6 +78,7 @@ Singleton {
 		notes: "notes",
 		messages: "messages",
 		reader: "fast-reader",
+		niri: "niri-settings",
 		power: "power-menu",
 		radial: "radial-menu",
 		eyerest: "eye-rest",

@@ -42,10 +42,14 @@ Singleton {
 
 	// corner radius of niri windows (window-rule geometry-corner-radius)
 	readonly property string niriConfigPath: `${Quickshell.env("XDG_CONFIG_HOME") || `${Quickshell.env("HOME")}/.config`}/niri/config.kdl`
+	// settings.kdl (the niri-settings plugin) wins: config.kdl includes it
 	readonly property int windowRadius: {
-		const text = niriFile.text().replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
-		const match = text.match(/^\s*geometry-corner-radius\s+([\d.]+)/m);
-		return match ? Math.round(Number(match[1])) : 7;
+		const clean = text => String(text || "").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+		for (const text of [niriSettingsFile.text(), niriFile.text()]) {
+			const match = clean(text).match(/^\s*geometry-corner-radius\s+([\d.]+)/m);
+			if (match) return Math.round(Number(match[1]));
+		}
+		return 7;
 	}
 
 	FileView {
@@ -53,6 +57,15 @@ Singleton {
 		path: root.niriConfigPath
 		blockLoading: true
 		watchChanges: true
+		onFileChanged: reload()
+	}
+
+	FileView {
+		id: niriSettingsFile
+		path: root.niriConfigPath.replace(/config\.kdl$/, "settings.kdl")
+		blockLoading: true
+		watchChanges: true
+		printErrors: false
 		onFileChanged: reload()
 	}
 
