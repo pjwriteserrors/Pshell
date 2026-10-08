@@ -34,6 +34,7 @@
 	{ "id": "lyrics", "name": "Lyrics", "category": "Panels", "requires": ["media"], "preview": {"on": ["bar", "media"], "run": ["python3 {shell}/scripts/plugin_previews.py --player & sleep 1.5"], "ipc": ["panels toggleMedia", "lyrics open"], "base": "off", "wait": 3} },
 	{ "id": "downloads", "name": "Browser downloads", "category": "Panels", "requires": ["network"], "preview": {"on": ["bar", "clock", "status", "quick-settings"], "run": ["python3 {shell}/scripts/plugin_previews.py --downloads & sleep 4"], "ipc": ["panels toggleNetwork"], "base": "off", "wait": 3} },
 	{ "id": "screentime", "name": "Screen time", "category": "Panels", "default": false, "preview": {"on": ["bar", "clock"], "ipc": ["screentime toggle"]} },
+	{ "id": "connections", "name": "Connections", "category": "Panels", "default": false, "requires": ["network"], "preview": {"on": ["bar", "clock", "status", "quick-settings"], "ipc": ["panels toggleNetwork"], "base": "off", "wait": 5} },
 
 	{ "id": "apps", "name": "Apps", "category": "Launcher" },
 	{ "id": "calculator", "name": "Calculator", "category": "Launcher" },

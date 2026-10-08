@@ -463,56 +463,79 @@ Drawer {
 					}
 				}
 
-				Repeater {
-					model: [
-						{ label: "Download", icon: "arrow_down", speed: Network.download, history: Network.downloadHistory, color: Theme.primary },
-						{ label: "Upload", icon: "arrow_up", speed: Network.upload, history: Network.uploadHistory, color: Theme.secondary }
-					]
+				// side by side once the globe needs the room
+				GridLayout {
+					id: graphs
 
-					delegate: Rectangle {
-						id: graph
+					readonly property bool compact: Plugins.on("connections")
 
-						required property var modelData
+					Layout.fillWidth: true
+					columns: graphs.compact ? 2 : 1
+					columnSpacing: 14
+					rowSpacing: 14
 
-						Layout.fillWidth: true
-						implicitHeight: 112
-						radius: Theme.radius.large
-						color: Theme.layer1
-						clip: true
+					Repeater {
+						// the values are bound in the graph: a model that changed with them would build both anew every sample
+						model: 2
 
-						Sparkline {
-							anchors.left: parent.left
-							anchors.right: parent.right
-							anchors.bottom: parent.bottom
-							height: 64
-							values: graph.modelData.history
-							color: graph.modelData.color
-						}
+						delegate: Rectangle {
+							id: graph
 
-						RowLayout {
-							x: 14
-							y: 12
-							width: parent.width - 28
-							spacing: 8
+							required property int index
+							readonly property var modelData: graph.index === 0
+								? { label: "Download", icon: "arrow_down", speed: Network.download, history: Network.downloadHistory, color: Theme.primary }
+								: { label: "Upload", icon: "arrow_up", speed: Network.upload, history: Network.uploadHistory, color: Theme.secondary }
 
-							Glyph {
-								icon: graph.modelData.icon
-								size: 16
+							Layout.fillWidth: true
+							Layout.preferredWidth: 1
+							implicitHeight: graphs.compact ? 88 : 112
+							radius: Theme.radius.large
+							color: Theme.layer1
+							clip: true
+
+							Sparkline {
+								anchors.left: parent.left
+								anchors.right: parent.right
+								anchors.bottom: parent.bottom
+								height: graphs.compact ? 48 : 64
+								values: graph.modelData.history
 								color: graph.modelData.color
 							}
 
-							SectionLabel {
-								Layout.fillWidth: true
-								text: graph.modelData.label
-							}
+							RowLayout {
+								x: 14
+								y: 12
+								width: parent.width - 28
+								spacing: 8
 
-							StyledText {
-								text: Network.formatSpeed(graph.modelData.speed)
-								tabular: true
-								font.pixelSize: Theme.size.title
-								font.weight: Font.Bold
+								Glyph {
+									icon: graph.modelData.icon
+									size: 16
+									color: graph.modelData.color
+								}
+
+								SectionLabel {
+									Layout.fillWidth: true
+									text: graphs.compact ? "" : graph.modelData.label
+								}
+
+								StyledText {
+									text: Network.formatSpeed(graph.modelData.speed)
+									tabular: true
+									font.pixelSize: Theme.size.title
+									font.weight: Font.Bold
+								}
 							}
 						}
+					}
+				}
+
+				Loader {
+					Layout.fillWidth: true
+					active: Plugins.on("connections")
+					visible: active
+					sourceComponent: ConnectionMap {
+						shown: root.shown && root.page === "network"
 					}
 				}
 

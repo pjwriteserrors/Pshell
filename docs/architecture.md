@@ -199,6 +199,24 @@ same host and socket, with or without the `downloads` plugin; only host and
 path are kept, nothing of a private window. Without the extension the links
 stay empty and everything else works.
 
+`connections` shows in the network panel where the connections go: a globe
+with an arc from here to every town an app talks to, and under it the apps
+or the places, the busiest first. What is downloaded travels along its arc
+towards home as packets, what is uploaded the other way. Pointing at a row
+lets its arcs stand out; a click keeps it and turns and zooms the globe to
+them, as does a click on a place. Dragging turns the globe, the wheel zooms.
+`scripts/outbound.py` reads the sockets with `ss` once a second, only while
+the panel is open (`core/services/Outbound.qml`): TCP with the bytes each
+socket has moved, and connected UDP, which carries no counters – what the
+interface received beyond all TCP is split among the QUIC sockets, an
+estimate. Only addresses out on the internet count; sockets of other users
+are "System". Places come from DB-IP's City Lite database (db-ip.com, CC BY
+4.0), fetched once into `~/.cache/pshell/outbound` (60 MB, 127 MB unpacked)
+and again when it is two months old; no address leaves the machine. Home is
+the weather's city, or where the time zone is at home. The land is
+`assets/globe/land.json`, a grid of dots made from Natural Earth by
+`scripts/globe_land.py`.
+
 `downloads` shows what the browser downloads (network panel, and a chip in
 the bar) and pauses, resumes and cancels from there. The browser reports
 through an extension (`dotfiles/floorp/downloads`) that starts

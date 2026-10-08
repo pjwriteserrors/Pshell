@@ -459,6 +459,8 @@ def prepare(work: Path):
     (state / "screentime.json").write_text(json.dumps({"days": screentime()}))
     # a mailbox that does not exist (scripts/messages/demo.py)
     (state / "messages.json").write_text(json.dumps({"demo": True, "accounts": []}))
+    # connections that do not exist (scripts/outbound.py)
+    (state / "connections.json").write_text(json.dumps({"demo": True}))
     (state / "song.json").write_text(json.dumps({
         "title": "Get Lucky", "artist": "Daft Punk", "album": "Random Access Memories", "cover": "",
         "links": [{"name": "Apple Music", "icon": "apple", "url": ""}, {"name": "Spotify", "icon": "music", "url": ""},

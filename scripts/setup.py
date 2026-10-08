@@ -65,6 +65,7 @@ PROGRAMS = {
     "fingerprint": [("fprintd-list", "fingerprint unlock")],
     "ssh": [("secret-tool", "SSH passwords")],
     "niri-settings": [("jq", "display setups")],
+    "connections": [("ss", "the sockets of the apps")],
     "mail": [("secret-tool", "mail passwords"), ("xdg-open", "attachments, sign-in page"), ("wl-copy", "sign-in code")],
     "microsoft-calendar": [("wl-copy", "sign-in code"), ("xdg-open", "sign-in page, joining meetings")],
 }
