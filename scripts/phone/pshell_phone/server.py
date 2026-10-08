@@ -1,10 +1,11 @@
 """The one port phones talk to: /pair, /link (WebSocket) and /blob."""
 
+import asyncio
 import json
 import mimetypes
 import ssl
 
-from aiohttp import WSMsgType, web
+from aiohttp import WSCloseCode, WSMsgType, web
 
 from . import config, identity
 from .hub import Peer, encode
@@ -108,7 +109,8 @@ class Server:
         return web.FileResponse(path, headers={"Content-Type": kind, "Cache-Control": "private, max-age=31536000, immutable"})
 
     async def start(self):
-        self.runner = web.AppRunner(self.app, access_log=None)
+        # open links would otherwise hold a shutdown for aiohttp's default 60 s
+        self.runner = web.AppRunner(self.app, access_log=None, shutdown_timeout=3)
         await self.runner.setup()
         bind = config.settings().get("bind") or [None]
         for address in bind if isinstance(bind, list) else [bind]:
@@ -117,5 +119,8 @@ class Server:
             self.sites.append(site)
 
     async def stop(self):
+        sockets = [peer.socket.close(code=WSCloseCode.GOING_AWAY) for peer in self.hub.phones()]
+        if sockets:
+            await asyncio.wait([asyncio.ensure_future(close) for close in sockets], timeout=2)
         if self.runner:
             await self.runner.cleanup()
