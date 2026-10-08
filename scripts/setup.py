@@ -77,12 +77,13 @@ OPTIONAL_PROGRAMS = [
 ]
 HOOK_PROGRAMS = {
     "kitty": [("kitty", "")], "pywalfox": [("pywalfox", "")], "telegram": [("wal-telegram", "")],
-    "openrgb": [("openrgb", "")], "oomox": [("oomox-cli", ""), ("gtk-update-icon-cache", "")],
+    "openrgb": [("openrgb", "")], "openrgb-leds": [("openrgb", "")], "oomox": [("oomox-cli", ""), ("gtk-update-icon-cache", "")],
     "spicetify": [("spicetify", "")],
 }
 PYTHON_MODULES = {
     "core": [("numpy", "scrolling screenshots, live pins, song detection"), ("dbus", "bluetooth pairing, live pins"), ("gi", "bluetooth pairing, live pins")],
     "hook:openrgb": [("PIL", "lighting")],
+    "hook:openrgb-leds": [("PIL", "lighting")],
 }
 # the phone daemon runs with the system's python, whatever `python3` is in the shell
 PHONE_PYTHON = "/usr/bin/python3"

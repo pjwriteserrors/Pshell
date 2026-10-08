@@ -9,12 +9,13 @@ import qs.style.theme
 import qs.core.services
 import qs.style.widgets
 import qs.core.views.overlays.studio
-import "../../lib/NiriAnimation.js" as NiriAnimation
 
-// Theme picker. A large live preview renders the candidate palette on top of
-// the wallpaper as a miniature shell; themes run along a film strip below,
-// the wallust palette/style matrix sits in a side sheet. ↑↓ browse themes,
-// → steps into the palette matrix, ← steps back out, Enter applies.
+// Theme picker. One stage shows the wallpaper in front with the shell in
+// miniature on top of it, painted in the palette that is chosen in the dock
+// at its corner. Below it runs the library as a film strip, or, on the
+// second tab, the pictures of the day (Daily) that are already fetched.
+// ←→ step through the strip, ↑↓ through the palettes, Tab changes the tab,
+// Enter applies.
 //
 // The palettes come from scripts/theme_catalog.sh: one `matrix-all` run per
 // opening brings every theme's matrix (cached on disk, generated in parallel
@@ -26,19 +27,18 @@ ModalWindow {
 	exclusiveKeyboard: true
 	onModalOpened: root.reset()
 
-	// wallust v4 remap: grid COLUMNS carry the wallust PALETTE (kmeans /
-	// salience / ansi), grid ROWS carry the wallust STYLE (dark / light).
+	// wallust v4 remap: "colour space" carries the wallust PALETTE (kmeans /
+	// salience / ansi), "palette" carries the wallust STYLE (dark / light).
+	property string view: "library"
 	property string searchText: ""
 	property var themes: []
 	property string selectedBackend: "fastresize"
 	property string selectedColorSpace: "salience"
 	property string selectedPalette: "dark"
-	property int selectedColorIndex: 0
-	property int selectedPaletteIndex: 0
-	property bool variantSelectionActive: false
-	property var animationOptions: []
-	property string animationStateHint: ""
-	property string selectedAnimationId: ""
+	property int currentThemeIndex: 0
+	property string dailyProvider: "bing"
+	// until the first touch, the picker stands on what the desktop wears
+	property bool startPending: false
 	// Every theme's palette matrix (the wallust colours per palette x style)
 	// by matrixKey, filled by one `matrix-all` run after the list and by a
 	// `matrix-json` run for the theme in front when it is not there yet.
@@ -56,52 +56,39 @@ ModalWindow {
 		if (root.previewMatrix === null) return "loading";
 		return root.matrixCell(root.selectedColorSpace, root.selectedPalette) ? "ready" : "error";
 	}
-	property int currentThemeIndex: 0
-	property string selectedDailyProvider: "bing"
-	property string dailyStatusText: ""
-	property string dailyErrorText: ""
-	property bool dailyLoading: false
-	property bool dailyFailed: false
 
 	readonly property string themeCatalogScriptPath: `${Quickshell.shellDir}/scripts/theme_catalog.sh`
 	readonly property string applyScriptPath: `${Quickshell.shellDir}/scripts/apply_theme_selection.sh`
-	readonly property string dailyScriptPath: `${Quickshell.shellDir}/scripts/wallpaper_of_day.py`
-	readonly property string dailyThemeDirPath: `${Host.wallpapers}/Wallpaper of the day`
 	readonly property string wallustConfigPath: `${Quickshell.env("HOME")}/.config/wallust/wallust.toml`
-	readonly property string shaderAnimationsDir: `${Quickshell.env("HOME")}/.config/niri/animations/shaders`
-	readonly property string animationStatePath: `${Quickshell.env("HOME")}/.local/state/quickshell-theme/current-animation`
-	readonly property string shaderCurrentPath: `${root.shaderAnimationsDir}/.current`
 	readonly property var backendOptions: ["full", "resized", "wal", "thumb", "fastresize"]
-	// grid columns -> wallust palette
 	readonly property var colorSpaceOptions: ["kmeans", "salience", "ansi"]
-	// grid rows -> wallust style (dark section on top, light on the bottom)
 	readonly property var paletteOptions: ["dark", "light"]
-	readonly property var dailyProviders: [
-		({ id: "bing", label: "Bing" }),
-		({ id: "wallhaven", label: "Wallhaven" }),
-		({ id: "moewalls", label: "MoeWalls" })
-	]
-	readonly property var darkPaletteOptions: ["dark"]
-	readonly property var lightPaletteOptions: ["light"]
-	readonly property var visualPaletteOptions: root.darkPaletteOptions.concat(root.lightPaletteOptions)
-	readonly property var currentAnimationOption: {
-		for (const option of root.animationOptions) {
-			if (String(option.id || "") === root.selectedAnimationId) return option;
-		}
-		return root.animationOptions.length > 0 ? root.animationOptions[0] : null;
-	}
-	readonly property color activePreviewBackground: root.previewPaletteData && root.previewPaletteData.background ? root.previewPaletteData.background : Theme.layer2
-	readonly property color activePreviewForeground: root.previewPaletteData && root.previewPaletteData.foreground ? root.previewPaletteData.foreground : Theme.text
+	readonly property int selectedColorIndex: Math.max(0, root.colorSpaceOptions.indexOf(root.selectedColorSpace))
 	readonly property var filteredThemes: {
 		const query = root.searchText.trim().toLowerCase();
 		if (query === "") return root.themes;
 		return root.themes.filter(theme => String(theme.name || "").toLowerCase().includes(query));
 	}
+	readonly property var dailyEntry: Daily.entries[root.dailyProvider] ?? null
 	readonly property var currentTheme: {
+		if (root.view === "daily") {
+			const entry = root.dailyEntry;
+			if (!entry) return null;
+			return {
+				name: String(entry.headline || entry.title || ""),
+				path: String(entry.theme_path || ""),
+				previewPath: String(entry.preview_path || ""),
+				mediaType: String(entry.media_type || "image"),
+				daily: entry
+			};
+		}
 		if (root.filteredThemes.length === 0) return null;
 		const index = Math.max(0, Math.min(root.currentThemeIndex, root.filteredThemes.length - 1));
 		return root.filteredThemes[index];
 	}
+	// the theme in front by name: it stays the same while Daily tells news
+	// about the other sources
+	readonly property string currentKey: root.currentTheme ? `${root.currentTheme.path}\u001f${root.currentTheme.previewPath}` : ""
 
 	function setThemeEntries(raw) {
 		const entries = [];
@@ -110,6 +97,8 @@ ModalWindow {
 			if (trimmed === "") continue;
 			const parts = trimmed.split("\t");
 			if (parts.length < 4) continue;
+			// the picture of the day has a tab of its own
+			if (parts[1] === Daily.themeDir) continue;
 			entries.push({
 				name: parts[0],
 				path: parts[1],
@@ -120,6 +109,7 @@ ModalWindow {
 			});
 		}
 		root.themes = entries;
+		root.settleStart();
 		Qt.callLater(function() {
 			root.reloadPreviewMatrix();
 			root.prewarmMatrices();
@@ -133,58 +123,17 @@ ModalWindow {
 
 	function setWallustConfig(raw) {
 		const backend = root.parseWallustValue(raw, "backend");
-		// wallust "palette" -> grid columns; wallust "style" -> grid rows
 		const palette = root.parseWallustValue(raw, "palette");
 		const style = root.parseWallustValue(raw, "style");
 
-		if (backend !== "" && root.backendOptions.indexOf(backend) >= 0) root.selectedBackend = backend;
-		if (palette !== "" && root.colorSpaceOptions.indexOf(palette) >= 0) root.selectedColorSpace = palette;
-		if (style !== "" && root.paletteOptions.indexOf(style) >= 0) root.selectedPalette = style;
-		root.syncVariantIndexes();
-	}
-
-	function syncVariantIndexes() {
-		const colorIndex = root.colorSpaceOptions.indexOf(root.selectedColorSpace);
-		const paletteIndex = root.visualPaletteOptions.indexOf(root.selectedPalette);
-		root.selectedColorIndex = Math.max(0, colorIndex);
-		root.selectedPaletteIndex = Math.max(0, paletteIndex);
-		if (colorIndex < 0) root.selectedColorSpace = root.colorSpaceOptions[0];
-		if (paletteIndex < 0) root.selectedPalette = root.visualPaletteOptions[0] || root.paletteOptions[0];
-	}
-
-	function selectColorIndex(index) {
-		const next = Math.max(0, Math.min(root.colorSpaceOptions.length - 1, index));
-		root.selectedColorIndex = next;
-		root.selectedColorSpace = root.colorSpaceOptions[next];
-	}
-
-	function selectPaletteIndex(index) {
-		const next = Math.max(0, Math.min(root.visualPaletteOptions.length - 1, index));
-		root.selectedPaletteIndex = next;
-		root.selectedPalette = root.visualPaletteOptions[next];
+		if (root.backendOptions.indexOf(backend) >= 0) root.selectedBackend = backend;
+		if (root.colorSpaceOptions.indexOf(palette) >= 0) root.selectedColorSpace = palette;
+		if (root.paletteOptions.indexOf(style) >= 0) root.selectedPalette = style;
 	}
 
 	function selectVariant(colorSpace, palette) {
-		const colorIndex = root.colorSpaceOptions.indexOf(colorSpace);
-		const paletteIndex = root.visualPaletteOptions.indexOf(palette);
-		if (colorIndex >= 0) root.selectColorIndex(colorIndex);
-		if (paletteIndex >= 0) root.selectPaletteIndex(paletteIndex);
-		root.variantSelectionActive = true;
-	}
-
-	function setAnimationOptions(raw) {
-		root.animationOptions = NiriAnimation.parseOptions(raw);
-		root.selectedAnimationId = NiriAnimation.chooseSelectedId(root.animationStateHint, root.animationOptions, "");
-	}
-
-	function setAnimationState(raw) {
-		root.animationStateHint = String(raw || "").trim();
-		root.selectedAnimationId = NiriAnimation.chooseSelectedId(root.animationStateHint, root.animationOptions, "");
-	}
-
-	function previewKey(theme, backend, colorSpace, palette) {
-		if (!theme) return "";
-		return [String(theme.path || ""), String(theme.previewPath || ""), backend, colorSpace, palette].join("\u001f");
+		if (root.colorSpaceOptions.indexOf(colorSpace) >= 0) root.selectedColorSpace = colorSpace;
+		if (root.paletteOptions.indexOf(palette) >= 0) root.selectedPalette = palette;
 	}
 
 	function matrixKey(theme, backend) {
@@ -192,16 +141,12 @@ ModalWindow {
 		return [String(theme.path || ""), String(theme.previewPath || ""), backend].join("\u001f");
 	}
 
-	function storeMatrix(data) {
+	function matrixOf(data) {
 		const items = Array.isArray(data.items) ? data.items : [];
 		const map = {};
 		for (const item of items)
 			map[`${item.colorSpace}|${item.palette}`] = item;
-		const key = root.matrixKey({ path: data.themePath, previewPath: data.previewPath }, data.backend);
-		const next = Object.assign({}, root.matrixCache);
-		next[key] = { items: items, map: map };
-		root.matrixCache = next;
-		return key;
+		return { items: items, map: map };
 	}
 
 	// the matrix of the theme in front: from the cache, or asked for
@@ -218,7 +163,9 @@ ModalWindow {
 			root.settleVariant();
 			return;
 		}
+		if (loadPreviewMatrixProcess.running && loadPreviewMatrixProcess.key === key) return;
 		loadPreviewMatrixProcess.running = false;
+		loadPreviewMatrixProcess.key = key;
 		loadPreviewMatrixProcess.command = [
 			"bash", root.themeCatalogScriptPath, "matrix-json",
 			theme.path, theme.previewPath, root.selectedBackend
@@ -226,22 +173,19 @@ ModalWindow {
 		loadPreviewMatrixProcess.running = true;
 	}
 
-	function setPreviewMatrix(raw) {
-		const text = String(raw || "").trim();
-		if (text === "") {
-			// wallust could not read this one: an empty matrix, so the cells
-			// show n/a instead of a spinner forever
-			if (root.previewMatrixRequestKey !== "")
-				root.storeMatrix({ themePath: root.currentTheme?.path, previewPath: root.currentTheme?.previewPath, backend: root.selectedBackend, items: [] });
-			return;
-		}
-
+	// an empty answer is wallust not reading this one: an empty matrix, so
+	// the palettes show as missing instead of a spinner forever
+	function setPreviewMatrix(key, raw) {
+		let data = {};
 		try {
-			const key = root.storeMatrix(JSON.parse(text));
-			if (key === root.previewMatrixRequestKey) root.settleVariant();
+			data = JSON.parse(String(raw || "").trim() || "{}");
 		} catch (error) {
 			console.warn(`Could not parse theme preview matrix: ${error}`);
 		}
+		const next = Object.assign({}, root.matrixCache);
+		next[key] = root.matrixOf(data);
+		root.matrixCache = next;
+		if (key === root.previewMatrixRequestKey) root.settleVariant();
 	}
 
 	// every theme's matrix in one go, so the other themes are ready before
@@ -259,13 +203,8 @@ ModalWindow {
 		try {
 			const data = JSON.parse(text);
 			const next = Object.assign({}, root.matrixCache);
-			for (const matrix of (Array.isArray(data.matrices) ? data.matrices : [])) {
-				const items = Array.isArray(matrix.items) ? matrix.items : [];
-				const map = {};
-				for (const item of items)
-					map[`${item.colorSpace}|${item.palette}`] = item;
-				next[root.matrixKey({ path: matrix.themePath, previewPath: matrix.previewPath }, matrix.backend)] = { items: items, map: map };
-			}
+			for (const matrix of (Array.isArray(data.matrices) ? data.matrices : []))
+				next[root.matrixKey({ path: matrix.themePath, previewPath: matrix.previewPath }, matrix.backend)] = root.matrixOf(matrix);
 			root.matrixCache = next;
 			root.settleVariant();
 		} catch (error) {
@@ -276,7 +215,7 @@ ModalWindow {
 	// a variant the theme does not have falls back to the nearest one it has
 	function settleVariant() {
 		const items = root.previewMatrixItems;
-		if (items.length > 0 && !root.isVariantAvailable(root.selectedColorSpace, root.selectedPalette)) {
+		if (items.length > 0 && !root.matrixCell(root.selectedColorSpace, root.selectedPalette)) {
 			const preferred = root.findPreferredVariant(items);
 			if (preferred) root.selectVariant(preferred.colorSpace, preferred.palette);
 		}
@@ -286,13 +225,9 @@ ModalWindow {
 		return root.previewMatrixMap[`${colorSpace}|${palette}`] || null;
 	}
 
-	function isVariantAvailable(colorSpace, palette) {
-		return root.matrixCell(colorSpace, palette) !== null;
-	}
-
 	function findPreferredVariant(items) {
 		const orderedColorSpaces = [root.selectedColorSpace].concat(root.colorSpaceOptions.filter(value => value !== root.selectedColorSpace));
-		const orderedPalettes = [root.selectedPalette].concat(root.visualPaletteOptions.filter(value => value !== root.selectedPalette));
+		const orderedPalettes = [root.selectedPalette].concat(root.paletteOptions.filter(value => value !== root.selectedPalette));
 		for (const palette of orderedPalettes) {
 			for (const colorSpace of orderedColorSpaces) {
 				for (const item of items) {
@@ -308,54 +243,41 @@ ModalWindow {
 		const data = root.previewPaletteData || {};
 		if (Array.isArray(data.swatches) && index >= 0 && index < data.swatches.length)
 			return data.swatches[index];
-		if (data.colors && data.colors[`color${index}`])
-			return data.colors[`color${index}`];
 		const fallbacks = [Theme.layer2, Theme.primary, Theme.layer3, Theme.text];
 		return fallbacks[Math.abs(index) % fallbacks.length];
 	}
 
 	function dataSwatch(data, index) {
-		if (!data) return "transparent";
-		if (Array.isArray(data.swatches) && index >= 0 && index < data.swatches.length)
+		if (data && Array.isArray(data.swatches) && index >= 0 && index < data.swatches.length)
 			return data.swatches[index];
-		if (data.colors && data.colors[`color${index}`])
-			return data.colors[`color${index}`];
 		return "transparent";
 	}
 
-	function dataTone(data, index) {
-		if (!data) return "transparent";
-		if (index === -2) return data.background || Qt.alpha(Theme.bg, 0.8);
-		if (index === -1) return data.foreground || Theme.text;
-		return root.dataSwatch(data, index);
+	function selectView(view) {
+		root.startPending = false;
+		root.view = view;
+		if (view === "daily") {
+			if (!root.dailyEntry) root.dailyProvider = root.firstDailyProvider();
+			Daily.refresh(false);
+		}
 	}
 
-	function colorChannel(hex, offset) {
-		let value = String(hex || "").replace("#", "");
-		if (value.length === 8) value = value.slice(2);
-		if (value.length < 6) return 0;
-		const parsed = parseInt(value.slice(offset, offset + 2), 16);
-		return isNaN(parsed) ? 0 : parsed / 255;
+	function firstDailyProvider() {
+		const source = Daily.sources.find(source => Daily.entries[source.id]);
+		return source ? source.id : Daily.sources[0].id;
 	}
 
-	function readableTextColor(hex) {
-		const r = root.colorChannel(hex, 0);
-		const g = root.colorChannel(hex, 2);
-		const b = root.colorChannel(hex, 4);
-		return (0.2126 * r + 0.7152 * g + 0.0722 * b) > 0.58 ? "#141414" : "#ffffff";
-	}
-
-	function reloadThemes() {
-		listThemesProcess.running = true;
-	}
-
-	function reloadWallustConfig() {
-		readWallustConfigProcess.running = true;
-	}
-
-	function reloadAnimations() {
-		listAnimationOptionsProcess.running = true;
-		readAnimationStateProcess.running = true;
+	// stands on what the desktop wears, as long as nothing was touched
+	function settleStart() {
+		if (!root.startPending) return;
+		if (Daily.applied.provider) {
+			root.view = "daily";
+			root.dailyProvider = Daily.applied.provider;
+			return;
+		}
+		root.view = "library";
+		const index = root.filteredThemes.findIndex(theme => theme.path === currentDirFile.text().trim());
+		if (index >= 0) root.currentThemeIndex = index;
 	}
 
 	function syncCurrentThemeIndex() {
@@ -368,102 +290,90 @@ ModalWindow {
 			root.currentThemeIndex = 0;
 	}
 
-	function moveSelection(delta) {
+	// a step along the strip
+	function move(delta) {
+		root.startPending = false;
+		if (root.view === "daily") {
+			const sources = Daily.sources.filter(source => Daily.entries[source.id]);
+			if (sources.length === 0) return;
+			const index = sources.findIndex(source => source.id === root.dailyProvider);
+			root.dailyProvider = sources[Math.max(0, Math.min(sources.length - 1, index + delta))].id;
+			return;
+		}
 		if (root.filteredThemes.length === 0) return;
-		root.variantSelectionActive = false;
 		root.currentThemeIndex = Math.max(0, Math.min(root.filteredThemes.length - 1, root.currentThemeIndex + delta));
 	}
 
-	function moveVertical(delta) {
-		if (root.variantSelectionActive) {
-			root.selectPaletteIndex(root.selectedPaletteIndex + delta);
-			return;
+	// a step through the palettes the theme has
+	function movePalette(delta) {
+		const count = root.colorSpaceOptions.length;
+		for (let step = 1; step <= count; step += 1) {
+			const colorSpace = root.colorSpaceOptions[(root.selectedColorIndex + delta * step + count * step) % count];
+			if (root.matrixCell(colorSpace, root.selectedPalette)) {
+				root.selectedColorSpace = colorSpace;
+				return;
+			}
 		}
-
-		root.moveSelection(delta);
-	}
-
-	function moveHorizontal(delta) {
-		if (!root.variantSelectionActive) {
-			if (delta > 0) root.variantSelectionActive = true;
-			return;
-		}
-
-		const next = root.selectedColorIndex + delta;
-		if (next < 0) {
-			root.variantSelectionActive = false;
-			return;
-		}
-		root.selectColorIndex(next);
 	}
 
 	function applyTheme(theme) {
 		if (!theme) return;
 		if (root.previewPaletteStatus === "loading") return;
 		if (root.previewPaletteStatus === "error") {
-			const preferredFromError = root.findPreferredVariant(root.previewMatrixItems);
-			if (preferredFromError) root.selectVariant(preferredFromError.colorSpace, preferredFromError.palette);
-			return;
-		}
-		if (!root.previewMatrixLoading && root.previewMatrixItems.length > 0 && !root.isVariantAvailable(root.selectedColorSpace, root.selectedPalette)) {
 			const preferred = root.findPreferredVariant(root.previewMatrixItems);
 			if (preferred) root.selectVariant(preferred.colorSpace, preferred.palette);
 			return;
 		}
-		Popups.closeModal();
-		Quickshell.execDetached([
-			"bash", root.applyScriptPath, theme.path,
+		const look = [
 			"--backend", root.selectedBackend,
 			"--palette", root.selectedColorSpace,
-			"--style", root.selectedPalette,
-			"--animation", root.selectedAnimationId
-		]);
-	}
-
-	function applyDailyWallpaper() {
-		if (root.dailyLoading) return;
-		root.dailyLoading = true;
-		root.dailyFailed = false;
-		root.dailyErrorText = "";
-		root.dailyStatusText = `Loading ${root.selectedDailyProvider}...`;
-		dailyDownloadProcess.command = [
-			"python3", root.dailyScriptPath,
-			"--provider", root.selectedDailyProvider
+			"--style", root.selectedPalette
 		];
-		dailyDownloadProcess.running = true;
-	}
-
-	function setDailyStatus(raw) {
-		try {
-			const data = JSON.parse(String(raw || "{}"));
-			const selected = String(data.selected_provider || data.provider || "bing");
-			if (["bing", "wallhaven", "moewalls"].includes(selected))
-				root.selectedDailyProvider = selected;
-			root.dailyStatusText = data.date ? `Cached ${String(data.date)}` : "Downloads once per day";
-		} catch (error) {
-			root.dailyStatusText = "Downloads once per day";
+		Popups.closeModal();
+		if (theme.daily) {
+			// the picture that is kept becomes the library's theme of the day
+			Quickshell.execDetached([
+				"sh", "-c", 'python3 "$1" --provider "$2" --cached >/dev/null && shift 2 && exec bash "$@"', "sh",
+				Daily.script, theme.daily.provider, root.applyScriptPath, Daily.themeDir
+			].concat(look));
+			return;
 		}
+		Quickshell.execDetached(["bash", root.applyScriptPath, theme.path].concat(look));
 	}
 
 	function reset() {
 		root.searchText = "";
 		root.currentThemeIndex = 0;
 		searchInput.text = "";
-		root.reloadThemes();
-		root.reloadWallustConfig();
-		root.reloadAnimations();
-		readDailyStatusProcess.running = true;
-		Qt.callLater(function() {
-			searchInput.selectAll();
-			searchInput.forceActiveFocus();
-		});
+		root.startPending = true;
+		currentDirFile.reload();
+		Daily.reload();
+		Daily.refresh(false);
+		root.settleStart();
+		listThemesProcess.running = true;
+		readWallustConfigProcess.running = true;
+		Qt.callLater(() => searchInput.forceActiveFocus());
 	}
 
 	onFilteredThemesChanged: syncCurrentThemeIndex()
-	onCurrentThemeChanged: root.reloadPreviewMatrix()
+	onCurrentKeyChanged: root.reloadPreviewMatrix()
 	onSelectedBackendChanged: {
 		root.reloadPreviewMatrix();
 		root.prewarmMatrices();
+	}
+
+	Connections {
+		target: Daily
+		function onAppliedChanged() {
+			root.settleStart();
+		}
+	}
+
+	FileView {
+		id: currentDirFile
+
+		path: `${Quickshell.env("HOME")}/.local/state/quickshell-theme/current-theme-dir`
+		printErrors: false
 	}
 
 	Process {
@@ -483,44 +393,18 @@ ModalWindow {
 	}
 
 	Process {
-		id: readDailyStatusProcess
-		command: ["python3", root.dailyScriptPath, "--status"]
-		stdout: StdioCollector {
-			onStreamFinished: root.setDailyStatus(text)
-		}
-	}
-
-	Process {
-		id: dailyDownloadProcess
-		command: ["true"]
-		stdout: StdioCollector {}
-		stderr: StdioCollector {
-			onStreamFinished: root.dailyErrorText = String(text || "").trim().split("\n").pop()
-		}
-		onExited: function(exitCode) {
-			root.dailyLoading = false;
-			if (exitCode === 0) {
-				root.dailyStatusText = "Downloaded — applying theme";
-				Quickshell.execDetached([
-					"bash", root.applyScriptPath, root.dailyThemeDirPath,
-					"--backend", root.selectedBackend,
-					"--palette", root.selectedColorSpace,
-					"--style", root.selectedPalette,
-					"--animation", root.selectedAnimationId
-				]);
-				Popups.closeModal();
-			} else {
-				root.dailyFailed = true;
-				root.dailyStatusText = root.dailyErrorText || "Download failed";
-			}
-		}
-	}
-
-	Process {
 		id: loadPreviewMatrixProcess
+
+		// the matrixKey this run was started for
+		property string key: ""
+
 		command: ["true"]
+		// a run that was stopped for the next theme has nothing to say
+		onExited: (exitCode, exitStatus) => {
+			if (exitStatus === 0) root.setPreviewMatrix(loadPreviewMatrixProcess.key, matrixText.text);
+		}
 		stdout: StdioCollector {
-			onStreamFinished: root.setPreviewMatrix(text)
+			id: matrixText
 		}
 	}
 
@@ -532,60 +416,153 @@ ModalWindow {
 		}
 	}
 
-	Process {
-		id: listAnimationOptionsProcess
-		command: ["bash", `${Quickshell.shellDir}/scripts/list_animations.sh`]
-		stdout: StdioCollector {
-			onStreamFinished: root.setAnimationOptions(text)
-		}
-	}
-
-	Process {
-		id: readAnimationStateProcess
-		command: ["sh", "-c", `
-if [ -f "${root.animationStatePath}" ]; then
-	cat "${root.animationStatePath}"
-elif [ -f "${root.shaderCurrentPath}" ]; then
-	printf 'shader:%s\\n' "$(sed -n '1p' "${root.shaderCurrentPath}")"
-fi
-`]
-		stdout: StdioCollector {
-			onStreamFinished: root.setAnimationState(text)
-		}
-	}
 	readonly property real panelWidth: Math.min(1440, root.width - 120)
 	readonly property real panelHeight: Math.min(900, root.height - 170)
 	readonly property color previewBg: root.previewPaletteData && root.previewPaletteData.background ? root.previewPaletteData.background : Theme.layer2
 	readonly property color previewFg: root.previewPaletteData && root.previewPaletteData.foreground ? root.previewPaletteData.foreground : Theme.text
 	readonly property bool paletteReady: root.previewPaletteStatus === "ready"
 
-	component KeyHint: RowLayout {
-		id: hint
+	// A picture of the strip: it grows and lights up when it is the one in
+	// front, and its image fades in once it is read.
+	component Thumb: Item {
+		id: thumb
 
-		property string keys: ""
+		property string source: ""
+		property string title: ""
 		property string label: ""
+		property bool current: false
+		property bool busy: false
+		property bool worn: false
+		property bool missing: false
+		signal clicked
 
-		spacing: 5
-
-		Rectangle {
-			Layout.preferredHeight: 20
-			Layout.preferredWidth: Math.max(22, keyText.implicitWidth + 10)
-			radius: 6
+		ClippingRectangle {
+			anchors.centerIn: parent
+			width: parent.width
+			height: parent.height - 10
+			radius: Theme.radius.large
 			color: Theme.layer2
+			scale: thumb.current ? 1 : (thumbMouse.containsMouse ? 0.95 : 0.9)
+			opacity: thumb.current || thumbMouse.containsMouse ? 1 : 0.6
+
+			Behavior on scale {
+				SpatialAnim {
+					duration: Motion.medium
+				}
+			}
+			Behavior on opacity {
+				Anim {}
+			}
+
+			Image {
+				anchors.fill: parent
+				source: thumb.source
+				fillMode: Image.PreserveAspectCrop
+				asynchronous: true
+				cache: true
+				smooth: true
+				sourceSize: Qt.size(680, 220)
+				opacity: status === Image.Ready ? 1 : 0
+
+				Behavior on opacity {
+					Anim {}
+				}
+			}
+
+			Rectangle {
+				anchors.fill: parent
+				gradient: Gradient {
+					GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, thumb.label !== "" ? 0.35 : 0) }
+					GradientStop { position: 0.45; color: "transparent" }
+					GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.75) }
+				}
+			}
+
+			Glyph {
+				anchors.centerIn: parent
+				visible: thumb.missing
+				icon: "wifi_off"
+				size: 22
+				color: Theme.textFaint
+			}
+
+			SectionLabel {
+				x: 11
+				y: 9
+				visible: thumb.label !== ""
+				text: thumb.label
+				tone: thumb.missing ? Theme.textSubtle : Qt.rgba(1, 1, 1, 0.9)
+				surface: thumb.missing ? Theme.layer2 : "transparent"
+			}
+
+			Spinner {
+				anchors.right: parent.right
+				anchors.top: parent.top
+				anchors.margins: 9
+				width: 14
+				height: 14
+				visible: thumb.busy
+				color: "white"
+			}
+
+			Rectangle {
+				anchors.right: parent.right
+				anchors.top: parent.top
+				anchors.margins: 8
+				width: 18
+				height: 18
+				radius: 9
+				color: Theme.primary
+				scale: thumb.worn && !thumb.busy ? 1 : 0
+
+				Behavior on scale {
+					SpatialAnim {
+						duration: Motion.medium
+					}
+				}
+
+				Glyph {
+					anchors.centerIn: parent
+					icon: "check"
+					size: 12
+					color: Theme.onPrimary
+				}
+			}
 
 			StyledText {
-				id: keyText
-				anchors.centerIn: parent
-				text: hint.keys
-				font.pixelSize: Theme.size.tiny
-				font.weight: Font.Bold
+				anchors.left: parent.left
+				anchors.right: parent.right
+				anchors.bottom: parent.bottom
+				anchors.margins: 10
+				text: thumb.title
+				tone: "white"
+				surface: "transparent"
+				elide: Text.ElideRight
+				font.pixelSize: Theme.size.small
+				font.weight: Font.DemiBold
+			}
+
+			Rectangle {
+				anchors.fill: parent
+				radius: Theme.radius.large
+				color: "transparent"
+				border.width: 2.5
+				border.color: Theme.primary
+				opacity: thumb.current ? 1 : 0
+
+				Behavior on opacity {
+					Anim {}
+				}
 			}
 		}
 
-		StyledText {
-			text: hint.label
-			tone: Theme.textSubtle
-			font.pixelSize: Theme.size.small
+		MouseArea {
+			id: thumbMouse
+
+			anchors.fill: parent
+			hoverEnabled: true
+			cursorShape: Qt.PointingHandCursor
+			onClicked: thumb.clicked()
 		}
 	}
 
@@ -608,45 +585,44 @@ fi
 
 		ColumnLayout {
 			anchors.fill: parent
-			anchors.margins: 22
-			spacing: 18
+			anchors.margins: 20
+			spacing: 16
 
 			// ── header ────────────────────────────────────────────────────
 			RowLayout {
 				Layout.fillWidth: true
-				spacing: 14
+				spacing: 12
 
-				ColumnLayout {
-					spacing: 0
-
-					StyledText {
-						text: Words.of("wallpaper.title", "Themes")
-						font.pixelSize: Theme.size.heading
-						font.weight: Font.Bold
-					}
-
-					StyledText {
-						text: root.searchText !== "" ? `${root.filteredThemes.length} of ${root.themes.length}` : `${root.themes.length} wallpapers`
-						tone: Theme.textMuted
-						font.pixelSize: Theme.size.small
-					}
+				Segmented {
+					Layout.preferredWidth: 250
+					Layout.preferredHeight: 40
+					options: [
+						{ value: "library", label: Words.of("wallpaper.library", "Library"), icon: "image_multiple" },
+						{ value: "daily", label: Words.of("wallpaper.today", "Today"), icon: "calendar_today" }
+					]
+					current: root.view
+					onSelected: value => root.selectView(value)
 				}
 
 				Rectangle {
 					id: searchBox
 
-					readonly property bool focused: searchInput.activeFocus
+					readonly property bool shown: root.view === "library"
 
-					Layout.preferredWidth: 320
+					Layout.preferredWidth: searchBox.shown ? 300 : 0
 					Layout.preferredHeight: 40
-					Layout.leftMargin: 10
 					radius: 20
-					color: searchBox.focused ? Theme.layer2 : Theme.layer1
-					border.width: searchBox.focused ? 1.5 : 0
-					border.color: Qt.alpha(Theme.primary, 0.85)
+					color: Theme.layer1
+					opacity: searchBox.shown ? 1 : 0
+					clip: true
 
-					Behavior on color {
-						ColorAnim {}
+					Behavior on Layout.preferredWidth {
+						SpatialAnim {
+							duration: Motion.medium
+						}
+					}
+					Behavior on opacity {
+						Anim {}
 					}
 
 					Glyph {
@@ -654,9 +630,10 @@ fi
 						anchors.verticalCenter: parent.verticalCenter
 						icon: "magnify"
 						size: 17
-						color: searchBox.focused ? Theme.primary : Theme.textSubtle
+						color: searchInput.text !== "" ? Theme.primary : Theme.textSubtle
 					}
 
+					// holds the keyboard on both tabs
 					TextInput {
 						id: searchInput
 
@@ -671,39 +648,26 @@ fi
 						font.family: Theme.fontFamily
 						font.pixelSize: Theme.size.body
 						selectByMouse: true
+						readOnly: !searchBox.shown
 						clip: true
 						focus: true
-						onTextChanged: root.searchText = text
+						onTextChanged: {
+							if (text !== "") root.startPending = false;
+							root.searchText = text;
+						}
 
-						Keys.onUpPressed: event => {
-							root.moveVertical(-1);
-							event.accepted = true;
-						}
-						Keys.onDownPressed: event => {
-							root.moveVertical(1);
-							event.accepted = true;
-						}
-						Keys.onLeftPressed: event => {
-							root.moveHorizontal(-1);
-							event.accepted = true;
-						}
-						Keys.onRightPressed: event => {
-							root.moveHorizontal(1);
-							event.accepted = true;
-						}
-						Keys.onReturnPressed: event => {
-							root.applyTheme(root.currentTheme);
-							event.accepted = true;
-						}
-						Keys.onEnterPressed: event => {
-							root.applyTheme(root.currentTheme);
-							event.accepted = true;
-						}
+						Keys.onLeftPressed: root.move(-1)
+						Keys.onRightPressed: root.move(1)
+						Keys.onUpPressed: root.movePalette(-1)
+						Keys.onDownPressed: root.movePalette(1)
+						Keys.onTabPressed: root.selectView(root.view === "daily" ? "library" : "daily")
+						Keys.onReturnPressed: root.applyTheme(root.currentTheme)
+						Keys.onEnterPressed: root.applyTheme(root.currentTheme)
 						Keys.onEscapePressed: Popups.closeModal()
 
 						StyledText {
 							anchors.verticalCenter: parent.verticalCenter
-							text: "Filter themes"
+							text: "Search"
 							tone: Theme.textSubtle
 							opacity: searchInput.text.length === 0 ? 1 : 0
 
@@ -720,91 +684,133 @@ fi
 					Layout.fillWidth: true
 				}
 
-				ColumnLayout {
-					spacing: 4
+				IconButton {
+					id: refreshButton
 
-					RowLayout {
-						Layout.alignment: Qt.AlignRight
-						spacing: 6
+					icon: "refresh"
+					variant: "tonal"
+					opacity: root.view === "daily" ? 1 : 0
+					visible: opacity > 0
+					onClicked: Daily.refresh(true)
 
-						SectionLabel {
-							text: Words.of("wallpaper.daily", "Wallpaper of the day")
-							Layout.rightMargin: 4
-						}
-
-						Repeater {
-							model: root.dailyProviders
-
-							delegate: Chip {
-								required property var modelData
-
-								readonly property bool current: root.selectedDailyProvider === modelData.id
-
-								text: modelData.label
-								icon: current && root.dailyLoading ? "sync" : "download"
-								selected: current
-								enabled: !root.dailyLoading
-								opacity: enabled || current ? 1 : 0.5
-								onClicked: {
-									root.selectedDailyProvider = modelData.id;
-									root.applyDailyWallpaper();
-								}
-							}
-						}
+					Behavior on opacity {
+						Anim {}
 					}
 
-					StyledText {
-						Layout.alignment: Qt.AlignRight
-						text: root.dailyLoading || root.dailyFailed ? root.dailyStatusText : (root.dailyStatusText !== "" ? `${root.dailyStatusText} · click a source to load & apply` : "Click a source to load & apply")
-						tone: root.dailyFailed ? Theme.danger : Theme.textSubtle
-						font.pixelSize: Theme.size.small
+					// turns while the sources are asked, and comes to rest upright
+					RotationAnimator on rotation {
+						running: Daily.fetching
+						loops: Animation.Infinite
+						from: 0
+						to: 360
+						duration: 900
+						onRunningChanged: if (!running) refreshButton.rotation = 0
 					}
 				}
 
 				IconButton {
-					Layout.leftMargin: 4
 					icon: "close"
 					variant: "tonal"
 					onClicked: Popups.closeModal()
 				}
 			}
 
-			// ── preview + palette sheet ───────────────────────────────────
-			RowLayout {
+			// ── stage ─────────────────────────────────────────────────────
+			ClippingRectangle {
+				id: stage
+
 				Layout.fillWidth: true
 				Layout.fillHeight: true
-				spacing: 20
+				radius: Theme.radius.huge
+				color: Theme.layer1
 
-				ClippingRectangle {
-					id: preview
+				// the wallpaper in front: a new one fades in over the last
+				Item {
+					id: backdrop
 
-					Layout.fillWidth: true
-					Layout.fillHeight: true
-					radius: Theme.radius.huge
-					color: Theme.layer1
+					readonly property string source: root.currentTheme ? root.currentTheme.previewPath : ""
+					property Image front: backdropA
 
-					Image {
-						id: wallpaper
-
-						anchors.fill: parent
-						source: root.currentTheme ? root.currentTheme.previewPath : ""
-						fillMode: Image.PreserveAspectCrop
-						asynchronous: true
-						cache: true
-						smooth: true
-						mipmap: true
-						opacity: status === Image.Ready ? 1 : 0
-
-						Behavior on opacity {
-							Anim {}
-						}
+					function reveal(layer) {
+						const last = layer === backdropA ? backdropB : backdropA;
+						rise.stop();
+						last.opacity = 1;
+						last.z = 0;
+						layer.z = 1;
+						layer.opacity = 0;
+						backdrop.front = layer;
+						rise.target = layer;
+						rise.start();
 					}
 
-					SequentialAnimation {
-						id: settle
+					function arrived(layer) {
+						if (layer.status === Image.Ready && layer !== backdrop.front && layer.wanted === backdrop.source)
+							backdrop.reveal(layer);
+					}
+
+					// the layer behind is loaded, and comes to the front when read
+					onSourceChanged: {
+						if (backdrop.source === "" || backdrop.front.wanted === backdrop.source) return;
+						const next = backdrop.front === backdropA ? backdropB : backdropA;
+						if (next.wanted === backdrop.source) {
+							backdrop.arrived(next);
+							return;
+						}
+						next.wanted = backdrop.source;
+						next.source = backdrop.source;
+					}
+
+					anchors.fill: parent
+					opacity: backdrop.source !== "" ? 1 : 0
+
+					Behavior on opacity {
+						Anim {}
+					}
+
+					Image {
+						id: backdropA
+
+						property string wanted: ""
+
+						anchors.fill: parent
+						fillMode: Image.PreserveAspectCrop
+						asynchronous: true
+						smooth: true
+						mipmap: true
+						opacity: 0
+						onStatusChanged: backdrop.arrived(backdropA)
+					}
+
+					Image {
+						id: backdropB
+
+						property string wanted: ""
+
+						anchors.fill: parent
+						fillMode: Image.PreserveAspectCrop
+						asynchronous: true
+						smooth: true
+						mipmap: true
+						opacity: 0
+						onStatusChanged: backdrop.arrived(backdropB)
+					}
+
+					ParallelAnimation {
+						id: rise
+
+						property Image target: null
 
 						NumberAnimation {
-							target: wallpaper
+							target: rise.target
+							property: "opacity"
+							to: 1
+							duration: Motion.long
+							easing.type: Easing.BezierSpline
+							easing.bezierCurve: Motion.standard
+						}
+
+						NumberAnimation {
+							target: rise.target
 							property: "scale"
 							from: 1.06
 							to: 1
@@ -813,692 +819,703 @@ fi
 							easing.bezierCurve: Motion.decel
 						}
 					}
+				}
 
-					Connections {
-						target: root
-						function onCurrentThemeChanged() {
-							settle.restart();
-						}
+				Rectangle {
+					anchors.fill: parent
+					gradient: Gradient {
+						GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0.12) }
+						GradientStop { position: 0.5; color: "transparent" }
+						GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.72) }
+					}
+				}
+
+				// miniature shell in the candidate palette
+				Item {
+					id: mock
+
+					anchors.fill: parent
+					opacity: root.paletteReady ? 1 : 0
+					visible: root.currentTheme !== null
+
+					Behavior on opacity {
+						Anim {}
 					}
 
 					Rectangle {
-						anchors.fill: parent
-						gradient: Gradient {
-							GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0.12) }
-							GradientStop { position: 0.55; color: "transparent" }
-							GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.66) }
-						}
-					}
+						id: mockBar
 
-					// miniature shell in the candidate palette
-					Item {
-						id: mock
+						width: parent.width
+						height: Math.round(Math.max(26, parent.height * 0.05))
+						color: Qt.alpha(root.previewBg, 0.94)
 
-						anchors.fill: parent
-						opacity: root.paletteReady ? 1 : 0
-						visible: root.currentTheme !== null
-
-						Behavior on opacity {
-							Anim {}
-						}
-
-						Rectangle {
-							id: mockBar
-
-							width: parent.width
-							height: Math.round(Math.max(26, parent.height * 0.05))
-							color: Qt.alpha(root.previewBg, 0.94)
-
-							Behavior on color {
-								ColorAnim {
-									duration: Motion.medium
-								}
-							}
-
-							Row {
-								x: 12
-								anchors.verticalCenter: parent.verticalCenter
-								spacing: 8
-
-								Rectangle {
-									anchors.verticalCenter: parent.verticalCenter
-									width: mockBar.height - 10
-									height: width
-									radius: width / 2
-									color: root.paletteSwatch(4)
-								}
-
-								Repeater {
-									model: 4
-
-									delegate: Rectangle {
-										required property int index
-
-										anchors.verticalCenter: parent.verticalCenter
-										width: index === 0 ? 20 : 7
-										height: 7
-										radius: 3.5
-										color: index === 0 ? root.paletteSwatch(4) : Qt.alpha(root.previewFg, index === 1 ? 0.6 : 0.25)
-									}
-								}
-							}
-
-							Text {
-								anchors.centerIn: parent
-								text: Qt.formatDateTime(new Date(), "HH:mm")
-								color: root.previewFg
-								font.family: Theme.fontFamily
-								font.pixelSize: Math.round(mockBar.height * 0.46)
-								font.weight: Font.Bold
-							}
-
-							Row {
-								anchors.right: parent.right
-								anchors.rightMargin: 12
-								anchors.verticalCenter: parent.verticalCenter
-								spacing: 7
-
-								Repeater {
-									model: [2, 3, 5, 1]
-
-									delegate: Rectangle {
-										required property int modelData
-
-										anchors.verticalCenter: parent.verticalCenter
-										width: 9
-										height: 9
-										radius: 4.5
-										color: root.paletteSwatch(modelData)
-									}
-								}
-							}
-						}
-
-						PanelShape {
-							id: mockPanel
-
-							x: parent.width - width - 34
-							y: mockBar.height
-							width: Math.min(260, parent.width * 0.3)
-							height: Math.min(200, parent.height * 0.4)
-							color: Qt.alpha(root.previewBg, 0.96)
-							radius: 16
-							fillet: 12
-
-							ColumnLayout {
-								anchors.fill: parent
-								anchors.margins: 14
-								spacing: 9
-
-								RowLayout {
-									Layout.fillWidth: true
-									spacing: 8
-
-									Repeater {
-										model: [4, 6]
-
-										delegate: Rectangle {
-											required property int modelData
-											required property int index
-
-											Layout.fillWidth: true
-											Layout.preferredHeight: 38
-											radius: index === 0 ? 12 : 19
-											color: index === 0 ? Qt.alpha(root.paletteSwatch(modelData), 0.3) : Qt.alpha(root.previewFg, 0.08)
-
-											Rectangle {
-												x: 7
-												anchors.verticalCenter: parent.verticalCenter
-												width: 24
-												height: 24
-												radius: 12
-												color: root.paletteSwatch(parent.modelData)
-											}
-
-											Rectangle {
-												x: 38
-												anchors.verticalCenter: parent.verticalCenter
-												width: parent.width - 48
-												height: 5
-												radius: 2.5
-												color: Qt.alpha(root.previewFg, 0.5)
-											}
-										}
-									}
-								}
-
-								Rectangle {
-									Layout.fillWidth: true
-									Layout.preferredHeight: 22
-									radius: 11
-									color: Qt.alpha(root.previewFg, 0.1)
-
-									Rectangle {
-										width: parent.width * 0.62
-										height: parent.height
-										radius: 11
-										color: root.paletteSwatch(4)
-									}
-								}
-
-								Repeater {
-									model: [0.82, 0.58, 0.7]
-
-									delegate: Rectangle {
-										required property real modelData
-										required property int index
-
-										Layout.preferredWidth: (mockPanel.width - 28) * modelData
-										Layout.preferredHeight: 6
-										radius: 3
-										color: Qt.alpha(index === 1 ? root.paletteSwatch(3) : root.previewFg, index === 1 ? 0.8 : 0.28)
-									}
-								}
+						Behavior on color {
+							ColorAnim {
+								duration: Motion.medium
 							}
 						}
 
 						Row {
-							anchors.right: parent.right
-							anchors.bottom: parent.bottom
-							anchors.margins: 22
-							spacing: 6
+							x: 12
+							anchors.verticalCenter: parent.verticalCenter
+							spacing: 8
+
+							Rectangle {
+								anchors.verticalCenter: parent.verticalCenter
+								width: mockBar.height - 10
+								height: width
+								radius: width / 2
+								color: root.paletteSwatch(4)
+							}
 
 							Repeater {
-								model: [-2, -1, 1, 2, 3, 4, 5, 6]
+								model: 4
 
-								delegate: Column {
-									id: swatch
+								delegate: Rectangle {
+									required property int index
 
+									anchors.verticalCenter: parent.verticalCenter
+									width: index === 0 ? 20 : 7
+									height: 7
+									radius: 3.5
+									color: index === 0 ? root.paletteSwatch(4) : Qt.alpha(root.previewFg, index === 1 ? 0.6 : 0.25)
+								}
+							}
+						}
+
+						Text {
+							anchors.centerIn: parent
+							text: Qt.formatDateTime(new Date(), "HH:mm")
+							color: root.previewFg
+							font.family: Theme.fontFamily
+							font.pixelSize: Math.round(mockBar.height * 0.46)
+							font.weight: Font.Bold
+						}
+
+						Row {
+							anchors.right: parent.right
+							anchors.rightMargin: 12
+							anchors.verticalCenter: parent.verticalCenter
+							spacing: 7
+
+							Repeater {
+								model: [2, 3, 5, 1]
+
+								delegate: Rectangle {
 									required property int modelData
-									readonly property color tone: modelData === -2 ? root.previewBg : (modelData === -1 ? root.previewFg : root.paletteSwatch(modelData))
 
-									spacing: 4
-
-									Rectangle {
-										width: 30
-										height: 40
-										radius: 10
-										color: swatch.tone
-										border.width: 1
-										border.color: Qt.rgba(1, 1, 1, 0.18)
-
-										Behavior on color {
-											ColorAnim {
-												duration: Motion.medium
-											}
-										}
-									}
-
-									Text {
-										anchors.horizontalCenter: parent.horizontalCenter
-										text: swatch.modelData === -2 ? "bg" : (swatch.modelData === -1 ? "fg" : `c${swatch.modelData}`)
-										color: Qt.rgba(1, 1, 1, 0.75)
-										font.family: Theme.fontFamily
-										font.pixelSize: 9
-										font.weight: Font.Bold
-									}
+									anchors.verticalCenter: parent.verticalCenter
+									width: 9
+									height: 9
+									radius: 4.5
+									color: root.paletteSwatch(modelData)
 								}
 							}
 						}
 					}
 
-					Rectangle {
-						x: 20
-						y: mockBar.height + 16
-						visible: root.currentTheme !== null
-						height: 24
-						width: mediaText.implicitWidth + 18
-						radius: 12
-						color: Qt.rgba(0, 0, 0, 0.45)
+					PanelShape {
+						id: mockPanel
 
-						StyledText {
-							id: mediaText
+						x: parent.width - width - 34
+						y: mockBar.height
+						width: Math.min(260, parent.width * 0.3)
+						height: Math.min(200, parent.height * 0.4)
+						color: Qt.alpha(root.previewBg, 0.96)
+						radius: 16
+						fillet: 12
 
-							anchors.centerIn: parent
-							text: root.currentTheme ? String(root.currentTheme.mediaType || "video") : ""
-							tone: "white"
-							font.pixelSize: Theme.size.tiny
-							font.weight: Font.Bold
-							font.capitalization: Font.AllUppercase
-							font.letterSpacing: 1
+						ColumnLayout {
+							anchors.fill: parent
+							anchors.margins: 14
+							spacing: 9
+
+							RowLayout {
+								Layout.fillWidth: true
+								spacing: 8
+
+								Repeater {
+									model: [4, 6]
+
+									delegate: Rectangle {
+										required property int modelData
+										required property int index
+
+										Layout.fillWidth: true
+										Layout.preferredHeight: 38
+										radius: index === 0 ? 12 : 19
+										color: index === 0 ? Qt.alpha(root.paletteSwatch(modelData), 0.3) : Qt.alpha(root.previewFg, 0.08)
+
+										Rectangle {
+											x: 7
+											anchors.verticalCenter: parent.verticalCenter
+											width: 24
+											height: 24
+											radius: 12
+											color: root.paletteSwatch(parent.modelData)
+										}
+
+										Rectangle {
+											x: 38
+											anchors.verticalCenter: parent.verticalCenter
+											width: parent.width - 48
+											height: 5
+											radius: 2.5
+											color: Qt.alpha(root.previewFg, 0.5)
+										}
+									}
+								}
+							}
+
+							Rectangle {
+								Layout.fillWidth: true
+								Layout.preferredHeight: 22
+								radius: 11
+								color: Qt.alpha(root.previewFg, 0.1)
+
+								Rectangle {
+									width: parent.width * 0.62
+									height: parent.height
+									radius: 11
+									color: root.paletteSwatch(4)
+								}
+							}
+
+							Repeater {
+								model: [0.82, 0.58, 0.7]
+
+								delegate: Rectangle {
+									required property real modelData
+									required property int index
+
+									Layout.preferredWidth: (mockPanel.width - 28) * modelData
+									Layout.preferredHeight: 6
+									radius: 3
+									color: Qt.alpha(index === 1 ? root.paletteSwatch(3) : root.previewFg, index === 1 ? 0.8 : 0.28)
+								}
+							}
 						}
-					}
-
-					ColumnLayout {
-						anchors.left: parent.left
-						anchors.bottom: parent.bottom
-						anchors.margins: 24
-						width: parent.width * 0.55
-						spacing: 2
-						visible: root.currentTheme !== null
-
-						StyledText {
-							Layout.fillWidth: true
-							text: root.currentTheme ? root.currentTheme.name : ""
-							tone: "white"
-							font.pixelSize: 30
-							font.weight: Font.Bold
-						}
-
-						StyledText {
-							Layout.fillWidth: true
-							text: `${root.selectedColorSpace} · ${root.selectedPalette}`
-							tone: Qt.rgba(1, 1, 1, 0.75)
-							font.pixelSize: Theme.size.body
-						}
-					}
-
-					Spinner {
-						anchors.centerIn: parent
-						width: 36
-						height: 36
-						visible: root.currentTheme !== null && root.previewPaletteStatus === "loading"
-						color: "white"
-					}
-
-					EmptyState {
-						anchors.centerIn: parent
-						visible: root.filteredThemes.length === 0
-						icon: "palette"
-						title: root.themes.length === 0 ? "Loading themes…" : "No themes found"
-						subtitle: root.themes.length === 0 ? "" : "Try a different search term."
-					}
-
-					MouseArea {
-						anchors.fill: parent
-						acceptedButtons: Qt.NoButton
-						onWheel: wheel => root.moveSelection((wheel.angleDelta.y || -wheel.angleDelta.x) < 0 ? 1 : -1)
 					}
 				}
 
-				// palette sheet
+				// what is in front
 				ColumnLayout {
-					Layout.preferredWidth: 300
-					Layout.maximumWidth: 300
-					Layout.fillWidth: false
-					Layout.fillHeight: true
-					spacing: 14
+					id: caption
 
-					ColumnLayout {
-						spacing: 1
+					readonly property var daily: root.currentTheme?.daily ?? null
 
-						StyledText {
-							text: Words.of("wallpaper.palette", "Palette")
-							font.pixelSize: Theme.size.title
-							font.weight: Font.Bold
-						}
+					anchors.left: parent.left
+					anchors.right: dock.left
+					anchors.bottom: parent.bottom
+					anchors.leftMargin: 26
+					anchors.rightMargin: 40
+					anchors.bottomMargin: 24
+					spacing: 3
+					visible: root.currentTheme !== null
 
-						StyledText {
-							text: root.variantSelectionActive ? "← back to themes · ↑↓←→ choose" : "→ to choose a palette"
-							tone: Theme.textSubtle
-							font.pixelSize: Theme.size.small
-						}
+					transform: Translate {
+						id: captionShift
 					}
 
-					Item {
-						id: matrix
+					RowLayout {
+						Layout.bottomMargin: 4
+						spacing: 8
+						visible: caption.daily !== null || root.currentTheme?.mediaType === "video"
 
-						readonly property real gap: 8
-						readonly property real cellW: (width - gap * (root.colorSpaceOptions.length - 1)) / root.colorSpaceOptions.length
-						readonly property real cellH: 84
-						readonly property real headerH: 20
-						readonly property real labelH: 22
+						Rectangle {
+							implicitHeight: 24
+							implicitWidth: captionLabel.implicitWidth + 20
+							radius: 12
+							color: Qt.rgba(0, 0, 0, 0.45)
 
-						function rowY(paletteIndex) {
-							return matrix.headerH + matrix.labelH + paletteIndex * (matrix.cellH + matrix.labelH + 6);
-						}
+							StyledText {
+								id: captionLabel
 
-						Layout.fillWidth: true
-						Layout.preferredHeight: matrix.rowY(root.visualPaletteOptions.length)
-						opacity: root.currentTheme ? 1 : 0.4
-
-						Repeater {
-							model: root.colorSpaceOptions
-
-							delegate: StyledText {
-								required property int index
-								required property string modelData
-
-								x: index * (matrix.cellW + matrix.gap)
-								width: matrix.cellW
-								height: matrix.headerH
-								horizontalAlignment: Text.AlignHCenter
-								text: modelData
-								tone: index === root.selectedColorIndex ? Theme.primary : Theme.textMuted
-								font.pixelSize: Theme.size.small
+								anchors.centerIn: parent
+								text: {
+									const daily = caption.daily;
+									if (!daily) return "Live";
+									const source = Daily.sources.find(source => source.id === daily.provider);
+									return [source ? source.label : "", daily.date_label, daily.media_type === "video" ? "Live" : ""].filter(Boolean).join("  ·  ");
+								}
+								tone: "white"
+								surface: "transparent"
+								font.pixelSize: Theme.size.tiny
 								font.weight: Font.Bold
+								font.capitalization: Font.AllUppercase
+								font.letterSpacing: 1
 							}
 						}
 
-						Repeater {
-							model: root.visualPaletteOptions
+						Rectangle {
+							implicitWidth: 24
+							implicitHeight: 24
+							radius: 12
+							visible: !!caption.daily?.source_url
+							color: Qt.rgba(0, 0, 0, linkMouse.containsMouse ? 0.7 : 0.45)
 
-							delegate: Item {
-								id: styleRow
+							Behavior on color {
+								ColorAnim {}
+							}
 
-								required property int index
-								required property string modelData
+							Glyph {
+								anchors.centerIn: parent
+								icon: "open_in_new"
+								size: 13
+								color: "white"
+								surface: "transparent"
+							}
 
-								width: matrix.width
-								height: matrix.cellH + matrix.labelH
-								y: matrix.rowY(index) - matrix.labelH
+							MouseArea {
+								id: linkMouse
 
-								RowLayout {
-									width: parent.width
-									height: matrix.labelH
-									spacing: 6
-
-									Glyph {
-										icon: styleRow.modelData === "light" ? "weather_sunny" : "weather_night"
-										size: 14
-										color: Theme.textSubtle
-									}
-
-									SectionLabel {
-										text: styleRow.modelData
-									}
+								anchors.fill: parent
+								hoverEnabled: true
+								cursorShape: Qt.PointingHandCursor
+								onClicked: {
+									Qt.openUrlExternally(caption.daily.source_url);
+									Popups.closeModal();
 								}
+							}
+						}
+					}
 
-								Repeater {
-									model: root.colorSpaceOptions
+					StyledText {
+						Layout.fillWidth: true
+						text: root.currentTheme ? root.currentTheme.name : ""
+						tone: "white"
+						surface: "transparent"
+						elide: Text.ElideRight
+						font.pixelSize: 30
+						font.weight: Font.Bold
+					}
 
-									delegate: Rectangle {
-										id: cell
+					StyledText {
+						Layout.fillWidth: true
+						visible: text !== ""
+						text: [caption.daily?.image_title, caption.daily?.credit].filter(Boolean).join("  ·  ")
+						tone: Qt.rgba(1, 1, 1, 0.8)
+						surface: "transparent"
+						elide: Text.ElideRight
+						font.pixelSize: Theme.size.body
+					}
 
-										required property int index
-										required property string modelData
+					StyledText {
+						Layout.fillWidth: true
+						Layout.maximumWidth: 720
+						Layout.topMargin: 4
+						visible: text !== ""
+						text: caption.daily?.description ?? ""
+						tone: Qt.rgba(1, 1, 1, 0.7)
+						surface: "transparent"
+						wrapMode: Text.WordWrap
+						maximumLineCount: 2
+						elide: Text.ElideRight
+						font.pixelSize: Theme.size.label
+						lineHeight: 1.25
+					}
+				}
 
-										readonly property var cellData: root.matrixCell(cell.modelData, styleRow.modelData)
-										readonly property bool available: cell.cellData !== null
-										readonly property color tone: root.dataTone(cell.cellData, -2)
-										readonly property color ink: root.dataTone(cell.cellData, -1)
+				ParallelAnimation {
+					id: captionIn
 
-										x: cell.index * (matrix.cellW + matrix.gap)
-										y: matrix.labelH
-										width: matrix.cellW
-										height: matrix.cellH
-										radius: Theme.radius.large
-										color: cell.available ? cell.tone : Theme.layer1
-										opacity: cell.available || root.previewMatrixLoading ? 1 : 0.35
-										scale: cellMouse.pressed ? 0.94 : (cellMouse.containsMouse && cell.available ? 1.04 : 1)
-										clip: true
+					NumberAnimation {
+						target: caption
+						property: "opacity"
+						from: 0
+						to: 1
+						duration: Motion.long
+						easing.type: Easing.BezierSpline
+						easing.bezierCurve: Motion.standard
+					}
 
-										Behavior on color {
-											ColorAnim {
-												duration: Motion.medium
-											}
+					NumberAnimation {
+						target: captionShift
+						property: "y"
+						from: 14
+						to: 0
+						duration: Motion.long
+						easing.type: Easing.BezierSpline
+						easing.bezierCurve: Motion.decel
+					}
+				}
+
+				Connections {
+					target: root
+					function onCurrentKeyChanged() {
+						captionIn.restart();
+					}
+				}
+
+				// the look: palette, dark or light, and on it goes
+				Rectangle {
+					id: dock
+
+					readonly property real cardW: 62
+					readonly property real gap: 8
+
+					anchors.right: parent.right
+					anchors.bottom: parent.bottom
+					anchors.margins: 18
+					width: dockRow.implicitWidth + 20
+					height: 64
+					radius: 32
+					color: Qt.alpha(Theme.base, 0.94)
+					opacity: root.currentTheme ? 1 : 0
+					scale: root.currentTheme ? 1 : 0.92
+					visible: opacity > 0
+
+					Behavior on opacity {
+						Anim {}
+					}
+					Behavior on scale {
+						SpatialAnim {
+							duration: Motion.medium
+						}
+					}
+
+					RowLayout {
+						id: dockRow
+
+						anchors.centerIn: parent
+						spacing: 12
+
+						Item {
+							implicitWidth: root.colorSpaceOptions.length * (dock.cardW + dock.gap) - dock.gap
+							implicitHeight: 44
+
+							Repeater {
+								model: root.colorSpaceOptions
+
+								delegate: Rectangle {
+									id: card
+
+									required property int index
+									required property string modelData
+
+									readonly property var cellData: root.matrixCell(card.modelData, root.selectedPalette)
+									readonly property bool available: card.cellData !== null
+
+									x: card.index * (dock.cardW + dock.gap)
+									width: dock.cardW
+									height: 44
+									radius: 22
+									color: card.available ? card.cellData.background : Theme.layer1
+									opacity: card.available || root.previewMatrixLoading ? 1 : 0.35
+									scale: cardMouse.pressed ? 0.92 : (cardMouse.containsMouse && card.available ? 1.06 : 1)
+
+									Behavior on color {
+										ColorAnim {
+											duration: Motion.medium
 										}
-										Behavior on scale {
-											SpatialAnim {
-												duration: Motion.short
-											}
+									}
+									Behavior on scale {
+										SpatialAnim {
+											duration: Motion.short
 										}
+									}
 
-										Text {
-											x: 10
-											y: 8
-											visible: cell.available
-											text: "Aa"
-											color: cell.ink
-											font.family: Theme.fontFamily
-											font.pixelSize: 17
-											font.weight: Font.Bold
-										}
+									Row {
+										anchors.centerIn: parent
+										spacing: -5
+										visible: card.available
 
-										Row {
-											anchors.left: parent.left
-											anchors.right: parent.right
-											anchors.bottom: parent.bottom
-											anchors.margins: 8
-											height: 14
-											spacing: 3
-											visible: cell.available
+										Repeater {
+											model: [4, 2, 5, 6]
 
-											Repeater {
-												model: [1, 2, 3, 4, 5, 6]
+											delegate: Rectangle {
+												required property int modelData
 
-												delegate: Rectangle {
-													required property int modelData
+												width: 15
+												height: 15
+												radius: 7.5
+												color: root.dataSwatch(card.cellData, modelData)
+												border.width: 1.5
+												border.color: card.color
 
-													width: (parent.width - 15) / 6
-													height: parent.height
-													radius: 4
-													color: root.dataSwatch(cell.cellData, modelData)
+												Behavior on color {
+													ColorAnim {
+														duration: Motion.medium
+													}
 												}
 											}
 										}
+									}
 
-										StyledText {
-											anchors.centerIn: parent
-											visible: !cell.available && !root.previewMatrixLoading
-											text: "n/a"
-											tone: Theme.textSubtle
-											font.pixelSize: Theme.size.small
-										}
+									Spinner {
+										anchors.centerIn: parent
+										width: 16
+										height: 16
+										visible: !card.available && root.previewMatrixLoading
+									}
 
-										Spinner {
-											anchors.centerIn: parent
-											width: 18
-											height: 18
-											visible: !cell.available && root.previewMatrixLoading
-										}
+									MouseArea {
+										id: cardMouse
 
-										MouseArea {
-											id: cellMouse
+										anchors.fill: parent
+										enabled: card.available
+										hoverEnabled: true
+										cursorShape: card.available ? Qt.PointingHandCursor : Qt.ArrowCursor
+										onClicked: root.selectedColorSpace = card.modelData
+									}
+								}
+							}
 
-											anchors.fill: parent
-											enabled: cell.available
-											hoverEnabled: true
-											cursorShape: cell.available ? Qt.PointingHandCursor : Qt.ArrowCursor
-											onClicked: root.selectVariant(cell.modelData, styleRow.modelData)
-										}
+							Rectangle {
+								x: root.selectedColorIndex * (dock.cardW + dock.gap) - 3
+								y: -3
+								width: dock.cardW + 6
+								height: 50
+								radius: 25
+								color: "transparent"
+								border.width: 2
+								border.color: Theme.primary
+								opacity: root.paletteReady ? 1 : 0
+
+								Behavior on x {
+									SpatialAnim {
+										duration: Motion.medium
+									}
+								}
+								Behavior on opacity {
+									Anim {}
+								}
+							}
+						}
+
+						// dark or light
+						Rectangle {
+							id: modeSwitch
+
+							readonly property int index: Math.max(0, root.paletteOptions.indexOf(root.selectedPalette))
+
+							implicitWidth: 80
+							implicitHeight: 40
+							radius: 20
+							color: Theme.layer1
+
+							Rectangle {
+								x: 3 + modeSwitch.index * 37
+								y: 3
+								width: 37
+								height: 34
+								radius: 17
+								color: Theme.primary
+
+								Behavior on x {
+									SpatialAnim {
+										duration: Motion.medium
+									}
+								}
+							}
+
+							Repeater {
+								model: root.paletteOptions
+
+								delegate: Item {
+									id: mode
+
+									required property int index
+									required property string modelData
+
+									x: 3 + mode.index * 37
+									y: 3
+									width: 37
+									height: 34
+
+									Glyph {
+										anchors.centerIn: parent
+										icon: mode.modelData === "light" ? "weather_sunny" : "weather_night"
+										size: 16
+										color: mode.index === modeSwitch.index ? Theme.onPrimary : Theme.textMuted
+										surface: mode.index === modeSwitch.index ? Theme.primary : Theme.layer1
+									}
+
+									MouseArea {
+										anchors.fill: parent
+										cursorShape: Qt.PointingHandCursor
+										onClicked: root.selectVariant(root.selectedColorSpace, mode.modelData)
 									}
 								}
 							}
 						}
 
-						Rectangle {
-							x: root.selectedColorIndex * (matrix.cellW + matrix.gap) - 4
-							y: matrix.rowY(root.selectedPaletteIndex) - 4
-							width: matrix.cellW + 8
-							height: matrix.cellH + 8
-							radius: Theme.radius.large + 4
-							color: "transparent"
-							border.width: root.variantSelectionActive ? 3 : 2
-							border.color: root.variantSelectionActive ? Theme.primary : Qt.alpha(Theme.text, 0.5)
-
-							Behavior on x {
-								SpatialAnim {
-									duration: Motion.medium
-								}
-							}
-							Behavior on y {
-								SpatialAnim {
-									duration: Motion.medium
-								}
-							}
-							Behavior on border.color {
-								ColorAnim {}
-							}
+						TextButton {
+							implicitHeight: 44
+							text: "Apply"
+							icon: "check"
+							variant: "filled"
+							enabled: root.currentTheme !== null && root.previewPaletteStatus !== "loading"
+							busy: root.previewPaletteStatus === "loading" && root.currentTheme !== null
+							onActivated: root.applyTheme(root.currentTheme)
 						}
-					}
-
-					Rectangle {
-						Layout.fillWidth: true
-						Layout.preferredHeight: 52
-						radius: Theme.radius.large
-						color: Theme.layer1
-
-						RowLayout {
-							anchors.fill: parent
-							anchors.leftMargin: 14
-							anchors.rightMargin: 14
-							spacing: 10
-
-							Glyph {
-								icon: "animation_play"
-								size: 18
-								color: Theme.primary
-							}
-
-							ColumnLayout {
-								Layout.fillWidth: true
-								spacing: 0
-
-								SectionLabel {
-									text: Words.of("wallpaper.animation", "Window animation")
-								}
-
-								StyledText {
-									Layout.fillWidth: true
-									text: root.currentAnimationOption ? root.currentAnimationOption.label : "Default"
-									font.weight: Font.DemiBold
-								}
-							}
-						}
-					}
-
-					Item {
-						Layout.fillHeight: true
-					}
-
-					TextButton {
-						Layout.fillWidth: true
-						implicitHeight: 48
-						text: root.previewPaletteStatus === "loading" ? "Reading palette…" : "Apply theme"
-						icon: "check"
-						variant: "filled"
-						enabled: root.currentTheme !== null && root.previewPaletteStatus !== "loading"
-						busy: root.previewPaletteStatus === "loading" && root.currentTheme !== null
-						onActivated: root.applyTheme(root.currentTheme)
-					}
-
-					Flow {
-						Layout.fillWidth: true
-						spacing: 12
-
-						KeyHint { keys: "↑↓"; label: "theme" }
-						KeyHint { keys: "→"; label: "palette" }
-						KeyHint { keys: "↵"; label: "apply" }
-						KeyHint { keys: "Esc"; label: "close" }
-					}
-				}
-			}
-
-			// ── film strip ────────────────────────────────────────────────
-			ListView {
-				id: strip
-
-				readonly property real itemWidth: 168
-
-				Layout.fillWidth: true
-				Layout.preferredHeight: 116
-				orientation: ListView.Horizontal
-				spacing: 10
-				clip: true
-				model: root.filteredThemes
-				currentIndex: root.currentThemeIndex
-				highlightRangeMode: ListView.StrictlyEnforceRange
-				preferredHighlightBegin: width / 2 - itemWidth / 2
-				preferredHighlightEnd: width / 2 + itemWidth / 2
-				highlightMoveDuration: Motion.long
-				boundsBehavior: Flickable.StopAtBounds
-				cacheBuffer: 1200
-
-				onCurrentIndexChanged: {
-					if (currentIndex >= 0 && currentIndex !== root.currentThemeIndex) {
-						root.variantSelectionActive = false;
-						root.currentThemeIndex = currentIndex;
 					}
 				}
 
-				delegate: Item {
-					id: thumb
+				Spinner {
+					anchors.centerIn: parent
+					width: 36
+					height: 36
+					visible: root.view === "daily" && root.currentTheme === null && !!Daily.asking[root.dailyProvider]
+				}
 
-					required property var modelData
-					required property int index
-					readonly property bool current: thumb.index === root.currentThemeIndex
+				EmptyState {
+					anchors.centerIn: parent
+					visible: root.view === "library" && root.filteredThemes.length === 0
+					icon: "palette"
+					title: root.themes.length === 0 ? "Loading…" : "Nothing found"
+				}
 
-					width: strip.itemWidth
-					height: strip.height
-
-					ClippingRectangle {
-						anchors.centerIn: parent
-						width: parent.width
-						height: parent.height - 10
-						radius: Theme.radius.large
-						color: Theme.layer2
-						scale: thumb.current ? 1 : (thumbMouse.containsMouse ? 0.9 : 0.84)
-						opacity: thumb.current ? 1 : 0.55
-
-						Behavior on scale {
-							SpatialAnim {
-								duration: Motion.medium
-							}
-						}
-						Behavior on opacity {
-							Anim {}
-						}
-
-						Image {
-							anchors.fill: parent
-							source: thumb.modelData.previewPath
-							fillMode: Image.PreserveAspectCrop
-							asynchronous: true
-							cache: true
-							smooth: true
-							sourceSize: Qt.size(340, 220)
-						}
-
-						Rectangle {
-							anchors.fill: parent
-							gradient: Gradient {
-								GradientStop { position: 0.45; color: "transparent" }
-								GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.75) }
-							}
-						}
-
-						StyledText {
-							anchors.left: parent.left
-							anchors.right: parent.right
-							anchors.bottom: parent.bottom
-							anchors.margins: 9
-							text: thumb.modelData.name
-							tone: "white"
-							font.pixelSize: Theme.size.small
-							font.weight: Font.DemiBold
-						}
-
-						Rectangle {
-							anchors.fill: parent
-							radius: Theme.radius.large
-							color: "transparent"
-							border.width: thumb.current ? 2.5 : 0
-							border.color: Theme.primary
-						}
-					}
-
-					MouseArea {
-						id: thumbMouse
-
-						anchors.fill: parent
-						hoverEnabled: true
-						cursorShape: Qt.PointingHandCursor
-						onClicked: {
-							if (thumb.current) {
-								root.applyTheme(thumb.modelData);
-								return;
-							}
-							root.variantSelectionActive = false;
-							root.currentThemeIndex = thumb.index;
-						}
-					}
+				EmptyState {
+					anchors.centerIn: parent
+					visible: root.view === "daily" && root.currentTheme === null && !Daily.asking[root.dailyProvider]
+					icon: "wifi_off"
+					title: "No picture today"
 				}
 
 				MouseArea {
 					anchors.fill: parent
 					acceptedButtons: Qt.NoButton
-					onWheel: wheel => root.moveSelection((wheel.angleDelta.y || -wheel.angleDelta.x) < 0 ? 1 : -1)
+					onWheel: wheel => root.move((wheel.angleDelta.y || -wheel.angleDelta.x) < 0 ? 1 : -1)
+				}
+			}
+
+			// ── strip: the library, or the pictures of the day ────────────
+			Item {
+				id: strips
+
+				Layout.fillWidth: true
+				Layout.preferredHeight: 116
+
+				ListView {
+					id: strip
+
+					readonly property real itemWidth: 168
+					readonly property bool shown: root.view === "library"
+
+					anchors.fill: parent
+					orientation: ListView.Horizontal
+					spacing: 10
+					clip: true
+					model: root.filteredThemes
+					currentIndex: root.currentThemeIndex
+					highlightRangeMode: ListView.StrictlyEnforceRange
+					preferredHighlightBegin: width / 2 - itemWidth / 2
+					preferredHighlightEnd: width / 2 + itemWidth / 2
+					highlightMoveDuration: Motion.long
+					boundsBehavior: Flickable.StopAtBounds
+					cacheBuffer: 1200
+					opacity: strip.shown ? 1 : 0
+					visible: opacity > 0
+					enabled: strip.shown
+
+					transform: Translate {
+						x: strip.shown ? 0 : -48
+
+						Behavior on x {
+							SpatialAnim {
+								duration: Motion.long
+							}
+						}
+					}
+
+					Behavior on opacity {
+						Anim {}
+					}
+
+					onCurrentIndexChanged: {
+						if (currentIndex >= 0 && currentIndex !== root.currentThemeIndex)
+							root.currentThemeIndex = currentIndex;
+					}
+
+					delegate: Thumb {
+						required property var modelData
+						required property int index
+
+						width: strip.itemWidth
+						height: strip.height
+						source: modelData.previewPath
+						title: modelData.name
+						current: index === root.currentThemeIndex
+						onClicked: {
+							if (current) {
+								root.applyTheme(modelData);
+								return;
+							}
+							root.startPending = false;
+							root.currentThemeIndex = index;
+						}
+					}
+
+					MouseArea {
+						anchors.fill: parent
+						acceptedButtons: Qt.NoButton
+						onWheel: wheel => root.move((wheel.angleDelta.y || -wheel.angleDelta.x) < 0 ? 1 : -1)
+					}
+				}
+
+				Row {
+					id: dailyStrip
+
+					readonly property bool shown: root.view === "daily"
+
+					anchors.fill: parent
+					spacing: 12
+					opacity: dailyStrip.shown ? 1 : 0
+					visible: opacity > 0
+					enabled: dailyStrip.shown
+
+					transform: Translate {
+						x: dailyStrip.shown ? 0 : 48
+
+						Behavior on x {
+							SpatialAnim {
+								duration: Motion.long
+							}
+						}
+					}
+
+					Behavior on opacity {
+						Anim {}
+					}
+
+					Repeater {
+						model: Daily.sources
+
+						delegate: Thumb {
+							id: dailyThumb
+
+							required property var modelData
+
+							readonly property var entry: Daily.entries[modelData.id] ?? null
+
+							width: (dailyStrip.width - dailyStrip.spacing * (Daily.sources.length - 1)) / Daily.sources.length
+							height: dailyStrip.height
+							source: dailyThumb.entry ? String(dailyThumb.entry.preview_path || "") : ""
+							label: modelData.label
+							title: dailyThumb.entry ? String(dailyThumb.entry.headline || dailyThumb.entry.title || "") : ""
+							current: root.dailyProvider === modelData.id
+							busy: !!Daily.asking[modelData.id]
+							worn: Daily.wears(dailyThumb.entry)
+							missing: !dailyThumb.entry && !dailyThumb.busy
+							onClicked: {
+								if (current) {
+									root.applyTheme(root.currentTheme);
+									return;
+								}
+								root.startPending = false;
+								root.dailyProvider = modelData.id;
+							}
+						}
+					}
+
+				}
+
+				MouseArea {
+					anchors.fill: parent
+					acceptedButtons: Qt.NoButton
+					enabled: dailyStrip.shown
+					onWheel: wheel => root.move((wheel.angleDelta.y || -wheel.angleDelta.x) < 0 ? 1 : -1)
 				}
 			}
 		}

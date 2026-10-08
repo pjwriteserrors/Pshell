@@ -503,9 +503,33 @@ list_themes() {
 	done < <(theme_list_entries)
 }
 
+# the list line of one entry, in the library or not (the pictures of the day
+# are kept outside of it)
+entry_line() {
+	local theme_path="$1"
+	local media_path preview_path
+
+	media_path="$(theme_pick_media "$theme_path" 2>/dev/null || true)"
+	[[ -n "$media_path" ]] || {
+		echo "no media: $theme_path" >&2
+		return 1
+	}
+	preview_path="$(theme_preview_path "$theme_path")"
+	extract_preview "$media_path" "$preview_path"
+	printf '%s\t%s\t%s\t%s\t%s\n' "$(theme_entry_name "$theme_path")" "$theme_path" "$media_path" "$preview_path" "$(theme_media_type "$media_path")"
+}
+
 case "${1:-list}" in
 	list)
 		list_themes
+		;;
+	entry)
+		shift
+		if (($# != 1)); then
+			echo "usage: $0 entry <theme-dir>" >&2
+			exit 1
+		fi
+		entry_line "$1"
 		;;
 	palette-json)
 		shift
@@ -540,7 +564,7 @@ case "${1:-list}" in
 		matrix_all_json "$@"
 		;;
 	*)
-		echo "usage: $0 [list|palette-json|matrix-json|matrix-all|prewarm]" >&2
+		echo "usage: $0 [list|entry|palette-json|matrix-json|matrix-all|prewarm]" >&2
 		exit 1
 		;;
 esac

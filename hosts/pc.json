@@ -20,7 +20,8 @@
 		"pywalfox",
 		"telegram",
 		"oomox",
-		"openrgb"
+		"openrgb",
+		"openrgb-leds"
 	],
 	"hookConfig": {
 		"spicetify": {

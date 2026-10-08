@@ -10,11 +10,11 @@ import qs.style.theme
 import qs.style.widgets
 import qs.core.services
 
-// The story behind Bing's image of the day, set into the wallpaper like a
+// The story behind the picture of the day (Bing's, or NASA's), set into the wallpaper like a
 // caption in a photo book: the photo itself goes soft and a little darker
 // behind the text (the wallpaper is redrawn here, cropped like awww does,
 // and blurred through a feathered mask), so there is no card or edge.
-// Shown while the "Wallpaper of the day" theme runs on a Bing image; only
+// Shown while the "Wallpaper of the day" theme runs on one of them; only
 // the links take input.
 PanelWindow {
 	id: root
@@ -28,14 +28,36 @@ PanelWindow {
 		}
 	}
 	readonly property bool active: themeNameFile.text().trim() === "Wallpaper of the day"
-		&& root.info.provider === "bing"
+		&& (root.info.provider === "bing" || root.info.provider === "apod")
 		&& !!(root.info.description || root.info.headline)
 	readonly property color ink: Qt.tint("#ffffff", Qt.alpha(Theme.primary, 0.08))
 	readonly property color accent: Qt.tint("#ffffff", Qt.alpha(Theme.primary, 0.6))
 	readonly property real feather: 120
 
+	// The wallpaper's player shares this layer, and whichever surface comes
+	// up last lies on top: after a player was started anew the caption is
+	// taken down and put up again.
+	property bool raised: true
+
+	Connections {
+		target: Popups
+		function onWallpaperPainted() {
+			raise.restart();
+		}
+	}
+
+	Timer {
+		id: raise
+
+		interval: 1200
+		onTriggered: {
+			root.raised = false;
+			Qt.callLater(() => root.raised = true);
+		}
+	}
+
 	screen: Popups.primaryScreen
-	visible: root.active
+	visible: root.active && root.raised
 	anchors.left: true
 	anchors.bottom: true
 	implicitWidth: caption.x + caption.width + root.feather + 40
@@ -150,7 +172,7 @@ PanelWindow {
 		}
 
 		StyledText {
-			text: ["Bing", root.info.date_label].filter(Boolean).join("   ·   ").toUpperCase()
+			text: [root.info.provider === "apod" ? "NASA" : "Bing", root.info.date_label].filter(Boolean).join("   ·   ").toUpperCase()
 			tone: root.accent
 			surface: "transparent"
 			font.pixelSize: Theme.size.tiny

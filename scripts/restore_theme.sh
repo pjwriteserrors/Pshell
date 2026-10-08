@@ -34,7 +34,7 @@ if [[ "$(theme_entry_name "$theme_path")" == "Wallpaper of the day" ]]; then
 		provider="$(<"$THEME_STATE_DIR/wallpaper-of-day-provider")"
 	fi
 	before="$(theme_pick_media "$theme_path" 2>/dev/null | xargs -r -d '\n' stat -c %Y 2>/dev/null || true)"
-	if [[ "$provider" =~ ^(bing|wallhaven|moewalls)$ ]]; then
+	if [[ "$provider" =~ ^(bing|apod|wallhaven|moewalls)$ ]]; then
 		python3 "$SCRIPT_DIR/wallpaper_of_day.py" --provider "$provider" --retries 6 \
 			|| notify-send "Wallpaper of the day" "Update failed; using the cached wallpaper." \
 			|| true

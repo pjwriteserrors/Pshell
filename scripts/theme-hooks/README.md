@@ -38,3 +38,14 @@ The sheet reads the wallust colours from the slots Pywalfox puts them in,
 which differ between its dark and light mode, so the hook has to keep
 Pywalfox's mode on `THEME_MODE` (that mode also decides whether pages are
 dark).
+
+## Keyboard and LEDs (OpenRGB)
+
+`openrgb` projects the wallpaper onto the keyboard, `openrgb-leds` puts the
+accent colour on GPU and ARGB headers; both are `scripts/apply_lighting.py`,
+with `hosts/<profile>-lighting.json` (without one the keyboard's defaults
+apply, and a device that is not there is left out). The colours only stay
+while an OpenRGB server holds the devices, so the script starts one
+(`quickshell-openrgb.service`, transient) when none listens, and the shell
+keeps `apply_lighting.py --watch` running, which puts the colours back when
+the keyboard is plugged in again. Nothing has to be installed per machine.

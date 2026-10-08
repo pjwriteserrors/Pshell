@@ -18,6 +18,8 @@
 	{ "id": "calendar", "name": "Calendar", "category": "Panels" },
 	{ "id": "microsoft-calendar", "name": "Microsoft calendar", "category": "Panels", "default": false, "requires": ["calendar"] },
 	{ "id": "weather", "name": "Weather", "category": "Panels" },
+	{ "id": "asteroids", "name": "Asteroid radar", "category": "Panels", "requires": ["weather"], "icon": "meteor" },
+	{ "id": "asteroid-alerts", "name": "Asteroid alerts", "category": "Panels", "requires": ["asteroids", "notifications"], "icon": "meteor" },
 	{ "id": "media", "name": "Media", "category": "Panels" },
 	{ "id": "clipboard", "name": "Clipboard history", "category": "Panels" },
 	{ "id": "overview", "name": "Overview", "category": "Panels" },
@@ -94,7 +96,8 @@
 	{ "id": "hook-pywalfox", "name": "Firefox & Floorp (Pywalfox)", "category": "Studio", "group": "Theme hooks", "hook": "pywalfox", "icon": "web", "default": false },
 	{ "id": "hook-telegram", "name": "Telegram", "category": "Studio", "group": "Theme hooks", "hook": "telegram", "icon": "send", "default": false },
 	{ "id": "hook-oomox", "name": "GTK theme & Papirus icons (Oomox)", "category": "Studio", "group": "Theme hooks", "hook": "oomox", "icon": "palette_swatch", "default": false },
-	{ "id": "hook-openrgb", "name": "Keyboard & RGB lighting (OpenRGB)", "category": "Studio", "group": "Theme hooks", "hook": "openrgb", "icon": "keyboard", "default": false },
+	{ "id": "hook-openrgb", "name": "Keyboard (OpenRGB)", "category": "Studio", "group": "Theme hooks", "hook": "openrgb", "icon": "keyboard", "default": false },
+	{ "id": "hook-openrgb-leds", "name": "GPU & fan LEDs (OpenRGB)", "category": "Studio", "group": "Theme hooks", "hook": "openrgb-leds", "icon": "lightbulb", "default": false },
 
 	{ "id": "backlight", "name": "Screen brightness", "category": "Hardware", "default": false, "icon": "brightness_6" },
 	{ "id": "ddc", "name": "Monitor brightness", "category": "Hardware", "default": false, "icon": "monitor" },

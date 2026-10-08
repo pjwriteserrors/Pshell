@@ -535,4 +535,7 @@ else
 fi
 
 log "wallpaper runtime done type=$MEDIA_TYPE media=$MEDIA_PATH status=$status"
+# what the shell keeps on the wallpaper (the caption of the picture of the
+# day) has to come up again above a player that was started anew
+"$SCRIPT_DIR/ipc.sh" theme painted >/dev/null 2>&1 || true
 exit "$status"

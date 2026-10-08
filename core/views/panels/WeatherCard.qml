@@ -7,8 +7,12 @@ import qs.core.services
 import qs.style.widgets
 
 // Current conditions, the next hours and a five day outlook with range bars.
+// With the `asteroids` plugin a last row names the asteroid that passes the
+// earth next; a click on it asks for the radar.
 Rectangle {
 	id: root
+
+	signal asteroidsPicked
 
 	implicitHeight: column.implicitHeight + 28
 	radius: Theme.radius.huge
@@ -208,6 +212,57 @@ Rectangle {
 						font.pixelSize: Theme.size.small
 						font.weight: Font.DemiBold
 					}
+				}
+			}
+		}
+
+		Clickable {
+			id: passing
+
+			readonly property var next: Asteroids.next
+
+			Layout.fillWidth: true
+			Layout.topMargin: 2
+			implicitHeight: 34
+			visible: passing.next !== null
+			radius: Theme.radius.medium
+			color: Theme.layer2
+			pressedScale: 0.98
+			onClicked: root.asteroidsPicked()
+
+			RowLayout {
+				anchors.fill: parent
+				anchors.leftMargin: 10
+				anchors.rightMargin: 6
+				spacing: 7
+
+				Glyph {
+					icon: "meteor"
+					size: 15
+					color: Theme.primary
+				}
+				StyledText {
+					text: passing.next?.name ?? ""
+					font.pixelSize: Theme.size.small
+					font.weight: Font.DemiBold
+				}
+				StyledText {
+					Layout.fillWidth: true
+					text: passing.next ? Asteroids.distance(passing.next.dist) : ""
+					tone: Theme.textMuted
+					tabular: true
+					font.pixelSize: Theme.size.small
+				}
+				StyledText {
+					text: passing.next ? Asteroids.when(passing.next.at, Asteroids.clock) : ""
+					tone: Theme.textMuted
+					tabular: true
+					font.pixelSize: Theme.size.small
+				}
+				Glyph {
+					icon: "chevron_right"
+					size: 16
+					color: Theme.textSubtle
 				}
 			}
 		}

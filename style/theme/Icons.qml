@@ -273,6 +273,7 @@ Singleton {
 		"drag": "󰇛",
 		"drag_vertical": "󰇝",
 		"earth": "󰇧",
+		"meteor": "󰘩",
 		"emoticon_happy_outline": "󰇵",
 		"eraser": "󰇾",
 		"ethernet": "󰈀",

@@ -2,7 +2,10 @@
 """Put the wallpaper's colours on the hardware: keyboard, GPU, ARGB headers.
 
     apply_lighting.py                 derive everything from the current theme
+    apply_lighting.py --only keyboard only the keyboard (or: leds)
     apply_lighting.py --restore       re-apply the last state (used at login)
+    apply_lighting.py --watch         stay, and put the colours back whenever
+                                      the keyboard is plugged in again
     apply_lighting.py --probe 0 30    light 30 LEDs on ARGB header 0, to count them
     apply_lighting.py --probe-order 0 paint it red/green/blue to read its wiring
     apply_lighting.py --dry-run       print what would be sent
@@ -17,6 +20,17 @@ verbatim, which is what a fresh login needs: the OpenRGB server comes up with
 the devices dark, and recomputing from the theme would be both slower and
 capable of disagreeing with what was on screen before the reboot.
 
+The colours only stay while an OpenRGB server holds the devices: a keyboard in
+Direct mode falls back to the colours it has stored the moment the program
+that set them is gone, and `openrgb --client` without a server is such a
+program. So a server is started here when none is listening - no unit has to
+be installed for it, the same shell works on every machine the keyboard is
+plugged into. A device that is not there is left out without a word, which is
+what lets one configuration serve a desktop with fans and a laptop without.
+
+The keyboard and the LEDs (GPU, ARGB headers) are two theme hooks, `openrgb`
+and `openrgb-leds`, and two parts of the saved state.
+
 Device roles, gains and the LED count of each ARGB header live in
 hosts/<profile>-lighting.json, because only the person with the case open
 knows how many LEDs are on a header.
@@ -30,6 +44,9 @@ import fcntl
 import json
 import os
 from pathlib import Path
+import re
+import select
+import socket
 import subprocess
 import sys
 import time
@@ -54,6 +71,11 @@ PALETTE_PATH = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / 
 LOCK_PATH = Path("/tmp/openrgb-lighting.lock")
 
 SERVER = os.environ.get("OPENRGB_SERVER", "127.0.0.1:6742")
+# the server of a machine that has the units installed, and the one started here
+INSTALLED_UNIT = "openrgb-theme.service"
+OWN_UNIT = "quickshell-openrgb.service"
+# part of the state -> the theme hook that switches it
+PARTS = {"keyboard": "openrgb", "leds": "openrgb-leds"}
 
 # OpenRGB's ANSI matrix for SteelSeries Apex keyboards. Values are indices in
 # the device's 112-entry LED array, not HID key codes.
@@ -369,31 +391,94 @@ def openrgb(*args: str, timeout: float = 35) -> subprocess.CompletedProcess:
     return subprocess.run(command, text=True, capture_output=True, timeout=timeout, check=False)
 
 
-def wait_for_server(attempts: int = 60, delay: float = 1.0) -> bool:
-    """A login restore races the OpenRGB server's own startup and detection."""
-    for _ in range(attempts):
-        result = openrgb("--list-devices", timeout=15)
-        if result.returncode == 0 and result.stdout.strip():
+def server_listening() -> bool:
+    address, _, port = SERVER.rpartition(":")
+    try:
+        with socket.create_connection((address or "127.0.0.1", int(port or 6742)), timeout=1):
             return True
-        time.sleep(delay)
-    return False
+    except (OSError, ValueError):
+        return False
 
 
-def build_plan(config: dict) -> list[dict]:
+def systemctl(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["systemctl", "--user", *args], text=True, capture_output=True, check=False)
+
+
+def start_server() -> None:
+    if systemctl("cat", INSTALLED_UNIT).returncode == 0:
+        systemctl("start", INSTALLED_UNIT)
+        return
+    address, _, port = SERVER.rpartition(":")
+    systemctl("reset-failed", OWN_UNIT)
+    subprocess.run(
+        ["systemd-run", "--user", "--quiet", "--collect", f"--unit={OWN_UNIT}",
+         "--property=Restart=on-failure", "--property=RestartSec=2",
+         "openrgb", "--server", "--server-host", address or "127.0.0.1", "--server-port", port or "6742", "--loglevel", "3"],
+        capture_output=True, check=False,
+    )
+
+
+def stop_server() -> None:
+    for unit in (OWN_UNIT, INSTALLED_UNIT):
+        if systemctl("is-active", "--quiet", unit).returncode == 0:
+            systemctl("stop", unit)
+    for _ in range(20):
+        if not server_listening():
+            return
+        time.sleep(0.25)
+
+
+def list_devices() -> dict[str, str]:
+    """The devices the server holds: index -> name."""
+    result = openrgb("--list-devices", timeout=15)
+    return dict(re.findall(r"^(\d+): (.+?)\s*$", result.stdout, re.M)) if result.returncode == 0 else {}
+
+
+def ensure_server(patience: float = 60) -> bool:
+    """A server that answers and has found its devices; True when it was started here.
+
+    Asking `openrgb --client` is no test: without a server it quietly looks
+    for the devices itself, and answers.
+    """
+    started = False
+    if not server_listening():
+        start_server()
+        started = True
+    deadline = time.time() + patience
+    while time.time() < deadline:
+        if server_listening() and list_devices():
+            break
+        time.sleep(0.5)
+    return started
+
+
+def find_devices(name: str, devices: dict[str, str]) -> list[str]:
+    """The indices a device goes by. OpenRGB versions disagree about suffixes
+    ("… Gen 3" is "… Gen 3 Wired" to a newer one), and a keyboard may be listed
+    once per interface it has: all of them are told, the one with the keys
+    listens."""
+    wanted = name.strip().lower()
+    exact = [index for index, found in devices.items() if found.lower() == wanted]
+    return exact or [index for index, found in devices.items() if wanted in found.lower() or found.lower() in wanted]
+
+
+def build_plan(config: dict, parts: list[str]) -> list[dict]:
     """The exact set of openrgb invocations, as data so it can be saved."""
     plan: list[dict] = []
-    palette = load_palette()
+    palette = load_palette() if "leds" in parts else {}
 
     keyboard = config.get("keyboard", {})
-    if keyboard.get("enabled", True) and FRAME_PATH.is_file():
+    if "keyboard" in parts and keyboard.get("enabled", True) and FRAME_PATH.is_file():
         colors = sampled_colors(FRAME_PATH, keyboard)
         plan.append({
             "what": "keyboard",
-            "args": ["--device", keyboard["device"], "--mode", "Direct", "--color", ",".join(colors)],
+            "part": "keyboard",
+            "device": keyboard["device"],
+            "args": ["--mode", "Direct", "--color", ",".join(colors)],
         })
 
     gpu = config.get("gpu", {})
-    if gpu.get("enabled", True):
+    if "leds" in parts and gpu.get("enabled", True):
         color = reorder(adjust(
             resolve_source(gpu.get("source", "accent"), palette),
             float(gpu.get("saturation", 1.2)),
@@ -404,11 +489,13 @@ def build_plan(config: dict) -> list[dict]:
         ), gpu.get("order", "RGB"))
         plan.append({
             "what": "gpu",
-            "args": ["--device", gpu["device"], "--mode", gpu.get("mode", "Static"), "--color", color],
+            "part": "leds",
+            "device": gpu["device"],
+            "args": ["--mode", gpu.get("mode", "Static"), "--color", color],
         })
 
     argb = config.get("argb", {})
-    if argb.get("enabled", True):
+    if "leds" in parts and argb.get("enabled", True):
         for header in argb.get("headers", []):
             leds = int(header.get("leds", 0))
             if leds <= 0:
@@ -423,10 +510,11 @@ def build_plan(config: dict) -> list[dict]:
             ), header.get("order", argb.get("order", "RGB")))
             plan.append({
                 "what": f"argb header {header['zone']}",
+                "part": "leds",
+                "device": argb["device"],
                 # --size before --color: a zone that is still 0 LEDs long has
                 # nothing to colour.
                 "args": [
-                    "--device", argb["device"],
                     "--zone", str(header["zone"]),
                     "--size", str(leds),
                     "--mode", argb.get("mode", "Direct"),
@@ -439,33 +527,142 @@ def build_plan(config: dict) -> list[dict]:
 
 def run_plan(plan: list[dict], dry_run: bool) -> int:
     failures = 0
+    devices = {} if dry_run else list_devices()
     for step in plan:
         if dry_run:
             printable = [a if len(a) < 70 else a[:67] + "..." for a in step["args"]]
-            print(f"{step['what']}: openrgb {' '.join(printable)}")
+            print(f"{step['what']}: openrgb --device {step['device']!r} {' '.join(printable)}")
             continue
-        result = openrgb(*step["args"])
-        if result.returncode != 0:
+        # none: not on this machine, or not plugged in right now
+        results = [openrgb("--device", index, *step["args"]) for index in find_devices(step["device"], devices)]
+        if results and all(result.returncode != 0 for result in results):
             failures += 1
-            print(f"{step['what']} failed: {result.stderr.strip() or result.stdout.strip()}", file=sys.stderr)
+            print(f"{step['what']} failed: {results[0].stderr.strip() or results[0].stdout.strip()}", file=sys.stderr)
     return failures
 
 
-def save_state(plan: list[dict]) -> None:
+def load_state() -> dict[str, list[dict]]:
+    """The saved steps by part."""
+    try:
+        payload = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    parts = payload.get("parts")
+    if isinstance(parts, dict):
+        return {part: steps for part, steps in parts.items() if isinstance(steps, list)}
+    # the state of before the parts: one plan, the device among the arguments
+    state: dict[str, list[dict]] = {}
+    for step in payload.get("plan") or []:
+        args = list(step.get("args") or [])
+        if args[:1] != ["--device"] or len(args) < 2:
+            continue
+        part = "keyboard" if step.get("what") == "keyboard" else "leds"
+        state.setdefault(part, []).append({"what": step.get("what", part), "part": part, "device": args[1], "args": args[2:]})
+    return state
+
+
+def save_state(plan: list[dict], parts: list[str]) -> None:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
-    payload = {"version": 1, "saved": time.time(), "plan": plan}
+    state = load_state()
+    for part in parts:
+        state[part] = [step for step in plan if step["part"] == part]
+    payload = {"version": 2, "saved": time.time(), "parts": state}
     temporary = STATE_PATH.with_suffix(".tmp")
     temporary.write_text(json.dumps(payload), encoding="utf-8")
     temporary.replace(STATE_PATH)
 
 
-def load_state() -> list[dict] | None:
+def parts_on() -> list[str]:
+    hooks = host.hooks()
+    return [part for part, hook in PARTS.items() if hook in hooks]
+
+
+def light(parts: list[str], restore: bool, dry_run: bool = False) -> int:
+    """Sends the parts' colours: the saved ones, or new ones from the theme."""
+    LOCK_PATH.touch(exist_ok=True)
+    with LOCK_PATH.open("w", encoding="utf-8") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if not dry_run:
+            ensure_server()
+
+        plan: list[dict] = []
+        missing = list(parts)
+        if restore:
+            state = load_state()
+            missing = [part for part in parts if part not in state]
+            for part in parts:
+                plan += state.get(part, [])
+        if missing:
+            if "leds" in missing and not PALETTE_PATH.is_file():
+                print(f"no palette at {PALETTE_PATH}", file=sys.stderr)
+                return 2
+            if "keyboard" in missing and not FRAME_PATH.is_file():
+                print(f"no wallpaper frame at {FRAME_PATH}", file=sys.stderr)
+            fresh = build_plan(load_config(), missing)
+            if not dry_run:
+                save_state(fresh, missing)
+            plan += fresh
+        return 1 if run_plan(plan, dry_run) else 0
+
+
+# -------------------------------------------------------------------- watch ---
+
+def keyboard_event(block: dict[str, str], name: str) -> bool:
+    """Whether a udev event says the keyboard was plugged in."""
+    if block.get("ACTION") != "add" or not block.get("DEVPATH"):
+        return False
     try:
-        payload = json.loads(STATE_PATH.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    plan = payload.get("plan")
-    return plan if isinstance(plan, list) and plan else None
+        uevent = Path("/sys" + block["DEVPATH"], "device", "uevent").read_text()
+    except OSError:
+        return False
+    found = re.search(r"^HID_NAME=(.+)$", uevent, re.M)
+    if not found:
+        return False
+    plugged, wanted = found.group(1).strip().lower(), name.strip().lower()
+    return plugged in wanted or wanted in plugged
+
+
+def watch() -> int:
+    """Keeps the colours on: at the start when no server ran, and whenever the
+    keyboard comes back (a KVM switch, a cable), since it comes back with the
+    colours it has stored and the server still talks to the one that left."""
+    if not parts_on():
+        return 0
+    if not server_listening():
+        light(parts_on(), restore=True)
+
+    name = load_config().get("keyboard", {}).get("device", "")
+    monitor = subprocess.Popen(
+        ["udevadm", "monitor", "--udev", "--property", "--subsystem-match=hidraw"],
+        stdout=subprocess.PIPE,
+    )
+    channel = monitor.stdout.fileno()
+    pending = b""
+    block: dict[str, str] = {}
+    due = 0.0
+    while monitor.poll() is None:
+        ready, _, _ = select.select([channel], [], [], 0.5)
+        if ready:
+            chunk = os.read(channel, 65536)
+            if not chunk:
+                break
+            *lines, pending = (pending + chunk).split(b"\n")
+            for line in (raw.decode("utf-8", "replace").strip() for raw in lines):
+                if "=" in line:
+                    key, _, value = line.partition("=")
+                    block[key] = value
+                    continue
+                # the keyboard arrives as several interfaces: once they are all in
+                if keyboard_event(block, name):
+                    due = time.time() + 2.5
+                block = {}
+        elif due and time.time() >= due:
+            due = 0.0
+            parts = parts_on()
+            if "keyboard" in parts:
+                stop_server()
+                light(parts, restore=True)
+    return 1
 
 
 # --------------------------------------------------------------------- main ---
@@ -476,8 +673,11 @@ def main() -> int:
                         help="wallpaper frame to project (default: the current theme's)")
     parser.add_argument("--restore", action="store_true",
                         help="re-apply the last saved state instead of recomputing")
-    parser.add_argument("--wait", action="store_true",
-                        help="wait for the OpenRGB server to answer first")
+    parser.add_argument("--only", choices=list(PARTS),
+                        help="only this part (default: both, or with --restore the ones whose hook is on)")
+    parser.add_argument("--watch", action="store_true",
+                        help="stay and put the colours back when the keyboard is plugged in again")
+    parser.add_argument("--wait", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--probe", nargs=2, metavar=("ZONE", "LEDS"), type=int,
                         help="light LEDS LEDs on an ARGB header so you can count them")
     parser.add_argument("--probe-order", metavar="ZONE", type=int,
@@ -492,9 +692,10 @@ def main() -> int:
 
     config = load_config()
 
-    if args.wait and not args.dry_run and not wait_for_server():
-        print("OpenRGB server did not answer", file=sys.stderr)
-        return 1
+    if args.watch:
+        return watch()
+    if not args.dry_run and (args.probe or args.probe_order is not None):
+        ensure_server()
 
     if args.probe_order is not None:
         zone = args.probe_order
@@ -508,8 +709,9 @@ def main() -> int:
         blocks = ["FF0000"] * block + ["00FF00"] * block + ["0000FF"] * (leds - 2 * block)
         plan = [{
             "what": f"order probe header {zone}",
+            "device": argb["device"],
             "args": [
-                "--device", argb["device"], "--zone", str(zone),
+                "--zone", str(zone),
                 "--size", str(leds), "--mode", argb.get("mode", "Direct"),
                 "--color", ",".join(blocks),
             ],
@@ -522,39 +724,20 @@ def main() -> int:
         argb = config.get("argb", {})
         plan = [{
             "what": f"probe header {zone}",
+            "device": argb["device"],
             "args": [
-                "--device", argb["device"], "--zone", str(zone),
+                "--zone", str(zone),
                 "--size", str(leds), "--mode", argb.get("mode", "Direct"),
                 "--color", ",".join(["FF2000"] * max(1, leds)),
             ],
         }]
         return 1 if run_plan(plan, args.dry_run) else 0
 
-    LOCK_PATH.touch(exist_ok=True)
-    with LOCK_PATH.open("w", encoding="utf-8") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-
-        plan = None
-        if args.restore:
-            plan = load_state()
-            if plan is None:
-                print("no saved lighting state; deriving it from the current theme", file=sys.stderr)
-
-        if plan is None:
-            if not FRAME_PATH.is_file():
-                print(f"no wallpaper frame at {FRAME_PATH}", file=sys.stderr)
-            if not PALETTE_PATH.is_file():
-                print(f"no palette at {PALETTE_PATH}", file=sys.stderr)
-                return 2
-            plan = build_plan(config)
-            if not args.dry_run:
-                save_state(plan)
-
-        if not plan:
-            print("nothing to light: every device is disabled or unconfigured", file=sys.stderr)
-            return 0
-
-        return 1 if run_plan(plan, args.dry_run) else 0
+    parts = [args.only] if args.only else (parts_on() if args.restore else list(PARTS))
+    if not parts:
+        print("nothing to light: both lighting hooks are off", file=sys.stderr)
+        return 0
+    return light(parts, args.restore, args.dry_run)
 
 
 if __name__ == "__main__":

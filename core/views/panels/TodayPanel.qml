@@ -8,10 +8,12 @@ import qs.style.theme
 import qs.core.services
 import qs.style.widgets
 import qs.core.views.panels.calendar
+import qs.core.views.panels.asteroids
 
 // Hangs from the clock: notification center on the left, date, calendar,
 // the day's Microsoft events and weather on the right. A picked event opens
-// a panel that grows out of this one's bottom edge.
+// a panel that grows out of this one's bottom edge. The weather card turns
+// into the asteroid radar and back.
 Drawer {
 	id: root
 
@@ -38,7 +40,10 @@ Drawer {
 		}
 		Outlook.refresh();
 	}
-	onPanelClosed: Outlook.selected = null
+	onPanelClosed: {
+		Outlook.selected = null;
+		sky.radar = false;
+	}
 
 	belowOpen: Outlook.selected !== null
 	belowContentHeight: details.implicitHeight
@@ -198,9 +203,63 @@ Drawer {
 				day: calendar.selected
 			}
 
-			WeatherCard {
+			Rectangle {
+				id: sky
+
+				// the asteroid radar instead of the weather
+				property bool radar: false
+				readonly property bool turned: sky.radar && Asteroids.ready
+
 				Layout.fillWidth: true
+				implicitHeight: sky.turned ? asteroids.implicitHeight : weather.implicitHeight
 				visible: Plugins.on("weather") && Weather.available
+				radius: Theme.radius.huge
+				color: Theme.layer1
+
+				WeatherCard {
+					id: weather
+
+					width: parent.width
+					color: "transparent"
+					visible: opacity > 0
+					opacity: sky.turned ? 0 : 1
+					scale: sky.turned ? 0.96 : 1
+					transformOrigin: Item.Top
+					onAsteroidsPicked: sky.radar = true
+
+					Behavior on opacity {
+						Anim {
+							duration: Motion.short
+						}
+					}
+					Behavior on scale {
+						SpatialAnim {
+							duration: Motion.medium
+						}
+					}
+				}
+
+				AsteroidCard {
+					id: asteroids
+
+					width: parent.width
+					color: "transparent"
+					shown: root.shown && sky.turned
+					visible: opacity > 0
+					opacity: sky.turned ? 1 : 0
+					scale: sky.turned ? 1 : 0.96
+					transformOrigin: Item.Top
+					onClosed: sky.radar = false
+
+					Behavior on opacity {
+						Anim {}
+					}
+					Behavior on scale {
+						SpatialAnim {
+							duration: Motion.medium
+						}
+					}
+				}
 			}
 		}
 	}

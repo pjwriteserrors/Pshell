@@ -73,7 +73,7 @@ def setup(hub, daemon):
     async def daily(_peer, args):
         """Fetches today's wallpaper from a source (once a day per source) and puts it on."""
         source = str(args.get("provider", "bing"))
-        if source not in ("bing", "wallhaven", "moewalls"):
+        if source not in ("bing", "apod", "wallhaven", "moewalls"):
             raise Refused("bad-provider", source)
         code, out = await run("python3", str(SCRIPTS / "wallpaper_of_day.py"), "--provider", source, timeout=180)
         if code != 0:

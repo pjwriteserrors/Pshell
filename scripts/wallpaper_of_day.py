@@ -1,30 +1,47 @@
 #!/usr/bin/env python3
 
-"""Resolve and cache a daily wallpaper from Bing, Wallhaven or MoeWalls."""
+"""The pictures of the day of Bing, NASA (APOD), Wallhaven and MoeWalls.
+
+Every source's picture is kept in ~/.local/state/quickshell-theme/daily with
+its preview and its wallust colours, so the theme picker shows them at once:
+
+  --fetch-all        fetch what is new from every source, one JSON line each
+  --list             what is kept, without asking anyone
+  --provider NAME    make NAME's picture the "Wallpaper of the day" theme
+                     (--cached: the one that is kept, without asking)
+"""
 
 from __future__ import annotations
 
 import argparse
+import fcntl
+import hashlib
 import html
 import json
 import mimetypes
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
 import urllib.parse
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor
+import xml.etree.ElementTree as ElementTree
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 
 USER_AGENT = "quickshell-wallpaper-of-the-day/1.0"
-SELECTION_VERSION = 8
-PROVIDERS = ("bing", "wallhaven", "moewalls")
+SELECTION_VERSION = 9
+PROVIDERS = ("bing", "apod", "wallhaven", "moewalls")
 # Providers whose pick can change during the day and is rechecked on every run.
-CHANGING_PROVIDERS = ("bing",)
+CHANGING_PROVIDERS = ("bing", "apod")
+APOD_FEED = "https://science.nasa.gov/feed/apod-basic/"
+APOD_NS = "{https://science.nasa.gov/apod/}"
+IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 BING_MARKETS = ("de-DE", "en-GB", "en-US", "en-CA", "en-IN", "fr-FR", "ja-JP", "zh-CN")
 WALLHAVEN_PREFERENCES = ("fantasy landscape", "landscape", "minimal", "minimalistic")
 MOEWALLS_SFW_PREFERENCES = (
@@ -98,7 +115,9 @@ THEME_DIR = THEME_LIBRARY_DIR / "Wallpaper of the day"
 METADATA_FILE = STATE_DIR / "wallpaper-of-day.json"
 PROVIDER_FILE = STATE_DIR / "wallpaper-of-day-provider"
 HISTORY_FILE = STATE_DIR / "wallpaper-of-day-history.json"
-SELECTIONS_FILE = STATE_DIR / "wallpaper-of-day-selections.json"
+CACHE_DIR = STATE_DIR / "daily"
+PREVIEW_DIR = Path(os.environ.get("THEME_PREVIEW_DIR", STATE_DIR / "previews"))
+WALLUST_CONFIG_FILE = Path(os.environ.get("WALLUST_CONFIG_FILE", HOME / ".config" / "wallust" / "wallust.toml"))
 
 
 def request(url: str, *, timeout: int = 30) -> urllib.response.addinfourl:
@@ -195,17 +214,56 @@ def bing_candidate() -> dict[str, object]:
     }
 
 
+def plain_text(markup: object) -> str:
+    text = html.unescape(re.sub(r"<[^>]+>", "", str(markup or "")))
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def lead(text: str, limit: int = 420) -> str:
+    """The first sentences of a text, as many as fit."""
+    if len(text) <= limit:
+        return text
+    cut = text.rfind(". ", 0, limit)
+    return text[: cut + 1] if cut > 0 else text[:limit].rsplit(" ", 1)[0] + "…"
+
+
+def apod_candidate() -> dict[str, object]:
+    with request(APOD_FEED) as response:
+        feed = ElementTree.fromstring(response.read())
+    # newest first; a day whose picture is a video has no image to hang up
+    for item in feed.iterfind("./channel/item"):
+        image = (item.findtext(APOD_NS + "hdurl") or "").strip()
+        if Path(urllib.parse.urlparse(image).path).suffix.lower() not in IMAGE_SUFFIXES:
+            continue
+        try:
+            published = parsedate_to_datetime(item.findtext("pubDate") or "")
+        except (TypeError, ValueError):
+            continue
+        title = plain_text(item.findtext("title")) or "Astronomy Picture of the Day"
+        explanation = plain_text(item.findtext(APOD_NS + "explanation"))
+        explanation = re.sub(r"^Explanation:\s*", "", explanation)
+        explanation = re.sub(r"\s*Tomorrow's picture:.*$", "", explanation)
+        credit = plain_text(item.findtext(APOD_NS + "credit") or item.findtext(APOD_NS + "copyright"))
+        credit = re.sub(r"^(Image )?Credit[^:]*:\s*", "", credit)
+        return {
+            "provider": "apod",
+            "title": title,
+            "headline": title,
+            "credit": credit,
+            "description": lead(explanation),
+            "explanation": explanation,
+            "date_label": f"{published:%B} {published.day}, {published.year}",
+            "source_url": (item.findtext("link") or "https://science.nasa.gov/apod/").strip(),
+            "download_url": image,
+            "views": None,
+            "candidate_id": published.strftime("%Y-%m-%d"),
+        }
+    raise RuntimeError("NASA's feed has no picture")
+
+
 def load_history() -> dict[str, list[dict[str, str]]]:
     try:
         data = json.loads(HISTORY_FILE.read_text())
-        return data if isinstance(data, dict) else {}
-    except (OSError, json.JSONDecodeError):
-        return {}
-
-
-def load_selections() -> dict[str, dict[str, object]]:
-    try:
-        data = json.loads(SELECTIONS_FILE.read_text())
         return data if isinstance(data, dict) else {}
     except (OSError, json.JSONDecodeError):
         return {}
@@ -453,6 +511,8 @@ def moewalls_candidate() -> dict[str, object]:
 def resolve(provider: str) -> dict[str, object]:
     if provider == "bing":
         return bing_candidate()
+    if provider == "apod":
+        return apod_candidate()
     if provider == "wallhaven":
         return wallhaven_candidate()
     return moewalls_candidate()
@@ -464,18 +524,6 @@ def load_metadata() -> dict[str, object]:
         return data if isinstance(data, dict) else {}
     except (OSError, json.JSONDecodeError):
         return {}
-
-
-def current_media(metadata: dict[str, object]) -> Path | None:
-    raw = metadata.get("media_path")
-    if raw:
-        path = Path(str(raw))
-        if path.is_file():
-            return path
-    for path in sorted(THEME_DIR.glob("wallpaper-of-the-day.*")):
-        if path.is_file() and ".part." not in path.name:
-            return path
-    return None
 
 
 def extension_for(url: str, content_type: str, disposition: str) -> str:
@@ -560,8 +608,8 @@ def normalize_video(path: Path) -> bool:
     return True
 
 
-def download(candidate: dict[str, object]) -> Path:
-    THEME_DIR.mkdir(parents=True, exist_ok=True)
+def download(candidate: dict[str, object], directory: Path) -> Path:
+    directory.mkdir(parents=True, exist_ok=True)
     url = str(candidate["download_url"])
     with request(url, timeout=60) as response:
         extension = extension_for(
@@ -569,15 +617,17 @@ def download(candidate: dict[str, object]) -> Path:
             response.headers.get("Content-Type", ""),
             response.headers.get("Content-Disposition", ""),
         )
-        target = THEME_DIR / f"wallpaper-of-the-day{extension}"
-        temporary = THEME_DIR / f".wallpaper-of-the-day.part.{os.getpid()}"
+        # a live wallpaper may be large, a picture that large is a mistake
+        limit = (750 if extension == ".mp4" else 120) * 1024 * 1024
+        target = directory / f"media{extension}"
+        temporary = directory / f".media.part.{os.getpid()}"
         size = 0
         try:
             with temporary.open("wb") as output:
                 while chunk := response.read(1024 * 1024):
                     size += len(chunk)
-                    if size > 750 * 1024 * 1024:
-                        raise RuntimeError("daily wallpaper exceeds the 750 MiB safety limit")
+                    if size > limit:
+                        raise RuntimeError(f"daily wallpaper exceeds the {limit >> 20} MiB safety limit")
                     output.write(chunk)
             if size == 0:
                 raise RuntimeError("downloaded daily wallpaper is empty")
@@ -586,14 +636,6 @@ def download(candidate: dict[str, object]) -> Path:
             os.replace(temporary, target)
         finally:
             temporary.unlink(missing_ok=True)
-    for old in THEME_DIR.glob("wallpaper-of-the-day.*"):
-        if old != target and old.is_file():
-            old.unlink()
-    # Interrupted video conversions can leave hidden partial files behind.
-    # They are never valid theme media and would otherwise waste disk space.
-    for partial in THEME_DIR.glob(".wallpaper-of-the-day.part.*"):
-        if partial.is_file():
-            partial.unlink()
     return target
 
 
@@ -622,65 +664,73 @@ def record_history(candidate: dict[str, object], selected_date: str) -> None:
     write_json_atomic(HISTORY_FILE, history)
 
 
-def record_selection(provider: str, result: dict[str, object]) -> None:
-    selections = load_selections()
-    selections[provider] = {
-        key: value
-        for key, value in result.items()
-        if key != "media_path"
-    }
-    write_json_atomic(SELECTIONS_FILE, selections)
+# ── the kept pictures ──────────────────────────────────────────────────────
+# daily/<provider>/entry.json describes the picture that is kept, and
+# daily/<provider>/<picture>/media.* is the picture: a folder of its own per
+# picture, so its preview and colours are never mistaken for the last one's.
 
 
-def update(provider: str, force: bool, resolve_only: bool, retries: int) -> dict[str, object]:
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    THEME_DIR.mkdir(parents=True, exist_ok=True)
-    PROVIDER_FILE.write_text(provider + "\n")
-    metadata = load_metadata()
-    selections = load_selections()
-    media = current_media(metadata)
-    today = date.today().isoformat()
-    changing = provider in CHANGING_PROVIDERS
-    candidate: dict[str, object] | None = None
+def cached_entry(provider: str) -> dict[str, object]:
+    try:
+        entry = json.loads((CACHE_DIR / provider / "entry.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
     if (
-        not force
-        and metadata.get("date") == today
-        and metadata.get("provider") == provider
-        and metadata.get("selection_version") == SELECTION_VERSION
-        and media
+        not isinstance(entry, dict)
+        or entry.get("selection_version") != SELECTION_VERSION
+        or not Path(str(entry.get("media_path") or "")).is_file()
     ):
-        if changing:
-            try:
-                candidate = resolve(provider)
-            except Exception:
-                candidate = None
-        if candidate is not None and candidate.get("candidate_id") == metadata.get("candidate_id"):
-            # same image, but its texts may have been added or corrected since
-            refreshed = {**metadata, **{k: v for k, v in candidate.items() if k != "download_url"}}
-            if refreshed != metadata:
-                metadata = refreshed
-                write_json_atomic(METADATA_FILE, metadata)
-                record_selection(provider, metadata)
-            candidate = None
-        if candidate is None:
-            if provider not in selections:
-                record_selection(provider, metadata)
-            return metadata
+        return {}
+    return entry
 
-    saved_selection = selections.get(provider, {})
-    reuse_saved_selection = (
-        candidate is None
-        and not changing
-        and not force
-        and saved_selection.get("date") == today
-        and saved_selection.get("selection_version") == SELECTION_VERSION
-        and bool(saved_selection.get("download_url"))
+
+def wallust_backend() -> str:
+    try:
+        match = re.search(r'^backend\s*=\s*"([^"]+)"', WALLUST_CONFIG_FILE.read_text(), re.M)
+    except OSError:
+        match = None
+    return match.group(1) if match else "fastresize"
+
+
+def prepare(directory: Path) -> dict[str, str]:
+    """The preview of a kept picture, and its wallust colours made ready."""
+    catalog = str(SCRIPT_DIR / "theme_catalog.sh")
+    line = subprocess.run(
+        ["bash", catalog, "entry", str(directory)], capture_output=True, text=True
+    ).stdout.strip()
+    fields = line.split("\t")
+    if len(fields) < 5:
+        return {"preview_path": "", "media_type": "image"}
+    subprocess.run(
+        ["bash", catalog, "prewarm", str(directory), fields[3], wallust_backend()],
+        capture_output=True,
     )
+    return {"preview_path": fields[3], "media_type": fields[4]}
 
-    last_error: Exception | None = None
-    if reuse_saved_selection:
-        candidate = dict(saved_selection)
-    if candidate is None:
+
+def forget(directory: Path) -> None:
+    """A picture that is no longer kept, with its preview and its colours."""
+    key = hashlib.sha1(str(directory).encode()).hexdigest()
+    shutil.rmtree(directory, ignore_errors=True)
+    (PREVIEW_DIR / f"{key}.png").unlink(missing_ok=True)
+    shutil.rmtree(STATE_DIR / "wallust-preview-cache" / key, ignore_errors=True)
+
+
+def fetch(provider: str, force: bool = False, retries: int = 1) -> dict[str, object]:
+    """The picture of the day of a source, downloaded unless it is kept already."""
+    home = CACHE_DIR / provider
+    home.mkdir(parents=True, exist_ok=True)
+    # one fetch per source at a time: whoever comes second finds it kept
+    with (CACHE_DIR / f"{provider}.lock").open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        entry = cached_entry(provider)
+        today = date.today().isoformat()
+        fresh = bool(entry) and entry.get("date") == today
+        if fresh and not force and provider not in CHANGING_PROVIDERS:
+            return entry
+
+        candidate: dict[str, object] | None = None
+        last_error: Exception | None = None
         for attempt in range(max(1, retries)):
             try:
                 candidate = resolve(provider)
@@ -689,30 +739,116 @@ def update(provider: str, force: bool, resolve_only: bool, retries: int) -> dict
                 last_error = error
                 if attempt + 1 < max(1, retries):
                     time.sleep(10)
-    if candidate is None:
-        raise RuntimeError(str(last_error or "could not resolve daily wallpaper"))
-    if resolve_only:
-        return candidate
+        if candidate is None:
+            if fresh and not force:
+                return entry
+            raise RuntimeError(str(last_error or "could not resolve daily wallpaper"))
 
-    media = download(candidate)
-    result = {
-        **candidate,
-        "date": today,
-        "selection_version": SELECTION_VERSION,
-        "media_path": str(media),
-        "download_url": str(candidate["download_url"]),
-    }
-    write_json_atomic(METADATA_FILE, result)
-    record_selection(provider, result)
-    if not reuse_saved_selection:
+        if entry and not force and candidate.get("candidate_id") == entry.get("candidate_id"):
+            # same picture, but its texts may have been added or corrected since
+            texts = {key: value for key, value in candidate.items() if key != "download_url"}
+            refreshed = {**entry, **texts, "date": today}
+            if refreshed != entry:
+                write_json_atomic(home / "entry.json", refreshed)
+            return refreshed
+
+        name = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(candidate.get("candidate_id") or today))[:60]
+        directory = home / f"{name}-{int(time.time())}"
+        try:
+            media = download(candidate, directory)
+        except Exception:
+            forget(directory)
+            raise
+        result = {
+            **candidate,
+            "date": today,
+            "selection_version": SELECTION_VERSION,
+            "theme_path": str(directory),
+            "media_path": str(media),
+            **prepare(directory),
+        }
+        write_json_atomic(home / "entry.json", result)
         record_history(candidate, today)
+        for old in home.iterdir():
+            if old.is_dir() and old != directory:
+                forget(old)
+        return result
+
+
+def install(entry: dict[str, object]) -> Path:
+    """Puts a kept picture into the library's "Wallpaper of the day" theme."""
+    THEME_DIR.mkdir(parents=True, exist_ok=True)
+    source = Path(str(entry["media_path"]))
+    target = THEME_DIR / f"wallpaper-of-the-day{source.suffix}"
+    if not (target.is_file() and target.samefile(source)):
+        temporary = THEME_DIR / f".wallpaper-of-the-day.part.{os.getpid()}"
+        temporary.unlink(missing_ok=True)
+        try:
+            os.link(source, temporary)
+        except OSError:  # the library is on another disk
+            shutil.copy2(source, temporary)
+        os.replace(temporary, target)
+    for old in THEME_DIR.glob("wallpaper-of-the-day.*"):
+        if old != target and old.is_file():
+            old.unlink()
+    for partial in THEME_DIR.glob(".wallpaper-of-the-day.part.*"):
+        if partial.is_file():
+            partial.unlink()
+    return target
+
+
+def update(provider: str, force: bool, resolve_only: bool, retries: int, cached: bool = False) -> dict[str, object]:
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    if resolve_only:
+        return resolve(provider)
+    entry = cached_entry(provider) if cached and not force else {}
+    if not entry:
+        entry = fetch(provider, force, retries)
+    PROVIDER_FILE.write_text(provider + "\n")
+    result = {
+        key: value
+        for key, value in entry.items()
+        if key not in ("theme_path", "preview_path", "media_type")
+    }
+    result["media_path"] = str(install(entry))
+    if result != load_metadata():
+        write_json_atomic(METADATA_FILE, result)
     return result
+
+
+def applied() -> dict[str, object]:
+    """Which kept picture the desktop wears, if it wears one."""
+    try:
+        name = (STATE_DIR / "current-theme-name").read_text().strip()
+    except OSError:
+        name = ""
+    if name != THEME_DIR.name:
+        return {}
+    metadata = load_metadata()
+    return {"provider": metadata.get("provider"), "candidate_id": metadata.get("candidate_id")}
+
+
+def fetch_all(force: bool) -> None:
+    os.nice(10)
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    with ThreadPoolExecutor(len(PROVIDERS)) as pool:
+        futures = {pool.submit(fetch, provider, force): provider for provider in PROVIDERS}
+        for future in as_completed(futures):
+            provider = futures[future]
+            try:
+                line: dict[str, object] = {"provider": provider, "entry": future.result()}
+            except Exception as error:
+                line = {"provider": provider, "error": str(error)}
+            print(json.dumps(line, ensure_ascii=False), flush=True)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--provider", choices=PROVIDERS)
     parser.add_argument("--status", action="store_true")
+    parser.add_argument("--list", action="store_true")
+    parser.add_argument("--fetch-all", action="store_true")
+    parser.add_argument("--cached", action="store_true")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--resolve-only", action="store_true")
     parser.add_argument("--retries", type=int, default=1)
@@ -726,10 +862,18 @@ def main() -> int:
             selected = str(metadata.get("provider") or "bing")
         print(json.dumps({**metadata, "selected_provider": selected}, ensure_ascii=False))
         return 0
+    if args.list:
+        entries = [entry for entry in map(cached_entry, PROVIDERS) if entry]
+        print(json.dumps({"entries": entries, "applied": applied()}, ensure_ascii=False))
+        return 0
+    if args.fetch_all:
+        fetch_all(args.force)
+        return 0
     if not args.provider:
-        parser.error("--provider is required unless --status is used")
+        parser.error("--provider is required unless --status, --list or --fetch-all is used")
     try:
-        print(json.dumps(update(args.provider, args.force, args.resolve_only, args.retries), ensure_ascii=False))
+        result = update(args.provider, args.force, args.resolve_only, args.retries, args.cached)
+        print(json.dumps(result, ensure_ascii=False))
         return 0
     except Exception as error:
         print(f"wallpaper of the day: {error}", file=sys.stderr)

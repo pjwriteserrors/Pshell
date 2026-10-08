@@ -85,6 +85,7 @@ or when a plugin has neither picture, scene nor icon.
 | `plugins` | what a fresh setup of this machine starts with, where it differs from the registry's defaults |
 | `primaryOutput` | output for desktop widgets and the default screen |
 | `weather.city` | |
+| `asteroids.magnitude` | the faintest asteroid `asteroid-alerts` speaks of (default 10, binoculars; 6 is the naked eye) |
 | `wallpapers` | the wallpaper library (outside the repo) |
 | `themeHooks` | the theme hooks a fresh setup of this machine starts with; each hook is a plugin `hook-<name>` in the Studio tab of `>plugins`, switched on and off there like any other |
 | `hookConfig.<hook>` | settings of a hook |
@@ -238,6 +239,31 @@ number went away. When the mailbox no longer signs in or the number's page is
 gone, its row says so and offers a new one; a failing network never counts as
 gone. The numbers are public: everyone can read their SMS, and a site may
 refuse them.
+
+`asteroids` adds a row to the weather card that names the asteroid passing
+the earth next; a click turns the card into a radar. It shows the space
+around the earth from above the ecliptic, distances squeezed by a logarithm
+(rings at 1, 5, 10 and 20 lunar distances): the moon, the side the sun is
+on, and every asteroid where it is right now, with a tail for the way it
+came and a stem down to the plane. The picked one shows its whole way and a
+ring where it comes closest. Dragging turns and tilts the radar, the wheel
+zooms; a click on an asteroid flies close to it, where it is a tumbling
+rock, and a click beside it flies back. Dragging along the week under it
+moves the scene through time, and it returns to now when let go. `scripts/asteroids.py` asks NASA JPL every six hours, no key
+needed (`core/services/Asteroids.qml`): the close approaches within 20
+lunar distances from a day back to a week ahead, the twelve nearest of them
+(SBDB Close-Approach Data API), and where they, the moon and the sun are
+every two hours (Horizons), kept in `~/.cache/pshell/asteroids.json`. Sizes
+are estimated from the brightness unless JPL has a measured one, good to a
+factor of about two.
+
+`asteroid-alerts` says when an asteroid can be seen from the weather's city
+and again when that is over: at night (the sun 12° under the horizon), at
+least 15° high and as bright as `asteroids.magnitude`. Horizons works that
+out for the place, for everything within 0.2 AU that could get bright enough
+at all. Such nights are rare – what usually passes is a few metres across
+and far too faint; what was said is kept in
+`~/.local/state/pshell/asteroids.json`.
 
 `downloads` shows what the browser downloads (network panel, and a chip in
 the bar) and pauses, resumes and cancels from there. The browser reports
@@ -413,6 +439,15 @@ exist.
 A hook that finds its program missing exits 3 and is logged as skipped. Only
 failures raise a notification; the log is
 `~/.local/state/quickshell-theme/apply-*.log`.
+
+The picker's second tab holds the pictures of the day of Bing, NASA (APOD,
+from the feed of science.nasa.gov; no key needed), Wallhaven and MoeWalls.
+`core/services/Daily.qml` has `scripts/wallpaper_of_day.py --fetch-all` ask
+for them twenty seconds after the shell started, every two hours and when the
+picker opens; each is kept in `~/.local/state/quickshell-theme/daily/<source>`
+with its preview and its wallust colours, so the tab shows them without
+waiting. Applying one links it into the library's `Wallpaper of the day` and
+applies that.
 
 At shell start `restore_theme.sh` only restarts the wallpaper, unless colours
 are missing or the wallpaper of the day changed. `wallpaper_watch.sh` repaints
