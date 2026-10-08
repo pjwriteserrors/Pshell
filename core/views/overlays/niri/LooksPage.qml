@@ -322,6 +322,46 @@ SettingsPage {
 		}
 	}
 
+	// ── screen frame (the shell's, not niri's) ─────────────────────────────
+	SettingCard {
+		anchor: "screen-frame"
+		visible: Plugins.on("bottom-corners")
+		title: "Screen frame"
+		icon: "rounded_corner"
+		modified: Corners.framed || Corners.edges !== "bottom"
+		onReset: {
+			Corners.setFrame(0);
+			Corners.setEdges("bottom");
+		}
+
+		RowLayout {
+			Layout.fillWidth: true
+			spacing: 14
+
+			ValueSlider {
+				from: 0
+				to: Corners.max
+				step: 1
+				value: Corners.frame
+				icon: "rounded_corner"
+				label: "Thickness"
+				unit: " px"
+				onMoved: value => Corners.setFrame(value)
+			}
+
+			Segmented {
+				Layout.preferredWidth: 220
+				color: Theme.layer2
+				options: [
+					{ value: "bottom", label: "Bottom" },
+					{ value: "all", label: "All edges" }
+				]
+				current: Corners.edges
+				onSelected: value => Corners.setEdges(value)
+			}
+		}
+	}
+
 	// ── tab indicator ──────────────────────────────────────────────────────
 	SettingCard {
 		anchor: "tab-indicator"

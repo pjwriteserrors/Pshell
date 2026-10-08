@@ -8,7 +8,6 @@ import Quickshell.Widgets
 import qs.style.theme
 import qs.core.services
 import qs.style.widgets
-import qs.core.views.overlays.niri
 
 // >plugins: everything the shell can do (core/services/Plugins.qml). The
 // tabs are on the left, a tab's plugins in the middle as a tree: a plugin
@@ -488,47 +487,6 @@ ModalWindow {
 							text: root.count(detail.members)
 							tabular: true
 							tone: Theme.textMuted
-						}
-					}
-
-					ColumnLayout {
-						Layout.fillWidth: true
-						visible: detail.plugin?.id === "bottom-corners"
-						spacing: 8
-
-						RowLayout {
-							Layout.fillWidth: true
-							spacing: 8
-
-							ValueSlider {
-								from: 0
-								to: Corners.max
-								step: 1
-								value: Corners.frame
-								icon: "rounded_corner"
-								label: "Frame"
-								unit: " px"
-								onMoved: value => Corners.setFrame(value)
-							}
-
-							TextButton {
-								implicitHeight: 40
-								variant: "ghost"
-								text: "Reset"
-								enabled: Corners.framed
-								onActivated: Corners.setFrame(0)
-							}
-						}
-
-						Segmented {
-							Layout.fillWidth: true
-							color: Theme.layer2
-							options: [
-								{ value: "bottom", label: "Bottom" },
-								{ value: "all", label: "All edges" }
-							]
-							current: Corners.edges
-							onSelected: value => Corners.setEdges(value)
 						}
 					}
 

@@ -74,6 +74,7 @@ ModalWindow {
 		{ page: "looks", anchor: "tab-indicator", title: "Tab indicator", words: "tab indicator tabbed column", take: ["layout/tab-indicator"] },
 		{ page: "looks", anchor: "insert-hint", title: "Insert hint", words: "insert hint drag move", take: ["layout/insert-hint"] },
 		{ page: "looks", anchor: "corners", title: "Window corners", words: "geometry-corner-radius rounded clip-to-geometry", take: ["@corners"] },
+		{ page: "looks", anchor: "screen-frame", title: "Screen frame", words: "frame screen corners bottom edges thickness", plugin: "bottom-corners" },
 		{ page: "input", anchor: "layouts", title: "Keyboard layouts", words: "xkb layout variant language", take: ["input/keyboard/xkb/layout", "input/keyboard/xkb/variant", "input/keyboard/xkb/model", "input/keyboard/xkb/rules", "input/keyboard/xkb/file"] },
 		{ page: "input", anchor: "xkb-options", title: "Keyboard options", words: "xkb options compose caps ctrl", take: ["input/keyboard/xkb/options"] },
 		{ page: "input", anchor: "repeat", title: "Key repeat", words: "repeat-delay repeat-rate", take: ["input/keyboard/repeat-delay", "input/keyboard/repeat-rate"] },
@@ -108,6 +109,7 @@ ModalWindow {
 		const words = root.query.split(/\s+/);
 		return root.index.filter(entry => {
 			if (!root.pages.some(page => page.id === entry.page)) return false;
+			if (entry.plugin && !Plugins.on(entry.plugin)) return false;
 			const hay = `${entry.title} ${entry.words} ${root.pageOf(entry.page).label}`.toLowerCase();
 			return words.every(word => hay.includes(word));
 		}).slice(0, 9);
