@@ -37,6 +37,25 @@ ModalWindow {
 	property string selectedPalette: "dark"
 	property int currentThemeIndex: 0
 	property string dailyProvider: "bing"
+	// the level picked for the live wallpaper of the day, by its kept path
+	property var resolutionChoice: ({})
+	readonly property var resolutionLevels: [
+		{ value: "2160", label: "4K", w: 3840, h: 2160 },
+		{ value: "1440", label: "2K", w: 2560, h: 1440 },
+		{ value: "1080", label: "1080p", w: 1920, h: 1080 }
+	]
+	readonly property var currentResolutionOptions: root.resolutionOptions(root.currentTheme)
+	readonly property string selectedResolution: {
+		const theme = root.currentTheme;
+		if (!theme || root.currentResolutionOptions.length === 0) return "original";
+		const chosen = root.resolutionChoice[theme.path] ?? "original";
+		return root.currentResolutionOptions.some(option => option.value === chosen) ? chosen : "original";
+	}
+	// the scaled copy being made before an apply: how far, 0 to 1
+	property bool scaling: false
+	property real scaleProgress: 0
+	property string scalingLabel: ""
+	property var scalingCommand: []
 	// until the first touch, the picker stands on what the desktop wears
 	property bool startPending: false
 	// Every theme's palette matrix (the wallust colours per palette x style)
@@ -114,6 +133,25 @@ ModalWindow {
 			root.reloadPreviewMatrix();
 			root.prewarmMatrices();
 		});
+	}
+
+	// the levels a live wallpaper of the day can be scaled down to, as
+	// theme_resolution_levels in scripts/theme_paths.sh: those whose box is
+	// smaller in both directions. The library is always painted as it is.
+	function resolutionOptions(theme) {
+		const size = root.mediaSize(theme);
+		if (!size || theme.daily?.provider !== "moewalls") return [];
+		const options = [{ value: "original", label: "Original" }];
+		for (const level of root.resolutionLevels) {
+			if (level.w < size.w && level.h < size.h) options.push({ value: level.value, label: level.label });
+		}
+		return options.length > 1 ? options : [];
+	}
+
+	function mediaSize(theme) {
+		const w = Number(theme?.daily?.width ?? 0);
+		const h = Number(theme?.daily?.height ?? 0);
+		return w > 0 && h > 0 ? { w, h } : null;
 	}
 
 	function parseWallustValue(raw, key) {
@@ -329,19 +367,44 @@ ModalWindow {
 			"--palette", root.selectedColorSpace,
 			"--style", root.selectedPalette
 		];
-		Popups.closeModal();
-		if (theme.daily) {
-			// the picture that is kept becomes the library's theme of the day
-			Quickshell.execDetached([
-				"sh", "-c", 'python3 "$1" --provider "$2" --cached >/dev/null && shift 2 && exec bash "$@"', "sh",
-				Daily.script, theme.daily.provider, root.applyScriptPath, Daily.themeDir
-			].concat(look));
+		// the picture that is kept becomes the library's theme of the day
+		const apply = theme.daily ? [
+			"sh", "-c", 'python3 "$1" --provider "$2" --cached >/dev/null && shift 2 && exec bash "$@"', "sh",
+			Daily.script, theme.daily.provider, root.applyScriptPath, Daily.themeDir
+		].concat(look, ["--resolution", root.selectedResolution]) : ["bash", root.applyScriptPath, theme.path].concat(look);
+		if (root.selectedResolution === "original") {
+			Popups.closeModal();
+			Quickshell.execDetached(apply);
 			return;
 		}
-		Quickshell.execDetached(["bash", root.applyScriptPath, theme.path].concat(look));
+		// the scaled copy is made from the kept file here first, with the bar
+		// on the stage; the apply then finds it ready (it is keyed by the
+		// file, and the library's theme of the day is a hard link of it)
+		if (root.scaling) return;
+		const level = root.resolutionLevels.find(level => level.value === root.selectedResolution);
+		root.scalingLabel = level ? level.label : root.selectedResolution;
+		root.scalingCommand = apply;
+		root.scaleProgress = 0;
+		root.scaling = true;
+		scaleProcess.command = ["bash", root.themeCatalogScriptPath, "scale", theme.path, root.selectedResolution];
+		scaleProcess.running = true;
+	}
+
+	function cancelScaling() {
+		root.scaling = false;
+		scaleProcess.running = false;
+	}
+
+	function scalingFinished(ok) {
+		root.scaling = false;
+		if (!ok) return;
+		Popups.closeModal();
+		Quickshell.execDetached(root.scalingCommand);
 	}
 
 	function reset() {
+		root.cancelScaling();
+		root.resolutionChoice = ({});
 		root.searchText = "";
 		root.currentThemeIndex = 0;
 		searchInput.text = "";
@@ -381,6 +444,22 @@ ModalWindow {
 		command: ["bash", root.themeCatalogScriptPath, "list"]
 		stdout: StdioCollector {
 			onStreamFinished: root.setThemeEntries(text)
+		}
+	}
+
+	Process {
+		id: scaleProcess
+
+		command: ["true"]
+		stdout: SplitParser {
+			onRead: line => {
+				const match = String(line).match(/^progress ([0-9.]+)$/);
+				if (match) root.scaleProgress = Math.max(0, Math.min(1, Number(match[1])));
+			}
+		}
+		// a run that was stopped (Esc, a new opening) says nothing
+		onExited: (exitCode, exitStatus) => {
+			if (root.scaling) root.scalingFinished(exitCode === 0 && exitStatus === 0);
 		}
 	}
 
@@ -663,7 +742,7 @@ ModalWindow {
 						Keys.onTabPressed: root.selectView(root.view === "daily" ? "library" : "daily")
 						Keys.onReturnPressed: root.applyTheme(root.currentTheme)
 						Keys.onEnterPressed: root.applyTheme(root.currentTheme)
-						Keys.onEscapePressed: Popups.closeModal()
+						Keys.onEscapePressed: root.scaling ? root.cancelScaling() : Popups.closeModal()
 
 						StyledText {
 							anchors.verticalCenter: parent.verticalCenter
@@ -1090,6 +1169,49 @@ ModalWindow {
 						font.weight: Font.Bold
 					}
 
+					// the size it is painted at: its own, or scaled down
+					RowLayout {
+						Layout.topMargin: 6
+						Layout.bottomMargin: 2
+						spacing: 10
+						visible: root.currentResolutionOptions.length > 0
+
+						Rectangle {
+							implicitHeight: 32
+							implicitWidth: sizeLabel.implicitWidth + 24
+							radius: 16
+							color: Qt.rgba(0, 0, 0, 0.45)
+
+							StyledText {
+								id: sizeLabel
+
+								anchors.centerIn: parent
+								text: {
+									const size = root.mediaSize(root.currentTheme);
+									return size ? `${size.w} × ${size.h}` : "";
+								}
+								tone: "white"
+								surface: "transparent"
+								font.pixelSize: Theme.size.label
+								font.weight: Font.DemiBold
+							}
+						}
+
+						Segmented {
+							Layout.preferredWidth: root.currentResolutionOptions.length * 82
+							Layout.preferredHeight: 32
+							enabled: !root.scaling
+							color: Qt.alpha(Theme.base, 0.85)
+							options: root.currentResolutionOptions
+							current: root.selectedResolution
+							onSelected: value => {
+								const next = Object.assign({}, root.resolutionChoice);
+								next[root.currentTheme.path] = value;
+								root.resolutionChoice = next;
+							}
+						}
+					}
+
 					StyledText {
 						Layout.fillWidth: true
 						visible: text !== ""
@@ -1345,9 +1467,74 @@ ModalWindow {
 							text: "Apply"
 							icon: "check"
 							variant: "filled"
-							enabled: root.currentTheme !== null && root.previewPaletteStatus !== "loading"
-							busy: root.previewPaletteStatus === "loading" && root.currentTheme !== null
+							enabled: root.currentTheme !== null && root.previewPaletteStatus !== "loading" && !root.scaling
+							busy: (root.previewPaletteStatus === "loading" && root.currentTheme !== null) || root.scaling
 							onActivated: root.applyTheme(root.currentTheme)
+						}
+					}
+				}
+
+				// the scaled copy being made: a bar that follows ffmpeg
+				Rectangle {
+					anchors.centerIn: parent
+					width: 360
+					height: 92
+					radius: 24
+					color: Qt.alpha(Theme.base, 0.94)
+					opacity: root.scaling ? 1 : 0
+					visible: opacity > 0
+
+					Behavior on opacity {
+						Anim {}
+					}
+
+					ColumnLayout {
+						anchors.fill: parent
+						anchors.margins: 18
+						spacing: 10
+
+						RowLayout {
+							Layout.fillWidth: true
+
+							StyledText {
+								Layout.fillWidth: true
+								text: `Scaling to ${root.scalingLabel}`
+								font.pixelSize: Theme.size.body
+								font.weight: Font.DemiBold
+								elide: Text.ElideRight
+							}
+
+							StyledText {
+								text: `${Math.floor(root.scaleProgress * 100)} %`
+								tone: Theme.textMuted
+								font.pixelSize: Theme.size.label
+							}
+						}
+
+						Rectangle {
+							Layout.fillWidth: true
+							Layout.preferredHeight: 8
+							radius: 4
+							color: Theme.layer1
+
+							Rectangle {
+								width: parent.width * root.scaleProgress
+								height: parent.height
+								radius: 4
+								color: Theme.primary
+
+								Behavior on width {
+									SpatialAnim {
+										duration: Motion.short
+									}
+								}
+							}
+						}
+
+						StyledText {
+							text: "Esc cancels"
+							tone: Theme.textMuted
+							font.pixelSize: Theme.size.tiny
 						}
 					}
 				}

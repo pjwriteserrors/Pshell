@@ -23,6 +23,8 @@ WAL_CACHE_DIR="${WAL_CACHE_DIR:-$HOME/.cache/wal}"
 NIRI_CONFIG_FILE="${NIRI_CONFIG_FILE:-$HOME/.config/niri/config.kdl}"
 NIRI_ANIMATIONS_ROOT="${NIRI_ANIMATIONS_ROOT:-$HOME/.config/niri/animations}"
 NIRI_ANIMATION_STATE_FILE="${NIRI_ANIMATION_STATE_FILE:-$THEME_STATE_DIR/current-animation}"
+THEME_SCALED_DIR="${THEME_SCALED_DIR:-$THEME_STATE_DIR/scaled}"
+THEME_RESOLUTIONS_FILE="${THEME_RESOLUTIONS_FILE:-$THEME_STATE_DIR/resolutions.json}"
 
 theme_ensure_runtime_dirs() {
 	mkdir -p "$THEME_STATE_DIR" "$THEME_PREVIEW_DIR" "$THEME_RUNTIME_DIR" "$THEME_CURRENT_DIR"
@@ -190,4 +192,163 @@ theme_resolve_media() {
 	local entry
 	entry="$(theme_resolve_entry "$1")" || return 1
 	theme_pick_media "$entry"
+}
+
+# ------------------------------------------------------------ resolution ---
+#
+# Media can be painted scaled down to one of the levels below (the picker
+# offers it for the live wallpaper of the day, the library stays original):
+# it keeps its aspect and is made just large enough to cover the level's box,
+# as awww and mpvpaper crop it to the screen anyway. The scaled copy is kept
+# in $THEME_SCALED_DIR, the choice per entry in $THEME_RESOLUTIONS_FILE, so a
+# restore paints the same.
+
+THEME_RESOLUTION_LEVELS=(2160 1440 1080)
+
+# "width height" of the media's first video stream (images are one too)
+theme_media_size() {
+	ffprobe -v error -select_streams v:0 -show_entries stream=width,height \
+		-of csv=s=x:p=0 -- "$1" 2>/dev/null | head -n 1 | tr x ' '
+}
+
+# the box of a level: 2160 is 4K, 1440 is 2K, 1080 is Full HD
+theme_resolution_box() {
+	case "$1" in
+		2160) printf '3840 2160\n' ;;
+		1440) printf '2560 1440\n' ;;
+		1080) printf '1920 1080\n' ;;
+		*) return 1 ;;
+	esac
+}
+
+# the levels a media of this size can be scaled down to, one per line
+theme_resolution_levels() {
+	local width="$1" height="$2" level box_w box_h
+
+	for level in "${THEME_RESOLUTION_LEVELS[@]}"; do
+		read -r box_w box_h < <(theme_resolution_box "$level")
+		# covering the box needs less than the original in both directions
+		(( box_w < width && box_h < height )) && printf '%s\n' "$level"
+	done
+	return 0
+}
+
+theme_resolution_get() {
+	local entry="$1"
+
+	[[ -f "$THEME_RESOLUTIONS_FILE" ]] || { printf 'original\n'; return 0; }
+	python3 - "$THEME_RESOLUTIONS_FILE" "$entry" <<'PY'
+import json, sys
+try:
+    data = json.load(open(sys.argv[1]))
+except (OSError, ValueError):
+    data = {}
+print(data.get(sys.argv[2], "original") if isinstance(data, dict) else "original")
+PY
+}
+
+theme_resolution_set() {
+	local entry="$1" level="$2"
+
+	mkdir -p "$THEME_STATE_DIR"
+	python3 - "$THEME_RESOLUTIONS_FILE" "$entry" "$level" <<'PY'
+import json, os, sys
+path, entry, level = sys.argv[1:4]
+try:
+    data = json.load(open(path))
+    if not isinstance(data, dict):
+        data = {}
+except (OSError, ValueError):
+    data = {}
+if level == "original":
+    data.pop(entry, None)
+else:
+    data[entry] = level
+tmp = f"{path}.tmp.{os.getpid()}"
+with open(tmp, "w") as handle:
+    json.dump(data, handle, indent=1, sort_keys=True)
+os.replace(tmp, path)
+PY
+}
+
+# The scaled copy of a media for a level, or the original when the level is
+# "original" or no step down from it. While ffmpeg runs, "progress F" lines
+# (F from 0 to 1, measured on the media's duration) go to stdout; the last
+# line is the path to paint. theme_scaled_media is the same without progress.
+theme_scale_media() {
+	local media_path="$1" level="$2"
+	local width height box_w box_h key extension target tmp_path scale
+	local duration_us=0 key_name value done_us last=-1 now
+
+	[[ "$level" == "original" || -z "$level" ]] && { printf '%s\n' "$media_path"; return 0; }
+	theme_resolution_box "$level" >/dev/null || { printf '%s\n' "$media_path"; return 0; }
+	read -r width height <<<"$(theme_media_size "$media_path")"
+	[[ "$width" =~ ^[0-9]+$ && "$height" =~ ^[0-9]+$ ]] || { printf '%s\n' "$media_path"; return 0; }
+	# no pipe into grep -q: under pipefail its early exit fails the pipeline
+	[[ $'\n'"$(theme_resolution_levels "$width" "$height")"$'\n' == *$'\n'"$level"$'\n'* ]] \
+		|| { printf '%s\n' "$media_path"; return 0; }
+	read -r box_w box_h < <(theme_resolution_box "$level")
+
+	# by the file, not its name: the picture of the day is installed into the
+	# library as a hard link, and the copy made from the kept one is found
+	key="$(theme_media_signature "$media_path" | sha1sum | awk '{print $1}')"
+	if [[ "$(theme_media_type "$media_path")" == "video" ]]; then
+		extension="mp4"
+	else
+		extension="${media_path##*.}"
+		extension="${extension,,}"
+		case "$extension" in
+			jpg|jpeg|png|webp) ;;
+			*) extension="png" ;;
+		esac
+	fi
+	target="$THEME_SCALED_DIR/$key-$level.$extension"
+	[[ -s "$target" ]] && { printf 'progress 1\n%s\n' "$target"; return 0; }
+
+	mkdir -p "$THEME_SCALED_DIR"
+	# what a stopped run left behind
+	find "$THEME_SCALED_DIR" -maxdepth 1 -name '.*' -type f -mmin +60 -delete 2>/dev/null || true
+	tmp_path="$THEME_SCALED_DIR/.$key-$level.$$.$extension"
+	scale="scale=${box_w}:${box_h}:force_original_aspect_ratio=increase:flags=lanczos,scale=trunc(iw/2)*2:trunc(ih/2)*2"
+	local -a encode
+	case "$extension" in
+		mp4)
+			duration_us="$(ffprobe -v error -show_entries format=duration -of csv=p=0 -- "$media_path" 2>/dev/null \
+				| awk '{ printf "%d", $1 * 1000000 }')"
+			encode=(-map 0:v:0 -an -vf "$scale" -c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p -movflags +faststart)
+			;;
+		jpg|jpeg) encode=(-frames:v 1 -vf "$scale" -q:v 2) ;;
+		*) encode=(-frames:v 1 -vf "$scale") ;;
+	esac
+
+	printf 'progress 0\n'
+	# -progress writes key=value blocks; out_time_us is how far the encoder is
+	while IFS='=' read -r key_name value; do
+		case "$key_name" in
+			out_time_us)
+				[[ "$value" =~ ^[0-9]+$ ]] && (( duration_us > 0 )) || continue
+				done_us="$value"
+				now=$(( done_us * 1000 / duration_us ))
+				(( now > 999 )) && now=999
+				if (( now != last )); then
+					last="$now"
+					printf 'progress %d.%03d\n' 0 "$now"
+				fi
+				;;
+		esac
+	done < <(ffmpeg -nostdin -hide_banner -loglevel error -nostats -stats_period 0.25 -progress pipe:1 -y \
+		-i "$media_path" "${encode[@]}" "$tmp_path" 2>&2)
+
+	if [[ ! -s "$tmp_path" ]]; then
+		rm -f "$tmp_path"
+		echo "could not scale $media_path to $level" >&2
+		printf '%s\n' "$media_path"
+		return 1
+	fi
+	mv -f "$tmp_path" "$target"
+	printf 'progress 1\n%s\n' "$target"
+}
+
+theme_scaled_media() {
+	theme_scale_media "$@" | tail -n 1
 }

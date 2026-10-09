@@ -5,9 +5,12 @@
 # hosts/<profile>.json) for everything else that follows the wallpaper.
 #
 #   apply_theme_selection.sh <theme> [--backend B] [--palette P] [--style S] [--animation KIND:NAME]
+#                            [--resolution original|2160|1440|1080]
 #
 # <theme> is a library entry (image, video or a directory holding one), by
-# path or by name.
+# path or by name. --resolution paints it scaled down (theme_scaled_media in
+# theme_paths.sh; the picker asks for it only for a live wallpaper of the day)
+# and is kept for the entry; without it the kept one is used.
 
 set -u
 
@@ -20,6 +23,7 @@ WALLUST_BACKEND=""
 WALLUST_PALETTE=""
 WALLUST_STYLE=""
 NIRI_ANIMATION_ID=""
+RESOLUTION=""
 RUN_ID="$(date +%Y%m%d-%H%M%S)"
 LOG_FILE="$THEME_STATE_DIR/apply-$RUN_ID.log"
 GTK_WAL_COLORS_FILE="$WAL_CACHE_DIR/gtk-colors.css"
@@ -49,6 +53,10 @@ while (($# > 0)); do
 			NIRI_ANIMATION_ID="${2:-}"
 			shift 2
 			;;
+		--resolution)
+			RESOLUTION="${2:-}"
+			shift 2
+			;;
 		--*)
 			echo "unknown option: $1" >&2
 			exit 1
@@ -66,7 +74,7 @@ while (($# > 0)); do
 done
 
 if [[ -z "$THEME_ARG" ]]; then
-	echo "usage: $0 <theme> [--backend VALUE --palette VALUE --style VALUE --animation KIND:NAME]" >&2
+	echo "usage: $0 <theme> [--backend VALUE --palette VALUE --style VALUE --animation KIND:NAME --resolution LEVEL]" >&2
 	exit 1
 fi
 
@@ -389,6 +397,21 @@ run_theme_hooks() {
 		run_bg "hook $hook" bash "$script"
 	done < <(python3 "$SCRIPT_DIR/host.py" hooks)
 }
+
+# the size to paint at: the one asked for, kept for the entry, or the kept one
+if [[ -n "$RESOLUTION" ]]; then
+	case "$RESOLUTION" in
+		original|2160|1440|1080) theme_resolution_set "$THEME_ENTRY" "$RESOLUTION" ;;
+		*) echo "unknown resolution: $RESOLUTION" >&2; exit 1 ;;
+	esac
+else
+	RESOLUTION="$(theme_resolution_get "$THEME_ENTRY")"
+fi
+if [[ "$RESOLUTION" != "original" ]]; then
+	log "START scale to $RESOLUTION"
+	THEME_MEDIA="$(theme_scaled_media "$THEME_MEDIA" "$RESOLUTION" 2>>"$LOG_FILE")"
+	log "OK scale to $RESOLUTION: $THEME_MEDIA"
+fi
 
 theme_name="$(theme_entry_name "$THEME_ENTRY")"
 media_type="$(theme_media_type "$THEME_MEDIA")"

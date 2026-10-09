@@ -555,6 +555,17 @@ case "${1:-list}" in
 		fi
 		prewarm_theme "$@"
 		;;
+	scale)
+		# the scaled copy of a picture of the day made ahead of its apply,
+		# with "progress F" lines for the picker's bar; the last line is the path
+		shift
+		if (($# != 2)); then
+			echo "usage: $0 scale <theme-dir-or-name> <original|2160|1440|1080>" >&2
+			exit 1
+		fi
+		media_path="$(theme_pick_media "$(resolve_theme_dir "$1")")" || exit 1
+		theme_scale_media "$media_path" "$2"
+		;;
 	matrix-all)
 		shift
 		if (($# != 1)); then
@@ -564,7 +575,7 @@ case "${1:-list}" in
 		matrix_all_json "$@"
 		;;
 	*)
-		echo "usage: $0 [list|entry|palette-json|matrix-json|matrix-all|prewarm]" >&2
+		echo "usage: $0 [list|entry|palette-json|matrix-json|matrix-all|prewarm|scale]" >&2
 		exit 1
 		;;
 esac

@@ -539,73 +539,29 @@ def extension_for(url: str, content_type: str, disposition: str) -> str:
     return ".mp4" if "video" in content_type else (guessed or ".jpg")
 
 
-def normalize_video(path: Path) -> bool:
-    probe = subprocess.run(
-        [
-            "ffprobe",
-            "-v",
-            "error",
-            "-select_streams",
-            "v:0",
-            "-show_entries",
-            "stream=width,height",
-            "-of",
-            "json",
-            str(path),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    streams = json.loads(probe.stdout).get("streams", [])
-    if not streams:
-        raise RuntimeError("downloaded video has no video stream")
-    width = int(streams[0].get("width") or 0)
-    height = int(streams[0].get("height") or 0)
-    if width <= 1920 and height <= 1080:
-        return False
-
-    converted = path.with_name(path.name + ".fullhd.mp4")
+def media_size(path: Path) -> tuple[int, int]:
+    """Width and height of a picture or video, (0, 0) when ffprobe cannot tell."""
     try:
-        subprocess.run(
-            [
-                "ffmpeg",
-                "-nostdin",
-                "-hide_banner",
-                "-loglevel",
-                "error",
-                "-y",
-                "-i",
-                str(path),
-                "-map",
-                "0:v:0",
-                "-map",
-                "0:a?",
-                "-vf",
-                "scale=1920:1080:force_original_aspect_ratio=decrease,"
-                "pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black",
-                "-c:v",
-                "libx264",
-                "-preset",
-                "veryfast",
-                "-crf",
-                "23",
-                "-pix_fmt",
-                "yuv420p",
-                "-c:a",
-                "aac",
-                "-b:a",
-                "160k",
-                "-movflags",
-                "+faststart",
-                str(converted),
-            ],
-            check=True,
+        probe = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=width,height", "-of", "json", str(path)],
+            check=True, capture_output=True, text=True,
         )
-        os.replace(converted, path)
-    finally:
-        converted.unlink(missing_ok=True)
-    return True
+        stream = json.loads(probe.stdout).get("streams", [{}])[0]
+        return int(stream.get("width") or 0), int(stream.get("height") or 0)
+    except (OSError, ValueError, IndexError, subprocess.CalledProcessError):
+        return 0, 0
+
+
+def with_size(entry: dict[str, object]) -> dict[str, object]:
+    """The entry with the media's own size, which the picker offers to scale
+    down from; entries kept before it was recorded get it measured here."""
+    if entry and not entry.get("width") and entry.get("media_path"):
+        width, height = media_size(Path(str(entry["media_path"])))
+        if width and height:
+            entry = {**entry, "width": width, "height": height}
+            write_json_atomic(CACHE_DIR / str(entry["provider"]) / "entry.json", entry)
+    return entry
 
 
 def download(candidate: dict[str, object], directory: Path) -> Path:
@@ -631,8 +587,8 @@ def download(candidate: dict[str, object], directory: Path) -> Path:
                     output.write(chunk)
             if size == 0:
                 raise RuntimeError("downloaded daily wallpaper is empty")
-            if extension == ".mp4":
-                normalize_video(temporary)
+            # kept at its own size: the picker scales a live one down on
+            # request (theme_scale_media in theme_paths.sh)
             os.replace(temporary, target)
         finally:
             temporary.unlink(missing_ok=True)
@@ -765,6 +721,7 @@ def fetch(provider: str, force: bool = False, retries: int = 1) -> dict[str, obj
             "selection_version": SELECTION_VERSION,
             "theme_path": str(directory),
             "media_path": str(media),
+            **dict(zip(("width", "height"), media_size(media))),
             **prepare(directory),
         }
         write_json_atomic(home / "entry.json", result)
@@ -863,7 +820,7 @@ def main() -> int:
         print(json.dumps({**metadata, "selected_provider": selected}, ensure_ascii=False))
         return 0
     if args.list:
-        entries = [entry for entry in map(cached_entry, PROVIDERS) if entry]
+        entries = [with_size(entry) for entry in map(cached_entry, PROVIDERS) if entry]
         print(json.dumps({"entries": entries, "applied": applied()}, ensure_ascii=False))
         return 0
     if args.fetch_all:
