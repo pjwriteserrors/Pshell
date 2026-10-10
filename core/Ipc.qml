@@ -410,8 +410,8 @@ Scope {
 		}
 	}
 
-	// sounds: play a moment of Sounds (`sounds play notification`), or switch
-	// what plays: all, buttons, system, off
+	// sounds: play a moment of Sounds (`sounds play notification`), switch
+	// what plays (all, buttons, system, off) or the pack (`sounds pack cosy`)
 	IpcHandler {
 		target: "sounds"
 		enabled: Plugins.on("sounds")
@@ -421,6 +421,13 @@ Scope {
 		}
 		function mode(mode: string): void {
 			if (["all", "buttons", "system", "off"].includes(mode)) Sounds.setMode(mode);
+		}
+		function pack(id: string): void {
+			if (Sounds.packs.some(entry => entry.id === id)) Sounds.setPack(id);
+		}
+		// a known pack whose zip lies in ~/Downloads
+		function install(id: string): void {
+			Sounds.install(Sounds.available.find(entry => entry.id === id));
 		}
 	}
 

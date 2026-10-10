@@ -105,6 +105,7 @@ ModalWindow {
 		{ page: "system", anchor: "decorations", title: "Title bars (CSD)", words: "prefer-no-csd decorations title bar", take: ["prefer-no-csd"] },
 		{ page: "system", anchor: "blur", title: "Blur", words: "blur passes offset noise saturation", take: ["blur"] },
 		{ page: "system", anchor: "system-more", title: "Clipboard, hotkey overlay, notifications, Xwayland", words: "clipboard disable-primary hotkey-overlay config-notification xwayland-satellite", take: ["clipboard", "hotkey-overlay", "config-notification", "xwayland-satellite"] },
+		{ page: "sounds", anchor: "sound-pack", title: "Sound pack", words: "sound pack theme cosy cozy install zip" },
 		{ page: "sounds", anchor: "sounds", title: "Sounds", words: "sound audio click volume mute quiet feedback do not disturb" },
 		{ page: "sounds", anchor: "sounds-list", title: "Every sound", words: "sound notification usb drive display monitor bluetooth error battery charger lock workspace screenshot" },
 		{ page: "lighting", anchor: "lighting", title: "Lighting", words: "lighting rgb openrgb led leds keyboard gpu fans argb wallpaper live screen ambient off dark" },

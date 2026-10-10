@@ -11,7 +11,7 @@ import qs.core.services
 import qs.style.widgets
 
 // Studio's combinations page: whole looks (wallpaper, palette, motion, icons,
-// pointer, style branch) saved under a name. The work is done by
+// pointer, style branch, sound pack) saved under a name. The work is done by
 // scripts/combinations.py. ↑↓ browse, Enter applies, N saves what is on now
 // under a new name, Delete removes (press twice).
 ModalWindow {
@@ -158,7 +158,7 @@ ModalWindow {
 	function isActive(entry) {
 		if (!entry)
 			return false;
-		const keys = ["theme", "backend", "palette", "style", "animation", "icons", "cursor", "cursorSize", "branch"];
+		const keys = ["theme", "backend", "palette", "style", "animation", "icons", "cursor", "cursorSize", "branch", "sounds"];
 		let any = false;
 		for (const key of keys) {
 			if (!root.named(entry, key))
@@ -188,7 +188,8 @@ ModalWindow {
 			part("animation_play", "Animation", ["animation"], split >= 0 ? animation.slice(split + 1) : animation, split >= 0 ? animation.slice(0, split) : ""),
 			part("apps", "Icons", ["icons"], String(e.icons || "")),
 			part("cursor_default_outline", "Cursor", ["cursor", "cursorSize"], String(e.cursor || ""), e.cursor && Number(e.cursorSize || 0) > 0 ? `${e.cursorSize} px` : ""),
-			part("source_branch", "Style", ["branch"], String(e.branch || ""))
+			part("source_branch", "Style", ["branch"], String(e.branch || "")),
+			part("volume_high", "Sounds", ["sounds"], Sounds.packs.find(pack => pack.id === e.sounds)?.name ?? String(e.sounds || ""))
 		];
 	}
 

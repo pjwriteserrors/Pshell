@@ -241,6 +241,12 @@ Scope {
 	}
 
 	LazyLoader {
+		active: Plugins.on("studio-sounds")
+
+		SoundPackPage {}
+	}
+
+	LazyLoader {
 		active: Plugins.on("lock-screen")
 
 		LockScreen {}

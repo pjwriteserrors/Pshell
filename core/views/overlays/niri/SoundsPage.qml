@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import qs.style.theme
 import qs.style.widgets
 import qs.core.services
+import qs.core.views.overlays.studio
 
 // Sounds (core/services/Sounds.qml): which kind plays – what is pressed,
 // what the system does on its own, both or none –, how loud, and below,
@@ -32,6 +33,18 @@ SettingsPage {
 		if (Sounds.mode === "off") return "Sounds are off";
 		if (!Sounds.kindOn(kind)) return kind === "buttons" ? "Off – only automatic sounds play" : "Off – only buttons play";
 		return "";
+	}
+
+	// ── the pack ───────────────────────────────────────────────────────────
+	SettingCard {
+		anchor: "sound-pack"
+		title: "Sound pack"
+		subtitle: "What every sound sounds like; Studio has the same choice"
+		icon: "music_note"
+
+		SoundPackGrid {
+			Layout.fillWidth: true
+		}
 	}
 
 	// ── what plays ─────────────────────────────────────────────────────────
@@ -210,7 +223,7 @@ SettingsPage {
 				Layout.fillWidth: true
 				Layout.topMargin: 10
 				Layout.leftMargin: 12
-				text: "Sounds from the Universal UI Soundpack by Nathan Gibson (nathangibson.myportfolio.com), CC BY 4.0 – cut and softened for the shell."
+				text: Sounds.current ? `Sounds of ${Sounds.current.name} by ${Sounds.current.author} (${Sounds.current.url.replace(/^https?:\/\//, "")}), ${Sounds.current.license} – cut and softened for the shell.` : ""
 				tone: Theme.textFaint
 				font.pixelSize: Theme.size.small
 				wrapMode: Text.WordWrap

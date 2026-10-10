@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Saved combinations: a wallpaper, a palette, a motion, a dress and a style, under one name.
+"""Saved combinations: a wallpaper, a palette, a motion, a dress, a style and sounds, under one name.
 
 Studio's own pages each change one thing. This keeps the *set* — what the
 desktop looked like as a whole — so a look can be put back on in one action
@@ -16,6 +16,7 @@ A combination records:
     cursor       cursor theme id, and its size
     cursorSize
     branch       the git branch of the shell style itself
+    sounds       the sound pack (scripts/sound_packs.py)
 
 Every field is optional. A combination that only names an animation and a
 cursor applies only those, and leaves the rest of the desktop alone — that is
@@ -54,7 +55,9 @@ STATE_DIR = Path(os.environ.get("THEME_STATE_DIR") or HOME / ".local/state/quick
 STORE = Path(os.environ.get("COMBINATIONS_FILE") or STATE_DIR / "combinations.json")
 SCRIPT_DIR = Path(__file__).resolve().parent
 
-FIELDS = ["theme", "backend", "palette", "style", "animation", "icons", "cursor", "cursorSize", "branch"]
+FIELDS = ["theme", "backend", "palette", "style", "animation", "icons", "cursor", "cursorSize", "branch", "sounds"]
+# the shell's sound settings; the shell follows the file when it changes
+SOUNDS_FILE = Path(os.environ.get("XDG_STATE_HOME") or HOME / ".local/state") / "pshell" / "sounds.json"
 
 
 # ----------------------------------------------------------------- the store
@@ -89,6 +92,14 @@ def run(command: list[str], timeout: int = 10) -> str:
     except (OSError, subprocess.SubprocessError):
         return ""
     return result.stdout.strip()
+
+
+def read_sounds() -> dict:
+    try:
+        data = json.loads(SOUNDS_FILE.read_text())
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
 
 
 def current_branch() -> str:
@@ -142,6 +153,7 @@ def current_state() -> dict:
         "cursor": appearance.get("cursor", ""),
         "cursorSize": appearance.get("cursorSize", 0),
         "branch": current_branch(),
+        "sounds": str(read_sounds().get("pack") or "gibson"),
     }
 
 
@@ -183,6 +195,17 @@ def apply_entry(entry: dict, skip_branch: bool = False) -> int:
         steps.append(command)
 
     failures = 0
+    pack = str(entry.get("sounds") or "")
+    if pack:
+        settings = read_sounds()
+        settings["pack"] = pack
+        try:
+            SOUNDS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            SOUNDS_FILE.write_text(json.dumps(settings, indent="\t") + "\n")
+        except OSError as error:
+            failures += 1
+            print(f"failed to set the sound pack: {error}", file=sys.stderr)
+
     for command in steps:
         try:
             result = subprocess.run(command, capture_output=True, text=True, timeout=600)

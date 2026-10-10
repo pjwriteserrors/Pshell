@@ -88,6 +88,7 @@
 	{ "id": "studio-dress", "name": "Icons & pointer", "category": "Studio" },
 	{ "id": "studio-styles", "name": "Style", "category": "Studio" },
 	{ "id": "studio-combinations", "name": "Combinations", "category": "Studio" },
+	{ "id": "studio-sounds", "name": "Sounds", "category": "Studio", "requires": ["sounds"], "icon": "volume_high" },
 	{ "id": "hook-sddm", "name": "SDDM login screen", "category": "Studio", "group": "Theme hooks", "hook": "sddm", "icon": "login", "default": false },
 	{ "id": "hook-betterdiscord", "name": "Discord (BetterDiscord)", "category": "Studio", "group": "Theme hooks", "hook": "betterdiscord", "icon": "chat", "default": false },
 	{ "id": "hook-obsidian", "name": "Obsidian", "category": "Studio", "group": "Theme hooks", "hook": "obsidian", "icon": "notebook", "default": false },

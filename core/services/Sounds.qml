@@ -9,7 +9,13 @@ import Quickshell.Io
 // shell (`buttons`) and what the system does on its own (`system`) – a
 // notification, a USB stick, a monitor, an error. Features name the moment
 // (`Sounds.play("copied")`, or Haptics.play, which hands every moment on);
-// the table below picks the file from assets/sounds (scripts/build_sounds.py).
+// the table below picks the file, from the sound pack that is chosen.
+//
+// A pack is a folder with one WAV for each file and a pack.json
+// (scripts/sound_packs.py builds it from the pack's zip): those that may be
+// passed on live in assets/sounds, the others are installed on each machine
+// into ~/.local/share/pshell/sounds. What a pack lacks comes from the one in
+// the shell (gibson).
 //
 // What plays is set on the Sounds page of the settings: everything, only one
 // of the two kinds, or nothing, how loud, and each moment on its own
@@ -90,6 +96,8 @@ Singleton {
 	property bool quietDnd: true
 	// moment → on, where it differs from the moment's fallback
 	property var switches: ({})
+	// the sound pack
+	property string pack: "gibson"
 
 	readonly property bool active: Plugins.on("sounds") && root.mode !== "off"
 
@@ -142,8 +150,15 @@ Singleton {
 		root.save();
 	}
 
+	// a pack is heard at once: a click, a switch, a notification
+	function setPack(id) {
+		root.pack = id;
+		root.save();
+		demo.restart();
+	}
+
 	function save() {
-		file.setText(JSON.stringify({ mode: root.mode, volume: root.volume, quietDnd: root.quietDnd, switches: root.switches }, null, "\t") + "\n");
+		file.setText(JSON.stringify({ mode: root.mode, volume: root.volume, quietDnd: root.quietDnd, pack: root.pack, switches: root.switches }, null, "\t") + "\n");
 	}
 
 	function load(text) {
@@ -152,6 +167,7 @@ Singleton {
 			root.mode = ["all", "buttons", "system", "off"].includes(data.mode) ? data.mode : "all";
 			root.volume = typeof data.volume === "number" ? Math.max(0, Math.min(1, data.volume)) : 0.6;
 			root.quietDnd = data.quietDnd !== false;
+			root.pack = typeof data.pack === "string" && data.pack !== "" ? data.pack : "gibson";
 			root.switches = data.switches && typeof data.switches === "object" && !Array.isArray(data.switches) ? data.switches : {};
 		} catch (error) {
 			console.warn("Sounds: sounds.json is not valid JSON");
@@ -217,7 +233,116 @@ Singleton {
 		root.heard = heard;
 		root.last = { rank: moment.rank, at: now, effect: effect };
 		effect.stop();
-		effect.play();
+		// a pack that was just picked may still be loading
+		if (effect.status === SoundEffect.Ready) effect.play();
+		else effect.waiting = true;
+	}
+
+	SequentialAnimation {
+		id: demo
+
+		ScriptAction {
+			script: root.preview("click")
+		}
+		PauseAnimation {
+			duration: 260
+		}
+		ScriptAction {
+			script: root.preview("toggleOn")
+		}
+		PauseAnimation {
+			duration: 420
+		}
+		ScriptAction {
+			script: root.preview("notification")
+		}
+	}
+
+	// ── packs ──────────────────────────────────────────────────────────────
+	// installed: [{ id, name, author, url, license, description, builtin, sounds, dir }]
+	property var packs: []
+	// known but not installed here: [{ …, zip }], zip: where it lies in ~/Downloads
+	property var available: []
+	readonly property var current: root.packs.find(entry => entry.id === root.pack) ?? root.packs.find(entry => entry.id === "gibson") ?? null
+	// the pack being installed, and what went wrong last time
+	property string installing: ""
+	property string installError: ""
+
+	function fileOf(name) {
+		const dir = root.current && (root.current.sounds ?? []).includes(name) ? root.current.dir : `${Paths.assets}/sounds/gibson`;
+		return `file://${dir}/${name}.wav`;
+	}
+
+	function refreshPacks() {
+		if (!lister.running) lister.running = true;
+	}
+
+	function install(entry) {
+		if (root.installing !== "" || !entry?.zip) return;
+		root.installing = entry.id;
+		root.installError = "";
+		installer.command = ["python3", `${Paths.scripts}/sound_packs.py`, "install", entry.zip];
+		installer.running = true;
+	}
+
+	function remove(id) {
+		if (root.pack === id) root.setPack("gibson");
+		Quickshell.execDetached(["python3", `${Paths.scripts}/sound_packs.py`, "remove", id]);
+		refreshLater.restart();
+	}
+
+	Component.onCompleted: root.refreshPacks()
+
+	Process {
+		id: lister
+
+		command: ["python3", `${Paths.scripts}/sound_packs.py`, "list"]
+		stdout: StdioCollector {
+			onStreamFinished: {
+				try {
+					const data = JSON.parse(String(text));
+					root.packs = Array.isArray(data.packs) ? data.packs : [];
+					root.available = Array.isArray(data.available) ? data.available : [];
+				} catch (error) {
+					console.warn("Sounds: sound_packs.py list said no JSON");
+				}
+			}
+		}
+	}
+
+	Process {
+		id: installer
+
+		stderr: StdioCollector {
+			id: installErrors
+		}
+		onExited: code => {
+			const id = root.installing;
+			root.installing = "";
+			if (code === 0) {
+				root.pack = id;
+				root.save();
+				pickedLater.restart();
+			} else {
+				root.installError = String(installErrors.text).trim().split("\n").pop() || "Could not build the pack";
+			}
+			root.refreshPacks();
+		}
+	}
+
+	Timer {
+		id: refreshLater
+
+		interval: 600
+		onTriggered: root.refreshPacks()
+	}
+
+	// a freshly installed pack is heard once the list knows it
+	Timer {
+		id: pickedLater
+
+		interval: 900
+		onTriggered: demo.restart()
 	}
 
 	// a loudness that sounds even along the slider
@@ -236,9 +361,15 @@ Singleton {
 
 		delegate: SoundEffect {
 			required property string modelData
+			// played before it had loaded: plays once it has
+			property bool waiting: false
 
-			source: `file://${Paths.assets}/sounds/${modelData}.wav`
+			source: root.fileOf(modelData)
 			volume: root.gain
+			onStatusChanged: if (status === SoundEffect.Ready && waiting) {
+				waiting = false;
+				play();
+			}
 		}
 
 		onObjectAdded: (index, object) => {

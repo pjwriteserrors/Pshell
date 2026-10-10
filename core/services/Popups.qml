@@ -91,7 +91,8 @@ Singleton {
 		animation: "studio-motion",
 		dress: "studio-dress",
 		styles: "studio-styles",
-		combinations: "studio-combinations"
+		combinations: "studio-combinations",
+		sounds: "studio-sounds"
 	})
 
 	function exists(id) {
@@ -153,7 +154,8 @@ Singleton {
 		{ id: "motion", modal: "animation", label: "Motion", icon: "animation_play" },
 		{ id: "dress", modal: "dress", label: "Icons & Pointer", icon: "cursor_default_outline" },
 		{ id: "styles", modal: "styles", label: "Style", icon: "source_branch" },
-		{ id: "combinations", modal: "combinations", label: "Combinations", icon: "bookmark_outline" }
+		{ id: "combinations", modal: "combinations", label: "Combinations", icon: "bookmark_outline" },
+		{ id: "sounds", modal: "sounds", label: "Sounds", icon: "volume_high" }
 	].filter(page => root.exists(page.modal))
 	readonly property int studioIndex: root.studioPages.findIndex(page => page.modal === root.modal)
 

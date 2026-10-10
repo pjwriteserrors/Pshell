@@ -65,6 +65,7 @@ PROGRAMS = {
     "fingerprint": [("fprintd-list", "fingerprint unlock")],
     "ssh": [("secret-tool", "SSH passwords")],
     "niri-settings": [("jq", "display setups")],
+    "sounds": [("udevadm", "USB sounds"), ("findmnt", "drive sounds"), ("ffmpeg", "installing sound packs")],
     "connections": [("ss", "the sockets of the apps")],
     "mail": [("secret-tool", "mail passwords"), ("xdg-open", "attachments, sign-in page"), ("wl-copy", "sign-in code")],
     "microsoft-calendar": [("wl-copy", "sign-in code"), ("xdg-open", "sign-in page, joining meetings")],
@@ -81,7 +82,7 @@ HOOK_PROGRAMS = {
     "spicetify": [("spicetify", "")],
 }
 PYTHON_MODULES = {
-    "core": [("numpy", "scrolling screenshots, live pins, song detection"), ("dbus", "bluetooth pairing, live pins"), ("gi", "bluetooth pairing, live pins")],
+    "core": [("numpy", "scrolling screenshots, live pins, song detection, sound packs"), ("dbus", "bluetooth pairing, live pins"), ("gi", "bluetooth pairing, live pins")],
     "hook:openrgb": [("PIL", "lighting")],
     "hook:openrgb-leds": [("PIL", "lighting")],
 }

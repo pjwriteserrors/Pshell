@@ -176,8 +176,8 @@ included last so that it wins; `scripts/keybinds.py` took over the binds of
 for machines without the plugin – one that is deleted or moved is covered in
 `keybinds.kdl` by a bind to `spawn "true"`.
 
-`sounds` plays short, quiet sounds (`core/services/Sounds.qml`, the files in
-`assets/sounds`): for what is pressed – buttons, switches, a choice, a panel
+`sounds` plays short, quiet sounds (`core/services/Sounds.qml`, from the
+sound pack that is chosen): for what is pressed – buttons, switches, a choice, a panel
 that opens or closes, the volume keys, a screenshot, a recording, do not
 disturb – and for what the system does on its own – a notification (an
 urgent one has its own), a USB device plugged in or removed, a USB stick
@@ -195,9 +195,24 @@ is played once. USB comes from `udevadm monitor`, drives from
 the Pshell settings picks everything, only buttons, only automatic or
 nothing, the volume, whether do not disturb quiets the system, and each
 sound on its own (`sounds.json`); `scripts/ipc.sh sounds play <moment>` and
-`sounds mode all|buttons|system|off` do it from a script. The files are cut
-from Nathan Gibson's Universal UI Soundpack (CC BY 4.0) by
-`scripts/build_sounds.py`.
+`sounds mode all|buttons|system|off` do it from a script.
+
+A sound pack is a folder of WAV files, one for each sound of the shell, and a
+`pack.json`; `scripts/sound_packs.py` builds one from the zip it is downloaded
+as (it knows each pack it can build: which of its sounds plays what, cut,
+raised or lowered, two played after each other) and brings every pack to the
+same loudness. A pack whose licence lets it be passed on is in the repository
+(`assets/sounds/<id>`: Nathan Gibson's Universal UI, CC BY 4.0); any other is
+built on each machine into `~/.local/share/pshell/sounds/<id>` and never
+committed – SampleKingdom's *Cosy* and Antahonist's *Cozy UI* samplers may
+not be shared. `sound_packs.py install <zip>` installs one, `list` shows
+what is installed and which known packs have their zip in `~/Downloads`. The
+pack is picked in Studio's *Sounds* tab (`studio-sounds`, with what plays and
+how loud) and on the Sounds page of the settings; a tile installs a pack
+whose zip is in `~/Downloads`. What a pack lacks comes from the one in the
+repository. A Studio combination keeps the pack with the rest of the look;
+`scripts/ipc.sh sounds pack <id>` and `sounds install <id>` do it from a
+script.
 
 The *Lighting* page of the Pshell settings (`>lighting`, while one of the
 OpenRGB theme hooks is on; `core/services/Lighting.qml`, `lighting.json`)
