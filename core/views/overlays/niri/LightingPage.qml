@@ -164,7 +164,7 @@ SettingsPage {
 		StyledText {
 			Layout.fillWidth: true
 			Layout.leftMargin: 12
-			text: "niri hands over the screen on the GPU, which shrinks it to 160 pixels before the CPU sees it: about 1–2 % of one core at 15 frames. The OpenRGB Effects plugin's screen copy cannot read niri's screencasts, so the shell does it itself."
+			text: "niri hands over the screen on the GPU, which shrinks it to 160 pixels before the CPU sees it: about 2–3 % of one core at 15 frames with every device live. The OpenRGB Effects plugin's screen copy cannot read niri's screencasts, so the shell does it itself."
 			tone: Theme.textFaint
 			font.pixelSize: Theme.size.small
 			wrapMode: Text.WordWrap

@@ -209,7 +209,7 @@ Live is `scripts/lighting_live.py`, running only while a device is live: niri's
 own `org.gnome.Mutter.ScreenCast` (no portal, no dialog) casts the chosen
 monitor (or the largest), GStreamer halves the DMA-BUFs in GL down to 160
 pixels, and the colours go into the OpenRGB server's socket
-(`scripts/openrgb_sdk.py`) – about 1–2 % of a core at 15 frames, nothing while
+(`scripts/openrgb_sdk.py`) – about 2–3 % of a core at 15 frames, nothing while
 the screen stands still. The keyboard gets the frame projected onto its keys,
 lamps the screen's colour weighted by chroma. The OpenRGB Effects plugin's
 "Screen copy" cannot replace this: it reads casts from shared memory, and niri
