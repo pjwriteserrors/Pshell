@@ -375,7 +375,8 @@ Scope {
 	}
 
 	// the Pshell settings (>settings); a page: displays, layout, looks, input,
-	// keys, multicursor, rules, workspaces, overview, system, sounds, debug
+	// keys, multicursor, rules, workspaces, overview, system, sounds,
+	// lighting, debug
 	IpcHandler {
 		target: "settings"
 		enabled: Plugins.on("niri-settings")

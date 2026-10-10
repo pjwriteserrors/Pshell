@@ -11,6 +11,10 @@ Singleton {
 
 	readonly property var glyphs: ({
 		"email_outline": "󰇰",
+		"fan": "󰈐",
+		"led_strip_variant": "󱁑",
+		"television_ambient_light": "󱍖",
+		"lightbulb_off": "󰹏",
 		"format_bold": "󰉤",
 		"format_italic": "󰉷",
 		"format_underline": "󰊇",

@@ -4,11 +4,16 @@
     apply_lighting.py                 derive everything from the current theme
     apply_lighting.py --only keyboard only the keyboard (or: leds)
     apply_lighting.py --restore       re-apply the last state (used at login)
+    apply_lighting.py --refresh       recompute the parts whose hook is on
+                                      (after a device's mode changed)
     apply_lighting.py --watch         stay, and put the colours back whenever
                                       the keyboard is plugged in again
     apply_lighting.py --probe 0 30    light 30 LEDs on ARGB header 0, to count them
     apply_lighting.py --probe-order 0 paint it red/green/blue to read its wiring
     apply_lighting.py --dry-run       print what would be sent
+    apply_lighting.py --devices       the devices and their modes, as JSON
+    apply_lighting.py --live          mirror the screen on the devices set to
+                                      "live" (scripts/lighting_live.py)
 
 The keyboard gets the wallpaper itself, projected onto its key matrix. The GPU
 and the ARGB headers get a single colour picked from the Wallust palette - the
@@ -34,6 +39,15 @@ and `openrgb-leds`, and two parts of the saved state.
 Device roles, gains and the LED count of each ARGB header live in
 hosts/<profile>-lighting.json, because only the person with the case open
 knows how many LEDs are on a header.
+
+What each device shows is the user's, set on the Lighting page of the Pshell
+settings (~/.local/state/pshell/lighting.json): "wallpaper" (the above),
+"live" (the screen, scripts/lighting_live.py) or "off" (dark). Devices OpenRGB
+finds beyond the configured ones join in as well: a matrix zone gets the
+wallpaper projected onto it like the keyboard, any other zone the accent
+colour. The saved state always holds every device's wallpaper colours; the
+mode only decides which of them are sent, so switching a device back from live
+needs no recomputing.
 """
 
 from __future__ import annotations
@@ -47,6 +61,7 @@ from pathlib import Path
 import re
 import select
 import socket
+import struct
 import subprocess
 import sys
 import time
@@ -62,6 +77,7 @@ LED_COUNT = 112
 SHELL_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SHELL_DIR / "scripts"))
 import host  # noqa: E402
+import openrgb_sdk  # noqa: E402
 
 CONFIG_PATH = Path(os.environ.get("LIGHTING_CONFIG") or SHELL_DIR / "hosts" / f"{host.profile_name()}-lighting.json")
 STATE_DIR = Path(os.environ.get("THEME_STATE_DIR", Path.home() / ".local/state/quickshell-theme"))
@@ -69,6 +85,8 @@ STATE_PATH = STATE_DIR / "lighting-state.json"
 FRAME_PATH = STATE_DIR / "current" / "frame.png"
 PALETTE_PATH = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "wal" / "colors.json"
 LOCK_PATH = Path("/tmp/openrgb-lighting.lock")
+SETTINGS_PATH = host.state_dir() / "lighting.json"
+MODES = ("wallpaper", "live", "off")
 
 SERVER = os.environ.get("OPENRGB_SERVER", "127.0.0.1:6742")
 # the server of a machine that has the units installed, and the one started here
@@ -76,6 +94,11 @@ INSTALLED_UNIT = "openrgb-theme.service"
 OWN_UNIT = "quickshell-openrgb.service"
 # part of the state -> the theme hook that switches it
 PARTS = {"keyboard": "openrgb", "leds": "openrgb-leds"}
+# configured device -> its part; the devices beyond them belong to "leds"
+ROLES = {"keyboard": "keyboard", "gpu": "leds", "argb": "leds"}
+# OpenRGB's device types, for the settings page's icons
+KINDS = {1: "memory", 2: "gpu", 3: "fans", 4: "strip", 5: "keyboard", 6: "mouse", 7: "mousemat",
+         8: "headset", 11: "light", 12: "speaker", 15: "case", 16: "microphone"}
 
 # OpenRGB's ANSI matrix for SteelSeries Apex keyboards. Values are indices in
 # the device's 112-entry LED array, not HID key codes.
@@ -167,6 +190,34 @@ def load_palette() -> dict[str, str]:
     palette = {name: value.lstrip("#") for name, value in data["colors"].items()}
     palette.update({name: value.lstrip("#") for name, value in data["special"].items()})
     return palette
+
+
+def load_settings() -> dict:
+    """The Lighting page's choices: a mode per device, and how live runs."""
+    try:
+        stored = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        stored = {}
+    modes = stored.get("modes") if isinstance(stored.get("modes"), dict) else {}
+    return {
+        "modes": {role: mode for role, mode in modes.items() if mode in MODES},
+        "output": str(stored.get("output") or ""),
+        "fps": max(1, min(60, int(stored.get("fps") or 15))),
+        "smoothing": max(0.0, min(0.95, float(stored.get("smoothing", 0.5)))),
+    }
+
+
+def mode_of(role: str, settings: dict) -> str:
+    return settings["modes"].get(role, "wallpaper")
+
+
+def role_of(step: dict) -> str:
+    """The device a step lights, as the settings name it. Steps saved before
+    there were roles say it in `what`."""
+    if step.get("role"):
+        return step["role"]
+    what = step.get("what", "")
+    return "argb" if what.startswith("argb") else what
 
 
 def saturation_of(hex_color: str) -> float:
@@ -333,30 +384,40 @@ def medoid(samples: list[tuple[int, int, int]]) -> tuple[int, int, int]:
     return best
 
 
-def sampled_colors(image_path: Path, settings: dict) -> list[str]:
+def flatten(image_path: Path) -> Image.Image:
     with Image.open(image_path) as source:
         source.seek(0)
         rgba = source.convert("RGBA")
         background = Image.new("RGBA", rgba.size, (0, 0, 0, 255))
-        image = Image.alpha_composite(background, rgba).convert("RGB")
+        return Image.alpha_composite(background, rgba).convert("RGB")
 
-    matrix = keyboard_matrix(settings.get("layout", "us-tkl"))
-    first, last = key_columns(matrix)
-    columns = last - first
 
-    # The whole picture over the keys that exist: the top row of keys shows
-    # the top of the wallpaper, the bottom row its bottom, the left and right
-    # edges its edges. Fitting the picture into the matrix' aspect ratio
-    # instead cropped it to a band through the middle, so the sky or the
-    # ground was never on the keyboard; and the columns of a layout without
-    # a numpad used to take the right fifth of the picture with them.
-    patches = image.resize(
-        (columns * KEY_SAMPLES, MATRIX_HEIGHT * KEY_SAMPLES),
-        resample=Image.Resampling.BOX,
-    )
-    keys = Image.new("RGB", (columns, MATRIX_HEIGHT))
+def grade(cells: Image.Image, settings: dict) -> Image.Image:
+    """The contrast is what makes a backlit key read at all, so the grading is
+    left to the settings."""
+    cells = ImageEnhance.Color(cells).enhance(float(settings.get("saturation", 1.35)))
+    cells = ImageEnhance.Brightness(cells).enhance(float(settings.get("brightness", 0.95)))
+    cells = ImageEnhance.Contrast(cells).enhance(float(settings.get("contrast", 1.45)))
+    return ImageEnhance.Sharpness(cells).enhance(float(settings.get("sharpness", 2.0)))
+
+
+def project(image: Image.Image, columns: int, rows: int, settings: dict, exact: bool = True) -> Image.Image:
+    """The whole picture over a grid of keys, graded: one pixel per key.
+
+    The top row of keys shows the top of the picture, the bottom row its
+    bottom, the left and right edges its edges. Fitting the picture into the
+    grid's aspect ratio instead cropped it to a band through the middle, so the
+    sky or the ground was never on the keyboard.
+
+    `exact` picks each key's medoid out of 5x5 samples; without it a key gets
+    its patch's mean, which is what a live frame can afford.
+    """
+    if not exact:
+        return grade(image.resize((columns, rows), resample=Image.Resampling.BOX), settings)
+    patches = image.resize((columns * KEY_SAMPLES, rows * KEY_SAMPLES), resample=Image.Resampling.BOX)
+    keys = Image.new("RGB", (columns, rows))
     pixels = patches.load()
-    for row in range(MATRIX_HEIGHT):
+    for row in range(rows):
         for column in range(columns):
             samples = [
                 pixels[column * KEY_SAMPLES + dx, row * KEY_SAMPLES + dy]
@@ -364,16 +425,17 @@ def sampled_colors(image_path: Path, settings: dict) -> list[str]:
                 for dx in range(KEY_SAMPLES)
             ]
             keys.putpixel((column, row), medoid(samples))
+    return grade(keys, settings)
 
-    # the same grading as before: the contrast is what makes a backlit key
-    # read at all, so it is left to the settings
-    keys = ImageEnhance.Color(keys).enhance(float(settings.get("saturation", 1.35)))
-    keys = ImageEnhance.Brightness(keys).enhance(float(settings.get("brightness", 0.95)))
-    keys = ImageEnhance.Contrast(keys).enhance(float(settings.get("contrast", 1.45)))
-    keys = ImageEnhance.Sharpness(keys).enhance(float(settings.get("sharpness", 2.0)))
 
+def keyboard_colors(image: Image.Image, settings: dict, exact: bool = True) -> list[str]:
+    """The keyboard's 112 LEDs, in the device's order."""
+    matrix = keyboard_matrix(settings.get("layout", "us-tkl"))
+    # the columns of a layout without a numpad would otherwise take the right
+    # fifth of the picture with them
+    first, last = key_columns(matrix)
+    graded = project(image, last - first, MATRIX_HEIGHT, settings, exact).load()
     colors = ["000000"] * LED_COUNT
-    graded = keys.load()
     for row in range(MATRIX_HEIGHT):
         for column in range(first, last):
             led = matrix[row][column]
@@ -382,6 +444,21 @@ def sampled_colors(image_path: Path, settings: dict) -> list[str]:
             red, green, blue = graded[column - first, row]
             colors[led] = f"{red:02X}{green:02X}{blue:02X}"
     return colors
+
+
+def matrix_colors(image: Image.Image, zone, settings: dict, exact: bool = True) -> list[str]:
+    """A matrix zone of any device (an openrgb_sdk.Zone), in the zone's LED order."""
+    graded = project(image, zone.width, zone.height, settings, exact).load()
+    colors = ["000000"] * zone.leds
+    for cell, led in enumerate(zone.map):
+        if led < zone.leds:
+            red, green, blue = graded[cell % zone.width, cell // zone.width]
+            colors[led] = f"{red:02X}{green:02X}{blue:02X}"
+    return colors
+
+
+def sampled_colors(image_path: Path, settings: dict) -> list[str]:
+    return keyboard_colors(flatten(image_path), settings)
 
 
 # ------------------------------------------------------------------ openrgb ---
@@ -462,7 +539,76 @@ def find_devices(name: str, devices: dict[str, str]) -> list[str]:
     return exact or [index for index, found in devices.items() if wanted in found.lower() or found.lower() in wanted]
 
 
-def build_plan(config: dict, parts: list[str]) -> list[dict]:
+def sdk_devices() -> list[openrgb_sdk.Device]:
+    """Every device the server holds, once each; none without a server."""
+    try:
+        client = openrgb_sdk.Client(SERVER, timeout=10)
+    except OSError:
+        return []
+    try:
+        return openrgb_sdk.unique(client.devices())
+    except (OSError, struct.error) as error:
+        print(f"OpenRGB device list: {error}", file=sys.stderr)
+        return []
+    finally:
+        client.close()
+
+
+def same_device(wanted: str, found: str) -> bool:
+    wanted, found = wanted.strip().lower(), found.strip().lower()
+    return bool(wanted) and (wanted == found or wanted in found or found in wanted)
+
+
+def assign(config: dict, devices: list[openrgb_sdk.Device]) -> tuple[dict, list[openrgb_sdk.Device]]:
+    """The device each configured role is, and the devices beyond them."""
+    roles, taken = {}, set()
+    for role in ROLES:
+        name = config.get(role, {}).get("device", "")
+        found = next((device for device in devices if same_device(name, device.name)), None)
+        roles[role] = found
+        taken.update(device.index for device in devices if same_device(name, device.name))
+    return roles, [device for device in devices if device.index not in taken]
+
+
+def other_role(device: openrgb_sdk.Device) -> str:
+    return f"device:{device.name}"
+
+
+def lamp_color(source: str, palette: dict[str, str], section: dict) -> str:
+    """A palette colour as a lamp shows it (see adjust)."""
+    return reorder(adjust(
+        resolve_source(source, palette),
+        float(section.get("saturation", 1.2)),
+        float(section.get("brightness", 1.0)),
+        section.get("gains", {}),
+        float(section.get("saturation_floor", 1.0)),
+        section.get("lightness", 0.5),
+    ), section.get("order", "RGB"))
+
+
+def other_steps(device: openrgb_sdk.Device, config: dict, palette: dict[str, str], image) -> list[dict]:
+    """A device nobody configured: matrix zones wear the wallpaper like the
+    keyboard, everything else the accent colour, calibrated like the ARGB
+    headers (no other calibration is known for it)."""
+    accent = lamp_color("accent", palette, config.get("argb", {}))
+    step = {"what": device.name, "role": other_role(device), "part": "leds", "device": device.name}
+    if device.mode_index("Direct") < 0:
+        if device.mode_index("Static") < 0:
+            return []
+        return [dict(step, args=["--mode", "Static", "--color", accent])]
+    steps = []
+    for index, zone in enumerate(device.zones):
+        if zone.leds <= 0:
+            continue
+        if zone.type == openrgb_sdk.ZONE_MATRIX and zone.map and image() is not None:
+            colors = matrix_colors(image(), zone, config.get("keyboard", {}))
+        else:
+            colors = [accent] * zone.leds
+        steps.append(dict(step, args=["--zone", str(index), "--mode", "Direct", "--color", ",".join(colors)]))
+    return steps
+
+
+def build_plan(config: dict, parts: list[str], devices: list | None = None) -> list[dict]:
     """The exact set of openrgb invocations, as data so it can be saved."""
     plan: list[dict] = []
     palette = load_palette() if "leds" in parts else {}
@@ -472,6 +618,7 @@ def build_plan(config: dict, parts: list[str]) -> list[dict]:
         colors = sampled_colors(FRAME_PATH, keyboard)
         plan.append({
             "what": "keyboard",
+            "role": "keyboard",
             "part": "keyboard",
             "device": keyboard["device"],
             "args": ["--mode", "Direct", "--color", ",".join(colors)],
@@ -489,6 +636,7 @@ def build_plan(config: dict, parts: list[str]) -> list[dict]:
         ), gpu.get("order", "RGB"))
         plan.append({
             "what": "gpu",
+            "role": "gpu",
             "part": "leds",
             "device": gpu["device"],
             "args": ["--mode", gpu.get("mode", "Static"), "--color", color],
@@ -510,6 +658,7 @@ def build_plan(config: dict, parts: list[str]) -> list[dict]:
             ), header.get("order", argb.get("order", "RGB")))
             plan.append({
                 "what": f"argb header {header['zone']}",
+                "role": "argb",
                 "part": "leds",
                 "device": argb["device"],
                 # --size before --color: a zone that is still 0 LEDs long has
@@ -522,19 +671,47 @@ def build_plan(config: dict, parts: list[str]) -> list[dict]:
                 ],
             })
 
+    if "leds" in parts:
+        frame: list = []
+
+        def image():
+            if not frame:
+                frame.append(flatten(FRAME_PATH) if FRAME_PATH.is_file() else None)
+            return frame[0]
+
+        _, others = assign(config, sdk_devices() if devices is None else devices)
+        for device in others:
+            plan += other_steps(device, config, palette, image)
+
     return plan
 
 
+def darkened(args: list[str]) -> list[str]:
+    """The same step with every colour black."""
+    out = list(args)
+    for index, value in enumerate(out[:-1]):
+        if value == "--color":
+            out[index + 1] = ",".join(["000000"] * len(out[index + 1].split(",")))
+    return out
+
+
 def run_plan(plan: list[dict], dry_run: bool) -> int:
+    """Sends the steps of the devices that wear the wallpaper; the ones set to
+    "off" get theirs in black, the live ones are left to lighting_live.py."""
     failures = 0
+    settings = load_settings()
     devices = {} if dry_run else list_devices()
     for step in plan:
+        mode = mode_of(role_of(step), settings)
+        if mode == "live":
+            continue
+        args = darkened(step["args"]) if mode == "off" else step["args"]
         if dry_run:
-            printable = [a if len(a) < 70 else a[:67] + "..." for a in step["args"]]
-            print(f"{step['what']}: openrgb --device {step['device']!r} {' '.join(printable)}")
+            printable = [a if len(a) < 70 else a[:67] + "..." for a in args]
+            print(f"{step['what']} ({mode}): openrgb --device {step['device']!r} {' '.join(printable)}")
             continue
         # none: not on this machine, or not plugged in right now
-        results = [openrgb("--device", index, *step["args"]) for index in find_devices(step["device"], devices)]
+        results = [openrgb("--device", index, *args) for index in find_devices(step["device"], devices)]
         if results and all(result.returncode != 0 for result in results):
             failures += 1
             print(f"{step['what']} failed: {results[0].stderr.strip() or results[0].stdout.strip()}", file=sys.stderr)
@@ -665,6 +842,45 @@ def watch() -> int:
     return 1
 
 
+# ------------------------------------------------------------------ devices ---
+
+def describe() -> dict:
+    """What the Lighting page lists: every device the parts that are on would
+    light, whether it is there right now, and its mode."""
+    parts = parts_on()
+    if parts:
+        ensure_server(patience=30)
+    devices = sdk_devices() if parts else []
+    config, settings = load_config(), load_settings()
+    roles, others = assign(config, devices)
+    found = []
+    for role, part in ROLES.items():
+        section = config.get(role, {})
+        if part not in parts or not section.get("enabled", True):
+            continue
+        device = roles[role]
+        found.append({
+            "id": role,
+            "kind": "fans" if role == "argb" else role,
+            "name": device.name if device else section.get("device", role),
+            "present": device is not None,
+            "mode": mode_of(role, settings),
+        })
+    if "leds" in parts:
+        for device in others:
+            usable = device.mode_index("Direct") >= 0 or device.mode_index("Static") >= 0
+            if not usable:
+                continue
+            found.append({
+                "id": other_role(device),
+                "kind": KINDS.get(device.type, "other"),
+                "name": device.name,
+                "present": True,
+                "mode": mode_of(other_role(device), settings),
+            })
+    return {"parts": parts, "server": bool(devices), "devices": found}
+
+
 # --------------------------------------------------------------------- main ---
 
 def main() -> int:
@@ -673,6 +889,8 @@ def main() -> int:
                         help="wallpaper frame to project (default: the current theme's)")
     parser.add_argument("--restore", action="store_true",
                         help="re-apply the last saved state instead of recomputing")
+    parser.add_argument("--refresh", action="store_true",
+                        help="recompute only the parts whose hook is on")
     parser.add_argument("--only", choices=list(PARTS),
                         help="only this part (default: both, or with --restore the ones whose hook is on)")
     parser.add_argument("--watch", action="store_true",
@@ -684,6 +902,10 @@ def main() -> int:
                         help="paint a header in three blocks - intended red, green, blue - "
                              "so the order you actually see names its wiring")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--devices", action="store_true",
+                        help="print the devices, whether they are there and their modes, as JSON")
+    parser.add_argument("--live", action="store_true",
+                        help="mirror the screen on the devices set to live (lighting_live.py)")
     args = parser.parse_args()
 
     global FRAME_PATH
@@ -694,6 +916,12 @@ def main() -> int:
 
     if args.watch:
         return watch()
+    if args.devices:
+        print(json.dumps(describe()))
+        return 0
+    if args.live:
+        import lighting_live
+        return lighting_live.main()
     if not args.dry_run and (args.probe or args.probe_order is not None):
         ensure_server()
 
@@ -733,7 +961,7 @@ def main() -> int:
         }]
         return 1 if run_plan(plan, args.dry_run) else 0
 
-    parts = [args.only] if args.only else (parts_on() if args.restore else list(PARTS))
+    parts = [args.only] if args.only else (parts_on() if args.restore or args.refresh else list(PARTS))
     if not parts:
         print("nothing to light: both lighting hooks are off", file=sys.stderr)
         return 0

@@ -50,8 +50,9 @@ ModalWindow {
 		{ id: "overview", label: "Overview & gestures", icon: "gesture_swipe", hint: "Overview, hot corners, Alt-Tab" },
 		{ id: "system", label: "System", icon: "cog_outline", hint: "Startup, environment, screenshots, blur" },
 		{ id: "sounds", label: "Sounds", icon: "volume_high", hint: "Clicks, notifications, devices", plugin: "sounds" },
+		{ id: "lighting", label: "Lighting", icon: "led_strip_variant", hint: "Keyboard and LEDs: wallpaper or screen", shown: Lighting.enabled },
 		{ id: "debug", label: "Debug", icon: "bug_outline", hint: "Rendering and driver switches" }
-	].filter(page => !page.plugin || Plugins.on(page.plugin))
+	].filter(page => (!page.plugin || Plugins.on(page.plugin)) && page.shown !== false)
 
 	// what search finds: a card on a page. `take` is what an export of the card
 	// holds: paths in settings.kdl, `output:<setting>` of every monitor,
@@ -106,11 +107,13 @@ ModalWindow {
 		{ page: "system", anchor: "system-more", title: "Clipboard, hotkey overlay, notifications, Xwayland", words: "clipboard disable-primary hotkey-overlay config-notification xwayland-satellite", take: ["clipboard", "hotkey-overlay", "config-notification", "xwayland-satellite"] },
 		{ page: "sounds", anchor: "sounds", title: "Sounds", words: "sound audio click volume mute quiet feedback do not disturb" },
 		{ page: "sounds", anchor: "sounds-list", title: "Every sound", words: "sound notification usb drive display monitor bluetooth error battery charger lock workspace screenshot" },
+		{ page: "lighting", anchor: "lighting", title: "Lighting", words: "lighting rgb openrgb led leds keyboard gpu fans argb wallpaper live screen ambient off dark" },
+		{ page: "lighting", anchor: "lighting-live", title: "Live lighting", words: "live screen mirror ambient monitor fps frames smoothing openrgb effects screen copy" },
 		{ page: "debug", anchor: "debug", title: "Debug options", words: "debug preview-render drm overlay planes scanout", take: ["debug"] }
 	]
 
 	// a page of the shell's own: no niri file behind it, nothing to undo
-	readonly property bool shellPage: root.current === "multicursor" || root.current === "sounds"
+	readonly property bool shellPage: ["multicursor", "sounds", "lighting"].includes(root.current)
 
 	readonly property var results: {
 		if (root.query === "") return [];
@@ -503,7 +506,7 @@ ModalWindow {
 								}
 
 								StyledText {
-									text: ({ keys: "keybinds.kdl", displays: "display-profile.kdl", multicursor: "multicursor.json", sounds: "sounds.json" })[root.current] ?? "settings.kdl"
+									text: ({ keys: "keybinds.kdl", displays: "display-profile.kdl", multicursor: "multicursor.json", sounds: "sounds.json", lighting: "lighting.json" })[root.current] ?? "settings.kdl"
 									font.weight: Font.DemiBold
 									font.pixelSize: Theme.size.label
 								}
@@ -537,7 +540,7 @@ ModalWindow {
 									variant: "ghost"
 									icon: "tray_arrow_down"
 									text: "Export"
-									visible: root.current !== "sounds"
+									visible: root.current !== "sounds" && root.current !== "lighting"
 									enabled: NiriSettings.loaded
 									onActivated: exportSheet.show(root.current)
 								}
@@ -596,6 +599,7 @@ ModalWindow {
 							case "overview": return overviewPage;
 							case "system": return systemPage;
 							case "sounds": return soundsPage;
+							case "lighting": return lightingPage;
 							default: return debugPage;
 							}
 						}
@@ -868,6 +872,12 @@ ModalWindow {
 		id: soundsPage
 
 		SoundsPage {}
+	}
+
+	Component {
+		id: lightingPage
+
+		LightingPage {}
 	}
 
 	Component {

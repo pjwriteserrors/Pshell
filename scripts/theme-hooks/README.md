@@ -49,3 +49,9 @@ while an OpenRGB server holds the devices, so the script starts one
 (`quickshell-openrgb.service`, transient) when none listens, and the shell
 keeps `apply_lighting.py --watch` running, which puts the colours back when
 the keyboard is plugged in again. Nothing has to be installed per machine.
+
+Each device can instead show the screen live or stay dark: the *Lighting*
+page of the Pshell settings (`~/.local/state/pshell/lighting.json`). The
+saved state still holds every device's wallpaper colours, the mode only picks
+which are sent; `scripts/lighting_live.py` (`apply_lighting.py --live`) paints
+the live ones, see docs/architecture.md.

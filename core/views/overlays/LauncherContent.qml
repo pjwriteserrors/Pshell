@@ -163,6 +163,7 @@ Item {
 		},
 		{ id: "niri-settings", plugin: "niri-settings", group: "system", command: "settings", page: "", name: "Pshell Settings", aliases: ["niri", "pshell", "preferences"], keywords: "layout borders input rules workspaces sounds" },
 		{ id: "niri-settings", plugin: "sounds", shown: Plugins.on("niri-settings"), group: "system", command: "sounds", page: "sounds", name: "Sounds", glyph: "volume_high", aliases: ["sound"], keywords: "clicks notifications volume mute" },
+		{ id: "niri-settings", shown: Plugins.on("niri-settings") && Lighting.enabled, group: "system", command: "lighting", page: "lighting", name: "Lighting", glyph: "led_strip_variant", aliases: ["rgb", "openrgb", "leds"], keywords: "keyboard fans gpu wallpaper screen live ambient" },
 		{ id: "niri-settings", plugin: "niri-settings", group: "system", command: "keys", page: "keys", name: "Key Binds", aliases: ["binds", "keybinds", "shortcuts"], keywords: "niri" },
 		{ id: "niri-settings", plugin: "niri-settings", group: "system", command: "setup", page: "displays", name: "Display Setup", aliases: ["display", "displays", "monitors"], keywords: "arrange" },
 		{ id: "dnd", plugin: "dnd", group: "system", command: "dnd", name: "Do Not Disturb", aliases: ["quiet", "silent"], keywords: "notifications", status: Notifs.dnd ? "On" : "" },

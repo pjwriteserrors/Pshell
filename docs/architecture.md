@@ -199,6 +199,23 @@ sound on its own (`sounds.json`); `scripts/ipc.sh sounds play <moment>` and
 from Nathan Gibson's Universal UI Soundpack (CC BY 4.0) by
 `scripts/build_sounds.py`.
 
+The *Lighting* page of the Pshell settings (`>lighting`, while one of the
+OpenRGB theme hooks is on; `core/services/Lighting.qml`, `lighting.json`)
+sets what each OpenRGB device shows: the wallpaper (the hooks, as before),
+the screen live, or nothing. Every device OpenRGB finds is listed, not only
+the configured keyboard, GPU and ARGB headers; one nobody configured gets the
+wallpaper projected onto its matrix zones and the accent colour elsewhere.
+Live is `scripts/lighting_live.py`, running only while a device is live: niri's
+own `org.gnome.Mutter.ScreenCast` (no portal, no dialog) casts the chosen
+monitor (or the largest), GStreamer halves the DMA-BUFs in GL down to 160
+pixels, and the colours go into the OpenRGB server's socket
+(`scripts/openrgb_sdk.py`) – about 1–2 % of a core at 15 frames, nothing while
+the screen stands still. The keyboard gets the frame projected onto its keys,
+lamps the screen's colour weighted by chroma. The OpenRGB Effects plugin's
+"Screen copy" cannot replace this: it reads casts from shared memory, and niri
+only shares DMA-BUFs (and prefers compressed ones, which is why the cast asks
+for a plain tiled or linear modifier).
+
 The launcher's apps (`core/views/overlays/launcher/AppsView.qml`): with
 nothing typed a dock of favourites (what is pinned, filled up with what is
 used most; Alt+1…8 starts one) over every app on shelves by its freedesktop
