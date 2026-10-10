@@ -160,14 +160,14 @@ function rank(entries, query, usage) {
 	return found;
 }
 
-function escape(text) {
+function escapeText(text) {
 	return String(text || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 // the name with the letters that answer in `color`, as styled text
 function highlight(name, indexes, color) {
 	const text = String(name || "");
-	if (!indexes || indexes.length === 0) return escape(text);
+	if (!indexes || indexes.length === 0) return escapeText(text);
 	const marked = {};
 	for (const index of indexes) marked[index] = true;
 	let out = "";
@@ -180,7 +180,7 @@ function highlight(name, indexes, color) {
 			out += "</b></font>";
 			open = false;
 		}
-		out += escape(text[i]);
+		out += escapeText(text[i]);
 	}
 	if (open) out += "</b></font>";
 	return out;

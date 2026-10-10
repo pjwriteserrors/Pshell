@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Effects
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
@@ -172,8 +173,6 @@ Item {
 	property var commandPins: []
 	// the tile that is picked, an index into `paletteCells`
 	property int paletteIndex: 0
-	// a command picked from the app search: an index into `appCommands`, -1 for the apps
-	property int commandFocus: -1
 
 	// every command once, those of a group behind it
 	readonly property var flatCommands: root.commands.filter(command => !command.parent).reduce((all, command) => all.concat(command.children ? [command].concat(command.children.filter(child => child.id !== "studio-page")) : [command]), [])
@@ -308,16 +307,6 @@ Item {
 		if (root.mode !== "apps" || query.length < 2) return [];
 		return root.flatCommands.map(command => ({ command: command, score: root.commandScore(command, query) }))
 			.filter(entry => entry.score >= 40).sort((a, b) => b.score - a.score).slice(0, 4);
-	}
-
-	// a command is picked ahead of the apps when a word of it starts with
-	// what is typed and no app's name does
-	function pickSearchResult() {
-		const query = root.searchText.trim().toLowerCase();
-		const best = root.appCommands[0];
-		const app = root.filteredApps[0];
-		root.commandFocus = best && best.score >= 60 && !(app && String(app.name || "").toLowerCase().startsWith(query)) ? 0 : -1;
-		appList.currentIndex = root.filteredApps.length > 0 ? 0 : -1;
 	}
 
 	FileView {
@@ -1473,8 +1462,6 @@ Item {
 			: searchField.text;
 		if (root.inCommandMode)
 			root.pickPaletteCell();
-		else
-			root.pickSearchResult();
 	}
 
 	function enterCommandInput(text, focusArgument) {
@@ -1537,15 +1524,16 @@ Item {
 		});
 	}
 
-	// Tab / Shift+Tab: apps → calculator → files → chat → chats → ollama
+	// Tab / Shift+Tab: apps → calculator → files → chat → chats → ollama,
+	// those whose plugin is on; the footer shows them as tabs
 	readonly property var modeCycle: [
-		{ mode: "apps", query: "" },
-		{ mode: "calc", query: ">c " },
-		{ mode: "files", query: ">file " },
-		{ mode: "chat", query: ">chat " },
-		{ mode: "chats", query: ">chats " },
-		{ mode: "ollama", query: ">ollama " }
-	]
+		{ mode: "apps", query: "", label: "Apps", glyph: "apps", plugin: "" },
+		{ mode: "calc", query: ">c ", label: "Calculator", glyph: "calculator", plugin: "calculator" },
+		{ mode: "files", query: ">file ", label: "Files", glyph: "folder", plugin: "files" },
+		{ mode: "chat", query: ">chat ", label: "Chat", glyph: "chat", plugin: "chat" },
+		{ mode: "chats", query: ">chats ", label: "Chats", glyph: "forum", plugin: "chat" },
+		{ mode: "ollama", query: ">ollama ", label: "Ollama", glyph: "robot", plugin: "ollama" }
+	].filter(entry => entry.plugin === "" || Plugins.on(entry.plugin))
 
 	function cycleMode(delta) {
 		const count = root.modeCycle.length;
@@ -2191,50 +2179,6 @@ Item {
 		root.saveUsageMap();
 	}
 
-	readonly property var allApps: {
-		const entries = [];
-		for (const entry of DesktopEntries.applications.values) {
-			if (!entry) continue;
-			if (entry.noDisplay || entry.hidden) continue;
-			entries.push(entry);
-		}
-
-		entries.sort((left, right) =>
-			String(left.name || left.id || "").localeCompare(String(right.name || right.id || ""))
-		);
-		return entries;
-	}
-
-	readonly property var filteredApps: {
-		if (!Plugins.on("apps")) return [];
-		const query = root.searchText.trim().toLowerCase();
-		const entries = root.allApps.slice();
-		if (query === "") {
-			entries.sort((left, right) => root.compareApps(left, right));
-			return entries.slice(0, 80);
-		}
-
-		const prepared = entries.map(entry => ({
-			_item: entry,
-			name: Fuzzy.prepare(String(entry.name || "")),
-			genericName: Fuzzy.prepare(String(entry.genericName || "")),
-			comment: Fuzzy.prepare(String(entry.comment || "")),
-			id: Fuzzy.prepare(String(entry.id || ""))
-		}));
-
-		return Fuzzy.go(query, prepared, {
-			all: true,
-			keys: ["name", "genericName", "comment", "id"],
-			scoreFn: result => {
-				const weights = [1.4, 0.5, 0.35, 0.6];
-				let score = 0;
-				for (let i = 0; i < weights.length; i += 1) score += result[i].score * weights[i];
-				score += root.appUsage(result.obj._item) * 100;
-				return score;
-			}
-		}).slice(0, 80).map(result => result.obj._item);
-	}
-
 	function iconSource(entry) {
 		if (!entry) return "";
 		const iconName = String(entry.icon || "");
@@ -2299,30 +2243,42 @@ Item {
 			return;
 		}
 
-		if (root.inCommandMode) {
+		if (root.inCommandMode)
 			root.launchCommand(root.paletteCommand);
-			return;
-		}
-
-		if (root.commandFocus >= 0 && root.commandFocus < root.appCommands.length) {
-			root.launchCommand(root.appCommands[root.commandFocus].command);
-			return;
-		}
-
-		if (appList.currentIndex < 0 || appList.currentIndex >= root.filteredApps.length) return;
-		root.launchApp(root.filteredApps[appList.currentIndex]);
 	}
 
 	function launchApp(entry) {
 		if (!entry) return;
 
 		root.recordLaunch(entry);
-		root.closeRequested();
 		Quickshell.execDetached({
 			command: entry.runInTerminal ? ["app2unit", "--", "kitty", "-e", ...entry.command] : ["app2unit", "--", ...entry.command],
 			workingDirectory: entry.workingDirectory
 		});
-		root.launchRequested();
+		closeAfterLaunch.restart();
+	}
+
+	// one of the app's own actions (a private window, a new document …)
+	function launchAppAction(entry, action) {
+		if (!entry || !action) return;
+
+		root.recordLaunch(entry);
+		Quickshell.execDetached({
+			command: entry.runInTerminal ? ["app2unit", "--", "kitty", "-e", ...action.command] : ["app2unit", "--", ...action.command],
+			workingDirectory: entry.workingDirectory
+		});
+		closeAfterLaunch.restart();
+	}
+
+	// the app starts at once; the launcher stays a moment for its icon to bloom
+	Timer {
+		id: closeAfterLaunch
+
+		interval: 130
+		onTriggered: {
+			root.closeRequested();
+			root.launchRequested();
+		}
 	}
 
 	function launchCommand(command) {
@@ -2478,7 +2434,7 @@ Item {
 		root.resetting = true;
 		root.leaveCommandInput("");
 		root.resetting = false;
-		appList.currentIndex = root.filteredApps.length > 0 ? 0 : -1;
+		appsView.reset();
 	}
 
 	// Ctrl+P keeps the picked command on top, or lets it go again
@@ -2524,16 +2480,8 @@ Item {
 		root.setLauncherSearch(">file ");
 	}
 
-	onFilteredAppsChanged: {
-		if (root.inCommandMode) return;
-		if (filteredApps.length === 0 && root.commandFocus < 0 && root.appCommands.length > 0) root.commandFocus = 0;
-		if (filteredApps.length === 0) appList.currentIndex = -1;
-		else if (appList.currentIndex < 0 || appList.currentIndex >= filteredApps.length) appList.currentIndex = 0;
-	}
-
 	// a tile that went (a plugin switched off) takes the pick with it
 	onPaletteCellsChanged: if (root.paletteIndex >= root.paletteCells.length) root.pickPaletteCell()
-	onAppCommandsChanged: if (root.commandFocus >= root.appCommands.length) root.commandFocus = root.appCommands.length - 1
 
 	onFilteredFileBrowserEntriesChanged: {
 		if (!root.inFileMode) return;
@@ -2932,7 +2880,6 @@ Item {
 		if (root.inCommandMode) return "commands";
 		return "apps";
 	}
-	readonly property bool browsingApps: root.mode === "apps" && root.searchText.trim() === ""
 	readonly property string inputGlyph: {
 		if (root.editingMessageId !== "") return "pencil";
 		switch (root.mode) {
@@ -2999,6 +2946,9 @@ Item {
 	}
 
 	// the view of the current mode when it handles keys itself
+	// what the apps want of the launcher's height: tall shelves, or as tall as the results
+	readonly property real appsHeight: appsView.preferredHeight + searchBox.implicitHeight + 30 + frame.spacing * 2
+
 	readonly property var activeModeView: {
 		switch (root.mode) {
 		case "translate": return translateView;
@@ -3008,6 +2958,7 @@ Item {
 		case "ai": return aiActionsView;
 		case "phone": return phoneView;
 		case "shots": return shotsView;
+		case "apps": return appsView;
 		default: return null;
 		}
 	}
@@ -3019,6 +2970,21 @@ Item {
 		case "web": return "Search the web";
 		case "ai": return "Instruction";
 		case "phone": return "Text to send";
+		case "apps": return "Search apps  ·  > for commands";
+		default: return "";
+		}
+	}
+	// what the footer calls a mode Tab does not reach
+	readonly property string modeLabel: {
+		switch (root.mode) {
+		case "commands": return root.openGroup ? root.openGroup.name : "Commands";
+		case "translate": return "Translate";
+		case "convert": return "Convert";
+		case "todo": return "Todo";
+		case "web": return "Web Search";
+		case "ai": return "AI Actions";
+		case "phone": return "Phone";
+		case "shots": return "Screenshots";
 		default: return "";
 		}
 	}
@@ -3033,6 +2999,7 @@ Item {
 		case "ai": return "run";
 		case "phone": return "send";
 		case "shots": return "copy";
+		case "apps": return appsView.zone === "actions" ? "run" : (appsView.current === null && appsView.searching && Plugins.on("web-search") ? "search the web" : "open");
 		default: return "open";
 		}
 	}
@@ -3147,12 +3114,29 @@ Item {
 
 			Layout.fillWidth: true
 			implicitHeight: root.inChatMode
-				? Math.min(168, Math.max(54, searchField.contentHeight + 26))
-				: 54
-			radius: root.inChatMode ? 22 : 27
+				? Math.min(168, Math.max(56, searchField.contentHeight + 28))
+				: 56
+			radius: Theme.radius.huge
 			color: searchBox.lit ? Theme.layer2 : Theme.layer1
-			border.width: searchBox.lit ? 1.5 : 0
-			border.color: root.editingMessageId !== "" ? Theme.warning : Qt.alpha(Theme.primary, 0.85)
+			border.width: 1
+			border.color: root.editingMessageId !== "" ? Theme.warning : (searchBox.lit ? Qt.alpha(Theme.primary, 0.45) : Theme.outline)
+
+			// a soft light around the field while something is typed into it
+			RectangularShadow {
+				z: -1
+				anchors.fill: parent
+				radius: parent.radius
+				blur: 22
+				spread: -2
+				color: root.editingMessageId !== "" ? Theme.warning : Theme.primary
+				opacity: searchBox.lit && root.searchText !== "" ? (Theme.dark ? 0.32 : 0.22) : 0
+
+				Behavior on opacity {
+					Anim {
+						duration: Motion.long
+					}
+				}
+			}
 
 			Behavior on implicitHeight {
 				SpatialAnim {
@@ -3168,14 +3152,32 @@ Item {
 				ColorAnim {}
 			}
 
-			Glyph {
+			// the mode, on a badge that changes with it
+			Rectangle {
 				id: lead
 
-				x: 18
-				y: root.inChatMode ? 17 : (parent.height - height) / 2
-				icon: root.inputGlyph
-				size: 21
-				color: searchBox.lit ? Theme.primary : Theme.textMuted
+				x: 10
+				y: root.inChatMode ? 10 : (parent.height - height) / 2
+				width: 36
+				height: 36
+				radius: Theme.radius.medium
+				color: searchBox.lit ? Theme.primarySoft : "transparent"
+
+				Behavior on color {
+					ColorAnim {}
+				}
+				Behavior on y {
+					SpatialAnim {
+						duration: Motion.medium
+					}
+				}
+
+				Glyph {
+					anchors.centerIn: parent
+					icon: root.inputGlyph
+					size: 20
+					color: searchBox.lit ? Theme.primary : Theme.textMuted
+				}
 			}
 
 			Rectangle {
@@ -3341,6 +3343,26 @@ Item {
 					color: Theme.primary
 				}
 
+				// the rest of the name Enter starts, after what is typed
+				Text {
+					id: ghost
+
+					readonly property rect end: searchField.positionToRectangle(searchField.length)
+
+					x: ghost.end.x + 1
+					y: ghost.end.y + (ghost.end.height - height) / 2
+					text: root.mode === "apps" ? appsView.completion : ""
+					color: Theme.textFaint
+					font: searchField.font
+					opacity: text !== "" ? 1 : 0
+
+					Behavior on opacity {
+						Anim {
+							duration: Motion.short
+						}
+					}
+				}
+
 				onTextChanged: {
 					if (root.commandInputSyncing) return;
 					if (!root.commandInputActive && text.startsWith(">")) {
@@ -3386,38 +3408,15 @@ Item {
 					event.accepted = true;
 				}
 				Keys.onLeftPressed: event => {
-					if (root.mode === "commands") {
-						root.movePalette(-1, 0);
-						return;
-					}
-					if (root.mode === "apps" && root.commandFocus >= 0) {
-						root.commandFocus = Math.max(0, root.commandFocus - 1);
-						return;
-					}
-					if (root.mode !== "apps" || root.filteredApps.length === 0 || appList.columns === 1) {
-						event.accepted = false;
-						return;
-					}
-					appList.currentIndex = Math.max(0, appList.currentIndex - 1);
-					appList.positionViewAtIndex(appList.currentIndex, GridView.Contain);
-					event.accepted = true;
+					if (root.mode === "commands") root.movePalette(-1, 0);
+					else event.accepted = false;
 				}
 				Keys.onRightPressed: event => {
-					if (root.mode === "commands") {
-						root.movePalette(1, 0);
-						return;
-					}
-					if (root.mode === "apps" && root.commandFocus >= 0) {
-						root.commandFocus = Math.min(root.appCommands.length - 1, root.commandFocus + 1);
-						return;
-					}
-					if (root.mode !== "apps" || root.filteredApps.length === 0 || appList.columns === 1) {
-						event.accepted = false;
-						return;
-					}
-					appList.currentIndex = Math.min(root.filteredApps.length - 1, appList.currentIndex + 1);
-					appList.positionViewAtIndex(appList.currentIndex, GridView.Contain);
-					event.accepted = true;
+					if (root.mode === "commands") root.movePalette(1, 0);
+					else event.accepted = false;
+				}
+				Keys.onReleased: event => {
+					if (root.mode === "apps") appsView.handleKeyRelease(event);
 				}
 				Keys.onDownPressed: {
 					if (root.activeModeView) {
@@ -3430,19 +3429,8 @@ Item {
 						fileBrowserList.positionViewAtIndex(fileBrowserList.currentIndex, ListView.Contain);
 						return;
 					}
-					if (root.inCalculatorMode || root.inAiMode || root.inChatMode || root.inOllamaMode) return;
-					if (root.inCommandMode) {
+					if (root.inCommandMode && !root.inCalculatorMode && !root.inAiMode && !root.inChatMode && !root.inOllamaMode)
 						root.movePalette(0, 1);
-						return;
-					}
-					if (root.filteredApps.length === 0) return;
-					// from the commands above the list back into it
-					if (root.commandFocus >= 0) {
-						root.commandFocus = -1;
-						return;
-					}
-					appList.currentIndex = Math.min(root.filteredApps.length - 1, appList.currentIndex + appList.columns);
-					appList.positionViewAtIndex(appList.currentIndex, GridView.Contain);
 				}
 				Keys.onUpPressed: {
 					if (root.activeModeView) {
@@ -3455,18 +3443,8 @@ Item {
 						fileBrowserList.positionViewAtIndex(fileBrowserList.currentIndex, ListView.Contain);
 						return;
 					}
-					if (root.inCalculatorMode || root.inAiMode || root.inChatMode || root.inOllamaMode) return;
-					if (root.inCommandMode) {
+					if (root.inCommandMode && !root.inCalculatorMode && !root.inAiMode && !root.inChatMode && !root.inOllamaMode)
 						root.movePalette(0, -1);
-						return;
-					}
-					if (root.commandFocus < 0 && root.appCommands.length > 0 && appList.currentIndex < appList.columns) {
-						root.commandFocus = 0;
-						return;
-					}
-					if (root.filteredApps.length === 0 || root.commandFocus >= 0) return;
-					appList.currentIndex = Math.max(0, appList.currentIndex - appList.columns);
-					appList.positionViewAtIndex(appList.currentIndex, GridView.Contain);
 				}
 			}
 
@@ -3522,215 +3500,28 @@ Item {
 			Layout.fillWidth: true
 			Layout.fillHeight: true
 
-			// apps: grid while browsing, ranked list while searching
+			// apps: a dock and shelves while browsing, a spotlight and the results while searching
 			ModeLayer {
 				current: root.mode === "apps"
 
-				// commands that answer the search, ahead of the apps
-				Row {
-					id: commandStrip
-
-					width: parent.width
-					spacing: 6
-					visible: root.appCommands.length > 0
-
-					Repeater {
-						model: root.appCommands.length
-
-						delegate: CommandTile {
-							id: found
-
-							required property int index
-
-							readonly property var entry: root.appCommands[found.index] || null
-
-							width: (commandStrip.width - 3 * commandStrip.spacing) / 4
-							command: found.entry?.command ?? null
-							glyph: root.commandGlyph(found.entry?.command)
-							selected: root.commandFocus === found.index
-							onPointed: root.commandFocus = found.index
-							onClicked: if (found.entry) root.launchCommand(found.entry.command)
-						}
-					}
-				}
-
-				GridView {
-					id: appList
-
-					readonly property int columns: root.browsingApps ? 6 : 1
+				AppsView {
+					id: appsView
 
 					anchors.fill: parent
-					anchors.topMargin: commandStrip.visible ? commandStrip.height + 8 : 0
-					clip: true
-					cellWidth: Math.floor(width / columns)
-					cellHeight: root.browsingApps ? 112 : 58
-					model: root.filteredApps
-					currentIndex: model.length > 0 ? 0 : -1
-					boundsBehavior: Flickable.StopAtBounds
-					highlightFollowsCurrentItem: false
-					ScrollBar.vertical: ThinScrollBar {}
-
-					populate: Transition {
-						Anim {
-							property: "opacity"
-							from: 0
-							to: 1
-							duration: Motion.short
-						}
-					}
-
-					delegate: Item {
-						id: app
-
-						required property DesktopEntry modelData
-						required property int index
-						readonly property bool selected: appList.currentIndex === app.index && root.commandFocus < 0
-						readonly property string subtitle: String(app.modelData.genericName || app.modelData.comment || "")
-
-						function point() {
-							root.commandFocus = -1;
-							appList.currentIndex = app.index;
-						}
-
-						width: appList.cellWidth
-						height: appList.cellHeight
-
-						Rectangle {
-							id: plate
-
-							anchors.fill: parent
-							anchors.margins: root.browsingApps ? 5 : 2
-							radius: root.browsingApps ? (app.selected ? Theme.radius.large : 26) : Theme.radius.medium
-							color: app.selected ? Theme.primaryContainer : (hover.containsMouse ? Theme.layer1 : "transparent")
-							scale: hover.pressed ? 0.94 : (app.selected && root.browsingApps ? 1.03 : 1)
-
-							Behavior on color {
-								ColorAnim {}
-							}
-							Behavior on radius {
-								SpatialAnim {
-									duration: Motion.medium
-								}
-							}
-							Behavior on scale {
-								SpatialAnim {
-									duration: Motion.medium
-								}
-							}
-
-							// grid tile
-							Column {
-								visible: root.browsingApps
-								anchors.centerIn: parent
-								width: parent.width - 14
-								spacing: 9
-
-								Image {
-									anchors.horizontalCenter: parent.horizontalCenter
-									width: 44
-									height: 44
-									source: root.iconSource(app.modelData)
-									sourceSize: Qt.size(88, 88)
-									fillMode: Image.PreserveAspectFit
-									smooth: true
-									mipmap: true
-									asynchronous: true
-									scale: app.selected ? 1.1 : 1
-
-									Behavior on scale {
-										SpatialAnim {
-											duration: Motion.medium
-										}
-									}
-								}
-
-								StyledText {
-									width: parent.width
-									horizontalAlignment: Text.AlignHCenter
-									text: app.modelData.name || app.modelData.id || "App"
-									font.pixelSize: Theme.size.label
-									font.weight: app.selected ? Font.DemiBold : Font.Medium
-								}
-							}
-
-							// list row
-							RowLayout {
-								visible: !root.browsingApps
-								anchors.fill: parent
-								anchors.leftMargin: 12
-								anchors.rightMargin: 14
-								spacing: 14
-
-								Image {
-									Layout.preferredWidth: 34
-									Layout.preferredHeight: 34
-									source: root.iconSource(app.modelData)
-									sourceSize: Qt.size(68, 68)
-									fillMode: Image.PreserveAspectFit
-									smooth: true
-									mipmap: true
-									asynchronous: true
-								}
-
-								ColumnLayout {
-									Layout.fillWidth: true
-									spacing: 0
-
-									StyledText {
-										Layout.fillWidth: true
-										text: app.modelData.name || app.modelData.id || "App"
-										font.pixelSize: Theme.size.body
-										font.weight: Font.DemiBold
-									}
-
-									StyledText {
-										Layout.fillWidth: true
-										visible: app.subtitle !== ""
-										text: app.subtitle
-										tone: Theme.textMuted
-										font.pixelSize: Theme.size.small
-									}
-								}
-
-								Glyph {
-									icon: "keyboard_return"
-									size: 16
-									color: Theme.primary
-									opacity: app.selected ? 1 : 0
-									scale: app.selected ? 1 : 0.5
-
-									Behavior on opacity {
-										Anim {
-											duration: Motion.short
-										}
-									}
-									Behavior on scale {
-										SpatialAnim {
-											duration: Motion.medium
-										}
-									}
-								}
-							}
-
-							MouseArea {
-								id: hover
-
-								anchors.fill: parent
-								hoverEnabled: true
-								cursorShape: Qt.PointingHandCursor
-								onEntered: if (Pointer.moved(hover, mouseX, mouseY)) app.point()
-								onPositionChanged: if (Pointer.moved(hover, mouseX, mouseY)) app.point()
-								onClicked: root.launchApp(app.modelData)
-							}
-						}
-					}
-				}
-
-				EmptyState {
-					anchors.centerIn: parent
-					visible: root.filteredApps.length === 0 && root.appCommands.length === 0
-					icon: "magnify"
-					title: "No apps match"
+					active: root.mode === "apps"
+					query: root.mode === "apps" ? root.searchText : ""
+					usage: root.usageMap
+					commands: root.appCommands
+					commandPins: root.commandPins
+					cursorAtEnd: searchField.cursorPosition === searchField.length
+					iconFor: entry => root.iconSource(entry)
+					glyphFor: command => root.commandGlyph(command)
+					onLaunchRequested: entry => root.launchApp(entry)
+					onActionRequested: (entry, action) => root.launchAppAction(entry, action)
+					onCommandRequested: command => root.launchCommand(command)
+					onCommandPinRequested: command => root.togglePin(command)
+					onWebSearchRequested: text => root.setLauncherSearch(`>w ${text}`)
+					onCloseRequested: root.closeRequested()
 				}
 			}
 
@@ -5306,14 +5097,191 @@ Item {
 			}
 		}
 
-		// ── footer ────────────────────────────────────────────────────────
+		// ── footer: the modes Tab walks, and the keys that matter here ──────
 		RowLayout {
 			Layout.fillWidth: true
-			spacing: 14
+			Layout.preferredHeight: 30
+			spacing: 10
+
+			Item {
+				id: modeStrip
+
+				readonly property int currentIndex: root.modeCycle.findIndex(entry => entry.mode === root.mode)
+
+				Layout.preferredWidth: modeTabs.width
+				Layout.preferredHeight: 30
+
+				// the mark under the mode; it stretches on its way like the shelves' one
+				Rectangle {
+					id: modeMark
+
+					readonly property Item target: modeStrip.currentIndex >= 0 && modeTabRepeater.count > modeStrip.currentIndex ? modeTabRepeater.itemAt(modeStrip.currentIndex) : null
+					property real edgeLeft: modeMark.target ? modeMark.target.x : 0
+					property real edgeRight: modeMark.target ? modeMark.target.x + modeMark.target.width : 0
+					property bool forward: true
+
+					x: modeMark.edgeLeft
+					width: Math.max(0, modeMark.edgeRight - modeMark.edgeLeft)
+					height: parent.height
+					radius: height / 2
+					color: Theme.layer2
+					opacity: modeMark.target ? 1 : 0
+
+					onTargetChanged: if (modeMark.target) modeMark.forward = modeMark.target.x >= modeMark.x
+
+					Behavior on edgeLeft {
+						SpatialAnim {
+							duration: modeMark.forward ? Motion.long : Motion.medium
+						}
+					}
+					Behavior on edgeRight {
+						SpatialAnim {
+							duration: modeMark.forward ? Motion.medium : Motion.long
+						}
+					}
+					Behavior on opacity {
+						Anim {
+							duration: Motion.short
+						}
+					}
+				}
+
+				Row {
+					id: modeTabs
+
+					height: parent.height
+
+					Repeater {
+						id: modeTabRepeater
+
+						model: root.modeCycle
+
+						delegate: Item {
+							id: modeTab
+
+							required property var modelData
+							required property int index
+							readonly property bool open: modeStrip.currentIndex === modeTab.index
+							readonly property bool wide: modeTab.open || modeTabMouse.containsMouse
+
+							width: modeTabGlyph.width + 20 + (modeTab.wide ? modeTabLabel.implicitWidth + 6 : 0)
+							height: modeTabs.height
+							clip: true
+
+							Behavior on width {
+								SpatialAnim {
+									duration: Motion.medium
+								}
+							}
+
+							Glyph {
+								id: modeTabGlyph
+
+								x: 10
+								anchors.verticalCenter: parent.verticalCenter
+								icon: modeTab.modelData.glyph
+								size: 15
+								color: modeTab.open ? Theme.primary : Theme.textSubtle
+								animated: false
+							}
+
+							StyledText {
+								id: modeTabLabel
+
+								x: modeTabGlyph.x + modeTabGlyph.width + 6
+								anchors.verticalCenter: parent.verticalCenter
+								text: modeTab.modelData.label
+								tone: modeTab.open ? Theme.text : Theme.textMuted
+								font.pixelSize: Theme.size.label
+								font.weight: Font.DemiBold
+								elide: Text.ElideNone
+								opacity: modeTab.wide ? 1 : 0
+
+								Behavior on opacity {
+									Anim {
+										duration: Motion.short
+									}
+								}
+							}
+
+							MouseArea {
+								id: modeTabMouse
+
+								anchors.fill: parent
+								hoverEnabled: true
+								cursorShape: Qt.PointingHandCursor
+								onClicked: {
+									root.setLauncherSearch(modeTab.modelData.query);
+									Qt.callLater(root.focusSearch);
+								}
+							}
+						}
+					}
+				}
+			}
+
+			// a mode Tab does not reach: where the typed command led
+			RowLayout {
+				spacing: 4
+				opacity: modeStrip.currentIndex < 0 && root.modeLabel !== "" ? 1 : 0
+				visible: opacity > 0.01
+
+				Behavior on opacity {
+					Anim {
+						duration: Motion.short
+					}
+				}
+
+				Glyph {
+					icon: "chevron_right"
+					size: 14
+					color: Theme.textSubtle
+					animated: false
+				}
+
+				Rectangle {
+					Layout.preferredHeight: 26
+					Layout.preferredWidth: modeLabelText.implicitWidth + 22
+					radius: 13
+					color: Theme.primaryContainer
+
+					StyledText {
+						id: modeLabelText
+
+						anchors.centerIn: parent
+						text: root.modeLabel
+						tone: Theme.primary
+						font.pixelSize: Theme.size.label
+						font.weight: Font.DemiBold
+					}
+				}
+			}
+
+			Item {
+				Layout.fillWidth: true
+			}
 
 			KeyHint {
 				key: "↵"
 				label: root.enterHint
+			}
+
+			KeyHint {
+				visible: root.mode === "apps" && appsView.currentWindows.length > 0 && appsView.zone !== "actions"
+				key: "⇧↵"
+				label: "go to window"
+			}
+
+			KeyHint {
+				visible: root.mode === "apps" && appsView.current !== null
+				key: appsView.searching ? (appsView.zone === "actions" ? "←" : "→") : "^↵"
+				label: appsView.zone === "actions" ? "back" : "actions"
+			}
+
+			KeyHint {
+				visible: root.mode === "apps" && !appsView.searching && appsView.shelves.length > 1
+				key: "^←→"
+				label: "shelves"
 			}
 
 			KeyHint {
@@ -5329,12 +5297,6 @@ Item {
 			}
 
 			KeyHint {
-				visible: !root.inChatMode && !root.inCalculatorMode && root.mode !== "translate"
-				key: root.browsingApps || root.mode === "commands" ? "←↑↓→" : "↑↓"
-				label: root.mode === "todo" ? "lists" : "move"
-			}
-
-			KeyHint {
 				visible: root.inChatMode
 				key: "⇧↵"
 				label: "new line"
@@ -5347,29 +5309,9 @@ Item {
 			}
 
 			KeyHint {
-				visible: !root.inCommandMode
-				key: ">"
-				label: "commands"
-			}
-
-			KeyHint {
-				key: "esc"
-				label: "close"
-			}
-
-			Item {
-				Layout.fillWidth: true
-			}
-
-			Meta {
-				text: {
-					switch (root.mode) {
-					case "apps": return root.browsingApps ? "Most used" : `${root.filteredApps.length} results`;
-					case "commands": return root.paletteCommand ? `${root.paletteCommand.prefix || ">"}${root.paletteCommand.command}` : "";
-					case "chat": return root.aiStreaming ? "Generating…" : "";
-					default: return "";
-					}
-				}
+				visible: root.mode === "chat" && root.aiStreaming
+				key: "…"
+				label: "generating"
 			}
 		}
 	}

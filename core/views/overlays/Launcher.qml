@@ -21,6 +21,9 @@ Drawer {
 			return 380;
 		case "chat":
 			return 660;
+		// the dock and shelves, or a spotlight as tall as the results
+		case "apps":
+			return content.appsHeight;
 		// as tall as its tiles
 		case "commands":
 			return Math.max(360, content.paletteHeight + 124);
