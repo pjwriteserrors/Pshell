@@ -3038,7 +3038,12 @@ Item {
 		searchField.forceActiveFocus();
 	}
 
-	onModeChanged: root.modelMenuOpen = false
+	onModeChanged: {
+		root.modelMenuOpen = false;
+		if (root.mode === "commands" && !root.openGroup) palette.replay();
+	}
+	// a group that opens sweeps its commands in
+	onOpenGroupChanged: if (root.mode === "commands") palette.replay()
 
 	component ModeLayer: Item {
 		id: layer

@@ -27,6 +27,12 @@ Item {
 	signal pointed(int index)
 	signal activated(int index)
 	signal pinRequested(int index)
+	signal cascade
+
+	// the tiles sweep in row by row, as the palette opens
+	function replay() {
+		root.cascade();
+	}
 
 	Flickable {
 		anchors.fill: parent
@@ -70,23 +76,57 @@ Item {
 						Repeater {
 							model: band.section.cells.length
 
-							delegate: CommandTile {
+							delegate: Item {
 								id: tile
 
 								required property int index
 
 								readonly property var cell: band.section.cells[tile.index] || null
+								property real enter: 1
 
 								width: (grid.width - (root.columns - 1) * root.gap) / root.columns
 								height: root.tileHeight
-								command: tile.cell?.command ?? null
-								glyph: tile.cell?.glyph ?? "console"
-								selected: tile.cell !== null && tile.cell.index === root.current
-								dimmed: tile.cell !== null && !tile.cell.match
-								pinned: tile.cell?.pinned ?? false
-								onPointed: if (tile.cell) root.pointed(tile.cell.index)
-								onClicked: if (tile.cell) root.activated(tile.cell.index)
-								onRightClicked: if (tile.cell) root.pinRequested(tile.cell.index)
+								opacity: Math.min(1, tile.enter)
+								scale: 0.9 + 0.1 * tile.enter
+
+								transform: Translate {
+									y: (1 - tile.enter) * 10
+								}
+
+								Connections {
+									target: root
+									function onCascade() {
+										tile.enter = 0;
+										pause.duration = 40 + (tile.cell?.row ?? 0) * 26 + (tile.cell?.column ?? 0) * 14;
+										sweep.restart();
+									}
+								}
+
+								SequentialAnimation {
+									id: sweep
+
+									PauseAnimation {
+										id: pause
+									}
+									SpatialAnim {
+										target: tile
+										property: "enter"
+										to: 1
+										duration: Motion.long
+									}
+								}
+
+								CommandTile {
+									anchors.fill: parent
+									command: tile.cell?.command ?? null
+									glyph: tile.cell?.glyph ?? "console"
+									selected: tile.cell !== null && tile.cell.index === root.current
+									dimmed: tile.cell !== null && !tile.cell.match
+									pinned: tile.cell?.pinned ?? false
+									onPointed: if (tile.cell) root.pointed(tile.cell.index)
+									onClicked: if (tile.cell) root.activated(tile.cell.index)
+									onRightClicked: if (tile.cell) root.pinRequested(tile.cell.index)
+								}
 							}
 						}
 					}

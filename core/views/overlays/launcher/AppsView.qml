@@ -79,6 +79,10 @@ Item {
 			});
 		}
 		list.sort((a, b) => a.name.localeCompare(b.name));
+		// two apps of one name (Files: Nautilus, Nemo) are told apart by what they run as
+		const names = {};
+		for (const item of list) names[item.name] = (names[item.name] || 0) + 1;
+		for (const item of list) item.also = names[item.name] > 1 ? AppSearch.runName(item.id) : "";
 		return list;
 	}
 	readonly property var byKey: {
@@ -95,7 +99,7 @@ Item {
 	readonly property var dock: {
 		const use = item => Number(root.usage[item.key] || 0);
 		const pinned = root.pins.map(key => root.byKey[key]).filter(item => item && !root.hidden.includes(item.key));
-		const used = root.shown.filter(item => !root.pins.includes(item.key) && use(item) > 0).sort((a, b) => use(b) - use(a));
+		const used = root.shown.filter(item => !root.pins.includes(item.key) && use(item) > 0).sort((a, b) => use(b) - use(a) || a.name.localeCompare(b.name));
 		return pinned.concat(used).slice(0, root.dockSlots);
 	}
 	readonly property var shelves: {
@@ -202,10 +206,17 @@ Item {
 		return list;
 	}
 
-	readonly property var currentActions: root.actionsFor(root.current)
+	readonly property bool webFallback: root.searching && root.results.length === 0 && Plugins.on("web-search")
+	readonly property var currentActions: root.webFallback
+		? [{ id: "web", label: "Search the web", glyph: "web", hint: "↵" }]
+		: root.actionsFor(root.current)
 	readonly property var menuActions: root.actionsFor(root.menuTarget)
 
 	function run(result, action, from) {
+		if (action?.id === "web") {
+			root.webSearchRequested(root.query.trim());
+			return;
+		}
 		if (!result || !action) return;
 		switch (action.id) {
 		case "open":
@@ -328,6 +339,8 @@ Item {
 
 	function selectResult(index) {
 		root.listIndex = Math.max(0, Math.min(root.results.length - 1, index));
+		root.picked = true;
+		root.pickedKey = root.results[root.listIndex]?.key ?? "";
 		resultList.currentIndex = root.listIndex;
 		root.actionIndex = 0;
 		root.reveal(resultList, root.listIndex, true);
@@ -511,6 +524,7 @@ Item {
 			root.run(result, root.currentActions[root.actionIndex], spotIcon);
 			return;
 		}
+		// (a result is there from here on)
 		if (modifiers & Qt.ControlModifier) {
 			root.showActions();
 			return;
@@ -545,23 +559,34 @@ Item {
 
 	// ── following the search ────────────────────────────────────────────
 	property string lastQuery: ""
+	// moved to a result by hand: it stays picked while the results change
+	property bool picked: false
+	property string pickedKey: ""
 
 	onResultsChanged: {
 		root.syncResults();
 		const typed = root.query.trim().toLowerCase();
 		if (typed !== root.lastQuery) {
 			root.lastQuery = typed;
+			root.picked = false;
 			root.zone = root.searching ? "list" : (root.zone === "dock" && root.dock.length > 0 ? "dock" : "grid");
-			// a command answers ahead of the apps when a word of it starts
-			// with what is typed and no app's name does
-			const best = root.commands[0];
-			const app = root.results.find(result => result.kind === "app");
-			const commandFirst = best && best.score >= 60 && !(app && app.item.name.toLowerCase().startsWith(typed));
-			root.selectResult(commandFirst || !app ? 0 : root.results.indexOf(app));
 			resultList.contentY = resultList.originY;
-		} else {
-			root.clampSelection();
 		}
+		const kept = root.picked ? root.results.findIndex(result => result.key === root.pickedKey) : -1;
+		if (kept >= 0) {
+			root.listIndex = kept;
+			resultList.currentIndex = kept;
+			return;
+		}
+		root.picked = false;
+		// a command answers ahead of the apps when a word of it starts
+		// with what is typed and no app's name does
+		const best = root.commands[0];
+		const app = root.results.find(result => result.kind === "app");
+		const commandFirst = best && best.score >= 60 && !(app && app.item.name.toLowerCase().startsWith(typed));
+		root.listIndex = commandFirst || !app ? 0 : root.results.indexOf(app);
+		resultList.currentIndex = root.listIndex;
+		root.clampSelection();
 	}
 	readonly property string currentKey: root.current?.key ?? ""
 	onCurrentKeyChanged: if (root.searching) spotChange.restart()
@@ -805,7 +830,7 @@ Item {
 			y: holder.y + tile.iconSize + 12
 			width: parent.width - 12
 			horizontalAlignment: Text.AlignHCenter
-			text: tile.item?.name ?? ""
+			text: tile.item ? (tile.item.also !== "" ? `${tile.item.name} · ${tile.item.also}` : tile.item.name) : ""
 			tone: tile.selected ? Theme.text : Theme.textMuted
 			font.pixelSize: Theme.size.label
 			font.weight: tile.selected ? Font.DemiBold : Font.Medium
@@ -870,6 +895,38 @@ Item {
 			width: lens.iconSize
 			height: lens.iconSize
 			source: lens.glow
+		}
+	}
+
+	// where a list goes on beyond its edge, it fades out there
+	component EdgeFade: Item {
+		id: fade
+
+		required property Flickable view
+
+		visible: false
+		layer.enabled: true
+
+		Rectangle {
+			anchors.fill: parent
+			gradient: Gradient {
+				GradientStop {
+					position: 0
+					color: fade.view.atYBeginning ? "white" : "transparent"
+				}
+				GradientStop {
+					position: Math.min(0.4, 22 / Math.max(1, fade.height))
+					color: "white"
+				}
+				GradientStop {
+					position: Math.max(0.6, 1 - 30 / Math.max(1, fade.height))
+					color: "white"
+				}
+				GradientStop {
+					position: 1
+					color: fade.view.atYEnd ? "white" : "transparent"
+				}
+			}
 		}
 	}
 
@@ -1139,6 +1196,13 @@ Item {
 			}
 		}
 
+		EdgeFade {
+			id: gridFade
+
+			anchors.fill: grid
+			view: grid
+		}
+
 		// ── the apps of the shelf ──
 		GridView {
 			id: grid
@@ -1156,6 +1220,13 @@ Item {
 			currentIndex: 0
 			cacheBuffer: root.cellHeight * 2
 			ScrollBar.vertical: ThinScrollBar {}
+			layer.enabled: true
+			layer.effect: MultiEffect {
+				maskEnabled: true
+				maskSource: gridFade
+				maskThresholdMin: 0
+				maskSpreadAtMin: 1
+			}
 
 			highlight: Lens {
 				target: grid.currentItem
@@ -1289,14 +1360,14 @@ Item {
 						width: 72
 						height: 72
 						radius: Theme.radius.huge
-						visible: !spot.isApp && spot.result !== null
-						color: Theme.primaryContainer
+						visible: !spot.isApp
+						color: spot.result ? Theme.primaryContainer : Theme.layer2
 
 						Glyph {
 							anchors.centerIn: parent
-							icon: spot.result?.kind === "command" ? root.glyphFor(spot.result.command) : "console"
+							icon: spot.result?.kind === "command" ? root.glyphFor(spot.result.command) : (root.webFallback ? "web" : "magnify")
 							size: 34
-							color: Theme.primary
+							color: spot.result || root.webFallback ? Theme.primary : Theme.textSubtle
 						}
 					}
 				}
@@ -1314,7 +1385,7 @@ Item {
 					horizontalAlignment: Text.AlignHCenter
 					wrapMode: Text.Wrap
 					maximumLineCount: 2
-					text: spot.isApp ? spot.result.item.name : (spot.result?.command?.name ?? "")
+					text: spot.isApp ? spot.result.item.name : (spot.result ? spot.result.command.name : (root.webFallback ? "Search the web" : "No app answers"))
 					font.pixelSize: Theme.size.heading
 					font.weight: Font.Bold
 				}
@@ -1324,8 +1395,9 @@ Item {
 					width: parent.width - 36
 					visible: text !== ""
 					horizontalAlignment: Text.AlignHCenter
-					text: spot.isApp ? spot.result.item.genericName : `${spot.result?.command?.prefix ?? ">"}${spot.result?.command?.command ?? ""}`
-					tone: spot.isApp ? Theme.textMuted : Theme.primary
+					text: spot.isApp ? [spot.result.item.genericName, spot.result.item.also].filter(part => part !== "").join("  ·  ")
+						: (spot.result ? `${spot.result.command.prefix ?? ">"}${spot.result.command.command}` : `“${root.query.trim()}”`)
+					tone: spot.isApp || !spot.result ? Theme.textMuted : Theme.primary
 					font.family: spot.isApp ? Theme.fontFamily : Theme.monoFamily
 					font.pixelSize: Theme.size.body
 				}
@@ -1421,6 +1493,13 @@ Item {
 			}
 		}
 
+		EdgeFade {
+			id: resultFade
+
+			anchors.fill: resultList
+			view: resultList
+		}
+
 		// ── results ──
 		ListView {
 			id: resultList
@@ -1435,6 +1514,13 @@ Item {
 			boundsBehavior: Flickable.StopAtBounds
 			highlightFollowsCurrentItem: false
 			section.property: "kind"
+			layer.enabled: true
+			layer.effect: MultiEffect {
+				maskEnabled: true
+				maskSource: resultFade
+				maskThresholdMin: 0
+				maskSpreadAtMin: 1
+			}
 			section.delegate: SectionLabel {
 				required property string section
 
@@ -1601,7 +1687,7 @@ Item {
 					anchors.verticalCenter: parent.verticalCenter
 					anchors.verticalCenterOffset: 9
 					width: parent.width - x - 60
-					text: row.isApp ? (row.result.item.genericName || row.result.item.comment) : `${row.result?.command?.prefix ?? ">"}${row.result?.command?.command ?? ""}`
+					text: row.isApp ? [row.result.item.genericName || row.result.item.comment, row.result.item.also].filter(part => part !== "").join("  ·  ") : `${row.result?.command?.prefix ?? ">"}${row.result?.command?.command ?? ""}`
 					tone: Theme.textSubtle
 					font.family: row.isApp ? Theme.fontFamily : Theme.monoFamily
 					font.pixelSize: Theme.size.small
@@ -1664,13 +1750,15 @@ Item {
 			visible: root.searching && root.results.length === 0
 			icon: "magnify"
 			title: `Nothing called “${root.query.trim()}”`
-			subtitle: Plugins.on("web-search") ? "Enter searches the web" : ""
+			subtitle: root.hidden.length > 0 ? "Hidden apps are on the Hidden shelf" : ""
 		}
 	}
 
 	function pointResult(index) {
 		if (root.listIndex === index) return;
 		root.listIndex = index;
+		root.picked = true;
+		root.pickedKey = root.results[index]?.key ?? "";
 		resultList.currentIndex = index;
 		if (root.zone === "actions") root.zone = "list";
 		root.actionIndex = 0;

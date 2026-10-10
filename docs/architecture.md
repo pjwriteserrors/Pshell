@@ -174,6 +174,22 @@ included last so that it wins; `scripts/keybinds.py` took over the binds of
 for machines without the plugin – one that is deleted or moved is covered in
 `keybinds.kdl` by a bind to `spawn "true"`.
 
+The launcher's apps (`core/views/overlays/launcher/AppsView.qml`): with
+nothing typed a dock of favourites (what is pinned, filled up with what is
+used most; Alt+1…8 starts one) over every app on shelves by its freedesktop
+category (All, Internet, Develop, Games, Graphics, Media, Office, System,
+Tools; Ctrl+←/→, PageUp/PageDown or the wheel). Typed, a spotlight on the
+left shows what Enter starts and what else it can do: the app's own actions
+(a private window), its open window (Shift+Enter goes there instead of
+starting another), pin to the dock (Ctrl+P), hide (Ctrl+H; the Hidden shelf
+brings it back). → at the end of the text or Ctrl+Enter walks those actions,
+a right click on a tile shows them too. `core/lib/AppSearch.js` ranks: the
+whole name, its start, the start of a word, the initials, the name it runs
+as (`nautilus`), then generic name and keywords, last the description from
+three letters on; use only moves a found app up. Pins and hidden apps are
+kept in `launcher-apps.json`. Tab walks the modes the footer shows (Apps,
+Calculator, Files, Chat, Chats, Ollama, those whose plugin is on).
+
 The launcher's commands (`allCommands` in
 `core/views/overlays/LauncherContent.qml`) are shown by `>` as a palette of
 tiles: a band a group (`group`: tools, ai, panels, system), on top what is
