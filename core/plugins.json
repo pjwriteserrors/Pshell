@@ -71,7 +71,8 @@
 	{ "id": "keep-awake", "name": "Keep awake", "category": "Desktop" },
 	{ "id": "rpg", "name": "Productivity RPG", "category": "Desktop", "default": false, "icon": "gamepad_variant" },
 	{ "id": "fast-reader", "name": "Fast reader", "category": "Desktop", "requires": ["drop-commands"], "preview": {"on": ["bar", "clock"], "ipc": ["reader read 'Vielen Dank für die Aufmerksamkeit. Ein Wort nach dem anderen, immer an derselben Stelle.'"], "wait": 4.3} },
-	{ "id": "niri-settings", "name": "niri settings", "category": "Desktop", "default": false, "icon": "tune_variant" },
+	{ "id": "niri-settings", "name": "Pshell settings", "category": "Desktop", "default": false, "icon": "tune_variant" },
+	{ "id": "sounds", "name": "Sounds", "category": "Desktop", "icon": "volume_high" },
 
 	{ "id": "clipboard-hints", "name": "Clipboard hints", "category": "Automation" },
 	{ "id": "agents", "name": "Agent status", "category": "Automation", "icon": "robot" },

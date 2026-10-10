@@ -374,8 +374,25 @@ Scope {
 		}
 	}
 
-	// niri's settings, edited in the shell (>niri); a page: displays, layout,
-	// looks, input, keys, rules, workspaces, overview, system, debug
+	// the Pshell settings (>settings); a page: displays, layout, looks, input,
+	// keys, multicursor, rules, workspaces, overview, system, sounds, debug
+	IpcHandler {
+		target: "settings"
+		enabled: Plugins.on("niri-settings")
+
+		function open(page: string): void {
+			if (page !== "") NiriSettings.page = page;
+			Popups.withFocusedScreen(screen => Popups.openModal("niri", screen));
+		}
+		function close(): void {
+			if (Popups.modal === "niri") Popups.closeModal();
+		}
+		function toggle(): void {
+			root.modalOnFocused("niri");
+		}
+	}
+
+	// the same under its old name, which key binds may still call
 	IpcHandler {
 		target: "niri"
 		enabled: Plugins.on("niri-settings")
@@ -389,6 +406,20 @@ Scope {
 		}
 		function toggle(): void {
 			root.modalOnFocused("niri");
+		}
+	}
+
+	// sounds: play a moment of Sounds (`sounds play notification`), or switch
+	// what plays: all, buttons, system, off
+	IpcHandler {
+		target: "sounds"
+		enabled: Plugins.on("sounds")
+
+		function play(moment: string): void {
+			Sounds.play(moment);
+		}
+		function mode(mode: string): void {
+			if (["all", "buttons", "system", "off"].includes(mode)) Sounds.setMode(mode);
 		}
 	}
 

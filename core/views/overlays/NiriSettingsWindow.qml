@@ -10,10 +10,12 @@ import qs.style.widgets
 import qs.core.services
 import qs.core.views.overlays.niri
 
-// >niri: every setting niri has, but the ones Studio looks after (cursor
-// theme, animations). The pages are on the left; typing finds a setting on
-// any page and jumps to it. Every change is live at once (niri reloads the
-// file); Ctrl+Z takes it back. core/services/NiriSettings.qml does the rest.
+// >settings, the Pshell settings: every setting niri has, but the ones Studio
+// looks after (cursor theme, animations), and those of the shell's own
+// (multicursor, sounds). The pages are on the left; typing finds a setting
+// on any page and jumps to it. Every change is live at once (niri reloads
+// the file); Ctrl+Z takes it back. core/services/NiriSettings.qml does the
+// rest.
 ModalWindow {
 	id: root
 
@@ -47,6 +49,7 @@ ModalWindow {
 		{ id: "workspaces", label: "Workspaces", icon: "view_grid_outline", hint: "Named workspaces" },
 		{ id: "overview", label: "Overview & gestures", icon: "gesture_swipe", hint: "Overview, hot corners, Alt-Tab" },
 		{ id: "system", label: "System", icon: "cog_outline", hint: "Startup, environment, screenshots, blur" },
+		{ id: "sounds", label: "Sounds", icon: "volume_high", hint: "Clicks, notifications, devices", plugin: "sounds" },
 		{ id: "debug", label: "Debug", icon: "bug_outline", hint: "Rendering and driver switches" }
 	].filter(page => !page.plugin || Plugins.on(page.plugin))
 
@@ -101,8 +104,13 @@ ModalWindow {
 		{ page: "system", anchor: "decorations", title: "Title bars (CSD)", words: "prefer-no-csd decorations title bar", take: ["prefer-no-csd"] },
 		{ page: "system", anchor: "blur", title: "Blur", words: "blur passes offset noise saturation", take: ["blur"] },
 		{ page: "system", anchor: "system-more", title: "Clipboard, hotkey overlay, notifications, Xwayland", words: "clipboard disable-primary hotkey-overlay config-notification xwayland-satellite", take: ["clipboard", "hotkey-overlay", "config-notification", "xwayland-satellite"] },
+		{ page: "sounds", anchor: "sounds", title: "Sounds", words: "sound audio click volume mute quiet feedback do not disturb" },
+		{ page: "sounds", anchor: "sounds-list", title: "Every sound", words: "sound notification usb drive display monitor bluetooth error battery charger lock workspace screenshot" },
 		{ page: "debug", anchor: "debug", title: "Debug options", words: "debug preview-render drm overlay planes scanout", take: ["debug"] }
 	]
+
+	// a page of the shell's own: no niri file behind it, nothing to undo
+	readonly property bool shellPage: root.current === "multicursor" || root.current === "sounds"
 
 	readonly property var results: {
 		if (root.query === "") return [];
@@ -163,7 +171,7 @@ ModalWindow {
 
 	Shortcut {
 		sequence: "Ctrl+Z"
-		enabled: root.shown && root.current !== "multicursor" && !(root.currentPage && root.currentPage.recording)
+		enabled: root.shown && !root.shellPage && !(root.currentPage && root.currentPage.recording)
 		onActivated: root.current === "keys" ? Keybinds.undo() : NiriSettings.undo()
 	}
 
@@ -246,7 +254,7 @@ ModalWindow {
 
 							StyledText {
 								Layout.fillWidth: true
-								text: Words.of("niri.title", "niri")
+								text: Words.of("settings.title", "Pshell settings")
 								font.pixelSize: Theme.size.heading
 								font.weight: Font.Bold
 							}
@@ -495,7 +503,7 @@ ModalWindow {
 								}
 
 								StyledText {
-									text: root.current === "keys" ? "keybinds.kdl" : (root.current === "displays" ? "display-profile.kdl" : (root.current === "multicursor" ? "multicursor.json" : "settings.kdl"))
+									text: ({ keys: "keybinds.kdl", displays: "display-profile.kdl", multicursor: "multicursor.json", sounds: "sounds.json" })[root.current] ?? "settings.kdl"
 									font.weight: Font.DemiBold
 									font.pixelSize: Theme.size.label
 								}
@@ -503,7 +511,7 @@ ModalWindow {
 
 							StyledText {
 								Layout.fillWidth: true
-								visible: root.current !== "multicursor"
+								visible: !root.shellPage
 								text: "niri takes every change at once. What it would not accept is never written."
 								tone: Theme.textSubtle
 								font.pixelSize: Theme.size.small
@@ -519,7 +527,7 @@ ModalWindow {
 									variant: "ghost"
 									icon: "undo"
 									text: "Undo"
-									visible: root.current !== "multicursor"
+									visible: !root.shellPage
 									enabled: root.current === "keys" ? Keybinds.history.length > 0 : NiriSettings.history.length > 0
 									onActivated: root.current === "keys" ? Keybinds.undo() : NiriSettings.undo()
 								}
@@ -529,6 +537,7 @@ ModalWindow {
 									variant: "ghost"
 									icon: "tray_arrow_down"
 									text: "Export"
+									visible: root.current !== "sounds"
 									enabled: NiriSettings.loaded
 									onActivated: exportSheet.show(root.current)
 								}
@@ -586,6 +595,7 @@ ModalWindow {
 							case "workspaces": return workspacesPage;
 							case "overview": return overviewPage;
 							case "system": return systemPage;
+							case "sounds": return soundsPage;
 							default: return debugPage;
 							}
 						}
@@ -852,6 +862,12 @@ ModalWindow {
 		id: systemPage
 
 		SystemPage {}
+	}
+
+	Component {
+		id: soundsPage
+
+		SoundsPage {}
 	}
 
 	Component {

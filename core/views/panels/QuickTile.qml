@@ -22,6 +22,7 @@ Clickable {
 	color: root.active ? Theme.primaryContainer : Theme.layer1
 	tint: root.fg
 	pressedScale: 0.96
+	sound: root.active ? "toggleOff" : "toggleOn"
 
 	Behavior on radius {
 		SpatialAnim {

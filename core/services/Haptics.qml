@@ -6,6 +6,8 @@ import Quickshell
 // MX Master 4 haptics through mxh (~/.local/bin/mxh → mx4-hapticd FIFO).
 // Only moments that deserve a physical confirmation play something; plain
 // clicks stay silent. Features name the moment, this table picks the effect.
+// Every moment is handed on to Sounds as well, which plays what it has a
+// sound for (`sound` names another one, "" keeps it quiet).
 //
 // Waveforms the mouse knows: SHARP/DAMP STATE CHANGE, SHARP/DAMP/SUBTLE/
 // WHISPER COLLISION, HAPPY/ANGRY ALERT, COMPLETED, SQUARE, WAVE, FIREWORK,
@@ -41,7 +43,8 @@ Singleton {
 		listDone: "FIREWORK"
 	})
 
-	function play(event) {
+	function play(event, sound) {
+		Sounds.play(sound ?? event);
 		if (!Plugins.on("haptics")) return;
 		const effect = root.effects[event] ?? event;
 		if (!effect) return;

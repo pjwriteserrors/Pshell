@@ -24,6 +24,7 @@ Clickable {
 	radius: Theme.radius.large
 	pressedScale: 0.985
 	color: root.hovered ? Theme.layer2 : "transparent"
+	sound: root.checked ? "toggleOff" : "toggleOn"
 	onClicked: root.toggled(!root.checked)
 
 	RowLayout {

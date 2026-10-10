@@ -184,7 +184,9 @@ Singleton {
 		if (notification.lastGeneration) return;
 		if (root.dnd && notification.urgency !== NotificationUrgency.Critical) return;
 		root.addToast(notification);
-		Haptics.play("notification");
+		// an app that plays its own sound says so (suppress-sound)
+		const critical = notification.urgency === NotificationUrgency.Critical;
+		Haptics.play("notification", notification.hints["suppress-sound"] ? "" : (critical ? "notificationCritical" : "notification"));
 	}
 
 	function addToast(notification) {
@@ -204,10 +206,13 @@ Singleton {
 	//   image    – file:// or absolute path, shown as a thumbnail
 	//   actions  – [{ label, icon, run: function }], clicking one closes the toast
 	//   duration – ms
+	//   sound    – a moment of Sounds to play (an error plays one anyway)
 	// Internal toasts are feedback for something the user just did, so they
 	// show during do-not-disturb as well.
 	function pushInternal(status, title, detail, options) {
 		const extra = options || {};
+		const sound = extra.sound ?? (String(status) === "error" ? "error" : "");
+		if (sound !== "") Sounds.play(sound);
 		root.nextToastId += 1;
 		root.toasts = root.toasts.concat([{
 			toastId: root.nextToastId,

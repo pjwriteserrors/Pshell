@@ -87,7 +87,7 @@ SCENES = {
     "translate": {"on": LAUNCHER, "ipc": ["launcher search '>t guten morgen'"], "wait": 4},
     "web-search": {"on": LAUNCHER, "ipc": ["launcher search '>w quickshell'"], "wait": 3},
     "todos": {"on": LAUNCHER, "ipc": ["launcher search '>todo '"]},
-    "niri-settings": {"on": [], "ipc": ["niri open layout"], "wait": 2.5},
+    "niri-settings": {"on": [], "ipc": ["settings open layout"], "wait": 2.5},
 
     "screenshot": {"on": ["bar"], "ipc": ["screenshot region"], "base": "modes", "close": "screenshot close"},
     "pins": {"on": ["bar"], "ipc": ["screenshot pin"], "base": "modes", "close": "screenshot close"},

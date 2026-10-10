@@ -17,6 +17,7 @@ Singleton {
 
 	function toggle() {
 		root.active = root.available && !root.active;
+		if (root.available) Sounds.play(root.active ? "toggleOn" : "toggleOff");
 	}
 
 	Process {

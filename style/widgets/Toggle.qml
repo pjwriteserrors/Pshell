@@ -1,5 +1,6 @@
 import QtQuick
 import qs.style.theme
+import qs.core.services
 
 // Switch with a liquid thumb: it stretches in the direction of travel and
 // settles with a small overshoot. The thumb carries a check / cross glyph.
@@ -90,6 +91,9 @@ Item {
 		anchors.fill: parent
 		anchors.margins: -4
 		cursorShape: root.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-		onClicked: root.toggled(!root.checked)
+		onClicked: {
+			Sounds.play(root.checked ? "toggleOff" : "toggleOn");
+			root.toggled(!root.checked);
+		}
 	}
 }

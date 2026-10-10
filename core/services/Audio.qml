@@ -155,6 +155,7 @@ Singleton {
 				const volume = match ? Number(match[1]) : 0;
 				const muted = raw.includes("[MUTED]");
 				const mic = root.requestKind === "microphone";
+				if (!mic) Sounds.play("volume");
 				Osd.show(root.requestKind, mic ? "Microphone" : "Volume", muted ? 0 : volume,
 					muted ? "Muted" : `${Math.round(volume * 100)}%`,
 					mic ? (muted ? "microphone_off" : "microphone") : root.volumeIcon(volume, muted));

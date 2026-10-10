@@ -329,6 +329,7 @@ Singleton {
 			root.sinceEyes = 0;
 			Notifs.pushInternal("running", "Time to stretch", "5 min · stand up, stretch, walk", {
 				icon: "human_handsup",
+				sound: "reminder",
 				duration: 60000,
 				actions: [
 					{ label: "Start", icon: "play", run: () => root.startStretch() },
@@ -345,6 +346,7 @@ Singleton {
 			root.sinceWater = 0;
 			Notifs.pushInternal("running", "Drink something", root.workKnown ? `${root.formatLitres(root.waterMl)} of ${root.formatLitres(root.paceMl)} by now` : `${root.formatLitres(root.waterMl)} / ${root.formatLitres(root.goalMl)} today`, {
 				icon: "cup_water",
+				sound: "reminder",
 				duration: 30000,
 				actions: [
 					{ label: "Bottle", icon: "cup_water", run: () => root.openPanel() },
@@ -386,10 +388,12 @@ Singleton {
 			root.sinceEyes = 0;
 			Notifs.pushInternal("running", "Rest your eyes", `${root.eyeRestSeconds} seconds at something 6 m away`, {
 				icon: "eye_outline",
+				sound: "reminder",
 				duration: 20000,
 				actions: [{ label: "Start", icon: "play", run: () => root.startEyeRest() }]
 			});
 		} else if (typingPause.isIdle && !root.quiet && !Session.locked) {
+			Sounds.play("reminder");
 			root.startEyeRest();
 		}
 	}

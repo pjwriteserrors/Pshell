@@ -161,7 +161,8 @@ Item {
 			// its pages are what it leads to
 			children: Popups.studioPages.map(page => ({ id: "studio-page", page: page.id, command: `studio ${page.id}`, name: page.label, glyph: page.icon, keywords: "" }))
 		},
-		{ id: "niri-settings", plugin: "niri-settings", group: "system", command: "niri", page: "", name: "niri Settings", aliases: ["settings"], keywords: "layout borders input rules workspaces" },
+		{ id: "niri-settings", plugin: "niri-settings", group: "system", command: "settings", page: "", name: "Pshell Settings", aliases: ["niri", "pshell", "preferences"], keywords: "layout borders input rules workspaces sounds" },
+		{ id: "niri-settings", plugin: "sounds", shown: Plugins.on("niri-settings"), group: "system", command: "sounds", page: "sounds", name: "Sounds", glyph: "volume_high", aliases: ["sound"], keywords: "clicks notifications volume mute" },
 		{ id: "niri-settings", plugin: "niri-settings", group: "system", command: "keys", page: "keys", name: "Key Binds", aliases: ["binds", "keybinds", "shortcuts"], keywords: "niri" },
 		{ id: "niri-settings", plugin: "niri-settings", group: "system", command: "setup", page: "displays", name: "Display Setup", aliases: ["display", "displays", "monitors"], keywords: "arrange" },
 		{ id: "dnd", plugin: "dnd", group: "system", command: "dnd", name: "Do Not Disturb", aliases: ["quiet", "silent"], keywords: "notifications", status: Notifs.dnd ? "On" : "" },
@@ -2305,7 +2306,7 @@ Item {
 			break;
 		case "niri-settings":
 			root.closeRequested();
-			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "niri", "open", command.page || ""]);
+			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "settings", "open", command.page || ""]);
 			break;
 		case "calculator":
 			root.setLauncherSearch(">c ");
@@ -2908,7 +2909,7 @@ Item {
 		case "rpg": return "gamepad_variant";
 		case "studio": return "palette";
 		case "studio-page": return command.glyph;
-		case "niri-settings": return command.page === "keys" ? "keyboard" : (command.page === "displays" ? "monitor_multiple" : "tune_variant");
+		case "niri-settings": return command.glyph ?? (command.page === "keys" ? "keyboard" : (command.page === "displays" ? "monitor_multiple" : "tune_variant"));
 		case "calculator":
 		case "calculator-result": return "calculator";
 		case "file-browser": return "folder";

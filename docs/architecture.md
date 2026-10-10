@@ -116,8 +116,8 @@ cursors). With several cursors letters, Backspace, Delete, the arrows, Home,
 End, Ctrl for words, Shift for selections and Ctrl+V go to each of them;
 Escape, a click or any other key ends it. A pill at the bottom of the screen
 counts the cursors: a text field draws only its own. The keys and the apps
-that are left alone are set on the *Multicursor* page of the niri settings
-(`scripts/ipc.sh niri open multicursor`, kept in
+that are left alone are set on the *Multicursor* page of the Pshell settings
+(`scripts/ipc.sh settings open multicursor`, kept in
 `~/.local/state/pshell/multicursor.json`); terminals, code editors, password
 prompts and games (the list of autocorrect) never get it, file managers not
 unless taken off the list. `scripts/ipc.sh multicursor toggle` switches it.
@@ -140,9 +140,11 @@ nothing happens), dead keys and Enter with several cursors (they end it), and
 on a laptop the touchpad no longer pauses while typing, since libinput does
 not know the keyboard of the daemon as the built-in one.
 
-`niri-settings` is a window for every niri setting but the ones Studio looks
-after (cursor theme and size, animations): `>niri` (`>keys` and `>setup` open
-its key bind and display pages), `scripts/ipc.sh niri open <page>`. Every
+`niri-settings` is the *Pshell settings*, a window for every niri setting but
+the ones Studio looks after (cursor theme and size, animations), and for those
+of the shell's own (multicursor, sounds): `>settings` (`>niri` still works;
+`>keys`, `>setup` and `>sounds` open their pages), `scripts/ipc.sh settings
+open <page>` (`niri open` is the old name). Every
 change applies at once and is written a moment later; `scripts/niri_settings.py`
 does the file work and lets nothing through that `niri validate` rejects, and
 niri reloads the files itself. Ctrl+Z takes changes back.
@@ -173,6 +175,29 @@ included last so that it wins; `scripts/keybinds.py` took over the binds of
 `config.kdl` and copies the shell's binds of `pshell.kdl`, which keeps them
 for machines without the plugin – one that is deleted or moved is covered in
 `keybinds.kdl` by a bind to `spawn "true"`.
+
+`sounds` plays short, quiet sounds (`core/services/Sounds.qml`, the files in
+`assets/sounds`): for what is pressed – buttons, switches, a choice, a panel
+that opens or closes, the volume keys, a screenshot, a recording, do not
+disturb – and for what the system does on its own – a notification (an
+urgent one has its own), a USB device plugged in or removed, a USB stick
+mounted or unmounted, a monitor, Bluetooth, the phone, the charger and a low
+battery, an error, a question waiting for an answer, a finished job or
+download, a break reminder, the lock screen and the start of a session.
+Features name the moment: `Sounds.play("copied")`, or `Haptics.play`, which
+hands every moment on; `Clickable` has a `sound` (`"click"`, `""` for none),
+and an internal toast plays its `sound` (an error one plays `error`). Only one
+sound is heard at a time: a moment of a higher rank cuts what plays below it
+and keeps lower ones quiet for a moment, so a notification is all that is
+heard when a USB stick brings one along, and the same moment twice in a row
+is played once. USB comes from `udevadm monitor`, drives from
+`findmnt --poll`, both only while their sounds are on. The *Sounds* page of
+the Pshell settings picks everything, only buttons, only automatic or
+nothing, the volume, whether do not disturb quiets the system, and each
+sound on its own (`sounds.json`); `scripts/ipc.sh sounds play <moment>` and
+`sounds mode all|buttons|system|off` do it from a script. The files are cut
+from Nathan Gibson's Universal UI Soundpack (CC BY 4.0) by
+`scripts/build_sounds.py`.
 
 The launcher's apps (`core/views/overlays/launcher/AppsView.qml`): with
 nothing typed a dock of favourites (what is pinned, filled up with what is

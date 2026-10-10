@@ -1,5 +1,6 @@
 import QtQuick
 import qs.style.theme
+import qs.core.services
 
 // Segmented switch. The highlight slides and stretches between options.
 Rectangle {
@@ -82,7 +83,10 @@ Rectangle {
 				MouseArea {
 					anchors.fill: parent
 					cursorShape: Qt.PointingHandCursor
-					onClicked: root.selected(String(option.modelData.value))
+					onClicked: {
+						if (!option.active) Sounds.play("select");
+						root.selected(String(option.modelData.value));
+					}
 				}
 			}
 		}

@@ -31,6 +31,8 @@ Rectangle {
 	property real pressedScale: 0.94
 	property int acceptedButtons: Qt.LeftButton
 	property bool wheelEnabled: false
+	// what a click sounds like (a moment of Sounds); "" is silent
+	property string sound: "click"
 	default property alias content: holder.data
 
 	color: "transparent"
@@ -60,8 +62,10 @@ Rectangle {
 				root.rightClicked(mouse);
 			else if (mouse.button === Qt.MiddleButton)
 				root.middleClicked(mouse);
-			else
+			else {
+				if (root.sound !== "") Sounds.play(root.sound);
 				root.clicked(mouse);
+			}
 		}
 		onWheel: wheel => {
 			if (!root.wheelEnabled) {

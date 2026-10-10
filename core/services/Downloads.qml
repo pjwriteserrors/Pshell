@@ -144,6 +144,8 @@ Singleton {
 		root.table = Object.assign({}, root.table, { [key]: item });
 		if (!before || kept !== wasKept) root.sort();
 		if (state === "done" && before?.state !== "done") root.unseen += 1;
+		// one that was seen running ends
+		if (before && before.state !== state && (state === "done" || state === "failed")) Sounds.play(state === "done" ? "download" : "error");
 		if (kept !== wasKept || (kept && before.state !== state)) root.save();
 	}
 

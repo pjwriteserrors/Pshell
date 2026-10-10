@@ -503,7 +503,22 @@ Singleton {
 		"rocket_launch_outline": "󱓟",
 		"swap_horizontal_variant": "󰣁",
 		"variable": "󰫧",
-		"view_dashboard_outline": "󰨝"
+		"view_dashboard_outline": "󰨝",
+		"usb": "󰕓",
+		"usb_flash_drive": "󱊞",
+		"monitor_off": "󰶐",
+		"power_plug": "󰚥",
+		"power_plug_off": "󰚦",
+		"lock_open_variant": "󰿆",
+		"eject": "󰇪",
+		"camera": "󰄀",
+		"toggle_switch": "󰔡",
+		"toggle_switch_off": "󰔢",
+		"alert_circle_outline": "󰗖",
+		"stop_circle_outline": "󰙧",
+		"bell_alert": "󰵙",
+		"arrow_expand": "󰘖",
+		"arrow_collapse": "󰘕"
 	})
 
 	function get(name) {

@@ -15,7 +15,7 @@ import qs.style.views
 // here and by the plugin switches, never by the style.
 Scope {
 	// services that act on their own, without a surface to pull them in
-	readonly property var background: [Agents, TimerGuard, ClipboardHints, Phone, Mail, Autocorrect, Screentime, Multicursor]
+	readonly property var background: [Agents, TimerGuard, ClipboardHints, Phone, Mail, Autocorrect, Screentime, Multicursor, Sounds]
 
 	// notifications and the shell's own messages
 	Variants {
