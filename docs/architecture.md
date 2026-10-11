@@ -306,7 +306,12 @@ Windows programs run with Proton (newest GE first) or Wine and can be added
 to Steam as non-Steam games set to Proton (`windows.py`; Steam is restarted
 for it, `config.vdf` is changed only at its compatibility mapping); files
 are checked with VirusTotal by their SHA-256, uploaded only when asked
-(`virustotal.py`; the API key is in the keyring). Text that the type
+(`virustotal.py`; the API key is in the keyring), or – private ones – scanned
+on the machine (`localscan.py`): ClamAV with its signatures plus the free
+extras of Sanesecurity and URLhaus, and YARA Forge's core rules, all below
+`~/.local/share/pshell/av` and run as the user (a freshclam config of its
+own; a clamd of its own, started for a scan and stopped after ten idle
+minutes; signatures a day old are updated first). Text that the type
 database does not know as text (.ini, .bat, .url, …) is looked into, gets
 a preview and opens in the text editor; .url and .webloc open their link.
 
