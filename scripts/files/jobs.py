@@ -26,6 +26,7 @@ import archives  # noqa: E402
 import convert  # noqa: E402
 import lookup  # noqa: E402
 import pdftools  # noqa: E402
+import remote  # noqa: E402
 import virustotal  # noqa: E402
 import windows  # noqa: E402
 
@@ -188,7 +189,7 @@ class Job:
         # (from, to) of what was moved or renamed: tags and favourites follow
         self.moves = []
         # a job that may be held: it waits between two chunks (or its process is stopped)
-        self.can_pause = kind in ("copy", "move", "auto", "paste", "extract", "compress", "download", "delete", "pdf", "vtscan", "convert")
+        self.can_pause = kind in ("copy", "move", "auto", "paste", "extract", "compress", "download", "delete", "pdf", "vtscan", "convert", "upload")
         self.paused = False
         self.process = None
         # what a job found out, for the window to show (a scan's verdict)
@@ -1030,6 +1031,26 @@ class Manager:
             raise Failure(failed[0][1])
         if failed:
             job.error = f"{len(failed)} could not be converted: {failed[0][1]}"
+
+    # ── to a server ────────────────────────────────────────────────────────
+    def _do_upload(self, job, args):
+        paths = [path for path in args.get("paths", []) if path and os.path.lexists(path)]
+        if not paths:
+            raise Failure("Nothing to send", "invalid")
+        server = args.get("server") or {}
+        where = args.get("name") or server.get("address") or "the server"
+        names = ", ".join(os.path.basename(path) for path in paths[:2]) + (f" and {len(paths) - 2} more" if len(paths) > 2 else "")
+        job.title = f"Sending {names} to {where}"
+        job.target = f"{where}:{args.get('dest', '')}"
+        job.bytes_total, job.files_total = tree_size(paths, lambda: job.cancellable.is_cancelled())
+        job.state = "running"
+        job.report(True)
+        try:
+            remote.send(job, server, paths, args.get("dest", ""))
+        except remote.RemoteError as error:
+            raise Failure(str(error))
+        job.bytes_done = job.bytes_total
+        job.files_done = job.files_total
 
     # ── Steam ──────────────────────────────────────────────────────────────
     def _do_steamadd(self, job, args):

@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Controls
 import qs.style.theme
 import qs.style.widgets
 import qs.core.services
@@ -35,10 +36,16 @@ Item {
 		root.currents = next.map((level, i) => root.currents[i] ?? -1);
 	}
 
+	// a menu taller than the window scrolls
+	function fit(h) {
+		return Math.min(h, Math.max(80, root.height - 16));
+	}
+
 	function show(entries, x, y) {
 		const clean = root.clean(entries);
 		if (clean.length === 0) return;
 		const size = root.measure(clean);
+		size.h = root.fit(size.h);
 		root.setLevels([]);
 		root.setLevels([{ entries: clean, x: Math.max(8, Math.min(root.width - size.w - 8, x)), y: Math.max(8, Math.min(root.height - size.h - 8, y)), originX: x, originY: y }]);
 		Sounds.play("open");
@@ -81,7 +88,9 @@ Item {
 			const parent = root.levels[level];
 			const parentSize = root.measure(parent.entries);
 			const size = root.measure(clean);
-			const y = parent.y + 6 + root.offsetOf(parent.entries, index);
+			size.h = root.fit(size.h);
+			// where the entry is now, the panel's scroll taken off
+			const y = parent.y + 6 + root.offsetOf(parent.entries, index) - (panels.itemAt(level)?.scroll ?? 0);
 			let x = parent.x + parentSize.w - 4;
 			if (x + size.w > root.width - 8) x = parent.x - size.w + 4;
 			const next = root.levels.slice(0, level + 1);
@@ -144,6 +153,8 @@ Item {
 	MouseArea {
 		anchors.fill: parent
 		acceptedButtons: Qt.AllButtons
+		// the files behind do not light up under it
+		hoverEnabled: true
 		onPressed: root.close()
 		onWheel: root.close()
 	}
@@ -185,6 +196,8 @@ Item {
 	}
 
 	Repeater {
+		id: panels
+
 		model: panelModel
 
 		delegate: Rectangle {
@@ -195,11 +208,22 @@ Item {
 			readonly property var modelData: root.levels[panel.level] ?? { entries: [], x: 0, y: 0, originX: 0, originY: 0 }
 			readonly property var entries: panel.modelData.entries
 			readonly property var size: root.measure(panel.entries)
+			readonly property real scroll: list.contentY
+			readonly property int current: root.currents[panel.level] ?? -1
+
+			// the keyboard's entry stays in sight
+			onCurrentChanged: {
+				if (panel.current < 0 || list.contentHeight <= list.height) return;
+				const top = root.offsetOf(panel.entries, panel.current);
+				if (top < list.contentY) list.contentY = top;
+				else if (top + 32 > list.contentY + list.height) list.contentY = top + 32 - list.height;
+			}
 
 			x: panel.modelData.x
 			y: panel.modelData.y
 			width: panel.size.w
-			height: panel.size.h
+			height: root.fit(panel.size.h)
+			clip: true
 			radius: Theme.radius.large
 			color: Theme.layer2
 			border.width: 1
@@ -247,9 +271,24 @@ Item {
 				hoverEnabled: true
 			}
 
-			Column {
+			Flickable {
+				id: list
+
 				anchors.fill: parent
 				anchors.margins: 6
+				contentHeight: rows.implicitHeight
+				interactive: list.contentHeight > list.height
+				boundsBehavior: Flickable.StopAtBounds
+				clip: true
+				// what opened beside a panel stays with its entry: it closes when the panel scrolls
+				onMovementStarted: if (root.levels.length > panel.index + 1) root.setLevels(root.levels.slice(0, panel.index + 1))
+
+				ScrollBar.vertical: ThinScrollBar {}
+
+			Column {
+				id: rows
+
+				width: list.width
 
 				Repeater {
 					model: panel.entries
@@ -393,6 +432,7 @@ Item {
 						}
 					}
 				}
+			}
 			}
 		}
 	}

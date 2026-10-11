@@ -485,7 +485,7 @@ Singleton {
 		else if (long) Sounds.play("taskDone");
 		else if (["copy", "move", "auto", "paste", "download"].includes(job.kind)) Sounds.play("copied");
 		// away from the window, a longer job says it is through
-		if (long && !root.windowActive && ["copy", "move", "auto", "paste", "download", "extract", "compress", "emptytrash", "delete", "convert", "pdf"].includes(job.kind)) {
+		if (long && !root.windowActive && ["copy", "move", "auto", "paste", "download", "extract", "compress", "emptytrash", "delete", "convert", "pdf", "upload"].includes(job.kind)) {
 			const created = job.created || [];
 			Notifs.pushInternal("done", root.doneTitle(job), job.skipped > 0 ? `${job.skipped} skipped` : "", {
 				icon: "folder_check_outline",
@@ -504,6 +504,7 @@ Singleton {
 		case "extract": return "Extracted";
 		case "compress": return "Packed";
 		case "convert": return "Converted";
+		case "upload": return "Sent";
 		case "pdf": return "PDF ready";
 		case "emptytrash": return "Trash emptied";
 		case "delete": return "Deleted";
@@ -819,6 +820,16 @@ Singleton {
 	}
 
 	signal compared(var result)
+
+	// ── to a server (the SSH plugin's logins, or any host ssh reaches) ──────
+	function sendToServer(paths, server, name, dest) {
+		root.startJob("upload", { paths: paths, server: server, name: name, dest: dest }, job => {
+			if (job.state === "done") {
+				Sounds.play("taskDone");
+				root.say(`On ${name} in ${dest}`, "server_network");
+			}
+		});
+	}
 
 	// ── converting ─────────────────────────────────────────────────────────
 	// what files can become: [{ format, label, kind }]

@@ -46,6 +46,8 @@ Item {
 		MouseArea {
 			anchors.fill: parent
 			acceptedButtons: Qt.AllButtons
+			// the files behind do not light up under it
+			hoverEnabled: true
 			onPressed: if (root.dismissable) root.dismissed()
 			onWheel: wheel => wheel.accepted = true
 		}

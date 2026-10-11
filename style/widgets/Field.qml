@@ -16,6 +16,8 @@ Rectangle {
 	property int fontSize: Theme.size.body
 	// what is typed here is corrected (Autocorrect)
 	property bool autocorrect: false
+	// Tab is the field's own (completion) instead of moving on
+	property bool keepTab: false
 	readonly property bool focused: input.activeFocus
 	// the keyboard is here: a field keeps its focus in a panel that is closed
 	readonly property bool typing: root.autocorrect && root.focused && Window.active
@@ -99,7 +101,7 @@ Rectangle {
 		}
 		Keys.onTabPressed: event => {
 			root.tabPressed();
-			event.accepted = false;
+			event.accepted = root.keepTab;
 		}
 
 		StyledText {

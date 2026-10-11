@@ -121,7 +121,7 @@ Item {
 								anchors.centerIn: parent
 								size: 16
 								color: card.done ? Theme.success : card.failed ? Theme.danger : Theme.primary
-								icon: card.done ? "check" : card.failed ? "alert_circle_outline" : ({ copy: "content_copy", move: "folder_move_outline", auto: "folder_move_outline", trash: "trash_can_outline", delete: "delete_outline", compress: "zip_box_outline", extract: "package_variant", download: "download", paste: "content_paste", undo: "undo", restore: "restore", emptytrash: "delete_sweep_outline", pdf: "file_pdf_box", vtscan: "shield_search", steamadd: "steam", convert: "swap_horizontal" })[card.job.kind] ?? "cog_outline"
+								icon: card.done ? "check" : card.failed ? "alert_circle_outline" : ({ copy: "content_copy", move: "folder_move_outline", auto: "folder_move_outline", trash: "trash_can_outline", delete: "delete_outline", compress: "zip_box_outline", extract: "package_variant", download: "download", paste: "content_paste", undo: "undo", restore: "restore", emptytrash: "delete_sweep_outline", pdf: "file_pdf_box", vtscan: "shield_search", steamadd: "steam", convert: "swap_horizontal", upload: "server_network" })[card.job.kind] ?? "cog_outline"
 							}
 						}
 

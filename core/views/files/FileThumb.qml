@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Effects
 import Quickshell.Widgets
 import qs.style.theme
 import qs.style.widgets
@@ -75,6 +76,7 @@ Item {
 	onPathChanged: Qt.callLater(root.ask)
 	onMtimeChanged: Qt.callLater(root.ask)
 	onHoveredChanged: {
+		if (root.hovered && paper.visible) sweep.restart();
 		if (root.hovered) back.stop();
 		else if (lines.y !== 6) back.restart();
 	}
@@ -158,50 +160,60 @@ Item {
 		visible: root.pictured && !photoFrame.visible
 		anchors.fill: parent
 
-		// under the pointer the page lifts off a second one, which fans out behind it
+		// under the pointer the page lifts towards the eye: its shadow grows soft
+		// and wide below it, and a sheen of light runs once over the paper
 		property real lift: root.hovered ? 1 : 0
 
 		Behavior on lift {
 			SpatialAnim {
-				duration: Motion.medium
+				duration: Motion.long
 			}
 		}
 
+		// at rest a plain shadow close under the page (cheap for a folder of
+		// hundreds of PDFs); lifted, a blurred one further down takes over
 		Rectangle {
-			x: sheet.x + 5 * paper.lift
-			y: sheet.y + 4 * paper.lift
+			x: sheet.x + 1
+			y: sheet.y + 3
 			width: sheet.width
-			height: sheet.height
-			radius: 4
-			color: Qt.rgba(0.93, 0.93, 0.94, 1)
-			opacity: Math.max(0, paper.lift)
+			height: sheet.height + 1
+			radius: 5
+			color: Theme.shadow
+			opacity: 0.4 * (1 - Math.min(1, Math.max(0, paper.lift)))
+		}
+
+		Rectangle {
+			id: shade
+
 			visible: paper.lift > 0.01
+			x: sheet.x + 3
+			y: sheet.y + 4 + 8 * Math.max(0, paper.lift)
+			width: sheet.width - 6
+			height: sheet.height - 4
+			radius: 6
+			color: Theme.shadow
+			opacity: 0.6 * Math.min(1, Math.max(0, paper.lift))
+			layer.enabled: shade.visible
+			layer.effect: MultiEffect {
+				blurEnabled: true
+				blurMax: 32
+				blur: 0.85
+			}
 		}
 
 		Rectangle {
 			id: sheet
 
 			readonly property real ratio: pageImage.implicitWidth > 0 ? pageImage.implicitHeight / pageImage.implicitWidth : 1.3
-			x: (parent.width - width) / 2 - 2 * paper.lift
-			y: (parent.height - height) / 2 - 4 * paper.lift
-			height: Math.min(parent.height * 0.92, parent.width * 0.86 * sheet.ratio)
+			x: (parent.width - width) / 2
+			y: (parent.height - height) / 2 - 5 * paper.lift
+			height: Math.min(parent.height * 0.9, parent.width * 0.84 * sheet.ratio)
 			width: height / sheet.ratio
 			radius: 4
 			color: "white"
-			scale: 1 + 0.02 * paper.lift
-
-			// a soft shadow under the page, wider the higher it is
-			Rectangle {
-				z: -1
-				anchors.fill: parent
-				anchors.topMargin: 3
-				anchors.leftMargin: 1 - 2 * paper.lift
-				anchors.rightMargin: -1 - 2 * paper.lift
-				anchors.bottomMargin: -4 - 6 * paper.lift
-				radius: 5 + 3 * paper.lift
-				color: Theme.shadow
-				opacity: 0.45 - 0.1 * paper.lift
-			}
+			scale: 1 + 0.035 * paper.lift
+			antialiasing: true
+			clip: true
 
 			Image {
 				id: pageImage
@@ -219,6 +231,55 @@ Item {
 						duration: Motion.short
 					}
 				}
+			}
+
+			// the sheen: a soft band of light that crosses the page once
+			Rectangle {
+				id: sheen
+
+				property real travel: -1
+				width: sheet.width * 0.7
+				height: sheet.height * 2
+				x: sheet.width * sheen.travel - width / 2
+				y: -sheet.height / 2
+				rotation: 24
+				opacity: 0.55
+				gradient: Gradient {
+					orientation: Gradient.Horizontal
+
+					GradientStop {
+						position: 0
+						color: Qt.rgba(1, 1, 1, 0)
+					}
+					GradientStop {
+						position: 0.5
+						color: Qt.rgba(1, 1, 1, 0.55)
+					}
+					GradientStop {
+						position: 1
+						color: Qt.rgba(1, 1, 1, 0)
+					}
+				}
+			}
+
+			NumberAnimation {
+				id: sweep
+
+				target: sheen
+				property: "travel"
+				from: -0.6
+				to: 1.6
+				duration: 900
+				easing.type: Easing.InOutCubic
+			}
+
+			// the paper's edge catches the light a little when it is up
+			Rectangle {
+				anchors.fill: parent
+				radius: parent.radius
+				color: "transparent"
+				border.width: 1
+				border.color: Qt.rgba(0, 0, 0, 0.08 + 0.04 * Math.max(0, paper.lift))
 			}
 		}
 	}
@@ -271,7 +332,8 @@ Item {
 		Repeater {
 			model: folderArt.pictures.slice(0, 3)
 
-			delegate: ClippingRectangle {
+			// drawn through a layer with a clear rim, so its edges stay smooth when turned
+			delegate: Item {
 				id: card
 
 				required property string modelData
@@ -279,26 +341,35 @@ Item {
 				readonly property int count: Math.min(3, folderArt.pictures.length)
 				readonly property real spread: card.count === 1 ? 0 : (card.index - (card.count - 1) / 2)
 
-				width: folderArt.width * 0.5
-				height: width * 0.74
+				width: folderArt.width * 0.5 + 4
+				height: (folderArt.width * 0.5) * 0.74 + 4
 				x: folderArt.width / 2 - width / 2 + card.spread * folderArt.width * (0.17 + 0.06 * folderArt.lift)
-				y: folderArt.height * (0.1 - 0.1 * folderArt.lift) + Math.abs(card.spread) * folderArt.height * 0.05
+				y: folderArt.height * (0.1 - 0.1 * folderArt.lift) + Math.abs(card.spread) * folderArt.height * 0.05 - 2
 				rotation: card.spread * (7 + 6 * folderArt.lift)
-				radius: 6
-				color: Theme.layer3
-				border.width: 2
-				border.color: Qt.alpha("white", 0.85)
+				antialiasing: true
+				layer.enabled: true
+				layer.smooth: true
+				layer.mipmap: true
 
-				Image {
+				ClippingRectangle {
 					anchors.fill: parent
-					source: card.modelData
-					asynchronous: true
-					fillMode: Image.PreserveAspectCrop
-					sourceSize.width: 160
-					opacity: status === Image.Ready ? 1 : 0
+					anchors.margins: 2
+					radius: 6
+					color: Theme.layer3
 
-					Behavior on opacity {
-						Anim {}
+					Image {
+						anchors.fill: parent
+						source: card.modelData
+						asynchronous: true
+						fillMode: Image.PreserveAspectCrop
+						sourceSize.width: 200
+						smooth: true
+						mipmap: true
+						opacity: status === Image.Ready ? 1 : 0
+
+						Behavior on opacity {
+							Anim {}
+						}
 					}
 				}
 			}

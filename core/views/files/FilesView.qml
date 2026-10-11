@@ -191,6 +191,10 @@ FocusScope {
 		}
 	}
 
+	function sendToServer(rows) {
+		sender.open(rows);
+	}
+
 	function openSettings(page) {
 		settings.open(page || "");
 	}
@@ -922,6 +926,13 @@ FocusScope {
 
 	CompareResults {
 		id: compareResults
+
+		anchors.fill: parent
+		onClosed: keyTarget.forceActiveFocus()
+	}
+
+	SendDialog {
+		id: sender
 
 		anchors.fill: parent
 		onClosed: keyTarget.forceActiveFocus()

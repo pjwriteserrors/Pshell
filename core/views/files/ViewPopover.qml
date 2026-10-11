@@ -81,6 +81,8 @@ Item {
 		anchors.fill: parent
 		enabled: root.shown
 		acceptedButtons: Qt.AllButtons
+		// the files behind do not light up under it
+		hoverEnabled: true
 		onPressed: root.close()
 		onWheel: wheel => wheel.accepted = false
 	}

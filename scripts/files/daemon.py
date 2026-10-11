@@ -36,6 +36,7 @@ import jobs  # noqa: E402
 import lookup  # noqa: E402
 import pdftools  # noqa: E402
 import places  # noqa: E402
+import remote  # noqa: E402
 import thumbs  # noqa: E402
 import virustotal  # noqa: E402
 import windows  # noqa: E402
@@ -462,6 +463,15 @@ class Daemon:
 
     def op_convertible(self, client, request):
         return {"targets": convert.targets(request.get("paths", []))}
+
+    def op_servers(self, client, request):
+        return remote.servers()
+
+    def op_remotels(self, client, request):
+        try:
+            return remote.listing(request.get("server") or {}, request.get("path", "~"))
+        except remote.RemoteError as error:
+            raise RuntimeError(str(error))
 
     def op_runners(self, client, request):
         return windows.runners()

@@ -75,6 +75,7 @@ QtObject {
 		// what the rest of the shell can do with them
 		const elsewhere = [];
 		if (root.shelves) elsewhere.push({ label: "Put on a shelf", icon: "tray_arrow_down", shortcut: "Ctrl+S", run: () => view.toShelf(rows) });
+		if (Plugins.on("ssh")) elsewhere.push({ label: "Send to a server…", icon: "server_network", run: () => root.view.sendToServer(rows) });
 		if (Phone.available) elsewhere.push({ label: `Send to ${Phone.name}`, icon: "cellphone_arrow_down", run: () => files.forEach(row => Phone.shareFile(row.path)), enabled: files.length > 0 });
 		if (root.ai && files.length > 0 && files.length <= 6) elsewhere.push({ label: files.length === 1 ? "Ask AI about it" : "Ask AI about them", icon: "creation", run: () => view.askAi(files) });
 		if (root.reader && texts.length === 1) elsewhere.push({ label: "Speed-read it", icon: "book_open_page_variant", run: () => view.speedRead(texts[0]) });
