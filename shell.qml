@@ -1,4 +1,9 @@
 //@ pragma UseQApplication
+// Qt Multimedia (SoundEffect in Sounds) would otherwise open its own PipeWire
+// client on worker threads next to Quickshell's main-thread one; the two clash
+// and crash the shell (socket notifiers touched from another thread). Pulse
+// goes through pipewire-pulse instead.
+//@ pragma Env QT_AUDIO_BACKEND=pulseaudio
 
 import QtQuick
 import Quickshell
