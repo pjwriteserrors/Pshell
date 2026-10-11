@@ -244,7 +244,7 @@ ModalWindow {
 	}
 
 	modalId: "vm"
-	scrimColor: Qt.rgba(0, 0, 0, 0.68)
+	scrimColor: Qt.rgba(0, 0, 0, 0.8)
 
 	onShownChanged: {
 		Machines.watched = root.shown;
