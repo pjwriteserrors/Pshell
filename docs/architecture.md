@@ -252,6 +252,54 @@ There is no polkit agent in the session, which is why root goes through
 sudo in a terminal. Looking Glass is started with `lookingGlass.args` of
 `vms.json` (default `-F`).
 
+`filemanager` is the shell's file manager, a window of its own (`>fm`,
+`scripts/ipc.sh files toggle|open <path>|tab <path>|reveal <path>|search
+<query>`; `core/views/files/`, `core/services/Files.qml`,
+`core/services/FileLibrary.qml`). A sidebar of places (home and recent, the
+usual folders, favourites, the shelves, tags, collections, drives, the
+network with the SSH plugin's hosts, the trash), tabs of panes – one, or two
+side by side (F3; F5 and F6 copy and move to the other) – and the details
+of what is picked beside them (Ctrl+I). The home page shows what just
+arrived (the browser's running downloads among it), what was opened lately,
+favourites, screenshots and recordings, the newest pictures, videos and
+documents, collections and drives. Folders are cards with what is in them
+peeking out, pictures and videos their thumbnails, texts their first lines;
+or a list, both optionally in groups (kind, date, size), sorted and shown
+per folder. Space looks at a file without opening it (pictures zoom, videos
+and music play, PDFs page by page, code highlighted by Peek, Markdown set),
+Ctrl+K finds every command and place, a right click or the menu key offers
+what the picked files can do, and the rest of the shell is part of that:
+put on a shelf, send to the phone, ask the AI (a chat with them attached),
+speed-read, annotate, pin, copy the text of a picture, set as wallpaper,
+pack and extract, a terminal or Claude Code in a folder. Tags and
+collections (files gathered without moving them) are kept in `files.json`
+with the favourites, how each folder is shown and the tabs of the last
+session; they follow files that the file manager moves or renames.
+
+The files themselves are the daemon's, `scripts/files/daemon.py`: it lives
+apart from the shell (started by it when it does not answer, gone a minute
+after the last shell unless a job runs), so a copy goes on while the shell
+reloads. It reads folders and watches the ones on the screen (GIO), makes
+thumbnails into the freedesktop cache that Nautilus and the file chooser
+share (Pillow, ffmpeg and pdftoppm, GNOME's thumbnailers for the rest),
+searches with fd (names) and ripgrep (contents), lists drives, phones and
+shares (udisks and gvfs; sftp for SSH hosts, a password is asked once), and
+runs the jobs: copy, move, trash, delete, rename one or many (one name a
+line, the multicursor works in it), new folders and files, pack, extract,
+paste (files, or a picture or text from the clipboard as a new file),
+download what is dropped as a link, restore from the trash. A name that is
+taken asks: replace (the old one goes to the trash), merge two folders, keep
+both, skip, another name – for one or for all. Ctrl+Z takes the last job
+back. Long jobs run in a tray at the corner and say when they are done if
+the window is away. `daemon.py call <op> '<json>'` asks it from a script.
+
+`files-default` makes it the file manager of the desktop: it holds
+`org.freedesktop.FileManager1` (what "Show in folder" of browsers, chats,
+the shelves and the downloads panel calls) and is the default for folders
+(`pshell-files.desktop`, `scripts/files/default.py`); switched off, the app
+that was the default before is again. Without a running shell, those calls
+go to Nautilus or the folder's old app.
+
 The launcher's apps (`core/views/overlays/launcher/AppsView.qml`): with
 nothing typed a dock of favourites (what is pinned, filled up with what is
 used most; Alt+1…8 starts one) over every app on shelves by its freedesktop

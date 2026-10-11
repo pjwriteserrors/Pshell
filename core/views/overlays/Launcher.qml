@@ -45,7 +45,31 @@ Drawer {
 		// a shelf hands over an AI action on its text
 		else if (Popups.payload?.aiPrompt)
 			content.runClipboardAction(Popups.payload.aiPrompt, Popups.payload.aiText);
+		// the file manager asks about files: a chat with them attached
+		else if (Popups.payload?.aiFiles) {
+			content.setLauncherSearch(">chat ");
+			root.attachQueue = Popups.payload.aiFiles.slice();
+			attachTimer.start();
+		}
 		Qt.callLater(() => content.focusSearch());
+	}
+
+	// files are attached one after another: each is read before the next
+	property var attachQueue: []
+
+	Timer {
+		id: attachTimer
+
+		interval: 60
+		repeat: true
+		onTriggered: {
+			if (root.attachQueue.length === 0) {
+				attachTimer.stop();
+				return;
+			}
+			if (content.aiAttachmentLoadingId !== "") return;
+			content.addPendingAttachment(root.attachQueue.shift());
+		}
 	}
 
 	// a file pick for the phone ends with the launcher

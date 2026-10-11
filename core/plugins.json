@@ -74,6 +74,8 @@
 	{ "id": "niri-settings", "name": "Pshell settings", "category": "Desktop", "default": false, "icon": "tune_variant" },
 	{ "id": "sounds", "name": "Sounds", "category": "Desktop", "icon": "volume_high" },
 	{ "id": "vm-launcher", "name": "VM launcher", "category": "Desktop", "default": false, "icon": "microsoft_windows" },
+	{ "id": "filemanager", "name": "File manager", "category": "Desktop", "icon": "folder_open" },
+	{ "id": "files-default", "name": "Default file manager", "category": "Desktop", "requires": ["filemanager"], "icon": "folder_star_outline" },
 
 	{ "id": "clipboard-hints", "name": "Clipboard hints", "category": "Automation" },
 	{ "id": "agents", "name": "Agent status", "category": "Automation", "icon": "robot" },

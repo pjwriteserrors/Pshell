@@ -67,6 +67,10 @@ PROGRAMS = {
     "niri-settings": [("jq", "display setups")],
     "sounds": [("udevadm", "USB sounds"), ("findmnt", "drive sounds"), ("ffmpeg", "installing sound packs")],
     "connections": [("ss", "the sockets of the apps")],
+    "filemanager": [("fd", "searching names"), ("rg", "searching contents"), ("pdftoppm", "PDF thumbnails"),
+                    ("ffmpeg", "video thumbnails, album covers"), ("ffprobe", "video and music details"),
+                    ("bsdtar", "packing and extracting"), ("pdfinfo", "PDF details")],
+    "files-default": [("xdg-mime", "folders open in the file manager")],
     "mail": [("secret-tool", "mail passwords"), ("xdg-open", "attachments, sign-in page"), ("wl-copy", "sign-in code")],
     "microsoft-calendar": [("wl-copy", "sign-in code"), ("xdg-open", "sign-in page, joining meetings")],
 }
@@ -85,6 +89,8 @@ PYTHON_MODULES = {
     "core": [("numpy", "scrolling screenshots, live pins, song detection, sound packs"), ("dbus", "bluetooth pairing, live pins"), ("gi", "bluetooth pairing, live pins")],
     "hook:openrgb": [("PIL", "lighting")],
     "hook:openrgb-leds": [("PIL", "lighting")],
+    "filemanager": [("gi", "folders, jobs, drives (python-gobject; gnome-desktop-4 for thumbnails, gvfs for phones and shares)"), ("PIL", "fast thumbnails")],
+    "files-default": [("dbus", "\"Show in folder\" of other apps")],
 }
 # the phone daemon runs with the system's python, whatever `python3` is in the shell
 PHONE_PYTHON = "/usr/bin/python3"

@@ -553,6 +553,32 @@ Scope {
 	}
 
 	IpcHandler {
+		target: "files"
+		enabled: Plugins.on("filemanager")
+
+		function toggle(): void {
+			Files.toggle();
+		}
+		// a folder (or home), in the tab that shows it or the current one
+		function open(path: string): void {
+			Files.open(path);
+		}
+		function tab(path: string): void {
+			Files.openInTab(path);
+		}
+		// files picked in their folder
+		function reveal(path: string): void {
+			Files.reveal([path]);
+		}
+		function search(query: string): void {
+			Files.searchFor(query);
+		}
+		function close(): void {
+			Files.close();
+		}
+	}
+
+	IpcHandler {
 		target: "agents"
 		enabled: Plugins.on("agents")
 

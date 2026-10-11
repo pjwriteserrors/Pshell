@@ -139,6 +139,7 @@ Item {
 		{ id: "translate", plugin: "translate", group: "tools", command: "t", name: "Translate", aliases: ["translate", "tr"], keywords: "language" },
 		{ id: "web-search", plugin: "web-search", group: "tools", command: "w", name: "Web Search", aliases: ["web", "search"], keywords: "browser" },
 		{ id: "file-browser", plugin: "files", group: "tools", command: "file", name: "Files", aliases: ["files"], keywords: "browse open folder" },
+		{ id: "file-manager", plugin: "filemanager", group: "tools", command: "fm", name: "File Manager", aliases: ["explorer", "manager"], keywords: "files folders window tabs" },
 		{ id: "todo", plugin: "todos", group: "tools", command: "todo", name: "Todo", aliases: ["todos"], keywords: "lists tasks" },
 		{ id: "shelf", plugin: "shelves", group: "tools", command: "shelf", name: "Shelf", keywords: "stash files text", status: Shelf.shelves.length > 0 ? String(Shelf.shelves.length) : "" },
 		{ id: "shelf-clipboard", plugin: "shelves", group: "tools", command: "shelfclip", name: "Shelf from Clipboard", aliases: ["clipshelf"], keywords: "stash copied" },
@@ -756,6 +757,14 @@ Item {
 			return;
 		}
 		root.openPathWithDefaultApp(entry.path);
+	}
+
+	function revealSelectedFileBrowserEntry() {
+		const entry = root.filteredFileBrowserEntries[fileBrowserList.currentIndex];
+		if (!entry) return;
+		if (entry.isDir) Files.open(entry.path);
+		else Files.reveal([entry.path]);
+		root.closeRequested();
 	}
 
 	function openSelectedFileBrowserEntry() {
@@ -2237,7 +2246,9 @@ Item {
 		}
 
 		if (root.inFileMode) {
-			root.openSelectedFileBrowserEntry();
+			// Shift+Enter shows it in the file manager instead
+			if ((modifiers & Qt.ShiftModifier) && Plugins.on("filemanager") && !Phone.pickingFile) root.revealSelectedFileBrowserEntry();
+			else root.openSelectedFileBrowserEntry();
 			return;
 		}
 
@@ -2316,6 +2327,10 @@ Item {
 		case "file-browser":
 			root.setLauncherSearch(">file ");
 			root.refreshFileBrowserDirectory();
+			break;
+		case "file-manager":
+			root.closeRequested();
+			Files.open("");
 			break;
 		case "chats":
 			root.setLauncherSearch(">chats ");

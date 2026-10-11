@@ -7,6 +7,7 @@ import qs.core.views.panels
 import qs.core.views.overlays
 import qs.core.views.rpg
 import qs.core.views.overlays.studio
+import qs.core.views.files
 // last, so a view of the same name in style/views wins
 import qs.style.views
 
@@ -195,6 +196,13 @@ Scope {
 		active: Plugins.on("vm-launcher")
 
 		VmLauncher {}
+	}
+
+	// the file manager, a window of its own
+	LazyLoader {
+		active: Plugins.on("filemanager")
+
+		FilesWindow {}
 	}
 
 	LazyLoader {

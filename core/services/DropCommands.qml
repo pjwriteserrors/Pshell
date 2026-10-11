@@ -39,6 +39,7 @@ Singleton {
 		{ id: "ai", label: "AI", icon: "creation", shown: root.words && Plugins.on("ai-actions"), opens: "ai" },
 		{ id: "path", label: "Copy path", icon: "clipboard_text", shown: root.files, run: items => Shelf.copyPaths(items) },
 		{ id: "zip", label: "ZIP", icon: "package_variant", shown: root.files, run: (items, at) => Shelf.zip(Shelf.current(at), items) },
+		{ id: "reveal", label: "Folder", icon: "folder_search_outline", shown: root.files && Plugins.on("filemanager"), run: items => Files.reveal(items.filter(item => item.kind === "file").map(item => item.path)) },
 		{ id: "ocr", label: "Text", icon: "text_recognition", shown: root.files && Plugins.on("ocr"), run: items => items.filter(item => Shelf.isImage(item)).forEach(item => Shelf.extractText(item)) },
 		{ id: "phone", label: "Phone", icon: "cellphone_arrow_down", shown: Phone.available, run: items => Shelf.sendToPhone(items) }
 	].filter(command => command.shown !== false)
