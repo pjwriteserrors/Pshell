@@ -29,7 +29,7 @@ Clickable {
 	radius: Theme.radius.medium
 	acceptedButtons: Qt.LeftButton | Qt.RightButton
 	pressedScale: 0.97
-	color: root.dropping ? Theme.primarySoft : (root.active ? Qt.tint(Theme.layer1, Qt.alpha(Theme.primary, 0.16)) : "transparent")
+	color: root.dropping ? Theme.primarySoft : (root.active ? Qt.tint(Theme.layer1, Qt.alpha(Theme.primary, 0.16)) : Qt.alpha(Theme.layer1, 0))
 	scale: root.dropping ? 1.03 : (root.pressed ? root.pressedScale : 1)
 	onRightClicked: mouse => root.menu(mouse.x, mouse.y)
 

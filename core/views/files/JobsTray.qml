@@ -121,7 +121,7 @@ Item {
 								anchors.centerIn: parent
 								size: 16
 								color: card.done ? Theme.success : card.failed ? Theme.danger : Theme.primary
-								icon: card.done ? "check" : card.failed ? "alert_circle_outline" : ({ copy: "content_copy", move: "folder_move_outline", auto: "folder_move_outline", trash: "trash_can_outline", delete: "delete_outline", compress: "zip_box_outline", extract: "package_variant", download: "download", paste: "content_paste", undo: "undo", restore: "restore", emptytrash: "delete_sweep_outline" })[card.job.kind] ?? "cog_outline"
+								icon: card.done ? "check" : card.failed ? "alert_circle_outline" : ({ copy: "content_copy", move: "folder_move_outline", auto: "folder_move_outline", trash: "trash_can_outline", delete: "delete_outline", compress: "zip_box_outline", extract: "package_variant", download: "download", paste: "content_paste", undo: "undo", restore: "restore", emptytrash: "delete_sweep_outline", pdf: "file_pdf_box", vtscan: "shield_search", steamadd: "steam", convert: "swap_horizontal" })[card.job.kind] ?? "cog_outline"
 							}
 						}
 
@@ -148,6 +148,7 @@ Item {
 									if (job.state === "done") return job.skipped > 0 ? `Done, ${job.skipped} skipped` : "Done";
 									if (job.state === "preparing") return "Counting…";
 									if (job.state === "conflict") return "Waits for an answer";
+									if (job.paused) return `Paused${job.bytesTotal > 0 ? " at " + Math.round(card.ratio * 100) + " %" : ""}`;
 									const parts = [];
 									if (job.bytesTotal > 0) parts.push(`${Files.sizeText(job.bytes)} of ${Files.sizeText(job.bytesTotal)}`);
 									else if (job.filesTotal > 1) parts.push(`${job.files} of ${job.filesTotal}`);
@@ -156,6 +157,16 @@ Item {
 									return parts.join(" · ") || String(job.current || "");
 								}
 							}
+						}
+
+						// held and let go again
+						IconButton {
+							visible: !card.done && !card.failed && !!card.job.canPause && card.job.state === "running"
+							width: 28
+							height: 28
+							iconSize: 15
+							icon: card.job.paused ? "play" : "pause"
+							onClicked: Files.pause(card.jobId, !card.job.paused)
 						}
 
 						IconButton {
@@ -182,8 +193,11 @@ Item {
 							width: parent.width * Math.max(0.02, card.ratio)
 							height: parent.height
 							radius: 3
-							color: card.job.state === "conflict" ? Theme.warning : Theme.primary
+							color: card.job.state === "conflict" || card.job.paused ? Theme.warning : Theme.primary
 
+							Behavior on color {
+								ColorAnim {}
+							}
 							Behavior on width {
 								Anim {
 									duration: Motion.medium
@@ -200,7 +214,7 @@ Item {
 
 							SequentialAnimation on x {
 								loops: Animation.Infinite
-								running: card.ratio < 0 && card.visible
+								running: card.ratio < 0 && card.visible && !card.job.paused
 
 								NumberAnimation {
 									from: -card.width * 0.3

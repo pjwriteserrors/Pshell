@@ -53,10 +53,11 @@ Item {
 	opacity: (root.cut ? 0.45 : 1) * (root.hidden ? 0.6 : 1)
 
 	function ask() {
-		if (root.dir) Files.wantPeek(root.path, "inode/directory");
+		if (root.dir) Files.checkPeek(root.path, "inode/directory", root.mtime);
 	}
 
 	onPathChanged: Qt.callLater(root.ask)
+	onMtimeChanged: Qt.callLater(root.ask)
 
 	Component.onCompleted: {
 		root.ask();
@@ -104,7 +105,7 @@ Item {
 			radius: Theme.radius.medium
 			color: root.selected ? Qt.tint(Theme.base, Qt.alpha(Theme.primary, root.hovered ? 0.2 : 0.15))
 				: root.dropTarget ? Qt.tint(Theme.base, Qt.alpha(Theme.primary, 0.12))
-				: root.hovered ? Theme.layer1 : (root.index % 2 === 1 ? Qt.alpha(Theme.fg, 0.018) : "transparent")
+				: root.hovered ? Theme.layer1 : Qt.alpha(Theme.layer1, root.index % 2 === 1 ? 0.45 : 0)
 			border.width: root.dropTarget || root.current ? 1.5 : 0
 			border.color: root.dropTarget ? Theme.primary : Qt.alpha(Theme.primary, 0.6)
 
@@ -130,6 +131,7 @@ Item {
 			thumb: root.thumb
 			canThumb: root.canThumb
 			isText: root.text
+			bytes: root.size
 			selected: root.selected
 		}
 
@@ -212,6 +214,7 @@ Item {
 			anchors.right: sizeText.left
 			anchors.verticalCenter: parent.verticalCenter
 			width: root.whenWidth
+			visible: root.whenWidth > 0
 			text: Files.whenText(root.mtime)
 			color: Theme.textMuted
 			font.family: Theme.fontFamily
@@ -225,6 +228,7 @@ Item {
 			anchors.right: kindText.left
 			anchors.verticalCenter: parent.verticalCenter
 			width: root.sizeWidth
+			visible: root.sizeWidth > 0
 			rightPadding: 16
 			horizontalAlignment: Text.AlignRight
 			text: root.dir ? root.count : Files.sizeText(root.size)
@@ -241,6 +245,7 @@ Item {
 			anchors.rightMargin: 10
 			anchors.verticalCenter: parent.verticalCenter
 			width: root.kindWidth
+			visible: root.kindWidth > 0
 			text: root.dir ? "Folder" : (Kinds.badgeOf({ dir: false, name: root.name }) || Kinds.kindLabel(root.kind).replace(/s$/, ""))
 			color: Theme.textSubtle
 			font.family: Theme.fontFamily

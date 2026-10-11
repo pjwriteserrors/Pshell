@@ -5,7 +5,7 @@
 // and brought into a ListModel by changes only, so a file that appears or
 // goes is animated instead of the whole view starting over.
 
-const ROLES = ["path", "name", "dir", "link", "broken", "size", "mtime", "mime", "hidden", "exec", "thumb", "canThumb", "text", "kind", "group", "uri", "orig", "deleted", "folder", "key"];
+const ROLES = ["path", "name", "dir", "link", "broken", "size", "mtime", "mime", "hidden", "exec", "thumb", "canThumb", "text", "sniff", "kind", "group", "uri", "orig", "deleted", "folder", "key"];
 
 function row(entry, group, home) {
 	const path = String(entry.path || "");
@@ -24,7 +24,9 @@ function row(entry, group, home) {
 		exec: !!entry.exec,
 		thumb: String(entry.thumb || ""),
 		canThumb: !!entry.canThumb,
-		text: !!entry.text,
+		// what may be text is looked into like text; binary ones show their glyph after all
+		text: !!entry.text || !!entry.sniff,
+		sniff: !!entry.sniff,
 		kind: Kinds.kindOf(entry),
 		group: group || "",
 		uri: String(entry.uri || ""),

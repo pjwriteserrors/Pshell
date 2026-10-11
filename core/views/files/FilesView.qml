@@ -5,6 +5,7 @@ import Quickshell
 import qs.style.theme
 import qs.style.widgets
 import qs.core.services
+import "FileKinds.js" as Kinds
 
 // The file manager: a sidebar of places, tabs of panes (one or two side by
 // side), details beside them, and everything that comes over them – menus,
@@ -107,8 +108,17 @@ FocusScope {
 		}
 	}
 
-	// the tabs of the last session come back
+	// the tabs of the last session come back (or the page the settings say)
 	function restore() {
+		const start = FileLibrary.setting("startPage");
+		if (start === "home" || (start === "folder" && FileLibrary.setting("startFolder") === "")) {
+			root.newTab({ kind: "home" }, true);
+			return;
+		}
+		if (start === "folder") {
+			root.newTab({ kind: "dir", path: FileLibrary.setting("startFolder") }, true);
+			return;
+		}
 		const saved = FileLibrary.session.filter(tab => Array.isArray(tab.panes) && tab.panes.length > 0).slice(0, 12);
 		if (saved.length === 0) {
 			root.newTab({ kind: "home" }, true);
@@ -120,6 +130,8 @@ FocusScope {
 				tab.second.go(entry.panes[1], { history: false, force: true });
 				tab.split = true;
 				tab.side = entry.focus === 1 ? 1 : 0;
+				tab.first.modeOverride = String(entry.modes?.[0] ?? "");
+				tab.second.modeOverride = String(entry.modes?.[1] ?? "");
 			}
 		}
 		root.currentIndex = 0;
@@ -165,6 +177,31 @@ FocusScope {
 		function onConfirmRequested(question) {
 			confirm.ask(question);
 		}
+		function onPasswordAsked(title, path, done) {
+			root.ask(`${title} – ${Files.nameOf(path)}`, "Password", "", done, true);
+		}
+		function onScanned(results) {
+			scanResults.open(results);
+		}
+		function onCompared(result) {
+			compareResults.open(result);
+		}
+		function onSettingsAsked(page) {
+			settings.open(page);
+		}
+	}
+
+	function openSettings(page) {
+		settings.open(page || "");
+	}
+
+	// a PDF tool: one with questions asks them first, the others start
+	function pdfTool(tool, rows) {
+		const paths = rows.map(row => row.path);
+		if (tool === "organize") organizer.open(rows[0]);
+		else if (tool === "sign") signer.open(rows[0]);
+		else if (pdfDialog.needsAsking(tool)) pdfDialog.open(tool, rows);
+		else Files.pdfTool(tool, paths, tool === "compress" ? { level: FileLibrary.setting("pdfQuality") } : {});
 	}
 
 	function handle(request) {
@@ -215,17 +252,33 @@ FocusScope {
 			else pane.openFolder(row.path);
 			return;
 		}
-		Files.launch([row.path]);
-		Sounds.play("open");
+		root.openFiles(pane, [row]);
+	}
+
+	// a double click on an archive takes it apart here, a Windows program
+	// starts with Proton or Wine, everything else opens in its app
+	function openFiles(pane, rows) {
+		const rest = [];
+		for (const row of rows) {
+			if (commands.isArchive(row) && FileLibrary.setting("archiveOpen") === "extract" && !/\.(iso|img|deb|rpm|apk|jar|cbz|cbr|epub)$/i.test(row.name)) {
+				Files.extract(row.path, pane.isFolder ? pane.location.path : Files.parentOf(row.path));
+				Sounds.play("open");
+			} else if (Kinds.isWindows(row)) {
+				Files.runWindows(row.path, "auto");
+			} else {
+				rest.push(row);
+			}
+		}
+		if (rest.length > 0) {
+			Files.launch(rest.map(row => row.path));
+			Sounds.play("open");
+		}
 	}
 
 	function openRows(pane, rows, newTab) {
 		const dirs = rows.filter(row => row.dir);
 		const files = rows.filter(row => !row.dir);
-		if (files.length > 0) {
-			Files.launch(files.map(row => row.path));
-			Sounds.play("open");
-		}
+		if (files.length > 0) root.openFiles(pane, files);
 		if (dirs.length === 1 && files.length === 0 && !newTab) pane.openFolder(dirs[0].path);
 		else dirs.forEach(row => root.newTab({ kind: "dir", path: row.path }, false));
 	}
@@ -278,8 +331,19 @@ FocusScope {
 	}
 
 	function showViewMenu(pane, item) {
-		const at = item.mapToItem(root, item.width - 210, item.height + 6);
-		menu.show(commands.viewEntries(pane), at.x, at.y);
+		if (pane !== root.pane) root.focusPane(pane);
+		viewPopover.open(pane, item);
+	}
+
+	// cards or a list: in a split only for that side, else where the folder's scope says
+	function setMode(pane, mode) {
+		if (root.tab?.split) {
+			pane.modeOverride = mode === pane.view.mode ? "" : mode;
+			root.saveSession();
+			return;
+		}
+		pane.modeOverride = "";
+		FileLibrary.setView(pane.viewKey, { mode: mode });
 	}
 
 	function focusPane(pane) {
@@ -538,11 +602,17 @@ FocusScope {
 			case Qt.Key_R:
 				pane.reload(false);
 				break;
+			case Qt.Key_Comma:
+				root.openSettings("");
+				break;
+			case Qt.Key_J:
+				root.activePaneView()?.viewOptions();
+				break;
 			case Qt.Key_1:
-				FileLibrary.setView(pane.isFolder ? folder : `:${pane.location.kind}`, { mode: "grid" });
+				root.setMode(pane, "grid");
 				break;
 			case Qt.Key_2:
-				FileLibrary.setView(pane.isFolder ? folder : `:${pane.location.kind}`, { mode: "list" });
+				root.setMode(pane, "list");
 				break;
 			case Qt.Key_Plus:
 			case Qt.Key_Equal:
@@ -773,6 +843,14 @@ FocusScope {
 		onClosed: keyTarget.forceActiveFocus()
 	}
 
+	ViewPopover {
+		id: viewPopover
+
+		anchors.fill: parent
+		view: root
+		onClosed: keyTarget.forceActiveFocus()
+	}
+
 	FileMenu {
 		id: menu
 
@@ -810,6 +888,50 @@ FocusScope {
 		id: batchRename
 
 		anchors.fill: parent
+		onClosed: keyTarget.forceActiveFocus()
+	}
+
+	PdfDialog {
+		id: pdfDialog
+
+		anchors.fill: parent
+		view: root
+		onClosed: keyTarget.forceActiveFocus()
+	}
+
+	PageOrganizer {
+		id: organizer
+
+		anchors.fill: parent
+		onClosed: keyTarget.forceActiveFocus()
+	}
+
+	SignDialog {
+		id: signer
+
+		anchors.fill: parent
+		onClosed: keyTarget.forceActiveFocus()
+	}
+
+	ScanResults {
+		id: scanResults
+
+		anchors.fill: parent
+		onClosed: keyTarget.forceActiveFocus()
+	}
+
+	CompareResults {
+		id: compareResults
+
+		anchors.fill: parent
+		onClosed: keyTarget.forceActiveFocus()
+	}
+
+	SettingsDialog {
+		id: settings
+
+		anchors.fill: parent
+		view: root
 		onClosed: keyTarget.forceActiveFocus()
 	}
 

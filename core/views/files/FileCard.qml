@@ -117,7 +117,7 @@ Item {
 			radius: Theme.radius.large
 			color: root.selected ? Qt.tint(Theme.base, Qt.alpha(Theme.primary, root.hovered ? 0.2 : 0.15))
 				: root.dropTarget ? Qt.tint(Theme.base, Qt.alpha(Theme.primary, 0.12))
-				: root.hovered ? Theme.layer1 : "transparent"
+				: Qt.alpha(Theme.layer1, root.hovered ? 1 : 0)
 			border.width: root.dropTarget || root.current ? 2 : (root.selected ? 1.5 : 0)
 			border.color: root.dropTarget ? Theme.primary : (root.current && !root.selected ? Qt.alpha(Theme.primary, 0.7) : Qt.alpha(Theme.primary, 0.55))
 			scale: root.dropTarget ? 1.04 : 1
@@ -147,6 +147,8 @@ Item {
 			thumb: root.thumb
 			canThumb: root.canThumb
 			isText: root.text
+			mtime: root.mtime
+			bytes: root.size
 			hovered: root.hovered
 			selected: root.selected
 			dropTarget: root.dropTarget

@@ -89,6 +89,26 @@ QtObject {
 			for (const entry of elsewhere) out.push(entry);
 		}
 
+		// Windows programs, PDFs, a second opinion on files
+		const special = [];
+		if (one && Kinds.isWindows(one)) {
+			special.push({ label: "Run with", icon: "microsoft_windows", children: done => Files.knowRunners(() => done(root.runnerEntries(one))) });
+			special.push({ label: "Add to Steam…", icon: "steam", run: () => root.view.ask("Name in the Steam library", "Name", one.name.replace(/\.[^.]+$/, ""), name => Files.addToSteam(one.path, name, FileLibrary.setting("protonVersion"))) });
+		}
+		const pdfs = files.filter(row => row.mime === "application/pdf");
+		if (pdfs.length > 0) special.push({ label: "PDF tools", icon: "file_pdf_box", children: () => root.pdfEntries(rows, pdfs) });
+		else if (images.length > 0 && images.length === files.length) special.push({ label: images.length === 1 ? "Make a PDF of it" : "Make one PDF of them", icon: "file_pdf_box", run: () => Files.pdfTool("fromimages", images.map(row => row.path), {}) });
+		else if (files.length > 0 && files.every(row => /\.(docx?|odt|rtf|xlsx?|ods|pptx?|odp)$/i.test(row.name))) special.push(root.pdfEntry("officetopdf", "Make a PDF", "file_pdf_box", files));
+		else if (files.length > 0 && files.every(row => /\.html?$/i.test(row.name))) special.push(root.pdfEntry("htmltopdf", "Make a PDF", "file_pdf_box", files));
+		if (one && Kinds.isWeblink(one)) special.push({ label: "Copy the link", icon: "link_variant", run: () => Files.request("info", { path: one.path }, data => { if (data?.url) Files.copyText(data.url, "Link copied"); }) });
+		const media = files.filter(row => row.kind === "image" || row.kind === "video" || row.kind === "audio");
+		if (media.length > 0 && media.length === files.length && dirs.length === 0) special.push({ label: "Convert to", icon: "swap_horizontal", children: done => Files.convertible(root.paths(files), targets => done(root.convertEntries(files, targets))) });
+		if (files.length > 0 && files.length <= 20 && dirs.length === 0) special.push({ label: "Check with VirusTotal", icon: "shield_search", run: () => Files.vtScan(root.paths(files)) });
+		if (special.length > 0) {
+			out.push({ separator: true });
+			for (const entry of special) out.push(entry);
+		}
+
 		out.push({ separator: true });
 		if (one && root.isArchive(one)) out.push({ label: "Extract here", icon: "package_variant", run: () => Files.extract(one.path, pane.isFolder ? pane.location.path : Files.parentOf(one.path)) });
 		out.push({ label: rows.length === 1 && one.dir ? `Pack “${one.name}” as ZIP` : "Pack as ZIP", icon: "zip_box_outline", run: () => Files.compress(paths) });
@@ -122,6 +142,73 @@ QtObject {
 			if (entries.length === 0) entries.push({ label: "No app opens this", enabled: false });
 			done(entries);
 		});
+	}
+
+	// the formats of the same kind, videos also to their sound
+	function convertEntries(rows, targets) {
+		const out = [];
+		let kind = "";
+		for (const target of targets) {
+			if (target.kind !== kind) {
+				kind = target.kind;
+				out.push({ header: kind === "video" ? "Video" : (kind === "audio" ? "Audio" : "Picture") });
+			}
+			out.push({ label: target.label, icon: kind === "video" ? "filmstrip" : (kind === "audio" ? "music_note" : "image_outline"), run: () => Files.convert(root.paths(rows), target.format) });
+		}
+		if (out.length === 0) out.push({ label: "Nothing to convert these to", enabled: false });
+		return out;
+	}
+
+	function runnerEntries(row) {
+		const out = Files.runners.map(runner => ({
+			label: runner.name,
+			icon: runner.kind === "wine" ? "glass_wine" : "steam",
+			run: () => Files.runWindows(row.path, runner.id)
+		}));
+		if (out.length === 0) out.push({ label: "Neither Proton nor Wine is installed", enabled: false });
+		return out;
+	}
+
+	function pdfEntry(tool, label, icon, rows, extra) {
+		const missing = Files.pdfMissing[tool];
+		return Object.assign({ label: label, icon: icon, enabled: !missing, hint: missing ? `needs ${missing}` : "", run: () => root.view.pdfTool(tool, rows) }, extra || {});
+	}
+
+	// everything a PDF can go through (iLovePDF's tools, here on the machine)
+	function pdfEntries(rows, pdfs) {
+		const one = pdfs.length === 1;
+		const mergeable = rows.filter(row => row.mime === "application/pdf" || row.kind === "image");
+		const out = [];
+		out.push({ header: "Pages" });
+		if (mergeable.length > 1) out.push(root.pdfEntry("merge", `Merge ${mergeable.length} into one…`, "call_merge", mergeable));
+		out.push(root.pdfEntry("split", "Split…", "call_split", pdfs));
+		out.push(root.pdfEntry("extract", "Take pages out…", "file_move_outline", pdfs));
+		out.push(root.pdfEntry("remove", "Remove pages…", "file_remove_outline", pdfs));
+		out.push(root.pdfEntry("rotate", "Rotate…", "rotate_right", pdfs));
+		if (one) out.push(root.pdfEntry("organize", "Organize pages…", "view_grid_outline", pdfs));
+		out.push({ header: "On the pages" });
+		out.push(root.pdfEntry("pagenumbers", "Page numbers…", "format_list_numbered", pdfs));
+		out.push(root.pdfEntry("watermark", "Watermark…", "water_outline", pdfs));
+		if (one) out.push(root.pdfEntry("sign", "Sign…", "draw_pen", pdfs));
+		out.push(root.pdfEntry("redact", "Black out words…", "eye_off_outline", pdfs));
+		out.push(root.pdfEntry("crop", "Crop the margins", "crop", pdfs));
+		out.push(root.pdfEntry("flatten", "Flatten forms and notes", "layers_outline", pdfs));
+		out.push(root.pdfEntry("grayscale", "Grayscale", "format_color_fill", pdfs));
+		out.push({ header: "Convert" });
+		out.push(root.pdfEntry("toimages", "To pictures…", "image_multiple_outline", pdfs));
+		out.push(root.pdfEntry("totext", "To text", "text_box_outline", pdfs));
+		out.push(root.pdfEntry("tooffice", "To Word…", "file_word_outline", pdfs));
+		out.push(root.pdfEntry("imagesout", "Take the pictures out", "file_image_outline", pdfs));
+		out.push(root.pdfEntry("pdfa", "To PDF/A (for archiving)", "archive", pdfs));
+		out.push({ header: "Size, safety, repair" });
+		out.push(root.pdfEntry("compress", "Compress…", "arrow_collapse_vertical", pdfs));
+		out.push(root.pdfEntry("protect", "Lock with a password…", "lock_outline", pdfs));
+		out.push(root.pdfEntry("unlock", "Remove the password…", "lock_open_variant_outline", pdfs));
+		out.push(root.pdfEntry("ocr", "Make the text searchable (OCR)", "text_recognition", pdfs));
+		out.push(root.pdfEntry("repair", "Repair", "wrench_outline", pdfs));
+		if (one) out.push(root.pdfEntry("metadata", "Title and author…", "information_variant", pdfs));
+		if (pdfs.length === 2) out.push(root.pdfEntry("compare", "Compare the two", "file_compare", pdfs));
+		return out;
 	}
 
 	function tagEntries(paths) {
@@ -188,12 +275,13 @@ QtObject {
 	}
 
 	function viewEntries(pane) {
-		const path = pane.isFolder ? pane.location.path : `:${pane.location.kind}`;
+		const path = pane.viewKey;
 		const set = changes => FileLibrary.setView(path, changes);
+		const own = key => FileLibrary.scopeOf(path, key) === "here";
 		return [
 			{ header: "Show as" },
-			{ label: "Cards", icon: "view_grid_outline", checked: pane.mode === "grid", shortcut: "Ctrl+1", run: () => set({ mode: "grid" }) },
-			{ label: "List", icon: "view_list_outline", checked: pane.mode === "list", shortcut: "Ctrl+2", run: () => set({ mode: "list" }) },
+			{ label: "Cards", icon: "view_grid_outline", checked: pane.mode === "grid", shortcut: "Ctrl+1", run: () => root.view.setMode(pane, "grid") },
+			{ label: "List", icon: "view_list_outline", checked: pane.mode === "list", shortcut: "Ctrl+2", run: () => root.view.setMode(pane, "list") },
 			{ header: "Sort by" },
 			{ label: "Name", checked: pane.sort === "name", run: () => set({ sort: "name", desc: false }) },
 			{ label: "Modified", checked: pane.sort === "modified", run: () => set({ sort: "modified", desc: true }) },
@@ -205,12 +293,17 @@ QtObject {
 			{ label: "Kind", checked: pane.group === "kind", run: () => set({ group: "kind" }) },
 			{ label: "Date", checked: pane.group === "date", run: () => set({ group: "date" }) },
 			{ label: "Size", checked: pane.group === "size", run: () => set({ group: "size" }) },
+			{ header: "Keep for this folder only" },
+			{ label: "Layout", checked: own("mode"), run: () => FileLibrary.setScope(path, "mode", own("mode") ? "everywhere" : "here") },
+			{ label: "Order", checked: own("sort"), run: () => FileLibrary.setScope(path, "sort", own("sort") ? "everywhere" : "here") },
+			{ label: "Groups", checked: own("group"), run: () => FileLibrary.setScope(path, "group", own("group") ? "everywhere" : "here") },
 			{ separator: true },
 			{ label: "Hidden files", checked: !!FileLibrary.view.hidden, shortcut: "Ctrl+H", run: () => FileLibrary.setView("", { hidden: !FileLibrary.view.hidden }) },
 			{ label: "Folders first", checked: FileLibrary.view.foldersFirst !== false, run: () => {
 				FileLibrary.setView("", { foldersFirst: FileLibrary.view.foldersFirst === false });
 				pane.arrange(false);
-			} }
+			} },
+			{ label: "Default card size", icon: "restore", enabled: (FileLibrary.view.cardSize || 172) !== 172, run: () => FileLibrary.setView("", { cardSize: 172 }) }
 		];
 	}
 
@@ -241,6 +334,8 @@ QtObject {
 		out.push({ label: FileLibrary.view.sidebar === false ? "Show the sidebar" : "Hide the sidebar", icon: "dock_left", shortcut: "Ctrl+B", group: "Window", run: () => FileLibrary.setView("", { sidebar: FileLibrary.view.sidebar === false }) });
 		out.push({ label: view.detailsOpen ? "Hide the details" : "Show the details", icon: "dock_right", shortcut: "Ctrl+I", group: "Window", run: () => view.showDetails(!view.detailsOpen) });
 		out.push({ label: "Search everywhere", icon: "magnify", shortcut: "Ctrl+F", group: "Window", run: () => view.focusSearch() });
+		out.push({ label: "Settings", icon: "cog_outline", shortcut: "Ctrl+,", group: "Window", run: () => view.openSettings("") });
+		out.push({ label: "View options", icon: "tune_variant", shortcut: "Ctrl+J", group: "Window", run: () => view.activePaneView()?.viewOptions() });
 		// places
 		const go = (label, icon, location) => out.push({ label: label, icon: icon, group: "Go to", run: () => pane.go(location) });
 		go("Home", "home_variant_outline", { kind: "home" });

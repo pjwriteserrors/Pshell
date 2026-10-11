@@ -15,6 +15,7 @@ progress, the drives, a "Show in folder" from another app.
 """
 import json
 import os
+import shutil
 import socket
 import sys
 import threading
@@ -28,11 +29,16 @@ import gi  # noqa: E402
 gi.require_version("Gio", "2.0")
 from gi.repository import Gio, GLib  # noqa: E402
 
+import archives  # noqa: E402
+import convert  # noqa: E402
 import fm1  # noqa: E402
 import jobs  # noqa: E402
 import lookup  # noqa: E402
+import pdftools  # noqa: E402
 import places  # noqa: E402
 import thumbs  # noqa: E402
+import virustotal  # noqa: E402
+import windows  # noqa: E402
 
 RUNTIME = os.environ.get("PSHELL_RUNTIME_DIR") or os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "pshell")
 SOCKET = os.path.join(RUNTIME, "files.sock")
@@ -445,6 +451,64 @@ class Daemon:
     def op_cancel(self, client, request):
         self.jobs.cancel(request["job"])
         return {}
+
+    def op_pause(self, client, request):
+        self.jobs.pause(request["job"], bool(request.get("on", True)))
+        return {}
+
+    @on_main("slow")
+    def op_archive(self, client, request):
+        return archives.listing(request["path"], int(request.get("limit", 3000)))
+
+    def op_convertible(self, client, request):
+        return {"targets": convert.targets(request.get("paths", []))}
+
+    def op_runners(self, client, request):
+        return windows.runners()
+
+    def op_runwin(self, client, request):
+        try:
+            return {"runner": windows.run(request["path"], request.get("runner", "auto"))}
+        except OSError as error:
+            raise RuntimeError(error.strerror or str(error))
+
+    def op_pdftools(self, client, request):
+        return pdftools.available()
+
+    def op_pdfmeta(self, client, request):
+        return pdftools.read_metadata(request["path"])
+
+    @on_main("slow")
+    def op_vtkey(self, client, request):
+        """{ value } sets (or with "" clears) the key; without it, says whether there is one."""
+        if "value" in request:
+            value = str(request.get("value") or "")
+            if value.strip():
+                problem = virustotal.check_key(value.strip())
+                if problem and "cannot be reached" not in problem:
+                    raise RuntimeError(problem)
+            error = virustotal.set_key(value)
+            if error:
+                raise RuntimeError(error)
+        return {"set": bool(virustotal.get_key())}
+
+    @on_main("slow")
+    def op_thumbcache(self, client, request):
+        """How big the thumbnail cache is; { clear: true } empties it (other
+        apps make theirs again too)."""
+        if request.get("clear"):
+            for folder in ("normal", "large", "x-large", "xx-large", "fail"):
+                shutil.rmtree(os.path.join(thumbs.CACHE, folder), ignore_errors=True)
+            thumbs.INDEX.read_at = 0
+        size = files = 0
+        for current, _, names in os.walk(thumbs.CACHE):
+            for name in names:
+                try:
+                    size += os.lstat(os.path.join(current, name)).st_size
+                    files += 1
+                except OSError:
+                    pass
+        return {"size": size, "files": files}
 
     def op_undo(self, client, request):
         job = self.jobs.undo()

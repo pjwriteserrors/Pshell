@@ -28,13 +28,54 @@ Item {
 	readonly property real usable: Math.max(100, root.width - root.pad * 2 - 6)
 	readonly property int columns: root.list ? 1 : Math.max(1, Math.floor(root.usable / root.cardSize))
 	readonly property real cellW: root.list ? root.usable : Math.floor(root.usable / root.columns)
-	readonly property real cellH: root.list ? (root.pane.location.kind === "search" ? 46 : 38) : Math.round(Math.round(root.cellW * 0.74) * 0.8) + 12 + 8 + 48
+	// a narrow list (a split) lets the kind go first, then the date: the name keeps its room
+	readonly property real kindW: root.cellW < 640 ? 0 : 128
+	readonly property real whenW: root.cellW < 470 ? 0 : (root.cellW < 560 ? 112 : 150)
+	readonly property real sizeW: root.cellW < 300 ? 0 : 86
+	// the columns change with the width: what moves then is not animated
+	property bool relayout: false
+
+	onColumnsChanged: {
+		root.relayout = true;
+		relayoutOff.restart();
+	}
+
+	Timer {
+		id: relayoutOff
+
+		interval: 400
+		onTriggered: {
+			root.relayout = false;
+			grid.forceLayout();
+		}
+	}
+
+	// a card: its picture, two lines of name and one about it, measured in the font it is drawn in
+	readonly property real nameH: Math.ceil(labelMetrics.height * 1.05) * 2 + 2 + Math.ceil(smallMetrics.height)
+	readonly property real cellH: root.list ? (root.pane.location.kind === "search" ? 46 : 38) : Math.round(Math.round(root.cellW * 0.74) * 0.8) + 12 + 8 + root.nameH + 14
 	readonly property real headerH: 46
 	readonly property bool showFolder: ["search", "recent", "tag", "collection", "shelf", "trash"].includes(root.pane.location.kind)
 	readonly property Flickable flick: root.grouped ? groupedView : grid
 
+	FontMetrics {
+		id: labelMetrics
+
+		font.family: Theme.fontFamily
+		font.pixelSize: Theme.size.label
+		font.weight: Font.DemiBold
+	}
+
+	FontMetrics {
+		id: smallMetrics
+
+		font.family: Theme.fontFamily
+		font.pixelSize: Theme.size.small
+	}
+
 	property int hoveredIndex: -1
 	property int dropIndex: -1
+	// something from elsewhere is held over the place itself, not over a folder in it
+	property bool dropOnPlace: false
 	property bool entering: false
 
 	// open: a double click or Enter; menu: a right click (index -1: the empty space)
@@ -47,7 +88,9 @@ Item {
 		target: root.pane
 
 		function onResetsChanged() {
-			root.entering = true;
+			// cards rise one by one into a folder opened anew; going back (or up)
+			// to one seen before only fades the whole view, so nothing blinks
+			root.entering = !root.pane.historyStep && root.pane.direction !== "out";
 			enteringOff.restart();
 			const dir = root.pane.direction;
 			stage.scale = dir === "in" ? 0.965 : (dir === "out" ? 1.035 : 0.985);
@@ -109,11 +152,11 @@ Item {
 		// name on the left; when, size and kind at the same places as in the rows
 		Repeater {
 			model: [
-				{ label: "Name", key: "name", x: 44, span: columnsHeader.width - 44 - 150 - 86 - 128 - 10, right: false },
-				{ label: root.pane.location.kind === "recent" ? "Used" : "Modified", key: "modified", x: columnsHeader.width - 10 - 128 - 86 - 150, span: 150, right: false },
-				{ label: "Size", key: "size", x: columnsHeader.width - 10 - 128 - 86, span: 86, right: true },
-				{ label: "Kind", key: "kind", x: columnsHeader.width - 10 - 128, span: 128, right: false }
-			]
+				{ label: "Name", key: "name", x: 44, span: columnsHeader.width - 44 - root.whenW - root.sizeW - root.kindW - 10, right: false },
+				{ label: root.pane.location.kind === "recent" ? "Used" : "Modified", key: "modified", x: columnsHeader.width - 10 - root.kindW - root.sizeW - root.whenW, span: root.whenW, right: false },
+				{ label: "Size", key: "size", x: columnsHeader.width - 10 - root.kindW - root.sizeW, span: root.sizeW, right: true },
+				{ label: "Kind", key: "kind", x: columnsHeader.width - 10 - root.kindW, span: root.kindW, right: false }
+			].filter(column => column.span > 0)
 
 			delegate: Item {
 				id: column
@@ -154,7 +197,7 @@ Item {
 					cursorShape: Qt.PointingHandCursor
 					onClicked: {
 						Sounds.play("select");
-						const path = root.pane.isFolder ? root.pane.location.path : `:${root.pane.location.kind}`;
+						const path = root.pane.viewKey;
 						if (column.on) FileLibrary.setView(path, { desc: !root.pane.desc });
 						else FileLibrary.setView(path, { sort: column.modelData.key, desc: column.modelData.key === "modified" || column.modelData.key === "size" });
 					}
@@ -199,10 +242,10 @@ Item {
 			delegate: root.list ? rowDelegate : cardDelegate
 			boundsBehavior: Flickable.StopAtBounds
 
-			add: root.pane.resetting || root.entering ? null : addTransition
-			remove: root.pane.resetting ? null : removeTransition
-			displaced: root.pane.resetting ? null : displacedTransition
-			move: root.pane.resetting ? null : displacedTransition
+			add: root.pane.resetting || root.entering || root.relayout ? null : addTransition
+			remove: root.pane.resetting || root.relayout ? null : removeTransition
+			displaced: root.pane.resetting || root.relayout ? null : displacedTransition
+			move: root.pane.resetting || root.relayout ? null : displacedTransition
 
 			ScrollBar.vertical: ThinScrollBar {}
 		}
@@ -283,6 +326,9 @@ Item {
 			FileRow {
 				view: root
 				pane: root.pane
+				whenWidth: root.whenW
+				sizeWidth: root.sizeW
+				kindWidth: root.kindW
 				showFolder: root.showFolder
 				entering: root.entering
 				width: root.cellW
@@ -426,6 +472,9 @@ Item {
 								folder: cell.row.folder
 								view: root
 								pane: root.pane
+								whenWidth: root.whenW
+								sizeWidth: root.sizeW
+								kindWidth: root.kindW
 								showFolder: root.showFolder
 								entering: root.entering
 							}
@@ -557,6 +606,11 @@ Item {
 					return;
 				}
 				if (pointer.deselectOnRelease && !pointer.drag.active && pointer.pressIndex >= 0) root.pane.pick(pointer.pressIndex, "only");
+				// a single click opens, when the settings say so (not with Ctrl or Shift)
+				const plain = (mouse.modifiers & (Qt.ControlModifier | Qt.ShiftModifier)) === 0;
+				if (FileLibrary.setting("singleClick") && plain && mouse.button === Qt.LeftButton && !pointer.drag.active && pointer.pressIndex >= 0
+					&& Math.hypot(mouse.x - pointer.pressAt.x, mouse.y - pointer.pressAt.y) < 6 && root.indexAt(mouse.x, mouse.y) === pointer.pressIndex)
+					root.opened(pointer.pressIndex, false);
 				pointer.drag.target = null;
 			}
 
@@ -566,7 +620,7 @@ Item {
 			}
 
 			onDoubleClicked: mouse => {
-				if (mouse.button !== Qt.LeftButton) return;
+				if (mouse.button !== Qt.LeftButton || FileLibrary.setting("singleClick")) return;
 				const index = root.indexAt(mouse.x, mouse.y);
 				if (index >= 0) root.opened(index, false);
 			}
@@ -594,6 +648,9 @@ Item {
 
 			anchors.fill: parent
 
+			// a collection, a tag or a shelf takes files without moving them
+			readonly property bool gathers: ["collection", "tag", "shelf"].includes(root.pane.location.kind)
+
 			function target() {
 				if (root.dropIndex >= 0) return root.pane.rows[root.dropIndex]?.path ?? "";
 				return root.pane.isFolder && root.pane.writable ? root.pane.location.path : "";
@@ -607,6 +664,7 @@ Item {
 			onPositionChanged: drag => drops.track(drag.x, drag.y, drag.source === ghost)
 			onExited: {
 				root.dropIndex = -1;
+				root.dropOnPlace = false;
 				edgeScroll.speed = 0;
 				springTimer.stop();
 			}
@@ -614,13 +672,34 @@ Item {
 				const into = drops.target();
 				const index = root.dropIndex;
 				root.dropIndex = -1;
+				root.dropOnPlace = false;
 				edgeScroll.speed = 0;
 				springTimer.stop();
+				if (index < 0 && drops.gathers && drop.source !== ghost) {
+					drop.acceptProposedAction();
+					drops.gather(drop);
+					return;
+				}
 				// dropped where it came from: nothing to do
 				if (into === "" || (drop.source === ghost && index < 0)) return;
 				if (index >= 0 && drop.source === ghost && root.pane.isSelected(root.pane.rows[index].path)) return;
 				drop.acceptProposedAction();
 				Files.dropInto(into, drop, "auto");
+			}
+
+			function gather(drop) {
+				const loc = root.pane.location;
+				const paths = (drop.urls ?? []).map(url => String(url)).filter(url => url.startsWith("file://")).map(url => decodeURIComponent(url.slice(7)));
+				if (loc.kind === "shelf") {
+					Shelf.addDrop(loc.id, drop);
+					Sounds.play("pinned");
+				} else if (paths.length === 0) {
+					return;
+				} else if (loc.kind === "collection") {
+					FileLibrary.addToCollection(loc.id, paths);
+				} else if (loc.kind === "tag" && !paths.every(path => FileLibrary.hasTag(path, loc.id))) {
+					FileLibrary.toggleTag(paths.filter(path => !FileLibrary.hasTag(path, loc.id)), loc.id);
+				}
 			}
 
 			function track(x, y, own) {
@@ -632,7 +711,25 @@ Item {
 					if (next >= 0) springTimer.restart();
 					else springTimer.stop();
 				}
+				root.dropOnPlace = next < 0 && !own && (drops.gathers || (root.pane.isFolder && root.pane.writable));
 				edgeScroll.speed = y < 40 ? -1 : (y > drops.height - 40 ? 1 : 0);
+			}
+		}
+
+		// the place itself takes what is held over it
+		Rectangle {
+			anchors.fill: parent
+			anchors.margins: 4
+			radius: Theme.radius.large
+			color: Qt.alpha(Theme.primary, root.dropOnPlace ? 0.05 : 0)
+			border.width: 2
+			border.color: Qt.alpha(Theme.primary, root.dropOnPlace ? 0.5 : 0)
+
+			Behavior on color {
+				ColorAnim {}
+			}
+			Behavior on border.color {
+				ColorAnim {}
 			}
 		}
 

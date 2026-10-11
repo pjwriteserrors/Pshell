@@ -21,6 +21,8 @@ Item {
 	property string kind: "other"
 	property string thumb: ""
 	property bool canThumb: false
+	// when the file last changed: a folder's count and a text's lines are read again after
+	property real mtime: 0
 	property bool isText: false
 	property bool hovered: false
 	property bool selected: false
@@ -54,13 +56,28 @@ Item {
 	readonly property bool pictured: root.picture !== "" && !root.dir
 	readonly property bool photo: root.kind === "image" || root.kind === "video"
 
+	// the file's size, for the settings' limit on thumbnails
+	property real bytes: 0
+	readonly property bool remote: root.path.startsWith("/run/user/") && root.path.includes("/gvfs/")
+	readonly property bool thumbAllowed: (!root.remote || FileLibrary.setting("remoteThumbs"))
+		&& (Number(FileLibrary.setting("thumbLimit")) === 0 || root.bytes <= Number(FileLibrary.setting("thumbLimit")) * 1e6)
+	readonly property bool textShown: FileLibrary.setting("textPreviews")
+
 	function ask() {
 		if (root.path === "") return;
-		if (!root.dir && root.canThumb && root.picture === "") Files.wantThumb(root.path, root.mime, root.size);
-		if (!root.compact && (root.dir || (root.isText && !root.pictured)) && !root.peek) Files.wantPeek(root.path, root.dir ? "inode/directory" : root.mime);
+		if (!root.dir && root.canThumb && root.picture === "" && root.thumbAllowed) Files.wantThumb(root.path, root.mime, root.size);
+		if (!root.compact && (root.dir || (root.isText && !root.pictured && root.textShown))) Files.checkPeek(root.path, root.dir ? "inode/directory" : root.mime, root.mtime);
 	}
 
+	onThumbAllowedChanged: Qt.callLater(root.ask)
+	onTextShownChanged: Qt.callLater(root.ask)
+
 	onPathChanged: Qt.callLater(root.ask)
+	onMtimeChanged: Qt.callLater(root.ask)
+	onHoveredChanged: {
+		if (root.hovered) back.stop();
+		else if (lines.y !== 6) back.restart();
+	}
 	Component.onCompleted: root.ask()
 
 	// ── a picture ──────────────────────────────────────────────────────────
@@ -141,36 +158,49 @@ Item {
 		visible: root.pictured && !photoFrame.visible
 		anchors.fill: parent
 
+		// under the pointer the page lifts off a second one, which fans out behind it
+		property real lift: root.hovered ? 1 : 0
+
+		Behavior on lift {
+			SpatialAnim {
+				duration: Motion.medium
+			}
+		}
+
+		Rectangle {
+			x: sheet.x + 5 * paper.lift
+			y: sheet.y + 4 * paper.lift
+			width: sheet.width
+			height: sheet.height
+			radius: 4
+			color: Qt.rgba(0.93, 0.93, 0.94, 1)
+			opacity: Math.max(0, paper.lift)
+			visible: paper.lift > 0.01
+		}
+
 		Rectangle {
 			id: sheet
 
 			readonly property real ratio: pageImage.implicitWidth > 0 ? pageImage.implicitHeight / pageImage.implicitWidth : 1.3
-			anchors.centerIn: parent
+			x: (parent.width - width) / 2 - 2 * paper.lift
+			y: (parent.height - height) / 2 - 4 * paper.lift
 			height: Math.min(parent.height * 0.92, parent.width * 0.86 * sheet.ratio)
 			width: height / sheet.ratio
 			radius: 4
 			color: "white"
-			rotation: root.hovered ? -2.5 : 0
-			scale: root.hovered ? 1.04 : 1
+			scale: 1 + 0.02 * paper.lift
 
-			Behavior on rotation {
-				SpatialAnim {}
-			}
-			Behavior on scale {
-				SpatialAnim {}
-			}
-
-			// a soft shadow under the page
+			// a soft shadow under the page, wider the higher it is
 			Rectangle {
 				z: -1
 				anchors.fill: parent
 				anchors.topMargin: 3
-				anchors.leftMargin: 1
-				anchors.rightMargin: -1
-				anchors.bottomMargin: -4
-				radius: 5
+				anchors.leftMargin: 1 - 2 * paper.lift
+				anchors.rightMargin: -1 - 2 * paper.lift
+				anchors.bottomMargin: -4 - 6 * paper.lift
+				radius: 5 + 3 * paper.lift
 				color: Theme.shadow
-				opacity: 0.45
+				opacity: 0.45 - 0.1 * paper.lift
 			}
 
 			Image {
@@ -200,7 +230,7 @@ Item {
 		visible: root.dir && !root.compact
 		anchors.fill: parent
 
-		readonly property var pictures: root.peek?.pictures ?? []
+		readonly property var pictures: FileLibrary.setting("folderPeeks") ? (root.peek?.pictures ?? []) : []
 		readonly property color body: Qt.tint(Theme.layer2, Qt.alpha(root.tone, root.selected || root.dropTarget ? 0.5 : 0.32))
 		readonly property color back: Qt.tint(Theme.layer1, Qt.alpha(root.tone, root.selected || root.dropTarget ? 0.38 : 0.22))
 		property real lift: root.dropTarget ? 1 : (root.hovered ? 0.55 : 0)
@@ -348,39 +378,71 @@ Item {
 	}
 
 	// ── text: its first lines ──────────────────────────────────────────────
+	// under the pointer the page lifts and slowly reads on, down its lines
 	Rectangle {
 		id: textPage
 
 		readonly property string snippet: String(root.peek?.snippet ?? "")
-		visible: !root.dir && !root.pictured && !root.compact && root.isText && textPage.snippet !== ""
+		property real lift: root.hovered ? 1 : 0
+		visible: !root.dir && !root.pictured && !root.compact && root.isText && root.textShown && textPage.snippet !== ""
 		anchors.centerIn: parent
+		anchors.verticalCenterOffset: -3 * textPage.lift
 		height: parent.height * 0.94
 		width: Math.min(parent.width * 0.86, height * 0.84)
 		radius: 7
 		color: Theme.layer2
 		clip: true
-		rotation: root.hovered ? -2 : 0
-		scale: root.hovered ? 1.04 : 1
+		scale: 1 + 0.03 * textPage.lift
+		border.width: 1
+		border.color: Qt.alpha(root.tone, Math.max(0, 0.35 * textPage.lift))
 
-		Behavior on rotation {
-			SpatialAnim {}
-		}
-		Behavior on scale {
-			SpatialAnim {}
+		Behavior on lift {
+			SpatialAnim {
+				duration: Motion.medium
+			}
 		}
 
 		Text {
-			anchors.fill: parent
-			anchors.margins: 7
-			anchors.topMargin: 6
-			text: textPage.visible ? (root.kind === "code" ? Peek.highlight(textPage.snippet, Peek.langOfPath(root.name), 900) : textPage.snippet) : ""
+			id: lines
+
+			readonly property real overflow: Math.max(0, lines.implicitHeight - (textPage.height - 14))
+			x: 7
+			y: 6
+			width: parent.width - 14
+			text: textPage.visible ? (root.kind === "code" ? Peek.highlight(textPage.snippet, Peek.langOfPath(root.name), 2400) : textPage.snippet) : ""
 			textFormat: root.kind === "code" ? Text.RichText : Text.PlainText
 			color: Theme.textMuted
 			font.family: Theme.monoFamily
 			font.pixelSize: Math.max(5, Math.min(8, root.width / 22))
 			lineHeight: 1.1
 			wrapMode: Text.NoWrap
-			clip: true
+		}
+
+		// reading on: as fast as an eye would, back up quickly when the pointer leaves
+		SequentialAnimation {
+			running: root.hovered && lines.overflow > 4 && textPage.visible
+
+			PauseAnimation {
+				duration: 350
+			}
+			NumberAnimation {
+				target: lines
+				property: "y"
+				to: 6 - lines.overflow
+				duration: Math.min(9000, lines.overflow * 28)
+				easing.type: Easing.InOutSine
+			}
+		}
+
+		NumberAnimation {
+			id: back
+
+			target: lines
+			property: "y"
+			to: 6
+			duration: Motion.medium
+			easing.type: Easing.BezierSpline
+			easing.bezierCurve: Motion.decel
 		}
 
 		Rectangle {

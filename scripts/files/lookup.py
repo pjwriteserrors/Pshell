@@ -25,6 +25,67 @@ TEXTUAL = ("text/", "application/json", "application/xml", "application/javascri
            "application/x-subrip", "application/ecmascript", "application/x-wine-extension-ini", "application/x-trash")
 
 
+# names that are text whatever the type database says (.ini is "unknown"
+# there, .bat and .url belong to Wine)
+TEXT_NAMES = re.compile(r"\.(ini|inf|bat|cmd|url|reg|nfo|diz|log|cfg|conf|config|desktop|srt|ass|ssa|vtt|sub|ps1|psm1|vbs|"
+                        r"properties|env|lst|list|cue|m3u8?|pls|nfo|me|1st|asc|gpg|pem|crt|csr|key|pub|"
+                        r"gitignore|gitattributes|editorconfig|dockerignore|npmrc|htaccess|service|timer|socket|"
+                        r"rules|mount|target|lock|sum|mod|plist|webloc|ovpn|nix|ebuild|spec|pkgbuild|install)$", re.I)
+TEXT_BARE = {"makefile", "dockerfile", "readme", "license", "copying", "authors", "changelog", "todo", "pkgbuild",
+             "gemfile", "rakefile", "procfile", "vagrantfile", "justfile", "cmakelists.txt", "news", "install"}
+# types that may well be text: looked into before a card or quick look shows them
+MAYBE_TEXT = ("application/octet-stream", "application/x-zerosize", "application/x-wine-extension-ini", "application/x-bat",
+              "application/x-mswinurl", "text/x-ms-regedit", "application/x-trash", "application/x-ipynb+json")
+
+
+def looks_textual(data):
+    """Whether bytes read from the start of a file are text: no NUL bytes
+    (unless it is UTF-16 with its mark), and as good as no control codes."""
+    if not data:
+        return True
+    if data.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return True
+    if b"\0" in data:
+        return False
+    try:
+        data.decode("utf-8")
+        return True
+    except UnicodeDecodeError as error:
+        # a character cut off at the end of what was read is fine
+        if error.start >= len(data) - 3 and error.reason in ("unexpected end of data",):
+            return True
+    controls = sum(1 for byte in data if byte < 32 and byte not in (9, 10, 12, 13, 27, 8))
+    return controls / len(data) < 0.02
+
+
+def decode(data):
+    if data.startswith(b"\xef\xbb\xbf"):
+        return data[3:].decode("utf-8", errors="replace")
+    if data.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return data.decode("utf-16", errors="replace")
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError as error:
+        if error.start >= len(data) - 3:
+            return data[:error.start].decode("utf-8", errors="replace")
+    return data.decode("cp1252", errors="replace")
+
+
+def text_name(name):
+    return bool(TEXT_NAMES.search(name)) or name.lower() in TEXT_BARE
+
+
+def sniff_text(path, size_limit=8_000_000):
+    """Reads the start of a file to tell text from binary."""
+    try:
+        if os.path.getsize(path) > size_limit:
+            return False
+        with open(path, "rb") as file:
+            return looks_textual(file.read(4096))
+    except OSError:
+        return False
+
+
 def natural(name):
     """A key that sorts "file 9" before "file 10", ignoring case."""
     return DIGITS.sub(lambda m: m.group().zfill(12), name.casefold())
@@ -89,7 +150,9 @@ def describe(path, name=None, st=None, lst=None, hidden=None):
         "exec": not is_dir and bool(st.st_mode & 0o111) and not textual(mime) and (mime.startswith("application/x-") or mime == "application/octet-stream"),
         "thumb": "",
         "canThumb": False,
-        "text": textual(mime) and st.st_size < 4_000_000,
+        "text": (textual(mime) or text_name(name)) and st.st_size < 8_000_000,
+        # not known to be text, but could be: the card looks before it shows it
+        "sniff": not is_dir and mime in MAYBE_TEXT and st.st_size < 8_000_000,
     }
     if not is_dir and thumbs.thumbable(mime):
         found = thumbs.existing(path, st.st_mtime)
@@ -177,6 +240,10 @@ def list_trash():
 def peek(path, mime):
     """What a card shows besides the name: for a folder how much is in it
     and up to three pictures from it; for a text file its first lines."""
+    try:
+        mtime = os.stat(path).st_mtime
+    except OSError:
+        mtime = 0
     if mime == "inode/directory":
         count = 0
         pictures = []
@@ -199,18 +266,18 @@ def peek(path, mime):
                 candidates.sort(reverse=True)
                 pictures = [(p, kind) for _, p, kind in candidates[:3]]
         except OSError:
-            return {"path": path, "count": -1, "pictures": []}
-        return {"path": path, "count": count, "pictures": pictures}
+            return {"path": path, "count": -1, "pictures": [], "mtime": mtime}
+        return {"path": path, "count": count, "pictures": pictures, "mtime": mtime}
     try:
         with open(path, "rb") as file:
-            head = file.read(1600)
+            head = file.read(4800)
     except OSError:
-        return {"path": path, "snippet": ""}
-    if b"\0" in head:
-        return {"path": path, "snippet": ""}
-    text = head.decode("utf-8", errors="replace")
-    lines = text.replace("\r\n", "\n").replace("\t", "  ").split("\n")[:14]
-    return {"path": path, "snippet": "\n".join(line[:90] for line in lines)}
+        return {"path": path, "snippet": "", "mtime": mtime}
+    if not looks_textual(head):
+        return {"path": path, "snippet": "", "mtime": mtime, "binary": True}
+    text = decode(head)
+    lines = text.replace("\r\n", "\n").replace("\r", "\n").replace("\t", "  ").split("\n")[:48]
+    return {"path": path, "snippet": "\n".join(line[:90] for line in lines), "mtime": mtime}
 
 
 def read_text(path, limit=96_000):
@@ -219,8 +286,8 @@ def read_text(path, limit=96_000):
             data = file.read(limit + 1)
     except OSError as error:
         return {"path": path, "error": error.strerror}
-    binary = b"\0" in data[:8192]
-    return {"path": path, "text": "" if binary else data[:limit].decode("utf-8", errors="replace"),
+    binary = not looks_textual(data[:8192])
+    return {"path": path, "text": "" if binary else decode(data[:limit]),
             "truncated": len(data) > limit, "binary": binary}
 
 
@@ -330,7 +397,7 @@ def info(path):
             result["folders"] = sum(1 for item in items if item.is_dir())
         except OSError:
             pass
-    elif entry["text"]:
+    elif entry["text"] and not WEBLINK.search(path):
         try:
             with open(path, "rb") as file:
                 data = file.read(2_000_000)
@@ -338,16 +405,61 @@ def info(path):
             facts.append(["Lines", f"{result['lines']:,}".replace(",", " ")])
         except OSError:
             pass
-    elif re.search(r"\.(zip|tar|tgz|gz|xz|zst|bz2|7z|rar)$", path, re.I):
+    elif ARCHIVE.search(path):
+        import archives
         try:
-            out = subprocess.run(["bsdtar", "-tf", path], capture_output=True, text=True, timeout=4).stdout
-            names = [line for line in out.splitlines() if line and not line.endswith("/")]
-            facts.append(["Contains", f"{len(names)} files"])
-            result["listing"] = names[:12]
+            inside = archives.listing(path, 4000)
         except (OSError, subprocess.SubprocessError):
-            pass
+            inside = {}
+        if inside.get("entries"):
+            files, folders = inside.get("files", 0), inside.get("folders", 0)
+            facts.append(["Contains", f"{files} file{'s' if files != 1 else ''}" + (f", {folders} folder{'s' if folders != 1 else ''}" if folders else "")])
+            if inside.get("size"):
+                facts.append(["Unpacked", human_size(inside["size"])])
+                if inside.get("packed"):
+                    facts.append(["Packed to", f"{min(100, round(inside['packed'] * 100 / max(1, inside['size'])))} %"])
+            # what is at the top, folders first
+            top = [entry for entry in inside["entries"] if "/" not in entry["name"]]
+            top.sort(key=lambda entry: (not entry["dir"], entry["name"].casefold()))
+            result["listing"] = [entry["name"] + ("/" if entry["dir"] else "") for entry in top[:14]]
+        if inside.get("encrypted"):
+            facts.append(["Locked", "with a password"])
+
+    if not entry["dir"] and WEBLINK.search(path):
+        target = weblink_target(path)
+        if target:
+            result["url"] = target
+            facts.insert(0, ["Opens", target])
     result["facts"] = facts
     return result
+
+
+ARCHIVE = re.compile(r"\.(zip|tar|tgz|tbz2?|txz|tzst|gz|xz|zst|bz2|lz4|lzma|7z|rar|cab|iso|jar|apk|cbz|cbr|deb|rpm)$", re.I)
+WEBLINK = re.compile(r"\.(url|webloc|desktop)$", re.I)
+
+
+def human_size(n):
+    for unit, step in (("B", 1), ("KB", 1e3), ("MB", 1e6), ("GB", 1e9), ("TB", 1e12)):
+        if n < step * 1000:
+            return f"{n / step:.1f} {unit}" if unit != "B" else f"{n} B"
+    return f"{n / 1e12:.1f} TB"
+
+
+def weblink_target(path):
+    """Where a link file leads: a Windows .url, a macOS .webloc, a desktop
+    entry of the Link type."""
+    try:
+        with open(path, "rb") as file:
+            data = decode(file.read(65536))
+    except OSError:
+        return ""
+    if path.lower().endswith(".webloc"):
+        match = re.search(r"<key>URL</key>\s*<string>([^<]+)</string>", data)
+        return match.group(1).strip() if match else ""
+    if path.lower().endswith(".desktop") and not re.search(r"^Type\s*=\s*Link", data, re.M):
+        return ""
+    match = re.search(r"^\s*URL\s*=\s*(\S.*)$", data, re.M | re.I)
+    return match.group(1).strip() if match else ""
 
 
 def du(path, cancelled=lambda: False):
@@ -566,13 +678,35 @@ def home(watch):
     }
 
 
-def apps_for(path):
-    """The apps that open a file, its default first."""
-    mime = describe(path)["mime"] if os.path.exists(path) else mime_of(path)
+def is_texty(path, mime):
+    """A file that is text though its type says otherwise (.ini, .bat …)."""
+    name = os.path.basename(path)
+    if textual(mime):
+        return True
+    return text_name(name) or (mime in MAYBE_TEXT and sniff_text(path))
+
+
+def open_type(path, mime):
+    """The type a file is opened as: text with a type of its own that no
+    app (or only Wine) opens goes to the text editor."""
+    if mime.startswith("text/") or not is_texty(path, mime):
+        return mime
     default = Gio.AppInfo.get_default_for_type(mime, False)
+    if default is None or mime in MAYBE_TEXT or "wine" in (default.get_id() or "").lower():
+        return "text/plain"
+    return mime
+
+
+def apps_for(path):
+    """The apps that open a file, its default first (text editors too for
+    what is text under another type)."""
+    mime = describe(path)["mime"] if os.path.exists(path) else mime_of(path)
+    shown = open_type(path, mime)
+    default = Gio.AppInfo.get_default_for_type(shown, False)
     apps = []
     seen = set()
-    for app in ([default] if default else []) + list(Gio.AppInfo.get_all_for_type(mime)):
+    extra = list(Gio.AppInfo.get_all_for_type("text/plain")) if is_texty(path, mime) else []
+    for app in ([default] if default else []) + list(Gio.AppInfo.get_all_for_type(mime)) + extra:
         app_id = app.get_id() or ""
         if not app_id or app_id in seen or not app.should_show():
             continue
@@ -596,7 +730,14 @@ def launch(paths, app_id=""):
             return ""
         groups = {}
         for gfile in files:
-            mime = mime_of(gfile.get_basename(), os.path.isdir(gfile.get_path() or ""))
+            path = gfile.get_path() or ""
+            # a link file opens where it leads
+            if WEBLINK.search(path) and not os.path.isdir(path):
+                target = weblink_target(path)
+                if target:
+                    Gio.AppInfo.launch_default_for_uri(target, None)
+                    continue
+            mime = open_type(path, mime_of(gfile.get_basename(), os.path.isdir(path)))
             app = Gio.AppInfo.get_default_for_type(mime, False)
             if app is None:
                 return f"No app opens {Gio.content_type_get_description(mime)}"

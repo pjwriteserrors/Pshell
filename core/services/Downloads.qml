@@ -56,6 +56,9 @@ Singleton {
 	// bytes and time of the last report, for the speed: { key: { at, received, speed } }
 	property var meters: ({})
 
+	// a download that was seen running is complete (the file manager may check it)
+	signal finished(var item)
+
 	function formatSize(bytes) {
 		const value = Math.max(0, Number(bytes) || 0);
 		if (value >= 1024 * 1024 * 1024) return `${(value / (1024 * 1024 * 1024)).toFixed(2)} GB`;
@@ -144,6 +147,7 @@ Singleton {
 		root.table = Object.assign({}, root.table, { [key]: item });
 		if (!before || kept !== wasKept) root.sort();
 		if (state === "done" && before?.state !== "done") root.unseen += 1;
+		if (state === "done" && before && before.state !== "done") root.finished(item);
 		// one that was seen running ends
 		if (before && before.state !== state && (state === "done" || state === "failed")) Sounds.play(state === "done" ? "download" : "error");
 		if (kept !== wasKept || (kept && before.state !== state)) root.save();

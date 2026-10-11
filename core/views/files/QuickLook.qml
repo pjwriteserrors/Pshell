@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 import QtQuick.Pdf
 import QtMultimedia
 import qs.style.theme
@@ -61,16 +62,26 @@ Item {
 	property bool truncated: false
 	property var folderRows: []
 	property var info: null
+	// what an archive holds: { entries, files, folders, size, packed, error }
+	property var archive: null
+	readonly property bool isArchive: root.kind === "archive"
+	readonly property bool isWeblink: Kinds.isWeblink(root.row)
+	readonly property string weblink: String(root.info?.url ?? "")
 
 	function load() {
 		const row = root.row;
 		root.text = "";
 		root.folderRows = [];
 		root.info = null;
+		root.archive = null;
 		zoom.reset();
 		player.stop();
 		if (!row) return;
-		if (row.text && !row.dir) {
+		if (root.isArchive) {
+			Files.request("archive", { path: row.path, limit: 3000 }, (data, error) => {
+				if (root.row?.path === row.path) root.archive = data ?? { entries: [], error: error };
+			});
+		} else if (row.text && !row.dir) {
 			Files.request("read", { path: row.path, limit: 200000 }, data => {
 				if (root.row?.path !== row.path) return;
 				root.text = data?.binary ? "" : String(data?.text ?? "");
@@ -564,13 +575,267 @@ Item {
 				}
 			}
 
+			// a link file: where it leads
+			Column {
+				id: linkView
+
+				anchors.centerIn: parent
+				width: Math.min(parent.width - 80, 560)
+				visible: root.isWeblink && root.weblink !== ""
+				spacing: 14
+
+				Rectangle {
+					anchors.horizontalCenter: parent.horizontalCenter
+					width: 84
+					height: 84
+					radius: 28
+					color: Theme.primarySoft
+					scale: linkView.visible ? 1 : 0.7
+
+					Behavior on scale {
+						SpatialAnim {
+							duration: Motion.long
+						}
+					}
+
+					Glyph {
+						anchors.centerIn: parent
+						icon: "web"
+						size: 40
+						color: Theme.primary
+					}
+				}
+
+				StyledText {
+					width: parent.width
+					horizontalAlignment: Text.AlignHCenter
+					text: root.weblink.replace(/^https?:\/\//, "").split(/[/?#]/)[0]
+					font.pixelSize: Theme.size.title + 4
+					font.weight: Font.DemiBold
+					elide: Text.ElideMiddle
+				}
+
+				StyledText {
+					width: parent.width
+					horizontalAlignment: Text.AlignHCenter
+					text: root.weblink
+					tone: Theme.textMuted
+					font.family: Theme.monoFamily
+					font.pixelSize: Theme.size.small
+					wrapMode: Text.WrapAnywhere
+					maximumLineCount: 4
+					elide: Text.ElideRight
+				}
+
+				Row {
+					anchors.horizontalCenter: parent.horizontalCenter
+					spacing: 8
+
+					TextButton {
+						variant: "filled"
+						text: "Open in the browser"
+						icon: "open_in_new"
+						onClicked: {
+							Qt.openUrlExternally(root.weblink);
+							root.close();
+						}
+					}
+
+					TextButton {
+						variant: "tonal"
+						text: "Copy"
+						icon: "content_copy"
+						onClicked: Files.copyText(root.weblink, "Link copied")
+					}
+				}
+			}
+
+			// an archive: what is in it, as a tree
+			Item {
+				id: archiveView
+
+				anchors.fill: parent
+				anchors.margins: 14
+				visible: root.isArchive
+
+				Spinner {
+					anchors.centerIn: parent
+					visible: !root.archive
+					width: 28
+					height: 28
+				}
+
+				Column {
+					anchors.centerIn: parent
+					visible: !!root.archive && (root.archive.entries ?? []).length === 0
+					spacing: 10
+
+					Glyph {
+						anchors.horizontalCenter: parent.horizontalCenter
+						icon: root.archive?.encrypted ? "lock_outline" : "package_variant_closed"
+						size: 44
+						color: Theme.textMuted
+					}
+
+					StyledText {
+						text: root.archive?.error || "Nothing is in it"
+						tone: Theme.textMuted
+					}
+				}
+
+				RowLayout {
+					id: archiveHead
+
+					visible: (root.archive?.entries ?? []).length > 0
+					width: parent.width
+					spacing: 10
+
+					Repeater {
+						model: [
+							{ icon: "file_outline", text: `${root.archive?.files ?? 0} file${root.archive?.files === 1 ? "" : "s"}` },
+							{ icon: "folder_outline", text: `${root.archive?.folders ?? 0} folder${root.archive?.folders === 1 ? "" : "s"}` },
+							{ icon: "arrow_expand_all", text: `${Files.sizeText(root.archive?.size ?? 0)} unpacked` },
+							{ icon: "package_variant_closed", text: root.archive?.size > 0 ? `packed to ${Math.min(100, Math.round((root.archive?.packed ?? 0) * 100 / root.archive.size))} %` : "" }
+						].filter(item => item.text !== "")
+
+						delegate: Rectangle {
+							required property var modelData
+
+							height: 28
+							width: chipRow.implicitWidth + 20
+							radius: 14
+							color: Theme.layer2
+
+							Row {
+								id: chipRow
+
+								anchors.centerIn: parent
+								spacing: 6
+
+								Glyph {
+									anchors.verticalCenter: parent.verticalCenter
+									icon: parent.parent.modelData.icon
+									size: 14
+									color: Theme.textMuted
+								}
+
+								StyledText {
+									anchors.verticalCenter: parent.verticalCenter
+									text: parent.parent.modelData.text
+									font.pixelSize: Theme.size.small
+								}
+							}
+						}
+					}
+
+					Item {
+						Layout.fillWidth: true
+					}
+
+					TextButton {
+						height: 32
+						variant: "tonal"
+						text: "Extract here"
+						icon: "package_variant"
+						onClicked: {
+							const row = root.row;
+							root.close();
+							Files.extract(row.path, root.pane.isFolder ? root.pane.location.path : Files.parentOf(row.path));
+						}
+					}
+				}
+
+				ListView {
+					id: archiveList
+
+					anchors.top: archiveHead.bottom
+					anchors.topMargin: 12
+					anchors.left: parent.left
+					anchors.right: parent.right
+					anchors.bottom: parent.bottom
+					visible: (root.archive?.entries ?? []).length > 0
+					model: root.archive?.entries ?? []
+					clip: true
+					boundsBehavior: Flickable.StopAtBounds
+					cacheBuffer: 600
+
+					ScrollBar.vertical: ThinScrollBar {}
+
+					delegate: Item {
+						id: archived
+
+						required property var modelData
+						required property int index
+						readonly property int depth: archived.modelData.name.split("/").length - 1
+						readonly property string leaf: archived.modelData.name.split("/").pop()
+
+						width: archiveList.width
+						height: 30
+
+						Rectangle {
+							anchors.fill: parent
+							radius: 6
+							color: Qt.alpha(Theme.layer2, archived.index % 2 === 1 ? 0.5 : 0)
+						}
+
+						// the lines that show what is inside what
+						Repeater {
+							model: archived.depth
+
+							delegate: Rectangle {
+								required property int index
+
+								x: 18 + index * 18
+								width: 1
+								height: archived.height
+								color: Theme.outline
+							}
+						}
+
+						Glyph {
+							id: archivedIcon
+
+							x: 10 + archived.depth * 18
+							anchors.verticalCenter: parent.verticalCenter
+							icon: archived.modelData.dir ? "folder" : Kinds.glyphOf({ dir: false, name: archived.leaf, mime: "" })
+							size: 16
+							color: archived.modelData.dir ? Theme.primary : Theme.textMuted
+							animated: false
+						}
+
+						StyledText {
+							anchors.left: archivedIcon.right
+							anchors.leftMargin: 8
+							anchors.right: archivedSize.left
+							anchors.rightMargin: 10
+							anchors.verticalCenter: parent.verticalCenter
+							text: archived.leaf
+							font.weight: archived.modelData.dir ? Font.DemiBold : Font.Normal
+							elide: Text.ElideMiddle
+						}
+
+						StyledText {
+							id: archivedSize
+
+							anchors.right: parent.right
+							anchors.rightMargin: 14
+							anchors.verticalCenter: parent.verticalCenter
+							text: archived.modelData.dir ? "" : Files.sizeText(archived.modelData.size)
+							tone: Theme.textSubtle
+							font.pixelSize: Theme.size.small
+							font.features: { "tnum": 1 }
+						}
+					}
+				}
+			}
+
 			// text and code
 			Flickable {
 				id: textView
 
 				anchors.fill: parent
 				anchors.margins: 18
-				visible: !!root.row?.text && !root.row?.dir && root.row?.mime !== "application/pdf"
+				visible: !!root.row?.text && !root.row?.dir && root.row?.mime !== "application/pdf" && root.text !== "" && !linkView.visible && !root.isArchive
 				contentWidth: Math.max(width, textBody.implicitWidth)
 				contentHeight: textBody.implicitHeight + 30
 				clip: true
@@ -652,7 +917,7 @@ Item {
 			// anything else: big, with what is known
 			Column {
 				anchors.centerIn: parent
-				visible: !zoom.visible && !video.visible && !controls.visible && !pages.visible && !textView.visible && !folderView.visible
+				visible: !zoom.visible && !video.visible && !controls.visible && !pages.visible && !textView.visible && !folderView.visible && !linkView.visible && !archiveView.visible
 				spacing: 16
 
 				FileThumb {

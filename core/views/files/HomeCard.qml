@@ -30,7 +30,7 @@ Item {
 		anchors.fill: parent
 		anchors.margins: root.bare ? 0 : -6
 		radius: Theme.radius.large
-		color: root.hovered && !root.bare ? Theme.layer1 : "transparent"
+		color: Qt.alpha(Theme.layer1, root.hovered && !root.bare ? 1 : 0)
 
 		Behavior on color {
 			ColorAnim {}

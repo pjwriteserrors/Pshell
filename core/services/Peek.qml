@@ -117,7 +117,8 @@ Singleton {
 		c: "c", h: "c", cc: "cpp", cpp: "cpp", cxx: "cpp", hpp: "cpp", java: "java", cs: "csharp", php: "php",
 		yml: "yaml", yaml: "yaml", toml: "toml", diff: "diff", patch: "diff", kt: "kotlin", swift: "swift",
 		rb: "ruby", lua: "lua", md: "markdown", ini: "ini", conf: "ini", cfg: "ini", nix: "nix", kdl: "kdl",
-		twig: "html", glsl: "c", frag: "c", vert: "c"
+		twig: "html", glsl: "c", frag: "c", vert: "c", bat: "shell", cmd: "shell", ps1: "shell", reg: "ini", inf: "ini",
+		url: "ini", desktop: "ini", service: "ini", properties: "ini", env: "shell"
 	})
 
 	function langOfPath(path) {

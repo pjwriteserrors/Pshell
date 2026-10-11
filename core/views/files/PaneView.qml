@@ -23,11 +23,15 @@ Item {
 	Rectangle {
 		anchors.fill: parent
 		radius: Theme.radius.huge
-		color: root.split ? (root.active ? Theme.layer1 : Qt.alpha(Theme.fg, 0.02)) : "transparent"
-		border.width: root.split && root.active ? 1 : 0
-		border.color: Qt.alpha(Theme.primary, 0.35)
+		// one colour fading in and out: a blend towards another one flashes
+		color: Qt.alpha(Theme.layer1, root.split ? (root.active ? 1 : 0.35) : 0)
+		border.width: root.split ? 1 : 0
+		border.color: Qt.alpha(Theme.primary, root.split && root.active ? 0.35 : 0)
 
 		Behavior on color {
+			ColorAnim {}
+		}
+		Behavior on border.color {
 			ColorAnim {}
 		}
 	}
@@ -120,13 +124,17 @@ Item {
 				height: 30
 				options: [{ value: "grid", icon: "view_grid_outline" }, { value: "list", icon: "view_list_outline" }]
 				current: root.pane.mode
-				onSelected: value => FileLibrary.setView(root.pane.isFolder ? root.pane.location.path : `:${root.pane.location.kind}`, { mode: value })
+				onSelected: value => root.shell.setMode(root.pane, value)
 			}
 		}
 	}
 
 	function editPath() {
 		crumbs.edit();
+	}
+
+	function viewOptions() {
+		root.shell.showViewMenu(root.pane, sortButton);
 	}
 
 	// ── the place ──────────────────────────────────────────────────────────
@@ -240,6 +248,11 @@ Item {
 				color: Theme.textSubtle
 				font.family: Theme.fontFamily
 				font.pixelSize: Theme.size.small
+			}
+
+			SizeReset {
+				visible: root.pane.mode === "grid" && opacity > 0.01
+				anchors.verticalCenter: parent.verticalCenter
 			}
 
 			// the size of the cards, also Ctrl and the wheel

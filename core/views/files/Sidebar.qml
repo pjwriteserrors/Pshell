@@ -93,6 +93,8 @@ Rectangle {
 		}
 
 		IconButton {
+			id: hide
+
 			anchors.right: parent.right
 			anchors.verticalCenter: parent.verticalCenter
 			width: 30
@@ -100,6 +102,16 @@ Rectangle {
 			iconSize: 16
 			icon: "dock_left"
 			onClicked: FileLibrary.setView("", { sidebar: false })
+		}
+
+		IconButton {
+			anchors.right: hide.left
+			anchors.verticalCenter: parent.verticalCenter
+			width: 30
+			height: 30
+			iconSize: 16
+			icon: "cog_outline"
+			onClicked: root.view.openSettings("")
 		}
 	}
 
@@ -182,10 +194,12 @@ Rectangle {
 				}
 			}
 
+			// folders dropped on the section (not on one of its folders) become favourites
 			SideSection {
 				width: parent.width
 				title: "Favorites"
-				visible: FileLibrary.favorites.length > 0 || favoriteDrop.containsDrag
+				dropEnabled: true
+				onDropped: drop => root.addFavorites(drop)
 
 				Repeater {
 					model: FileLibrary.favorites
@@ -212,6 +226,18 @@ Rectangle {
 							{ label: "Remove from favorites", icon: "star_off_outline", run: () => FileLibrary.toggleFavorite(modelData) }
 						])
 					}
+				}
+
+				Text {
+					visible: FileLibrary.favorites.length === 0
+					x: 12
+					width: parent.width - 24
+					height: implicitHeight + 6
+					text: "Drop folders here to keep them at hand."
+					color: Theme.textFaint
+					font.family: Theme.fontFamily
+					font.pixelSize: Theme.size.small
+					wrapMode: Text.WordWrap
 				}
 			}
 
@@ -284,6 +310,16 @@ Rectangle {
 				width: parent.width
 				title: "Collections"
 				action: "plus"
+				// files dropped beside the collections start a new one
+				dropEnabled: true
+				onDropped: drop => {
+					const paths = root.pathsOf(drop);
+					if (paths.length === 0) return;
+					root.view.ask("New collection", "Name of the collection", "", name => {
+						FileLibrary.newCollection(name, paths);
+						Sounds.play("pinned");
+					});
+				}
 				onActionClicked: root.view.ask("New collection", "Name of the collection", "", name => {
 					const id = FileLibrary.newCollection(name, []);
 					root.go({ kind: "collection", id: id });
@@ -430,19 +466,17 @@ Rectangle {
 				}
 			}
 		}
+	}
 
-		DropArea {
-			id: favoriteDrop
+	function pathsOf(drop) {
+		return (drop.urls ?? []).map(url => String(url)).filter(url => url.startsWith("file://")).map(url => decodeURIComponent(url.slice(7)));
+	}
 
-			anchors.fill: parent
-			z: -1
-			onDropped: drop => {
-				const dirs = (drop.urls ?? []).map(url => String(url)).filter(url => url.startsWith("file://")).map(url => decodeURIComponent(url.slice(7)));
-				Files.request("describe", { paths: dirs }, data => {
-					for (const entry of data?.entries ?? []) if (entry.dir && !FileLibrary.isFavorite(entry.path)) FileLibrary.toggleFavorite(entry.path);
-				});
-			}
-		}
+	function addFavorites(drop) {
+		const dirs = root.pathsOf(drop);
+		Files.request("describe", { paths: dirs }, data => {
+			for (const entry of data?.entries ?? []) if (entry.dir && !FileLibrary.isFavorite(entry.path)) FileLibrary.toggleFavorite(entry.path);
+		});
 	}
 
 	SideItem {

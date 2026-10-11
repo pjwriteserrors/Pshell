@@ -37,12 +37,17 @@ Item {
 	property int resets: 0
 	// "in", "out" or "jump": how the last navigation went, for the transition
 	property string direction: "jump"
+	// the last navigation went back or forth in the history (a place seen before)
+	property bool historyStep: false
 	// the model is being refilled: views hold their change animations back
 	property bool resetting: false
 
 	// view settings: those of the folder, else the general ones
-	readonly property var view: root.location.kind === "dir" ? FileLibrary.viewOf(root.location.path) : FileLibrary.viewOf(`:${root.location.kind}`)
-	readonly property string mode: root.view.mode
+	readonly property string viewKey: root.location.kind === "dir" ? String(root.location.path) : `:${root.location.kind}`
+	readonly property var view: FileLibrary.viewOf(root.viewKey)
+	// in a split each side may show its files its own way
+	property string modeOverride: ""
+	readonly property string mode: root.modeOverride || root.view.mode
 	readonly property string sort: root.location.kind === "recent" && !FileLibrary.folderViews[":recent"]?.sort ? "modified" : root.view.sort
 	readonly property bool desc: root.location.kind === "recent" && !FileLibrary.folderViews[":recent"]?.sort ? true : !!root.view.desc
 	readonly property string group: root.view.group
@@ -124,6 +129,7 @@ Item {
 			root.forward = [];
 		}
 		root.direction = options.direction || root.directionTo(root.location, next);
+		root.historyStep = false;
 		root.location = next;
 		root.filter = "";
 		root.pendingSelect = options.select || [];
@@ -149,6 +155,7 @@ Item {
 		root.back = root.back.slice(0, -1);
 		root.forward = root.forward.concat([{ location: root.location, selected: root.selectedPaths().slice(0, 50) }]);
 		root.direction = "out";
+		root.historyStep = true;
 		root.location = entry.location;
 		root.filter = "";
 		root.pendingSelect = entry.selected || [];
@@ -162,6 +169,7 @@ Item {
 		root.forward = root.forward.slice(0, -1);
 		root.back = root.back.concat([{ location: root.location, selected: root.selectedPaths().slice(0, 50) }]);
 		root.direction = "in";
+		root.historyStep = true;
 		root.location = entry.location;
 		root.filter = "";
 		root.pendingSelect = entry.selected || [];
@@ -293,8 +301,13 @@ Item {
 		function onJobFinished(job) {
 			// what a job made in this folder is picked (a paste, a new folder)
 			const created = (job.created || []).filter(path => Files.parentOf(path) === root.location.path);
-			if (job.state !== "done" || created.length === 0 || root.location.kind !== "dir") return;
-			if (["copy", "move", "auto", "paste", "mkdir", "newfile", "rename", "batchrename", "extract", "compress", "download", "link", "restore", "undo"].includes(job.kind)) {
+			const here = root.location.kind === "dir" && (job.touched || []).includes(root.location.path);
+			if (job.state !== "done" || created.length === 0 || root.location.kind !== "dir") {
+				// what it took away goes even if the folder's watch missed it
+				if (here || (root.location.kind === "trash" && ["trash", "restore", "emptytrash", "delete", "undo"].includes(job.kind))) changedTimer.restart();
+				return;
+			}
+			if (["copy", "move", "auto", "paste", "mkdir", "newfile", "rename", "batchrename", "extract", "compress", "download", "link", "restore", "undo", "convert", "pdf"].includes(job.kind)) {
 				root.pendingSelect = created;
 				if (job.kind === "mkdir" || job.kind === "newfile") root.pendingRename = created[0];
 				changedTimer.stop();

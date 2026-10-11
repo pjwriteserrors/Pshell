@@ -138,8 +138,9 @@ Item {
 		{ id: "converter", plugin: "converter", group: "tools", command: "conv", name: "Convert", aliases: ["convert"], keywords: "units currency" },
 		{ id: "translate", plugin: "translate", group: "tools", command: "t", name: "Translate", aliases: ["translate", "tr"], keywords: "language" },
 		{ id: "web-search", plugin: "web-search", group: "tools", command: "w", name: "Web Search", aliases: ["web", "search"], keywords: "browser" },
-		{ id: "file-browser", plugin: "files", group: "tools", command: "file", name: "Files", aliases: ["files"], keywords: "browse open folder" },
-		{ id: "file-manager", plugin: "filemanager", group: "tools", command: "fm", name: "File Manager", aliases: ["explorer", "manager"], keywords: "files folders window tabs" },
+		// with the file manager on, >file opens it (and searches for what follows)
+		{ id: "file-browser", plugin: "files", shown: !Plugins.on("filemanager"), group: "tools", command: "file", name: "Files", aliases: ["files"], keywords: "browse open folder" },
+		{ id: "file-manager", plugin: "filemanager", group: "tools", command: "file", name: "Files", aliases: ["files", "fm", "explorer", "manager"], keywords: "file manager folders window tabs browse open" },
 		{ id: "todo", plugin: "todos", group: "tools", command: "todo", name: "Todo", aliases: ["todos"], keywords: "lists tasks" },
 		{ id: "shelf", plugin: "shelves", group: "tools", command: "shelf", name: "Shelf", keywords: "stash files text", status: Shelf.shelves.length > 0 ? String(Shelf.shelves.length) : "" },
 		{ id: "shelf-clipboard", plugin: "shelves", group: "tools", command: "shelfclip", name: "Shelf from Clipboard", aliases: ["clipshelf"], keywords: "stash copied" },
@@ -336,7 +337,10 @@ Item {
 	readonly property bool inChatMode: Plugins.on("chat") && (root.commandQuery === "chat" || root.commandQuery.startsWith("chat "))
 	readonly property bool inOllamaMode: Plugins.on("ollama") && root.commandQuery === "ollama"
 	// the phone and the chat pick their files here as well
-	readonly property bool inFileMode: (Plugins.on("files") || Phone.pickingFile) && (root.commandQuery === "file" || root.commandQuery.startsWith("file "))
+	readonly property bool inFileMode: ((Plugins.on("files") && !Plugins.on("filemanager")) || Phone.pickingFile) && (root.commandQuery === "file" || root.commandQuery.startsWith("file "))
+	// ">file report" searches the file manager for it
+	readonly property string fileManagerQuery: Plugins.on("filemanager") && !Phone.pickingFile && /^(file|files|fm) +\S/.test(root.commandQuery)
+		? root.searchText.trim().slice(1).trim().replace(/^\S+\s+/, "") : ""
 	readonly property bool inTranslateMode: Plugins.on("translate") && (root.commandQuery === "t" || root.commandQuery.startsWith("t "))
 	readonly property bool inConvertMode: Plugins.on("converter") && (root.commandQuery === "conv" || root.commandQuery.startsWith("conv "))
 	readonly property bool inTodoMode: Plugins.on("todos") && (root.commandQuery === "todo" || root.commandQuery.startsWith("todo "))
@@ -2242,6 +2246,12 @@ Item {
 		if (root.inChatMode) {
 			if (root.editingMessageId !== "") root.submitEditedMessage(root.chatPrompt);
 			else root.sendChatPrompt(root.chatPrompt);
+			return;
+		}
+
+		if (root.fileManagerQuery !== "") {
+			root.closeRequested();
+			Files.searchFor(root.fileManagerQuery);
 			return;
 		}
 

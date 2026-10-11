@@ -127,6 +127,7 @@ Singleton {
 		}
 		switch (message.event) {
 		case "changed":
+			root.refreshPeek(String(message.path));
 			root.folderChanged(String(message.path));
 			break;
 		case "thumb":
@@ -172,6 +173,7 @@ Singleton {
 			for (const message of waiting) root.socket?.write(JSON.stringify(message) + "\n");
 			root.socket?.flush();
 			root.syncWatches();
+			root.knowVtKey();
 		});
 	}
 
@@ -345,6 +347,29 @@ Singleton {
 		askTimer.restart();
 	}
 
+	// a folder whose card is somewhere on the screen changed: its count is read again
+	function refreshPeek(path) {
+		const peek = root.peekMap[path];
+		if (!peek || peek.count === undefined) return;
+		delete root.askedPeeks[path];
+		root.wantPeek(path, "inode/directory");
+	}
+
+	// a peek taken before the folder (or file) last changed is asked again;
+	// the old one shows until the new one is in
+	function checkPeek(path, mime, mtime) {
+		const peek = root.peekMap[path];
+		if (!peek) {
+			root.wantPeek(path, mime);
+			return;
+		}
+		const key = `${path}|${mtime}`;
+		if (!mtime || peek.mtime === undefined || Math.abs(Number(peek.mtime) - Number(mtime)) < 0.01 || root.askedPeeks[key]) return;
+		root.askedPeeks[key] = true;
+		root.wantedPeeks.push({ path: path, mime: mime });
+		askTimer.restart();
+	}
+
 	// a folder read again may have files that changed: their pictures are asked anew
 	function forget(paths) {
 		for (const path of paths) {
@@ -434,6 +459,7 @@ Singleton {
 		else if (job.kind === "undo") root.request("undoable", {}, data => root.undoTitle = String(data?.title || ""));
 		// tags, favourites and collections follow what was moved or renamed
 		if (job.state === "done") for (const move of job.moves || []) FileLibrary.moved(move[0], move[1]);
+		for (const folder of job.touched || []) root.refreshPeek(folder);
 		const followUp = root.followUps[job.id];
 		delete root.followUps[job.id];
 		if (followUp) followUp(job);
@@ -459,7 +485,7 @@ Singleton {
 		else if (long) Sounds.play("taskDone");
 		else if (["copy", "move", "auto", "paste", "download"].includes(job.kind)) Sounds.play("copied");
 		// away from the window, a longer job says it is through
-		if (long && !root.windowActive && ["copy", "move", "auto", "paste", "download", "extract", "compress", "emptytrash", "delete"].includes(job.kind)) {
+		if (long && !root.windowActive && ["copy", "move", "auto", "paste", "download", "extract", "compress", "emptytrash", "delete", "convert", "pdf"].includes(job.kind)) {
 			const created = job.created || [];
 			Notifs.pushInternal("done", root.doneTitle(job), job.skipped > 0 ? `${job.skipped} skipped` : "", {
 				icon: "folder_check_outline",
@@ -477,6 +503,8 @@ Singleton {
 		case "download": return "Downloaded";
 		case "extract": return "Extracted";
 		case "compress": return "Packed";
+		case "convert": return "Converted";
+		case "pdf": return "PDF ready";
 		case "emptytrash": return "Trash emptied";
 		case "delete": return "Deleted";
 		default: return String(job.title || "Done");
@@ -506,6 +534,10 @@ Singleton {
 
 	function cancel(jobId) {
 		root.request("cancel", { job: jobId });
+	}
+
+	function pause(jobId, on) {
+		root.request("pause", { job: jobId, on: !!on });
 	}
 
 	function undo() {
@@ -546,8 +578,18 @@ Singleton {
 		});
 	}
 
-	function trash(paths) {
+	function trash(paths, asked) {
 		if (paths.length === 0) return;
+		if (FileLibrary.setting("confirmTrash") && !asked) {
+			root.confirmRequested({
+				title: paths.length === 1 ? `Move ${root.nameOf(paths[0])} to the trash?` : `Move ${paths.length} items to the trash?`,
+				detail: "It can be taken out again from the trash.",
+				confirm: "Move to the trash",
+				danger: false,
+				run: () => root.trash(paths, true)
+			});
+			return;
+		}
 		root.startJob("trash", { paths: paths }, job => {
 			if (job.state !== "failed" || job.code !== "no-trash") return;
 			const refused = job.failedPaths || [];
@@ -639,8 +681,156 @@ Singleton {
 		if (paths.length > 0) root.startJob("compress", { paths: paths }, followUp);
 	}
 
-	function extract(path, target, followUp) {
-		root.startJob("extract", { path: path, target: target || root.parentOf(path) }, followUp);
+	// a locked archive asks for its password (passwordAsked) and goes on with it
+	function extract(path, target, followUp, password) {
+		root.startJob("extract", { path: path, target: target || root.parentOf(path), password: password || "", trashArchive: !!FileLibrary.setting("trashArchive") }, job => {
+			if (job.state === "failed" && job.code === "password") {
+				root.passwordAsked(job.error, path, given => root.extract(path, target, followUp, given));
+				return;
+			}
+			if (followUp) followUp(job);
+		});
+	}
+
+	signal passwordAsked(string title, string path, var done)
+
+	// ── Windows programs ───────────────────────────────────────────────────
+	// [{ id, name, kind: proton | wine }] and whether Steam is there; asked once
+	property var runners: []
+	property bool steam: false
+	property bool runnersKnown: false
+
+	function knowRunners(done) {
+		if (root.runnersKnown) {
+			if (done) done();
+			return;
+		}
+		root.request("runners", {}, data => {
+			root.runners = data?.runners ?? [];
+			root.steam = !!data?.steam;
+			root.runnersKnown = true;
+			if (done) done();
+		});
+	}
+
+	// runner: "auto", "wine", "proton:<dir>"; auto follows the settings
+	function runWindows(path, runner) {
+		let chosen = runner || "auto";
+		if (chosen === "auto") {
+			const wanted = FileLibrary.setting("windowsRunner");
+			const version = String(FileLibrary.setting("protonVersion") || "");
+			chosen = wanted === "wine" ? "wine" : (wanted === "proton" && version !== "" ? version : (wanted === "proton" ? "proton" : "auto"));
+		}
+		FileLibrary.noteOpened(path);
+		root.request("runwin", { path: path, runner: chosen }, (data, error) => {
+			if (error) root.fail(error);
+			else {
+				Sounds.play("open");
+				root.say(`Starting with ${data.runner}`, "microsoft_windows");
+			}
+		});
+	}
+
+	function addToSteam(path, name, tool, followUp) {
+		root.startJob("steamadd", { path: path, name: name || "", tool: tool || "" }, job => {
+			if (job.state === "done") {
+				const steam = job.result?.steam;
+				Sounds.play("taskDone");
+				Notifs.pushInternal("done", `${steam?.name ?? "The game"} is in Steam`, steam?.restarted ? "Steam was restarted to take it in" : "It shows up in the library", {
+					icon: "steam",
+					actions: steam ? [{ label: "Open in Steam", icon: "play", run: () => Qt.openUrlExternally(`steam://rungameid/${steam.gameid}`) }] : []
+				});
+			}
+			if (followUp) followUp(job);
+		});
+	}
+
+	// ── VirusTotal ─────────────────────────────────────────────────────────
+	property bool vtKeySet: false
+
+	function knowVtKey() {
+		root.request("vtkey", {}, data => root.vtKeySet = !!data?.set);
+	}
+
+	// upload: "ask" (unknown files are offered for upload), "yes", "never"
+	function vtScan(paths, upload, quiet) {
+		const files = paths.filter(path => String(path) !== "");
+		if (files.length === 0) return;
+		const mode = upload || (FileLibrary.setting("vtUpload") === "always" ? "yes" : "ask");
+		root.startJob("vtscan", { paths: files, upload: mode }, job => {
+			if (job.state === "failed" && job.code === "vtkey") {
+				if (!quiet) root.settingsAsked("virustotal");
+				return;
+			}
+			if (job.state !== "done") return;
+			const scan = job.result?.scan ?? [];
+			const bad = scan.filter(entry => entry.state === "malicious" || entry.state === "suspicious");
+			if (quiet) {
+				// a download checked on its own only speaks up when something is wrong
+				if (bad.length > 0) Notifs.pushInternal("error", `${bad[0].name} looks dangerous`, `${bad[0].malicious + bad[0].suspicious} of ${bad[0].total} scanners flag it`, {
+					icon: "shield_alert_outline",
+					actions: [{ label: "Show", icon: "folder_open_outline", run: () => root.reveal([bad[0].path]) }]
+				});
+				return;
+			}
+			root.scanned(scan);
+		});
+	}
+
+	signal scanned(var results)
+	// the window opens its settings (on a page)
+	signal settingsAsked(string page)
+
+	Connections {
+		target: Downloads
+		ignoreUnknownSignals: true
+
+		function onFinished(item) {
+			if (root.enabled && FileLibrary.setting("vtDownloads") && root.vtKeySet && item?.path) root.vtScan([item.path], "never", true);
+		}
+	}
+
+	// ── PDF tools ──────────────────────────────────────────────────────────
+	// tool → what it lacks here ("LibreOffice"); asked once
+	property var pdfMissing: ({})
+	property var ocrLanguages: []
+
+	function knowPdfTools() {
+		root.request("pdftools", {}, data => {
+			root.pdfMissing = data?.missing ?? {};
+			root.ocrLanguages = data?.languages ?? [];
+		});
+	}
+
+	function pdfTool(tool, paths, options, followUp) {
+		root.startJob("pdf", { tool: tool, paths: paths, options: options || {} }, job => {
+			if (job.state === "failed" && job.code === "password") {
+				root.passwordAsked(job.error, paths[0], given => root.pdfTool(tool, paths, Object.assign({}, options, { password: given }), followUp));
+				return;
+			}
+			if (job.state === "done" && job.result?.compare) root.compared(job.result.compare);
+			if (job.state === "done" && (job.result?.saved ?? []).length > 0) {
+				const before = job.result.saved.reduce((sum, pair) => sum + pair[0], 0);
+				const after = job.result.saved.reduce((sum, pair) => sum + pair[1], 0);
+				root.say(after < before ? `${Math.round((1 - after / before) * 100)} % smaller · ${root.sizeText(after)}` : "It was as small as it gets already", "zip_box_outline");
+			}
+			if (followUp) followUp(job);
+		});
+	}
+
+	signal compared(var result)
+
+	// ── converting ─────────────────────────────────────────────────────────
+	// what files can become: [{ format, label, kind }]
+	function convertible(paths, done) {
+		root.request("convertible", { paths: paths }, data => done(data?.targets ?? []));
+	}
+
+	function convert(paths, format, followUp) {
+		root.startJob("convert", { paths: paths, format: format }, job => {
+			if (job.state === "done" && job.error) root.say(job.error, "alert_circle_outline");
+			if (followUp) followUp(job);
+		});
 	}
 
 	function restore(entries) {
@@ -762,6 +952,17 @@ Singleton {
 
 	function sizeText(bytes) {
 		const n = Number(bytes) || 0;
+		if (FileLibrary.setting("sizeUnits") === "iec") {
+			if (n < 1024) return `${n} B`;
+			const units = ["KiB", "MiB", "GiB", "TiB"];
+			let value = n / 1024;
+			let unit = 0;
+			while (value >= 1024 && unit < units.length - 1) {
+				value /= 1024;
+				unit += 1;
+			}
+			return `${value.toFixed(value < 10 ? 1 : 0)} ${units[unit]}`;
+		}
 		if (n < 1000) return `${n} B`;
 		if (n < 1000 * 1000) return `${(n / 1000).toFixed(n < 10000 ? 1 : 0)} KB`;
 		if (n < 1000 * 1000 * 1000) return `${(n / 1000 / 1000).toFixed(n < 1e7 ? 1 : 0)} MB`;
@@ -773,6 +974,7 @@ Singleton {
 	function whenText(seconds) {
 		const time = Number(seconds) * 1000;
 		if (!time) return "";
+		if (FileLibrary.setting("dateStyle") === "absolute") return Qt.formatDateTime(new Date(time), "dd.MM.yyyy HH:mm");
 		const now = Date.now();
 		const delta = (now - time) / 1000;
 		const date = new Date(time);

@@ -34,6 +34,9 @@ Item {
 	property int serial: 0
 
 	function toggleSplit() {
+		// a way of showing that was only for one side ends with the split
+		first.modeOverride = "";
+		second.modeOverride = "";
 		if (!root.split) {
 			// the second pane starts where the first one is
 			second.go(first.location, { history: false, force: true });
@@ -48,6 +51,6 @@ Item {
 
 	// what the session keeps of it
 	function snapshot() {
-		return { panes: root.split ? [first.location, second.location] : [first.location], split: root.split, focus: root.side };
+		return { panes: root.split ? [first.location, second.location] : [first.location], split: root.split, focus: root.side, modes: [first.modeOverride, second.modeOverride] };
 	}
 }

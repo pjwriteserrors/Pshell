@@ -4,16 +4,54 @@ import qs.style.widgets
 import qs.core.services
 
 // A titled group of the sidebar that folds away with a click on its title.
-Column {
+// One that takes drops lights up as a whole while something is held over
+// it; its size never changes for a drag, so what is under the pointer stays.
+Item {
 	id: root
 
 	property string title: ""
 	property string action: ""
 	property bool folded: false
+	property bool dropEnabled: false
+	readonly property bool dropping: sectionDrop.containsDrag
 	default property alias content: items.data
 	signal actionClicked
+	signal dropped(var drop)
 
-	spacing: 2
+	implicitHeight: column.implicitHeight
+
+	Rectangle {
+		anchors.fill: parent
+		anchors.topMargin: 2
+		radius: Theme.radius.medium
+		color: Qt.alpha(Theme.primary, root.dropping ? 0.1 : 0)
+		border.width: 1
+		border.color: Qt.alpha(Theme.primary, root.dropping ? 0.45 : 0)
+
+		Behavior on color {
+			ColorAnim {}
+		}
+		Behavior on border.color {
+			ColorAnim {}
+		}
+	}
+
+	DropArea {
+		id: sectionDrop
+
+		anchors.fill: parent
+		enabled: root.dropEnabled
+		onDropped: event => {
+			event.acceptProposedAction();
+			root.dropped(event);
+		}
+	}
+
+	Column {
+		id: column
+
+		width: parent.width
+		spacing: 2
 
 	Item {
 		width: parent.width
@@ -94,5 +132,6 @@ Column {
 			width: parent.width
 			spacing: 1
 		}
+	}
 	}
 }

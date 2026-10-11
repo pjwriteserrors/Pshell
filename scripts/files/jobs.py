@@ -9,6 +9,7 @@ undoing a copy that replaced files brings the old ones back.
 import os
 import re
 import shutil
+import signal
 import stat
 import subprocess
 import threading
@@ -21,13 +22,51 @@ import gi
 gi.require_version("Gio", "2.0")
 from gi.repository import Gio, GLib  # noqa: E402
 
+import archives  # noqa: E402
+import convert  # noqa: E402
 import lookup  # noqa: E402
+import pdftools  # noqa: E402
+import virustotal  # noqa: E402
+import windows  # noqa: E402
 
 COPY_FLAGS = Gio.FileCopyFlags.NOFOLLOW_SYMLINKS | Gio.FileCopyFlags.ALL_METADATA
 
 
 class Cancelled(Exception):
     pass
+
+
+class PdfContext:
+    """What a PDF tool sees of its job."""
+
+    def __init__(self, job):
+        self.job = job
+
+    def total(self, count):
+        self.job.files_total = max(self.job.files_total, self.job.files_done + int(count))
+        self.job.report()
+
+    def step(self):
+        self.job.files_done += 1
+        self.job.report()
+
+    def name(self, text):
+        self.job.current = text
+        self.job.report()
+
+    def check(self):
+        self.job.check()
+
+    def process(self, process):
+        self.job.process = process
+
+    def result(self, data):
+        self.job.result = data
+
+    def report_saving(self, before, after):
+        saved = (self.job.result or {}).get("saved", [])
+        saved.append([before, after])
+        self.job.result = dict(self.job.result or {}, saved=saved)
 
 
 class Failure(Exception):
@@ -148,6 +187,12 @@ class Job:
         self.failed_paths = []
         # (from, to) of what was moved or renamed: tags and favourites follow
         self.moves = []
+        # a job that may be held: it waits between two chunks (or its process is stopped)
+        self.can_pause = kind in ("copy", "move", "auto", "paste", "extract", "compress", "download", "delete", "pdf", "vtscan", "convert")
+        self.paused = False
+        self.process = None
+        # what a job found out, for the window to show (a scan's verdict)
+        self.result = None
 
     # ── reporting ──────────────────────────────────────────────────────────
     def snapshot(self):
@@ -164,7 +209,21 @@ class Job:
             "created": self.created[-200:], "undoable": bool(self.undo), "skipped": self.skipped,
             "failedPaths": self.failed_paths[:50],
             "moves": self.moves[-500:] if self.state in ("done", "failed", "cancelled") else [],
+            "touched": self.touched() if self.state in ("done", "failed", "cancelled") else [],
+            "paused": self.paused, "canPause": self.can_pause, "result": self.result,
         }
+
+    def touched(self):
+        """The folders the job changed, so views of them read again even when
+        a watch missed it."""
+        paths = list(self.args.get("paths") or []) + list(self.args.get("sources") or [])
+        if self.args.get("path"):
+            paths.append(self.args["path"])
+        paths += self.created + [move[0] for move in self.moves]
+        folders = {os.path.dirname(str(path).rstrip("/")) for path in paths if isinstance(path, str) and path.startswith("/")}
+        if self.target:
+            folders.add(self.target)
+        return sorted(folders)[:100]
 
     def report(self, force=False):
         now = time.monotonic()
@@ -181,6 +240,28 @@ class Job:
     def check(self):
         if self.cancellable.is_cancelled():
             raise Cancelled()
+        if self.paused:
+            self.wait_paused()
+            if self.cancellable.is_cancelled():
+                raise Cancelled()
+
+    def wait_paused(self):
+        """Holds the job's thread while it is paused (also inside a copy's
+        progress callback, which holds the copy)."""
+        while self.paused and not self.cancellable.is_cancelled():
+            time.sleep(0.1)
+
+    def set_paused(self, on):
+        if not self.can_pause or self.state in ("done", "failed", "cancelled"):
+            return
+        self.paused = bool(on)
+        if self.process is not None and self.process.poll() is None:
+            try:
+                os.killpg(self.process.pid, signal.SIGSTOP if self.paused else signal.SIGCONT)
+            except OSError:
+                pass
+        self.rate_at = (time.monotonic(), self.bytes_done)
+        self.report(True)
 
     # ── conflicts ──────────────────────────────────────────────────────────
     def ask(self, source, target, merge_possible):
@@ -221,7 +302,13 @@ class Job:
 
     def cancel(self):
         self.cancellable.cancel()
+        self.paused = False
         self.wakeup.set()
+        if self.process is not None and self.process.poll() is None:
+            try:
+                os.killpg(self.process.pid, signal.SIGKILL)
+            except OSError:
+                pass
 
 
 class Manager:
@@ -283,6 +370,11 @@ class Manager:
         if job:
             job.cancel()
 
+    def pause(self, job_id, on):
+        job = self.jobs.get(job_id)
+        if job:
+            job.set_paused(on)
+
     def undo(self):
         with self.lock:
             if not self.journal:
@@ -301,6 +393,7 @@ class Manager:
         def progress(current, total, *_):
             job.bytes_done = base + current
             job.report()
+            job.wait_paused()
 
         st = os.lstat(source)
         if stat.S_ISLNK(st.st_mode):
@@ -644,25 +737,29 @@ class Manager:
         stem = re.sub(r"(\.tar)?\.[^.]+$", "", os.path.basename(archive)) or "Archive"
         out = unique(os.path.join(folder, stem))
         job.title = f"Extracting {os.path.basename(archive)}"
+        job.files_total = 1
         job.state = "running"
         job.report(True)
         os.mkdir(out)
-        process = subprocess.Popen(["bsdtar", "-xf", archive, "-C", out], stderr=subprocess.PIPE, text=True)
-        while process.poll() is None:
-            if job.cancellable.is_cancelled():
-                process.kill()
-                shutil.rmtree(out, ignore_errors=True)
-                raise Cancelled()
-            time.sleep(0.1)
-        if process.returncode != 0:
+        try:
+            archives.extract(archive, out, archives.Progress(job), args.get("password", ""))
+        except Cancelled:
             shutil.rmtree(out, ignore_errors=True)
-            raise Failure((process.stderr.read() or "Could not extract").strip().splitlines()[-1])
+            raise
+        except archives.NeedsPassword:
+            shutil.rmtree(out, ignore_errors=True)
+            raise Failure("It is locked with a password" if not args.get("password") else "That password does not open it", "password", [archive])
+        except Exception as error:
+            shutil.rmtree(out, ignore_errors=True)
+            if job.cancellable.is_cancelled():
+                raise Cancelled()
+            raise Failure(str(error) or "Could not extract it")
+        job.bytes_done = job.bytes_total
         # an archive of one folder or file needs no folder around it
         inner = os.listdir(out)
         if len(inner) == 1:
             single = os.path.join(out, inner[0])
-            lifted = unique(os.path.join(folder, inner[0]))
-            if os.path.basename(lifted) == inner[0] or not os.path.lexists(os.path.join(folder, inner[0])):
+            if not os.path.lexists(os.path.join(folder, inner[0])) or os.path.join(folder, inner[0]) == out:
                 temp = out + ".pshell-lift"
                 os.rename(single, temp)
                 os.rmdir(out)
@@ -671,7 +768,14 @@ class Manager:
                 out = lifted
         job.created.append(out)
         job.undo.append(("trash", out))
-        job.files_done = job.files_total = 1
+        job.files_done = 1
+        # the archive itself may go once it is out
+        if args.get("trashArchive"):
+            try:
+                trash_one(archive)
+                job.undo.append(("restore", archive, time.time()))
+            except GLib.Error:
+                pass
 
     def _do_compress(self, job, args):
         paths = args.get("paths", [])
@@ -687,7 +791,8 @@ class Manager:
         same_parent = all(os.path.dirname(path) == parent for path in paths)
         command = ["bsdtar", "-a", "-cvf", out]
         command += (["-C", parent] + [os.path.basename(path) for path in paths]) if same_parent else paths
-        process = subprocess.Popen(command, stderr=subprocess.PIPE, text=True)
+        process = subprocess.Popen(command, stderr=subprocess.PIPE, text=True, start_new_session=True)
+        job.process = process
         for line in process.stderr:
             if job.cancellable.is_cancelled():
                 process.kill()
@@ -697,6 +802,7 @@ class Manager:
                 job.current = line[2:].strip()
                 job.report()
         process.wait()
+        job.process = None
         if job.cancellable.is_cancelled():
             try:
                 os.unlink(out)
@@ -784,6 +890,7 @@ class Manager:
                         out.close()
                         os.unlink(path + ".part")
                         raise Cancelled()
+                    job.wait_paused()
                     chunk = response.read(262144)
                     if not chunk:
                         break
@@ -793,6 +900,161 @@ class Manager:
         os.rename(path + ".part", path)
         job.created.append(path)
         job.undo.append(("trash", path))
+        job.files_done = 1
+
+    # ── PDF tools ──────────────────────────────────────────────────────────
+    def _do_pdf(self, job, args):
+        tool = args.get("tool", "")
+        paths = [path for path in args.get("paths", []) if path]
+        runner = pdftools.TOOLS.get(tool)
+        if runner is None:
+            raise Failure(f"There is no PDF tool {tool}")
+        if not paths:
+            raise Failure("Pick a PDF first", "invalid")
+        names = ", ".join(os.path.basename(path) for path in paths[:2]) + (f" and {len(paths) - 2} more" if len(paths) > 2 else "")
+        job.title = f"{pdftools.TITLES.get(tool, 'Working on')} {names}"
+        job.undo_title = job.title
+        job.state = "running"
+        job.report(True)
+        before = set()
+        try:
+            created = runner(PdfContext(job), paths, args.get("options") or {})
+        except pdftools.ToolError as error:
+            raise Failure(str(error), error.code, paths)
+        except Cancelled:
+            raise
+        except Exception as error:
+            if job.cancellable.is_cancelled():
+                raise Cancelled()
+            raise Failure(str(error) or "The PDF tool failed")
+        for path in created:
+            if path not in before:
+                job.created.append(path)
+                job.undo.append(("trash", path))
+        job.files_done = job.files_total
+
+    # ── VirusTotal ─────────────────────────────────────────────────────────
+    def _do_vtscan(self, job, args):
+        paths = [path for path in args.get("paths", []) if path and os.path.isfile(path)]
+        if not paths:
+            raise Failure("Pick files to check (folders cannot be checked)", "invalid")
+        key = virustotal.get_key()
+        if not key:
+            raise Failure("Set your VirusTotal API key in the settings first", "vtkey")
+        upload = args.get("upload", "ask")
+        job.title = f"Checking {os.path.basename(paths[0])}" if len(paths) == 1 else f"Checking {len(paths)} files"
+        job.bytes_total = sum(os.path.getsize(path) for path in paths)
+        job.files_total = len(paths)
+        job.state = "running"
+        job.report(True)
+        found = []
+
+        def progress(count):
+            job.bytes_done += count
+            job.report()
+
+        for path in paths:
+            job.check()
+            job.current = os.path.basename(path)
+            entry = {"path": path, "name": os.path.basename(path), "size": os.path.getsize(path)}
+            try:
+                sha = virustotal.sha256(path, progress, job.check)
+                entry["sha256"] = sha
+                try:
+                    entry.update(virustotal.verdict(virustotal._get(f"/files/{sha}", key), sha))
+                except virustotal.Problem as problem:
+                    if problem.code != "unknown":
+                        raise
+                    if upload != "yes":
+                        entry.update({"state": "unknown", "link": f"https://www.virustotal.com/gui/file/{sha}"})
+                    else:
+                        job.current = f"Uploading {os.path.basename(path)}"
+                        job.report(True)
+                        analysis = virustotal.upload(path, key)
+
+                        def waiting(status):
+                            job.current = f"VirusTotal: {status}"
+                            job.report(True)
+
+                        answer = virustotal.wait_for(analysis, key, job.check, waiting)
+                        entry.update(virustotal.verdict(answer, sha))
+                        entry["uploaded"] = True
+            except virustotal.Problem as problem:
+                if problem.code in ("key", "offline", "quota"):
+                    raise Failure(str(problem), "vt" + problem.code)
+                entry.update({"state": "error", "error": str(problem)})
+            found.append(entry)
+            job.files_done += 1
+            job.result = {"scan": found}
+            job.report(True)
+        job.result = {"scan": found}
+
+    # ── converting ─────────────────────────────────────────────────────────
+    def _do_convert(self, job, args):
+        paths = [path for path in args.get("paths", []) if path and os.path.isfile(path)]
+        fmt = args.get("format", "")
+        if not paths or not fmt:
+            raise Failure("Nothing to convert", "invalid")
+        label = fmt.split(".")[-1].upper()
+        job.title = f"Converting {os.path.basename(paths[0])} to {label}" if len(paths) == 1 else f"Converting {len(paths)} files to {label}"
+        job.undo_title = job.title
+        sizes = {path: max(1, os.path.getsize(path)) for path in paths}
+        job.bytes_total = sum(sizes.values())
+        job.files_total = len(paths)
+        job.state = "running"
+        job.report(True)
+        failed = []
+        for path in paths:
+            job.check()
+            job.current = os.path.basename(path)
+            base = job.bytes_done
+
+            def report(share, base=base, size=sizes[path]):
+                job.bytes_done = base + int(size * share)
+                job.report()
+
+            try:
+                target = convert.convert(job, path, fmt, report)
+            except convert.ConvertError as error:
+                if job.cancellable.is_cancelled():
+                    raise Cancelled()
+                failed.append((path, str(error)))
+                job.failed_paths.append(path)
+                job.bytes_done = base + sizes[path]
+                continue
+            job.created.append(target)
+            job.undo.append(("trash", target))
+            job.files_done += 1
+            job.report(True)
+        if failed and len(failed) == len(paths):
+            raise Failure(failed[0][1])
+        if failed:
+            job.error = f"{len(failed)} could not be converted: {failed[0][1]}"
+
+    # ── Steam ──────────────────────────────────────────────────────────────
+    def _do_steamadd(self, job, args):
+        path = args["path"]
+        name = (args.get("name") or re.sub(r"\.[^.]+$", "", os.path.basename(path))).strip()
+        job.title = f"Adding {name} to Steam"
+        job.files_total = 1
+        job.state = "running"
+        job.report(True)
+        tool = args.get("tool", "")
+        if tool.startswith("proton:"):
+            folder = tool.split(":", 1)[1]
+            tool = windows.tool_name(folder, os.path.basename(folder))
+        if not tool or tool in ("auto", "proton", "wine"):
+            tools = windows.protons()
+            tool = tools[0]["id"] if tools else "proton_experimental"
+
+        def report(text):
+            job.current = text
+            job.report(True)
+
+        try:
+            job.result = {"steam": windows.add_to_steam(path, name, tool, job.check, report)}
+        except RuntimeError as error:
+            raise Failure(str(error))
         job.files_done = 1
 
     def _do_link(self, job, args):

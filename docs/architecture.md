@@ -252,7 +252,8 @@ There is no polkit agent in the session, which is why root goes through
 sudo in a terminal. Looking Glass is started with `lookingGlass.args` of
 `vms.json` (default `-F`).
 
-`filemanager` is the shell's file manager, a window of its own (`>fm`,
+`filemanager` is the shell's file manager, a window of its own (`>file`,
+`>file <words>` searches,
 `scripts/ipc.sh files toggle|open <path>|tab <path>|reveal <path>|search
 <query>`; `core/views/files/`, `core/services/Files.qml`,
 `core/services/FileLibrary.qml`). A sidebar of places (home and recent, the
@@ -290,8 +291,31 @@ paste (files, or a picture or text from the clipboard as a new file),
 download what is dropped as a link, restore from the trash. A name that is
 taken asks: replace (the old one goes to the trash), merge two folders, keep
 both, skip, another name – for one or for all. Ctrl+Z takes the last job
-back. Long jobs run in a tray at the corner and say when they are done if
-the window is away. `daemon.py call <op> '<json>'` asks it from a script.
+back. Long jobs run in a tray at the corner, can be paused and stopped there,
+and say when they are done if the window is away. `daemon.py call <op>
+'<json>'` asks it from a script.
+
+Beyond moving files the daemon converts and inspects them, every result a
+new file beside the old one: archives are listed for quick look and taken
+apart with progress (`archives.py`: ZIP and tar in Python, the rest by
+7-Zip; a double click extracts); videos, audio and pictures become other
+formats of their kind (`convert.py`: ffmpeg, ImageMagick); PDFs go through
+iLovePDF's tools on the machine (`pdftools.py`: pikepdf, Ghostscript,
+poppler, Tesseract for OCR, LibreOffice and Chromium where they are);
+Windows programs run with Proton (newest GE first) or Wine and can be added
+to Steam as non-Steam games set to Proton (`windows.py`; Steam is restarted
+for it, `config.vdf` is changed only at its compatibility mapping); files
+are checked with VirusTotal by their SHA-256, uploaded only when asked
+(`virustotal.py`; the API key is in the keyring). Text that the type
+database does not know as text (.ini, .bat, .url, …) is looked into, gets
+a preview and opens in the text editor; .url and .webloc open their link.
+
+How a folder is shown (layout, order, groups) is the same everywhere unless
+a folder keeps its own – the view options (the sort button, Ctrl+J) say
+which, per setting; in a split each side may also have its own layout. The
+settings (Ctrl+,) hold the rest: how the window starts, single click,
+asking before the trash, dates and sizes, previews, archives, Windows
+programs, VirusTotal, PDF compression, the caches.
 
 `files-default` makes it the file manager of the desktop: it holds
 `org.freedesktop.FileManager1` (what "Show in folder" of browsers, chats,

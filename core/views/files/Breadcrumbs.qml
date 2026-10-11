@@ -111,7 +111,7 @@ Item {
 	Rectangle {
 		anchors.fill: parent
 		radius: Theme.radius.medium
-		color: root.editing ? Theme.layer2 : (empty.containsMouse ? Theme.layer1 : "transparent")
+		color: root.editing ? Theme.layer2 : Qt.alpha(Theme.layer1, empty.containsMouse ? 1 : 0)
 		border.width: root.editing ? 1.5 : 0
 		border.color: Qt.alpha(Theme.primary, 0.8)
 

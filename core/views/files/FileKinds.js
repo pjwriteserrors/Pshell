@@ -7,6 +7,8 @@ const CODE = /\.(c|h|cc|cpp|hpp|rs|go|py|js|mjs|ts|tsx|jsx|qml|java|kt|kts|swift
 const ARCHIVE = /\.(zip|tar|tgz|gz|xz|zst|bz2|7z|rar|lz|lzma|cab|deb|rpm|apk|jar|txz|tbz2)$/i;
 const DISK = /\.(iso|img|qcow2|vdi|vmdk|vhdx?|dmg)$/i;
 const APP = /\.(appimage|desktop|exe|msi|run|flatpakref)$/i;
+const WEBLINK = /\.(url|webloc)$/i;
+const WINDOWS = /\.(exe|msi|msix|appx|com|scr)$/i;
 const BOOK = /\.(epub|mobi|azw3|fb2|djvu|cbz|cbr)$/i;
 const SHEET = /\.(xlsx?|ods|csv|tsv)$/i;
 const SLIDES = /\.(pptx?|odp|key)$/i;
@@ -23,6 +25,7 @@ function kindOf(entry) {
 	if (SHEET.test(name) || SLIDES.test(name) || /officedocument|opendocument|msword|ms-excel|ms-powerpoint|rtf/.test(mime)) return "document";
 	if (ARCHIVE.test(name) || /zip|tar|compressed|archive|x-7z|rar/.test(mime)) return "archive";
 	if (DISK.test(name)) return "disk";
+	if (WEBLINK.test(name) || mime === "application/x-mswinurl") return "weblink";
 	if (APP.test(name) || entry.exec) return "app";
 	if (mime.startsWith("font/") || /font/.test(mime)) return "font";
 	if (CODE.test(name)) return "code";
@@ -32,9 +35,9 @@ function kindOf(entry) {
 
 const LABELS = {
 	folder: "Folders", image: "Images", video: "Videos", audio: "Music", document: "Documents",
-	text: "Text", code: "Code", archive: "Archives", disk: "Disk images", app: "Apps", font: "Fonts", other: "Other"
+	text: "Text", code: "Code", archive: "Archives", disk: "Disk images", app: "Apps", font: "Fonts", weblink: "Links", other: "Other"
 };
-const ORDER = ["folder", "image", "video", "audio", "document", "text", "code", "archive", "app", "disk", "font", "other"];
+const ORDER = ["folder", "image", "video", "audio", "document", "text", "code", "weblink", "archive", "app", "disk", "font", "other"];
 
 function kindLabel(kind) {
 	return LABELS[kind] || "Other";
@@ -63,7 +66,8 @@ function glyphOf(entry) {
 	case "code": return "code_braces";
 	case "archive": return "package_variant_closed";
 	case "disk": return "disc";
-	case "app": return "application_brackets_outline";
+	case "app": return WINDOWS.test(name) ? "microsoft_windows" : "application_brackets_outline";
+	case "weblink": return "link_variant";
 	case "font": return "format_font";
 	default: return entry?.broken ? "link_variant_off" : "file_outline";
 	}
@@ -82,8 +86,18 @@ function toneOf(entry) {
 	case "text": return "secondary";
 	case "app": return "primary";
 	case "disk": return "tertiary";
+	case "weblink": return "primary";
 	default: return "textMuted";
 	}
+}
+
+// a program for Windows (Wine or Proton runs it)
+function isWindows(entry) {
+	return !!entry && !entry.dir && WINDOWS.test(String(entry.name || ""));
+}
+
+function isWeblink(entry) {
+	return !!entry && !entry.dir && (WEBLINK.test(String(entry.name || "")) || entry.mime === "application/x-mswinurl");
 }
 
 // "PDF", "PNG", "MP4" … for the corner of a card

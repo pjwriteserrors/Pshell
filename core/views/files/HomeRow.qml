@@ -19,7 +19,7 @@ Item {
 	Rectangle {
 		anchors.fill: parent
 		radius: Theme.radius.medium
-		color: mouse.containsMouse ? Theme.layer1 : "transparent"
+		color: Qt.alpha(Theme.layer1, mouse.containsMouse ? 1 : 0)
 
 		Behavior on color {
 			ColorAnim {}

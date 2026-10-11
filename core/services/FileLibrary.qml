@@ -22,8 +22,31 @@ Singleton {
 	property var collections: []
 	// how folders are shown unless one was set for a folder
 	property var view: ({ mode: "grid", sort: "name", desc: false, group: "none", cardSize: 172, hidden: false, foldersFirst: true, sidebar: true, details: false })
-	// path → { mode, sort, desc, group } where it differs
+	// path → { mode, sort, desc, group } of folders that keep their own
 	property var folderViews: ({})
+	// what the settings page sets (see defaults)
+	property var settings: ({})
+	readonly property var defaults: ({
+		startPage: "restore",
+		startFolder: "",
+		singleClick: false,
+		confirmTrash: false,
+		archiveOpen: "extract",
+		trashArchive: false,
+		textPreviews: true,
+		folderPeeks: true,
+		thumbLimit: 300,
+		remoteThumbs: false,
+		dateStyle: "relative",
+		sizeUnits: "si",
+		sounds: true,
+		windowsRunner: "auto",
+		protonVersion: "",
+		vtUpload: "ask",
+		vtDownloads: false,
+		pdfQuality: "ebook",
+		restoreSelection: true
+	})
 	// [{ path, at }], newest first
 	property var opened: []
 	// the tabs of the last session: [{ panes: [location], split }]
@@ -184,29 +207,81 @@ Singleton {
 	}
 
 	// ── how a folder is shown ──────────────────────────────────────────────
+	// The layout, the order and the groups are each the same everywhere,
+	// unless a folder keeps its own (its scope is "here"). Sort and its
+	// direction go together.
+	readonly property var scoped: ["mode", "sort", "group"]
+
 	function viewOf(path) {
 		return Object.assign({}, root.view, root.folderViews[String(path)] ?? {});
 	}
 
-	// mode, sort, desc and group are kept for the folder; the rest for all
+	function keysOf(key) {
+		return key === "sort" || key === "desc" ? ["sort", "desc"] : [key];
+	}
+
+	// "here" when the folder keeps its own, else "everywhere"
+	function scopeOf(path, key) {
+		const own = root.folderViews[String(path)];
+		return own && own[key === "desc" ? "sort" : key] !== undefined ? "here" : "everywhere";
+	}
+
+	// a change goes where the folder's scope for it says
 	function setView(path, changes) {
 		const own = {};
 		const shared = {};
 		for (const key of Object.keys(changes)) {
-			if (["mode", "sort", "desc", "group"].includes(key) && path) own[key] = changes[key];
+			if (path && ["mode", "sort", "desc", "group"].includes(key) && root.scopeOf(path, key) === "here") own[key] = changes[key];
 			else shared[key] = changes[key];
 		}
 		if (Object.keys(shared).length > 0) root.view = Object.assign({}, root.view, shared);
 		if (Object.keys(own).length > 0) {
 			const next = Object.assign({}, root.folderViews);
 			next[path] = Object.assign({}, next[path] ?? {}, own);
-			// the oldest folders are forgotten
-			const keys = Object.keys(next);
-			if (keys.length > 400) delete next[keys[0]];
 			root.folderViews = next;
-			// a choice made here becomes what other folders start with
-			root.view = Object.assign({}, root.view, own);
 		}
+		root.save();
+	}
+
+	// "here": the folder keeps what it shows now; "everywhere": it follows the rest again
+	function setScope(path, key, scope) {
+		if (!path) return;
+		const next = Object.assign({}, root.folderViews);
+		const own = Object.assign({}, next[path] ?? {});
+		const current = root.viewOf(path);
+		for (const each of root.keysOf(key)) {
+			if (scope === "here") own[each] = current[each];
+			else delete own[each];
+		}
+		if (Object.keys(own).length > 0) next[path] = own;
+		else delete next[path];
+		// the oldest folders are forgotten
+		const keys = Object.keys(next);
+		if (keys.length > 600) delete next[keys[0]];
+		root.folderViews = next;
+		root.save();
+	}
+
+	readonly property int ownViews: Object.keys(root.folderViews).length
+
+	function forgetFolderViews() {
+		root.folderViews = {};
+		root.save();
+	}
+
+	// ── settings ───────────────────────────────────────────────────────────
+	function setting(key) {
+		const value = root.settings[key];
+		return value === undefined ? root.defaults[key] : value;
+	}
+
+	function set(key, value) {
+		root.settings = Object.assign({}, root.settings, { [key]: value });
+		root.save();
+	}
+
+	function resetSettings() {
+		root.settings = {};
 		root.save();
 	}
 
@@ -214,6 +289,11 @@ Singleton {
 	function noteOpened(path) {
 		const value = String(path);
 		root.opened = [{ path: value, at: Date.now() / 1000 }].concat(root.opened.filter(entry => entry.path !== value)).slice(0, 80);
+		root.save();
+	}
+
+	function forgetOpened() {
+		root.opened = [];
 		root.save();
 	}
 
@@ -251,6 +331,8 @@ Singleton {
 			collections: root.collections,
 			view: root.view,
 			folderViews: root.folderViews,
+			settings: root.settings,
+			version: 2,
 			opened: root.opened,
 			session: root.session
 		}, null, "\t") + "\n")
@@ -269,6 +351,23 @@ Singleton {
 		root.collections = Array.isArray(data.collections) ? data.collections : [];
 		root.view = Object.assign({}, root.view, data.view ?? {});
 		root.folderViews = data.folderViews && typeof data.folderViews === "object" ? data.folderViews : {};
+		root.settings = data.settings && typeof data.settings === "object" ? data.settings : {};
+		// before scopes every choice was kept for its folder as well: what is
+		// the same as everywhere is not the folder's own
+		if (!data.version) {
+			const next = {};
+			for (const path of Object.keys(root.folderViews)) {
+				const own = {};
+				for (const key of ["mode", "sort", "desc", "group"]) {
+					const value = root.folderViews[path][key];
+					if (value !== undefined && value !== root.view[key]) own[key] = value;
+				}
+				if (own.desc !== undefined && own.sort === undefined) own.sort = root.view.sort;
+				if (own.sort !== undefined && own.desc === undefined) own.desc = root.view.desc;
+				if (Object.keys(own).length > 0) next[path] = own;
+			}
+			root.folderViews = next;
+		}
 		root.opened = Array.isArray(data.opened) ? data.opened : [];
 		root.session = Array.isArray(data.session) ? data.session : [];
 		root.loaded = true;

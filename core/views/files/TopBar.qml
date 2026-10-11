@@ -133,7 +133,7 @@ Item {
 			Rectangle {
 				anchors.fill: parent
 				radius: 12
-				color: area.containsMouse && !tab.current ? Theme.layer1 : "transparent"
+				color: Qt.alpha(Theme.layer1, area.containsMouse && !tab.current ? 1 : 0)
 
 				Behavior on color {
 					ColorAnim {}
