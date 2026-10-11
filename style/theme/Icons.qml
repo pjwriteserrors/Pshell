@@ -10,6 +10,8 @@ Singleton {
 	readonly property string family: "Symbols Nerd Font"
 
 	readonly property var glyphs: ({
+		"microsoft_windows": "󰖳",
+		"linux": "󰌽",
 		"email_outline": "󰇰",
 		"fan": "󰈐",
 		"led_strip_variant": "󱁑",

@@ -192,6 +192,12 @@ Scope {
 	}
 
 	LazyLoader {
+		active: Plugins.on("vm-launcher")
+
+		VmLauncher {}
+	}
+
+	LazyLoader {
 		active: Plugins.on("radial-menu")
 
 		RadialMenu {}

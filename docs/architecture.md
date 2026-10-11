@@ -231,6 +231,27 @@ lamps the screen's colour weighted by chroma. The OpenRGB Effects plugin's
 only shares DMA-BUFs (and prefers compressed ones, which is why the cast asks
 for a plain tiled or linear modifier).
 
+`vm-launcher` starts a virtual machine of libvirt (`>vm`, `scripts/ipc.sh vm
+toggle`, `vm launch <name>` without the popup; `core/services/Machines.qml`,
+`scripts/vm.py`). The popup draws the machine as a monitor, with what it has
+(threads, memory, the GPU passed through, its drives) and the three steps of a
+launch, which are its status as well: the drive the disk image is on is
+mounted, the machine starts, Looking Glass comes up. The popup stays while
+Windows boots – the panes of its logo flip in, the boot dots run – and gives
+way to Looking Glass once its host application answers (`Host version` in
+the client's log, `$XDG_RUNTIME_DIR/pshell/looking-glass.log`). A running
+machine is shut down or turned off by holding the button; a machine that is
+off can have its drive unmounted.
+The drive of a disk image is remembered by the mount point it was seen under
+(`vms.json`, by UUID), so a drive that is not mounted is still found. The
+user mounts it through an fstab entry with `user`; the first time, a terminal
+asks for the password and `vm.py allow` writes that entry (`/etc/fstab` is
+backed up as `fstab.bak-pshell-vm`). A drive the machine gets whole must not
+be mounted on the host: the launch stops and the same terminal unmounts it.
+There is no polkit agent in the session, which is why root goes through
+sudo in a terminal. Looking Glass is started with `lookingGlass.args` of
+`vms.json` (default `-F`).
+
 The launcher's apps (`core/views/overlays/launcher/AppsView.qml`): with
 nothing typed a dock of favourites (what is pinned, filled up with what is
 used most; Alt+1…8 starts one) over every app on shelves by its freedesktop

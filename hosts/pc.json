@@ -8,7 +8,8 @@
 		"ddc": true,
 		"mouse-battery": true,
 		"phone": true,
-		"haptics": true
+		"haptics": true,
+		"vm-launcher": true
 	},
 	"themeHooks": [
 		"sddm",

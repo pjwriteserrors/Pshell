@@ -150,6 +150,31 @@ Scope {
 		}
 	}
 
+	// the VM launcher: `vm launch win11` starts a machine without the popup
+	IpcHandler {
+		target: "vm"
+		enabled: Plugins.on("vm-launcher")
+
+		function open(): void {
+			Popups.withFocusedScreen(screen => Popups.openModal("vm", screen));
+		}
+		function close(): void {
+			if (Popups.modal === "vm") Popups.closeModal();
+		}
+		function toggle(): void {
+			root.modalOnFocused("vm");
+		}
+		function launch(name: string): void {
+			Machines.launch(name);
+		}
+		function shutdown(name: string): void {
+			Machines.shutdown(name);
+		}
+		function status(): string {
+			return JSON.stringify({ vms: Machines.vms.map(vm => ({ name: vm.name, state: vm.state })), target: Machines.target, step: Machines.step, failure: Machines.failure, lookingGlass: Machines.lgState });
+		}
+	}
+
 	// quick actions around the pointer
 	IpcHandler {
 		target: "radial"
