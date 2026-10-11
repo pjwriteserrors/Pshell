@@ -45,11 +45,14 @@ Item {
 		easing.type: Easing.OutCubic
 	}
 
-	MouseArea {
+	// the pointer over the row shows the arrows; a handler, so the cards
+	// under it still light up themselves (a hovering MouseArea took that)
+	HoverHandler {
 		id: hover
+	}
 
+	MouseArea {
 		anchors.fill: parent
-		hoverEnabled: true
 		acceptedButtons: Qt.NoButton
 		onWheel: wheel => {
 			const dx = wheel.pixelDelta.x !== 0 ? -wheel.pixelDelta.x : (wheel.modifiers & Qt.ShiftModifier ? -wheel.angleDelta.y : -wheel.angleDelta.x);
@@ -109,7 +112,7 @@ Item {
 		height: 34
 		variant: "tonal"
 		icon: "chevron_left"
-		opacity: root.less && hover.containsMouse ? 1 : 0
+		opacity: root.less && hover.hovered ? 1 : 0
 		visible: opacity > 0
 		onClicked: root.turn(-1)
 
@@ -126,7 +129,7 @@ Item {
 		height: 34
 		variant: "tonal"
 		icon: "chevron_right"
-		opacity: root.more && hover.containsMouse ? 1 : 0
+		opacity: root.more && hover.hovered ? 1 : 0
 		visible: opacity > 0
 		onClicked: root.turn(1)
 
