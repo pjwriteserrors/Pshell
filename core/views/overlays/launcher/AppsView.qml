@@ -749,7 +749,7 @@ Item {
 			anchors.margins: 4
 			radius: Theme.radius.large
 			color: Theme.layer2
-			opacity: !tile.selected && mouse.containsMouse ? 0.7 : 0
+			opacity: !tile.selected && tileMouse.containsMouse ? 0.7 : 0
 
 			Behavior on opacity {
 				Anim {
@@ -765,7 +765,7 @@ Item {
 			height: tile.iconSize
 			anchors.horizontalCenter: parent.horizontalCenter
 			y: (tile.height - tile.iconSize - 26) / 2 - (tile.selected ? 3 : 0)
-			scale: mouse.pressed ? 0.88 : (tile.selected ? 1.12 : 1)
+			scale: tileMouse.pressed ? 0.88 : (tile.selected ? 1.12 : 1)
 
 			Behavior on y {
 				SpatialAnim {
@@ -837,15 +837,15 @@ Item {
 		}
 
 		MouseArea {
-			id: mouse
+			id: tileMouse
 
 			anchors.fill: parent
 			anchors.margins: 4
 			hoverEnabled: true
 			acceptedButtons: Qt.LeftButton | Qt.RightButton
 			cursorShape: Qt.PointingHandCursor
-			onEntered: if (Pointer.moved(mouse, mouseX, mouseY)) tile.pointed()
-			onPositionChanged: if (Pointer.moved(mouse, mouseX, mouseY)) tile.pointed()
+			onEntered: if (Pointer.moved(tileMouse, mouseX, mouseY)) tile.pointed()
+			onPositionChanged: if (Pointer.moved(tileMouse, mouseX, mouseY)) tile.pointed()
 			onClicked: event => {
 				tile.pointed();
 				if (event.button === Qt.RightButton) tile.menuRequested();

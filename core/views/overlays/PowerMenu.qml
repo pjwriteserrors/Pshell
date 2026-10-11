@@ -419,7 +419,7 @@ ModalWindow {
 								anchors.margins: 8
 								radius: action.selected ? 30 : width / 2
 								color: action.selected ? (action.modelData.id === "lock" ? Theme.primary : Theme.danger) : Theme.base
-								scale: mouse.pressed ? 0.9 : 1
+								scale: actionMouse.pressed ? 0.9 : 1
 
 								Behavior on radius {
 									SpatialAnim {
@@ -463,13 +463,13 @@ ModalWindow {
 							}
 
 							MouseArea {
-								id: mouse
+								id: actionMouse
 
 								anchors.fill: parent
 								hoverEnabled: true
 								cursorShape: Qt.PointingHandCursor
-								onEntered: if (Pointer.moved(mouse, mouseX, mouseY)) action.point()
-								onPositionChanged: if (Pointer.moved(mouse, mouseX, mouseY)) action.point()
+								onEntered: if (Pointer.moved(actionMouse, mouseX, mouseY)) action.point()
+								onPositionChanged: if (Pointer.moved(actionMouse, mouseX, mouseY)) action.point()
 								onPressed: {
 									if (!action.modelData.hold) return;
 									releaseAnim.stop();
