@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Makes the shell's file manager the one folders open in, or gives that
-back (plugin "files-default").
+"""The shell's file manager as an app of the desktop (plugin "filemanager")
+and the one folders open in (plugin "files-default").
 
-    default.py on     folders (inode/directory) open in the shell; the
-                      app that did it before is remembered
-    default.py off    that app opens folders again
-    default.py open <path|uri>...
+    default.py install  the desktop entry "Pshell Files": app launchers list it
+    default.py remove   the entry goes again (and folders go back)
+    default.py on       installs, and folders (inode/directory) open in the
+                        shell; the app that did it before is remembered
+    default.py off      installs, and that app opens folders again
+    default.py open [path|uri]...
                       what the desktop entry runs: the shell shows the
                       folders, or – without a running shell – the app
                       that was the default before does
@@ -43,12 +45,15 @@ def write_entry():
     os.makedirs(APPS, exist_ok=True)
     entry = f"""[Desktop Entry]
 Type=Application
-Name=Files
-Comment=The shell's file manager
+Name=Pshell Files
+GenericName=File Manager
+Comment=Browse, find and organise your files
 Icon=system-file-manager
 Exec=python3 {HERE}/default.py open %U
 MimeType={MIME};
-NoDisplay=true
+Categories=System;FileTools;FileManager;Core;
+Keywords=files;folders;explorer;browser;manager;
+StartupNotify=false
 Terminal=false
 """
     path = os.path.join(APPS, DESKTOP_ID)
@@ -74,9 +79,21 @@ def on():
 
 
 def off():
+    write_entry()
     if query() == DESKTOP_ID:
         before = remembered() or "org.gnome.Nautilus.desktop"
         subprocess.run(["xdg-mime", "default", before, MIME])
+
+
+def remove():
+    if query() == DESKTOP_ID:
+        before = remembered() or "org.gnome.Nautilus.desktop"
+        subprocess.run(["xdg-mime", "default", before, MIME])
+    try:
+        os.unlink(os.path.join(APPS, DESKTOP_ID))
+        subprocess.run(["update-desktop-database", APPS], capture_output=True)
+    except OSError:
+        pass
 
 
 def open_paths(args):
@@ -86,7 +103,8 @@ def open_paths(args):
             arg = urllib.parse.unquote(urllib.parse.urlparse(arg).path)
         paths.append(arg)
     shown = True
-    for path in paths or [os.path.expanduser("~")]:
+    # started as an app: the window as it was left
+    for path in paths or [""]:
         result = subprocess.run([os.path.join(SHELL, "scripts", "ipc.sh"), "files", "open", path], capture_output=True, timeout=5)
         shown = shown and result.returncode == 0 and b"No running" not in result.stderr + result.stdout
     if not shown:
@@ -96,7 +114,11 @@ def open_paths(args):
 
 def main():
     command = sys.argv[1] if len(sys.argv) > 1 else ""
-    if command == "on":
+    if command == "install":
+        write_entry()
+    elif command == "remove":
+        remove()
+    elif command == "on":
         on()
     elif command == "off":
         off()

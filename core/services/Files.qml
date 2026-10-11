@@ -271,6 +271,7 @@ Singleton {
 			retry.stop();
 			root.hangUp();
 			root.connected = false;
+			root.applyDefault();
 		}
 	}
 
@@ -786,15 +787,20 @@ Singleton {
 		return Qt.formatDate(date, "d MMM yyyy");
 	}
 
-	// ── the default file manager ───────────────────────────────────────────
-	// folders opened by xdg-open come here while the plugin is on; switched
-	// off, whatever was the default before is again
+	// ── the desktop entry and the default file manager ─────────────────────
+	// folders opened by xdg-open come here while files-default is on;
+	// switched off, whatever was the default before is again
 	readonly property string desktopId: "pshell-files.desktop"
 
+	// the desktop entry "Pshell Files" is there while the plugin is on, so app
+	// launchers offer the window too
+	property bool entryInstalled: false
+
 	function applyDefault() {
-		if (!root.enabled && !Plugins.on("files-default")) return;
-		defaultProc.command = ["python3", `${Paths.scripts}/files/default.py`, root.isDefault ? "on" : "off"];
+		if (!root.enabled && !root.entryInstalled) return;
+		defaultProc.command = ["python3", `${Paths.scripts}/files/default.py`, !root.enabled ? "remove" : (root.isDefault ? "on" : "off")];
 		defaultProc.running = true;
+		root.entryInstalled = root.enabled;
 	}
 
 	Process {
