@@ -14,9 +14,24 @@ DialogFrame {
 	id: root
 
 	property var results: []
-	readonly property var unknown: root.results.filter(entry => entry.state === "unknown")
+	// a scan on this machine: what it went through ({ files, bytes, yara, signatures, problems })
+	property bool local: false
+	property var summary: ({})
+	readonly property var unknown: root.local ? [] : root.results.filter(entry => entry.state === "unknown")
+	readonly property bool clean: root.local && root.results.length === 0
+
+	function openLocal(result) {
+		root.local = true;
+		root.summary = result;
+		root.results = result.flagged ?? [];
+		root.show();
+		keys.forceActiveFocus();
+		Sounds.play(root.results.some(entry => entry.state === "malicious") ? "error" : "taskDone");
+	}
 
 	function open(results) {
+		root.local = false;
+		root.summary = {};
 		root.results = results;
 		root.show();
 		keys.forceActiveFocus();
@@ -56,6 +71,7 @@ DialogFrame {
 				height: 40
 				radius: 13
 				readonly property string worst: root.results.some(entry => entry.state === "malicious") ? "malicious" : (root.results.some(entry => entry.state === "suspicious") ? "suspicious" : (root.results.every(entry => entry.state === "clean") ? "clean" : "unknown"))
+				// an empty list of a scan here is all clean
 				color: Qt.tint(Theme.layer2, Qt.alpha(root.tone(worst), 0.2))
 
 				Glyph {
@@ -71,14 +87,15 @@ DialogFrame {
 				spacing: 1
 
 				StyledText {
-					text: "VirusTotal"
+					text: root.local ? "Virus scan" : "VirusTotal"
 					font.pixelSize: Theme.size.title
 					font.weight: Font.DemiBold
 				}
 
 				StyledText {
 					Layout.fillWidth: true
-					text: root.results.length === 1 ? root.results[0].name : `${root.results.length} files`
+					text: root.local ? `${root.summary.files ?? 0} file${root.summary.files === 1 ? "" : "s"} · ${Files.sizeText(root.summary.bytes ?? 0)} · on this PC with ClamAV${root.summary.yara ? " and YARA" : ""}`
+						: (root.results.length === 1 ? root.results[0].name : `${root.results.length} files`)
 					tone: Theme.textSubtle
 					font.pixelSize: Theme.size.small
 					elide: Text.ElideMiddle
@@ -86,8 +103,55 @@ DialogFrame {
 			}
 		}
 
+		// nothing found: said big and plain
+		ColumnLayout {
+			Layout.fillWidth: true
+			visible: root.clean
+			spacing: 8
+
+			Rectangle {
+				Layout.alignment: Qt.AlignHCenter
+				Layout.topMargin: 6
+				width: 76
+				height: 76
+				radius: 26
+				color: Qt.tint(Theme.layer2, Qt.alpha(Theme.success, 0.2))
+				scale: root.clean && root.shown ? 1 : 0.6
+
+				Behavior on scale {
+					SpatialAnim {
+						duration: Motion.long
+					}
+				}
+
+				Glyph {
+					anchors.centerIn: parent
+					icon: "shield_check_outline"
+					size: 38
+					color: Theme.success
+				}
+			}
+
+			StyledText {
+				Layout.alignment: Qt.AlignHCenter
+				text: "Nothing found"
+				font.pixelSize: Theme.size.title
+				font.weight: Font.DemiBold
+			}
+
+			StyledText {
+				Layout.fillWidth: true
+				horizontalAlignment: Text.AlignHCenter
+				text: `None of ${root.summary.files ?? 0} file${root.summary.files === 1 ? "" : "s"} matches a signature${root.summary.signatures ? " (signatures of " + Files.whenText(root.summary.signatures) + ")" : ""}.${root.summary.problems ? ` ${root.summary.problems} could not be read.` : ""}`
+				tone: Theme.textMuted
+				font.pixelSize: Theme.size.small
+				wrapMode: Text.WordWrap
+			}
+		}
+
 		Flickable {
 			Layout.fillWidth: true
+			visible: !root.clean
 			Layout.preferredHeight: Math.min(440, list.implicitHeight)
 			contentHeight: list.implicitHeight
 			clip: true
@@ -188,6 +252,7 @@ DialogFrame {
 										wrapMode: Text.WordWrap
 										text: {
 											const entry = entryCard.modelData;
+											if (entry.local) return entry.state === "malicious" ? "A known virus signature matches" : "YARA rules match – worth a closer look";
 											switch (entry.state) {
 											case "malicious": return `${entry.malicious} of ${entry.total} scanners call it malicious${entry.label ? " · " + entry.label : ""}`;
 											case "suspicious": return `${entry.suspicious} of ${entry.total} scanners find it suspicious`;
@@ -196,6 +261,20 @@ DialogFrame {
 											default: return entry.error || "It could not be checked";
 											}
 										}
+									}
+								}
+
+								// what is flagged can go right away (undo brings it back)
+								IconButton {
+									visible: entryCard.modelData.state === "malicious" || entryCard.modelData.state === "suspicious"
+									width: 30
+									height: 30
+									iconSize: 15
+									icon: "trash_can_outline"
+									onClicked: {
+										Files.trash([entryCard.modelData.path]);
+										root.results = root.results.filter(entry => entry.path !== entryCard.modelData.path);
+										if (root.results.length === 0) root.hide();
 									}
 								}
 

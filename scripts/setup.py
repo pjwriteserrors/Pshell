@@ -71,7 +71,7 @@ PROGRAMS = {
                     ("ffmpeg", "video thumbnails, album covers"), ("ffprobe", "video and music details"),
                     ("bsdtar", "packing"), ("7z", "extracting 7z, rar and others"), ("pdfinfo", "PDF details"),
                     ("gs", "compressing PDFs, PDF/A"), ("pdftotext", "PDF text, comparing, blacking out"),
-                    ("tesseract", "OCR of PDFs"), ("magick", "converting pictures"), ("secret-tool", "VirusTotal key"),
+                    ("tesseract", "OCR of PDFs"), ("magick", "converting pictures"), ("secret-tool", "VirusTotal key"), ("clamd", "virus scan on this PC (clamav)"), ("yara", "YARA rules in the virus scan"),
                     ("wine", "Windows programs (or Proton from Steam)"), ("soffice", "office files to PDF and back (optional)")],
     "files-default": [("xdg-mime", "folders open in the file manager")],
     "mail": [("secret-tool", "mail passwords"), ("xdg-open", "attachments, sign-in page"), ("wl-copy", "sign-in code")],

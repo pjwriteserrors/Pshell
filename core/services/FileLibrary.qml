@@ -44,6 +44,8 @@ Singleton {
 		protonVersion: "",
 		vtUpload: "ask",
 		vtDownloads: false,
+		avYara: true,
+		avDownloads: false,
 		pdfQuality: "ebook",
 		restoreSelection: true
 	})

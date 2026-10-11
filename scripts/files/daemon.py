@@ -32,6 +32,7 @@ from gi.repository import Gio, GLib  # noqa: E402
 import archives  # noqa: E402
 import convert  # noqa: E402
 import fm1  # noqa: E402
+import localscan  # noqa: E402
 import jobs  # noqa: E402
 import lookup  # noqa: E402
 import pdftools  # noqa: E402
@@ -192,6 +193,7 @@ class Daemon:
             self.loop.run()
         finally:
             self.fm1.release()
+            localscan.ENGINE.stop()
             try:
                 if os.path.exists(self.path):
                     os.unlink(self.path)
@@ -463,6 +465,13 @@ class Daemon:
 
     def op_convertible(self, client, request):
         return {"targets": convert.targets(request.get("paths", []))}
+
+    def op_avstatus(self, client, request):
+        return localscan.status()
+
+    def op_avstop(self, client, request):
+        localscan.ENGINE.stop()
+        return {}
 
     def op_servers(self, client, request):
         return remote.servers()

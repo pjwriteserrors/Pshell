@@ -104,6 +104,7 @@ QtObject {
 		if (one && Kinds.isWeblink(one)) special.push({ label: "Copy the link", icon: "link_variant", run: () => Files.request("info", { path: one.path }, data => { if (data?.url) Files.copyText(data.url, "Link copied"); }) });
 		const media = files.filter(row => row.kind === "image" || row.kind === "video" || row.kind === "audio");
 		if (media.length > 0 && media.length === files.length && dirs.length === 0) special.push({ label: "Convert to", icon: "swap_horizontal", children: done => Files.convertible(root.paths(files), targets => done(root.convertEntries(files, targets))) });
+		special.push({ label: "Scan for viruses (on this PC)", icon: "shield_search", run: () => Files.avScan(paths) });
 		if (files.length > 0 && files.length <= 20 && dirs.length === 0) special.push({ label: "Check with VirusTotal", icon: "shield_search", run: () => Files.vtScan(root.paths(files)) });
 		if (special.length > 0) {
 			out.push({ separator: true });
@@ -269,6 +270,7 @@ QtObject {
 			out.push({ label: "Open a terminal here", icon: "console", shortcut: "F4", run: () => Files.terminal(folder) });
 			if (root.agents) out.push({ label: "Claude Code here", icon: "robot_outline", run: () => Files.agent(folder) });
 			out.push({ label: "Copy the path", icon: "clipboard_text_outline", run: () => Files.copyText(folder, "Path copied") });
+			out.push({ label: "Scan this folder for viruses", icon: "shield_search", run: () => Files.avScan([folder]) });
 		}
 		out.push({ label: view.tab.split ? "Close the split" : "Split", icon: "view_split_vertical", shortcut: "F3", run: () => view.tab.toggleSplit() });
 		out.push({ label: "Read again", icon: "refresh", shortcut: "Ctrl+R", run: () => pane.reload(false) });

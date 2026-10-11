@@ -505,6 +505,7 @@ Singleton {
 		case "compress": return "Packed";
 		case "convert": return "Converted";
 		case "upload": return "Sent";
+		case "avscan": return "Scanned";
 		case "pdf": return "PDF ready";
 		case "emptytrash": return "Trash emptied";
 		case "delete": return "Deleted";
@@ -760,7 +761,7 @@ Singleton {
 		const mode = upload || (FileLibrary.setting("vtUpload") === "always" ? "yes" : "ask");
 		root.startJob("vtscan", { paths: files, upload: mode }, job => {
 			if (job.state === "failed" && job.code === "vtkey") {
-				if (!quiet) root.settingsAsked("virustotal");
+				if (!quiet) root.settingsAsked("virus");
 				return;
 			}
 			if (job.state !== "done") return;
@@ -779,6 +780,67 @@ Singleton {
 	}
 
 	signal scanned(var results)
+
+	// ── the virus scan on this machine (ClamAV and YARA) ───────────────────
+	// { clamav, yara, signatures, extras, rules, running, install }
+	property var av: ({})
+
+	function knowAv(done) {
+		root.request("avstatus", {}, data => {
+			root.av = data ?? {};
+			if (done) done(root.av);
+		});
+	}
+
+	// quiet: only a find is worth a word (a download checked on its own)
+	function avScan(paths, quiet) {
+		const items = paths.filter(path => String(path) !== "");
+		if (items.length === 0) return;
+		root.knowAv(av => {
+			if (!av.clamav) {
+				if (!quiet) root.settingsAsked("virus");
+				return;
+			}
+			root.startJob("avscan", { paths: items, yara: FileLibrary.setting("avYara") !== false }, job => {
+				if (job.state === "failed" && (job.code === "avmissing" || job.code === "avnosigs")) {
+					if (!quiet) root.settingsAsked("virus");
+					return;
+				}
+				if (job.state !== "done") return;
+				const result = job.result?.localscan;
+				if (!result) return;
+				if (quiet) {
+					const bad = result.flagged ?? [];
+					if (bad.length > 0) Notifs.pushInternal("error", `${bad[0].name} looks dangerous`, bad[0].engines.map(hit => hit.result).slice(0, 2).join(", "), {
+						icon: "shield_alert_outline",
+						actions: [{ label: "Show", icon: "folder_open_outline", run: () => root.reveal([bad[0].path]) }]
+					});
+					return;
+				}
+				root.localScanned(result);
+			});
+		});
+	}
+
+	signal localScanned(var result)
+
+	function avUpdate(done) {
+		root.startJob("avupdate", {}, job => {
+			root.knowAv();
+			if (job.state === "done") root.say((job.result?.problems ?? []).length > 0 ? "Signatures updated, some extras failed" : "The signatures are up to date", "shield_check_outline");
+			if (done) done(job);
+		});
+	}
+
+	// ClamAV comes from the system's packages: a terminal asks for the password
+	function installAv() {
+		const command = String(root.av.install || "");
+		if (command === "") {
+			root.say("Install ClamAV with your package manager", "alert_circle_outline");
+			return;
+		}
+		Quickshell.execDetached(["kitty", "--title", "Install ClamAV", "sh", "-c", `${command}; echo; echo 'Done – this window can close.'; read -r _`]);
+	}
 	// the window opens its settings (on a page)
 	signal settingsAsked(string page)
 
@@ -787,7 +849,9 @@ Singleton {
 		ignoreUnknownSignals: true
 
 		function onFinished(item) {
-			if (root.enabled && FileLibrary.setting("vtDownloads") && root.vtKeySet && item?.path) root.vtScan([item.path], "never", true);
+			if (!root.enabled || !item?.path) return;
+			if (FileLibrary.setting("avDownloads")) root.avScan([item.path], true);
+			if (FileLibrary.setting("vtDownloads") && root.vtKeySet) root.vtScan([item.path], "never", true);
 		}
 	}
 

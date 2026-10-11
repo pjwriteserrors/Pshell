@@ -24,6 +24,7 @@ from gi.repository import Gio, GLib  # noqa: E402
 
 import archives  # noqa: E402
 import convert  # noqa: E402
+import localscan  # noqa: E402
 import lookup  # noqa: E402
 import pdftools  # noqa: E402
 import remote  # noqa: E402
@@ -189,7 +190,7 @@ class Job:
         # (from, to) of what was moved or renamed: tags and favourites follow
         self.moves = []
         # a job that may be held: it waits between two chunks (or its process is stopped)
-        self.can_pause = kind in ("copy", "move", "auto", "paste", "extract", "compress", "download", "delete", "pdf", "vtscan", "convert", "upload")
+        self.can_pause = kind in ("copy", "move", "auto", "paste", "extract", "compress", "download", "delete", "pdf", "vtscan", "convert", "upload", "avscan")
         self.paused = False
         self.process = None
         # what a job found out, for the window to show (a scan's verdict)
@@ -933,6 +934,49 @@ class Manager:
                 job.created.append(path)
                 job.undo.append(("trash", path))
         job.files_done = job.files_total
+
+    # ── the virus scan on this machine ─────────────────────────────────────
+    def _do_avscan(self, job, args):
+        paths = [path for path in args.get("paths", []) if path and os.path.lexists(path)]
+        if not paths:
+            raise Failure("Nothing to scan", "invalid")
+        job.title = f"Scanning {os.path.basename(paths[0].rstrip('/')) or paths[0]}" if len(paths) == 1 else f"Scanning {len(paths)} items"
+        job.state = "running"
+        job.report(True)
+
+        def report(text):
+            job.current = text
+            job.report(True)
+
+        try:
+            status = localscan.status()
+            # signatures older than a day are brought up to date first
+            if status["clamav"] and (not status["signatures"] or time.time() - status["signatures"] > 86400):
+                report("Updating the signatures")
+                try:
+                    localscan.update(job, report)
+                except localscan.ScanError:
+                    if not localscan.signatures_date():
+                        raise
+            job.result = {"localscan": localscan.scan(job, paths, report, bool(args.get("yara", True)))}
+        except localscan.ScanError as error:
+            raise Failure(str(error), "av" + error.code)
+
+    def _do_avupdate(self, job, args):
+        job.title = "Updating the virus signatures"
+        job.state = "running"
+        job.report(True)
+
+        def report(text):
+            job.current = text
+            job.report(True)
+
+        try:
+            problems = localscan.update(job, report)
+        except localscan.ScanError as error:
+            raise Failure(str(error), "av" + error.code)
+        job.result = {"problems": problems}
+        job.files_done = job.files_total = 1
 
     # ── VirusTotal ─────────────────────────────────────────────────────────
     def _do_vtscan(self, job, args):

@@ -27,7 +27,7 @@ DialogFrame {
 		{ id: "previews", label: "Previews", icon: "image_outline" },
 		{ id: "archives", label: "Archives", icon: "package_variant" },
 		{ id: "windows", label: "Windows programs", icon: "microsoft_windows" },
-		{ id: "virustotal", label: "VirusTotal", icon: "shield_search" },
+		{ id: "virus", label: "Virus scan", icon: "shield_search" },
 		{ id: "pdf", label: "PDF", icon: "file_pdf_box" },
 		{ id: "storage", label: "Storage", icon: "harddisk" }
 	]
@@ -40,6 +40,7 @@ DialogFrame {
 		Files.knowRunners();
 		Files.knowVtKey();
 		Files.knowPdfTools();
+		Files.knowAv();
 		Files.request("thumbcache", {}, data => root.cache = data);
 		keys.forceActiveFocus();
 	}
@@ -398,10 +399,92 @@ DialogFrame {
 					}
 				}
 
+				// ── the scan on this PC ────────────────────────────────────
+				Group {
+					shown: root.page === "virus"
+					title: "On this PC – nothing leaves it"
+
+					Hint {
+						text: "ClamAV with its signatures and the free extra ones of Sanesecurity and URLhaus, and the core rules of YARA Forge. For private files: they are scanned here and never sent anywhere. Right click → “Scan for viruses”."
+					}
+
+					Line {
+						label: Files.av.clamav ? "ClamAV is installed" : "ClamAV is not installed"
+						icon: Files.av.clamav ? "check_decagram_outline" : "alert_circle_outline"
+						tint: Files.av.clamav ? Theme.success : Theme.warning
+
+						TextButton {
+							visible: !Files.av.clamav
+							height: 30
+							variant: "filled"
+							text: "Install"
+							icon: "download"
+							onClicked: {
+								Files.installAv();
+								avRecheck.restart();
+							}
+						}
+					}
+
+					Line {
+						visible: !!Files.av.clamav
+						label: Files.av.signatures ? `Signatures of ${Files.whenText(Files.av.signatures)}${Files.av.extras ? ` · ${Files.av.extras} extra sets` : ""}` : "No signatures yet"
+						icon: "database_outline"
+						tint: Files.av.signatures ? Theme.textMuted : Theme.warning
+
+						TextButton {
+							height: 30
+							variant: Files.av.signatures ? "tonal" : "filled"
+							text: Files.av.signatures ? "Update" : "Download (≈ 250 MB)"
+							icon: "refresh"
+							onClicked: Files.avUpdate(() => Files.knowAv())
+						}
+					}
+
+					Line {
+						visible: !!Files.av.yara
+						label: Files.av.rules ? `YARA rules of ${Files.whenText(Files.av.rules)}` : "YARA rules come with the signatures"
+						icon: "text_search"
+					}
+
+					Switch {
+						label: "Also YARA's rules"
+						hint: "They find what is new or packed, now and then also something harmless."
+						checked: FileLibrary.setting("avYara") !== false
+						enabled: !!Files.av.yara
+						onToggled: on => FileLibrary.set("avYara", on)
+					}
+
+					Switch {
+						label: "Scan every finished download here"
+						hint: "Signatures older than a day are updated before a scan."
+						checked: FileLibrary.setting("avDownloads")
+						enabled: !!Files.av.clamav
+						onToggled: on => FileLibrary.set("avDownloads", on)
+					}
+
+					Timer {
+						id: avRecheck
+
+						interval: 3000
+						repeat: true
+						running: false
+						property int left: 60
+						onTriggered: Files.knowAv(av => {
+							avRecheck.left -= 1;
+							if (av.clamav || avRecheck.left <= 0) {
+								avRecheck.stop();
+								// a fresh install gets its signatures right away
+								if (av.clamav && !av.signatures) Files.avUpdate(() => Files.knowAv());
+							}
+						})
+					}
+				}
+
 				// ── VirusTotal ─────────────────────────────────────────────
 				Group {
-					shown: root.page === "virustotal"
-					title: "API key"
+					shown: root.page === "virus"
+					title: "VirusTotal – API key"
 
 					Line {
 						label: Files.vtKeySet ? "A key is kept in the keyring" : "No key yet"
@@ -466,7 +549,7 @@ DialogFrame {
 				}
 
 				Group {
-					shown: root.page === "virustotal"
+					shown: root.page === "virus"
 					title: "Files VirusTotal has never seen"
 
 					Choice {
@@ -481,7 +564,7 @@ DialogFrame {
 				}
 
 				Group {
-					shown: root.page === "virustotal"
+					shown: root.page === "virus"
 					title: "Downloads"
 
 					Switch {

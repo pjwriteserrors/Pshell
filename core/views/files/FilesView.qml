@@ -183,6 +183,9 @@ FocusScope {
 		function onScanned(results) {
 			scanResults.open(results);
 		}
+		function onLocalScanned(result) {
+			scanResults.openLocal(result);
+		}
 		function onCompared(result) {
 			compareResults.open(result);
 		}
