@@ -20,6 +20,12 @@ Singleton {
 	property var tagged: ({})
 	// [{ id, name, icon, paths: [path] }]
 	property var collections: []
+	// searches kept in the sidebar: [{ id, name, query, path, contents }]
+	property var searches: []
+	// notes stuck to files and folders: path → { text, at }
+	property var notes: ({})
+	// folders that open their terminals, agents and apps on a workspace of their own: path → workspace index
+	property var workspaces: ({})
 	// how folders are shown unless one was set for a folder
 	property var view: ({ mode: "grid", sort: "name", desc: false, group: "none", cardSize: 172, hidden: false, foldersFirst: true, sidebar: true, details: false })
 	// path → { mode, sort, desc, group } of folders that keep their own
@@ -47,7 +53,11 @@ Singleton {
 		avYara: true,
 		avDownloads: false,
 		pdfQuality: "ebook",
-		restoreSelection: true
+		restoreSelection: true,
+		shareHost: "litterbox",
+		shareHours: 24,
+		shareServer: null,
+		gitBadges: true
 	})
 	// [{ path, at }], newest first
 	property var opened: []
@@ -201,10 +211,73 @@ Singleton {
 		}
 		const favorites = root.favorites.map(remap);
 		const collections = root.collections.map(collection => Object.assign({}, collection, { paths: collection.paths.map(remap) }));
+		const nextNotes = {};
+		for (const path of Object.keys(root.notes)) {
+			const target = remap(path);
+			if (target !== path) changed = true;
+			nextNotes[target] = root.notes[path];
+		}
 		if (!changed && favorites.every((path, i) => path === root.favorites[i]) && JSON.stringify(collections) === JSON.stringify(root.collections)) return;
+		root.notes = nextNotes;
 		root.tagged = nextTagged;
 		root.favorites = favorites;
 		root.collections = collections;
+		root.save();
+	}
+
+	// ── searches kept ──────────────────────────────────────────────────────
+	function addSearch(name, query, path, contents) {
+		const id = `s${Date.now().toString(36)}`;
+		root.searches = root.searches.concat([{ id: id, name: String(name).trim() || String(query), query: String(query), path: String(path || ""), contents: !!contents }]);
+		root.save();
+		return id;
+	}
+
+	function searchById(id) {
+		return root.searches.find(entry => entry.id === id) ?? null;
+	}
+
+	function renameSearch(id, name) {
+		root.searches = root.searches.map(entry => entry.id === id ? Object.assign({}, entry, { name: String(name).trim() || entry.name }) : entry);
+		root.save();
+	}
+
+	function removeSearch(id) {
+		root.searches = root.searches.filter(entry => entry.id !== id);
+		root.save();
+	}
+
+	// ── notes on files ─────────────────────────────────────────────────────
+	function noteOf(path) {
+		return root.notes[String(path)]?.text ?? "";
+	}
+
+	function setNote(path, text) {
+		const next = Object.assign({}, root.notes);
+		const clean = String(text || "").trim();
+		if (clean === "") delete next[String(path)];
+		else next[String(path)] = { text: clean, at: Date.now() / 1000 };
+		root.notes = next;
+		root.save();
+	}
+
+	// ── a workspace per folder ─────────────────────────────────────────────
+	// the folder itself or the nearest one above it that has one; -1 for none
+	function workspaceOf(path) {
+		let current = String(path);
+		while (current !== "" && current !== "/") {
+			const index = root.workspaces[current];
+			if (index !== undefined) return Number(index);
+			current = current.slice(0, current.lastIndexOf("/"));
+		}
+		return -1;
+	}
+
+	function setWorkspace(path, index) {
+		const next = Object.assign({}, root.workspaces);
+		if (index === undefined || index === null || Number(index) < 0) delete next[String(path)];
+		else next[String(path)] = Number(index);
+		root.workspaces = next;
 		root.save();
 	}
 
@@ -331,6 +404,9 @@ Singleton {
 			tags: root.tags,
 			tagged: root.tagged,
 			collections: root.collections,
+			searches: root.searches,
+			notes: root.notes,
+			workspaces: root.workspaces,
 			view: root.view,
 			folderViews: root.folderViews,
 			settings: root.settings,
@@ -351,6 +427,9 @@ Singleton {
 		root.tags = Array.isArray(data.tags) ? data.tags : root.defaultTags;
 		root.tagged = data.tagged && typeof data.tagged === "object" ? data.tagged : {};
 		root.collections = Array.isArray(data.collections) ? data.collections : [];
+		root.searches = Array.isArray(data.searches) ? data.searches : [];
+		root.notes = data.notes && typeof data.notes === "object" ? data.notes : {};
+		root.workspaces = data.workspaces && typeof data.workspaces === "object" ? data.workspaces : {};
 		root.view = Object.assign({}, root.view, data.view ?? {});
 		root.folderViews = data.folderViews && typeof data.folderViews === "object" ? data.folderViews : {};
 		root.settings = data.settings && typeof data.settings === "object" ? data.settings : {};

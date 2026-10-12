@@ -48,6 +48,11 @@ Singleton {
 		if (list.length > 0) root.show({ paths: list, kind: "items", newTab: false });
 	}
 
+	// any place of the window: { kind: "storage" | "duplicates" | "search" | …, path, … }
+	function goTo(location) {
+		root.show({ paths: [], kind: "place", location: location, newTab: false });
+	}
+
 	function searchFor(query) {
 		root.show({ paths: [], kind: "search", query: String(query || ""), newTab: false });
 	}
@@ -144,6 +149,10 @@ Singleton {
 			break;
 		case "places":
 			root.places = message.places || [];
+			break;
+		case "rules":
+			root.rules = message.rules || [];
+			root.knowRules();
 			break;
 		case "search":
 			root.searchResults(String(message.search), message.entries || [], !!message.done, String(message.error || ""));
@@ -905,6 +914,237 @@ Singleton {
 		root.startJob("convert", { paths: paths, format: format }, job => {
 			if (job.state === "done" && job.error) root.say(job.error, "alert_circle_outline");
 			if (followUp) followUp(job);
+		});
+	}
+
+	// ── what can be taken back ─────────────────────────────────────────────
+	// [{ title, at, kind, count }], newest first
+	function history(done) {
+		root.request("history", {}, data => done(data?.entries ?? []));
+	}
+
+	function undoAt(at) {
+		root.request("undo", { at: at }, (data, error) => {
+			if (error) root.say(error, "undo");
+		});
+	}
+
+	// ── copies of the same file ────────────────────────────────────────────
+	// folder → { groups, at } of the last look for copies
+	property var dupeResults: ({})
+	property var dupeRunning: ({})
+
+	function findDupes(path, options, done) {
+		root.dupeRunning = Object.assign({}, root.dupeRunning, { [path]: true });
+		root.startJob("dupes", { paths: [path], options: options || { pictures: true } }, job => {
+			const next = Object.assign({}, root.dupeRunning);
+			delete next[path];
+			root.dupeRunning = next;
+			if (job.state === "done") root.dupeResults = Object.assign({}, root.dupeResults, { [path]: { groups: job.result?.dupes?.groups ?? [], at: Date.now() } });
+			if (done) done(job);
+		});
+	}
+
+	// ── what takes the space ───────────────────────────────────────────────
+	property var storageRunning: ({})
+	property var storageScanned: ({})
+
+	function measureStorage(path, done) {
+		root.storageRunning = Object.assign({}, root.storageRunning, { [path]: true });
+		root.startJob("storage", { path: path }, job => {
+			const next = Object.assign({}, root.storageRunning);
+			delete next[path];
+			root.storageRunning = next;
+			if (job.state === "done") root.storageScanned = Object.assign({}, root.storageScanned, { [path]: Date.now() });
+			if (done) done(job);
+		});
+	}
+
+	function storageTree(rootPath, path, done) {
+		root.request("storagetree", { root: rootPath, path: path, depth: 2 }, data => done(data?.tree ?? null));
+	}
+
+	// ── rules ──────────────────────────────────────────────────────────────
+	// [{ id, name, enabled, folder, subfolders, when, match: {…}, action: {…}, lastRun, count }]
+	property var rules: []
+	property var ruleTexts: ({})
+
+	function knowRules() {
+		root.request("rules", {}, data => {
+			root.rules = data?.rules ?? [];
+			root.ruleTexts = data?.described ?? {};
+		});
+	}
+
+	function setRules(list) {
+		root.request("rules", { rules: list }, data => {
+			root.rules = data?.rules ?? [];
+			root.ruleTexts = data?.described ?? {};
+		});
+	}
+
+	function saveRule(rule) {
+		const list = root.rules.filter(each => each.id !== rule.id);
+		const at = root.rules.findIndex(each => each.id === rule.id);
+		list.splice(at >= 0 ? at : list.length, 0, rule);
+		root.setRules(list);
+	}
+
+	function removeRule(id) {
+		root.setRules(root.rules.filter(rule => rule.id !== id));
+	}
+
+	function runRule(id) {
+		root.request("rulerun", { rule: id }, (data, error) => {
+			if (error) root.fail(error);
+			else if (!data.count) root.say("Nothing there fits the rule", "playlist_check");
+		});
+	}
+
+	// ── git ────────────────────────────────────────────────────────────────
+	function commit(paths, message, push) {
+		root.startJob("gitcommit", { paths: paths, message: message, push: !!push }, job => {
+			if (job.state !== "done") return;
+			const git = job.result?.git ?? {};
+			Sounds.play("taskDone");
+			root.say(git.pushError ? `Committed, the push failed: ${git.pushError}` : (git.pushed ? `Committed and pushed: ${git.head}` : `Committed: ${git.head}`), "source_commit");
+		});
+	}
+
+	// pull, push or fetch in the repository of a folder
+	function gitRun(path, what) {
+		root.startJob("gitrun", { path: path, what: what }, job => {
+			if (job.state === "done") root.say(String(job.result?.git?.summary || "Done"), what === "push" ? "upload_outline" : "source_pull");
+		});
+	}
+
+	// ── earlier versions ───────────────────────────────────────────────────
+	function versionsOf(path, done) {
+		root.request("versions", { path: path }, data => done(data?.versions ?? [], data?.providers ?? []));
+	}
+
+	// mode: "beside" (a copy next to it) or "replace" (the current one goes to the trash)
+	function restoreVersion(path, version, mode) {
+		root.startJob("restoreversion", { path: path, version: version, mode: mode || "beside" }, job => {
+			if (job.state === "done") root.say(mode === "replace" ? "The earlier version is back" : "The earlier version is beside it", "history");
+		});
+	}
+
+	// ── vaults (gocryptfs) ─────────────────────────────────────────────────
+	// { installed, install, fingerprint, vaults: [{ id, name, cipher, mount, open, keyring, remember }] }
+	property var vaults: ({ installed: false, vaults: [] })
+
+	function knowVaults(done) {
+		root.request("vault", { action: "status" }, data => {
+			if (data) root.vaults = data;
+			if (done) done(root.vaults);
+		});
+	}
+
+	function vaultDo(args, done) {
+		root.request("vault", args, (data, error) => {
+			if (data) root.vaults = data;
+			if (done) done(data, error);
+			else if (error && error !== "password") root.fail(error);
+		});
+	}
+
+	// a vault whose password is in the keyring asks for a finger first: on
+	// the PC's reader, else on the phone
+	function proveIdentity(what, done) {
+		if (root.vaults.fingerprint) {
+			fingerProc.done = done;
+			fingerProc.running = true;
+			root.say("Put your finger on the reader", "fingerprint");
+			return;
+		}
+		if (Plugins.on("phone-unlock") && Phone.reachable) {
+			root.say(`Confirm on ${Phone.name}`, "cellphone_key");
+			Phone.call("unlock", "pam", { what: what, body: "Put your finger on the sensor to open it." }, (data, error) => done(!error && !!data, String(error?.message ?? error ?? "")));
+			return;
+		}
+		done(true, "");
+	}
+
+	Process {
+		id: fingerProc
+
+		property var done: null
+
+		command: ["fprintd-verify"]
+		onExited: code => {
+			const done = fingerProc.done;
+			fingerProc.done = null;
+			if (done) done(code === 0, code === 0 ? "" : "The finger did not match");
+		}
+	}
+
+	// ── a link to share ────────────────────────────────────────────────────
+	// [{ id, name, url, host, at, expires, size }]
+	property var shares: []
+
+	function knowShares(done) {
+		root.request("shares", {}, data => {
+			root.shares = data?.shares ?? [];
+			if (done) done(data);
+		});
+	}
+
+	function share(paths, options) {
+		const settings = FileLibrary.setting("shareServer") || {};
+		root.startJob("share", {
+			paths: paths,
+			host: options.host,
+			hours: Number(options.hours) || 24,
+			server: options.host === "ssh" ? settings.server : null,
+			folder: settings.folder || "",
+			baseUrl: settings.url || ""
+		}, job => {
+			if (job.state !== "done") return;
+			const made = job.result?.share;
+			if (!made?.url) return;
+			Quickshell.execDetached(["wl-copy", "--", made.url]);
+			Sounds.play("taskDone");
+			root.knowShares();
+			Notifs.pushInternal("done", "The link is on the clipboard", `${made.url}${made.expires ? " · until " + Qt.formatDateTime(new Date(made.expires * 1000), "ddd HH:mm") : ""}`, {
+				icon: "link_variant",
+				actions: [{ label: "Open", icon: "open_in_new", run: () => Qt.openUrlExternally(made.url) }]
+			});
+		});
+	}
+
+	function unshare(id) {
+		root.request("shares", { remove: id }, data => root.shares = data?.shares ?? []);
+	}
+
+	// ── pictures and tags ──────────────────────────────────────────────────
+	function imageTool(tool, paths, options) {
+		root.startJob("image", { tool: tool, paths: paths, options: options || {} }, job => {
+			if (job.state === "done" && job.error) root.say(job.error, "alert_circle_outline");
+		});
+	}
+
+	function writeTags(path, tags, cover, removeCover) {
+		root.startJob("tags", { path: path, tags: tags, cover: cover || "", removeCover: !!removeCover }, job => {
+			if (job.state === "done") root.say("Tags saved", "tag_check_outline");
+		});
+	}
+
+	// ── two folders ────────────────────────────────────────────────────────
+	function compareFolders(left, right, done) {
+		root.request("compare", { left: left, right: right, deep: true }, (data, error) => {
+			if (error) root.fail(error);
+			done(data);
+		});
+	}
+
+	function syncPlan(source, target, direction, remove, done) {
+		root.request("syncplan", { source: source, target: target, direction: direction, delete: !!remove }, (data, error) => done(data, error));
+	}
+
+	function sync(source, target, direction, remove) {
+		root.startJob("sync", { source: source, target: target, direction: direction, delete: !!remove }, job => {
+			if (job.state === "done") root.say("The folders are in step", "folder_sync_outline");
 		});
 	}
 

@@ -23,11 +23,20 @@ gi.require_version("Gio", "2.0")
 from gi.repository import Gio, GLib  # noqa: E402
 
 import archives  # noqa: E402
+import compare  # noqa: E402
 import convert  # noqa: E402
+import dupes  # noqa: E402
+import gitinfo  # noqa: E402
+import imagetools  # noqa: E402
 import localscan  # noqa: E402
 import lookup  # noqa: E402
+import mediatags  # noqa: E402
 import pdftools  # noqa: E402
 import remote  # noqa: E402
+import rules  # noqa: E402
+import share  # noqa: E402
+import storage  # noqa: E402
+import versions  # noqa: E402
 import virustotal  # noqa: E402
 import windows  # noqa: E402
 
@@ -69,6 +78,46 @@ class PdfContext:
         saved = (self.job.result or {}).get("saved", [])
         saved.append([before, after])
         self.job.result = dict(self.job.result or {}, saved=saved)
+
+
+class Context:
+    """What a tool of its own module sees of its job."""
+
+    def __init__(self, job):
+        self.raw = job
+
+    def check(self):
+        self.raw.check()
+
+    def cancelled(self):
+        return self.raw.cancellable.is_cancelled()
+
+    def total(self, size):
+        self.raw.bytes_total = int(size)
+        self.raw.report()
+
+    def progress(self, count):
+        self.raw.bytes_done += int(count)
+        self.raw.report()
+
+    def progress_to(self, done):
+        self.raw.bytes_done = int(done)
+        self.raw.report()
+
+    def count(self, files):
+        self.raw.files_done = int(files)
+        self.raw.report()
+
+    def status(self, text):
+        self.raw.current = text
+        self.raw.report(True)
+
+    def current(self, text):
+        self.raw.current = text
+        self.raw.report()
+
+    def process(self, process):
+        self.raw.process = process
 
 
 class Failure(Exception):
@@ -190,7 +239,7 @@ class Job:
         # (from, to) of what was moved or renamed: tags and favourites follow
         self.moves = []
         # a job that may be held: it waits between two chunks (or its process is stopped)
-        self.can_pause = kind in ("copy", "move", "auto", "paste", "extract", "compress", "download", "delete", "pdf", "vtscan", "convert", "upload", "avscan")
+        self.can_pause = kind in ("copy", "move", "auto", "paste", "extract", "compress", "download", "delete", "pdf", "vtscan", "convert", "upload", "avscan", "dupes", "storage", "share", "sync", "image")
         self.paused = False
         self.process = None
         # what a job found out, for the window to show (a scan's verdict)
@@ -355,7 +404,7 @@ class Manager:
             job.state, job.error = "failed", str(error)
         if job.undo and job.kind != "undo":
             with self.lock:
-                self.journal.append({"title": job.undo_title or job.title, "ops": job.undo, "at": time.time()})
+                self.journal.append({"title": job.undo_title or job.title, "ops": job.undo, "at": time.time(), "kind": job.kind})
                 self.journal = self.journal[-40:]
         job.current = ""
         job.report(True)
@@ -377,15 +426,26 @@ class Manager:
         if job:
             job.set_paused(on)
 
-    def undo(self):
+    def undo(self, stamp=None):
+        """The last thing done is taken back, or the one of the history that was picked."""
         with self.lock:
             if not self.journal:
                 return None
-            entry = self.journal.pop()
+            index = len(self.journal) - 1
+            if stamp is not None:
+                index = next((i for i, entry in enumerate(self.journal) if entry["at"] == stamp), -1)
+                if index < 0:
+                    return None
+            entry = self.journal.pop(index)
         return self.start("undo", {"ops": entry["ops"], "title": entry["title"]})
 
     def last_undo(self):
         return self.journal[-1]["title"] if self.journal else ""
+
+    def history(self):
+        """What can be taken back, newest first."""
+        with self.lock:
+            return [{"title": entry["title"], "at": entry["at"], "kind": entry.get("kind", ""), "count": len(entry["ops"])} for entry in reversed(self.journal)]
 
     # ── copy and move ──────────────────────────────────────────────────────
     def _copy_file(self, job, source, target):
@@ -1132,6 +1192,239 @@ class Manager:
             job.undo.append(("trash", link))
             job.files_done += 1
 
+    # ── copies, space, rules ───────────────────────────────────────────────
+    def _do_dupes(self, job, args):
+        roots = [path for path in args.get("paths", []) if path and os.path.isdir(path)]
+        if not roots:
+            raise Failure("Pick a folder to look through", "invalid")
+        job.title = f"Looking for copies in {os.path.basename(roots[0].rstrip('/')) or roots[0]}" if len(roots) == 1 else f"Looking for copies in {len(roots)} folders"
+        job.state = "running"
+        job.report(True)
+        groups = dupes.find(roots, args.get("options") or {}, Context(job))
+        job.result = {"dupes": {"roots": roots, "groups": groups[:2000]}}
+
+    def _do_storage(self, job, args):
+        root = args.get("path") or lookup.HOME
+        job.title = f"Measuring {lookup.HOME and root.replace(lookup.HOME, '~', 1)}"
+        job.state = "running"
+        job.report(True)
+        try:
+            job.result = {"storage": storage.scan(root, Context(job), bool(args.get("oneFs", True)))}
+        except RuntimeError as error:
+            raise Failure(str(error))
+
+    def _do_rule(self, job, args):
+        rule = args.get("rule") or {}
+        action = rule.get("action") or {}
+        kind = action.get("kind", "move")
+        paths = [path for path in args.get("paths", []) if os.path.lexists(path)]
+        name = rule.get("name") or rules.describe_rule(rule)
+        job.title = f"{name}: {os.path.basename(paths[0])}" if len(paths) == 1 else f"{name}: {len(paths)} files"
+        job.undo_title = job.title
+        if kind == "trash":
+            self._do_trash(job, {"paths": paths})
+        elif kind == "extract":
+            for path in paths:
+                self._do_extract(job, {"path": path, "target": os.path.dirname(path), "trashArchive": bool(action.get("trashSource"))})
+        else:
+            by_target = {}
+            for path in paths:
+                by_target.setdefault(rules.target_for(rule, path), []).append(path)
+            for target, group in by_target.items():
+                if not target:
+                    raise Failure("The rule has no folder to put them in", "invalid")
+                if not os.path.isdir(target):
+                    os.makedirs(target, exist_ok=True)
+                    job.undo.append(("trash", target))
+                # nobody is asked: a name that is taken keeps both
+                job.all_choice = "keep"
+                self._transfer(job, {"sources": group, "target": target}, "copy" if kind == "copy" else "move")
+        job.title = f"{name}: {os.path.basename(paths[0])}" if len(paths) == 1 else f"{name}: {len(paths)} files"
+        job.undo_title = job.title
+
+    # ── git ────────────────────────────────────────────────────────────────
+    def _do_gitcommit(self, job, args):
+        paths = [path for path in args.get("paths", []) if path]
+        message = str(args.get("message") or "").strip()
+        if not paths or not message:
+            raise Failure("A commit needs files and a message", "invalid")
+        job.title = f"Committing {os.path.basename(paths[0])}" if len(paths) == 1 else f"Committing {len(paths)} items"
+        job.state = "running"
+        job.report(True)
+        try:
+            job.result = {"git": gitinfo.commit(paths, message, bool(args.get("push")))}
+        except (RuntimeError, subprocess.SubprocessError) as error:
+            raise Failure(str(error))
+        job.files_done = job.files_total = 1
+
+    def _do_gitrun(self, job, args):
+        what = args.get("what", "")
+        job.title = {"pull": "Pulling", "push": "Pushing", "fetch": "Fetching"}.get(what, "git") + f" {os.path.basename(args['path'].rstrip('/'))}"
+        job.state = "running"
+        job.report(True)
+        try:
+            job.result = {"git": gitinfo.run(args["path"], what)}
+        except (RuntimeError, subprocess.SubprocessError) as error:
+            raise Failure(str(error))
+        job.files_done = job.files_total = 1
+
+    # ── earlier versions ───────────────────────────────────────────────────
+    def _do_restoreversion(self, job, args):
+        path = args["path"]
+        mode = args.get("mode", "beside")
+        job.title = f"Bringing back {os.path.basename(path)}"
+        job.undo_title = job.title
+        job.state = "running"
+        job.report(True)
+        since = time.time()
+        try:
+            target = versions.restore(path, args["version"], mode, unique, trash_one)
+        except (RuntimeError, OSError, GLib.Error) as error:
+            raise Failure(str(getattr(error, "message", "") or error))
+        job.created.append(target)
+        job.undo.append(("replaced", path, since) if mode == "replace" else ("trash", target))
+        job.files_done = job.files_total = 1
+
+    # ── a link to share ────────────────────────────────────────────────────
+    def _do_share(self, job, args):
+        paths = [path for path in args.get("paths", []) if path and os.path.lexists(path)]
+        if not paths:
+            raise Failure("Nothing to share", "invalid")
+        job.title = f"Sharing {os.path.basename(paths[0].rstrip('/'))}" if len(paths) == 1 else f"Sharing {len(paths)} items"
+        job.state = "running"
+        job.report(True)
+        try:
+            result = share.upload(Context(job), paths, args.get("host", "litterbox"), float(args.get("hours", 24)),
+                                  args.get("server"), args.get("baseUrl", ""), args.get("folder", ""))
+        except (share.ShareError, remote.RemoteError) as error:
+            raise Failure(str(error))
+        job.result = {"share": result}
+        job.bytes_done = job.bytes_total
+        job.files_done = job.files_total = 1
+
+    # ── pictures and tags ──────────────────────────────────────────────────
+    def _replace_in_place(self, job, path, made):
+        """The file made takes the place of `path`; the old one goes to the trash."""
+        since = time.time()
+        try:
+            trash_one(path)
+        except GLib.Error as error:
+            os.unlink(made)
+            raise Failure(f"The old one cannot go to the trash here: {error.message}")
+        os.replace(made, path)
+        job.undo.append(("replaced", path, since))
+        return path
+
+    def _do_image(self, job, args):
+        tool = args.get("tool", "")
+        paths = [path for path in args.get("paths", []) if path and os.path.isfile(path)]
+        if not paths:
+            raise Failure("Pick pictures first", "invalid")
+        options = args.get("options") or {}
+        replace = bool(options.get("replace"))
+        job.title = f"{imagetools.TITLES.get(tool, 'Changing')} {os.path.basename(paths[0])}" if len(paths) == 1 else f"{imagetools.TITLES.get(tool, 'Changing')} {len(paths)} pictures"
+        job.undo_title = job.title
+        job.files_total = len(paths)
+        job.state = "running"
+        job.report(True)
+        failed = []
+        for path in paths:
+            job.check()
+            job.current = os.path.basename(path)
+            job.report()
+            try:
+                made = imagetools.edit(tool, path, options, unique)
+            except imagetools.ImageError as error:
+                failed.append(str(error))
+                job.failed_paths.append(path)
+                continue
+            if replace:
+                ext = os.path.splitext(path)[1]
+                if os.path.splitext(made)[1] != ext:
+                    job.created.append(made)
+                    job.undo.append(("trash", made))
+                else:
+                    job.created.append(self._replace_in_place(job, path, made))
+            else:
+                job.created.append(made)
+                job.undo.append(("trash", made))
+            job.files_done += 1
+            job.report(True)
+        if failed and len(failed) == len(paths):
+            raise Failure(failed[0])
+        if failed:
+            job.error = f"{len(failed)} could not be changed: {failed[0]}"
+
+    def _do_tags(self, job, args):
+        path = args["path"]
+        job.title = f"Writing the tags of {os.path.basename(path)}"
+        job.undo_title = job.title
+        job.state = "running"
+        job.report(True)
+        ext = os.path.splitext(path)[1]
+        work = unique(os.path.join(os.path.dirname(path), f".tagging-{os.path.basename(path)}"))
+        shutil.copy2(path, work)
+        try:
+            mediatags.write(work, args.get("tags") or {}, args.get("cover", ""), bool(args.get("removeCover")))
+        except mediatags.TagError as error:
+            os.unlink(work)
+            raise Failure(str(error))
+        except BaseException:
+            if os.path.exists(work):
+                os.unlink(work)
+            raise
+        if not work.endswith(ext):
+            os.unlink(work)
+            raise Failure("The tags could not be written")
+        job.created.append(self._replace_in_place(job, path, work))
+        job.moves.append((path, path))
+        job.files_done = job.files_total = 1
+
+    # ── two folders in step ────────────────────────────────────────────────
+    def _do_sync(self, job, args):
+        source, target = args.get("source", ""), args.get("target", "")
+        if not os.path.isdir(source) or not os.path.isdir(target):
+            raise Failure("Both sides need to be folders", "invalid")
+        both = args.get("direction") == "both"
+        delete = bool(args.get("delete")) and not both
+        hidden = bool(args.get("hidden"))
+        job.title = f"Syncing {os.path.basename(source)} → {os.path.basename(target)}" if not both else f"Syncing {os.path.basename(source)} ⇄ {os.path.basename(target)}"
+        job.target = target
+        job.state = "running"
+        job.bytes_total, job.files_total = tree_size([source] + ([target] if both else []), lambda: job.cancellable.is_cancelled())
+        job.report(True)
+        passes = [(source, target)] + ([(target, source)] if both else [])
+        offset = 0
+        for src, dst in passes:
+            command = compare.rsync_command(src, dst, delete, hidden)
+            if both:
+                command.insert(2, "--update")
+            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+            job.process = process
+            try:
+                for chunk in iter(lambda: process.stdout.read1(4096), b""):
+                    for part in re.split(rb"[\r\n]", chunk):
+                        match = remote.PROGRESS.match(part.decode("utf-8", "replace"))
+                        if match:
+                            job.bytes_done = offset + int(match.group(1).replace(",", "").replace(".", ""))
+                            job.report()
+                    if job.cancellable.is_cancelled():
+                        break
+                process.wait()
+                errors = process.stderr.read().decode("utf-8", "replace")
+            finally:
+                job.process = None
+                if process.poll() is None:
+                    process.kill()
+                    process.wait()
+            job.check()
+            if process.returncode not in (0, 24):
+                raise Failure((errors.strip().splitlines() or ["rsync failed"])[-1])
+            offset = job.bytes_done
+        job.bytes_done = job.bytes_total
+        job.files_done = job.files_total
+        job.created.append(target)
+
     # ── undo ───────────────────────────────────────────────────────────────
     def _do_undo(self, job, args):
         ops = list(reversed(args.get("ops", [])))
@@ -1173,6 +1466,14 @@ class Manager:
                         os.makedirs(os.path.dirname(target), exist_ok=True)
                         item.move(Gio.File.new_for_path(target), Gio.FileCopyFlags.NOFOLLOW_SYMLINKS, job.cancellable, None, None)
                         job.created.append(target)
+                elif kind == "replaced":
+                    # the file that took another's place goes, the one before comes back
+                    item = find_in_trash(op[1], op[2])
+                    if item is not None:
+                        if os.path.lexists(op[1]):
+                            trash_one(op[1])
+                        item.move(Gio.File.new_for_path(op[1]), Gio.FileCopyFlags.NOFOLLOW_SYMLINKS, job.cancellable, None, None)
+                        job.created.append(op[1])
                 elif kind == "trashagain" and os.path.lexists(op[1]):
                     trash_one(op[1])
                 elif kind == "mkdir" and not os.path.lexists(op[1]):

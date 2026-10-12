@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Quickshell
 import qs.style.theme
 import qs.style.widgets
 import qs.core.services
@@ -29,6 +30,9 @@ DialogFrame {
 		{ id: "windows", label: "Windows programs", icon: "microsoft_windows" },
 		{ id: "virus", label: "Virus scan", icon: "shield_search" },
 		{ id: "pdf", label: "PDF", icon: "file_pdf_box" },
+		{ id: "rules", label: "Rules", icon: "playlist_check" },
+		{ id: "vaults", label: "Vaults", icon: "safe_square_outline" },
+		{ id: "sharing", label: "Sharing", icon: "link_variant" },
 		{ id: "storage", label: "Storage", icon: "harddisk" }
 	]
 
@@ -41,6 +45,9 @@ DialogFrame {
 		Files.knowVtKey();
 		Files.knowPdfTools();
 		Files.knowAv();
+		Files.knowRules();
+		Files.knowVaults();
+		Files.knowShares();
 		Files.request("thumbcache", {}, data => root.cache = data);
 		keys.forceActiveFocus();
 	}
@@ -251,6 +258,13 @@ DialogFrame {
 				Group {
 					shown: root.page === "browsing"
 					title: "Everywhere"
+
+					Switch {
+						label: "Git status on files"
+						hint: "In a repository: what changed shows on the cards, the branch above them"
+						checked: FileLibrary.setting("gitBadges") !== false
+						onToggled: on => FileLibrary.set("gitBadges", on)
+					}
 
 					Switch {
 						label: "Hidden files"
@@ -610,6 +624,287 @@ DialogFrame {
 							label: modelData === "LibreOffice" ? "Office files to PDF and PDF to Word need LibreOffice" : `Some tools need ${modelData}`
 							icon: "alert_circle_outline"
 							tint: Theme.warning
+						}
+					}
+				}
+
+				// ── rules ──────────────────────────────────────────────────
+				Group {
+					shown: root.page === "rules"
+					title: "Rules for folders"
+
+					Hint {
+						text: "What happens on its own: new PDFs that mention “Rechnung” go to Documents/Invoices, screenshots older than a month into an archive. A rule only takes files that arrive after it was made – “Run now” takes what is there already. Everything a rule does can be undone (Ctrl+Shift+Z)."
+					}
+
+					Repeater {
+						model: Files.rules
+
+						delegate: Rectangle {
+							id: ruleCard
+
+							required property var modelData
+
+							Layout.fillWidth: true
+							implicitHeight: ruleColumn.implicitHeight + 20
+							radius: Theme.radius.large
+							color: Theme.layer2
+							opacity: modelData.enabled === false ? 0.6 : 1
+
+							RowLayout {
+								id: ruleColumn
+
+								x: 12
+								y: 10
+								width: parent.width - 24
+								spacing: 10
+
+								Glyph {
+									icon: "playlist_check"
+									size: 18
+									color: Theme.primary
+								}
+
+								ColumnLayout {
+									Layout.fillWidth: true
+									spacing: 2
+
+									StyledText {
+										Layout.fillWidth: true
+										text: ruleCard.modelData.name || Files.ruleTexts[ruleCard.modelData.id] || "Rule"
+										font.weight: Font.DemiBold
+										elide: Text.ElideRight
+									}
+
+									StyledText {
+										Layout.fillWidth: true
+										text: `In ${Files.pretty(ruleCard.modelData.folder)}: ${Files.ruleTexts[ruleCard.modelData.id] ?? ""}`
+										tone: Theme.textMuted
+										font.pixelSize: Theme.size.small
+										wrapMode: Text.WordWrap
+									}
+
+									StyledText {
+										visible: !!ruleCard.modelData.lastRun
+										text: `${ruleCard.modelData.count ?? 0} file${(ruleCard.modelData.count ?? 0) === 1 ? "" : "s"} so far · last ${Files.whenText(ruleCard.modelData.lastRun).toLowerCase()}`
+										tone: Theme.textSubtle
+										font.pixelSize: Theme.size.tiny
+									}
+								}
+
+								IconButton {
+									width: 30
+									height: 30
+									iconSize: 15
+									icon: "play_outline"
+									onClicked: Files.runRule(ruleCard.modelData.id)
+								}
+
+								IconButton {
+									width: 30
+									height: 30
+									iconSize: 15
+									icon: "pencil_outline"
+									onClicked: root.view.ruleDialog(ruleCard.modelData, "")
+								}
+
+								IconButton {
+									width: 30
+									height: 30
+									iconSize: 15
+									icon: "delete_outline"
+									onClicked: Files.removeRule(ruleCard.modelData.id)
+								}
+
+								Toggle {
+									checked: ruleCard.modelData.enabled !== false
+									onToggled: on => Files.saveRule(Object.assign({}, ruleCard.modelData, { enabled: on }))
+								}
+							}
+						}
+					}
+
+					TextButton {
+						Layout.alignment: Qt.AlignLeft
+						height: 32
+						variant: "tonal"
+						icon: "plus"
+						text: "New rule"
+						onClicked: root.view.ruleDialog(null, Files.home + "/Downloads")
+					}
+				}
+
+				// ── vaults ─────────────────────────────────────────────────
+				Group {
+					shown: root.page === "vaults"
+					title: "Vaults – encrypted folders"
+
+					Hint {
+						text: "A vault keeps its files encrypted on disk (gocryptfs); open, it is a normal folder. Lock it and nothing in it can be read – also not from a backup or a cloud folder it lies in. Make one with a right click on empty space → Look at it → New vault here."
+					}
+
+					Line {
+						label: Files.vaults.installed ? "gocryptfs is installed" : "gocryptfs is not installed"
+						icon: Files.vaults.installed ? "check_decagram_outline" : "alert_circle_outline"
+						tint: Files.vaults.installed ? Theme.success : Theme.warning
+
+						TextButton {
+							visible: !Files.vaults.installed && !!Files.vaults.install
+							height: 30
+							variant: "filled"
+							text: "Install"
+							icon: "download"
+							onClicked: {
+								Quickshell.execDetached(["kitty", "--title", "Install gocryptfs", "sh", "-c", `${Files.vaults.install}; echo; echo 'Done – this window can close.'; read -r _`]);
+								vaultRecheck.restart();
+							}
+						}
+					}
+
+					Line {
+						label: Files.vaults.fingerprint ? "Kept passwords open with your finger on the reader" : (Plugins.on("phone-unlock") ? "Kept passwords open with your finger on the phone" : "Kept passwords open without asking while you are logged in")
+						icon: Files.vaults.fingerprint || Plugins.on("phone-unlock") ? "fingerprint" : "key_outline"
+					}
+
+					Repeater {
+						model: Files.vaults.vaults ?? []
+
+						delegate: Line {
+							required property var modelData
+
+							label: `${modelData.name} · ${Files.pretty(modelData.mount)}${modelData.keyring ? " · password kept" : ""}`
+							icon: modelData.open ? "safe_square_outline" : "lock_outline"
+							tint: modelData.open ? Theme.success : Theme.textMuted
+
+							TextButton {
+								height: 30
+								variant: "tonal"
+								text: modelData.open ? "Lock" : "Open"
+								onClicked: {
+									if (modelData.open) Files.vaultDo({ action: "close", vault: modelData.id });
+									else root.view.unlockVault(modelData, path => {
+										root.hide();
+										root.view.pane.openFolder(path);
+									});
+								}
+							}
+						}
+					}
+
+					Timer {
+						id: vaultRecheck
+
+						interval: 3000
+						repeat: true
+						property int left: 60
+						onTriggered: Files.knowVaults(status => {
+							vaultRecheck.left -= 1;
+							if (status.installed || vaultRecheck.left <= 0) vaultRecheck.stop();
+						})
+					}
+				}
+
+				// ── sharing ────────────────────────────────────────────────
+				Group {
+					shown: root.page === "sharing"
+					title: "Links to share"
+
+					Hint {
+						text: "Right click → Share a link… uploads a file (or a ZIP of several) and puts the link on the clipboard. Litterbox and 0x0.st delete it when the time is up; on your own server it is deleted by this PC once it ran out."
+					}
+
+					Choice {
+						options: [{ value: "litterbox", label: "Litterbox" }, { value: "0x0", label: "0x0.st" }, { value: "ssh", label: "My server" }]
+						value: FileLibrary.setting("shareHost")
+						onPicked: value => FileLibrary.set("shareHost", value)
+					}
+				}
+
+				Group {
+					shown: root.page === "sharing"
+					title: "My server"
+
+					Hint {
+						text: "A folder on a server you reach by SSH that a web server shows, and the address it has there – e.g. /var/www/share and https://example.org/share."
+					}
+
+					RowLayout {
+						Layout.fillWidth: true
+						spacing: 8
+
+						Field {
+							id: shareHost
+
+							Layout.fillWidth: true
+							placeholder: "user@server (or a login of the SSH plugin)"
+							text: String(FileLibrary.setting("shareServer")?.server?.address ?? "")
+						}
+					}
+
+					Field {
+						id: shareFolder
+
+						Layout.fillWidth: true
+						placeholder: "Folder on the server"
+						text: String(FileLibrary.setting("shareServer")?.folder ?? "")
+					}
+
+					Field {
+						id: shareUrl
+
+						Layout.fillWidth: true
+						placeholder: "Its web address"
+						text: String(FileLibrary.setting("shareServer")?.url ?? "")
+					}
+
+					TextButton {
+						Layout.alignment: Qt.AlignRight
+						height: 32
+						variant: "filled"
+						text: "Save"
+						enabled: shareHost.text.trim() !== "" && shareFolder.text.trim() !== "" && /^https?:\/\//.test(shareUrl.text.trim())
+						onClicked: {
+							FileLibrary.set("shareServer", { name: shareHost.text.trim(), server: { address: shareHost.text.trim() }, folder: shareFolder.text.trim(), url: shareUrl.text.trim() });
+							Sounds.play("taskDone");
+						}
+					}
+				}
+
+				Group {
+					shown: root.page === "sharing"
+					title: "Shared lately"
+
+					Hint {
+						visible: Files.shares.length === 0
+						text: "Nothing shared yet."
+					}
+
+					Repeater {
+						model: Files.shares.slice(0, 30)
+
+						delegate: Line {
+							required property var modelData
+
+							label: `${modelData.name} · ${modelData.expired ? "ran out" : (modelData.expires ? "until " + Qt.formatDateTime(new Date(modelData.expires * 1000), "ddd d MMM HH:mm") : "")}`
+							icon: modelData.expired ? "link_variant_off" : "link_variant"
+							tint: modelData.expired ? Theme.textSubtle : Theme.primary
+
+							IconButton {
+								visible: !modelData.expired
+								width: 30
+								height: 30
+								iconSize: 15
+								icon: "content_copy"
+								onClicked: Files.copyText(modelData.url, "Link copied")
+							}
+
+							IconButton {
+								width: 30
+								height: 30
+								iconSize: 15
+								icon: "delete_outline"
+								onClicked: Files.unshare(modelData.id)
+							}
 						}
 					}
 				}

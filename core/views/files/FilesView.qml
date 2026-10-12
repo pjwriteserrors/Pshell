@@ -219,6 +219,17 @@ FocusScope {
 			root.focusSearch();
 			return;
 		}
+		if (request.kind === "compare") {
+			const tab = root.newTab({ kind: "dir", path: request.left }, true);
+			tab.second.go({ kind: "dir", path: request.right }, { history: false, force: true });
+			tab.split = true;
+			compareTimer.restart();
+			return;
+		}
+		if (request.kind === "place" && request.location) {
+			root.pane.go(request.location);
+			return;
+		}
 		if (paths.length === 0) {
 			if (request.newTab) root.newTab({ kind: "home" }, true);
 			return;
@@ -404,11 +415,349 @@ FocusScope {
 		prompt.open(title, placeholder, text, done, !!password);
 	}
 
+	// ── forms: a few questions, then something is done ─────────────────────
+	function form(spec, done) {
+		formDialog.here = root.pane?.isFolder ? root.pane.location.path : "";
+		formDialog.open(spec, done);
+		return formDialog;
+	}
+
+	function openHistory() {
+		history.open();
+	}
+
+	function showDiff(path) {
+		diff.open(path);
+	}
+
+	function crop(path) {
+		cropper.open(path);
+	}
+
+	// ── pictures, tags, links ──────────────────────────────────────────────
+	function resizeDialog(rows) {
+		root.form({
+			title: rows.length === 1 ? "Resize the picture" : `Resize ${rows.length} pictures`,
+			subtitle: rows.length === 1 ? rows[0].name : "",
+			icon: "resize",
+			accent: Theme.tertiary,
+			action: "Resize",
+			fields: [
+				{ key: "mode", type: "choice", label: "By", value: "longest", options: [{ value: "longest", label: "Longest side" }, { value: "percent", label: "Percent" }] },
+				{ key: "longest", type: "menu", label: "Longest side", value: 1920, when: v => v.mode === "longest", options: [640, 1080, 1280, 1920, 2560, 3840].map(n => ({ value: n, label: `${n} px` })) },
+				{ key: "percent", type: "slider", label: "Size", value: 50, min: 10, max: 100, step: 5, unit: "%", when: v => v.mode === "percent" },
+				{ key: "replace", type: "switch", label: "Replace the original", hint: "It goes to the trash, so this can be undone", value: false }
+			]
+		}, values => Files.imageTool("resize", rows.map(row => row.path), { mode: values.mode, longest: Number(values.longest), percent: Number(values.percent), replace: values.replace }));
+	}
+
+	function watermarkDialog(rows) {
+		root.form({
+			title: "Watermark",
+			subtitle: rows.length === 1 ? rows[0].name : `${rows.length} pictures`,
+			icon: "water_outline",
+			accent: Theme.tertiary,
+			action: "Put it on",
+			fields: [
+				{ key: "text", type: "text", label: "Text", placeholder: `© ${new Date().getFullYear()} …`, required: true },
+				{ key: "position", type: "menu", label: "Where", value: "bottomright", options: [{ value: "bottomright", label: "Bottom right" }, { value: "bottomleft", label: "Bottom left" }, { value: "topright", label: "Top right" }, { value: "center", label: "Middle" }, { value: "tile", label: "All over" }] },
+				{ key: "opacity", type: "slider", label: "Strength", value: 0.5, min: 0.1, max: 1, step: 0.05, unit: "%" },
+				{ key: "size", type: "slider", label: "Size", value: 0.05, min: 0.02, max: 0.15, step: 0.01, unit: "%" }
+			]
+		}, values => Files.imageTool("watermark", rows.map(row => row.path), values));
+	}
+
+	function tagsDialog(row) {
+		const dialog = root.form({
+			title: "Tags",
+			subtitle: row.name,
+			icon: "music_note",
+			accent: Theme.secondary,
+			action: "Save",
+			width: 500,
+			fields: [
+				{ key: "title", type: "text", label: "Title" },
+				{ key: "artist", type: "text", label: "Artist" },
+				{ key: "album", type: "text", label: "Album" },
+				{ key: "album_artist", type: "text", label: "Album artist" },
+				{ key: "date", type: "text", label: "Year" },
+				{ key: "track", type: "text", label: "Track" },
+				{ key: "genre", type: "text", label: "Genre" },
+				{ key: "cover", type: "path", label: "Cover (a picture file)", placeholder: "Leave empty to keep the one it has" },
+				{ key: "removeCover", type: "switch", label: "Take the cover out", value: false, when: v => !!v.hasCover && !v.cover }
+			]
+		}, values => {
+			const tags = {};
+			for (const key of ["title", "artist", "album", "album_artist", "date", "track", "genre"]) if (values[key] !== undefined) tags[key] = String(values[key]);
+			Files.writeTags(row.path, tags, String(values.cover || ""), !!values.removeCover);
+		});
+		Files.request("mediatags", { path: row.path }, data => {
+			if (data) dialog.merge(Object.assign({ hasCover: !!data.cover }, data.tags ?? {}));
+		});
+	}
+
+	function shareDialog(rows) {
+		const paths = rows.map(row => row.path);
+		const server = FileLibrary.setting("shareServer");
+		const images = rows.filter(row => row.kind === "image");
+		const dialog = root.form({
+			title: "Share a link",
+			subtitle: rows.length === 1 ? rows[0].name : `${rows.length} items (as one ZIP)`,
+			icon: "link_variant",
+			action: "Upload",
+			actionIcon: "upload_outline",
+			fields: [
+				{ key: "host", type: "menu", label: "Upload to", value: FileLibrary.setting("shareHost") === "ssh" && !server ? "litterbox" : FileLibrary.setting("shareHost"), options: [
+					{ value: "litterbox", label: "Litterbox (up to 1 GB)", icon: "cloud_upload_outline" },
+					{ value: "0x0", label: "0x0.st (up to 512 MB)", icon: "cloud_upload_outline" },
+					{ value: "ssh", label: server ? `My server (${server.name || "SSH"})` : "My server – set it up in the settings", icon: "server_network" }
+				] },
+				{ key: "hours", type: "menu", label: "For", value: FileLibrary.setting("shareHours"), options: [{ value: 1, label: "1 hour" }, { value: 12, label: "12 hours" }, { value: 24, label: "1 day" }, { value: 72, label: "3 days" }, { value: 168, label: "1 week (0x0.st)" }] },
+				{ key: "where", type: "info", tone: "warning", text: v => "Anyone with the link can download it until it runs out. The host can see what you upload.", when: v => v.host !== "ssh" },
+				{ key: "gps", type: "info", tone: "warning", icon: "map_marker_alert_outline", text: "A picture says where it was taken – use Edit picture → Remove location first if that should stay private.", when: v => !!v.located }
+			],
+			check: values => values.host === "ssh" && !server ? "Set up your server in the settings first" : ""
+		}, values => {
+			FileLibrary.set("shareHost", values.host);
+			FileLibrary.set("shareHours", Number(values.hours));
+			Files.share(paths, { host: values.host, hours: Number(values.hours) });
+		});
+		for (const row of images.slice(0, 10)) Files.request("imageinfo", { path: row.path }, data => {
+			if (data?.location) dialog.merge({ located: true });
+		});
+	}
+
+	// ── rules ──────────────────────────────────────────────────────────────
+	function ruleDialog(rule, folder) {
+		const given = rule ?? { id: `r${Date.now().toString(36)}`, enabled: true, folder: folder || "", when: "new", match: { kind: "any" }, action: { kind: "move", target: "" } };
+		const match = given.match ?? {};
+		const action = given.action ?? {};
+		const dialog = root.form({
+			title: rule ? "Change the rule" : "New rule",
+			subtitle: "What happens on its own with files in a folder",
+			icon: "playlist_check",
+			action: rule ? "Save" : "Make the rule",
+			width: 540,
+			fields: [
+				{ key: "name", type: "text", label: "Name", placeholder: "Invoices", value: given.name ?? "" },
+				{ key: "folder", type: "path", label: "Watch the folder", value: given.folder, required: true, offers: [Files.home + "/Downloads", Files.home + "/Desktop", root.pane?.isFolder ? root.pane.location.path : ""].filter((path, index, list) => path !== "" && list.indexOf(path) === index) },
+				{ key: "subfolders", type: "switch", label: "Also in its subfolders", value: !!given.subfolders },
+				{ key: "when", type: "choice", label: "When", value: given.when ?? "new", options: [{ value: "new", label: "A file arrives" }, { value: "hourly", label: "Every hour" }] },
+				{ key: "kind", type: "menu", label: "Files that are", value: match.kind ?? "any", options: [
+					{ value: "any", label: "Anything" }, { value: "pdf", label: "PDFs" }, { value: "image", label: "Pictures" }, { value: "video", label: "Videos" },
+					{ value: "audio", label: "Sound" }, { value: "document", label: "Documents" }, { value: "archive", label: "Archives" }, { value: "program", label: "Programs" }
+				] },
+				{ key: "name_", type: "text", label: "Named (words or a pattern like Screenshot*.png)", value: match.name ?? "" },
+				{ key: "contains", type: "text", label: "That mention (PDFs and text)", placeholder: "Rechnung", value: match.contains ?? "" },
+				{ key: "olderThan", type: "text", label: "Older than (days)", placeholder: "30", value: match.olderThan ? String(match.olderThan) : "" },
+				{ key: "largerThan", type: "text", label: "Bigger than (MB)", placeholder: "", value: match.largerThan ? String(match.largerThan) : "" },
+				{ key: "action", type: "choice", label: "Then", value: action.kind ?? "move", options: [{ value: "move", label: "Move" }, { value: "copy", label: "Copy" }, { value: "trash", label: "Trash" }, { value: "extract", label: "Unpack" }] },
+				{ key: "target", type: "path", label: "To the folder", value: action.target ?? "", when: v => v.action === "move" || v.action === "copy", offers: [Files.home + "/Documents", Files.home + "/Pictures", Files.home + "/Videos", Files.home + "/Music"] },
+				{ key: "byDate", type: "switch", label: "Into a folder per year and month", value: !!action.byDate, when: v => v.action === "move" || v.action === "copy" },
+				{ key: "trashSource", type: "switch", label: "Trash the archive afterwards", value: !!action.trashSource, when: v => v.action === "extract" },
+				{ key: "preview", type: "info", text: v => v.previewText || "Files already there are left alone – only new ones are taken." }
+			],
+			check: values => (values.action === "move" || values.action === "copy") && String(values.target || "").trim() === "" ? "Pick the folder they go to" : ""
+		}, values => {
+			Files.saveRule({
+				id: given.id,
+				name: String(values.name || "").trim(),
+				enabled: given.enabled !== false,
+				folder: String(values.folder).trim().replace(/^~/, Files.home),
+				subfolders: !!values.subfolders,
+				when: values.when,
+				match: {
+					kind: values.kind,
+					name: String(values.name_ || "").trim(),
+					contains: String(values.contains || "").trim(),
+					olderThan: Number(values.olderThan) || 0,
+					largerThan: Number(values.largerThan) || 0
+				},
+				action: { kind: values.action, target: String(values.target || "").trim().replace(/^~/, Files.home), byDate: !!values.byDate, trashSource: !!values.trashSource }
+			});
+			Sounds.play("taskDone");
+			snackbar.show(rule ? "Rule saved" : "The rule is on", "playlist_check");
+		});
+		return dialog;
+	}
+
+	// ── vaults ─────────────────────────────────────────────────────────────
+	function newVault(folder) {
+		Files.knowVaults(status => {
+			if (!status.installed) {
+				root.openSettings("vaults");
+				return;
+			}
+			root.form({
+				title: "New vault",
+				subtitle: `In ${Files.pretty(folder)}`,
+				icon: "safe_square_outline",
+				accent: Theme.success,
+				action: "Make the vault",
+				fields: [
+					{ key: "name", type: "text", label: "Name", value: "Vault", required: true },
+					{ key: "password", type: "password", label: "Password", required: true },
+					{ key: "repeat", type: "password", label: "Once more", required: true },
+					{ key: "remember", type: "switch", label: "Keep the password in the keyring", hint: status.fingerprint ? "Opening then asks for your finger" : (Plugins.on("phone-unlock") ? "Opening then asks for your finger on the phone" : "Opening then needs no password while you are logged in"), value: false },
+					{ key: "about", type: "info", icon: "information_outline", text: "Files in it are encrypted on disk (gocryptfs). Without the password nobody can read them – there is no way back if it is lost." }
+				],
+				check: values => String(values.password || "").length > 0 && String(values.password).length < 6 ? "At least 6 characters" : (values.password !== values.repeat ? "The passwords are not the same" : "")
+			}, values => Files.vaultDo({ action: "create", name: values.name, folder: folder, password: values.password, remember: values.remember }, (data, error) => {
+				if (error) {
+					Files.fail(error);
+					return;
+				}
+				Sounds.play("taskDone");
+				const made = (data?.vaults ?? []).slice(-1)[0];
+				if (made) root.pane.openFolder(made.mount);
+			}));
+		});
+	}
+
+	function unlockVault(vault, then) {
+		const opened = path => {
+			Sounds.play("unlocked");
+			if (then) then(path);
+			else root.pane.openFolder(path);
+		};
+		const ask = () => root.form({
+			title: `Open ${vault.name}`,
+			icon: "lock_open_variant_outline",
+			accent: Theme.success,
+			action: "Open",
+			fields: [
+				{ key: "password", type: "password", label: "Password", required: true },
+				{ key: "remember", type: "switch", label: "Keep the password in the keyring", value: false, when: () => !vault.keyring }
+			]
+		}, values => Files.vaultDo({ action: "open", vault: vault.id, password: values.password, remember: !!values.remember }, (data, error) => {
+			if (error === "password") {
+				Files.fail("Wrong password");
+				ask();
+			} else if (error) Files.fail(error);
+			else opened(data.path);
+		}));
+		if (!vault.keyring) {
+			ask();
+			return;
+		}
+		Files.proveIdentity(`Open the vault ${vault.name}?`, (ok, problem) => {
+			if (!ok) {
+				if (problem) Files.say(problem, "fingerprint_off");
+				ask();
+				return;
+			}
+			Files.vaultDo({ action: "open", vault: vault.id, keyring: true }, (data, error) => {
+				if (error) ask();
+				else opened(data.path);
+			});
+		});
+	}
+
+	// ── git ────────────────────────────────────────────────────────────────
+	function gitMenu(pane) {
+		const folder = pane.location.path;
+		const git = pane.git ?? {};
+		const changed = Object.keys(git.files ?? {}).length;
+		return [
+			{ header: `${git.branch || "git"} · ${Files.pretty(git.repo || folder)}` },
+			{ label: "Commit the changes here…", icon: "source_commit", enabled: changed > 0, run: () => root.commitDialog([folder], Files.nameOf(folder)) },
+			{ label: "Show the changes", icon: "file_compare", enabled: changed > 0, run: () => root.showDiff(folder) },
+			{ separator: true },
+			{ label: "Pull", icon: "source_pull", run: () => Files.gitRun(folder, "pull") },
+			{ label: "Push", icon: "upload_outline", enabled: (git.ahead ?? 0) > 0, run: () => Files.gitRun(folder, "push") },
+			{ separator: true },
+			{ label: "Open a terminal here", icon: "console", run: () => Files.terminal(folder) }
+		];
+	}
+
+	function commitDialog(paths, what) {
+		root.form({
+			title: "Commit",
+			subtitle: what,
+			icon: "source_commit",
+			accent: Theme.warning,
+			action: "Commit",
+			fields: [
+				{ key: "message", type: "area", label: "What changed", placeholder: "Fix the …", required: true },
+				{ key: "push", type: "switch", label: "Push right after", value: false }
+			]
+		}, values => Files.commit(paths, values.message.trim(), values.push));
+	}
+
+	// ── two sides compared ─────────────────────────────────────────────────
+	function compareSides() {
+		const tab = root.tab;
+		if (!tab?.split || !tab.first.isFolder || !tab.second.isFolder) {
+			snackbar.show("Open two folders side by side first (F3)", "view_split_vertical");
+			return;
+		}
+		const left = tab.first;
+		const right = tab.second;
+		Files.compareFolders(left.location.path, right.location.path, data => {
+			if (!data) return;
+			left.compareStates = root.topStates(data.left);
+			right.compareStates = root.topStates(data.right);
+			Sounds.play("select");
+		});
+	}
+
+	// what is deep inside a folder shows on the folder: changed when anything below it is
+	function topStates(states) {
+		const out = {};
+		for (const rel of Object.keys(states)) {
+			const slash = rel.indexOf("/");
+			if (slash < 0) {
+				out[rel] = states[rel];
+				continue;
+			}
+			const top = rel.slice(0, slash);
+			const state = states[rel];
+			const before = out[top];
+			if (before === undefined) out[top] = state === "same" ? "same" : (state === "only" ? "only" : "changed");
+			else if (before !== state && !(before === "changed" && state === "same")) out[top] = state === "same" && before === "only" ? "changed" : (before === "same" && state === "only" ? "changed" : (before === "only" && state === "only" ? "only" : "changed"));
+		}
+		return out;
+	}
+
+	// both sides read first
+	Timer {
+		id: compareTimer
+
+		interval: 500
+		onTriggered: root.compareSides()
+	}
+
+	function stopComparing() {
+		if (!root.tab) return;
+		root.tab.first.compareStates = null;
+		root.tab.second.compareStates = null;
+	}
+
+	function openSync(pane) {
+		const tab = root.tab;
+		if (!tab?.split) return;
+		syncer.open(tab.first.location.path, tab.second.location.path);
+	}
+
+	Connections {
+		target: Files
+
+		// a sync that is through: the comparison is made again
+		function onJobFinished(job) {
+			if (job.kind === "sync" && root.tab?.first.compareStates) root.compareSides();
+		}
+	}
+
 	// ── details and quick look ─────────────────────────────────────────────
 	readonly property bool detailsOpen: !!FileLibrary.view.details
 
 	function showDetails(on) {
 		FileLibrary.setView("", { details: !!on });
+	}
+
+	function showVersions() {
+		root.showDetails(true);
+		Qt.callLater(() => details.loadVersions());
 	}
 
 	function quickLook(pane) {
@@ -533,6 +882,10 @@ FocusScope {
 		case Qt.Key_F6:
 			if (root.tab.split && targets.length > 0 && root.tab.other.isFolder) Files.transfer(paths, root.tab.other.location.path, "move");
 			break;
+		case Qt.Key_F7:
+			if (pane.compareStates) root.stopComparing();
+			else root.compareSides();
+			break;
 		case Qt.Key_Delete:
 			if (pane.location.kind === "trash" || shift) Files.remove(paths);
 			else Files.trash(paths);
@@ -569,7 +922,8 @@ FocusScope {
 				if (folder !== "") Files.paste(folder);
 				break;
 			case Qt.Key_Z:
-				Files.undo();
+				if (shift) root.openHistory();
+				else Files.undo();
 				break;
 			case Qt.Key_K:
 			case Qt.Key_P:
@@ -941,11 +1295,48 @@ FocusScope {
 		onClosed: keyTarget.forceActiveFocus()
 	}
 
+	HistoryDialog {
+		id: history
+
+		anchors.fill: parent
+		onClosed: keyTarget.forceActiveFocus()
+	}
+
+	DiffDialog {
+		id: diff
+
+		anchors.fill: parent
+		onClosed: keyTarget.forceActiveFocus()
+		onCommitAsked: path => root.commitDialog([path], Files.nameOf(path))
+	}
+
+	CropDialog {
+		id: cropper
+
+		anchors.fill: parent
+		onClosed: keyTarget.forceActiveFocus()
+	}
+
+	SyncDialog {
+		id: syncer
+
+		anchors.fill: parent
+		onClosed: keyTarget.forceActiveFocus()
+	}
+
 	SettingsDialog {
 		id: settings
 
 		anchors.fill: parent
 		view: root
+		onClosed: keyTarget.forceActiveFocus()
+	}
+
+	// above the settings: a rule or a vault is made from there
+	FormDialog {
+		id: formDialog
+
+		anchors.fill: parent
 		onClosed: keyTarget.forceActiveFocus()
 	}
 

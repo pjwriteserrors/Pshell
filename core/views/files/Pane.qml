@@ -9,7 +9,8 @@ import "Listing.js" as Listing
 //
 // A location is { kind, path, query, id, contents }:
 //   home, dir (path), recent, search (query below path, names or contents),
-//   tag (id), collection (id), trash, shelf (id)
+//   tag (id), collection (id), trash, shelf (id), duplicates (path: the
+//   copies below a folder), storage (path: what takes its space)
 Item {
 	id: root
 
@@ -33,6 +34,12 @@ Item {
 	property bool writable: false
 	property real free: 0
 	property real total: 0
+	// { repo, branch, ahead, behind, files: { name: "M" | "A" | "?" | "D" | "U" } } of a folder in git
+	property var git: null
+	// two folders compared: { name: "only" | "newer" | "older" | "differs" | "same" } of this side
+	property var compareStates: null
+	// copies found: groups and how much could go
+	property var dupeSummary: null
 	// the model was refilled rather than changed: views play their entrance
 	property int resets: 0
 	// "in", "out" or "jump": how the last navigation went, for the transition
@@ -48,9 +55,10 @@ Item {
 	// in a split each side may show its files its own way
 	property string modeOverride: ""
 	readonly property string mode: root.modeOverride || root.view.mode
-	readonly property string sort: root.location.kind === "recent" && !FileLibrary.folderViews[":recent"]?.sort ? "modified" : root.view.sort
-	readonly property bool desc: root.location.kind === "recent" && !FileLibrary.folderViews[":recent"]?.sort ? true : !!root.view.desc
-	readonly property string group: root.view.group
+	readonly property string sort: root.location.kind === "duplicates" ? "modified" : (root.location.kind === "recent" && !FileLibrary.folderViews[":recent"]?.sort ? "modified" : root.view.sort)
+	readonly property bool desc: root.location.kind === "duplicates" ? false : (root.location.kind === "recent" && !FileLibrary.folderViews[":recent"]?.sort ? true : !!root.view.desc)
+	// copies come in their groups, as they were found
+	readonly property string group: root.location.kind === "duplicates" ? "given" : root.view.group
 	readonly property bool showHidden: !!FileLibrary.view.hidden
 	property string filter: ""
 
@@ -78,6 +86,8 @@ Item {
 		case "tag": return FileLibrary.tagById(loc.id)?.name ?? "Tag";
 		case "collection": return FileLibrary.collectionById(loc.id)?.name ?? "Collection";
 		case "shelf": return Shelf.titleOf(Shelf.shelfById(loc.id)) || "Shelf";
+		case "duplicates": return `Copies in ${loc.path === Files.home ? "your home" : Files.nameOf(loc.path)}`;
+		case "storage": return `Space of ${loc.path === Files.home ? "your home" : (loc.path === "/" ? "the system" : Files.nameOf(loc.path))}`;
 		default: return loc.path === Files.home ? "Home folder" : (Files.nameOf(loc.path) || "/");
 		}
 	}
@@ -90,12 +100,14 @@ Item {
 		case "tag": return "tag_outline";
 		case "collection": return "bookmark_box_multiple_outline";
 		case "shelf": return "tray_arrow_down";
+		case "duplicates": return "content_duplicate";
+		case "storage": return "chart_donut";
 		default: return root.location.path === Files.home ? "home_outline" : "folder_outline";
 		}
 	}
 	// a folder on disk: what can be pasted into, created in, watched
 	readonly property bool isFolder: root.location.kind === "dir"
-	readonly property bool virtual: !root.isFolder && root.location.kind !== "home"
+	readonly property bool virtual: !root.isFolder && root.location.kind !== "home" && root.location.kind !== "storage"
 	readonly property string folder: root.isFolder ? String(root.location.path) : (root.location.kind === "search" ? String(root.location.path || Files.home) : Files.home)
 
 	signal loaded(bool reset)
@@ -110,7 +122,7 @@ Item {
 	// ── going places ───────────────────────────────────────────────────────
 	function same(a, b) {
 		return a.kind === b.kind && String(a.path || "") === String(b.path || "") && String(a.query || "") === String(b.query || "")
-			&& String(a.id || "") === String(b.id || "") && !!a.contents === !!b.contents;
+			&& String(a.id || "") === String(b.id || "") && !!a.contents === !!b.contents && String(a.at || "") === String(b.at || "");
 	}
 
 	// opts: { select: [paths], history: false, direction }
@@ -196,6 +208,7 @@ Item {
 		const loc = root.location;
 		Files.watch(root.paneId, loc.kind === "dir" ? loc.path : "");
 		if (navigated) {
+			root.compareStates = null;
 			root.settled = false;
 			root.error = "";
 			root.selected = {};
@@ -215,6 +228,7 @@ Item {
 			root.writable = !!extra?.writable;
 			root.free = Number(extra?.free) || 0;
 			root.total = Number(extra?.total) || 0;
+			root.git = extra?.git ?? null;
 			root.raw = entries || [];
 			root.arrange(navigated);
 		};
@@ -258,6 +272,15 @@ Item {
 			Files.request("describe", { paths: paths }, (data, error) => done(data?.entries ?? [], error, {}));
 			break;
 		}
+		case "duplicates":
+			root.readDupes(generation, done);
+			break;
+		case "storage":
+			loadingTimer.stop();
+			root.settled = true;
+			root.raw = [];
+			root.arrange(true);
+			break;
 		case "search":
 			root.raw = [];
 			root.arrange(true);
@@ -270,6 +293,68 @@ Item {
 				Files.request("search", { search: root.searchId, root: loc.path || Files.home, query: loc.query, contents: !!loc.contents, hidden: root.showHidden, limit: 800 });
 			break;
 		}
+	}
+
+	// the copies of the last look, else a look is started (and waited for)
+	function readDupes(generation, done) {
+		const path = String(root.location.path);
+		const found = Files.dupeResults[path];
+		if (!found) {
+			root.dupeSummary = null;
+			if (!Files.dupeRunning[path]) Files.findDupes(path, { pictures: true });
+			root.searching = true;
+			return;
+		}
+		root.searching = false;
+		const order = [];
+		const info = {};
+		let waste = 0;
+		const labels = {};
+		found.groups.forEach((group, rank) => {
+			const first = group.paths[0];
+			let label = `${Files.nameOf(first.path)} · ${group.kind === "same" ? `${group.paths.length} copies, ${Files.sizeText(group.size)} each` : `${group.paths.length} look alike`}`;
+			while (labels[label]) label += " ";
+			labels[label] = true;
+			waste += group.kind === "same" ? group.size * (group.paths.length - 1) : 0;
+			for (const item of group.paths) {
+				order.push(item.path);
+				info[item.path] = { group: label, groupRank: rank };
+			}
+		});
+		root.dupeSummary = { groups: found.groups.length, waste: waste, at: found.at, firsts: found.groups.map(group => group.paths[0].path) };
+		Files.request("describe", { paths: order }, (data, error) => {
+			const entries = (data?.entries ?? []).map(entry => Object.assign(entry, info[entry.path] ?? {}));
+			// a group of which only one is left is no group of copies any more
+			const counts = {};
+			for (const entry of entries) counts[entry.group] = (counts[entry.group] ?? 0) + 1;
+			done(entries.filter(entry => counts[entry.group] > 1), error, {});
+		});
+	}
+
+	Connections {
+		target: Files
+		enabled: root.location.kind === "duplicates"
+
+		function onDupeResultsChanged() {
+			root.reload(false);
+		}
+		function onDupeRunningChanged() {
+			if (!Files.dupeRunning[String(root.location.path)] && !Files.dupeResults[String(root.location.path)]) root.searching = false;
+		}
+	}
+
+	// copies: all but the first (the oldest) of each group are picked
+	function pickCopies() {
+		const firsts = new Set(root.dupeSummary?.firsts ?? []);
+		const seen = new Set();
+		const next = {};
+		for (const row of root.rows) {
+			if (seen.has(row.group) || !firsts.has(row.path)) {
+				if (!firsts.has(row.path)) next[row.path] = true;
+			}
+			seen.add(row.group);
+		}
+		root.commit(next);
 	}
 
 	Timer {
@@ -305,6 +390,8 @@ Item {
 			if (job.state !== "done" || created.length === 0 || root.location.kind !== "dir") {
 				// what it took away goes even if the folder's watch missed it
 				if (here || (root.location.kind === "trash" && ["trash", "restore", "emptytrash", "delete", "undo"].includes(job.kind))) changedTimer.restart();
+			// copies that were thrown away leave the list of copies
+			if (root.location.kind === "duplicates" && ["trash", "delete", "move", "auto", "undo"].includes(job.kind)) changedTimer.restart();
 				return;
 			}
 			if (["copy", "move", "auto", "paste", "mkdir", "newfile", "rename", "batchrename", "extract", "compress", "download", "link", "restore", "undo", "convert", "pdf"].includes(job.kind)) {
@@ -357,7 +444,7 @@ Item {
 			group: root.group,
 			hidden: root.showHidden,
 			filter: root.filter,
-			foldersFirst: FileLibrary.view.foldersFirst !== false,
+			foldersFirst: root.location.kind !== "duplicates" && FileLibrary.view.foldersFirst !== false,
 			home: Files.home
 		});
 		const wasEmpty = model.count === 0;

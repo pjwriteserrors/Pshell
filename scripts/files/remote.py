@@ -159,6 +159,19 @@ def listing(server, folder):
     return {"path": lines[0], "home": lines[1], "entries": entries}
 
 
+def run(server, command, timeout=60):
+    """One command on the server (a folder made, a share taken back)."""
+    target, options, env = login(server)
+    try:
+        result = subprocess.run(["ssh", "-T", *options, target, command], stdin=subprocess.DEVNULL,
+                                capture_output=True, text=True, errors="replace", env=env, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise RemoteError("The server takes too long to answer")
+    if result.returncode != 0:
+        raise RemoteError(failure(result.stderr, "The server refused it"))
+    return result.stdout
+
+
 PROGRESS = re.compile(r"^\s*([\d,.]+)\s+(\d+)%\s+(\S+)")
 
 

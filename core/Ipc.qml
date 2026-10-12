@@ -582,6 +582,18 @@ Scope {
 		function search(query: string): void {
 			Files.searchFor(query);
 		}
+		// what takes the space of a folder (home without one)
+		function space(path: string): void {
+			Files.goTo({ kind: "storage", path: path || Paths.home });
+		}
+		// copies of the same file below a folder
+		function copies(path: string): void {
+			Files.goTo({ kind: "duplicates", path: path || Paths.home });
+		}
+		// two folders side by side, compared
+		function compare(left: string, right: string): void {
+			Files.show({ paths: [], kind: "compare", left: left, right: right, newTab: false });
+		}
 		function close(): void {
 			Files.close();
 		}

@@ -26,6 +26,19 @@ Rectangle {
 	// nothing picked in a folder: the folder
 	readonly property string path: root.subject ? root.subject.path : (root.picked.length === 0 && root.pane?.isFolder ? root.pane.location.path : "")
 	property var info: null
+	// earlier versions of the picked file, once asked for
+	property var versions: null
+	property bool versionsLoading: false
+
+	function loadVersions() {
+		const path = root.path;
+		if (path === "" || root.versionsLoading) return;
+		root.versionsLoading = true;
+		Files.versionsOf(path, list => {
+			root.versionsLoading = false;
+			if (path === root.path) root.versions = list;
+		});
+	}
 
 	radius: Theme.radius.huge
 	color: Theme.layer1
@@ -376,6 +389,183 @@ Rectangle {
 							const id = FileLibrary.addTag(name);
 							if (id) FileLibrary.toggleTag(root.picked.map(row => row.path), id);
 						})
+					}
+				}
+			}
+
+			// ── a note stuck to it ─────────────────────────────────────────
+			ColumnLayout {
+				id: noteBox
+
+				readonly property string saved: {
+					FileLibrary.notes;
+					return FileLibrary.noteOf(root.path);
+				}
+
+				Layout.fillWidth: true
+				visible: root.path !== "" && root.picked.length <= 1
+				spacing: 8
+
+				SectionLabel {
+					text: "Note"
+				}
+
+				AreaField {
+					id: noteField
+
+					property string forPath: ""
+
+					Layout.fillWidth: true
+					Layout.preferredHeight: Math.max(64, Math.min(180, area.contentHeight + 28))
+					placeholder: root.entry?.dir ? "What is this folder for? Shown on its card." : "A note for this file – shown on its card."
+					onEdited: noteSave.restart()
+					onFocusedChanged: if (!focused) noteSave.save()
+
+					Timer {
+						id: noteSave
+
+						function save() {
+							if (noteField.forPath !== "" && noteField.text.trim() !== FileLibrary.noteOf(noteField.forPath)) FileLibrary.setNote(noteField.forPath, noteField.text);
+						}
+
+						interval: 700
+						onTriggered: noteSave.save()
+					}
+				}
+
+				// another file picked: its note comes in (what was typed for the last one is kept first)
+				Connections {
+					target: root
+
+					function onPathChanged() {
+						noteSave.save();
+						noteField.forPath = root.path;
+						noteField.text = FileLibrary.noteOf(root.path);
+						root.versions = null;
+					}
+				}
+
+				Component.onCompleted: {
+					noteField.forPath = root.path;
+					noteField.text = FileLibrary.noteOf(root.path);
+				}
+			}
+
+			// ── earlier versions ───────────────────────────────────────────
+			ColumnLayout {
+				Layout.fillWidth: true
+				visible: !!root.subject && !root.subject.dir && root.pane?.location.kind !== "trash"
+				spacing: 6
+
+				SectionLabel {
+					text: "Earlier versions"
+				}
+
+				TextButton {
+					visible: root.versions === null
+					height: 30
+					variant: "ghost"
+					icon: "history"
+					text: root.versionsLoading ? "Looking…" : "Look for earlier versions"
+					onClicked: root.loadVersions()
+				}
+
+				StyledText {
+					Layout.fillWidth: true
+					visible: root.versions !== null && root.versions.length === 0
+					text: "None found: no snapshots, no git history and nothing of it in the trash."
+					tone: Theme.textSubtle
+					font.pixelSize: Theme.size.small
+					wrapMode: Text.WordWrap
+				}
+
+				Repeater {
+					model: root.versions ?? []
+
+					delegate: Rectangle {
+						id: version
+
+						required property var modelData
+
+						Layout.fillWidth: true
+						implicitHeight: 48
+						radius: Theme.radius.medium
+						color: Qt.alpha(Theme.layer2, versionMouse.containsMouse ? 1 : 0.55)
+
+						Behavior on color {
+							ColorAnim {}
+						}
+
+						MouseArea {
+							id: versionMouse
+
+							anchors.fill: parent
+							hoverEnabled: true
+							acceptedButtons: Qt.NoButton
+						}
+
+						Glyph {
+							x: 10
+							anchors.verticalCenter: parent.verticalCenter
+							icon: ({ git: "source_commit", trash: "trash_can_outline" })[version.modelData.source] ?? "camera_timer"
+							size: 16
+							color: Theme.textMuted
+						}
+
+						Column {
+							x: 34
+							anchors.verticalCenter: parent.verticalCenter
+							width: parent.width - 34 - versionButtons.width - 8
+
+							StyledText {
+								width: parent.width
+								text: Files.whenText(version.modelData.when)
+								font.pixelSize: Theme.size.small
+								font.weight: Font.DemiBold
+								elide: Text.ElideRight
+							}
+
+							StyledText {
+								width: parent.width
+								text: `${version.modelData.title}${version.modelData.size !== undefined ? " · " + Files.sizeText(version.modelData.size) : ""}`
+								tone: Theme.textSubtle
+								font.pixelSize: Theme.size.tiny
+								elide: Text.ElideRight
+							}
+						}
+
+						Row {
+							id: versionButtons
+
+							anchors.right: parent.right
+							anchors.rightMargin: 4
+							anchors.verticalCenter: parent.verticalCenter
+							opacity: versionMouse.containsMouse ? 1 : 0.6
+
+							// a copy beside it
+							IconButton {
+								width: 28
+								height: 28
+								iconSize: 15
+								icon: "content_copy"
+								onClicked: Files.restoreVersion(root.path, version.modelData.id, "beside")
+							}
+
+							// in its place
+							IconButton {
+								width: 28
+								height: 28
+								iconSize: 15
+								icon: "restore"
+								onClicked: Files.confirmRequested({
+									title: "Put this version in its place?",
+									detail: "The file as it is now goes to the trash, so this can be undone.",
+									confirm: "Bring it back",
+									danger: false,
+									run: () => Files.restoreVersion(root.path, version.modelData.id, "replace")
+								})
+							}
+						}
 					}
 				}
 			}

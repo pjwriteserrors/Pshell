@@ -17,6 +17,9 @@ Item {
 	property bool split: false
 	readonly property alias browse: browse
 	readonly property bool home: root.pane.location.kind === "home"
+	readonly property bool storage: root.pane.location.kind === "storage"
+	// pages of their own instead of the files
+	readonly property bool page: root.home || root.storage
 
 	signal focusRequested
 
@@ -97,7 +100,28 @@ Item {
 			anchors.right: parent.right
 			anchors.verticalCenter: parent.verticalCenter
 			spacing: 4
-			visible: !root.home
+			visible: !root.page
+
+			// a folder in git: its branch, what changed, a commit away
+			Chip {
+				visible: !!root.pane.git && FileLibrary.setting("gitBadges") !== false
+				height: 28
+				icon: "source_branch"
+				text: {
+					const git = root.pane.git;
+					if (!git) return "";
+					const changed = Object.keys(git.files ?? {}).length;
+					const parts = [git.branch || "git"];
+					if (git.ahead) parts.push(`↑${git.ahead}`);
+					if (git.behind) parts.push(`↓${git.behind}`);
+					if (changed) parts.push(`${changed} changed`);
+					return parts.join("  ");
+				}
+				onClicked: {
+					const at = mapToItem(root.shell, 0, height + 4);
+					root.shell.menuFromSidebar(root.shell.gitMenu(root.pane), at.x, at.y);
+				}
+			}
 
 			// a search that started here may also look into the files
 			Chip {
@@ -137,12 +161,23 @@ Item {
 		root.shell.showViewMenu(root.pane, sortButton);
 	}
 
+	PlaceBanner {
+		id: banner
+
+		anchors.top: bar.bottom
+		anchors.topMargin: 4
+		anchors.left: parent.left
+		anchors.right: parent.right
+		pane: root.pane
+		shell: root.shell
+	}
+
 	// ── the place ──────────────────────────────────────────────────────────
 	Item {
 		id: content
 
-		anchors.top: bar.bottom
-		anchors.topMargin: 6
+		anchors.top: banner.bottom
+		anchors.topMargin: 2
 		anchors.left: parent.left
 		anchors.right: parent.right
 		anchors.bottom: status.top
@@ -151,7 +186,7 @@ Item {
 			id: browse
 
 			anchors.fill: parent
-			visible: !root.home
+			visible: !root.page
 			pane: root.pane
 			active: root.active
 			onFocusRequested: root.focusRequested()
@@ -171,6 +206,16 @@ Item {
 				shell: root.shell
 			}
 		}
+
+		Loader {
+			anchors.fill: parent
+			active: root.storage
+			visible: root.storage
+			sourceComponent: StorageView {
+				pane: root.pane
+				shell: root.shell
+			}
+		}
 	}
 
 	// ── what is in it ──────────────────────────────────────────────────────
@@ -182,8 +227,8 @@ Item {
 		anchors.bottom: parent.bottom
 		anchors.leftMargin: 16
 		anchors.rightMargin: 14
-		height: root.home ? 0 : 30
-		visible: !root.home
+		height: root.page ? 0 : 30
+		visible: !root.page
 
 		Row {
 			anchors.verticalCenter: parent.verticalCenter

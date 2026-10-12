@@ -194,6 +194,14 @@ Item {
 			anchors.verticalCenter: parent.verticalCenter
 			spacing: 3
 
+			Marks {
+				anchors.verticalCenter: parent.verticalCenter
+				pane: root.pane
+				path: root.path
+				name: root.name
+				compact: true
+			}
+
 			Repeater {
 				model: root.tags.slice(0, 5)
 

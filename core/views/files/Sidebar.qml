@@ -23,12 +23,16 @@ Rectangle {
 	color: Theme.layer1
 	clip: true
 
-	Component.onCompleted: Files.request("describe", { paths: root.standard }, data => root.existing = (data?.entries ?? []).filter(entry => entry.dir).map(entry => entry.path))
+	Component.onCompleted: {
+		Files.request("describe", { paths: root.standard }, data => root.existing = (data?.entries ?? []).filter(entry => entry.dir).map(entry => entry.path));
+		Files.knowVaults();
+	}
 
 	function isAt(kind, value) {
 		if (root.loc.kind !== kind) return false;
 		if (kind === "dir") return root.loc.path === value;
 		if (kind === "tag" || kind === "collection" || kind === "shelf") return root.loc.id === value;
+		if (kind === "search") return String(root.loc.query) === String(value.query) && String(root.loc.path || Files.home) === String(value.path || Files.home);
 		return true;
 	}
 
@@ -363,6 +367,78 @@ Rectangle {
 				}
 			}
 
+			// searches kept: a click runs them again
+			SideSection {
+				width: parent.width
+				title: "Searches"
+				visible: FileLibrary.searches.length > 0
+
+				Repeater {
+					model: FileLibrary.searches
+
+					delegate: SideItem {
+						id: searchItem
+
+						required property var modelData
+
+						width: parent.width
+						icon: modelData.contents ? "text_search" : "magnify"
+						label: modelData.name
+						active: root.isAt("search", modelData)
+						onClicked: root.go({ kind: "search", path: modelData.path, query: modelData.query, contents: modelData.contents })
+						onMenu: (x, y) => root.menuAt(searchItem, x, y, [
+							{ label: "Rename…", icon: "form_textbox", run: () => root.view.ask("Rename the search", "Name", modelData.name, name => FileLibrary.renameSearch(modelData.id, name)) },
+							{ label: "Remove", icon: "delete_outline", danger: true, run: () => FileLibrary.removeSearch(modelData.id) }
+						])
+					}
+				}
+			}
+
+			// vaults: encrypted folders, locked or open
+			SideSection {
+				width: parent.width
+				title: "Vaults"
+				visible: (Files.vaults.vaults ?? []).length > 0
+
+				Repeater {
+					model: Files.vaults.vaults ?? []
+
+					delegate: SideItem {
+						id: vaultItem
+
+						required property var modelData
+						property bool opening: false
+
+						width: parent.width
+						icon: modelData.open ? "safe_square_outline" : "lock_outline"
+						iconColor: modelData.open ? Theme.success : Theme.textMuted
+						label: modelData.name
+						active: modelData.open && root.isAt("dir", modelData.mount)
+						busy: vaultItem.opening
+						dropEnabled: modelData.open
+						trailing: modelData.open ? "lock_outline" : ""
+						onTrailingClicked: Files.vaultDo({ action: "close", vault: modelData.id }, (data, error) => {
+							if (error) Files.fail(error);
+							else {
+								Sounds.play("locked");
+								if (root.isAt("dir", modelData.mount)) root.go({ kind: "home" });
+							}
+						})
+						onClicked: {
+							if (modelData.open) root.go({ kind: "dir", path: modelData.mount });
+							else root.view.unlockVault(modelData);
+						}
+						onDropped: drop => Files.dropInto(modelData.mount, drop, "auto")
+						onMenu: (x, y) => root.menuAt(vaultItem, x, y, [
+							modelData.open ? { label: "Lock", icon: "lock_outline", run: () => Files.vaultDo({ action: "close", vault: modelData.id }) } : { label: "Open", icon: "lock_open_variant_outline", run: () => root.view.unlockVault(modelData) },
+							{ label: "Show the encrypted folder", icon: "folder_lock_outline", run: () => Files.reveal([modelData.cipher]) },
+							{ separator: true },
+							{ label: "Take off the list", icon: "playlist_remove", run: () => Files.vaultDo({ action: "forget", vault: modelData.id }) }
+						])
+					}
+				}
+			}
+
 			SideSection {
 				width: parent.width
 				title: "Drives"
@@ -392,6 +468,14 @@ Rectangle {
 							root.view.openPlace(root.pane, modelData);
 						}
 						onDropped: drop => Files.dropInto(modelData.path, drop, "auto")
+						onMenu: (x, y) => {
+							if (!modelData.mounted || !modelData.path) return;
+							root.menuAt(drive, x, y, [
+								{ label: "What takes the space", icon: "chart_donut", run: () => root.go({ kind: "storage", path: modelData.path }) },
+								{ label: "Find copies on it", icon: "content_duplicate", run: () => root.go({ kind: "duplicates", path: modelData.path }) },
+								{ label: "Open in a new tab", icon: "tab_plus", run: () => root.view.newTab({ kind: "dir", path: modelData.path }, true) }
+							]);
+						}
 
 						Connections {
 							target: Files

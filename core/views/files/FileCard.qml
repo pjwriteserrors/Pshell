@@ -46,6 +46,11 @@ Item {
 		return FileLibrary.tagsOf(root.path);
 	}
 	readonly property real art: Math.round(root.width * 0.74)
+	// a note stuck to it shows instead of size and date
+	readonly property string note: {
+		FileLibrary.notes;
+		return FileLibrary.noteOf(root.path);
+	}
 	// where the name field is, for the view to let clicks through while renaming
 	readonly property Item nameArea: nameBox
 
@@ -208,6 +213,16 @@ Item {
 			}
 		}
 
+		// git, a comparison, a note
+		Marks {
+			x: picture.x - 3
+			y: picture.y + picture.height - 15
+			pane: root.pane
+			path: root.path
+			name: root.name
+			compact: root.width < 150
+		}
+
 		// a link says so
 		Rectangle {
 			visible: root.link
@@ -259,8 +274,8 @@ Item {
 				anchors.topMargin: 2
 				width: parent.width
 				horizontalAlignment: Text.AlignHCenter
-				text: root.showFolder ? root.folder : root.meta
-				color: Theme.textSubtle
+				text: root.showFolder ? root.folder : (root.note !== "" ? root.note.split("\n")[0] : root.meta)
+				color: root.note !== "" && !root.showFolder ? Theme.warning : Theme.textSubtle
 				font.family: Theme.fontFamily
 				font.pixelSize: Theme.size.small
 				elide: root.showFolder ? Text.ElideLeft : Text.ElideRight

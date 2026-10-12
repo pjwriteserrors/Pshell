@@ -30,15 +30,24 @@ gi.require_version("Gio", "2.0")
 from gi.repository import Gio, GLib  # noqa: E402
 
 import archives  # noqa: E402
+import compare  # noqa: E402
 import convert  # noqa: E402
 import fm1  # noqa: E402
+import gitinfo  # noqa: E402
+import imagetools  # noqa: E402
 import localscan  # noqa: E402
 import jobs  # noqa: E402
 import lookup  # noqa: E402
+import mediatags  # noqa: E402
 import pdftools  # noqa: E402
 import places  # noqa: E402
 import remote  # noqa: E402
+import rules  # noqa: E402
+import share  # noqa: E402
+import storage  # noqa: E402
 import thumbs  # noqa: E402
+import vault  # noqa: E402
+import versions  # noqa: E402
 import virustotal  # noqa: E402
 import windows  # noqa: E402
 
@@ -65,6 +74,16 @@ def call_once(op, args):
                 if message.get("id") == "cli":
                     print(json.dumps(message, indent=1))
                     return 0 if message.get("ok") else 1
+
+
+class Quiet:
+    """A job's face for work that only answers (no progress shown)."""
+
+    def check(self):
+        pass
+
+    def cancelled(self):
+        return False
 
 
 class Client:
@@ -185,6 +204,10 @@ class Daemon:
         server.listen(8)
         threading.Thread(target=self.accept, args=(server,), daemon=True).start()
         self.places = places.Places(lambda snapshot: self.broadcast({"event": "places", "places": snapshot}))
+        self.rules = rules.Engine(self.jobs.start, self.broadcast)
+        self.rules.start()
+        GLib.timeout_add_seconds(3600, lambda: self.slow.submit(share.expire) and True)
+        GLib.timeout_add_seconds(40, lambda: self.slow.submit(share.expire) and False)
         # the first folder is read as quickly as the rest: the type database
         # and the thumbnail index are loaded ahead
         self.pool.submit(lambda: (Gio.content_type_guess("a.txt", None), thumbs.INDEX.fresh()))
@@ -194,6 +217,7 @@ class Daemon:
         finally:
             self.fm1.release()
             localscan.ENGINE.stop()
+            vault.lock_all()
             try:
                 if os.path.exists(self.path):
                     os.unlink(self.path)
@@ -262,7 +286,15 @@ class Daemon:
         if path.startswith("trash:"):
             return lookup.list_trash()
         try:
-            return lookup.list_folder(path)
+            listing = lookup.list_folder(path)
+            if request.get("git", True) and path.startswith("/"):
+                try:
+                    found = gitinfo.status(path)
+                except Exception:
+                    found = None
+                if found:
+                    listing["git"] = found
+            return listing
         except FileNotFoundError:
             raise RuntimeError("This folder does not exist (any more)")
         except PermissionError:
@@ -529,8 +561,120 @@ class Daemon:
                     pass
         return {"size": size, "files": files}
 
+    # ── the history of what can be taken back ─────────────────────────────
+    def op_history(self, client, request):
+        return {"entries": self.jobs.history()}
+
+    # ── space ──────────────────────────────────────────────────────────────
+    def op_storagetree(self, client, request):
+        tree = storage.subtree(request.get("root", ""), request.get("path", ""), int(request.get("depth", 2)))
+        return {"tree": tree}
+
+    @on_main("slow")
+    def op_cleanup(self, client, request):
+        return {"items": storage.cleanup(Quiet())}
+
+    # ── rules ──────────────────────────────────────────────────────────────
+    @on_main("main")
+    def op_rules(self, client, request):
+        """{ rules } sets them; without, says what they are."""
+        if "rules" in request:
+            given = [rule for rule in request.get("rules") or [] if isinstance(rule, dict) and rule.get("id")]
+            old = {rule["id"]: rule for rule in self.rules.rules}
+            for rule in given:
+                for key in ("lastRun", "count"):
+                    if key not in rule and key in old.get(rule["id"], {}):
+                        rule[key] = old[rule["id"]][key]
+            self.rules.set_rules(given)
+            self.broadcast({"event": "rules", "rules": self.rules.rules})
+        return {"rules": self.rules.rules, "described": {rule["id"]: rules.describe_rule(rule) for rule in self.rules.rules}}
+
+    @on_main("slow")
+    def op_rulepreview(self, client, request):
+        rule = request.get("rule") or {}
+        found = rules.candidates(rule)
+        return {"paths": found[:300], "count": len(found), "described": rules.describe_rule(rule)}
+
+    @on_main("slow")
+    def op_rulerun(self, client, request):
+        rule = next((rule for rule in self.rules.rules if rule.get("id") == request.get("rule")), None)
+        if rule is None:
+            raise RuntimeError("That rule is gone")
+        found = rules.candidates(rule)
+        if found:
+            self.rules.act(rule, found)
+        return {"count": len(found)}
+
+    # ── git ────────────────────────────────────────────────────────────────
+    def op_git(self, client, request):
+        return {"git": gitinfo.status(request["path"])}
+
+    @on_main("slow")
+    def op_gitdiff(self, client, request):
+        return gitinfo.diff(request["path"])
+
+    # ── earlier versions ───────────────────────────────────────────────────
+    @on_main("slow")
+    def op_versions(self, client, request):
+        return versions.versions(request["path"])
+
+    # ── vaults ─────────────────────────────────────────────────────────────
+    @on_main("slow")
+    def op_vault(self, client, request):
+        action = request.get("action", "status")
+        try:
+            if action == "create":
+                vault.create(request.get("name", ""), request["folder"], request.get("password", ""), bool(request.get("remember")))
+            elif action == "open":
+                path = vault.open_vault(request["vault"], request.get("password", ""), bool(request.get("keyring")), bool(request.get("remember")))
+                return dict(vault.status(), path=path)
+            elif action == "close":
+                vault.close_vault(request["vault"])
+            elif action == "forget":
+                vault.forget(request["vault"], False)
+            elif action == "adopt":
+                vault.adopt(request["path"], request.get("name", ""))
+        except vault.VaultError as error:
+            raise RuntimeError(str(error) if error.code != "password" else "password")
+        return vault.status()
+
+    # ── shared links ───────────────────────────────────────────────────────
+    def op_shares(self, client, request):
+        if request.get("remove"):
+            share.take_back(request["remove"])
+        return {"shares": share.load(), "hosts": share.HOSTS}
+
+    # ── pictures, tags ─────────────────────────────────────────────────────
+    def op_imageinfo(self, client, request):
+        return {"location": imagetools.has_location(request["path"])}
+
+    @on_main("slow")
+    def op_mediatags(self, client, request):
+        try:
+            data = mediatags.read(request["path"])
+        except mediatags.TagError as error:
+            raise RuntimeError(str(error))
+        if data.get("cover"):
+            data["coverFile"] = mediatags.cover_file(request["path"])
+        return data
+
+    # ── two folders ────────────────────────────────────────────────────────
+    @on_main("slow")
+    def op_compare(self, client, request):
+        return compare.compare(request["left"], request["right"], bool(request.get("deep", True)), bool(request.get("hidden")))
+
+    @on_main("slow")
+    def op_syncplan(self, client, request):
+        source, target = request["source"], request["target"]
+        if request.get("direction") == "both":
+            steps = compare.plan(source, target, False, bool(request.get("hidden")))
+            back = compare.plan(target, source, False, bool(request.get("hidden")))
+            return {"steps": steps[:500], "back": back[:500], "count": len(steps) + len(back)}
+        steps = compare.plan(source, target, bool(request.get("delete")), bool(request.get("hidden")))
+        return {"steps": steps[:800], "count": len(steps)}
+
     def op_undo(self, client, request):
-        job = self.jobs.undo()
+        job = self.jobs.undo(request.get("at"))
         if job is None:
             raise RuntimeError("Nothing to undo")
         return {"job": job}

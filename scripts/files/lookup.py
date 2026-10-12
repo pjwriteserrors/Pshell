@@ -494,27 +494,92 @@ def du(path, cancelled=lambda: False):
     return {"path": path, "size": total, "files": files, "folders": folders}
 
 
+KIND_EXTENSIONS = {
+    "image": "jpg jpeg png gif webp bmp tif tiff heic heif avif svg ico raw cr2 nef arw dng",
+    "picture": "jpg jpeg png gif webp bmp tif tiff heic heif avif svg",
+    "video": "mp4 mkv webm mov avi m4v wmv flv mpg mpeg ts",
+    "audio": "mp3 flac ogg opus wav m4a aac wma alac aiff",
+    "music": "mp3 flac ogg opus m4a aac",
+    "pdf": "pdf",
+    "document": "pdf doc docx odt rtf txt md xls xlsx ods ppt pptx odp csv epub tex",
+    "text": "txt md rst log ini cfg conf json yaml yml toml xml csv",
+    "archive": "zip tar gz tgz xz zst 7z rar bz2 tbz2 txz iso",
+    "code": "py js ts tsx jsx qml c cc cpp h hpp rs go java kt swift sh zsh lua rb php cs",
+    "program": "exe msi appimage deb rpm run",
+}
+FILTER = re.compile(r"^(kind|type|ext|size|modified|changed|older|newer)(:|>=|<=|>|<)(.+)$", re.I)
+SIZE = re.compile(r"^([\d.]+)\s*([kmgt]?)(i?b?)$", re.I)
+
+
+def parse_query(query):
+    """Words and filters: kind:pdf ext:png size>1GB size<10m modified:week
+    older:30d. Returns (words, fd flags, a check for what fd cannot say)."""
+    words, flags, checks = [], [], []
+    for token in query.split():
+        match = FILTER.match(token)
+        if not match:
+            words.append(token)
+            continue
+        key, op, value = match.group(1).lower(), match.group(2), match.group(3).lower()
+        if key in ("kind", "type"):
+            if value in ("folder", "dir", "directory"):
+                flags += ["--type", "d"]
+            elif value in KIND_EXTENSIONS:
+                for ext in KIND_EXTENSIONS[value].split():
+                    flags += ["--extension", ext]
+                flags += ["--type", "f"]
+            else:
+                words.append(token)
+        elif key == "ext":
+            for ext in value.split(","):
+                flags += ["--extension", ext.lstrip(".")]
+        elif key == "size" and op in (">", "<", ">=", "<="):
+            found = SIZE.match(value)
+            if found:
+                number, unit = found.group(1), (found.group(2) or "b").lower()
+                flags += ["--size", f"{'+' if op.startswith('>') else '-'}{number}{unit}"]
+        elif key in ("modified", "changed", "newer"):
+            span = {"today": None, "yesterday": "2d", "week": "7d", "month": "31d", "year": "365d"}.get(value, value)
+            if span is None:
+                now = time.localtime()
+                span = f"{now.tm_hour * 60 + now.tm_min + 1}min"
+            flags += ["--changed-within", span]
+        elif key == "older":
+            flags += ["--changed-before", {"week": "7d", "month": "31d", "year": "365d"}.get(value, value)]
+    return words, flags, checks
+
+
 def search(root, query, hidden, contents, limit, emit, cancelled):
     """Streams what matches, a batch at a time. Names are matched by fd
     (every word, any order, case-insensitive unless a capital is typed);
-    contents by ripgrep."""
-    words = [word for word in query.split() if word]
-    if not words:
+    contents by ripgrep. Filters (kind:, ext:, size>, modified:) narrow both."""
+    words, flags, _ = parse_query(query)
+    if not words and not flags:
         emit([], True)
         return
-    if contents:
+    text = " ".join(words)
+    if contents and words:
         command = ["rg", "--files-with-matches", "--no-messages", "--fixed-strings", "--smart-case", "--max-filesize", "8M"]
         if hidden:
             command.append("--hidden")
-        command += ["--", query, root]
+        for index, flag in enumerate(flags):
+            if flag == "--extension":
+                command += ["--glob", f"*.{flags[index + 1]}"]
+        command += ["--", text, root]
+        rest = []
     else:
         # fd takes one pattern; the others filter below
-        command = ["fd", "--absolute-path", "--color", "never", "--fixed-strings", "--max-results", str(limit * 6)]
+        command = ["fd", "--absolute-path", "--color", "never", "--max-results", str(limit * 6)] + flags
         if hidden:
             command.append("--hidden")
-        command += ["--", max(words, key=len), root]
-    rest = [word for word in words if word != max(words, key=len)] if not contents else []
-    smart = any(ch.isupper() for ch in query)
+        if words:
+            command += ["--fixed-strings", "--", max(words, key=len), root]
+        else:
+            command += ["--", "", root]
+        rest = [word for word in words if word != max(words, key=len)]
+    # what ripgrep cannot filter (size, time) is checked here
+    after = [] if not (contents and words) else [flag for flag in flags if flag in ("--size", "--changed-within", "--changed-before")]
+    smart = any(ch.isupper() for ch in text)
     try:
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, bufsize=1)
     except OSError:
@@ -536,6 +601,8 @@ def search(root, query, hidden, contents, limit, emit, cancelled):
             entry = describe(path, name)
             if entry is None:
                 continue
+            if after and not passes(entry, flags):
+                continue
             batch.append(entry)
             sent += 1
             if sent >= limit:
@@ -548,6 +615,30 @@ def search(root, query, hidden, contents, limit, emit, cancelled):
         process.kill()
         process.wait()
     emit(batch, True)
+
+
+def span_seconds(text):
+    match = re.match(r"^(\d+)\s*(min|h|d|w|y)?", text)
+    if not match:
+        return 0
+    return int(match.group(1)) * {"min": 60, "h": 3600, "d": 86400, "w": 604800, "y": 31536000, None: 86400}[match.group(2)]
+
+
+def passes(entry, flags):
+    now = time.time()
+    for index, flag in enumerate(flags):
+        value = flags[index + 1] if index + 1 < len(flags) else ""
+        if flag == "--size":
+            found = SIZE.match(value[1:])
+            if found:
+                bytes_ = float(found.group(1)) * {"": 1, "b": 1, "k": 1e3, "m": 1e6, "g": 1e9, "t": 1e12}[(found.group(2) or "").lower()]
+                if (value[0] == "+" and entry["size"] < bytes_) or (value[0] == "-" and entry["size"] > bytes_):
+                    return False
+        elif flag == "--changed-within" and now - entry["mtime"] > span_seconds(value):
+            return False
+        elif flag == "--changed-before" and now - entry["mtime"] < span_seconds(value):
+            return False
+    return True
 
 
 RECENT = os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.join(HOME, ".local/share"), "recently-used.xbel")

@@ -78,6 +78,8 @@ function arrange(entries, opts) {
 	const filter = String(opts.filter || "").trim().toLowerCase();
 	const words = filter === "" ? [] : filter.split(/\s+/);
 	const rows = [];
+	// groups the place gives itself (copies found): their own order
+	const givenRank = {};
 	for (const entry of entries) {
 		if (!opts.hidden && entry.hidden) continue;
 		if (words.length > 0) {
@@ -88,6 +90,10 @@ function arrange(entries, opts) {
 		if (opts.group === "kind") group = Kinds.kindLabel(Kinds.kindOf(entry));
 		else if (opts.group === "date") group = dateGroup(entry.used || entry.mtime);
 		else if (opts.group === "size") group = sizeGroup(entry);
+		else if (opts.group === "given") {
+			group = String(entry.group || "");
+			givenRank[group] = Number(entry.groupRank) || 0;
+		}
 		rows.push(row(entry, group, opts.home));
 	}
 	const sign = opts.desc ? -1 : 1;
@@ -111,6 +117,7 @@ function arrange(entries, opts) {
 		if (opts.group === "kind") return Kinds.kindRank(r.kind);
 		if (opts.group === "date") return dateRank(r.group);
 		if (opts.group === "size") return SIZE_ORDER.indexOf(r.group);
+		if (opts.group === "given") return givenRank[r.group] ?? 0;
 		return 0;
 	};
 	rows.sort((a, b) => {
