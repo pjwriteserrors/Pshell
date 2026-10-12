@@ -338,9 +338,9 @@ Item {
 	readonly property bool inOllamaMode: Plugins.on("ollama") && root.commandQuery === "ollama"
 	// the phone and the chat pick their files here as well
 	readonly property bool inFileMode: ((Plugins.on("files") && !Plugins.on("filemanager")) || Phone.pickingFile) && (root.commandQuery === "file" || root.commandQuery.startsWith("file "))
-	// ">file report" searches the file manager for it
-	readonly property string fileManagerQuery: Plugins.on("filemanager") && !Phone.pickingFile && /^(file|files|fm) +\S/.test(root.commandQuery)
-		? root.searchText.trim().slice(1).trim().replace(/^\S+\s+/, "") : ""
+	// with the file manager on, >file finds files right here (FileFinderView)
+	readonly property bool inFinderMode: Plugins.on("filemanager") && !Phone.pickingFile && /^(file|files|fm)( |$)/.test(root.commandQuery)
+	readonly property string fileManagerQuery: ""
 	readonly property bool inTranslateMode: Plugins.on("translate") && (root.commandQuery === "t" || root.commandQuery.startsWith("t "))
 	readonly property bool inConvertMode: Plugins.on("converter") && (root.commandQuery === "conv" || root.commandQuery.startsWith("conv "))
 	readonly property bool inTodoMode: Plugins.on("todos") && (root.commandQuery === "todo" || root.commandQuery.startsWith("todo "))
@@ -348,7 +348,7 @@ Item {
 	readonly property bool inAiActionsMode: Plugins.on("ai-actions") && (root.commandQuery === "ai" || root.commandQuery.startsWith("ai "))
 	readonly property bool inPhoneMode: Phone.offered && (root.commandQuery === "phone" || root.commandQuery.startsWith("phone "))
 	readonly property bool inShotsMode: Plugins.on("screenshot-history") && (root.commandQuery === "shots" || root.commandQuery.startsWith("shots "))
-	readonly property bool inViewMode: root.inTranslateMode || root.inConvertMode || root.inTodoMode || root.inWebMode || root.inAiActionsMode || root.inPhoneMode || root.inShotsMode
+	readonly property bool inViewMode: root.inTranslateMode || root.inConvertMode || root.inTodoMode || root.inWebMode || root.inAiActionsMode || root.inPhoneMode || root.inShotsMode || root.inFinderMode
 	// what follows the command token, as typed (">t fr hello" → "fr hello")
 	readonly property string modeArgument: {
 		const match = /^>\S+\s([\s\S]*)$/.exec(root.searchText);
@@ -2339,8 +2339,7 @@ Item {
 			root.refreshFileBrowserDirectory();
 			break;
 		case "file-manager":
-			root.closeRequested();
-			Files.open("");
+			root.setLauncherSearch(">file ");
 			break;
 		case "chats":
 			root.setLauncherSearch(">chats ");
@@ -2904,6 +2903,7 @@ Item {
 		if (root.inAiActionsMode) return "ai";
 		if (root.inPhoneMode) return "phone";
 		if (root.inShotsMode) return "shots";
+		if (root.inFinderMode) return "finder";
 		if (root.inChatMode) return "chat";
 		if (root.inAiMode) return "chats";
 		if (root.inOllamaMode) return "ollama";
@@ -2924,6 +2924,7 @@ Item {
 		case "ai": return "creation";
 		case "phone": return "cellphone";
 		case "shots": return "image_multiple";
+		case "finder": return "folder_search_outline";
 		case "chat": return "chat";
 		case "chats": return "forum";
 		case "ollama": return "robot";
@@ -2991,6 +2992,7 @@ Item {
 		case "ai": return aiActionsView;
 		case "phone": return phoneView;
 		case "shots": return shotsView;
+		case "finder": return finderView;
 		case "apps": return appsView;
 		default: return null;
 		}
@@ -3003,6 +3005,7 @@ Item {
 		case "web": return "Search the web";
 		case "ai": return "Instruction";
 		case "phone": return "Text to send";
+		case "finder": return "Search your files";
 		case "apps": return "Search apps  ·  > for commands";
 		default: return "";
 		}
@@ -3018,6 +3021,7 @@ Item {
 		case "ai": return "AI Actions";
 		case "phone": return "Phone";
 		case "shots": return "Screenshots";
+		case "finder": return "Files";
 		default: return "";
 		}
 	}
@@ -3754,6 +3758,20 @@ Item {
 						root.launchRequested();
 					}
 					onPickFileRequested: root.pickFileForPhone()
+				}
+			}
+
+			// files, with the file manager on
+			ModeLayer {
+				current: root.mode === "finder"
+
+				FileFinderView {
+					id: finderView
+
+					anchors.fill: parent
+					active: root.mode === "finder"
+					argument: root.modeArgument
+					onCloseRequested: root.closeRequested()
 				}
 			}
 

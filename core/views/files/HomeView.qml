@@ -327,6 +327,148 @@ Item {
 				}
 			}
 
+			// ── the day: files made or changed, the meetings between them ───
+			HomeSection {
+				id: day
+
+				// 0 today, 1 yesterday
+				property int back: 0
+				property var files: []
+				readonly property var events: {
+					Outlook.byDay;
+					if (!Outlook.enabled || !Outlook.signedIn) return [];
+					const date = new Date();
+					date.setDate(date.getDate() - day.back);
+					return Outlook.eventsOn(date).filter(event => !event.allDay && Outlook.active(event));
+				}
+				// files and meetings in one line of time, newest first
+				readonly property var line: {
+					const out = day.files.slice(0, 14).map(entry => ({ kind: "file", at: entry.mtime, entry: entry }));
+					for (const event of day.events) out.push({ kind: "event", at: new Date(event.start).getTime() / 1000, event: event });
+					return out.sort((a, b) => b.at - a.at);
+				}
+
+				function load() {
+					const start = new Date();
+					start.setHours(0, 0, 0, 0);
+					start.setDate(start.getDate() - day.back);
+					const end = new Date(start.getTime() + 86400000);
+					Files.request("dayfiles", { start: start.getTime() / 1000, end: end.getTime() / 1000, limit: 40 }, data => day.files = data?.entries ?? []);
+					if (Outlook.enabled) Outlook.ensure(start);
+				}
+
+				order: 3
+				title: day.back === 0 ? "Your day" : "Yesterday"
+				subtitle: Outlook.enabled && Outlook.signedIn ? "What you saved, and the meetings around it" : "What you saved"
+				visible: day.line.length > 0
+				action: day.back === 0 ? "Yesterday" : "Today"
+				onActionClicked: {
+					day.back = 1 - day.back;
+					day.load();
+				}
+				Component.onCompleted: day.load()
+
+				Connections {
+					target: root
+
+					function onFeedChanged() {
+						day.load();
+					}
+				}
+
+				Column {
+					width: root.wide
+					spacing: 2
+
+					Repeater {
+						model: day.line
+
+						delegate: Item {
+							id: moment
+
+							required property var modelData
+
+							width: root.wide
+							height: moment.modelData.kind === "event" ? 40 : 50
+
+							Text {
+								id: clock
+
+								width: 52
+								anchors.verticalCenter: parent.verticalCenter
+								text: Qt.formatTime(new Date(moment.modelData.at * 1000), "HH:mm")
+								color: moment.modelData.kind === "event" ? Theme.primary : Theme.textSubtle
+								font.family: Theme.fontFamily
+								font.pixelSize: Theme.size.small
+								font.weight: Font.DemiBold
+							}
+
+							// the line the moments hang on
+							Rectangle {
+								x: 58
+								width: 2
+								height: parent.height
+								color: Theme.layer2
+							}
+
+							Rectangle {
+								x: 54
+								anchors.verticalCenter: parent.verticalCenter
+								width: 10
+								height: 10
+								radius: 5
+								color: moment.modelData.kind === "event" ? Theme.primary : Theme.layer3
+								border.width: 2
+								border.color: Theme.base
+							}
+
+							Rectangle {
+								visible: moment.modelData.kind === "event"
+								x: 76
+								anchors.verticalCenter: parent.verticalCenter
+								width: Math.min(parent.width - 80, eventText.implicitWidth + 40)
+								height: 32
+								radius: 16
+								color: Theme.primarySoft
+
+								Glyph {
+									x: 10
+									anchors.verticalCenter: parent.verticalCenter
+									icon: moment.modelData.event?.online ? "video_outline" : "calendar_outline"
+									size: 15
+									color: Theme.primary
+								}
+
+								Text {
+									id: eventText
+
+									x: 32
+									anchors.verticalCenter: parent.verticalCenter
+									width: parent.width - 40
+									text: String(moment.modelData.event?.subject ?? "")
+									color: Theme.primary
+									font.family: Theme.fontFamily
+									font.pixelSize: Theme.size.small
+									font.weight: Font.DemiBold
+									elide: Text.ElideRight
+								}
+							}
+
+							HomeRow {
+								visible: moment.modelData.kind === "file"
+								x: 70
+								width: parent.width - 70
+								anchors.verticalCenter: parent.verticalCenter
+								entry: moment.modelData.entry ?? ({})
+								onActivated: root.openEntry(moment.modelData.entry)
+								onMenu: (item, x, y) => root.menuFor(moment.modelData.entry, item, x, y)
+								onReveal: Files.reveal([moment.modelData.entry.path])
+							}
+						}
+					}
+				}
+			}
+
 			// ── favourites ─────────────────────────────────────────────────
 			HomeSection {
 				order: 4
@@ -350,6 +492,87 @@ Item {
 							onMenu: (item, x, y) => {
 								const entry = root.folders[path];
 								if (entry) root.menuFor(entry, item, x, y);
+							}
+						}
+					}
+				}
+			}
+
+			// ── where the week went (screentime) ───────────────────────────
+			HomeSection {
+				id: busy
+
+				property var folders: []
+
+				order: 5
+				title: "Worked on this week"
+				subtitle: "By the time windows named these folders"
+				visible: Plugins.on("screentime") && busy.folders.length > 0
+				Component.onCompleted: busy.folders = Files.busyFolders()
+
+				Connections {
+					target: root
+
+					function onFeedChanged() {
+						busy.folders = Files.busyFolders();
+					}
+				}
+
+				Column {
+					width: Math.min(root.wide, 640)
+					spacing: 4
+
+					Repeater {
+						model: busy.folders
+
+						delegate: Item {
+							id: project
+
+							required property var modelData
+
+							width: parent.width
+							height: 34
+
+							Glyph {
+								anchors.verticalCenter: parent.verticalCenter
+								icon: "folder_outline"
+								size: 17
+								color: Theme.primary
+							}
+
+							Text {
+								x: 28
+								width: 170
+								anchors.verticalCenter: parent.verticalCenter
+								text: Files.nameOf(project.modelData.path)
+								color: Theme.text
+								font.family: Theme.fontFamily
+								font.pixelSize: Theme.size.body
+								elide: Text.ElideRight
+							}
+
+							Rectangle {
+								x: 206
+								anchors.verticalCenter: parent.verticalCenter
+								width: (parent.width - 290) * project.modelData.seconds / Math.max(1, busy.folders[0].seconds)
+								height: 8
+								radius: 4
+								color: Theme.primary
+							}
+
+							Text {
+								anchors.right: parent.right
+								anchors.verticalCenter: parent.verticalCenter
+								text: Screentime.format(project.modelData.seconds)
+								color: Theme.textMuted
+								font.family: Theme.fontFamily
+								font.pixelSize: Theme.size.small
+							}
+
+							MouseArea {
+								anchors.fill: parent
+								cursorShape: Qt.PointingHandCursor
+								onClicked: root.pane.openFolder(project.modelData.path)
 							}
 						}
 					}

@@ -78,9 +78,17 @@ QtObject {
 		const elsewhere = [];
 		if (root.shelves) elsewhere.push({ label: "Put on a shelf", icon: "tray_arrow_down", shortcut: "Ctrl+S", run: () => view.toShelf(rows) });
 		if (Plugins.on("todos")) elsewhere.push({ label: "Remember as a task", icon: "checkbox_marked_circle_plus_outline", children: () => root.taskEntries(paths) });
+		if (Plugins.on("mail") && Mail.accounts.length > 0) elsewhere.push({ label: "Send by mail", icon: "email_outline", run: () => Files.mailFiles(paths) });
+		if (Files.recentChats.length > 0 && files.length > 0) elsewhere.push({ label: "Send on WhatsApp", icon: "whatsapp", children: () => Files.recentChats.map(chat => ({
+			label: chat.name,
+			icon: chat.group ? "account_group_outline" : "account_outline",
+			run: () => Files.sendToChat(chat, root.paths(files))
+		})) });
 		if (Plugins.on("ssh")) elsewhere.push({ label: "Send to a server…", icon: "server_network", run: () => root.view.sendToServer(rows) });
 		if (Phone.available) elsewhere.push({ label: `Send to ${Phone.name}`, icon: "cellphone_arrow_down", run: () => files.forEach(row => Phone.shareFile(row.path)), enabled: files.length > 0 });
 		if (root.ai && files.length > 0 && files.length <= 6) elsewhere.push({ label: files.length === 1 ? "Ask AI about it" : "Ask AI about them", icon: "creation", run: () => view.askAi(files) });
+		const readable = files.filter(row => row.text || row.mime === "application/pdf");
+		if (Plugins.on("translate") && readable.length > 0 && readable.length === files.length) elsewhere.push({ label: "Translate…", icon: "translate", run: () => view.translateDialog(readable) });
 		if (root.reader && texts.length === 1) elsewhere.push({ label: "Speed-read it", icon: "book_open_page_variant", run: () => view.speedRead(texts[0]) });
 		if (images.length > 0 && images.length === files.length) {
 			elsewhere.push({ label: images.length === 1 ? "Name it by what it shows" : "Name them by what they show", icon: "creation", run: () => Files.startJob("ainame", { paths: images.map(row => row.path) }, job => {
@@ -116,9 +124,14 @@ QtObject {
 		else if (images.length > 0 && images.length === files.length) special.push({ label: images.length === 1 ? "Make a PDF of it" : "Make one PDF of them", icon: "file_pdf_box", run: () => Files.pdfTool("fromimages", images.map(row => row.path), {}) });
 		else if (files.length > 0 && files.every(row => /\.(docx?|odt|rtf|xlsx?|ods|pptx?|odp)$/i.test(row.name))) special.push(root.pdfEntry("officetopdf", "Make a PDF", "file_pdf_box", files));
 		else if (files.length > 0 && files.every(row => /\.html?$/i.test(row.name))) special.push(root.pdfEntry("htmltopdf", "Make a PDF", "file_pdf_box", files));
+		if (one && /\.ics$/i.test(one.name) && Outlook.enabled && Outlook.signedIn) special.push({ label: "Add to the calendar", icon: "calendar_plus", run: () => Files.importCalendar(one.path) });
 		if (one && Kinds.isWeblink(one)) special.push({ label: "Copy the link", icon: "link_variant", run: () => Files.request("info", { path: one.path }, data => { if (data?.url) Files.copyText(data.url, "Link copied"); }) });
 		if (images.length > 0 && images.length === files.length && dirs.length === 0) special.push({ label: images.length === 1 ? "Edit the picture" : "Edit the pictures", icon: "image_edit_outline", children: () => root.imageEntries(images) });
 		const songs = files.filter(row => row.kind === "audio");
+		if (songs.length > 0 && songs.length === files.length) {
+			special.push({ label: songs.length === 1 ? "Play" : `Play ${songs.length}`, icon: "play_outline", run: () => Files.play(root.paths(songs), false) });
+			if (Files.music.playing) special.push({ label: "Add to the queue", icon: "playlist_plus", run: () => Files.play(root.paths(songs), true) });
+		}
 		if (one && songs.length === 1) special.push({ label: "Edit the tags…", icon: "tag_text_outline", run: () => view.tagsDialog(one) });
 		const media = files.filter(row => row.kind === "image" || row.kind === "video" || row.kind === "audio");
 		if (media.length > 0 && media.length === files.length && dirs.length === 0) special.push({ label: "Convert to", icon: "swap_horizontal", children: done => Files.convertible(root.paths(files), targets => done(root.convertEntries(files, targets))) });
@@ -151,6 +164,7 @@ QtObject {
 				{ label: "Find copies in it", icon: "content_duplicate", run: () => pane.go({ kind: "duplicates", path: one.path }) },
 				{ label: "Make a rule for it…", icon: "playlist_check", run: () => view.ruleDialog(null, one.path) }
 			] });
+			if (root.wallpaper) out.push({ label: "Wallpapers from it…", icon: "wallpaper", run: () => view.wallpaperFolder(one.path) });
 			out.push({ label: "Open a terminal here", icon: "console", shortcut: "F4", run: () => Files.terminal(one.path) });
 			if (root.agents) out.push({ label: "Claude Code here", icon: "robot_outline", run: () => Files.agent(one.path) });
 		}
@@ -158,6 +172,20 @@ QtObject {
 		out.push({ separator: true });
 		out.push({ label: "Move to the trash", icon: "trash_can_outline", danger: true, shortcut: "Del", run: () => Files.trash(paths) });
 		out.push({ label: "Properties", icon: "information_outline", shortcut: "Alt+Enter", run: () => view.showDetails(true) });
+		return out;
+	}
+
+	// a folder's terminals, agents and apps open on a workspace of its own
+	function workspaceEntries(folder) {
+		const own = FileLibrary.workspaces[folder];
+		const inherited = FileLibrary.workspaceOf(folder);
+		const out = [{ header: own === undefined && inherited >= 0 ? `Workspace ${inherited} comes from a folder above` : "Terminals, agents and apps open on" }];
+		for (let index = 1; index <= 9; index += 1) out.push({ label: `Workspace ${index}`, icon: "numeric_" + index + "_box_outline", checked: own === index, run: () => {
+			FileLibrary.setWorkspace(folder, index);
+			Files.say(`${Files.nameOf(folder)} opens on workspace ${index}`, "view_dashboard_outline");
+		} });
+		out.push({ separator: true });
+		out.push({ label: "Where I am", icon: "close", enabled: own !== undefined, run: () => FileLibrary.setWorkspace(folder, -1) });
 		return out;
 	}
 
@@ -375,6 +403,8 @@ QtObject {
 				{ label: "Make a rule for this folder…", icon: "playlist_check", run: () => view.ruleDialog(null, folder) },
 				{ label: "New vault here…", icon: "safe_square_outline", enabled: pane.writable, run: () => view.newVault(folder) }
 			] });
+			out.push({ label: "Its own workspace", icon: "view_dashboard_outline", children: () => root.workspaceEntries(folder) });
+			if (root.wallpaper) out.push({ label: "Wallpapers from this folder…", icon: "wallpaper", run: () => view.wallpaperFolder(folder) });
 			if (pane.git) out.push({ label: "Git", icon: "source_branch", children: () => view.gitMenu(pane) });
 		}
 		if (view.tab.split && view.tab.first.isFolder && view.tab.second.isFolder) {

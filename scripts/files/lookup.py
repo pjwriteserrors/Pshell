@@ -854,3 +854,24 @@ def set_default_app(path, app_id):
     except GLib.Error as error:
         return error.message
     return ""
+
+
+def day_files(day_start, day_end, limit=60):
+    """Files of the home folder changed in a span of time (a day), newest first."""
+    hours = max(1, int((time.time() - day_start) / 3600) + 1)
+    command = ["fd", "--type", "f", "--changed-within", f"{hours}h", "--exclude", ".*", "--exclude", "node_modules",
+               "--exclude", "__pycache__", "--max-depth", "6", "--absolute-path", "--color", "never", ".", HOME]
+    try:
+        out = subprocess.run(command, capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    found = []
+    for path in out.stdout.splitlines():
+        try:
+            mtime = os.stat(path).st_mtime
+        except OSError:
+            continue
+        if day_start <= mtime < day_end and not path.endswith((".part", ".crdownload", ".tmp")):
+            found.append((mtime, path))
+    found.sort(reverse=True)
+    return [entry for entry in (describe(path) for _, path in found[:limit]) if entry]

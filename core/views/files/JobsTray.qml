@@ -228,5 +228,42 @@ Item {
 				}
 			}
 		}
+
+		// a long job: the PC stays awake, and can shut down once all are through
+		Rectangle {
+			visible: Files.longJobs
+			width: parent.width
+			height: 40
+			radius: Theme.radius.large
+			color: Theme.layer2
+			border.width: 1
+			border.color: Theme.outline
+
+			RowLayout {
+				anchors.fill: parent
+				anchors.leftMargin: 12
+				anchors.rightMargin: 8
+				spacing: 8
+
+				Glyph {
+					icon: Files.shutdownAfter ? "power" : "coffee_outline"
+					size: 15
+					color: Files.shutdownAfter ? Theme.danger : Theme.textMuted
+				}
+
+				StyledText {
+					Layout.fillWidth: true
+					text: Files.shutdownAfter ? "Shuts down when everything is through" : (Files.awake ? "The PC stays awake meanwhile" : "Jobs that take a while")
+					tone: Theme.textMuted
+					font.pixelSize: Theme.size.small
+					elide: Text.ElideRight
+				}
+
+				Toggle {
+					checked: Files.shutdownAfter
+					onToggled: on => Files.shutdownAfter = on
+				}
+			}
+		}
 	}
 }

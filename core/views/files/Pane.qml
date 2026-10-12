@@ -259,6 +259,7 @@ Item {
 			root.arrange(true);
 			break;
 		case "dir":
+			if (navigated && loc.path !== Files.home) FileLibrary.noteVisited(loc.path);
 			Files.request("list", { path: loc.path }, (data, error) => done(data?.entries ?? [], error, data));
 			break;
 		case "trash":

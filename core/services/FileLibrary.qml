@@ -61,10 +61,19 @@ Singleton {
 		aiIndex: false,
 		aiFolders: [],
 		aiOcr: true,
-		aiDescribe: true
+		aiDescribe: true,
+		downloadToast: true,
+		keepAwake: true,
+		ledPulse: true,
+		phoneAll: false,
+		phoneImportFolder: "",
+		terminalBeside: true,
+		wallRotation: null
 	})
 	// [{ path, at }], newest first
 	property var opened: []
+	// folders looked into lately: [{ path, at }], newest first (the launcher and the radial menu offer them)
+	property var visited: []
 	// the tabs of the last session: [{ panes: [location], split }]
 	property var session: []
 	property bool loaded: false
@@ -373,6 +382,15 @@ Singleton {
 
 	function forgetOpened() {
 		root.opened = [];
+		root.visited = [];
+		root.save();
+	}
+
+	function noteVisited(path) {
+		const value = String(path);
+		if (value === "" || value === "/") return;
+		if (root.visited[0]?.path === value) return;
+		root.visited = [{ path: value, at: Date.now() / 1000 }].concat(root.visited.filter(entry => entry.path !== value)).slice(0, 40);
 		root.save();
 	}
 
@@ -416,6 +434,7 @@ Singleton {
 			settings: root.settings,
 			version: 2,
 			opened: root.opened,
+			visited: root.visited,
 			session: root.session
 		}, null, "\t") + "\n")
 	}
@@ -454,6 +473,7 @@ Singleton {
 			root.folderViews = next;
 		}
 		root.opened = Array.isArray(data.opened) ? data.opened : [];
+		root.visited = Array.isArray(data.visited) ? data.visited : [];
 		root.session = Array.isArray(data.session) ? data.session : [];
 		root.loaded = true;
 	}

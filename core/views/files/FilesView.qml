@@ -234,6 +234,14 @@ FocusScope {
 			if (request.newTab) root.newTab({ kind: "home" }, true);
 			return;
 		}
+		if (request.kind === "look") {
+			const folder = Files.parentOf(paths[0]);
+			root.goSomewhere({ kind: "dir", path: folder }, false, [paths[0]]);
+			lookLater.path = paths[0];
+			lookLater.tries = 0;
+			lookLater.restart();
+			return;
+		}
 		if (request.kind === "items" || request.kind === "properties") {
 			const folder = Files.parentOf(paths[0]);
 			root.goSomewhere({ kind: "dir", path: folder }, request.newTab, paths.filter(path => Files.parentOf(path) === folder));
@@ -256,6 +264,25 @@ FocusScope {
 		}
 		if (newTab && root.pane?.location.kind !== "home") root.newTab(location, true, select);
 		else root.pane.go(location, { select: select });
+	}
+
+	// quick look once the folder is read and the file picked
+	Timer {
+		id: lookLater
+
+		property string path: ""
+		property int tries: 0
+		interval: 120
+		onTriggered: {
+			const pane = root.pane;
+			if (pane && pane.settled && pane.rows.some(row => row.path === lookLater.path)) {
+				pane.selectPaths([lookLater.path]);
+				root.quickLook(pane);
+			} else if (lookLater.tries < 25) {
+				lookLater.tries += 1;
+				lookLater.restart();
+			}
+		}
 	}
 
 	// ── opening things ─────────────────────────────────────────────────────
@@ -288,6 +315,9 @@ FocusScope {
 				Sounds.play("open");
 			} else if (Kinds.isWindows(row)) {
 				Files.runWindows(row.path, "auto");
+			} else if (/\.ics$/i.test(row.name) && Outlook.enabled && Outlook.signedIn) {
+				// an invitation or a calendar file: into the calendar, once agreed
+				Files.confirmRequested({ title: `Add ${row.name} to the calendar?`, detail: "Its events go into your Microsoft 365 calendar.", confirm: "Add", danger: false, run: () => Files.importCalendar(row.path) });
 			} else {
 				rest.push(row);
 			}
@@ -447,6 +477,10 @@ FocusScope {
 		cropper.open(path);
 	}
 
+	function wallpaperFolder(folder) {
+		wallpapers.open(folder);
+	}
+
 	function trim(path, mode) {
 		trimmer.open(path, mode);
 	}
@@ -541,6 +575,31 @@ FocusScope {
 		});
 		for (const row of images.slice(0, 10)) Files.request("imageinfo", { path: row.path }, data => {
 			if (data?.location) dialog.merge({ located: true });
+		});
+	}
+
+	function translateDialog(rows) {
+		root.form({
+			title: "Translate",
+			subtitle: rows.length === 1 ? rows[0].name : `${rows.length} files`,
+			icon: "translate",
+			action: "Translate",
+			fields: [
+				{ key: "target", type: "menu", label: "Into", value: FileLibrary.setting("translateTo") || "en", options: [
+					{ value: "en", label: "English" }, { value: "de", label: "German" }, { value: "fr", label: "French" }, { value: "es", label: "Spanish" },
+					{ value: "it", label: "Italian" }, { value: "nl", label: "Dutch" }, { value: "pl", label: "Polish" }, { value: "tr", label: "Turkish" },
+					{ value: "uk", label: "Ukrainian" }, { value: "ru", label: "Russian" }, { value: "ja", label: "Japanese" }, { value: "zh", label: "Chinese" }
+				] },
+				{ key: "engine", type: "choice", label: "With", value: FileLibrary.setting("translateEngine") || "online", options: [{ value: "online", label: "Google (fast)" }, { value: "local", label: "Ollama on this PC" }] },
+				{ key: "privacy", type: "info", tone: "warning", text: "The text goes to Google for it. For private files: Ollama on this PC.", when: v => v.engine === "online" },
+				{ key: "where", type: "info", text: "The translation is saved beside it as “name (EN).txt”; a PDF's text comes as text." }
+			]
+		}, values => {
+			FileLibrary.set("translateTo", values.target);
+			FileLibrary.set("translateEngine", values.engine);
+			Files.startJob("translate", { paths: rows.map(row => row.path), target: values.target, engine: values.engine }, job => {
+				if (job.state === "done" && job.error) Files.say(job.error, "alert_circle_outline");
+			});
 		});
 	}
 
@@ -1204,7 +1263,93 @@ FocusScope {
 	}
 
 	// ── over everything ────────────────────────────────────────────────────
+	// what the file manager plays
+	Rectangle {
+		id: nowPlaying
+
+		anchors.right: details.left
+		anchors.rightMargin: 20
+		anchors.bottom: jobsTray.top
+		anchors.bottomMargin: jobsTray.height > 0 ? 8 : 0
+		width: 340
+		height: Files.music.playing ? 52 : 0
+		visible: height > 1
+		radius: Theme.radius.large
+		color: Theme.layer2
+		border.width: 1
+		border.color: Theme.outline
+		clip: true
+
+		Behavior on height {
+			SpatialAnim {
+				duration: Motion.medium
+			}
+		}
+
+		Glyph {
+			x: 14
+			anchors.verticalCenter: parent.verticalCenter
+			icon: "music_note"
+			size: 18
+			color: Theme.primary
+		}
+
+		Column {
+			x: 42
+			anchors.verticalCenter: parent.verticalCenter
+			width: parent.width - 42 - musicButtons.width - 10
+
+			StyledText {
+				width: parent.width
+				text: String(Files.music.title || Files.nameOf(Files.music.path || ""))
+				font.pixelSize: Theme.size.small
+				font.weight: Font.DemiBold
+				elide: Text.ElideRight
+			}
+
+			StyledText {
+				width: parent.width
+				text: `${Math.floor((Files.music.position ?? 0) / 60)}:${String(Math.floor((Files.music.position ?? 0) % 60)).padStart(2, "0")}${(Files.music.count ?? 0) > 1 ? ` · ${(Files.music.index ?? 0) + 1} of ${Files.music.count}` : ""}`
+				tone: Theme.textSubtle
+				font.pixelSize: Theme.size.tiny
+			}
+		}
+
+		Row {
+			id: musicButtons
+
+			anchors.right: parent.right
+			anchors.rightMargin: 6
+			anchors.verticalCenter: parent.verticalCenter
+
+			IconButton {
+				width: 30
+				height: 30
+				iconSize: 16
+				icon: Files.music.paused ? "play" : "pause"
+				onClicked: Files.musicDo("toggle")
+			}
+			IconButton {
+				width: 30
+				height: 30
+				iconSize: 16
+				icon: "skip_next"
+				enabled: (Files.music.index ?? 0) < (Files.music.count ?? 0) - 1
+				onClicked: Files.musicDo("next")
+			}
+			IconButton {
+				width: 30
+				height: 30
+				iconSize: 16
+				icon: "stop"
+				onClicked: Files.musicDo("stop")
+			}
+		}
+	}
+
 	JobsTray {
+		id: jobsTray
+
 		anchors.right: details.left
 		anchors.rightMargin: 20
 		anchors.bottom: parent.bottom
@@ -1338,6 +1483,14 @@ FocusScope {
 		id: cropper
 
 		anchors.fill: parent
+		onClosed: keyTarget.forceActiveFocus()
+	}
+
+	WallpaperDialog {
+		id: wallpapers
+
+		anchors.fill: parent
+		view: root
 		onClosed: keyTarget.forceActiveFocus()
 	}
 

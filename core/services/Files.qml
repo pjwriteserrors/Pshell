@@ -3,6 +3,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import qs.style.theme
 
 // The file manager (plugin "filemanager"). Folders are read, pictured and
 // changed by a daemon of its own (scripts/files/daemon.py) that lives apart
@@ -46,6 +47,11 @@ Singleton {
 	function reveal(paths) {
 		const list = (Array.isArray(paths) ? paths : [paths]).map(path => String(path)).filter(path => path !== "");
 		if (list.length > 0) root.show({ paths: list, kind: "items", newTab: false });
+	}
+
+	// a file shown in its folder, quick look open on it
+	function look(path) {
+		root.show({ paths: [String(path)], kind: "look", newTab: false });
 	}
 
 	// any place of the window: { kind: "storage" | "duplicates" | "search" | …, path, … }
@@ -188,6 +194,7 @@ Singleton {
 			root.syncWatches();
 			root.knowVtKey();
 			root.knowIndex();
+			root.knowAv();
 		});
 	}
 
@@ -451,6 +458,52 @@ Singleton {
 	property var followUps: ({})
 	signal jobFinished(var job)
 
+	// ── long jobs: awake, a word when through, a shutdown after ────────────
+	readonly property var heavyKinds: ["copy", "move", "auto", "paste", "download", "extract", "compress", "emptytrash", "delete", "convert", "pdf", "upload", "avscan", "avupdate", "vtscan", "dupes", "storage", "share", "sync", "trim", "gif", "aipull", "image"]
+	readonly property bool longJobs: root.activeJobs.some(job => root.heavyKinds.includes(job.kind) && Number(job.elapsed) > 8)
+	// the machine does not sleep while one runs
+	readonly property bool awake: root.longJobs && FileLibrary.setting("keepAwake") !== false
+	property bool shutdownAfter: false
+
+	Process {
+		running: root.awake
+		command: ["systemd-inhibit", "--what=sleep:idle", "--who=Pshell Files", "--why=A file job is running", "--mode=block", "sleep", "infinity"]
+	}
+
+	onBusyChanged: {
+		if (root.busy || !root.shutdownAfter) return;
+		root.shutdownAfter = false;
+		shutdownTimer.left = 30;
+		shutdownTimer.start();
+		root.shutdownToast = Notifs.pushInternal("running", "Shutting down in 30 seconds", "The file jobs are through", {
+			icon: "power",
+			duration: 30000,
+			actions: [{ label: "Cancel", icon: "close", run: () => shutdownTimer.stop() }]
+		});
+	}
+
+	property int shutdownToast: 0
+
+	Timer {
+		id: shutdownTimer
+
+		property int left: 30
+		interval: 1000
+		repeat: true
+		onTriggered: {
+			shutdownTimer.left -= 1;
+			if (shutdownTimer.left > 0) return;
+			shutdownTimer.stop();
+			Session.run("shutdown");
+		}
+	}
+
+	// the keyboard breathes when a long job ends while you are elsewhere
+	function pulse(ok) {
+		if (FileLibrary.setting("ledPulse") === false || !Lighting.enabled || Lighting.modeOf("keyboard") === "live") return;
+		Quickshell.execDetached(["python3", `${Paths.scripts}/files/ledpulse.py`, String(ok ? Theme.success : Theme.danger)]);
+	}
+
 	function startJob(kind, args, followUp) {
 		root.request("job", Object.assign({ kind: kind }, args || {}), (data, error) => {
 			if (error) {
@@ -486,6 +539,7 @@ Singleton {
 	function announce(job) {
 		if (job.state === "failed") {
 			if (job.code === "no-trash" || job.code === "exists" || job.code === "invalid") return; // the window asks or says
+			if (Number(job.elapsed) > 20 && !root.windowActive) root.pulse(false);
 			Notifs.pushInternal("error", job.title || "File job failed", job.error, { icon: "folder_alert_outline" });
 			return;
 		}
@@ -498,6 +552,7 @@ Singleton {
 		}
 		else if (long) Sounds.play("taskDone");
 		else if (["copy", "move", "auto", "paste", "download"].includes(job.kind)) Sounds.play("copied");
+		if (Number(job.elapsed) > 20 && !root.windowActive) root.pulse(true);
 		// away from the window, a longer job says it is through
 		if (long && !root.windowActive && ["copy", "move", "auto", "paste", "download", "extract", "compress", "emptytrash", "delete", "convert", "pdf", "upload"].includes(job.kind)) {
 			const created = job.created || [];
@@ -582,6 +637,9 @@ Singleton {
 		const files = paths.filter(path => String(path) !== "");
 		if (files.length === 0) return;
 		for (const path of files) FileLibrary.noteOpened(path);
+		// a file of a folder with a workspace of its own opens there
+		const workspace = FileLibrary.workspaceOf(root.parentOf(files[0]));
+		if (workspace >= 0) Quickshell.execDetached(["niri", "msg", "action", "focus-workspace", String(workspace)]);
 		root.request("open", { paths: files, app: app || "" }, (data, error) => {
 			if (error) root.fail(error);
 		});
@@ -864,9 +922,28 @@ Singleton {
 
 		function onFinished(item) {
 			if (!root.enabled || !item?.path) return;
+			if (FileLibrary.setting("downloadToast") !== false) root.downloadToast(String(item.path));
 			if (FileLibrary.setting("avDownloads")) root.avScan([item.path], true);
 			if (FileLibrary.setting("vtDownloads") && root.vtKeySet) root.vtScan([item.path], "never", true);
 		}
+	}
+
+	// a download that is through: what can be done with it, right in the toast
+	function downloadToast(path) {
+		const name = root.nameOf(path);
+		const archive = /\.(zip|tar|tgz|gz|xz|zst|bz2|7z|rar)$/i.test(name) && !/\.(deb|rpm|apk|jar)$/i.test(name);
+		const actions = [
+			{ label: "Open", icon: "open_in_app", run: () => root.launch([path]) },
+			{ label: "Show", icon: "folder_open_outline", run: () => root.reveal([path]) }
+		];
+		if (archive) actions.push({ label: "Extract", icon: "package_variant", run: () => root.extract(path, root.parentOf(path)) });
+		if (!FileLibrary.setting("avDownloads") && (root.av.clamav || root.vtKeySet)) actions.push({ label: "Scan", icon: "shield_search", run: () => root.av.clamav ? root.avScan([path]) : root.vtScan([path]) });
+		Notifs.pushInternal("done", name, `Downloaded to ${root.pretty(root.parentOf(path))}`, {
+			icon: archive ? "package_variant_closed" : "download",
+			image: /\.(png|jpe?g|webp|gif)$/i.test(name) ? path : "",
+			duration: 9000,
+			actions: actions
+		});
 	}
 
 	// ── PDF tools ──────────────────────────────────────────────────────────
@@ -1004,6 +1081,167 @@ Singleton {
 			if (error) root.fail(error);
 			else if (!data.count) root.say("Nothing there fits the rule", "playlist_check");
 		});
+	}
+
+	// ── music (an mpv of the file manager) ─────────────────────────────────
+	// { playing, title, path, paused, position, duration, index, count, mpris }
+	property var music: ({ playing: false })
+
+	function play(paths, append) {
+		root.request("play", { paths: paths, append: !!append }, (data, error) => {
+			if (error) {
+				root.fail(error);
+				return;
+			}
+			if (append && root.music.playing) root.say(paths.length === 1 ? "In the queue" : `${paths.length} in the queue`, "playlist_plus");
+			musicTimer.restart();
+		});
+	}
+
+	function musicDo(action) {
+		root.request("player", { action: action }, data => {
+			root.music = data ?? { playing: false };
+			musicTimer.restart();
+		});
+	}
+
+	// while it plays, what plays is asked every second
+	Timer {
+		id: musicTimer
+
+		interval: 1000
+		repeat: true
+		triggeredOnStart: true
+		onTriggered: root.request("player", {}, data => {
+			root.music = data ?? { playing: false };
+			if (!root.music.playing) musicTimer.stop();
+		})
+	}
+
+	// ── a folder as the wallpaper ──────────────────────────────────────────
+	// FileLibrary's wallRotation: { folder, minutes, shuffle, last, at }
+	function rotateWallpaper(now) {
+		const rotation = FileLibrary.setting("wallRotation");
+		if (!rotation?.folder) return;
+		if (!now && Date.now() / 1000 - Number(rotation.at || 0) < Number(rotation.minutes || 60) * 60 - 5) return;
+		root.request("list", { path: rotation.folder }, data => {
+			const pictures = (data?.entries ?? []).filter(entry => !entry.dir && !entry.hidden && /^image\//.test(entry.mime)).sort((a, b) => b.mtime - a.mtime);
+			if (pictures.length === 0) return;
+			let next;
+			if (rotation.shuffle !== false) {
+				const others = pictures.filter(entry => entry.path !== rotation.last);
+				next = others[Math.floor(Math.random() * others.length)] ?? pictures[0];
+			} else {
+				const at = pictures.findIndex(entry => entry.path === rotation.last);
+				next = pictures[(at + 1) % pictures.length];
+			}
+			FileLibrary.set("wallRotation", Object.assign({}, rotation, { last: next.path, at: Date.now() / 1000 }));
+			Quickshell.execDetached(["bash", `${Paths.scripts}/apply_theme_selection.sh`, next.path]);
+		});
+	}
+
+	Timer {
+		running: root.enabled && !!FileLibrary.setting("wallRotation")?.folder && Plugins.on("studio-wallpaper")
+		interval: 60000
+		repeat: true
+		onTriggered: root.rotateWallpaper(false)
+	}
+
+	// ── time spent on a folder (screentime) ────────────────────────────────
+	// seconds of the last `days` days in windows whose title names the folder
+	// (an editor's project, a terminal's path, a browser tab of it)
+	function timeIn(folder, days) {
+		if (!Plugins.on("screentime")) return 0;
+		const name = root.nameOf(folder).toLowerCase();
+		const pretty = root.pretty(folder).toLowerCase();
+		if (name.length < 3) return 0;
+		const words = new RegExp(`(^|[^a-z0-9])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`);
+		let total = 0;
+		for (let back = 0; back < days; back += 1) {
+			const day = Screentime.day(Screentime.shifted(Screentime.today, -back));
+			for (const key of Object.keys(day.windows ?? {})) {
+				const title = key.split("\n").slice(1).join(" ").toLowerCase();
+				if (title.includes(pretty) || title.includes(String(folder).toLowerCase()) || words.test(title)) total += day.windows[key];
+			}
+		}
+		return total;
+	}
+
+	// the folders most time went to this week: [{ path, seconds }]
+	function busyFolders() {
+		const candidates = Array.from(new Set(FileLibrary.favorites.concat(FileLibrary.visited.slice(0, 25).map(entry => entry.path))));
+		return candidates.map(path => ({ path: path, seconds: root.timeIn(path, 7) })).filter(entry => entry.seconds >= 300).sort((a, b) => b.seconds - a.seconds).slice(0, 6);
+	}
+
+	// ── the calendar ───────────────────────────────────────────────────────
+	// the events of an .ics file go into the Microsoft 365 calendar
+	function importCalendar(path) {
+		calendarProc.command = ["python3", `${Paths.scripts}/ms_calendar.py`, "import", String(path)];
+		calendarProc.running = true;
+	}
+
+	Process {
+		id: calendarProc
+
+		stdout: StdioCollector {
+			onStreamFinished: {
+				let answer = {};
+				try {
+					answer = JSON.parse(text.trim().split("\n").pop() || "{}");
+				} catch (error) {
+					answer = { error: "The calendar did not answer" };
+				}
+				if (answer.error) {
+					root.fail(answer.error);
+					return;
+				}
+				Sounds.play("taskDone");
+				root.say(answer.imported === 1 ? "The event is in the calendar" : `${answer.imported} events are in the calendar`, "calendar_check");
+				Outlook.refresh();
+			}
+		}
+	}
+
+	// ── to people: a new mail, a WhatsApp chat ─────────────────────────────
+	// a new mail with the files attached (a folder is packed first); a big one asks first
+	function mailFiles(paths, asked) {
+		const items = paths.filter(path => String(path) !== "");
+		if (items.length === 0) return;
+		root.request("describe", { paths: items }, data => {
+			const entries = data?.entries ?? [];
+			const folders = entries.filter(entry => entry.dir).map(entry => entry.path);
+			if (folders.length > 0) {
+				root.say("Packing the folder first…", "zip_box_outline");
+				root.compress(items, job => {
+					if (job.state === "done" && (job.created ?? []).length > 0) root.mailFiles(job.created, asked);
+				});
+				return;
+			}
+			const total = entries.reduce((sum, entry) => sum + Number(entry.size || 0), 0);
+			if (total > 20e6 && !asked) {
+				root.confirmRequested({
+					title: `Attach ${root.sizeText(total)} to a mail?`,
+					detail: "Many mail servers refuse more than 20–25 MB. A link to share is lighter – or pack them as a ZIP first.",
+					confirm: "Attach anyway",
+					danger: false,
+					run: () => root.mailFiles(items, true)
+				});
+				return;
+			}
+			const kept = Mail.drafts["new"] ?? { html: "", files: [], to: "", cc: "", bcc: "", subject: "" };
+			const files = (kept.files ?? []).concat(items.filter(path => !(kept.files ?? []).includes(path)));
+			Mail.keep("new", Object.assign({}, kept, { files: files, subject: kept.subject || (items.length === 1 ? root.nameOf(items[0]) : `${items.length} files`) }));
+			Messages.open("new");
+		});
+	}
+
+	// the newest WhatsApp chats a file can go to
+	readonly property var recentChats: WhatsApp.enabled && WhatsApp.linked ? WhatsApp.chats.filter(chat => !chat.archived).slice(0, 8) : []
+
+	function sendToChat(chat, paths) {
+		WhatsApp.send(chat.id, "", "", paths.map(path => ({ path: path, as: /\.(jpe?g|png|webp|gif|mp4|mov|webm)$/i.test(path) ? "" : "document" })), []);
+		Sounds.play("copied");
+		root.say(paths.length === 1 ? `Sent to ${chat.name}` : `${paths.length} files sent to ${chat.name}`, "whatsapp");
 	}
 
 	// ── the index for search by meaning ────────────────────────────────────
@@ -1272,13 +1510,23 @@ Singleton {
 		if (clips.length > 0) root.startJob("clipsave", { ids: clips.map(item => String(item.path).slice(5)), target: target, names: clips.map(item => item.name) });
 	}
 
+	// a program for a folder: on the folder's workspace when it has one, else
+	// (a terminal) below the Files window in its column
+	function spawnFor(folder, command, stack) {
+		const workspace = FileLibrary.workspaceOf(folder);
+		const args = ["python3", `${Paths.scripts}/files/spawn_here.py`];
+		if (workspace >= 0) args.push("--workspace", String(workspace));
+		else if (stack && FileLibrary.setting("terminalBeside") !== false && root.windowActive) args.push("--stack");
+		Quickshell.execDetached(args.concat(["--"], command));
+	}
+
 	function terminal(folder) {
-		Quickshell.execDetached(["kitty", "--directory", String(folder)]);
+		root.spawnFor(String(folder), ["kitty", "--directory", String(folder)], true);
 	}
 
 	// a coding agent in a terminal, in that folder
 	function agent(folder) {
-		Quickshell.execDetached(["kitty", "--directory", String(folder), "claude"]);
+		root.spawnFor(String(folder), ["kitty", "--directory", String(folder), "claude"], true);
 	}
 
 	// ── reading ────────────────────────────────────────────────────────────

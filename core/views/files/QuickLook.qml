@@ -5,6 +5,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Pdf
 import QtMultimedia
+import Quickshell.Io
 import qs.style.theme
 import qs.style.widgets
 import qs.core.services
@@ -68,8 +69,50 @@ Item {
 	readonly property bool isWeblink: Kinds.isWeblink(root.row)
 	readonly property string weblink: String(root.info?.url ?? "")
 
+	// the words of a song: [{ t, text }] (t -1 without timing)
+	property var lyrics: []
+	property bool lyricsSynced: false
+	readonly property int lyricLine: {
+		if (!root.lyricsSynced) return -1;
+		const seconds = player.position / 1000;
+		let at = -1;
+		for (let i = 0; i < root.lyrics.length; i += 1) if (root.lyrics[i].t >= 0 && root.lyrics[i].t <= seconds + 0.25) at = i;
+		return at;
+	}
+
+	function findLyrics(path) {
+		Files.request("mediatags", { path: path }, data => {
+			if (root.row?.path !== path || !data?.tags?.title) return;
+			const tags = data.tags;
+			lyricsProc.path = path;
+			lyricsProc.command = ["python3", `${Paths.scripts}/lyrics.py`, "--title", String(tags.title), "--artist", String(tags.artist ?? tags.album_artist ?? ""), "--album", String(tags.album ?? ""), "--duration", String(Math.round(Number(data.duration) || 0))];
+			lyricsProc.running = true;
+		});
+	}
+
+	Process {
+		id: lyricsProc
+
+		property string path: ""
+
+		stdout: StdioCollector {
+			onStreamFinished: {
+				if (root.row?.path !== lyricsProc.path) return;
+				try {
+					const answer = JSON.parse(text);
+					root.lyrics = answer.state === "found" ? (answer.lines ?? []) : [];
+					root.lyricsSynced = !!answer.synced;
+				} catch (error) {
+					root.lyrics = [];
+				}
+			}
+		}
+	}
+
 	function load() {
 		const row = root.row;
+		root.lyrics = [];
+		root.lyricsSynced = false;
 		root.text = "";
 		root.folderRows = [];
 		root.info = null;
@@ -100,6 +143,7 @@ Item {
 			player.source = Files.uri(row.path);
 			player.play();
 		}
+		if (root.kind === "audio" && Plugins.on("lyrics")) root.findLyrics(row.path);
 	}
 
 	visible: scrim.opacity > 0.01
@@ -429,11 +473,18 @@ Item {
 				visible: root.kind === "video"
 			}
 
-			// music: the cover
+			// music: the cover (to the left when the words are there)
 			FileThumb {
 				visible: root.kind === "audio"
 				anchors.centerIn: parent
+				anchors.horizontalCenterOffset: root.lyrics.length > 0 ? -parent.width * 0.22 : 0
 				anchors.verticalCenterOffset: -30
+
+				Behavior on anchors.horizontalCenterOffset {
+					SpatialAnim {
+						duration: Motion.long
+					}
+				}
 				width: Math.min(parent.width, parent.height) * 0.5
 				height: width
 				radius: Theme.radius.huge
@@ -444,6 +495,56 @@ Item {
 				kind: "audio"
 				thumb: root.row?.thumb ?? ""
 				canThumb: !!root.row?.canThumb
+			}
+
+			// the words of the song, the line that is sung lit
+			ListView {
+				id: lyricList
+
+				visible: root.kind === "audio" && root.lyrics.length > 0
+				x: parent.width * 0.5
+				y: 20
+				width: parent.width * 0.46
+				height: parent.height - 96
+				clip: true
+				model: root.lyrics
+				spacing: 6
+				boundsBehavior: Flickable.StopAtBounds
+				highlightRangeMode: root.lyricsSynced ? ListView.ApplyRange : ListView.NoHighlightRange
+				preferredHighlightBegin: height * 0.35
+				preferredHighlightEnd: height * 0.45
+				highlightMoveDuration: 400
+				currentIndex: Math.max(0, root.lyricLine)
+				opacity: visible ? 1 : 0
+
+				Behavior on opacity {
+					Anim {}
+				}
+
+				delegate: Text {
+					required property var modelData
+					required property int index
+					readonly property bool sung: index === root.lyricLine
+
+					width: lyricList.width
+					text: String(modelData.text || "·")
+					color: !root.lyricsSynced || sung ? Theme.text : Theme.textSubtle
+					font.family: Theme.fontFamily
+					font.pixelSize: sung ? Theme.size.title : Theme.size.body
+					font.weight: sung ? Font.Bold : Font.Medium
+					wrapMode: Text.WordWrap
+
+					Behavior on font.pixelSize {
+						Anim {}
+					}
+
+					MouseArea {
+						anchors.fill: parent
+						enabled: root.lyricsSynced && parent.modelData.t >= 0
+						cursorShape: Qt.PointingHandCursor
+						onClicked: player.position = parent.modelData.t * 1000
+					}
+				}
 			}
 
 			Item {

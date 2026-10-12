@@ -7,6 +7,8 @@
                                         result
   ms_calendar.py events FROM TO         events between two local dates
                                         (YYYY-MM-DD, TO exclusive)
+  ms_calendar.py import FILE.ics        put the events of an .ics file into
+                                        the calendar (prints how many)
   ms_calendar.py logout
 
 The refresh token lives in $XDG_STATE_HOME/pshell/microsoft.json (0600) and
@@ -271,6 +273,80 @@ def events(first, last):
     return 0
 
 
+def ics_events(path):
+    """The VEVENTs of an .ics file: { subject, start, end (aware), allDay, location, body }."""
+    from zoneinfo import ZoneInfo
+    with open(path, encoding="utf-8", errors="replace") as file:
+        raw = file.read().replace("\r\n", "\n")
+    lines = []
+    for line in raw.split("\n"):
+        if line.startswith((" ", "\t")) and lines:
+            lines[-1] += line[1:]
+        else:
+            lines.append(line)
+    found, current = [], None
+    for line in lines:
+        if line == "BEGIN:VEVENT":
+            current = {}
+        elif line == "END:VEVENT" and current is not None:
+            found.append(current)
+            current = None
+        elif current is not None and ":" in line:
+            head, value = line.split(":", 1)
+            name, *params = head.split(";")
+            current[name.upper()] = (value, dict(param.split("=", 1) for param in params if "=" in param))
+
+    def when(entry):
+        value, params = entry
+        if params.get("VALUE") == "DATE" or re.fullmatch(r"\d{8}", value):
+            return datetime.strptime(value[:8], "%Y%m%d"), True
+        stamp = datetime.strptime(value.rstrip("Z")[:15], "%Y%m%dT%H%M%S")
+        if value.endswith("Z"):
+            return stamp.replace(tzinfo=timezone.utc), False
+        if params.get("TZID"):
+            try:
+                return stamp.replace(tzinfo=ZoneInfo(params["TZID"].strip('"'))), False
+            except Exception:
+                pass
+        return stamp.astimezone(), False
+
+    def text(entry):
+        return (entry or ("", {}))[0].replace("\\n", "\n").replace("\\,", ",").replace("\\;", ";").strip()
+
+    events_out = []
+    for event in found:
+        if "DTSTART" not in event:
+            continue
+        start, all_day = when(event["DTSTART"])
+        end = when(event["DTEND"])[0] if "DTEND" in event else (start + timedelta(days=1) if all_day else start + timedelta(hours=1))
+        events_out.append({"subject": text(event.get("SUMMARY")) or "(No title)", "start": start, "end": end, "allDay": all_day,
+                           "location": text(event.get("LOCATION")), "body": text(event.get("DESCRIPTION"))})
+    return events_out
+
+
+def import_ics(path):
+    access = token()
+    if access is None:
+        out({"error": "Not signed in to the calendar"})
+        return 1
+    made = 0
+    for event in ics_events(path):
+        if event["allDay"]:
+            start = {"dateTime": event["start"].strftime("%Y-%m-%dT00:00:00"), "timeZone": "UTC"}
+            end = {"dateTime": event["end"].strftime("%Y-%m-%dT00:00:00"), "timeZone": "UTC"}
+        else:
+            start = {"dateTime": event["start"].astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"), "timeZone": "UTC"}
+            end = {"dateTime": event["end"].astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"), "timeZone": "UTC"}
+        body = {"subject": event["subject"], "start": start, "end": end, "isAllDay": event["allDay"],
+                "location": {"displayName": event["location"]}, "body": {"contentType": "text", "content": event["body"]}}
+        request = urllib.request.Request(f"{GRAPH}/me/events", data=json.dumps(body).encode(), method="POST",
+                                         headers={"Authorization": f"Bearer {access}", "Content-Type": "application/json"})
+        with urllib.request.urlopen(request, timeout=30):
+            made += 1
+    out({"imported": made})
+    return 0
+
+
 def main(argv):
     command = argv[1] if len(argv) > 1 else "status"
     try:
@@ -286,6 +362,8 @@ def main(argv):
             out({"signedIn": False})
         elif command == "events" and len(argv) == 4:
             return events(argv[2], argv[3])
+        elif command == "import" and len(argv) == 3:
+            return import_ics(argv[2])
         else:
             print(__doc__, file=sys.stderr)
             return 2

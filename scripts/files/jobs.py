@@ -38,6 +38,7 @@ import remote  # noqa: E402
 import rules  # noqa: E402
 import share  # noqa: E402
 import storage  # noqa: E402
+import translate  # noqa: E402
 import versions  # noqa: E402
 import virustotal  # noqa: E402
 import windows  # noqa: E402
@@ -241,7 +242,7 @@ class Job:
         # (from, to) of what was moved or renamed: tags and favourites follow
         self.moves = []
         # a job that may be held: it waits between two chunks (or its process is stopped)
-        self.can_pause = kind in ("copy", "move", "auto", "paste", "extract", "compress", "download", "delete", "pdf", "vtscan", "convert", "upload", "avscan", "dupes", "storage", "share", "sync", "image", "trim", "gif")
+        self.can_pause = kind in ("copy", "move", "auto", "paste", "extract", "compress", "download", "delete", "pdf", "vtscan", "convert", "upload", "avscan", "dupes", "storage", "share", "sync", "image", "trim", "gif", "translate")
         self.paused = False
         self.process = None
         # what a job found out, for the window to show (a scan's verdict)
@@ -1335,6 +1336,38 @@ class Manager:
         job.created.append(made)
         job.undo.append(("trash", made))
         job.files_done = 1
+
+    # ── into another language ──────────────────────────────────────────────
+    def _do_translate(self, job, args):
+        paths = [path for path in args.get("paths", []) if os.path.isfile(path)]
+        target = str(args.get("target") or "en")
+        engine = args.get("engine", "online")
+        job.title = f"Translating {os.path.basename(paths[0])}" if len(paths) == 1 else f"Translating {len(paths)} files"
+        job.undo_title = job.title
+        job.files_total = len(paths)
+        job.bytes_total = 1000 * len(paths)
+        job.state = "running"
+        job.report(True)
+        problems = []
+        for index, path in enumerate(paths):
+            job.current = os.path.basename(path)
+
+            def report(share, index=index):
+                job.bytes_done = int((index + share) * 1000)
+                job.report()
+
+            try:
+                made = translate.translate(path, target, engine, unique, report, job.check)
+            except translate.TranslateError as error:
+                problems.append(str(error))
+                continue
+            job.created.append(made)
+            job.undo.append(("trash", made))
+            job.files_done += 1
+        if problems and not job.created:
+            raise Failure(problems[0])
+        if problems:
+            job.error = problems[0]
 
     # ── a model for Ollama ─────────────────────────────────────────────────
     def _do_aipull(self, job, args):

@@ -45,6 +45,7 @@ import lookup  # noqa: E402
 import mediatags  # noqa: E402
 import pdftools  # noqa: E402
 import places  # noqa: E402
+import player  # noqa: E402
 import remote  # noqa: E402
 import rules  # noqa: E402
 import share  # noqa: E402
@@ -53,6 +54,7 @@ import tasks  # noqa: E402
 import thumbs  # noqa: E402
 import vault  # noqa: E402
 import versions  # noqa: E402
+import vmshare  # noqa: E402
 import virustotal  # noqa: E402
 import windows  # noqa: E402
 
@@ -436,6 +438,10 @@ class Daemon:
     def op_home(self, client, request):
         return lookup.home([path for path in request.get("watch", []) if path])
 
+    @on_main("slow")
+    def op_dayfiles(self, client, request):
+        return {"entries": lookup.day_files(float(request["start"]), float(request["end"]), int(request.get("limit", 60)))}
+
     def op_describe(self, client, request):
         return {"entries": [entry for entry in (lookup.describe(path) for path in request.get("paths", [])[:2000]) if entry]}
 
@@ -698,6 +704,36 @@ class Daemon:
     @on_main("slow")
     def op_similar(self, client, request):
         return index.similar(request["path"])
+
+    # ── the Windows VM ─────────────────────────────────────────────────────
+    @on_main("slow")
+    def op_vmshare(self, client, request):
+        name = request.get("vm", "win11")
+        try:
+            if request.get("action") == "setup":
+                return vmshare.setup(name, request.get("folder", ""))
+            if request.get("action") == "open":
+                return vmshare.open_in_vm(name, request["path"], jobs.unique)
+            if request.get("action") == "watcher":
+                info = vmshare.status(name)
+                if info.get("folder"):
+                    vmshare.write_watcher(info["folder"])
+                return vmshare.status(name)
+            return dict(vmshare.status(name), suggested=vmshare.default_folder())
+        except vmshare.VmError as error:
+            raise RuntimeError(str(error))
+
+    # ── music ──────────────────────────────────────────────────────────────
+    def op_play(self, client, request):
+        try:
+            return player.play(request.get("paths", []), bool(request.get("append")))
+        except player.PlayerError as error:
+            raise RuntimeError(str(error))
+
+    def op_player(self, client, request):
+        if request.get("action"):
+            player.control(request["action"])
+        return player.status()
 
     # ── tasks about files (the todo lists) ─────────────────────────────────
     def op_tasks(self, client, request):

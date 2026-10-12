@@ -10,6 +10,21 @@ Singleton {
 	readonly property string family: "Symbols Nerd Font"
 
 	readonly property var glyphs: ({
+		"image_off_outline": "󱇑",
+		"calendar_plus": "󰃳",
+		"calendar_check": "󰃯",
+		"calendar_outline": "󰭧",
+		"video_outline": "󰯜",
+		"account_group_outline": "󰭘",
+		"numeric_1_box_outline": "󰎦",
+		"numeric_2_box_outline": "󰎩",
+		"numeric_3_box_outline": "󰎬",
+		"numeric_4_box_outline": "󰎮",
+		"numeric_5_box_outline": "󰎰",
+		"numeric_6_box_outline": "󰎵",
+		"numeric_7_box_outline": "󰎸",
+		"numeric_8_box_outline": "󰎻",
+		"numeric_9_box_outline": "󰎾",
 		"approximately_equal": "󰾞",
 		"camera_outline": "󰵝",
 		"cellphone_screenshot": "󰨵",

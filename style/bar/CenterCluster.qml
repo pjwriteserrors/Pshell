@@ -133,4 +133,9 @@ Row {
 	DownloadChip {
 		bar: root.bar
 	}
+
+	// copies, unpacking, uploads of the file manager
+	FileJobChip {
+		bar: root.bar
+	}
 }

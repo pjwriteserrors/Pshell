@@ -297,6 +297,30 @@ Rectangle {
 				}
 			}
 
+			// time spent on it (screentime: windows whose title names it)
+			RowLayout {
+				readonly property real today: Plugins.on("screentime") && root.entry?.dir ? (Screentime.stamp, Files.timeIn(root.path, 1)) : 0
+				readonly property real week: Plugins.on("screentime") && root.entry?.dir ? (Screentime.stamp, Files.timeIn(root.path, 7)) : 0
+
+				Layout.fillWidth: true
+				visible: Plugins.on("screentime") && !!root.entry?.dir && root.picked.length <= 1 && week > 0
+				spacing: 8
+
+				Glyph {
+					icon: "timer_sand"
+					size: 15
+					color: Theme.textMuted
+				}
+
+				StyledText {
+					Layout.fillWidth: true
+					text: `Worked on: ${Screentime.format(parent.today)} today · ${Screentime.format(parent.week)} this week`
+					tone: Theme.textMuted
+					font.pixelSize: Theme.size.label
+					wrapMode: Text.WordWrap
+				}
+			}
+
 			// a folder's size, worked out when asked
 			RowLayout {
 				Layout.fillWidth: true
