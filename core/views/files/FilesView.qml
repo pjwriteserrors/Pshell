@@ -276,6 +276,11 @@ FocusScope {
 	// a double click on an archive takes it apart here, a Windows program
 	// starts with Proton or Wine, everything else opens in its app
 	function openFiles(pane, rows) {
+		// on the phone: each comes over first
+		if (pane.location.kind === "phone") {
+			for (const row of rows) root.openElsewhere(pane, row);
+			return;
+		}
 		const rest = [];
 		for (const row of rows) {
 			if (commands.isArchive(row) && FileLibrary.setting("archiveOpen") === "extract" && !/\.(iso|img|deb|rpm|apk|jar|cbz|cbr|epub)$/i.test(row.name)) {
@@ -291,6 +296,10 @@ FocusScope {
 			Files.launch(rest.map(row => row.path));
 			Sounds.play("open");
 		}
+	}
+
+	function openElsewhere(pane, row) {
+		PhoneDrive.open(Object.assign({ phoneId: row.path.slice(6) }, row));
 	}
 
 	function openRows(pane, rows, newTab) {
@@ -422,6 +431,10 @@ FocusScope {
 		return formDialog;
 	}
 
+	function taskMenu(paths) {
+		return commands.taskEntries(paths);
+	}
+
 	function openHistory() {
 		history.open();
 	}
@@ -432,6 +445,10 @@ FocusScope {
 
 	function crop(path) {
 		cropper.open(path);
+	}
+
+	function trim(path, mode) {
+		trimmer.open(path, mode);
 	}
 
 	// ── pictures, tags, links ──────────────────────────────────────────────
@@ -761,6 +778,11 @@ FocusScope {
 	}
 
 	function quickLook(pane) {
+		if (pane.location.kind === "phone") {
+			const row = pane.currentRow ?? pane.selectedRows()[0];
+			if (row) root.openElsewhere(pane, row);
+			return;
+		}
 		const rows = pane.selectionCount > 1 ? pane.selectedRows() : pane.rows;
 		const current = pane.currentRow ?? pane.selectedRows()[0] ?? null;
 		if (!current || rows.length === 0) return;
@@ -887,7 +909,9 @@ FocusScope {
 			else root.compareSides();
 			break;
 		case Qt.Key_Delete:
-			if (pane.location.kind === "trash" || shift) Files.remove(paths);
+			if (pane.location.kind === "clipboard") Files.request("clipdelete", { clips: targets.map(row => row.clipId).filter(clip => clip !== "") }, () => pane.reload(false));
+			else if (pane.location.kind === "phone") break;
+			else if (pane.location.kind === "trash" || shift) Files.remove(paths);
 			else Files.trash(paths);
 			break;
 		case Qt.Key_Tab:
@@ -1312,6 +1336,13 @@ FocusScope {
 
 	CropDialog {
 		id: cropper
+
+		anchors.fill: parent
+		onClosed: keyTarget.forceActiveFocus()
+	}
+
+	TrimDialog {
+		id: trimmer
 
 		anchors.fill: parent
 		onClosed: keyTarget.forceActiveFocus()

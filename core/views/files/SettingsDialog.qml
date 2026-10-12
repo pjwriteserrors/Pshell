@@ -30,6 +30,7 @@ DialogFrame {
 		{ id: "windows", label: "Windows programs", icon: "microsoft_windows" },
 		{ id: "virus", label: "Virus scan", icon: "shield_search" },
 		{ id: "pdf", label: "PDF", icon: "file_pdf_box" },
+		{ id: "ai", label: "AI search", icon: "creation" },
 		{ id: "rules", label: "Rules", icon: "playlist_check" },
 		{ id: "vaults", label: "Vaults", icon: "safe_square_outline" },
 		{ id: "sharing", label: "Sharing", icon: "link_variant" },
@@ -48,6 +49,7 @@ DialogFrame {
 		Files.knowRules();
 		Files.knowVaults();
 		Files.knowShares();
+		Files.knowIndex();
 		Files.request("thumbcache", {}, data => root.cache = data);
 		keys.forceActiveFocus();
 	}
@@ -624,6 +626,140 @@ DialogFrame {
 							label: modelData === "LibreOffice" ? "Office files to PDF and PDF to Word need LibreOffice" : `Some tools need ${modelData}`
 							icon: "alert_circle_outline"
 							tint: Theme.warning
+						}
+					}
+				}
+
+				// ── search by meaning ──────────────────────────────────────
+				Group {
+					shown: root.page === "ai"
+					title: "Search by meaning – on this PC"
+
+					Hint {
+						text: "Ask in plain words: “the Telekom invoice from the spring”, “photo of the red car”. The files of a few folders are read – their names, their text, the text in pictures and, with a picture model, what pictures show – into an index on this PC. Ollama reads the question; nothing leaves the PC. In the search: “By meaning”. On a file: “Find similar files”."
+					}
+
+					Switch {
+						label: "Keep the index up to date"
+						hint: "Soon after the start, then every four hours"
+						checked: !!FileLibrary.setting("aiIndex")
+						onToggled: on => {
+							FileLibrary.set("aiIndex", on);
+							if (on && !Files.index.built) Files.indexNow();
+						}
+					}
+
+					Line {
+						label: Files.index.running ? `Reading ${Files.index.done ?? 0} of ${Files.index.total ?? 0}${Files.index.current ? " · " + Files.index.current : ""}`
+							: (Files.index.files ? `${Files.index.files} files · ${Files.index.withText ?? 0} with text · ${Files.index.meanings ?? 0} by meaning · ${Files.index.described ?? 0} pictures described · ${Files.whenText(Files.index.built).toLowerCase()}` : "Nothing indexed yet")
+						icon: Files.index.running ? "progress_clock" : "database_search_outline"
+
+						TextButton {
+							height: 30
+							variant: Files.index.files ? "tonal" : "filled"
+							text: Files.index.running ? "Stop" : "Index now"
+							icon: Files.index.running ? "close" : "refresh"
+							onClicked: Files.index.running ? Files.request("indexstop", {}) : Files.indexNow()
+						}
+					}
+
+					Hint {
+						visible: !!Files.index.error
+						text: String(Files.index.error || "")
+					}
+				}
+
+				Group {
+					shown: root.page === "ai"
+					title: "Folders"
+
+					Repeater {
+						model: FileLibrary.setting("aiFolders").length > 0 ? FileLibrary.setting("aiFolders") : ["Documents", "Downloads", "Desktop", "Pictures"].map(name => `${Files.home}/${name}`)
+
+						delegate: Line {
+							required property string modelData
+
+							label: Files.pretty(modelData)
+							icon: "folder_outline"
+
+							IconButton {
+								visible: FileLibrary.setting("aiFolders").length > 0
+								width: 28
+								height: 28
+								iconSize: 15
+								icon: "close"
+								onClicked: FileLibrary.set("aiFolders", FileLibrary.setting("aiFolders").filter(path => path !== modelData))
+							}
+						}
+					}
+
+					TextButton {
+						Layout.alignment: Qt.AlignLeft
+						height: 30
+						variant: "tonal"
+						icon: "folder_plus_outline"
+						text: root.view.pane?.isFolder ? `Add ${Files.pretty(root.view.pane.location.path)}` : "Add a folder…"
+						onClicked: {
+							const base = FileLibrary.setting("aiFolders").length > 0 ? FileLibrary.setting("aiFolders") : ["Documents", "Downloads", "Desktop", "Pictures"].map(name => `${Files.home}/${name}`);
+							const add = path => FileLibrary.set("aiFolders", base.filter(each => each !== path).concat([path]));
+							if (root.view.pane?.isFolder) add(root.view.pane.location.path);
+							else root.view.ask("Index which folder?", "Folder", Files.home, path => add(path.replace(/^~/, Files.home)));
+						}
+					}
+
+					Switch {
+						label: "Read the text in pictures and scans (OCR)"
+						hint: "Screenshots and scanned letters become findable by what they say; it takes a while the first time"
+						checked: FileLibrary.setting("aiOcr") !== false
+						onToggled: on => FileLibrary.set("aiOcr", on)
+					}
+
+					Switch {
+						label: "Describe pictures with a picture model"
+						hint: Files.index.ai?.vision ? `With ${Files.index.ai.vision} – about a second or two per picture` : "Needs a picture model (below)"
+						checked: FileLibrary.setting("aiDescribe") !== false
+						enabled: !!Files.index.ai?.vision
+						onToggled: on => FileLibrary.set("aiDescribe", on)
+					}
+				}
+
+				Group {
+					shown: root.page === "ai"
+					title: "Models (Ollama)"
+
+					Line {
+						label: Files.index.ai?.running ? (Files.index.ai?.text ? `Reads questions with ${Files.index.ai.text}` : "No text model – questions are searched word by word") : "Ollama is not running – questions are searched word by word"
+						icon: Files.index.ai?.text ? "check_decagram_outline" : "alert_circle_outline"
+						tint: Files.index.ai?.text ? Theme.success : Theme.warning
+					}
+
+					Line {
+						label: Files.index.ai?.embed ? `Finds by meaning with ${Files.index.ai.embed}` : `Search by meaning needs an embedding model: ${Files.index.ai?.suggestedEmbed ?? "nomic-embed-text"} (about 270 MB)`
+						icon: Files.index.ai?.embed ? "check_decagram_outline" : "vector_link"
+						tint: Files.index.ai?.embed ? Theme.success : Theme.textMuted
+
+						TextButton {
+							visible: !Files.index.ai?.embed && !!Files.index.ai?.running
+							height: 30
+							variant: "filled"
+							icon: "download"
+							text: "Download"
+							onClicked: Files.pullModel(Files.index.ai?.suggestedEmbed ?? "nomic-embed-text")
+						}
+					}
+
+					Line {
+						label: Files.index.ai?.vision ? `Sees pictures with ${Files.index.ai.vision}` : `Pictures are described with a picture model: ${Files.index.ai?.suggestedVision ?? "moondream"} (about 1.7 GB)`
+						icon: Files.index.ai?.vision ? "check_decagram_outline" : "eye_outline"
+						tint: Files.index.ai?.vision ? Theme.success : Theme.textMuted
+
+						TextButton {
+							visible: !Files.index.ai?.vision && !!Files.index.ai?.running
+							height: 30
+							variant: "tonal"
+							icon: "download"
+							text: "Download"
+							onClicked: Files.pullModel(Files.index.ai?.suggestedVision ?? "moondream")
 						}
 					}
 				}

@@ -45,12 +45,49 @@ def free_name(folder, name):
     return candidate
 
 
+# folders of the PC the phone may put files in for a while, by a ticket the
+# shell asked for (the file manager's import of photos, a file opened from
+# the phone): ticket → (folder, until)
+TICKETS = {}
+TICKET_LIFE = 30 * 60
+
+
 def setup(hub, daemon):
+    @hub.action("files", "ticket", kinds=("shell", "cli"))
+    async def ticket(_peer, args):
+        """A ticket for one folder of the PC: uploads that carry it go there."""
+        folder = expand(str(args.get("folder") or ""))
+        if not str(args.get("folder") or "").startswith(("/", "~")):
+            raise Refused("bad-folder", "A folder of the PC is needed")
+        folder.mkdir(parents=True, exist_ok=True)
+        now = asyncio.get_running_loop().time()
+        for key in [key for key, (_, until) in TICKETS.items() if until < now]:
+            TICKETS.pop(key, None)
+        token = os.urandom(12).hex()
+        TICKETS[token] = (folder, now + TICKET_LIFE)
+        return {"ticket": token}
+
     async def upload(request):
         device = daemon.server.require(request)
         if not hub.allowed("files"):
             raise web.HTTPForbidden()
         folder = downloads()
+        ticketed = ""
+        # into a folder the shell asked for, by its ticket
+        if "ticket" in request.query:
+            entry = TICKETS.get(request.query["ticket"])
+            if entry is None or entry[1] < asyncio.get_running_loop().time():
+                raise web.HTTPForbidden()
+            folder = entry[0]
+            ticketed = request.query["ticket"]
+            name = re.sub(r"[/\\\0]", "_", unquote(request.match_info["name"])).strip().lstrip(".") or "file"
+            same = folder / name
+            # the same file again (an import that ran before) is not made twice
+            if same.is_file() and request.content_length is not None and same.stat().st_size == request.content_length:
+                async for _ in request.content.iter_chunked(256 * 1024):
+                    pass
+                await hub.emit("files", "received", {"path": str(same), "name": same.name, "size": same.stat().st_size, "from": device["name"], "ticket": ticketed, "skipped": True})
+                return web.json_response({"path": str(same), "name": same.name, "skipped": True})
         # into a folder the phone is browsing (fs), if it may
         if "dir" in request.query:
             if not hub.allowed("fs"):
@@ -72,7 +109,7 @@ def setup(hub, daemon):
         except (OSError, asyncio.CancelledError, ConnectionError):
             partial.unlink(missing_ok=True)
             raise
-        await hub.emit("files", "received", {"path": str(target), "name": target.name, "size": target.stat().st_size, "from": device["name"]})
+        await hub.emit("files", "received", {"path": str(target), "name": target.name, "size": target.stat().st_size, "from": device["name"], "ticket": ticketed})
         shelf = request.query.get("shelf")
         if shelf and hub.allowed("shelves"):
             args = {"paths": [str(target)]}

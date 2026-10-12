@@ -394,6 +394,24 @@ class Sharing(DaemonTest):
             self.assertNotIn("..", Path(path).name)
             Path(path).unlink()
 
+    async def test_upload_by_ticket_lands_in_its_folder_once(self):
+        phone = await self.paired_phone()
+        pc = json.loads(phone.pc.read_text())
+        cli = await self.local()
+        folder = self.tmp / "imports" / "2026"
+        ticket = (await cli.call("files", "ticket", {"folder": str(folder)}))["data"]["ticket"]
+        paths = []
+        for _ in range(2):
+            async with phone.session.put(f"https://{pc['host']}:{pc['port']}/upload/IMG_1.jpg?ticket={ticket}", data=b"picture", ssl=phone.context()) as response:
+                self.assertEqual(response.status, 200)
+                paths.append((await response.json())["path"])
+        # the same file twice is kept once
+        self.assertEqual(paths[0], paths[1])
+        self.assertEqual(Path(paths[0]).parent, folder)
+        self.assertEqual(sorted(p.name for p in folder.iterdir()), ["IMG_1.jpg"])
+        async with phone.session.put(f"https://{pc['host']}:{pc['port']}/upload/x.jpg?ticket=wrong", data=b"x", ssl=phone.context()) as response:
+            self.assertEqual(response.status, 403)
+
     async def test_upload_needs_a_paired_phone(self):
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         context.check_hostname = False

@@ -150,6 +150,10 @@ Singleton {
 		case "places":
 			root.places = message.places || [];
 			break;
+		case "index":
+			root.index = Object.assign({}, root.index, message.state || {});
+			if (!message.state?.running) root.knowIndex();
+			break;
 		case "rules":
 			root.rules = message.rules || [];
 			root.knowRules();
@@ -183,6 +187,7 @@ Singleton {
 			root.socket?.flush();
 			root.syncWatches();
 			root.knowVtKey();
+			root.knowIndex();
 		});
 	}
 
@@ -1001,6 +1006,60 @@ Singleton {
 		});
 	}
 
+	// ── the index for search by meaning ────────────────────────────────────
+	// { files, meanings, described, withText, built, running, done, total, current, error, ai: { text, vision, embed, models } }
+	property var index: ({})
+
+	function knowIndex(done) {
+		root.request("indexstatus", {}, data => {
+			if (data) root.index = data;
+			if (done) done(root.index);
+		});
+	}
+
+	function indexNow() {
+		root.request("indexbuild", { settings: {
+			folders: FileLibrary.setting("aiFolders"),
+			ocr: FileLibrary.setting("aiOcr") !== false,
+			describe: FileLibrary.setting("aiDescribe") !== false
+		} });
+		root.index = Object.assign({}, root.index, { running: true });
+	}
+
+	// the index keeps up by itself while it is on: soon after the start, then every few hours
+	Timer {
+		running: root.enabled && root.connected && !!FileLibrary.setting("aiIndex")
+		interval: root.index.built ? 4 * 3600 * 1000 : 10 * 60 * 1000
+		repeat: true
+		onTriggered: if (!root.index.running) root.indexNow()
+	}
+
+	function pullModel(model) {
+		root.startJob("aipull", { model: model }, job => {
+			if (job.state === "done") {
+				root.say(`${model} is ready`, "check");
+				root.knowIndex();
+			}
+		});
+	}
+
+	// ── tasks about files (todos plugin) ───────────────────────────────────
+	signal tasksChanged
+
+	function rememberTask(paths, list, note) {
+		root.request("tasks", { action: "add", list: list, paths: paths, note: note || "" }, (data, error) => {
+			if (error) {
+				root.fail(error);
+				return;
+			}
+			FileLibrary.set("taskList", data.list);
+			Todos.refresh();
+			Sounds.play("pinned");
+			root.say(paths.length === 1 ? `A task in ${Todos.displayName(data.list)}` : `${paths.length} tasks in ${Todos.displayName(data.list)}`, "checkbox_marked_circle_outline");
+			root.tasksChanged();
+		});
+	}
+
 	// ── git ────────────────────────────────────────────────────────────────
 	function commit(paths, message, push) {
 		root.startJob("gitcommit", { paths: paths, message: message, push: !!push }, job => {
@@ -1169,6 +1228,17 @@ Singleton {
 
 	// what another app (or another place of the shell) dropped on a folder
 	function dropInto(target, drop, mode, followUp) {
+		// files of the phone or entries of the clipboard history, dragged out of their place
+		if ((drop.formats ?? []).includes("application/x-pshell-items")) {
+			let items = [];
+			try {
+				items = JSON.parse(drop.getDataAsString("application/x-pshell-items"));
+			} catch (error) {
+				items = [];
+			}
+			root.materialize(items, target);
+			return items.length > 0;
+		}
 		const files = [];
 		const links = [];
 		for (const url of drop.urls ?? []) {
@@ -1191,6 +1261,15 @@ Singleton {
 			return true;
 		}
 		return false;
+	}
+
+	// things that are not files yet become files in a folder: phone files are
+	// sent up, clipboard entries are written out
+	function materialize(items, target) {
+		const phone = items.filter(item => String(item.path).startsWith("phone:"));
+		const clips = items.filter(item => String(item.path).startsWith("clip:"));
+		if (phone.length > 0) PhoneDrive.importEntries(phone.map(item => Object.assign({ phoneId: String(item.path).slice(6) }, item)), target);
+		if (clips.length > 0) root.startJob("clipsave", { ids: clips.map(item => String(item.path).slice(5)), target: target, names: clips.map(item => item.name) });
 	}
 
 	function terminal(folder) {

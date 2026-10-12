@@ -650,6 +650,7 @@ Item {
 
 			// a collection, a tag or a shelf takes files without moving them
 			readonly property bool gathers: ["collection", "tag", "shelf"].includes(root.pane.location.kind)
+			// the phone's place takes files to send them there
 
 			function target() {
 				if (root.dropIndex >= 0) return root.pane.rows[root.dropIndex]?.path ?? "";
@@ -678,6 +679,15 @@ Item {
 				if (index < 0 && drops.gathers && drop.source !== ghost) {
 					drop.acceptProposedAction();
 					drops.gather(drop);
+					return;
+				}
+				// files dropped on the phone's place go to the phone
+				if (root.pane.location.kind === "phone" && drop.source !== ghost) {
+					const paths = (drop.urls ?? []).map(url => String(url)).filter(url => url.startsWith("file://")).map(url => decodeURIComponent(url.slice(7)));
+					if (paths.length === 0) return;
+					drop.acceptProposedAction();
+					Phone.sendFiles(paths);
+					Files.say(paths.length === 1 ? `Sending ${Files.nameOf(paths[0])} to ${Phone.name}` : `Sending ${paths.length} files to ${Phone.name}`, "cellphone_arrow_down");
 					return;
 				}
 				// dropped where it came from: nothing to do
@@ -799,7 +809,12 @@ Item {
 		ghost.y = y + columnsHeader.height;
 		const rows = root.pane.selectedRows();
 		const paths = rows.map(row => row.path);
-		root.dragData = {
+		// what lives elsewhere (the phone, the clipboard) becomes a file where it is dropped
+		const elsewhere = rows.filter(row => /^(phone|clip):/.test(row.path));
+		root.dragData = elsewhere.length > 0 ? {
+			"application/x-pshell-items": JSON.stringify(elsewhere.map(row => ({ path: row.path, name: row.name, mime: row.mime, size: row.size }))),
+			"text/plain": elsewhere.map(row => row.name).join("\n")
+		} : {
 			"text/uri-list": paths.map(path => Files.uri(path)).join("\r\n") + "\r\n",
 			"text/plain": paths.join("\n")
 		};

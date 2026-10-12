@@ -29,12 +29,16 @@ import gi  # noqa: E402
 gi.require_version("Gio", "2.0")
 from gi.repository import Gio, GLib  # noqa: E402
 
+import ai  # noqa: E402
 import archives  # noqa: E402
+import captures  # noqa: E402
+import clips  # noqa: E402
 import compare  # noqa: E402
 import convert  # noqa: E402
 import fm1  # noqa: E402
 import gitinfo  # noqa: E402
 import imagetools  # noqa: E402
+import index  # noqa: E402
 import localscan  # noqa: E402
 import jobs  # noqa: E402
 import lookup  # noqa: E402
@@ -45,6 +49,7 @@ import remote  # noqa: E402
 import rules  # noqa: E402
 import share  # noqa: E402
 import storage  # noqa: E402
+import tasks  # noqa: E402
 import thumbs  # noqa: E402
 import vault  # noqa: E402
 import versions  # noqa: E402
@@ -657,6 +662,87 @@ class Daemon:
         if data.get("cover"):
             data["coverFile"] = mediatags.cover_file(request["path"])
         return data
+
+    # ── screenshots and recordings ─────────────────────────────────────────
+    @on_main("slow")
+    def op_captures(self, client, request):
+        return captures.listing(int(request.get("limit", 800)))
+
+    def op_duration(self, client, request):
+        return {"duration": captures.duration(request["path"])}
+
+    def op_aistatus(self, client, request):
+        return ai.status()
+
+    # ── search by meaning ──────────────────────────────────────────────────
+    def op_indexstatus(self, client, request):
+        return index.status()
+
+    def op_indexbuild(self, client, request):
+        settings = request.get("settings") or {}
+
+        def report():
+            self.broadcast({"event": "index", "state": {key: index.STATE[key] for key in ("running", "done", "total", "current", "error")}})
+
+        threading.Thread(target=index.build, args=(settings, report), daemon=True).start()
+        return {}
+
+    def op_indexstop(self, client, request):
+        index.STATE["stop"] = True
+        return {}
+
+    @on_main("slow")
+    def op_aisearch(self, client, request):
+        return index.search(str(request.get("query", "")), int(request.get("limit", 80)), bool(request.get("smart", True)))
+
+    @on_main("slow")
+    def op_similar(self, client, request):
+        return index.similar(request["path"])
+
+    # ── tasks about files (the todo lists) ─────────────────────────────────
+    def op_tasks(self, client, request):
+        action = request.get("action", "find")
+        if action == "add":
+            return {"list": tasks.add(request["list"], request.get("paths", []), request.get("note", ""))}
+        if action == "toggle":
+            tasks.toggle(request["list"], int(request["line"]))
+            return {}
+        if action == "lists":
+            return {"lists": tasks.lists()}
+        return {"tasks": tasks.find(request["path"])}
+
+    # ── the clipboard history ──────────────────────────────────────────────
+    @on_main("slow")
+    def op_clips(self, client, request):
+        if not clips.available():
+            raise RuntimeError("cliphist is not installed")
+        return clips.listing()
+
+    def op_cliprestore(self, client, request):
+        clips.restore(request["clip"])
+        return {}
+
+    def op_clipdelete(self, client, request):
+        clips.delete([str(clip) for clip in request.get("clips", [])])
+        return {}
+
+    # ── the phone ──────────────────────────────────────────────────────────
+    def op_phonethumbs(self, client, request):
+        """Small pictures the phone sent (base64 JPEGs) into the cache: { id: path }."""
+        import base64
+        folder = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.join(lookup.HOME, ".cache"), "pshell", "phone-thumbs")
+        os.makedirs(folder, exist_ok=True)
+        paths = {}
+        for phone_id, data in (request.get("thumbs") or {}).items():
+            safe = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in str(phone_id))[:80]
+            path = os.path.join(folder, f"{safe}.jpg")
+            try:
+                with open(path, "wb") as file:
+                    file.write(base64.b64decode(data))
+                paths[phone_id] = path
+            except (OSError, ValueError):
+                continue
+        return {"paths": paths}
 
     # ── two folders ────────────────────────────────────────────────────────
     @on_main("slow")

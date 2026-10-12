@@ -57,8 +57,14 @@ Item {
 
 	property var folders: ({})
 
-	Component.onCompleted: root.refresh()
-	onVisibleChanged: if (root.visible) root.refresh()
+	Component.onCompleted: {
+		root.refresh();
+		PhoneDrive.checkFresh();
+	}
+	onVisibleChanged: if (root.visible) {
+		root.refresh();
+		PhoneDrive.checkFresh();
+	}
 
 	Connections {
 		target: root.pane
@@ -260,6 +266,40 @@ Item {
 				}
 			}
 
+			// ── new on the phone ───────────────────────────────────────────
+			HomeSection {
+				order: 2
+				title: `New on ${PhoneDrive.name}`
+				subtitle: "Photos since the last import"
+				visible: PhoneDrive.reachable && PhoneDrive.fresh.length > 0
+				action: `Import all ${PhoneDrive.fresh.length}`
+				onActionClicked: PhoneDrive.importEntries(PhoneDrive.fresh)
+
+				Strip {
+					width: root.wide
+
+					Repeater {
+						model: PhoneDrive.fresh
+
+						delegate: HomeCard {
+							required property var modelData
+
+							entry: Object.assign({}, modelData, { thumb: (PhoneDrive.thumbTick, PhoneDrive.thumbs[modelData.phoneId] ?? "") })
+							onActivated: PhoneDrive.open(modelData)
+							onMenu: (item, x, y) => {
+								const at = item.mapToItem(root.shell, x, y);
+								root.shell.menuFromSidebar([
+									{ label: "Open", icon: "open_in_app", run: () => PhoneDrive.open(modelData) },
+									{ label: `Import to ${Files.pretty(PhoneDrive.importFolder())}`, icon: "cellphone_arrow_down", run: () => PhoneDrive.importEntries([modelData]) },
+									{ label: `All of ${PhoneDrive.name}'s camera`, icon: "camera_outline", run: () => root.pane.go({ kind: "phone", id: "camera" }) }
+								], at.x, at.y);
+							}
+							onReveal: root.pane.go({ kind: "phone", id: "camera" })
+						}
+					}
+				}
+			}
+
 			// ── recent ─────────────────────────────────────────────────────
 			HomeSection {
 				order: 3
@@ -322,8 +362,8 @@ Item {
 				title: "Captures"
 				subtitle: "Screenshots and screen recordings"
 				visible: (root.feed.captures ?? []).length > 0
-				action: "Open folder"
-				onActionClicked: root.pane.openFolder(`${root.dirs.pictures ?? Files.home}/Screenshots`)
+				action: "Show all"
+				onActionClicked: root.pane.go({ kind: "captures" })
 
 				Strip {
 					width: root.wide

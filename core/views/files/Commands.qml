@@ -42,6 +42,8 @@ QtObject {
 		const view = root.view;
 		const out = [];
 
+		if (kind === "phone") return root.phoneEntries(pane, rows);
+		if (kind === "clipboard") return root.clipEntries(pane, rows);
 		if (kind === "trash") {
 			out.push({ label: rows.length === 1 ? "Restore" : `Restore ${rows.length} items`, icon: "restore", run: () => Files.restore(rows) });
 			out.push({ label: "Delete for good", icon: "delete_forever_outline", danger: true, shortcut: "Shift+Del", run: () => Files.remove(paths) });
@@ -75,10 +77,22 @@ QtObject {
 		// what the rest of the shell can do with them
 		const elsewhere = [];
 		if (root.shelves) elsewhere.push({ label: "Put on a shelf", icon: "tray_arrow_down", shortcut: "Ctrl+S", run: () => view.toShelf(rows) });
+		if (Plugins.on("todos")) elsewhere.push({ label: "Remember as a task", icon: "checkbox_marked_circle_plus_outline", children: () => root.taskEntries(paths) });
 		if (Plugins.on("ssh")) elsewhere.push({ label: "Send to a server…", icon: "server_network", run: () => root.view.sendToServer(rows) });
 		if (Phone.available) elsewhere.push({ label: `Send to ${Phone.name}`, icon: "cellphone_arrow_down", run: () => files.forEach(row => Phone.shareFile(row.path)), enabled: files.length > 0 });
 		if (root.ai && files.length > 0 && files.length <= 6) elsewhere.push({ label: files.length === 1 ? "Ask AI about it" : "Ask AI about them", icon: "creation", run: () => view.askAi(files) });
 		if (root.reader && texts.length === 1) elsewhere.push({ label: "Speed-read it", icon: "book_open_page_variant", run: () => view.speedRead(texts[0]) });
+		if (images.length > 0 && images.length === files.length) {
+			elsewhere.push({ label: images.length === 1 ? "Name it by what it shows" : "Name them by what they show", icon: "creation", run: () => Files.startJob("ainame", { paths: images.map(row => row.path) }, job => {
+				if (job.state === "failed") Files.fail(job.error);
+			}) });
+			elsewhere.push({ label: "Text from it as a .txt beside it", icon: "text_recognition", run: () => Files.startJob("capturetext", { paths: images.map(row => row.path) }) });
+		}
+		const clips = files.filter(row => row.kind === "video");
+		if (one && clips.length === 1) {
+			elsewhere.push({ label: "Cut the recording…", icon: "content_cut", run: () => view.trim(one.path, "cut") });
+			elsewhere.push({ label: "Make a GIF…", icon: "file_gif_box", run: () => view.trim(one.path, "gif") });
+		}
 		if (images.length === 1) {
 			if (root.captures) elsewhere.push({ label: "Annotate", icon: "draw", run: () => Screenshot.editShot(images[0].path) });
 			if (root.pins) elsewhere.push({ label: "Pin to the screen", icon: "pin_outline", run: () => Screenshot.pinShot(images[0].path) });
@@ -126,6 +140,7 @@ QtObject {
 			}
 		}
 		if (one && !one.dir && kind !== "trash") out.push({ label: "Earlier versions", icon: "history", run: () => view.showVersions() });
+		if (one && !one.dir && (Files.index.files ?? 0) > 0) out.push({ label: "Find similar files", icon: "approximately_equal", run: () => pane.go({ kind: "similar", path: one.path }) });
 
 		out.push({ separator: true });
 		if (one && root.isArchive(one)) out.push({ label: "Extract here", icon: "package_variant", run: () => Files.extract(one.path, pane.isFolder ? pane.location.path : Files.parentOf(one.path)) });
@@ -143,6 +158,52 @@ QtObject {
 		out.push({ separator: true });
 		out.push({ label: "Move to the trash", icon: "trash_can_outline", danger: true, shortcut: "Del", run: () => Files.trash(paths) });
 		out.push({ label: "Properties", icon: "information_outline", shortcut: "Alt+Enter", run: () => view.showDetails(true) });
+		return out;
+	}
+
+	// the todo lists a file can go into as a task (with a link back)
+	function taskEntries(paths) {
+		const last = String(FileLibrary.setting("taskList") || "");
+		const out = Todos.lists.map(list => ({
+			label: list.name,
+			icon: list.path === last ? "star_outline" : "format_list_checks",
+			hint: `${list.total - list.done} open`,
+			run: () => Files.rememberTask(paths, list.path)
+		}));
+		if (out.length > 0) out.push({ separator: true });
+		out.push({ label: "With a note…", icon: "note_edit_outline", enabled: Todos.lists.length > 0, run: () => root.view.ask("What is to do with it?", "Note for the task", "", note => Files.rememberTask(paths, last || Todos.lists[0].path, note)) });
+		out.push({ label: "New list…", icon: "playlist_plus", run: () => root.view.ask("New todo list", "Name of the list", "Files", name => Files.rememberTask(paths, name)) });
+		return out;
+	}
+
+	// entries of the clipboard history: files in the runtime folder, newest first
+	function clipEntries(pane, rows) {
+		const view = root.view;
+		const own = rows.filter(row => row.clipId !== "" && row.clipKind !== "files");
+		const out = [];
+		out.push({ label: rows.length === 1 ? "Open" : `Open ${rows.length} items`, icon: "open_in_app", shortcut: "Enter", run: () => Files.launch(rows.map(row => row.path)) });
+		out.push({ label: "Quick look", icon: "eye_outline", shortcut: "Space", run: () => view.quickLook(pane) });
+		if (rows.length === 1 && rows[0].clipId !== "") out.push({ label: "Put on the clipboard again", icon: "clipboard_arrow_left_outline", run: () => Files.request("cliprestore", { clip: rows[0].clipId }, () => Files.say("On the clipboard again", "content_paste")) });
+		out.push({ separator: true });
+		out.push({ label: "Save to Downloads", icon: "download", run: () => Files.transfer(rows.map(row => row.path), `${Files.home}/Downloads`, "copy") });
+		if (view.tab.split && view.tab.other.isFolder) out.push({ label: `Save to ${view.tab.other.title}`, icon: "dock_right", run: () => Files.transfer(rows.map(row => row.path), view.tab.other.location.path, "copy") });
+		out.push({ label: "Save to…", icon: "content_save_outline", run: () => view.ask("Save to which folder?", "Folder", `${Files.home}/Documents`, folder => Files.transfer(rows.map(row => row.path), folder.replace(/^~/, Files.home), "copy")) });
+		if (root.ai && own.length > 0 && own.length <= 6) out.push({ label: "Ask AI about it", icon: "creation", run: () => view.askAi(own) });
+		out.push({ separator: true });
+		out.push({ label: rows.length === 1 ? "Remove from the history" : `Remove ${rows.length} from the history`, icon: "delete_outline", danger: true, shortcut: "Del", run: () => Files.request("clipdelete", { clips: rows.map(row => row.clipId).filter(clip => clip !== "") }, () => pane.reload(false)) });
+		return out;
+	}
+
+	// files of the phone: they come over first, opened or imported
+	function phoneEntries(pane, rows) {
+		const entries = rows.map(row => Object.assign({ phoneId: row.path.slice(6) }, row));
+		const out = [];
+		out.push({ label: rows.length === 1 ? "Open" : `Open ${rows.length} files`, icon: "open_in_app", shortcut: "Enter", run: () => rows.forEach(row => root.view.openElsewhere(pane, row)) });
+		out.push({ separator: true });
+		out.push({ label: `Import to ${Files.pretty(PhoneDrive.importFolder())}`, icon: "cellphone_arrow_down", run: () => PhoneDrive.importEntries(entries) });
+		out.push({ label: "Import to Downloads", icon: "download", run: () => PhoneDrive.importEntries(entries, `${Files.home}/Downloads`) });
+		if (root.view.tab.split && root.view.tab.other.isFolder) out.push({ label: `Import to ${root.view.tab.other.title}`, icon: "dock_right", run: () => PhoneDrive.importEntries(entries, root.view.tab.other.location.path) });
+		out.push({ label: "Import to…", icon: "folder_arrow_down_outline", run: () => root.view.ask("Import to which folder?", "Folder", PhoneDrive.importFolder(), folder => PhoneDrive.importEntries(entries, folder.replace(/^~/, Files.home))) });
 		return out;
 	}
 
@@ -382,6 +443,7 @@ QtObject {
 		if (picked.length > 0) flatten(root.forRows(pane, picked), picked.length === 1 ? picked[0].name : `${picked.length} picked`, "");
 		flatten(root.forPlace(pane), pane.title, "");
 		if (Files.undoTitle !== "") out.push({ label: `Undo ${Files.undoTitle.charAt(0).toLowerCase()}${Files.undoTitle.slice(1)}`, icon: "undo", shortcut: "Ctrl+Z", group: "Edit", run: () => Files.undo() });
+		out.push({ label: "Ask your files…", icon: "creation", group: "Window", run: () => view.ask("What are you looking for?", "the Telekom invoice from the spring", "", query => pane.go({ kind: "search", path: Files.home, query: query, ai: true })) });
 		out.push({ label: "Undo history", icon: "history", shortcut: "Ctrl+Shift+Z", group: "Edit", run: () => view.openHistory() });
 		out.push({ label: "Rules for folders", icon: "playlist_check", group: "Window", run: () => view.openSettings("rules") });
 		out.push({ label: "Vaults", icon: "safe_square_outline", group: "Window", run: () => view.openSettings("vaults") });
@@ -397,6 +459,9 @@ QtObject {
 		go("Home", "home_variant_outline", { kind: "home" });
 		go("Recent", "history", { kind: "recent" });
 		go("Trash", "trash_can_outline", { kind: "trash" });
+		if (Plugins.on("clipboard")) go("Clipboard history", "clipboard_text_multiple_outline", { kind: "clipboard" });
+		if (Plugins.on("screenshot") || Plugins.on("recording")) go("Captures", "camera_outline", { kind: "captures" });
+		if (PhoneDrive.enabled) for (const entry of PhoneDrive.collections) go(`${entry.label} on ${PhoneDrive.name}`, entry.icon, { kind: "phone", id: entry.id });
 		go("What takes the space in your home", "chart_donut", { kind: "storage", path: Files.home });
 		go("Copies in your home", "content_duplicate", { kind: "duplicates", path: Files.home });
 		for (const search of FileLibrary.searches) go(search.name, "magnify", { kind: "search", path: search.path, query: search.query, contents: search.contents });

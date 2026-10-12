@@ -5,7 +5,7 @@
 // and brought into a ListModel by changes only, so a file that appears or
 // goes is animated instead of the whole view starting over.
 
-const ROLES = ["path", "name", "dir", "link", "broken", "size", "mtime", "mime", "hidden", "exec", "thumb", "canThumb", "text", "sniff", "kind", "group", "uri", "orig", "deleted", "folder", "key"];
+const ROLES = ["path", "name", "dir", "link", "broken", "size", "mtime", "mime", "hidden", "exec", "thumb", "canThumb", "text", "sniff", "kind", "group", "uri", "orig", "deleted", "folder", "key", "clipId", "clipKind", "order", "snippet"];
 
 function row(entry, group, home) {
 	const path = String(entry.path || "");
@@ -32,8 +32,15 @@ function row(entry, group, home) {
 		uri: String(entry.uri || ""),
 		orig: String(entry.orig || ""),
 		deleted: Number(entry.deleted) || 0,
-		folder: home && folder.startsWith(home) ? "~" + folder.slice(home.length) : folder,
-		key: String(entry.key || String(entry.name || "").toLowerCase())
+		// a place of its own (the phone) says where in it a file is
+		folder: entry.folder !== undefined ? String(entry.folder) : (home && folder.startsWith(home) ? "~" + folder.slice(home.length) : folder),
+		key: String(entry.key || String(entry.name || "").toLowerCase()),
+		// an entry of the clipboard history (its cliphist id), and what it held
+		clipId: String(entry.clip || ""),
+		clipKind: String(entry.clipKind || ""),
+		// the place's own order (best matches first) and why it is there
+		order: Number(entry.order) || 0,
+		snippet: String(entry.snippet || "")
 	};
 }
 
@@ -100,6 +107,9 @@ function arrange(entries, opts) {
 	const byName = (a, b) => a.key < b.key ? -1 : (a.key > b.key ? 1 : (a.name < b.name ? -1 : (a.name > b.name ? 1 : 0)));
 	let compare;
 	switch (opts.sort) {
+	case "given":
+		compare = (a, b) => a.order - b.order;
+		break;
 	case "modified":
 		compare = (a, b) => (a.mtime - b.mtime) * sign || byName(a, b);
 		break;

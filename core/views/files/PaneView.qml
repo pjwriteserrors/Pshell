@@ -125,12 +125,22 @@ Item {
 
 			// a search that started here may also look into the files
 			Chip {
-				visible: root.pane.location.kind === "search"
+				visible: root.pane.location.kind === "search" && !root.pane.location.ai
 				height: 28
 				text: "Contents"
 				icon: "text_search"
 				selected: !!root.pane.location.contents
 				onClicked: root.pane.go(Object.assign({}, root.pane.location, { contents: !root.pane.location.contents }), { history: false })
+			}
+
+			// the question read by a model, the files found by what they are about
+			Chip {
+				visible: root.pane.location.kind === "search"
+				height: 28
+				text: "By meaning"
+				icon: "creation"
+				selected: !!root.pane.location.ai
+				onClicked: root.pane.go(Object.assign({}, root.pane.location, { ai: !root.pane.location.ai, contents: false }), { history: false })
 			}
 
 			IconButton {

@@ -57,7 +57,11 @@ Singleton {
 		shareHost: "litterbox",
 		shareHours: 24,
 		shareServer: null,
-		gitBadges: true
+		gitBadges: true,
+		aiIndex: false,
+		aiFolders: [],
+		aiOcr: true,
+		aiDescribe: true
 	})
 	// [{ path, at }], newest first
 	property var opened: []
@@ -226,9 +230,9 @@ Singleton {
 	}
 
 	// ── searches kept ──────────────────────────────────────────────────────
-	function addSearch(name, query, path, contents) {
+	function addSearch(name, query, path, contents, ai) {
 		const id = `s${Date.now().toString(36)}`;
-		root.searches = root.searches.concat([{ id: id, name: String(name).trim() || String(query), query: String(query), path: String(path || ""), contents: !!contents }]);
+		root.searches = root.searches.concat([{ id: id, name: String(name).trim() || String(query), query: String(query), path: String(path || ""), contents: !!contents, ai: !!ai }]);
 		root.save();
 		return id;
 	}

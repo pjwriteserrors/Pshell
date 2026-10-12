@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import Quickshell
 import qs.core.services
 import "Listing.js" as Listing
 
@@ -40,6 +41,8 @@ Item {
 	property var compareStates: null
 	// copies found: groups and how much could go
 	property var dupeSummary: null
+	// how a search by meaning was read: { words, read: { kind, after, before }, relaxed }
+	property var aiRead: null
 	// the model was refilled rather than changed: views play their entrance
 	property int resets: 0
 	// "in", "out" or "jump": how the last navigation went, for the transition
@@ -55,10 +58,16 @@ Item {
 	// in a split each side may show its files its own way
 	property string modeOverride: ""
 	readonly property string mode: root.modeOverride || root.view.mode
-	readonly property string sort: root.location.kind === "duplicates" ? "modified" : (root.location.kind === "recent" && !FileLibrary.folderViews[":recent"]?.sort ? "modified" : root.view.sort)
-	readonly property bool desc: root.location.kind === "duplicates" ? false : (root.location.kind === "recent" && !FileLibrary.folderViews[":recent"]?.sort ? true : !!root.view.desc)
+	// recent things come newest first unless the place was given an order of its own
+	readonly property bool newestFirst: ["recent", "clipboard", "phone", "captures"].includes(root.location.kind) && !FileLibrary.folderViews[`:${root.location.kind}`]?.sort
+	// matches by meaning come best first
+	readonly property bool ranked: (root.location.kind === "search" && !!root.location.ai) || root.location.kind === "similar"
+	readonly property string sort: root.ranked ? "given" : (root.location.kind === "duplicates" ? "modified" : (root.newestFirst ? "modified" : root.view.sort))
+	readonly property bool desc: root.location.kind === "duplicates" ? false : (root.newestFirst ? true : !!root.view.desc)
 	// copies come in their groups, as they were found
-	readonly property string group: root.location.kind === "duplicates" ? "given" : root.view.group
+	readonly property string group: root.ranked ? "none" : root.location.kind === "duplicates" ? "given"
+		// captures are a timeline unless they were given groups of their own
+		: (root.location.kind === "captures" && !FileLibrary.folderViews[":captures"]?.group ? "date" : root.view.group)
 	readonly property bool showHidden: !!FileLibrary.view.hidden
 	property string filter: ""
 
@@ -83,10 +92,14 @@ Item {
 		case "recent": return "Recent";
 		case "trash": return "Trash";
 		case "search": return loc.query ? `“${loc.query}”` : "Search";
+		case "similar": return `Like ${Files.nameOf(loc.path)}`;
 		case "tag": return FileLibrary.tagById(loc.id)?.name ?? "Tag";
 		case "collection": return FileLibrary.collectionById(loc.id)?.name ?? "Collection";
 		case "shelf": return Shelf.titleOf(Shelf.shelfById(loc.id)) || "Shelf";
 		case "duplicates": return `Copies in ${loc.path === Files.home ? "your home" : Files.nameOf(loc.path)}`;
+		case "phone": return `${PhoneDrive.collectionOf(loc.id).label} on ${PhoneDrive.name}`;
+		case "clipboard": return "Clipboard history";
+		case "captures": return "Captures";
 		case "storage": return `Space of ${loc.path === Files.home ? "your home" : (loc.path === "/" ? "the system" : Files.nameOf(loc.path))}`;
 		default: return loc.path === Files.home ? "Home folder" : (Files.nameOf(loc.path) || "/");
 		}
@@ -96,12 +109,16 @@ Item {
 		case "home": return "home_variant_outline";
 		case "recent": return "history";
 		case "trash": return "trash_can_outline";
-		case "search": return "magnify";
+		case "search": return root.location.ai ? "creation" : "magnify";
+		case "similar": return "approximately_equal";
 		case "tag": return "tag_outline";
 		case "collection": return "bookmark_box_multiple_outline";
 		case "shelf": return "tray_arrow_down";
 		case "duplicates": return "content_duplicate";
 		case "storage": return "chart_donut";
+		case "phone": return PhoneDrive.collectionOf(root.location.id).icon;
+		case "clipboard": return "clipboard_text_multiple_outline";
+		case "captures": return "camera_outline";
 		default: return root.location.path === Files.home ? "home_outline" : "folder_outline";
 		}
 	}
@@ -122,7 +139,7 @@ Item {
 	// ── going places ───────────────────────────────────────────────────────
 	function same(a, b) {
 		return a.kind === b.kind && String(a.path || "") === String(b.path || "") && String(a.query || "") === String(b.query || "")
-			&& String(a.id || "") === String(b.id || "") && !!a.contents === !!b.contents && String(a.at || "") === String(b.at || "");
+			&& String(a.id || "") === String(b.id || "") && !!a.contents === !!b.contents && String(a.at || "") === String(b.at || "") && !!a.ai === !!b.ai;
 	}
 
 	// opts: { select: [paths], history: false, direction }
@@ -207,6 +224,8 @@ Item {
 		const generation = root.generation;
 		const loc = root.location;
 		Files.watch(root.paneId, loc.kind === "dir" ? loc.path : "");
+		// the folders of captures, watched while they are shown
+		for (let i = 0; i < 3; i += 1) Files.watch(`${root.paneId}-c${i}`, "");
 		if (navigated) {
 			root.compareStates = null;
 			root.settled = false;
@@ -275,13 +294,48 @@ Item {
 		case "duplicates":
 			root.readDupes(generation, done);
 			break;
+		case "captures":
+			Files.request("captures", {}, (data, error) => {
+				done(data?.entries ?? [], error, {});
+				for (const [index, folder] of (data?.folders ?? []).entries()) Files.watch(`${root.paneId}-c${index}`, folder);
+			});
+			break;
+		case "clipboard":
+			Files.request("clips", {}, (data, error) => done(data?.entries ?? [], error, {}));
+			// a new entry (cliphist writes its database) reads the list again
+			Files.watch(root.paneId, `${Quickshell.env("XDG_CACHE_HOME") || Files.home + "/.cache"}/cliphist`);
+			break;
+		case "phone":
+			PhoneDrive.browse(String(loc.id), { limit: 600 }, (entries, error) => done(entries, error === "permission"
+				? `Allow the Pshell app on ${PhoneDrive.name} to see photos: in the app, Files → Let the PC see your photos` : error, {}));
+			break;
 		case "storage":
 			loadingTimer.stop();
 			root.settled = true;
 			root.raw = [];
 			root.arrange(true);
 			break;
+		case "similar":
+			root.searching = true;
+			Files.request("similar", { path: loc.path }, (data, error) => {
+				root.searching = false;
+				done((data?.entries ?? []).map((entry, index) => Object.assign(entry, { order: index })), error, {});
+			});
+			break;
 		case "search":
+			if (loc.ai && String(loc.query || "").trim() !== "") {
+				root.raw = [];
+				root.arrange(true);
+				root.searching = true;
+				root.aiRead = null;
+				Files.request("aisearch", { query: loc.query }, (data, error) => {
+					if (generation !== root.generation) return;
+					root.searching = false;
+					root.aiRead = data ? { words: data.words ?? [], read: data.read, relaxed: !!data.relaxed } : null;
+					done((data?.entries ?? []).map((entry, index) => Object.assign(entry, { order: index })), error, {});
+				});
+				break;
+			}
 			root.raw = [];
 			root.arrange(true);
 			root.searchId = `s${root.paneId}-${generation}`;
@@ -343,6 +397,17 @@ Item {
 		}
 	}
 
+	// pictures of the phone's files come in after the list: the rows take them
+	Connections {
+		target: PhoneDrive
+		enabled: root.location.kind === "phone"
+
+		function onThumbTickChanged() {
+			root.raw = root.raw.map(entry => entry.phoneId && PhoneDrive.thumbs[entry.phoneId] && entry.thumb !== PhoneDrive.thumbs[entry.phoneId] ? Object.assign({}, entry, { thumb: PhoneDrive.thumbs[entry.phoneId] }) : entry);
+			root.arrange(false);
+		}
+	}
+
 	// copies: all but the first (the oldest) of each group are picked
 	function pickCopies() {
 		const firsts = new Set(root.dupeSummary?.firsts ?? []);
@@ -370,6 +435,8 @@ Item {
 
 		function onFolderChanged(path) {
 			if (root.location.kind === "dir" && path === root.location.path) changedTimer.restart();
+			else if (root.location.kind === "clipboard" && path.endsWith("/cliphist")) changedTimer.restart();
+			else if (root.location.kind === "captures" && /\/(Screenshots|Recordings|Screencasts)$/.test(path)) changedTimer.restart();
 			else if (root.location.kind === "trash" && path.endsWith("/Trash/files")) changedTimer.restart();
 		}
 
@@ -611,5 +678,8 @@ Item {
 		onTriggered: root.typed = ""
 	}
 
-	Component.onDestruction: Files.watch(root.paneId, "")
+	Component.onDestruction: {
+		Files.watch(root.paneId, "");
+		for (let i = 0; i < 3; i += 1) Files.watch(`${root.paneId}-c${i}`, "");
+	}
 }

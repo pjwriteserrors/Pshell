@@ -102,6 +102,7 @@ class App : Application(), SingletonImageLoader.Factory {
 		Finder.install(this)
 		ClipboardSync.install(this)
 		Transfers.install(this)
+		dev.pshell.app.service.PhoneMedia.install(this)
 		Handoff.install(this)
 		Telephony.install(this)
 		PhoneNotificationListener.install(this)

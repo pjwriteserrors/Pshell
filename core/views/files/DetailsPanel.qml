@@ -24,7 +24,7 @@ Rectangle {
 	}
 	readonly property var subject: root.picked.length === 1 ? root.picked[0] : null
 	// nothing picked in a folder: the folder
-	readonly property string path: root.subject ? root.subject.path : (root.picked.length === 0 && root.pane?.isFolder ? root.pane.location.path : "")
+	readonly property string path: String((root.subject ? root.subject.path : (root.picked.length === 0 && root.pane?.isFolder ? root.pane.location.path : "")) ?? "")
 	property var info: null
 	// earlier versions of the picked file, once asked for
 	property var versions: null
@@ -448,6 +448,113 @@ Rectangle {
 				Component.onCompleted: {
 					noteField.forPath = root.path;
 					noteField.text = FileLibrary.noteOf(root.path);
+				}
+			}
+
+			// ── tasks that name it ─────────────────────────────────────────
+			ColumnLayout {
+				id: taskBox
+
+				property var found: []
+
+				function load() {
+					const path = root.path;
+					if (path === "" || !Plugins.on("todos")) {
+						taskBox.found = [];
+						return;
+					}
+					Files.request("tasks", { path: path }, data => {
+						if (path === root.path) taskBox.found = data?.tasks ?? [];
+					});
+				}
+
+				Layout.fillWidth: true
+				visible: Plugins.on("todos") && root.path !== "" && root.picked.length <= 1
+				spacing: 6
+
+				Connections {
+					target: root
+
+					function onPathChanged() {
+						taskTimer.restart();
+					}
+				}
+
+				Connections {
+					target: Files
+
+					function onTasksChanged() {
+						taskBox.load();
+					}
+				}
+
+				Timer {
+					id: taskTimer
+
+					interval: 150
+					onTriggered: taskBox.load()
+				}
+
+				SectionLabel {
+					text: "Tasks"
+				}
+
+				Repeater {
+					model: taskBox.found
+
+					delegate: RowLayout {
+						id: task
+
+						required property var modelData
+
+						Layout.fillWidth: true
+						spacing: 8
+
+						IconButton {
+							width: 28
+							height: 28
+							iconSize: 17
+							icon: task.modelData.done ? "checkbox_marked_circle" : "checkbox_blank_circle_outline"
+							iconColor: task.modelData.done ? Theme.success : Theme.textMuted
+							onClicked: Files.request("tasks", { action: "toggle", list: task.modelData.list, line: task.modelData.line }, (data, error) => {
+								if (error) Files.fail(error);
+								Todos.refresh();
+								taskBox.load();
+								Sounds.play(task.modelData.done ? "toggleOff" : "toggleOn");
+							})
+						}
+
+						ColumnLayout {
+							Layout.fillWidth: true
+							spacing: 0
+
+							StyledText {
+								Layout.fillWidth: true
+								text: task.modelData.text
+								font.strikeout: task.modelData.done
+								tone: task.modelData.done ? Theme.textSubtle : Theme.text
+								font.pixelSize: Theme.size.small
+								wrapMode: Text.WordWrap
+							}
+
+							StyledText {
+								text: task.modelData.listName
+								tone: Theme.textSubtle
+								font.pixelSize: Theme.size.tiny
+							}
+						}
+					}
+				}
+
+				TextButton {
+					height: 30
+					variant: "ghost"
+					icon: "checkbox_marked_circle_plus_outline"
+					text: taskBox.found.length > 0 ? "Another task" : "Remember as a task"
+					onClicked: {
+						const at = mapToItem(root.view, 0, height + 4);
+						root.view.menuFromSidebar(root.view.taskMenu([root.path]), at.x, at.y);
+					}
 				}
 			}
 

@@ -226,9 +226,15 @@ private fun FilesScreen() {
 	val context = LocalContext.current
 	val transfers by Transfers.list.collectAsState()
 	val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> if (uris.isNotEmpty()) Transfers.upload(uris) }
+	var askedMedia by remember { mutableIntStateOf(0) }
+	val media = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { askedMedia += 1 }
+	val mediaAllowed = remember(askedMedia) { dev.pshell.app.service.PhoneMedia.allowed(context) }
 	Screen("Files") {
 		PrimaryButton("Send files to the PC", Modifier.fillMaxWidth(), icon = "file_send_outline") { picker.launch(arrayOf("*/*")) }
 		Label("They land in the PC's downloads folder. From any other app: Share → Send to PC. The PC sends files with >phone in the launcher, or by dropping them on the phone page.", style = Theme.Type.small, color = Theme.colors.textMuted, maxLines = 5)
+		Access("Let the PC see your photos", mediaAllowed, "The PC's file manager shows the phone's pictures, videos, downloads and WhatsApp media, and imports them", "image_multiple_outline") {
+			media.launch(dev.pshell.app.service.PhoneMedia.permissions)
+		}
 		if (transfers.isEmpty()) EmptyState("swap_vertical", "Nothing sent yet")
 		else {
 			SectionLabel("Transfers")

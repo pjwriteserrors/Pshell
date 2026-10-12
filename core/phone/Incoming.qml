@@ -101,6 +101,8 @@ Scope {
 	// a file of the phone arrived in the downloads folder (a shelf that
 	// watches it shows it by itself)
 	function received(data) {
+		// asked for by the file manager (an import, a file opened from the phone): it says itself
+		if (data.ticket) return;
 		const path = String(data.path || "");
 		const image = /\.(png|jpe?g|webp|gif)$/i.test(path);
 		Notifs.pushInternal("done", String(data.name || "File"), `From ${data.from || root.link.name}`, {

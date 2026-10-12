@@ -22,7 +22,9 @@ import gi
 gi.require_version("Gio", "2.0")
 from gi.repository import Gio, GLib  # noqa: E402
 
+import ai  # noqa: E402
 import archives  # noqa: E402
+import captures  # noqa: E402
 import compare  # noqa: E402
 import convert  # noqa: E402
 import dupes  # noqa: E402
@@ -239,7 +241,7 @@ class Job:
         # (from, to) of what was moved or renamed: tags and favourites follow
         self.moves = []
         # a job that may be held: it waits between two chunks (or its process is stopped)
-        self.can_pause = kind in ("copy", "move", "auto", "paste", "extract", "compress", "download", "delete", "pdf", "vtscan", "convert", "upload", "avscan", "dupes", "storage", "share", "sync", "image")
+        self.can_pause = kind in ("copy", "move", "auto", "paste", "extract", "compress", "download", "delete", "pdf", "vtscan", "convert", "upload", "avscan", "dupes", "storage", "share", "sync", "image", "trim", "gif")
         self.paused = False
         self.process = None
         # what a job found out, for the window to show (a scan's verdict)
@@ -1241,6 +1243,119 @@ class Manager:
                 self._transfer(job, {"sources": group, "target": target}, "copy" if kind == "copy" else "move")
         job.title = f"{name}: {os.path.basename(paths[0])}" if len(paths) == 1 else f"{name}: {len(paths)} files"
         job.undo_title = job.title
+
+    # ── screenshots and recordings ─────────────────────────────────────────
+    def _do_capturetext(self, job, args):
+        paths = [path for path in args.get("paths", []) if os.path.isfile(path)]
+        job.title = f"Reading the text of {os.path.basename(paths[0])}" if len(paths) == 1 else f"Reading the text of {len(paths)} pictures"
+        job.undo_title = job.title
+        job.files_total = len(paths)
+        job.state = "running"
+        job.report(True)
+        problems = []
+        for path in paths:
+            job.check()
+            job.current = os.path.basename(path)
+            job.report(True)
+            try:
+                made = captures.text_beside(path, unique)
+                job.created.append(made)
+                job.undo.append(("trash", made))
+            except (captures.CaptureError, subprocess.SubprocessError) as error:
+                problems.append(str(error))
+            job.files_done += 1
+        if problems and not job.created:
+            raise Failure(problems[0])
+
+    def _do_ainame(self, job, args):
+        paths = [path for path in args.get("paths", []) if os.path.isfile(path)]
+        job.title = f"Naming {os.path.basename(paths[0])}" if len(paths) == 1 else f"Naming {len(paths)} pictures"
+        job.undo_title = "Names by AI"
+        job.files_total = len(paths)
+        job.state = "running"
+        job.report(True)
+        problems = []
+        for path in paths:
+            job.check()
+            job.current = os.path.basename(path)
+            job.report(True)
+            try:
+                name = captures.suggest_name(path)
+                if name != os.path.basename(path):
+                    target = os.path.join(os.path.dirname(path), name)
+                    if os.path.lexists(target):
+                        target = unique(target)
+                    self._rename(job, path, os.path.basename(target))
+            except (captures.CaptureError, ai.AiError, subprocess.SubprocessError) as error:
+                problems.append(str(error))
+            job.files_done += 1
+        if problems and not job.created:
+            raise Failure(problems[0])
+
+    def _do_trim(self, job, args):
+        path = args["path"]
+        length = float(args.get("end", 0)) - float(args.get("start", 0))
+        job.title = f"Cutting {os.path.basename(path)}"
+        job.undo_title = job.title
+        job.files_total = 1
+        job.bytes_total = 1000
+        job.state = "running"
+        job.report(True)
+
+        def report(share):
+            job.bytes_done = int(share * 1000)
+            job.report()
+
+        try:
+            made = captures.trim(Context(job), path, args.get("start", 0), args.get("end", 0), bool(args.get("exact", True)), unique, report)
+        except captures.CaptureError as error:
+            raise Failure(str(error))
+        job.created.append(made)
+        job.undo.append(("trash", made))
+        job.files_done = 1
+        job.current = f"{length:.1f} s"
+
+    def _do_gif(self, job, args):
+        path = args["path"]
+        job.title = f"Making a GIF of {os.path.basename(path)}"
+        job.undo_title = job.title
+        job.files_total = 1
+        job.bytes_total = 1000
+        job.state = "running"
+        job.report(True)
+
+        def report(share):
+            job.bytes_done = int(share * 1000)
+            job.report()
+
+        try:
+            made = captures.to_gif(Context(job), path, args.get("start", 0), args.get("end", 0), int(args.get("fps", 15)), int(args.get("width", 720)), unique, report)
+        except captures.CaptureError as error:
+            raise Failure(str(error))
+        job.created.append(made)
+        job.undo.append(("trash", made))
+        job.files_done = 1
+
+    # ── a model for Ollama ─────────────────────────────────────────────────
+    def _do_aipull(self, job, args):
+        model = str(args.get("model") or "")
+        job.title = f"Downloading the model {model}"
+        job.state = "running"
+        job.report(True)
+
+        def report(done, total, status):
+            if total:
+                job.bytes_total = total
+                job.bytes_done = done
+            job.current = status
+            job.report()
+
+        try:
+            ai.pull(model, report, lambda: job.cancellable.is_cancelled())
+        except ai.AiError as error:
+            raise Failure(str(error))
+        job.check()
+        job.files_done = job.files_total = 1
 
     # ── git ────────────────────────────────────────────────────────────────
     def _do_gitcommit(self, job, args):

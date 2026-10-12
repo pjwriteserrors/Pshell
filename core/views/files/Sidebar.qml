@@ -31,7 +31,7 @@ Rectangle {
 	function isAt(kind, value) {
 		if (root.loc.kind !== kind) return false;
 		if (kind === "dir") return root.loc.path === value;
-		if (kind === "tag" || kind === "collection" || kind === "shelf") return root.loc.id === value;
+		if (kind === "tag" || kind === "collection" || kind === "shelf" || kind === "phone") return root.loc.id === value;
 		if (kind === "search") return String(root.loc.query) === String(value.query) && String(root.loc.path || Files.home) === String(value.path || Files.home);
 		return true;
 	}
@@ -158,6 +158,32 @@ Rectangle {
 					label: "Recent"
 					active: root.isAt("recent")
 					onClicked: root.go({ kind: "recent" })
+				}
+
+				// screenshots and recordings on a timeline
+				SideItem {
+					visible: Plugins.on("screenshot") || Plugins.on("recording")
+					width: parent.width
+					icon: "camera_outline"
+					label: "Captures"
+					active: root.isAt("captures")
+					onClicked: root.go({ kind: "captures" })
+				}
+
+				// what was copied lately; files dropped here go onto the clipboard
+				SideItem {
+					visible: Plugins.on("clipboard")
+					width: parent.width
+					icon: "clipboard_text_multiple_outline"
+					label: "Clipboard"
+					active: root.isAt("clipboard")
+					dropEnabled: true
+					onClicked: root.go({ kind: "clipboard" })
+					onDropped: drop => {
+						const paths = root.pathsOf(drop);
+						if (paths.length > 0) Files.clipboardSet(paths, false);
+						else if (drop.hasText) Files.copyText(drop.text, "On the clipboard");
+					}
 				}
 			}
 
@@ -382,10 +408,10 @@ Rectangle {
 						required property var modelData
 
 						width: parent.width
-						icon: modelData.contents ? "text_search" : "magnify"
+						icon: modelData.ai ? "creation" : (modelData.contents ? "text_search" : "magnify")
 						label: modelData.name
 						active: root.isAt("search", modelData)
-						onClicked: root.go({ kind: "search", path: modelData.path, query: modelData.query, contents: modelData.contents })
+						onClicked: root.go({ kind: "search", path: modelData.path, query: modelData.query, contents: modelData.contents, ai: !!modelData.ai })
 						onMenu: (x, y) => root.menuAt(searchItem, x, y, [
 							{ label: "Rename…", icon: "form_textbox", run: () => root.view.ask("Rename the search", "Name", modelData.name, name => FileLibrary.renameSearch(modelData.id, name)) },
 							{ label: "Remove", icon: "delete_outline", danger: true, run: () => FileLibrary.removeSearch(modelData.id) }
@@ -435,6 +461,38 @@ Rectangle {
 							{ separator: true },
 							{ label: "Take off the list", icon: "playlist_remove", run: () => Files.vaultDo({ action: "forget", vault: modelData.id }) }
 						])
+					}
+				}
+			}
+
+			// the phone: its camera, screenshots, WhatsApp … through the phone app
+			SideSection {
+				width: parent.width
+				title: PhoneDrive.name
+				visible: PhoneDrive.enabled && Phone.paired
+				dropEnabled: PhoneDrive.reachable
+				onDropped: drop => {
+					const paths = root.pathsOf(drop);
+					if (paths.length > 0) Phone.sendFiles(paths);
+				}
+
+				Repeater {
+					model: PhoneDrive.enabled ? PhoneDrive.collections.filter(entry => ["camera", "screenshots", "whatsapp", "downloads", "videos"].includes(entry.id) || FileLibrary.setting("phoneAll")) : []
+
+					delegate: SideItem {
+						required property var modelData
+
+						width: parent.width
+						icon: modelData.icon
+						label: modelData.label
+						active: root.isAt("phone", modelData.id)
+						opacity: PhoneDrive.reachable ? 1 : 0.5
+						dropEnabled: PhoneDrive.reachable
+						onClicked: root.go({ kind: "phone", id: modelData.id })
+						onDropped: drop => {
+							const paths = root.pathsOf(drop);
+							if (paths.length > 0) Phone.sendFiles(paths);
+						}
 					}
 				}
 			}
