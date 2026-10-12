@@ -196,7 +196,7 @@ def doctor():
 
     report.section("Python modules")
     hooks = host.hooks()
-    groups = ["core"] + [f"hook:{hook}" for hook in hooks]
+    groups = plugins + [f"hook:{hook}" for hook in hooks]
     missing = [(module, why) for group in groups for module, why in PYTHON_MODULES.get(group, []) if not module_available(module)]
     for module, why in missing:
         report.fail(f"{module} – {why}")
