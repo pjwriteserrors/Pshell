@@ -264,7 +264,7 @@ class Outlook(Provider):
         self.store.put([self.convert(item) for item in items])
         return bool(items)
 
-    def load(self, chat):
+    def load(self, chat, each=None):
         known = {message["id"]: message for message in self.store.chat_messages(self.id, chat, hidden=True)}
         if all("body" in message for message in known.values()) and known:
             return
@@ -273,10 +273,13 @@ class Outlook(Provider):
         query = urllib.parse.urlencode({"$filter": f"conversationId eq '{quoted}'", "$select": FIELDS + ",body", "$expand": EXTENDED, "$top": "50"})
         items = self.pages("/me/messages?" + query, 300)
         self.store.put([self.convert(item) for item in items])
-        for item in items:
+        # the newest first: that is where the chat is looked at
+        for item in sorted(items, key=lambda item: item.get("receivedDateTime") or "", reverse=True):
             if "body" in known.get(item["id"], {}):
                 continue
             self.keep_body(item)
+            if each and item["id"] in known:
+                each(item["id"])
 
     def keep_body(self, item):
         raw = (item.get("body") or {}).get("content") or ""

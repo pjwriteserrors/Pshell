@@ -431,10 +431,13 @@ class Imap(Provider):
         self.store.put_body(self.id, ident, body)
         self.store.patch(self.id, ident, preview=content.preview(body["text"]), hasAttachments=bool(attachments))
 
-    def load(self, chat):
-        for message in self.store.chat_messages(self.id, chat, hidden=True):
+    def load(self, chat, each=None):
+        # the newest first: that is where the chat is looked at
+        for message in reversed(self.store.chat_messages(self.id, chat, hidden=True)):
             if "body" not in message:
                 self.keep_body(message["id"])
+                if each:
+                    each(message["id"])
 
     def find_signature(self):
         mine = [message for ident in self.store.ids(self.id, "sent:") if (message := self.store.message(self.id, ident))]
@@ -596,6 +599,17 @@ class Imap(Provider):
 
     def send(self, draft):
         mail, everyone = self.compose(draft)
+        self.post(mail, everyone)
+        # Gmail files what it sends itself
+        if not self.gmail and "sent" in self.roles:
+            try:
+                self.ensure()
+                self.conn.append(quoted(self.roles["sent"]), "(\\Seen)", imaplib.Time2Internaldate(time.time()), bytes(mail))
+            except (OSError, imaplib.IMAP4.error):
+                pass
+
+    def post(self, mail, everyone):
+        """Hands a mail to the SMTP server."""
         host, port = self.smtp.get("host", ""), int(self.smtp.get("port") or 465)
         if not host:
             raise Failure("No SMTP server")
@@ -613,13 +627,6 @@ class Imap(Provider):
             raise Failure(f"Not sent: {str(error)[:200]}")
         except OSError as error:
             raise Failure(f"{host}: {error}")
-        # Gmail files what it sends itself
-        if not self.gmail and "sent" in self.roles:
-            try:
-                self.ensure()
-                self.conn.append(quoted(self.roles["sent"]), "(\\Seen)", imaplib.Time2Internaldate(time.time()), bytes(mail))
-            except (OSError, imaplib.IMAP4.error):
-                pass
 
     def check_smtp(self):
         host, port = self.smtp.get("host", ""), int(self.smtp.get("port") or 465)

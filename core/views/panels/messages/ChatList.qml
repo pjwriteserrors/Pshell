@@ -205,7 +205,7 @@ ColumnLayout {
 		return Qt.formatDate(date, date.getFullYear() === now.getFullYear() ? "d MMM" : "d MMM yy");
 	}
 
-	spacing: 8
+	spacing: 10
 
 	// another mailbox shows nothing of this one's
 	Connections {
@@ -849,8 +849,8 @@ ColumnLayout {
 			readonly property bool fresh: (item.chat?.unread ?? 0) > 0
 
 			width: ListView.view.width
-			implicitHeight: 62
-			radius: Theme.radius.medium
+			implicitHeight: 66
+			radius: Theme.radius.large
 			pressedScale: 0.98
 			showHover: false
 			color: item.current ? Theme.primaryContainer : (item.hovered ? Theme.layer1 : "transparent")
@@ -865,19 +865,19 @@ ColumnLayout {
 
 			RowLayout {
 				anchors.fill: parent
-				anchors.leftMargin: 10
-				anchors.rightMargin: 10
-				spacing: 10
+				anchors.leftMargin: 12
+				anchors.rightMargin: 12
+				spacing: 12
 
 				ChatAvatar {
 					people: item.chat?.people ?? []
-					size: 40
+					size: 42
 					surface: item.current ? Theme.primaryContainer : (item.hovered ? Theme.layer1 : Theme.base)
 				}
 
 				ColumnLayout {
 					Layout.fillWidth: true
-					spacing: 2
+					spacing: 3
 
 					RowLayout {
 						Layout.fillWidth: true
@@ -908,7 +908,7 @@ ColumnLayout {
 						StyledText {
 							text: item.chat ? root.stamp(item.chat.date) : ""
 							tone: item.fresh ? Theme.primary : Theme.textSubtle
-							font.pixelSize: Theme.size.tiny
+							font.pixelSize: Theme.size.small
 							font.weight: item.fresh ? Font.Bold : Font.Normal
 						}
 					}
@@ -927,7 +927,7 @@ ColumnLayout {
 							text: `${who}${item.chat?.preview || (item.chat?.people ?? []).map(entry => entry.name).join(", ")}`
 							elide: Text.ElideRight
 							tone: item.fresh ? Theme.text : Theme.textMuted
-							font.pixelSize: Theme.size.small
+							font.pixelSize: Theme.size.label
 						}
 
 						Badge {

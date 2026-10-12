@@ -20,6 +20,7 @@ import assist  # noqa: E402
 import content  # noqa: E402
 import daemon as service  # noqa: E402
 import store as storage  # noqa: E402
+import newsletters  # noqa: E402
 from demo import Demo  # noqa: E402
 from outlook import Outlook  # noqa: E402
 from provider import Failure  # noqa: E402
@@ -230,6 +231,76 @@ class Graph(unittest.TestCase):
         self.outlook.set_read(["here", "gone"], True)
         self.assertTrue(self.store.message("outlook", "here")["read"])
         self.assertIsNone(self.store.message("outlook", "gone"))
+
+
+def head(sender, subject, date, leave, post=""):
+    lines = [f"From: {sender}", f"Subject: {subject}", f"Date: {date}", f"List-Unsubscribe: {leave}"]
+    return "\r\n".join(lines + ([f"List-Unsubscribe-Post: {post}"] if post else []) + ["", ""]).encode()
+
+
+class Newsletters(unittest.TestCase):
+    def test_senders_are_grouped_and_the_newest_mail_says_how_to_leave(self):
+        senders = newsletters.group([
+            head("Shop <news@mail.shop.example>", "Old", "Mon, 05 Jan 2026 10:00:00 +0000", "<mailto:out@shop.example?subject=bye>"),
+            head("Shop <deals@shop.example>", "New", "Tue, 06 Jan 2026 10:00:00 +0000", "<https://shop.example/u?x=1>, <mailto:out@shop.example>", "List-Unsubscribe=One-Click"),
+            head("Paper <a@paper.co.uk>", "Daily", "Tue, 06 Jan 2026 10:00:00 +0000", "<https://paper.co.uk/out>"),
+            head("Tom <tom@example.org>", "Hi", "Tue, 06 Jan 2026 10:00:00 +0000", ""),
+        ], "box")
+        self.assertEqual([(sender["id"], sender["count"], sender["method"]) for sender in senders], [("box|shop.example", 2, "one-click"), ("box|paper.co.uk", 1, "page")])
+        self.assertEqual((senders[0]["subject"], senders[0]["http"]), ("New", "https://shop.example/u?x=1"))
+
+    def test_a_platform_many_send_through_is_told_apart_by_name(self):
+        senders = newsletters.group([
+            head("One <one@substack.com>", "a", "Tue, 06 Jan 2026 10:00:00 +0000", "<https://substack.com/1>"),
+            head("Two <two@substack.com>", "b", "Tue, 06 Jan 2026 10:00:00 +0000", "<https://substack.com/2>"),
+        ], "box")
+        self.assertEqual(sorted(sender["id"] for sender in senders), ["box|substack.com|one", "box|substack.com|two"])
+
+    def test_the_ways_out_are_tried_in_turn(self):
+        tried = []
+
+        class Web:
+            def one_click(self, url):
+                tried.append("one-click")
+                raise OSError
+
+            def page(self, url):
+                tried.append("page")
+                return False
+
+        def post(address):
+            tried.append("email")
+            return True
+
+        sender = {"http": "https://shop.example/u", "mailto": "mailto:out@shop.example", "oneClick": True}
+        self.assertEqual(newsletters.leave(sender, Web(), post), {"status": "done", "method": "email", "url": "https://shop.example/u"})
+        self.assertEqual(tried, ["one-click", "email"])
+        self.assertEqual(newsletters.leave({"http": "https://shop.example/u"}, Web(), post)["status"], "needs-you")
+        self.assertEqual(newsletters.mail_to("mailto:out@shop.example?subject=bye%20now"), ("out@shop.example", "bye now", "unsubscribe"))
+
+    def test_only_public_addresses_are_spoken_to(self):
+        for url in ("http://127.0.0.1/u", "http://192.168.1.1/u", "http://[::1]/u", "http://169.254.169.254/u", "file:///etc/passwd", "mailto:a@b.example"):
+            self.assertFalse(newsletters.is_public(url), url)
+        with self.assertRaises(newsletters.Blocked):
+            newsletters.Web().request("http://localhost:1/u")
+
+    def test_a_page_is_read_for_its_form(self):
+        page = '<form action="/out" method="post"><input type="hidden" name="t" value="1"><input type="radio" name="what" value="some"><input type="radio" name="what" value="all"><button name="go" value="Abmelden">Abmelden</button></form>'
+        self.assertEqual(newsletters.leave_form(page, "https://shop.example/u?x=1"), {"action": "https://shop.example/out", "method": "POST", "fields": {"t": "1", "what": "all", "go": "Abmelden"}})
+        self.assertIsNone(newsletters.leave_form('<form action="/search"><input name="q"></form>', "https://shop.example/"))
+        self.assertTrue(newsletters.confirmed("<p>Sie wurden erfolgreich abgemeldet.</p><script>unsubscribed</script>"))
+        self.assertFalse(newsletters.confirmed("<p>Click to unsubscribe</p>"))
+
+    def test_the_mailbox_of_work_is_left_out(self):
+        events = []
+        accounts = [{"id": "outlook", "kind": "outlook"}, {"id": "demo", "kind": "demo"}]
+        desk = newsletters.Desk(lambda: accounts, None, lambda event, **fields: events.append(fields), demo=True)
+        desk.found["senders"].append(dict(desk.found["senders"][0], id="outlook|shop.example", account="outlook"))
+        self.assertEqual([account["id"] for account in desk.private()], ["demo"])
+        desk.publish()
+        self.assertEqual({sender["account"] for sender in events[-1]["senders"]}, {"demo"})
+        desk.leave(["outlook|shop.example", "demo|quietpages.example"])
+        self.assertEqual(list(desk.left), ["demo|quietpages.example"])
 
 
 if __name__ == "__main__":

@@ -459,6 +459,13 @@ def prepare(work: Path):
     (state / "screentime.json").write_text(json.dumps({"days": screentime()}))
     # a mailbox that does not exist (scripts/messages/demo.py)
     (state / "messages.json").write_text(json.dumps({"demo": True, "accounts": []}))
+    # a WhatsApp account that does not exist (scripts/whatsapp/demo.go), with the bridge that is built already
+    (state / "whatsapp").mkdir()
+    (state / "whatsapp" / "demo").write_text("")
+    bridge = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "pshell" / "whatsapp" / "bridge"
+    if bridge.exists():
+        (home / ".cache" / "pshell" / "whatsapp").mkdir(parents=True)
+        shutil.copy(bridge, home / ".cache" / "pshell" / "whatsapp" / "bridge")
     # connections that do not exist (scripts/outbound.py)
     (state / "connections.json").write_text(json.dumps({"demo": True}))
     (state / "song.json").write_text(json.dumps({

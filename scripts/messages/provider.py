@@ -198,8 +198,8 @@ class Provider:
         """Loads mails from before the oldest one known. False when there are none."""
         return False
 
-    def load(self, chat):
-        """Makes sure every mail of the chat has its body."""
+    def load(self, chat, each=None):
+        """Makes sure every mail of the chat has its body; `each` is told the id of every mail that got one."""
 
     def set_read(self, idents, value):
         raise Failure("Not supported")

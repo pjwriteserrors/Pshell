@@ -47,7 +47,10 @@ Item {
 	// a drawn mail is shown pixel for pixel: it gets the width it was drawn at where the chat has it
 	readonly property real sheetWidth: Math.max(root.page?.width ?? 0, root.expanded && !root.whole ? (root.message.signaturePage?.width ?? 0) : 0)
 	readonly property real room: root.sheetWidth > 0 ? Math.max(root.maxWidth, Math.min(root.sheetWidth + 24, root.width - (root.group ? 36 : 0))) : root.maxWidth
-	readonly property color surface: root.mine ? Theme.primaryContainer : Theme.layer2
+	readonly property color surface: root.mine ? Messages.mine : Messages.theirs
+	// the room above the first of a run, and the corner of the ones that follow it
+	readonly property real lead: root.head && !root.newDay ? 10 : 0
+	readonly property real joint: Messages.bubbleJoint
 
 	signal reply
 	signal forward
@@ -76,8 +79,22 @@ Item {
 
 	// links wear the accent, and a picture is a link to itself: a click shows it large
 	function tinted(html) {
-		return String(html).replace(/<a href=/g, `<a style="color:${Theme.primary}" href=`)
+		return root.snug(html).replace(/<a href=/g, `<a style="color:${Messages.accent}" href=`)
 			.replace(/<img src="file:\/\/([^"]+)"[^>]*>/g, (image, path) => `<a href="pshell-picture:${path}">${image}</a>`);
+	}
+
+	// rich text puts room above its first and below its last paragraph: in a bubble that is a hole
+	function snug(html) {
+		let text = String(html).trim();
+		const first = text.match(/^<p(\s[^>]*)?>/);
+		if (first && !/style=/.test(first[0])) text = `<p style="margin-top:0"${first[1] ?? ""}>` + text.slice(first[0].length);
+		const last = text.lastIndexOf("<p");
+		if (last >= 0 && text.endsWith("</p>")) {
+			const tag = text.slice(last).match(/^<p(\s[^>]*)?>/);
+			if (tag && tag[0].includes("margin-top:0") && !tag[0].includes("margin-bottom")) text = text.slice(0, last) + tag[0].replace("margin-top:0", "margin-top:0;margin-bottom:0") + text.slice(last + tag[0].length);
+			else if (tag && !/style=/.test(tag[0])) text = text.slice(0, last) + `<p style="margin-bottom:0"${tag[1] ?? ""}>` + text.slice(last + tag[0].length);
+		}
+		return text;
 	}
 
 	function follow(link) {
@@ -85,16 +102,65 @@ Item {
 		else Qt.openUrlExternally(link);
 	}
 
+	// a mail that just arrived comes up out of its corner
+	function appear() {
+		if (Messages.style.arrival !== "none") pop.restart();
+	}
+
 	implicitHeight: column.implicitHeight
 	// the strip of the bubble under the pointer may reach over the mail above it
-	z: hover.hovered || toolsHover.hovered ? 2 : 0
+	z: hover.hovered || root.toolsOver ? 2 : 0
+	// the pointer was on this mail once: its tools are made
+	property bool touched: false
+	readonly property bool toolsOver: toolsLoader.item?.over ?? false
 
-	Avatar {
-		id: face
+	ParallelAnimation {
+		id: pop
 
-		visible: false
-		name: root.message.from.name
-		email: root.message.from.email
+		Anim {
+			target: stack
+			property: "opacity"
+			from: 0
+			to: 1
+			duration: Messages.style.arrival === "fade" ? Motion.long : Motion.short
+		}
+		SpatialAnim {
+			target: stack
+			property: "scale"
+			from: Messages.style.arrival === "pop" ? 0.9 : 1
+			to: 1
+			duration: Motion.long
+		}
+		SpatialAnim {
+			target: slide
+			property: "x"
+			from: Messages.style.arrival === "slide" ? (root.mine ? 48 : -48) : 0
+			to: 0
+			duration: Motion.long
+		}
+	}
+
+	// the colour of who wrote, where names are shown
+	readonly property color tone: {
+		let sum = 0;
+		const key = root.message.from.email || root.message.from.name;
+		for (let i = 0; i < key.length; i += 1) sum = (sum * 31 + key.charCodeAt(i)) % 360;
+		return Qt.hsla(sum / 360, 0.45, Theme.dark ? 0.62 : 0.42, 1);
+	}
+
+	Gradient {
+		id: ownGradient
+
+		orientation: Gradient.Horizontal
+
+		GradientStop {
+			position: 0
+			color: Messages.mine
+		}
+		GradientStop {
+			position: 1
+			color: Messages.mineEnd
+		}
 	}
 
 	// how wide the text would run unwrapped
@@ -102,9 +168,10 @@ Item {
 		id: probe
 
 		visible: false
-		text: root.message.text || "…"
+		// a line this long is wider than any bubble: the rest of a long mail need not be measured
+		text: String(root.message.text || "…").slice(0, 240)
 		font.family: Theme.fontFamily
-		font.pixelSize: Theme.size.body
+		font.pixelSize: Messages.textSize
 		font.weight: Font.DemiBold
 	}
 
@@ -117,14 +184,14 @@ Item {
 		Item {
 			visible: root.newDay
 			width: parent.width
-			height: 36
+			height: 44
 
 			Rectangle {
 				anchors.centerIn: parent
-				width: dayLabel.implicitWidth + 20
-				height: 22
-				radius: 11
-				color: Theme.layer1
+				width: dayLabel.implicitWidth + 24
+				height: 24
+				radius: 12
+				color: Theme.layer2
 
 				StyledText {
 					id: dayLabel
@@ -132,56 +199,76 @@ Item {
 					anchors.centerIn: parent
 					text: root.day()
 					tone: Theme.textMuted
-					font.pixelSize: Theme.size.tiny
+					font.pixelSize: Theme.size.small
 					font.weight: Font.DemiBold
 				}
 			}
 		}
 
 		// an automatic reply is a notice, not a message
-		Rectangle {
-			visible: root.message.auto
+		// Only where the mail is one: laid out by hand, as a layout that takes its width from
+		// the wrapped words it holds never settles – and every bubble of a long chat paid for it.
+		Loader {
+			active: root.message.auto
+			visible: active
 			anchors.horizontalCenter: parent.horizontalCenter
-			width: Math.min(root.maxWidth, notice.implicitWidth + 28)
-			height: notice.implicitHeight + 16
-			radius: Theme.radius.medium
-			color: Theme.layer1
+			sourceComponent: Rectangle {
+				// how wide the words would run unwrapped
+				readonly property real wanted: Math.max(noticeHead.implicitWidth, noticeProbe.implicitWidth)
 
-			ColumnLayout {
-				id: notice
+				width: Math.min(root.maxWidth, Math.ceil(wanted) + 28)
+				height: notice.height + 16
+				radius: Theme.radius.medium
+				color: Theme.layer2
 
-				anchors.centerIn: parent
-				width: Math.min(implicitWidth, root.maxWidth - 28)
-				spacing: 2
+				Text {
+					id: noticeProbe
 
-				RowLayout {
-					Layout.alignment: Qt.AlignHCenter
-					spacing: 6
+					visible: false
+					text: String(root.message.text).slice(0, 400)
+					font.family: Theme.fontFamily
+					font.pixelSize: Theme.size.small
+				}
 
-					Glyph {
-						icon: "beach"
-						size: 13
-						color: Theme.textMuted
+				Column {
+					id: notice
+
+					x: 14
+					y: 8
+					width: parent.width - 28
+					spacing: 2
+
+					Row {
+						id: noticeHead
+
+						anchors.horizontalCenter: parent.horizontalCenter
+						spacing: 6
+
+						Glyph {
+							anchors.verticalCenter: parent.verticalCenter
+							icon: "beach"
+							size: 13
+							color: Theme.textMuted
+						}
+
+						StyledText {
+							text: `${root.message.from.name} · automatic reply`
+							tone: Theme.textMuted
+							font.pixelSize: Theme.size.small
+							font.weight: Font.DemiBold
+						}
 					}
 
 					StyledText {
-						text: `${root.message.from.name} · automatic reply`
-						tone: Theme.textMuted
+						width: parent.width
+						text: root.message.text
+						tone: Theme.textSubtle
+						wrapMode: Text.Wrap
+						horizontalAlignment: Text.AlignHCenter
+						maximumLineCount: 4
+						elide: Text.ElideRight
 						font.pixelSize: Theme.size.small
-						font.weight: Font.DemiBold
 					}
-				}
-
-				StyledText {
-					Layout.fillWidth: true
-					Layout.maximumWidth: root.maxWidth - 28
-					text: root.message.text
-					tone: Theme.textSubtle
-					wrapMode: Text.Wrap
-					horizontalAlignment: Text.AlignHCenter
-					maximumLineCount: 4
-					elide: Text.ElideRight
-					font.pixelSize: Theme.size.small
 				}
 			}
 		}
@@ -191,15 +278,17 @@ Item {
 
 			visible: !root.message.auto
 			width: parent.width
-			height: stack.height + (root.head ? 6 : 0)
+			height: stack.height + root.lead
 
 			HoverHandler {
 				id: hover
+
+				onHoveredChanged: if (hovered) root.touched = true
 			}
 
 			Avatar {
 				visible: !root.mine && root.group && root.head
-				y: stack.height - bubble.height + (root.head ? 6 : 0)
+				y: root.lead
 				size: 28
 				name: root.message.from.name
 				email: root.message.from.email
@@ -209,16 +298,11 @@ Item {
 				id: stack
 
 				x: Math.round(root.mine ? parent.width - width : (root.group ? 36 : 0))
-				y: root.head ? 6 : 0
+				y: root.lead
 				spacing: 2
-
-				StyledText {
-					visible: !root.mine && root.group && root.head
-					leftPadding: 12
-					text: root.message.from.name
-					tone: face.tone
-					font.pixelSize: Theme.size.small
-					font.weight: Font.DemiBold
+				transformOrigin: root.mine ? Item.BottomRight : Item.BottomLeft
+				transform: Translate {
+					id: slide
 				}
 
 				Rectangle {
@@ -226,10 +310,14 @@ Item {
 
 					width: inner.width + 24
 					height: inner.implicitHeight + 16
-					radius: Theme.radius.large
+					radius: Messages.bubbleRadius
+					gradient: root.mine && Messages.style.gradient ? ownGradient : null
+					// one of a run hangs on the one before it
+					topLeftRadius: !root.mine && !root.head ? root.joint : radius
+					topRightRadius: root.mine && !root.head ? root.joint : radius
 					color: root.surface
 					border.width: root.flash || root.picked ? 2 : 0
-					border.color: Theme.primary
+					border.color: Messages.accent
 
 					Behavior on border.width {
 						Anim {
@@ -248,6 +336,7 @@ Item {
 							root.message.attachments.length > 0 ? 250 : 0,
 							root.expanded ? (root.message.signaturePage && !root.whole ? root.message.signaturePage.width : (root.message.signatureRich ? 480 : 320)) : 0,
 							title.visible ? Math.ceil(title.implicitWidth) : 0,
+							name.visible ? Math.ceil(name.implicitWidth) : 0,
 							foot.implicitWidth)
 
 						x: 12
@@ -255,44 +344,56 @@ Item {
 						width: Math.min(root.room - 24, inner.wanted)
 						spacing: 6
 
+						// who wrote it, where more than one could have
+						StyledText {
+							id: name
+
+							visible: !root.mine && root.group && root.head
+							text: root.message.from.name
+							tone: root.tone
+							font.pixelSize: Theme.size.small
+							font.weight: Font.DemiBold
+						}
+
 						// the mail this one answers
-						Clickable {
-							visible: !!root.message.ref
+						Loader {
+							active: !!root.message.ref
+							visible: active
 							Layout.fillWidth: true
-							implicitHeight: 40
-							radius: Theme.radius.small
-							color: Qt.alpha(Theme.fg, 0.07)
-							pressedScale: 0.98
-							onClicked: root.jump(root.message.ref.id)
+							sourceComponent: Clickable {
+								implicitHeight: 40
+								radius: Theme.radius.small
+								color: Qt.alpha(Theme.fg, 0.07)
+								pressedScale: 0.98
+								onClicked: root.jump(root.message.ref.id)
 
-							Rectangle {
-								width: 3
-								height: parent.height
-								radius: 1.5
-								color: Theme.primary
-							}
-
-							ColumnLayout {
-								x: 11
-								width: parent.width - 19
-								anchors.verticalCenter: parent.verticalCenter
-								spacing: 0
-
-								StyledText {
-									Layout.fillWidth: true
-									text: root.message.ref?.name ?? ""
-									tone: Theme.primary
-									elide: Text.ElideRight
-									font.pixelSize: Theme.size.small
-									font.weight: Font.DemiBold
+								Rectangle {
+									width: 3
+									height: parent.height
+									radius: 1.5
+									color: Messages.accent
 								}
 
-								StyledText {
-									Layout.fillWidth: true
-									text: root.message.ref?.text ?? ""
-									tone: Theme.textMuted
-									elide: Text.ElideRight
-									font.pixelSize: Theme.size.small
+								ColumnLayout {
+									x: 11
+									width: parent.width - 19
+									anchors.verticalCenter: parent.verticalCenter
+									spacing: 0
+
+									StyledText {
+										text: root.message.ref?.name ?? ""
+										tone: Messages.accent
+										elide: Text.ElideRight
+										font.pixelSize: Theme.size.small
+										font.weight: Font.DemiBold
+									}
+
+									StyledText {
+										text: root.message.ref?.text ?? ""
+										tone: Theme.textMuted
+										elide: Text.ElideRight
+										font.pixelSize: Theme.size.small
+									}
 								}
 							}
 						}
@@ -327,45 +428,53 @@ Item {
 							font.weight: Font.Bold
 						}
 
-						TextEdit {
+						Loader {
 							id: body
-
-							visible: root.message.loaded && root.message.html !== "" && !root.page
+							
+							active: root.message.loaded && root.message.html !== "" && !root.page
+							visible: active
 							Layout.fillWidth: true
-							readOnly: true
-							selectByMouse: true
-							textFormat: TextEdit.RichText
-							wrapMode: TextEdit.Wrap
-							color: Theme.text
-							selectionColor: Qt.alpha(Theme.primary, 0.4)
-							selectedTextColor: Theme.text
-							font.family: Theme.fontFamily
-							font.pixelSize: Theme.size.body
-							text: root.tinted(root.message.html)
-							onLinkActivated: link => root.follow(link)
+							sourceComponent: TextEdit {
+								readOnly: true
+								selectByMouse: true
+								textFormat: TextEdit.RichText
+								wrapMode: TextEdit.Wrap
+								color: Theme.text
+								selectionColor: Qt.alpha(Messages.accent, 0.4)
+								selectedTextColor: Theme.text
+								font.family: Theme.fontFamily
+								font.pixelSize: Messages.textSize
+								text: root.tinted(root.message.html)
+								onLinkActivated: link => root.follow(link)
 
-							HoverHandler {
-								cursorShape: body.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.IBeamCursor
+								HoverHandler {
+									cursorShape: parent.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.IBeamCursor
+								}
 							}
 						}
 
 						// until the mail itself is here: how it begins
-						StyledText {
-							id: pending
-
-							visible: !body.visible && !root.page && (root.message.text !== "" || !root.message.loaded)
+						Loader {
+							active: !body.active && !root.page && (root.message.text !== "" || !root.message.loaded)
+							visible: active
 							Layout.fillWidth: true
-							text: root.message.text || "…"
-							tone: root.message.loaded ? Theme.text : Theme.textMuted
-							wrapMode: Text.Wrap
-							font.pixelSize: Theme.size.body
+							sourceComponent: StyledText {
+								text: root.message.text || "…"
+								tone: root.message.loaded ? Theme.text : Theme.textMuted
+								wrapMode: Text.Wrap
+								elide: Text.ElideNone
+								font.pixelSize: Messages.textSize
+							}
 						}
 
 						// the mail as it was laid out, its links where they are
-						Sheet {
-							visible: root.page !== null
+						Loader {
+							active: root.page !== null
+							visible: active
 							Layout.fillWidth: true
-							page: root.page
+							sourceComponent: Sheet {
+								page: root.page
+							}
 						}
 
 						// attached pictures are looked at here; a click shows them large
@@ -416,7 +525,7 @@ Item {
 									Glyph {
 										icon: root.fileIcon(file.modelData.type, file.modelData.name)
 										size: 20
-										color: Theme.primary
+										color: Messages.accent
 									}
 
 									ColumnLayout {
@@ -450,55 +559,66 @@ Item {
 						}
 
 						// a signature with a layout of its own, as it was made
-						Sheet {
-							visible: root.expanded && !root.whole && !!root.message.signaturePage
+						Loader {
+							active: root.expanded && !root.whole && !!root.message.signaturePage
+							visible: active
 							Layout.fillWidth: true
-							page: root.expanded ? (root.message.signaturePage ?? null) : null
+							sourceComponent: Sheet {
+								page: root.expanded ? (root.message.signaturePage ?? null) : null
+							}
 						}
 
 						// … or what Qt draws of it where no picture could be made
-						Rectangle {
-							visible: root.expanded && root.message.signatureRich && !root.message.signaturePage && !root.whole
+						Loader {
+							active: root.expanded && root.message.signatureRich && !root.message.signaturePage && !root.whole
+							visible: active
 							Layout.fillWidth: true
-							implicitHeight: paper.implicitHeight + 20
-							radius: Theme.radius.small
-							color: "white"
-							clip: true
+							sourceComponent: Rectangle {
+								implicitHeight: paper.implicitHeight + 20
+								radius: Theme.radius.small
+								color: "white"
+								clip: true
 
-							Text {
-								id: paper
+								Text {
+									id: paper
 
-								x: 10
-								y: 10
-								width: parent.width - 20
-								textFormat: Text.RichText
-								wrapMode: Text.Wrap
-								color: "#1b1b1b"
-								linkColor: "#0b57d0"
-								font.family: Theme.fontFamily
-								font.pixelSize: Theme.size.body
-								text: parent.visible ? root.message.signature : ""
-								onLinkActivated: link => Qt.openUrlExternally(link)
+									x: 10
+									y: 10
+									width: parent.width - 20
+									textFormat: Text.RichText
+									wrapMode: Text.Wrap
+									color: "#1b1b1b"
+									linkColor: "#0b57d0"
+									font.family: Theme.fontFamily
+									font.pixelSize: Theme.size.body
+									text: parent.visible ? root.message.signature : ""
+									onLinkActivated: link => Qt.openUrlExternally(link)
+								}
 							}
 						}
 
 						// a plain signature and the mails quoted below it
-						TextEdit {
+						Loader {
+							id: fold
+
 							readonly property string folded: [root.message.signatureRich || root.whole ? "" : root.message.signature, root.message.quote].filter(part => part !== "").join("<br><br>")
 
-							visible: root.expanded && folded !== ""
+							active: root.expanded && folded !== ""
+							visible: active
 							Layout.fillWidth: true
-							readOnly: true
-							selectByMouse: true
-							textFormat: TextEdit.RichText
-							wrapMode: TextEdit.Wrap
-							color: Theme.textMuted
-							selectionColor: Qt.alpha(Theme.primary, 0.4)
-							selectedTextColor: Theme.text
-							font.family: Theme.fontFamily
-							font.pixelSize: Theme.size.small
-							text: root.expanded ? root.tinted(folded) : ""
-							onLinkActivated: link => root.follow(link)
+							sourceComponent: TextEdit {
+								readOnly: true
+								selectByMouse: true
+								textFormat: TextEdit.RichText
+								wrapMode: TextEdit.Wrap
+								color: Theme.textMuted
+								selectionColor: Qt.alpha(Messages.accent, 0.4)
+								selectedTextColor: Theme.text
+								font.family: Theme.fontFamily
+								font.pixelSize: Theme.size.small
+								text: root.expanded ? root.tinted(fold.folded) : ""
+								onLinkActivated: link => root.follow(link)
+							}
 						}
 
 						RowLayout {
@@ -551,76 +671,91 @@ Item {
 			// what can be done with this mail: a strip on the bubble's upper corner while the
 			// pointer is there. It stays inside the chat whatever the bubble's width, and
 			// follows down a mail that is taller than the view.
-			Rectangle {
-				id: tools
+			// Made when the pointer first comes to the mail: a long chat does not pay for strips nobody sees.
+			Loader {
+				id: toolsLoader
 
-				readonly property real bubbleTop: stack.y + stack.height - bubble.height
-				// the upper edge of what the list shows, as this row sees it
-				readonly property real viewTop: (root.ListView.view ? root.ListView.view.contentY - root.y : 0) - row.y
-
-				x: Math.round(Math.max(0, Math.min(row.width - width, stack.x + stack.width - width - 10)))
-				y: Math.round(Math.max(tools.bubbleTop - 14, Math.min(tools.viewTop + 6, tools.bubbleTop + bubble.height - height - 6)))
 				z: 5
-				width: strip.width + 8
-				height: 34
-				radius: height / 2
-				color: Theme.layer3
-				border.width: 1
-				border.color: Theme.outline
-				opacity: hover.hovered || toolsHover.hovered ? 1 : 0
-				visible: opacity > 0.01
+				active: root.touched
+				sourceComponent: Rectangle {
+					id: tools
 
-				Behavior on opacity {
-					Anim {
-						duration: Motion.short
+					readonly property bool over: toolsHover.hovered
+					readonly property real bubbleTop: stack.y + stack.height - bubble.height
+					// the upper edge of what the list shows, as this row sees it
+					readonly property real viewTop: (root.ListView.view ? root.ListView.view.contentY - root.y : 0) - row.y
+
+					x: Math.round(Math.max(0, Math.min(row.width - width, stack.x + stack.width - width - 10)))
+					y: Math.round(Math.max(tools.bubbleTop - 14, Math.min(tools.viewTop + 6, tools.bubbleTop + bubble.height - height - 6)))
+					width: strip.width + 8
+					height: 34
+					radius: height / 2
+					color: Theme.layer3
+					border.width: 1
+					border.color: Theme.outline
+					readonly property bool shown: hover.hovered || toolsHover.hovered
+					opacity: shown ? 1 : 0
+					scale: shown ? 1 : 0.86
+					transformOrigin: Item.BottomRight
+					visible: opacity > 0.01
+
+					Behavior on opacity {
+						Anim {
+							duration: Motion.short
+						}
 					}
-				}
-
-				HoverHandler {
-					id: toolsHover
-				}
-
-				Row {
-					id: strip
-
-					anchors.centerIn: parent
-					spacing: 0
-
-					IconButton {
-						implicitWidth: 28
-						implicitHeight: 28
-						icon: "reply"
-						onClicked: root.reply()
-					}
-
-					IconButton {
-						implicitWidth: 28
-						implicitHeight: 28
-						icon: "share"
-						onClicked: root.forward()
+					Behavior on scale {
+						SpatialAnim {
+							duration: Motion.short
+						}
 					}
 
-					// as chat text, or the way the sender laid it out
-					IconButton {
-						visible: root.message.drawable
-						implicitWidth: 28
-						implicitHeight: 28
-						icon: root.drawn ? "text" : "image_outline"
-						onClicked: root.choice = !root.drawn
+					HoverHandler {
+						id: toolsHover
 					}
 
-					IconButton {
-						implicitWidth: 28
-						implicitHeight: 28
-						icon: "open_in_new"
-						onClicked: Mail.original(root.message.id)
-					}
+					Row {
+						id: strip
 
-					IconButton {
-						implicitWidth: 28
-						implicitHeight: 28
-						icon: "delete_outline"
-						onClicked: Mail.removeMessage(root.message.id)
+						anchors.centerIn: parent
+						spacing: 0
+
+						IconButton {
+							implicitWidth: 28
+							implicitHeight: 28
+							icon: "reply"
+							onClicked: root.reply()
+						}
+
+						IconButton {
+							implicitWidth: 28
+							implicitHeight: 28
+							icon: "share"
+							onClicked: root.forward()
+						}
+
+						// as chat text, or the way the sender laid it out
+						IconButton {
+							visible: root.message.drawable
+							implicitWidth: 28
+							implicitHeight: 28
+							icon: root.drawn ? "text" : "image_outline"
+							onClicked: root.choice = !root.drawn
+						}
+
+						IconButton {
+							implicitWidth: 28
+							implicitHeight: 28
+							icon: "open_in_new"
+							onClicked: Mail.original(root.message.id)
+						}
+
+						IconButton {
+							implicitWidth: 28
+							implicitHeight: 28
+							icon: "delete_outline"
+							onClicked: Mail.removeMessage(root.message.id)
+						}
 					}
 				}
 			}

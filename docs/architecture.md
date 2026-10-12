@@ -108,6 +108,14 @@ dropping it on *Read* opens the reader from the top
 pause at punctuation and the countdown are kept in
 `~/.local/state/pshell/reader.json`.
 
+`find-mouse` shows where the pointer is: shaking it with no key or button
+held dims the screens but a circle around it, which closes in on the pointer
+and sends rings off until the shaking ends; a click ends it at once.
+`scripts/find_mouse.py` reads mice, touchpads and keyboards (evdev) for the
+shake, the screens take the pointer while the light is on to learn where it
+is. `scripts/ipc.sh findmouse find` asks for it from a key; the light then
+comes with the pointer's next move.
+
 `multicursor` brings the line and cursor keys of a code editor to every text
 field: move a line up or down (Alt+↑/↓), copy it (Ctrl+Alt+Shift+↑/↓), a
 cursor above or below (Alt+Shift+↑/↓), a cursor where a click lands
@@ -502,6 +510,26 @@ of the Messages tab (`mail`) with a second one for its notifications
 (`mail-notifications`); a new provider adds both and an entry in
 `core/services/Messages.qml`.
 
+The messages of a chat stand on a backdrop (`Messages.backdrop`, kept in
+`messages-window.json`; `ChatStage.qml`, `Backdrop.qml`): the palette as slow
+light, contour lines or dots (`assets/shaders/backdrop.frag`, compiled with
+`qsb` into the `.qsb` beside it), the desktop's wallpaper, a picture of one's
+own, or nothing. The palette in a chat's header picks it (`LookPicker.qml`) and
+how far it is blurred, dimmed and tinted; with motion it drifts and moves
+against the chat as that is scrolled. Beside it stands how the messages
+themselves look (`Messages.style`, same file): the corners of the bubbles,
+which of the palette's colours one's own wear and whether as a gradient, how
+much of the palette all of them carry, how
+far the others' let the backdrop through, the size of the words, how a new
+message comes up (pop, slide, fade, not at all) and whether a message of
+nothing but emoji throws them into the air.
+
+A message that arrives while its chat is not on the screen is a toast with
+the sender's picture, and is answered right there: WhatsApp sends it at once,
+a mail goes to who wrote it through the outbox like any other. A video of a
+WhatsApp chat is fetched and played over Messages (`PictureView.qml`), where
+pictures are shown large.
+
 Where the surface is too narrow for the list and the chat side by side, one
 of them is shown; a mail drawn as a picture that would have to shrink there
 is shown as chat text instead, so its type keeps its size.
@@ -556,6 +584,23 @@ and the language are worked out in code from how people sign and write, as
 that is too much to ask of a small model. Everything it writes is a
 proposal: taken, it is text in the field like any other.
 
+`mail-unsubscribe` is the Newsletters tab (`scripts/ipc.sh messages
+newsletters`, `core/services/Newsletters.qml`, `scripts/messages/newsletters.py`
+inside the daemon): the senders of the last six months whose mails name a
+way out (`List-Unsubscribe`), who sends most first. Only the private
+mailboxes are looked at (IMAP, read-only), never the mailbox of work
+(Outlook); they are looked at again when the tab comes up a day later, or
+with the arrow. The senders that are ticked are left with the button: RFC
+8058's one click, else a mail to the address the sender takes it at, else
+the form or link of its page. What none of them settles stands under
+Unsubscribed to be confirmed in the browser. From there a sender is taken
+back: it is on the list again and the browser shows where to sign up. Every
+address comes out of mail, so only public internet addresses are spoken to,
+each redirect included. The scan is cached in
+`~/.cache/pshell/messages/newsletters.json`, who was left is kept in
+`~/.local/state/pshell/newsletters.json`; `newsletters.py scan` prints what a
+scan finds.
+
 Ctrl+K brings up the customers, Ctrl+F searches the open chat, Alt+Up and
 Alt+Down walk the chats; with the keyboard in the list, j and k do the same,
 r answers, e archives and / searches. `scripts/messages/test_messages.py`
@@ -567,6 +612,9 @@ quoted older mails are folded away (`scripts/messages/content.py`). A mail
 with a layout of its own (a newsletter) and a signature built from tables
 and pictures are drawn by a headless Chromium into a picture, links
 included (`scripts/messages/render.py`); the mail's own scripts never run.
+A chat is told to the panel once when it is opened; after that only the
+mail that changed – its body came, its picture was drawn – is told again
+(`mail`), and a chat that was left is not drawn on.
 One browser stays up while mails are drawn and is spoken to over its
 DevTools pipe; only the mails on the screen are drawn, and a mail's pictures
 are waited for a few seconds at most. A mail laid out wider than the page is
@@ -591,6 +639,37 @@ any other mailbox use IMAP/SMTP, are pushed (IDLE) and keep their password in
 the keyring (`secret-tool`, service `pshell-mail`). `"demo": true` in
 messages.json, or `PSHELL_MESSAGES_DEMO=1`, serves a mailbox that does not
 exist.
+
+`whatsapp` is WhatsApp as a tab of Messages (`scripts/ipc.sh messages
+whatsapp <chat>`, `core/services/WhatsApp.qml`, `Wa*.qml` beside the mail
+views), with `whatsapp-notifications` for its toasts. `scripts/whatsapp` is
+its bridge, a Go program on whatsmeow that `run.sh` builds into
+`~/.cache/pshell/whatsapp/bridge` when its sources are newer (`run.sh update`
+fetches the newest whatsmeow, which is what helps when WhatsApp asks for a
+newer client). It is a linked device like WhatsApp Web: the phone scans the
+QR code the tab shows (or is given a code to type), and the device stays
+signed in – the bridge runs with the shell, not with the panel – until it is
+unlinked on the phone or in the tab's settings; WhatsApp itself drops linked
+devices when the phone was offline for two weeks. Its keys are in
+`~/.local/state/pshell/whatsapp/session.db`, chats and messages in `chats.db`
+beside it (the past is what the phone hands over, up to a year, and more of a
+chat when it is scrolled back), media, pictures of people and thumbnails in
+`~/.cache/pshell/whatsapp`. Shell and bridge talk in JSON lines
+(`commands.go` lists the commands). The phone keeps showing its own
+notifications unless the panel is on the screen.
+Chats are pinned, muted, archived and marked unread in step with the phone;
+messages are answered, reacted to, forwarded, starred, edited and deleted for
+everyone; photos, videos, GIFs, documents, voice messages (recorded with
+ffmpeg from the default microphone), stickers, polls, places and contacts
+are shown, and all but places and contacts are sent from the field. The
+smiley holds emoji (`assets/emoji/emoji.json`, Unicode's list), the stickers
+that were kept, made from a picture or sent last, and the search for GIFs and
+stickers at Klipy, where WhatsApp itself gets them; it needs a key
+(partner.klipy.com) that the tab's settings keep. Calls cannot be taken – a
+toast says who calls –, and what is to be seen once, statuses and channels
+stay on the phone. A file `demo` in the state folder, or
+`PSHELL_WHATSAPP_DEMO=1`, serves an account that does not exist
+(`demo.go`).
 
 ## Theme pipeline
 

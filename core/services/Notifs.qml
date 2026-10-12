@@ -204,6 +204,9 @@ Singleton {
 	// options (all optional):
 	//   icon     – glyph name instead of the status glyph
 	//   image    – file:// or absolute path, shown as a thumbnail
+	//   avatar   – the picture of who it is from, small beside the text
+	//   app      – what it says above the title instead of "Shell"
+	//   reply    – { placeholder, send: function(text) }: it is answered in the toast
 	//   actions  – [{ label, icon, run: function }], clicking one closes the toast
 	//   duration – ms
 	//   sound    – a moment of Sounds to play (an error plays one anyway)
@@ -224,6 +227,9 @@ Singleton {
 			detail: String(detail || ""),
 			icon: String(extra.icon || ""),
 			image: String(extra.image || ""),
+			avatar: String(extra.avatar || ""),
+			app: String(extra.app || ""),
+			reply: extra.reply && typeof extra.reply.send === "function" ? extra.reply : null,
 			actions: Array.isArray(extra.actions) ? extra.actions : [],
 			duration: Number(extra.duration) > 0 ? Number(extra.duration) : (String(status) === "running" ? 8000 : 5000)
 		}]);

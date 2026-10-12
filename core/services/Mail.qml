@@ -114,6 +114,8 @@ Singleton {
 	// what the account's last sent mails end with; `rich` when it has a layout of its own
 	// rich: { rich, page } – what Qt draws of it, and its picture
 	signal signatureFound(string account, string text, var rich)
+	// what the daemon knows of newsletters (Newsletters)
+	signal newsletters(var data)
 
 	function command(name, fields) {
 		if (!daemon.running) return;
@@ -152,9 +154,26 @@ Singleton {
 	}
 
 	// ── chats ────────────────────────────────────────────────────────────
+	// The mails as they were told, each as the object it was before unless it changed: a bubble whose
+	// mail is the same one is not laid out again, however often the chat is told.
+	property var told: ({})
+	function settled(messages) {
+		const kept = {};
+		const out = messages.map(message => {
+			const text = JSON.stringify(message);
+			const before = root.told[message.id];
+			const entry = before && before.text === text ? before : { text: text, message: message };
+			kept[message.id] = entry;
+			return entry.message;
+		});
+		root.told = kept;
+		return out;
+	}
+
 	function open(id) {
 		if (root.openId !== id) {
 			root.messages = [];
+			root.told = {};
 			root.tips = {};
 		}
 		root.openId = id;
@@ -165,6 +184,7 @@ Singleton {
 	function close() {
 		root.openId = "";
 		root.messages = [];
+		root.told = {};
 		root.tips = {};
 		root.command("close");
 	}
@@ -181,6 +201,7 @@ Singleton {
 
 	// from a notification or a command: the panel with the chat in it
 	function show(id) {
+		Messages.current = "mail";
 		root.pick(String(id).split("|")[0]);
 		root.open(id);
 		Messages.open("chat");
@@ -420,7 +441,7 @@ Singleton {
 			break;
 		case "chat":
 			if (data.id !== root.openId) break;
-			root.messages = data.messages ?? [];
+			root.messages = root.settled(data.messages ?? []);
 			// what was sent from here has arrived in its chat
 			const own = root.messages.filter(message => message.mine).length;
 			if (root.outbox.some(entry => entry.state === "sent" && entry.key === data.id && own > entry.mine))
@@ -429,6 +450,19 @@ Singleton {
 				root.tips = data.tips;
 				root.loading = false;
 			}
+			break;
+		// one mail of the chat: its body came, its picture was drawn
+		case "mail":
+			if (data.id !== root.openId || !data.message) break;
+			if (root.messages.some(message => message.id === data.message.id))
+				root.messages = root.settled(root.messages.map(message => message.id === data.message.id ? data.message : message));
+			break;
+		// the chat is there; who is away follows
+		case "opened":
+			if (data.id === root.openId) root.loading = false;
+			break;
+		case "tips":
+			if (data.id === root.openId) root.tips = data.tips ?? {};
 			break;
 		case "avatars":
 			root.avatars = Object.assign({}, root.avatars, data.avatars);
@@ -468,6 +502,9 @@ Singleton {
 		case "signature":
 			root.signatureFound(data.account, data.text ?? "", data.rich ?? { rich: "", page: null });
 			break;
+		case "newsletters":
+			root.newsletters(data);
+			break;
 		case "file":
 			root.fileReady(Number(data.req) || 0, String(data.path || ""));
 			break;
@@ -498,10 +535,19 @@ Singleton {
 		if (Messages.shown && root.openId === mail.chat) return;
 		Notifs.pushInternal("running", mail.name, mail.preview ? `${mail.subject}\n${mail.preview}` : mail.subject, {
 			icon: "email_outline",
-			image: root.avatars[mail.email] ?? "",
+			app: "Mail",
+			avatar: root.avatars[mail.email] ?? "",
 			duration: 9000,
-			actions: [{ label: "Open", icon: "forum", run: () => root.show(mail.chat) }]
+			actions: [{ label: "Open", icon: "forum", run: () => root.show(mail.chat) }],
+			reply: mail.id ? { placeholder: `Reply to ${String(mail.name).split(/\s+/)[0]}`, send: text => root.answer(mail, text) } : null
 		});
+	}
+
+	// an answer written in the toast: to who wrote, through the outbox like any other
+	function answer(mail, text) {
+		const html = `<p>${String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\r?\n/g, "<br>")}</p>`;
+		root.post(mail.chat, { account: mail.account, mode: "replyAll", reply: mail.id, to: [mail.email], cc: [], bcc: [], text: text, html: html, files: [] },
+			{ html: html, files: [] }, String(text).slice(0, 400));
 	}
 
 	// mails drawn as they were laid out wear the shell's colours

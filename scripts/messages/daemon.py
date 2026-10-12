@@ -20,9 +20,11 @@ Commands ({"cmd": …}):
   addAccount {kind, …} · removeAccount id · signature {account, text}
   suggestSignature account · autoReply {account, enabled, text}
   login · cancelLogin   Microsoft's device code sign-in
+  newsletters · scanNewsletters · unsubscribe ids · resubscribe id · newsletterPage id
+                        the private mailboxes' newsletters (newsletters.py)
 
 Events ({"event": …}): accounts, chats, chat, incoming, sent, preview, search,
-login, signature, saved, error.
+login, signature, saved, newsletters, error.
 """
 
 from __future__ import annotations
@@ -43,6 +45,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import content  # noqa: E402
+import newsletters  # noqa: E402
 import render  # noqa: E402
 import store as storage  # noqa: E402
 from provider import Failure, signature_preview  # noqa: E402
@@ -126,7 +129,7 @@ class Worker(threading.Thread):
         self.owner.publish()
         self.owner.follow(self)
         for message in arrived:
-            emit("incoming", chat=f"{message['account']}|{message['chat']}", account=message["account"],
+            emit("incoming", chat=f"{message['account']}|{message['chat']}", account=message["account"], id=message["id"],
                  name=message["from"]["name"], email=message["from"]["email"], subject=content.clean_subject(message["subject"]), preview=message.get("preview", ""))
 
     def run(self):
@@ -169,6 +172,7 @@ class Daemon:
         self.told = None
         # mails whose picture is asked for and not made yet
         self.drawing = set()
+        self.news = newsletters.Desk(lambda: list(self.config["accounts"]), self.store, emit, DEMO)
 
     # ── accounts ────────────────────────────────────────────────────────
     def load(self):
@@ -286,6 +290,7 @@ class Daemon:
         shutil.rmtree(storage.CACHE / "files", ignore_errors=True)
         self.publish_accounts()
         self.publish()
+        self.news.publish()
 
     def login(self):
         """Microsoft's device code sign-in; the account is added once it went through."""
@@ -337,7 +342,8 @@ class Daemon:
             raise Failure("The account is gone")
         return worker, key
 
-    def chat_event(self, worker, key, tips=None):
+    def entries(self, worker, key):
+        """The mails of a chat as they are in the store, and as the panel is told them."""
         seen, mails = set(), []
         stored = self.store.chat_messages(worker.account["id"], key)
         # a mail to oneself lies in two folders: the sent one is shown
@@ -374,12 +380,29 @@ class Daemon:
                     "text": content.preview((parent.get("body") or {}).get("text") or parent.get("preview", ""), 160),
                 },
             })
+        return stored, out
+
+    def chat_event(self, worker, key, tips=None):
+        stored, out = self.entries(worker, key)
         if self.opened == f"{worker.account['id']}|{key}":
             self.told = self.mark(stored)
         event = {"id": f"{worker.account['id']}|{key}", "messages": out}
         if tips is not None:
             event["tips"] = tips
         emit("chat", **event)
+
+    def mail_event(self, worker, key, ident):
+        """One mail of the chat that is looked at changed – its body came, its picture was drawn: only it is told again."""
+        chat = f"{worker.account['id']}|{key}"
+        if self.opened != chat:
+            return
+        stored, out = self.entries(worker, key)
+        entry = next((entry for entry in out if entry["id"] == ident), None)
+        if entry is None:
+            self.chat_event(worker, key)
+            return
+        self.told = self.mark(stored)
+        emit("mail", id=chat, message=entry)
 
     @staticmethod
     def mark(mails):
@@ -403,23 +426,36 @@ class Daemon:
     def open(self, worker, key, read):
         ident = f"{worker.account['id']}|{key}"
         self.opened = ident
-        # what is known shows at once, the bodies follow
+        # what is known shows at once; the bodies that are missing follow one by one
         self.chat_event(worker, key)
-        worker.provider.load(key)
-        self.chat_event(worker, key)
-        self.publish()
+        known = self.told
+        if any("body" not in message for message in self.store.chat_messages(worker.account["id"], key, hidden=True)):
+            try:
+                worker.provider.load(key, lambda one: self.mail_event(worker, key, one))
+            finally:
+                # also what the mailbox knew beyond the store: a mail more, another order
+                mails = self.store.chat_messages(worker.account["id"], key)
+                if [mark[0] for mark in self.mark(mails)] != [mark[0] for mark in known or []]:
+                    self.chat_event(worker, key)
+                self.publish()
+        # the chat is there: nothing the panel waits for comes after this
+        emit("opened", id=ident)
         mails = self.store.chat_messages(worker.account["id"], key)
         if read:
             unread = [message["id"] for message in mails if not message["read"] and not message["mine"]]
             if unread:
                 worker.provider.set_read(unread, True)
                 self.publish()
+                if self.opened == ident:
+                    self.chat_event(worker, key)
+        if self.opened != ident:
+            return
         others = {entry["email"] for message in mails for entry in [message["from"], *message["to"], *message["cc"]]} - worker.provider.own - worker.provider.lists
         tips = worker.provider.tips(sorted(others))
+        emit("tips", id=ident, tips=tips)
         avatars = {email: path for email in sorted(others)[:12] if (path := worker.provider.avatar(email))}
         if avatars:
             emit("avatars", avatars=avatars)
-        self.chat_event(worker, key, tips)
 
     def draw(self, worker, key, ident):
         """One mail as it was laid out, and its signature, in the palette the shell wears now.
@@ -428,6 +464,9 @@ class Daemon:
         palette costs what is looked at, not everything.
         """
         try:
+            # a chat that was left is not drawn on: its mails are asked for again when it is looked at
+            if self.opened != f"{worker.account['id']}|{key}":
+                return
             changed = worker.provider.restyle(ident)
             try:
                 changed = worker.provider.draw(ident) or changed
@@ -435,8 +474,8 @@ class Daemon:
                 pass
         finally:
             self.drawing.discard((worker.account["id"], ident))
-        if changed and self.opened == f"{worker.account['id']}|{key}":
-            self.chat_event(worker, key)
+        if changed:
+            self.mail_event(worker, key, ident)
 
     def chat_ids(self, worker, key, received=False):
         mails = self.store.chat_messages(worker.account["id"], key)
@@ -541,6 +580,8 @@ class Daemon:
         elif name == "cancelLogin":
             if self.login_stop is not None:
                 self.login_stop.set()
+        elif name in newsletters.COMMANDS:
+            self.news.handle(command)
 
     def guarded(self, job, *args):
         try:

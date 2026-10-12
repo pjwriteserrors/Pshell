@@ -300,122 +300,143 @@ ColumnLayout {
 		}
 	}
 
-	RowLayout {
+	// the field, with what goes with a mail on its left and what shows and sends it on its right
+	Rectangle {
 		Layout.fillWidth: true
-		spacing: 6
+		implicitHeight: bar.implicitHeight + 8
+		radius: Math.min(24, height / 2)
+		color: field.focused ? Theme.layer2 : Theme.layer1
+		border.width: field.focused ? 1.5 : 0
+		border.color: Qt.alpha(Theme.primary, 0.85)
 
-		IconButton {
-			Layout.alignment: Qt.AlignBottom
-			implicitWidth: 40
-			implicitHeight: 40
-			icon: "paperclip"
-			variant: "tonal"
-			onClicked: if (!picker.running) picker.running = true
+		Behavior on color {
+			ColorAnim {}
 		}
 
-		IconButton {
-			Layout.alignment: Qt.AlignBottom
-			implicitWidth: 40
-			implicitHeight: 40
-			icon: "text_box"
-			variant: "tonal"
-			checked: root.snippets
-			onClicked: root.snippets = !root.snippets
-		}
+		RowLayout {
+			id: bar
 
-		IconButton {
-			visible: root.assist
-			Layout.alignment: Qt.AlignBottom
-			implicitWidth: 40
-			implicitHeight: 40
-			icon: root.framing ? "" : "auto_fix"
-			variant: "tonal"
-			iconColor: Theme.tertiary
-			interactive: !root.framing
-			onClicked: root.frame()
+			x: 4
+			y: 4
+			width: parent.width - 8
+			spacing: 2
 
-			Spinner {
-				anchors.centerIn: parent
-				visible: root.framing
-				width: 18
-				height: 18
-				color: Theme.tertiary
-			}
-		}
-
-		AreaField {
-			id: field
-
-			Layout.fillWidth: true
-			Layout.preferredHeight: Math.max(40, Math.min(root.maxHeight, field.area.contentHeight + 28))
-			placeholder: root.placeholder
-			autocorrect: true
-			rich: true
-			asksPaste: true
-			onPasting: if (!clipboard.running) clipboard.running = true
-			onEdited: {
-				root.plain = field.area.getText(0, field.area.length);
-				root.edited();
+			IconButton {
+				Layout.alignment: Qt.AlignBottom
+				implicitWidth: 40
+				implicitHeight: 40
+				icon: "paperclip"
+				onClicked: if (!picker.running) picker.running = true
 			}
 
-			// what is marked gets its look here
-			Rectangle {
-				anchors.right: parent.right
-				anchors.top: parent.top
-				anchors.margins: 5
-				width: looks.width + 6
-				height: 30
-				radius: 15
-				color: Theme.layer3
-				opacity: field.area.selectedText !== "" ? 1 : 0
-				visible: opacity > 0.01
+			IconButton {
+				Layout.alignment: Qt.AlignBottom
+				implicitWidth: 40
+				implicitHeight: 40
+				icon: "text_box"
+				checked: root.snippets
+				onClicked: root.snippets = !root.snippets
+			}
 
-				Behavior on opacity {
-					Anim {
-						duration: Motion.short
-					}
+			IconButton {
+				visible: root.assist
+				Layout.alignment: Qt.AlignBottom
+				implicitWidth: 40
+				implicitHeight: 40
+				icon: root.framing ? "" : "auto_fix"
+				iconColor: Theme.tertiary
+				interactive: !root.framing
+				onClicked: root.frame()
+
+				Spinner {
+					anchors.centerIn: parent
+					visible: root.framing
+					width: 18
+					height: 18
+					color: Theme.tertiary
+				}
+			}
+
+			AreaField {
+				id: field
+
+				Layout.fillWidth: true
+				Layout.preferredHeight: Math.max(40, Math.min(root.maxHeight, Math.ceil(field.area.contentHeight) + 22))
+				color: "transparent"
+				border.width: 0
+				placeholder: root.placeholder
+				autocorrect: true
+				rich: true
+				asksPaste: true
+				onPasting: if (!clipboard.running) clipboard.running = true
+				onEdited: {
+					root.plain = field.area.getText(0, field.area.length);
+					root.edited();
 				}
 
-				Row {
-					id: looks
+				// what is marked gets its look here
+				Rectangle {
+					anchors.right: parent.right
+					anchors.top: parent.top
+					anchors.margins: 5
+					width: looks.width + 6
+					height: 30
+					radius: 15
+					color: Theme.layer3
+					opacity: field.area.selectedText !== "" ? 1 : 0
+					visible: opacity > 0.01
 
-					anchors.centerIn: parent
+					Behavior on opacity {
+						Anim {
+							duration: Motion.short
+						}
+					}
 
-					Repeater {
-						model: ["bold", "italic", "underline"]
+					Row {
+						id: looks
 
-						delegate: IconButton {
-							required property string modelData
+						anchors.centerIn: parent
 
-							implicitWidth: 26
-							implicitHeight: 26
-							icon: `format_${modelData}`
-							onClicked: root.toggle(modelData)
+						Repeater {
+							model: ["bold", "italic", "underline"]
+
+							delegate: IconButton {
+								required property string modelData
+
+								implicitWidth: 26
+								implicitHeight: 26
+								icon: `format_${modelData}`
+								onClicked: root.toggle(modelData)
+							}
 						}
 					}
 				}
 			}
-		}
 
-		IconButton {
-			Layout.alignment: Qt.AlignBottom
-			implicitWidth: 40
-			implicitHeight: 40
-			icon: "eye_outline"
-			variant: "tonal"
-			enabled: root.ready
-			onClicked: root.preview()
-		}
+			IconButton {
+				Layout.alignment: Qt.AlignBottom
+				implicitWidth: 40
+				implicitHeight: 40
+				icon: "eye_outline"
+				enabled: root.ready
+				onClicked: root.preview()
+			}
 
-		IconButton {
-			Layout.alignment: Qt.AlignBottom
-			implicitWidth: 40
-			implicitHeight: 40
-			icon: "send"
-			variant: "filled"
-			enabled: root.ready
-			onClicked: root.submit()
+			IconButton {
+				Layout.alignment: Qt.AlignBottom
+				implicitWidth: 40
+				implicitHeight: 40
+				icon: "send"
+				variant: "filled"
+				enabled: root.ready
+				onClicked: root.submit()
+			}
 		}
+	}
+
+	Component.onCompleted: {
+		field.area.topPadding = 7;
+		field.area.bottomPadding = 7;
 	}
 
 	Shortcut {

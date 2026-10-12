@@ -198,8 +198,11 @@ Item {
 			onAccepted: composer.focusInput()
 		}
 
-		Item {
+		// where the chat will stand
+		ChatStage {
+			Layout.fillWidth: true
 			Layout.fillHeight: true
+			live: Messages.shown && root.visible
 		}
 
 		StyledText {

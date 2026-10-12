@@ -32,6 +32,7 @@ Clickable {
 		}
 
 		StyledText {
+			visible: root.text !== ""
 			text: root.text
 			tone: root.selected ? Theme.onPrimary : Theme.text
 			font.pixelSize: Theme.size.label

@@ -218,7 +218,9 @@ def page(body, plain=False):
     return (
         "<!doctype html><meta charset=\"utf-8\">"
         "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src https: http: file: data:; style-src 'unsafe-inline' https:; font-src https: data:; script-src 'none'\">"
-        "<style>html,body{margin:0;background:transparent;color:#000}body{padding:2px;font-family:'Adwaita Sans',sans-serif;font-size:13px;overflow-wrap:anywhere}img{max-width:100%}</style>"
+        "<style>html,body{margin:0;background:transparent;color:#000}body{padding:2px;font-family:'Adwaita Sans',sans-serif;font-size:13px;overflow-wrap:anywhere}img{max-width:100%}"
+        # a paragraph's own room above the first and below the last line would be a hole in the bubble
+        "body>:first-child,body>div:first-child>:first-child{margin-top:0}body>:last-child,body>div:last-child>:last-child{margin-bottom:0}</style>"
         + ("<style>html,body{background:#fff}body{padding:14px}</style>" if plain else "")
         + body
     )

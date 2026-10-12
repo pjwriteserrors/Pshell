@@ -76,6 +76,8 @@ PROGRAMS = {
     "files-default": [("xdg-mime", "folders open in the file manager")],
     "mail": [("secret-tool", "mail passwords"), ("xdg-open", "attachments, sign-in page"), ("wl-copy", "sign-in code")],
     "microsoft-calendar": [("wl-copy", "sign-in code"), ("xdg-open", "sign-in page, joining meetings")],
+    "whatsapp": [("go", "building the WhatsApp bridge"), ("ffmpeg", "voice messages, GIFs, stickers, videos"), ("ffprobe", "length of what is sent"),
+                 ("xdg-open", "videos and documents"), ("wl-copy", "copying a message")],
 }
 OPTIONAL_PROGRAMS = [
     ("chromium", "mails and signatures drawn as they were laid out"),
@@ -258,9 +260,21 @@ def doctor():
         if report.failures == before:
             report.ok("keyboard and uinput are there")
 
+    if "find-mouse" in plugins:
+        report.section("Find my mouse")
+        mice = glob.glob("/dev/input/by-path/*-event-mouse") + glob.glob("/dev/input/by-id/*-event-mouse")
+        if any(os.access(path, os.R_OK) for path in mice):
+            report.ok("the mouse is readable")
+        else:
+            report.fail("the mouse is not readable (scripts/setup-rpg-input-access.sh)")
+
     report.section("Fonts")
     for family, why in FONTS:
         (report.ok if font_available(family) else report.fail)(f"{family} – {why}")
+    if "whatsapp" in plugins:
+        (report.ok if font_available("Noto Color Emoji") else report.fail)("Noto Color Emoji – emoji in WhatsApp (noto-fonts-emoji)")
+        webp = any(os.path.isfile(f"{folder}/imageformats/libqwebp.so") for folder in ("/usr/lib/qt6/plugins", "/usr/lib/qt/plugins", "/usr/lib64/qt6/plugins"))
+        (report.ok if webp else report.warn)("WebP in Qt – stickers as they are, animated ones smoothly (qt6-imageformats)")
 
     report.section("Theme")
     library = Path(os.path.expanduser(profile.get("wallpapers", "~/Pictures/Wallpapers")))

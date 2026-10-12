@@ -16,7 +16,7 @@ import qs.style.views
 // here and by the plugin switches, never by the style.
 Scope {
 	// services that act on their own, without a surface to pull them in
-	readonly property var background: [Agents, TimerGuard, ClipboardHints, Phone, Mail, Autocorrect, Screentime, Multicursor, Sounds]
+	readonly property var background: [Agents, TimerGuard, ClipboardHints, Phone, Mail, WhatsApp, Autocorrect, Screentime, Multicursor, Sounds, FindMouse]
 
 	// notifications and the shell's own messages
 	Variants {
@@ -35,6 +35,13 @@ Scope {
 		model: Plugins.on("multicursor") ? Quickshell.screens : []
 
 		CursorCount {}
+	}
+
+	// the light on a pointer that is shaken
+	Variants {
+		model: Plugins.on("find-mouse") ? Quickshell.screens : []
+
+		MouseFinder {}
 	}
 
 	Variants {
@@ -278,6 +285,13 @@ Scope {
 		active: Plugins.on("todos")
 
 		TodoWidgets {}
+	}
+
+	// the useless fact of the day, a card on the desktop
+	LazyLoader {
+		active: Plugins.on("useless-fact")
+
+		UselessFact {}
 	}
 
 	LazyLoader {

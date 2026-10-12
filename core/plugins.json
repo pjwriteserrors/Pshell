@@ -76,6 +76,8 @@
 	{ "id": "vm-launcher", "name": "VM launcher", "category": "Desktop", "default": false, "icon": "microsoft_windows" },
 	{ "id": "filemanager", "name": "File manager", "category": "Desktop", "icon": "folder_open" },
 	{ "id": "files-default", "name": "Default file manager", "category": "Desktop", "requires": ["filemanager"], "icon": "folder_star_outline" },
+	{ "id": "find-mouse", "name": "Find my mouse", "category": "Desktop", "icon": "mouse_variant" },
+	{ "id": "useless-fact", "name": "Useless fact", "category": "Desktop", "icon": "lightbulb", "preview": {"on": ["bar"], "base": "off", "wait": 5} },
 
 	{ "id": "clipboard-hints", "name": "Clipboard hints", "category": "Automation" },
 	{ "id": "agents", "name": "Agent status", "category": "Automation", "icon": "robot" },
@@ -134,5 +136,8 @@
 	{ "id": "messages", "name": "Messages", "category": "Messages", "default": false, "preview": {"on": ["bar", "mail"], "ipc": ["messages chat 'demo|relaunch'"], "wait": 4} },
 	{ "id": "mail", "name": "Mail", "category": "Messages", "requires": ["messages"], "icon": "email_outline" },
 	{ "id": "mail-notifications", "name": "Mail notifications", "category": "Messages", "requires": ["mail", "notifications"], "icon": "bell_outline" },
-	{ "id": "mail-ai", "name": "Mail assistant", "category": "Messages", "default": false, "requires": ["mail"], "icon": "creation" }
+	{ "id": "mail-unsubscribe", "name": "Newsletters", "category": "Messages", "requires": ["mail"], "icon": "newspaper_variant_outline", "preview": {"on": ["bar", "mail"], "ipc": ["messages newsletters"], "wait": 4} },
+	{ "id": "mail-ai", "name": "Mail assistant", "category": "Messages", "default": false, "requires": ["mail"], "icon": "creation" },
+	{ "id": "whatsapp", "name": "WhatsApp", "category": "Messages", "default": false, "requires": ["messages"], "icon": "whatsapp", "preview": {"on": ["bar"], "ipc": ["messages whatsapp '120363000000000001@g.us'"], "wait": 5} },
+	{ "id": "whatsapp-notifications", "name": "WhatsApp notifications", "category": "Messages", "requires": ["whatsapp", "notifications"], "icon": "bell_outline" }
 ]

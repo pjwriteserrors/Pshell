@@ -514,12 +514,21 @@ Scope {
 		function chat(id: string): void {
 			Mail.show(id);
 		}
+		// WhatsApp, with the chat of that id in it; `id` may be empty
+		function whatsapp(id: string): void {
+			if (id === "") Messages.open("whatsapp");
+			else WhatsApp.show(id);
+		}
 		// a new mail; `to` may be empty
 		function compose(to: string): void {
 			Messages.open(to === "" ? "new" : `new:${to}`);
 		}
 		function settings(): void {
 			Messages.open("settings");
+		}
+		// the newsletters of the private mailboxes
+		function newsletters(): void {
+			Messages.open("newsletters");
 		}
 		function refresh(): void {
 			Mail.refresh();
@@ -645,6 +654,16 @@ Scope {
 
 		function toggle(): void {
 			Multicursor.setOn(!Multicursor.on);
+		}
+	}
+
+	// the light on the pointer, as shaking it brings
+	IpcHandler {
+		target: "findmouse"
+		enabled: FindMouse.available
+
+		function find(): void {
+			FindMouse.show();
 		}
 	}
 

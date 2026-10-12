@@ -31,7 +31,9 @@ PanelWindow {
 	WlrLayershell.namespace: "shell-toasts"
 	WlrLayershell.layer: WlrLayer.Overlay
 	WlrLayershell.exclusionMode: ExclusionMode.Ignore
-	WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+	// a toast that can be answered takes the keyboard once its field is clicked
+	readonly property bool answerable: Notifs.toasts.some(toast => toast.internal ? !!toast.reply : !!toast.notification?.hasInlineReply)
+	WlrLayershell.keyboardFocus: root.answerable ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 	mask: Region {
 		item: list
 	}
@@ -76,7 +78,19 @@ PanelWindow {
 			readonly property color urgency: toast.internal
 				? (toast.modelData.status === "error" ? Theme.danger : Theme.primary)
 				: Notifs.urgencyColor(toast.notification?.urgency ?? -1)
-			readonly property string iconSource: toast.internal ? "" : Notifs.iconFor(toast.notification?.image ?? "", toast.notification?.appIcon ?? "")
+			readonly property string avatar: toast.internal ? String(toast.modelData.avatar ?? "") : ""
+			readonly property string iconSource: toast.internal ? (toast.avatar === "" || toast.avatar.includes("://") ? toast.avatar : `file://${toast.avatar}`) : Notifs.iconFor(toast.notification?.image ?? "", toast.notification?.appIcon ?? "")
+			readonly property var reply: toast.internal ? (toast.modelData.reply ?? null) : null
+			readonly property bool answerable: toast.reply !== null || (!toast.internal && !!toast.notification?.hasInlineReply)
+
+			function answer() {
+				const text = toastReply.text.trim();
+				if (text === "") return;
+				if (toast.reply !== null) toast.reply.send(text);
+				else if (!Notifs.sendReply(toast.notification, text)) return;
+				toastReply.text = "";
+				toast.leave(1);
+			}
 			property real remaining: 1
 			property bool leaving: false
 
@@ -96,7 +110,8 @@ PanelWindow {
 				from: 1
 				to: 0
 				duration: toast.modelData.duration
-				paused: hover.hovered || drag.active
+				// it stays while it is looked at, dragged or answered
+				paused: hover.hovered || drag.active || toastReply.focused || toastReply.text !== ""
 				onFinished: toast.leave(1)
 			}
 
@@ -193,11 +208,15 @@ PanelWindow {
 								color: Theme.layer2
 
 								Image {
+									id: face
+
+									readonly property bool whole: toast.avatar !== "" || (toast.notification?.image ?? "") !== ""
+
 									anchors.fill: parent
-									anchors.margins: (toast.notification?.image ?? "") !== "" ? 0 : 6
-									visible: toast.iconSource !== ""
+									anchors.margins: face.whole ? 0 : 6
+									visible: toast.iconSource !== "" && face.status !== Image.Error
 									source: toast.iconSource
-									fillMode: (toast.notification?.image ?? "") !== "" ? Image.PreserveAspectCrop : Image.PreserveAspectFit
+									fillMode: face.whole ? Image.PreserveAspectCrop : Image.PreserveAspectFit
 									sourceSize: Qt.size(64, 64)
 									asynchronous: true
 									smooth: true
@@ -206,7 +225,7 @@ PanelWindow {
 
 								Glyph {
 									anchors.centerIn: parent
-									visible: toast.internal
+									visible: toast.internal && !face.visible
 									icon: toast.modelData.icon || (toast.modelData.status === "error" ? "alert_circle" : (toast.modelData.status === "running" ? "palette" : "check_circle"))
 									size: 18
 									color: toast.urgency
@@ -223,7 +242,7 @@ PanelWindow {
 
 								SectionLabel {
 									Layout.fillWidth: true
-									text: toast.internal ? "Shell" : (toast.notification?.appName || "System")
+									text: toast.internal ? (toast.modelData.app || "Shell") : (toast.notification?.appName || "System")
 								}
 
 								IconButton {
@@ -327,28 +346,34 @@ PanelWindow {
 						}
 					}
 
-					// a message that can be answered (a chat on the phone, say) is answered right here
+					// a message that can be answered (a chat, a mail, a chat on the phone) is answered right here
 					RowLayout {
 						Layout.fillWidth: true
-						visible: !toast.internal && !!toast.notification?.hasInlineReply
+						visible: toast.answerable
 						spacing: 6
 
 						Field {
 							id: toastReply
 
 							Layout.fillWidth: true
-							implicitHeight: 34
+							implicitHeight: 36
 							icon: "reply"
-							placeholder: toast.notification?.inlineReplyPlaceholder || "Reply"
-							onAccepted: if (Notifs.sendReply(toast.notification, toastReply.text)) toast.leave(1)
+							autocorrect: true
+							placeholder: toast.reply?.placeholder || toast.notification?.inlineReplyPlaceholder || "Reply"
+							onAccepted: toast.answer()
+							onEscapePressed: {
+								if (toastReply.text === "") toast.leave(1);
+								else toastReply.text = "";
+							}
 						}
 
 						IconButton {
 							icon: "send"
 							variant: "filled"
-							implicitWidth: 34
-							implicitHeight: 34
-							onClicked: if (Notifs.sendReply(toast.notification, toastReply.text)) toast.leave(1)
+							implicitWidth: 36
+							implicitHeight: 36
+							enabled: toastReply.text.trim() !== ""
+							onClicked: toast.answer()
 						}
 					}
 				}

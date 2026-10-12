@@ -308,22 +308,25 @@ Item {
 		// who the chat is with
 		RowLayout {
 			Layout.fillWidth: true
-			spacing: 10
+			Layout.preferredHeight: 48
+			spacing: 2
 
 			IconButton {
 				visible: root.narrow
 				icon: "arrow_left"
-				variant: "tonal"
 				onClicked: root.back()
 			}
 
 			ChatAvatar {
+				Layout.leftMargin: 6
+				Layout.rightMargin: 10
 				people: root.chat?.people ?? []
-				size: 40
+				size: 38
 			}
 
 			ColumnLayout {
 				Layout.fillWidth: true
+				Layout.rightMargin: 8
 				spacing: 1
 
 				StyledText {
@@ -331,7 +334,7 @@ Item {
 					text: root.chat?.subject ?? ""
 					elide: Text.ElideRight
 					font.pixelSize: Theme.size.title
-					font.weight: Font.Bold
+					font.weight: Font.DemiBold
 				}
 
 				// a click on a name keeps the list to the chats with them
@@ -351,7 +354,7 @@ Item {
 
 							text: `${modelData.name}${index < Math.min(6, root.chat?.people.length ?? 0) - 1 ? ", " : ""}`
 							tone: nameArea.containsMouse ? Theme.primary : Theme.textMuted
-							font.pixelSize: Theme.size.small
+							font.pixelSize: Theme.size.label
 
 							MouseArea {
 								id: nameArea
@@ -368,7 +371,7 @@ Item {
 						visible: (root.chat?.people.length ?? 0) > 6
 						text: ` +${(root.chat?.people.length ?? 0) - 6}`
 						tone: Theme.textSubtle
-						font.pixelSize: Theme.size.small
+						font.pixelSize: Theme.size.label
 					}
 				}
 			}
@@ -430,6 +433,12 @@ Item {
 				onClicked: if (root.chat) Mail.archive(root.chat.id)
 			}
 
+			IconButton {
+				icon: "palette_outline"
+				checked: stage.picking
+				onClicked: stage.picking = !stage.picking
+			}
+
 			TextButton {
 				text: ""
 				icon: "delete_outline"
@@ -440,64 +449,70 @@ Item {
 			}
 		}
 
-		Flow {
-			Layout.fillWidth: true
-			visible: root.snoozing
-			spacing: 6
+		Reveal {
+			shown: root.snoozing
 
-			Repeater {
-				model: [
-					{ label: "In 3 hours", until: () => Date.now() + 3 * 3600 * 1000 },
-					{ label: "Tomorrow", until: () => root.at(1, 8) },
-					{ label: "Monday", until: () => root.at(((8 - new Date().getDay()) % 7) || 7, 8) }
-				]
+			Flow {
+				width: parent.width
+				spacing: 6
 
-				delegate: Chip {
-					required property var modelData
+				Repeater {
+					model: [
+						{ label: "In 3 hours", until: () => Date.now() + 3 * 3600 * 1000 },
+						{ label: "Tomorrow", until: () => root.at(1, 8) },
+						{ label: "Monday", until: () => root.at(((8 - new Date().getDay()) % 7) || 7, 8) }
+					]
 
-					icon: "bell_sleep_outline"
-					text: modelData.label
-					onClicked: Mail.snooze(root.chat.id, modelData.until())
+					delegate: Chip {
+						required property var modelData
+
+						icon: "bell_sleep_outline"
+						text: modelData.label
+						onClicked: Mail.snooze(root.chat.id, modelData.until())
+					}
 				}
 			}
 		}
 
-		RowLayout {
-			Layout.fillWidth: true
-			visible: root.finding
-			spacing: 6
+		Reveal {
+			shown: root.finding
 
-			Field {
-				id: finder
+			RowLayout {
+				width: parent.width
+				spacing: 6
 
-				Layout.fillWidth: true
-				icon: "magnify"
-				placeholder: "Search in chat"
-				onAccepted: root.step(-1)
-				onUpPressed: root.step(-1)
-				onDownPressed: root.step(1)
-				onEscapePressed: root.finding = false
-			}
+				Field {
+					id: finder
 
-			StyledText {
-				visible: root.sought.length >= 2
-				text: root.found.length > 0 ? `${root.foundAt + 1}/${root.found.length}` : "0"
-				tone: Theme.textMuted
-				font.pixelSize: Theme.size.label
-				tabular: true
-			}
+					Layout.fillWidth: true
+					icon: "magnify"
+					placeholder: "Search in chat"
+					onAccepted: root.step(-1)
+					onUpPressed: root.step(-1)
+					onDownPressed: root.step(1)
+					onEscapePressed: root.finding = false
+				}
 
-			IconButton {
-				icon: "chevron_down"
-				rotation: 180
-				enabled: root.found.length > 1
-				onClicked: root.step(-1)
-			}
+				StyledText {
+					visible: root.sought.length >= 2
+					text: root.found.length > 0 ? `${root.foundAt + 1}/${root.found.length}` : "0"
+					tone: Theme.textMuted
+					font.pixelSize: Theme.size.label
+					tabular: true
+				}
 
-			IconButton {
-				icon: "chevron_down"
-				enabled: root.found.length > 1
-				onClicked: root.step(1)
+				IconButton {
+					icon: "chevron_down"
+					rotation: 180
+					enabled: root.found.length > 1
+					onClicked: root.step(-1)
+				}
+
+				IconButton {
+					icon: "chevron_down"
+					enabled: root.found.length > 1
+					onClicked: root.step(1)
+				}
 			}
 		}
 
@@ -544,9 +559,13 @@ Item {
 			}
 		}
 
-		Item {
+		ChatStage {
+			id: stage
+
 			Layout.fillWidth: true
 			Layout.fillHeight: true
+			scroll: list.contentHeight > list.height ? Math.max(0, Math.min(1, (list.contentY - list.originY) / (list.contentHeight - list.height))) : 1
+			live: Messages.shown
 
 			ListView {
 				id: list
@@ -555,8 +574,14 @@ Item {
 				property bool stick: true
 
 				anchors.fill: parent
+				anchors.leftMargin: stage.inset
+				anchors.rightMargin: Math.max(0, stage.inset - 8)
 				clip: true
 				spacing: 3
+				header: Item {
+					width: list.width
+					height: 10
+				}
 				boundsBehavior: Flickable.StopAtBounds
 				ScrollBar.vertical: ThinScrollBar {}
 				// tall mails must not be thrown away while they are scrolled through
@@ -599,19 +624,9 @@ Item {
 					required property string modelData
 					required property int index
 
-					// A new mail fades in by itself. (As a transition of the list the fade was cut
+					// A new mail comes up by itself. (As a transition of the list the fade was cut
 					// short when the view jumped to the newest mail, and left the first mails unseen.)
-					ListView.onAdd: appear.restart()
-
-					Anim {
-						id: appear
-
-						target: entry
-						property: "opacity"
-						from: 0
-						to: 1
-						duration: Motion.medium
-					}
+					ListView.onAdd: if (!arrive.running) entry.appear()
 
 					width: ListView.view.width - 12
 					message: Mail.messages[root.byId[modelData]] ?? root.blank
@@ -640,6 +655,7 @@ Item {
 				footer: Column {
 					width: list.width - 12
 					topPadding: root.outgoing.length > 0 ? 6 : 0
+					bottomPadding: 12
 					spacing: 4
 
 					Repeater {
@@ -663,8 +679,8 @@ Item {
 								anchors.right: parent.right
 								width: Math.min(parent.width * 0.74, Math.max(sentText.implicitWidth, status.implicitWidth, 60) + 24)
 								height: sentColumn.implicitHeight + 16
-								radius: Theme.radius.large
-								color: leaving.failed ? Theme.dangerContainer : Theme.primaryContainer
+								radius: Messages.bubbleRadius
+								color: leaving.failed ? Theme.dangerContainer : Messages.mine
 								opacity: leaving.entry.state === "sent" || leaving.failed ? 1 : 0.7
 
 								Behavior on opacity {
@@ -771,23 +787,45 @@ Item {
 
 				anchors.right: parent.right
 				anchors.bottom: parent.bottom
-				anchors.rightMargin: 14
-				anchors.bottomMargin: 8
-				implicitWidth: 36
-				implicitHeight: 36
+				anchors.margins: 12
+				implicitWidth: 38
+				implicitHeight: 38
 				icon: "arrow_down"
 				color: Theme.layer3
 				scale: wanted ? 1 : 0
+				opacity: wanted ? 1 : 0
 				visible: scale > 0.01
 				onClicked: {
 					list.stick = true;
+					flick.stop();
+					const from = list.contentY;
 					list.positionViewAtEnd();
+					// a long way is not gone in full
+					flick.from = Math.max(from, list.contentY - 900);
+					flick.to = list.contentY;
+					flick.start();
 				}
 
 				Behavior on scale {
 					SpatialAnim {
 						duration: Motion.medium
 					}
+				}
+				Behavior on opacity {
+					Anim {
+						duration: Motion.short
+					}
+				}
+
+				// the way down is seen
+				NumberAnimation {
+					id: flick
+
+					target: list
+					property: "contentY"
+					duration: Motion.long
+					easing.type: Easing.BezierSpline
+					easing.bezierCurve: Motion.decel
 				}
 			}
 		}
@@ -842,10 +880,10 @@ Item {
 			readonly property bool shown: root.picked !== null
 
 			Layout.fillWidth: true
-			Layout.preferredHeight: shown ? 40 : 0
+			Layout.preferredHeight: shown ? 46 : 0
 			visible: Layout.preferredHeight > 0.5
 			opacity: shown ? 1 : 0
-			radius: Theme.radius.medium
+			radius: Theme.radius.large
 			color: Theme.layer1
 			clip: true
 
@@ -1143,16 +1181,19 @@ Item {
 			}
 		}
 
-		Field {
-			id: adder
+		Reveal {
+			shown: root.adding
 
-			Layout.fillWidth: true
-			visible: root.adding
-			icon: "account"
-			placeholder: "To"
-			onAccepted: {
-				if (adder.text.trim() === "") composer.focusInput();
-				else root.take();
+			Field {
+				id: adder
+
+				width: parent.width
+				icon: "account"
+				placeholder: "To"
+				onAccepted: {
+					if (adder.text.trim() === "") composer.focusInput();
+					else root.take();
+				}
 			}
 		}
 
