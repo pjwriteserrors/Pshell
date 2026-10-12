@@ -537,6 +537,36 @@ Singleton {
 		}
 	}
 
+	// niri's own picker: the next window clicked, null when it was called off
+	property bool picking: false
+	property var picked: null
+
+	function pickWindow(done) {
+		if (root.picking) return;
+		root.picked = done;
+		root.picking = true;
+		pickProc.running = true;
+	}
+
+	Process {
+		id: pickProc
+
+		command: ["niri", "msg", "-j", "pick-window"]
+		stdout: StdioCollector {
+			onStreamFinished: {
+				let window = null;
+				try {
+					window = JSON.parse(text);
+				} catch (error) {}
+				const done = root.picked;
+				root.picked = null;
+				root.picking = false;
+				if (window && done) done({ appId: String(window.app_id ?? ""), title: String(window.title ?? "") });
+			}
+		}
+		onExited: root.picking = false
+	}
+
 	Process {
 		id: liveProc
 

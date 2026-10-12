@@ -20,6 +20,7 @@ ModalWindow {
 	id: root
 
 	modalId: "niri"
+	aside: NiriSettings.picking
 	exclusiveKeyboard: true
 	onModalOpened: {
 		NiriSettings.prepare();

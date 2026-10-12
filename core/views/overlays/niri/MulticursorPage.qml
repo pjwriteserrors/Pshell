@@ -194,6 +194,14 @@ SettingsPage {
 				}
 			}
 
+			Chip {
+				icon: "cursor_default_click_outline"
+				text: "Pick"
+				onClicked: NiriSettings.pickWindow(window => {
+					if (window.appId !== "") Multicursor.setExcluded(window.appId, true);
+				})
+			}
+
 			Repeater {
 				model: root.open
 

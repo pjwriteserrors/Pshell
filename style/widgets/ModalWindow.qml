@@ -15,6 +15,9 @@ PanelWindow {
 	property color scrimColor: Theme.scrim
 	readonly property bool shown: Popups.modal === root.modalId
 	property real reveal: root.shown ? 1 : 0
+	// out of the way, clicks going to what is below
+	property bool aside: false
+	property real veil: root.aside ? 0 : 1
 	property var targetScreen: Popups.primaryScreen
 	default property alias content: holder.data
 	readonly property Item contentItem: holder
@@ -37,7 +40,14 @@ PanelWindow {
 		}
 	}
 
+	Behavior on veil {
+		NumberAnimation {
+			duration: Motion.medium
+		}
+	}
+
 	screen: root.targetScreen
+	mask: root.aside ? nothing : null
 	visible: root.shown || root.reveal > 0.002
 	color: "transparent"
 	anchors {
@@ -55,7 +65,11 @@ PanelWindow {
 	Rectangle {
 		anchors.fill: parent
 		color: root.scrimColor
-		opacity: root.reveal * root.scrimOpacity
+		opacity: root.reveal * root.scrimOpacity * root.veil
+	}
+
+	Region {
+		id: nothing
 	}
 
 	MouseArea {
@@ -68,7 +82,7 @@ PanelWindow {
 
 		anchors.fill: parent
 		focus: true
-		opacity: root.reveal
+		opacity: root.reveal * root.veil
 		scale: 0.94 + 0.06 * root.reveal
 		transform: Translate {
 			y: 24 * (1 - root.reveal)

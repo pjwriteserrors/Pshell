@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Layouts
 import qs.style.theme
 import qs.style.widgets
+import qs.core.services
 import "RuleSchema.js" as RuleSchema
 
 // One `match` or `exclude` line: its conditions, all of which must hold.
@@ -118,6 +119,24 @@ Rectangle {
 							font.pixelSize: Theme.size.label
 							selectByMouse: true
 							onEditingFinished: if (text !== String(cond.value ?? "")) root.setProp(cond.modelData, text)
+						}
+
+						Clickable {
+							implicitWidth: 22
+							implicitHeight: 22
+							radius: 11
+							visible: root.kind === "window" && (cond.modelData === "app-id" || cond.modelData === "title")
+							onClicked: NiriSettings.pickWindow(window => {
+								const text = cond.modelData === "title" ? window.title : window.appId;
+								if (text !== "") root.setProp(cond.modelData, `^${root.quoteRegex(text)}$`);
+							})
+
+							Glyph {
+								anchors.centerIn: parent
+								icon: "cursor_default_click_outline"
+								size: 13
+								color: Theme.textMuted
+							}
 						}
 
 						Clickable {
