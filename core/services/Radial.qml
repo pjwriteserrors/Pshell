@@ -67,6 +67,17 @@ Singleton {
 		};
 	})
 
+	// the folders looked into lately, and the usual ways into Files
+	readonly property var filesEntries: [
+		{ id: "files-home", label: "Files", icon: "folder_open", run: () => Files.open("") },
+		{ id: "files-downloads", label: "Downloads", icon: "download", run: () => Files.open(`${Paths.home}/Downloads`) }
+	].concat(FileLibrary.visited.slice(0, 6).map((entry, index) => ({
+		id: `files-${index}`,
+		label: Files.nameOf(entry.path),
+		icon: "folder_outline",
+		run: () => Files.open(entry.path)
+	})))
+
 	readonly property var timerEntries: [
 		{ id: "pause", label: "Pause", icon: "pause", enabled: Tmpo.tracking, run: () => Tmpo.pause() },
 		{ id: "resume", label: "Resume", icon: "play", enabled: !Tmpo.tracking && Tmpo.canResume, run: () => Tmpo.runAction(["resume"]) },
@@ -93,6 +104,8 @@ Singleton {
 			entries.push({ id: "dnd", label: Words.of("radial.dnd", "Do not disturb"), icon: Notifs.dnd ? "bell_off_outline" : "bell_outline", active: Notifs.dnd, run: () => Notifs.toggleDnd() });
 		if (Plugins.on("sound"))
 			entries.push({ id: "mic", label: Words.of("radial.mic", "Microphone"), icon: Audio.micIcon, active: Audio.micMuted, run: () => Audio.toggleMicMute() });
+		if (Plugins.on("filemanager"))
+			entries.push({ id: "files", label: Words.of("radial.files", "Files"), icon: "folder_outline", children: root.filesEntries });
 		entries.push({ id: "power", label: Words.of("radial.power", "Power"), icon: "power", children: root.powerEntries });
 		if (Plugins.on("ssh"))
 			entries.push({ id: "ssh", label: Words.of("radial.ssh", "SSH"), icon: "console", enabled: root.sshEntries.length > 0, children: root.sshEntries });
