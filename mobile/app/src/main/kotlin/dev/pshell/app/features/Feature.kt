@@ -18,8 +18,8 @@ enum class Group(val id: String, val title: String, val icon: String, val blurb:
 
 /**
  * One thing the app can do. It is offered only while every plugin it names
- * is switched on at the PC (and "phone" itself); the PC refuses the rest
- * anyway. [card] is its live summary on the home screen, [screen] the whole.
+ * is switched on at the PC (and "phone" itself), and one of [anyPlugins]
+ * where several bring it each on their own; the PC refuses the rest anyway. [card] is its live summary on the home screen, [screen] the whole.
  * [keywords] find it in the home screen's search, next to its title.
  */
 class Feature(
@@ -28,6 +28,7 @@ class Feature(
 	val icon: String,
 	val group: Group,
 	val plugins: List<String> = emptyList(),
+	val anyPlugins: List<String> = emptyList(),
 	val keywords: List<String> = emptyList(),
 	/** draws its own surface edge to edge, no page header (touchpad, terminal) */
 	val bare: Boolean = false,
@@ -56,11 +57,13 @@ val Features: List<Feature> = listOf(
 	// media
 	MediaFeature,
 	SoundFeature,
+	SoundsFeature,
 	LyricsFeature,
 	SongFeature,
 	HandoffFeature,
 	// work
 	MessagesFeature,
+	NewslettersFeature,
 	TimerFeature,
 	TrackingFeature,
 	AgentsFeature,
@@ -72,18 +75,26 @@ val Features: List<Feature> = listOf(
 	ReaderFeature,
 	ChatFeature,
 	TranslateFeature,
+	IdentitiesFeature,
 	ConvertFeature,
 	BreaksFeature,
 	WeatherFeature,
+	AsteroidsFeature,
+	FactFeature,
 	// pc
 	UnlockFeature,
 	SystemFeature,
+	ScreentimeFeature,
+	ConnectionsFeature,
 	UpdatesFeature,
 	QuickFeature,
 	CaptureFeature,
 	StudioFeature,
+	LightingFeature,
 	DisplayFeature,
 	SshFeature,
+	MachinesFeature,
+	LibraryFeature,
 	PcFilesFeature,
 	RpgFeature,
 	SessionFeature,

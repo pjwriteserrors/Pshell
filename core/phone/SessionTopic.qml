@@ -2,7 +2,8 @@ import QtQuick
 import Quickshell
 import qs.core.services
 
-// session: locked or not, and the power menu's actions.
+// session: locked or not, the power menu's actions, and finding the PC and
+// its pointer.
 Topic {
 	id: topic
 
@@ -12,7 +13,8 @@ Topic {
 		locked: Session.locked,
 		host: Host.hostname,
 		canLock: Plugins.on("lock-screen"),
-		canPower: Plugins.on("power-menu")
+		canPower: Plugins.on("power-menu"),
+		canFindPointer: FindMouse.available
 	}) : null
 
 	Timer {
@@ -58,6 +60,11 @@ Topic {
 			if (!topic.link.allowed("phone.find")) throw new Error("Finding is off");
 			Notifs.pushInternal("running", "Here I am", `${topic.link.name} is looking for this PC`, { icon: "monitor", duration: 15000 });
 			Quickshell.execDetached(["sh", "-c", 'for i in 1 2 3; do pw-play /usr/share/sounds/freedesktop/stereo/complete.oga 2>/dev/null || paplay /usr/share/sounds/freedesktop/stereo/complete.oga 2>/dev/null; done']);
+			return {};
+		// the light that shows where the pointer is
+		case "pointer":
+			if (!FindMouse.available) throw new Error("plugin-off");
+			FindMouse.show();
 			return {};
 		case "lock":
 			if (!Plugins.on("lock-screen")) throw new Error("The lock screen is off");

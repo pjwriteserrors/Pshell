@@ -18,6 +18,8 @@ Singleton {
 	property var tags: []
 	// path → [tag id]
 	property var tagged: ({})
+	// tagged paths that are not on the disk right now (Files keeps it)
+	property var missing: ({})
 	// [{ id, name, icon, paths: [path] }]
 	property var collections: []
 	// searches kept in the sidebar: [{ id, name, query, path, contents }]
@@ -124,7 +126,7 @@ Singleton {
 	}
 
 	function countOf(id) {
-		return root.pathsWithTag(id).length;
+		return root.pathsWithTag(id).filter(path => !root.missing[path]).length;
 	}
 
 	// on for every path if one of them lacks it, off otherwise

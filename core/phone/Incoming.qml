@@ -16,6 +16,8 @@ Scope {
 
 	// key → the notification shown for it
 	property var shown: ({})
+	// key → the app it came from
+	property var senders: ({})
 	property int counter: 0
 	// players this paused for a call, to start them again after it
 	property var pausedForCall: []
@@ -30,12 +32,18 @@ Scope {
 		const old = root.shown[key];
 		if (!old) return;
 		delete root.shown[key];
+		delete root.senders[key];
 		old.close();
 	}
 
 	function posted(data, device) {
 		const key = String(data.key || "");
 		if (key === "") return;
+		// an app switched off in the settings does not show here
+		if (PhoneApps.saw(data)) {
+			root.forget(key);
+			return;
+		}
 		root.forget(key);
 		root.counter += 1;
 		const act = (action, args) => root.link.call("phone.notifications", action, Object.assign({ key: key }, args || {}), null, { device: device });
@@ -69,6 +77,7 @@ Scope {
 			onReplied: text => act("reply", { action: replyAction.id, text: text })
 		});
 		root.shown[key] = notification;
+		root.senders[key] = PhoneApps.idOf(data);
 		notification.closed.connect(() => Notifs.markClosed(notification.id));
 		Notifs.addGroup(notification, Notifs.snapshot(notification));
 		// an update of something already seen, or a quiet one, makes no toast
@@ -134,6 +143,15 @@ Scope {
 				return;
 			}
 			for (const key of Object.keys(root.shown)) root.forget(key);
+		}
+	}
+
+	// an app switched off takes what it shows with it
+	Connections {
+		target: PhoneApps
+
+		function onMutedChanged() {
+			for (const key of Object.keys(root.shown)) if (PhoneApps.isMuted(root.senders[key])) root.forget(key);
 		}
 	}
 

@@ -179,6 +179,11 @@ Singleton {
 			notification.dismiss();
 			return;
 		}
+		// a program switched off in the settings (Notifications) shows nothing
+		if (notification.lastGeneration ? PhoneApps.localMuted.includes(String(notification.appName)) : PhoneApps.arriving(notification.appName)) {
+			notification.dismiss();
+			return;
+		}
 		root.addGroup(notification, root.snapshot(notification));
 		// carried over from before a shell reload: already seen, no toast again
 		if (notification.lastGeneration) return;
@@ -214,6 +219,9 @@ Singleton {
 	// show during do-not-disturb as well.
 	function pushInternal(status, title, detail, options) {
 		const extra = options || {};
+		// who says it: the file that called, "TimerGuard.qml" → "Timer Guard"
+		const caller = String(new Error().stack || "").split("\n").find(line => line.includes(".qml") && !line.includes("/Notifs.qml")) || "";
+		const source = (caller.match(/([^\/@]+)\.qml/)?.[1] ?? "").replace(/([a-z])([A-Z])/g, "$1 $2");
 		const sound = extra.sound ?? (String(status) === "error" ? "error" : "");
 		if (sound !== "") Sounds.play(sound);
 		root.nextToastId += 1;
@@ -229,6 +237,7 @@ Singleton {
 			image: String(extra.image || ""),
 			avatar: String(extra.avatar || ""),
 			app: String(extra.app || ""),
+			source: String(extra.app || source),
 			reply: extra.reply && typeof extra.reply.send === "function" ? extra.reply : null,
 			actions: Array.isArray(extra.actions) ? extra.actions : [],
 			duration: Number(extra.duration) > 0 ? Number(extra.duration) : (String(status) === "running" ? 8000 : 5000)

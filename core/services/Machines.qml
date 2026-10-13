@@ -11,7 +11,8 @@ import Quickshell.Io
 // for Windows; the launch is done once its host application answers.
 //
 // The launch lives here, not in the popup: closing the popup leaves it
-// running. Status is read only while the popup is up or a launch runs.
+// running. Status is read only while the popup is up, the phone looks or a
+// launch runs.
 Singleton {
 	id: root
 
@@ -23,6 +24,8 @@ Singleton {
 	property string error: ""
 	// someone looks: the popup is up
 	property bool watched: false
+	// someone looks from elsewhere: the phone app
+	property bool remote: false
 
 	// ── the launch ─────────────────────────────────────────────────────────
 	// the machine being launched, "" while none is
@@ -219,7 +222,7 @@ Singleton {
 	Timer {
 		interval: root.launching ? 1000 : 2500
 		repeat: true
-		running: Plugins.on("vm-launcher") && (root.watched || root.launching || Object.keys(root.pending).length > 0)
+		running: Plugins.on("vm-launcher") && (root.watched || root.remote || root.launching || Object.keys(root.pending).length > 0)
 		triggeredOnStart: true
 		onTriggered: root.refresh()
 	}

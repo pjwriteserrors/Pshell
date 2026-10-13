@@ -76,14 +76,25 @@ Item {
 		root.editing = false;
 		suggestions.model = [];
 		if (!go) return;
-		let path = field.text.trim();
+		// pasted from elsewhere it may be quoted, or a file:// link
+		let path = field.text.trim().replace(/^(["'])(.*)\1$/, "$2");
+		if (path.startsWith("file://")) path = decodeURIComponent(path.slice(7));
 		if (path.startsWith("~")) path = Files.home + path.slice(1);
 		if (!path.startsWith("/")) path = root.pane.folder + "/" + path;
 		path = path.replace(/\/+$/, "") || "/";
-		root.pane.openFolder(path);
+		root.arrive(path);
 	}
 
-	// folders below what is typed
+	// a folder opens; a file shows in its folder, picked
+	function arrive(path) {
+		Files.request("describe", { paths: [path] }, data => {
+			const entry = data?.entries?.[0];
+			if (entry && !entry.dir) root.pane.go({ kind: "dir", path: Files.parentOf(path) }, { select: [path] });
+			else root.pane.openFolder(path);
+		});
+	}
+
+	// folders and files below what is typed
 	function suggest() {
 		let text = field.text;
 		if (text.startsWith("~")) text = Files.home + text.slice(1);
@@ -93,19 +104,20 @@ Item {
 		const prefix = text.slice(slash + 1).toLowerCase();
 		Files.request("list", { path: folder }, data => {
 			if (!root.editing) return;
-			const dirs = (data?.entries ?? []).filter(entry => entry.dir && (prefix.startsWith(".") || !entry.hidden) && entry.name.toLowerCase().startsWith(prefix))
-				.sort((a, b) => a.key < b.key ? -1 : 1).slice(0, 8);
-			suggestions.model = dirs.map(entry => ({ name: entry.name, path: entry.path }));
-			suggestions.currentIndex = dirs.length > 0 ? 0 : -1;
+			const fits = (data?.entries ?? []).filter(entry => (prefix.startsWith(".") || !entry.hidden) && entry.name.toLowerCase().startsWith(prefix))
+				.sort((a, b) => (b.dir - a.dir) || (a.key < b.key ? -1 : 1)).slice(0, 8);
+			suggestions.model = fits.map(entry => ({ name: entry.name, path: entry.path, dir: !!entry.dir }));
+			suggestions.currentIndex = fits.length > 0 ? 0 : -1;
 		});
 	}
 
 	function complete() {
 		const pick = suggestions.model[Math.max(0, suggestions.currentIndex)];
 		if (!pick) return;
-		field.text = Files.pretty(pick.path) + "/";
+		field.text = Files.pretty(pick.path) + (pick.dir ? "/" : "");
 		field.cursorPosition = field.text.length;
-		root.suggest();
+		if (pick.dir) root.suggest();
+		else suggestions.model = [];
 	}
 
 	Rectangle {
@@ -316,9 +328,9 @@ Item {
 
 					Glyph {
 						anchors.verticalCenter: parent.verticalCenter
-						icon: "folder_outline"
+						icon: option.modelData.dir ? "folder_outline" : "file_outline"
 						size: 15
-						color: Theme.primary
+						color: option.modelData.dir ? Theme.primary : Theme.textMuted
 						animated: false
 					}
 
@@ -337,7 +349,7 @@ Item {
 						mouse.accepted = true;
 						root.editing = false;
 						suggestions.model = [];
-						root.pane.openFolder(option.modelData.path);
+						root.arrive(option.modelData.path);
 					}
 				}
 			}

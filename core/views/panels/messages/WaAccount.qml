@@ -206,7 +206,7 @@ Item {
 
 				Layout.fillWidth: true
 				icon: "file_gif_box"
-				placeholder: WhatsApp.gifsReady ? "Klipy API key (set)" : "Klipy API key"
+				placeholder: WhatsApp.gifsReady ? "Giphy API key (set)" : "Giphy API key"
 				onAccepted: save.clicked(null)
 			}
 
@@ -215,7 +215,7 @@ Item {
 				implicitHeight: 40
 				icon: "open_in_new"
 				variant: "tonal"
-				onClicked: Qt.openUrlExternally("https://partner.klipy.com")
+				onClicked: Qt.openUrlExternally("https://developers.giphy.com/dashboard/")
 			}
 
 			IconButton {

@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.provider.MediaStore
 import android.util.Base64
 import android.util.Size
@@ -43,12 +44,28 @@ object PhoneMedia {
 			"videos" -> Collection(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, null, null)
 			"screenshots" -> Collection(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "$path LIKE ?", arrayOf("%Screenshots%"))
 			"downloads" -> Collection(MediaStore.Downloads.EXTERNAL_CONTENT_URI, null, null)
-			"whatsapp" -> Collection(files, "$path LIKE ? AND ${MediaStore.Files.FileColumns.MEDIA_TYPE} != ${MediaStore.Files.FileColumns.MEDIA_TYPE_NONE}", arrayOf("%WhatsApp/Media/%"))
+			// with every file in sight, the documents sent in chats too
+			"whatsapp" -> if (allFiles()) Collection(files, "$path LIKE ? AND ${MediaStore.MediaColumns.MIME_TYPE} IS NOT NULL", arrayOf("%WhatsApp/Media/%"))
+			else Collection(files, "$path LIKE ? AND ${MediaStore.Files.FileColumns.MEDIA_TYPE} != ${MediaStore.Files.FileColumns.MEDIA_TYPE_NONE}", arrayOf("%WhatsApp/Media/%"))
 			"music" -> Collection(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, null, null)
-			"documents" -> Collection(files, "${MediaStore.Files.FileColumns.MIME_TYPE} IN (?, ?, ?, ?, ?, ?)", arrayOf("application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.oasis.opendocument.text", "text/plain", "application/epub+zip"))
+			"documents" -> Collection(files, "${MediaStore.Files.FileColumns.MIME_TYPE} IN (${documentTypes.joinToString { "?" }})", documentTypes)
 			else -> throw LinkError("no-collection", "Nothing called $name on the phone")
 		}
 	}
+
+	private val documentTypes = arrayOf(
+		"application/pdf", "text/plain", "text/csv", "application/epub+zip", "application/rtf",
+		"application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+		"application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		"application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+		"application/vnd.oasis.opendocument.text", "application/vnd.oasis.opendocument.spreadsheet", "application/vnd.oasis.opendocument.presentation",
+	)
+
+	/**
+	 * Android shows an app only pictures, videos and music of other apps;
+	 * a PDF or an archive in Downloads needs the access to all files.
+	 */
+	fun allFiles(): Boolean = Environment.isExternalStorageManager()
 
 	fun allowed(context: Context): Boolean {
 		fun has(permission: String) = context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
@@ -61,13 +78,13 @@ object PhoneMedia {
 		else arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
 
 	private fun check() {
-		if (!allowed(app)) throw LinkError("permission", "Allow the Pshell app to see photos and videos (on the phone: Files → Let the PC see your photos)")
+		if (!allowed(app) && !allFiles()) throw LinkError("permission", "Allow the Pshell app to see photos and videos (on the phone: Files → Let the PC see your photos)")
 	}
 
 	fun install(app: App) {
 		this.app = app
 
-		// { collection, since (seconds), offset, limit } → { items: [{ id, name, size, modified, mime, folder, width, height }], total }
+		// { collection, since (seconds), offset, limit } → { items: [{ id, name, size, modified, mime, folder, width, height }], total, allFiles }
 		app.link.handle("phone.files", "browse") { args ->
 			check()
 			withContext(Dispatchers.IO) {
@@ -107,7 +124,7 @@ object PhoneMedia {
 						} while (items.size < limit && cursor.moveToNext())
 					}
 				}
-				json("items" to items, "total" to total)
+				json("items" to items, "total" to total, "allFiles" to allFiles())
 			}
 		}
 

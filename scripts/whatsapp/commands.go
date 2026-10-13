@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -207,7 +208,7 @@ func (b *Bridge) slow(c *Command) {
 	case "gifs":
 		b.gifs(c)
 	case "settings":
-		b.store.set("klipy", strings.TrimSpace(c.Key))
+		b.store.set("giphy", strings.TrimSpace(c.Key))
 		b.publishState()
 	}
 }
@@ -508,9 +509,11 @@ func (b *Bridge) star(c *Command) {
 		return
 	}
 	info := b.info(row)
-	sender := info.Sender
-	if info.Chat.Server != types.GroupServer || row.Mine {
-		sender = types.EmptyJID
+	// only what somebody else wrote in a group names its sender; the chat itself
+	// stands for "0" there, and an empty one costs the device its link
+	sender := info.Sender.ToNonAD()
+	if info.Chat.Server != types.GroupServer || row.Mine || sender.IsEmpty() {
+		sender = info.Chat
 	}
 	if !b.patch(appstate.BuildStar(info.Chat, sender, row.ID, row.Mine, c.Value), "Starring") {
 		return
@@ -874,26 +877,18 @@ func (b *Bridge) publishStickers() {
 	b.emit("stickers", map[string]any{"stickers": kept})
 }
 
-// ── GIFs and stickers that are searched for (Klipy, as in WhatsApp itself) ─
-type klipyFile struct {
+// ── GIFs and stickers that are searched for (Giphy) ─────────────────────
+// giphyFile is one size of a find; Giphy writes the measures as text.
+type giphyFile struct {
 	URL    string `json:"url"`
-	Width  int    `json:"width"`
-	Height int    `json:"height"`
-}
-
-func pick(file map[string]map[string]klipyFile, sizes, formats []string) klipyFile {
-	for _, size := range sizes {
-		for _, format := range formats {
-			if found := file[size][format]; found.URL != "" {
-				return found
-			}
-		}
-	}
-	return klipyFile{}
+	WebP   string `json:"webp"`
+	MP4    string `json:"mp4"`
+	Width  string `json:"width"`
+	Height string `json:"height"`
 }
 
 func (b *Bridge) gifs(c *Command) {
-	key := b.store.get("klipy")
+	key := b.store.get("giphy")
 	kind := "gif"
 	if c.Kind == "sticker" {
 		kind = "sticker"
@@ -905,8 +900,8 @@ func (b *Bridge) gifs(c *Command) {
 		return
 	}
 	query := strings.TrimSpace(c.Query)
-	address := fmt.Sprintf("https://api.klipy.com/api/v1/%s/%ss/", url.PathEscape(key), kind)
-	values := url.Values{"per_page": {"36"}, "customer_id": {"pshell"}}
+	address := fmt.Sprintf("https://api.giphy.com/v1/%ss/", kind)
+	values := url.Values{"api_key": {key}, "limit": {"36"}}
 	if query == "" {
 		address += "trending"
 	} else {
@@ -922,40 +917,37 @@ func (b *Bridge) gifs(c *Command) {
 	}
 	defer response.Body.Close()
 	var data struct {
-		Data struct {
-			Data []struct {
-				ID    json.RawMessage                 `json:"id"`
-				Title string                          `json:"title"`
-				Type  string                          `json:"type"`
-				File  map[string]map[string]klipyFile `json:"file"`
-			} `json:"data"`
+		Data []struct {
+			ID     string               `json:"id"`
+			Title  string               `json:"title"`
+			Images map[string]giphyFile `json:"images"`
 		} `json:"data"`
 	}
 	if response.StatusCode != 200 || json.NewDecoder(response.Body).Decode(&data) != nil {
-		answer["error"] = fmt.Sprintf("Klipy answered %d", response.StatusCode)
+		answer["error"] = fmt.Sprintf("Giphy answered %d", response.StatusCode)
 		b.emit("gifs", answer)
 		return
 	}
-	moving := []string{"gif", "jpg", "png"}
-	if qtReadsWebp {
-		moving = []string{"webp", "gif", "jpg", "png"}
-	}
 	results := []map[string]any{}
-	for _, item := range data.Data.Data {
-		if item.Type == "ad" || len(item.File) == 0 {
+	for _, item := range data.Data {
+		small, whole := item.Images["fixed_width"], item.Images["original"]
+		preview := small.URL
+		if qtReadsWebp && small.WebP != "" {
+			preview = small.WebP
+		}
+		address := whole.MP4
+		if kind == "sticker" {
+			address = whole.WebP
+			if address == "" {
+				address = whole.URL
+			}
+		}
+		if preview == "" || address == "" {
 			continue
 		}
-		small := pick(item.File, []string{"sm", "xs", "md", "hd"}, moving)
-		var whole klipyFile
-		if kind == "gif" {
-			whole = pick(item.File, []string{"md", "hd", "sm"}, []string{"mp4"})
-		} else {
-			whole = pick(item.File, []string{"hd", "md", "sm"}, []string{"webp", "png", "gif"})
-		}
-		if small.URL == "" || whole.URL == "" {
-			continue
-		}
-		results = append(results, map[string]any{"id": string(item.ID), "title": item.Title, "preview": small.URL, "width": small.Width, "height": small.Height, "url": whole.URL})
+		width, _ := strconv.Atoi(small.Width)
+		height, _ := strconv.Atoi(small.Height)
+		results = append(results, map[string]any{"id": item.ID, "title": item.Title, "preview": preview, "width": width, "height": height, "url": address})
 	}
 	answer["results"] = results
 	b.emit("gifs", answer)

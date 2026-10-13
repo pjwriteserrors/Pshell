@@ -527,6 +527,7 @@ Singleton {
 		// tags, favourites and collections follow what was moved or renamed
 		if (job.state === "done") for (const move of job.moves || []) FileLibrary.moved(move[0], move[1]);
 		for (const folder of job.touched || []) root.refreshPeek(folder);
+		root.checkTagged();
 		const followUp = root.followUps[job.id];
 		delete root.followUps[job.id];
 		if (followUp) followUp(job);
@@ -534,6 +535,32 @@ Singleton {
 		root.announce(job);
 		// done jobs stay a moment in the tray, then go
 		forgetTimer.restart();
+	}
+
+	// a tag counts the files that are still there: what went to the trash
+	// keeps its tags for when it comes back
+	function checkTagged() {
+		const paths = Object.keys(FileLibrary.tagged).slice(0, 2000);
+		if (paths.length === 0) {
+			FileLibrary.missing = ({});
+			return;
+		}
+		root.request("describe", { paths: paths }, data => {
+			const there = new Set((data?.entries ?? []).map(entry => entry.path));
+			const missing = {};
+			for (const path of paths) if (!there.has(path)) missing[path] = true;
+			FileLibrary.missing = missing;
+		});
+	}
+
+	onWindowOpenChanged: if (root.windowOpen) root.checkTagged()
+
+	Connections {
+		target: FileLibrary
+
+		function onTaggedChanged() {
+			if (root.windowOpen) root.checkTagged();
+		}
 	}
 
 	function announce(job) {

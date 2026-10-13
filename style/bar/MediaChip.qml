@@ -5,26 +5,29 @@ import qs.style.theme
 import qs.core.services
 import qs.style.widgets
 
-// Now playing. Three bars dance while music plays and freeze when paused;
-// a long title scrolls when hovered. Middle click toggles playback, right
-// click skips.
+// Now playing. Three bars follow the sound (cava) while music plays and
+// freeze when paused; a long title scrolls when hovered. Middle click toggles playback, right
+// click skips, scroll changes the volume.
 BarButton {
 	id: root
 
 	readonly property bool hasTrack: Media.barText !== ""
 	// width without the title, and what the title would add
 	readonly property real fixedWidth: root.padding * 2 + 16
-	// do not disturb keeps the bars but drops the title
-	readonly property bool showTitle: root.hasTrack && !Notifs.dnd
+	// do not disturb keeps the bars but drops the title, and so does a
+	// paused track when the title is only wanted while it plays
+	readonly property bool showTitle: root.hasTrack && !Notifs.dnd && (Media.playing || Media.titleWhenPaused)
 	readonly property real textWant: root.showTitle ? 9 + Math.min(220, label.implicitWidth) : 0
 	// extra width the bar can spare for the title
 	property real room: 1e6
 	readonly property real textWidth: root.showTitle && root.room >= 9 + 48 ? Math.min(220, label.implicitWidth, root.room - 9) : 0
 
 	panelId: "media"
-	tooltip: Media.hasPlayer ? "Media · middle-click play/pause · right-click next" : "Media"
+	tooltip: Media.hasPlayer ? "Media · scroll for volume · middle-click play/pause · right-click next" : "Media"
 	padding: 10
+	wheelEnabled: true
 	onClicked: toggle()
+	onScrolled: wheel => Audio.adjust((wheel.angleDelta.y || -wheel.angleDelta.x) > 0 ? 1 : -1)
 	onMiddleClicked: Media.player?.togglePlaying()
 	onRightClicked: Media.player?.next()
 
@@ -45,41 +48,41 @@ BarButton {
 				color: root.active ? Theme.primary : Theme.text
 			}
 
+			ExternalCava {
+				id: cava
+
+				bars: 3
+				framerate: 30
+				active: root.visible && root.hasTrack && Media.playing
+			}
+
 			Row {
 				anchors.centerIn: parent
 				visible: root.hasTrack
+				// as tall as the title, and fixed: the row would otherwise
+				// re-centre around its tallest bar
+				height: label.implicitHeight
 				spacing: 2.5
 
 				Repeater {
-					model: [0.55, 1, 0.75]
+					model: cava.bars
 
 					delegate: Rectangle {
 						id: eq
 
-						required property real modelData
 						required property int index
-						property real level: Media.playing ? eq.modelData : 0.3
+						readonly property real level: Media.playing ? (cava.values[eq.index] || 0) : 0.3
 
 						anchors.bottom: parent.bottom
 						width: 3.5
-						height: Math.max(3, 14 * eq.level)
+						height: Math.max(3, parent.height * eq.level)
 						radius: 1.75
 						color: Theme.primary
 
-						// a new random height every 700 ms, eased in 300 ms: the
-						// bars keep moving without repainting every frame
-						Behavior on level {
+						Behavior on height {
 							Anim {
-								duration: 300
+								duration: 80
 							}
-						}
-
-						Timer {
-							running: Media.playing
-							repeat: true
-							interval: 700 + eq.index * 90
-							onTriggered: eq.level = 0.25 + Math.random() * 0.75
-							onRunningChanged: if (!running) eq.level = 0.3
 						}
 					}
 				}

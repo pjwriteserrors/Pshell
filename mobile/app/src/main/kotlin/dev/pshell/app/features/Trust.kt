@@ -82,7 +82,7 @@ private fun size(bytes: Long): String = when {
 	else -> "%.2f GB".format(bytes / 1024.0 / 1024.0 / 1024.0)
 }
 
-private fun fileIcon(name: String): String = when (name.substringAfterLast('.', "").lowercase()) {
+fun fileIcon(name: String): String = when (name.substringAfterLast('.', "").lowercase()) {
 	"png", "jpg", "jpeg", "webp", "gif", "svg" -> "file_image_outline"
 	"mp4", "mkv", "webm", "mov" -> "file_video_outline"
 	"mp3", "flac", "ogg", "wav", "m4a" -> "file_music_outline"

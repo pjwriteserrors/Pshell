@@ -45,6 +45,13 @@ fun pluginOn(vararg plugins: String): Boolean {
 	return state["phone"] == true && plugins.all { state[it] == true }
 }
 
+/** None named, or one of them on: for what several plugins bring each on their own. */
+@Composable
+fun anyPluginOn(plugins: List<String>): Boolean {
+	val state by LocalApp.current.plugins.collectAsState()
+	return plugins.isEmpty() || plugins.any { state[it] == true }
+}
+
 /** The floating tab bar's manners: gone while the content scrolls down, a mere handle where every pixel counts. */
 object Chrome {
 	var hidden by androidx.compose.runtime.mutableStateOf(false)

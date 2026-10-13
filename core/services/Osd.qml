@@ -3,7 +3,8 @@ pragma Singleton
 import QtQuick
 import Quickshell
 
-// Transient level indicator (volume, microphone, brightness).
+// Transient level indicator (volume, microphone, brightness), and how far a
+// theme change is.
 Singleton {
 	id: root
 
@@ -24,12 +25,27 @@ Singleton {
 		root.icon = icon;
 		root.visible = true;
 		root.serial += 1;
+		hideTimer.interval = 1400;
 		hideTimer.restart();
+	}
+
+	// a job counting its steps: stays up until the last one. Steps that run
+	// side by side may report out of order, so the bar never goes back
+	function advance(kind, label, done, total, icon) {
+		const running = root.visible && root.kind === kind;
+		let progress = total > 0 ? Math.min(1, done / total) : 1;
+		// the end of a job whose bar has left already (a step took its time)
+		if (progress >= 1 && !running) return;
+		if (done > 0 && running) progress = Math.max(root.progress, progress);
+		show(kind, label, progress, `${Math.round(progress * 100)}%`, icon);
+		if (progress < 1 && root.visible) {
+			hideTimer.interval = 15000;
+			hideTimer.restart();
+		}
 	}
 
 	Timer {
 		id: hideTimer
-		interval: 1400
 		onTriggered: root.visible = false
 	}
 }

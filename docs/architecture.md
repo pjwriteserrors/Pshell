@@ -89,7 +89,8 @@ or when a plugin has neither picture, scene nor icon.
 | `wallpapers` | the wallpaper library (outside the repo) |
 | `themeHooks` | the theme hooks a fresh setup of this machine starts with; each hook is a plugin `hook-<name>` in the Studio tab of `>plugins`, switched on and off there like any other |
 | `hookConfig.<hook>` | settings of a hook |
-| `autocorrect.exclude` | app ids typing is not corrected in, as regular expressions, besides terminals, code editors, password managers and games |
+| `autocorrect.exclude` | app ids typing is not corrected in, as regular expressions, besides terminals, code editors, file managers, password managers and games |
+| `autocorrect.browsers` | app ids of browsers besides the known ones: in a browser the address field is left alone, which is where Ctrl+L, T, N, K, E, F, Alt+D or F6 lead, until Enter, Escape, Tab or a click |
 | `identities.nat` | where the people of `identities` are from, a nationality of randomuser.me (default `de`) |
 | `shelf.watch` | folders whose new files land on a shelf (default: Downloads, Pictures/Screenshots, Videos/Recordings) |
 | `phone` | the phone app's daemon: `port`, `bind`, `addresses` (a VPN name for pairing codes), `downloads`, `files` (the folder the phone may browse), `editCommands`, `presence` (docs/mobile.md) |
@@ -306,7 +307,9 @@ and say when they are done if the window is away. `daemon.py call <op>
 Beyond moving files the daemon converts and inspects them, every result a
 new file beside the old one: archives are listed for quick look and taken
 apart with progress (`archives.py`: ZIP and tar in Python, the rest by
-7-Zip; a double click extracts); videos, audio and pictures become other
+7-Zip; a double click extracts; a click on a file in the listing takes
+that one out into `~/.cache/pshell/archive-peek` and shows it, kept a
+day); videos, audio and pictures become other
 formats of their kind (`convert.py`: ffmpeg, ImageMagick); PDFs go through
 iLovePDF's tools on the machine (`pdftools.py`: pikepdf, Ghostscript,
 poppler, Tesseract for OCR, LibreOffice and Chromium where they are);
@@ -725,8 +728,8 @@ ffmpeg from the default microphone), stickers, polls, places and contacts
 are shown, and all but places and contacts are sent from the field. The
 smiley holds emoji (`assets/emoji/emoji.json`, Unicode's list), the stickers
 that were kept, made from a picture or sent last, and the search for GIFs and
-stickers at Klipy, where WhatsApp itself gets them; it needs a key
-(partner.klipy.com) that the tab's settings keep. Calls cannot be taken – a
+stickers at Giphy; it needs a key (developers.giphy.com) that the tab's
+settings keep. Calls cannot be taken – a
 toast says who calls –, and what is to be seen once, statuses and channels
 stay on the phone. A file `demo` in the state folder, or
 `PSHELL_WHATSAPP_DEMO=1`, serves an account that does not exist
@@ -746,6 +749,10 @@ stay on the phone. A file `demo` in the state folder, or
 4. the theme hooks that are on (`scripts/theme-hooks/<hook>.sh`, plugins
    `hook-<name>`), in parallel, once the wallpaper is painted
 5. GTK colour scheme follows the palette's dark/light mode
+
+Each step that is through (frame, colours, wallpaper, every hook, GTK) is
+reported with `ipc.sh theme progress <done> <total>`, and the shell shows the
+change as a bar in the OSD (`Osd.advance`).
 
 A hook that finds its program missing exits 3 and is logged as skipped. Only
 failures raise a notification; the log is

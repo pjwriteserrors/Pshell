@@ -279,7 +279,8 @@ Singleton {
 			if (result !== root.later) reply(true, result);
 		} catch (error) {
 			const text = String(error?.message ?? error);
-			reply(false, { code: text === "unknown-action" ? text : "failed", message: text });
+			// a topic that names no plugin says so itself when what it needs is off
+			reply(false, { code: text === "unknown-action" || text === "plugin-off" ? text : "failed", message: text });
 		}
 	}
 

@@ -55,6 +55,8 @@ Singleton {
 	property real eyesDueAt: 0
 	property string warnedFallDay: ""
 	property int bottleLeft: root.bottleSize
+	// what the bottles put aside still hold: size → millilitres
+	property var bottleLevels: ({})
 	// the last bottle reading, for two minutes: { at, ml, from }
 	property var lastSip: null
 	readonly property bool canUncount: root.lastSip !== null && root.lastSip.ml > 0
@@ -240,11 +242,15 @@ Singleton {
 		return drunk;
 	}
 
-	// another bottle: it starts full, nothing is counted
+	// another bottle: the one put aside keeps its level, nothing is counted
 	function setBottleSize(ml) {
 		if (!root.bottleSizes.includes(ml) || ml === root.bottleSize) return;
+		const levels = Object.assign({}, root.bottleLevels);
+		levels[root.bottleSize] = root.bottleLeft;
+		root.bottleLevels = levels;
+		const left = levels[ml] === undefined ? ml : levels[ml];
 		root.bottleSize = ml;
-		root.bottleLeft = ml;
+		root.bottleLeft = left;
 		root.lastSip = null;
 		sipWindow.stop();
 		saveDelay.restart();
@@ -447,7 +453,7 @@ Singleton {
 		id: saveDelay
 
 		interval: 5000
-		onTriggered: store.setText(JSON.stringify({ enabled: root.enabled, warnedFallDay: root.warnedFallDay, bottleSize: root.bottleSize, bottleLeft: root.bottleLeft, days: root.days }))
+		onTriggered: store.setText(JSON.stringify({ enabled: root.enabled, warnedFallDay: root.warnedFallDay, bottleSize: root.bottleSize, bottleLeft: root.bottleLeft, bottleLevels: root.bottleLevels, days: root.days }))
 	}
 
 	FileView {
@@ -463,6 +469,12 @@ Singleton {
 				root.warnedFallDay = data.warnedFallDay || "";
 				root.bottleSize = root.bottleSizes.includes(data.bottleSize) ? data.bottleSize : 750;
 				root.bottleLeft = Number.isFinite(data.bottleLeft) ? Math.min(data.bottleLeft, root.bottleSize) : root.bottleSize;
+				const levels = {};
+				for (const size of root.bottleSizes) {
+					const left = (data.bottleLevels || {})[size];
+					if (Number.isFinite(left)) levels[size] = Math.max(0, Math.min(left, size));
+				}
+				root.bottleLevels = levels;
 				// glasses before the bottle counted 250 ml each
 				const days = data.days || {};
 				for (const key of Object.keys(days)) {

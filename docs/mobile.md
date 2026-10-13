@@ -33,12 +33,14 @@ core/services/Phone.qml   the shell's end; core/phone/ holds one file per topic
 - **App.** One foreground service holds the connection; screens subscribe to
   topics and send calls. The features fall into groups (`features/Feature.kt`):
   **Remote** (touchpad, keyboard, commands, terminal, windows, launcher,
-  radial menu, screen), **Media** (player, sound, lyrics, what plays,
-  continue), **Work** (messages, timer, days, agents, todos, notes, calendar,
-  shelves, downloads, reader, AI chat, translate, converter, breaks,
-  weather), **PC** (unlock, system, updates, quick settings, capture, Studio,
-  displays, SSH, PC files, RPG, session) and **Phone & PC** (notifications,
-  clipboard, files, calls, find). Each group is a tab of the bar: it opens on
+  radial menu, screen), **Media** (player, sound, sounds, lyrics, what
+  plays, continue), **Work** (messages, newsletters, timer, days, agents,
+  todos, notes, calendar, shelves, downloads, reader, AI chat, translate,
+  identities, converter, breaks, weather, asteroids, the useless fact),
+  **PC** (unlock, system, screen time, connections, updates, quick settings,
+  capture, Studio, lighting, displays, SSH, virtual machines, file manager,
+  PC files, RPG, session) and **Phone & PC** (notifications, clipboard,
+  files, calls, find). Each group is a tab of the bar: it opens on
   the group's first feature, the rest sit in a row of chips at the top. The
   home screen is a control centre (what is going on, what is changed most)
   followed by every group under its own heading; a search field at the top
@@ -103,8 +105,8 @@ folder), `PUT /wallpaper/<name>`, `GET /stream/screen` (JPEG frames).
 ## Plugins decide what the app offers
 
 The app gets the switches of `core/plugins.json` as the PC resolved them
-(topic `plugins`) and offers a feature only while all its plugins are on;
-switching one in `>plugins` changes the phone within a second. Features of
+(topic `plugins`) and offers a feature only while all its plugins are on
+(Lighting: either of its two); switching one in `>plugins` changes the phone within a second. Features of
 the phone alone have plugins of their own in the tab **Phone**, all requiring
 `phone`.
 
@@ -119,6 +121,7 @@ the phone alone have plugins of their own in the tab **Phone**, all requiring
 | Timer | `qtrack` | running timer, today | pause, resume, switch, start |
 | Days | `qtrack` | the day board: every tracked day, its entries by project, what is queued for and sent to Teamwork | check an entry for Teamwork, change its description, billable, shift start or end, pick a ticket, delete, send the day |
 | Messages | `messages`, `mail` | mail as chats: who, subject, preview, unread; a chat's mails as bubbles with attachments; the outbox | open (marks it read on the PC too), reply to all or write a new mail (plain text, sent after the PC's grace period, with undo), snippets, flag, mark unread, snooze, archive, delete, search, older mails; an attachment opens on the PC or comes to the phone; the mail assistant (`mail-ai`) drafts and summarises |
+| Newsletters | `messages`, `mail`, `mail-unsubscribe` | who sends newsletters to the private mailboxes, how many and when last; who was left | scan the mailboxes, unsubscribe from the senders that are ticked, take one back |
 | Downloads | `downloads` | what the browser on the PC downloads, with progress and speed | pause, resume, cancel; a finished file opens on the PC, shows in its folder, or comes to the phone |
 | Lyrics | `lyrics`, `media` | the words of the song that plays, the sung line following the player | tap a line to seek there |
 | Reader | `fast-reader` | a text one word at a time, on the phone (pasted, or marked in another app → *Read fast*) | speed; the same text on the PC's reader, with play, pause and steps while it runs |
@@ -126,7 +129,10 @@ the phone alone have plugins of their own in the tab **Phone**, all requiring
 | Agents | `agents` | agents working or waiting | answer, focus the window |
 | Breaks | `breaks` (+ `eye-rest`, `stretch`, `water`, `headache-log`) | next breaks, water, the week | log water, a headache, a break |
 | System | `system-monitor` | CPU, memory, disks, graphs | |
+| Screen time | `screentime` | a day's time at the screen against the one before, its week, its top apps, windows, workspaces and pages | step to earlier days |
+| Connections | `connections` | where the PC's connections go, by app and by place, with what moves; sampled only while the screen is open | |
 | Sound | `sound` | outputs, a volume per app | volume, mute, switch output |
+| Sounds | `sounds` | the shell's own sounds: the pack, which kind plays, how loud, every sound on its own | pick a pack, all / buttons / automatic / off, volume, quiet during do not disturb, single sounds on or off; play one on the PC |
 | Updates | `updates` | packages, progress, news | check, update |
 | Todos, Notes | `todos`, `notes` | lists, notes | tick, add, edit |
 | Windows | `overview` | the monitors where they stand, their workspaces, the windows where they sit | tap to focus, hold and drag to another workspace or monitor, close |
@@ -135,15 +141,21 @@ the phone alone have plugins of their own in the tab **Phone**, all requiring
 | Capture | `screenshot`, `recording`, `screenshot-history` | a screenshot on the phone; the PC's recent shots | shoot, start the PC's capture modes (region, window, OCR, QR, pin, …), fetch or copy a shot, record an output |
 | Screen | `phone-screen` | an output, a few pictures a second | pinch to zoom |
 | Studio | `studio-wallpaper`, `studio-styles`, `studio-motion`, `studio-dress`, `studio-combinations` | the wallpaper library; the shell in miniature in each palette wallust makes of a wallpaper; animations, icon and cursor themes, saved combinations | apply a wallpaper with a palette; fetch the wallpaper of the day; a phone photo becomes the wallpaper; switch style, animation, icons, pointer, or a whole combination |
+| Lighting | `hook-openrgb` or `hook-openrgb-leds` | the OpenRGB devices and what each shows | wallpaper, live or off per device; the mirrored monitor, frames per second and smoothing of live; look for devices again |
 | What plays? | `song-detection`, `media` | the song the PC heard, cover and links | listen |
 | Weather | `weather` | the Today panel's weather, hours and week | |
+| Asteroids | `asteroids` | the asteroids that pass the earth this week: when, how close, how big, and when one stands in the sky | |
+| Useless fact | `useless-fact` | the fact of the day | ask for a new one, open its source |
 | Calendar | `calendar`, `microsoft-calendar` | the next two weeks of the Microsoft 365 calendar | sign in with the device code, join a meeting here or on the PC |
 | Shelves | `shelves` | the stashes on the desktop and what lies on them | a thing to the phone, files from the phone onto a shelf, the PC's clipboard onto one, close, reopen |
 | Translate | `translate` | | the PC's translator, for a text of the phone |
+| Identities | `identities` | the made-up people to sign up with: every field of one, what its mailbox and number received, the code a message is about | copy a field or a code, read a mail and open its links, a new identity, save with a title, remove, a new mailbox or number for one that is gone |
 | Displays | `niri-settings` | the desk setups | switch |
 | Agents | `agents` | agents working or waiting; the last answer from the transcript | answer, focus the window, read or copy the last answer |
 | AI chat | `chat` | | chat with a model on the PC (Ollama), with pictures and text files; edit, ask again |
 | SSH | `ssh` | saved hosts; a host's folders, listed by the PC over SSH | open a session on the PC; files of the phone go to a folder of the host (up to the PC, then scp) |
+| Virtual machines | `vm-launcher` | the machines of libvirt, running or off; a launch's three steps, and why one failed | start, shut down, force off, try again; Looking Glass on the PC for a machine that runs |
+| File manager | `filemanager`, `phone-files` | the file manager's home: favourites, recently opened files, tags, collections; the PC's folders, the files of a tag or a collection | walk through folders, search by name below one; a file comes to the phone, opens on the PC or shows in its folder there; favourite folders, tags on and off |
 | RPG | `rpg` | level and XP | |
 | Notifications | `phone-notifications`, `phone-mirror` | | phone → PC with actions and replies; PC → phone; questions both ways |
 | Clipboard | `phone-clipboard` (+ `clipboard`) | the PC's clipboard and history | sync, send, copy an entry |
@@ -151,7 +163,7 @@ the phone alone have plugins of their own in the tab **Phone**, all requiring
 | PC files | `phone-fs` (off) | folders below the shared one | fetch, upload, new folder |
 | Continue | `phone-handoff` | what plays on the PC | open it on the phone at its position; links both ways |
 | Calls | `phone-telephony` | | pause media during a call, show the caller, silence |
-| Find | `phone-find` | | ring the phone; make the PC speak up |
+| Find | `phone-find` (+ `find-mouse`) | | ring the phone; make the PC speak up; light up where the PC's pointer is |
 | Unlock | `phone-unlock` (off), `lock-screen` | | a fingerprint lifts the lock screen |
 | Presence | `phone-presence` (off) | | lock, pause when the phone leaves |
 | Session | | locked or not | lock, suspend, log out, restart, shut down |
@@ -204,7 +216,12 @@ sent as an anchor, not every second.
 **Notifications.** Phone → PC: a notification listener sends each one with
 its actions; the shell shows them like any other (a `LocalNotification`
 stands in for a D-Bus one), and a click, a reply or a dismissal goes back. A
-code in a message gets a *Copy* button. Messengers keep one notification per
+code in a message gets a *Copy* button. Which apps sent something is kept
+(`PhoneApps.qml`, phone-apps.json: the app, how many, when – not what was
+said); the Pshell settings list them under *Notifications*, each
+with a switch, and an app switched off there shows nothing on the PC;
+the same page lists the programs of the PC that sent something to the
+phone, and one switched off there stays on the PC. Messengers keep one notification per
 chat and re-post it: the PC toasts it when its text changed (a new message),
 silently refreshes it otherwise, and asks the phone for everything it has
 (`phone.notifications sync`) whenever the shell or the link starts. PC → phone: every notification and
@@ -285,7 +302,15 @@ Every feature exists whether or not its plugin is on at the PC: a plugin
 that is off hides the feature in the app and makes the PC refuse its calls,
 nothing more. Not in the app, on purpose: the calculator (the phone has
 one), the OSD, the bar, the clipboard hints and the drop commands (they live
-on the PC's pointer), the lock screen's fingerprint, the mouse haptics.
+on the PC's pointer), the lock screen's fingerprint, the mouse haptics,
+WhatsApp (the phone has its own), the multicursor, the bottom corners and
+the Pshell settings window.
+
+**Identities.** Looking from the phone counts as looking
+(`Identities.remote`), for the identity that is open there: its mailbox and
+number are read every few seconds although the surface on the PC is closed,
+and that surface stays as it is. A mail's whole text is asked for when it is
+opened.
 
 **Shelves** are the shell's: `~/.local/state/pshell/shelf.json` holds every
 open and recently closed shelf with its place and its things, so they are
@@ -301,7 +326,9 @@ folder) and shows it as its preview, on the desktop and in the app.
 - The phone's files as a mounted drive. The PC's file manager shows the
   phone's pictures, videos, downloads, WhatsApp media, music and documents
   as places (`phone.files` browse / thumbs / upload, `service/PhoneMedia.kt`;
-  the app asks for the photo permission under Files) and imports them, but
+  the app asks for the photo permission under Files; what is neither picture,
+  video nor music – a PDF or an archive in Downloads – shows once the app
+  may see all files, asked for in the same place) and imports them, but
   cannot rename or delete on the phone.
 - SMS as a list of threads: messages come as notifications and are answered
   there. A call can be silenced from the PC, not answered.

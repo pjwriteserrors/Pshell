@@ -45,7 +45,8 @@ Topic {
 	// is not sent again.
 	property var recent: ({})
 
-	function remember(id, entry, message) {
+	// `sender` is who it counts for in the settings, where it is not the app
+	function remember(id, entry, message, sender) {
 		const now = Date.now();
 		const key = `${message.app}|${message.title}|${message.body}`;
 		const last = topic.recent[key] || 0;
@@ -53,13 +54,16 @@ Topic {
 			if (now - topic.recent[old] > 60000) delete topic.recent[old];
 		topic.recent[key] = now;
 		if (now - last < 60000) return;
+		// a program switched off in the settings stays on the PC
+		if (PhoneApps.sending(sender || message.app)) return;
 		topic.live[id] = entry;
 		const ids = Object.keys(topic.live).map(Number).sort((x, y) => x - y);
 		while (ids.length > 80) delete topic.live[ids.shift()];
 		topic.link.emit("notifications", "posted", message);
 	}
 
-	// one of the shell's own messages (a break reminder, a finished update)
+	// one of the shell's own messages (a break reminder, a finished update);
+	// each part of the shell has a switch of its own in the settings
 	function mirrorToast(toast) {
 		const id = toast.toastId;
 		const message = {
@@ -72,7 +76,7 @@ Topic {
 			actions: (toast.actions || []).map((action, index) => ({ id: String(index), label: String(action.label || "") }))
 		};
 		if (topic.localPath(toast.image) !== "") message.image = { "$blob": topic.localPath(toast.image) };
-		topic.remember(id, { toast: toast }, message);
+		topic.remember(id, { toast: toast }, message, toast.source ? `Shell · ${toast.source}` : "Shell");
 	}
 
 	// a notification of a program; its id never meets a toast's (those count up from 1)

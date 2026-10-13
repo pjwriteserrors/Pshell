@@ -8,11 +8,13 @@ import Quickshell.Services.Mpris
 // MPRIS player selection: the playing player wins, otherwise the one the
 // user picked or the last one that played. Playback pauses when the screen
 // locks or the headphones go away (both can be switched off, media.json).
+// The bar can drop the title of a paused track.
 Singleton {
 	id: root
 
 	property bool pauseOnLock: true
 	property bool pauseOnHeadphones: true
+	property bool titleWhenPaused: true
 
 	property var rememberedPlayer: null
 	property var selectedPlayer: null
@@ -81,7 +83,8 @@ Singleton {
 	function setRule(rule, on) {
 		if (rule === "lock") root.pauseOnLock = !!on;
 		else if (rule === "headphones") root.pauseOnHeadphones = !!on;
-		settings.setText(JSON.stringify({ pauseOnLock: root.pauseOnLock, pauseOnHeadphones: root.pauseOnHeadphones }, null, 2));
+		else if (rule === "title") root.titleWhenPaused = !!on;
+		settings.setText(JSON.stringify({ pauseOnLock: root.pauseOnLock, pauseOnHeadphones: root.pauseOnHeadphones, titleWhenPaused: root.titleWhenPaused }, null, 2));
 	}
 
 	Connections {
@@ -109,6 +112,7 @@ Singleton {
 				const data = JSON.parse(String(text() || "{}"));
 				root.pauseOnLock = data.pauseOnLock !== false;
 				root.pauseOnHeadphones = data.pauseOnHeadphones !== false;
+				root.titleWhenPaused = data.titleWhenPaused !== false;
 			} catch (error) {}
 		}
 	}

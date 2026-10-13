@@ -17,6 +17,7 @@
 	<uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
 	<uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
 	<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+	<uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
 	<uses-permission android:name="android.permission.USE_BIOMETRIC" />
 	<uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 	<!-- headphones that follow the music from the PC -->
@@ -32,6 +33,15 @@
 		<intent>
 			<action android:name="android.intent.action.VIEW" />
 			<data android:scheme="https" android:host="youtu.be" />
+		</intent>
+		<!-- the files app a received file is shown in -->
+		<package android:name="com.sec.android.app.myfiles" />
+		<intent>
+			<action android:name="android.intent.action.VIEW" />
+			<data android:mimeType="vnd.android.document/directory" />
+		</intent>
+		<intent>
+			<action android:name="android.intent.action.VIEW_DOWNLOADS" />
 		</intent>
 	</queries>
 

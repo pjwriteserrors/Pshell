@@ -887,6 +887,10 @@ MODIFIERS = {29, 42, 54, 56, 58, 69, 70, 97, 100, 125, 126}
 SILENT = {99, 113, 114, 115, 163, 164, 165, 166, 224, 225, 248} | set(range(183, 195))
 BACKSPACE, TAB, ENTER, KEYPAD_ENTER, SPACE = 14, 15, 28, 96, 57
 BUTTONS = range(0x110, 0x120)
+ESCAPE, F6 = 1, 64
+# what puts the cursor into a browser's address, search or find field:
+# with Control, and with Alt
+ADDRESS_KEYS = ("ltnkef", "d")
 TOUCH = 0x14a
 
 
@@ -933,6 +937,13 @@ class Daemon:
             emit(type="error", reason="uinput")
             raise SystemExit(2)
         self.active = False
+        # a browser has the keyboard, and its address field the cursor: a
+        # field is not seen, the shortcut that leads into it is (Ctrl+L, a
+        # new tab …), and Enter, Escape, Tab or a click lead out again
+        self.browser = False
+        self.address = False
+        self.address_at = 0.0
+        self.letters = {code: char for char, (code, shift, altgr) in self.keymap.keys.items() if not shift and not altgr}
         # the animations a correction is typed with; one of them each time
         self.animations: list[str] = []
         self.said = b""
@@ -999,6 +1010,9 @@ class Daemon:
                 continue
             if isinstance(message, dict):
                 self.active = message.get("active") is True
+                self.browser = message.get("browser") is True
+                # a new window of the browser (Ctrl+N) opens in its address field
+                self.address = self.address and self.browser and time.monotonic() - self.address_at < 1.5
                 if isinstance(message.get("animations"), list):
                     self.animations = [name for name in message["animations"] if name in ANIMATIONS]
                 # another window, another text
@@ -1134,6 +1148,7 @@ class Daemon:
             if value == 1 and (code in BUTTONS or code == TOUCH):
                 self.typist.reset(opening=True)
                 self.waiting = None
+                self.address = False
             return
         if code in MODIFIERS:
             if value == 2:
@@ -1155,6 +1170,20 @@ class Daemon:
             self.typist.reset(partial=True)
         if self.keymap.held(b"Control", b"Mod1", b"Mod4"):
             self.typist.reset(partial=True)
+            letter = self.letters.get(code, "")
+            if self.browser and value == 1 and letter and not self.keymap.held(b"Mod4") \
+                    and letter in ADDRESS_KEYS[0 if self.keymap.held(b"Control") else 1]:
+                self.address = True
+                self.address_at = time.monotonic()
+            return
+        if self.browser and code == F6:
+            self.address = True
+            self.address_at = time.monotonic()
+        if self.address:
+            # an address or a search is typed as it is
+            if code in (ENTER, KEYPAD_ENTER, ESCAPE, TAB):
+                self.address = False
+            self.typist.reset(opening=True)
             return
         edit = None
         # what Backspace brings back is not animated

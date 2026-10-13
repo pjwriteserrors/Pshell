@@ -269,6 +269,8 @@ Item {
 			MouseArea {
 				anchors.fill: parent
 				hoverEnabled: true
+				// the wheel at the list's end stays here, it does not close the menu
+				onWheel: wheel => wheel.accepted = true
 			}
 
 			Flickable {
@@ -283,7 +285,10 @@ Item {
 				// what opened beside a panel stays with its entry: it closes when the panel scrolls
 				onMovementStarted: if (root.levels.length > panel.index + 1) root.setLevels(root.levels.slice(0, panel.index + 1))
 
-				ScrollBar.vertical: ThinScrollBar {}
+				// a menu that goes on below shows that it does
+				ScrollBar.vertical: ThinScrollBar {
+					active: list.interactive
+				}
 
 			Column {
 				id: rows

@@ -754,12 +754,36 @@ def parts_on() -> list[str]:
     return [part for part, hook in PARTS.items() if hook in hooks]
 
 
+def same_keyboard(plugged: str, wanted: str) -> bool:
+    plugged, wanted = plugged.strip().lower(), wanted.strip().lower()
+    return bool(plugged) and (plugged in wanted or wanted in plugged)
+
+
+def keyboard_plugged(name: str) -> bool:
+    """Whether the keyboard is on a port right now, by the name --watch knows
+    it by when it arrives."""
+    if not name.strip():
+        return True
+    for uevent in Path("/sys/class/hidraw").glob("*/device/uevent"):
+        try:
+            found = re.search(r"^HID_NAME=(.+)$", uevent.read_text(), re.M)
+        except OSError:
+            continue
+        if found and same_keyboard(found.group(1), name):
+            return True
+    return False
+
+
 def light(parts: list[str], restore: bool, dry_run: bool = False) -> int:
     """Sends the parts' colours: the saved ones, or new ones from the theme."""
     LOCK_PATH.touch(exist_ok=True)
     with LOCK_PATH.open("w", encoding="utf-8") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        if not dry_run:
+        # a keyboard that is not plugged in is not waited for (the server
+        # would look for it for a minute): its colours are saved, and --watch
+        # sends them when it arrives
+        reachable = dry_run or "leds" in parts or keyboard_plugged(load_config().get("keyboard", {}).get("device", ""))
+        if not dry_run and reachable:
             ensure_server()
 
         plan: list[dict] = []
@@ -779,6 +803,8 @@ def light(parts: list[str], restore: bool, dry_run: bool = False) -> int:
             if not dry_run:
                 save_state(fresh, missing)
             plan += fresh
+        if not reachable:
+            return 0
         return 1 if run_plan(plan, dry_run) else 0
 
 
@@ -793,10 +819,7 @@ def keyboard_event(block: dict[str, str], name: str) -> bool:
     except OSError:
         return False
     found = re.search(r"^HID_NAME=(.+)$", uevent, re.M)
-    if not found:
-        return False
-    plugged, wanted = found.group(1).strip().lower(), name.strip().lower()
-    return plugged in wanted or wanted in plugged
+    return bool(found) and same_keyboard(found.group(1), name)
 
 
 def watch() -> int:

@@ -1,11 +1,14 @@
 package dev.pshell.app.service
 
+import android.app.DownloadManager
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Environment
+import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.webkit.MimeTypeMap
@@ -86,12 +89,29 @@ object Transfers {
 			}
 			resolver.update(target, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null)
 			update(name, false) { it.copy(state = "done", done = size, uri = target) }
-			val open = PendingIntent.getActivity(app, name.hashCode(), Intent(Intent.ACTION_VIEW).setDataAndType(target, mime(name)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION), PendingIntent.FLAG_IMMUTABLE)
+			// a tap shows where the file lies; without a files app that can, the file itself opens
+			val show = folderIntent() ?: Intent(Intent.ACTION_VIEW).setDataAndType(target, mime(name)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+			val open = PendingIntent.getActivity(app, name.hashCode(), show, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
 			app.getSystemService(NotificationManager::class.java).notify("file", name.hashCode(), Channels.builder(app, Channels.FILES).setContentTitle(name).setContentText("Received from the PC · in Downloads").setContentIntent(open).setAutoCancel(true).build())
 		} catch (error: Exception) {
 			target?.let { resolver.delete(it, null, null) }
 			update(name, false) { it.copy(state = "failed", error = error.message.orEmpty()) }
 		}
+	}
+
+	/**
+	 * Opens the Downloads folder in the phone's files app: Samsung's own
+	 * where there is one (it takes a path), else whichever app shows a
+	 * folder of the storage, else the system's list of downloads.
+	 */
+	private fun folderIntent(): Intent? {
+		val folder = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+		val candidates = listOf(
+			Intent("samsung.myfiles.intent.action.LAUNCH_MY_FILES").setPackage("com.sec.android.app.myfiles").putExtra("samsung.myfiles.intent.extra.START_PATH", folder.absolutePath),
+			Intent(Intent.ACTION_VIEW).setDataAndType(DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:${Environment.DIRECTORY_DOWNLOADS}"), DocumentsContract.Document.MIME_TYPE_DIR),
+			Intent(DownloadManager.ACTION_VIEW_DOWNLOADS),
+		)
+		return candidates.firstOrNull { it.resolveActivity(app.packageManager) != null }?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 	}
 
 	fun nameOf(context: Context, uri: Uri): Pair<String, Long> {

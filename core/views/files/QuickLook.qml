@@ -29,7 +29,45 @@ Item {
 	readonly property string kind: root.row ? Kinds.kindOf(root.row) : "other"
 	signal closed
 
+	// what was looked at before a file of an archive was opened: [{ rows, index }]
+	property var outer: []
+	// the file of the archive that is being taken out
+	property string entering: ""
+
+	// a file inside the archive, taken out into the cache and shown here
+	function enter(name) {
+		const row = root.row;
+		if (!row || root.entering !== "") return;
+		root.entering = name;
+		Files.request("archivemember", { path: row.path, name: name }, (data, error) => {
+			root.entering = "";
+			if (!root.shown || root.row?.path !== row.path) return;
+			if (error || !data?.entry) {
+				Files.fail(error || "This file cannot be read");
+				return;
+			}
+			root.outer = root.outer.concat([{ rows: root.rows, index: root.index }]);
+			root.stepDirection = 0;
+			root.rows = [data.entry];
+			root.index = 0;
+			root.load();
+		});
+	}
+
+	// back to the archive
+	function leave() {
+		if (root.outer.length === 0) return;
+		const before = root.outer[root.outer.length - 1];
+		root.outer = root.outer.slice(0, -1);
+		root.stepDirection = 0;
+		root.rows = before.rows;
+		root.index = before.index;
+		root.load();
+	}
+
 	function open(pane, rows, index) {
+		root.outer = [];
+		root.entering = "";
 		root.pane = pane;
 		root.rows = rows;
 		root.index = index;
@@ -155,6 +193,12 @@ Item {
 		Keys.onPressed: event => {
 			switch (event.key) {
 			case Qt.Key_Escape:
+				if (root.outer.length > 0) root.leave();
+				else root.close();
+				break;
+			case Qt.Key_Backspace:
+				root.leave();
+				break;
 			case Qt.Key_Space:
 				root.close();
 				break;
@@ -255,10 +299,23 @@ Item {
 			anchors.top: parent.top
 			height: 56
 
+			IconButton {
+				id: back
+
+				visible: root.outer.length > 0
+				x: 12
+				anchors.verticalCenter: parent.verticalCenter
+				width: 32
+				height: 32
+				iconSize: 18
+				icon: "arrow_left"
+				onClicked: root.leave()
+			}
+
 			FileThumb {
 				id: icon
 
-				x: 18
+				x: back.visible ? 54 : 18
 				anchors.verticalCenter: parent.verticalCenter
 				width: 30
 				height: 30
@@ -878,7 +935,7 @@ Item {
 						Rectangle {
 							anchors.fill: parent
 							radius: 6
-							color: Qt.alpha(Theme.layer2, archived.index % 2 === 1 ? 0.5 : 0)
+							color: archivedArea.containsMouse ? Theme.primarySoft : Qt.alpha(Theme.layer2, archived.index % 2 === 1 ? 0.5 : 0)
 						}
 
 						// the lines that show what is inside what
@@ -927,6 +984,27 @@ Item {
 							tone: Theme.textSubtle
 							font.pixelSize: Theme.size.small
 							font.features: { "tnum": 1 }
+							visible: root.entering !== archived.modelData.name
+						}
+
+						Spinner {
+							anchors.right: parent.right
+							anchors.rightMargin: 14
+							anchors.verticalCenter: parent.verticalCenter
+							visible: root.entering === archived.modelData.name
+							width: 16
+							height: 16
+						}
+
+						// a file opens here, in the quick look
+						MouseArea {
+							id: archivedArea
+
+							anchors.fill: parent
+							enabled: !archived.modelData.dir
+							hoverEnabled: true
+							cursorShape: Qt.PointingHandCursor
+							onClicked: root.enter(archived.modelData.name)
 						}
 					}
 				}

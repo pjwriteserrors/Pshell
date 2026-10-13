@@ -821,6 +821,9 @@ Scope {
 		function painted(): void {
 			Popups.wallpaperPainted();
 		}
+		function progress(done: int, total: int): void {
+			Osd.advance("theme", "Theme", done, total, "palette");
+		}
 	}
 
 	// Studio: wallpaper, motion, dress, styles, combinations

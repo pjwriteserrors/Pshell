@@ -15,6 +15,7 @@ import configparser
 import fcntl
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -265,6 +266,33 @@ def spicetify_version() -> str:
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
+def spotify_version(config: configparser.ConfigParser) -> str:
+    """The version Spotify last ran as, read where spicetify reads it."""
+    prefs = Path(config.get("Setting", "prefs_path", fallback="").strip() or "/nonexistent")
+    try:
+        match = re.search(r'(?m)^app\.last-launched-version="?([^"\n]*)', prefs.read_text())
+    except OSError:
+        return ""
+    return match.group(1).strip() if match else ""
+
+
+def relabel_backup(config_file: Path, config: configparser.ConfigParser, apps: Path) -> None:
+    """The pacman hook backs up a new Spotify before it has run once, and
+    spicetify names that backup after the version that ran last: the old one.
+    From the first start on it calls the backup outdated and refuses to
+    refresh. Patched app files can only come from the backup at hand, so the
+    name is what is wrong, and is put right here."""
+    running = spotify_version(config)
+    labelled = config.get("Backup", "version", fallback="").strip()
+    if not running or not labelled or running == labelled or apps_state(apps) != "applied":
+        return
+    text = config_file.read_text()
+    patched = re.sub(r"(?ms)(^\[Backup\].*?^version[ \t]*=[ \t]*)[^\n]*", lambda m: m.group(1) + running, text, count=1)
+    if patched != text:
+        config_file.write_text(patched)
+        config.set("Backup", "version", running)
+
+
 def repair_commands(config: configparser.ConfigParser, apps: Path) -> list[str]:
     """What it takes to get the theme applied again after a Spotify or
     spicetify update (or on first run). Empty when nothing is broken."""
@@ -307,6 +335,7 @@ def main() -> int:
             return 1
         config = ensure_config(config_file)
         apps = spotify_apps(config)
+        relabel_backup(config_file, config, apps)
 
         # -n everywhere: `apply` and `restore` would otherwise restart Spotify
         commands = repair_commands(config, apps)

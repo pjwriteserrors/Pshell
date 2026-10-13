@@ -4,7 +4,7 @@
 source "$(dirname -- "${BASH_SOURCE[0]}")/lib.sh"
 generator="$(hook_config generator)" || skip "no generator configured"
 [[ -f "$generator" ]] || skip "generator missing: $generator"
-python3 "$generator"
+python3 "$generator" || exit 1
 if [[ "$(hook_config refresh)" == "true" ]]; then
 	spicetify config current_theme custom color_scheme Base >/dev/null 2>&1 || true
 	# after a Spotify update this fails until `spicetify backup apply` is run

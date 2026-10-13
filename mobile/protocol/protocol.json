@@ -322,6 +322,20 @@
 				"mail"
 			]
 		},
+		"newsletters": {
+			"owner": "shell",
+			"plugins": [
+				"messages",
+				"mail",
+				"mail-unsubscribe"
+			]
+		},
+		"identities": {
+			"owner": "shell",
+			"plugins": [
+				"identities"
+			]
+		},
 		"tracking": {
 			"owner": "shell",
 			"plugins": [
@@ -351,6 +365,53 @@
 			"owner": "shell",
 			"plugins": [
 				"converter"
+			]
+		},
+		"screentime": {
+			"owner": "shell",
+			"plugins": [
+				"screentime"
+			]
+		},
+		"connections": {
+			"owner": "shell",
+			"plugins": [
+				"connections"
+			]
+		},
+		"asteroids": {
+			"owner": "shell",
+			"plugins": [
+				"asteroids"
+			]
+		},
+		"fact": {
+			"owner": "shell",
+			"plugins": [
+				"useless-fact"
+			]
+		},
+		"machines": {
+			"owner": "shell",
+			"plugins": [
+				"vm-launcher"
+			]
+		},
+		"lighting": {
+			"owner": "shell",
+			"plugins": []
+		},
+		"sounds": {
+			"owner": "shell",
+			"plugins": [
+				"sounds"
+			]
+		},
+		"library": {
+			"owner": "shell",
+			"plugins": [
+				"filemanager",
+				"phone-files"
 			]
 		}
 	},

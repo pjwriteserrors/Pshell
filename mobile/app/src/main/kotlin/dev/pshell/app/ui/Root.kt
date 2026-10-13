@@ -202,7 +202,7 @@ private fun Route(route: String) {
 			val found = feature(rest.substringBefore('/'))
 			val arg = rest.substringAfter('/', "")
 			if (found == null) Screen("Unknown") { EmptyState("help_circle_outline", "Nothing here") }
-			else if (!pluginOn(*found.plugins.toTypedArray())) Screen(found.title) {
+			else if (!pluginOn(*found.plugins.toTypedArray()) || !anyPluginOn(found.anyPlugins)) Screen(found.title) {
 				EmptyState("toggle_switch_off_outline", "Switched off", text = "${found.title} is off on this PC. Switch it on in >plugins.")
 			}
 			else if (arg.isNotEmpty() && found.page != null) found.page.invoke(android.net.Uri.decode(arg))

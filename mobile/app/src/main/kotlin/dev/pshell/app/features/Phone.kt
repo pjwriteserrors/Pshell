@@ -229,11 +229,16 @@ private fun FilesScreen() {
 	var askedMedia by remember { mutableIntStateOf(0) }
 	val media = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { askedMedia += 1 }
 	val mediaAllowed = remember(askedMedia) { dev.pshell.app.service.PhoneMedia.allowed(context) }
+	val files = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { askedMedia += 1 }
+	val filesAllowed = remember(askedMedia) { dev.pshell.app.service.PhoneMedia.allFiles() }
 	Screen("Files") {
 		PrimaryButton("Send files to the PC", Modifier.fillMaxWidth(), icon = "file_send_outline") { picker.launch(arrayOf("*/*")) }
 		Label("They land in the PC's downloads folder. From any other app: Share → Send to PC. The PC sends files with >phone in the launcher, or by dropping them on the phone page.", style = Theme.Type.small, color = Theme.colors.textMuted, maxLines = 5)
 		Access("Let the PC see your photos", mediaAllowed, "The PC's file manager shows the phone's pictures, videos, downloads and WhatsApp media, and imports them", "image_multiple_outline") {
 			media.launch(dev.pshell.app.service.PhoneMedia.permissions)
+		}
+		Access("Let the PC see all files", filesAllowed, "Documents and archives too, not only pictures and videos", "folder_outline") {
+			files.launch(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${context.packageName}")))
 		}
 		if (transfers.isEmpty()) EmptyState("swap_vertical", "Nothing sent yet")
 		else {
@@ -376,8 +381,10 @@ val FindFeature = Feature(
 	plugins = listOf("phone-find"),
 	screen = {
 		val link = link
+		val session = topic("session")
 		Screen("Find", subtitle = "Each can make the other speak up") {
 			Tile("monitor_shimmer", "Find my PC", Modifier.fillMaxWidth(), subtitle = "It plays a sound and says so on its screens") { link.run("session", "find") }
+			if (session["canFindPointer"].bool) Tile("mouse_variant", "Show the pointer", Modifier.fillMaxWidth()) { link.run("session", "pointer") }
 			Label("The other way: >phone in the PC's launcher, then Ring. The phone rings at full volume, even when silent.", style = Theme.Type.small, color = Theme.colors.textMuted, maxLines = 3)
 		}
 	},

@@ -33,9 +33,19 @@ Scope {
 	MessagesTopic { link: root.link }
 	TrackingTopic { link: root.link }
 	DownloadsTopic { link: root.link }
+	LibraryTopic { link: root.link }
 	LyricsTopic { link: root.link }
 	ReaderTopic { link: root.link }
 	ConvertTopic { link: root.link }
+	ScreentimeTopic { link: root.link }
+	ConnectionsTopic { link: root.link }
+	AsteroidsTopic { link: root.link }
+	FactTopic { link: root.link }
+	MachinesTopic { link: root.link }
+	LightingTopic { link: root.link }
+	SoundsTopic { link: root.link }
+	IdentitiesTopic { link: root.link }
+	NewslettersTopic { link: root.link }
 
 	Incoming { link: root.link }
 }

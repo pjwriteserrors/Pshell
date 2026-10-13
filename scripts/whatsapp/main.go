@@ -133,7 +133,7 @@ func (b *Bridge) publishState() {
 	b.mu.Lock()
 	fields := map[string]any{
 		"state": b.phase, "error": b.problem, "qr": b.qrFile, "code": b.pairCode,
-		"syncing": time.Since(b.lastSync) < 20*time.Second, "gifs": b.store.get("klipy") != "",
+		"syncing": time.Since(b.lastSync) < 20*time.Second, "gifs": b.store.get("giphy") != "",
 	}
 	b.mu.Unlock()
 	if id := b.cli.Store.ID; id != nil {

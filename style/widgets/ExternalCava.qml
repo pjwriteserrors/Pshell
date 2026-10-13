@@ -8,6 +8,7 @@ Item {
 	id: root
 
 	property int bars: 32
+	property int framerate: 60
 	property bool active: false
 	property var values: []
 	property string inputMethod: "pipewire"
@@ -25,7 +26,7 @@ Item {
 	}
 
 	function command(method) {
-		const lines = ["[general]", "framerate = 60", `bars = ${root.bars}`, "autosens = 1", "[input]", `method = ${method}`,
+		const lines = ["[general]", `framerate = ${root.framerate}`, `bars = ${root.bars}`, "autosens = 1", "[input]", `method = ${method}`,
 			"[output]", "method = raw", "raw_target = /dev/stdout", "data_format = ascii", "ascii_max_range = 100", "channels = mono", "mono_option = average"];
 		const escaped = lines.map(line => `'${line.replace(/'/g, `'"'"'`)}'`).join(" ");
 		return ["sh", "-c", `tmp=$(mktemp); trap 'rm -f "$tmp"' EXIT; printf '%s\\n' ${escaped} > "$tmp"; exec cava -p "$tmp"`];

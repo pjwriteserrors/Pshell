@@ -952,6 +952,26 @@ Drawer {
 						}
 					}
 				}
+
+				SectionLabel {
+					Layout.topMargin: 4
+					visible: Plugins.on("media")
+					text: "Media in the bar"
+				}
+
+				ListItem {
+					Layout.fillWidth: true
+					implicitHeight: 46
+					visible: Plugins.on("media")
+					icon: "text_short"
+					title: "Title when paused"
+					onClicked: Media.setRule("title", !Media.titleWhenPaused)
+
+					Toggle {
+						checked: Media.titleWhenPaused
+						onToggled: on => Media.setRule("title", on)
+					}
+				}
 			}
 		}
 

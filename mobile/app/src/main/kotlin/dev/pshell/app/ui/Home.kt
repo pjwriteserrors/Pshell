@@ -68,7 +68,7 @@ import kotlinx.coroutines.launch
 fun enabledFeatures(): List<Feature> {
 	val plugins by LocalApp.current.plugins.collectAsState()
 	// before the first connection nothing is known: offer what needs no plugin
-	return Features.filter { feature -> feature.plugins.all { plugins[it] == true } }
+	return Features.filter { feature -> feature.plugins.all { plugins[it] == true } && (feature.anyPlugins.isEmpty() || feature.anyPlugins.any { plugins[it] == true }) }
 }
 
 @Composable

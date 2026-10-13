@@ -12,7 +12,7 @@ import qs.style.widgets
 // What goes into a message besides words: emoji, stickers and GIFs, each
 // with a search. The stickers are one's own – kept from chats, made from a
 // picture, or the ones sent last – and those the search finds; GIFs and
-// found stickers come from Klipy, where WhatsApp itself gets them.
+// found stickers come from Giphy.
 Rectangle {
 	id: root
 
@@ -224,7 +224,7 @@ Rectangle {
 				Layout.fillWidth: true
 				implicitHeight: 36
 				icon: "key"
-				placeholder: "Klipy API key"
+				placeholder: "Giphy API key"
 				onAccepted: if (key.text.trim() !== "") WhatsApp.command("settings", { key: key.text.trim() })
 			}
 
@@ -233,7 +233,7 @@ Rectangle {
 				implicitHeight: 36
 				icon: "open_in_new"
 				variant: "tonal"
-				onClicked: Qt.openUrlExternally("https://partner.klipy.com")
+				onClicked: Qt.openUrlExternally("https://developers.giphy.com/dashboard/")
 			}
 
 			IconButton {

@@ -52,6 +52,7 @@ ModalWindow {
 		{ id: "system", label: "System", icon: "cog_outline", hint: "Startup, environment, screenshots, blur" },
 		{ id: "sounds", label: "Sounds", icon: "volume_high", hint: "Clicks, notifications, devices", plugin: "sounds" },
 		{ id: "lighting", label: "Lighting", icon: "led_strip_variant", hint: "Keyboard and LEDs: wallpaper or screen", shown: Lighting.enabled },
+		{ id: "phone", label: "Notifications", icon: "bell_outline", hint: "Which programs notify, here and on the phone", plugin: "notifications" },
 		{ id: "debug", label: "Debug", icon: "bug_outline", hint: "Rendering and driver switches" }
 	].filter(page => (!page.plugin || Plugins.on(page.plugin)) && page.shown !== false)
 
@@ -111,11 +112,14 @@ ModalWindow {
 		{ page: "sounds", anchor: "sounds-list", title: "Every sound", words: "sound notification usb drive display monitor bluetooth error battery charger lock workspace screenshot" },
 		{ page: "lighting", anchor: "lighting", title: "Lighting", words: "lighting rgb openrgb led leds keyboard gpu fans argb wallpaper live screen ambient off dark" },
 		{ page: "lighting", anchor: "lighting-live", title: "Live lighting", words: "live screen mirror ambient monitor fps frames smoothing openrgb effects screen copy" },
+		{ page: "phone", anchor: "notification-apps", title: "Notifications", words: "notifications programs apps mute hide off silence benachrichtigungen ausschalten" },
+		{ page: "phone", anchor: "phone-apps", title: "Phone notifications", words: "phone handy notifications apps whatsapp mail mute hide off android benachrichtigungen" },
+		{ page: "phone", anchor: "phone-pc-apps", title: "Notifications to the phone", words: "phone handy notifications programs apps mirror send mute off pc benachrichtigungen" },
 		{ page: "debug", anchor: "debug", title: "Debug options", words: "debug preview-render drm overlay planes scanout", take: ["debug"] }
 	]
 
 	// a page of the shell's own: no niri file behind it, nothing to undo
-	readonly property bool shellPage: ["multicursor", "sounds", "lighting"].includes(root.current)
+	readonly property bool shellPage: ["multicursor", "sounds", "lighting", "phone"].includes(root.current)
 
 	readonly property var results: {
 		if (root.query === "") return [];
@@ -542,7 +546,7 @@ ModalWindow {
 									variant: "ghost"
 									icon: "tray_arrow_down"
 									text: "Export"
-									visible: root.current !== "sounds" && root.current !== "lighting"
+									visible: root.current !== "sounds" && root.current !== "lighting" && root.current !== "phone"
 									enabled: NiriSettings.loaded
 									onActivated: exportSheet.show(root.current)
 								}
@@ -602,6 +606,7 @@ ModalWindow {
 							case "system": return systemPage;
 							case "sounds": return soundsPage;
 							case "lighting": return lightingPage;
+							case "phone": return phonePage;
 							default: return debugPage;
 							}
 						}
@@ -880,6 +885,12 @@ ModalWindow {
 		id: lightingPage
 
 		LightingPage {}
+	}
+
+	Component {
+		id: phonePage
+
+		PhonePage {}
 	}
 
 	Component {

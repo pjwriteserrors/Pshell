@@ -25,12 +25,21 @@ Singleton {
 		// code
 		"code(-oss|-insiders|-url-handler)?", "(vs)?codium", "cursor", "(dev\\.zed\\.)?zed.*", "jetbrains-.*",
 		"sublime_text", "neovide", "emacs.*", "lapce",
+		// file managers
+		"org\\.gnome\\.nautilus", "thunar", "org\\.kde\\.dolphin", "nemo", "pcmanfm.*", "org\\.gnome\\.files", "spacefm", "doublecmd", "krusader",
 		// passwords
 		".*keepass.*", "bitwarden", "1password", "enpass", ".*pinentry.*", ".*askpass.*", "gcr-prompter", "polkit.*",
 		// games and other machines
 		"steam_app_.*", "gamescope", ".*\\.exe", ".*minecraft.*", "virt-(manager|viewer)", "remote-viewer",
 		"org\\.remmina\\.remmina", ".*vnc.*", "looking-glass-client", ".*moonlight.*", "parsec", "rustdesk", "anydesk", "scrcpy"
 	].concat(Host.profile.autocorrect?.exclude ?? [])
+
+	// browsers: their address field is left alone (the daemon follows the
+	// shortcuts that lead into it); the host profile's autocorrect.browsers adds its own
+	readonly property var browsers: [
+		".*(firefox|floorp|librewolf|waterfox|zen|chromium|chrome|brave|vivaldi|opera|edge|epiphany|qutebrowser|thorium|helium).*"
+	].concat(Host.profile.autocorrect?.browsers ?? [])
+	readonly property bool browser: root.window !== null && root.matches(root.browsers, root.window.app_id)
 
 	readonly property var window: Niri.windows.find(w => w.is_focused) ?? null
 	readonly property int windowId: root.window ? Number(root.window.id) : -1
@@ -72,8 +81,12 @@ Singleton {
 	}
 
 	function skips(appId) {
+		return root.matches(root.excluded, appId);
+	}
+
+	function matches(patterns, appId) {
 		const id = String(appId || "");
-		return root.excluded.some(pattern => {
+		return patterns.some(pattern => {
 			try {
 				return new RegExp(`^(?:${pattern})$`, "i").test(id);
 			} catch (error) {
@@ -84,7 +97,7 @@ Singleton {
 
 	// every change of window as well: the text in front of the cursor is another one
 	function tell() {
-		if (daemon.running) daemon.write(JSON.stringify({ active: root.active, animations: root.animations }) + "\n");
+		if (daemon.running) daemon.write(JSON.stringify({ active: root.active, browser: root.browser, animations: root.animations }) + "\n");
 	}
 
 	function handle(line) {
@@ -105,6 +118,7 @@ Singleton {
 	onActiveChanged: root.tell()
 	onWindowIdChanged: root.tell()
 	onFieldChanged: root.tell()
+	onBrowserChanged: root.tell()
 	onAnimationsChanged: root.tell()
 	onEnabledChanged: root.failed = false
 

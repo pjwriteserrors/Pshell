@@ -128,9 +128,24 @@ Singleton {
 		Quickshell.execDetached(["sh", "-c", `niri msg action focus-monitor '${workspace.output}' && niri msg action focus-workspace ${Number(workspace.idx)}`]);
 	}
 
+	// asked for while a question to niri is still out: what changed since is
+	// asked again once it is back, or the focus stays where it was for seconds
+	property bool stale: false
+
 	function refresh() {
-		if (!workspacesProc.running) workspacesProc.running = true;
-		if (!windowsProc.running) windowsProc.running = true;
+		if (workspacesProc.running || windowsProc.running) {
+			root.stale = true;
+			return;
+		}
+		workspacesProc.running = true;
+		windowsProc.running = true;
+	}
+
+	function answered() {
+		root.sync();
+		if (!root.stale || workspacesProc.running || windowsProc.running) return;
+		root.stale = false;
+		root.refresh();
 	}
 
 	function focusWindow(id) {
@@ -177,7 +192,7 @@ Singleton {
 		stdout: StdioCollector {
 			onStreamFinished: {
 				workspacesProc.lastText = text;
-				root.sync();
+				root.answered();
 			}
 		}
 	}
@@ -190,7 +205,7 @@ Singleton {
 		stdout: StdioCollector {
 			onStreamFinished: {
 				windowsProc.lastText = text;
-				root.sync();
+				root.answered();
 			}
 		}
 	}
@@ -227,8 +242,10 @@ Singleton {
 					if (!castsProc.running) castsProc.running = true;
 					return;
 				}
-				if (data.indexOf("Workspace") >= 0 || data.indexOf("Window") >= 0)
-					debounce.restart();
+				// not restarted by every event: a window whose title keeps
+				// changing would hold the answer back for as long as it does
+				if ((data.indexOf("Workspace") >= 0 || data.indexOf("Window") >= 0) && !debounce.running)
+					debounce.start();
 			}
 		}
 		onExited: restartEvents.restart()

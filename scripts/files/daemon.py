@@ -13,6 +13,7 @@ Lines of JSON both ways. The shell asks `{"id", "op", …}` and gets
 `{"event": …}`: a folder that changed, a thumbnail that is ready, a job's
 progress, the drives, a "Show in folder" from another app.
 """
+import hashlib
 import json
 import os
 import shutil
@@ -505,6 +506,28 @@ class Daemon:
     @on_main("slow")
     def op_archive(self, client, request):
         return archives.listing(request["path"], int(request.get("limit", 3000)))
+
+    @on_main("slow")
+    def op_archivemember(self, client, request):
+        """One file of an archive, taken out into the cache for quick look:
+        { path, name } → { entry }."""
+        path = request["path"]
+        name = str(request["name"])
+        cache = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.join(lookup.HOME, ".cache"), "pshell", "archive-peek")
+        # what was looked into days ago goes
+        if os.path.isdir(cache):
+            for folder in os.listdir(cache):
+                full = os.path.join(cache, folder)
+                if time.time() - os.path.getmtime(full) > 86400:
+                    shutil.rmtree(full, ignore_errors=True)
+        key = hashlib.sha1(f"{path}|{os.path.getmtime(path)}|{name}".encode()).hexdigest()
+        try:
+            target = archives.member(path, name, os.path.join(cache, key))
+        except archives.NeedsPassword:
+            raise RuntimeError("This archive is locked with a password") from None
+        except Exception as error:  # a broken archive fails in as many ways as there are formats
+            raise RuntimeError(str(error) or "This file cannot be read") from None
+        return {"entry": lookup.describe(target)}
 
     def op_convertible(self, client, request):
         return {"targets": convert.targets(request.get("paths", []))}

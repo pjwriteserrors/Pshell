@@ -115,6 +115,75 @@ def _seven_listing(path):
     return entries, encrypted
 
 
+# ── one file out of it ─────────────────────────────────────────────────────
+MEMBER_LIMIT = 1 << 30
+
+
+class _Quiet:
+    """Progress nobody watches: one file for quick look."""
+
+    def total(self, value):
+        pass
+
+    def add(self, count):
+        pass
+
+    def name(self, value):
+        pass
+
+    def hold(self):
+        pass
+
+
+def member(path, name, out):
+    """Takes the file `name` (as the listing names it) out of the archive
+    into the folder `out` and returns where it lies."""
+    kind = kind_of(path)
+    os.makedirs(out, exist_ok=True)
+    target = os.path.join(out, os.path.basename(name.replace("\\", "/").rstrip("/")) or "file")
+    if os.path.isfile(target):
+        return target
+    partial = target + ".part"
+    try:
+        if kind == "zip":
+            with zipfile.ZipFile(path) as archive:
+                info = next((info for info in archive.infolist() if info.filename.rstrip("/") == name and not info.is_dir()), None)
+                if info is None:
+                    raise ValueError("This file is not in the archive")
+                if info.flag_bits & 0x1:
+                    raise NeedsPassword()
+                if info.file_size > MEMBER_LIMIT:
+                    raise ValueError("Too large to look into: extract the archive")
+                with archive.open(info) as source:
+                    _copy_stream(source, partial, _Quiet())
+        elif kind == "tar":
+            with tarfile.open(path) as archive:
+                found = next((entry for entry in archive if entry.name.rstrip("/") == name), None)
+                source = archive.extractfile(found) if found is not None and found.isfile() else None
+                if source is None:
+                    raise ValueError("This file is not in the archive")
+                if found.size > MEMBER_LIMIT:
+                    raise ValueError("Too large to look into: extract the archive")
+                with source:
+                    _copy_stream(source, partial, _Quiet())
+        elif kind == "single":
+            _extract_single(path, out, _Quiet())
+            return target
+        else:
+            with open(partial, "wb") as sink:
+                done = subprocess.run(["7z", "e", "-y", "-so", "-p", "--", path, name], stdout=sink, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL, timeout=120)
+            problem = done.stderr.decode("utf-8", "replace")
+            if "password" in problem.lower() or "encrypted" in problem.lower():
+                raise NeedsPassword()
+            if done.returncode not in (0, 1) or os.path.getsize(partial) == 0 and "No files to process" in problem:
+                raise ValueError(problem.strip().splitlines()[-1] if problem.strip() else "7-Zip could not read it")
+        os.replace(partial, target)
+    finally:
+        if os.path.exists(partial):
+            os.unlink(partial)
+    return target
+
+
 # ── extracting ─────────────────────────────────────────────────────────────
 class Progress:
     """What the job sees: bytes done of a total, the name at hand, and a

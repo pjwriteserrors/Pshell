@@ -94,6 +94,19 @@ log() {
 	printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*" >>"$LOG_FILE"
 }
 
+# How far the change is, for the shell's bar: frame, colours, wallpaper, each
+# hook, GTK colour scheme, GTK reload. The hooks run side by side, so every
+# step that is through adds a line and the lines are counted.
+readarray -t THEME_HOOKS < <(python3 "$SCRIPT_DIR/host.py" hooks | awk 'NF')
+PROGRESS_TOTAL=$((5 + ${#THEME_HOOKS[@]}))
+PROGRESS_FILE="$(mktemp "$THEME_RUNTIME_DIR/apply-progress.XXXXXX")"
+trap 'rm -f "$PROGRESS_FILE"' EXIT
+
+progress_step() {
+	echo >>"$PROGRESS_FILE"
+	"$SCRIPT_DIR/ipc.sh" theme progress "$(wc -l <"$PROGRESS_FILE")" "$PROGRESS_TOTAL" >/dev/null 2>&1 || true
+}
+
 run_step() {
 	local name="$1"
 	shift
@@ -116,7 +129,12 @@ run_bg() {
 	local name="$1"
 	shift
 	log "START $name"
-	("$@") >>"$LOG_FILE" 2>&1 &
+	(
+		"$@"
+		code=$?
+		progress_step
+		exit "$code"
+	) >>"$LOG_FILE" 2>&1 &
 	BG_PIDS+=("$!")
 	BG_NAMES+=("$name")
 }
@@ -129,6 +147,7 @@ await_wallpaper_runtime() {
 	[[ -n "$WALLPAPER_CODE" ]] && return "$WALLPAPER_CODE"
 	wait "$WALLPAPER_PID"
 	WALLPAPER_CODE=$?
+	progress_step
 	if (( WALLPAPER_CODE == 0 )); then
 		log "OK wallpaper runtime"
 		OK_COUNT=$((OK_COUNT + 1))
@@ -168,6 +187,7 @@ finish_report() {
 	(( FAIL_COUNT > 0 )) && summary+=", ${FAIL_COUNT} failed"
 	log "$summary"
 	log "Log file: $LOG_FILE"
+	"$SCRIPT_DIR/ipc.sh" theme progress "$PROGRESS_TOTAL" "$PROGRESS_TOTAL" >/dev/null 2>&1 || true
 	if (( FAIL_COUNT > 0 )); then
 		notify-send "Theme Apply" "$summary"$'\n'"$LOG_FILE"
 	fi
@@ -386,16 +406,16 @@ bounce_gtk_theme() {
 
 run_theme_hooks() {
 	local hook script
-	while IFS= read -r hook; do
-		[[ -n "$hook" ]] || continue
+	for hook in "${THEME_HOOKS[@]}"; do
 		script="$SCRIPT_DIR/theme-hooks/$hook.sh"
 		if [[ ! -f "$script" ]]; then
 			log "FAIL hook $hook (no $script)"
 			FAIL_COUNT=$((FAIL_COUNT + 1))
+			progress_step
 			continue
 		fi
 		run_bg "hook $hook" bash "$script"
-	done < <(python3 "$SCRIPT_DIR/host.py" hooks)
+	done
 }
 
 # the size to paint at: the one asked for, kept for the entry, or the kept one
@@ -419,6 +439,7 @@ media_type="$(theme_media_type "$THEME_MEDIA")"
 log "Theme: $THEME_ENTRY"
 log "Media: $THEME_MEDIA ($media_type)"
 
+"$SCRIPT_DIR/ipc.sh" theme progress 0 "$PROGRESS_TOTAL" >/dev/null 2>&1 || true
 run_step "niri screen transition" niri msg action do-screen-transition --delay-ms 350 || true
 
 # The frame first: wallust reads it, and so does the wallpaper runtime, which
@@ -431,6 +452,7 @@ if ! run_step "wallpaper frame" theme_write_frame "$THEME_MEDIA" "$frame_path"; 
 	finish_report
 	exit 1
 fi
+progress_step
 
 log "START wallpaper runtime"
 (bash "$SCRIPT_DIR/apply_wallpaper_runtime.sh" "$THEME_MEDIA") >>"$LOG_FILE" 2>&1 &
@@ -456,6 +478,7 @@ fi
 
 update_gtk_wal_theme
 run_step "shell reload" "$SCRIPT_DIR/ipc.sh" theme reload || true
+progress_step
 
 # a style's window animation may be painted in the palette (@color4@ …): write
 # it again with the new colours

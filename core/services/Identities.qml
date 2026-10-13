@@ -54,12 +54,21 @@ Singleton {
 	property bool windowOpen: false
 	readonly property bool shown: root.windowed ? root.windowOpen : Popups.current === "identity"
 
+	// looked at from the phone (core/phone/IdentitiesTopic.qml), and which one:
+	// that counts like the surface being up, for that identity
+	property int remote: 0
+	property string remoteId: ""
+	readonly property string seen: root.remote > 0 ? root.remoteId : ""
+
 	onShownChanged: {
 		root.awakeUntil = Date.now() + 600000;
 		if (!root.shown) return;
 		root.check();
 		root.poll(true);
 	}
+
+	onRemoteChanged: if (root.remote > 0) root.check()
+	onSeenChanged: if (root.seen !== "" && !root.creating) root.ask(root.seen, true)
 
 	// ── surface ───────────────────────────────────────────────────────────
 	function open(view) {
@@ -119,10 +128,10 @@ Singleton {
 		root.poll(true);
 	}
 
-	// opens with a new one
-	function create() {
+	// opens with a new one; `quiet` leaves the surface alone (asked from the phone)
+	function create(quiet) {
 		if (!root.enabled) return;
-		root.open("card");
+		if (quiet !== true) root.open("card");
 		if (root.creating) return;
 		// the draft before it makes room
 		for (const identity of root.identities)
@@ -221,9 +230,13 @@ Singleton {
 	// what the current identity received; `now` also asks the number, which
 	// is otherwise asked every other time (its site is not ours to hammer)
 	function poll(now) {
-		if (!root.enabled || !root.current || root.creating) return;
+		if (!root.enabled || root.creating) return;
 		root.ticks += 1;
-		root.ask(root.currentId, root.shown && (now === true || root.ticks % 2 === 0));
+		const number = now === true || root.ticks % 2 === 0;
+		const there = root.shown || root.seen === root.currentId;
+		// the timer also runs for the phone: the current one is not asked for that alone
+		if (root.current && (now === true || there || Date.now() < root.awakeUntil)) root.ask(root.currentId, there && number);
+		if (root.seen !== "" && root.seen !== root.currentId) root.ask(root.seen, number);
 	}
 
 	// every saved one, now and then: is its mailbox, its number still there?
@@ -466,12 +479,12 @@ Singleton {
 	}
 
 	Timer {
-		running: root.enabled && root.current !== null && (root.shown || Date.now() < root.awakeUntil)
+		running: root.enabled && (root.current !== null && (root.shown || Date.now() < root.awakeUntil) || root.seen !== "")
 		repeat: true
 		interval: 15000
 		onTriggered: {
 			// `running` is only looked at again when something it reads changes
-			if (!root.shown && Date.now() >= root.awakeUntil) root.awakeUntil = 0;
+			if (!root.shown && root.seen === "" && Date.now() >= root.awakeUntil) root.awakeUntil = 0;
 			else root.poll(false);
 		}
 	}
