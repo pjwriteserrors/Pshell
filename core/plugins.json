@@ -116,6 +116,7 @@
 	{ "id": "fingerprint", "name": "Fingerprint unlock", "category": "Hardware", "default": false, "requires": ["lock-screen"], "icon": "fingerprint" },
 	{ "id": "kdeconnect", "name": "KDE Connect", "category": "Hardware", "default": false, "icon": "cellphone" },
 	{ "id": "haptics", "name": "Mouse haptics", "category": "Hardware", "default": false, "icon": "mouse" },
+	{ "id": "printer", "name": "3D printer", "category": "Hardware", "default": false, "icon": "printer_3d" },
 
 	{ "id": "phone", "name": "Phone app", "category": "Phone", "default": false, "icon": "cellphone" },
 	{ "id": "phone-status", "name": "Phone status", "category": "Phone", "requires": ["phone"], "icon": "battery" },

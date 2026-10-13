@@ -335,6 +335,7 @@ def print_job(printer, jobs, job, mapping, settings):
 
 
 def main():
+    emit("ready")
     first = sys.stdin.readline()
     if not first:
         return

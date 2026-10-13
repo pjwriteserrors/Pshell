@@ -99,6 +99,12 @@ Scope {
 	}
 
 	LazyLoader {
+		active: Plugins.on("printer")
+
+		PrinterPanel {}
+	}
+
+	LazyLoader {
 		active: Plugins.on("media")
 
 		MediaPanel {}

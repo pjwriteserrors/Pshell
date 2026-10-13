@@ -743,6 +743,32 @@ Scope {
 	}
 
 	IpcHandler {
+		target: "printer"
+		enabled: Plugins.on("printer")
+
+		function toggle(): void {
+			root.drawerOnFocused("printer");
+		}
+		function open(): void {
+			Printer.openPanel();
+		}
+		// the panel on a job: its folder name under the jobs folder
+		function show(id: string): void {
+			Printer.selected = id;
+			Printer.openPanel();
+		}
+		function refresh(): void {
+			Printer.refresh();
+		}
+		function pause(): void {
+			Printer.pause();
+		}
+		function resume(): void {
+			Printer.resume();
+		}
+	}
+
+	IpcHandler {
 		target: "breaks"
 		enabled: Plugins.on("breaks")
 
