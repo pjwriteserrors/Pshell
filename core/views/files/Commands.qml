@@ -117,6 +117,7 @@ QtObject {
 		const special = [];
 		if (one && Kinds.isWindows(one)) {
 			special.push({ label: "Run with", icon: "microsoft_windows", children: done => Files.knowRunners(() => done(root.runnerEntries(one))) });
+			if (Plugins.on("vm-launcher")) special.push({ label: "Open in the Windows VM", icon: "monitor_shimmer", run: () => Files.openInVm(one.path) });
 			special.push({ label: "Add to Steam…", icon: "steam", run: () => root.view.ask("Name in the Steam library", "Name", one.name.replace(/\.[^.]+$/, ""), name => Files.addToSteam(one.path, name, FileLibrary.setting("protonVersion"))) });
 		}
 		const pdfs = files.filter(row => row.mime === "application/pdf");

@@ -353,7 +353,10 @@ Item {
 					start.setHours(0, 0, 0, 0);
 					start.setDate(start.getDate() - day.back);
 					const end = new Date(start.getTime() + 86400000);
-					Files.request("dayfiles", { start: start.getTime() / 1000, end: end.getTime() / 1000, limit: 40 }, data => day.files = data?.entries ?? []);
+					Files.request("dayfiles", { start: start.getTime() / 1000, end: end.getTime() / 1000, limit: 40 }, data => {
+						// the page may be gone by the time the answer is in
+						if (day) day.files = data?.entries ?? [];
+					});
 					if (Outlook.enabled) Outlook.ensure(start);
 				}
 

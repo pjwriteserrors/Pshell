@@ -819,6 +819,58 @@ Singleton {
 		});
 	}
 
+	// ── the Windows VM (vm-launcher) ───────────────────────────────────────
+	// { vm, known, state, folder, shared, watcher, suggested }
+	property var vmShare: ({})
+	readonly property string vmName: String(Machines.vms[0]?.name ?? "win11")
+
+	function knowVm(done) {
+		if (!Plugins.on("vm-launcher")) return;
+		root.request("vmshare", { vm: root.vmName }, data => {
+			root.vmShare = data ?? {};
+			if (done) done(root.vmShare);
+		});
+	}
+
+	// the folder the VM shares with the PC; the VM must be off for it
+	function setupVmShare(folder) {
+		root.request("vmshare", { vm: root.vmName, action: "setup", folder: folder || "" }, (data, error) => {
+			if (error) {
+				root.fail(error);
+				return;
+			}
+			root.vmShare = data ?? {};
+			Sounds.play("taskDone");
+			root.say(`${root.vmName} shares ${root.pretty(root.vmShare.folder)}`, "folder_network_outline");
+		});
+	}
+
+	// a Windows program into the shared folder, asked to open there; the VM is started when it is off
+	function openInVm(path) {
+		root.request("vmshare", { vm: root.vmName, action: "open", path: path }, (data, error) => {
+			if (error) {
+				if (/no shared folder/.test(error)) root.settingsAsked("windows");
+				root.fail(error);
+				return;
+			}
+			FileLibrary.noteOpened(path);
+			if (data.state !== "running") {
+				// the VM's own window shows it coming up (storage, start, display)
+				Machines.refresh();
+				Popups.withFocusedScreen(screen => Popups.openModal("vm", screen));
+				vmLaunch.restart();
+			}
+			root.say(data.state === "running" ? `${root.nameOf(path)} opens in Windows` : `Starting ${root.vmName} – it opens once Windows is up`, "microsoft_windows");
+		});
+	}
+
+	Timer {
+		id: vmLaunch
+
+		interval: 900
+		onTriggered: Machines.launch(root.vmName)
+	}
+
 	// ── VirusTotal ─────────────────────────────────────────────────────────
 	property bool vtKeySet: false
 

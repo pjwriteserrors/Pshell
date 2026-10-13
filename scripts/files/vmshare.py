@@ -19,6 +19,8 @@ import xml.etree.ElementTree as ET
 import lookup
 
 CONNECT = os.environ.get("PSHELL_VM_CONNECT") or "qemu:///system"
+# a VM with its own QEMU arguments (Looking Glass) keeps their prefix when written back
+ET.register_namespace("qemu", "http://libvirt.org/schemas/domain/qemu/1.0")
 TAG = "pshell"
 WATCHER = r"""# Pshell: opens what the PC asks for (Files → Open in the Windows VM).
 # Start it once at logon: right click → Run with PowerShell, or put a link in shell:startup.

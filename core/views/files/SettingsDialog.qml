@@ -50,6 +50,7 @@ DialogFrame {
 		Files.knowVaults();
 		Files.knowShares();
 		Files.knowIndex();
+		Files.knowVm();
 		Files.request("thumbcache", {}, data => root.cache = data);
 		keys.forceActiveFocus();
 	}
@@ -205,6 +206,61 @@ DialogFrame {
 						placeholder: "/home/you/Projects"
 						text: FileLibrary.setting("startFolder")
 						onEdited: text => FileLibrary.set("startFolder", text.trim())
+					}
+				}
+
+				Group {
+					shown: root.page === "general"
+					title: "With the rest of the shell"
+
+					Switch {
+						label: "A finished download says so"
+						hint: "With what can be done with it: open, show, extract, scan"
+						checked: FileLibrary.setting("downloadToast") !== false
+						onToggled: on => FileLibrary.set("downloadToast", on)
+					}
+
+					Switch {
+						label: "Stay awake while a long job runs"
+						hint: "Copies, uploads, scans and conversions keep the PC from sleeping"
+						checked: FileLibrary.setting("keepAwake") !== false
+						onToggled: on => FileLibrary.set("keepAwake", on)
+					}
+
+					Switch {
+						visible: Lighting.enabled
+						label: "The keyboard breathes when a long job is through"
+						hint: "Only while the Files window is not in front"
+						checked: FileLibrary.setting("ledPulse") !== false
+						onToggled: on => FileLibrary.set("ledPulse", on)
+					}
+
+					Switch {
+						label: "A terminal opens below the Files window"
+						hint: "In the same column, instead of a column of its own. A folder with a workspace of its own opens it there."
+						checked: FileLibrary.setting("terminalBeside") !== false
+						onToggled: on => FileLibrary.set("terminalBeside", on)
+					}
+
+					Switch {
+						visible: PhoneDrive.enabled
+						label: `All places of ${PhoneDrive.name} in the sidebar`
+						hint: "Also all pictures, music and documents – not only camera, screenshots, WhatsApp, downloads and videos"
+						checked: !!FileLibrary.setting("phoneAll")
+						onToggled: on => FileLibrary.set("phoneAll", on)
+					}
+
+					Line {
+						visible: !!FileLibrary.setting("wallRotation")?.folder
+						label: `Wallpapers come from ${Files.pretty(String(FileLibrary.setting("wallRotation")?.folder ?? ""))}`
+						icon: "wallpaper"
+
+						TextButton {
+							height: 30
+							variant: "tonal"
+							text: "Stop"
+							onClicked: FileLibrary.set("wallRotation", null)
+						}
 					}
 				}
 
@@ -412,6 +468,47 @@ DialogFrame {
 
 					Hint {
 						text: Files.steam ? "“Add to Steam…” in a program's menu puts it in the library as a non-Steam game, set to run with Proton. Steam is restarted for it when it runs." : "Steam is not installed."
+					}
+				}
+
+				// the Windows VM: a folder both sides see, programs opened in it
+				Group {
+					shown: root.page === "windows" && Plugins.on("vm-launcher")
+					title: `Windows VM (${Files.vmName})`
+
+					Hint {
+						text: "“Open in the Windows VM” puts a program into a folder the VM shares with this PC and asks Windows to start it. Setting it up adds that folder to the VM (virtiofs; the VM must be off). In Windows it needs the virtio-win guest tools with VirtIO-FS and WinFsp once, and the watcher script from the folder (pshell-open.ps1) started at logon – it opens what is asked for."
+					}
+
+					Line {
+						label: Files.vmShare.known === false ? "libvirt does not know this VM" : (Files.vmShare.shared ? `Shares ${Files.pretty(String(Files.vmShare.folder))}` : "No shared folder yet")
+						icon: Files.vmShare.shared ? "check_decagram_outline" : "folder_network_outline"
+						tint: Files.vmShare.shared ? Theme.success : Theme.textMuted
+
+						TextButton {
+							visible: Files.vmShare.known !== false && !Files.vmShare.shared
+							height: 30
+							variant: "filled"
+							text: "Set up"
+							enabled: Files.vmShare.state === "shut off"
+							onClicked: root.view.ask("Which folder should the VM share?", "Folder", String(Files.vmShare.suggested || `${Files.home}/VM Share`), folder => Files.setupVmShare(folder.replace(/^~/, Files.home)))
+						}
+
+						TextButton {
+							visible: !!Files.vmShare.shared
+							height: 30
+							variant: "tonal"
+							text: "Open the folder"
+							onClicked: {
+								root.hide();
+								root.view.pane.openFolder(String(Files.vmShare.folder));
+							}
+						}
+					}
+
+					Hint {
+						visible: Files.vmShare.known !== false && !Files.vmShare.shared && Files.vmShare.state !== "shut off"
+						text: "Shut the VM down first – its setup can only change while it is off."
 					}
 				}
 
