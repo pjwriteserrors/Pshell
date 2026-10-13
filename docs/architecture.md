@@ -330,6 +330,67 @@ settings (Ctrl+,) hold the rest: how the window starts, single click,
 asking before the trash, dates and sizes, previews, archives, Windows
 programs, VirusTotal, PDF compression, the caches.
 
+What a place can be goes beyond folders (`Pane.qml` knows the kinds, the
+sidebar and Ctrl+K lead to them): the clipboard history (`clips.py`:
+cliphist's entries written out once into the runtime folder, so nothing of
+the clipboard stays on disk; dragged into a folder an entry is a file), the
+captures on a timeline (`captures.py`: a screenshot gets a name from what
+it says – Tesseract reads it, a model of Ollama names it –, its text beside
+it as .txt; a recording is cut or becomes a GIF with ffmpeg), the phone
+(`core/services/PhoneDrive.qml`: camera, screenshots, WhatsApp, downloads …
+read through the phone app, small pictures over the link; a file opened or
+imported is sent up by the phone into a folder the PC named with a ticket
+of the phone daemon, new photos wait on the home page), the copies below a
+folder (`dupes.py`: same size, same edges, then the whole file; pictures
+also when scaled or saved again), what takes its space (`storage.py`,
+`StorageView.qml`: a treemap to walk into, with what could go), a search
+kept in the sidebar – with filters such as `kind:pdf size>1GB
+modified:week older:30d` – and a search by meaning (`index.py`: an index of
+names, text, OCR and, with a vision model, what pictures show, in
+`~/.local/share/pshell/files-index.db`; a text model of Ollama reads the
+question, SQLite FTS5 and – with an embedding model – the closest in
+meaning find the files; "Find similar files" on any of them).
+
+Around the files: rules for folders that the daemon carries out as jobs
+(`rules.py`, `files-rules.json`: new PDFs that mention a word go somewhere,
+old screenshots into an archive; undone like anything else, and the history
+of what can be undone is a list, Ctrl+Shift+Z), git where a folder is a
+repository (`gitinfo.py`: what changed as marks on the cards, the branch
+above them, a commit of what is picked, pull and push, the diff of a file),
+earlier versions of a file (`versions.py`: snapper, Timeshift and btrfs
+snapshots, its git history, copies in the trash), vaults (`vault.py`:
+gocryptfs; the password typed or kept in the keyring, then opened by a
+finger on the reader or the phone), a link to share (`share.py`: Litterbox,
+0x0.st or an own server over SSH, where the PC deletes it once it ran out),
+quick changes to pictures (`imagetools.py`: size, crop, turn, mirror,
+watermark; location and camera data are taken out without touching the
+picture), the tags and cover of music (`mediatags.py`, ffmpeg), two folders
+compared side by side in a split and brought in step with rsync
+(`compare.py`, F7), translations saved beside a text or PDF (`translate.py`:
+Google, or Ollama on the machine), notes stuck to files and folders (in
+`files.json`, shown on the card) and tasks about them in the todo lists
+(`tasks.py`, with a link back).
+
+And the shell around it: `>file` finds files in the launcher itself (the
+folders looked into lately, favourites, results as you type with the one
+under the cursor large beside them; Shift+Enter is quick look,
+`core/views/overlays/launcher/FileFinderView.qml`), the bar shows long jobs
+(`style/bar/FileJobChip.qml`), the radial menu has a ring of the last
+folders, a finished download says so with what can be done with it, a
+folder can have a workspace of its own for its terminals, agents and apps
+(a terminal otherwise opens below the Files window in its column,
+`spawn_here.py`), files go into a new mail or a WhatsApp chat, an .ics into
+the calendar, a folder can feed the wallpaper, a song shows its words in
+quick look and others queue behind it (`player.py`, an mpv of its own), the
+home page lines the day's files up with its meetings and says which folders
+the week went to (screentime), the PC stays awake while a long job runs and
+may shut down after it, the keyboard breathes when one is through
+(`ledpulse.py`), and a Windows program can be sent into the Windows VM
+(`vmshare.py`: a virtiofs folder both sides see and a watcher script in
+Windows that opens what is asked for).
+`scripts/ipc.sh files space|copies <folder>` and `files compare <a> <b>`
+open those places from a keybind.
+
 `files-default` makes it the file manager of the desktop: it holds
 `org.freedesktop.FileManager1` (what "Show in folder" of browsers, chats,
 the shelves and the downloads panel calls) and is the default for folders

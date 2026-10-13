@@ -298,7 +298,11 @@ folder) and shows it as its preview, on the desktop and in the app.
 ## Not built
 
 - The phone as webcam and microphone.
-- The phone's files mounted on the PC (the PC's files on the phone exist).
+- The phone's files as a mounted drive. The PC's file manager shows the
+  phone's pictures, videos, downloads, WhatsApp media, music and documents
+  as places (`phone.files` browse / thumbs / upload, `service/PhoneMedia.kt`;
+  the app asks for the photo permission under Files) and imports them, but
+  cannot rename or delete on the phone.
 - SMS as a list of threads: messages come as notifications and are answered
   there. A call can be silenced from the PC, not answered.
 - The screen view is a series of pictures, not a video, and takes no touch.
