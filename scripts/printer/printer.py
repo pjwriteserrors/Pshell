@@ -6,18 +6,21 @@ stdin and writes one JSON event per line on stdout.
 
 - Watches the inbox folder (where OrcaSlicer exports to): a G-code that
   lands there moves into a job folder of its own under `jobs`, is read for
-  its filaments and rendered for the panel (gcode.py), and the shell hears
-  `arrived` and opens the panel.
+  its filaments, turned into a 3D instance table (mesh.py) and layer
+  pictures (gcode.py), and the shell hears `arrived` and opens the panel.
 - Keeps the printer's LAN MQTT session (kobra.py): status, temperatures,
-  the job's progress, the ACE's slots.
+  the job's progress, the ACE's slots, the chamber light.
 - Prints a job: upload over the printer's OctoPrint-style API, then start
   it over MQTT with the slots picked for each of the file's filaments.
+- Keeps a history of the prints that ended (history.json), also of the
+  last one that ended while it was not running, as the printer remembers it.
 
-Commands: config {address, inbox, jobs, cache} (first, once) · refresh ·
-print {id, mapping: [{tool, slot}], settings} · pause · resume · stop ·
+Commands: config {address, inbox, jobs, cache, history} (first, once) ·
+refresh · print {id, mapping: [{tool, slot}], settings} · pause · resume ·
+stop · light {on} · camera {on} · speed {mode} · dry {on, temp, minutes} ·
 forget {id} · rerender {id}
-Events: conn · status · ace · jobs · arrived · render · upload · started ·
-error
+Events: ready · conn · status · progress · ace · light · jobs · arrived ·
+render · upload · started · answer · history · ended · error
 """
 
 import ctypes
@@ -37,10 +40,17 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gcode  # noqa: E402
 import kobra  # noqa: E402
+import mesh  # noqa: E402
 
 IN_CLOSE_WRITE = 0x08
 IN_MOVED_TO = 0x80
 SUFFIXES = (".gcode",)
+# what a job is in while it runs; anything else (or none) means it ended
+ACTIVE = {"preheating", "auto_leveling", "vibrating", "flow_calibrating", "printing", "pausing", "paused",
+          "resuming", "resumed", "stopping", "updated", "downloading", "checking"}
+ENDINGS = {"finished": "finished", "stoped": "stopped", "stopped": "stopped", "canceled": "stopped", "failed": "failed"}
+# the preview of a job as this version draws it; older ones are drawn again
+PREVIEW = 2
 
 out_lock = threading.Lock()
 
@@ -57,6 +67,10 @@ def now_ms():
     return int(time.time() * 1000)
 
 
+def remote_name(name):
+    return re.sub(r"[^\w.+()-]+", "_", name)
+
+
 class Jobs:
     """The job folders: <jobs>/<id>/{<file>, job.json}; pictures in <cache>/<id>."""
 
@@ -71,8 +85,9 @@ class Jobs:
         for name in os.listdir(root):
             job = self._load(name)
             if job:
+                job.setdefault("remote", remote_name(job["name"]))
                 self.items[job["id"]] = job
-                if not os.path.exists(os.path.join(cache, job["id"], "model.png")):
+                if job.get("previewVersion") != PREVIEW or not os.path.exists(os.path.join(job["preview"], "model.bin")):
                     self.renders.put(job["id"])
         threading.Thread(target=self._renderer, daemon=True).start()
 
@@ -99,6 +114,11 @@ class Jobs:
             jobs = sorted(self.items.values(), key=lambda job: job.get("added", 0), reverse=True)
             emit("jobs", jobs=jobs)
 
+    def by_remote(self, filename):
+        with self.lock:
+            matches = [job for job in self.items.values() if job.get("remote") == filename]
+        return max(matches, key=lambda job: job.get("printed", 0)) if matches else None
+
     def take(self, path):
         """Moves a new file from the inbox into a job folder of its own."""
         name = os.path.basename(path)
@@ -109,7 +129,7 @@ class Jobs:
         target = os.path.join(folder, name)
         shutil.move(path, target)
         job = {"id": ident, "name": name, "file": target, "added": now_ms(), "status": "new", "meta": None, "frames": 0,
-               "dir": folder, "preview": os.path.join(self.cache, ident)}
+               "remote": remote_name(name), "dir": folder, "preview": os.path.join(self.cache, ident)}
         with self.lock:
             self.items[ident] = job
         self.save(job)
@@ -145,7 +165,12 @@ class Jobs:
                 continue
             try:
                 model = gcode.read(job["file"])
-                self.update(ident, meta=model["meta"], frames=0, rendering=True)
+                self.update(ident, meta=model["meta"], frames=0, shape=None, rendering=True)
+                shutil.rmtree(job["preview"], ignore_errors=True)
+                os.makedirs(job["preview"], exist_ok=True)
+                shape = mesh.write(model, os.path.join(job["preview"], "model.bin"))
+                # the part turns in the panel as soon as it is there
+                self.update(ident, shape=shape)
                 last = [0.0]
 
                 def progress(done, total):
@@ -153,13 +178,59 @@ class Jobs:
                         last[0] = time.monotonic()
                         emit("render", id=ident, done=done, total=total)
 
-                shutil.rmtree(job["preview"], ignore_errors=True)
                 frames = gcode.render(model, job["preview"], progress)
                 del model
-                self.update(ident, frames=frames, marks=gcode.frame_layers(job["meta"]["layers"]), rendering=False)
+                self.update(ident, frames=frames, marks=gcode.frame_layers(job["meta"]["layers"]),
+                            previewVersion=PREVIEW, rendering=False)
             except Exception as error:  # a broken file must not stop the daemon
                 self.update(ident, rendering=False)
                 emit("error", what="render", id=ident, msg=str(error))
+
+
+class History:
+    """The prints that ended: [{key, name, job, ended, minutes, result, progress, layers, grams, filaments}]."""
+
+    def __init__(self, path, jobs):
+        self.path = path
+        self.jobs = jobs
+        try:
+            with open(path) as source:
+                self.items = json.load(source)
+        except (OSError, ValueError):
+            self.items = []
+
+    def publish(self):
+        emit("history", items=self.items[-500:])
+
+    def record(self, project, result, live):
+        name = project.get("filename") or "?"
+        key = f"{name}|{project.get('total_layers')}|{project.get('print_time')}|{result}"
+        if any(item.get("key") == key for item in self.items[-50:]):
+            return
+        job = self.jobs.by_remote(name)
+        meta = (job or {}).get("meta") or {}
+        share = 1.0 if result == "finished" else min(1.0, max(0.0, (project.get("progress") or 0) / 100))
+        entry = {
+            "key": key,
+            "name": name,
+            "job": job["id"] if job else "",
+            "ended": now_ms() if live else 0,
+            "minutes": project.get("print_time") or 0,
+            "result": result,
+            "progress": project.get("progress") or 0,
+            "layers": project.get("total_layers") or 0,
+            "grams": round((meta.get("grams") or 0) * share, 1),
+            "filaments": [{"color": f.get("color"), "type": f.get("type"), "grams": round((f.get("grams") or 0) * share, 1)}
+                          for f in meta.get("filaments", [])],
+        }
+        self.items.append(entry)
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        with open(self.path + ".tmp", "w") as target:
+            json.dump(self.items, target, indent=1)
+        os.replace(self.path + ".tmp", self.path)
+        self.publish()
+        if live:
+            emit("ended", **entry)
 
 
 def watch(inbox, arrived):
@@ -189,14 +260,16 @@ def watch(inbox, arrived):
 class Printer:
     """The MQTT session, kept up; what the printer reports, passed on."""
 
-    def __init__(self, address):
+    def __init__(self, address, history):
         self.address = address
+        self.history = history
         self.link = None
         self.creds = None
         self.wake = threading.Event()
         self.busy = False
         self.ace = {}
         self.project = None
+        self.seen_last = False
         threading.Thread(target=self._keep, daemon=True).start()
 
     def _keep(self):
@@ -222,6 +295,7 @@ class Printer:
                     # the ACE says nothing on its own while a print runs steadily
                     if ticks % 4 == 0:
                         self.link.publish("multiColorBox", "getInfo")
+                        self.link.publish("light", "query")
                 except OSError:
                     break
             emit("conn", online=False, error="connection lost")
@@ -229,40 +303,61 @@ class Printer:
     def refresh(self):
         if self.link and not self.link.closed.is_set():
             try:
-                self.link.publish("info", "query")
-                self.link.publish("multiColorBox", "getInfo")
+                for kind, action in (("info", "query"), ("multiColorBox", "getInfo"), ("light", "query")):
+                    self.link.publish(kind, action)
             except OSError:
                 pass
         else:
             self.wake.set()
 
-    def command(self, kind, action, data):
+    def send(self, kind, action, data, slicer=False):
         if not self.link or self.link.closed.is_set():
             raise OSError("printer offline")
-        return self.link.publish(kind, action, data, slicer=True)
+        return self.link.publish(kind, action, data, slicer=slicer)
+
+    def _ended(self, project, live):
+        result = ENDINGS.get(str(project.get("state")), "finished" if (project.get("progress") or 0) >= 100 else "stopped")
+        self.history.record(project, result, live)
 
     def _report(self, kind, message):
         data = message.get("data")
         if kind == "info" and isinstance(data, dict):
             self.busy = data.get("state") == "busy"
-            temp = data.get("temp") or {}
             project = data.get("project")
-            self.project = project
-            emit("status", state=data.get("state", ""), temps=temp, project=project,
-                 last=data.get("last_project"), firmware=data.get("version", ""), speed=data.get("print_speed_mode"))
+            active = project if project and str(project.get("state")) in ACTIVE else None
+            if self.project and not active:
+                ended = project or data.get("last_project") or {}
+                self._ended(dict(self.project, **{k: v for k, v in ended.items() if v is not None}), True)
+            elif not self.seen_last and data.get("last_project") and not active:
+                # the last print, which ended while nobody listened
+                self._ended(data["last_project"], False)
+            self.seen_last = True
+            self.project = active
+            emit("status", state=data.get("state", ""), temps=data.get("temp") or {}, project=project,
+                 last=data.get("last_project"), firmware=data.get("version", ""), speed=data.get("print_speed_mode"),
+                 fan=data.get("fan_speed_pct"), auxFan=data.get("aux_fan_speed_pct"), boxFan=data.get("box_fan_level"))
         elif kind == "tempature" and isinstance(data, dict):
             emit("status", temps=data)
         elif kind == "print" and isinstance(data, dict) and "progress" in data:
             emit("progress", **{k: data.get(k) for k in ("progress", "curr_layer", "total_layers", "remain_time", "print_time", "filename", "state")})
-        elif kind == "print" and message.get("action") in ("start", "pause", "resume", "stop"):
+        elif kind == "print" and message.get("action") in ("start", "pause", "resume", "stop", "update"):
             emit("answer", action=message.get("action"), code=message.get("code"), state=message.get("state"), msg=message.get("msg"))
             self.link.publish("info", "query")
+        elif kind == "light" and isinstance(data, dict):
+            light = (data.get("lights") or [data])[0]
+            if "status" in light:
+                emit("light", on=bool(light.get("status")), brightness=light.get("brightness", 0))
+        elif kind == "video":
+            emit("answer", action=f"video:{message.get('action')}", code=message.get("code"), state=message.get("state"), msg=message.get("msg"))
         elif kind == "multiColorBox" and isinstance(data, dict):
             for box in data.get("multi_color_box") or []:
                 known = self.ace.setdefault(box.get("id", 0), {"slots": {}})
-                for key in ("loaded_slot", "humidity", "temp", "drying_status", "status"):
+                for key in ("loaded_slot", "temp", "drying_status", "status"):
                     if box.get(key) is not None:
                         known[key] = box[key]
+                humidity = box.get("humidity") or (box.get("drying_status") or {}).get("humidity")
+                if humidity:
+                    known["humidity"] = humidity
                 for slot in box.get("slots") or []:
                     known["slots"][slot.get("index", 0)] = slot
             boxes = []
@@ -280,7 +375,7 @@ class Printer:
 
 def print_job(printer, jobs, job, mapping, settings):
     ident = job["id"]
-    remote = re.sub(r"[^\w.+()-]+", "_", job["name"])
+    remote = remote_name(job["name"])
     try:
         size = os.path.getsize(job["file"])
         jobs.update(ident, status="uploading")
@@ -326,7 +421,7 @@ def print_job(printer, jobs, job, mapping, settings):
             data["ams_settings"] = {"use_ams": True, "ams_box_mapping": boxes}
         # the printer indexes the file a moment after the upload
         time.sleep(1.5)
-        printer.command("print", "start", data)
+        printer.send("print", "start", data, slicer=True)
         jobs.update(ident, status="sent", remote=remote, printed=now_ms(), mapping=mapping)
         emit("started", id=ident, remote=remote)
     except Exception as error:
@@ -343,8 +438,10 @@ def main():
     home = os.path.expanduser("~")
     inbox = os.path.expanduser(config.get("inbox") or f"{home}/Prints/inbox")
     jobs = Jobs(os.path.expanduser(config.get("jobs") or f"{home}/Prints/jobs"), os.path.expanduser(config["cache"]))
+    history = History(os.path.expanduser(config.get("history") or f"{home}/.local/state/pshell/printer-history.json"), jobs)
     jobs.publish()
-    printer = Printer(config["address"])
+    history.publish()
+    printer = Printer(config["address"], history)
 
     def arrived(path):
         # Orca writes in one go, but a copy may still be growing: wait for a still size
@@ -383,7 +480,19 @@ def main():
                 if job:
                     threading.Thread(target=print_job, args=(printer, jobs, job, command.get("mapping") or [], command.get("settings") or {}), daemon=True).start()
             elif op in ("pause", "resume", "stop"):
-                printer.command("print", op, {"taskid": "-1"})
+                printer.send("print", op, {"taskid": "-1"}, slicer=True)
+            elif op == "speed":
+                printer.send("print", "update", {"taskid": "-1", "settings": {"print_speed_mode": int(command.get("mode", 2))}})
+            elif op == "light":
+                on = bool(command.get("on"))
+                printer.send("light", "control", {"type": 2, "status": int(on), "brightness": 100 if on else 0})
+                emit("light", on=on, brightness=100 if on else 0)
+            elif op == "camera":
+                printer.send("video", "startCapture" if command.get("on") else "stopCapture", None)
+            elif op == "dry":
+                status = {"status": 1, "target_temp": int(command.get("temp", 45)), "duration": int(command.get("minutes", 240))} if command.get("on") else {"status": 0}
+                printer.send("multiColorBox", "setDry", {"multi_color_box": [{"id": int(command.get("box", 0)), "drying_status": status}]})
+                printer.send("multiColorBox", "getInfo", None)
             elif op == "forget":
                 jobs.forget(command.get("id"))
             elif op == "rerender":

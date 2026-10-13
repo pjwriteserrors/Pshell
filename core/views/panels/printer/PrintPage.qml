@@ -1,0 +1,737 @@
+pragma ComponentBehavior: Bound
+
+import QtQuick
+import QtQuick.Layouts
+import Quickshell
+import qs.style.theme
+import qs.core.services
+import qs.style.widgets
+
+// The print: the part in 3D on the left (turnable, cut at the layer on the
+// nozzle), on the right what fits the moment – the running print with its
+// progress, speed and temperatures; a job waiting for its slots; or the
+// printer at rest with its last print.
+Item {
+	id: root
+
+	property bool windowed: false
+	// the job shown: the one picked, else the one printing
+	readonly property var job: Printer.job(Printer.selected) ?? Printer.printingJob
+	readonly property bool showsLive: Printer.printing && (root.job === null || root.job === Printer.printingJob)
+	readonly property string mode: root.showsLive ? "live" : (root.job !== null ? "job" : "idle")
+	property var mapping: []
+	readonly property bool mapped: root.mapping.length > 0 && root.mapping.every(pick => pick.slot >= 0)
+	readonly property bool sending: root.job !== null && (root.job.status === "uploading" || Printer.uploads[root.job.id] !== undefined)
+
+	function remap() {
+		root.mapping = Printer.suggestAll(root.job);
+	}
+
+	function pick(tool, slot) {
+		root.mapping = root.mapping.map(entry => entry.tool === tool ? { tool, slot } : entry);
+	}
+
+	onJobChanged: root.remap()
+	Component.onCompleted: root.remap()
+
+	Connections {
+		target: Printer
+
+		// the ACE answered after the job was picked: fill what is still open
+		function onSlotsChanged() {
+			if (root.mapping.some(pick => pick.slot < 0)) root.remap();
+		}
+	}
+
+	RowLayout {
+		anchors.fill: parent
+		spacing: 18
+
+		// ── the part ─────────────────────────────────────────────────────
+		Rectangle {
+			id: stage
+
+			Layout.fillHeight: true
+			Layout.preferredWidth: root.windowed ? root.width * 0.62 : 500
+			radius: Theme.radius.huge
+			color: Theme.layer1
+			border.width: 1
+			border.color: Theme.outline
+			clip: true
+
+			// a soft light from above, behind the part
+			Rectangle {
+				anchors.fill: parent
+				radius: parent.radius
+				gradient: Gradient {
+					GradientStop {
+						position: 0
+						color: Qt.alpha(root.showsLive ? Printer.hot : Theme.primary, 0.07)
+					}
+					GradientStop {
+						position: 0.7
+						color: "transparent"
+					}
+				}
+			}
+
+			ModelView {
+				id: model
+
+				anchors.fill: parent
+				anchors.margins: 2
+				job: root.job
+				liveLayer: root.showsLive ? Printer.layer : -1
+			}
+
+			EmptyState {
+				anchors.centerIn: parent
+				visible: root.job === null
+				icon: Printer.printing ? "printer_3d" : "tray_arrow_down"
+				title: Printer.printing ? "A print from elsewhere" : "Nothing to print"
+				subtitle: Printer.printing ? "Its part is not known here" : `Export from OrcaSlicer into ${Printer.inbox}`
+			}
+
+			// the layer the cut is at
+			Rectangle {
+				anchors.left: parent.left
+				anchors.top: parent.top
+				anchors.margins: 14
+				width: layerText.implicitWidth + 24
+				height: 28
+				radius: 14
+				color: Qt.alpha(Theme.bg, 0.7)
+				border.width: 1
+				border.color: Theme.outline
+				visible: model.ready
+				opacity: model.intro
+
+				StyledText {
+					id: layerText
+
+					anchors.centerIn: parent
+					text: `Layer ${model.shownLayer} / ${model.layers} · ${model.cut.toFixed(1)} mm`
+					font.pixelSize: Theme.size.small
+					tabular: true
+				}
+			}
+
+			// a hint until the part was touched once
+			Row {
+				anchors.right: parent.right
+				anchors.top: parent.top
+				anchors.margins: 16
+				spacing: 6
+				visible: model.ready
+				opacity: model.idleSince === 0 ? 0.6 : 0
+
+				Behavior on opacity {
+					Anim {}
+				}
+
+				Glyph {
+					icon: "rotate_3d_variant"
+					size: 14
+					color: Theme.textMuted
+				}
+
+				StyledText {
+					text: "Drag to turn · wheel to zoom"
+					tone: Theme.textMuted
+					font.pixelSize: Theme.size.tiny
+				}
+			}
+
+			// the layer from above
+			Rectangle {
+				anchors.right: parent.right
+				anchors.bottom: scrubber.visible ? scrubber.top : parent.bottom
+				anchors.margins: 12
+				width: 104
+				height: 104
+				radius: Theme.radius.large
+				color: Qt.alpha(Theme.bg, 0.72)
+				border.width: 1
+				border.color: Theme.outline
+				visible: (root.job?.frames ?? 0) > 0 && model.ready
+				opacity: model.intro
+
+				Image {
+					anchors.fill: parent
+					anchors.margins: 8
+					fillMode: Image.PreserveAspectFit
+					source: parent.visible ? Printer.frameUrl(root.job, "top", Printer.frameIndex(root.job, model.shownLayer)) : ""
+					smooth: true
+					mipmap: true
+				}
+			}
+
+			// scrubbing through a job that is not printing
+			Item {
+				id: scrubber
+
+				anchors.left: parent.left
+				anchors.right: parent.right
+				anchors.bottom: parent.bottom
+				anchors.margins: 16
+				height: 22
+				visible: model.ready && !model.live
+
+				Rectangle {
+					anchors.verticalCenter: parent.verticalCenter
+					width: parent.width
+					height: 4
+					radius: 2
+					color: Qt.alpha(Theme.fg, 0.1)
+				}
+
+				Rectangle {
+					anchors.verticalCenter: parent.verticalCenter
+					width: parent.width * model.scrub
+					height: 4
+					radius: 2
+					gradient: Gradient {
+						orientation: Gradient.Horizontal
+						GradientStop {
+							position: 0
+							color: Theme.primary
+						}
+						GradientStop {
+							position: 1
+							color: Printer.hot
+						}
+					}
+				}
+
+				Rectangle {
+					x: parent.width * model.scrub - width / 2
+					anchors.verticalCenter: parent.verticalCenter
+					width: knob.pressed ? 18 : 14
+					height: width
+					radius: width / 2
+					color: Printer.hot
+					border.width: 3
+					border.color: Theme.bg
+
+					Behavior on width {
+						SpatialAnim {}
+					}
+				}
+
+				MouseArea {
+					id: knob
+
+					anchors.fill: parent
+					anchors.margins: -6
+					cursorShape: Qt.PointingHandCursor
+					onPressed: mouse => model.scrub = Math.max(0, Math.min(1, mouse.x / width))
+					onPositionChanged: mouse => {
+						if (pressed) model.scrub = Math.max(0, Math.min(1, mouse.x / width));
+					}
+				}
+			}
+		}
+
+		// ── what fits the moment ─────────────────────────────────────────
+		Item {
+			Layout.fillWidth: true
+			Layout.fillHeight: true
+
+			Repeater {
+				model: ["live", "job", "idle"]
+
+				delegate: Loader {
+					id: side
+
+					required property string modelData
+					readonly property bool current: side.modelData === root.mode
+
+					anchors.fill: parent
+					active: side.current || side.opacity > 0
+					opacity: side.current ? 1 : 0
+					visible: opacity > 0.01
+					sourceComponent: side.modelData === "live" ? liveSide : (side.modelData === "job" ? jobSide : idleSide)
+
+					transform: Translate {
+						y: side.current ? 0 : 18
+
+						Behavior on y {
+							SpatialAnim {}
+						}
+					}
+
+					Behavior on opacity {
+						Anim {
+							duration: Motion.medium
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// ── the print running ────────────────────────────────────────────────
+	Component {
+		id: liveSide
+
+		ColumnLayout {
+			spacing: 12
+
+			StyledText {
+				Layout.fillWidth: true
+				text: root.job ? Printer.title(root.job) : Printer.nameOf(Printer.project?.filename)
+				font.pixelSize: Theme.size.title
+				font.weight: Font.DemiBold
+				wrapMode: Text.Wrap
+				maximumLineCount: 2
+			}
+
+			RowLayout {
+				spacing: 10
+
+				StyledText {
+					id: percent
+
+					property real shown: Printer.progress * 100
+
+					text: Math.round(percent.shown)
+					font.pixelSize: Theme.size.hero
+					font.weight: Font.Bold
+					tabular: true
+
+					Behavior on shown {
+						NumberAnimation {
+							duration: 900
+							easing.type: Easing.OutCubic
+						}
+					}
+				}
+
+				ColumnLayout {
+					spacing: 2
+
+					StyledText {
+						text: "%"
+						font.pixelSize: Theme.size.title
+						tone: Theme.textMuted
+					}
+
+					Rectangle {
+						Layout.preferredHeight: 22
+						Layout.preferredWidth: stateText.implicitWidth + 18
+						radius: 11
+						color: Printer.paused ? Qt.alpha(Theme.warning, 0.16) : Qt.alpha(Printer.hot, 0.14)
+
+						StyledText {
+							id: stateText
+
+							anchors.centerIn: parent
+							text: Printer.status
+							font.pixelSize: Theme.size.small
+							font.weight: Font.DemiBold
+							tone: Printer.paused ? Theme.warning : Printer.hot
+						}
+					}
+				}
+			}
+
+			HeatBar {
+				Layout.fillWidth: true
+				value: Printer.progress
+				running: !Printer.paused
+			}
+
+			GridLayout {
+				Layout.fillWidth: true
+				columns: 2
+				columnSpacing: 14
+				rowSpacing: 8
+
+				Repeater {
+					model: [
+						{ label: "Layer", value: `${Printer.layer} / ${Printer.layers}` },
+						{ label: "Left", value: Printer.duration(Printer.secondsLeft) },
+						{ label: "Done at", value: Qt.formatTime(new Date(Date.now() + Printer.secondsLeft * 1000), "HH:mm") },
+						{ label: "Running", value: Printer.duration(Number(Printer.project?.print_time ?? 0) * 60) }
+					]
+
+					delegate: ColumnLayout {
+						id: fact
+
+						required property var modelData
+
+						Layout.fillWidth: true
+						spacing: 0
+
+						SectionLabel {
+							text: fact.modelData.label
+						}
+
+						StyledText {
+							text: fact.modelData.value
+							font.pixelSize: Theme.size.title
+							tabular: true
+						}
+					}
+				}
+			}
+
+			// the nozzle's last ten minutes
+			Rectangle {
+				Layout.fillWidth: true
+				Layout.preferredHeight: 62
+				radius: Theme.radius.large
+				color: Theme.layer1
+				clip: true
+
+				Sparkline {
+					anchors.fill: parent
+					anchors.topMargin: 22
+					values: Printer.nozzleLog
+					maximum: Math.max(260, ...Printer.nozzleLog)
+					color: Printer.hot
+				}
+
+				StyledText {
+					anchors.left: parent.left
+					anchors.top: parent.top
+					anchors.margins: 10
+					anchors.topMargin: 6
+					text: `Nozzle ${Math.round(Number(Printer.temps.curr_nozzle_temp ?? 0))}° · bed ${Math.round(Number(Printer.temps.curr_hotbed_temp ?? 0))}°`
+					font.pixelSize: Theme.size.small
+					tone: Theme.textMuted
+					tabular: true
+				}
+			}
+
+			Segmented {
+				Layout.fillWidth: true
+				Layout.preferredHeight: 32
+				options: Printer.speeds
+				current: String(Printer.speed)
+				onSelected: value => Printer.setSpeed(Number(value))
+			}
+
+			Item {
+				Layout.fillHeight: true
+			}
+
+			RowLayout {
+				Layout.fillWidth: true
+				spacing: 8
+
+				TextButton {
+					Layout.fillWidth: true
+					text: Printer.paused ? "Resume" : "Pause"
+					icon: Printer.paused ? "play" : "pause"
+					onActivated: Printer.paused ? Printer.resume() : Printer.pause()
+				}
+
+				TextButton {
+					Layout.fillWidth: true
+					text: "Stop"
+					icon: "stop"
+					variant: "danger"
+					confirm: true
+					confirmText: "Stop the print?"
+					onActivated: Printer.stop()
+				}
+			}
+		}
+	}
+
+	// ── a job waiting for its slots ──────────────────────────────────────
+	Component {
+		id: jobSide
+
+		ColumnLayout {
+			spacing: 12
+
+			StyledText {
+				Layout.fillWidth: true
+				text: Printer.title(root.job)
+				font.pixelSize: Theme.size.title
+				font.weight: Font.DemiBold
+				wrapMode: Text.Wrap
+				maximumLineCount: 2
+			}
+
+			Flow {
+				Layout.fillWidth: true
+				spacing: 6
+
+				Repeater {
+					model: {
+						const meta = root.job?.meta;
+						if (!meta) return [];
+						return [
+							{ icon: "clock_outline", text: meta.seconds > 0 ? Printer.duration(meta.seconds) : "–" },
+							{ icon: "weight_gram", text: `${meta.grams} g` },
+							{ icon: "layers_outline", text: `${meta.layers} layers` },
+							{ icon: "ruler", text: `${meta.height} mm` }
+						];
+					}
+
+					delegate: Rectangle {
+						id: info
+
+						required property var modelData
+						required property int index
+
+						width: infoRow.implicitWidth + 18
+						height: 26
+						radius: 13
+						color: Theme.layer2
+						opacity: 0
+						scale: 0.9
+
+						Component.onCompleted: appear.start()
+
+						SequentialAnimation {
+							id: appear
+
+							PauseAnimation {
+								duration: info.index * 60
+							}
+							ParallelAnimation {
+								NumberAnimation {
+									target: info
+									property: "opacity"
+									to: 1
+									duration: 260
+								}
+								NumberAnimation {
+									target: info
+									property: "scale"
+									to: 1
+									duration: 380
+									easing.type: Easing.OutBack
+								}
+							}
+						}
+
+						Row {
+							id: infoRow
+
+							anchors.centerIn: parent
+							spacing: 5
+
+							Glyph {
+								anchors.verticalCenter: parent.verticalCenter
+								icon: info.modelData.icon
+								size: 13
+								color: Theme.textMuted
+							}
+
+							StyledText {
+								anchors.verticalCenter: parent.verticalCenter
+								text: info.modelData.text
+								font.pixelSize: Theme.size.small
+								tabular: true
+							}
+						}
+					}
+				}
+			}
+
+			SectionLabel {
+				Layout.topMargin: 4
+				text: (root.job?.meta?.filaments ?? []).length > 1 ? "Filaments → ACE slots" : "Filament → ACE slot"
+			}
+
+			Repeater {
+				model: root.job?.meta?.filaments ?? []
+
+				delegate: FilamentRow {
+					required property var modelData
+
+					Layout.fillWidth: true
+					filament: modelData
+					picked: root.mapping.find(entry => entry.tool === modelData.tool)?.slot ?? -1
+					onPick: slot => root.pick(modelData.tool, slot)
+				}
+			}
+
+			StyledText {
+				Layout.fillWidth: true
+				visible: Printer.online && Printer.slots.length === 0
+				text: "The ACE has not answered yet"
+				tone: Theme.textMuted
+				font.pixelSize: Theme.size.small
+			}
+
+			Repeater {
+				model: [
+					{ key: "leveling", label: "Level the bed first", icon: "grid" },
+					{ key: "flow", label: "Calibrate the flow", icon: "water_percent" }
+				]
+
+				delegate: RowLayout {
+					id: option
+
+					required property var modelData
+
+					Layout.fillWidth: true
+					spacing: 8
+
+					Glyph {
+						icon: option.modelData.icon
+						size: 15
+						color: Theme.textMuted
+					}
+
+					StyledText {
+						Layout.fillWidth: true
+						text: option.modelData.label
+						font.pixelSize: Theme.size.label
+					}
+
+					Toggle {
+						checked: !!Printer.options[option.modelData.key]
+						onToggled: checked => Printer.setOption(option.modelData.key, checked)
+					}
+				}
+			}
+
+			Item {
+				Layout.fillHeight: true
+			}
+
+			StyledText {
+				Layout.fillWidth: true
+				visible: root.job?.status === "sent" || root.job?.status === "failed"
+				text: root.job?.status === "failed" ? "The last try failed" : `Sent ${Qt.formatDateTime(new Date(root.job?.printed ?? 0), "d MMM, HH:mm")}`
+				tone: root.job?.status === "failed" ? Theme.danger : Theme.textMuted
+				font.pixelSize: Theme.size.small
+			}
+
+			RowLayout {
+				Layout.fillWidth: true
+				spacing: 8
+
+				IconButton {
+					icon: "folder_open_outline"
+					onClicked: Quickshell.execDetached(["xdg-open", root.job.dir])
+				}
+
+				TextButton {
+					text: "Remove"
+					icon: "delete_outline"
+					variant: "ghost"
+					confirm: true
+					confirmText: "Remove?"
+					onActivated: Printer.forget(root.job.id)
+				}
+
+				TextButton {
+					Layout.fillWidth: true
+					text: root.sending ? "Sending…" : (Printer.printing ? "Printer is busy" : (Printer.online ? "Print" : "Printer offline"))
+					icon: "printer_3d"
+					variant: "filled"
+					busy: root.sending
+					enabled: Printer.online && !Printer.printing && root.mapped && !root.sending
+					onActivated: Printer.start(root.job.id, root.mapping)
+				}
+			}
+		}
+	}
+
+	// ── the printer at rest ──────────────────────────────────────────────
+	Component {
+		id: idleSide
+
+		ColumnLayout {
+			spacing: 14
+
+			readonly property var last: Printer.history.length > 0 ? Printer.history[Printer.history.length - 1] : null
+
+			StyledText {
+				Layout.fillWidth: true
+				text: Printer.online ? "Ready for the next print" : (Printer.error ? "Not reachable" : "Connecting…")
+				font.pixelSize: Theme.size.title
+				font.weight: Font.DemiBold
+			}
+
+			StyledText {
+				Layout.fillWidth: true
+				text: Printer.online ? "Export a G-code from OrcaSlicer into the inbox; this panel opens with it." : (Printer.error ? `${Printer.error}. With LAN mode on, a restart of the printer helps.` : "")
+				wrapMode: Text.Wrap
+				tone: Theme.textMuted
+				font.pixelSize: Theme.size.label
+			}
+
+			Clickable {
+				Layout.fillWidth: true
+				Layout.preferredHeight: 40
+				radius: Theme.radius.medium
+				color: Theme.layer1
+				onClicked: Quickshell.execDetached(["xdg-open", Printer.inbox.replace(/^~/, Quickshell.env("HOME"))])
+
+				RowLayout {
+					anchors.fill: parent
+					anchors.leftMargin: 12
+					anchors.rightMargin: 12
+					spacing: 8
+
+					Glyph {
+						icon: "tray_arrow_down"
+						size: 16
+						color: Theme.primary
+					}
+
+					StyledText {
+						Layout.fillWidth: true
+						text: Printer.inbox
+						font.family: Theme.monoFamily
+						font.pixelSize: Theme.size.small
+					}
+
+					Glyph {
+						icon: "folder_open_outline"
+						size: 15
+						color: Theme.textMuted
+					}
+				}
+			}
+
+			SectionLabel {
+				Layout.topMargin: 6
+				text: "ACE"
+				visible: Printer.slots.length > 0
+			}
+
+			RowLayout {
+				spacing: 10
+				visible: Printer.slots.length > 0
+
+				Repeater {
+					model: Printer.slots
+
+					delegate: Spool {
+						required property var modelData
+
+						slot: modelData
+						Layout.preferredWidth: 40
+						Layout.preferredHeight: 40
+					}
+				}
+			}
+
+			SectionLabel {
+				Layout.topMargin: 6
+				text: "Last print"
+				visible: parent.last !== null
+			}
+
+			HistoryRow {
+				Layout.fillWidth: true
+				visible: parent.last !== null
+				item: parent.last
+			}
+
+			Item {
+				Layout.fillHeight: true
+			}
+		}
+	}
+}

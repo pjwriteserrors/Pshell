@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import qs.core.services
 import qs.core.views.panels
+import qs.core.views.panels.printer
 import qs.core.views.overlays
 import qs.core.views.rpg
 import qs.core.views.overlays.studio
@@ -102,6 +103,19 @@ Scope {
 		active: Plugins.on("printer")
 
 		PrinterPanel {}
+	}
+
+	// popped out, and the camera's feed
+	LazyLoader {
+		active: Plugins.on("printer") && Printer.windowed
+
+		PrinterWindow {}
+	}
+
+	LazyLoader {
+		active: Plugins.on("printer") && Printer.camera
+
+		CameraWindow {}
 	}
 
 	LazyLoader {

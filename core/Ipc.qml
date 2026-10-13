@@ -747,15 +747,31 @@ Scope {
 		enabled: Plugins.on("printer")
 
 		function toggle(): void {
-			root.drawerOnFocused("printer");
+			if (Printer.windowed) Printer.toggle();
+			else root.drawerOnFocused("printer");
 		}
 		function open(): void {
-			Printer.openPanel();
+			Printer.open();
 		}
 		// the panel on a job: its folder name under the jobs folder
 		function show(id: string): void {
-			Printer.selected = id;
-			Printer.openPanel();
+			Printer.show(id);
+		}
+		// "print" | "ace" | "stats"
+		function tab(name: string): void {
+			Printer.tab = name;
+			Printer.open();
+		}
+		// a window of its own, or back under the bar
+		function window(): void {
+			if (Printer.windowed) Printer.dock();
+			else Printer.popOut();
+		}
+		function camera(): void {
+			Printer.setCamera(!Printer.camera);
+		}
+		function light(): void {
+			Printer.setLight(!Printer.light);
 		}
 		function refresh(): void {
 			Printer.refresh();

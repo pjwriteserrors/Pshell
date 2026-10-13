@@ -5,14 +5,12 @@
 move by layer and tool. `render(model, out, progress)` turns the moves into
 pictures the panel steps through while the printer works:
 
-- `model.png`   the whole part, seen from the front-right and above
-- `frame-NNN.png` the part as printed up to a layer, the layer itself lit;
-  at most FRAMES of them, spread over the layers
-- `top-NNN.png` that layer from above, the one below it faint
+- `model.png`   the whole part, seen from the front-right and above (cards)
+- `top-NNN.png` a layer from above, the one below it faint; at most FRAMES
+  of them, spread over the layers
 - `thumb.png`   the slicer's own thumbnail
 
-The panel lays a faint `model.png` under the frame, so what is still to come
-shows as a ghost.
+The part itself turns in 3D in the panel, from mesh.py's instance table.
 """
 
 import base64
@@ -178,8 +176,6 @@ def _shade(colour, factor):
     return tuple(max(0, min(255, int(c * factor))) for c in colour) + (255,)
 
 
-# the layer on the nozzle: hot, whatever the filament's colour
-HOT = (255, 138, 48, 255)
 
 
 def render(model, out, progress=lambda done, total: None):
@@ -219,13 +215,11 @@ def render(model, out, progress=lambda done, total: None):
     # light from the front left, a little above
     light = (-0.6, -0.8)
 
-    def draw_layer(draw, layer, lit=False):
+    def draw_layer(draw, layer):
         z = layer["z"]
         for tool, x0, y0, x1, y1, outer in layer["segments"]:
             colour = colours.get(tool, [200, 200, 200])
-            if lit:
-                fill = HOT
-            elif outer:
+            if outer:
                 length = math.hypot(x1 - x0, y1 - y0) or 1
                 # outer walls run counter-clockwise: the outside is on the right
                 nx, ny = (y1 - y0) / length, -(x1 - x0) / length
@@ -257,17 +251,7 @@ def render(model, out, progress=lambda done, total: None):
     def top_point(px, py):
         return tsize / 2 + (px - cx) * tscale, tsize / 2 - (py - cy) * tscale
 
-    built = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(built)
-    done = 0
     for frame, last in enumerate(marks):
-        while done <= last:
-            draw_layer(draw, layers[done])
-            done += 1
-        shot = built.copy()
-        draw_layer(ImageDraw.Draw(shot), layers[last], lit=True)
-        save(shot, f"frame-{frame:03d}.png", SIZE)
-
         top = Image.new("RGBA", (tsize, tsize), (0, 0, 0, 0))
         tdraw = ImageDraw.Draw(top)
         if last > 0:

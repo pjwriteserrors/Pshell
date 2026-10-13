@@ -18,22 +18,43 @@ OrcaSlicer ──export──▶ ~/Prints/inbox/
 
 - In OrcaSlicer, export the G-code (*Export G-code file*) into
   `~/Prints/inbox`. The panel opens, the file moves into a job folder of its
-  own, and the part builds itself up layer by layer once it is drawn.
-- Each filament of the file gets an ACE slot, with the same material and
-  the nearest colour picked in advance. A slot of another material is
-  marked. *Print* uploads the file and starts it with that mapping.
-- While it prints, the panel shows the part up to the layer on the nozzle
-  (lit), the rest as a ghost, that layer from above, the progress, the time
-  left, when it is done, and pause / resume / stop (stop asks twice).
-- Dragging across a job that is not printing scrubs through its layers; a
-  double click builds it up again.
-- `>printer` in the launcher, `scripts/ipc.sh printer open|toggle|refresh|pause|resume`,
+  own, and the part drops onto the bed in 3D and builds itself up.
+- **Print** page: the part turns by dragging (and spins on when let go),
+  the wheel zooms, a double click puts the view back; left alone it turns
+  slowly. While it prints the part is cut at the layer on the nozzle – solid
+  below, the layer hot, the outer walls above as a ghost, a glowing sheet
+  where it is cut – and that layer is shown from above in the corner.
+  Beside it: progress, layer, time left, when it is done, the nozzle's last
+  ten minutes, the speed (silent / standard / sport), pause and stop (stop
+  asks twice). A job not printing shows its filaments with the ACE slot each
+  comes from (same material and nearest colour picked in advance), bed
+  levelling and flow calibration, and *Print*; the slider scrubs its layers.
+- **ACE** page: the four spools (the one feeding turns), humidity and
+  temperature in the box, drying with presets per material.
+- **Statistics** page: prints, success rate, hours, filament; the last two
+  weeks as bars (what failed or was stopped in red); filament by colour; the
+  last prints. A print that ends sends a notification.
+- Header: the chamber light, the camera – its stream in a window of its own
+  (`CameraWindow`), closing it stops the stream – and pop-out: the same
+  panel as a window (`PrinterWindow`), kept as `windowed` in printer.json.
+- `>printer` in the launcher, `scripts/ipc.sh printer open|toggle|tab <print|ace|stats>|window|camera|light|refresh|pause|resume`,
   `printer show <job folder>`.
 
-`~/.local/state/pshell/printer.json` holds `address`, `inbox`, `jobs` and
-`options` (bed levelling / flow calibration before a print). Without an
-address the panel asks for one. The pictures live in
-`~/.cache/pshell/printer/<job>` and are drawn again when they are missing.
+`~/.local/state/pshell/printer.json` holds `address`, `inbox`, `jobs`,
+`options` and `windowed`; `printer-history.json` the prints that ended.
+Without an address the panel asks for one. A job's preview lives in
+`~/.cache/pshell/printer/<job>`: `model.bin` (the 3D part), `top-NNN.png`,
+`model.png` (cards), `thumb.png`; it is drawn again when missing or older.
+
+## The 3D part
+
+`scripts/printer/mesh.py` turns every extruding move (straight runs merged,
+about two thirds remain) into one row of a Qt Quick 3D instance table:
+a `#Cube` stretched to the move's length, line width and layer height. The
+panel draws the table twice with `FileInstancing` and its own shaders
+(`core/views/panels/printer/shaders/`): solid below the cut, outer walls
+faint above it. The cut is a uniform, so following the printer costs
+nothing. Needs `qt6-quick3d`.
 
 ## The printer's side
 
@@ -45,7 +66,11 @@ firmware 2.7.2.7:
   the printer's own MQTT broker (`kobra.handshake`). **When :18910 does not
   answer although LAN mode is on, restart the printer** – it was closed
   until a restart once.
-- `:9883` is that broker (TLS, self-signed). `info` (queried every 5 s while
+- `:9883` is that broker (TLS, self-signed). Light is `light`/`control`,
+  the camera `video`/`startCapture` (the stream is `:18088/flv`; the
+  printer turns its light on with it), speed `print`/`update`, drying
+  `multiColorBox`/`setDry`.
+- `info` (queried every 5 s while
   busy, 15 s otherwise) carries state, temperatures and the job; `print`
   pushes progress; the ACE only answers `multiColorBox`/`getInfo`, so it is
   asked every 20 s while printing, every minute otherwise.
