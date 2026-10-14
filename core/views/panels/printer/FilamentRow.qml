@@ -14,10 +14,13 @@ RowLayout {
 
 	required property var filament
 	property int picked: -1
+	// a model is sliced for the slot's material: another one is no mistake
+	property bool adapts: false
 	signal pick(int slot)
 
 	readonly property var slot: Printer.slot(root.picked)
-	readonly property bool mismatch: root.slot !== null && String(root.slot.type).toLowerCase().split(" ")[0] !== String(root.filament.type).toLowerCase().split(" ")[0]
+	readonly property string grams: root.filament.grams !== undefined ? `${root.filament.grams} g` : root.filament.type || "Filament"
+	readonly property bool mismatch: !root.adapts && root.slot !== null && String(root.slot.type).toLowerCase().split(" ")[0] !== String(root.filament.type).toLowerCase().split(" ")[0]
 
 	spacing: 10
 
@@ -43,7 +46,7 @@ RowLayout {
 
 		StyledText {
 			Layout.fillWidth: true
-			text: root.mismatch ? `Slot holds ${root.slot.type}` : (root.slot ? `${root.filament.grams} g · from slot ${root.slot.slot + 1}` : `${root.filament.grams} g`)
+			text: root.mismatch ? `Slot holds ${root.slot.type}` : (root.slot ? (root.adapts ? `printed as ${root.slot.type} from slot ${root.slot.slot + 1}` : `${root.grams} · from slot ${root.slot.slot + 1}`) : root.grams)
 			tone: root.mismatch ? Theme.warning : Theme.textMuted
 			font.pixelSize: Theme.size.small
 		}

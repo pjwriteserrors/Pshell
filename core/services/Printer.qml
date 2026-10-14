@@ -71,6 +71,18 @@ Singleton {
 	// oldest first: { name, job, ended, minutes, result, progress, layers, grams, filaments }
 	property var history: []
 
+	// ── slicing (OrcaSlicer's presets, scripts/printer/slicer.py) ─────────
+	property bool slicerAvailable: false
+	// [{ name, layer, user, fits, made }] – this printer's first
+	property var profiles: []
+	property var beds: []
+	property string defaultBed: "High Temp Plate"
+	// the profile Orca last used with this printer
+	property string defaultProcess: ""
+	// what the last model was sliced with; a new model starts from it
+	property var slicing: ({ process: "", bed: "", supports: null, infill: null, brim: null, orient: false })
+	property bool importing: false
+
 	readonly property var ended: ["finished", "stoped", "stopped", "canceled", "failed"]
 	readonly property bool printing: root.project !== null && !root.ended.includes(String(root.project.state ?? ""))
 	readonly property bool paused: root.printing && (Number(root.project.pause ?? 0) === 1 || root.project.state === "paused")
@@ -163,7 +175,7 @@ Singleton {
 	}
 
 	function nameOf(file) {
-		const name = String(file ?? "").replace(/\.gcode(\.3mf)?$/i, "").replace(/_(PLA|PETG|ABS|ASA|TPU|PA|PC)[^_]*_[\d.]+_(\d+[dhms])+$/i, "");
+		const name = String(file ?? "").replace(/\.(gcode\.3mf|gcode|stl|3mf|obj|step|stp)$/i, "").replace(/_p\d+$/, "").replace(/_(PLA|PETG|ABS|ASA|TPU|PA|PC)[^_]*_[\d.]+_(\d+[dhms])+$/i, "");
 		return name.replace(/[+_]/g, " ").replace(/\s+/g, " ").trim();
 	}
 
@@ -221,6 +233,63 @@ Singleton {
 		root.send({ op: "print", id, mapping, settings: root.options });
 	}
 
+	// ── slicing ───────────────────────────────────────────────────────────
+	// the settings a model is sliced with: its own, else the last ones, else the first profile for this printer
+	function sliceSettings(job) {
+		const own = job?.slice ?? {};
+		const known = name => name && root.profiles.some(p => p.name === name) ? name : "";
+		const process = own.process || known(root.slicing.process) || known(root.defaultProcess) || (root.profiles.find(p => p.fits)?.name ?? "");
+		return {
+			process,
+			bed: own.bed || root.slicing.bed || root.defaultBed,
+			supports: own.supports !== undefined ? own.supports : root.slicing.supports,
+			infill: own.infill !== undefined ? own.infill : root.slicing.infill,
+			brim: own.brim !== undefined ? own.brim : root.slicing.brim,
+			orient: own.orient !== undefined ? !!own.orient : !!root.slicing.orient,
+			filaments: own.filaments ?? []
+		};
+	}
+
+	// the model's colours as the ACE slots picked for them print them
+	function sliceFilaments(job, mapping) {
+		return root.filamentsOf(job).map(filament => {
+			const pick = (mapping ?? []).find(entry => entry.tool === filament.tool);
+			const slot = pick ? root.slot(pick.slot) : null;
+			return { tool: filament.tool, type: slot?.type || filament.type || "PLA", color: slot?.color ?? filament.color };
+		});
+	}
+
+	function sliceJob(job, settings) {
+		if (!job || job.kind !== "model") return;
+		const next = Object.assign({}, settings);
+		root.send({ op: "slice", id: job.id, settings: next });
+		const kept = Object.assign({}, next);
+		delete kept.filaments;
+		root.slicing = kept;
+		root.save();
+	}
+
+	function setPlate(id, plate) {
+		root.send({ op: "plate", id, plate });
+	}
+
+	function layOnFace(id, face) {
+		root.send({ op: "lay", id, face });
+	}
+
+	function resetPlacement(id) {
+		root.send({ op: "unlay", id });
+	}
+
+	function loadProfiles() {
+		root.send({ op: "profiles" });
+	}
+
+	// the desktop's file chooser; a preset or a bundle goes into Orca's presets
+	function importProfile() {
+		if (!picker.running) picker.running = true;
+	}
+
 	function setOption(key, value) {
 		const next = Object.assign({}, root.options);
 		next[key] = value;
@@ -234,7 +303,7 @@ Singleton {
 	}
 
 	function save() {
-		settings.setText(JSON.stringify({ address: root.address, inbox: root.inbox, jobs: root.jobsDir, options: root.options, windowed: root.windowed }, null, "\t") + "\n");
+		settings.setText(JSON.stringify({ address: root.address, inbox: root.inbox, jobs: root.jobsDir, options: root.options, windowed: root.windowed, slicing: root.slicing }, null, "\t") + "\n");
 	}
 
 	// ── surface ───────────────────────────────────────────────────────────
@@ -295,9 +364,15 @@ Singleton {
 		return best;
 	}
 
+	// a model's own colours before it is sliced, a G-code's after
+	function filamentsOf(job) {
+		if (job?.kind === "model") return job.filaments ?? [];
+		return job?.meta?.filaments ?? [];
+	}
+
 	function suggestAll(job) {
 		const out = [];
-		for (const filament of job?.meta?.filaments ?? []) {
+		for (const filament of root.filamentsOf(job)) {
 			const slot = root.suggest(filament, out.map(pick => pick.slot));
 			out.push({ tool: filament.tool, slot });
 		}
@@ -359,6 +434,7 @@ Singleton {
 				cache: `${Paths.cache}/printer`,
 				history: Paths.stateFile("printer-history.json")
 			}) + "\n");
+			root.loadProfiles();
 			break;
 		case "conn":
 			root.online = !!data.online;
@@ -398,6 +474,20 @@ Singleton {
 		case "history":
 			root.history = data.items ?? [];
 			break;
+		case "profiles":
+			root.slicerAvailable = !!data.available;
+			root.profiles = data.processes ?? [];
+			root.beds = data.beds ?? [];
+			root.defaultBed = data.bed || root.defaultBed;
+			root.defaultProcess = data.process ?? "";
+			break;
+		case "imported":
+			root.importing = false;
+			if ((data.names ?? []).length > 0)
+				Notifs.pushInternal("done", "Profile imported", data.names.join(", "), { icon: "printer_3d" });
+			else
+				Notifs.pushInternal("error", "Nothing imported", "No process or filament profile in that file", { icon: "printer_3d" });
+			break;
 		case "render": {
 			const next = Object.assign({}, root.renders);
 			if (data.done >= data.total) delete next[data.id];
@@ -432,7 +522,8 @@ Singleton {
 				Notifs.pushInternal("error", "Printer", `${data.action}: ${data.msg || data.code}`, { icon: "printer_3d" });
 			break;
 		case "error":
-			if (["print", "render", "inbox", "light", "camera", "dry", "speed", "pause", "resume", "stop"].includes(data.what))
+			if (data.what === "import") root.importing = false;
+			if (["print", "render", "inbox", "light", "camera", "dry", "speed", "pause", "resume", "stop", "import", "lay", "unlay"].includes(data.what))
 				Notifs.pushInternal("error", data.what === "print" ? "Print failed" : "Printer", data.msg ?? "", { icon: "printer_3d" });
 			break;
 		}
@@ -455,6 +546,7 @@ Singleton {
 				if (data.jobs) root.jobsDir = data.jobs;
 				if (data.options && typeof data.options === "object") root.options = Object.assign({}, root.options, data.options);
 				root.windowed = data.windowed === true;
+				if (data.slicing && typeof data.slicing === "object") root.slicing = Object.assign({}, root.slicing, data.slicing);
 			} catch (error) {}
 			root.loaded = true;
 		}
@@ -483,6 +575,19 @@ Singleton {
 
 		interval: 4000
 		onTriggered: if (root.enabled && root.configured && !daemon.running) daemon.running = true
+	}
+
+	Process {
+		id: picker
+
+		command: ["python3", `${Paths.scripts}/pick_files.py`, "Import a slicer profile"]
+		stdout: SplitParser {
+			onRead: line => {
+				if (line.trim() === "") return;
+				root.importing = true;
+				root.send({ op: "import", path: line.trim() });
+			}
+		}
 	}
 
 	Timer {

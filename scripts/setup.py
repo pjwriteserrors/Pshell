@@ -67,6 +67,7 @@ PROGRAMS = {
     "niri-settings": [("jq", "display setups")],
     "sounds": [("udevadm", "USB sounds"), ("findmnt", "drive sounds"), ("ffmpeg", "installing sound packs")],
     "connections": [("ss", "the sockets of the apps")],
+    "printer": [("orca-slicer", "slicing STL and 3MF models (OrcaSlicer)")],
     "filemanager": [("fd", "searching names"), ("rg", "searching contents"), ("pdftoppm", "PDF thumbnails"),
                     ("git", "what changed in a repository"), ("rsync", "syncing two folders, sending to a server"),
                     ("tesseract", "text in pictures: names for screenshots, search"), ("curl", "sharing a link"),
@@ -100,7 +101,7 @@ PYTHON_MODULES = {
     "filemanager": [("gi", "folders, jobs, drives (python-gobject; gnome-desktop-4 for thumbnails, gvfs for phones and shares)"), ("PIL", "fast thumbnails"),
                     ("pikepdf", "PDF tools (python-pikepdf)"), ("vdf", "adding games to Steam (python-vdf)")],
     "files-default": [("dbus", "\"Show in folder\" of other apps")],
-    "printer": [("cryptography", "the printer's LAN handshake (python-cryptography)"), ("PIL", "the layer pictures")],
+    "printer": [("cryptography", "the printer's LAN handshake (python-cryptography)"), ("PIL", "the layer pictures"), ("numpy", "laying an STL on a face")],
 }
 # the phone daemon runs with the system's python, whatever `python3` is in the shell
 PHONE_PYTHON = "/usr/bin/python3"

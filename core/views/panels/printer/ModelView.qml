@@ -2,6 +2,8 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick3D
+import QtQuick3D.Helpers
+import Quickshell.Io
 import qs.style.theme
 import qs.core.services
 import qs.style.widgets
@@ -12,8 +14,74 @@ import qs.style.widgets
 // the cut runs. Dragging turns it (and lets it spin on), the wheel zooms, a
 // double click puts the view back; left alone it turns slowly by itself.
 // A job that is not printing builds itself up once when it is shown.
+// In lay mode (an STL) the faces the part can rest on show under the
+// pointer; a click on one lays the part on it (facePicked).
 Item {
 	id: root
+
+	// ── laying on a face ─────────────────────────────────────────────────
+	property bool layMode: false
+	// [{ normal, offset, area, center, triangles }] in bed coordinates
+	property var faces: []
+	property int hoveredFace: -1
+	// faces in a colour no filament and no heat has
+	readonly property color faceColor: "#3ad0ff"
+	signal facePicked(int index)
+
+	onLayModeChanged: root.hoveredFace = -1
+
+	FileView {
+		id: facesFile
+
+		path: root.job?.facesFile && (root.job?.faces ?? []).length > 0 ? root.job.facesFile : ""
+		watchChanges: true
+		printErrors: false
+		onLoaded: {
+			try {
+				root.faces = JSON.parse(text());
+			} catch (error) {
+				root.faces = [];
+			}
+		}
+		onPathChanged: if (path === "") root.faces = []
+		onFileChanged: reload()
+	}
+
+	// a face's triangles in the scene (y up), a hair off the surface
+	function positionsOf(face) {
+		const out = [];
+		const t = face.triangles ?? [];
+		const n = face.normal;
+		const off = 0.15;
+		for (let i = 0; i + 2 < t.length; i += 3)
+			out.push(Qt.vector3d(t[i] + n[0] * off, t[i + 2] + n[2] * off, -(t[i + 1] + n[1] * off)));
+		return out;
+	}
+	readonly property var allFacePositions: root.layMode ? root.faces.reduce((all, face) => all.concat(root.positionsOf(face)), []) : []
+	readonly property var hoverPositions: root.layMode && root.hoveredFace >= 0 && root.hoveredFace < root.faces.length ? root.positionsOf(root.faces[root.hoveredFace]) : []
+
+	// the face under the pointer, from the picked point's normal and height
+	function faceAt(x, y) {
+		const result = view.pick(x, y);
+		if (!result || result.objectHit !== faceHull) return -1;
+		const n = result.sceneNormal;
+		const bedNormal = [n.x, -n.z, n.y];
+		const p = result.scenePosition;
+		const local = [p.x + root.cx, -(p.z - root.cy), p.y - root.lift];
+		let best = -1;
+		let bestGap = Infinity;
+		for (let i = 0; i < root.faces.length; i += 1) {
+			const f = root.faces[i].normal;
+			const dot = f[0] * bedNormal[0] + f[1] * bedNormal[1] + f[2] * bedNormal[2];
+			if (Math.abs(dot) < 0.97) continue;
+			const gap = Math.abs(f[0] * local[0] + f[1] * local[1] + f[2] * local[2] - root.faces[i].offset);
+			if (gap < bestGap) {
+				bestGap = gap;
+				best = i;
+			}
+		}
+		return best;
+	}
 
 	property var job: null
 	// the printer's layer while it prints, -1 otherwise
@@ -168,7 +236,7 @@ Item {
 
 	// left alone, it turns slowly
 	FrameAnimation {
-		running: root.visible && root.ready && !root.held && !spin.running && !homing.running && !arrive.running
+		running: root.visible && root.ready && !root.held && !root.layMode && !spin.running && !homing.running && !arrive.running
 		onTriggered: {
 			if (Date.now() - root.idleSince > 3500) root.yaw += frameTime * 7;
 		}
@@ -264,6 +332,38 @@ Item {
 							duration: 600
 						}
 					}
+				}
+			}
+
+			// the faces the part can rest on: invisible but pickable, the one pointed at lit
+			Model {
+				id: faceHull
+
+				visible: root.layMode && root.allFacePositions.length > 0
+				pickable: root.layMode
+				geometry: ProceduralMesh {
+					positions: root.allFacePositions
+				}
+				materials: PrincipledMaterial {
+					lighting: PrincipledMaterial.NoLighting
+					baseColor: Qt.alpha(root.faceColor, 0.16)
+					alphaMode: PrincipledMaterial.Blend
+					cullMode: Material.NoCulling
+					depthDrawMode: Material.NeverDepthDraw
+				}
+			}
+
+			Model {
+				visible: root.hoverPositions.length > 0
+				geometry: ProceduralMesh {
+					positions: root.hoverPositions
+				}
+				materials: PrincipledMaterial {
+					lighting: PrincipledMaterial.NoLighting
+					baseColor: Qt.alpha(root.faceColor, 0.75)
+					alphaMode: PrincipledMaterial.Blend
+					cullMode: Material.NoCulling
+					depthDrawMode: Material.NeverDepthDraw
 				}
 			}
 
@@ -371,11 +471,20 @@ Item {
 	TapHandler {
 		enabled: root.ready
 		onDoubleTapped: root.home()
+		onTapped: eventPoint => {
+			if (!root.layMode) return;
+			const face = root.faceAt(eventPoint.position.x, eventPoint.position.y);
+			if (face >= 0) root.facePicked(face);
+		}
 	}
 
 	HoverHandler {
 		enabled: root.ready
-		cursorShape: drag.active ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+		cursorShape: root.layMode ? (root.hoveredFace >= 0 ? Qt.PointingHandCursor : Qt.CrossCursor) : (drag.active ? Qt.ClosedHandCursor : Qt.OpenHandCursor)
+		onPointChanged: {
+			if (root.layMode && !drag.active) root.hoveredFace = root.faceAt(point.position.x, point.position.y);
+		}
+		onHoveredChanged: if (!hovered) root.hoveredFace = -1
 	}
 
 	// waiting for the part: the slicer's picture, a spinner
@@ -402,7 +511,7 @@ Item {
 
 		StyledText {
 			anchors.horizontalCenter: parent.horizontalCenter
-			text: "Building the part"
+			text: root.job?.slicing ? "Slicing" : (root.job?.kind === "model" && !root.job?.file ? "Waiting for the slicer" : "Building the part")
 			tone: Theme.textMuted
 			font.pixelSize: Theme.size.label
 		}

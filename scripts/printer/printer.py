@@ -14,13 +14,22 @@ stdin and writes one JSON event per line on stdout.
   it over MQTT with the slots picked for each of the file's filaments.
 - Keeps a history of the prints that ended (history.json), also of the
   last one that ended while it was not running, as the printer remembers it.
+- A model (STL, 3MF, OBJ, STEP) in the inbox becomes a job that is sliced
+  here with OrcaSlicer (slicer.py) – with the profile, plate, supports and
+  infill the panel asks for, and the filament of the ACE slot each of the
+  model's colours is printed from; a 3MF of several plates gives a G-code
+  each. An STL can be laid on one of its faces first (placement.py). A
+  sliced 3MF (.gcode.3mf) is taken as its plates' G-code. A slicer profile
+  (.json, or an Orca or Bambu bundle) in the inbox is imported into Orca's.
 
 Commands: config {address, inbox, jobs, cache, history} (first, once) ·
 refresh · print {id, mapping: [{tool, slot}], settings} · pause · resume ·
 stop · light {on} · camera {on} · speed {mode} · dry {on, temp, minutes} ·
-forget {id} · rerender {id}
+forget {id} · rerender {id} · slice {id, settings} · plate {id, plate} ·
+lay {id, face} · unlay {id} · profiles · import {path}
 Events: ready · conn · status · progress · ace · light · jobs · arrived ·
-render · upload · started · answer · history · ended · error
+render · upload · started · answer · history · ended · profiles ·
+imported · error
 """
 
 import ctypes
@@ -41,10 +50,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gcode  # noqa: E402
 import kobra  # noqa: E402
 import mesh  # noqa: E402
+import placement  # noqa: E402
+import slicer  # noqa: E402
 
 IN_CLOSE_WRITE = 0x08
 IN_MOVED_TO = 0x80
-SUFFIXES = (".gcode",)
+SUFFIXES = (".gcode",) + slicer.MODELS + slicer.PROFILES
 # what a job is in while it runs; anything else (or none) means it ended
 ACTIVE = {"preheating", "auto_leveling", "vibrating", "flow_calibrating", "printing", "pausing", "paused",
           "resuming", "resumed", "stopping", "updated", "downloading", "checking"}
@@ -71,6 +82,23 @@ def remote_name(name):
     return re.sub(r"[^\w.+()-]+", "_", name)
 
 
+def kind_of(name):
+    lower = name.lower()
+    if lower.endswith(".gcode.3mf"):
+        return "sliced"
+    if lower.endswith(".gcode"):
+        return "gcode"
+    if lower.endswith(slicer.MODELS):
+        return "model"
+    if lower.endswith(slicer.PROFILES):
+        return "profile"
+    return ""
+
+
+def stem_of(name):
+    return re.sub(r"\.(gcode\.3mf|gcode|stl|3mf|obj|step|stp)$", "", name, flags=re.I)
+
+
 class Jobs:
     """The job folders: <jobs>/<id>/{<file>, job.json}; pictures in <cache>/<id>."""
 
@@ -86,8 +114,9 @@ class Jobs:
             job = self._load(name)
             if job:
                 job.setdefault("remote", remote_name(job["name"]))
+                job["slicing"] = False
                 self.items[job["id"]] = job
-                if job.get("previewVersion") != PREVIEW or not os.path.exists(os.path.join(job["preview"], "model.bin")):
+                if job.get("file") and (job.get("previewVersion") != PREVIEW or not os.path.exists(os.path.join(job["preview"], "model.bin"))):
                     self.renders.put(job["id"])
         threading.Thread(target=self._renderer, daemon=True).start()
 
@@ -99,11 +128,14 @@ class Jobs:
             return None
         job["id"] = name
         job["dir"] = os.path.join(self.root, name)
-        job["preview"] = os.path.join(self.cache, name)
+        job["preview"] = self.preview_of(job)
         return job
 
+    def preview_of(self, job):
+        return os.path.join(self.cache, job["id"], str(job.get("previewKey", 0)))
+
     def save(self, job):
-        kept = {k: v for k, v in job.items() if k not in ("dir", "preview")}
+        kept = {k: v for k, v in job.items() if k not in ("dir", "preview", "slicing")}
         path = os.path.join(job["dir"], "job.json")
         with open(path + ".tmp", "w") as target:
             json.dump(kept, target, indent=1)
@@ -119,22 +151,37 @@ class Jobs:
             matches = [job for job in self.items.values() if job.get("remote") == filename]
         return max(matches, key=lambda job: job.get("printed", 0)) if matches else None
 
-    def take(self, path):
-        """Moves a new file from the inbox into a job folder of its own."""
+    def take(self, path, defaults=None):
+        """Moves a new file from the inbox into a job folder of its own: a G-code
+        as it is, a sliced 3MF as its plates, a model to be sliced."""
         name = os.path.basename(path)
-        stem = re.sub(r"[^\w.+()-]+", "_", name[: -len(".gcode")] if name.endswith(".gcode") else name)[:80]
+        kind = kind_of(name)
+        stem = re.sub(r"[^\w.+()-]+", "_", stem_of(name))[:80]
         ident = time.strftime("%Y%m%d-%H%M%S-") + stem
         folder = os.path.join(self.root, ident)
         os.makedirs(folder, exist_ok=True)
         target = os.path.join(folder, name)
         shutil.move(path, target)
-        job = {"id": ident, "name": name, "file": target, "added": now_ms(), "status": "new", "meta": None, "frames": 0,
-               "remote": remote_name(name), "dir": folder, "preview": os.path.join(self.cache, ident)}
+        job = {"id": ident, "name": name, "kind": "gcode", "file": target, "added": now_ms(), "status": "new", "meta": None,
+               "frames": 0, "remote": remote_name(name), "dir": folder, "previewKey": 0}
+        if kind == "sliced":
+            plates = slicer.sliced_plates(target, os.path.join(folder, "plates"))
+            job.update(kind="sliced", source=target, plates=len(plates), plate=1, file=plates[0] if plates else "",
+                       remote=remote_name(f"{stem_of(name)}_p1.gcode"))
+        elif kind == "model":
+            job.update(kind="model", source=target, file="", plates=0, plate=1, status="unsliced",
+                       format=os.path.splitext(name)[1].lower().lstrip("."),
+                       filaments=slicer.model_filaments(target), slice=dict(defaults or {}), sliceError="")
+        job["preview"] = self.preview_of(job)
         with self.lock:
             self.items[ident] = job
         self.save(job)
-        self.renders.put(ident)
+        if job["file"]:
+            self.renders.put(ident)
         return job
+
+    def plate_file(self, job, plate):
+        return os.path.join(job["dir"], "plates", f"plate_{plate}.gcode")
 
     def update(self, ident, **fields):
         with self.lock:
@@ -165,9 +212,14 @@ class Jobs:
                 continue
             try:
                 model = gcode.read(job["file"])
-                self.update(ident, meta=model["meta"], frames=0, shape=None, rendering=True)
-                shutil.rmtree(job["preview"], ignore_errors=True)
+                old = os.path.join(self.cache, ident)
+                key = int(job.get("previewKey", 0)) + 1
+                # a new folder each time: the panel sees the path change and loads it
+                shutil.rmtree(old, ignore_errors=True)
+                job["previewKey"] = key
+                job["preview"] = self.preview_of(job)
                 os.makedirs(job["preview"], exist_ok=True)
+                self.update(ident, meta=model["meta"], frames=0, shape=None, rendering=True, previewKey=key, preview=job["preview"])
                 shape = mesh.write(model, os.path.join(job["preview"], "model.bin"))
                 # the part turns in the panel as soon as it is there
                 self.update(ident, shape=shape)
@@ -231,6 +283,126 @@ class History:
         self.publish()
         if live:
             emit("ended", **entry)
+
+
+class Slicing:
+    """Slices model jobs, one at a time; a newer request for a job replaces
+    one that still waits. Orca's presets are read again after an import."""
+
+    def __init__(self, jobs):
+        self.jobs = jobs
+        self.cond = threading.Condition()
+        self.pending = {}
+        self._presets = None
+        # the placed STL is written by lay() and read by a slice
+        self.placing = threading.Lock()
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def presets(self, fresh=False):
+        if fresh or self._presets is None:
+            self._presets = slicer.Presets()
+        return self._presets
+
+    def bed(self):
+        machine = self.presets().flat(self.presets().machine_path())
+        try:
+            points = [tuple(float(v) for v in p.split("x")) for p in machine.get("printable_area", [])]
+            return [max(p[0] for p in points), max(p[1] for p in points)]
+        except (ValueError, TypeError):
+            return [250.0, 250.0]
+
+    def profiles(self, fresh=False):
+        presets = self.presets(fresh)
+        emit("profiles", available=bool(slicer.executable()), processes=presets.processes(),
+             beds=slicer.BEDS[1:5], bed=presets.bed, process=presets.process, machine=presets.machine_name)
+
+    def request(self, ident, settings):
+        with self.cond:
+            self.pending[ident] = settings
+            self.cond.notify()
+
+    def _run(self):
+        while True:
+            with self.cond:
+                while not self.pending:
+                    self.cond.wait()
+                ident, settings = next(iter(self.pending.items()))
+                del self.pending[ident]
+            try:
+                self._slice(ident, settings)
+            except Exception as error:  # a model Orca cannot take must not stop the daemon
+                self.jobs.update(ident, slicing=False, sliceError=str(error))
+                emit("error", what="slice", id=ident, msg=str(error))
+
+    def placed(self, job, fresh=False):
+        """The STL as it lies on the bed (placement.py), made on first use; its faces with it."""
+        path = os.path.join(job["dir"], "placed.stl")
+        if fresh or not os.path.exists(path):
+            triangles = placement.place(placement.read_stl(job["source"]), self.bed())
+            placement.write_stl(path, triangles)
+            self.faces(job, triangles)
+        return path
+
+    def faces(self, job, triangles):
+        found = placement.faces(triangles)
+        target = os.path.join(job["dir"], "faces.json")
+        summary = placement.write_faces(target, found)
+        self.jobs.update(job["id"], faces=summary, facesFile=target, facesKey=now_ms())
+
+    def lay(self, ident, index):
+        job = self.jobs.items.get(ident)
+        if not job or job.get("format") != "stl":
+            return
+        faces = job.get("faces") or []
+        if not 0 <= index < len(faces):
+            return
+        with self.placing:
+            path = self.placed(job)
+            triangles, _rotation = placement.lay(placement.read_stl(path), faces[index]["normal"], self.bed())
+            placement.write_stl(path, triangles)
+            self.faces(job, triangles)
+        settings = dict(job.get("slice") or {}, orient=False)
+        self.request(ident, settings)
+
+    def unlay(self, ident):
+        job = self.jobs.items.get(ident)
+        if not job or job.get("format") != "stl":
+            return
+        with self.placing:
+            self.placed(job, fresh=True)
+        self.request(ident, dict(job.get("slice") or {}, orient=False))
+
+    def _slice(self, ident, settings):
+        job = self.jobs.items.get(ident)
+        if not job or job.get("kind") != "model":
+            return
+        self.jobs.update(ident, slicing=True, sliceError="", slice=settings)
+        stl = job.get("format") == "stl"
+        orient = bool(settings.get("orient"))
+        filaments = settings.get("filaments") or job.get("filaments") or [{"tool": 0, "type": "PLA", "color": [220, 220, 220]}]
+        started = time.monotonic()
+        with self.placing:
+            if stl and not orient:
+                model = self.placed(job)
+                arrange = False
+            else:
+                model = job["source"]
+                # a 3MF keeps the plates it was made with
+                arrange = job.get("format") != "3mf"
+                if stl:
+                    self.jobs.update(ident, faces=[])
+            options = dict(settings, arrange=arrange, orient=orient and job.get("format") != "3mf")
+            plates, error = slicer.slice_model(self.presets(), model, os.path.join(job["dir"], "plates"),
+                                               settings.get("process") or "", filaments, options)
+        if error:
+            self.jobs.update(ident, slicing=False, sliceError=error, status="unsliced")
+            emit("error", what="slice", id=ident, msg=error)
+            return
+        plate = min(max(1, int(job.get("plate") or 1)), len(plates))
+        self.jobs.update(ident, slicing=False, plates=len(plates), plate=plate, file=plates[plate - 1], status="new",
+                         remote=remote_name(f"{stem_of(job['name'])}_p{plate}.gcode"), sliced=now_ms(),
+                         sliceSeconds=round(time.monotonic() - started, 1))
+        self.jobs.renders.put(ident)
 
 
 def watch(inbox, arrived):
@@ -375,7 +547,7 @@ class Printer:
 
 def print_job(printer, jobs, job, mapping, settings):
     ident = job["id"]
-    remote = remote_name(job["name"])
+    remote = job.get("remote") or remote_name(job["name"])
     try:
         size = os.path.getsize(job["file"])
         jobs.update(ident, status="uploading")
@@ -442,6 +614,7 @@ def main():
     jobs.publish()
     history.publish()
     printer = Printer(config["address"], history)
+    slicing = Slicing(jobs)
 
     def arrived(path):
         # Orca writes in one go, but a copy may still be growing: wait for a still size
@@ -455,9 +628,19 @@ def main():
                 break
             size = now
             time.sleep(0.25)
+        if kind_of(os.path.basename(path)) == "profile":
+            try:
+                imported = slicing.presets().import_file(path)
+                os.remove(path)
+            except (OSError, ValueError) as error:
+                emit("error", what="import", msg=str(error))
+                return
+            emit("imported", names=[name for _kind, name in imported], kinds=[kind for kind, _name in imported])
+            slicing.profiles(fresh=True)
+            return
         try:
             job = jobs.take(path)
-        except OSError as error:
+        except (OSError, ValueError) as error:
             emit("error", what="inbox", msg=str(error))
             return
         jobs.publish()
@@ -498,7 +681,27 @@ def main():
             elif op == "rerender":
                 if command.get("id") in jobs.items:
                     jobs.renders.put(command["id"])
-        except OSError as error:
+            elif op == "slice":
+                if command.get("id") in jobs.items:
+                    slicing.request(command["id"], command.get("settings") or {})
+            elif op == "plate":
+                job = jobs.items.get(command.get("id"))
+                plate = int(command.get("plate") or 1)
+                if job and 1 <= plate <= int(job.get("plates") or 0):
+                    jobs.update(job["id"], plate=plate, file=jobs.plate_file(job, plate),
+                                remote=remote_name(f"{stem_of(job['name'])}_p{plate}.gcode"))
+                    jobs.renders.put(job["id"])
+            elif op == "lay":
+                threading.Thread(target=slicing.lay, args=(command.get("id"), int(command.get("face", -1))), daemon=True).start()
+            elif op == "unlay":
+                threading.Thread(target=slicing.unlay, args=(command.get("id"),), daemon=True).start()
+            elif op == "profiles":
+                threading.Thread(target=slicing.profiles, args=(True,), daemon=True).start()
+            elif op == "import":
+                imported = slicing.presets().import_file(os.path.expanduser(command.get("path", "")))
+                emit("imported", names=[name for _kind, name in imported], kinds=[kind for kind, _name in imported])
+                slicing.profiles(fresh=True)
+        except Exception as error:  # one bad command must not stop the daemon
             emit("error", what=op, msg=str(error))
 
 

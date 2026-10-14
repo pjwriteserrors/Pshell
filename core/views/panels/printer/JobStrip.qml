@@ -87,7 +87,29 @@ ListView {
 			anchors.verticalCenterOffset: -10
 			width: 20
 			height: 20
-			visible: !!card.modelData.rendering
+			visible: !!card.modelData.rendering || !!card.modelData.slicing
+		}
+
+		// what came in: a model to slice, a sliced 3MF
+		Rectangle {
+			anchors.top: parent.top
+			anchors.left: parent.left
+			anchors.margins: 7
+			width: kindText.implicitWidth + 10
+			height: 16
+			radius: 8
+			visible: card.modelData.kind === "model" || card.modelData.kind === "sliced"
+			color: Qt.alpha(Theme.primary, 0.18)
+
+			StyledText {
+				id: kindText
+
+				anchors.centerIn: parent
+				text: String(card.modelData.format || "3mf").toUpperCase()
+				font.pixelSize: 9
+				font.weight: Font.Bold
+				tone: Theme.primary
+			}
 		}
 
 		StyledText {

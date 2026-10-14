@@ -23,6 +23,13 @@ Item {
 	readonly property bool mapped: root.mapping.length > 0 && root.mapping.every(pick => pick.slot >= 0)
 	readonly property bool sending: root.job !== null && (root.job.status === "uploading" || Printer.uploads[root.job.id] !== undefined)
 
+	// ── a model, sliced here ─────────────────────────────────────────────
+	readonly property bool isModel: root.job?.kind === "model"
+	readonly property bool isStl: root.isModel && root.job?.format === "stl"
+	readonly property bool sliced: root.isModel && !!root.job?.file && !root.job?.slicing && (root.job?.plates ?? 0) > 0
+	readonly property var settings: Printer.sliceSettings(root.job)
+	property bool layMode: false
+
 	function remap() {
 		root.mapping = Printer.suggestAll(root.job);
 	}
@@ -31,8 +38,47 @@ Item {
 		root.mapping = root.mapping.map(entry => entry.tool === tool ? { tool, slot } : entry);
 	}
 
-	onJobChanged: root.remap()
+	// one setting changed: slice again with it
+	function edit(key, value) {
+		const next = Object.assign({}, root.settings);
+		next[key] = value;
+		next.filaments = Printer.sliceFilaments(root.job, root.mapping);
+		if (key === "orient" && value) root.layMode = false;
+		Printer.sliceJob(root.job, next);
+	}
+
+	// slices a model that never was, and again when its slots changed
+	function autoSlice() {
+		if (!root.isModel || !root.job || root.job.slicing || !root.settings.process) return;
+		const filaments = Printer.sliceFilaments(root.job, root.mapping);
+		const unsliced = root.job.status === "unsliced" && !root.job.sliceError;
+		const changed = root.job.slice?.filaments !== undefined && JSON.stringify(root.job.slice.filaments) !== JSON.stringify(filaments);
+		if (unsliced || changed)
+			Printer.sliceJob(root.job, Object.assign({}, root.settings, { filaments }));
+	}
+
+	onJobChanged: {
+		root.layMode = false;
+		root.remap();
+		slicer.restart();
+	}
+	onMappingChanged: slicer.restart()
 	Component.onCompleted: root.remap()
+
+	Connections {
+		target: Printer
+
+		function onProfilesChanged() {
+			slicer.restart();
+		}
+	}
+
+	Timer {
+		id: slicer
+
+		interval: 700
+		onTriggered: root.autoSlice()
+	}
 
 	Connections {
 		target: Printer
@@ -82,6 +128,156 @@ Item {
 				anchors.margins: 2
 				job: root.job
 				liveLayer: root.showsLive ? Printer.layer : -1
+				layMode: root.layMode
+				opacity: root.job?.slicing && ready ? 0.45 : 1
+				onFacePicked: index => {
+					Printer.layOnFace(root.job.id, index);
+					root.layMode = false;
+				}
+
+				Behavior on opacity {
+					Anim {}
+				}
+			}
+
+			// slicing again: the old part dims under a spinner
+			Column {
+				anchors.centerIn: parent
+				spacing: 10
+				visible: !!root.job?.slicing && model.ready
+
+				Spinner {
+					anchors.horizontalCenter: parent.horizontalCenter
+					width: 36
+					height: 36
+				}
+
+				StyledText {
+					anchors.horizontalCenter: parent.horizontalCenter
+					text: `Slicing with ${root.settings.process}`
+					font.pixelSize: Theme.size.label
+				}
+			}
+
+			// what went wrong when there is no part to show
+			EmptyState {
+				anchors.centerIn: parent
+				visible: root.isModel && !root.job?.slicing && !!root.job?.sliceError && !model.ready
+				icon: "alert_circle_outline"
+				title: "Could not slice"
+				subtitle: root.job?.sliceError ?? ""
+			}
+
+			// laying an STL on a face, turning it automatically, back as it came
+			Row {
+				anchors.right: parent.right
+				anchors.top: parent.top
+				anchors.margins: 10
+				spacing: 4
+				visible: root.isStl && model.ready && !root.job?.slicing
+
+				Repeater {
+					model: [
+						{ icon: "arrow_collapse_down", checked: root.layMode, label: "Lay on face", run: () => root.layMode = !root.layMode },
+						{ icon: "auto_fix", checked: !!root.settings.orient, label: "Auto orient", run: () => root.edit("orient", !root.settings.orient) },
+						{ icon: "restore", checked: false, label: "As it came", run: () => {
+							root.layMode = false;
+							if (root.settings.orient) root.edit("orient", false);
+							else Printer.resetPlacement(root.job.id);
+						} }
+					]
+
+					delegate: Clickable {
+						id: tool
+
+						required property var modelData
+
+						width: toolRow.implicitWidth + 20
+						height: 30
+						radius: 15
+						color: tool.modelData.checked ? Theme.primary : Qt.alpha(Theme.bg, 0.7)
+						border.width: 1
+						border.color: tool.modelData.checked ? Theme.primary : Theme.outline
+						onClicked: tool.modelData.run()
+
+						Behavior on color {
+							ColorAnim {}
+						}
+
+						Row {
+							id: toolRow
+
+							anchors.centerIn: parent
+							spacing: 5
+
+							Glyph {
+								anchors.verticalCenter: parent.verticalCenter
+								icon: tool.modelData.icon
+								size: 14
+								color: tool.modelData.checked ? Theme.onPrimary : Theme.text
+							}
+
+							StyledText {
+								anchors.verticalCenter: parent.verticalCenter
+								text: tool.modelData.label
+								font.pixelSize: Theme.size.small
+								tone: tool.modelData.checked ? Theme.onPrimary : Theme.text
+							}
+						}
+					}
+				}
+			}
+
+			// what lay mode asks for
+			Rectangle {
+				anchors.horizontalCenter: parent.horizontalCenter
+				anchors.bottom: parent.bottom
+				anchors.bottomMargin: 46
+				width: layHint.implicitWidth + 28
+				height: 32
+				radius: 16
+				color: Theme.primary
+				opacity: root.layMode ? 1 : 0
+				scale: root.layMode ? 1 : 0.9
+				visible: opacity > 0.01
+
+				Behavior on opacity {
+					Anim {}
+				}
+				Behavior on scale {
+					SpatialAnim {}
+				}
+
+				StyledText {
+					id: layHint
+
+					anchors.centerIn: parent
+					text: model.hoveredFace >= 0 ? "Click to lay the part on this face" : "Point at a flat face of the part"
+					tone: Theme.onPrimary
+					font.pixelSize: Theme.size.label
+					font.weight: Font.DemiBold
+				}
+			}
+
+			// the plates of a 3MF
+			Row {
+				anchors.left: parent.left
+				anchors.bottom: scrubber.visible ? scrubber.top : parent.bottom
+				anchors.margins: 12
+				spacing: 6
+				visible: (root.job?.plates ?? 0) > 1
+
+				Repeater {
+					model: root.job?.plates ?? 0
+
+					delegate: Chip {
+						required property int index
+
+						text: `Plate ${index + 1}`
+						selected: (root.job?.plate ?? 1) === index + 1
+						onClicked: Printer.setPlate(root.job.id, index + 1)
+					}
+				}
 			}
 
 			EmptyState {
@@ -122,7 +318,7 @@ Item {
 				anchors.top: parent.top
 				anchors.margins: 16
 				spacing: 6
-				visible: model.ready
+				visible: model.ready && !root.isStl
 				opacity: model.idleSince === 0 ? 0.6 : 0
 
 				Behavior on opacity {
@@ -236,6 +432,16 @@ Item {
 		Item {
 			Layout.fillWidth: true
 			Layout.fillHeight: true
+
+			ProfileMenu {
+				id: menu
+
+				anchors.fill: parent
+				z: 10
+				current: root.settings.process
+				onPicked: name => root.edit("process", name)
+				onOpenChanged: if (open) Printer.loadProfiles()
+			}
 
 			Repeater {
 				model: ["live", "job", "idle"]
@@ -534,67 +740,91 @@ Item {
 				}
 			}
 
-			SectionLabel {
-				Layout.topMargin: 4
-				text: (root.job?.meta?.filaments ?? []).length > 1 ? "Filaments → ACE slots" : "Filament → ACE slot"
-			}
+			Flickable {
+				id: options
 
-			Repeater {
-				model: root.job?.meta?.filaments ?? []
-
-				delegate: FilamentRow {
-					required property var modelData
-
-					Layout.fillWidth: true
-					filament: modelData
-					picked: root.mapping.find(entry => entry.tool === modelData.tool)?.slot ?? -1
-					onPick: slot => root.pick(modelData.tool, slot)
-				}
-			}
-
-			StyledText {
 				Layout.fillWidth: true
-				visible: Printer.online && Printer.slots.length === 0
-				text: "The ACE has not answered yet"
-				tone: Theme.textMuted
-				font.pixelSize: Theme.size.small
-			}
+				Layout.fillHeight: true
+				contentHeight: optionColumn.implicitHeight
+				clip: true
+				boundsBehavior: Flickable.StopAtBounds
 
-			Repeater {
-				model: [
-					{ key: "leveling", label: "Level the bed first", icon: "grid" },
-					{ key: "flow", label: "Calibrate the flow", icon: "water_percent" }
-				]
+				ColumnLayout {
+					id: optionColumn
 
-				delegate: RowLayout {
-					id: option
+					width: options.width
+					spacing: 12
 
-					required property var modelData
+					SliceControls {
+						Layout.fillWidth: true
+						visible: root.isModel
+						job: root.job
+						settings: root.settings
+						onEdit: (key, value) => root.edit(key, value)
+						onOpenProfiles: menu.open = true
+					}
 
-					Layout.fillWidth: true
-					spacing: 8
+					SectionLabel {
+						Layout.topMargin: 4
+						text: Printer.filamentsOf(root.job).length > 1 ? "Filaments → ACE slots" : "Filament → ACE slot"
+					}
 
-					Glyph {
-						icon: option.modelData.icon
-						size: 15
-						color: Theme.textMuted
+					Repeater {
+						model: Printer.filamentsOf(root.job)
+
+						delegate: FilamentRow {
+							required property var modelData
+
+							Layout.fillWidth: true
+							filament: modelData
+							// a model is sliced for the slot's material
+							adapts: root.isModel
+							picked: root.mapping.find(entry => entry.tool === modelData.tool)?.slot ?? -1
+							onPick: slot => root.pick(modelData.tool, slot)
+						}
 					}
 
 					StyledText {
 						Layout.fillWidth: true
-						text: option.modelData.label
-						font.pixelSize: Theme.size.label
+						visible: Printer.online && Printer.slots.length === 0
+						text: "The ACE has not answered yet"
+						tone: Theme.textMuted
+						font.pixelSize: Theme.size.small
 					}
 
-					Toggle {
-						checked: !!Printer.options[option.modelData.key]
-						onToggled: checked => Printer.setOption(option.modelData.key, checked)
+					Repeater {
+						model: [
+							{ key: "leveling", label: "Level the bed first", icon: "grid" },
+							{ key: "flow", label: "Calibrate the flow", icon: "water_percent" }
+						]
+
+						delegate: RowLayout {
+							id: option
+
+							required property var modelData
+
+							Layout.fillWidth: true
+							spacing: 8
+
+							Glyph {
+								icon: option.modelData.icon
+								size: 15
+								color: Theme.textMuted
+							}
+
+							StyledText {
+								Layout.fillWidth: true
+								text: option.modelData.label
+								font.pixelSize: Theme.size.label
+							}
+
+							Toggle {
+								checked: !!Printer.options[option.modelData.key]
+								onToggled: checked => Printer.setOption(option.modelData.key, checked)
+							}
+						}
 					}
 				}
-			}
-
-			Item {
-				Layout.fillHeight: true
 			}
 
 			StyledText {
