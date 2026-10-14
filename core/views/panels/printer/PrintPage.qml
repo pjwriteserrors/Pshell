@@ -44,13 +44,26 @@ Item {
 		});
 	}
 
+	// another slot: sliced again only for another material, else just painted
 	function pick(tool, slot) {
+		if (root.mapping.some(entry => entry.tool === tool && entry.slot === slot)) return;
 		root.mapping = root.mapping.map(entry => entry.tool === tool ? { tool, slot } : entry);
 		Printer.remember(root.job, root.mapping);
+		if (root.isModel && root.job.slice?.filaments !== undefined) {
+			const filaments = Printer.sliceFilaments(root.job, root.mapping);
+			if (Printer.needsSlice(root.job, filaments))
+				Printer.sliceJob(root.job, Object.assign({}, root.settings, { filaments, mapping: root.mapping }));
+			else
+				Printer.recolor(root.job, root.mapping);
+		} else if (!root.isModel) {
+			Printer.recolor(root.job, root.mapping);
+		}
 	}
 
 	// one setting changed: slice again with it
 	function edit(key, value) {
+		// the same again (a profile picked that was picked) changes nothing
+		if (root.job?.slice?.filaments !== undefined && JSON.stringify(root.settings[key] ?? null) === JSON.stringify(value ?? null)) return;
 		const next = Object.assign({}, root.settings);
 		next[key] = value;
 		next.filaments = Printer.sliceFilaments(root.job, root.mapping);
@@ -59,14 +72,12 @@ Item {
 		Printer.sliceJob(root.job, next);
 	}
 
-	// slices a model that never was, and again when its slots changed
+	// slices a model that never was – and nothing else: a model is sliced
+	// again only for a setting changed by hand or a slot of another material
 	function autoSlice() {
 		if (!root.isModel || !root.job || root.job.slicing || !root.settings.process) return;
-		const filaments = Printer.sliceFilaments(root.job, root.mapping);
-		const unsliced = root.job.status === "unsliced" && !root.job.sliceError;
-		const changed = root.job.slice?.filaments !== undefined && JSON.stringify(root.job.slice.filaments) !== JSON.stringify(filaments);
-		if (unsliced || changed)
-			Printer.sliceJob(root.job, Object.assign({}, root.settings, { filaments, mapping: root.mapping }));
+		if (root.job.status !== "unsliced" || root.job.sliceError || root.job.slice?.filaments !== undefined) return;
+		Printer.sliceJob(root.job, Object.assign({}, root.settings, { filaments: Printer.sliceFilaments(root.job, root.mapping), mapping: root.mapping }));
 	}
 
 	// the daemon sends a job anew with every change (a slice, a picture):
@@ -77,7 +88,6 @@ Item {
 		root.remap();
 		slicer.restart();
 	}
-	onMappingChanged: slicer.restart()
 	Component.onCompleted: root.remap()
 
 	Connections {

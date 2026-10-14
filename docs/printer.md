@@ -72,7 +72,12 @@ of its own.
   one) is sliced with Anycubic's preset for the material of the ACE slot it
   is printed from (`PLA Matte` → PLA) and in that slot's colour. Picking
   another slot slices again.
-- Every change slices again; the old part dims under a spinner meanwhile.
+- A setting changed by hand slices again (the old part dims under a spinner
+  meanwhile); so does a slot of another material. A slot of the same
+  material in another colour only paints the part anew (`mesh.recolor`,
+  written as a new file: Quick 3D maps the one it shows, and a file cut
+  short under it ends in SIGBUS). Opening the profile list, syncing the ACE
+  or the same value picked again slice nothing.
   A 3MF of several plates keeps its plates, one G-code each, switched with
   the chips on the part. The last settings are the next model's.
 - **Lay on face** (STL): the faces the part can rest on show in cyan; the

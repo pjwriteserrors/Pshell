@@ -25,7 +25,7 @@ stdin and writes one JSON event per line on stdout.
 Commands: config {address, inbox, jobs, cache, history} (first, once) ·
 refresh · print {id, mapping: [{tool, slot}], settings} · pause · resume ·
 stop · light {on} · camera {on} · speed {mode} · dry {on, temp, minutes} ·
-ace · forget {id} · rerender {id} · slice {id, settings} · plate {id, plate} ·
+ace · recolor {id, mapping, colours} · forget {id} · rerender {id} · slice {id, settings} · plate {id, plate} ·
 lay {id, face} · unlay {id} · profiles · import {path}
 Events: ready · conn · status · progress · ace · light · jobs · arrived ·
 render · upload · started · answer · history · ended · profiles ·
@@ -61,7 +61,7 @@ ACTIVE = {"preheating", "auto_leveling", "vibrating", "flow_calibrating", "print
           "resuming", "resumed", "stopping", "updated", "downloading", "checking"}
 ENDINGS = {"finished": "finished", "stoped": "stopped", "stopped": "stopped", "canceled": "stopped", "failed": "failed"}
 # the preview of a job as this version draws it; older ones are drawn again
-PREVIEW = 2
+PREVIEW = 3
 
 out_lock = threading.Lock()
 
@@ -192,6 +192,30 @@ class Jobs:
         self.save(job)
         self.publish()
         return job
+
+    def recolor(self, ident, mapping, colours):
+        """Another slot of the same material: the part takes its colour, nothing is sliced."""
+        job = self.items.get(ident)
+        if not job or not job.get("shape"):
+            return
+        old = job["preview"]
+        key = int(job.get("previewKey", 0)) + 1
+        new = os.path.join(self.cache, ident, str(key))
+        # a new folder with a new file: the panel sees the path change and
+        # loads it; the old file is only removed (never rewritten) – the
+        # panel still has it mapped
+        shutil.copytree(old, new, ignore=shutil.ignore_patterns("model.bin"))
+        mesh.recolor(os.path.join(old, "model.bin"), os.path.join(new, "model.bin"),
+                     {int(tool): colour for tool, colour in colours.items()})
+        meta = dict(job.get("meta") or {})
+        meta["filaments"] = [dict(f, color=colours.get(str(f["tool"]), colours.get(f["tool"], f["color"]))) for f in meta.get("filaments", [])]
+        fields = {"previewKey": key, "preview": new, "meta": meta, "mapping": mapping}
+        if job.get("kind") == "model":
+            fields["slice"] = dict(job.get("slice") or {}, mapping=mapping,
+                                   filaments=[dict(f, color=colours.get(str(f["tool"]), f.get("color"))) for f in (job.get("slice") or {}).get("filaments", [])])
+        self.update(ident, **fields)
+        # the panel has moved on to the new folder by then
+        threading.Timer(5, shutil.rmtree, args=(old,), kwargs={"ignore_errors": True}).start()
 
     def forget(self, ident):
         with self.lock:
@@ -664,6 +688,8 @@ def main():
                     threading.Thread(target=print_job, args=(printer, jobs, job, command.get("mapping") or [], command.get("settings") or {}), daemon=True).start()
             elif op in ("pause", "resume", "stop"):
                 printer.send("print", op, {"taskid": "-1"}, slicer=True)
+            elif op == "recolor":
+                jobs.recolor(command.get("id"), command.get("mapping") or [], command.get("colours") or {})
             elif op == "ace":
                 # what the ACE holds now: asked, not changed
                 printer.send("multiColorBox", "getInfo", None)

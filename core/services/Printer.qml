@@ -264,6 +264,33 @@ Singleton {
 		});
 	}
 
+	// the filament preset a slot's material is sliced with (slicer.py MATERIALS): "PLA Matte" is PLA
+	readonly property var materials: ["PLA HIGH SPEED", "PLA SILK", "PLA+", "PLA", "PETG", "ABS", "ASA", "TPU", "PA6-CF", "PAHT-CF", "PC-CF", "PC-GF", "PA", "PC", "PEBA"]
+	function materialOf(type) {
+		const text = String(type || "PLA").toUpperCase();
+		return root.materials.find(known => text.startsWith(known)) ?? "PLA";
+	}
+
+	// whether picking other slots needs another slice: only another material does
+	function needsSlice(job, filaments) {
+		const before = job?.slice?.filaments ?? [];
+		return filaments.some(filament => {
+			const old = before.find(entry => entry.tool === filament.tool);
+			return !old || root.materialOf(old.type) !== root.materialOf(filament.type);
+		});
+	}
+
+	// the same material in another colour: the part is painted, not sliced
+	function recolor(job, mapping) {
+		if (!job) return;
+		const colours = {};
+		for (const pick of mapping) {
+			const slot = root.slot(pick.slot);
+			if (slot) colours[String(pick.tool)] = slot.color;
+		}
+		root.send({ op: "recolor", id: job.id, mapping, colours });
+	}
+
 	function sliceJob(job, settings) {
 		if (!job || job.kind !== "model") return;
 		const next = Object.assign({}, settings);

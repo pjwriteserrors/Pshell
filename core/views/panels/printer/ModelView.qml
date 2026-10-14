@@ -155,7 +155,9 @@ Item {
 		}
 	}
 
-	onJobChanged: Qt.callLater(root.build)
+	// only another job builds itself up again, not the same one sent anew (a new colour, a picture)
+	readonly property string jobId: root.job?.id ?? ""
+	onJobIdChanged: Qt.callLater(root.build)
 	onReadyChanged: if (root.ready) Qt.callLater(root.build)
 
 	ParallelAnimation {
