@@ -153,6 +153,8 @@ Item {
 				anchors.margins: 2
 				job: root.job
 				liveLayer: root.showsLive ? Printer.layer : -1
+				// the panel's view or the window's: only the one that shows has a scene
+				alive: root.windowed ? Printer.windowed && Printer.windowOpen : !Printer.windowed && Popups.current === "printer"
 				layMode: root.layMode
 				opacity: root.job?.slicing && ready ? 0.45 : 1
 				onFacePicked: index => {

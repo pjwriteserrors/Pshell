@@ -62,8 +62,8 @@ Item {
 
 	// the face under the pointer, from the picked point's normal and height
 	function faceAt(x, y) {
-		const result = view.pick(x, y);
-		if (!result || result.objectHit !== faceHull) return -1;
+		const result = scene.item?.pick(x, y);
+		if (!result || result.objectHit?.objectName !== "faceHull") return -1;
 		const n = result.sceneNormal;
 		const bedNormal = [n.x, -n.z, n.y];
 		const p = result.scenePosition;
@@ -244,178 +244,206 @@ Item {
 		}
 	}
 
-	View3D {
-		id: view
+	// The scene is made anew each time the panel opens and dropped when it
+	// closes: Qt Quick 3D 6.12 aborts (an assert in QSSGRenderRoot::reindex)
+	// when it sets up the renderer again for a scene that changed while the
+	// window was hidden – a running print does that all the time.
+	// whether the surface this view is on shows (PrintPage says which: the panel or the window)
+	property bool alive: Printer.shown
+	onAliveChanged: if (!root.alive) drop.restart()
+	Timer {
+		id: drop
+
+		// the panel's closing animation still shows the part
+		interval: 450
+	}
+
+	Loader {
+		id: scene
 
 		anchors.fill: parent
-		opacity: root.intro
-		visible: root.ready
+		active: (root.alive || drop.running) && root.ready
+		sourceComponent: sceneComponent
+	}
 
-		environment: SceneEnvironment {
-			backgroundMode: SceneEnvironment.Transparent
-			antialiasingMode: SceneEnvironment.MSAA
-			antialiasingQuality: SceneEnvironment.High
-			aoEnabled: true
-			aoStrength: 55
-			aoDistance: root.size * 0.04
-			aoSoftness: 40
-			tonemapMode: SceneEnvironment.TonemapModeLinear
-		}
+	Component {
+		id: sceneComponent
 
-		Node {
-			id: pivot
+		View3D {
+			id: view
 
-			position: Qt.vector3d(0, root.height3d * 0.42, 0)
-			eulerRotation: Qt.vector3d(root.pitch, root.yaw + root.swing, 0)
+			anchors.fill: parent
+			opacity: root.intro
+			visible: root.ready
 
-			PerspectiveCamera {
-				z: root.size * 2.3 / root.zoom
-				fieldOfView: 32
-				clipNear: 1
-				clipFar: 5000
+			environment: SceneEnvironment {
+				backgroundMode: SceneEnvironment.Transparent
+				antialiasingMode: SceneEnvironment.MSAA
+				antialiasingQuality: SceneEnvironment.High
+				aoEnabled: true
+				aoStrength: 55
+				aoDistance: root.size * 0.04
+				aoSoftness: 40
+				tonemapMode: SceneEnvironment.TonemapModeLinear
 			}
-		}
 
-		DirectionalLight {
-			eulerRotation: Qt.vector3d(-52, root.yaw - 40, 0)
-			brightness: 1.25
-			ambientColor: Qt.rgba(0.42, 0.43, 0.46, 1)
-			castsShadow: true
-			shadowMapQuality: Light.ShadowMapQualityHigh
-			shadowFactor: 35
-			shadowBias: 0.4
-		}
+			Node {
+				id: pivot
 
-		DirectionalLight {
-			eulerRotation: Qt.vector3d(-18, root.yaw + 150, 0)
-			brightness: 0.45
-		}
+				position: Qt.vector3d(0, root.height3d * 0.42, 0)
+				eulerRotation: Qt.vector3d(root.pitch, root.yaw + root.swing, 0)
 
-		// the bed under the part
-		Model {
-			source: "#Rectangle"
-			eulerRotation.x: -90
-			scale: Qt.vector3d(root.size * 0.07, root.size * 0.07, 1)
-			materials: CustomMaterial {
-				property color tint: Theme.fg
-				property vector2d center: Qt.vector2d(0, 0)
-				property real spacing: 10
-				property real radius: root.size * 2.2
-				property real opacity: root.intro
-				shadingMode: CustomMaterial.Unshaded
-				sourceBlend: CustomMaterial.SrcAlpha
-				destinationBlend: CustomMaterial.OneMinusSrcAlpha
-				depthDrawMode: Material.NeverDepthDraw
-				vertexShader: Qt.resolvedUrl("shaders/plane.vert")
-				fragmentShader: Qt.resolvedUrl("shaders/bed.frag")
-			}
-		}
-
-		Node {
-			// the part's middle on the bed's
-			position: Qt.vector3d(-root.cx, root.lift, root.cy)
-
-			Model {
-				source: "#Cube"
-				instancing: FileInstancing {
-					source: root.ready ? `file://${root.job.preview}/model.bin` : ""
+				PerspectiveCamera {
+					z: root.size * 2.3 / root.zoom
+					fieldOfView: 32
+					clipNear: 1
+					clipFar: 5000
 				}
+			}
+
+			DirectionalLight {
+				eulerRotation: Qt.vector3d(-52, root.yaw - 40, 0)
+				brightness: 1.25
+				ambientColor: Qt.rgba(0.42, 0.43, 0.46, 1)
+				castsShadow: true
+				shadowMapQuality: Light.ShadowMapQualityHigh
+				shadowFactor: 35
+				shadowBias: 0.4
+			}
+
+			DirectionalLight {
+				eulerRotation: Qt.vector3d(-18, root.yaw + 150, 0)
+				brightness: 0.45
+			}
+
+			// the bed under the part
+			Model {
+				source: "#Rectangle"
+				eulerRotation.x: -90
+				scale: Qt.vector3d(root.size * 0.07, root.size * 0.07, 1)
 				materials: CustomMaterial {
-					property real cut: root.cut
-					property real layerHeight: root.layerHeight
-					property real lift: root.lift
-					property real glow: root.complete && !root.live ? 0 : 1
-					property color hot: Printer.hot
-					vertexShader: Qt.resolvedUrl("shaders/part.vert")
-					fragmentShader: Qt.resolvedUrl("shaders/part.frag")
-
-					Behavior on glow {
-						NumberAnimation {
-							duration: 600
-						}
-					}
-				}
-			}
-
-			// the faces the part can rest on: invisible but pickable, the one pointed at lit
-			Model {
-				id: faceHull
-
-				visible: root.layMode && root.allFacePositions.length > 0
-				pickable: root.layMode
-				geometry: ProceduralMesh {
-					positions: root.allFacePositions
-				}
-				materials: PrincipledMaterial {
-					lighting: PrincipledMaterial.NoLighting
-					baseColor: Qt.alpha(root.faceColor, 0.16)
-					alphaMode: PrincipledMaterial.Blend
-					cullMode: Material.NoCulling
-					depthDrawMode: Material.NeverDepthDraw
-				}
-			}
-
-			Model {
-				visible: root.hoverPositions.length > 0
-				geometry: ProceduralMesh {
-					positions: root.hoverPositions
-				}
-				materials: PrincipledMaterial {
-					lighting: PrincipledMaterial.NoLighting
-					baseColor: Qt.alpha(root.faceColor, 0.75)
-					alphaMode: PrincipledMaterial.Blend
-					cullMode: Material.NoCulling
-					depthDrawMode: Material.NeverDepthDraw
-				}
-			}
-
-			Model {
-				source: "#Cube"
-				instancing: FileInstancing {
-					source: root.ready ? `file://${root.job.preview}/model.bin` : ""
-				}
-				materials: CustomMaterial {
-					property real cut: root.cut
-					property real lift: root.lift
-					property real opacity: 0.06
 					property color tint: Theme.fg
+					property vector2d center: Qt.vector2d(0, 0)
+					property real spacing: 10
+					property real radius: root.size * 2.2
+					property real opacity: root.intro
 					shadingMode: CustomMaterial.Unshaded
 					sourceBlend: CustomMaterial.SrcAlpha
 					destinationBlend: CustomMaterial.OneMinusSrcAlpha
 					depthDrawMode: Material.NeverDepthDraw
-					vertexShader: Qt.resolvedUrl("shaders/ghost.vert")
-					fragmentShader: Qt.resolvedUrl("shaders/ghost.frag")
+					vertexShader: Qt.resolvedUrl("shaders/plane.vert")
+					fragmentShader: Qt.resolvedUrl("shaders/bed.frag")
 				}
 			}
-		}
 
-		// the sheet where the part is cut
-		Model {
-			id: sheet
+			Node {
+				// the part's middle on the bed's
+				position: Qt.vector3d(-root.cx, root.lift, root.cy)
 
-			property real time: 0
+				Model {
+					source: "#Cube"
+					instancing: FileInstancing {
+						source: root.ready ? `file://${root.job.preview}/model.bin` : ""
+					}
+					materials: CustomMaterial {
+						property real cut: root.cut
+						property real layerHeight: root.layerHeight
+						property real lift: root.lift
+						property real glow: root.complete && !root.live ? 0 : 1
+						property color hot: Printer.hot
+						vertexShader: Qt.resolvedUrl("shaders/part.vert")
+						fragmentShader: Qt.resolvedUrl("shaders/part.frag")
 
-			visible: !root.complete || root.live
-			source: "#Rectangle"
-			eulerRotation.x: -90
-			y: root.cut + root.lift + 0.05
-			scale: Qt.vector3d((root.bounds[2] - root.bounds[0] + 8) / 100, (root.bounds[3] - root.bounds[1] + 8) / 100, 1)
-			materials: CustomMaterial {
-				property color hot: Printer.hot
-				property real time: sheet.time
-				property real opacity: root.intro
-				shadingMode: CustomMaterial.Unshaded
-				sourceBlend: CustomMaterial.SrcAlpha
-				destinationBlend: CustomMaterial.One
-				depthDrawMode: Material.NeverDepthDraw
-				cullMode: Material.NoCulling
-				vertexShader: Qt.resolvedUrl("shaders/plane.vert")
-				fragmentShader: Qt.resolvedUrl("shaders/cut.frag")
+						Behavior on glow {
+							NumberAnimation {
+								duration: 600
+							}
+						}
+					}
+				}
+
+				// the faces the part can rest on: invisible but pickable, the one pointed at lit
+				Model {
+					id: faceHull
+
+				objectName: "faceHull"
+
+					visible: root.layMode && root.allFacePositions.length > 0
+					pickable: root.layMode
+					geometry: ProceduralMesh {
+						positions: root.allFacePositions
+					}
+					materials: PrincipledMaterial {
+						lighting: PrincipledMaterial.NoLighting
+						baseColor: Qt.alpha(root.faceColor, 0.16)
+						alphaMode: PrincipledMaterial.Blend
+						cullMode: Material.NoCulling
+						depthDrawMode: Material.NeverDepthDraw
+					}
+				}
+
+				Model {
+					visible: root.hoverPositions.length > 0
+					geometry: ProceduralMesh {
+						positions: root.hoverPositions
+					}
+					materials: PrincipledMaterial {
+						lighting: PrincipledMaterial.NoLighting
+						baseColor: Qt.alpha(root.faceColor, 0.75)
+						alphaMode: PrincipledMaterial.Blend
+						cullMode: Material.NoCulling
+						depthDrawMode: Material.NeverDepthDraw
+					}
+				}
+
+				Model {
+					source: "#Cube"
+					instancing: FileInstancing {
+						source: root.ready ? `file://${root.job.preview}/model.bin` : ""
+					}
+					materials: CustomMaterial {
+						property real cut: root.cut
+						property real lift: root.lift
+						property real opacity: 0.06
+						property color tint: Theme.fg
+						shadingMode: CustomMaterial.Unshaded
+						sourceBlend: CustomMaterial.SrcAlpha
+						destinationBlend: CustomMaterial.OneMinusSrcAlpha
+						depthDrawMode: Material.NeverDepthDraw
+						vertexShader: Qt.resolvedUrl("shaders/ghost.vert")
+						fragmentShader: Qt.resolvedUrl("shaders/ghost.frag")
+					}
+				}
 			}
 
-			FrameAnimation {
-				running: root.visible && sheet.visible
-				onTriggered: sheet.time += frameTime
+			// the sheet where the part is cut
+			Model {
+				id: sheet
+
+				property real time: 0
+
+				visible: !root.complete || root.live
+				source: "#Rectangle"
+				eulerRotation.x: -90
+				y: root.cut + root.lift + 0.05
+				scale: Qt.vector3d((root.bounds[2] - root.bounds[0] + 8) / 100, (root.bounds[3] - root.bounds[1] + 8) / 100, 1)
+				materials: CustomMaterial {
+					property color hot: Printer.hot
+					property real time: sheet.time
+					property real opacity: root.intro
+					shadingMode: CustomMaterial.Unshaded
+					sourceBlend: CustomMaterial.SrcAlpha
+					destinationBlend: CustomMaterial.One
+					depthDrawMode: Material.NeverDepthDraw
+					cullMode: Material.NoCulling
+					vertexShader: Qt.resolvedUrl("shaders/plane.vert")
+					fragmentShader: Qt.resolvedUrl("shaders/cut.frag")
+				}
+
+				FrameAnimation {
+					running: root.visible && sheet.visible
+					onTriggered: sheet.time += frameTime
+				}
 			}
 		}
 	}

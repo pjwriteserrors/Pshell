@@ -105,6 +105,11 @@ panel draws the table twice with `FileInstancing` and its own shaders
 faint above it. The cut is a uniform, so following the printer costs
 nothing. Needs `qt6-quick3d`.
 
+The scene lives only while its surface shows (the panel or the window) and is
+made anew when it opens: Qt Quick 3D 6.12 aborts (an assert in
+`QSSGRenderRoot::reindex`) when it sets the renderer up again for a scene
+that changed while the window was hidden, which a running print always does.
+
 ## The printer's side
 
 Anycubic does not document the LAN protocol; this follows what
