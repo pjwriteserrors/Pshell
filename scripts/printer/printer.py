@@ -25,7 +25,7 @@ stdin and writes one JSON event per line on stdout.
 Commands: config {address, inbox, jobs, cache, history} (first, once) ·
 refresh · print {id, mapping: [{tool, slot}], settings} · pause · resume ·
 stop · light {on} · camera {on} · speed {mode} · dry {on, temp, minutes} ·
-forget {id} · rerender {id} · slice {id, settings} · plate {id, plate} ·
+ace · forget {id} · rerender {id} · slice {id, settings} · plate {id, plate} ·
 lay {id, face} · unlay {id} · profiles · import {path}
 Events: ready · conn · status · progress · ace · light · jobs · arrived ·
 render · upload · started · answer · history · ended · profiles ·
@@ -664,6 +664,9 @@ def main():
                     threading.Thread(target=print_job, args=(printer, jobs, job, command.get("mapping") or [], command.get("settings") or {}), daemon=True).start()
             elif op in ("pause", "resume", "stop"):
                 printer.send("print", op, {"taskid": "-1"}, slicer=True)
+            elif op == "ace":
+                # what the ACE holds now: asked, not changed
+                printer.send("multiColorBox", "getInfo", None)
             elif op == "speed":
                 printer.send("print", "update", {"taskid": "-1", "settings": {"print_speed_mode": int(command.get("mode", 2))}})
             elif op == "light":

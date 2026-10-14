@@ -31,6 +31,10 @@ OrcaSlicer ──export──▶ ~/Prints/inbox/
   levelling and flow calibration, and *Print*; the slider scrubs its layers.
 - **ACE** page: the four spools (the one feeding turns), humidity and
   temperature in the box, drying with presets per material.
+- **Sync ACE** (beside the slots, on the ACE page and at rest) asks the ACE
+  again what it holds, after a spool was changed; otherwise it is asked
+  every minute. The slots picked for a job stay with it – a model keeps
+  them with its slicing settings – until another slot is picked.
 - **Statistics** page: prints, success rate, hours, filament; the last two
   weeks as bars (what failed or was stopped in red); filament by colour; the
   last prints. A print that ends sends a notification.

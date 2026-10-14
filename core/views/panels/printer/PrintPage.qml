@@ -30,12 +30,23 @@ Item {
 	readonly property var settings: Printer.sliceSettings(root.job)
 	property bool layMode: false
 
+	// the slots picked for this job before (kept per job), else the ones that fit best
 	function remap() {
-		root.mapping = Printer.suggestAll(root.job);
+		root.mapping = Printer.mappingFor(root.job);
+	}
+
+	// only what is still open, when the ACE answered late
+	function fillOpen() {
+		const suggested = Printer.suggestAll(root.job);
+		root.mapping = suggested.map(entry => {
+			const kept = root.mapping.find(pick => pick.tool === entry.tool);
+			return kept && kept.slot >= 0 ? kept : entry;
+		});
 	}
 
 	function pick(tool, slot) {
 		root.mapping = root.mapping.map(entry => entry.tool === tool ? { tool, slot } : entry);
+		Printer.remember(root.job, root.mapping);
 	}
 
 	// one setting changed: slice again with it
@@ -43,6 +54,7 @@ Item {
 		const next = Object.assign({}, root.settings);
 		next[key] = value;
 		next.filaments = Printer.sliceFilaments(root.job, root.mapping);
+		next.mapping = root.mapping;
 		if (key === "orient" && value) root.layMode = false;
 		Printer.sliceJob(root.job, next);
 	}
@@ -54,10 +66,13 @@ Item {
 		const unsliced = root.job.status === "unsliced" && !root.job.sliceError;
 		const changed = root.job.slice?.filaments !== undefined && JSON.stringify(root.job.slice.filaments) !== JSON.stringify(filaments);
 		if (unsliced || changed)
-			Printer.sliceJob(root.job, Object.assign({}, root.settings, { filaments }));
+			Printer.sliceJob(root.job, Object.assign({}, root.settings, { filaments, mapping: root.mapping }));
 	}
 
-	onJobChanged: {
+	// the daemon sends a job anew with every change (a slice, a picture):
+	// only another job starts the slots and the lay mode over
+	readonly property string jobId: root.job?.id ?? ""
+	onJobIdChanged: {
 		root.layMode = false;
 		root.remap();
 		slicer.restart();
@@ -85,7 +100,7 @@ Item {
 
 		// the ACE answered after the job was picked: fill what is still open
 		function onSlotsChanged() {
-			if (root.mapping.some(pick => pick.slot < 0)) root.remap();
+			if (root.mapping.length === 0 || root.mapping.some(pick => pick.slot < 0)) root.fillOpen();
 		}
 	}
 
@@ -764,9 +779,16 @@ Item {
 						onOpenProfiles: menu.open = true
 					}
 
-					SectionLabel {
+					RowLayout {
+						Layout.fillWidth: true
 						Layout.topMargin: 4
-						text: Printer.filamentsOf(root.job).length > 1 ? "Filaments → ACE slots" : "Filament → ACE slot"
+
+						SectionLabel {
+							Layout.fillWidth: true
+							text: Printer.filamentsOf(root.job).length > 1 ? "Filaments → ACE slots" : "Filament → ACE slot"
+						}
+
+						AceSync {}
 					}
 
 					Repeater {
@@ -924,10 +946,17 @@ Item {
 				}
 			}
 
-			SectionLabel {
+			RowLayout {
+				Layout.fillWidth: true
 				Layout.topMargin: 6
-				text: "ACE"
-				visible: Printer.slots.length > 0
+				visible: Printer.online
+
+				SectionLabel {
+					Layout.fillWidth: true
+					text: "ACE"
+				}
+
+				AceSync {}
 			}
 
 			RowLayout {

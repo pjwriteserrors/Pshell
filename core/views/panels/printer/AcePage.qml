@@ -160,8 +160,15 @@ Item {
 			Layout.fillHeight: true
 			spacing: 12
 
-			SectionLabel {
-				text: "Inside the ACE"
+			RowLayout {
+				Layout.fillWidth: true
+
+				SectionLabel {
+					Layout.fillWidth: true
+					text: "Inside the ACE"
+				}
+
+				AceSync {}
 			}
 
 			RowLayout {

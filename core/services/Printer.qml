@@ -82,6 +82,11 @@ Singleton {
 	// what the last model was sliced with; a new model starts from it
 	property var slicing: ({ process: "", bed: "", supports: null, infill: null, brim: null, orient: false })
 	property bool importing: false
+	// the slots picked per job in this session: id → [{ tool, slot }]
+	property var chosen: ({})
+	// asking the ACE what it holds
+	property bool aceSyncing: false
+	property real aceSyncedAt: 0
 
 	readonly property var ended: ["finished", "stoped", "stopped", "canceled", "failed"]
 	readonly property bool printing: root.project !== null && !root.ended.includes(String(root.project.state ?? ""))
@@ -370,6 +375,30 @@ Singleton {
 		return job?.meta?.filaments ?? [];
 	}
 
+	// the slots a job is printed from: picked before (a model keeps them with its slicing), else suggested
+	function mappingFor(job) {
+		if (!job) return [];
+		const tools = root.filamentsOf(job).map(filament => filament.tool);
+		const fits = mapping => Array.isArray(mapping) && tools.every(tool => mapping.some(pick => pick.tool === tool && pick.slot >= 0 && root.slot(pick.slot) !== null));
+		for (const kept of [root.chosen[job.id], job.slice?.mapping, job.mapping])
+			if (fits(kept)) return kept.filter(pick => tools.includes(pick.tool));
+		return root.suggestAll(job);
+	}
+
+	function remember(job, mapping) {
+		if (!job) return;
+		const next = Object.assign({}, root.chosen);
+		next[job.id] = mapping;
+		root.chosen = next;
+	}
+
+	// asks the ACE again what it holds (a spool changed, a new one went in)
+	function syncAce() {
+		root.aceSyncing = true;
+		aceTimeout.restart();
+		root.send({ op: "ace" });
+	}
+
 	function suggestAll(job) {
 		const out = [];
 		for (const filament of root.filamentsOf(job)) {
@@ -466,6 +495,8 @@ Singleton {
 			break;
 		case "ace":
 			root.boxes = data.boxes ?? [];
+			root.aceSyncing = false;
+			root.aceSyncedAt = Date.now();
 			break;
 		case "jobs":
 			root.jobs = data.jobs ?? [];
@@ -575,6 +606,14 @@ Singleton {
 
 		interval: 4000
 		onTriggered: if (root.enabled && root.configured && !daemon.running) daemon.running = true
+	}
+
+	// the ACE did not answer: the button stops turning
+	Timer {
+		id: aceTimeout
+
+		interval: 8000
+		onTriggered: root.aceSyncing = false
 	}
 
 	Process {
