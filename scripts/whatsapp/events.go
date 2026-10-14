@@ -628,13 +628,16 @@ func shown(path string, animated bool) string {
 // fetch brings a message's file from WhatsApp's servers into the cache.
 func (b *Bridge) fetch(chat, id string, asked bool) string {
 	row := b.store.message(chat, id)
-	if row == nil || row.Extra.Media == nil || len(row.Raw) == 0 {
+	if row == nil || row.Extra.Media == nil {
 		return ""
 	}
 	if path := row.Extra.Media.Path; path != "" {
 		if _, err := os.Stat(path); err == nil {
 			return path
 		}
+	}
+	if len(row.Raw) == 0 {
+		return ""
 	}
 	msg := &waE2E.Message{}
 	if proto.Unmarshal(row.Raw, msg) != nil {

@@ -17,7 +17,7 @@ import re
 from html.parser import HTMLParser
 
 # bodies kept by an older version are read again
-VERSION = 7
+VERSION = 8
 
 BLOCKS = {
     "p", "div", "tr", "table", "ul", "ol", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre",
@@ -49,6 +49,11 @@ CLOSING = re.compile(
 MOBILE = re.compile(r"^\s*(?:Sent from my |Gesendet von (?:meinem|Mail|Outlook)|Von meinem .{2,30} gesendet|Get Outlook for |Outlook für .{2,12} beziehen|Diese Nachricht wurde von meinem)", re.I)
 URL = re.compile(r"((?:https?://|www\.)[^\s<>\"')\]]+[^\s<>\"')\].,;:!?])")
 FORWARD = re.compile(r"^\s*(?:fwd?|wg|tr|i)\s*:", re.I)
+HEADER_FIELD = re.compile(r"^\s*\**(Von|From|De|Gesendet|Sent|Datum|Date|An|To|Cc|Kopie\s*\(CC\)|Betreff|Subject|Envoyé|Objet|Antwort an|Reply-To)\**\s*:\s*(.*?)\s*$", re.I)
+WROTE_DE = re.compile(r"^\s*Am (.{6,200}?) schrieb (.{1,200}?)\s*:\s*$", re.I)
+WROTE_EN = re.compile(r"^\s*On (.{6,200}?\d{1,2}:\d{2}(?:\s*[AP]M)?),?\s+(.{1,200}?)\s+wrote:\s*$", re.I)
+WROTE_FR = re.compile(r"^\s*Le (.{6,200}?),?\s+(.{1,200}?) a écrit\s*:\s*$", re.I)
+EMAIL = re.compile(r"[\w.+'-]+@[\w-]+(?:\.[\w-]+)+")
 PREFIX = re.compile(r"^\s*(?:(?:re|aw|antw|sv|fwd?|wg|tr|r)\s*(?:\[\d+\])?\s*:\s*)+", re.I)
 
 
@@ -297,6 +302,100 @@ def find_quote(lines):
     return None
 
 
+def sender(value):
+    """"Name <address>", "Name [mailto:address]" or an address alone → (name, address)."""
+    value = str(value or "").strip()
+    found = EMAIL.search(value)
+    email = found.group(0) if found else ""
+    name = re.split(r"\s*[<\[(]", value)[0].strip().strip("\"'*").strip()
+    if not name or "@" in name:
+        name = email.split("@")[0] if email else value
+    return name, email
+
+
+def mail_header(lines, index):
+    """The header a quoted mail begins with at `index`: ({name, email, date, subject}, lines it takes), or None."""
+    text = lines[index].text()
+    for pattern in (WROTE_DE, WROTE_EN, WROTE_FR):
+        found = pattern.match(text)
+        if found:
+            name, email = sender(found.group(2))
+            return {"name": name, "email": email, "date": found.group(1).strip(), "subject": ""}, 1
+    # a block of header lines, in whatever order, with who sent it among them
+    if index > 0 and HEADER_FIELD.match(lines[index - 1].text()):
+        return None
+    fields, end = {}, index
+    while end < len(lines):
+        found = HEADER_FIELD.match(lines[end].text())
+        if not found:
+            break
+        key = found.group(1).lower()
+        key = {"von": "from", "de": "from", "gesendet": "date", "sent": "date", "datum": "date", "envoyé": "date", "betreff": "subject", "objet": "subject"}.get(key, key)
+        fields.setdefault(key, found.group(2))
+        end += 1
+    if end - index < 2 or not fields.get("from"):
+        return None
+    name, email = sender(fields.get("from", ""))
+    return {"name": name, "email": email, "date": fields.get("date", ""), "subject": clean_subject(fields.get("subject", ""))}, end - index
+
+
+def unquoted(lines):
+    """Lines that all begin with ">" without it, as plain lines."""
+    return from_plain("\n".join(re.sub(r"^\s*>\s?", "", line.text()) for line in lines))
+
+
+def take_chain(lines, depth=0, source=""):
+    """A forwarded conversation → its mails, oldest first: [{name, email, date, subject, html, text}].
+
+    Empty when it does not begin with the header of a mail, or when one of its
+    mails is a layout (a forwarded newsletter is shown as it was made).
+    """
+    starts, index = [], 0
+    while index < len(lines):
+        found = mail_header(lines, index)
+        if found:
+            starts.append((index, found[0], index + found[1]))
+            index += found[1]
+        else:
+            index += 1
+    # only separators and blank lines may come before the first mail
+    if not starts or any(not line.blank() and not QUOTE_LINE.match(line.text()) for line in lines[:starts[0][0]]):
+        return []
+    chain = []
+    for number, (_, header, begin) in enumerate(starts):
+        end = starts[number + 1][0] if number + 1 < len(starts) else len(lines)
+        body = list(lines[begin:end])
+        # a layout: tables and pictures above the signature
+        if source and body and body[0].offset is not None:
+            cut = find_signature(body)
+            stop = body[cut].offset if cut else (lines[end].offset if end < len(lines) else None)
+            piece = source[body[0].offset:stop if stop is not None else len(source)]
+            if len(re.findall(r"<table", piece, re.I)) >= 2 or len(re.findall(r"<img", piece, re.I)) >= 2:
+                return []
+        # the separator of the next mail is not part of this one
+        while body and (body[-1].blank() or QUOTE_LINE.match(body[-1].text())):
+            body.pop()
+        older = []
+        # a plain mail quotes the older ones with ">" at the line starts
+        if depth < 6:
+            if all(line.blank() or line.text().lstrip().startswith(">") for line in body):
+                body = unquoted(body)
+            inner = next((at for at in range(len(body)) if mail_header(body, at)), None)
+            if inner is not None and any(not line.blank() for line in body[:inner]):
+                older = take_chain(body[inner:], depth + 1)
+                if older:
+                    body = body[:inner]
+                    while body and (body[-1].blank() or QUOTE_LINE.match(body[-1].text())):
+                        body.pop()
+        signature = find_signature(body)
+        if signature is not None and any(not line.blank() for line in body[:signature]):
+            body = body[:signature]
+        if any(not line.blank() for line in body):
+            chain.append(dict(header, html=render(body, None)[:20000], text=plain(body)[:8000]))
+        chain.extend(reversed(older))
+    return list(reversed(chain))[-40:]
+
+
 def find_signature(lines):
     for index, line in enumerate(lines):
         if line.text().rstrip("  ") in ("--", "-- ", "—", "––") and index > 0:
@@ -343,15 +442,20 @@ def split(body, is_html=True, subject="", images=None, keep_quote=False, raw=Fal
         quote_at, quote_offset = found, lines[found].offset
     # a forward is its quoted mail
     forward = keep_quote or bool(FORWARD.match(str(subject or "")))
-    quote = []
-    if quote_at is not None and not forward:
+    quote, chain = [], []
+    # a forwarded conversation: its mails one by one, what the one who forwarded it wrote above
+    if quote_at is not None and forward and not keep_quote:
+        chain = take_chain(lines[quote_at:], source=source if is_html else "")
+    if chain:
+        own = lines[:quote_at]
+    elif quote_at is not None and not forward:
         own, quote = lines[:quote_at], lines[quote_at:]
         # nothing above the quote: the mail answers inline, keep it whole
         if not any(not line.blank() for line in own):
             own, quote = lines, []
     else:
         own = lines
-    if not quote:
+    if not quote and not chain:
         quote_offset = None
 
     if signature_at is not None and signature_at >= len(own):
@@ -391,6 +495,7 @@ def split(body, is_html=True, subject="", images=None, keep_quote=False, raw=Fal
         "signatureText": plain(signature)[:4000],
         "quote": render(quote[:400], None)[:30000],
         "quoted": bool(quote),
+        "chain": chain,
         "v": VERSION,
     }
     if raw:

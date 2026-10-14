@@ -7,16 +7,22 @@ import qs.core.services
 import "../../lib/fuzzysort.js" as Fuzzy
 
 // Ctrl+K: every command of the file manager and every place to go, found
-// by typing. What the picked files can do comes first.
+// by typing. What the picked files can do comes first. With a `provider`
+// the entries come from it for what is typed (the AI line, Ctrl+Shift+A).
 Item {
 	id: root
 
 	property var commands: []
+	// query => entries, instead of searching the commands
+	property var provider: null
+	property string placeholder: "What do you want to do?"
+	property string glyph: "console_line"
 	property bool shown: false
 	property int current: 0
 	signal closed
 
 	readonly property var found: {
+		if (root.provider) return root.shown ? root.provider(field.text) : [];
 		const query = field.text.trim().toLowerCase();
 		if (query === "") return root.commands.slice(0, 80);
 		const scored = [];
@@ -124,8 +130,8 @@ Item {
 			y: 12
 			width: parent.width - 24
 			height: 46
-			icon: "console_line"
-			placeholder: "What do you want to do?"
+			icon: root.glyph
+			placeholder: root.placeholder
 			fontSize: Theme.size.title
 			onAccepted: root.run(root.current)
 			onEscapePressed: root.close()
@@ -157,7 +163,7 @@ Item {
 				required property var modelData
 				required property int index
 				// a group's title above its first command, while nothing is typed
-				readonly property bool titled: field.text.trim() === "" && (slot.index === 0 || root.found[slot.index - 1]?.group !== slot.modelData.group)
+				readonly property bool titled: (root.provider ? String(slot.modelData.group || "") !== "" : field.text.trim() === "") && (slot.index === 0 || root.found[slot.index - 1]?.group !== slot.modelData.group)
 
 				width: list.width
 				height: entry.height + (slot.titled ? 28 : 0)

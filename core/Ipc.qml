@@ -643,6 +643,28 @@ Scope {
 	}
 
 	IpcHandler {
+		target: "todos"
+		enabled: Plugins.on("todos")
+
+		// the editor on a new note (Mod+T)
+		function create(): void {
+			Todos.newNote();
+		}
+		// the editor on the note of that name, made when there is none
+		function edit(name: string): void {
+			const path = Todos.findNote(name)?.path ?? Todos.createNote(name);
+			if (path !== "") Todos.openEditor(path, -1);
+		}
+		function close(): void {
+			Todos.closeEditor();
+		}
+		// a task into a group ("" the inbox); "#group" and "!"…"!!!" in the text work too
+		function add(group: string, text: string): string {
+			return Todos.addTask(group, text);
+		}
+	}
+
+	IpcHandler {
 		target: "keepawake"
 		enabled: Plugins.on("keep-awake")
 

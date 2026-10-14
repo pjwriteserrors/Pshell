@@ -805,7 +805,17 @@ DialogFrame {
 					}
 
 					Switch {
+						label: "Include pictures"
+						checked: FileLibrary.setting("aiPictures") !== false
+						onToggled: on => {
+							FileLibrary.set("aiPictures", on);
+							if (FileLibrary.setting("aiIndex")) Qt.callLater(() => Files.indexNow());
+						}
+					}
+
+					Switch {
 						label: "Read the text in pictures and scans (OCR)"
+						enabled: FileLibrary.setting("aiPictures") !== false
 						hint: "Screenshots and scanned letters become findable by what they say; it takes a while the first time"
 						checked: FileLibrary.setting("aiOcr") !== false
 						onToggled: on => FileLibrary.set("aiOcr", on)
@@ -815,7 +825,7 @@ DialogFrame {
 						label: "Describe pictures with a picture model"
 						hint: Files.index.ai?.vision ? `With ${Files.index.ai.vision} – about a second or two per picture` : "Needs a picture model (below)"
 						checked: FileLibrary.setting("aiDescribe") !== false
-						enabled: !!Files.index.ai?.vision
+						enabled: !!Files.index.ai?.vision && FileLibrary.setting("aiPictures") !== false
 						onToggled: on => FileLibrary.set("aiDescribe", on)
 					}
 				}
@@ -825,18 +835,54 @@ DialogFrame {
 					title: "Models (Ollama)"
 
 					Line {
-						label: Files.index.ai?.running ? (Files.index.ai?.text ? `Reads questions with ${Files.index.ai.text}` : "No text model – questions are searched word by word") : "Ollama is not running – questions are searched word by word"
-						icon: Files.index.ai?.text ? "check_decagram_outline" : "alert_circle_outline"
-						tint: Files.index.ai?.text ? Theme.success : Theme.warning
+						visible: !Files.index.ai?.running
+						label: "Ollama is not running"
+						icon: "alert_circle_outline"
+						tint: Theme.warning
+					}
+
+					ModelChoice {
+						label: "Reading questions"
+						key: "understand"
+						role: "text"
+					}
+
+					ModelChoice {
+						label: "Finding by meaning"
+						key: "embed"
+						role: "embed"
+					}
+
+					ModelChoice {
+						label: "Describing pictures"
+						key: "describe"
+						role: "vision"
+					}
+
+					ModelChoice {
+						label: "Naming pictures by what they show"
+						key: "nameVision"
+						role: "vision"
+					}
+
+					ModelChoice {
+						label: "Naming pictures by their text"
+						key: "nameText"
+						role: "text"
+					}
+
+					ModelChoice {
+						label: "Translating on this PC"
+						key: "translate"
+						role: "text"
 					}
 
 					Line {
-						label: Files.index.ai?.embed ? `Finds by meaning with ${Files.index.ai.embed}` : `Search by meaning needs an embedding model: ${Files.index.ai?.suggestedEmbed ?? "nomic-embed-text"} (about 270 MB)`
-						icon: Files.index.ai?.embed ? "check_decagram_outline" : "vector_link"
-						tint: Files.index.ai?.embed ? Theme.success : Theme.textMuted
+						visible: !Files.index.ai?.embed && !!Files.index.ai?.running
+						label: `Search by meaning needs an embedding model: ${Files.index.ai?.suggestedEmbed ?? "nomic-embed-text"} (about 270 MB)`
+						icon: "vector_link"
 
 						TextButton {
-							visible: !Files.index.ai?.embed && !!Files.index.ai?.running
 							height: 30
 							variant: "filled"
 							icon: "download"
@@ -846,12 +892,11 @@ DialogFrame {
 					}
 
 					Line {
-						label: Files.index.ai?.vision ? `Sees pictures with ${Files.index.ai.vision}` : `Pictures are described with a picture model: ${Files.index.ai?.suggestedVision ?? "moondream"} (about 1.7 GB)`
-						icon: Files.index.ai?.vision ? "check_decagram_outline" : "eye_outline"
-						tint: Files.index.ai?.vision ? Theme.success : Theme.textMuted
+						visible: !Files.index.ai?.vision && !!Files.index.ai?.running
+						label: `Pictures are described with a picture model: ${Files.index.ai?.suggestedVision ?? "moondream"} (about 1.7 GB)`
+						icon: "eye_outline"
 
 						TextButton {
-							visible: !Files.index.ai?.vision && !!Files.index.ai?.running
 							height: 30
 							variant: "tonal"
 							icon: "download"
@@ -1297,6 +1342,58 @@ DialogFrame {
 			id: tail
 
 			spacing: 6
+		}
+	}
+
+	// which model a feature uses: one picked, or the one found (ai.py)
+	component ModelChoice: RowLayout {
+		id: pick
+
+		property string label: ""
+		property string key: ""
+		// text | vision | embed
+		property string role: "text"
+		readonly property var ai: Files.index.ai ?? ({})
+		readonly property var installed: (pick.ai.models ?? []).filter(name => (pick.role === "embed") === (pick.ai.embedModels ?? []).includes(name))
+		readonly property string picked: String((FileLibrary.setting("aiModels") ?? {})[pick.key] ?? "")
+		readonly property bool kept: pick.installed.includes(pick.picked)
+		readonly property string found: String(pick.ai[pick.role] ?? "")
+
+		Layout.fillWidth: true
+		spacing: 10
+
+		Glyph {
+			icon: pick.role === "embed" ? "vector_link" : (pick.role === "vision" ? "eye_outline" : "text_box_outline")
+			size: 17
+			color: Theme.textMuted
+		}
+
+		StyledText {
+			Layout.fillWidth: true
+			text: pick.label
+			wrapMode: Text.WordWrap
+		}
+
+		TextButton {
+			height: 30
+			variant: "tonal"
+			enabled: pick.installed.length > 0
+			text: pick.kept ? pick.picked : (pick.found !== "" ? `Automatic · ${pick.found}` : "None")
+			onClicked: models.open()
+
+			PickList {
+				id: models
+
+				x: parent ? parent.width - width : 0
+				y: parent ? parent.height + 4 : 0
+				current: pick.kept ? pick.picked : ""
+				entries: [{ value: "", label: "Automatic", detail: pick.found, icon: "auto_fix" }].concat(pick.installed.map(name => ({ value: name, label: name, icon: "robot_outline" })))
+				onPicked: value => {
+					FileLibrary.set("aiModels", Object.assign({}, FileLibrary.setting("aiModels") ?? {}, { [pick.key]: value }));
+					// other vectors: the index is read again
+					if (pick.key === "embed" && FileLibrary.setting("aiIndex")) Qt.callLater(() => Files.indexNow());
+				}
+			}
 		}
 	}
 

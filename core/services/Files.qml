@@ -1314,11 +1314,12 @@ Singleton {
 		});
 	}
 
-	// the newest WhatsApp chats a file can go to
-	readonly property var recentChats: WhatsApp.enabled && WhatsApp.linked ? WhatsApp.chats.filter(chat => !chat.archived).slice(0, 8) : []
+	// the people a file can go to on WhatsApp, the ones most sent to first, then the newest chats
+	readonly property var recentChats: WhatsApp.enabled && WhatsApp.linked ? WhatsApp.chats.filter(chat => !chat.group && !chat.archived).map((chat, order) => ({ chat: chat, order: order, sent: FileLibrary.sentTo[chat.id] ?? 0 })).sort((a, b) => b.sent - a.sent || a.order - b.order).map(entry => entry.chat) : []
 
 	function sendToChat(chat, paths) {
 		WhatsApp.send(chat.id, "", "", paths.map(path => ({ path: path, as: /\.(jpe?g|png|webp|gif|mp4|mov|webm)$/i.test(path) ? "" : "document" })), []);
+		FileLibrary.noteSent(chat.id);
 		Sounds.play("copied");
 		root.say(paths.length === 1 ? `Sent to ${chat.name}` : `${paths.length} files sent to ${chat.name}`, "whatsapp");
 	}
@@ -1337,8 +1338,10 @@ Singleton {
 	function indexNow() {
 		root.request("indexbuild", { settings: {
 			folders: FileLibrary.setting("aiFolders"),
+			pictures: FileLibrary.setting("aiPictures") !== false,
 			ocr: FileLibrary.setting("aiOcr") !== false,
-			describe: FileLibrary.setting("aiDescribe") !== false
+			describe: FileLibrary.setting("aiDescribe") !== false,
+			models: FileLibrary.setting("aiModels")
 		} });
 		root.index = Object.assign({}, root.index, { running: true });
 	}
@@ -1363,16 +1366,15 @@ Singleton {
 	// ── tasks about files (todos plugin) ───────────────────────────────────
 	signal tasksChanged
 
-	function rememberTask(paths, list, note) {
-		root.request("tasks", { action: "add", list: list, paths: paths, note: note || "" }, (data, error) => {
+	function rememberTask(paths, group, note) {
+		root.request("tasks", { action: "add", group: group, paths: paths, note: note || "" }, (data, error) => {
 			if (error) {
 				root.fail(error);
 				return;
 			}
-			FileLibrary.set("taskList", data.list);
-			Todos.refresh();
+			FileLibrary.set("taskGroup", data.group);
 			Sounds.play("pinned");
-			root.say(paths.length === 1 ? `A task in ${Todos.displayName(data.list)}` : `${paths.length} tasks in ${Todos.displayName(data.list)}`, "checkbox_marked_circle_outline");
+			root.say(paths.length === 1 ? `A task in ${data.group}` : `${paths.length} tasks in ${data.group}`, "checkbox_marked_circle_outline");
 			root.tasksChanged();
 		});
 	}

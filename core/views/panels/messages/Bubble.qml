@@ -22,6 +22,10 @@ Item {
 	property bool picked: false
 
 	readonly property bool mine: root.message.mine
+	// a forwarded conversation, oldest first: [{ name, email, date, html, text, right }]
+	readonly property var chain: root.message.chain ?? []
+	// a long one shows its newest mails until asked for all
+	property bool wholeChain: false
 	readonly property date when: new Date(root.message.date * 1000)
 	readonly property bool newDay: !root.previous || new Date(root.previous.date * 1000).toDateString() !== root.when.toDateString()
 	// the first of a run of mails from one person
@@ -141,9 +145,10 @@ Item {
 	}
 
 	// the colour of who wrote, where names are shown
-	readonly property color tone: {
+	readonly property color tone: root.toneOf(root.message.from.email || root.message.from.name)
+
+	function toneOf(key) {
 		let sum = 0;
-		const key = root.message.from.email || root.message.from.name;
 		for (let i = 0; i < key.length; i += 1) sum = (sum * 31 + key.charCodeAt(i)) % 360;
 		return Qt.hsla(sum / 360, 0.45, Theme.dark ? 0.62 : 0.42, 1);
 	}
@@ -333,6 +338,7 @@ Item {
 							root.page ? root.page.width : Math.ceil(probe.implicitWidth) + 8,
 							root.message.html.includes("<img") ? 330 : 0,
 							root.message.ref ? 200 : 0,
+							root.chain.length > 0 ? 460 : 0,
 							root.message.attachments.length > 0 ? 250 : 0,
 							root.expanded ? (root.message.signaturePage && !root.whole ? root.message.signaturePage.width : (root.message.signatureRich ? 480 : 320)) : 0,
 							title.visible ? Math.ceil(title.implicitWidth) : 0,
@@ -455,7 +461,7 @@ Item {
 
 						// until the mail itself is here: how it begins
 						Loader {
-							active: !body.active && !root.page && (root.message.text !== "" || !root.message.loaded)
+							active: !body.active && !root.page && root.chain.length === 0 && (root.message.text !== "" || !root.message.loaded)
 							visible: active
 							Layout.fillWidth: true
 							sourceComponent: StyledText {
@@ -474,6 +480,140 @@ Item {
 							Layout.fillWidth: true
 							sourceComponent: Sheet {
 								page: root.page
+							}
+						}
+
+						// the forwarded conversation, packed: its mails as a chat of their own
+						Loader {
+							active: root.chain.length > 0
+							visible: active
+							Layout.fillWidth: true
+							sourceComponent: Rectangle {
+								id: pack
+
+								readonly property int hidden: root.wholeChain ? 0 : Math.max(0, root.chain.length - 4)
+
+								implicitHeight: thread.implicitHeight + 16
+								radius: Theme.radius.medium
+								color: Qt.alpha(Theme.fg, 0.05)
+								border.width: 1
+								border.color: Qt.alpha(Theme.fg, 0.08)
+
+								Column {
+									id: thread
+
+									x: 8
+									y: 8
+									width: parent.width - 16
+									spacing: 3
+
+									Clickable {
+										visible: pack.hidden > 0
+										anchors.horizontalCenter: parent.horizontalCenter
+										implicitWidth: earlier.implicitWidth + 20
+										implicitHeight: 22
+										radius: 11
+										color: Qt.alpha(Theme.fg, 0.08)
+										onClicked: root.wholeChain = true
+
+										StyledText {
+											id: earlier
+
+											anchors.centerIn: parent
+											text: pack.hidden === 1 ? "1 earlier mail" : `${pack.hidden} earlier mails`
+											tone: Theme.textMuted
+											font.pixelSize: Theme.size.small
+										}
+									}
+
+									Repeater {
+										model: root.chain.slice(pack.hidden)
+
+										delegate: Item {
+											id: quoted
+
+											required property var modelData
+											required property int index
+											readonly property var before: quoted.index > 0 ? root.chain[pack.hidden + quoted.index - 1] : null
+											// the first of a run from one person carries the name
+											readonly property bool head: !quoted.before || quoted.before.email !== quoted.modelData.email || quoted.before.name !== quoted.modelData.name
+											readonly property real wanted: Math.max(Math.ceil(quotedProbe.implicitWidth) + 4, Math.ceil(quotedHead.implicitWidth))
+
+											width: thread.width
+											height: card.height + (quoted.head && quoted.index > 0 ? 5 : 0)
+
+											Text {
+												id: quotedProbe
+
+												visible: false
+												text: String(quoted.modelData.text).slice(0, 200)
+												font.family: Theme.fontFamily
+												font.pixelSize: Messages.textSize
+											}
+
+											Rectangle {
+												id: card
+
+												x: quoted.modelData.right ? parent.width - width : 0
+												y: parent.height - height
+												width: Math.min(parent.width * 0.86, quoted.wanted + 20)
+												height: cardColumn.implicitHeight + 12
+												radius: Math.max(4, Messages.bubbleRadius - 4)
+												topLeftRadius: !quoted.modelData.right && !quoted.head ? root.joint : radius
+												topRightRadius: quoted.modelData.right && !quoted.head ? root.joint : radius
+												color: quoted.modelData.right ? Qt.alpha(Messages.accent, 0.16) : Qt.alpha(Theme.fg, 0.07)
+
+												ColumnLayout {
+													id: cardColumn
+
+													x: 10
+													y: 6
+													width: parent.width - 20
+													spacing: 2
+
+													RowLayout {
+														id: quotedHead
+
+														visible: quoted.head
+														spacing: 6
+
+														StyledText {
+															text: quoted.modelData.name
+															tone: root.toneOf(quoted.modelData.email || quoted.modelData.name)
+															font.pixelSize: Theme.size.small
+															font.weight: Font.DemiBold
+														}
+
+														StyledText {
+															text: quoted.modelData.date
+															tone: Theme.textSubtle
+															font.pixelSize: Theme.size.tiny
+														}
+													}
+
+													TextEdit {
+														Layout.fillWidth: true
+														readOnly: true
+														selectByMouse: true
+														textFormat: TextEdit.RichText
+														wrapMode: TextEdit.Wrap
+														color: Theme.text
+														selectionColor: Qt.alpha(Messages.accent, 0.4)
+														selectedTextColor: Theme.text
+														font.family: Theme.fontFamily
+														font.pixelSize: Messages.textSize
+														text: root.tinted(quoted.modelData.html)
+														onLinkActivated: link => root.follow(link)
+
+														HoverHandler {
+															cursorShape: parent.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.IBeamCursor
+														}
+													}
+												}
+											}
+										}
+									}
+								}
 							}
 						}
 

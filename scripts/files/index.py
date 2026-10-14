@@ -154,13 +154,17 @@ def build(settings, report=lambda: None):
         STATE.update(running=True, done=0, total=0, current="", error="", stop=False)
     db = connect()
     try:
-        state = ai.status()
+        state = ai.status("index", settings.get("models"))
         vision = state["vision"] if settings.get("describe", True) else ""
         embed_model = state["embed"]
         folders = roots(settings)
         known = {row[0]: (row[1], row[2]) for row in db.execute("SELECT path, mtime, model FROM files")}
         todo, present = [], set()
+        pictures = settings.get("pictures", True)
         for path in walk(folders):
+            # left out pictures are not present: what was read of them goes
+            if not pictures and kind_of(os.path.basename(path)) == "picture":
+                continue
             present.add(path)
             try:
                 st = os.stat(path)
@@ -255,7 +259,7 @@ the a an of to in on at for from with and or my me find file files where what wh
 
 
 def understand(query):
-    state = ai.status()
+    state = ai.status("search")
     if not state["text"]:
         return None
     try:
@@ -329,7 +333,7 @@ def search(query, limit=80, smart=True):
             for rank, (path, score) in enumerate(rows):
                 scores[path] = scores.get(path, 0) + 1.0 / (rank + 3)
                 why[path] = "words"
-        state = ai.status()
+        state = ai.status("search")
         if state["embed"]:
             try:
                 vector = ai.embed(state["embed"], [query])[0]

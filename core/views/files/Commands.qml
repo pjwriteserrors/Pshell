@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import qs.core.services
 import "FileKinds.js" as Kinds
+import "../../lib/AiIntents.js" as Intents
 
 // Everything the file manager can do, in one place: the right-click menus,
 // the command palette and the keys all come from here, so a feature that
@@ -30,13 +31,15 @@ QtObject {
 	}
 
 	// ── what the picked files can do ───────────────────────────────────────
+	// The menu stays short: opening, the clipboard, one submenu for what this
+	// kind of file can do (also behind the button in the preview), sorting
+	// it away, sending it, the rest under "More".
 	function forRows(pane, rows) {
 		if (rows.length === 0) return root.forPlace(pane);
 		const one = rows.length === 1 ? rows[0] : null;
 		const dirs = rows.filter(row => row.dir);
 		const files = rows.filter(row => !row.dir);
-		const images = files.filter(row => row.kind === "image");
-		const texts = files.filter(row => row.text);
+		const songs = files.filter(row => row.kind === "audio");
 		const kind = pane.location.kind;
 		const paths = root.paths(rows);
 		const view = root.view;
@@ -52,127 +55,161 @@ QtObject {
 			return out;
 		}
 
-		out.push({ label: one ? (one.dir ? "Open" : "Open") : `Open ${rows.length} items`, icon: "open_in_app", shortcut: "Enter", run: () => view.openRows(pane, rows, false) });
+		// open
+		out.push({ label: one ? "Open" : `Open ${rows.length} items`, icon: "open_in_app", shortcut: "Enter", run: () => view.openRows(pane, rows, false) });
 		if (dirs.length > 0) out.push({ label: dirs.length === 1 ? "Open in a new tab" : "Open in new tabs", icon: "tab_plus", shortcut: "Ctrl+Enter", run: () => dirs.forEach(row => view.newTab({ kind: "dir", path: row.path }, true)) });
 		if (one?.dir && view.tab.split) out.push({ label: "Open in the other pane", icon: "dock_right", run: () => view.tab.other.openFolder(one.path) });
 		if (one && !one.dir) out.push({ label: "Open with", icon: "apps", children: done => root.openWith(one, done) });
+		if (songs.length > 0 && songs.length === files.length) {
+			out.push({ label: songs.length === 1 ? "Play" : `Play ${songs.length}`, icon: "play_outline", run: () => Files.play(root.paths(songs), false) });
+			if (Files.music.playing) out.push({ label: "Add to the queue", icon: "playlist_plus", run: () => Files.play(root.paths(songs), true) });
+		}
 		if (pane.virtual) out.push({ label: "Show in its folder", icon: "folder_search_outline", run: () => view.revealIn(pane, paths) });
 		out.push({ label: "Quick look", icon: "eye_outline", shortcut: "Space", run: () => view.quickLook(pane) });
+		if (one?.dir) {
+			out.push({ label: "Open a terminal here", icon: "console", shortcut: "F4", run: () => Files.terminal(one.path) });
+			if (root.agents) out.push({ label: "Claude Code here", icon: "robot_outline", run: () => Files.agent(one.path) });
+		}
 
+		// the clipboard and the name
 		out.push({ separator: true });
 		out.push({ label: "Cut", icon: "content_cut", shortcut: "Ctrl+X", run: () => Files.clipboardSet(paths, true) });
 		out.push({ label: "Copy", icon: "content_copy", shortcut: "Ctrl+C", run: () => Files.clipboardSet(paths, false) });
 		if (one?.dir) out.push({ label: "Paste into it", icon: "content_paste", run: () => Files.paste(one.path) });
-		out.push({ label: "Duplicate", icon: "content_duplicate", run: () => Files.duplicate(paths) });
 		out.push({ label: "Copy path", icon: "clipboard_text_outline", shortcut: "Ctrl+Shift+C", run: () => Files.copyText(paths.join("\n"), rows.length === 1 ? "Path copied" : `${rows.length} paths copied`) });
+		out.push({ label: "Duplicate", icon: "content_duplicate", run: () => Files.duplicate(paths) });
 		out.push({ label: rows.length === 1 ? "Rename" : `Rename ${rows.length} items`, icon: "form_textbox", shortcut: "F2", run: () => view.rename(pane, rows) });
 
+		// what this kind of file can do
+		out.push({ separator: true });
+		const own = root.kindMenu(pane, rows);
+		if (own) out.push(own.entries.length === 1 ? own.entries[0] : { label: own.label, icon: own.icon, children: own.entries });
+		if (one && root.isArchive(one)) out.push({ label: "Extract here", icon: "package_variant", run: () => Files.extract(one.path, pane.isFolder ? pane.location.path : Files.parentOf(one.path)) });
+		if (one && /\.ics$/i.test(one.name) && Outlook.enabled && Outlook.signedIn) out.push({ label: "Add to the calendar", icon: "calendar_plus", run: () => Files.importCalendar(one.path) });
+		if (one && Kinds.isWeblink(one)) out.push({ label: "Copy the link", icon: "link_variant", run: () => Files.request("info", { path: one.path }, data => { if (data?.url) Files.copyText(data.url, "Link copied"); }) });
+		out.push({ label: rows.length === 1 && one.dir ? `Pack “${one.name}” as ZIP` : "Pack as ZIP", icon: "zip_box_outline", run: () => Files.compress(paths) });
+
+		// sorting it away
 		out.push({ separator: true });
 		if (one?.dir) out.push({ label: FileLibrary.isFavorite(one.path) ? "Remove from favorites" : "Add to favorites", icon: FileLibrary.isFavorite(one.path) ? "star_off_outline" : "star_outline", shortcut: "Ctrl+D", run: () => FileLibrary.toggleFavorite(one.path) });
 		out.push({ label: "Tags", icon: "tag_outline", children: () => root.tagEntries(paths) });
 		out.push({ label: "Add to a collection", icon: "bookmark_box_multiple_outline", children: () => root.collectionEntries(paths) });
 		if (kind === "collection") out.push({ label: "Take out of this collection", icon: "bookmark_remove_outline", run: () => FileLibrary.removeFromCollection(pane.location.id, paths) });
 		if (kind === "tag") out.push({ label: `Remove “${pane.title}”`, icon: "tag_remove_outline", run: () => FileLibrary.toggleTag(paths, pane.location.id) });
+		if (root.shelves) out.push({ label: "Put on a shelf", icon: "tray_arrow_down", shortcut: "Ctrl+S", run: () => view.toShelf(rows) });
+		if (Plugins.on("todos")) out.push({ label: "Remember as a task", icon: "checkbox_marked_circle_plus_outline", children: () => root.taskEntries(paths) });
 
-		// what the rest of the shell can do with them
-		const elsewhere = [];
-		if (root.shelves) elsewhere.push({ label: "Put on a shelf", icon: "tray_arrow_down", shortcut: "Ctrl+S", run: () => view.toShelf(rows) });
-		if (Plugins.on("todos")) elsewhere.push({ label: "Remember as a task", icon: "checkbox_marked_circle_plus_outline", children: () => root.taskEntries(paths) });
-		if (Plugins.on("mail") && Mail.accounts.length > 0) elsewhere.push({ label: "Send by mail", icon: "email_outline", run: () => Files.mailFiles(paths) });
-		if (Files.recentChats.length > 0 && files.length > 0) elsewhere.push({ label: "Send on WhatsApp", icon: "whatsapp", children: () => Files.recentChats.map(chat => ({
-			label: chat.name,
-			icon: chat.group ? "account_group_outline" : "account_outline",
-			run: () => Files.sendToChat(chat, root.paths(files))
-		})) });
-		if (Plugins.on("ssh")) elsewhere.push({ label: "Send to a server…", icon: "server_network", run: () => root.view.sendToServer(rows) });
-		if (Phone.available) elsewhere.push({ label: `Send to ${Phone.name}`, icon: "cellphone_arrow_down", run: () => files.forEach(row => Phone.shareFile(row.path)), enabled: files.length > 0 });
-		if (root.ai && files.length > 0 && files.length <= 6) elsewhere.push({ label: files.length === 1 ? "Ask AI about it" : "Ask AI about them", icon: "creation", run: () => view.askAi(files) });
-		const readable = files.filter(row => row.text || row.mime === "application/pdf");
-		if (Plugins.on("translate") && readable.length > 0 && readable.length === files.length) elsewhere.push({ label: "Translate…", icon: "translate", run: () => view.translateDialog(readable) });
-		if (root.reader && texts.length === 1) elsewhere.push({ label: "Speed-read it", icon: "book_open_page_variant", run: () => view.speedRead(texts[0]) });
-		if (images.length > 0 && images.length === files.length) {
-			elsewhere.push({ label: images.length === 1 ? "Name it by what it shows" : "Name them by what they show", icon: "creation", run: () => Files.startJob("ainame", { paths: images.map(row => row.path) }, job => {
-				if (job.state === "failed") Files.fail(job.error);
-			}) });
-			elsewhere.push({ label: "Text from it as a .txt beside it", icon: "text_recognition", run: () => Files.startJob("capturetext", { paths: images.map(row => row.path) }) });
-		}
-		const clips = files.filter(row => row.kind === "video");
-		if (one && clips.length === 1) {
-			elsewhere.push({ label: "Cut the recording…", icon: "content_cut", run: () => view.trim(one.path, "cut") });
-			elsewhere.push({ label: "Make a GIF…", icon: "file_gif_box", run: () => view.trim(one.path, "gif") });
-		}
-		if (images.length === 1) {
-			if (root.captures) elsewhere.push({ label: "Annotate", icon: "draw", run: () => Screenshot.editShot(images[0].path) });
-			if (root.pins) elsewhere.push({ label: "Pin to the screen", icon: "pin_outline", run: () => Screenshot.pinShot(images[0].path) });
-			if (root.ocr) elsewhere.push({ label: "Copy text from it", icon: "text_recognition", run: () => Screenshot.runOcr(images[0].path, null, false) });
-		}
-		if (root.wallpaper && one && (one.kind === "image" || one.kind === "video")) elsewhere.push({ label: "Set as wallpaper", icon: "wallpaper", run: () => view.setWallpaper(one.path) });
-		elsewhere.push({ label: "Share a link…", icon: "link_variant", run: () => view.shareDialog(rows) });
-		if (elsewhere.length > 0) {
-			out.push({ separator: true });
-			for (const entry of elsewhere) out.push(entry);
-		}
+		// elsewhere: other people, the phone, a server
+		const send = root.sendEntries(rows);
+		if (send.length > 0) out.push({ label: "Send to", icon: "send", children: send });
 
-		// Windows programs, PDFs, a second opinion on files
-		const special = [];
-		if (one && Kinds.isWindows(one)) {
-			special.push({ label: "Run with", icon: "microsoft_windows", children: done => Files.knowRunners(() => done(root.runnerEntries(one))) });
-			if (Plugins.on("vm-launcher")) special.push({ label: "Open in the Windows VM", icon: "monitor_shimmer", run: () => Files.openInVm(one.path) });
-			special.push({ label: "Add to Steam…", icon: "steam", run: () => root.view.ask("Name in the Steam library", "Name", one.name.replace(/\.[^.]+$/, ""), name => Files.addToSteam(one.path, name, FileLibrary.setting("protonVersion"))) });
-		}
-		const pdfs = files.filter(row => row.mime === "application/pdf");
-		if (pdfs.length > 0) special.push({ label: "PDF tools", icon: "file_pdf_box", children: () => root.pdfEntries(rows, pdfs) });
-		else if (images.length > 0 && images.length === files.length) special.push({ label: images.length === 1 ? "Make a PDF of it" : "Make one PDF of them", icon: "file_pdf_box", run: () => Files.pdfTool("fromimages", images.map(row => row.path), {}) });
-		else if (files.length > 0 && files.every(row => /\.(docx?|odt|rtf|xlsx?|ods|pptx?|odp)$/i.test(row.name))) special.push(root.pdfEntry("officetopdf", "Make a PDF", "file_pdf_box", files));
-		else if (files.length > 0 && files.every(row => /\.html?$/i.test(row.name))) special.push(root.pdfEntry("htmltopdf", "Make a PDF", "file_pdf_box", files));
-		if (one && /\.ics$/i.test(one.name) && Outlook.enabled && Outlook.signedIn) special.push({ label: "Add to the calendar", icon: "calendar_plus", run: () => Files.importCalendar(one.path) });
-		if (one && Kinds.isWeblink(one)) special.push({ label: "Copy the link", icon: "link_variant", run: () => Files.request("info", { path: one.path }, data => { if (data?.url) Files.copyText(data.url, "Link copied"); }) });
-		if (images.length > 0 && images.length === files.length && dirs.length === 0) special.push({ label: images.length === 1 ? "Edit the picture" : "Edit the pictures", icon: "image_edit_outline", children: () => root.imageEntries(images) });
-		const songs = files.filter(row => row.kind === "audio");
-		if (songs.length > 0 && songs.length === files.length) {
-			special.push({ label: songs.length === 1 ? "Play" : `Play ${songs.length}`, icon: "play_outline", run: () => Files.play(root.paths(songs), false) });
-			if (Files.music.playing) special.push({ label: "Add to the queue", icon: "playlist_plus", run: () => Files.play(root.paths(songs), true) });
-		}
-		if (one && songs.length === 1) special.push({ label: "Edit the tags…", icon: "tag_text_outline", run: () => view.tagsDialog(one) });
-		const media = files.filter(row => row.kind === "image" || row.kind === "video" || row.kind === "audio");
-		if (media.length > 0 && media.length === files.length && dirs.length === 0) special.push({ label: "Convert to", icon: "swap_horizontal", children: done => Files.convertible(root.paths(files), targets => done(root.convertEntries(files, targets))) });
-		special.push({ label: "Scan for viruses (on this PC)", icon: "shield_search", run: () => Files.avScan(paths) });
-		if (files.length > 0 && files.length <= 20 && dirs.length === 0) special.push({ label: "Check with VirusTotal", icon: "shield_search", run: () => Files.vtScan(root.paths(files)) });
-		if (special.length > 0) {
-			out.push({ separator: true });
-			for (const entry of special) out.push(entry);
-		}
-
-		// git: what changed, a commit, the history
+		// the rest
 		const git = pane.git;
-		if (git && pane.isFolder) {
-			const changed = rows.filter(row => git.files?.[row.name]);
-			if (changed.length > 0) {
-				out.push({ separator: true });
-				out.push({ label: changed.length === 1 ? `Commit ${changed[0].name}…` : `Commit ${changed.length} items…`, icon: "source_commit", run: () => view.commitDialog(changed.map(row => row.path), changed.length === 1 ? changed[0].name : `${changed.length} items`) });
-				if (changed.length === 1) out.push({ label: "Show the changes", icon: "file_compare", run: () => view.showDiff(changed[0].path) });
-			}
-		}
-		if (one && !one.dir && kind !== "trash") out.push({ label: "Earlier versions", icon: "history", run: () => view.showVersions() });
-		if (one && !one.dir && (Files.index.files ?? 0) > 0) out.push({ label: "Find similar files", icon: "approximately_equal", run: () => pane.go({ kind: "similar", path: one.path }) });
-
-		out.push({ separator: true });
-		if (one && root.isArchive(one)) out.push({ label: "Extract here", icon: "package_variant", run: () => Files.extract(one.path, pane.isFolder ? pane.location.path : Files.parentOf(one.path)) });
-		out.push({ label: rows.length === 1 && one.dir ? `Pack “${one.name}” as ZIP` : "Pack as ZIP", icon: "zip_box_outline", run: () => Files.compress(paths) });
-		if (one?.dir) {
-			out.push({ label: "Look at it", icon: "chart_donut", children: [
-				{ label: "What takes the space", icon: "chart_donut", run: () => pane.go({ kind: "storage", path: one.path }) },
-				{ label: "Find copies in it", icon: "content_duplicate", run: () => pane.go({ kind: "duplicates", path: one.path }) },
-				{ label: "Make a rule for it…", icon: "playlist_check", run: () => view.ruleDialog(null, one.path) }
-			] });
-			if (root.wallpaper) out.push({ label: "Wallpapers from it…", icon: "wallpaper", run: () => view.wallpaperFolder(one.path) });
-			out.push({ label: "Open a terminal here", icon: "console", shortcut: "F4", run: () => Files.terminal(one.path) });
-			if (root.agents) out.push({ label: "Claude Code here", icon: "robot_outline", run: () => Files.agent(one.path) });
-		}
+		const changed = git && pane.isFolder ? rows.filter(row => git.files?.[row.name]) : [];
+		if (changed.length > 0) out.push({ label: "Git", icon: "source_branch", children: [
+			{ label: changed.length === 1 ? `Commit ${changed[0].name}…` : `Commit ${changed.length} items…`, icon: "source_commit", run: () => view.commitDialog(changed.map(row => row.path), changed.length === 1 ? changed[0].name : `${changed.length} items`) },
+			{ label: "Show the changes", icon: "file_compare", shown: changed.length === 1, run: () => view.showDiff(changed[0].path) }
+		] });
+		const more = root.moreEntries(pane, rows);
+		if (more.length > 0) out.push({ label: "More", icon: "dots_horizontal", children: more });
 
 		out.push({ separator: true });
 		out.push({ label: "Move to the trash", icon: "trash_can_outline", danger: true, shortcut: "Del", run: () => Files.trash(paths) });
 		out.push({ label: "Properties", icon: "information_outline", shortcut: "Alt+Enter", run: () => view.showDetails(true) });
+		return out;
+	}
+
+	// what one kind of file can do, as one submenu: { label, short, icon, entries } or null.
+	// The preview and the details show it as a button.
+	function kindMenu(pane, rows) {
+		const one = rows.length === 1 ? rows[0] : null;
+		const dirs = rows.filter(row => row.dir);
+		const files = rows.filter(row => !row.dir);
+		const all = test => files.length > 0 && dirs.length === 0 && files.every(test);
+		const view = root.view;
+		if (["trash", "phone", "clipboard"].includes(pane.location.kind)) return null;
+		const convert = () => ({ label: "Convert to", icon: "swap_horizontal", children: done => Files.convertible(root.paths(files), targets => done(root.convertEntries(files, targets))) });
+
+		if (one?.dir) return { label: "Folder", short: "Folder", icon: "folder_open_outline", entries: root.folderEntries(pane, one.path) };
+		if (all(row => row.kind === "image")) return { label: files.length === 1 ? "Edit the picture" : "Edit the pictures", short: "Edit", icon: "image_edit_outline", entries: root.imageEntries(files) };
+		// PDFs, also with pictures to merge them into
+		const pdfs = files.filter(row => row.mime === "application/pdf");
+		if (pdfs.length > 0 && all(row => row.mime === "application/pdf" || row.kind === "image")) return { label: "PDF tools", short: "PDF tools", icon: "file_pdf_box", entries: root.pdfEntries(rows, pdfs) };
+		if (all(row => row.kind === "video")) {
+			const entries = [];
+			if (one) {
+				entries.push({ label: "Cut the recording…", icon: "content_cut", run: () => view.trim(one.path, "cut") });
+				entries.push({ label: "Make a GIF…", icon: "file_gif_box", run: () => view.trim(one.path, "gif") });
+				if (root.wallpaper) entries.push({ label: "Set as wallpaper", icon: "wallpaper", run: () => view.setWallpaper(one.path) });
+			}
+			entries.push(convert());
+			return { label: files.length === 1 ? "Edit the video" : "Edit the videos", short: "Edit", icon: "filmstrip", entries: entries };
+		}
+		if (all(row => row.kind === "audio")) {
+			const entries = [];
+			if (one) entries.push({ label: "Edit the tags…", icon: "tag_text_outline", run: () => view.tagsDialog(one) });
+			entries.push(convert());
+			return { label: files.length === 1 ? "Edit the song" : "Edit the songs", short: "Edit", icon: "music_note", entries: entries };
+		}
+		if (all(row => row.kind === "image" || row.kind === "video" || row.kind === "audio")) return { label: "Convert to", short: "Convert", icon: "swap_horizontal", entries: [convert()] };
+		if (one && Kinds.isWindows(one)) return { label: "Windows", short: "Run", icon: "microsoft_windows", entries: [
+			{ label: "Run with", icon: "play_outline", children: done => Files.knowRunners(() => done(root.runnerEntries(one))) },
+			{ label: "Open in the Windows VM", icon: "monitor_shimmer", shown: Plugins.on("vm-launcher"), run: () => Files.openInVm(one.path) },
+			{ label: "Add to Steam…", icon: "steam", run: () => view.ask("Name in the Steam library", "Name", one.name.replace(/\.[^.]+$/, ""), name => Files.addToSteam(one.path, name, FileLibrary.setting("protonVersion"))) }
+		] };
+		if (all(row => /\.(docx?|odt|rtf|xlsx?|ods|pptx?|odp)$/i.test(row.name))) return { label: "Make a PDF", short: "PDF", icon: "file_pdf_box", entries: [root.pdfEntry("officetopdf", "Make a PDF", "file_pdf_box", files)] };
+		if (all(row => /\.html?$/i.test(row.name))) return { label: "Make a PDF", short: "PDF", icon: "file_pdf_box", entries: [root.pdfEntry("htmltopdf", "Make a PDF", "file_pdf_box", files)] };
+		return null;
+	}
+
+	// a folder: what is in it, its rules, where its terminals open
+	function folderEntries(pane, folder, writable) {
+		const view = root.view;
+		return [
+			{ label: "What takes the space", icon: "chart_donut", run: () => pane.go({ kind: "storage", path: folder }) },
+			{ label: "Find copies in it", icon: "content_duplicate", run: () => pane.go({ kind: "duplicates", path: folder }) },
+			{ label: "Make a rule for it…", icon: "playlist_check", run: () => view.ruleDialog(null, folder) },
+			{ label: "New vault in it…", icon: "safe_square_outline", enabled: writable !== false, run: () => view.newVault(folder) },
+			{ label: "Its own workspace", icon: "view_dashboard_outline", children: () => root.workspaceEntries(folder) },
+			{ label: "Wallpapers from it…", icon: "wallpaper", shown: root.wallpaper, run: () => view.wallpaperFolder(folder) }
+		];
+	}
+
+	// mail, chats, the phone, a server, a link
+	function sendEntries(rows) {
+		const files = rows.filter(row => !row.dir);
+		const view = root.view;
+		const out = [];
+		if (Plugins.on("mail") && Mail.accounts.length > 0) out.push({ label: "Mail", icon: "email_outline", run: () => Files.mailFiles(root.paths(rows)) });
+		if (Files.recentChats.length > 0 && files.length > 0) out.push({ label: "WhatsApp", icon: "whatsapp", children: () => Files.recentChats.map(chat => ({
+			label: chat.name,
+			icon: "account_outline",
+			run: () => Files.sendToChat(chat, root.paths(files))
+		})) });
+		if (Phone.available) out.push({ label: Phone.name, icon: "cellphone_arrow_down", enabled: files.length > 0, run: () => files.forEach(row => Phone.shareFile(row.path)) });
+		if (Plugins.on("ssh")) out.push({ label: "A server…", icon: "server_network", run: () => view.sendToServer(rows) });
+		if (out.length > 0) out.push({ separator: true });
+		out.push({ label: "Share a link…", icon: "link_variant", run: () => view.shareDialog(rows) });
+		return out;
+	}
+
+	// asking, reading, looking further, checking
+	function moreEntries(pane, rows) {
+		const one = rows.length === 1 ? rows[0] : null;
+		const files = rows.filter(row => !row.dir);
+		const texts = files.filter(row => row.text);
+		const readable = files.filter(row => row.text || row.mime === "application/pdf");
+		const view = root.view;
+		const out = [];
+		if (root.ai && files.length > 0 && files.length <= 6) out.push({ label: files.length === 1 ? "Ask AI about it" : "Ask AI about them", icon: "creation", run: () => view.askAi(files) });
+		if (Plugins.on("translate") && readable.length > 0 && readable.length === files.length) out.push({ label: "Translate…", icon: "translate", run: () => view.translateDialog(readable) });
+		if (root.reader && texts.length === 1) out.push({ label: "Speed-read it", icon: "book_open_page_variant", run: () => view.speedRead(texts[0]) });
+		if (out.length > 0) out.push({ separator: true });
+		if (one && !one.dir) out.push({ label: "Earlier versions", icon: "history", run: () => view.showVersions() });
+		if (one && !one.dir && (Files.index.files ?? 0) > 0) out.push({ label: "Find similar files", icon: "approximately_equal", run: () => pane.go({ kind: "similar", path: one.path }) });
+		out.push({ separator: true });
+		out.push({ label: "Scan for viruses", icon: "shield_search", run: () => Files.avScan(root.paths(rows)) });
+		if (files.length > 0 && files.length <= 20 && files.length === rows.length) out.push({ label: "Check with VirusTotal", icon: "shield_search", run: () => Files.vtScan(root.paths(files)) });
 		return out;
 	}
 
@@ -190,18 +227,18 @@ QtObject {
 		return out;
 	}
 
-	// the todo lists a file can go into as a task (with a link back)
+	// the task groups a file can go into as a task (with a link back)
 	function taskEntries(paths) {
-		const last = String(FileLibrary.setting("taskList") || "");
-		const out = Todos.lists.map(list => ({
-			label: list.name,
-			icon: list.path === last ? "star_outline" : "format_list_checks",
-			hint: `${list.total - list.done} open`,
-			run: () => Files.rememberTask(paths, list.path)
+		const last = String(FileLibrary.setting("taskGroup") || "");
+		const out = Todos.groups.map(group => ({
+			label: group.name,
+			icon: group.name === last ? "star_outline" : (group.name === Todos.inbox ? "inbox_outline" : "folder_outline"),
+			hint: `${group.open} open`,
+			run: () => Files.rememberTask(paths, group.name)
 		}));
-		if (out.length > 0) out.push({ separator: true });
-		out.push({ label: "With a note…", icon: "note_edit_outline", enabled: Todos.lists.length > 0, run: () => root.view.ask("What is to do with it?", "Note for the task", "", note => Files.rememberTask(paths, last || Todos.lists[0].path, note)) });
-		out.push({ label: "New list…", icon: "playlist_plus", run: () => root.view.ask("New todo list", "Name of the list", "Files", name => Files.rememberTask(paths, name)) });
+		out.push({ separator: true });
+		out.push({ label: "With a note…", icon: "note_edit_outline", run: () => root.view.ask("What is to do with it?", "Note for the task", "", note => Files.rememberTask(paths, last || Todos.inbox, note)) });
+		out.push({ label: "New group…", icon: "playlist_plus", run: () => root.view.ask("New group", "Name of the group", "Files", name => Files.rememberTask(paths, name)) });
 		return out;
 	}
 
@@ -236,19 +273,31 @@ QtObject {
 		return out;
 	}
 
-	// quick changes to pictures: each makes a new one beside it (or replaces it, asked in the dialogs)
+	// everything for pictures: changes make a new one beside it (or replace it, asked in the dialogs)
 	function imageEntries(images) {
 		const paths = images.map(row => row.path);
 		const one = images.length === 1 ? images[0] : null;
 		return [
+			{ header: "Edit" },
+			{ label: "Draw on it", icon: "draw", shown: !!one && root.captures, run: () => Screenshot.editShot(one.path) },
+			{ label: "Crop…", icon: "crop", shown: !!one, run: () => root.view.crop(one.path) },
 			{ label: "Resize…", icon: "resize", run: () => root.view.resizeDialog(images) },
-			{ label: "Crop…", icon: "crop", enabled: !!one, run: () => root.view.crop(one.path) },
 			{ label: "Turn left", icon: "rotate_left", run: () => Files.imageTool("rotate", paths, { degrees: 270 }) },
 			{ label: "Turn right", icon: "rotate_right", run: () => Files.imageTool("rotate", paths, { degrees: 90 }) },
 			{ label: "Mirror", icon: "flip_horizontal", run: () => Files.imageTool("flip", paths, { axis: "horizontal" }) },
-			{ separator: true },
+			{ label: "Watermark…", icon: "water_outline", run: () => root.view.watermarkDialog(images) },
 			{ label: "Remove location and camera data", icon: "map_marker_off_outline", run: () => Files.imageTool("strip", paths, {}) },
-			{ label: "Watermark…", icon: "water_outline", run: () => root.view.watermarkDialog(images) }
+			{ header: "Text" },
+			{ label: "Copy the text", icon: "text_recognition", shown: !!one && root.ocr, run: () => Screenshot.runOcr(one.path, null, false) },
+			{ label: "Text as a .txt beside it", icon: "text_box_outline", run: () => Files.startJob("capturetext", { paths: paths }) },
+			{ label: one ? "Name it by what it shows" : "Name them by what they show", icon: "creation", run: () => Files.startJob("ainame", { paths: paths }, job => {
+				if (job.state === "failed") Files.fail(job.error);
+			}) },
+			{ header: "Use" },
+			{ label: "Pin to the screen", icon: "pin_outline", shown: !!one && root.pins, run: () => Screenshot.pinShot(one.path) },
+			{ label: "Set as wallpaper", icon: "wallpaper", shown: !!one && root.wallpaper, run: () => root.view.setWallpaper(one.path) },
+			{ label: one ? "Make a PDF of it" : "Make one PDF of them", icon: "file_pdf_box", run: () => Files.pdfTool("fromimages", paths, {}) },
+			{ label: "Convert to", icon: "swap_horizontal", children: done => Files.convertible(paths, targets => done(root.convertEntries(images, targets))) }
 		];
 	}
 
@@ -391,29 +440,25 @@ QtObject {
 		}
 		if (pane.rows.length > 0) out.push({ label: "Pick all", icon: "select_all", shortcut: "Ctrl+A", run: () => pane.selectAll() });
 		out.push({ label: "View", icon: "eye_outline", children: () => root.viewEntries(pane) });
-		out.push({ separator: true });
-		if (folder !== "") {
-			out.push({ label: FileLibrary.isFavorite(folder) ? "Remove from favorites" : "Add to favorites", icon: FileLibrary.isFavorite(folder) ? "star_off_outline" : "star_outline", shortcut: "Ctrl+D", run: () => FileLibrary.toggleFavorite(folder) });
-			out.push({ label: "Open a terminal here", icon: "console", shortcut: "F4", run: () => Files.terminal(folder) });
-			if (root.agents) out.push({ label: "Claude Code here", icon: "robot_outline", run: () => Files.agent(folder) });
-			out.push({ label: "Copy the path", icon: "clipboard_text_outline", run: () => Files.copyText(folder, "Path copied") });
-			out.push({ label: "Scan this folder for viruses", icon: "shield_search", run: () => Files.avScan([folder]) });
-			out.push({ label: "Look at it", icon: "chart_donut", children: [
-				{ label: "What takes the space here", icon: "chart_donut", run: () => pane.go({ kind: "storage", path: folder }) },
-				{ label: "Find copies here", icon: "content_duplicate", run: () => pane.go({ kind: "duplicates", path: folder }) },
-				{ label: "Make a rule for this folder…", icon: "playlist_check", run: () => view.ruleDialog(null, folder) },
-				{ label: "New vault here…", icon: "safe_square_outline", enabled: pane.writable, run: () => view.newVault(folder) }
-			] });
-			out.push({ label: "Its own workspace", icon: "view_dashboard_outline", children: () => root.workspaceEntries(folder) });
-			if (root.wallpaper) out.push({ label: "Wallpapers from this folder…", icon: "wallpaper", run: () => view.wallpaperFolder(folder) });
-			if (pane.git) out.push({ label: "Git", icon: "source_branch", children: () => view.gitMenu(pane) });
-		}
+		out.push({ label: view.tab.split ? "Close the split" : "Split", icon: "view_split_vertical", shortcut: "F3", run: () => view.tab.toggleSplit() });
 		if (view.tab.split && view.tab.first.isFolder && view.tab.second.isFolder) {
 			out.push(pane.compareStates ? { label: "Stop comparing", icon: "file_compare", run: () => view.stopComparing() }
 				: { label: "Compare with the other side", icon: "file_compare", shortcut: "F7", run: () => view.compareSides() });
 			out.push({ label: "Sync with the other side…", icon: "folder_sync_outline", run: () => view.openSync(pane) });
 		}
-		out.push({ label: view.tab.split ? "Close the split" : "Split", icon: "view_split_vertical", shortcut: "F3", run: () => view.tab.toggleSplit() });
+		if (folder !== "") {
+			out.push({ separator: true });
+			out.push({ label: FileLibrary.isFavorite(folder) ? "Remove from favorites" : "Add to favorites", icon: FileLibrary.isFavorite(folder) ? "star_off_outline" : "star_outline", shortcut: "Ctrl+D", run: () => FileLibrary.toggleFavorite(folder) });
+			out.push({ label: "Open a terminal here", icon: "console", shortcut: "F4", run: () => Files.terminal(folder) });
+			if (root.agents) out.push({ label: "Claude Code here", icon: "robot_outline", run: () => Files.agent(folder) });
+			out.push({ label: "Copy the path", icon: "clipboard_text_outline", run: () => Files.copyText(folder, "Path copied") });
+			const entries = root.folderEntries(pane, folder, pane.writable);
+			entries.push({ separator: true });
+			entries.push({ label: "Scan for viruses", icon: "shield_search", run: () => Files.avScan([folder]) });
+			out.push({ label: "This folder", icon: "folder_open_outline", children: entries });
+			if (pane.git) out.push({ label: "Git", icon: "source_branch", children: () => view.gitMenu(pane) });
+		}
+		out.push({ separator: true });
 		out.push({ label: "Read again", icon: "refresh", shortcut: "Ctrl+R", run: () => pane.reload(false) });
 		return out;
 	}
@@ -451,6 +496,63 @@ QtObject {
 		];
 	}
 
+	// ── the AI line (Ctrl+Shift+A): what a sentence asks for ─────────────────
+	function aiLine(pane, prompt) {
+		return Intents.rank(prompt, root.aiIntents(pane));
+	}
+
+	// the AI features, each with the words that ask for it; on the picked
+	// files when they fit, else on everything
+	function aiIntents(pane) {
+		const view = root.view;
+		const rows = pane.targets().filter(row => !String(row.path).startsWith("phone:"));
+		const files = rows.filter(row => !row.dir);
+		const one = files.length === 1 ? files[0] : null;
+		const images = files.filter(row => row.kind === "image");
+		const pdfs = files.filter(row => row.mime === "application/pdf");
+		const texts = files.filter(row => row.text);
+		const readable = files.filter(row => row.text || row.mime === "application/pdf");
+		const them = list => list.length === 1 ? `“${list[0].name}”` : `${list.length} files`;
+		const quoted = rest => rest !== "" ? ` “${rest}”` : "";
+		const search = rest => pane.go({ kind: "search", path: Files.home, query: rest, ai: true });
+		return [
+			{ id: "find", group: "Your files", icon: "magnify", label: rest => rest !== "" ? `Find${quoted(rest)} by meaning` : "Find by meaning…",
+				words: ["such", "find", "wo ist", "wo sind", "where", "zeig", "show me", "gibt es", "hab ich"],
+				hints: ["rechnung", "invoice", "vertrag", "foto", "photo", "bild", "picture", "screenshot", "datei", "file", "dokument", "document", "pdf", "brief", "letter"],
+				run: rest => rest !== "" ? search(rest) : view.ask("What are you looking for?", "the Telekom invoice from the spring", "", search) },
+			{ id: "similar", group: "Picked", icon: "approximately_equal", label: `Files like ${one ? them([one]) : "it"}`, shown: !!one && (Files.index.files ?? 0) > 0,
+				words: ["ähnlich", "aehnlich", "similar", "wie dies", "like this", "gleich"],
+				run: () => pane.go({ kind: "similar", path: one.path }) },
+			{ id: "name", group: "Picked", icon: "creation", label: `Name ${them(images)} by what they show`, shown: images.length > 0 && images.length === files.length,
+				words: ["benenn", "umbenenn", "name", "rename", "titel", "title", "nach inhalt", "by content"],
+				run: () => Files.startJob("ainame", { paths: root.paths(images) }, job => {
+					if (job.state === "failed") Files.fail(job.error);
+				}) },
+			{ id: "ocr", group: "Picked", icon: "text_recognition", label: one && root.ocr ? `Copy the text of ${them([one])}` : `The text of ${them(images)} as .txt beside`, shown: images.length > 0 && images.length === files.length,
+				words: ["text", "ocr", "abschreib", "erkenn", "lesen", "read", "extract", "kopier", "copy"],
+				run: () => one && root.ocr ? Screenshot.runOcr(one.path, null, false) : Files.startJob("capturetext", { paths: root.paths(images) }) },
+			{ id: "searchable", group: "Picked", icon: "text_recognition", label: `Make ${them(pdfs)} searchable`, shown: pdfs.length > 0 && pdfs.length === files.length,
+				words: ["durchsuchbar", "searchable", "ocr", "text erkenn", "scan"],
+				run: () => view.pdfTool("ocr", pdfs) },
+			{ id: "translate", group: "Picked", icon: "translate", label: `Translate ${them(readable)}…`, shown: Plugins.on("translate") && readable.length > 0 && readable.length === files.length,
+				words: ["übersetz", "uebersetz", "translat", "sprache", "language"],
+				run: (rest, prompt) => view.translateDialog(readable, Intents.language(prompt)) },
+			{ id: "read", group: "Picked", icon: "book_open_page_variant", label: `Speed-read ${them(texts)}`, shown: root.reader && texts.length === 1,
+				words: ["speed", "schnell les", "vorles", "lies", "read"],
+				run: () => view.speedRead(texts[0]) },
+			{ id: "ask", group: "Picked", icon: "creation", label: rest => rest !== "" ? `Ask about ${them(files)}:${quoted(rest)}` : `Ask AI about ${them(files)}`, shown: root.ai && files.length > 0 && files.length <= 6,
+				words: ["frag", "ask", "erklär", "erklaer", "explain", "zusammenfass", "zusammen", "summar", "was steht", "what", "worum", "wer", "who", "wann", "when", "warum", "why", "wie", "how", "inhalt"],
+				run: (rest, prompt) => view.askAi(files, prompt) },
+			{ id: "settings", group: "Settings", icon: "cog_outline", label: "Models and the index",
+				words: ["modell", "model", "index", "einstell", "setting", "ollama"],
+				run: () => view.openSettings("ai") },
+			{ id: "find-any", fallback: true, instead: "find", group: "", icon: "magnify", label: rest => `Find “${rest}” by meaning`, shown: true,
+				run: (rest, prompt) => search(prompt) },
+			{ id: "ask-any", fallback: true, instead: "ask", group: "", icon: "creation", label: rest => files.length > 0 && files.length <= 6 ? `Ask about ${them(files)}: “${rest}”` : `Ask AI: “${rest}”`, shown: root.ai,
+				run: (rest, prompt) => view.askAi(files.length <= 6 ? files : [], prompt) }
+		].map(intent => intent.group === "Picked" ? Object.assign(intent, { group: files.length === 1 ? files[0].name : `${files.length} picked` }) : intent);
+	}
+
 	// ── the palette: everything above, and places to go ────────────────────
 	function palette(pane) {
 		const view = root.view;
@@ -463,7 +565,7 @@ QtObject {
 					header = entry.header;
 					continue;
 				}
-				if (entry.separator || entry.enabled === false) continue;
+				if (entry.separator || entry.enabled === false || entry.shown === false) continue;
 				// submenus made on the spot are taken in when they need no answer to wait for
 				const children = typeof entry.children === "function" && entry.children.length === 0 ? entry.children() : entry.children;
 				if (Array.isArray(children)) flatten(children, group, entry.label);
@@ -474,6 +576,7 @@ QtObject {
 		if (picked.length > 0) flatten(root.forRows(pane, picked), picked.length === 1 ? picked[0].name : `${picked.length} picked`, "");
 		flatten(root.forPlace(pane), pane.title, "");
 		if (Files.undoTitle !== "") out.push({ label: `Undo ${Files.undoTitle.charAt(0).toLowerCase()}${Files.undoTitle.slice(1)}`, icon: "undo", shortcut: "Ctrl+Z", group: "Edit", run: () => Files.undo() });
+		out.push({ label: "AI…", icon: "creation", shortcut: "Ctrl+Shift+A", group: "Window", run: () => view.openAiLine() });
 		out.push({ label: "Ask your files…", icon: "creation", group: "Window", run: () => view.ask("What are you looking for?", "the Telekom invoice from the spring", "", query => pane.go({ kind: "search", path: Files.home, query: query, ai: true })) });
 		out.push({ label: "Undo history", icon: "history", shortcut: "Ctrl+Shift+Z", group: "Edit", run: () => view.openHistory() });
 		out.push({ label: "Rules for folders", icon: "playlist_check", group: "Window", run: () => view.openSettings("rules") });

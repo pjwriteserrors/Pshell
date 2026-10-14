@@ -84,6 +84,8 @@ type Extra struct {
 	Error     string   `json:"error,omitempty"`
 	// who sent it, as WhatsApp addressed them (a hidden address in some groups)
 	Origin string `json:"origin,omitempty"`
+	// what a voice message says, as the speech model heard it
+	Transcript string `json:"transcript,omitempty"`
 }
 
 type Row struct {

@@ -146,7 +146,8 @@ class Provider:
         body["pageSource"] = ""
         if ident is not None:
             body.pop("cids", None)
-            if is_html:
+            # a forward with nothing written above the conversation has no page of its own
+            if is_html and not (body.get("chain") and not body["text"].strip()):
                 path = files_dir(self.id, ident, "page") / "page.html"
                 path.write_text(render.page_source(str(raw)[:end], images))
                 body["pageSource"] = str(path)

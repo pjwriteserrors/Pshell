@@ -96,7 +96,7 @@ def clean_name(text):
 
 def suggest_name(path, timeout=90):
     """A name for a screenshot: what its text is about, or what a vision model sees."""
-    state = ai.status()
+    state = ai.status("name")
     if not state["text"] and not state["vision"]:
         raise CaptureError("Naming needs a model in Ollama")
     text = ""

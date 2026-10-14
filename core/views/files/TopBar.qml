@@ -308,6 +308,14 @@ Item {
 		anchors.verticalCenter: parent.verticalCenter
 		spacing: 4
 
+		IconButton {
+			width: 34
+			height: 34
+			iconSize: 17
+			icon: "creation"
+			onClicked: root.view.openAiLine()
+		}
+
 		Clickable {
 			width: paletteRow.implicitWidth + 20
 			height: 34

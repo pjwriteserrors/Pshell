@@ -379,8 +379,25 @@ FocusScope {
 		menu.show(commands.forRows(pane, rows), x, y);
 	}
 
+	// what this kind of file can do, for a button in the preview or the details
+	function kindMenu(pane, rows) {
+		return pane && rows.length > 0 ? commands.kindMenu(pane, rows) : null;
+	}
+
+	function showKindMenu(pane, rows, x, y) {
+		const own = root.kindMenu(pane, rows);
+		if (own) menu.show(own.entries, x, y);
+	}
+
 	function openPalette() {
 		if (root.pane) palette.open(commands.palette(root.pane));
+	}
+
+	function openAiLine() {
+		const pane = root.pane;
+		if (!pane) return;
+		aiLine.provider = prompt => commands.aiLine(pane, prompt);
+		aiLine.open([]);
 	}
 
 	function menuFromSidebar(entries, x, y) {
@@ -428,9 +445,11 @@ FocusScope {
 		snackbar.show(rows.length === 1 ? "On the shelf" : `${rows.length} items on the shelf`, "tray_arrow_down");
 	}
 
-	function askAi(rows) {
+	// a chat about the files; with a prompt it is asked once they are read
+	function askAi(rows, prompt) {
 		Popups.withFocusedScreen(screen => Popups.open("launcher", screen, "", {
-			aiFiles: rows.map(row => ({ path: row.path, name: row.name, mimeType: row.mime, size: row.size, isDir: false }))
+			aiFiles: rows.map(row => ({ path: row.path, name: row.name, mimeType: row.mime, size: row.size, isDir: false })),
+			aiAsk: String(prompt || "")
 		}));
 	}
 
@@ -578,14 +597,14 @@ FocusScope {
 		});
 	}
 
-	function translateDialog(rows) {
+	function translateDialog(rows, target) {
 		root.form({
 			title: "Translate",
 			subtitle: rows.length === 1 ? rows[0].name : `${rows.length} files`,
 			icon: "translate",
 			action: "Translate",
 			fields: [
-				{ key: "target", type: "menu", label: "Into", value: FileLibrary.setting("translateTo") || "en", options: [
+				{ key: "target", type: "menu", label: "Into", value: target || FileLibrary.setting("translateTo") || "en", options: [
 					{ value: "en", label: "English" }, { value: "de", label: "German" }, { value: "fr", label: "French" }, { value: "es", label: "Spanish" },
 					{ value: "it", label: "Italian" }, { value: "nl", label: "Dutch" }, { value: "pl", label: "Polish" }, { value: "tr", label: "Turkish" },
 					{ value: "uk", label: "Ukrainian" }, { value: "ru", label: "Russian" }, { value: "ja", label: "Japanese" }, { value: "zh", label: "Chinese" }
@@ -988,7 +1007,8 @@ FocusScope {
 			handled = true;
 			switch (event.key) {
 			case Qt.Key_A:
-				pane.selectAll();
+				if (shift) root.openAiLine();
+				else pane.selectAll();
 				break;
 			case Qt.Key_I:
 				if (shift) pane.invertSelection();
@@ -1385,13 +1405,22 @@ FocusScope {
 		id: menu
 
 		anchors.fill: parent
-		onClosed: keyTarget.forceActiveFocus()
+		onClosed: look.shown ? look.takeKeys() : keyTarget.forceActiveFocus()
 	}
 
 	CommandPalette {
 		id: palette
 
 		anchors.fill: parent
+		onClosed: keyTarget.forceActiveFocus()
+	}
+
+	CommandPalette {
+		id: aiLine
+
+		anchors.fill: parent
+		glyph: "creation"
+		placeholder: "Ask, find, name, translate…"
 		onClosed: keyTarget.forceActiveFocus()
 	}
 

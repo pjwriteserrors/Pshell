@@ -363,11 +363,17 @@ class Daemon:
             if parent is message:
                 parent = None
             own_subject = content.clean_subject(message["subject"])
+            # the forwarded conversation as a chat: the one who forwarded it (or oneself, where one wrote in it) on the right
+            chain = body.get("chain") or []
+            address = str(worker.account.get("address") or "").lower()
+            right = address if any(entry["email"].lower() == address for entry in chain) else str(message["from"].get("email") or "").lower()
+            chain = [dict(entry, right=entry["email"].lower() == right) for entry in chain]
             out.append({
                 "id": message["id"], "from": message["from"], "to": message["to"], "cc": message["cc"], "date": message["date"],
                 "mine": message["mine"], "read": message["read"], "flagged": message.get("flagged", False),
                 "subject": own_subject if own_subject != subject else "",
-                "html": body.get("html", ""), "text": body.get("text", "") or message.get("preview", ""),
+                "html": body.get("html", ""), "text": "\n\n".join([body.get("text", "") or ("" if chain else message.get("preview", ""))] + [f"{entry['name']}: {entry['text']}" for entry in chain]).strip(),
+                "chain": chain,
                 "signature": body.get("signature", ""), "signatureRich": body.get("signatureRich", False), "signaturePage": body.get("signaturePage") if render.current(body.get("signaturePage")) else None, "quote": "" if parent else body.get("quote", ""),
                 "attachments": body.get("attachments", []), "loaded": "body" in message,
                 # a mail with a layout of its own, and the picture of it once it was drawn

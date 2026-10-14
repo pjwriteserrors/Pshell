@@ -16,6 +16,14 @@ EMBED_MODELS = ("nomic-embed-text", "mxbai-embed-large", "bge-m3", "snowflake-ar
 VISION_MODELS = ("qwen2.5vl", "qwen3-vl", "llava", "llama3.2-vision", "moondream", "minicpm-v", "gemma3", "granite3.2-vision", "llava-phi3")
 TEXT_PREFERRED = ("qwen3", "llama3.1", "llama3.2", "gemma3", "mistral", "qwen2.5", "phi4", "phi3")
 SUGGESTED_EMBED = "nomic-embed-text"
+# what each feature uses a model for, and the setting (aiModels in files.json) that picks it
+FEATURES = {
+    "name": {"text": "nameText", "vision": "nameVision"},
+    "index": {"vision": "describe", "embed": "embed"},
+    "search": {"text": "understand", "embed": "embed"},
+    "translate": {"text": "translate"},
+}
+SETTINGS = os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "pshell", "files.json")
 SUGGESTED_VISION = "moondream"
 
 
@@ -50,17 +58,34 @@ def _pick(names, wanted):
     return ""
 
 
-def status():
+def chosen():
+    """The models picked in the settings: { setting: name }; none means the one found here."""
+    try:
+        with open(SETTINGS, encoding="utf-8") as file:
+            picked = (json.load(file).get("settings") or {}).get("aiModels") or {}
+        return picked if isinstance(picked, dict) else {}
+    except (OSError, ValueError, AttributeError):
+        return {}
+
+
+def status(feature="", picked=None):
     names = models()
-    return {
+    state = {
         "running": bool(names) or _alive(),
         "models": names,
+        "embedModels": [name for name in names if _pick([name], EMBED_MODELS)],
         "text": _pick(names, TEXT_PREFERRED) or next((name for name in names if not _pick([name], EMBED_MODELS)), ""),
         "vision": _pick(names, VISION_MODELS),
         "embed": _pick(names, EMBED_MODELS),
         "suggestedEmbed": SUGGESTED_EMBED,
         "suggestedVision": SUGGESTED_VISION,
     }
+    # a picked model that is still there wins over the one found
+    picked = chosen() if picked is None else picked
+    for role, key in FEATURES.get(feature, {}).items():
+        if picked.get(key) in names:
+            state[role] = picked[key]
+    return state
 
 
 def _alive():

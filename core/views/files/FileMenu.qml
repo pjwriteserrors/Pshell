@@ -66,7 +66,8 @@ Item {
 			out.push(entry);
 		}
 		while (out.length > 0 && out[out.length - 1].separator) out.pop();
-		return out;
+		// a header with nothing under it goes
+		return out.filter((entry, i) => !entry.header || (out[i + 1] && !out[i + 1].header && !out[i + 1].separator));
 	}
 
 	function measure(entries) {

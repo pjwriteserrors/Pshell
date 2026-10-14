@@ -287,6 +287,13 @@ Scope {
 		TodoWidgets {}
 	}
 
+	// the editor of a todo list, a window of its own while it is open
+	LazyLoader {
+		active: Plugins.on("todos") && Todos.editorOpen
+
+		TodoEditor {}
+	}
+
 	// the useless fact of the day, a card on the desktop
 	LazyLoader {
 		active: Plugins.on("useless-fact")

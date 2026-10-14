@@ -762,7 +762,7 @@ class Daemon:
     def op_tasks(self, client, request):
         action = request.get("action", "find")
         if action == "add":
-            return {"list": tasks.add(request["list"], request.get("paths", []), request.get("note", ""))}
+            return {"group": tasks.add(request.get("group") or request.get("list", ""), request.get("paths", []), request.get("note", ""))}
         if action == "toggle":
             tasks.toggle(request["list"], int(request["line"]))
             return {}

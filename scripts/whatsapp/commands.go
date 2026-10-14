@@ -33,6 +33,7 @@ import (
 //	react {chat, id, emoji} · edit {chat, id, text} · revoke {chat, id} · remove {chat, id}
 //	forward {chat, id, to: [chat]} · star {chat, id, value}
 //	fetch {chat, id, action: ""|open|save}              a message's file
+//	transcribe {chat, id} · stopTranscribing {chat, id} what a voice message says, written out
 //	typing {chat, value, kind: ""|audio} · record {action: start|stop|cancel, chat, reply}
 //	poll {chat, text, options, multi} · vote {chat, id, options} · place {chat, lat, lng, name} · contact {chat, people}
 //	pin|archive|markUnread {chat, value} · mute {chat, seconds} · ephemeral {chat, seconds} · deleteChat {chat} · block {chat, value}
@@ -72,7 +73,7 @@ type Command struct {
 // what needs no connection
 var offline = map[string]bool{
 	"login": true, "cancelLogin": true, "active": true, "open": true, "close": true, "older": true, "search": true, "starred": true,
-	"stickers": true, "favorite": true, "dropSticker": true, "settings": true, "remove": true, "contacts": true, "record": true, "keepSticker": true, "gifs": true,
+	"stickers": true, "favorite": true, "dropSticker": true, "settings": true, "remove": true, "contacts": true, "record": true, "keepSticker": true, "gifs": true, "transcribe": true, "stopTranscribing": true,
 }
 
 func (b *Bridge) command(c *Command) {
@@ -148,6 +149,10 @@ func (b *Bridge) slow(c *Command) {
 		b.star(c)
 	case "fetch":
 		b.fetchFor(c)
+	case "transcribe":
+		b.transcribe(c)
+	case "stopTranscribing":
+		stopTranscribing(c.Chat, c.ID)
 	case "record":
 		b.record(c)
 	case "poll":

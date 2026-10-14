@@ -311,6 +311,7 @@ Item {
 							root.message.poll ? 280 : 0,
 							root.message.link ? 280 : 0,
 							root.kind === "voice" || root.kind === "audio" ? 250 : 0,
+							heard.visible ? Math.ceil(heard.implicitWidth) + 8 : 0,
 							root.kind === "document" || root.kind === "contact" || root.kind === "location" ? 240 : 0,
 							root.hidden ? 210 : 0,
 							name.visible ? Math.ceil(name.implicitWidth) : 0,
@@ -637,6 +638,111 @@ Item {
 								tabular: true
 								font.pixelSize: Theme.size.small
 							}
+
+							IconButton {
+								visible: !root.message.transcript && !root.message.transcribing
+								implicitWidth: 26
+								implicitHeight: 26
+								icon: "text_recognition"
+								onClicked: WhatsApp.act("transcribe", root.message.id)
+							}
+						}
+
+						// how far the speech model is, as far as can be told from how long it took before
+						RowLayout {
+							id: hearing
+
+							readonly property var job: root.message.transcribing ?? null
+							readonly property bool known: hearing.job !== null && (hearing.job.since ?? 0) > 0 && (hearing.job.expected ?? 0) > 0
+							property real now: Date.now()
+							readonly property real elapsed: hearing.known ? Math.max(0, (hearing.now - hearing.job.since) / 1000) : 0
+							readonly property real remaining: hearing.known ? hearing.job.expected - hearing.elapsed : 0
+
+							visible: hearing.job !== null && !root.hidden
+							Layout.fillWidth: true
+							spacing: 8
+
+							Timer {
+								running: hearing.visible
+								interval: 500
+								repeat: true
+								triggeredOnStart: true
+								onTriggered: hearing.now = Date.now()
+							}
+
+							Rectangle {
+								id: track
+
+								Layout.fillWidth: true
+								implicitHeight: 4
+								radius: 2
+								clip: true
+								color: Qt.alpha(Theme.text, 0.14)
+
+								Rectangle {
+									visible: hearing.known
+									width: track.width * Math.min(0.97, hearing.elapsed / Math.max(1, hearing.job?.expected ?? 1))
+									height: parent.height
+									radius: 2
+									color: Messages.accent
+
+									Behavior on width {
+										Anim {
+											duration: 500
+										}
+									}
+								}
+
+								// waiting for its turn, or for its file
+								Rectangle {
+									id: sweep
+
+									visible: !hearing.known
+									width: track.width * 0.3
+									height: parent.height
+									radius: 2
+									color: Messages.accent
+
+									SequentialAnimation on x {
+										running: sweep.visible
+										loops: Animation.Infinite
+
+										NumberAnimation {
+											from: -sweep.width
+											to: track.width
+											duration: 1200
+											easing.type: Easing.InOutQuad
+										}
+									}
+								}
+							}
+
+							StyledText {
+								visible: hearing.known && hearing.remaining > 0
+								text: WhatsApp.clock(hearing.remaining)
+								tone: Theme.textMuted
+								tabular: true
+								font.pixelSize: Theme.size.small
+							}
+
+							IconButton {
+								implicitWidth: 26
+								implicitHeight: 26
+								icon: "close"
+								onClicked: WhatsApp.act("stopTranscribing", root.message.id)
+							}
+						}
+
+						// what it says, as the speech model heard it
+						StyledText {
+							id: heard
+
+							visible: (root.kind === "voice" || root.kind === "audio") && !root.hidden && (root.message.transcript ?? "") !== ""
+							Layout.fillWidth: true
+							text: root.message.transcript ?? ""
+							tone: Theme.textMuted
+							wrapMode: Text.Wrap
+							font.pixelSize: Theme.size.small
 						}
 
 						// a document
@@ -1126,9 +1232,9 @@ Item {
 					}
 
 					Tool {
-						visible: !root.reacting && root.message.text !== ""
+						visible: !root.reacting && (root.message.text !== "" || (root.message.transcript ?? "") !== "")
 						icon: "content_copy"
-						onClicked: Quickshell.execDetached(["wl-copy", "--", root.message.text])
+						onClicked: Quickshell.execDetached(["wl-copy", "--", root.message.text || root.message.transcript])
 					}
 
 					Tool {

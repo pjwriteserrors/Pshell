@@ -15,7 +15,7 @@ import "../../lib/fuzzysort.js" as Fuzzy
 
 // Launcher content: apps, commands (>), calculator (>c), files (>file),
 // Ollama chats (>chat, >chats), model manager (>ollama), display setup
-// (>setup), niri settings (>niri, >keys), translator (>t), converter (>conv), todo lists (>todo), web
+// (>setup), niri settings (>niri, >keys), translator (>t), converter (>conv), tasks and notes (>todo), web
 // search (>w), Ollama
 // actions on the clipboard (>ai) and KDE Connect (>phone). The newer modes
 // live in overlays/launcher/*View.qml and share one small interface
@@ -141,7 +141,7 @@ Item {
 		// with the file manager on, >file opens it (and searches for what follows)
 		{ id: "file-browser", plugin: "files", shown: !Plugins.on("filemanager"), group: "tools", command: "file", name: "Files", aliases: ["files"], keywords: "browse open folder" },
 		{ id: "file-manager", plugin: "filemanager", group: "tools", command: "file", name: "Files", aliases: ["files", "fm", "explorer", "manager"], keywords: "file manager folders window tabs browse open" },
-		{ id: "todo", plugin: "todos", group: "tools", command: "todo", name: "Todo", aliases: ["todos"], keywords: "lists tasks" },
+		{ id: "todo", plugin: "todos", group: "tools", command: "todo", name: "Todo", aliases: ["todos"], keywords: "lists tasks notes" },
 		{ id: "shelf", plugin: "shelves", group: "tools", command: "shelf", name: "Shelf", keywords: "stash files text", status: Shelf.shelves.length > 0 ? String(Shelf.shelves.length) : "" },
 		{ id: "shelf-clipboard", plugin: "shelves", group: "tools", command: "shelfclip", name: "Shelf from Clipboard", aliases: ["clipshelf"], keywords: "stash copied" },
 		{ id: "identity", plugin: "identities", group: "tools", command: "identity", name: "Fake Identity", aliases: ["fake", "account"], keywords: "new person sign up mail sms phone temporary" },
@@ -149,7 +149,7 @@ Item {
 		{ id: "phone", plugin: Phone.plugin, group: "tools", command: "phone", name: "Phone", keywords: `send ${Phone.name}` },
 		{ id: "chat", plugin: "chat", group: "ai", command: "chat", name: "Chat", keywords: "ai assistant" },
 		{ id: "chats", plugin: "chat", group: "ai", command: "chats", name: "Chats", keywords: "saved history" },
-		{ id: "ai-actions", plugin: "ai-actions", group: "ai", command: "ai", name: "AI Actions", aliases: ["actions"], keywords: "explain summarize translate clipboard" },
+		{ id: "ai-actions", plugin: "ai-actions", group: "ai", command: "ai", name: "AI", aliases: ["actions", "ki"], keywords: "explain summarize translate clipboard ask find files chat" },
 		{ id: "ollama", plugin: "ollama", group: "ai", command: "ollama", name: "Ollama", aliases: ["models"], keywords: "installed running" },
 		{ id: "messages", plugin: "messages", group: "panels", command: "messages", name: "Messages", aliases: ["msg"], keywords: "mail chats inbox", status: Messages.unread > 0 ? String(Messages.unread) : "" },
 		{ id: "mail", plugin: "mail", group: "panels", command: "mail", name: "New Mail", aliases: ["compose"], keywords: "write" },
@@ -2491,6 +2491,8 @@ Item {
 			return;
 		}
 		root.startNewChat();
+		if (AiActions.model !== "" && root.aiModels.some(model => String(model.name || model.model || "") === AiActions.model))
+			root.selectedAiModel = AiActions.model;
 		root.aiPendingAttachments = [{
 			id: root.makeId("clipboard"),
 			path: "",
@@ -3001,9 +3003,9 @@ Item {
 		switch (root.mode) {
 		case "translate": return "Text";
 		case "convert": return "5 kg in lb";
-		case "todo": return todoView.naming ? "List name" : "New task";
+		case "todo": return todoView.placeholder;
 		case "web": return "Search the web";
-		case "ai": return "Instruction";
+		case "ai": return "Ask, find, translate…";
 		case "phone": return "Text to send";
 		case "finder": return "Search your files";
 		case "apps": return "Search apps  ·  > for commands";
@@ -3018,7 +3020,7 @@ Item {
 		case "convert": return "Convert";
 		case "todo": return "Todo";
 		case "web": return "Web Search";
-		case "ai": return "AI Actions";
+		case "ai": return "AI";
 		case "phone": return "Phone";
 		case "shots": return "Screenshots";
 		case "finder": return "Files";
@@ -3031,7 +3033,7 @@ Item {
 		case "calc":
 		case "convert":
 		case "translate": return "copy";
-		case "todo": return todoView.naming ? "create" : "add";
+		case "todo": return todoView.enterHint;
 		case "web": return webSearchView.showingResults ? "open" : "search";
 		case "ai": return "run";
 		case "phone": return "send";
@@ -3692,7 +3694,7 @@ Item {
 				}
 			}
 
-			// todo lists
+			// tasks and notes
 			ModeLayer {
 				current: root.mode === "todo"
 
@@ -3738,8 +3740,19 @@ Item {
 					active: root.mode === "ai"
 					argument: root.modeArgument
 					model: root.selectedAiModel
+					models: root.aiModels.map(model => String(model.name || model.model || ""))
 					busy: root.aiStreaming
 					onRunRequested: (prompt, text) => root.runClipboardAction(prompt, text)
+					onChatRequested: prompt => {
+						root.startNewChat();
+						if (prompt !== "") root.sendChatPrompt(prompt);
+					}
+					onCommandRequested: query => root.setLauncherSearch(query)
+					onFilesRequested: query => {
+						if (query !== "") Files.goTo({ kind: "search", path: Files.home, query: query, ai: true });
+						else Files.show({ paths: [], kind: "search", query: "", newTab: false });
+						root.closeRequested();
+					}
 				}
 			}
 
@@ -5349,7 +5362,7 @@ Item {
 			KeyHint {
 				visible: root.mode === "todo"
 				key: "^N"
-				label: "new list"
+				label: todoView.newLabel
 			}
 
 			KeyHint {

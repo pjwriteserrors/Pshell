@@ -4,7 +4,6 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import qs.style.theme
-import qs.style.widgets
 
 // A popover list to pick one entry from, with a search field when it is
 // long. Entries: [{ value, label, detail, icon }]; ↑↓ and Enter work.

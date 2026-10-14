@@ -62,8 +62,11 @@ Singleton {
 		gitBadges: true,
 		aiIndex: false,
 		aiFolders: [],
+		aiPictures: true,
 		aiOcr: true,
 		aiDescribe: true,
+		// models picked per feature (scripts/files/ai.py FEATURES); none is the one found
+		aiModels: ({}),
 		downloadToast: true,
 		keepAwake: true,
 		ledPulse: true,
@@ -78,6 +81,8 @@ Singleton {
 	property var visited: []
 	// the tabs of the last session: [{ panes: [location], split }]
 	property var session: []
+	// how often files went to a WhatsApp chat: { chatId: count }
+	property var sentTo: ({})
 	property bool loaded: false
 
 	readonly property var tagColors: ["danger", "warning", "success", "primary", "secondary", "tertiary", "text"]
@@ -396,6 +401,11 @@ Singleton {
 		root.save();
 	}
 
+	function noteSent(chatId) {
+		root.sentTo = Object.assign({}, root.sentTo, { [chatId]: (root.sentTo[chatId] ?? 0) + 1 });
+		root.save();
+	}
+
 	function setSession(tabs) {
 		root.session = tabs;
 		root.save();
@@ -437,7 +447,8 @@ Singleton {
 			version: 2,
 			opened: root.opened,
 			visited: root.visited,
-			session: root.session
+			session: root.session,
+			sentTo: root.sentTo
 		}, null, "\t") + "\n")
 	}
 
@@ -477,6 +488,7 @@ Singleton {
 		root.opened = Array.isArray(data.opened) ? data.opened : [];
 		root.visited = Array.isArray(data.visited) ? data.visited : [];
 		root.session = Array.isArray(data.session) ? data.session : [];
+		root.sentTo = data.sentTo && typeof data.sentTo === "object" ? data.sentTo : {};
 		root.loaded = true;
 	}
 

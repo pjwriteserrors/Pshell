@@ -204,6 +204,21 @@ Rectangle {
 					onClicked: root.view.openRows(root.pane, root.picked, false)
 				}
 
+				TextButton {
+					id: kindButton
+
+					readonly property var menu: root.view.kindMenu(root.pane, root.picked)
+
+					visible: !!kindButton.menu && !root.picked[0]?.dir
+					height: 32
+					text: kindButton.menu?.short ?? ""
+					icon: kindButton.menu?.icon ?? ""
+					onClicked: {
+						const at = mapToItem(root.view, 0, height + 4);
+						root.view.showKindMenu(root.pane, root.picked, at.x, at.y);
+					}
+				}
+
 				IconButton {
 					width: 32
 					height: 32

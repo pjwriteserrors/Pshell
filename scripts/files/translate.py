@@ -70,7 +70,7 @@ def local(piece, target, model):
 def translate(path, target, engine, unique, report, check):
     text = text_of(path)
     if engine == "local":
-        model = ai.status()["text"]
+        model = ai.status("translate")["text"]
         if not model:
             raise TranslateError("Translating on this PC needs a text model in Ollama")
         pieces = chunks(text, 2500)

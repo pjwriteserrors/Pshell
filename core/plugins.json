@@ -47,6 +47,8 @@
 	{ "id": "translate", "name": "Translate", "category": "Launcher" },
 	{ "id": "web-search", "name": "Web search", "category": "Launcher" },
 	{ "id": "todos", "name": "Todo lists", "category": "Launcher", "default": false },
+	{ "id": "todo-links", "name": "Note connections", "category": "Launcher", "requires": ["todos"], "icon": "link_variant" },
+	{ "id": "todo-ai", "name": "Task categories by AI", "category": "Launcher", "requires": ["todos"], "icon": "robot" },
 	{ "id": "converter", "name": "Converter", "category": "Launcher", "preview": {"on": ["bar", "launcher-button"], "ipc": ["launcher search '>conv 5 kg in lb'"]} },
 	{ "id": "identities", "name": "Fake identities", "category": "Launcher", "icon": "account_circle" },
 

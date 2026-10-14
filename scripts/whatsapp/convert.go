@@ -463,6 +463,14 @@ func (b *Bridge) view(row *Row, reactions [][2]string, votes map[string][]string
 	if extra.Media != nil {
 		out["media"] = extra.Media
 	}
+	if extra.Transcript != "" {
+		out["transcript"] = extra.Transcript
+	}
+	if row.Kind == "voice" || row.Kind == "audio" {
+		if state := transcription(row.Chat, row.ID); state != nil {
+			out["transcribing"] = state
+		}
+	}
 	if extra.Quote != nil {
 		out["quote"] = map[string]any{"id": extra.Quote.ID, "name": strings.TrimPrefix(b.name(extra.Quote.Sender), "~"), "text": extra.Quote.Text}
 	}

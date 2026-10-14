@@ -49,6 +49,7 @@ Drawer {
 		else if (Popups.payload?.aiFiles) {
 			content.setLauncherSearch(">chat ");
 			root.attachQueue = Popups.payload.aiFiles.slice();
+			root.attachAsk = String(Popups.payload.aiAsk || "");
 			attachTimer.start();
 		}
 		Qt.callLater(() => content.focusSearch());
@@ -56,6 +57,8 @@ Drawer {
 
 	// files are attached one after another: each is read before the next
 	property var attachQueue: []
+	// asked once they are all read
+	property string attachAsk: ""
 
 	Timer {
 		id: attachTimer
@@ -63,11 +66,13 @@ Drawer {
 		interval: 60
 		repeat: true
 		onTriggered: {
+			if (content.aiAttachmentLoadingId !== "") return;
 			if (root.attachQueue.length === 0) {
 				attachTimer.stop();
+				if (root.attachAsk !== "") content.sendChatPrompt(root.attachAsk);
+				root.attachAsk = "";
 				return;
 			}
-			if (content.aiAttachmentLoadingId !== "") return;
 			content.addPendingAttachment(root.attachQueue.shift());
 		}
 	}

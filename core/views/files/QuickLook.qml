@@ -86,6 +86,10 @@ Item {
 		root.closed();
 	}
 
+	function takeKeys() {
+		keys.forceActiveFocus();
+	}
+
 	function go(delta) {
 		if (root.rows.length < 2) return;
 		root.stepDirection = delta;
@@ -381,6 +385,21 @@ Item {
 						const row = root.row;
 						root.close();
 						root.view.openRow(root.pane, row, false);
+					}
+				}
+				TextButton {
+					id: kindButton
+
+					// not for a file taken out of an archive: changes would land in the cache
+					readonly property var menu: root.shown && root.row && root.outer.length === 0 ? root.view.kindMenu(root.pane, [root.row]) : null
+
+					visible: !!kindButton.menu
+					height: 32
+					text: kindButton.menu?.short ?? ""
+					icon: kindButton.menu?.icon ?? ""
+					onClicked: {
+						const at = mapToItem(root.view, 0, height + 4);
+						root.view.showKindMenu(root.pane, [root.row], at.x, at.y);
 					}
 				}
 				IconButton {
