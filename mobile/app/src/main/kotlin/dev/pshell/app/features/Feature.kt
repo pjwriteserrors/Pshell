@@ -94,6 +94,7 @@ val Features: List<Feature> = listOf(
 	DisplayFeature,
 	SshFeature,
 	MachinesFeature,
+	PrinterFeature,
 	LibraryFeature,
 	PcFilesFeature,
 	RpgFeature,

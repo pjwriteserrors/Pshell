@@ -38,7 +38,7 @@ core/services/Phone.qml   the shell's end; core/phone/ holds one file per topic
   todos, notes, calendar, shelves, downloads, reader, AI chat, translate,
   identities, converter, breaks, weather, asteroids, the useless fact),
   **PC** (unlock, system, screen time, connections, updates, quick settings,
-  capture, Studio, lighting, displays, SSH, virtual machines, file manager,
+  capture, Studio, lighting, displays, SSH, virtual machines, 3D printer, file manager,
   PC files, RPG, session) and **Phone & PC** (notifications, clipboard,
   files, calls, find). Each group is a tab of the bar: it opens on
   the group's first feature, the rest sit in a row of chips at the top. The
@@ -100,7 +100,8 @@ topic computes nothing otherwise. A file in a snapshot is `{"$blob": path}`
 in QML; the daemon turns it into a URL the phone fetches (`/blob/<token>`).
 
 Other paths on the port: `PUT /upload/<name>` (a file for the downloads
-folder), `PUT /wallpaper/<name>`, `GET /stream/screen` (JPEG frames).
+folder), `PUT /wallpaper/<name>`, `GET /stream/screen` (JPEG frames),
+`GET /stream/printer` (the printer's camera, passed through from the LAN).
 
 ## Plugins decide what the app offers
 
@@ -134,7 +135,8 @@ the phone alone have plugins of their own in the tab **Phone**, all requiring
 | Sound | `sound` | outputs, a volume per app | volume, mute, switch output |
 | Sounds | `sounds` | the shell's own sounds: the pack, which kind plays, how loud, every sound on its own | pick a pack, all / buttons / automatic / off, volume, quiet during do not disturb, single sounds on or off; play one on the PC |
 | Updates | `updates` | packages, progress, news | check, update |
-| Todos, Notes | `todos`, `notes` | lists, notes | tick, add, edit |
+| Todos | `todos` | the groups of Tasks.md, each task's state, priority, category, description and linked notes | tick, set state or priority, edit, move to another group or category, delete, add (`!`–`!!!` priority, `#group`), a new group; read a linked note; show the task on the PC |
+| Notes | `notes` | notes | add, edit |
 | Windows | `overview` | the monitors where they stand, their workspaces, the windows where they sit | tap to focus, hold and drag to another workspace or monitor, close |
 | Launcher, Radial menu | `apps`, `radial-menu`, `web-search` | programs, the menu's entries | start, run, search the web on the PC |
 | Quick settings | `quick-settings` (+ `dnd`, `keep-awake`, `power-profiles`, `ddc`, `backlight`, `bluetooth`, `network`, `autocorrect`) | each tile | toggle, brightness, monitor input, Bluetooth devices, autocorrect on or off |
@@ -154,6 +156,7 @@ the phone alone have plugins of their own in the tab **Phone**, all requiring
 | Agents | `agents` | agents working or waiting; the last answer from the transcript | answer, focus the window, read or copy the last answer |
 | AI chat | `chat` | | chat with a model on the PC (Ollama), with pictures and text files; edit, ask again |
 | SSH | `ssh` | saved hosts; a host's folders, listed by the PC over SSH | open a session on the PC; files of the phone go to a folder of the host (up to the PC, then scp) |
+| 3D printer | `printer` | what prints: progress, layer, time left, the layer on the nozzle from above, nozzle and bed; the jobs from the slicer's inbox with the ACE slot of each filament; the ACE's spools, humidity and drying; statistics and the last prints; the camera | pause, resume, stop, speed, light; print a job (slots, levelling and calibration), forget one; dry with a preset or stop |
 | Virtual machines | `vm-launcher` | the machines of libvirt, running or off; a launch's three steps, and why one failed | start, shut down, force off, try again; Looking Glass on the PC for a machine that runs |
 | File manager | `filemanager`, `phone-files` | the file manager's home: favourites, recently opened files, tags, collections; the PC's folders, the files of a tag or a collection | walk through folders, search by name below one; a file comes to the phone, opens on the PC or shows in its folder there; favourite folders, tags on and off |
 | RPG | `rpg` | level and XP | |

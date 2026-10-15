@@ -1088,7 +1088,7 @@ Singleton {
 	// the first free place of a grid, left to right, top to bottom
 	function pin(path) {
 		if (path === "" || root.isPinned(path)) return;
-		const screen = Popups.primaryScreen;
+		const screen = Quickshell.screens.find(entry => String(entry.name || "").startsWith("eDP")) ?? Popups.primaryScreen;
 		const width = screen?.width ?? 1920;
 		const height = screen?.height ?? 1080;
 		const taken = root.pins.map(pin => ({ x: pin.x, y: pin.y, w: pin.w > 0 ? pin.w : 310, h: pin.h > 0 ? pin.h : 300 }));

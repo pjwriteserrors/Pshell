@@ -46,6 +46,8 @@ Scope {
 	SoundsTopic { link: root.link }
 	IdentitiesTopic { link: root.link }
 	NewslettersTopic { link: root.link }
+	TodosTopic { link: root.link }
+	PrinterTopic { link: root.link }
 
 	Incoming { link: root.link }
 }

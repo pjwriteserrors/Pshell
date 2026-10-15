@@ -196,7 +196,7 @@
 			]
 		},
 		"todos": {
-			"owner": "daemon",
+			"owner": "shell",
 			"plugins": [
 				"todos"
 			]
@@ -389,6 +389,12 @@
 			"owner": "shell",
 			"plugins": [
 				"useless-fact"
+			]
+		},
+		"printer": {
+			"owner": "shell",
+			"plugins": [
+				"printer"
 			]
 		},
 		"machines": {

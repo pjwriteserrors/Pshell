@@ -11,8 +11,8 @@ import qs.style.widgets
 import qs.core.views.overlays.launcher
 
 // Notes and task boards pinned to the desktop (launcher >todo → pin; a note
-// made for a task pins itself). One transparent layer on the primary screen
-// between wallpaper and windows; only the cards take input, and the
+// made for a task pins itself). One transparent layer on the laptop's own
+// screen (eDP; the primary one without it) between wallpaper and windows; only the cards take input, and the
 // keyboard only while something is typed in one. Cards are dragged by their
 // header, folded to it with its chevron (or a double click) and resized at
 // their bottom right corner (the text grows with the width); all of it
@@ -32,7 +32,7 @@ PanelWindow {
 	// [{ x1, y1, x2, y2, faded }] from a task (on a board) to its note
 	property var links: []
 
-	screen: Popups.primaryScreen
+	screen: Quickshell.screens.find(screen => String(screen.name || "").startsWith("eDP")) ?? Popups.primaryScreen
 	visible: Todos.pins.length > 0
 	anchors.top: true
 	anchors.bottom: true

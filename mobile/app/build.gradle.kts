@@ -53,8 +53,8 @@ android {
 		applicationId = "dev.pshell.app"
 		minSdk = 30
 		targetSdk = 36
-		versionCode = 4
-		versionName = "1.3"
+		versionCode = 5
+		versionName = "1.4"
 	}
 
 	buildTypes {
@@ -97,6 +97,9 @@ dependencies {
 	implementation("io.coil-kt.coil3:coil-svg:3.6.3")
 	implementation("com.journeyapps:zxing-android-embedded:4.3.0")
 	implementation("androidx.glance:glance-appwidget:1.2.0")
+	implementation("androidx.media3:media3-exoplayer:1.8.0")
+	implementation("androidx.media3:media3-datasource-okhttp:1.8.0")
+	implementation("androidx.media3:media3-ui:1.8.0")
 
 	testImplementation("junit:junit:4.13.2")
 }
