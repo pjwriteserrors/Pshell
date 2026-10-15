@@ -386,6 +386,12 @@ class Daemon:
         """Every few seconds: Solaar came or went, a receiver was plugged in."""
         running = solaar_running()
         if running != self.solaar:
+            if running and self.in_charge:
+                # Solaar is back: the buttons are its again
+                self.engine.release_all()
+                for mouse in self.mice.values():
+                    if mouse.online:
+                        self.undivert(mouse)
             self.solaar = running
             emit("solaar", running=running)
             if not running:
@@ -1117,7 +1123,13 @@ class Stats:
             moved = 0.0
             try:
                 while True:
+                    if daemon.config["options"].get("stats", True) is False and not daemon.watching:
+                        time.sleep(5)
+                        continue
                     ready, _, _ = select.select(list(fds), [], [], 5)
+                    # a mouse reports up to a thousand times a second: read
+                    # them in handfuls rather than one by one
+                    time.sleep(0.02)
                     for fd in ready:
                         dx = dy = 0
                         for ev in fds[fd].read():
@@ -1127,19 +1139,20 @@ class Stats:
                                 elif ev.code == E.REL_Y:
                                     dy += ev.value
                                 elif ev.code == E.REL_WHEEL:
-                                    self.add(scroll=abs(ev.value))
+                                    if daemon.config["options"].get("stats", True) is not False:
+                                        self.add(scroll=abs(ev.value))
                                     if daemon.watching:
                                         emit("wheel", wheel="main", delta=ev.value)
                                 elif ev.code == E.REL_HWHEEL and daemon.watching:
                                     emit("wheel", wheel="thumb", delta=ev.value)
                             elif ev.type == E.EV_KEY and ev.code in buttons:
-                                if ev.value == 1:
+                                if ev.value == 1 and daemon.config["options"].get("stats", True) is not False:
                                     self.add(clicks=1)
                                 if daemon.watching and ev.value in (0, 1):
                                     emit("press", control=buttons[ev.code], down=ev.value == 1, native=True)
                         if dx or dy:
                             moved += math.hypot(dx, dy)
-                    if moved:
+                    if moved and daemon.config["options"].get("stats", True) is not False:
                         mouse = daemon.current()
                         dpi = (mouse.state.get("dpi", {}).get("value") if mouse else None) or 1000
                         self.add(distance=moved / dpi * 0.0254)

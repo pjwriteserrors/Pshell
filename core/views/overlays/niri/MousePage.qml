@@ -17,7 +17,7 @@ SettingsPage {
 	title: Mouse.device ? Mouse.device.name : "Mouse"
 	description: Mouse.device ? "What every button does – also per app and by swipe – and how it points, scrolls and feels. Changes reach the mouse at once." : "Logitech mice on a Bolt or Unifying receiver, or on Bluetooth."
 	asideWidth: Math.min(380, Math.max(300, root.width * 0.3))
-	recording: studio.picker.recording || rulesList.picker?.recording === true
+	recording: studio.picker.recording || rulesList.recording
 
 	property string control: "gesture"
 	property string app: ""
@@ -316,7 +316,6 @@ SettingsPage {
 		title: "Buttons & gestures"
 		subtitle: "Pick a control on the mouse, a place and a way to use it. Swipe = hold the button and move the mouse."
 		icon: "gesture_tap_button"
-		modified: Mouse.rules.length > 0
 
 		ButtonStudio {
 			id: studio
@@ -879,8 +878,13 @@ SettingsPage {
 		anchor: "mouse-stats"
 		visible: !!Mouse.device
 		title: "On the move"
-		subtitle: `All together ${root.fmtDistance(Mouse.stats.total?.distance ?? 0)}, ${(Mouse.stats.total?.clicks ?? 0).toLocaleString()} clicks since the shell counts`
+		subtitle: Mouse.option("stats", true) ? `All together ${root.fmtDistance(Mouse.stats.total?.distance ?? 0)}, ${(Mouse.stats.total?.clicks ?? 0).toLocaleString()} clicks since the shell counts` : "Not counted – switch it on to see how far the mouse goes"
 		icon: "map_marker_distance"
+
+		trailing: Toggle {
+			checked: Mouse.option("stats", true)
+			onToggled: on => Mouse.setOption("stats", on)
+		}
 
 		RowLayout {
 			Layout.fillWidth: true

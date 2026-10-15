@@ -14,6 +14,7 @@ ColumnLayout {
 	id: root
 
 	property var picker: null
+	readonly property bool recording: modPicker.recording
 
 	signal opened(string control, string app)
 
