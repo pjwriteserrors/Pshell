@@ -209,6 +209,30 @@ Scope {
 	}
 
 	// quick actions around the pointer
+	// the Logitech mouse: `mouse profile Gaming`, `mouse next`, `mouse rumble games`
+	IpcHandler {
+		target: "mouse"
+		enabled: Plugins.on("mouse")
+
+		function open(): void {
+			NiriSettings.page = "mouse";
+			Popups.withFocusedScreen(screen => Popups.openModal("niri", screen));
+		}
+		function profile(name: string): bool {
+			return Mouse.useProfile(name);
+		}
+		function next(): void {
+			Mouse.nextProfile();
+		}
+		function profiles(): string {
+			return JSON.stringify({ active: Mouse.activeProfile, profiles: Mouse.profiles.map(p => ({ id: p.id, name: p.name, apps: p.apps ?? [], games: p.games === true })) });
+		}
+		// off | games | always
+		function rumble(mode: string): void {
+			Mouse.setOption("rumble", ["off", "games", "always"].includes(mode) ? mode : "off");
+		}
+	}
+
 	IpcHandler {
 		target: "radial"
 		enabled: Plugins.on("radial-menu")

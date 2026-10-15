@@ -247,6 +247,9 @@ class Daemon:
         self.engine = Engine(self.fire, self.native, self.loop.schedule, self.live)
         self.app = ""
         self.windows = {}
+        self.windows_known = False
+        self.gaming = False
+        self.rumble = None
         self.focused = None
         self.dpi_index = {}
         self.shifted = {}
@@ -254,6 +257,7 @@ class Daemon:
         self.last_move = 0.0
         self.move_pending = None
         self.mods_thread = None
+        self.warned = {}
 
     # ── setup ───────────────────────────────────────────────────────────
     def start(self):
@@ -263,6 +267,8 @@ class Daemon:
             pass
         self.engine.configure(self.config["rules"], self.config["options"])
         self.output = actions.Output()
+        self.rumble = Rumble(self)
+        self.rumble.update()
         self.loop.post(self.scan)
         self.loop.schedule(5, self.poll)
         threading.Thread(target=self.read_stdin, daemon=True).start()
@@ -276,6 +282,8 @@ class Daemon:
 
     def stop(self):
         self.engine.release_all()
+        if self.rumble and self.rumble.proc:
+            self.rumble.proc.terminate()
         for mouse in list(self.mice.values()):
             if mouse.online and not self.solaar:
                 self.undivert(mouse)
@@ -354,6 +362,7 @@ class Daemon:
             return
         mouse.online = True
         mouse.configured_at = time.monotonic()
+        self.battery_seen(mouse)
         mouse.diverted = {}
         mouse.thumb_diverted = None
         mouse.wheel_diverted = False
@@ -368,6 +377,31 @@ class Daemon:
                     mouse.read_features()
                     self.publish()
             self.loop.schedule(1.0, features)
+
+    def battery_seen(self, mouse):
+        """Keeps the level over time, says how long it lasts and warns once
+        when it runs low (15 %, 5 %) and when it is full."""
+        battery = mouse.state.get("battery")
+        if not battery:
+            return
+        battery.update(self.stats.battery(mouse.serial, battery))
+        percent, status = battery["percent"], battery["status"]
+        warned = self.warned.setdefault(mouse.serial, set())
+        name = mouse.info.get("name", "Mouse")
+        if status == "discharging":
+            warned.discard("full")
+            for level, wave in ((5, "ANGRY ALERT"), (15, "KNOCK")):
+                if percent <= level and level not in warned:
+                    warned.add(level)
+                    notify(f"{name}: {percent} % left", "Time for the cable" if level == 5 else "It will want charging soon", "battery-low")
+                    self.loop.post(lambda wave=wave: self.play(wave, mouse))
+                    break
+        else:
+            warned.discard(5)
+            warned.discard(15)
+            if status == "full" and "full" not in warned:
+                warned.add("full")
+                notify(f"{name} is charged", "The cable can go", "battery-full")
 
     def remember(self, mouse):
         devices = self.config.setdefault("devices", {})
@@ -569,6 +603,7 @@ class Daemon:
                     self.engine.move(dx, dy)
         elif fid == hidpp.UNIFIED_BATTERY and function == 0:
             mouse.state["battery"] = hidpp.parse_battery(params)
+            self.battery_seen(mouse)
             emit("battery", device=mouse.serial, battery=mouse.state["battery"])
         elif fid == hidpp.THUMB_WHEEL and function == 0:
             rotation = int.from_bytes(params[0:2], "big", signed=True)
@@ -605,14 +640,15 @@ class Daemon:
         down = names - mouse.pressed
         up = mouse.pressed - names
         mouse.pressed = names
+        live = self.watching or self.config["options"].get("hud", True)
         for name in up:
-            if self.watching:
+            if live:
                 emit("press", device=mouse.serial, control=name, down=False)
             if self.in_charge:
                 self.engine.up(name, now)
                 self.chord_wheel(mouse, name, False)
         for name in down:
-            if self.watching:
+            if live:
                 emit("press", device=mouse.serial, control=name, down=True)
             if self.in_charge:
                 self.engine.app = self.app
@@ -642,7 +678,7 @@ class Daemon:
     def live(self, kind, **data):
         if kind == "fired":
             emit("fired", **data)
-        elif kind == "move" and self.watching:
+        elif kind == "move" and (self.watching or self.config["options"].get("hud", True)):
             # at most 30 a second
             now = time.monotonic()
             if now - self.last_move > 0.033:
@@ -694,6 +730,16 @@ class Daemon:
         try:
             if kind == "keys":
                 codes = out.codes(action)
+                if action.get("latch") and phase == "tap":
+                    # pressed once: held down until pressed again (a sticky Super)
+                    key = f"latch:{','.join(map(str, codes))}"
+                    if key in out.held:
+                        out.release(key)
+                        emit("latch", keys=action.get("keys") or [], on=False)
+                    else:
+                        out.hold(key, codes)
+                        emit("latch", keys=action.get("keys") or [], on=True)
+                    return
                 if phase == "start":
                     out.hold(owner, codes)
                 elif phase == "end":
@@ -821,7 +867,39 @@ class Daemon:
             proc.wait()
             time.sleep(3)
 
+    def feel_desktop(self, moment):
+        """A pulse for something on the desktop (options.feel: moment -> waveform)."""
+        waveform = (self.config["options"].get("feel") or {}).get(moment)
+        if waveform:
+            self.loop.post(lambda: self.play(waveform))
+
     def on_niri(self, event):
+        if "WorkspacesChanged" in event:
+            self.workspaces = {w["id"]: w.get("output") for w in event["WorkspacesChanged"]["workspaces"]}
+            for w in event["WorkspacesChanged"]["workspaces"]:
+                if w.get("is_focused"):
+                    self.focused_output = w.get("output")
+            return
+        if "WorkspaceActivated" in event:
+            data = event["WorkspaceActivated"]
+            if data.get("focused"):
+                output = getattr(self, "workspaces", {}).get(data["id"])
+                if output and output != getattr(self, "focused_output", output):
+                    self.feel_desktop("monitor")
+                else:
+                    self.feel_desktop("workspace")
+                self.focused_output = output
+            return
+        if "WindowUrgencyChanged" in event:
+            if event["WindowUrgencyChanged"].get("urgent"):
+                self.feel_desktop("urgent")
+            return
+        if "WindowOpenedOrChanged" in event and event["WindowOpenedOrChanged"]["window"]["id"] not in self.windows and self.windows_known:
+            self.feel_desktop("open")
+        if "WindowClosed" in event:
+            self.feel_desktop("close")
+        if "WindowsChanged" in event:
+            self.windows_known = True
         if "WindowsChanged" in event:
             self.windows = {w["id"]: w.get("app_id") or "" for w in event["WindowsChanged"]["windows"]}
             for w in event["WindowsChanged"]["windows"]:
@@ -842,8 +920,8 @@ class Daemon:
         if app != self.app:
             self.app = app
             self.loop.post(lambda: setattr(self.engine, "app", app))
-            if self.watching:
-                emit("focus", app=app)
+            # the page switches profiles by app, so always
+            emit("focus", app=app)
 
     # ── held modifiers (evdev keyboards, only while a rule needs them) ──
     def ensure_mods(self):
@@ -943,6 +1021,7 @@ class Daemon:
             self.config = merge_config(command.get("config") or {})
             self.engine.configure(self.config["rules"], self.config["options"])
             self.ensure_mods()
+            self.rumble.update()
             for mouse in self.mice.values():
                 if mouse.online:
                     self.apply_settings(mouse)
@@ -953,11 +1032,17 @@ class Daemon:
             if mouse and mouse.online:
                 self.config.setdefault("devices", {}).setdefault(mouse.serial, {}).update(command.get("values") or {})
                 self.apply_settings(mouse)
+        elif op == "gaming":
+            self.gaming = bool(command.get("on"))
+            self.rumble.update()
         elif op == "watch":
             self.watching = bool(command.get("on"))
             if self.watching:
                 emit("focus", app=self.app)
                 emit("stats", **self.stats.summary())
+                for mouse in self.mice.values():
+                    if mouse.info.get("serial"):
+                        emit("batteryLog", device=mouse.serial, log=self.stats.history(mouse.serial))
         elif op == "refresh":
             for mouse in self.mice.values():
                 if mouse.online:
@@ -993,6 +1078,90 @@ class Daemon:
                 if mouse.online or serial:
                     return mouse
         return None
+
+
+def notify(title, body, icon):
+    if DRY:
+        log(f"DRY notify {title}")
+        return
+    subprocess.Popen(["notify-send", "-a", "Mouse", "-i", icon, title, body],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+class Rumble:
+    """Game haptics: what plays on the speakers, its bass, felt in the
+    thumb. parec takes the default output's monitor at 8 kHz; every 20 ms
+    the low end is weighed against the last second, and a hit that stands
+    out (a shot, a crash, a kick drum) plays a pulse that matches its
+    strength. Runs only while wanted: options.rumble "always", or "games"
+    while a game is running (the page says so)."""
+
+    def __init__(self, daemon):
+        self.daemon = daemon
+        self.proc = None
+        self.thread = None
+
+    def wanted(self):
+        mode = self.daemon.config["options"].get("rumble", "off")
+        return mode == "always" or (mode == "games" and self.daemon.gaming)
+
+    def update(self):
+        if self.wanted() and self.proc is None:
+            try:
+                self.proc = subprocess.Popen(
+                    ["parec", "-d", "@DEFAULT_MONITOR@", "--rate=8000", "--channels=1",
+                     "--format=s16le", "--raw", "--latency-msec=20"],
+                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            except OSError as error:
+                log(f"rumble: {error}")
+                return
+            self.thread = threading.Thread(target=self.listen, args=(self.proc,), daemon=True)
+            self.thread.start()
+            emit("rumble", on=True)
+        elif not self.wanted() and self.proc is not None:
+            self.proc.terminate()
+            self.proc = None
+            emit("rumble", on=False)
+
+    def listen(self, proc):
+        import numpy as np
+        block = 160 * 2  # 20 ms
+        average = 0.0
+        last_hit = 0.0
+        previous = 0.0
+        last_emit = 0.0
+        while proc.poll() is None:
+            data = proc.stdout.read(block)
+            if not data or len(data) < block:
+                break
+            options = self.daemon.config["options"]
+            sensitivity = float(options.get("rumbleSensitivity", 60)) / 100
+            samples = np.frombuffer(data, dtype="<i2").astype(np.float32)
+            # an average of every 20 samples keeps what is below ~200 Hz
+            bass = samples.reshape(-1, 20).mean(axis=1)
+            energy = float(np.sqrt(np.mean(bass * bass)))
+            now = time.monotonic()
+            ratio = energy / max(average, 1.0)
+            floor = 2500 * (1.15 - sensitivity)
+            needed = 3.2 - sensitivity * 1.8
+            if (energy > floor and ratio > needed and energy > previous * 1.2
+                    and now - last_hit > float(options.get("rumbleGap", 110)) / 1000):
+                last_hit = now
+                strength = min(1.0, (ratio - needed) / 3 + energy / 20000)
+                if strength > 0.66:
+                    wave = "SHARP COLLISION"
+                elif strength > 0.33:
+                    wave = "DAMP COLLISION"
+                else:
+                    wave = "SUBTLE COLLISION"
+                self.daemon.loop.post(lambda wave=wave: self.daemon.play(wave))
+                if self.daemon.watching:
+                    emit("hit", strength=round(strength, 2))
+            if self.daemon.watching and now - last_emit > 0.066:
+                last_emit = now
+                emit("bass", level=round(min(1.0, energy / 12000), 3), threshold=round(min(1.0, max(floor, average * needed) / 12000), 3))
+            average = average * 0.96 + energy * 0.04
+            previous = energy
 
 
 class DryDevice:
@@ -1072,6 +1241,32 @@ class Stats:
                 bucket["clicks"] = bucket.get("clicks", 0) + clicks
                 bucket["scroll"] = bucket.get("scroll", 0) + scroll
             self.dirty = True
+
+    def battery(self, serial, battery):
+        """Notes a level that changed; returns {hoursLeft} from how fast it
+        fell since the last charge (None until it has fallen for a while)."""
+        with self.lock:
+            log_ = self.data.setdefault("battery", {}).setdefault(serial, [])
+            now = time.time()
+            if not log_ or log_[-1][1] != battery["percent"] or log_[-1][2] != battery["status"]:
+                log_.append([round(now), battery["percent"], battery["status"]])
+                del log_[:-500]
+                self.dirty = True
+            # the run since it last charged
+            run = []
+            for when, percent, status in reversed(log_):
+                if status != "discharging":
+                    break
+                run.append((when, percent))
+            run.reverse()
+            if len(run) >= 2 and run[-1][0] - run[0][0] > 4 * 3600 and run[0][1] > run[-1][1]:
+                per_hour = (run[0][1] - run[-1][1]) / ((run[-1][0] - run[0][0]) / 3600)
+                return {"hoursLeft": round(battery["percent"] / per_hour, 1), "since": run[0][0]}
+            return {"hoursLeft": None}
+
+    def history(self, serial):
+        with self.lock:
+            return list((self.data.get("battery") or {}).get(serial, []))[-200:]
 
     def summary(self):
         with self.lock:
@@ -1267,6 +1462,52 @@ def solaar_import():
     return {"devices": devices, "rules": rules, "skipped": skipped}
 
 
+KEY_WORDS = {"KEY_LEFTMETA": "super", "KEY_RIGHTMETA": "super", "KEY_LEFTCTRL": "ctrl", "KEY_RIGHTCTRL": "ctrl",
+             "KEY_LEFTSHIFT": "shift", "KEY_RIGHTSHIFT": "shift", "KEY_LEFTALT": "alt", "KEY_RIGHTALT": "altgr"}
+
+
+def script_keys(command):
+    """A helper script that only presses keys through ydotool (what Solaar
+    rules on Wayland are often made of) becomes those keys: pressed and let
+    go in one go, or – a script that keeps a state file and presses in one
+    branch, lets go in the other – held until the next press (latch)."""
+    import re
+    path = Path(os.path.expanduser(command.strip()))
+    if " " in command.strip() or not path.is_file() or path.stat().st_size > 4096:
+        return None
+    try:
+        text = path.read_text()
+    except OSError:
+        return None
+    lines = [l.strip() for l in text.splitlines() if l.strip() and not l.strip().startswith("#")]
+    steps = re.findall(r"ydotool\s+key\s+((?:\d+:[01]\s*)+)", text)
+    if not steps:
+        return None
+    allowed = re.compile(r"^(ydotool key [\d: ]+|if .*|then|else|fi|STATE_FILE=.*|rm .*|touch .*|#!.*|.*=\$\(.*\))$")
+    if not all(allowed.match(l) for l in lines):
+        return None
+    events = [(int(code), int(value)) for step in steps for code, value in (t.split(":") for t in step.split())]
+    pressed = [code for code, value in events if value == 1]
+    released = [code for code, value in events if value == 0]
+    if not pressed or set(pressed) != set(released):
+        return None
+    try:
+        from evdev import ecodes as E
+        names = []
+        for code in pressed:
+            raw = E.KEY.get(code, f"KEY_{code}")
+            raw = raw[0] if isinstance(raw, list) else raw
+            names.append(KEY_WORDS.get(raw, raw[4:].lower()))
+    except ImportError:
+        names = [str(c) for c in pressed]
+    latch = "if " in text and ("touch" in text or "STATE" in text)
+    out = {"kind": "keys", "keys": names, "codes": pressed, "label": " + ".join(n.capitalize() for n in names)}
+    if latch:
+        out["latch"] = True
+        out["label"] = f"{out['label']} (stays down until pressed again)"
+    return out
+
+
 def convert_solaar_rule(items):
     control = trigger = None
     app = ""
@@ -1303,7 +1544,7 @@ def convert_solaar_rule(items):
             mods = [SOLAAR_MODS[m] for m in (value if isinstance(value, list) else [value]) if m in SOLAAR_MODS]
         elif name == "Execute":
             command = value if isinstance(value, str) else " ".join(shlex.quote(str(v)) for v in value)
-            action = {"kind": "command", "command": command}
+            action = script_keys(command) or {"kind": "command", "command": command}
         elif name == "KeyPress":
             keys = value[0] if isinstance(value, list) and value and isinstance(value[0], list) else value
             keys = keys if isinstance(keys, list) else [keys]

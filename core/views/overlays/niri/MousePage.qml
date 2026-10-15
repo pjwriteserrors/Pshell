@@ -44,6 +44,12 @@ SettingsPage {
 		root.reveal("mouse-buttons");
 	}
 
+	function fmtLeft(hours) {
+		if (hours >= 48) return `${Math.round(hours / 24)} days`;
+		if (hours >= 2) return `${Math.round(hours)} hours`;
+		return `${Math.round(hours * 60)} minutes`;
+	}
+
 	function fmtDistance(m) {
 		if (!m) return "0 m";
 		return m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${m.toFixed(m < 10 ? 1 : 0)} m`;
@@ -179,7 +185,7 @@ SettingsPage {
 
 						StyledText {
 							Layout.fillWidth: true
-							text: !Mouse.device ? (Mouse.scanned ? "None found" : "Looking …") : (!Mouse.online ? "Asleep – move it to wake it" : `${root.st.battery?.status ?? ""} · ${Mouse.device.connection === "receiver" ? "Bolt receiver" : Mouse.device.connection}`)
+							text: !Mouse.device ? (Mouse.scanned ? "None found" : "Looking …") : (!Mouse.online ? "Asleep – move it to wake it" : (root.st.battery?.hoursLeft ? `about ${root.fmtLeft(root.st.battery.hoursLeft)} left` : `${root.st.battery?.status ?? ""} · ${Mouse.device.connection === "receiver" ? "Bolt receiver" : Mouse.device.connection}`))
 							tone: Theme.textSubtle
 							font.pixelSize: Theme.size.small
 							elide: Text.ElideRight
@@ -309,6 +315,19 @@ SettingsPage {
 		}
 	}
 
+	// ── profiles ───────────────────────────────────────────────────────────
+	SettingCard {
+		anchor: "mouse-profiles"
+		visible: !!Mouse.device
+		title: "Profiles"
+		subtitle: Mouse.profiles.length > 1 ? `${Mouse.active?.name ?? ""} is in use${Mouse.override ? " (picked by hand)" : ""}` : "Whole sets of buttons and settings – for games, for drawing, per app. Make a second one to switch."
+		icon: "account_switch_outline"
+
+		ProfileStrip {
+			Layout.fillWidth: true
+		}
+	}
+
 	// ── buttons ────────────────────────────────────────────────────────────
 	SettingCard {
 		anchor: "mouse-buttons"
@@ -326,6 +345,14 @@ SettingsPage {
 			active: root.active
 			onControlPicked: control => root.control = control
 			onAppPicked: app => root.app = app
+		}
+
+		FlagRow {
+			icon: "gesture_swipe"
+			title: "Show the gestures while holding"
+			subtitle: "Hold a button that has swipes for a moment: what each way does appears in the middle of the screen, and follows the mouse"
+			checked: Mouse.option("hud", true)
+			onToggled: on => Mouse.setOption("hud", on)
 		}
 	}
 
@@ -722,6 +749,29 @@ SettingsPage {
 		}
 	}
 
+	// ── games and the desktop, felt ────────────────────────────────────────
+	SettingCard {
+		anchor: "mouse-feel"
+		visible: root.has && !!root.st.haptic
+		title: "Haptics beyond clicks"
+		subtitle: "The mouse as a little rumble motor: games, music, and the desktop itself."
+		icon: "vibrate"
+
+		GameFeel {
+			Layout.fillWidth: true
+		}
+
+		Rectangle {
+			Layout.fillWidth: true
+			Layout.preferredHeight: 1
+			color: Theme.outline
+		}
+
+		DesktopFeel {
+			Layout.fillWidth: true
+		}
+	}
+
 	// ── force panel ────────────────────────────────────────────────────────
 	SettingCard {
 		anchor: "mouse-force"
@@ -992,6 +1042,29 @@ SettingsPage {
 					}
 				}
 			}
+		}
+	}
+
+	// ── battery ────────────────────────────────────────────────────────────
+	SettingCard {
+		anchor: "mouse-battery"
+		visible: root.has && !!root.st.battery
+		title: "Battery"
+		subtitle: root.st.battery?.hoursLeft ? `${root.st.battery.percent} % – at the pace since the last charge, about ${root.fmtLeft(root.st.battery.hoursLeft)} left` : `${root.st.battery?.percent ?? 0} %, ${root.st.battery?.status ?? ""} – how long it lasts shows once it has run a few hours`
+		icon: (root.st.battery?.status ?? "").startsWith("charging") ? "battery_charging" : "battery"
+
+		BatteryChart {
+			Layout.fillWidth: true
+			Layout.preferredHeight: 120
+			log: Mouse.batteryLog
+		}
+
+		StyledText {
+			Layout.fillWidth: true
+			text: "A knock and a notification at 15 %, an angry buzz at 5 %, a note when it is full."
+			tone: Theme.textFaint
+			font.pixelSize: Theme.size.small
+			wrapMode: Text.WordWrap
 		}
 	}
 

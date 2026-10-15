@@ -54,6 +54,7 @@ class Held:
         self.swiped = False  # a swipe or a chord fired: no click on release
         self.held = None  # the hold rule that fired
         self.passing = False  # the press went straight through (native or sustained)
+        self.done = False  # the click fired on the press already
         self.done_swipe = False
         self.wheel = 0.0
         self.thumb = 0.0
@@ -184,6 +185,10 @@ class Engine:
                 state.passing = True
                 self._fire(click, control, "click", "start")
                 return
+            # nothing else it could become: no need to wait for the release
+            state.done = True
+            self._fire(click, control, "click")
+            return
         if "hold" in rules:
             token = state.token
             self.schedule(self.hold_ms / 1000.0, lambda: self._hold(control, token))
@@ -206,6 +211,8 @@ class Engine:
         if control in self.order:
             self.order.remove(control)
         if state is None:
+            return
+        if state.done:
             return
         if state.passing:
             click = state.rules.get("click")

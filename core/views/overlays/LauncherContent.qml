@@ -169,6 +169,17 @@ Item {
 		{ id: "niri-settings", shown: Plugins.on("niri-settings") && Lighting.enabled, group: "system", command: "lighting", page: "lighting", name: "Lighting", glyph: "led_strip_variant", aliases: ["rgb", "openrgb", "leds"], keywords: "keyboard fans gpu wallpaper screen live ambient" },
 		{ id: "niri-settings", plugin: "niri-settings", group: "system", command: "keys", page: "keys", name: "Key Binds", aliases: ["binds", "keybinds", "shortcuts"], keywords: "niri" },
 		{ id: "niri-settings", plugin: "niri-settings", group: "system", command: "setup", page: "displays", name: "Display Setup", aliases: ["display", "displays", "monitors"], keywords: "arrange" },
+		{
+			id: "mouse", plugin: "mouse", group: "system", command: "mouse", name: "Mouse Profiles", aliases: ["maus", "profile", "profiles", "logitech"], keywords: "mx master dpi gaming haptics buttons",
+			status: Mouse.active?.name ?? "",
+			// a profile each, then what else the mouse has
+			children: Mouse.profiles.map(p => ({ id: "mouse-profile", profile: p.id, command: `mouse ${p.name.toLowerCase()}`, name: p.name, glyph: p.icon || "mouse_variant", status: p.id === Mouse.activeProfile ? "In use" : ((p.apps ?? []).length > 0 ? p.apps.join(", ") : (p.games ? "While playing" : "")), keywords: `profile ${(p.apps ?? []).join(" ")}` }))
+				.concat([
+					{ id: "mouse-new", command: "mouse new", name: "New Profile", glyph: "plus", keywords: "copy duplicate add" },
+					{ id: "mouse-rumble", command: "mouse rumble", name: "Game Haptics", glyph: "vibrate", status: ({ off: "Off", games: "In games", always: "Always" })[Mouse.option("rumble", "off")], keywords: "rumble bass feel vibration" },
+					{ id: "niri-settings", command: "mouse settings", page: "mouse", name: "Mouse Settings", glyph: "tune_variant", keywords: "buttons gestures dpi" }
+				])
+		},
 		{ id: "games", plugin: "games", group: "tools", command: "games", name: "Games", aliases: ["game", "play", "steam", "library"], keywords: "steam proton wine library play launch covers", status: Games.running.length > 0 ? "Playing" : "" },
 		{ id: "vm", plugin: "vm-launcher", group: "system", command: "vm", name: "Virtual Machines", aliases: ["vms", "windows", "win", "virt"], keywords: "looking glass qemu libvirt start boot", status: Machines.vms.some(vm => vm.running) ? "On" : "" },
 		{ id: "dnd", plugin: "dnd", group: "system", command: "dnd", name: "Do Not Disturb", aliases: ["quiet", "silent"], keywords: "notifications", status: Notifs.dnd ? "On" : "" },
@@ -182,7 +193,7 @@ Item {
 	property int paletteIndex: 0
 
 	// every command once, those of a group behind it
-	readonly property var flatCommands: root.commands.filter(command => !command.parent).reduce((all, command) => all.concat(command.children ? [command].concat(command.children.filter(child => child.id !== "studio-page")) : [command]), [])
+	readonly property var flatCommands: root.commands.filter(command => !command.parent).reduce((all, command) => all.concat(command.children ? [command].concat(command.children.filter(child => child.id !== "studio-page" && !String(child.id).startsWith("mouse-"))) : [command]), [])
 	// the group whose commands are shown: ">shot", ">studio wall"
 	readonly property var openGroup: {
 		if (!root.inCommandMode) return null;
@@ -2329,6 +2340,19 @@ Item {
 			root.closeRequested();
 			root.openStudioRequested(command.page);
 			break;
+		case "mouse-profile":
+			root.closeRequested();
+			Mouse.useProfile(command.profile);
+			break;
+		case "mouse-new":
+			root.closeRequested();
+			Mouse.newProfile("", "");
+			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "mouse", "open"]);
+			break;
+		case "mouse-rumble":
+			// off → in games → always → off
+			Mouse.setOption("rumble", ({ off: "games", games: "always", always: "off" })[Mouse.option("rumble", "off")]);
+			break;
 		case "niri-settings":
 			root.closeRequested();
 			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "settings", "open", command.page || ""]);
@@ -2953,6 +2977,10 @@ Item {
 		case "rpg": return "gamepad_variant";
 		case "studio": return "palette";
 		case "studio-page": return command.glyph;
+		case "mouse":
+		case "mouse-profile":
+		case "mouse-new":
+		case "mouse-rumble": return command.glyph ?? "mouse_variant";
 		case "niri-settings": return command.glyph ?? (command.page === "keys" ? "keyboard" : (command.page === "displays" ? "monitor_multiple" : "tune_variant"));
 		case "calculator":
 		case "calculator-result": return "calculator";

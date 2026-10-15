@@ -38,6 +38,13 @@ Scope {
 		CursorCount {}
 	}
 
+	// what the swipes of a held mouse button do
+	Variants {
+		model: Plugins.on("mouse") ? Quickshell.screens : []
+
+		GestureHud {}
+	}
+
 	// the light on a pointer that is shaken
 	Variants {
 		model: Plugins.on("find-mouse") ? Quickshell.screens : []

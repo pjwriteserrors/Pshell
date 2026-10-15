@@ -42,6 +42,7 @@ Popup {
 		feel.current = root.rule?.feel === undefined || root.rule?.feel === null ? "auto" : (root.rule.feel === "" ? "none" : root.rule.feel);
 		repeat.checked = root.rule?.repeat === true;
 		sustain.checked = action?.sustain === true;
+		latch.checked = action?.latch === true;
 		recorder.keys = action?.kind === "keys" ? (action.keys ?? []) : [];
 		recorder.codes = action?.kind === "keys" ? (action.codes ?? []) : [];
 		recorder.label = action?.kind === "keys" ? (action.label ?? "") : "";
@@ -62,6 +63,7 @@ Popup {
 
 	function pick(action) {
 		if (action.kind === "keys" && root.canSustain && sustain.checked) action = Object.assign({}, action, { sustain: true });
+		else if (action.kind === "keys" && latch.checked) action = Object.assign({}, action, { latch: true });
 		root.chosen(action, root.extra());
 		root.close();
 	}
@@ -88,6 +90,7 @@ Popup {
 		{ id: "media", label: "Media & volume", icon: "music_note" },
 		{ id: "screenshot", label: "Screenshot", icon: "selection_drag" },
 		{ id: "mouse", label: "The mouse", icon: "mouse" },
+		{ id: "profiles", label: "Profiles", icon: "account_switch_outline" },
 		{ id: "keys", label: "Shortcut", icon: "keyboard_outline" },
 		{ id: "buttons", label: "Click & scroll", icon: "cursor_default_click_outline" },
 		{ id: "command", label: "Command", icon: "console" }
@@ -95,7 +98,9 @@ Popup {
 
 	readonly property var all: {
 		const out = [];
-		for (const a of Mouse.shellActions)
+		for (const p of Mouse.profiles)
+			out.push({ group: "profiles", action: { kind: "shell", id: "profile", value: p.id }, info: { label: `Switch to ${p.name}`, icon: p.icon || "mouse_variant" }, detail: "Kept in every profile" });
+		for (const a of Mouse.shellActions.filter(a => !a.hidden))
 			out.push({ group: a.group === "Shell" ? "shell" : a.group.toLowerCase(), action: { kind: "shell", id: a.id }, info: { label: a.label, icon: a.icon }, detail: a.detail ?? "" });
 		for (const a of Mouse.niriActions)
 			out.push({ group: a.group.toLowerCase(), action: { kind: "niri", action: a.id }, info: { label: a.label, icon: a.icon }, detail: `niri: ${a.id}` });
@@ -480,6 +485,16 @@ Popup {
 						visible: root.canSustain
 						title: "Hold the keys while the button is down"
 						subtitle: "For a held Shift or Super – the button works like the key itself"
+						onCheckedChanged: if (checked) latch.checked = false
+					}
+
+					FlagRowLite {
+						id: latch
+
+						Layout.fillWidth: true
+						title: "Stays down until pressed again"
+						subtitle: "A sticky key: one press holds it, the next lets go"
+						onCheckedChanged: if (checked) sustain.checked = false
 					}
 
 					Item {

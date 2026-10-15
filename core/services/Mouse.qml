@@ -191,8 +191,151 @@ Singleton {
 	}
 
 	function save() {
-		file.setText(JSON.stringify(root.config, null, "\t") + "\n");
+		file.setText(JSON.stringify(Object.assign({}, root.config, { profiles: root.snapshotProfiles() }), null, "\t") + "\n");
 	}
+
+	// ── profiles ───────────────────────────────────────────────────────────
+	// A profile is a whole set of rules and device settings. The one in use is
+	// the working set (config.rules, config.devices); the others wait in
+	// config.profiles. One can follow apps (apps) or a running game (games):
+	// it comes while they have the focus or run, the picked one comes back
+	// after. Rules switching profiles (and those marked shared) are in all.
+	readonly property var profiles: root.config.profiles ?? []
+	readonly property string activeProfile: root.config.active ?? ""
+	readonly property var active: root.profiles.find(p => p.id === root.activeProfile) ?? null
+	property bool gaming: Plugins.on("games") && Games.running.length > 0
+	onGamingChanged: {
+		root.send({ op: "gaming", on: root.gaming });
+		root.override = false;
+		root.followContext();
+	}
+	onFocusAppChanged: {
+		root.override = false;
+		root.followContext();
+	}
+	// a profile picked by hand stays until the app or the game changes
+	property bool override: false
+
+	readonly property var profileIcons: ["mouse_variant", "gamepad_variant", "briefcase_outline", "palette_outline", "code_braces", "movie_open_outline", "music_note", "crosshairs", "leaf", "rocket_launch_outline"]
+
+	function shared(rule) {
+		return rule.shared === true || (rule.action?.kind === "shell" && ["profile", "profile-next"].includes(rule.action?.id));
+	}
+
+	function deviceSettings(devices) {
+		const out = {};
+		for (const serial of Object.keys(devices ?? {})) {
+			const copy = Object.assign({}, devices[serial]);
+			delete copy.seen;
+			out[serial] = copy;
+		}
+		return out;
+	}
+
+	// the profiles with the one in use as it is now
+	function snapshotProfiles() {
+		return root.profiles.map(p => p.id === root.activeProfile ? Object.assign({}, p, { rules: root.rules.filter(r => !root.shared(r)), devices: root.deviceSettings(root.config.devices) }) : p);
+	}
+
+	function ensureProfiles() {
+		if (root.profiles.length > 0) return;
+		root.config = Object.assign({}, root.config, {
+			profiles: [{ id: "everyday", name: "Everyday", icon: "mouse_variant", apps: [], games: false }],
+			active: "everyday",
+			profile: "everyday"
+		});
+	}
+
+	function profileFor() {
+		if (root.gaming) {
+			const game = root.profiles.find(p => p.games === true);
+			if (game) return game.id;
+		}
+		const app = (root.focusApp || "").toLowerCase();
+		if (app) {
+			const own = root.profiles.find(p => (p.apps ?? []).some(a => a.toLowerCase() === app));
+			if (own) return own.id;
+		}
+		return root.config.profile ?? root.activeProfile;
+	}
+
+	function followContext() {
+		if (!root.loaded || root.override || root.profiles.length < 2) return;
+		const want = root.profileFor();
+		if (want && want !== root.activeProfile) root.load(want, true);
+	}
+
+	// puts a profile in use: what is in use goes back into its own first
+	function load(id, quiet) {
+		const target = root.profiles.find(p => p.id === id);
+		if (!target || id === root.activeProfile) return;
+		const profiles = root.snapshotProfiles();
+		const keep = root.rules.filter(r => root.shared(r));
+		const keys = new Set(keep.map(r => `${r.control}/${r.trigger}/${r.app ?? ""}/${(r.mods ?? []).join("+")}`));
+		const rules = (target.rules ?? []).filter(r => !keys.has(`${r.control}/${r.trigger}/${r.app ?? ""}/${(r.mods ?? []).join("+")}`)).concat(keep);
+		const devices = {};
+		for (const serial of new Set(Object.keys(root.config.devices ?? {}).concat(Object.keys(target.devices ?? {}))))
+			devices[serial] = Object.assign({}, target.devices?.[serial] ?? root.config.devices?.[serial] ?? {}, { seen: root.config.devices?.[serial]?.seen });
+		root.config = Object.assign({}, root.config, { profiles, rules, devices, active: id });
+		root.commit();
+		Osd.show("mouse", quiet ? "Mouse profile (automatic)" : "Mouse profile", 1, target.name, target.icon || "mouse_variant");
+		root.play(quiet ? "SUBTLE COLLISION" : "DAMP STATE CHANGE");
+		root.profileSwitched(target.name, quiet === true);
+	}
+
+	signal profileSwitched(string name, bool automatic)
+
+	// by hand (the launcher, a button, the page)
+	function useProfile(id) {
+		const target = root.profiles.find(p => p.id === id || p.name.toLowerCase() === String(id).toLowerCase());
+		if (!target) return false;
+		root.config = Object.assign({}, root.config, { profile: target.id });
+		root.override = root.profileFor() !== target.id;
+		if (target.id !== root.activeProfile) root.load(target.id, false);
+		else root.commit();
+		return true;
+	}
+
+	function nextProfile() {
+		if (root.profiles.length < 2) return;
+		const at = root.profiles.findIndex(p => p.id === root.activeProfile);
+		root.useProfile(root.profiles[(at + 1) % root.profiles.length].id);
+	}
+
+	// a new one, starting as a copy of what is in use
+	function newProfile(name, icon) {
+		root.ensureProfiles();
+		const id = `p${Date.now().toString(36)}`;
+		const profiles = root.snapshotProfiles().concat([{ id, name: name || `Profile ${root.profiles.length + 1}`, icon: icon || "mouse_variant", apps: [], games: false, rules: root.rules.filter(r => !root.shared(r)), devices: root.deviceSettings(root.config.devices) }]);
+		root.config = Object.assign({}, root.config, { profiles });
+		root.useProfile(id);
+		return id;
+	}
+
+	function editProfile(id, values) {
+		root.config = Object.assign({}, root.config, { profiles: root.profiles.map(p => p.id === id ? Object.assign({}, p, values) : p) });
+		root.commit();
+		root.followContext();
+	}
+
+	function removeProfile(id) {
+		if (root.profiles.length < 2) return;
+		const rest = root.profiles.filter(p => p.id !== id);
+		if (id === root.activeProfile) {
+			root.config = Object.assign({}, root.config, { profile: rest[0].id });
+			root.load(rest[0].id, true);
+		}
+		const next = root.config.profile === id ? rest[0].id : root.config.profile;
+		root.config = Object.assign({}, root.config, { profiles: root.snapshotProfiles().filter(p => p.id !== id), profile: next });
+		root.commit();
+	}
+
+	// ── live game haptics ─────────────────────────────────────────────────
+	property bool rumbling: false
+	property real bass: 0
+	property real bassThreshold: 0
+	signal hit(real strength)
+	property var batteryLog: []
 
 	Timer {
 		id: saving
@@ -221,14 +364,21 @@ Singleton {
 				root.config = {
 					devices: data.devices && typeof data.devices === "object" ? data.devices : {},
 					rules: Array.isArray(data.rules) ? data.rules : [],
-					options: data.options && typeof data.options === "object" ? data.options : {}
+					options: data.options && typeof data.options === "object" ? data.options : {},
+					profiles: Array.isArray(data.profiles) ? data.profiles : [],
+					active: String(data.active ?? ""),
+					profile: String(data.profile ?? data.active ?? "")
 				};
 			} catch (error) {
 				console.warn("Mouse: mouse.json is not valid JSON");
 			}
+			root.ensureProfiles();
 			root.loaded = true;
 		}
-		onLoadFailed: root.loaded = true
+		onLoadFailed: {
+			root.ensureProfiles();
+			root.loaded = true;
+		}
 	}
 
 	// ── the daemon ────────────────────────────────────────────────────────
@@ -286,6 +436,22 @@ Singleton {
 			break;
 		case "fired":
 			root.fired(data.rule ?? "", data.control ?? "", data.trigger ?? "");
+			break;
+		case "rumble":
+			root.rumbling = data.on === true;
+			break;
+		case "bass":
+			root.bass = data.level ?? 0;
+			root.bassThreshold = data.threshold ?? 0;
+			break;
+		case "hit":
+			root.hit(data.strength ?? 0);
+			break;
+		case "batteryLog":
+			root.batteryLog = data.log ?? [];
+			break;
+		case "latch":
+			Osd.show("mouse", data.on ? "Held down" : "Let go", data.on ? 1 : 0, (data.keys ?? []).join(" + "), "keyboard_outline");
 			break;
 		case "focus":
 			root.focusApp = data.app ?? "";
@@ -397,7 +563,10 @@ Singleton {
 		{ id: "volume-up", label: "Volume up", icon: "volume_high", group: "Media", run: () => Audio.adjust(1) },
 		{ id: "volume-down", label: "Volume down", icon: "volume_medium", group: "Media", run: () => Audio.adjust(-1) },
 		{ id: "mute", label: "Mute", icon: "volume_off", group: "Media", run: () => Audio.toggleMute() },
-		{ id: "mic-mute", label: "Mute the microphone", icon: "microphone_off", group: "Media", run: () => Audio.toggleMicMute() }
+		{ id: "mic-mute", label: "Mute the microphone", icon: "microphone_off", group: "Media", run: () => Audio.toggleMicMute() },
+		{ id: "profile-next", label: "Next mouse profile", icon: "swap_horizontal", group: "Profiles", run: () => root.nextProfile() },
+		{ id: "profile", label: "Mouse profile", icon: "account_switch_outline", group: "Profiles", hidden: true, run: value => root.useProfile(value) },
+		{ id: "rumble", label: "Game haptics on / off", icon: "vibrate", group: "Profiles", run: () => root.setOption("rumble", root.option("rumble", "off") === "off" ? "always" : "off") }
 	]
 
 	// as the keybinds open them (core/Ipc.qml): on the focused screen, again closes
@@ -470,6 +639,10 @@ Singleton {
 		case "none":
 			return { label: "Nothing", icon: "cancel", plain: false };
 		case "shell": {
+			if (action.id === "profile") {
+				const p = root.profiles.find(x => x.id === action.value);
+				return { label: `Profile: ${p?.name ?? action.value}`, icon: p?.icon ?? "account_switch_outline" };
+			}
 			const a = root.shellActions.find(x => x.id === action.id);
 			return { label: a?.label ?? action.id, icon: a?.icon ?? "flash" };
 		}
