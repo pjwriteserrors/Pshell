@@ -54,7 +54,7 @@ Clickable {
 	// the swipe coming this way
 	Rectangle {
 		anchors.fill: parent
-		radius: parent.radius
+		radius: root.radius
 		color: Theme.primary
 		opacity: Math.max(root.approach * 0.16, root.glow * 0.22)
 	}

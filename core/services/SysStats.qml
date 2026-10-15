@@ -108,6 +108,16 @@ Singleton {
 		}
 		const percent = Math.max(0, Math.min(100, Number(values.percent)));
 		root.mouseFound = values.available === "1" && Number.isFinite(percent);
+		// a Logitech mouse the kernel says nothing about: its own word (Mouse)
+		if (!root.mouseFound && Mouse.online && Number.isFinite(Number(Mouse.state.battery?.percent))) {
+			const battery = Mouse.state.battery;
+			root.mouseFound = true;
+			root.mouseName = Mouse.device.name;
+			root.mouseStatus = battery.status === "discharging" ? "Discharging" : (battery.status === "full" ? "Full" : "Charging");
+			root.mouseLevel = root.clamp01(battery.percent / 100);
+			root.mouseText = `${Math.round(battery.percent)}%`;
+			return;
+		}
 		if (!root.mouseFound) {
 			root.mouseText = "";
 			root.mouseLevel = 0;

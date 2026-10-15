@@ -5,15 +5,15 @@
 // drawing's width and height), `label` the side the callout goes to.
 
 var controls = [
-	{ id: "middle", label: "Wheel click", icon: "mouse", spot: [0.535, 0.2], side: "right", triggers: "button" },
-	{ id: "shift", label: "SmartShift button", icon: "cog_transfer", spot: [0.535, 0.335], side: "right", triggers: "button" },
-	{ id: "thumb", label: "Thumb wheel", icon: "pan_horizontal", spot: [0.2, 0.47], side: "left", triggers: "thumb" },
-	{ id: "forward", label: "Forward button", icon: "arrow_right", spot: [0.185, 0.555], side: "left", triggers: "button" },
-	{ id: "back", label: "Back button", icon: "arrow_left", spot: [0.17, 0.625], side: "left", triggers: "button" },
-	{ id: "gesture", label: "Gesture button", icon: "gesture_swipe", spot: [0.12, 0.715], side: "left", triggers: "button" },
-	{ id: "haptic", label: "Haptic sense panel", icon: "vibrate", spot: [0.135, 0.82], side: "left", triggers: "button" },
-	{ id: "left", label: "Left button", icon: "mouse", spot: [0.37, 0.16], side: "left", triggers: "none" },
-	{ id: "right", label: "Right button", icon: "mouse", spot: [0.73, 0.18], side: "right", triggers: "none" }
+	{ id: "middle", label: "Wheel click", icon: "mouse", spot: [0.563, 0.205], side: "right", triggers: "button" },
+	{ id: "shift", label: "SmartShift button", icon: "cog_transfer", spot: [0.563, 0.336], side: "right", triggers: "button" },
+	{ id: "thumb", label: "Thumb wheel", icon: "pan_horizontal", spot: [0.2, 0.488], side: "left", triggers: "thumb" },
+	{ id: "forward", label: "Forward button", icon: "arrow_right", spot: [0.19, 0.57], side: "left", triggers: "button" },
+	{ id: "back", label: "Back button", icon: "arrow_left", spot: [0.17, 0.632], side: "left", triggers: "button" },
+	{ id: "gesture", label: "Gesture button", icon: "gesture_swipe", spot: [0.133, 0.714], side: "left", triggers: "button" },
+	{ id: "haptic", label: "Haptic sense panel", icon: "vibrate", spot: [0.18, 0.824], side: "left", triggers: "button" },
+	{ id: "left", label: "Left button", icon: "mouse", spot: [0.42, 0.2], side: "left", triggers: "none" },
+	{ id: "right", label: "Right button", icon: "mouse", spot: [0.72, 0.2], side: "right", triggers: "none" }
 ];
 
 var swipes = [

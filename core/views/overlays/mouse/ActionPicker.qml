@@ -388,6 +388,8 @@ Popup {
 						height: grid.cellHeight
 
 						Clickable {
+							id: cellButton
+
 							anchors.fill: parent
 							anchors.margins: 4
 							radius: Theme.radius.large
@@ -441,7 +443,7 @@ Popup {
 									implicitWidth: 28
 									implicitHeight: 28
 									icon: "play_outline"
-									visible: parent.parent.hovered
+									visible: cellButton.hovered
 									onClicked: Mouse.test(cell.modelData.action)
 								}
 							}

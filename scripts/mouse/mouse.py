@@ -49,6 +49,13 @@ STATS_FILE = STATE / "mouse-stats.json"
 CONFIG_FILE = STATE / "mouse.json"
 SOLAAR = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "solaar"
 
+# tests: PSHELL_MOUSE_DRY=1 reads the mouse but writes nothing to it and runs
+# no action (both are logged on stderr); PSHELL_MOUSE_INJECT=<fifo> takes
+# more commands, among them made-up reports: {op: "inject", cids: [0xC3]},
+# {op: "inject", dx, dy}, {op: "inject", thumb: 5}
+DRY = os.environ.get("PSHELL_MOUSE_DRY") == "1"
+INJECT = os.environ.get("PSHELL_MOUSE_INJECT", "")
+
 WAVEFORMS = {name: code for code, name in hidpp.HAPTIC_WAVEFORMS.items()}
 FEEL_DEFAULT = "SUBTLE COLLISION"
 
@@ -140,11 +147,10 @@ class Mouse:
     def serial(self):
         return self.info.get("serial") or self.key
 
-    def read(self):
+    def read(self, on_identity=None):
         d = self.device
         d.features.clear()
         d.by_index.clear()
-        d.enumerate()
         info = {
             "id": "",
             "name": d.name(),
@@ -154,7 +160,7 @@ class Mouse:
             "slot": self.devnum if self.node["receiver"] else 0,
             "serial": d.serial(),
             "firmware": [],
-            "features": sorted(f"{fid:04X}" for fid, (index, _v, _f) in d.features.items() if index is not None),
+            "features": self.info.get("features", []) if self.info.get("serial") else [],
         }
         try:
             info["firmware"] = d.firmware()
@@ -166,8 +172,18 @@ class Mouse:
             pass
         info["id"] = info["serial"] or self.key
         self.info = info
+        # the notifications name features by index: the ones they can come from
+        for fid in (hidpp.REPROG_V4, hidpp.UNIFIED_BATTERY, hidpp.THUMB_WHEEL, hidpp.HIRES_WHEEL, hidpp.WIRELESS_STATUS):
+            d.feature(fid)
+        if on_identity:
+            on_identity()
         self.state = self.read_state()
         return info
+
+    def read_features(self):
+        """Every feature the mouse has (the page lists them): a few dozen
+        requests, so only once it is shown."""
+        self.info["features"] = sorted(f"{fid:04X}" for _i, fid, _v, _f in self.device.enumerate())
 
     def read_state(self):
         d = self.device
@@ -250,6 +266,8 @@ class Daemon:
         self.loop.post(self.scan)
         self.loop.schedule(5, self.poll)
         threading.Thread(target=self.read_stdin, daemon=True).start()
+        if INJECT:
+            threading.Thread(target=self.read_inject, daemon=True).start()
         threading.Thread(target=self.follow_focus, daemon=True).start()
         threading.Thread(target=self.stats.follow, args=(self,), daemon=True).start()
         self.ensure_mods()
@@ -268,7 +286,7 @@ class Daemon:
 
     @property
     def in_charge(self):
-        return not self.solaar
+        return not self.solaar or os.environ.get("PSHELL_MOUSE_CHARGE") == "1"
 
     def scan(self):
         nodes = hidpp.find_nodes()
@@ -323,8 +341,13 @@ class Daemon:
             log(f"receiver notifications: {error}")
 
     def connect(self, mouse):
+        def identity():
+            # the name first, the rest of what it says a moment later
+            mouse.online = True
+            self.publish()
+
         try:
-            mouse.read()
+            mouse.read(identity)
         except (Offline, TimeoutError, HidppError) as error:
             mouse.online = False
             log(f"slot {mouse.devnum}: {error}")
@@ -339,6 +362,12 @@ class Daemon:
             self.apply_settings(mouse, initial=True)
             self.apply_diversion(mouse)
         self.publish()
+        if not mouse.info.get("features"):
+            def features():
+                if mouse.online:
+                    mouse.read_features()
+                    self.publish()
+            self.loop.schedule(1.0, features)
 
     def remember(self, mouse):
         devices = self.config.setdefault("devices", {})
@@ -378,7 +407,7 @@ class Daemon:
     def apply_settings(self, mouse, initial=False):
         """Writes what the page keeps for this mouse where the mouse differs."""
         want = self.settings_of(mouse)
-        d = mouse.device
+        d = DryDevice(mouse) if DRY else mouse.device
         state = mouse.state
         changed = False
         try:
@@ -439,7 +468,7 @@ class Daemon:
             return
         wants, thumb = self.engine.wants()
         controls = {c["control"]: c for c in mouse.state.get("controls") or []}
-        d = mouse.device
+        d = DryDevice(mouse) if DRY else mouse.device
         for name, control in controls.items():
             if not control["divertable"]:
                 continue
@@ -460,6 +489,8 @@ class Daemon:
                 log(f"thumb wheel: {error}")
 
     def undivert(self, mouse):
+        if DRY:
+            return
         d = mouse.device
         try:
             for name, need in list(mouse.diverted.items()):
@@ -544,7 +575,7 @@ class Daemon:
                 self.engine.thumb_stop()
             if rotation and not self.engine.thumb(rotation):
                 # nothing for it here: sideways, as the wheel would on its own
-                self.output.scroll_hires(rotation * 20, True)
+                self.output_scroll(rotation * 20, True)
         elif fid == hidpp.HIRES_WHEEL:
             if function == 0:
                 delta = int.from_bytes(params[1:3], "big", signed=True)
@@ -552,7 +583,7 @@ class Daemon:
                     notch = mouse.state.get("wheel", {}).get("multiplier", 15) if params[0] & 0x10 else 1
                     if not self.engine.wheel(delta, notch):
                         # a chord holds the wheel, but not this way round
-                        self.output.scroll_hires(int(delta * 120 / notch), False)
+                        self.output_scroll(int(delta * 120 / notch), False)
             elif function == 1:
                 if "smartshift" in mouse.state:
                     mouse.state["smartshift"]["ratchet"] = bool(params[0] & 1)
@@ -584,7 +615,7 @@ class Daemon:
 
     def chord_wheel(self, mouse, control, down):
         """The main wheel is only diverted while a button with wheel rules is down."""
-        if not self.engine.needs_wheel(control) or "wheel" not in mouse.state:
+        if not self.engine.needs_wheel(control) or "wheel" not in mouse.state or DRY:
             return
         want = down
         if mouse.wheel_diverted == want:
@@ -594,6 +625,12 @@ class Daemon:
             mouse.wheel_diverted = want
         except HidppError as error:
             log(f"wheel: {error}")
+
+    def output_scroll(self, hires, horizontal):
+        if DRY:
+            log(f"DRY scroll {hires} {'h' if horizontal else 'v'}")
+            return
+        self.output.scroll_hires(hires, horizontal)
 
     # ── what the rules do ───────────────────────────────────────────────
     def live(self, kind, **data):
@@ -627,6 +664,9 @@ class Daemon:
         code = WAVEFORMS.get(str(waveform).upper().replace("_", " "))
         if code is None:
             return
+        if DRY:
+            log(f"DRY play {waveform}")
+            return
         try:
             mouse.device.play(code)
         except (HidppError, TimeoutError) as error:
@@ -640,6 +680,10 @@ class Daemon:
 
     def run(self, action, owner="test", phase="tap"):
         kind = action.get("kind")
+        if DRY and kind != "shell":
+            log(f"DRY run {json.dumps(action)} {owner} {phase}")
+            emit("dry", action=action, owner=owner, phase=phase)
+            return
         out = self.output
         try:
             if kind == "keys":
@@ -736,6 +780,10 @@ class Daemon:
     def native(self, control, phase):
         """What a diverted control does when no rule takes it. Returns True
         for "start" when the press is held through until "end"."""
+        if DRY:
+            log(f"DRY native {control} {phase}")
+            emit("dry", action={"kind": "native", "control": control}, owner=control, phase=phase)
+            return phase == "start" and control in ("middle", "back", "forward")
         button = {"middle": "middle", "back": "back", "forward": "forward"}.get(control)
         if button:
             if phase == "start":
@@ -857,8 +905,34 @@ class Daemon:
             self.loop.post(lambda command=command: self.command(command))
         self.loop.post(self.stop)
 
+    def read_inject(self):
+        while True:
+            with open(INJECT) as stream:
+                for line in stream:
+                    try:
+                        command = json.loads(line)
+                    except ValueError:
+                        continue
+                    self.loop.post(lambda command=command: self.command(command))
+
     def command(self, command):
         op = command.get("op")
+        if op == "inject":
+            mouse = self.current()
+            if mouse is None:
+                return
+            if "cids" in command:
+                self.on_buttons(mouse, set(command["cids"]))
+            elif "thumb" in command:
+                if self.watching:
+                    emit("wheel", device=mouse.serial, wheel="thumb", delta=command["thumb"])
+                if not self.engine.thumb(command["thumb"]):
+                    self.output_scroll(command["thumb"] * 20, True)
+            elif "wheel" in command:
+                self.engine.wheel(command["wheel"], 1)
+            else:
+                self.engine.move(command.get("dx", 0), command.get("dy", 0))
+            return
         if op == "config":
             self.config = merge_config(command.get("config") or {})
             self.engine.configure(self.config["rules"], self.config["options"])
@@ -890,13 +964,18 @@ class Daemon:
             self.play(command.get("waveform", FEEL_DEFAULT), self.find(command.get("device")))
         elif op == "host":
             mouse = self.find(command.get("device"))
-            if mouse and mouse.online:
+            if DRY:
+                log(f"DRY host {command.get('index')}")
+            elif mouse and mouse.online:
                 mouse.device.change_host(int(command.get("index", 0)))
         elif op == "test":
             self.run(command.get("action") or {})
         elif op == "takeover":
             imported = solaar_import()
             emit("imported", **imported)
+            if DRY:
+                log("DRY stop solaar")
+                return
             stop_solaar()
             self.loop.schedule(1.5, self.poll)
         elif op == "quit":
@@ -908,6 +987,46 @@ class Daemon:
                 if mouse.online or serial:
                     return mouse
         return None
+
+
+class DryDevice:
+    """Writes nothing: what would be set goes into the state the page sees."""
+
+    def __init__(self, mouse):
+        self.mouse = mouse
+
+    def __getattr__(self, name):
+        state = self.mouse.state
+        real = self.mouse.device
+
+        def write(*args, **kwargs):
+            log(f"DRY {name} {args} {kwargs}")
+            if name == "set_dpi":
+                state["dpi"]["value"] = int(args[0])
+            elif name == "set_smartshift":
+                ss = state["smartshift"]
+                for key in ("ratchet", "threshold", "torque"):
+                    if kwargs.get(key) is not None:
+                        ss[key] = kwargs[key]
+            elif name == "set_wheel":
+                for key in ("hires", "invert", "diverted"):
+                    if kwargs.get(key) is not None:
+                        state["wheel"][key] = kwargs[key]
+            elif name == "set_thumbwheel":
+                for key, field in (("invert", "invert"), ("diverted", "diverted")):
+                    if kwargs.get(key) is not None:
+                        state["thumbwheel"][field] = kwargs[key]
+            elif name == "set_haptic":
+                state["haptic"]["enabled"], state["haptic"]["level"] = bool(args[0]), int(args[1])
+            elif name == "set_force":
+                state["force"][0]["value"] = int(args[1])
+
+        if name.startswith("set_") or name in ("play", "change_host"):
+            return write
+        if name in ("smartshift", "wheel", "thumbwheel", "haptic_info", "force_buttons"):
+            key = {"haptic_info": "haptic", "force_buttons": "force"}.get(name, name)
+            return lambda: state[key]
+        return getattr(real, name)
 
 
 def merge_config(data):
@@ -1201,6 +1320,7 @@ def dump():
             try:
                 mouse.device.ping(timeout=1.5)
                 mouse.read()
+                mouse.read_features()
                 mouse.online = True
             except (Offline, TimeoutError, HidppError):
                 continue

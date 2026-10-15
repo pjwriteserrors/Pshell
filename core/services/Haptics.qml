@@ -3,7 +3,8 @@ pragma Singleton
 import QtQuick
 import Quickshell
 
-// MX Master 4 haptics through mxh (~/.local/bin/mxh → mx4-hapticd FIFO).
+// MX Master 4 haptics: through the mouse daemon while the `mouse` plugin has
+// the mouse, else through mxh (~/.local/bin/mxh → mx4-hapticd FIFO).
 // Only moments that deserve a physical confirmation play something; plain
 // clicks stay silent. Features name the moment, this table picks the effect.
 // Every moment is handed on to Sounds as well, which plays what it has a
@@ -48,6 +49,8 @@ Singleton {
 		if (!Plugins.on("haptics")) return;
 		const effect = root.effects[event] ?? event;
 		if (!effect) return;
-		Quickshell.execDetached([root.mxhPath, String(effect)]);
+		// the mouse page's daemon has the mouse open already: straight there
+		if (Mouse.enabled && Mouse.online && Mouse.state.haptic) Mouse.play(String(effect));
+		else Quickshell.execDetached([root.mxhPath, String(effect)]);
 	}
 }

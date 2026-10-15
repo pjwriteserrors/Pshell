@@ -234,153 +234,148 @@ ColumnLayout {
 		wrapMode: Text.WordWrap
 	}
 
-	// ── a button: the cross and the rest ───────────────────────────────────
-	RowLayout {
+	// ── a button: the cross, then the rest ─────────────────────────────────
+	Item {
+		id: cross
+
+		readonly property real cellW: Math.min(210, (cross.width - 16) / 3)
+		readonly property real cellH: 70
+		readonly property bool live: Mouse.moveControl === root.control && !!Mouse.pressed[root.control]
+		readonly property real distance: Mouse.option("swipeDistance", 70)
+		readonly property real nx: cross.live ? Mouse.moveX / cross.distance : 0
+		readonly property real ny: cross.live ? Mouse.moveY / cross.distance : 0
+
 		Layout.fillWidth: true
+		Layout.preferredHeight: cross.cellH * 3 + 16
 		visible: root.editable && root.control !== "thumb"
-		spacing: 18
 
-		// the cross: a swipe heads for a tile, which fills as it nears
-		Item {
-			id: cross
+		// guides from the middle
+		Rectangle {
+			anchors.centerIn: parent
+			width: cross.cellW * 2 + 16
+			height: 2
+			radius: 1
+			color: Theme.outline
+		}
+		Rectangle {
+			anchors.centerIn: parent
+			width: 2
+			height: parent.height - cross.cellH
+			radius: 1
+			color: Theme.outline
+		}
 
-			readonly property real cell: Math.min(150, (root.width * 0.55 - 16) / 3)
-			readonly property bool live: Mouse.moveControl === root.control && !!Mouse.pressed[root.control]
-			readonly property real distance: Mouse.option("swipeDistance", 70)
-			readonly property real nx: cross.live ? Mouse.moveX / cross.distance : 0
-			readonly property real ny: cross.live ? Mouse.moveY / cross.distance : 0
+		Repeater {
+			model: [
+				{ id: "up", col: 1, row: 0 }, { id: "left", col: 0, row: 1 }, { id: "click", col: 1, row: 1 },
+				{ id: "right", col: 2, row: 1 }, { id: "down", col: 1, row: 2 }
+			]
 
-			Layout.preferredWidth: cross.cell * 3 + 16
-			Layout.preferredHeight: cross.cell * 3 * 0.62 + 16
+			delegate: TriggerTile {
+				id: crossTile
 
-			// guides from the middle
-			Rectangle {
-				anchors.centerIn: parent
-				width: parent.width * 0.7
-				height: 2
-				radius: 1
-				color: Theme.outline
-			}
-			Rectangle {
-				anchors.centerIn: parent
-				width: 2
-				height: parent.height * 0.7
-				radius: 1
-				color: Theme.outline
-			}
+				required property var modelData
+				readonly property var tile: root.tileFor(crossTile.modelData.id)
+				readonly property var meta: Controls.swipes.find(s => s.id === crossTile.modelData.id)
 
-			Repeater {
-				model: [
-					{ id: "up", col: 1, row: 0 }, { id: "left", col: 0, row: 1 }, { id: "click", col: 1, row: 1 },
-					{ id: "right", col: 2, row: 1 }, { id: "down", col: 1, row: 2 }
-				]
-
-				delegate: TriggerTile {
-					id: crossTile
-
-					required property var modelData
-					readonly property var tile: root.tileFor(crossTile.modelData.id)
-					readonly property var meta: Controls.swipes.find(s => s.id === crossTile.modelData.id)
-
-					x: crossTile.modelData.col * (cross.cell + 8)
-					y: crossTile.modelData.row * (cross.cell * 0.62 + 8)
-					width: cross.cell
-					height: cross.cell * 0.62
-					compact: true
-					trigger: crossTile.modelData.id
-					triggerLabel: crossTile.modelData.id === "click" ? "Click" : (crossTile.meta?.label ?? "")
-					triggerIcon: crossTile.modelData.id === "click" ? "gesture_tap" : (crossTile.meta?.icon ?? "")
-					info: crossTile.tile.info
-					own: crossTile.tile.own
-					inherited: crossTile.tile.inherited
-					approach: {
-						if (!cross.live) return 0;
-						switch (crossTile.modelData.id) {
-						case "up": return Math.max(0, Math.min(1, -cross.ny)) * (Math.abs(cross.ny) >= Math.abs(cross.nx) ? 1 : 0.3);
-						case "down": return Math.max(0, Math.min(1, cross.ny)) * (Math.abs(cross.ny) >= Math.abs(cross.nx) ? 1 : 0.3);
-						case "left": return Math.max(0, Math.min(1, -cross.nx)) * (Math.abs(cross.nx) >= Math.abs(cross.ny) ? 1 : 0.3);
-						case "right": return Math.max(0, Math.min(1, cross.nx)) * (Math.abs(cross.nx) >= Math.abs(cross.ny) ? 1 : 0.3);
-						}
-						return Math.max(0, 1 - Math.hypot(cross.nx, cross.ny));
+				x: (cross.width - cross.cellW * 3 - 16) / 2 + crossTile.modelData.col * (cross.cellW + 8)
+				y: crossTile.modelData.row * (cross.cellH + 8)
+				width: cross.cellW
+				height: cross.cellH
+				trigger: crossTile.modelData.id
+				triggerLabel: crossTile.modelData.id === "click" ? "Click" : (crossTile.meta?.label ?? "")
+				triggerIcon: crossTile.modelData.id === "click" ? "gesture_tap" : (crossTile.meta?.icon ?? "")
+				info: crossTile.tile.info
+				own: crossTile.tile.own
+				inherited: crossTile.tile.inherited
+				approach: {
+					if (!cross.live) return 0;
+					const along = (v, other) => Math.max(0, Math.min(1, v)) * (Math.abs(v) >= Math.abs(other) ? 1 : 0.3);
+					switch (crossTile.modelData.id) {
+					case "up": return along(-cross.ny, cross.nx);
+					case "down": return along(cross.ny, cross.nx);
+					case "left": return along(-cross.nx, cross.ny);
+					case "right": return along(cross.nx, cross.ny);
 					}
-					z: crossTile.modelData.id === "click" ? 2 : 1
-					onClicked: root.edit(crossTile.modelData.id)
-					Component.onCompleted: root.tiles = root.tiles.concat([crossTile])
-					Component.onDestruction: root.tiles = root.tiles.filter(t => t !== crossTile)
-
-					Behavior on approach {
-						Anim {
-							duration: Motion.micro
-						}
-					}
+					return Math.max(0, 1 - Math.hypot(cross.nx, cross.ny));
 				}
-			}
+				z: crossTile.modelData.id === "click" ? 2 : 1
+				onClicked: root.edit(crossTile.modelData.id)
+				Component.onCompleted: root.tiles = root.tiles.concat([crossTile])
+				Component.onDestruction: root.tiles = root.tiles.filter(t => t !== crossTile)
 
-			// the press itself, a dot travelling from the middle
-			Rectangle {
-				width: 14
-				height: 14
-				radius: 7
-				z: 5
-				color: Theme.primary
-				border.width: 3
-				border.color: Qt.alpha(Theme.primary, 0.3)
-				opacity: cross.live ? 1 : 0
-				scale: cross.live ? 1 : 0.4
-				x: cross.width / 2 - 7 + Math.max(-1.2, Math.min(1.2, cross.nx)) * (cross.cell + 8)
-				y: cross.height / 2 - 7 + Math.max(-1.2, Math.min(1.2, cross.ny)) * (cross.cell * 0.62 + 8)
-
-				Behavior on opacity {
+				Behavior on approach {
 					Anim {
-						duration: Motion.short
-					}
-				}
-				Behavior on scale {
-					SpatialAnim {}
-				}
-				Behavior on x {
-					SpatialAnim {
-						duration: Motion.micro
-					}
-				}
-				Behavior on y {
-					SpatialAnim {
 						duration: Motion.micro
 					}
 				}
 			}
 		}
 
-		// the other ways
-		GridLayout {
-			Layout.fillWidth: true
-			Layout.alignment: Qt.AlignTop
-			columns: 2
-			rowSpacing: 8
-			columnSpacing: 8
+		// the press itself, a dot travelling from the middle
+		Rectangle {
+			width: 14
+			height: 14
+			radius: 7
+			z: 5
+			color: Theme.primary
+			border.width: 3
+			border.color: Qt.alpha(Theme.primary, 0.3)
+			opacity: cross.live ? 1 : 0
+			scale: cross.live ? 1 : 0.4
+			x: cross.width / 2 - 7 + Math.max(-1.2, Math.min(1.2, cross.nx)) * (cross.cellW + 8)
+			y: cross.height / 2 - 7 + Math.max(-1.2, Math.min(1.2, cross.ny)) * (cross.cellH + 8)
 
-			Repeater {
-				model: Controls.extras
-
-				delegate: TriggerTile {
-					id: extraTile
-
-					required property var modelData
-					readonly property var tile: root.tileFor(extraTile.modelData.id)
-
-					Layout.fillWidth: true
-					Layout.preferredWidth: 1
-					compact: true
-					trigger: extraTile.modelData.id
-					triggerLabel: extraTile.modelData.label
-					triggerIcon: extraTile.modelData.icon
-					info: extraTile.tile.info
-					own: extraTile.tile.own
-					inherited: extraTile.tile.inherited
-					onClicked: root.edit(extraTile.modelData.id)
-					Component.onCompleted: root.tiles = root.tiles.concat([extraTile])
-					Component.onDestruction: root.tiles = root.tiles.filter(t => t !== extraTile)
+			Behavior on opacity {
+				Anim {
+					duration: Motion.short
 				}
+			}
+			Behavior on scale {
+				SpatialAnim {}
+			}
+			Behavior on x {
+				SpatialAnim {
+					duration: Motion.micro
+				}
+			}
+			Behavior on y {
+				SpatialAnim {
+					duration: Motion.micro
+				}
+			}
+		}
+	}
+
+	// the other ways
+	GridLayout {
+		Layout.fillWidth: true
+		visible: root.editable && root.control !== "thumb"
+		columns: root.width > 640 ? 3 : 2
+		rowSpacing: 8
+		columnSpacing: 8
+
+		Repeater {
+			model: Controls.extras
+
+			delegate: TriggerTile {
+				id: extraTile
+
+				required property var modelData
+				readonly property var tile: root.tileFor(extraTile.modelData.id)
+
+				Layout.fillWidth: true
+				Layout.preferredWidth: 1
+				compact: true
+				trigger: extraTile.modelData.id
+				triggerLabel: extraTile.modelData.label
+				triggerIcon: extraTile.modelData.icon
+				info: extraTile.tile.info
+				own: extraTile.tile.own
+				inherited: extraTile.tile.inherited
+				onClicked: root.edit(extraTile.modelData.id)
+				Component.onCompleted: root.tiles = root.tiles.concat([extraTile])
+				Component.onDestruction: root.tiles = root.tiles.filter(t => t !== extraTile)
 			}
 		}
 	}

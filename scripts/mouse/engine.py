@@ -190,7 +190,7 @@ class Engine:
 
     def _hold(self, control, token):
         state = self.held.get(control)
-        if not state or state.token != token or state.swiped or state.travel > self.swipe_distance * 0.6:
+        if not state or state.token != token or state.swiped or state.travel > self.swipe_distance * 0.35:
             return
         rule = state.rules.get("hold")
         if not rule:

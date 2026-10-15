@@ -61,10 +61,9 @@ SettingsPage {
 			color: Theme.layer1
 			clip: true
 
-			// a glow that follows the battery's mood
+			// a glow that breathes behind the mouse
 			Rectangle {
-				anchors.horizontalCenter: parent.horizontalCenter
-				y: parent.height * 0.18
+				anchors.centerIn: figure
 				width: parent.width * 0.9
 				height: width
 				radius: width / 2
@@ -251,7 +250,7 @@ SettingsPage {
 	SettingCard {
 		anchor: "mouse-none"
 		visible: !Mouse.device
-		title: Mouse.running ? "No Logitech mouse found" : "Starting …"
+		title: Mouse.scanned ? "No Logitech mouse found" : "Looking for the mouse …"
 		subtitle: "A Bolt or Unifying receiver plugged in, or the mouse paired over Bluetooth, and it shows up here by itself."
 		icon: "mouse"
 	}
@@ -438,7 +437,6 @@ SettingsPage {
 				to: root.st.dpiRange?.max ?? 8000
 				step: root.st.dpiRange?.step ?? 50
 				icon: "speedometer"
-				label: "Speed"
 				value: root.st.dpi?.value ?? 1000
 				onMoved: v => Mouse.set("dpi", Math.round(v))
 			}
@@ -1003,7 +1001,7 @@ SettingsPage {
 
 		GridLayout {
 			Layout.fillWidth: true
-			columns: 2
+			columns: width > 720 ? 2 : 1
 			rowSpacing: 6
 			columnSpacing: 18
 

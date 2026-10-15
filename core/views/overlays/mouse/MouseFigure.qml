@@ -50,14 +50,13 @@ Item {
 
 		// a soft shadow under the body
 		Rectangle {
-			x: 40
-			y: 380
-			width: 220
-			height: 44
-			radius: 22
+			x: 50
+			y: 372
+			width: 210
+			height: 46
+			radius: 23
 			color: Theme.shadow
-			opacity: 0.5
-			scale: 1
+			opacity: 0.45
 		}
 
 		Shape {
@@ -86,7 +85,36 @@ Item {
 				}
 
 				PathSvg {
-					path: "M 168 18 C 215 16 252 40 262 92 C 272 150 276 230 268 300 C 262 360 228 404 172 410 C 120 414 78 398 62 368 C 44 360 22 340 18 300 C 14 262 22 228 44 212 C 64 198 80 190 86 170 C 90 120 96 70 112 40 C 126 24 146 19 168 18 Z"
+					path: "M 100 40 C 130 14 210 12 240 40 C 262 70 272 150 270 220 C 268 300 262 360 232 392 C 205 412 130 414 95 396 C 60 388 26 360 20 318 C 16 280 24 236 52 214 C 70 200 80 186 84 160 C 88 110 88 70 100 40 Z"
+				}
+			}
+
+			// light from the upper left: the body has some volume
+			ShapePath {
+				strokeWidth: 0
+				strokeColor: "transparent"
+				fillGradient: LinearGradient {
+					x1: 30
+					y1: 60
+					x2: 280
+					y2: 300
+
+					GradientStop {
+						position: 0
+						color: Qt.alpha(Theme.text, 0.07)
+					}
+					GradientStop {
+						position: 0.5
+						color: Qt.alpha(Theme.text, 0.015)
+					}
+					GradientStop {
+						position: 1
+						color: Qt.rgba(0, 0, 0, 0.22)
+					}
+				}
+
+				PathSvg {
+					path: "M 100 40 C 130 14 210 12 240 40 C 262 70 272 150 270 220 C 268 300 262 360 232 392 C 205 412 130 414 95 396 C 60 388 26 360 20 318 C 16 280 24 236 52 214 C 70 200 80 186 84 160 C 88 110 88 70 100 40 Z"
 				}
 			}
 
@@ -97,7 +125,7 @@ Item {
 				fillColor: Qt.alpha(Theme.text, root.selected === "haptic" ? 0.0 : 0.035)
 
 				PathSvg {
-					path: "M 62 368 C 44 360 22 340 18 300 C 14 262 22 228 44 212 C 58 230 66 270 70 310 C 72 335 70 352 62 368 Z"
+					path: "M 95 396 C 60 388 26 360 20 318 C 16 280 24 236 52 214 C 66 240 76 290 80 330 C 83 360 90 382 95 396 Z"
 				}
 			}
 
@@ -109,7 +137,7 @@ Item {
 				capStyle: ShapePath.RoundCap
 
 				PathSvg {
-					path: "M 166 20 L 165 52 M 165 132 L 165 172 M 88 170 C 140 186 204 186 266 162"
+					path: "M 169 14 L 169 46 M 169 124 L 169 132 M 169 152 L 169 190 M 85 164 C 130 188 214 192 269 176"
 				}
 			}
 		}
@@ -132,7 +160,7 @@ Item {
 				fillColor: Qt.alpha(Theme.primary, 0.22)
 
 				PathSvg {
-					path: "M 165 20 C 146 20 126 24 112 40 C 96 70 90 120 88 170 C 120 180 140 183 165 184 Z"
+					path: "M 168 15 C 140 15 116 24 100 40 C 88 70 88 110 85 164 C 115 180 140 188 168 190 Z"
 				}
 			}
 		}
@@ -154,7 +182,7 @@ Item {
 				fillColor: Qt.alpha(Theme.primary, 0.22)
 
 				PathSvg {
-					path: "M 167 20 C 215 18 252 40 262 92 C 266 118 267 140 266 162 C 230 176 200 183 167 184 Z"
+					path: "M 170 15 C 200 14 226 22 240 40 C 258 66 266 120 269 176 C 230 188 200 191 170 190 Z"
 				}
 			}
 		}
@@ -163,8 +191,8 @@ Item {
 		Item {
 			id: ripple
 
-			x: 40
-			y: 330
+			x: 54
+			y: 346
 			width: 1
 			height: 1
 
@@ -227,8 +255,8 @@ Item {
 				kickAnim.restart();
 			}
 
-			x: 154
-			y: 54
+			x: 158
+			y: 48
 			width: 23
 			height: 76
 			radius: 11
@@ -314,8 +342,8 @@ Item {
 
 		// the SmartShift button
 		Rectangle {
-			x: 157
-			y: 136
+			x: 161
+			y: 134
 			width: 17
 			height: 14
 			radius: 5
@@ -334,12 +362,12 @@ Item {
 
 			property real offset: 0
 
-			x: 44
-			y: 186
+			x: 40
+			y: 196
 			width: 40
 			height: 17
 			radius: 8
-			rotation: -28
+			rotation: -38
 			color: root.selected === "thumb" ? Theme.primary : Theme.layer3
 			border.width: 1
 			border.color: Qt.alpha(Theme.text, 0.18)
@@ -374,7 +402,7 @@ Item {
 		}
 
 		Repeater {
-			model: [{ id: "forward", x: 36, y: 222 }, { id: "back", x: 31, y: 251 }]
+			model: [{ id: "forward", x: 40, y: 232 }, { id: "back", x: 34, y: 258 }]
 
 			delegate: Rectangle {
 				id: side
@@ -386,7 +414,7 @@ Item {
 				width: 34
 				height: 14
 				radius: 7
-				rotation: -14
+				rotation: -24
 				color: root.selected === side.modelData.id || root.pressed[side.modelData.id] ? Theme.primary : Theme.layer3
 				border.width: 1
 				border.color: Qt.alpha(Theme.text, 0.18)
@@ -399,7 +427,7 @@ Item {
 
 		// the gesture button: a dimple under the thumb
 		Rectangle {
-			x: 24
+			x: 28
 			y: 289
 			width: 24
 			height: 22
