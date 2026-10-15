@@ -9,7 +9,8 @@
 		"mouse-battery": true,
 		"phone": true,
 		"haptics": true,
-		"vm-launcher": true
+		"vm-launcher": true,
+		"games": true
 	},
 	"themeHooks": [
 		"sddm",

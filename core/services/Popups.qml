@@ -86,6 +86,7 @@ Singleton {
 		niri: "niri-settings",
 		power: "power-menu",
 		vm: "vm-launcher",
+		games: "games",
 		radial: "radial-menu",
 		eyerest: "eye-rest",
 		stretch: "stretch",

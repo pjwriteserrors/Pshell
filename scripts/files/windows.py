@@ -111,6 +111,18 @@ def _command(path, wrapper):
 
 def run(path, runner="auto"):
     """Starts a Windows program; returns what started it, or raises."""
+    command, env, label = prepare(path, runner)
+    os.makedirs(os.path.dirname(LOG), exist_ok=True)
+    log = open(LOG, "ab")
+    log.write(f"\n=== {time.strftime('%F %T')} {' '.join(command)}\n".encode())
+    log.flush()
+    subprocess.Popen(command, cwd=os.path.dirname(path), env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
+    return label
+
+
+def prepare(path, runner="auto", prefix="default"):
+    """What starts a Windows program: (command, environment, label). Proton
+    gets the prefix `prefix` below PREFIXES (a game keeps one of its own)."""
     if not os.path.isfile(path):
         raise RuntimeError("It is not there any more")
     tools = protons()
@@ -122,7 +134,7 @@ def run(path, runner="auto"):
         runner = f"proton:{tools[0]['path']}" if tools else ""
     if runner.startswith("proton:"):
         tool = runner.split(":", 1)[1]
-        prefix = os.path.join(PREFIXES, "default")
+        prefix = os.path.join(PREFIXES, prefix)
         os.makedirs(prefix, exist_ok=True)
         env["STEAM_COMPAT_DATA_PATH"] = prefix
         env["STEAM_COMPAT_CLIENT_INSTALL_PATH"] = steam_root() or os.path.join(DATA, "Steam")
@@ -139,12 +151,7 @@ def run(path, runner="auto"):
         label = "Wine"
     else:
         raise RuntimeError("Neither Proton nor Wine is installed")
-    os.makedirs(os.path.dirname(LOG), exist_ok=True)
-    log = open(LOG, "ab")
-    log.write(f"\n=== {time.strftime('%F %T')} {' '.join(command)}\n".encode())
-    log.flush()
-    subprocess.Popen(command, cwd=os.path.dirname(path), env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
-    return label
+    return command, env, label
 
 
 # ── Steam ──────────────────────────────────────────────────────────────────

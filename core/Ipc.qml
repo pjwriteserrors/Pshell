@@ -150,6 +150,34 @@ Scope {
 		}
 	}
 
+	// the game library: `games add <path>` opens it to add a program
+	IpcHandler {
+		target: "games"
+		enabled: Plugins.on("games")
+
+		function open(): void {
+			Popups.withFocusedScreen(screen => Popups.openModal("games", screen));
+		}
+		function close(): void {
+			if (Popups.modal === "games") Popups.closeModal();
+		}
+		function toggle(): void {
+			root.modalOnFocused("games");
+		}
+		function add(path: string): void {
+			Popups.withFocusedScreen(screen => {
+				Popups.openModal("games", screen);
+				Games.addRequested(path);
+			});
+		}
+		function launch(id: string): void {
+			Games.launch(id, "");
+		}
+		function list(): string {
+			return JSON.stringify(Games.games.map(game => ({ id: game.id, name: game.name, kind: game.kind, running: Games.isRunning(game.id) })));
+		}
+	}
+
 	// the VM launcher: `vm launch win11` starts a machine without the popup
 	IpcHandler {
 		target: "vm"

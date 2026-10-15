@@ -225,6 +225,12 @@ Scope {
 		VmLauncher {}
 	}
 
+	LazyLoader {
+		active: Plugins.on("games")
+
+		GameLibrary {}
+	}
+
 	// the file manager, a window of its own
 	LazyLoader {
 		active: Plugins.on("filemanager")
