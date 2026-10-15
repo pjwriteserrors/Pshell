@@ -155,6 +155,10 @@ QtObject {
 		if (one && Kinds.isWindows(one)) return { label: "Windows", short: "Run", icon: "microsoft_windows", entries: [
 			{ label: "Run with", icon: "play_outline", children: done => Files.knowRunners(() => done(root.runnerEntries(one))) },
 			{ label: "Open in the Windows VM", icon: "monitor_shimmer", shown: Plugins.on("vm-launcher"), run: () => Files.openInVm(one.path) },
+			{ label: "Add to Games…", icon: "gamepad_variant", shown: Plugins.on("games"), run: () => {
+				Popups.openModal("games", Popups.primaryScreen);
+				Games.addRequested(one.path);
+			} },
 			{ label: "Add to Steam…", icon: "steam", run: () => view.ask("Name in the Steam library", "Name", one.name.replace(/\.[^.]+$/, ""), name => Files.addToSteam(one.path, name, FileLibrary.setting("protonVersion"))) }
 		] };
 		if (all(row => /\.(docx?|odt|rtf|xlsx?|ods|pptx?|odp)$/i.test(row.name))) return { label: "Make a PDF", short: "PDF", icon: "file_pdf_box", entries: [root.pdfEntry("officetopdf", "Make a PDF", "file_pdf_box", files)] };
