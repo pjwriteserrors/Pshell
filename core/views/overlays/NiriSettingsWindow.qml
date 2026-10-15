@@ -45,6 +45,7 @@ ModalWindow {
 		{ id: "looks", label: "Borders & shadows", icon: "border_style", hint: "Focus ring, border, shadow, tabs" },
 		{ id: "input", label: "Input", icon: "mouse", hint: "Keyboard, mouse, touchpad, tablet" },
 		{ id: "keys", label: "Key binds", icon: "keyboard", hint: "Shortcuts and switches" },
+		{ id: "mouse", label: "Mouse", icon: "mouse_variant", hint: "Buttons, gestures, scrolling, haptics", plugin: "mouse" },
 		{ id: "multicursor", label: "Multicursor", icon: "cursor_text", hint: "Lines and cursors in every text field", plugin: "multicursor" },
 		{ id: "rules", label: "Window rules", icon: "application_cog_outline", hint: "Per app: size, place, look" },
 		{ id: "workspaces", label: "Workspaces", icon: "view_grid_outline", hint: "Named workspaces" },
@@ -92,6 +93,15 @@ ModalWindow {
 		{ page: "input", anchor: "input-more", title: "Power key, workspace back and forth, cursor", words: "disable-power-key-handling workspace-auto-back-and-forth hide-when-typing hide-after-inactive-ms cursor", take: ["input/disable-power-key-handling", "input/workspace-auto-back-and-forth", "cursor/hide-when-typing", "cursor/hide-after-inactive-ms"] },
 		{ page: "keys", anchor: "binds", title: "Key binds", words: "keys shortcuts binds hotkeys", take: ["@binds"] },
 		{ page: "keys", anchor: "switches", title: "Lid and tablet mode", words: "switch-events lid-close lid-open tablet-mode", take: ["switch-events"] },
+		{ page: "mouse", anchor: "mouse-buttons", title: "Mouse buttons and gestures", words: "logitech mx master button remap gesture swipe thumb wheel per app solaar rule action ring", plugin: "mouse" },
+		{ page: "mouse", anchor: "mouse-rules", title: "Mouse rules", words: "rule editor condition modifier ctrl shift app hold double click solaar", plugin: "mouse" },
+		{ page: "mouse", anchor: "mouse-pointer", title: "Mouse DPI", words: "dpi speed sensitivity pointer precision sniper shift", plugin: "mouse" },
+		{ page: "mouse", anchor: "mouse-scroll", title: "Mouse wheel", words: "smartshift ratchet free spin torque wheel natural scrolling hires thumb wheel", plugin: "mouse" },
+		{ page: "mouse", anchor: "mouse-haptics", title: "Mouse haptics", words: "haptic vibration feedback strength waveform pulse", plugin: "mouse" },
+		{ page: "mouse", anchor: "mouse-force", title: "Haptic sense panel", words: "force sensing button pressure panel thumb", plugin: "mouse" },
+		{ page: "mouse", anchor: "mouse-hosts", title: "Easy-Switch", words: "easy switch host channel computer bluetooth pair", plugin: "mouse" },
+		{ page: "mouse", anchor: "mouse-stats", title: "Mouse statistics", words: "distance clicks scroll odometer statistics", plugin: "mouse" },
+		{ page: "mouse", anchor: "mouse-device", title: "Mouse battery and firmware", words: "battery firmware serial receiver bolt unifying hid++ features", plugin: "mouse" },
 		{ page: "multicursor", anchor: "multicursor", title: "Multicursor shortcuts", words: "move copy duplicate line add cursor above below click multi" },
 		{ page: "multicursor", anchor: "multicursor-apps", title: "Multicursor: excluded apps", words: "apps exclude leave alone" },
 		{ page: "rules", anchor: "rules", title: "Window rules", words: "window-rule match app-id title open-floating opacity", take: ["window-rule"] },
@@ -119,7 +129,7 @@ ModalWindow {
 	]
 
 	// a page of the shell's own: no niri file behind it, nothing to undo
-	readonly property bool shellPage: ["multicursor", "sounds", "lighting", "phone"].includes(root.current)
+	readonly property bool shellPage: ["multicursor", "sounds", "lighting", "phone", "mouse"].includes(root.current)
 
 	readonly property var results: {
 		if (root.query === "") return [];
@@ -512,7 +522,7 @@ ModalWindow {
 								}
 
 								StyledText {
-									text: ({ keys: "keybinds.kdl", displays: "display-profile.kdl", multicursor: "multicursor.json", sounds: "sounds.json", lighting: "lighting.json" })[root.current] ?? "settings.kdl"
+									text: ({ keys: "keybinds.kdl", displays: "display-profile.kdl", multicursor: "multicursor.json", sounds: "sounds.json", lighting: "lighting.json", mouse: "mouse.json" })[root.current] ?? "settings.kdl"
 									font.weight: Font.DemiBold
 									font.pixelSize: Theme.size.label
 								}
@@ -546,7 +556,7 @@ ModalWindow {
 									variant: "ghost"
 									icon: "tray_arrow_down"
 									text: "Export"
-									visible: root.current !== "sounds" && root.current !== "lighting" && root.current !== "phone"
+									visible: root.current !== "sounds" && root.current !== "lighting" && root.current !== "phone" && root.current !== "mouse"
 									enabled: NiriSettings.loaded
 									onActivated: exportSheet.show(root.current)
 								}
@@ -599,6 +609,7 @@ ModalWindow {
 							case "looks": return looksPage;
 							case "input": return inputPage;
 							case "keys": return keysPage;
+							case "mouse": return mousePage;
 							case "multicursor": return multicursorPage;
 							case "rules": return rulesPage;
 							case "workspaces": return workspacesPage;
@@ -843,6 +854,12 @@ ModalWindow {
 		id: keysPage
 
 		KeysPage {}
+	}
+
+	Component {
+		id: mousePage
+
+		MousePage {}
 	}
 
 	Component {

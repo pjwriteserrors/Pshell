@@ -49,7 +49,7 @@ NAMED = {
     "mute": "KEY_MUTE", "brightnessup": "KEY_BRIGHTNESSUP", "brightnessdown": "KEY_BRIGHTNESSDOWN",
     "back": "KEY_BACK", "forward": "KEY_FORWARD", "refresh": "KEY_REFRESH", "zoomin": "KEY_ZOOMIN",
     "zoomout": "KEY_ZOOMOUT", "calculator": "KEY_CALC", "mail": "KEY_MAIL", "search": "KEY_SEARCH",
-    "minus": "KEY_MINUS", "plus": "KEY_EQUAL", "equal": "KEY_EQUAL", "comma": "KEY_COMMA",
+    "equal": "KEY_EQUAL", "comma": "KEY_COMMA",
     "period": "KEY_DOT", "dot": "KEY_DOT", "slash": "KEY_SLASH",
 }
 
@@ -99,6 +99,7 @@ def key_code(name, layout="us"):
         return None
     raw = str(name)
     lowered = raw.lower().strip()
+    lowered = {"plus": "+", "minus": "-"}.get(lowered, lowered)
     if lowered in MODIFIERS:
         return E.ecodes[MODIFIERS[lowered]]
     if lowered in NAMED:

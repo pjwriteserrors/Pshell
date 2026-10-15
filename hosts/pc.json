@@ -9,6 +9,7 @@
 		"mouse-battery": true,
 		"phone": true,
 		"haptics": true,
+		"mouse": true,
 		"vm-launcher": true,
 		"games": true
 	},
