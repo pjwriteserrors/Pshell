@@ -39,6 +39,21 @@ which differ between its dark and light mode, so the hook has to keep
 Pywalfox's mode on `THEME_MODE` (that mode also decides whether pages are
 dark).
 
+## Discord in the shell's look (BetterDiscord)
+
+`betterdiscord` writes the wallust colours, the shell's roles (primary,
+on-primary, … from `Theme.qml`, through the port in
+`dotfiles/spicetify/generate.py`), niri's window radius and the wallpaper's
+still frame (small, as a data URI) as a marked block into BetterDiscord's
+`custom.css`, which BetterDiscord reloads live. The look itself is
+`dotfiles/betterdiscord/pshell.theme.css`: the wallpaper behind everything, the
+title bar as the bar with its screen corners, the channel list as a panel
+growing out of it, the server rail as a capsule, the chat as a window, lists
+as ListItems with icon badges, menus and popouts as panels, the shell's
+motion. The hook links it into `themes/` and switches it on once; turned off
+in BetterDiscord it stays off. BetterDiscord does not see changes to the
+linked file itself: after editing the sheet, reload Discord (Ctrl+R).
+
 ## Keyboard and LEDs (OpenRGB)
 
 `openrgb` projects the wallpaper onto the keyboard, `openrgb-leds` puts the

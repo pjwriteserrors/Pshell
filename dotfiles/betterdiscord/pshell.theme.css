@@ -1,0 +1,1600 @@
+/**
+ * @name Pshell
+ * @author Philipp Jung
+ * @description Discord drawn like the quickshell shell: its bar, panels, tiles and motion, in the wallpaper's colours.
+ * @version 2.0.0
+ */
+
+/* Discord as a small desktop of the shell (style/): the wallpaper behind
+ * everything, the title bar as the shell's bar with its screen corners, the
+ * channel list as a panel growing out of the bar (PanelShape.qml), the server
+ * rail as a capsule like the workspaces, the chat as a window with niri's
+ * corners, the user area as a card like the control centre's head. Lists are
+ * ListItems with round icon badges, sections SectionLabels, menus and popouts
+ * panels, tooltips the bar's pills; everything moves on Motion.qml's curves.
+ *
+ * The colours come from scripts/theme-hooks/betterdiscord.sh: on every theme
+ * change it writes the wallust palette, the shell's roles (Theme.qml), niri's
+ * window radius and the wallpaper as a block into custom.css, which
+ * BetterDiscord reloads live. Everything else is derived here. */
+
+/* ── palette ────────────────────────────────────────────────────────────── */
+:root {
+	--ps-bg: var(--pshell-bg, var(--background, #141414));
+	--ps-fg: var(--pshell-fg, var(--foreground, #e6e6e6));
+	--ps-primary: var(--pshell-primary, var(--color4, #6f9fd8));
+	--ps-on-primary: var(--pshell-on-primary, var(--ps-bg));
+	--ps-danger: var(--pshell-danger, #e5484d);
+	--ps-warning: var(--pshell-warning, #f5a524);
+	--ps-success: var(--pshell-success, #46a758);
+	--ps-shadow: var(--pshell-shadow, rgba(0, 0, 0, 0.55));
+	--ps-wallpaper: var(--pshell-wallpaper, none);
+
+	/* surfaces: the bar is see-through, panels turn solid below it */
+	--ps-glass: color-mix(in srgb, var(--ps-bg) 80%, transparent);
+	--ps-solid: color-mix(in srgb, var(--ps-bg) 96%, transparent);
+	--ps-layer1: color-mix(in srgb, var(--ps-fg) 4.5%, var(--ps-bg));
+	--ps-layer2: color-mix(in srgb, var(--ps-fg) 8.5%, var(--ps-bg));
+	--ps-layer3: color-mix(in srgb, var(--ps-fg) 13%, var(--ps-bg));
+	--ps-wash1: color-mix(in srgb, var(--ps-fg) 4.5%, transparent);
+	--ps-wash2: color-mix(in srgb, var(--ps-fg) 8.5%, transparent);
+	--ps-wash3: color-mix(in srgb, var(--ps-fg) 13%, transparent);
+	--ps-wash4: color-mix(in srgb, var(--ps-fg) 18%, transparent);
+	--ps-hover: color-mix(in srgb, var(--ps-fg) 10%, transparent);
+
+	--ps-text: var(--ps-fg);
+	--ps-text-muted: color-mix(in srgb, var(--ps-fg) 64%, transparent);
+	--ps-text-subtle: color-mix(in srgb, var(--ps-fg) 42%, transparent);
+	--ps-text-faint: color-mix(in srgb, var(--ps-fg) 24%, transparent);
+	--ps-outline: color-mix(in srgb, var(--ps-fg) 8%, transparent);
+
+	--ps-primary-soft: color-mix(in srgb, var(--ps-primary) 14%, transparent);
+	--ps-primary-container: color-mix(in srgb, var(--ps-primary) 20%, var(--ps-bg));
+	--ps-primary-hover: color-mix(in srgb, var(--ps-primary) 88%, var(--ps-fg));
+	--ps-primary-active: color-mix(in srgb, var(--ps-primary) 76%, var(--ps-fg));
+	--ps-danger-soft: color-mix(in srgb, var(--ps-danger) 16%, transparent);
+
+	/* metrics (Theme.qml) */
+	--ps-radius-small: 8px;
+	--ps-radius-medium: 12px;
+	--ps-radius-large: 16px;
+	--ps-radius-huge: 22px;
+	--ps-radius-window: var(--pshell-radius-window, 18px);
+	--ps-radius-full: 999px;
+	--ps-bar: 38px;
+	--ps-gap: 8px;
+	--ps-font: "Adwaita Sans", "gg sans", sans-serif;
+	--ps-mono: "Adwaita Mono", monospace;
+	--ps-blur: blur(22px) saturate(1.3);
+
+	/* Motion.qml */
+	--ps-spatial: cubic-bezier(0.38, 1.21, 0.22, 1);
+	--ps-spatial-fast: cubic-bezier(0.42, 1.67, 0.21, 0.9);
+	--ps-decel: cubic-bezier(0.05, 0.7, 0.1, 1);
+	--ps-accel: cubic-bezier(0.3, 0, 0.8, 0.15);
+	--ps-standard: cubic-bezier(0.2, 0, 0, 1);
+	--ps-micro: 100ms;
+	--ps-short: 160ms;
+	--ps-medium: 250ms;
+	--ps-long: 360ms;
+
+	color-scheme: var(--pshell-scheme, dark);
+}
+
+/* ── Discord's tokens ───────────────────────────────────────────────────── */
+:root,
+:is(.theme-dark, .theme-darker, .theme-midnight, .theme-light):not(.custom-user-profile-theme) {
+	--font-primary: var(--ps-font) !important;
+	--font-display: var(--ps-font) !important;
+	--font-headline: var(--ps-font) !important;
+	--font-code: var(--ps-mono) !important;
+	--custom-app-top-bar-height: var(--ps-bar) !important;
+	--radius-xs: 6px !important;
+	--radius-sm: var(--ps-radius-small) !important;
+	--radius-md: var(--ps-radius-medium) !important;
+	--radius-lg: var(--ps-radius-large) !important;
+	--radius-xl: var(--ps-radius-huge) !important;
+	--button-border-radius: var(--ps-radius-full) !important;
+	--button-border-radius-lg: var(--ps-radius-full) !important;
+	--custom-app-top-bar-item-radius: var(--ps-radius-full) !important;
+
+	--app-frame-background: transparent !important;
+	--app-frame-border: transparent !important;
+	--app-border-frame: transparent !important;
+	--background-base-lowest: var(--ps-bg) !important;
+	--background-base-lower: var(--ps-bg) !important;
+	--background-base-low: var(--ps-layer1) !important;
+	--background-surface-high: var(--ps-bg) !important;
+	--background-surface-higher: var(--ps-bg) !important;
+	--background-surface-highest: var(--ps-layer2) !important;
+	--background-secondary-alt: var(--ps-layer1) !important;
+	--bg-surface-raised: var(--ps-layer2) !important;
+	--home-background: var(--ps-bg) !important;
+	--panel-bg: var(--ps-bg) !important;
+	--chat-background: var(--ps-bg) !important;
+	--chat-background-default: var(--ps-layer1) !important;
+	--chat-border: transparent !important;
+	--channeltextarea-background: var(--ps-layer1) !important;
+	--channel-background-default: var(--ps-bg) !important;
+	--custom-channel-members-bg: transparent !important;
+	--modal-background: var(--ps-bg) !important;
+	--modal-footer-background: var(--ps-layer1) !important;
+	--embed-background: var(--ps-wash1) !important;
+	--embed-background-alternate: var(--ps-wash2) !important;
+	--card-background-default: var(--ps-wash1) !important;
+	--card-border-default: transparent !important;
+	--card-secondary-bg: var(--ps-wash2) !important;
+	--card-primary-pressed-bg: var(--ps-wash3) !important;
+	--card-secondary-pressed-bg: var(--ps-wash3) !important;
+	--background-code: var(--ps-wash1) !important;
+	--background-accent: var(--ps-wash3) !important;
+	--background-scrim: color-mix(in srgb, black 42%, transparent) !important;
+	--context-menu-backdrop-background: transparent !important;
+
+	--background-mod-muted: var(--ps-wash1) !important;
+	--background-mod-subtle: var(--ps-wash1) !important;
+	--background-mod-normal: var(--ps-wash2) !important;
+	--background-mod-strong: var(--ps-wash3) !important;
+	--background-modifier-hover: var(--ps-wash1) !important;
+	--background-modifier-active: var(--ps-wash2) !important;
+	--background-modifier-selected: var(--ps-primary-soft) !important;
+	--background-modifier-accent: var(--ps-outline) !important;
+	--interactive-background-default: transparent !important;
+	--interactive-background-hover: var(--ps-wash1) !important;
+	--interactive-background-active: var(--ps-wash2) !important;
+	--interactive-background-selected: var(--ps-primary-soft) !important;
+	--interactive-accent-background-default: var(--ps-primary-soft) !important;
+	--interactive-accent-background-hover: var(--ps-primary-soft) !important;
+	--interactive-accent-background-active: var(--ps-primary-soft) !important;
+	--interactive-accent-background-selected: var(--ps-primary-soft) !important;
+	--message-background-hover: var(--ps-wash1) !important;
+	--message-highlight-background-default: var(--ps-primary-soft) !important;
+	--message-highlight-background-hover: var(--ps-primary-soft) !important;
+	--message-mentioned-background-default: color-mix(in srgb, var(--ps-primary) 8%, transparent) !important;
+	--message-mentioned-background-hover: var(--ps-primary-soft) !important;
+
+	--text-strong: var(--ps-text) !important;
+	--text-default: var(--ps-text) !important;
+	--text-subtle: var(--ps-text-muted) !important;
+	--text-muted: var(--ps-text-muted) !important;
+	--chat-text-muted: var(--ps-text-subtle) !important;
+	--text-link: var(--ps-primary) !important;
+	--text-brand: var(--ps-primary) !important;
+	--text-invert: var(--ps-bg) !important;
+	--header-primary: var(--ps-text) !important;
+	--header-secondary: var(--ps-text-muted) !important;
+	--channels-default: var(--ps-text-muted) !important;
+	--channel-icon: var(--ps-text-muted) !important;
+	--channel-text-area-placeholder: var(--ps-text-subtle) !important;
+	--interactive-normal: var(--ps-text-muted) !important;
+	--interactive-hover: var(--ps-text) !important;
+	--interactive-active: var(--ps-text) !important;
+	--interactive-muted: var(--ps-text-faint) !important;
+	--interactive-text-default: var(--ps-text-muted) !important;
+	--interactive-text-hover: var(--ps-text) !important;
+	--interactive-text-active: var(--ps-text) !important;
+	--interactive-icon-default: var(--ps-text-muted) !important;
+	--interactive-icon-hover: var(--ps-text) !important;
+	--interactive-icon-active: var(--ps-text) !important;
+	--icon-strong: var(--ps-text) !important;
+	--icon-default: var(--ps-text-muted) !important;
+	--icon-subtle: var(--ps-text-subtle) !important;
+	--icon-muted: var(--ps-text-subtle) !important;
+	--icon-brand: var(--ps-primary) !important;
+	--icon-link: var(--ps-primary) !important;
+	--icon-invert: var(--ps-bg) !important;
+	--textbox-markdown-syntax: var(--ps-text-subtle) !important;
+	--mention-background: var(--ps-primary-soft) !important;
+	--mention-foreground: var(--ps-primary) !important;
+	--keyword-highlight-background: var(--ps-primary-soft) !important;
+
+	--border-subtle: transparent !important;
+	--border-muted: transparent !important;
+	--border-faint: transparent !important;
+	--border-normal: var(--ps-outline) !important;
+	--border-strong: var(--ps-wash2) !important;
+	--border-focus: var(--ps-primary) !important;
+	--spine-default: var(--ps-wash3) !important;
+	--thread-channel-spine: var(--ps-wash3) !important;
+
+	--brand-500: var(--ps-primary) !important;
+	--brand-560: var(--ps-primary-hover) !important;
+	--brand-600: var(--ps-primary-active) !important;
+	--brand-400: var(--ps-primary) !important;
+	--brand-360: var(--ps-primary) !important;
+	--brand-experiment: var(--ps-primary) !important;
+	--brand-experiment-560: var(--ps-primary-hover) !important;
+	--brand-experiment-600: var(--ps-primary-active) !important;
+	--brand-05a: color-mix(in srgb, var(--ps-primary) 5%, transparent) !important;
+	--brand-10a: color-mix(in srgb, var(--ps-primary) 10%, transparent) !important;
+	--brand-15a: var(--ps-primary-soft) !important;
+	--brand-20a: color-mix(in srgb, var(--ps-primary) 20%, transparent) !important;
+	--background-brand: var(--ps-primary) !important;
+	--control-brand-foreground: var(--ps-primary) !important;
+	--control-brand-foreground-new: var(--ps-primary) !important;
+	--tabs-indicator-default: var(--ps-primary) !important;
+	--progressbar-indicator-background: var(--ps-primary) !important;
+	--progressbar-track-background: var(--ps-layer2) !important;
+	--slider-track-background: var(--ps-layer2) !important;
+	--polls-voted-fill: var(--ps-primary-soft) !important;
+	--polls-victor-fill: var(--ps-primary-soft) !important;
+
+	/* TextButton.qml: accent or tint, never an outline */
+	--control-primary-background-default: var(--ps-primary) !important;
+	--control-primary-background-hover: var(--ps-primary-hover) !important;
+	--control-primary-background-active: var(--ps-primary-active) !important;
+	--control-primary-border-default: transparent !important;
+	--control-primary-border-hover: transparent !important;
+	--control-primary-border-active: transparent !important;
+	--control-primary-text-default: var(--ps-on-primary) !important;
+	--control-primary-text-hover: var(--ps-on-primary) !important;
+	--control-primary-text-active: var(--ps-on-primary) !important;
+	--control-primary-icon-default: var(--ps-on-primary) !important;
+	--control-primary-icon-hover: var(--ps-on-primary) !important;
+	--control-primary-icon-active: var(--ps-on-primary) !important;
+	--control-secondary-background-default: var(--ps-wash2) !important;
+	--control-secondary-background-hover: var(--ps-wash3) !important;
+	--control-secondary-background-active: var(--ps-wash4) !important;
+	--control-secondary-border-default: transparent !important;
+	--control-secondary-border-hover: transparent !important;
+	--control-secondary-border-active: transparent !important;
+	--control-secondary-text-default: var(--ps-text) !important;
+	--control-secondary-text-hover: var(--ps-text) !important;
+	--control-secondary-text-active: var(--ps-text) !important;
+	--control-secondary-icon-default: var(--ps-text) !important;
+	--control-secondary-icon-hover: var(--ps-text) !important;
+	--control-secondary-icon-active: var(--ps-text) !important;
+	--control-critical-primary-background-default: var(--ps-danger) !important;
+	--control-critical-primary-background-hover: color-mix(in srgb, var(--ps-danger) 88%, var(--ps-fg)) !important;
+	--control-critical-primary-background-active: color-mix(in srgb, var(--ps-danger) 76%, var(--ps-fg)) !important;
+	--control-critical-primary-border-default: transparent !important;
+	--control-critical-primary-border-hover: transparent !important;
+	--control-critical-primary-border-active: transparent !important;
+	--control-critical-primary-text-default: var(--ps-bg) !important;
+	--control-critical-primary-text-hover: var(--ps-bg) !important;
+	--control-critical-primary-text-active: var(--ps-bg) !important;
+	--control-critical-primary-icon-default: var(--ps-bg) !important;
+	--control-critical-primary-icon-hover: var(--ps-bg) !important;
+	--control-critical-primary-icon-active: var(--ps-bg) !important;
+	--control-critical-secondary-background-default: var(--ps-danger-soft) !important;
+	--control-critical-secondary-background-hover: color-mix(in srgb, var(--ps-danger) 24%, transparent) !important;
+	--control-critical-secondary-background-active: color-mix(in srgb, var(--ps-danger) 32%, transparent) !important;
+	--control-critical-secondary-border-default: transparent !important;
+	--control-critical-secondary-border-hover: transparent !important;
+	--control-critical-secondary-border-active: transparent !important;
+	--control-critical-secondary-text-default: var(--ps-danger) !important;
+	--control-critical-secondary-text-hover: var(--ps-danger) !important;
+	--control-critical-secondary-text-active: var(--ps-danger) !important;
+	--control-critical-secondary-icon-default: var(--ps-danger) !important;
+	--control-critical-secondary-icon-hover: var(--ps-danger) !important;
+	--control-critical-secondary-icon-active: var(--ps-danger) !important;
+	--control-icon-only-background-hover: var(--ps-hover) !important;
+	--control-icon-only-background-active: var(--ps-wash3) !important;
+	--control-icon-only-border-hover: transparent !important;
+	--control-icon-only-border-active: transparent !important;
+	--control-icon-only-icon-default: var(--ps-text-muted) !important;
+	--control-icon-only-icon-hover: var(--ps-text) !important;
+	--control-icon-only-icon-active: var(--ps-text) !important;
+	--redesign-button-tertiary-background: var(--ps-wash2) !important;
+	--redesign-button-tertiary-pressed-background: var(--ps-wash3) !important;
+	--redesign-button-tertiary-text: var(--ps-text) !important;
+	--redesign-button-tertiary-pressed-text: var(--ps-text) !important;
+	--button-outline-brand-text: var(--ps-primary) !important;
+	--button-outline-brand-background-hover: var(--ps-primary-soft) !important;
+	--button-outline-brand-border-active: var(--ps-primary) !important;
+	--button-outline-primary-text: var(--ps-text) !important;
+
+	/* Toggle.qml */
+	--switch-background-default: var(--ps-layer3) !important;
+	--switch-background-hover: color-mix(in srgb, var(--ps-fg) 18%, var(--ps-bg)) !important;
+	--switch-background-active: color-mix(in srgb, var(--ps-fg) 18%, var(--ps-bg)) !important;
+	--switch-background-selected-default: var(--ps-primary) !important;
+	--switch-background-selected-hover: var(--ps-primary-hover) !important;
+	--switch-border-default: transparent !important;
+	--switch-border-hover: transparent !important;
+	--switch-border-selected-default: transparent !important;
+	--switch-border-selected-hover: transparent !important;
+	--switch-thumb-background-default: var(--ps-text-muted) !important;
+	--switch-thumb-background-selected-default: var(--ps-on-primary) !important;
+	--switch-thumb-icon-default: var(--ps-layer3) !important;
+	--switch-thumb-icon-active: var(--ps-primary) !important;
+	--checkbox-background-default: var(--ps-wash2) !important;
+	--checkbox-background-hover: var(--ps-wash3) !important;
+	--checkbox-background-active: var(--ps-wash3) !important;
+	--checkbox-background-selected-default: var(--ps-primary) !important;
+	--checkbox-background-selected-hover: var(--ps-primary-hover) !important;
+	--checkbox-border-default: transparent !important;
+	--checkbox-border-hover: transparent !important;
+	--checkbox-border-active: transparent !important;
+	--checkbox-border-selected-default: transparent !important;
+	--checkbox-border-selected-hover: transparent !important;
+	--checkbox-icon-active: var(--ps-on-primary) !important;
+	--radio-background-default: var(--ps-wash2) !important;
+	--radio-background-hover: var(--ps-wash3) !important;
+	--radio-background-active: var(--ps-wash3) !important;
+	--radio-background-selected-default: var(--ps-primary) !important;
+	--radio-background-selected-hover: var(--ps-primary-hover) !important;
+	--radio-border-default: transparent !important;
+	--radio-border-hover: transparent !important;
+	--radio-border-active: transparent !important;
+	--radio-border-selected-default: transparent !important;
+	--radio-border-selected-hover: transparent !important;
+	--radio-foreground-default: var(--ps-on-primary) !important;
+	--radio-foreground-hover: var(--ps-on-primary) !important;
+	--radio-foreground-active: var(--ps-on-primary) !important;
+	--togglebutton-background-selected: var(--ps-primary) !important;
+	--togglebutton-background-selected-hover: var(--ps-primary-hover) !important;
+	--togglebutton-background-selected-active: var(--ps-primary-active) !important;
+	--togglebutton-icon-selected: var(--ps-on-primary) !important;
+	--togglebutton-icon-selected-hover: var(--ps-on-primary) !important;
+	--togglebutton-icon-only-icon-selected: var(--ps-on-primary) !important;
+	--togglebutton-icon-only-icon-selected-hover: var(--ps-on-primary) !important;
+
+	/* Field.qml: a tint, the accent's ring only while focused */
+	--input-background-default: var(--ps-wash1) !important;
+	--input-border-default: transparent !important;
+	--input-border-hover: transparent !important;
+	--input-border-active: color-mix(in srgb, var(--ps-primary) 85%, transparent) !important;
+	--input-border-readonly: transparent !important;
+	--input-text-default: var(--ps-text) !important;
+	--input-placeholder-text-default: var(--ps-text-subtle) !important;
+	--input-icon-default: var(--ps-text-subtle) !important;
+
+	/* Chip.qml */
+	--reaction-background-default: var(--ps-wash2) !important;
+	--reaction-background-hover: var(--ps-wash3) !important;
+	--reaction-background-active: var(--ps-wash3) !important;
+	--reaction-border-default: transparent !important;
+	--reaction-border-hover: transparent !important;
+	--reaction-border-active: transparent !important;
+	--reaction-background-reacted-default: var(--ps-primary) !important;
+	--reaction-background-reacted-hover: var(--ps-primary-hover) !important;
+	--reaction-border-reacted-default: transparent !important;
+	--reaction-text-default: var(--ps-text-muted) !important;
+	--reaction-text-hover: var(--ps-text) !important;
+	--reaction-text-active: var(--ps-text) !important;
+	--reaction-text-reacted-default: var(--ps-on-primary) !important;
+
+	--text-feedback-critical: var(--ps-danger) !important;
+	--text-feedback-warning: var(--ps-warning) !important;
+	--text-feedback-positive: var(--ps-success) !important;
+	--text-feedback-info: var(--ps-primary) !important;
+	--icon-feedback-critical: var(--ps-danger) !important;
+	--icon-feedback-warning: var(--ps-warning) !important;
+	--icon-feedback-positive: var(--ps-success) !important;
+	--icon-feedback-info: var(--ps-primary) !important;
+	--background-feedback-critical: var(--ps-danger-soft) !important;
+	--background-feedback-warning: color-mix(in srgb, var(--ps-warning) 14%, transparent) !important;
+	--background-feedback-positive: color-mix(in srgb, var(--ps-success) 14%, transparent) !important;
+	--background-feedback-info: var(--ps-primary-soft) !important;
+	--border-feedback-critical: transparent !important;
+	--border-feedback-warning: transparent !important;
+	--border-feedback-positive: transparent !important;
+	--border-feedback-info: transparent !important;
+	--status-danger: var(--ps-danger) !important;
+	--badge-notification-background: var(--ps-primary) !important;
+	--badge-primary-background: var(--ps-primary) !important;
+	--badge-primary-text: var(--ps-on-primary) !important;
+
+	--shadow-border: 0 0 0 1px var(--ps-outline) !important;
+	--shadow-low: none !important;
+	--shadow-low-hover: none !important;
+	--shadow-low-active: none !important;
+	--shadow-ledge: none !important;
+	--shadow-top-ledge: none !important;
+	--shadow-medium: 0 8px 24px var(--ps-shadow) !important;
+	--shadow-high: 0 14px 40px var(--ps-shadow) !important;
+	--elevation-stroke: 0 0 0 1px var(--ps-outline) !important;
+	--elevation-low: none !important;
+	--elevation-medium: 0 8px 24px var(--ps-shadow) !important;
+	--elevation-high: 0 14px 40px var(--ps-shadow) !important;
+
+	/* ThinScrollBar.qml: only there while the list is under the pointer */
+	--scrollbar-thin-thumb: transparent !important;
+	--scrollbar-thin-track: transparent !important;
+	--scrollbar-auto-thumb: transparent !important;
+	--scrollbar-auto-track: transparent !important;
+	--scrollbar-auto-scrollbar-color-thumb: transparent !important;
+	--scrollbar-auto-scrollbar-color-track: transparent !important;
+}
+
+[class*="scrollerBase_"]:hover {
+	--scrollbar-thin-thumb: var(--ps-text-subtle) !important;
+	--scrollbar-auto-thumb: var(--ps-text-subtle) !important;
+	--scrollbar-auto-scrollbar-color-thumb: var(--ps-text-subtle) !important;
+}
+
+::-webkit-scrollbar-thumb {
+	border-radius: var(--ps-radius-full) !important;
+	transition: background-color var(--ps-short) var(--ps-standard);
+}
+
+::selection {
+	background: color-mix(in srgb, var(--ps-primary) 40%, transparent);
+}
+
+/* ── the desktop ────────────────────────────────────────────────────────── */
+html,
+body,
+#app-mount,
+[class^="bg__"] {
+	background: var(--ps-bg) !important;
+	font-family: var(--ps-font);
+}
+
+[class^="base_"]:has(> [class^="content_"] > [class^="sidebar_"]) {
+	background:
+		linear-gradient(color-mix(in srgb, var(--ps-bg) 30%, transparent), color-mix(in srgb, var(--ps-bg) 30%, transparent)),
+		var(--ps-wallpaper) center / cover no-repeat,
+		var(--ps-bg) !important;
+}
+
+/* ── the bar ────────────────────────────────────────────────────────────── */
+/* flush with the window's top edge, see-through; its lower corners curve
+   down into the window like the shell's screen corners */
+[class^="base_"] > [class^="bar_"] {
+	position: relative;
+	z-index: 3;
+	overflow: visible !important;
+	background: var(--ps-glass) !important;
+	backdrop-filter: var(--ps-blur);
+	padding-inline: 6px;
+}
+
+[class^="base_"] > [class^="bar_"]::before,
+[class^="base_"] > [class^="bar_"]::after {
+	content: "";
+	position: absolute;
+	top: 100%;
+	width: var(--ps-radius-window);
+	height: var(--ps-radius-window);
+	pointer-events: none;
+}
+
+[class^="base_"] > [class^="bar_"]::before {
+	left: 0;
+	background: radial-gradient(circle at 100% 100%, transparent calc(var(--ps-radius-window) - 0.5px), var(--ps-glass) var(--ps-radius-window));
+}
+
+[class^="base_"] > [class^="bar_"]::after {
+	right: 0;
+	background: radial-gradient(circle at 0 100%, transparent calc(var(--ps-radius-window) - 0.5px), var(--ps-glass) var(--ps-radius-window));
+}
+
+/* the title is the bar's centre, like the clock */
+[class^="base_"] > [class^="bar_"] [class^="title_"] [class*="defaultColor_"] {
+	color: var(--ps-text) !important;
+	font-size: 13px !important;
+	font-weight: 700 !important;
+}
+
+/* everything in the bar sits in a pill that lights up under the pointer */
+[class^="base_"] > [class^="bar_"] :is([class*="button_"][role="button"], [class*="clickable_"], [class*="iconWrapper_"], [class*="winButton_"]) {
+	border-radius: var(--ps-radius-full) !important;
+	transition: background-color var(--ps-short) var(--ps-standard), color var(--ps-short) var(--ps-standard) !important;
+}
+
+[class^="base_"] > [class^="bar_"] [class*="winButton_"] {
+	height: 28px !important;
+	width: 28px !important;
+	margin: 5px 2px !important;
+	color: var(--ps-text-muted) !important;
+}
+
+[class^="base_"] > [class^="bar_"] :is([class*="button_"][role="button"], [class*="clickable_"], [class*="winButton_"]):hover {
+	background: var(--ps-hover) !important;
+	color: var(--ps-text) !important;
+}
+
+[class^="base_"] > [class^="bar_"] [class*="winButtonClose_"]:hover {
+	background: var(--ps-danger-soft) !important;
+	color: var(--ps-danger) !important;
+}
+
+[class^="base_"] > [class^="bar_"] [class*="winButtonsWithDivider_"]::before {
+	display: none !important;
+}
+
+/* ── the server rail: a capsule like the workspaces ─────────────────────── */
+[class^="sidebar_"] > nav[class*="guilds_"] {
+	position: relative;
+	isolation: isolate;
+	background: transparent !important;
+	margin-top: var(--ps-gap) !important;
+	margin-bottom: calc(var(--custom-app-panels-height, 56px) + var(--ps-gap) * 2) !important;
+}
+
+[class^="sidebar_"] > nav[class*="guilds_"]::before {
+	content: "";
+	position: absolute;
+	inset: 0 8px;
+	z-index: -1;
+	border-radius: var(--ps-radius-full);
+	background: var(--ps-glass);
+	backdrop-filter: var(--ps-blur);
+}
+
+nav[class*="guilds_"] [class*="scroller_"] {
+	padding-top: 8px !important;
+}
+
+nav[class*="guilds_"] [class*="unreadMentionsIndicator"] {
+	display: none !important;
+}
+
+/* icons are round; the open server turns into a rounded square with the
+   accent ring, the way a quick tile changes shape when it is on */
+nav[class*="guilds_"] foreignObject {
+	mask: none !important;
+	overflow: visible !important;
+}
+
+nav[class*="guilds_"] svg {
+	overflow: visible !important;
+}
+
+nav[class*="guilds_"] [role="treeitem"] {
+	border-radius: 50% !important;
+	overflow: hidden;
+	background-color: var(--ps-layer2) !important;
+	transition: border-radius var(--ps-long) var(--ps-spatial), box-shadow var(--ps-medium) var(--ps-standard), background-color var(--ps-short) var(--ps-standard) !important;
+}
+
+nav[class*="guilds_"] [role="treeitem"]:hover {
+	border-radius: var(--ps-radius-medium) !important;
+}
+
+nav[class*="guilds_"] [role="treeitem"][aria-selected="true"] {
+	border-radius: var(--ps-radius-medium) !important;
+	box-shadow: 0 0 0 2px var(--ps-bg), 0 0 0 4px var(--ps-primary);
+}
+
+nav[class*="guilds_"] [role="treeitem"] [class*="childWrapper_"] {
+	background: transparent !important;
+	color: var(--ps-text) !important;
+}
+
+nav[class*="guilds_"] [role="treeitem"][aria-selected="true"] [class*="childWrapper_"] {
+	background: var(--ps-primary) !important;
+	color: var(--ps-on-primary) !important;
+}
+
+nav[class*="guilds_"] [role="treeitem"] img {
+	border-radius: inherit;
+}
+
+/* the side mark: the workspace pill, inside the capsule */
+nav[class*="guilds_"] [class^="wrapper_"][class*="overlay_"] {
+	transform: translateX(6px);
+}
+
+nav[class*="guilds_"] [class^="wrapper_"][class*="overlay_"] [class^="item_"] {
+	background: var(--ps-primary) !important;
+	width: 6px !important;
+	border-radius: var(--ps-radius-full) !important;
+	transition: height var(--ps-medium) var(--ps-spatial), transform var(--ps-medium) var(--ps-spatial), opacity var(--ps-short) var(--ps-standard) !important;
+}
+
+nav[class*="guilds_"] [class*="guildSeparator_"] {
+	background: var(--ps-wash3) !important;
+	width: 20px !important;
+	margin-inline: auto;
+	height: 2px !important;
+	border-radius: var(--ps-radius-full);
+}
+
+nav[class*="guilds_"] [class*="lowerBadge_"] [class*="numberBadge_"],
+nav[class*="guilds_"] [class*="upperBadge_"] > div {
+	box-shadow: 0 0 0 3px var(--ps-bg);
+}
+
+nav[class*="guilds_"] [class*="expandedFolderBackground_"],
+nav[class*="guilds_"] [class*="folder_"] {
+	background: var(--ps-wash2) !important;
+	border-radius: var(--ps-radius-full) !important;
+}
+
+nav[class*="guilds_"] [class*="circleIconButton_"] {
+	background: var(--ps-wash2) !important;
+	color: var(--ps-text) !important;
+	border-radius: 50% !important;
+	transition: border-radius var(--ps-long) var(--ps-spatial), background-color var(--ps-short) var(--ps-standard) !important;
+}
+
+nav[class*="guilds_"] [class*="circleIconButton_"]:hover {
+	background: var(--ps-primary) !important;
+	color: var(--ps-on-primary) !important;
+	border-radius: var(--ps-radius-medium) !important;
+}
+
+/* number badges (Badge.qml) */
+[class*="numberBadge_"],
+[class*="base_"][class*="baseShapeRound_"] {
+	background-color: var(--ps-primary) !important;
+	color: var(--ps-on-primary) !important;
+	font-weight: 700 !important;
+}
+
+/* ── the channel list: a panel growing out of the bar ───────────────────── */
+/* PanelShape.qml: concave fillets flow from the bar into its sides, the
+   bottom corners are round, it is see-through where it meets the bar and
+   turns solid further down */
+[class^="sidebar_"] > [class^="sidebarList_"] {
+	position: relative;
+	overflow: visible !important;
+	border: none !important;
+	margin: 0 calc(var(--ps-gap) + 2px) calc(var(--custom-app-panels-height, 56px) + var(--ps-gap) * 2) 6px !important;
+	border-radius: 0 0 var(--ps-radius-window) var(--ps-radius-window) !important;
+	background: linear-gradient(var(--ps-glass), var(--ps-solid) 90px) !important;
+	backdrop-filter: var(--ps-blur);
+	box-shadow: 0 18px 40px -18px var(--ps-shadow);
+}
+
+[class^="sidebar_"] > [class^="sidebarList_"]::before,
+[class^="sidebar_"] > [class^="sidebarList_"]::after {
+	content: "";
+	position: absolute;
+	top: 0;
+	width: var(--ps-radius-window);
+	height: var(--ps-radius-window);
+	pointer-events: none;
+}
+
+[class^="sidebar_"] > [class^="sidebarList_"]::before {
+	right: 100%;
+	background: radial-gradient(circle at 0 100%, transparent calc(var(--ps-radius-window) - 0.5px), var(--ps-glass) var(--ps-radius-window));
+}
+
+[class^="sidebar_"] > [class^="sidebarList_"]::after {
+	left: 100%;
+	background: radial-gradient(circle at 100% 100%, transparent calc(var(--ps-radius-window) - 0.5px), var(--ps-glass) var(--ps-radius-window));
+}
+
+[class^="sidebarList_"] > *,
+[class^="sidebarList_"] nav,
+[class^="sidebarList_"] [class*="scroller_"],
+[class^="sidebarList_"] header,
+[class^="sidebarList_"] [class*="searchBar_"] {
+	background: transparent !important;
+	border: none !important;
+	box-shadow: none !important;
+}
+
+[class^="sidebarList_"] > * {
+	border-radius: inherit;
+	overflow: hidden;
+}
+
+[class*="sidebarResizeHandle_"] {
+	opacity: 0;
+}
+
+[class*="sectionDivider_"] {
+	background: transparent !important;
+	height: 8px !important;
+}
+
+/* DMs: the search is a field (Field.qml) */
+[class^="sidebarList_"] [class*="searchBar_"] {
+	padding: 10px 10px 6px !important;
+	height: auto !important;
+}
+
+[class^="sidebarList_"] [class*="searchBar_"] button {
+	height: 36px !important;
+	border-radius: var(--ps-radius-full) !important;
+	background: var(--ps-wash1) !important;
+	color: var(--ps-text-subtle) !important;
+	justify-content: flex-start !important;
+	padding-inline: 16px !important;
+	transition: background-color var(--ps-short) var(--ps-standard) !important;
+}
+
+[class^="sidebarList_"] [class*="searchBar_"] button:hover {
+	background: var(--ps-wash2) !important;
+	color: var(--ps-text-muted) !important;
+}
+
+[class^="sidebarList_"] [class*="searchBar_"] button [class*="buttonChildren_"] {
+	justify-content: flex-start !important;
+	font-weight: 500 !important;
+}
+
+/* a server: its name is the panel's title */
+[class^="sidebarList_"] header[class*="header_"] {
+	height: 52px !important;
+	padding-inline: 6px !important;
+}
+
+[class^="sidebarList_"] header [class*="guildDropdown_"] {
+	border-radius: var(--ps-radius-full) !important;
+	padding-inline: 10px !important;
+	transition: background-color var(--ps-short) var(--ps-standard) !important;
+}
+
+[class^="sidebarList_"] header [class*="guildDropdown_"]:hover {
+	background: var(--ps-hover) !important;
+}
+
+[class^="sidebarList_"] header h2[class*="name_"] {
+	font-size: 15px !important;
+	font-weight: 700 !important;
+	color: var(--ps-text) !important;
+}
+
+[class^="sidebarList_"] header [class*="inviteButton_"] {
+	border-radius: 50% !important;
+	background: var(--ps-wash2) !important;
+}
+
+[class*="headerEllipse"],
+[class*="headerGlass_"] {
+	display: none !important;
+}
+
+/* sections: SectionLabel.qml */
+[class^="sidebarList_"] [class*="containerDefault_"] h3[class*="name_"],
+[class*="privateChannelsHeaderContainer_"] [class*="headerText_"],
+[class*="membersGroup_"],
+[class^="side_"] [class^="header_"] {
+	font-size: 10px !important;
+	font-weight: 700 !important;
+	letter-spacing: 1.2px !important;
+	text-transform: uppercase !important;
+	color: var(--ps-text-subtle) !important;
+}
+
+[class^="sidebarList_"] [class*="containerDefault_"]:has(h3) {
+	padding-top: 10px;
+}
+
+/* rows: ListItem.qml – a round icon badge, the open one tinted with the
+   accent and its badge filled */
+[class^="sidebarList_"] [class*="containerDefault_"] [class^="link_"],
+[class^="sidebarList_"] [class*="interactive_"],
+[class^="sidebarList_"] [class*="voiceUser_"] {
+	border-radius: var(--ps-radius-medium) !important;
+	transition: background-color var(--ps-short) var(--ps-standard), color var(--ps-short) var(--ps-standard) !important;
+}
+
+[class^="sidebarList_"] [class*="containerDefault_"] [class^="link_"] {
+	min-height: 36px;
+	padding-block: 2px;
+}
+
+[class^="sidebarList_"] [class*="containerDefault_"] [class*="wrapper_"]:hover [class^="link_"] {
+	background: var(--ps-wash1) !important;
+}
+
+[class^="sidebarList_"] [class*="modeSelected_"] [class^="link_"],
+[class^="sidebarList_"] [class*="interactive_"][class*="selected_"] {
+	background: var(--ps-primary-soft) !important;
+}
+
+[class^="sidebarList_"] [class*="containerDefault_"] [class*="name_"],
+[class^="sidebarList_"] [class*="channel_"] [class*="name_"] {
+	font-size: 14px !important;
+	font-weight: 500 !important;
+}
+
+[class^="sidebarList_"] [class*="modeSelected_"] [class*="name_"],
+[class^="sidebarList_"] [class*="modeUnread"] [class*="name_"],
+[class^="sidebarList_"] [class*="interactive_"][class*="selected_"] [class*="name_"] {
+	color: var(--ps-text) !important;
+	font-weight: 600 !important;
+}
+
+[class^="sidebarList_"] [class*="modeMuted_"] {
+	opacity: 0.5;
+}
+
+[class^="sidebarList_"] [class*="containerDefault_"] [class^="iconContainer_"] {
+	width: 26px !important;
+	height: 26px !important;
+	margin-inline: -3px 3px !important;
+	border-radius: 50% !important;
+	background: var(--ps-wash2);
+	display: flex !important;
+	align-items: center;
+	justify-content: center;
+	transition: background-color var(--ps-medium) var(--ps-standard), color var(--ps-medium) var(--ps-standard) !important;
+}
+
+[class^="sidebarList_"] [class*="containerDefault_"] [class^="iconContainer_"] svg {
+	width: 15px !important;
+	height: 15px !important;
+}
+
+[class^="sidebarList_"] [class*="modeSelected_"] [class^="iconContainer_"] {
+	background: var(--ps-primary) !important;
+	color: var(--ps-on-primary) !important;
+}
+
+[class^="sidebarList_"] [class*="modeSelected_"] [class^="iconContainer_"] svg {
+	color: var(--ps-on-primary) !important;
+	fill: currentColor;
+}
+
+/* the unread mark: the bar's accent pill */
+[class^="sidebarList_"] [class^="unread_"] {
+	background: var(--ps-primary) !important;
+	width: 4px !important;
+	border-radius: var(--ps-radius-full) !important;
+	left: 2px !important;
+}
+
+/* DM shortcuts (friends, nitro, shop): badges too */
+[class*="linkButton_"] [class*="avatar_"] {
+	width: 28px !important;
+	height: 28px !important;
+	margin-inline: -4px 0 !important;
+	border-radius: 50% !important;
+	background: var(--ps-wash2);
+	display: flex !important;
+	align-items: center;
+	justify-content: center;
+	transition: background-color var(--ps-medium) var(--ps-standard) !important;
+}
+
+[class*="linkButton_"] [class*="avatar_"] svg {
+	width: 16px !important;
+	height: 16px !important;
+}
+
+[class*="linkButton_"][class*="selected_"] [class*="avatar_"] {
+	background: var(--ps-primary);
+	color: var(--ps-on-primary) !important;
+}
+
+[class^="sidebarList_"] [class*="dm_"] [class*="interactive_"] {
+	min-height: 44px;
+}
+
+/* boost goal and similar strips: a pill */
+[class^="sidebarList_"] [class*="containerWithMargin_"],
+[class^="sidebarList_"] [class*="progressContainer_"] {
+	border-radius: var(--ps-radius-full) !important;
+}
+
+/* ── the user area: a card like the control centre's head ──────────────── */
+[class^="sidebar_"] > section[class^="panels_"] {
+	background: var(--ps-solid) !important;
+	backdrop-filter: var(--ps-blur);
+	border: none !important;
+	border-radius: var(--ps-radius-window) !important;
+	box-shadow: 0 0 0 1px var(--ps-outline), 0 14px 36px -12px var(--ps-shadow) !important;
+	overflow: hidden;
+	inset-inline: 8px 10px !important;
+	bottom: var(--ps-gap) !important;
+}
+
+[class^="panels_"] > * {
+	background: transparent !important;
+	border: none !important;
+}
+
+[class^="panels_"] [class*="accountPopoutButtonWrapper_"] {
+	border-radius: var(--ps-radius-full) !important;
+	transition: background-color var(--ps-short) var(--ps-standard) !important;
+}
+
+[class^="panels_"] [class*="accountPopoutButtonWrapper_"]:hover {
+	background: var(--ps-hover) !important;
+}
+
+[class^="panels_"] [class*="panelTitleContainer_"] [class*="title_"] {
+	font-weight: 600 !important;
+	font-size: 13px !important;
+}
+
+[class^="panels_"] [class*="panelSubtextContainer_"] {
+	color: var(--ps-text-muted) !important;
+	font-size: 11px !important;
+}
+
+/* round icon buttons on a tint; a button with a menu is one pill */
+[class^="panels_"] [class*="buttons_"] > button,
+[class^="panels_"] [class*="audioButtonParent_"] {
+	background: var(--ps-wash2) !important;
+	border-radius: var(--ps-radius-full) !important;
+	transition: background-color var(--ps-short) var(--ps-standard), border-radius var(--ps-long) var(--ps-spatial) !important;
+}
+
+[class^="panels_"] [class*="buttons_"] {
+	gap: 6px;
+}
+
+[class^="panels_"] [class*="buttons_"] > button:hover,
+[class^="panels_"] [class*="audioButtonParent_"]:hover {
+	background: var(--ps-wash3) !important;
+}
+
+[class^="panels_"] [class*="audioButtonParent_"] button {
+	background: transparent !important;
+	border-radius: var(--ps-radius-full) !important;
+}
+
+/* voice connection rows inside the card */
+[class^="panels_"] [class*="actionButtons_"] button {
+	border-radius: var(--ps-radius-medium) !important;
+}
+
+/* ── the window: chat and every other page ──────────────────────────────── */
+[class^="content_"] > [class^="page_"] {
+	background: transparent !important;
+	padding: var(--ps-gap) var(--ps-gap) var(--ps-gap) 0 !important;
+	border: none !important;
+	box-sizing: border-box;
+}
+
+[class^="content_"] > [class^="page_"] > * {
+	height: 100%;
+	border-radius: var(--ps-radius-window) !important;
+	overflow: hidden !important;
+	background: var(--ps-bg) !important;
+	box-shadow: 0 0 0 1px var(--ps-outline), 0 14px 40px -16px var(--ps-shadow);
+	animation: ps-window var(--ps-long) var(--ps-decel) both;
+}
+
+[class^="page_"] [class^="chat_"],
+[class^="page_"] [class^="chatContent_"],
+[class^="page_"] [class^="container_"],
+[class^="page_"] [class*="messagesWrapper_"] {
+	background: transparent !important;
+	border: none !important;
+}
+
+/* the head of the window: the panel heading (PageHeader.qml) */
+[class^="page_"] section[class*="title_"] {
+	background: transparent !important;
+	box-shadow: none !important;
+	border: none !important;
+	min-height: 56px;
+	padding-inline: 10px 8px !important;
+}
+
+[class^="page_"] section[class*="title_"] h1,
+[class^="page_"] section[class*="title_"] [class*="titleWrapper_"] [class*="title_"] {
+	font-size: 15px !important;
+	font-weight: 700 !important;
+	color: var(--ps-text) !important;
+}
+
+/* IconButton.qml: round, the checked one a rounded accent square */
+[class^="page_"] section[class*="title_"] [class*="toolbar_"] [class*="iconWrapper_"] {
+	width: 34px !important;
+	height: 34px !important;
+	margin-inline: 1px !important;
+	border-radius: var(--ps-radius-full) !important;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: background-color var(--ps-short) var(--ps-standard), border-radius var(--ps-long) var(--ps-spatial), color var(--ps-short) var(--ps-standard) !important;
+}
+
+[class^="page_"] section[class*="title_"] [class*="toolbar_"] [class*="iconWrapper_"]:hover {
+	background: var(--ps-hover) !important;
+}
+
+[class^="page_"] section[class*="title_"] [class*="toolbar_"] [class*="iconWrapper_"][class*="selected_"] {
+	background: var(--ps-primary) !important;
+	border-radius: var(--ps-radius-medium) !important;
+	color: var(--ps-on-primary) !important;
+}
+
+[class^="page_"] section[class*="title_"] [class*="toolbar_"] [class*="iconWrapper_"][class*="selected_"] svg {
+	color: var(--ps-on-primary) !important;
+}
+
+[class^="page_"] section[class*="title_"] [class*="divider_"] {
+	display: none !important;
+}
+
+/* search: a field */
+[class*="search_"] [class*="searchBar_"] {
+	height: 34px !important;
+	border-radius: var(--ps-radius-full) !important;
+	background: var(--ps-wash1) !important;
+	padding-inline: 12px 6px !important;
+	outline: 1.5px solid transparent;
+	outline-offset: -1.5px;
+	transition: background-color var(--ps-short) var(--ps-standard), outline-color var(--ps-short) var(--ps-standard) !important;
+}
+
+[class*="search_"] [class*="searchBar_"]:focus-within {
+	background: var(--ps-wash2) !important;
+	outline-color: color-mix(in srgb, var(--ps-primary) 85%, transparent);
+}
+
+/* messages */
+[class^="messageListItem_"] > [class*="message_"] {
+	border-radius: var(--ps-radius-medium) !important;
+	margin-inline: 8px !important;
+	transition: background-color var(--ps-short) var(--ps-standard) !important;
+}
+
+[class*="message_"] h3[class*="header_"] [class*="username_"] {
+	font-weight: 600 !important;
+}
+
+[class*="message_"] h3[class*="header_"] [class*="timestamp_"] {
+	font-size: 11px !important;
+	color: var(--ps-text-subtle) !important;
+}
+
+[class*="repliedMessage_"]::before {
+	border-color: var(--ps-wash4) !important;
+}
+
+/* day separators: a small chip with a SectionLabel */
+[class*="divider_"][class*="hasContent_"][role="separator"] {
+	border-top-color: transparent !important;
+	opacity: 1 !important;
+}
+
+[class*="divider_"][class*="hasContent_"][role="separator"] > span[class*="content_"] {
+	background: var(--ps-layer2) !important;
+	color: var(--ps-text-muted) !important;
+	border-radius: var(--ps-radius-full) !important;
+	padding: 3px 12px !important;
+	font-size: 10px !important;
+	font-weight: 700 !important;
+	letter-spacing: 1.2px;
+	text-transform: uppercase;
+}
+
+/* the line where unread messages start: the accent */
+[class*="divider_"][class*="isUnread_"] {
+	--divider-color: var(--ps-primary) !important;
+	border-top-color: var(--ps-primary) !important;
+	opacity: 1 !important;
+}
+
+[class*="divider_"][class*="isUnread_"] [class*="unreadPill_"] {
+	background: var(--ps-primary) !important;
+	color: var(--ps-on-primary) !important;
+	border-radius: var(--ps-radius-full) !important;
+	padding-inline: 8px !important;
+	font-weight: 700 !important;
+}
+
+[class*="divider_"][class*="isUnread_"] [class*="unreadPillCap_"] {
+	display: none !important;
+}
+
+[class*="divider_"][class*="isUnread_"] span[class*="content_"] {
+	background: var(--ps-primary) !important;
+	color: var(--ps-on-primary) !important;
+}
+
+/* embeds, attachments, code: cards on the window */
+[class*="embedFull_"],
+article[class*="embed"] {
+	border-radius: var(--ps-radius-large) !important;
+	border: none !important;
+	border-inline-start: 3px solid var(--ps-primary) !important;
+	background: var(--ps-layer1) !important;
+}
+
+[class*="imageWrapper_"],
+[class*="imageContainer_"] [class*="clickableWrapper_"],
+[class*="mosaicItem_"],
+[class*="oneByOneGrid_"],
+[class*="attachment_"],
+[class*="fileWrapper_"],
+[class*="newMosaicStyle_"] {
+	border-radius: var(--ps-radius-large) !important;
+	border-color: transparent !important;
+}
+
+code,
+pre,
+[class*="codeContainer_"] {
+	font-family: var(--ps-mono) !important;
+}
+
+[class*="markup_"] pre > code,
+[class*="codeContainer_"] {
+	border-radius: var(--ps-radius-medium) !important;
+	border: none !important;
+	background: var(--ps-layer1) !important;
+}
+
+[class*="markup_"] code.inline {
+	background: var(--ps-wash2) !important;
+	border-radius: 6px !important;
+}
+
+[class*="blockquoteDivider_"] {
+	background: var(--ps-primary) !important;
+	border-radius: var(--ps-radius-full);
+}
+
+/* reactions: chips, filled with the accent once you joined in */
+[class^="reaction_"] {
+	border-radius: var(--ps-radius-full) !important;
+	border: none !important;
+	transition: background-color var(--ps-short) var(--ps-standard), transform var(--ps-short) var(--ps-spatial-fast) !important;
+}
+
+[class^="reaction_"]:active {
+	transform: scale(0.94);
+}
+
+[class^="reaction_"][class*="reactionMe_"] [class*="reactionCount_"] {
+	color: var(--ps-on-primary) !important;
+	font-weight: 700 !important;
+}
+
+/* the hover toolbar of a message: a small floating pill */
+[class*="buttonsInner_"],
+[class*="hoverBarButtons_"] {
+	background: var(--ps-bg) !important;
+	border: none !important;
+	border-radius: var(--ps-radius-full) !important;
+	box-shadow: 0 0 0 1px var(--ps-outline), 0 8px 24px var(--ps-shadow) !important;
+	padding: 2px;
+}
+
+[class*="buttonsInner_"] [class*="button_"],
+[class*="hoverBarButtons_"] [class*="button_"] {
+	border-radius: var(--ps-radius-full) !important;
+}
+
+/* jump / new-messages bars: accent pills */
+[class*="newMessagesBar_"],
+[class*="jumpToPresentBar_"] {
+	background: var(--ps-primary) !important;
+	color: var(--ps-on-primary) !important;
+	border-radius: var(--ps-radius-full) !important;
+	box-shadow: 0 8px 24px var(--ps-shadow) !important;
+	margin: 6px 12px !important;
+}
+
+/* ── the composer: like the launcher's search ───────────────────────────── */
+[class^="form_"] {
+	padding-inline: 10px !important;
+}
+
+[class^="channelTextArea_"] {
+	border-radius: var(--ps-radius-large) !important;
+	border: none !important;
+	box-shadow: none !important;
+	background: var(--ps-layer1) !important;
+	margin-bottom: 10px !important;
+	outline: 1.5px solid transparent;
+	outline-offset: -1.5px;
+	transition: background-color var(--ps-short) var(--ps-standard), outline-color var(--ps-short) var(--ps-standard) !important;
+}
+
+[class^="channelTextArea_"]:focus-within {
+	background: var(--ps-layer2) !important;
+	outline-color: color-mix(in srgb, var(--ps-primary) 85%, transparent);
+}
+
+[class^="channelTextArea_"] [class^="scrollableContainer_"] {
+	background: transparent !important;
+	border-radius: inherit !important;
+}
+
+/* the attach button is the launcher's search badge: a tinted rounded square */
+[class^="channelTextArea_"] [class*="attachButton_"] {
+	width: 34px !important;
+	height: 34px !important;
+	border-radius: var(--ps-radius-medium) !important;
+	background: var(--ps-wash2) !important;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: background-color var(--ps-short) var(--ps-standard) !important;
+}
+
+[class^="channelTextArea_"]:focus-within [class*="attachButton_"] {
+	background: var(--ps-primary-soft) !important;
+	color: var(--ps-primary) !important;
+}
+
+[class^="channelTextArea_"] [class*="buttons_"] [class*="button_"][role="button"] {
+	border-radius: var(--ps-radius-full) !important;
+	transition: background-color var(--ps-short) var(--ps-standard) !important;
+}
+
+[class^="channelTextArea_"] [class*="buttons_"] [class*="button_"][role="button"]:hover {
+	background: var(--ps-hover) !important;
+}
+
+[class*="attachedBars_"] {
+	background: var(--ps-layer2) !important;
+	border-radius: var(--ps-radius-large) var(--ps-radius-large) 0 0 !important;
+}
+
+[class^="typing_"] {
+	color: var(--ps-text-subtle) !important;
+}
+
+/* ── members: a card inside the window ──────────────────────────────────── */
+[class^="membersWrap_"] {
+	padding: 0 8px 8px 0;
+	background: transparent !important;
+}
+
+[class^="membersWrap_"] > [class^="members_"] {
+	background: var(--ps-layer1) !important;
+	border-radius: var(--ps-radius-large) !important;
+}
+
+[class^="member_"],
+[class^="member_"] [class*="layout_"] {
+	border-radius: var(--ps-radius-medium) !important;
+	transition: background-color var(--ps-short) var(--ps-standard) !important;
+}
+
+/* friends: the tabs are a segmented control (Segmented.qml) */
+[class*="topPill_"] {
+	background: var(--ps-wash1);
+	border-radius: var(--ps-radius-full);
+	padding: 3px;
+	gap: 2px;
+}
+
+[class*="topPill_"] [class*="item_"] {
+	border-radius: var(--ps-radius-full) !important;
+	margin: 0 !important;
+	padding: 4px 14px !important;
+	font-weight: 500 !important;
+	color: var(--ps-text-muted) !important;
+	transition: background-color var(--ps-medium) var(--ps-spatial), color var(--ps-short) var(--ps-standard) !important;
+}
+
+[class*="topPill_"] [class*="item_"][class*="selected_"] {
+	background: var(--ps-primary) !important;
+	color: var(--ps-on-primary) !important;
+	font-weight: 600 !important;
+}
+
+[class*="peopleListItem_"] {
+	border: none !important;
+	border-radius: var(--ps-radius-medium) !important;
+	margin-inline: 8px !important;
+	padding-inline: 10px !important;
+}
+
+/* ── panels: menus, popouts, dialogs ────────────────────────────────────── */
+/* context menus: the shell's popup panels, glass with the accent only on
+   what matters */
+[class^="menu_"] {
+	background: color-mix(in srgb, var(--ps-bg) 88%, transparent) !important;
+	backdrop-filter: var(--ps-blur);
+	border: none !important;
+	border-radius: var(--ps-radius-large) !important;
+	box-shadow: 0 0 0 1px var(--ps-outline), 0 14px 40px var(--ps-shadow) !important;
+	transform-origin: top left;
+}
+
+[class^="menu_"] [class^="scroller_"] {
+	padding: 6px !important;
+}
+
+[class^="menu_"] [class^="item_"] {
+	border-radius: var(--ps-radius-medium) !important;
+	margin-block: 1px !important;
+	font-weight: 500;
+	transition: background-color var(--ps-short) var(--ps-standard), color var(--ps-short) var(--ps-standard) !important;
+}
+
+[class^="menu_"] [class^="labelContainer_"] {
+	min-height: 34px !important;
+	padding-inline: 12px !important;
+}
+
+[class^="menu_"] [class^="item_"]:hover,
+[class^="menu_"] [class^="item_"][class*="focused_"] {
+	background: var(--ps-wash2) !important;
+	color: var(--ps-text) !important;
+}
+
+[class^="menu_"] [class^="item_"][class*="colorDanger_"] {
+	color: var(--ps-danger) !important;
+}
+
+[class^="menu_"] [class^="item_"][class*="colorDanger_"]:is(:hover, [class*="focused_"]) {
+	background: var(--ps-danger-soft) !important;
+	color: var(--ps-danger) !important;
+}
+
+[class^="menu_"] [class^="separator_"] {
+	border: none !important;
+	height: 1px;
+	background: var(--ps-outline);
+	margin: 5px 12px !important;
+}
+
+/* profiles and the other popouts: panels */
+.user-profile-popout,
+[class^="popout_"],
+[class*="emojiPicker_"],
+[class*="contentWrapper_"][class*="contentWrapperV2_"],
+[class^="messagesPopoutWrap_"],
+[class^="recentMentionsPopout_"],
+[class*="popoutContainer_"],
+[class^="autocomplete_"] {
+	border: none !important;
+	border-radius: var(--ps-radius-window) !important;
+	box-shadow: 0 0 0 1px var(--ps-outline), 0 14px 40px var(--ps-shadow) !important;
+	overflow: hidden;
+}
+
+.user-profile-popout [class^="inner_"] {
+	border-radius: inherit !important;
+}
+
+[class^="autocomplete_"] {
+	background: color-mix(in srgb, var(--ps-bg) 92%, transparent) !important;
+	backdrop-filter: var(--ps-blur);
+}
+
+[class^="autocomplete_"] [class*="clickable_"],
+[class^="autocomplete_"] [class*="autocompleteRow_"] > * {
+	border-radius: var(--ps-radius-medium) !important;
+}
+
+/* dialogs (ModalWindow.qml): a large panel over a dark veil */
+[role="dialog"][class^="root_"],
+[class*="focusLock_"] > [class^="root_"] {
+	background: var(--ps-bg) !important;
+	border: none !important;
+	border-radius: var(--ps-radius-huge) !important;
+	box-shadow: 0 0 0 1px var(--ps-outline), 0 20px 60px var(--ps-shadow) !important;
+	overflow: hidden;
+}
+
+[class^="backdrop_"] {
+	backdrop-filter: blur(4px);
+}
+
+/* tooltips: the bar's tooltip, a tinted pill */
+[class^="tooltip_"][class*="tooltipPrimary_"] {
+	background: var(--ps-layer3) !important;
+	color: var(--ps-text) !important;
+	border: none !important;
+	border-radius: var(--ps-radius-large) !important;
+	box-shadow: 0 8px 24px var(--ps-shadow) !important;
+	font-size: 12px !important;
+	font-weight: 600 !important;
+}
+
+[class^="tooltip_"] [class*="tooltipPointer_"] {
+	display: none !important;
+}
+
+[class^="tooltip_"] [class*="tooltipContent_"] {
+	padding: 6px 12px !important;
+}
+
+/* ── settings ───────────────────────────────────────────────────────────── */
+/* the Studio of the shell: one large panel, the navigation as ListItems with
+   icon badges, the page as a tinted card inside it */
+[class*="modal_"]:has(> [class*="modalContent_"] [class^="sidebar_"] nav) {
+	border-radius: var(--ps-radius-huge) !important;
+	background: var(--ps-bg) !important;
+	border: none !important;
+	box-shadow: 0 0 0 1px var(--ps-outline), 0 24px 70px var(--ps-shadow) !important;
+	overflow: hidden !important;
+	animation: ps-modal var(--ps-long) var(--ps-decel) both;
+}
+
+[class*="modalContent_"] aside[class^="sidebar_"],
+[class*="modalContent_"] aside[class^="sidebar_"] nav {
+	background: transparent !important;
+	border: none !important;
+}
+
+[class*="modalContent_"] [class^="contentHeader_"] {
+	background: transparent !important;
+	border: none !important;
+	box-shadow: none !important;
+	min-height: 56px;
+}
+
+[class*="modalContent_"] [class^="contentHeader_"] [class*="breadcrumb"],
+[class*="modalContent_"] [class^="contentHeader_"] [class*="breadcrumb"] * {
+	font-size: 15px !important;
+	font-weight: 700 !important;
+	color: var(--ps-text) !important;
+}
+
+[class*="modalContent_"] [class^="contentBody_"] {
+	background: var(--ps-layer1) !important;
+	border-radius: var(--ps-radius-large) !important;
+	margin: 0 10px 10px 0;
+}
+
+[class*="modalContent_"] [class^="contentBody_"] > [class*="scroller"] {
+	background: transparent !important;
+}
+
+[class*="modalContent_"] [class^="contentBody_"] [class^="divider_"] {
+	background: transparent !important;
+	border-color: transparent !important;
+}
+
+[class*="modalContent_"] [class^="sectionLabel_"] h3,
+[class*="modalContent_"] .bd-sidebar-header {
+	font-size: 10px !important;
+	font-weight: 700 !important;
+	letter-spacing: 1.2px !important;
+	text-transform: uppercase !important;
+	color: var(--ps-text-subtle) !important;
+}
+
+[class*="modalContent_"] [class^="item_"][role="link"] {
+	border-radius: var(--ps-radius-medium) !important;
+	min-height: 38px;
+	transition: background-color var(--ps-short) var(--ps-standard), color var(--ps-short) var(--ps-standard) !important;
+}
+
+[class*="modalContent_"] [class^="item_"][role="link"]:not([class*="active_"]):hover {
+	background: var(--ps-wash1) !important;
+}
+
+[class*="modalContent_"] [class^="item_"][role="link"][class*="active_"]:not([class^="subnav_"] *) {
+	background: var(--ps-primary-soft) !important;
+	color: var(--ps-text) !important;
+	font-weight: 600;
+}
+
+[class*="modalContent_"] [class^="item_"][role="link"] > [class*="itemContent_"] > svg {
+	box-sizing: content-box;
+	padding: 5px;
+	margin-inline: -5px 2px;
+	border-radius: 50%;
+	background: var(--ps-wash2);
+	transition: background-color var(--ps-medium) var(--ps-standard), color var(--ps-medium) var(--ps-standard);
+}
+
+[class*="modalContent_"] [class^="item_"][role="link"][class*="active_"] > [class*="itemContent_"] > svg {
+	background: var(--ps-primary);
+	color: var(--ps-on-primary) !important;
+}
+
+/* the sub-pages: the accent pill slides along a faint track */
+[class^="subnav_"] [class^="track_"] {
+	background: var(--ps-wash2) !important;
+	border-radius: var(--ps-radius-full);
+}
+
+[class^="subnav_"] [class^="thumb_"] {
+	background: var(--ps-primary) !important;
+	border-radius: var(--ps-radius-full);
+	transition: transform var(--ps-medium) var(--ps-spatial), height var(--ps-medium) var(--ps-spatial) !important;
+}
+
+[class^="subnav_"] [class^="item_"][class*="active_"] {
+	color: var(--ps-text) !important;
+	font-weight: 600;
+}
+
+/* search fields in panels (Field.qml) */
+[class*="searchBarContainer_"] [class*="wrapper_"],
+[class*="modalContent_"] [class*="hasLeading_"] {
+	border-radius: var(--ps-radius-full) !important;
+	background: var(--ps-wash1) !important;
+	border: none !important;
+}
+
+[class*="modalContent_"] [class*="hasLeading_"]:focus-within {
+	background: var(--ps-wash2) !important;
+	box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ps-primary) 85%, transparent) !important;
+}
+
+[class*="scrim_"] {
+	background: color-mix(in srgb, black 42%, transparent) !important;
+	backdrop-filter: blur(4px);
+}
+
+[class^="side_"] [class^="item_"] {
+	border-radius: var(--ps-radius-medium) !important;
+	padding-block: 8px !important;
+	font-weight: 500 !important;
+	transition: background-color var(--ps-short) var(--ps-standard), color var(--ps-short) var(--ps-standard) !important;
+}
+
+[class^="side_"] [class^="item_"][class*="selected_"] {
+	background: var(--ps-primary-soft) !important;
+	color: var(--ps-text) !important;
+	font-weight: 600 !important;
+}
+
+[class^="side_"] [class^="separator_"] {
+	background: transparent !important;
+}
+
+/* BetterDiscord's own pages */
+.bd-addon-card,
+.bd-settings-group,
+.bd-search-wrapper,
+.bd-setting-item {
+	border-radius: var(--ps-radius-large) !important;
+	border-color: transparent !important;
+}
+
+.bd-addon-card {
+	background: var(--ps-layer1) !important;
+}
+
+.bd-switch-checked .bd-switch-body,
+.bd-button:not(.bd-button-color-red, .bd-button-color-secondary) {
+	background-color: var(--ps-primary) !important;
+	color: var(--ps-on-primary) !important;
+}
+
+.bd-button {
+	border-radius: var(--ps-radius-full) !important;
+}
+
+/* ── buttons ────────────────────────────────────────────────────────────── */
+button[class*="button_"]:is([class*="lookFilled_"], [class*="sm_"], [class*="md_"], [class*="lg_"]),
+button[class*="button_"][class*="size"] {
+	border-radius: var(--ps-radius-full) !important;
+	font-weight: 600 !important;
+	transition: background-color var(--ps-short) var(--ps-standard), transform var(--ps-short) var(--ps-spatial-fast) !important;
+}
+
+button[class*="button_"]:active {
+	transform: scale(0.97);
+}
+
+/* ── motion ─────────────────────────────────────────────────────────────── */
+/* panels bloom open on the spatial curve, things that pop do it faster */
+@keyframes ps-bloom {
+	from {
+		transform: translateY(-8px) scale(0.95);
+	}
+}
+
+@keyframes ps-fade {
+	from {
+		opacity: 0;
+	}
+}
+
+@keyframes ps-pop {
+	from {
+		opacity: 0;
+		transform: scale(0.9);
+	}
+}
+
+@keyframes ps-modal {
+	from {
+		opacity: 0;
+		transform: scale(0.94);
+	}
+}
+
+@keyframes ps-window {
+	from {
+		opacity: 0.4;
+		transform: scale(0.985);
+	}
+}
+
+@media not (prefers-reduced-motion) {
+	[class^="menu_"],
+	[class^="autocomplete_"],
+	.user-profile-popout,
+	[class*="emojiPicker_"] {
+		animation: ps-bloom var(--ps-long) var(--ps-spatial) both, ps-fade var(--ps-medium) var(--ps-standard) both;
+	}
+
+	[class^="tooltip_"][class*="tooltipPrimary_"],
+	[class*="buttonsInner_"] {
+		animation: ps-pop 190ms var(--ps-spatial-fast) both;
+	}
+}
+
+@media (prefers-reduced-motion) {
+	[class^="content_"] > [class^="page_"] > * {
+		animation: none;
+	}
+}
