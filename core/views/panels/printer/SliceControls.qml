@@ -16,6 +16,8 @@ ColumnLayout {
 
 	required property var job
 	required property var settings
+	// "main": the profiles and what the slicer does; "more": the plate, supports, infill, brim
+	property string part: "main"
 	signal edit(string key, var value)
 	signal openProfiles(string kind)
 
@@ -32,6 +34,7 @@ ColumnLayout {
 
 	RowLayout {
 		Layout.fillWidth: true
+		visible: root.part === "main"
 
 		SectionLabel {
 			Layout.fillWidth: true
@@ -60,6 +63,7 @@ ColumnLayout {
 	// the profile
 	Clickable {
 		Layout.fillWidth: true
+		visible: root.part === "main"
 		Layout.preferredHeight: 46
 		radius: Theme.radius.medium
 		color: Theme.layer1
@@ -117,6 +121,7 @@ ColumnLayout {
 	// the filament profile – one for every filament of its material
 	Clickable {
 		Layout.fillWidth: true
+		visible: root.part === "main"
 		Layout.preferredHeight: 38
 		Layout.topMargin: -4
 		radius: Theme.radius.medium
@@ -162,6 +167,7 @@ ColumnLayout {
 	// the plate
 	Flow {
 		Layout.fillWidth: true
+		visible: root.part === "more"
 		spacing: 6
 
 		Repeater {
@@ -179,6 +185,7 @@ ColumnLayout {
 
 	GridLayout {
 		Layout.fillWidth: true
+		visible: root.part === "more"
 		columns: 2
 		columnSpacing: 10
 		rowSpacing: 8
@@ -239,7 +246,7 @@ ColumnLayout {
 
 	StyledText {
 		Layout.fillWidth: true
-		visible: !!root.job?.sliceError
+		visible: root.part === "main" && !!root.job?.sliceError
 		text: root.job?.sliceError ?? ""
 		wrapMode: Text.Wrap
 		tone: Theme.danger

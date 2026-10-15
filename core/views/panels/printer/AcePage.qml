@@ -6,8 +6,9 @@ import qs.style.theme
 import qs.core.services
 import qs.style.widgets
 
-// The ACE: its four spools as cards (the one feeding turns), the air in the
-// box, and drying – a preset for the material and a ring that counts down.
+// The ACE: its spools on a shelf (AceShelf: the one feeding turns, its
+// filament runs up to the printer), the air in the box, and drying – a
+// preset for the material and a ring that counts down.
 Item {
 	id: root
 
@@ -19,137 +20,35 @@ Item {
 		anchors.fill: parent
 		spacing: 18
 
-		GridLayout {
+		Rectangle {
 			Layout.fillWidth: true
 			Layout.fillHeight: true
 			Layout.minimumWidth: 360
-			columns: 2
-			rowSpacing: 12
-			columnSpacing: 12
+			radius: Theme.radius.huge
+			color: Theme.layer1
+			border.width: 1
+			border.color: Theme.outline
 
-			Repeater {
-				model: Printer.slots
-
-				delegate: Rectangle {
-					id: card
-
-					required property var modelData
-					required property int index
-					readonly property bool empty: card.modelData.type === ""
-					readonly property bool feeding: (root.box?.loaded ?? -1) === card.modelData.index
-
-					Layout.fillWidth: true
-					Layout.fillHeight: true
-					radius: Theme.radius.huge
-					color: Theme.layer1
-					border.width: 1
-					border.color: card.feeding ? Qt.alpha(Printer.hot, 0.5) : Theme.outline
-					opacity: 0
-					scale: 0.94
-
-					Component.onCompleted: appear.start()
-
-					SequentialAnimation {
-						id: appear
-
-						PauseAnimation {
-							duration: card.index * 70
-						}
-						ParallelAnimation {
-							NumberAnimation {
-								target: card
-								property: "opacity"
-								to: 1
-								duration: 300
-							}
-							NumberAnimation {
-								target: card
-								property: "scale"
-								to: 1
-								duration: 450
-								easing.type: Easing.OutBack
-							}
-						}
+			// a soft light from above
+			Rectangle {
+				anchors.fill: parent
+				radius: parent.radius
+				gradient: Gradient {
+					GradientStop {
+						position: 0
+						color: Qt.alpha(Printer.printing ? Printer.hot : Theme.primary, 0.06)
 					}
-
-					// the filament's colour, softly behind the spool
-					Rectangle {
-						anchors.left: parent.left
-						anchors.top: parent.top
-						anchors.bottom: parent.bottom
-						width: parent.width * 0.5
-						radius: parent.radius
-						visible: !card.empty
-						gradient: Gradient {
-							orientation: Gradient.Horizontal
-							GradientStop {
-								position: 0
-								color: Qt.alpha(Printer.rgb(card.modelData.color), 0.16)
-							}
-							GradientStop {
-								position: 1
-								color: "transparent"
-							}
-						}
-					}
-
-					RowLayout {
-						anchors.fill: parent
-						anchors.margins: 16
-						spacing: 16
-
-						Spool {
-							Layout.preferredWidth: 74
-							Layout.preferredHeight: 74
-							slot: card.modelData
-						}
-
-						ColumnLayout {
-							Layout.fillWidth: true
-							spacing: 2
-
-							StyledText {
-								Layout.fillWidth: true
-								text: card.empty ? "Empty" : card.modelData.type
-								font.pixelSize: Theme.size.title
-								font.weight: Font.DemiBold
-								tone: card.empty ? Theme.textFaint : Theme.text
-							}
-
-							StyledText {
-								Layout.fillWidth: true
-								visible: !card.empty
-								text: {
-									const c = card.modelData.color;
-									const hex = "#" + c.map(v => v.toString(16).padStart(2, "0")).join("").toUpperCase();
-									return card.modelData.sku ? `${hex} · ${card.modelData.sku}` : hex;
-								}
-								tone: Theme.textMuted
-								font.pixelSize: Theme.size.small
-								font.family: Theme.monoFamily
-							}
-
-							Rectangle {
-								Layout.topMargin: 6
-								Layout.preferredHeight: 20
-								Layout.preferredWidth: badge.implicitWidth + 16
-								radius: 10
-								visible: !card.empty
-								color: card.feeding ? Qt.alpha(Printer.hot, 0.16) : Theme.layer2
-
-								StyledText {
-									id: badge
-
-									anchors.centerIn: parent
-									text: card.feeding ? "Feeding" : `Slot ${card.modelData.slot + 1} · ready`
-									font.pixelSize: Theme.size.tiny
-									font.weight: Font.DemiBold
-									tone: card.feeding ? Printer.hot : Theme.textMuted
-								}
-							}
-						}
+					GradientStop {
+						position: 0.6
+						color: "transparent"
 					}
 				}
+			}
+
+			AceShelf {
+				anchors.fill: parent
+				anchors.margins: 14
+				visible: Printer.slots.length > 0
 			}
 		}
 

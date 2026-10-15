@@ -322,6 +322,21 @@ Singleton {
 		root.send({ op: "profiles" });
 	}
 
+	// files dropped on the panel: copied into the inbox, taken like any there
+	readonly property var accepts: [".gcode", ".3mf", ".stl", ".obj", ".step", ".stp", ".json", ".orca_printer", ".orca_filament", ".bbscfg", ".bbsflmt"]
+	function takes(path) {
+		const lower = String(path).toLowerCase();
+		return root.accepts.some(ending => lower.endsWith(ending));
+	}
+	function addFiles(paths) {
+		const wanted = (paths ?? []).filter(path => root.takes(path));
+		if (wanted.length > 0) root.send({ op: "add", paths: wanted });
+		return wanted.length;
+	}
+
+	// a print that finished, while the shell runs (the panel throws confetti)
+	signal finished(string name)
+
 	// the desktop's file chooser; a preset or a bundle goes into Orca's presets
 	function importProfile() {
 		if (!picker.running) picker.running = true;
@@ -576,6 +591,7 @@ Singleton {
 		case "ended": {
 			const name = root.nameOf(data.name);
 			const actions = [{ label: "Show", icon: "printer_3d", run: () => root.open() }];
+			if (data.result === "finished") root.finished(name);
 			if (data.result === "finished")
 				Notifs.pushInternal("done", "Print finished", `${name} · ${root.duration(Number(data.minutes) * 60)}`, { icon: "printer_3d", sound: "taskDone", actions, duration: 15000 });
 			else

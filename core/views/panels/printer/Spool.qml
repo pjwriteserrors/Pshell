@@ -11,7 +11,7 @@ Item {
 	required property var slot
 	property bool chosen: false
 	readonly property bool empty: root.slot.type === ""
-	readonly property bool feeding: (Printer.ace?.loaded ?? -1) === root.slot.index && Printer.printing
+	property bool feeding: (Printer.ace?.loaded ?? -1) === root.slot.index && Printer.printing
 
 	implicitWidth: 40
 	implicitHeight: 40

@@ -53,7 +53,7 @@ ListView {
 
 		width: 136
 		height: 90
-		y: card.hovered ? 0 : 4
+		y: card.hovered || card.current ? 0 : 4
 		radius: Theme.radius.large
 		color: card.current ? Theme.primarySoft : Theme.layer1
 		border.width: 1
@@ -131,6 +131,30 @@ ListView {
 			radius: 4
 			visible: card.onPrinter || card.modelData.status === "new"
 			color: card.onPrinter ? Printer.hot : Theme.primary
+		}
+
+		// the print on it, as a thin line along the bottom
+		Rectangle {
+			anchors.left: parent.left
+			anchors.right: parent.right
+			anchors.bottom: parent.bottom
+			anchors.margins: 10
+			anchors.bottomMargin: 3
+			height: 3
+			radius: 1.5
+			visible: card.onPrinter && Printer.printing
+			color: Qt.alpha(Theme.fg, 0.1)
+
+			Rectangle {
+				width: parent.width * Printer.progress
+				height: parent.height
+				radius: parent.radius
+				color: Printer.hot
+
+				Behavior on width {
+					SpatialAnim {}
+				}
+			}
 		}
 	}
 }

@@ -26,7 +26,7 @@ Commands: config {address, inbox, jobs, cache, history} (first, once) ·
 refresh · print {id, mapping: [{tool, slot}], settings} · pause · resume ·
 stop · light {on} · camera {on} · speed {mode} · dry {on, temp, minutes} ·
 ace · recolor {id, mapping, colours} · forget {id} · rerender {id} · slice {id, settings} · plate {id, plate} ·
-lay {id, face} · unlay {id} · profiles · import {path}
+lay {id, face} · unlay {id} · profiles · import {path} · add {paths}
 Events: ready · conn · status · progress · ace · light · jobs · arrived ·
 render · upload · started · answer · history · ended · profiles ·
 imported · error
@@ -794,6 +794,17 @@ def main():
                 threading.Thread(target=slicing.unlay, args=(command.get("id"),), daemon=True).start()
             elif op == "profiles":
                 threading.Thread(target=slicing.profiles, args=(True,), daemon=True).start()
+            elif op == "add":
+                # files dropped on the panel: into the inbox under a hidden name, then
+                # moved in whole – the watcher takes them as if exported there
+                for path in command.get("paths") or []:
+                    path = os.path.expanduser(path)
+                    if not os.path.isfile(path) or os.path.dirname(os.path.abspath(path)) == os.path.abspath(inbox):
+                        continue
+                    name = os.path.basename(path)
+                    part = os.path.join(inbox, f".{name}.part")
+                    shutil.copyfile(path, part)
+                    os.replace(part, os.path.join(inbox, name))
             elif op == "import":
                 imported = slicing.presets().import_file(os.path.expanduser(command.get("path", "")))
                 emit("imported", names=[name for _kind, name in imported], kinds=[kind for kind, _name in imported])

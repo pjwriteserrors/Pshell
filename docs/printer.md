@@ -17,20 +17,29 @@ OrcaSlicer ──export──▶ ~/Prints/inbox/
 ## Using it
 
 - In OrcaSlicer, export the G-code (*Export G-code file*) into
-  `~/Prints/inbox` – or drop a model there (below). The panel opens, the file moves into a job folder of its
-  own, and the part drops onto the bed in 3D and builds itself up.
+  `~/Prints/inbox` – or drop a model there (below), or drop the file
+  anywhere on the panel (it is copied into the inbox; profiles are imported).
+  The panel opens, the file moves into a job folder of its own, and the part
+  drops onto the bed in 3D and builds itself up. With nothing to print a
+  little vase prints itself on the stage in the ACE's colours.
 - **Print** page: the part turns by dragging (and spins on when let go),
   the wheel zooms, a double click puts the view back; left alone it turns
   slowly. While it prints the part is cut at the layer on the nozzle – solid
   below, the layer hot, the outer walls above as a ghost, a glowing sheet
   where it is cut – and that layer is shown from above in the corner.
-  Beside it: progress, layer, time left, when it is done, the nozzle's last
-  ten minutes, the speed (silent / standard / sport), pause and stop (stop
-  asks twice). A job not printing shows its filaments with the ACE slot each
-  comes from (same material and nearest colour picked in advance), bed
-  levelling and flow calibration, and *Print*; the slider scrubs its layers.
-- **ACE** page: the four spools (the one feeding turns), humidity and
-  temperature in the box, drying with presets per material.
+  Beside it: a dial with the progress and the layer, when it is ready, the
+  spools it prints from, the heat of the last ten minutes, the speed
+  (silent / standard / sport), pause and *Hold to stop*. A job not printing
+  shows its profiles, its filaments with the ACE slot each comes from (same
+  material and nearest colour picked in advance) and, folded under *More*
+  with a line of what they are set to, the plate, supports, infill, brim,
+  levelling and flow calibration; then *Hold to print*. Starting and
+  stopping a print are hold buttons (`HoldButton`): a fill runs while held
+  and they fire when it is through – a click alone only wiggles. The slider
+  scrubs the layers. A print that finished throws confetti on the panel.
+- **ACE** page: the spools side by side on a shelf (`AceShelf`) – the one
+  feeding turns and glows, its filament runs up as a flowing line – humidity
+  and temperature in the box, drying with presets per material.
 - **Sync ACE** (beside the slots, on the ACE page and at rest) asks the ACE
   again what it holds, after a spool was changed; otherwise it is asked
   every minute. The slots picked for a job stay with it – a model keeps
@@ -38,7 +47,7 @@ OrcaSlicer ──export──▶ ~/Prints/inbox/
 - **Statistics** page: prints, success rate, hours, filament; the last two
   weeks as bars (what failed or was stopped in red); filament by colour; the
   last prints. A print that ends sends a notification.
-- Header: the chamber light, the camera – its stream in a window of its own
+- Header: the pages (print / ACE / stats), the temperatures, the chamber light, the camera – its stream in a window of its own
   (`CameraWindow`), closing it stops the stream – and pop-out: the same
   panel as a window (`PrinterWindow`), kept as `windowed` in printer.json.
 - `>printer` in the launcher, `scripts/ipc.sh printer open|toggle|tab <print|ace|stats>|window|camera|light|refresh|pause|resume`,

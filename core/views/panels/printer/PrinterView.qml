@@ -7,9 +7,11 @@ import qs.core.services
 import qs.style.widgets
 
 // The 3D printer, the same under the bar (PrinterPanel) and in a window of
-// its own (PrinterWindow): a header with what the printer does and its
-// light, camera and pop-out; then the pages – the print with the part in
-// 3D, the ACE, the statistics – sliding into each other; below, the jobs.
+// its own (PrinterWindow): a header with what the printer does, the pages
+// to switch, its light, camera and pop-out; then the pages – the print with
+// the part in 3D, the ACE, the statistics – sliding into each other; below,
+// the jobs. Files dropped anywhere on it go into the inbox; a print that
+// finished throws confetti.
 Item {
 	id: root
 
@@ -64,11 +66,13 @@ Item {
 			}
 
 			ColumnLayout {
-				Layout.fillWidth: true
+				Layout.preferredWidth: 210
+				Layout.maximumWidth: 210
 				spacing: 1
 
 				StyledText {
 					Layout.fillWidth: true
+					elide: Text.ElideRight
 					text: Words.of("printer.title", Printer.name)
 					font.pixelSize: Theme.size.heading
 					font.weight: Font.Bold
@@ -108,6 +112,28 @@ Item {
 						font.pixelSize: Theme.size.label
 					}
 				}
+			}
+
+			Item {
+				Layout.fillWidth: true
+			}
+
+			// the pages
+			Segmented {
+				Layout.preferredWidth: 330
+				Layout.preferredHeight: 34
+				visible: Printer.configured
+				options: [
+					{ value: "print", label: "Print", icon: "printer_3d" },
+					{ value: "ace", label: "ACE", icon: "palette" },
+					{ value: "stats", label: "Stats", icon: "chart_bar" }
+				]
+				current: Printer.tab
+				onSelected: value => Printer.tab = value
+			}
+
+			Item {
+				Layout.fillWidth: true
 			}
 
 			Repeater {
@@ -177,26 +203,13 @@ Item {
 			}
 		}
 
-		Segmented {
-			Layout.fillWidth: true
-			Layout.preferredHeight: 36
-			visible: Printer.configured
-			options: [
-				{ value: "print", label: "Print", icon: "printer_3d" },
-				{ value: "ace", label: "ACE", icon: "palette" },
-				{ value: "stats", label: "Statistics", icon: "chart_bar" }
-			]
-			current: Printer.tab
-			onSelected: value => Printer.tab = value
-		}
-
 		// ── the pages, sliding into each other ───────────────────────────
 		Item {
 			id: pages
 
 			Layout.fillWidth: true
 			Layout.fillHeight: root.windowed
-			Layout.preferredHeight: root.windowed ? -1 : 430
+			Layout.preferredHeight: root.windowed ? -1 : 470
 			Layout.minimumHeight: 400
 			visible: Printer.configured
 			clip: true
@@ -238,6 +251,114 @@ Item {
 		JobStrip {
 			Layout.fillWidth: true
 			visible: Printer.configured && Printer.jobs.length > 0 && Printer.tab === "print"
+		}
+	}
+
+	// ── files dropped on it ──────────────────────────────────────────────
+	DropArea {
+		id: drop
+
+		property int count: 0
+
+		function paths(event) {
+			return (event.urls ?? []).map(url => String(url)).filter(url => url.startsWith("file://")).map(url => decodeURIComponent(url.slice(7)));
+		}
+
+		anchors.fill: parent
+		enabled: Printer.configured
+		onEntered: drag => {
+			drop.count = drop.paths(drag).filter(path => Printer.takes(path)).length;
+			if (drop.count > 0) drag.accept(Qt.CopyAction);
+		}
+		onExited: drop.count = 0
+		onDropped: event => {
+			const added = Printer.addFiles(drop.paths(event));
+			drop.count = 0;
+			if (added > 0) {
+				event.accept(Qt.CopyAction);
+				Printer.tab = "print";
+			}
+		}
+	}
+
+	Rectangle {
+		anchors.fill: parent
+		anchors.margins: -6
+		radius: Theme.radius.huge
+		color: Qt.alpha(Theme.bg, 0.82)
+		border.width: 2
+		border.color: Theme.primary
+		opacity: drop.containsDrag && drop.count > 0 ? 1 : 0
+		visible: opacity > 0.01
+		z: 20
+
+		Behavior on opacity {
+			Anim {
+				duration: Motion.short
+			}
+		}
+
+		Column {
+			anchors.centerIn: parent
+			spacing: 12
+
+			Rectangle {
+				anchors.horizontalCenter: parent.horizontalCenter
+				width: 84
+				height: 84
+				radius: 42
+				color: Theme.primarySoft
+
+				Glyph {
+					id: dropIcon
+
+					anchors.centerIn: parent
+					icon: "tray_arrow_down"
+					size: 38
+					color: Theme.primary
+
+					SequentialAnimation on anchors.verticalCenterOffset {
+						running: drop.containsDrag
+						loops: Animation.Infinite
+						NumberAnimation { to: 6; duration: 420; easing.type: Easing.InOutSine }
+						NumberAnimation { to: -2; duration: 420; easing.type: Easing.InOutSine }
+					}
+				}
+			}
+
+			StyledText {
+				anchors.horizontalCenter: parent.horizontalCenter
+				text: drop.count > 1 ? `Drop ${drop.count} files to add them` : "Drop to add it"
+				font.pixelSize: Theme.size.title
+				font.weight: Font.DemiBold
+			}
+
+			StyledText {
+				anchors.horizontalCenter: parent.horizontalCenter
+				text: "Models are sliced here, G-code is ready to print, profiles are imported"
+				tone: Theme.textMuted
+				font.pixelSize: Theme.size.label
+			}
+		}
+	}
+
+	// ── a print that finished ────────────────────────────────────────────
+	Confetti {
+		id: confetti
+
+		anchors.fill: parent
+		z: 30
+		colours: {
+			const loaded = Printer.slots.filter(slot => slot.type !== "").map(slot => Printer.rgb(slot.color));
+			return loaded.concat([Theme.primary, Printer.hot]);
+		}
+	}
+
+	Connections {
+		target: Printer
+
+		function onFinished() {
+			if (root.visible) confetti.burst();
 		}
 	}
 
