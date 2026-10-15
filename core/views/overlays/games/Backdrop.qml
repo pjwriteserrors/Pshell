@@ -31,7 +31,7 @@ Item {
 		if (!back) return;
 		back.soft = root.soft;
 		back.source = root.urlOf(root.picture);
-		if (back.source === "" || back.status === Image.Ready) root.swap();
+		if (String(back.source) === "" || back.status === Image.Ready) root.swap();
 	}
 
 	function swap() {

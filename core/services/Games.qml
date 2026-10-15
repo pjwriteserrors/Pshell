@@ -55,6 +55,10 @@ Singleton {
 	property bool padUsed: false
 	signal pad(string button)
 
+	// the game the library opens on (from the bar's panel), and whether with its menu
+	property string focusId: ""
+	property bool focusMenu: false
+
 	// a program to add, asked for from elsewhere (the file manager, IPC)
 	signal addRequested(string path)
 	signal launched(string id)

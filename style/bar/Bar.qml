@@ -217,6 +217,17 @@ PanelWindow {
 
 			BarIcon {
 				bar: root
+				panelId: "gamebar"
+				visible: Plugins.on("games-bar")
+				icon: "gamepad_variant"
+				tooltip: Games.running.length > 0 ? "Games · playing" : "Games · right-click for the library"
+				iconColor: Games.running.length > 0 ? Theme.success : (active ? Theme.primary : Theme.text)
+				onClicked: toggle()
+				onRightClicked: Popups.toggleModal("games", root.screen)
+			}
+
+			BarIcon {
+				bar: root
 				panelId: "ssh"
 				visible: Plugins.on("ssh")
 				icon: "server_network"

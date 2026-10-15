@@ -77,6 +77,7 @@
 	{ "id": "sounds", "name": "Sounds", "category": "Desktop", "icon": "volume_high" },
 	{ "id": "vm-launcher", "name": "VM launcher", "category": "Desktop", "default": false, "icon": "microsoft_windows" },
 	{ "id": "games", "name": "Games", "category": "Desktop", "default": false, "icon": "gamepad_variant" },
+	{ "id": "games-bar", "name": "Games in the bar", "category": "Desktop", "requires": ["games"], "icon": "gamepad_variant", "preview": {"on": ["bar", "clock"], "ipc": ["games panel"]} },
 	{ "id": "filemanager", "name": "File manager", "category": "Desktop", "icon": "folder_open" },
 	{ "id": "files-default", "name": "Default file manager", "category": "Desktop", "requires": ["filemanager"], "icon": "folder_star_outline" },
 	{ "id": "find-mouse", "name": "Find my mouse", "category": "Desktop", "icon": "mouse_variant" },

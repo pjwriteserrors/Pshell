@@ -231,6 +231,13 @@ Scope {
 		GameLibrary {}
 	}
 
+	// … and as a panel under the bar
+	LazyLoader {
+		active: Plugins.on("games-bar")
+
+		GamesPanel {}
+	}
+
 	// the file manager, a window of its own
 	LazyLoader {
 		active: Plugins.on("filemanager")

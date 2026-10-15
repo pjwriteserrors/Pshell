@@ -60,3 +60,14 @@ favourite, Y or Start the menu, LB/RB the filters, Select the grid.
 
 `games.py running` finds what runs: Steam's reaper (`SteamLaunch
 AppId=<id>`) and the watchers of games started here.
+
+`games-bar` puts the library under the bar as well (`core/views/panels/GamesPanel.qml`,
+`scripts/ipc.sh games panel`): the gamepad in the bar opens a panel with the
+picked game as a banner (its hero, logo, what is known, favourite, Play)
+over its covers – Recent (what runs first), Favourites or All, two rows to
+scroll. Arrows walk them, Enter plays (the banner pulses until it started,
+then the panel goes), typing searches, Tab walks the filters; the expand
+button or Ctrl+Enter opens the full library on the same game, the menu
+button or a right click on a cover opens it there with its menu. A right
+click on the bar's gamepad opens the full library straight away; it turns
+green while a game runs.

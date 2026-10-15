@@ -87,6 +87,7 @@ Singleton {
 		power: "power-menu",
 		vm: "vm-launcher",
 		games: "games",
+		gamebar: "games-bar",
 		radial: "radial-menu",
 		eyerest: "eye-rest",
 		stretch: "stretch",

@@ -231,10 +231,20 @@ ModalWindow {
 		root.intro = true;
 		introEnd.restart();
 		root.selectedId = "";
+		const focus = Games.focusId;
+		const withMenu = Games.focusMenu;
+		Games.focusId = "";
+		Games.focusMenu = false;
 		Qt.callLater(() => {
 			root.select(0, true);
 			shelf.positionViewAtBeginning();
 			keys.forceActiveFocus();
+			// opened from the bar's panel on a game
+			if (focus !== "" && root.list.some(game => game.id === focus)) {
+				root.selectedId = focus;
+				shelf.positionViewAtIndex(root.index, ListView.Beginning);
+				if (withMenu) Qt.callLater(() => root.openMenu(root.side + 300, root.height / 2));
+			}
 		});
 		rising.restart();
 	}

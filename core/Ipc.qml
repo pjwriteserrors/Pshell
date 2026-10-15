@@ -173,6 +173,11 @@ Scope {
 		function launch(id: string): void {
 			Games.launch(id, "");
 		}
+		// the panel under the bar (games-bar)
+		function panel(): void {
+			if (Plugins.on("games-bar")) root.drawerOnFocused("gamebar");
+			else root.modalOnFocused("games");
+		}
 		function list(): string {
 			return JSON.stringify(Games.games.map(game => ({ id: game.id, name: game.name, kind: game.kind, running: Games.isRunning(game.id) })));
 		}
