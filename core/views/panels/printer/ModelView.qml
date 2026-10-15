@@ -262,7 +262,11 @@ Item {
 		id: scene
 
 		anchors.fill: parent
-		active: (root.alive || drop.running) && root.ready
+		// not while it shows: a scene dropped and made again in a window on
+		// screen crashes in QSSGRenderInstanceTable::getTransform (a part
+		// sliced again went through that) – a new model.bin goes into the
+		// living scene, which hides while there is none (visible: ready)
+		active: root.alive || drop.running
 		sourceComponent: sceneComponent
 	}
 

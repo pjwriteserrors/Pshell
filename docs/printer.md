@@ -68,10 +68,17 @@ of its own.
 - **Plate** (Cool / Engineering / High temp / Textured PEI, from Orca's
   choice), **supports**, **infill** and **brim**: "Profile" keeps the
   preset's value.
-- **Filaments**: each of the model's colours (a 3MF names them; an STL has
-  one) is sliced with Anycubic's preset for the material of the ACE slot it
-  is printed from (`PLA Matte` → PLA) and in that slot's colour. Picking
-  another slot slices again.
+- **Filament profile**: "Automatic" is the filament preset Orca last used
+  with this printer; the list also has the user's own (e.g. one tuned for
+  minis) and Anycubic's. Each of the model's colours (a 3MF names them; an
+  STL has one) is sliced with the picked preset when it is of the material
+  of the ACE slot it prints from (`PLA Matte` → PLA), else with Anycubic's
+  for that material – in that slot's colour.
+- **A preset saved in Orca** slices again by itself: the daemon looks at the
+  user's presets every 3 s; each slice keeps a hash of what the presets made
+  of its settings (`slicer.signature`, colours left out), and a model whose
+  hash is another now is sliced again – not the one printing, which waits
+  until the print is over.
 - A setting changed by hand slices again (the old part dims under a spinner
   meanwhile); so does a slot of another material. A slot of the same
   material in another colour only paints the part anew (`mesh.recolor`,
@@ -109,6 +116,9 @@ The scene lives only while its surface shows (the panel or the window) and is
 made anew when it opens: Qt Quick 3D 6.12 aborts (an assert in
 `QSSGRenderRoot::reindex`) when it sets the renderer up again for a scene
 that changed while the window was hidden, which a running print always does.
+It is not dropped while it shows, though: a scene dropped and made again in
+a window on screen crashes in `QSSGRenderInstanceTable::getTransform`. A part
+sliced again goes into the living scene as a new file.
 
 ## The printer's side
 

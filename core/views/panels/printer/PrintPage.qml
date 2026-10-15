@@ -465,8 +465,8 @@ Item {
 
 				anchors.fill: parent
 				z: 10
-				current: root.settings.process
-				onPicked: name => root.edit("process", name)
+				current: menu.kind === "filament" ? (root.settings.filament ?? "") : root.settings.process
+				onPicked: (kind, name) => root.edit(kind, name)
 				onOpenChanged: if (open) Printer.loadProfiles()
 			}
 
@@ -788,7 +788,10 @@ Item {
 						job: root.job
 						settings: root.settings
 						onEdit: (key, value) => root.edit(key, value)
-						onOpenProfiles: menu.open = true
+						onOpenProfiles: kind => {
+							menu.kind = kind;
+							menu.open = true;
+						}
 					}
 
 					RowLayout {

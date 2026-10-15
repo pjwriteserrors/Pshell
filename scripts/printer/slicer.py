@@ -17,6 +17,7 @@ G-code of each plate. Value options need `--opt=value`: with a space,
 """
 
 import glob
+import hashlib
 import json
 import os
 import re
@@ -62,6 +63,28 @@ def _load(path):
         return None
 
 
+def _first(value):
+    return (value[0] if value else "") if isinstance(value, list) else (value or "")
+
+
+def material_of(text):
+    """The material a filament is sliced as: "PLA Matte" is PLA."""
+    upper = str(text or "PLA").upper()
+    return next((known for known in MATERIALS if upper.startswith(known.upper())), "PLA")
+
+
+def user_stamp():
+    """Changes whenever a preset of the user's is saved, made or removed."""
+    stamp = []
+    for kind in ("process", "filament", "machine"):
+        for path in sorted(glob.glob(os.path.join(USER, kind, "*.json"))):
+            try:
+                stamp.append((path, os.stat(path).st_mtime_ns))
+            except OSError:
+                continue
+    return stamp
+
+
 class Presets:
     def __init__(self):
         self.root = resources()
@@ -81,6 +104,7 @@ class Presets:
         # what Orca last used with this printer
         used = next((entry for entry in conf.get("orca_presets") or [] if entry.get("machine") == self.machine_name), {})
         self.process = used.get("process", "")
+        self.filament = used.get("filament", "")
         try:
             self.bed = BEDS[int(used.get("curr_bed_type") or (conf.get("app") or {}).get("curr_bed_type", 3))]
         except (ValueError, IndexError):
@@ -162,17 +186,37 @@ class Presets:
         out.sort(key=lambda p: (not p["fits"], not p["user"], p["name"]))
         return out
 
-    def filament_for(self, material):
-        """The system filament preset for this machine and a material ("PLA Matte" → PLA)."""
+    def filaments(self):
+        """[{name, type, user}] – the filament presets for this machine, the user's first."""
         system_machine = self.machine_system()
-        text = str(material or "PLA").upper()
-        for known in MATERIALS:
-            if text.startswith(known.upper()):
-                for vendor in ("Anycubic", "OrcaFilamentLibrary"):
-                    for name, path in self.vendors.get(vendor, {}).items():
-                        if name.startswith(f"Anycubic {known} @") and system_machine in name:
-                            return path
-                    break
+        out = []
+        for path in sorted(glob.glob(os.path.join(USER, "filament", "*.json"))):
+            data = _load(path) or {}
+            whole = self.flat(path)
+            if (whole.get("compatible_printers") or []) and system_machine not in whole["compatible_printers"]:
+                continue
+            out.append({"name": data.get("name") or os.path.basename(path)[:-5], "type": _first(whole.get("filament_type")), "user": True})
+        for vendor in ("Anycubic", "OrcaFilamentLibrary"):
+            for name, path in self.vendors.get(vendor, {}).items():
+                if os.path.basename(os.path.dirname(path)) == "filament" and name.endswith(f"@{system_machine}"):
+                    out.append({"name": name, "type": _first(self.flat(path).get("filament_type")), "user": False})
+        out.sort(key=lambda f: (not f["user"], f["name"]))
+        return out
+
+    def filament_for(self, material, chosen=""):
+        """The filament preset a material is sliced with: the one chosen, else the one Orca
+        last used with this printer – each only when it is of that material – else the
+        system's for this machine ("PLA Matte" → PLA)."""
+        system_machine = self.machine_system()
+        wanted = material_of(material)
+        for name in (chosen, self.filament):
+            path = self.find(name, kind="filament") if name else None
+            if path and material_of(_first(self.flat(path).get("filament_type"))) == wanted:
+                return path
+        for vendor in ("Anycubic", "OrcaFilamentLibrary"):
+            for name, path in self.vendors.get(vendor, {}).items():
+                if name.startswith(f"Anycubic {wanted} @") and system_machine in name:
+                    return path
         for vendor, names in self.vendors.items():
             for name, path in names.items():
                 if name.startswith("Anycubic PLA @") and system_machine in name:
@@ -180,9 +224,8 @@ class Presets:
         return self.find("Generic PLA") or ""
 
     # ── writing a set for the command line ───────────────────────────────
-    def write_set(self, folder, process, filaments, overrides):
-        """machine.json, process.json, filament-N.json in folder; returns their paths."""
-        os.makedirs(folder, exist_ok=True)
+    def build_set(self, process, filaments, overrides, chosen=""):
+        """(machine, process, [filament]) as the command line gets them."""
         system_machine = self.machine_system()
         machine = self.flat(self.machine_path())
         machine.update({"inherits": system_machine, "from": "User", "type": "machine"})
@@ -196,17 +239,26 @@ class Presets:
                       "from": "User", "type": "process", "compatible_printers": [system_machine], "compatible_printers_condition": ""})
         whole.update({key: value for key, value in overrides.items() if value is not None})
 
-        paths = {"machine": os.path.join(folder, "machine.json"), "process": os.path.join(folder, "process.json"), "filaments": []}
-        for path, data in ((paths["machine"], machine), (paths["process"], whole)):
-            with open(path, "w") as target:
-                json.dump(data, target, indent=1)
-        for index, filament in enumerate(filaments):
-            source = self.filament_for(filament.get("type"))
+        out = []
+        for filament in filaments:
+            source = self.filament_for(filament.get("type"), chosen)
             data = self.flat(source)
             colour = "#" + "".join(f"{int(c):02X}" for c in (filament.get("color") or [200, 200, 200])[:3])
             data.update({"inherits": self.system_root(source) or "", "from": "User", "type": "filament",
                          "compatible_printers": [system_machine], "compatible_printers_condition": "",
                          "filament_colour": [colour], "default_filament_colour": [colour]})
+            out.append(data)
+        return machine, whole, out
+
+    def write_set(self, folder, process, filaments, overrides, chosen=""):
+        """machine.json, process.json, filament-N.json in folder; returns their paths."""
+        os.makedirs(folder, exist_ok=True)
+        machine, whole, datas = self.build_set(process, filaments, overrides, chosen)
+        paths = {"machine": os.path.join(folder, "machine.json"), "process": os.path.join(folder, "process.json"), "filaments": []}
+        for path, data in ((paths["machine"], machine), (paths["process"], whole)):
+            with open(path, "w") as target:
+                json.dump(data, target, indent=1)
+        for index, data in enumerate(datas):
             path = os.path.join(folder, f"filament-{index}.json")
             with open(path, "w") as target:
                 json.dump(data, target, indent=1)
@@ -286,17 +338,32 @@ def sliced_plates(path, folder):
     return out
 
 
+def _overrides(presets, options):
+    return {
+        "curr_bed_type": options.get("bed") or presets.bed,
+        "enable_support": None if options.get("supports") is None else ("1" if options.get("supports") else "0"),
+        "sparse_infill_density": None if not options.get("infill") else f"{int(options['infill'])}%",
+        "brim_type": None if options.get("brim") is None else ("auto_brim" if options.get("brim") else "no_brim"),
+    }
+
+
+def signature(presets, process, filaments, options):
+    """What the presets make of these settings, as a short hash: another one after
+    a preset was saved in Orca means the slice is old. The colours are left out
+    (another colour only paints the part)."""
+    plain = [dict(filament, color=None) for filament in filaments]
+    try:
+        made = presets.build_set(process, plain, _overrides(presets, options), options.get("filament") or "")
+    except ValueError:
+        return ""
+    return hashlib.sha1(json.dumps(made, sort_keys=True).encode()).hexdigest()[:16]
+
+
 def slice_model(presets, model, folder, process, filaments, options):
     """Slices a model into folder/plate_N.gcode; returns (plates, error)."""
     work = tempfile.mkdtemp(prefix="pshell-slice-")
     try:
-        overrides = {
-            "curr_bed_type": options.get("bed") or presets.bed,
-            "enable_support": None if options.get("supports") is None else ("1" if options.get("supports") else "0"),
-            "sparse_infill_density": None if not options.get("infill") else f"{int(options['infill'])}%",
-            "brim_type": None if options.get("brim") is None else ("auto_brim" if options.get("brim") else "no_brim"),
-        }
-        paths = presets.write_set(os.path.join(work, "set"), process, filaments, overrides)
+        paths = presets.write_set(os.path.join(work, "set"), process, filaments, _overrides(presets, options), options.get("filament") or "")
         out = os.path.join(work, "out")
         os.makedirs(out)
         command = [executable(), f"--datadir={os.path.join(work, 'data')}", "--allow-newer-file=1",

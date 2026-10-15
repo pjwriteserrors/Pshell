@@ -6,8 +6,10 @@ import qs.style.theme
 import qs.core.services
 import qs.style.widgets
 
-// How a model is sliced: the profile (Orca's presets, a click opens the
-// list), the plate, supports and infill; below, what the slicer is doing.
+// How a model is sliced: the profile and the filament profile (Orca's
+// presets, a click opens the list), the plate, supports and infill; below,
+// what the slicer is doing. A preset saved in Orca slices again by itself
+// (printer.py Slicing.stale).
 // Every change slices again (PrintPage).
 ColumnLayout {
 	id: root
@@ -15,9 +17,10 @@ ColumnLayout {
 	required property var job
 	required property var settings
 	signal edit(string key, var value)
-	signal openProfiles
+	signal openProfiles(string kind)
 
 	readonly property var profile: Printer.profiles.find(p => p.name === root.settings.process) ?? null
+	readonly property var filament: Printer.filamentProfiles.find(f => f.name === root.settings.filament) ?? null
 	readonly property var bedNames: ({
 		"Cool Plate": "Cool",
 		"Engineering Plate": "Engineering",
@@ -62,7 +65,7 @@ ColumnLayout {
 		color: Theme.layer1
 		border.width: 1
 		border.color: Theme.outline
-		onClicked: root.openProfiles()
+		onClicked: root.openProfiles("process")
 
 		RowLayout {
 			anchors.fill: parent
@@ -101,6 +104,51 @@ ColumnLayout {
 					tone: root.profile && !root.profile.fits ? Theme.warning : Theme.textMuted
 					font.pixelSize: Theme.size.small
 				}
+			}
+
+			Glyph {
+				icon: "chevron_down"
+				size: 16
+				color: Theme.textMuted
+			}
+		}
+	}
+
+	// the filament profile – one for every filament of its material
+	Clickable {
+		Layout.fillWidth: true
+		Layout.preferredHeight: 38
+		Layout.topMargin: -4
+		radius: Theme.radius.medium
+		color: Theme.layer1
+		border.width: 1
+		border.color: Theme.outline
+		onClicked: root.openProfiles("filament")
+
+		RowLayout {
+			anchors.fill: parent
+			anchors.leftMargin: 12
+			anchors.rightMargin: 10
+			spacing: 10
+
+			Glyph {
+				Layout.preferredWidth: 28
+				icon: "printer_3d_nozzle"
+				size: 15
+				color: root.filament?.user ? Theme.primary : Theme.textMuted
+			}
+
+			StyledText {
+				Layout.fillWidth: true
+				text: root.settings.filament || "Filament: automatic"
+				elide: Text.ElideRight
+				font.pixelSize: Theme.size.label
+			}
+
+			StyledText {
+				text: root.filament ? (root.filament.user ? `yours · ${root.filament.type}` : root.filament.type) : "Orca's last"
+				tone: Theme.textMuted
+				font.pixelSize: Theme.size.small
 			}
 
 			Glyph {

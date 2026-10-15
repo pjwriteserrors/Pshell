@@ -79,6 +79,9 @@ Singleton {
 	property string defaultBed: "High Temp Plate"
 	// the profile Orca last used with this printer
 	property string defaultProcess: ""
+	// the filament presets for this printer [{ name, type, user }] and the one Orca last used
+	property var filamentProfiles: []
+	property string defaultFilament: ""
 	// what the last model was sliced with; a new model starts from it
 	property var slicing: ({ process: "", bed: "", supports: null, infill: null, brim: null, orient: false })
 	property bool importing: false
@@ -251,6 +254,8 @@ Singleton {
 			infill: own.infill !== undefined ? own.infill : root.slicing.infill,
 			brim: own.brim !== undefined ? own.brim : root.slicing.brim,
 			orient: own.orient !== undefined ? !!own.orient : !!root.slicing.orient,
+			// a filament preset picked by hand ("" – Orca's last for this printer)
+			filament: own.filament !== undefined ? own.filament : (root.slicing.filament ?? ""),
 			filaments: own.filaments ?? []
 		};
 	}
@@ -538,6 +543,8 @@ Singleton {
 			root.beds = data.beds ?? [];
 			root.defaultBed = data.bed || root.defaultBed;
 			root.defaultProcess = data.process ?? "";
+			root.filamentProfiles = data.filaments ?? [];
+			root.defaultFilament = data.filament ?? "";
 			break;
 		case "imported":
 			root.importing = false;

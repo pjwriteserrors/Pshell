@@ -8,20 +8,27 @@ import qs.style.widgets
 
 // The slicer profiles to pick from, over the side of the print page: those
 // made for this printer first (the user's own, then Anycubic's), then the
-// user's made for other printers. Importing takes a preset or a bundle
-// through the file chooser; one dropped into the inbox is imported too.
+// user's made for other printers. The same list picks the filament profile
+// (kind "filament"): the user's, then Anycubic's, and "Automatic" – Orca's
+// last for this printer. Importing takes a preset or a bundle through the
+// file chooser; one dropped into the inbox is imported too.
 Item {
 	id: root
 
 	property bool open: false
+	property string kind: "process"
 	property string current: ""
-	signal picked(string name)
+	signal picked(string kind, string name)
 
-	readonly property var groups: [
+	readonly property var groups: (root.kind === "filament" ? [
+		{ label: "", items: [{ name: "", label: "Automatic", detail: Printer.defaultFilament || "Anycubic's for the material", auto: true }] },
+		{ label: "Yours", items: Printer.filamentProfiles.filter(f => f.user).map(f => ({ name: f.name, detail: f.type, user: true })) },
+		{ label: "Anycubic", items: Printer.filamentProfiles.filter(f => !f.user).map(f => ({ name: f.name, detail: f.type, user: false })) }
+	] : [
 		{ label: "Yours", items: Printer.profiles.filter(p => p.user && p.fits) },
 		{ label: "Anycubic", items: Printer.profiles.filter(p => !p.user && p.fits) },
 		{ label: "Made for other printers", items: Printer.profiles.filter(p => !p.fits) }
-	].filter(group => group.items.length > 0)
+	]).filter(group => group.items.length > 0)
 
 	visible: card.opacity > 0.01
 
@@ -68,7 +75,7 @@ Item {
 
 				StyledText {
 					Layout.fillWidth: true
-					text: "Slicer profile"
+					text: root.kind === "filament" ? "Filament profile" : "Slicer profile"
 					font.pixelSize: Theme.size.title
 					font.weight: Font.DemiBold
 				}
@@ -87,7 +94,7 @@ Item {
 				clip: true
 				spacing: 2
 				boundsBehavior: Flickable.StopAtBounds
-				model: root.groups.reduce((rows, group) => rows.concat([{ header: group.label }], group.items), [])
+				model: root.groups.reduce((rows, group) => rows.concat(group.label ? [{ header: group.label }] : [], group.items), [])
 
 				delegate: Loader {
 					id: row
@@ -120,7 +127,7 @@ Item {
 							radius: Theme.radius.medium
 							color: chosen ? Theme.primarySoft : "transparent"
 							onClicked: {
-								root.picked(row.modelData.name);
+								root.picked(root.kind, row.modelData.name);
 								root.open = false;
 							}
 
@@ -131,19 +138,22 @@ Item {
 								spacing: 8
 
 								Glyph {
-									icon: item.chosen ? "check" : (row.modelData.user ? "account_outline" : "printer_3d")
+									icon: item.chosen ? "check" : (row.modelData.auto ? "auto_fix" : (row.modelData.user ? "account_outline" : (root.kind === "filament" ? "printer_3d_nozzle" : "printer_3d")))
 									size: 15
 									color: item.chosen ? Theme.primary : Theme.textMuted
 								}
 
 								StyledText {
 									Layout.fillWidth: true
-									text: row.modelData.name
+									text: row.modelData.label ?? row.modelData.name
+									elide: Text.ElideRight
 									font.pixelSize: Theme.size.label
 								}
 
 								StyledText {
-									text: `${row.modelData.layer} mm`
+									Layout.maximumWidth: row.modelData.auto ? item.width * 0.5 : implicitWidth
+									text: row.modelData.detail ?? `${row.modelData.layer} mm`
+									elide: Text.ElideRight
 									tone: Theme.textMuted
 									font.pixelSize: Theme.size.small
 									tabular: true

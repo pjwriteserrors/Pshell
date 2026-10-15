@@ -313,14 +313,17 @@ class Slicing:
     """Slices model jobs, one at a time; a newer request for a job replaces
     one that still waits. Orca's presets are read again after an import."""
 
-    def __init__(self, jobs):
+    def __init__(self, jobs, printing):
         self.jobs = jobs
+        # the job the printer is on now (its G-code is not sliced anew)
+        self.printing = printing
         self.cond = threading.Condition()
         self.pending = {}
         self._presets = None
         # the placed STL is written by lay() and read by a slice
         self.placing = threading.Lock()
         threading.Thread(target=self._run, daemon=True).start()
+        threading.Thread(target=self._watch, daemon=True).start()
 
     def presets(self, fresh=False):
         if fresh or self._presets is None:
@@ -337,8 +340,62 @@ class Slicing:
 
     def profiles(self, fresh=False):
         presets = self.presets(fresh)
-        emit("profiles", available=bool(slicer.executable()), processes=presets.processes(),
-             beds=slicer.BEDS[1:5], bed=presets.bed, process=presets.process, machine=presets.machine_name)
+        emit("profiles", available=bool(slicer.executable()), processes=presets.processes(), filaments=presets.filaments(),
+             beds=slicer.BEDS[1:5], bed=presets.bed, process=presets.process, filament=presets.filament, machine=presets.machine_name)
+
+    def _watch(self):
+        """A preset saved in Orca (or imported) after a model was sliced: the list is
+        read anew and every model sliced with it is sliced again – but not the one
+        printing now (that one when the print is over)."""
+        stamp = None
+        busy = None
+        check = True
+        while True:
+            now = slicer.user_stamp()
+            if now != stamp:
+                if stamp is not None:
+                    self.profiles(fresh=True)
+                stamp = now
+                check = True
+            if self.printing() != busy:
+                busy = self.printing()
+                check = True
+            if check:
+                check = not self.stale()
+            time.sleep(3)
+
+    def stale(self):
+        """Slices again what is old; False while the printer's job is not known yet."""
+        busy = self.printing()
+        if busy is None:
+            return False
+        presets = self.presets()
+        for job in list(self.jobs.items.values()):
+            if job.get("kind") != "model" or job.get("slicing") or not job.get("file") or job["id"] in self.pending:
+                continue
+            # the one printing, and one just sent that the printer has not named yet
+            if job["id"] == busy or job.get("status") == "uploading" or now_ms() - job.get("printed", 0) < 120000:
+                continue
+            settings = job.get("slice") or {}
+            if not settings.get("process"):
+                continue
+            filaments = settings.get("filaments") or job.get("filaments") or []
+            made = slicer.signature(presets, settings["process"], filaments, settings)
+            if not made:
+                continue
+            if not job.get("profileSig"):
+                # sliced before this was kept: old when a preset changed after the slice
+                if self.newest() * 1000 <= job.get("sliced", 0):
+                    self.jobs.update(job["id"], profileSig=made)
+                    continue
+            elif job["profileSig"] == made:
+                continue
+            self.request(job["id"], dict(settings))
+        return True
+
+    @staticmethod
+    def newest():
+        return max((mtime for _path, mtime in slicer.user_stamp()), default=0) / 1e9
 
     def request(self, ident, settings):
         with self.cond:
@@ -425,7 +482,8 @@ class Slicing:
         plate = min(max(1, int(job.get("plate") or 1)), len(plates))
         self.jobs.update(ident, slicing=False, plates=len(plates), plate=plate, file=plates[plate - 1], status="new",
                          remote=remote_name(f"{stem_of(job['name'])}_p{plate}.gcode"), sliced=now_ms(),
-                         sliceSeconds=round(time.monotonic() - started, 1))
+                         sliceSeconds=round(time.monotonic() - started, 1),
+                         profileSig=slicer.signature(self.presets(), settings.get("process") or "", filaments, settings))
         self.jobs.renders.put(ident)
 
 
@@ -466,7 +524,17 @@ class Printer:
         self.ace = {}
         self.project = None
         self.seen_last = False
+        self.started = time.monotonic()
         threading.Thread(target=self._keep, daemon=True).start()
+
+    def printing(self):
+        """The id of the job the printer is on now, when it is one of ours; None while
+        that is not known yet (the printer has not answered, and may – 30 s)."""
+        if not self.seen_last and time.monotonic() - self.started < 30:
+            return None
+        project = self.project
+        job = self.history.jobs.by_remote(project.get("filename")) if project else None
+        return job["id"] if job else ""
 
     def _keep(self):
         delay = 3
@@ -638,7 +706,7 @@ def main():
     jobs.publish()
     history.publish()
     printer = Printer(config["address"], history)
-    slicing = Slicing(jobs)
+    slicing = Slicing(jobs, printer.printing)
 
     def arrived(path):
         # Orca writes in one go, but a copy may still be growing: wait for a still size
