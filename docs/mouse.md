@@ -98,3 +98,37 @@ panel as control 0x1A0 of 0x1B04. 0x2251 (wheel statistics) takes
 fn 2 `01` to start counting (fn 1 then reads `01`); 0x2250 does not take
 that, and neither sent a report while nothing moved. 0x1701 and 0x00D1
 (firmware update) are left alone.
+
+## Profiles
+
+A profile is a whole set of rules and device settings (`profiles`, `active`
+and the picked `profile` in `mouse.json`); the one in use is the working set
+the daemon gets. A profile can follow apps (it comes while one of them has
+the focus) or a game (while the Games plugin sees one running); the picked
+one comes back after. Picked by hand it stays until the app or the game
+changes. Rules that switch profiles – and rules marked `shared` – go along
+into every profile. Switching: the strip on the page, `>mouse` in the
+launcher (a tile per profile, *New Profile*, *Game Haptics*, *Mouse
+Settings*), a button (*Next mouse profile*, *Switch to …*),
+`scripts/ipc.sh mouse profile <name>|next|profiles|rumble off|games|always|open`.
+
+## Haptics beyond clicks
+
+- **Game haptics** (`rumble`: off, games, always): `parec` takes the default
+  output's monitor at 8 kHz, the low end of each 20 ms is weighed against the
+  last second, and a hit that stands out plays a hard bump, a soft bump or a
+  tick by its strength (`rumbleSensitivity`, at most every `rumbleGap` ms).
+  The page shows the bass, the line to cross and each hit.
+- **Feel the desktop** (`feel`: moment → waveform): another workspace, the
+  focus on another monitor, a window opening or closing, a window wanting
+  attention – from niri's event stream.
+- **Battery**: kept over time (`mouse-stats.json`), how long it lasts at the
+  pace since the last charge, a knock and a notification at 15 %, a buzz at
+  5 %, a note when it is full.
+- **Gesture HUD** (`hud`): holding a button with swipes for a moment shows
+  what each way does in the middle of the focused screen, following the
+  mouse.
+
+Shortcuts can be *sticky* (`latch`: one press holds the keys, the next lets
+go). The Solaar import turns helper scripts that only press keys through
+ydotool into such shortcuts (a state-file toggle becomes a sticky key).

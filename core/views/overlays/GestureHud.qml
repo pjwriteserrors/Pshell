@@ -100,6 +100,18 @@ PanelWindow {
 		opacity: Math.min(1, root.reveal)
 		scale: 0.85 + 0.15 * root.reveal
 
+		// a soft disc behind it all, so it reads on any window
+		Rectangle {
+			anchors.centerIn: parent
+			width: 470
+			height: 370
+			radius: 185
+			color: Qt.alpha(Theme.base, 0.72)
+			border.width: 1
+			border.color: Qt.alpha(Theme.text, 0.06)
+			scale: 0.9 + 0.1 * root.reveal
+		}
+
 		// the middle: the button that is held
 		Rectangle {
 			id: middle
@@ -154,12 +166,43 @@ PanelWindow {
 				id: pill
 
 				required property var modelData
+				required property int index
+				// slides out from the middle, one after the other
+				property real out: 0
 				readonly property var info: root.way(pill.modelData.id)
 				readonly property real toward: Math.max(0, Math.min(1, root.nx * pill.modelData.dx + root.ny * pill.modelData.dy))
 				readonly property bool firing: root.firedWay === pill.modelData.id
 
-				x: hud.width / 2 - width / 2 + pill.modelData.dx * 158
-				y: hud.height / 2 - height / 2 + pill.modelData.dy * 128
+				x: hud.width / 2 - width / 2 + pill.modelData.dx * 158 * pill.out
+				y: hud.height / 2 - height / 2 + pill.modelData.dy * 128 * pill.out
+				opacity: pill.out
+
+				Connections {
+					target: root
+
+					function onWantedChanged() {
+						if (root.wanted) {
+							pill.out = 0;
+							slide.restart();
+						}
+					}
+				}
+
+				SequentialAnimation {
+					id: slide
+
+					PauseAnimation {
+						duration: pill.index * 35
+					}
+					NumberAnimation {
+						target: pill
+						property: "out"
+						to: 1
+						duration: Motion.long
+						easing.type: Easing.BezierSpline
+						easing.bezierCurve: Motion.spatial
+					}
+				}
 				width: Math.max(120, label.implicitWidth + 58)
 				height: 46
 				radius: 23

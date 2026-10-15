@@ -70,11 +70,24 @@ ColumnLayout {
 		property real flash: 0
 
 		Layout.fillWidth: true
-		Layout.preferredHeight: 46
+		// opens when it starts listening, closes when it stops
+		Layout.preferredHeight: Mouse.rumbling ? 46 : 0
 		radius: Theme.radius.large
 		color: Theme.layer1
-		visible: Mouse.rumbling
+		opacity: Mouse.rumbling ? 1 : 0
+		visible: Layout.preferredHeight > 0.5
 		clip: true
+
+		Behavior on Layout.preferredHeight {
+			SpatialAnim {
+				duration: Motion.long
+			}
+		}
+		Behavior on opacity {
+			Anim {
+				duration: Motion.medium
+			}
+		}
 
 		Connections {
 			target: Mouse

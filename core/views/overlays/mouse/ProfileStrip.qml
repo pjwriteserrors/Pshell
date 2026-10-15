@@ -264,6 +264,8 @@ ColumnLayout {
 					model: Mouse.profileIcons
 
 					delegate: Clickable {
+						id: iconChoice
+
 						required property string modelData
 						readonly property bool picked: (Mouse.active?.icon ?? "") === modelData
 
@@ -275,9 +277,9 @@ ColumnLayout {
 
 						Glyph {
 							anchors.centerIn: parent
-							icon: parent.modelData
+							icon: iconChoice.modelData
 							size: 16
-							color: parent.picked ? Theme.onPrimary : Theme.textMuted
+							color: iconChoice.picked ? Theme.onPrimary : Theme.textMuted
 						}
 					}
 				}
@@ -324,7 +326,7 @@ ColumnLayout {
 							searchable: true
 							placeholder: "An open window's app"
 							entries: {
-								const taken = new Set(Mouse.profiles.flatMap(p => p.apps ?? []));
+								const taken = new Set(Mouse.profiles.reduce((all, p) => all.concat(p.apps ?? []), []));
 								const out = [];
 								for (const w of Niri.windows) {
 									const id = String(w.app_id || "");

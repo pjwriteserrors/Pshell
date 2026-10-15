@@ -81,10 +81,29 @@ ColumnLayout {
 			id: row
 
 			required property var modelData
+			required property int index
 
 			Layout.fillWidth: true
-			Layout.leftMargin: 50
+			Layout.leftMargin: 10
 			spacing: 10
+			// the rows fall into place one after the other
+			opacity: 0
+			Component.onCompleted: rowIn.start()
+
+			SequentialAnimation {
+				id: rowIn
+
+				PauseAnimation {
+					duration: 120 + row.index * 45
+				}
+				NumberAnimation {
+					target: row
+					property: "opacity"
+					to: 1
+					duration: Motion.long
+					easing.type: Easing.OutCubic
+				}
+			}
 
 			Glyph {
 				icon: row.modelData.icon
@@ -94,11 +113,13 @@ ColumnLayout {
 
 			StyledText {
 				Layout.fillWidth: true
+				Layout.minimumWidth: 150
 				text: row.modelData.label
+				elide: Text.ElideRight
 			}
 
 			Segmented {
-				Layout.preferredWidth: 340
+				Layout.preferredWidth: 290
 				implicitHeight: 32
 				options: root.pulses
 				current: Mouse.option("feel", {})[row.modelData.id] ?? ""
