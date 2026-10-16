@@ -79,7 +79,9 @@ class Device:
             if kind not in REPLAYED and kind != EV_LED:
                 continue
             if kind == e.EV_ABS:
-                caps[str(kind)] = [[code, list(info)] for code, info in codes]
+                # without the value it has right now: the description stays the same
+                # from one jump to the next, and so do the clones over there
+                caps[str(kind)] = [[code, [0] + list(info)[1:]] for code, info in codes]
             else:
                 caps[str(kind)] = list(codes)
         return {"name": self.name, "kind": self.kind, "caps": caps, "props": list(self.raw.input_props())}
@@ -124,7 +126,7 @@ class FakeDevice:
         self.name = name
         self.kind = kind
         self.grabbed = False
-        self.queue = asyncio.Queue()
+        self.readers = []  # like a real device: every reader gets every event
         self.down = set()
 
     def describe(self):
@@ -134,15 +136,25 @@ class FakeDevice:
     def pressed(self):
         return bool(self.down)
 
+    def put(self, frame):
+        for kind, code, value in frame:
+            if kind == EV_KEY:
+                (self.down.add if value else self.down.discard)(code)
+        for queue in self.readers:
+            queue.put_nowait(frame)
+
     async def frames(self):
-        while True:
-            frame = await self.queue.get()
-            for kind, code, value in frame:
-                if kind == EV_KEY:
-                    (self.down.add if value else self.down.discard)(code)
-            yield frame
+        queue = asyncio.Queue()
+        self.readers.append(queue)
+        try:
+            while True:
+                yield await queue.get()
+        finally:
+            self.readers.remove(queue)
 
     def grab(self):
+        if self.grabbed:
+            raise OSError(16, "Device or resource busy")  # as EVIOCGRAB answers
         self.grabbed = True
 
     def ungrab(self):
@@ -385,7 +397,11 @@ class Kvm:
         self.clones = {}  # device id → (signature, [Clone])
         self.warp = Warp()
         self.quiet_until = 0
-        self.edge_task = None
+        # the shell reports the strip every 80 ms while the pointer moves on it:
+        # one report, and one jump, at a time, or two watchers would both jump
+        # and the devices the first one grabbed would never be let go
+        self.lock = asyncio.Lock()
+        self.jumping = False
         self.register()
         hub.hooks["disconnect"].append(self.peer_gone)
         hub.hooks["connect"].append(self.publish)
@@ -436,6 +452,10 @@ class Kvm:
 
     # ── the pointer on a strip ─────────────────────────────────────────────
     async def edge(self, args):
+        async with self.lock:
+            return await self.edge_locked(args)
+
+    async def edge_locked(self, args):
         inside = bool(args.get("inside"))
         if not inside:
             self.at = None
@@ -470,9 +490,13 @@ class Kvm:
         try:
             async for frame in device.frames():
                 dx, dy = motion.feed(frame)
-                if (dx or dy) and push.feed(dx, dy) and time.monotonic() >= self.quiet_until and self.mode == "local" and self.watching:
-                    if not any(d.pressed() for d in self.watching["devices"]):
+                if (dx or dy) and push.feed(dx, dy) and time.monotonic() >= self.quiet_until and self.mode == "local" and not self.jumping:
+                    watching = self.watching
+                    if watching is None or watching["push"] is not push:
+                        return  # a watcher left over
+                    if not any(d.pressed() for d in watching["devices"]):
                         push.reset()
+                        self.jumping = True
                         self.hub.spawn(self.go(edge))
         except (OSError, asyncio.CancelledError):
             pass
@@ -489,7 +513,14 @@ class Kvm:
 
     # ── this PC's mouse goes over ──────────────────────────────────────────
     async def go(self, edge):
-        if self.mode != "local" or self.watching is None:
+        try:
+            async with self.lock:
+                await self.go_locked(edge)
+        finally:
+            self.jumping = False
+
+    async def go_locked(self, edge):
+        if self.mode != "local" or self.watching is None or self.watching["edge"] is not edge:
             return
         remote = self.linked(edge["pc"])
         if remote is None:
@@ -504,7 +535,13 @@ class Kvm:
         forwarded = pointers + (keyboards if self.settings["keyboard"] else [])
         pos = (self.at or {}).get("pos", 0.5)
         try:
-            await remote.call("kvm-link", "enter", {"devices": [d.describe() for d in forwarded], "side": edge["side"], "pos": pos}, timeout=5)
+            descriptions = [d.describe() for d in forwarded]
+        except (OSError, SystemError):  # a device unplugged just now
+            for device in keyboards:
+                device.close()
+            return
+        try:
+            await remote.call("kvm-link", "enter", {"devices": descriptions, "side": edge["side"], "pos": pos}, timeout=5)
         except Refused as refused:
             for device in keyboards:
                 device.close()
@@ -514,8 +551,8 @@ class Kvm:
         for device in forwarded:
             try:
                 device.grab()
-            except OSError:
-                pass
+            except OSError as error:
+                print(f"phone: kvm cannot grab {device.name}: {error}", flush=True)
         self.mode = "away"
         self.away = {"remote": remote, "devices": pointers + keyboards, "forwarded": forwarded, "edge": edge, "tasks": [], "mods": set()}
         for device in pointers + keyboards:
@@ -557,6 +594,10 @@ class Kvm:
 
     async def home(self, reason, pos=None):
         """The mouse is this PC's again."""
+        async with self.lock:
+            await self.home_locked(reason, pos)
+
+    async def home_locked(self, reason, pos):
         away, self.away = self.away, None
         if away is None:
             return
@@ -727,7 +768,7 @@ class Kvm:
                 raise Refused("not-allowed", "Only for the tests")
             device = FAKES[str(args.get("device", "mouse"))]
             for frame in args.get("frames", []):
-                await device.queue.put([tuple(event) for event in frame])
+                device.put([tuple(event) for event in frame])
             await asyncio.sleep(0)
             return {}
 

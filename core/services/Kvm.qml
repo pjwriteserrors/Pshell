@@ -58,6 +58,9 @@ Singleton {
 		Phone.call("kvm", "home", {}, (data, error) => Pcs.report(error));
 	}
 
+	// the hint (how to come back) is said once; afterwards a jump is felt, not read
+	property bool told: false
+
 	Connections {
 		target: Phone
 		enabled: root.enabled
@@ -65,10 +68,14 @@ Singleton {
 		function onEvent(topic, name, data, device) {
 			if (topic !== "kvm") return;
 			if (name === "away") {
-				Sounds.play("open");
-				Notifs.pushInternal("done", `Mouse on ${data.name}`, data.keyboard ? "The keyboard types there too · Ctrl+Alt+Esc brings both back" : "Ctrl+Alt+Esc brings it back", { icon: "mouse", duration: 3000 });
+				// in the hand: the mouse is on this PC, so the jump is felt here
+				Haptics.play("mouseAway", "open");
+				if (!root.told) {
+					root.told = true;
+					Notifs.pushInternal("done", `Mouse on ${data.name}`, data.keyboard ? "The keyboard types there too · Ctrl+Alt+Esc brings both back" : "Ctrl+Alt+Esc brings it back", { icon: "mouse", duration: 3000 });
+				}
 			} else if (name === "home") {
-				Sounds.play("close");
+				Haptics.play("mouseHome", "close");
 				if (data.reason === "lost") Notifs.pushInternal("error", "Mouse back", `The link to ${data.name} is gone`, { icon: "mouse" });
 			} else if (name === "failed") {
 				Notifs.pushInternal("error", `The mouse stays here`, `${data.name}: ${data.message}`, { icon: "mouse" });

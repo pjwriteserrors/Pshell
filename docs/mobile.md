@@ -410,6 +410,13 @@ one (plugin `pc-mouse`, needs `pc-link`; `scripts/phone/pshell_phone/features/kv
   keyboards are listened to while away, whether they go along or not); *Bring
   the mouse back* or `qs ipc call pcs mouseHome` on either side; a link that
   breaks. Whatever is held over there is let go.
+- **Felt, not read.** A jump plays a haptic on the PC the mouse is plugged
+  into (`mouseAway`, `mouseHome` in `Haptics.qml`, with the MX Master's
+  haptics); only the first jump of a session says how to come back.
+- The strip is reported every 80 ms while the pointer moves on it; reports
+  and jumps go one at a time (a lock), since two watchers used to jump both
+  and the keyboard the first had grabbed stayed grabbed after coming back
+  (or, grabbed twice, never went along).
 - **The keyboard goes along** (on by default): the keyboards are grabbed and
   cloned too, so typing happens where the mouse is.
 - Devices of tools that type on their own (`pshell …` uinput devices,

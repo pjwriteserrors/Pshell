@@ -832,6 +832,29 @@ class MouseAcross(OtherPCs):
         self.assertNotIn([[1, 1, 1]], frames)
         await self.cli_pc.call("kvm", "fake", {"device": "keyboard", "frames": [[[1, 29, 0]], [[1, 56, 0]], [[1, 1, 0]]]})
 
+    async def test_reports_of_the_strip_at_once_make_one_jump(self):
+        # the shell reports the strip every 80 ms while the pointer moves: each
+        # report started a watcher of its own, every one of them jumped, and the
+        # keyboard grabbed by all but the last stayed grabbed after coming back
+        pc, laptop = await self.ready(keyboard=True)
+        await asyncio.gather(*[pc.call("kvm", "edge", {"output": "OUT-1", "side": "right", "pos": 0.1 * i, "inside": True}) for i in range(10)])
+        while not pc.events.empty():
+            pc.events.get_nowait()
+        await self.push(self.cli_pc, 5, times=12)
+        await laptop.until(lambda: laptop.state["kvm"]["mode"] == "guest")
+        await asyncio.sleep(0.5)
+        aways = []
+        while not pc.events.empty():
+            event = pc.events.get_nowait()
+            if event["topic"] == "kvm" and event["name"] == "away":
+                aways.append(event)
+        self.assertEqual(len(aways), 1)
+        self.assertEqual(len((await self.log(self.cli_laptop))["warps"]), 1)
+        await laptop.call("kvm", "home")
+        await pc.until(lambda: pc.state["kvm"]["mode"] == "local")
+        await asyncio.sleep(0.2)
+        self.assertEqual((await self.log(self.cli_pc))["grabbed"], {"mouse": False, "keyboard": False})
+
     async def test_asked_to_come_home(self):
         pc, laptop = await self.ready()
         await pc.call("kvm", "edge", {"output": "OUT-1", "side": "right", "pos": 0.5, "inside": True})

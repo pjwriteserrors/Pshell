@@ -41,7 +41,10 @@ Singleton {
 		// lock screen
 		wrongPassword: "ANGRY ALERT",
 		// all items of a todo list are done
-		listDone: "FIREWORK"
+		listDone: "FIREWORK",
+		// the mouse goes over to another PC (Kvm.qml), and comes back
+		mouseAway: "SHARP STATE CHANGE",
+		mouseHome: "DAMP STATE CHANGE"
 	})
 
 	function play(event, sound) {
