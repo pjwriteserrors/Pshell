@@ -936,6 +936,10 @@ Scope {
 		function list(): string {
 			return Pcs.devices.map(device => `${device.connected ? "●" : "○"} ${device.name} ${device.id.slice(0, 12)}`).join("\n");
 		}
+		// mouse and keyboard back to this PC (or another PC's back to it)
+		function mouseHome(): void {
+			Kvm.home();
+		}
 		// shows this PC's code (for the other one to type in) and the form to pair
 		function pair(): void {
 			Phone.startPairing();

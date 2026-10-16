@@ -378,6 +378,45 @@ phonectl send cogi ~/Photos/2026 notes.txt
 phonectl text cogi https://example.org
 ```
 
+## Mouse across PCs
+
+One mouse and keyboard for two paired PCs, without a receiver on the other
+one (plugin `pc-mouse`, needs `pc-link`; `scripts/phone/pshell_phone/features/kvm.py`,
+`core/services/Kvm.qml`).
+
+- **Edges.** Control centre → phone → *Mouse across PCs* shows the screens
+  as they stand; clicking an edge steps through the paired PCs (and none).
+  The shell lays a strip one pixel wide on each edge whose PC is linked
+  (`KvmEdge.qml`, layer *top*: above windows, below fullscreen ones, so a
+  game is never left by accident; the pixel is the strip's, a click there
+  does nothing). It only says that the pointer is on it and where along it.
+- **Pushing over.** While the pointer is on a strip the daemon reads the
+  mice and touchpads (evdev, not grabbed) and counts outward motion: three
+  frames or more, *Hold* long (400 ms by default), no pause over 250 ms,
+  any inward motion starts over. Not while a mouse button or a key is down
+  (it would stick here). Then `kvm-link.enter` there with what each device
+  is, `EVIOCGRAB` here, and every frame over the link as a binary frame
+  (`0x10 device { type code value }…`). Key repeats stay here; the other
+  side repeats by itself.
+- **Over there** each device gets a clone (uinput, the same capabilities;
+  kept while the link lasts), so its libinput treats them as its own: its
+  acceleration, scrolling, touchpad gestures. The mouse daemon's remapped
+  buttons (`Pshell mouse buttons/keys`) go along; what it does itself (niri
+  actions, haptics) stays here. The pointer starts at that PC's own edge
+  for this one, else at the side facing it on the outermost output, at the
+  same height: an absolute pointer of ours (`pshell kvm pointer`), which
+  niri spreads over the bounding box of all outputs.
+- **Back.** Pushing out of the lit edge there; Ctrl+Alt+Esc here (the
+  keyboards are listened to while away, whether they go along or not); *Bring
+  the mouse back* or `qs ipc call pcs mouseHome` on either side; a link that
+  breaks. Whatever is held over there is let go.
+- **The keyboard goes along** (on by default): the keyboards are grabbed and
+  cloned too, so typing happens where the mouse is.
+- Devices of tools that type on their own (`pshell …` uinput devices,
+  ydotool, autocorrect) stay out. `PSHELL_KVM_FAKE=1` (the tests) reads and
+  grabs nothing and moves no pointer; `kvm.fake` feeds frames, `kvm.log`
+  shows what would have happened.
+
 ## Not built
 
 - The phone as webcam and microphone.

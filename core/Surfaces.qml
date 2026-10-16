@@ -45,6 +45,13 @@ Scope {
 		GestureHud {}
 	}
 
+	// edges that lead to another PC: the mouse goes over when pushed on
+	Variants {
+		model: Kvm.enabled ? Kvm.strips : []
+
+		KvmEdge {}
+	}
+
 	// the light on a pointer that is shaken
 	Variants {
 		model: Plugins.on("find-mouse") ? Quickshell.screens : []

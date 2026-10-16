@@ -49,6 +49,21 @@
 			],
 			"pc": true
 		},
+		"kvm": {
+			"owner": "daemon",
+			"plugins": [
+				"pc-mouse"
+			],
+			"local": true
+		},
+		"kvm-link": {
+			"owner": "daemon",
+			"plugins": [
+				"pc-link",
+				"pc-mouse"
+			],
+			"pc": true
+		},
 		"phone.status": {
 			"owner": "phone",
 			"plugins": [

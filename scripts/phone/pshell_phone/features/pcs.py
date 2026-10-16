@@ -147,6 +147,9 @@ class Remote:
                 await session.close()
                 self.session = None
                 await self.feature.publish()
+                kvm = getattr(self.feature.daemon, "kvm", None)
+                if kvm is not None:
+                    await kvm.unlinked(self)
             return
 
     async def read(self, ws):
@@ -169,6 +172,10 @@ class Remote:
                     await self.feature.publish()
                 elif data.get("topic") == "link" and isinstance(data.get("data"), dict):
                     self.info = data["data"]
+            elif kind == "kvm":
+                kvm = getattr(self.feature.daemon, "kvm", None)
+                if kvm is not None:
+                    self.hub.spawn(kvm.message(self, data))
             elif kind == "result":
                 future = self.pending.pop(data.get("id"), None)
                 if future and not future.done():
@@ -192,6 +199,16 @@ class Remote:
             raise Refused("timeout", f"{topic}.{action}") from None
         finally:
             self.pending.pop(call_id, None)
+
+    async def send_bytes(self, data):
+        """A binary frame over the link (kvm.py); False when it is gone."""
+        if not self.connected or self.socket is None:
+            return False
+        try:
+            await self.socket.send_bytes(data)
+            return True
+        except (ConnectionError, RuntimeError, aiohttp.ClientError):
+            return False
 
     async def close(self):
         if self.socket is not None:

@@ -82,6 +82,10 @@ ColumnLayout {
 		}
 	}
 
+	KvmSetup {
+		Layout.fillWidth: true
+	}
+
 	// what is on its way
 	Repeater {
 		model: Pcs.transfers

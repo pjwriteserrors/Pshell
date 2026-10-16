@@ -39,6 +39,8 @@ Singleton {
 	property var pairing: ({ active: false })
 	// the other PCs (Pcs.qml): { devices, nearby, transfers }
 	property var pcs: ({ devices: [], nearby: [], transfers: [] })
+	// mouse and keyboard across PCs (Kvm.qml): { edges, hold, keyboard, mode, pc, name, strips }
+	property var kvm: ({ edges: [], strips: [], mode: "local" })
 	// device id → the phone's own topics: { "phone.status": { battery, … }, … }
 	property var remote: ({})
 
@@ -319,6 +321,8 @@ Singleton {
 				root.pairing = message.data || { active: false };
 			} else if (message.topic === "pcs") {
 				root.pcs = message.data || { devices: [], nearby: [], transfers: [] };
+			} else if (message.topic === "kvm") {
+				root.kvm = message.data || { edges: [], strips: [], mode: "local" };
 			}
 			break;
 		case "event":

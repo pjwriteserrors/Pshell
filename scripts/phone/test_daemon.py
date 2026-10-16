@@ -120,6 +120,8 @@ class DaemonTest(unittest.IsolatedAsyncioTestCase):
             XDG_STATE_HOME=str(folder / "state"), XDG_RUNTIME_DIR=str(folder / "run"),
             XDG_CACHE_HOME=str(folder / "cache"), XDG_CONFIG_HOME=str(folder / "config"),
             PSHELL_PHONE_PORT=str(port), PSHELL_PHONE_DOWNLOADS=str(folder / "downloads"), PYTHONUNBUFFERED="1",
+            # no real mouse is read or grabbed, no pointer moved
+            PSHELL_KVM_FAKE="1",
         )
         if (folder / "home").is_dir():
             env["HOME"] = str(folder / "home")
@@ -729,6 +731,115 @@ class WhatAnotherPCMayDo(DaemonTest):
         async with laptop.session.put(f"https://127.0.0.1:{self.port}/upload/x.txt", data=b"x", ssl=laptop.context()) as response:
             self.assertEqual(response.status, 403)
         self.assertEqual((await laptop.get("/stream/screen"))[0], 403)
+
+
+class MouseAcross(OtherPCs):
+    """The PC's mouse goes to the laptop over an edge and comes back."""
+
+    plugins = {"phone": True, "pc-link": True, "pc-mouse": True}
+
+    test_files_and_folders_go_over = None
+    test_links_and_text = None
+    test_removing_unpairs_both = None
+    test_wrong_code_is_refused_and_the_right_one_still_works = None
+    test_a_link_naming_another_certificate_is_refused = None
+    test_pair_by_code_and_link_both_ways = None
+    test_shared_folder_of_the_other_pc = None
+
+    async def ready(self, keyboard=False):
+        pc, laptop = await self.pair()
+        self.cli_pc = await self.local()
+        self.cli_laptop = await self.local(path=self.laptop_socket)
+        laptop_id = pc.state["pcs"]["devices"][0]["id"]
+        await pc.send({"type": "sub", "topics": ["kvm"]})
+        await laptop.send({"type": "sub", "topics": ["kvm"]})
+        answer = await pc.call("kvm", "set", {"edges": [{"output": "OUT-1", "side": "right", "pc": laptop_id}], "hold": 200, "keyboard": keyboard})
+        self.assertTrue(answer["ok"], answer)
+        await pc.until(lambda: pc.state.get("kvm", {}).get("strips"))
+        return pc, laptop
+
+    async def push(self, cli, dx, times=8, gap=0.05):
+        for _ in range(times):
+            await cli.call("kvm", "fake", {"device": "mouse", "frames": [[[2, 0, dx]]]})
+            await asyncio.sleep(gap)
+
+    async def log(self, cli):
+        return (await cli.call("kvm", "log"))["data"]
+
+    async def test_over_the_edge_and_back(self):
+        pc, laptop = await self.ready()
+        # on the strip, but not pushing long enough: nothing
+        await pc.call("kvm", "edge", {"output": "OUT-1", "side": "right", "pos": 0.3, "inside": True})
+        await self.push(self.cli_pc, 5, times=2)
+        await asyncio.sleep(0.3)
+        self.assertEqual(pc.state["kvm"]["mode"], "local")
+        # pushing in the other direction: nothing either
+        await self.push(self.cli_pc, -5)
+        self.assertEqual(pc.state["kvm"]["mode"], "local")
+        await self.push(self.cli_pc, 5)
+        await pc.until(lambda: pc.state["kvm"]["mode"] == "away")
+        await laptop.until(lambda: laptop.state["kvm"]["mode"] == "guest")
+        log = await self.log(self.cli_laptop)
+        # there, the pointer starts at the facing edge, at the same height
+        self.assertEqual(log["warps"], [["OUT-1", "left", 0.3]])
+        self.assertTrue((await self.log(self.cli_pc))["grabbed"]["mouse"])
+        # what the mouse does arrives there
+        await self.cli_pc.call("kvm", "fake", {"device": "mouse", "frames": [[[2, 0, 7], [2, 1, -2]], [[1, 272, 1]], [[1, 272, 0]]]})
+        await asyncio.sleep(0.3)
+        frames = list((await self.log(self.cli_laptop))["clones"].values())[0][0]
+        self.assertIn([[2, 0, 7], [2, 1, -2]], frames)
+        self.assertIn([[1, 272, 1]], frames)
+        # its strip is the way back: pushing left there
+        self.assertEqual(laptop.state["kvm"]["strips"][0]["side"], "left")
+        await laptop.call("kvm", "edge", {"output": "OUT-1", "side": "left", "pos": 0.6, "inside": True})
+        # the laptop's own time to hold (400 ms by default)
+        await self.push(self.cli_pc, -5, times=14)
+        await pc.until(lambda: pc.state["kvm"]["mode"] == "local")
+        await laptop.until(lambda: laptop.state["kvm"]["mode"] == "local")
+        log = await self.log(self.cli_pc)
+        self.assertFalse(log["grabbed"]["mouse"])
+        self.assertEqual(log["warps"], [["OUT-1", "right", 0.6]])
+
+    async def test_a_held_button_does_not_go_over(self):
+        pc, laptop = await self.ready()
+        await pc.call("kvm", "edge", {"output": "OUT-1", "side": "right", "pos": 0.5, "inside": True})
+        await self.cli_pc.call("kvm", "fake", {"device": "mouse", "frames": [[[1, 272, 1]]]})
+        await self.push(self.cli_pc, 5)
+        await asyncio.sleep(0.2)
+        self.assertEqual(pc.state["kvm"]["mode"], "local")
+        await self.cli_pc.call("kvm", "fake", {"device": "mouse", "frames": [[[1, 272, 0]]]})
+        await self.push(self.cli_pc, 5)
+        await pc.until(lambda: pc.state["kvm"]["mode"] == "away")
+
+    async def test_keyboard_goes_along_and_ctrl_alt_esc_brings_it_back(self):
+        pc, laptop = await self.ready(keyboard=True)
+        await pc.call("kvm", "edge", {"output": "OUT-1", "side": "right", "pos": 0.5, "inside": True})
+        await self.push(self.cli_pc, 5)
+        await laptop.until(lambda: laptop.state["kvm"]["mode"] == "guest")
+        self.assertTrue((await self.log(self.cli_pc))["grabbed"]["keyboard"])
+        # a key, and its repeats stay here (the laptop repeats by itself)
+        await self.cli_pc.call("kvm", "fake", {"device": "keyboard", "frames": [[[1, 30, 1]], [[1, 30, 2]], [[1, 30, 0]]]})
+        await asyncio.sleep(0.3)
+        frames = list((await self.log(self.cli_laptop))["clones"].values())[0][1]
+        self.assertEqual(frames, [[[1, 30, 1]], [[1, 30, 0]]])
+        await self.cli_pc.call("kvm", "fake", {"device": "keyboard", "frames": [[[1, 29, 1]], [[1, 56, 1]], [[1, 1, 1]]]})
+        await pc.until(lambda: pc.state["kvm"]["mode"] == "local")
+        # Ctrl and Alt went down there and are let go when it leaves
+        await laptop.until(lambda: laptop.state["kvm"]["mode"] == "local")
+        await asyncio.sleep(0.2)
+        frames = list((await self.log(self.cli_laptop))["clones"].values())[0][1]
+        self.assertEqual(frames[-1], [[1, 29, 0], [1, 56, 0]])
+        self.assertNotIn([[1, 1, 1]], frames)
+        await self.cli_pc.call("kvm", "fake", {"device": "keyboard", "frames": [[[1, 29, 0]], [[1, 56, 0]], [[1, 1, 0]]]})
+
+    async def test_asked_to_come_home(self):
+        pc, laptop = await self.ready()
+        await pc.call("kvm", "edge", {"output": "OUT-1", "side": "right", "pos": 0.5, "inside": True})
+        await self.push(self.cli_pc, 5)
+        await laptop.until(lambda: laptop.state["kvm"]["mode"] == "guest")
+        # the laptop sends it back (its IPC call)
+        await laptop.call("kvm", "home")
+        await pc.until(lambda: pc.state["kvm"]["mode"] == "local")
 
 
 if __name__ == "__main__":
