@@ -25,10 +25,16 @@ PanelWindow {
 	anchors.right: root.side !== "left"
 	anchors.top: root.side !== "bottom"
 	anchors.bottom: root.side !== "top"
-	implicitWidth: 1
-	implicitHeight: 1
+	// wider than what takes the pointer, for the light; only the outermost
+	// pixel is the strip (the mask), the rest lets clicks through
+	readonly property int glow: 18
+	implicitWidth: root.glow
+	implicitHeight: root.glow
 	exclusiveZone: 0
 	color: "transparent"
+	mask: Region {
+		item: line
+	}
 	WlrLayershell.namespace: "shell-kvm-edge"
 	WlrLayershell.layer: WlrLayer.Top
 	WlrLayershell.exclusionMode: ExclusionMode.Ignore
@@ -40,11 +46,21 @@ PanelWindow {
 		Kvm.edge(root.output, root.side, Math.min(1, Math.max(0, pos)), inside);
 	}
 
-	// the edge lights up while the pointer pushes on it
+	// the light of the edge: faint while it waits, bright while the pointer pushes on it
 	Rectangle {
 		anchors.fill: parent
-		color: Theme.primary
-		opacity: root.hovered ? 0.85 : 0
+		opacity: root.hovered ? 0.9 : 0
+		gradient: Gradient {
+			orientation: root.vertical ? Gradient.Horizontal : Gradient.Vertical
+			GradientStop {
+				position: 0
+				color: root.side === "left" || root.side === "top" ? Theme.primary : "transparent"
+			}
+			GradientStop {
+				position: 1
+				color: root.side === "left" || root.side === "top" ? "transparent" : Theme.primary
+			}
+		}
 
 		Behavior on opacity {
 			NumberAnimation {
@@ -53,10 +69,29 @@ PanelWindow {
 		}
 	}
 
+	// the strip itself: one pixel at the very edge, a thin line to be seen by
+	Item {
+		id: line
+
+		x: root.side === "right" ? root.width - 1 : 0
+		y: root.side === "bottom" ? root.height - 1 : 0
+		width: root.vertical ? 1 : root.width
+		height: root.vertical ? root.height : 1
+	}
+
+	Rectangle {
+		x: root.side === "right" ? root.width - 2 : 0
+		y: root.side === "bottom" ? root.height - 2 : 0
+		width: root.vertical ? 2 : root.width
+		height: root.vertical ? root.height : 2
+		color: Theme.primary
+		opacity: root.hovered ? 1 : 0.35
+	}
+
 	MouseArea {
 		id: area
 
-		anchors.fill: parent
+		anchors.fill: line
 		hoverEnabled: true
 		acceptedButtons: Qt.NoButton
 		onEntered: root.report(true)

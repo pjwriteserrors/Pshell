@@ -419,6 +419,10 @@ one (plugin `pc-mouse`, needs `pc-link`; `scripts/phone/pshell_phone/features/kv
   (or, grabbed twice, never went along).
 - **The keyboard goes along** (on by default): the keyboards are grabbed and
   cloned too, so typing happens where the mouse is.
+  Multicursor grabs the keyboards itself while a window with text has the
+  focus; it stands down while the mouse is away (`Multicursor.active`), and
+  the daemon tries the grab again until it has them – only grabbed devices
+  go over, so nothing is typed on both PCs.
 - Devices of tools that type on their own (`pshell …` uinput devices,
   ydotool, autocorrect) stay out. `PSHELL_KVM_FAKE=1` (the tests) reads and
   grabs nothing and moves no pointer; `kvm.fake` feeds frames, `kvm.log`

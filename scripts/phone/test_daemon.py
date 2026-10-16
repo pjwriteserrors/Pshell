@@ -855,6 +855,27 @@ class MouseAcross(OtherPCs):
         await asyncio.sleep(0.2)
         self.assertEqual((await self.log(self.cli_pc))["grabbed"], {"mouse": False, "keyboard": False})
 
+    async def test_a_keyboard_held_by_another_goes_over_once_let_go(self):
+        # multicursor grabs the keyboards while a window with text has the focus
+        pc, laptop = await self.ready(keyboard=True)
+        await self.cli_pc.call("kvm", "fake", {"device": "keyboard", "taken": True})
+        await pc.call("kvm", "edge", {"output": "OUT-1", "side": "right", "pos": 0.5, "inside": True})
+        await self.push(self.cli_pc, 5)
+        await laptop.until(lambda: laptop.state["kvm"]["mode"] == "guest")
+        # still taken: typed here, so nothing of it goes over
+        await self.cli_pc.call("kvm", "fake", {"device": "keyboard", "frames": [[[1, 30, 1]], [[1, 30, 0]]]})
+        await asyncio.sleep(0.3)
+        self.assertEqual(list((await self.log(self.cli_laptop))["clones"].values())[0][1], [])
+        # it lets go (the shell told it the mouse is away): from then on it goes over
+        await self.cli_pc.call("kvm", "fake", {"device": "keyboard", "taken": False})
+        await asyncio.sleep(0.4)
+        self.assertTrue((await self.log(self.cli_pc))["grabbed"]["keyboard"])
+        await self.cli_pc.call("kvm", "fake", {"device": "keyboard", "frames": [[[1, 31, 1]], [[1, 31, 0]]]})
+        await asyncio.sleep(0.3)
+        self.assertEqual(list((await self.log(self.cli_laptop))["clones"].values())[0][1], [[[1, 31, 1]], [[1, 31, 0]]])
+        await laptop.call("kvm", "home")
+        await pc.until(lambda: pc.state["kvm"]["mode"] == "local")
+
     async def test_asked_to_come_home(self):
         pc, laptop = await self.ready()
         await pc.call("kvm", "edge", {"output": "OUT-1", "side": "right", "pos": 0.5, "inside": True})

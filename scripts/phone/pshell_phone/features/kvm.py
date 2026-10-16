@@ -126,6 +126,7 @@ class FakeDevice:
         self.name = name
         self.kind = kind
         self.grabbed = False
+        self.taken = False  # grabbed by somebody else (multicursor)
         self.readers = []  # like a real device: every reader gets every event
         self.down = set()
 
@@ -153,7 +154,7 @@ class FakeDevice:
             self.readers.remove(queue)
 
     def grab(self):
-        if self.grabbed:
+        if self.grabbed or self.taken:
             raise OSError(16, "Device or resource busy")  # as EVIOCGRAB answers
         self.grabbed = True
 
@@ -548,18 +549,41 @@ class Kvm:
             await self.hub.emit("kvm", "failed", {"message": refused.message, "name": (remote.device or {}).get("name", "")})
             return
         await self.stop_watching(keep=pointers)
+        # A keyboard may be grabbed already: multicursor takes them while a
+        # window with text has the focus. It lets go once the shell sees the
+        # mouse away; until then they are tried again, and only what is
+        # grabbed goes over (else it would be typed here and there).
+        waiting = []
         for device in forwarded:
             try:
                 device.grab()
-            except OSError as error:
-                print(f"phone: kvm cannot grab {device.name}: {error}", flush=True)
+            except OSError:
+                waiting.append(device)
         self.mode = "away"
         self.away = {"remote": remote, "devices": pointers + keyboards, "forwarded": forwarded, "edge": edge, "tasks": [], "mods": set()}
         for device in pointers + keyboards:
             index = forwarded.index(device) if device in forwarded else -1
             self.away["tasks"].append(self.hub.spawn(self.forward(device, index)))
+        if waiting:
+            self.away["tasks"].append(self.hub.spawn(self.grab_later(self.away, waiting)))
         await self.publish()
         await self.hub.emit("kvm", "away", {"id": remote.id, "name": (remote.device or {}).get("name", ""), "keyboard": self.settings["keyboard"]})
+
+    async def grab_later(self, away, waiting):
+        for _ in range(40):
+            await asyncio.sleep(0.1)
+            if self.away is not away:
+                return
+            for device in list(waiting):
+                try:
+                    device.grab()
+                    waiting.remove(device)
+                except OSError:
+                    pass
+            if not waiting:
+                return
+        for device in waiting:
+            print(f"phone: kvm cannot grab {device.name}: somebody else holds it", flush=True)
 
     async def forward(self, device, index):
         """A device's frames to the other PC; the keyboards also listen for Ctrl+Alt+Esc."""
@@ -583,7 +607,7 @@ class Kvm:
                         return
                     # held keys repeat over there by themselves
                     frame = [event for event in frame if not (event[0] == EV_KEY and event[2] == 2)]
-                if index < 0 or not frame:
+                if index < 0 or not frame or not device.grabbed:
                     continue
                 payload = bytes([FRAME, index]) + b"".join(EVENT.pack(*event) for event in frame[:200])
                 if not await remote.send_bytes(payload):
@@ -767,6 +791,8 @@ class Kvm:
             if not FAKE:
                 raise Refused("not-allowed", "Only for the tests")
             device = FAKES[str(args.get("device", "mouse"))]
+            if "taken" in args:
+                device.taken = bool(args["taken"])
             for frame in args.get("frames", []):
                 device.put([tuple(event) for event in frame])
             await asyncio.sleep(0)

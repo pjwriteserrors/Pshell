@@ -43,7 +43,8 @@ Singleton {
 	readonly property var window: Niri.windows.find(w => w.is_focused) ?? null
 	readonly property int windowId: root.window ? Number(root.window.id) : -1
 	// no window has the keyboard while it is in the launcher or a panel
-	readonly property bool active: root.enabled && !Session.locked && root.window !== null && !root.skips(root.window.app_id)
+	// not while the keyboards type on another PC (Kvm.qml): that grabs them itself
+	readonly property bool active: root.enabled && !Session.locked && root.window !== null && !root.skips(root.window.app_id) && Kvm.mode !== "away"
 	// cursors in the text right now: 0 none, 1 one that was put down
 	property int cursors: 0
 	// the clipboard is the daemon's way into a text field: what passes through it is nobody's copy
