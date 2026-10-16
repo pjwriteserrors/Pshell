@@ -50,11 +50,18 @@ ColumnLayout {
 			for (const rule of Mouse.rules.filter(r => r.control === root.control && (r.app ?? "") === root.app && (r.mods ?? []).length === 0))
 				Mouse.removeRule(rule.id);
 		} else {
+			// a preset with swipes is the whole set of swipes: the ways it
+			// leaves out go back to nothing rather than keeping older ones
+			const swipes = ["up", "down", "left", "right"];
+			const sets = preset.rules.map(r => r.trigger);
+			if (sets.some(t => swipes.includes(t)))
+				for (const rule of Mouse.rules.filter(r => r.control === root.control && (r.app ?? "") === root.app && (r.mods ?? []).length === 0 && swipes.includes(r.trigger) && !sets.includes(r.trigger)))
+					Mouse.removeRule(rule.id);
 			for (const r of preset.rules)
 				Mouse.assign(root.control, r.trigger, root.app, r.action, { repeat: r.repeat === true });
 		}
 		Mouse.play("COMPLETED");
-		const triggers = preset.id === "reset" ? Controls.triggersOf(root.control) : preset.rules.map(r => r.trigger);
+		const triggers = preset.id === "reset" || preset.rules.some(r => ["up", "down", "left", "right"].includes(r.trigger)) ? Controls.triggersOf(root.control) : preset.rules.map(r => r.trigger);
 		triggers.forEach((trigger, i) => {
 			const tile = root.tiles.find(t => t.trigger === trigger);
 			if (tile) Qt.callLater(() => flashLater.createObject(root, { tile, delay: i * 70 }));

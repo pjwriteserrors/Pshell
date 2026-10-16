@@ -55,7 +55,9 @@ AZERTY), a mouse button or scroll, a command.
 Presets (under the cross) go onto the control that is shown, in the place
 that is picked: sets for any button (workspaces, media, screenshots, undo,
 browser, action ring, precision, zoom or volume while held) and for the
-thumb wheel (tabs, volume, workspaces, windows, zoom); *As it comes* takes
+thumb wheel (tabs, volume, workspaces, windows, zoom). A preset with swipes
+sets all four ways: the ones it leaves out are cleared, not kept from before.
+*As it comes* takes
 the control's rules away. `scripts/ipc.sh mouse state` (twice) lists the
 rules the page has next to the ones the daemon goes by.
 
