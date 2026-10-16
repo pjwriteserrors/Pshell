@@ -494,6 +494,36 @@ Popup {
 						Layout.preferredHeight: 150
 					}
 
+					// a single key, also those that are hard to press into the recorder
+					Flow {
+						Layout.fillWidth: true
+						spacing: 6
+
+						Repeater {
+							model: [
+								{ keys: ["super"], icon: "microsoft_windows" },
+								{ keys: ["ctrl"], icon: "apple_keyboard_control" },
+								{ keys: ["shift"], icon: "apple_keyboard_shift" },
+								{ keys: ["alt"], icon: "apple_keyboard_option" },
+								{ keys: ["esc"], icon: "keyboard_esc" },
+								{ keys: ["enter"], icon: "keyboard_return" },
+								{ keys: ["space"], icon: "keyboard_space" },
+								{ keys: ["tab"], icon: "keyboard_tab" },
+								{ keys: ["delete"], icon: "backspace_reverse_outline" },
+								{ keys: ["print"], icon: "printer" }
+							]
+
+							delegate: Chip {
+								required property var modelData
+
+								text: recorder.pretty(modelData.keys[0])
+								icon: modelData.icon
+								selected: recorder.keys.length === 1 && recorder.keys[0] === modelData.keys[0]
+								onClicked: recorder.use(modelData.keys)
+							}
+						}
+					}
+
 					FlagRowLite {
 						id: sustain
 

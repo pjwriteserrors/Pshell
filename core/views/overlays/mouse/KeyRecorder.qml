@@ -3,7 +3,8 @@ import QtQuick.Layouts
 import qs.style.theme
 import qs.style.widgets
 
-// Takes a shortcut as it is pressed: the modifiers held and one key. Keeps
+// Takes a shortcut as it is pressed: the modifiers held and one key, or
+// modifiers alone (Super pressed and let go is Super). Keeps
 // the keys' evdev codes too (Qt's native scan code less 8), so the mouse
 // presses the very same keys whatever the layout.
 Rectangle {
@@ -13,12 +14,37 @@ Rectangle {
 	property var keys: []
 	property var codes: []
 	property string label: ""
+	// the modifiers pressed so far while no other key came
+	property var pending: []
 
 	signal recorded(var keys, var codes, string label)
 
+	readonly property var modifierOrder: [
+		{ name: "ctrl", code: 29, keys: [Qt.Key_Control] },
+		{ name: "shift", code: 42, keys: [Qt.Key_Shift] },
+		{ name: "alt", code: 56, keys: [Qt.Key_Alt, Qt.Key_AltGr] },
+		{ name: "super", code: 125, keys: [Qt.Key_Meta, Qt.Key_Super_L, Qt.Key_Super_R] }
+	]
+
 	function start() {
+		root.pending = [];
 		root.recording = true;
 		catcher.forceActiveFocus();
+	}
+
+	// keys given rather than pressed (a key button)
+	function use(keys) {
+		const codes = keys.map(k => root.modifierOrder.find(m => m.name === k)?.code ?? 0);
+		root.finish(keys, codes.includes(0) ? [] : codes);
+	}
+
+	function finish(keys, codes) {
+		root.keys = keys;
+		root.codes = codes.length === keys.length ? codes : [];
+		root.label = keys.map(k => root.pretty(k)).join(" + ");
+		root.pending = [];
+		root.recording = false;
+		root.recorded(root.keys, root.codes, root.label);
 	}
 
 	function nameOf(event) {
@@ -43,7 +69,7 @@ Rectangle {
 	}
 
 	function pretty(name) {
-		const words = { ctrl: "Ctrl", shift: "Shift", alt: "Alt", super: "Super", enter: "Enter", esc: "Esc", tab: "Tab", space: "Space", backspace: "Backspace", delete: "Delete", pageup: "Page up", pagedown: "Page down", up: "↑", down: "↓", left: "←", right: "→", playpause: "Play", volumeup: "Volume +", volumedown: "Volume −", mute: "Mute", plus: "+", minus: "−" };
+		const words = { ctrl: "Ctrl", shift: "Shift", alt: "Alt", super: "Super", enter: "Enter", esc: "Esc", tab: "Tab", space: "Space", backspace: "Backspace", delete: "Delete", pageup: "Page up", pagedown: "Page down", up: "↑", down: "↓", left: "←", right: "→", playpause: "Play", volumeup: "Volume +", volumedown: "Volume −", mute: "Mute", print: "Print", plus: "+", minus: "−" };
 		if (words[name]) return words[name];
 		if (/^f\d+$/.test(name)) return name.toUpperCase();
 		return name.length === 1 ? name.toUpperCase() : name;
@@ -67,8 +93,12 @@ Rectangle {
 		Keys.onPressed: event => {
 			if (!root.recording) return;
 			event.accepted = true;
-			const modifierKeys = [Qt.Key_Control, Qt.Key_Shift, Qt.Key_Alt, Qt.Key_Meta, Qt.Key_Super_L, Qt.Key_Super_R, Qt.Key_AltGr];
-			if (modifierKeys.includes(event.key)) return;
+			const modifier = root.modifierOrder.find(m => m.keys.includes(event.key));
+			if (modifier) {
+				if (!root.pending.includes(modifier.name))
+					root.pending = root.modifierOrder.filter(m => m.name === modifier.name || root.pending.includes(m.name)).map(m => m.name);
+				return;
+			}
 			const keys = [];
 			const codes = [];
 			if (event.modifiers & Qt.ControlModifier) { keys.push("ctrl"); codes.push(29); }
@@ -79,11 +109,15 @@ Rectangle {
 			if (name === "") return;
 			keys.push(name);
 			if (event.nativeScanCode > 8) codes.push(event.nativeScanCode - 8);
-			root.keys = keys;
-			root.codes = codes.length === keys.length ? codes : [];
-			root.label = keys.map(k => root.pretty(k)).join(" + ");
-			root.recording = false;
-			root.recorded(root.keys, root.codes, root.label);
+			root.finish(keys, codes);
+		}
+		// modifiers let go with nothing else pressed: they are the shortcut
+		Keys.onReleased: event => {
+			if (!root.recording || event.isAutoRepeat) return;
+			if (!root.modifierOrder.some(m => m.keys.includes(event.key)) || root.pending.length === 0) return;
+			event.accepted = true;
+			const names = root.pending;
+			root.finish(names, names.map(n => root.modifierOrder.find(m => m.name === n).code));
 		}
 	}
 
@@ -183,7 +217,7 @@ Rectangle {
 
 		StyledText {
 			Layout.alignment: Qt.AlignHCenter
-			text: root.recording ? "Press the shortcut now" : (root.keys.length > 0 ? "Click to record another" : "Click, then press the shortcut")
+			text: root.recording ? (root.pending.length > 0 ? root.pending.map(k => root.pretty(k)).join(" + ") + " + …  or let go" : "Press the shortcut now") : (root.keys.length > 0 ? "Click to record another" : "Click, then press the shortcut – or one key")
 			tone: root.recording ? Theme.primary : Theme.textMuted
 			font.weight: Font.Medium
 		}

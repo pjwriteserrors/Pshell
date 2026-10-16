@@ -143,3 +143,6 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
 Shortcuts can be *sticky* (`latch`: one press holds the keys, the next lets
 go). The Solaar import turns helper scripts that only press keys through
 ydotool into such shortcuts (a state-file toggle becomes a sticky key).
+A shortcut may also be a single key: modifiers pressed and let go on their
+own are recorded as they are (Super alone), and a row of key buttons gives
+Super, Ctrl, Shift, Alt, Esc, Enter, Space, Tab, Delete and Print directly.
