@@ -27,9 +27,11 @@ OrcaSlicer ──export──▶ ~/Prints/inbox/
   slowly. While it prints the part is cut at the layer on the nozzle – solid
   below, the layer hot, the outer walls above as a ghost, a glowing sheet
   where it is cut – and that layer is shown from above in the corner.
+  Along the bottom of the stage the progress runs as a bar with a glint.
   Beside it: a dial with the progress and the layer, when it is ready, the
-  spools it prints from, the heat of the last ten minutes, the speed
-  (silent / standard / sport), pause and *Hold to stop*. A job not printing
+  nozzle and the bed as tiles with the heat of the last ten minutes behind
+  (`HeatTile`), the spools it prints from, the speed (silent / standard /
+  sport), pause and *Hold to stop*. A job not printing
   shows its profiles, its filaments with the ACE slot each comes from (same
   material and nearest colour picked in advance) and, folded under *More*
   with a line of what they are set to, the plate, supports, infill, brim,
@@ -47,7 +49,13 @@ OrcaSlicer ──export──▶ ~/Prints/inbox/
 - **Statistics** page: prints, success rate, hours, filament; the last two
   weeks as bars (what failed or was stopped in red); filament by colour; the
   last prints. A print that ends sends a notification.
-- Header: the pages (print / ACE / stats), the temperatures, the chamber light, the camera – its stream in a window of its own
+- The panel is drawn in the shell's tiles (`Card`: filled, no outline,
+  rising into place one after the other whenever a page comes in). Below
+  the print page the jobs run as a strip after an *Inbox* card that opens
+  the inbox; the wheel scrolls it. The statistics show the day under the
+  pointer above its bar and the filament by colour as a ring.
+- Header: the pages (print / ACE / stats), the temperatures (counting, a
+  thin bar filling toward the target while heating), the chamber light, the camera – its stream in a window of its own
   (`CameraWindow`), closing it stops the stream – and pop-out: the same
   panel as a window (`PrinterWindow`), kept as `windowed` in printer.json.
 - `>printer` in the launcher, `scripts/ipc.sh printer open|toggle|tab <print|ace|stats>|window|camera|light|refresh|pause|resume`,

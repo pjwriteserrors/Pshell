@@ -35,6 +35,7 @@ RowLayout {
 		StyledText {
 			Layout.fillWidth: true
 			text: Printer.nameOf(root.item?.name)
+			elide: Text.ElideRight
 			font.pixelSize: Theme.size.body
 			font.weight: Font.DemiBold
 		}
@@ -51,6 +52,7 @@ RowLayout {
 				if (item.result !== "finished") parts.push(`${item.result} at ${item.progress} %`);
 				return parts.join(" · ");
 			}
+			elide: Text.ElideRight
 			tone: Theme.textMuted
 			font.pixelSize: Theme.size.small
 		}

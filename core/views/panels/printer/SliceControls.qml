@@ -62,13 +62,13 @@ ColumnLayout {
 
 	// the profile
 	Clickable {
+		id: processButton
+
 		Layout.fillWidth: true
 		visible: root.part === "main"
-		Layout.preferredHeight: 46
-		radius: Theme.radius.medium
-		color: Theme.layer1
-		border.width: 1
-		border.color: Theme.outline
+		Layout.preferredHeight: 54
+		radius: Theme.radius.large
+		color: processButton.hovered ? Theme.layer2 : Theme.layer1
 		onClicked: root.openProfiles("process")
 
 		RowLayout {
@@ -78,16 +78,21 @@ ColumnLayout {
 			spacing: 10
 
 			Rectangle {
-				Layout.preferredWidth: 28
-				Layout.preferredHeight: 28
-				radius: 8
-				color: Theme.primarySoft
+				Layout.preferredWidth: 34
+				Layout.preferredHeight: 34
+				radius: 17
+				color: Theme.primary
 
 				Glyph {
 					anchors.centerIn: parent
 					icon: "tune_variant"
-					size: 15
-					color: Theme.primary
+					size: 17
+					color: Theme.onPrimary
+					rotation: processButton.hovered ? 90 : 0
+
+					Behavior on rotation {
+						SpatialAnim {}
+					}
 				}
 			}
 
@@ -120,14 +125,14 @@ ColumnLayout {
 
 	// the filament profile – one for every filament of its material
 	Clickable {
+		id: filamentButton
+
 		Layout.fillWidth: true
 		visible: root.part === "main"
-		Layout.preferredHeight: 38
+		Layout.preferredHeight: 42
 		Layout.topMargin: -4
-		radius: Theme.radius.medium
-		color: Theme.layer1
-		border.width: 1
-		border.color: Theme.outline
+		radius: Theme.radius.large
+		color: filamentButton.hovered ? Theme.layer2 : Theme.layer1
 		onClicked: root.openProfiles("filament")
 
 		RowLayout {
@@ -136,11 +141,18 @@ ColumnLayout {
 			anchors.rightMargin: 10
 			spacing: 10
 
-			Glyph {
-				Layout.preferredWidth: 28
-				icon: "printer_3d_nozzle"
-				size: 15
-				color: root.filament?.user ? Theme.primary : Theme.textMuted
+			Rectangle {
+				Layout.preferredWidth: 34
+				Layout.preferredHeight: 26
+				radius: 13
+				color: root.filament?.user ? Theme.primarySoft : Theme.layer3
+
+				Glyph {
+					anchors.centerIn: parent
+					icon: "printer_3d_nozzle"
+					size: 14
+					color: root.filament?.user ? Theme.primary : Theme.textMuted
+				}
 			}
 
 			StyledText {

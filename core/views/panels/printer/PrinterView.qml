@@ -2,16 +2,17 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Shapes
 import qs.style.theme
 import qs.core.services
 import qs.style.widgets
 
 // The 3D printer, the same under the bar (PrinterPanel) and in a window of
 // its own (PrinterWindow): a header with what the printer does, the pages
-// to switch, its light, camera and pop-out; then the pages – the print with
-// the part in 3D, the ACE, the statistics – sliding into each other; below,
-// the jobs. Files dropped anywhere on it go into the inbox; a print that
-// finished throws confetti.
+// to switch, the heaters, its light, camera and pop-out; then the pages –
+// the print with the part in 3D, the ACE, the statistics – sliding into
+// each other; below, the jobs. Files dropped anywhere on it go into the
+// inbox; a print that finished throws confetti.
 Item {
 	id: root
 
@@ -34,40 +35,54 @@ Item {
 
 			// the printer's mark, ringed by the progress while it prints
 			Item {
-				Layout.preferredWidth: 44
-				Layout.preferredHeight: 44
+				Layout.preferredWidth: 48
+				Layout.preferredHeight: 48
 
 				Ring {
 					anchors.fill: parent
 					value: Printer.progress
 					thickness: 3
-					color: Printer.hot
+					color: Printer.paused ? Theme.warning : Printer.hot
 					trackColor: Printer.printing ? Theme.layer3 : "transparent"
 				}
 
 				Rectangle {
 					anchors.centerIn: parent
-					width: 34
-					height: 34
-					radius: 17
-					color: Printer.printing ? Qt.alpha(Printer.hot, 0.16) : Theme.primarySoft
+					width: 38
+					height: 38
+					radius: 19
+					color: Printer.printing ? Printer.hot : (Printer.online ? Theme.primary : Theme.layer2)
 
 					Behavior on color {
-						ColorAnim {}
+						ColorAnim {
+							duration: Motion.long
+						}
 					}
 
 					Glyph {
+						id: head
+
 						anchors.centerIn: parent
 						icon: "printer_3d"
-						size: 19
-						color: Printer.printing ? Printer.hot : Theme.primary
+						size: 20
+						color: Printer.online ? Theme.bg : Theme.textMuted
+
+						// the head runs to and fro while it prints
+						SequentialAnimation on anchors.horizontalCenterOffset {
+							running: Printer.printing && !Printer.paused && root.visible
+							loops: Animation.Infinite
+							onRunningChanged: if (!running) head.anchors.horizontalCenterOffset = 0
+							NumberAnimation { to: 2; duration: 520; easing.type: Easing.InOutSine }
+							NumberAnimation { to: -2; duration: 1040; easing.type: Easing.InOutSine }
+							NumberAnimation { to: 0; duration: 520; easing.type: Easing.InOutSine }
+						}
 					}
 				}
 			}
 
 			ColumnLayout {
-				Layout.preferredWidth: 210
-				Layout.maximumWidth: 210
+				Layout.preferredWidth: 230
+				Layout.maximumWidth: 230
 				spacing: 1
 
 				StyledText {
@@ -79,37 +94,59 @@ Item {
 				}
 
 				RowLayout {
+					Layout.fillWidth: true
 					spacing: 6
 
-					Rectangle {
-						id: pulse
+					Item {
+						Layout.preferredWidth: 8
+						Layout.preferredHeight: 8
 
-						Layout.preferredWidth: 7
-						Layout.preferredHeight: 7
-						radius: 4
-						color: !Printer.online ? Theme.danger : (Printer.printing ? Printer.hot : Theme.success)
+						// a ring goes out of the dot while it works
+						Rectangle {
+							id: ripple
 
-						SequentialAnimation on opacity {
-							running: Printer.printing && !Printer.paused
-							loops: Animation.Infinite
-							onRunningChanged: if (!running) pulse.opacity = 1
-							NumberAnimation {
-								to: 0.3
-								duration: 800
-								easing.type: Easing.InOutSine
+							anchors.centerIn: parent
+							width: 8
+							height: 8
+							radius: 4
+							color: "transparent"
+							border.width: 1.5
+							border.color: dot.color
+							opacity: 0
+							visible: Printer.printing && !Printer.paused
+
+							ParallelAnimation {
+								running: ripple.visible && root.visible
+								loops: Animation.Infinite
+								NumberAnimation { target: ripple; property: "scale"; from: 1; to: 2.6; duration: 1400; easing.type: Easing.OutCubic }
+								NumberAnimation { target: ripple; property: "opacity"; from: 0.9; to: 0; duration: 1400; easing.type: Easing.OutCubic }
 							}
-							NumberAnimation {
-								to: 1
-								duration: 800
-								easing.type: Easing.InOutSine
+						}
+
+						Rectangle {
+							id: dot
+
+							anchors.fill: parent
+							radius: 4
+							color: !Printer.online ? Theme.danger : (Printer.paused ? Theme.warning : (Printer.printing ? Printer.hot : Theme.success))
+
+							Behavior on color {
+								ColorAnim {}
 							}
 						}
 					}
 
 					StyledText {
-						text: Printer.status + (Printer.firmware ? ` · ${Printer.firmware}` : "")
+						Layout.fillWidth: true
+						elide: Text.ElideRight
+						text: {
+							if (Printer.printing && Printer.secondsLeft > 0)
+								return `${Printer.status} · ${Math.round(Printer.progress * 100)} % · ready ${Qt.formatTime(new Date(Date.now() + Printer.secondsLeft * 1000), "HH:mm")}`;
+							return Printer.status + (Printer.firmware ? ` · ${Printer.firmware}` : "");
+						}
 						tone: Theme.textMuted
 						font.pixelSize: Theme.size.label
+						tabular: true
 					}
 				}
 			}
@@ -120,8 +157,8 @@ Item {
 
 			// the pages
 			Segmented {
-				Layout.preferredWidth: 330
-				Layout.preferredHeight: 34
+				Layout.preferredWidth: 300
+				Layout.preferredHeight: 36
 				visible: Printer.configured
 				options: [
 					{ value: "print", label: "Print", icon: "printer_3d" },
@@ -136,69 +173,139 @@ Item {
 				Layout.fillWidth: true
 			}
 
-			Repeater {
-				model: Printer.online ? [
-					{ icon: "printer_3d_nozzle", now: Number(Printer.temps.curr_nozzle_temp ?? 0), target: Number(Printer.temps.target_nozzle_temp ?? 0), label: "Nozzle" },
-					{ icon: "radiator", now: Number(Printer.temps.curr_hotbed_temp ?? 0), target: Number(Printer.temps.target_hotbed_temp ?? 0), label: "Bed" }
-				] : []
+			// the heaters, at a glance
+			Rectangle {
+				Layout.preferredHeight: 36
+				Layout.preferredWidth: heaters.implicitWidth + 8
+				radius: 18
+				color: Theme.layer1
+				visible: Printer.online
 
-				delegate: TempChip {}
+				Row {
+					id: heaters
+
+					anchors.centerIn: parent
+
+					Repeater {
+						model: [
+							{ icon: "printer_3d_nozzle", now: Number(Printer.temps.curr_nozzle_temp ?? 0), target: Number(Printer.temps.target_nozzle_temp ?? 0) },
+							{ icon: "radiator", now: Number(Printer.temps.curr_hotbed_temp ?? 0), target: Number(Printer.temps.target_hotbed_temp ?? 0) }
+						]
+
+						delegate: TempReadout {}
+					}
+				}
 			}
 
-			Item {
-				Layout.preferredWidth: 4
-			}
+			// light, camera, a window of its own
+			Rectangle {
+				Layout.preferredHeight: 36
+				Layout.preferredWidth: actions.implicitWidth + 6
+				radius: 18
+				color: Theme.layer1
 
-			IconButton {
-				icon: Printer.light ? "lightbulb_on" : "lightbulb_outline"
-				checked: Printer.light
-				enabled: Printer.online
-				onClicked: Printer.setLight(!Printer.light)
-			}
+				Row {
+					id: actions
 
-			IconButton {
-				icon: Printer.camera ? "video" : "video_off"
-				checked: Printer.camera
-				enabled: Printer.online && Printer.cameraUrl !== ""
-				onClicked: Printer.setCamera(!Printer.camera)
-			}
+					anchors.centerIn: parent
+					spacing: 2
 
-			IconButton {
-				icon: root.windowed ? "dock_window" : "open_in_new"
-				onClicked: root.windowed ? Printer.dock() : Printer.popOut()
+					IconButton {
+						width: 30
+						height: 30
+						icon: Printer.light ? "lightbulb_on" : "lightbulb_outline"
+						checked: Printer.light
+						enabled: Printer.online
+						onClicked: Printer.setLight(!Printer.light)
+					}
+
+					IconButton {
+						width: 30
+						height: 30
+						icon: Printer.camera ? "video" : "video_off"
+						checked: Printer.camera
+						enabled: Printer.online && Printer.cameraUrl !== ""
+						onClicked: Printer.setCamera(!Printer.camera)
+					}
+
+					IconButton {
+						width: 30
+						height: 30
+						icon: root.windowed ? "dock_window" : "open_in_new"
+						onClicked: root.windowed ? Printer.dock() : Printer.popOut()
+					}
+				}
 			}
 		}
 
 		// ── not set up yet ───────────────────────────────────────────────
-		ColumnLayout {
+		Card {
 			Layout.fillWidth: true
+			Layout.preferredHeight: setup.implicitHeight + 56
 			visible: !Printer.configured
-			spacing: 10
+			cue: !Printer.configured
 
-			StyledText {
-				Layout.fillWidth: true
-				text: "Where is the printer? Its address is on the printer under Settings → Network, with LAN mode on."
-				wrapMode: Text.Wrap
-				tone: Theme.textMuted
-			}
+			ColumnLayout {
+				id: setup
 
-			RowLayout {
-				Layout.fillWidth: true
-				spacing: 8
+				anchors.centerIn: parent
+				width: Math.min(parent.width - 48, 460)
+				spacing: 14
 
-				Field {
-					id: address
+				Rectangle {
+					Layout.alignment: Qt.AlignHCenter
+					Layout.preferredWidth: 72
+					Layout.preferredHeight: 72
+					radius: 36
+					color: Theme.primaryContainer
 
-					Layout.fillWidth: true
-					placeholder: "192.168.…"
-					icon: "lan"
-					onAccepted: Printer.setAddress(address.text)
+					Glyph {
+						anchors.centerIn: parent
+						icon: "lan"
+						size: 32
+						color: Theme.primary
+					}
 				}
 
-				TextButton {
-					text: "Connect"
-					variant: "filled"
-					onActivated: Printer.setAddress(address.text)
+				StyledText {
+					Layout.fillWidth: true
+					horizontalAlignment: Text.AlignHCenter
+					text: "Where is the printer?"
+					font.pixelSize: Theme.size.title + 2
+					font.weight: Font.Bold
+				}
+
+				StyledText {
+					Layout.fillWidth: true
+					horizontalAlignment: Text.AlignHCenter
+					text: "Its address is on the printer under Settings → Network, with LAN mode on."
+					wrapMode: Text.Wrap
+					tone: Theme.textMuted
+					font.pixelSize: Theme.size.label
+				}
+
+				RowLayout {
+					Layout.fillWidth: true
+					Layout.topMargin: 4
+					spacing: 8
+
+					Field {
+						id: address
+
+						Layout.fillWidth: true
+						Layout.preferredHeight: 40
+						color: Theme.layer2
+						placeholder: "192.168.…"
+						icon: "lan"
+						onAccepted: Printer.setAddress(address.text)
+					}
+
+					TextButton {
+						Layout.preferredHeight: 40
+						text: "Connect"
+						variant: "filled"
+						onActivated: Printer.setAddress(address.text)
+					}
 				}
 			}
 		}
@@ -232,7 +339,8 @@ Item {
 					active: holder.seen
 					visible: opacity > 0.01
 					opacity: holder.current ? 1 : 0
-					x: holder.current ? 0 : (holder.index < root.page ? -48 : 48)
+					scale: holder.current ? 1 : 0.985
+					x: holder.current ? 0 : (holder.index < root.page ? -64 : 64)
 					sourceComponent: [printPage, acePage, statsPage][holder.index]
 
 					Behavior on opacity {
@@ -243,14 +351,41 @@ Item {
 					Behavior on x {
 						SpatialAnim {}
 					}
+					Behavior on scale {
+						SpatialAnim {}
+					}
 				}
 			}
 		}
 
 		// ── the jobs that came in ────────────────────────────────────────
-		JobStrip {
+		Item {
+			id: strip
+
+			readonly property bool wanted: Printer.configured && Printer.tab === "print"
+
 			Layout.fillWidth: true
-			visible: Printer.configured && Printer.jobs.length > 0 && Printer.tab === "print"
+			Layout.preferredHeight: strip.wanted ? jobs.implicitHeight : 0
+			Layout.topMargin: strip.wanted ? 0 : -14
+			clip: true
+			opacity: strip.wanted ? 1 : 0
+
+			Behavior on Layout.preferredHeight {
+				SpatialAnim {}
+			}
+			Behavior on Layout.topMargin {
+				SpatialAnim {}
+			}
+			Behavior on opacity {
+				Anim {}
+			}
+
+			JobStrip {
+				id: jobs
+
+				width: parent.width
+				height: jobs.implicitHeight
+			}
 		}
 	}
 
@@ -282,13 +417,15 @@ Item {
 	}
 
 	Rectangle {
+		id: dropCover
+
+		readonly property bool on: drop.containsDrag && drop.count > 0
+
 		anchors.fill: parent
 		anchors.margins: -6
 		radius: Theme.radius.huge
-		color: Qt.alpha(Theme.bg, 0.82)
-		border.width: 2
-		border.color: Theme.primary
-		opacity: drop.containsDrag && drop.count > 0 ? 1 : 0
+		color: Qt.alpha(Theme.bg, 0.86)
+		opacity: dropCover.on ? 1 : 0
 		visible: opacity > 0.01
 		z: 20
 
@@ -298,30 +435,100 @@ Item {
 			}
 		}
 
+		// a border that marches round
+		Shape {
+			anchors.fill: parent
+			preferredRendererType: Shape.CurveRenderer
+
+			ShapePath {
+				strokeColor: Theme.primary
+				strokeWidth: 2.5
+				strokeStyle: ShapePath.DashLine
+				dashPattern: [5, 4]
+				fillColor: "transparent"
+
+				NumberAnimation on dashOffset {
+					running: dropCover.visible
+					from: 0
+					to: -18
+					duration: 700
+					loops: Animation.Infinite
+				}
+
+				PathRectangle {
+					x: 2
+					y: 2
+					width: dropCover.width - 4
+					height: dropCover.height - 4
+					radius: dropCover.radius - 2
+				}
+			}
+		}
+
 		Column {
 			anchors.centerIn: parent
-			spacing: 12
+			spacing: 14
+			scale: dropCover.on ? 1 : 0.9
 
-			Rectangle {
+			Behavior on scale {
+				SpatialAnim {}
+			}
+
+			Item {
 				anchors.horizontalCenter: parent.horizontalCenter
-				width: 84
-				height: 84
-				radius: 42
-				color: Theme.primarySoft
+				width: 120
+				height: 120
 
-				Glyph {
-					id: dropIcon
+				// rings going out from the target
+				Repeater {
+					model: 3
 
+					delegate: Rectangle {
+						id: wave
+
+						required property int index
+
+						anchors.centerIn: parent
+						width: 88
+						height: 88
+						radius: 44
+						color: "transparent"
+						border.width: 2
+						border.color: Theme.primary
+						opacity: 0
+
+						SequentialAnimation {
+							running: dropCover.visible
+							loops: Animation.Infinite
+							PauseAnimation { duration: wave.index * 500 }
+							ParallelAnimation {
+								NumberAnimation { target: wave; property: "scale"; from: 0.9; to: 1.5; duration: 1500; easing.type: Easing.OutCubic }
+								NumberAnimation { target: wave; property: "opacity"; from: 0.6; to: 0; duration: 1500; easing.type: Easing.OutCubic }
+							}
+							PauseAnimation { duration: (2 - wave.index) * 500 }
+						}
+					}
+				}
+
+				Rectangle {
 					anchors.centerIn: parent
-					icon: "tray_arrow_down"
-					size: 38
+					width: 88
+					height: 88
+					radius: 44
 					color: Theme.primary
 
-					SequentialAnimation on anchors.verticalCenterOffset {
-						running: drop.containsDrag
-						loops: Animation.Infinite
-						NumberAnimation { to: 6; duration: 420; easing.type: Easing.InOutSine }
-						NumberAnimation { to: -2; duration: 420; easing.type: Easing.InOutSine }
+					Glyph {
+						anchors.centerIn: parent
+						icon: "tray_arrow_down"
+						size: 38
+						color: Theme.onPrimary
+
+						SequentialAnimation on anchors.verticalCenterOffset {
+							running: drop.containsDrag
+							loops: Animation.Infinite
+							NumberAnimation { to: 6; duration: 420; easing.type: Easing.InOutSine }
+							NumberAnimation { to: -2; duration: 420; easing.type: Easing.InOutSine }
+						}
 					}
 				}
 			}
@@ -329,8 +536,8 @@ Item {
 			StyledText {
 				anchors.horizontalCenter: parent.horizontalCenter
 				text: drop.count > 1 ? `Drop ${drop.count} files to add them` : "Drop to add it"
-				font.pixelSize: Theme.size.title
-				font.weight: Font.DemiBold
+				font.pixelSize: Theme.size.heading
+				font.weight: Font.Bold
 			}
 
 			StyledText {
@@ -367,39 +574,47 @@ Item {
 
 		PrintPage {
 			windowed: root.windowed
+			current: root.page === 0
 		}
 	}
 
 	Component {
 		id: acePage
 
-		AcePage {}
+		AcePage {
+			current: root.page === 1
+		}
 	}
 
 	Component {
 		id: statsPage
 
-		StatsPage {}
+		StatsPage {
+			current: root.page === 2
+		}
 	}
 
-	component TempChip: Rectangle {
+	// a heater in the header: its icon, the number counting, a thin bar
+	// filling toward the target while it heats
+	component TempReadout: Item {
 		id: chip
 
 		required property var modelData
-		readonly property bool heating: chip.modelData.target > 0 && Math.abs(chip.modelData.target - chip.modelData.now) > 3
+		readonly property bool on: chip.modelData.target > 0
+		readonly property bool heating: chip.on && chip.modelData.target - chip.modelData.now > 3
+		property real shown: chip.modelData.now
 
-		Layout.preferredHeight: 30
-		Layout.preferredWidth: chipRow.implicitWidth + 20
-		radius: 15
-		color: chip.modelData.target > 0 ? Qt.alpha(Printer.hot, 0.12) : Theme.layer1
-		border.width: 1
-		border.color: chip.modelData.target > 0 ? Qt.alpha(Printer.hot, 0.3) : Theme.outline
-
-		Behavior on color {
-			ColorAnim {}
+		Behavior on shown {
+			NumberAnimation {
+				duration: 900
+				easing.type: Easing.OutCubic
+			}
 		}
 
-		RowLayout {
+		width: chipRow.implicitWidth + 18
+		height: 30
+
+		Row {
 			id: chipRow
 
 			anchors.centerIn: parent
@@ -408,30 +623,47 @@ Item {
 			Glyph {
 				id: flame
 
+				anchors.verticalCenter: parent.verticalCenter
 				icon: chip.modelData.icon
 				size: 14
-				color: chip.modelData.target > 0 ? Printer.hot : Theme.textMuted
+				color: chip.on ? Printer.hot : Theme.textMuted
 
 				SequentialAnimation on opacity {
-					running: chip.heating
+					running: chip.heating && root.visible
 					loops: Animation.Infinite
 					onRunningChanged: if (!running) flame.opacity = 1
-					NumberAnimation {
-						to: 0.35
-						duration: 600
-					}
-					NumberAnimation {
-						to: 1
-						duration: 600
-					}
+					NumberAnimation { to: 0.35; duration: 600; easing.type: Easing.InOutSine }
+					NumberAnimation { to: 1; duration: 600; easing.type: Easing.InOutSine }
 				}
 			}
 
 			StyledText {
-				text: `${Math.round(chip.modelData.now)}°` + (chip.modelData.target > 0 ? ` / ${Math.round(chip.modelData.target)}°` : "")
+				anchors.verticalCenter: parent.verticalCenter
+				text: `${Math.round(chip.shown)}°`
 				font.pixelSize: Theme.size.label
 				font.weight: Font.DemiBold
 				tabular: true
+			}
+		}
+
+		Rectangle {
+			anchors.horizontalCenter: parent.horizontalCenter
+			anchors.bottom: parent.bottom
+			width: chipRow.implicitWidth
+			height: 2
+			radius: 1
+			color: Qt.alpha(Printer.hot, 0.18)
+			opacity: chip.heating ? 1 : 0
+
+			Behavior on opacity {
+				Anim {}
+			}
+
+			Rectangle {
+				width: parent.width * Math.max(0, Math.min(1, chip.shown / Math.max(1, chip.modelData.target)))
+				height: parent.height
+				radius: 1
+				color: Printer.hot
 			}
 		}
 	}
