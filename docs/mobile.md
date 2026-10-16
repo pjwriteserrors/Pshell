@@ -389,7 +389,8 @@ one (plugin `pc-mouse`, needs `pc-link`; `scripts/phone/pshell_phone/features/kv
   The shell lays a strip one pixel wide on each edge whose PC is linked
   (`KvmEdge.qml`, layer *top*: above windows, below fullscreen ones, so a
   game is never left by accident; the pixel is the strip's, a click there
-  does nothing). It only says that the pointer is on it and where along it.
+  does nothing; a faint line marks it, a glow lights up while the pointer
+  pushes on it). It only says that the pointer is on it and where along it.
 - **Pushing over.** While the pointer is on a strip the daemon reads the
   mice and touchpads (evdev, not grabbed) and counts outward motion: three
   frames or more, *Hold* long (400 ms by default), no pause over 250 ms,

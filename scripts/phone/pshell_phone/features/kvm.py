@@ -780,6 +780,11 @@ class Kvm:
         @hub.action("kvm", "home", kinds=("shell", "cli"))
         async def come_home(_peer, _args):
             """The mouse comes back here, or another PC's mouse is sent back."""
+            if self.jumping:
+                # a jump on its way (the first one makes the clones over there):
+                # its end is waited for, then it comes back
+                async with self.lock:
+                    pass
             if self.mode == "away":
                 await self.home("asked")
             elif self.mode == "guest":
