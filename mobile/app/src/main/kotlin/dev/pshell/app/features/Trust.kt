@@ -59,6 +59,7 @@ import java.security.KeyStore
 import java.security.PrivateKey
 import java.security.Signature
 import java.security.spec.ECGenParameterSpec
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.coroutines.resume
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -170,6 +171,9 @@ object UnlockKey {
 
 	val exists: Boolean get() = store.containsAlias(ALIAS)
 
+	/** The public half as [create] returned it; null without a key. */
+	val public: String? get() = runCatching { store.getCertificate(ALIAS)?.publicKey?.encoded }.getOrNull()?.let { Base64.encodeToString(it, Base64.NO_WRAP) }
+
 	/** Makes the key and returns its public half, as the PC wants it. */
 	fun create(): String {
 		val spec = KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_SIGN)
@@ -269,7 +273,8 @@ private fun UnlockScreen() {
 	var tick by remember { mutableIntStateOf(0) }
 	LaunchedEffect(tick) {
 		runCatching { link.call("unlock", "status") }.onSuccess {
-			enrolled = it["enrolled"].bool && UnlockKey.exists
+			// a key the PC does not know (made again, but never confirmed there) only makes "does not fit"
+			enrolled = it["enrolled"].bool && UnlockKey.public == it["key"].string
 			local = it["local"].bool
 		}
 	}
@@ -299,6 +304,10 @@ private fun UnlockScreen() {
 					} catch (failure: LinkError) {
 						UnlockKey.delete()
 						link.describe(failure)
+					} catch (failure: CancellationException) {
+						// left before the PC said yes: no key the PC might not have
+						UnlockKey.delete()
+						throw failure
 					} catch (failure: Exception) {
 						"This phone has no fingerprint set up (${failure.message})"
 					}

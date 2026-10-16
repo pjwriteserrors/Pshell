@@ -57,7 +57,9 @@ def setup(hub, daemon):
 
     @hub.action("unlock", "status", kinds=("phone",))
     async def status(peer, _args):
-        return {"enrolled": peer.device_id in load(), "local": local(peer.address)}
+        stored = load().get(peer.device_id)
+        # the public half, so the phone sees whether its own key is still the one enrolled here
+        return {"enrolled": stored is not None, "key": stored or "", "local": local(peer.address)}
 
     @hub.action("unlock", "enroll", kinds=("phone",))
     async def enroll(peer, args):
