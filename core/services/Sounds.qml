@@ -69,6 +69,7 @@ Singleton {
 		{ id: "reminder", kind: "system", file: "reminder", rank: 3, icon: "cup_water", title: "Reminder", subtitle: "Time to stretch, drink or rest the eyes", plugin: "breaks" },
 		{ id: "locked", kind: "system", file: "lock", rank: 3, icon: "lock", title: "Locked", subtitle: "The screen locks", plugin: "lock-screen" },
 		{ id: "unlocked", kind: "system", file: "unlock", rank: 3, icon: "lock_open_variant", title: "Unlocked", subtitle: "Welcome back", plugin: "lock-screen" },
+		{ id: "suspend", kind: "system", file: "chime-down", rank: 3, icon: "sleep", title: "Suspend", subtitle: "The PC goes to sleep" },
 		{ id: "startup", kind: "system", file: "startup", rank: 3, icon: "power", title: "Start", subtitle: "Once when the session starts, not on a reload" }
 	].filter(moment => !moment.plugin || Plugins.on(moment.plugin))
 
@@ -430,7 +431,7 @@ Singleton {
 
 	// the lock screen
 	readonly property bool locked: Session.locked
-	onLockedChanged: if (root.settled) root.play(root.locked ? "locked" : "unlocked")
+	onLockedChanged: if (root.settled && !Session.sleeping) root.play(root.locked ? "locked" : "unlocked")
 
 	// the phone app
 	readonly property bool phone: Plugins.on("phone") && Phone.connected

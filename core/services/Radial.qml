@@ -48,6 +48,7 @@ Singleton {
 
 	readonly property var powerEntries: [
 		{ id: "lock", label: Words.of("power.lock", "Lock"), icon: "lock", shown: Plugins.on("lock-screen"), run: () => Session.run("lock") },
+		{ id: "suspend", label: Words.of("power.suspend", "Suspend"), icon: "sleep", run: () => Session.run("suspend") },
 		{ id: "logout", label: Words.of("power.logout", "Log out"), icon: "logout", hold: true, danger: true, run: () => Session.run("logout") },
 		{ id: "reboot", label: Words.of("power.reboot", "Restart"), icon: "restart", hold: true, danger: true, run: () => Session.run("reboot") },
 		{ id: "shutdown", label: Words.of("power.shutdown", "Shut down"), icon: "power", hold: true, danger: true, run: () => Session.run("shutdown") }

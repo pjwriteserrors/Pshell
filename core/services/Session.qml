@@ -9,6 +9,10 @@ Singleton {
 	id: root
 
 	property bool locked: false
+	// logind announced a suspend; cleared again on resume
+	property bool sleeping: false
+	// the delay lock that holds a suspend back until the screen is locked
+	property bool holdSleep: true
 	signal lockRequested
 	// the phone proved itself (docs/mobile.md, unlock); the lock screen decides
 	signal unlockRequested
@@ -109,6 +113,12 @@ Singleton {
 		Quickshell.execDetached(["niri", "msg", "action", "quit", "--skip-confirmation"]);
 	}
 
+	// the chime and the lock follow from logind (PrepareForSleep below), so they
+	// come with every suspend, also from the phone or a terminal
+	function suspend() {
+		Quickshell.execDetached(["systemctl", "suspend"]);
+	}
+
 	function reboot() {
 		Quickshell.execDetached(["systemctl", "reboot"]);
 	}
@@ -119,9 +129,10 @@ Singleton {
 
 	function run(kind) {
 		Popups.closeAll();
-		if (kind !== "lock") root.cancelAfter();
+		if (kind !== "lock" && kind !== "suspend") root.cancelAfter();
 		switch (kind) {
 		case "lock": root.lock(); break;
+		case "suspend": root.suspend(); break;
 		case "logout": root.logout(); break;
 		case "reboot": root.reboot(); break;
 		case "shutdown": root.shutdown(); break;
@@ -169,6 +180,43 @@ Singleton {
 			root.left -= 1;
 			if (root.left <= 0 && root.pending) root.run(root.pending.kind);
 		}
+	}
+
+	// Before every suspend: chime, lock, and only then let logind go on, so
+	// the machine wakes up behind the lock screen and nothing shows before
+	// it. The delay lock gives at most InhibitDelayMaxSec (5 s) for that.
+	Process {
+		running: root.holdSleep
+		command: ["systemd-inhibit", "--what=sleep", "--who=Quickshell", "--why=Locks the screen first", "--mode=delay", "sleep", "infinity"]
+	}
+
+	Process {
+		running: true
+		command: ["gdbus", "monitor", "--system", "--dest", "org.freedesktop.login1", "--object-path", "/org/freedesktop/login1"]
+		stdout: SplitParser {
+			onRead: line => {
+				const going = (String(line).match(/PrepareForSleep \((true|false)/) ?? [])[1];
+				if (going === "true") {
+					root.sleeping = true;
+					Sounds.play("suspend");
+					if (Plugins.on("lock-screen") && !root.locked) root.lock();
+					sleepRelease.restart();
+				} else if (going === "false") {
+					sleepRelease.stop();
+					root.sleeping = false;
+					root.holdSleep = true;
+				}
+			}
+		}
+	}
+
+	// the lock surface is up and the chime heard; ending the delay lock lets
+	// the suspend happen
+	Timer {
+		id: sleepRelease
+
+		interval: 900
+		onTriggered: root.holdSleep = false
 	}
 
 	// a suspended machine would never get there

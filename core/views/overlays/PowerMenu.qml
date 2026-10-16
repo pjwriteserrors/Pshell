@@ -9,7 +9,7 @@ import qs.style.theme
 import qs.core.services
 import qs.style.widgets
 
-// Session menu. Lock fires on click; logout, reboot and shutdown must be
+// Session menu. Lock and suspend fire on click; logout, reboot and shutdown must be
 // held until the ring closes (Enter on the keyboard confirms instantly).
 // "After" under reboot and shutdown picks what to wait for: a process, a
 // busy agent or a download (Session.after).
@@ -67,6 +67,7 @@ ModalWindow {
 
 	readonly property var actions: [
 		{ id: "lock", label: Words.of("power.lock", "Lock"), icon: "lock", hold: false, shown: Plugins.on("lock-screen") },
+		{ id: "suspend", label: Words.of("power.suspend", "Suspend"), icon: "sleep", hold: false },
 		{ id: "logout", label: Words.of("power.logout", "Log out"), icon: "logout", hold: true },
 		{ id: "reboot", label: Words.of("power.reboot", "Restart"), icon: "restart", hold: true, after: true },
 		{ id: "shutdown", label: Words.of("power.shutdown", "Shut down"), icon: "power", hold: true, after: true }
@@ -418,7 +419,7 @@ ModalWindow {
 								anchors.fill: parent
 								anchors.margins: 8
 								radius: action.selected ? 30 : width / 2
-								color: action.selected ? (action.modelData.id === "lock" ? Theme.primary : Theme.danger) : Theme.base
+								color: action.selected ? (action.modelData.hold ? Theme.danger : Theme.primary) : Theme.base
 								scale: actionMouse.pressed ? 0.9 : 1
 
 								Behavior on radius {
@@ -441,7 +442,7 @@ ModalWindow {
 									anchors.centerIn: parent
 									icon: action.modelData.icon
 									size: 40
-									color: action.selected ? (action.modelData.id === "lock" ? Theme.onPrimary : Theme.bg) : Theme.text
+									color: action.selected ? (action.modelData.hold ? Theme.bg : Theme.onPrimary) : Theme.text
 									spin: action.selected && action.modelData.id === "reboot" ? 360 : 0
 
 									Behavior on spin {
