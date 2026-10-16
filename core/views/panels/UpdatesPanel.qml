@@ -533,6 +533,26 @@ Drawer {
 						current: String(Updates.intervalHours)
 						onSelected: value => Updates.setInterval(Number(value))
 					}
+
+					StyledText {
+						Layout.fillWidth: true
+						Layout.topMargin: 4
+						text: "Remind me from"
+						font.pixelSize: Theme.size.label
+						font.weight: Font.Medium
+					}
+
+					Segmented {
+						Layout.fillWidth: true
+						options: [
+							{ value: "0", label: "Off" },
+							{ value: "50", label: "50" },
+							{ value: "100", label: "100" },
+							{ value: "200", label: "200" }
+						]
+						current: String(Updates.remindAt)
+						onSelected: value => Updates.setRemindAt(Number(value))
+					}
 				}
 			}
 		}

@@ -31,6 +31,10 @@ Singleton {
 	// settings
 	property bool autoCheck: true
 	property int intervalHours: 6
+	// remind to update once this many repo packages are pending (0 = never),
+	// so a backlog of hundreds of downloads does not build up
+	property int remindAt: 100
+	property real lastReminder: 0
 
 	// a running update
 	property string runId: ""
@@ -298,12 +302,16 @@ Singleton {
 		root.news = Array.isArray(data.news) ? data.news : [];
 		root.newsRead = Array.isArray(data.newsRead) ? data.newsRead : [];
 		root.lastNews = Number(data.lastNews) || 0;
+		root.remindAt = data.remindAt === undefined ? 100 : Math.max(0, Number(data.remindAt) || 0);
+		root.lastReminder = Number(data.lastReminder) || 0;
 	}
 
 	function persist() {
 		settings.setText(JSON.stringify({
 			autoCheck: root.autoCheck,
 			intervalHours: root.intervalHours,
+			remindAt: root.remindAt,
+			lastReminder: root.lastReminder,
 			lastCheck: root.lastCheck,
 			packages: root.packages,
 			lastNews: root.lastNews,
@@ -320,6 +328,33 @@ Singleton {
 	function setInterval(hours) {
 		root.intervalHours = Number(hours) || 6;
 		root.persist();
+	}
+
+	function setRemindAt(count) {
+		root.remindAt = Math.max(0, Number(count) || 0);
+		root.lastReminder = 0;
+		root.persist();
+		root.remind();
+	}
+
+	// at most once a day while the backlog stays above the threshold; falling
+	// below it (an update) arms the reminder again right away
+	function remind() {
+		if (root.remindAt <= 0 || root.repoCount < root.remindAt) {
+			if (root.lastReminder !== 0) {
+				root.lastReminder = 0;
+				root.persist();
+			}
+			return;
+		}
+		if (root.busy || Date.now() - root.lastReminder < 86400000) return;
+		root.lastReminder = Date.now();
+		root.persist();
+		Notifs.pushInternal("info", `${root.repoCount} system updates pending`, "Update soon so the next one stays quick", {
+			icon: "package_up",
+			duration: 10000,
+			actions: [{ label: "Show", icon: "package_up", run: () => root.openPanel() }]
+		});
 	}
 
 	function dueIn() {
@@ -344,6 +379,7 @@ Singleton {
 				root.packages = rows;
 				root.lastCheck = Date.now();
 				root.persist();
+				root.remind();
 			}
 		}
 		onExited: exitCode => {
