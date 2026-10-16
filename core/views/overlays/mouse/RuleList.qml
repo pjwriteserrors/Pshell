@@ -269,6 +269,7 @@ ColumnLayout {
 	ActionPicker {
 		id: modPicker
 
+		live: false
 		onChosen: (action, extra) => {
 			Mouse.putRule(Object.assign({ id: Mouse.newId(), control: modPicker.control, trigger: modPicker.trigger, app: modPicker.app, mods: root.newMods.slice(), on: true }, extra, { action }));
 			root.newMods = [];

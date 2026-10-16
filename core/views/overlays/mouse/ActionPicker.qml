@@ -18,6 +18,9 @@ Popup {
 	property string trigger: ""
 	property string app: ""
 	property var rule: null
+	// feel and repeat reach a rule that is already there at once; off for a
+	// picker that makes a new rule (one with keys held)
+	property bool live: true
 	property string group: "suggested"
 	readonly property bool recording: recorder.recording
 
@@ -63,6 +66,14 @@ Popup {
 		out.feel = feel.current === "auto" ? null : (feel.current === "none" ? "" : feel.current);
 		if (root.swipe) out.repeat = repeat.checked;
 		return out;
+	}
+
+	// how it feels changed on a rule that exists: keep it without a new pick
+	function keep() {
+		if (!root.live || !root.rule)
+			return;
+		root.rule = Object.assign({}, root.rule, root.extra());
+		Mouse.putRule(root.rule);
 	}
 
 	function pick(action) {
@@ -620,6 +631,7 @@ Popup {
 				onSelected: value => {
 					feel.current = value;
 					if (value !== "auto" && value !== "none") Mouse.play(value);
+					root.keep();
 				}
 			}
 
@@ -629,6 +641,7 @@ Popup {
 				visible: root.swipe && root.control !== "thumb" && !root.trigger.startsWith("wheel") && !root.trigger.startsWith("thumb")
 				title: "Again while moving"
 				compact: true
+				onClicked: Qt.callLater(root.keep)
 			}
 
 			Item {
