@@ -4,6 +4,10 @@ Every topic of mobile/protocol/protocol.json has one owner: the daemon, the
 shell or the phone. The owner publishes the topic's state and answers its
 calls; everybody else subscribes and calls. The hub caches the last snapshot,
 routes calls to the owner and refuses whatever belongs to a plugin that is off.
+
+Another PC connects like a phone does (kind "pc"), but reaches only the
+topics marked `"pc": true`, and of those only the daemon's actions that name
+it: it is not a remote control of this PC, just the other end of a transfer.
 """
 
 import asyncio
@@ -20,6 +24,7 @@ from . import config
 
 DEFAULT_TIMEOUT = 15
 MAX_TIMEOUT = 3600
+REMOTE = ("phone", "pc")  # who connects over the network
 
 
 class Refused(Exception):
@@ -141,8 +146,11 @@ class Hub:
         return self.on("phone") and all(self.on(plugin) for plugin in spec.get("plugins", []))
 
     def visible(self, topic, peer):
-        """Topics marked local never leave the PC."""
-        return peer.kind != "phone" or not self.topics.get(topic, {}).get("local")
+        """Topics marked local never leave the PC; another PC sees only its own."""
+        spec = self.topics.get(topic, {})
+        if peer.kind == "pc":
+            return bool(spec.get("pc")) and not spec.get("local")
+        return peer.kind != "phone" or not spec.get("local")
 
     # ── registration (features) ────────────────────────────────────────────
     def action(self, topic, name, kinds=("phone", "shell", "cli")):
@@ -280,7 +288,8 @@ class Hub:
                 continue
             if from_phone and peer.kind != "shell":
                 continue
-            if not from_phone and peer.kind != "phone" and not (source is None and peer.kind == "shell"):
+            # the daemon's own events also reach a tool that subscribed to the topic (phonectl send)
+            if not from_phone and peer.kind != "phone" and not (source is None and (peer.kind == "shell" or peer.kind == "cli" and topic in peer.subs)):
                 continue
             if peer.kind == "phone" and device_id and peer.device_id != device_id:
                 continue
@@ -298,6 +307,8 @@ class Hub:
             raise Refused("local-only", topic)
         args = args or {}
         owner = spec["owner"]
+        if origin is not None and origin.kind == "pc" and owner != "daemon":
+            raise Refused("not-allowed", topic)
         if owner == "daemon":
             entry = self.actions.get((topic, action))
             if entry is None:
@@ -374,7 +385,7 @@ class Hub:
             task = self.spawn(self._answer(peer, message))
             peer.calls.add(task)
             task.add_done_callback(peer.calls.discard)
-        elif kind == "result":
+        elif kind == "result" and peer.kind != "pc":  # nobody calls another PC through the hub
             future = self.pending.get(message.get("id"))
             if future and not future.done():
                 if message.get("ok"):
@@ -386,7 +397,7 @@ class Hub:
         elif kind == "event":
             topic = str(message.get("topic", ""))
             owner = self.topics.get(topic, {}).get("owner")
-            if peer.kind == "phone" and owner != "phone":
+            if peer.kind == "pc" or peer.kind == "phone" and owner != "phone":
                 return
             data = message.get("data") if isinstance(message.get("data"), dict) else {}
             if peer.kind == "shell":

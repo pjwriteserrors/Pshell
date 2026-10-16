@@ -323,6 +323,61 @@ original would be gone by then. A YouTube link on a shelf gets the video's
 thumbnail and title (`shelf.py linkpreview`, the picture lands in the same
 folder) and shows it as its preview, on the desktop and in the app.
 
+## Other PCs
+
+The daemon also pairs with other PCs that run Pshell (a laptop, say), for
+what the app does between phone and PC: files and folders, links, text.
+Plugins `pc-link` (on) and `pc-fs` ("Files for other PCs", off); both need
+`phone`, so the daemon runs on both PCs.
+
+- **Pairing.** On the laptop: control centre → phone → *Pair a phone or
+  PC*; under the QR code stands the same secret, typeable: `ABCDE-FGHJK`. On
+  the PC: *Pair with another PC* lists the PCs with Pshell it sees on the LAN
+  (mDNS, `_pshell._tcp`; phones do not announce themselves) – pick one, or
+  give an address – and takes the code. `phonectl pair-pc <code> [address]`
+  does the same; a `pshell://pair?…` link pins the fingerprint as well.
+- The PC learns the laptop's certificate only in the handshake, so it never
+  sends the code: it sends `HMAC(code, "pshell-pc|" + laptop + "|" + pc)`
+  over both fingerprints, and the laptop answers with
+  `HMAC(code, "pshell-pc-back|" + pc + "|" + laptop)` and its certificate. A
+  machine in between holds other certificates, so neither proof it could pass
+  on fits, and the code (≈49 bits, two minutes, five tries) cannot be guessed
+  in time. While pairing the PC shows no certificate of its own: the laptop's
+  TLS refuses every unknown one. Both PCs keep the other in `devices.json`
+  (`kind: "pc"`, with its addresses and port); removing it on one side
+  removes it on the other too when they are linked.
+- **Links.** Each daemon keeps a link to the other one as a client, like a
+  phone (`/link`, the certificate pinned as the only trusted one), so both
+  can send whatever the network allows. Where to look: what mDNS says now,
+  the address it last connected from, then what it said at pairing; again
+  every 10 s while unlinked, at once when it shows up.
+- **What a PC may ask** is little: it is a peer of kind `pc`, which reaches
+  only the topics marked `"pc": true` (`link`, `plugins`, `pc`, `pcfs`) and
+  of those only the daemon's actions that name it; no phone path
+  (`/upload`, `/stream/*`, …), no shell topic, no event. `pc.begin` /
+  `PUT /pc/put/<ticket>?path=` / `pc.end` put files into the downloads
+  folder – a folder as a new folder there, `Photos (1)` if `Photos` is taken
+  – or, with `pc-fs` on, into a folder below the shared one (`phone.files`
+  of the host profile, the home by default); `pc.open` opens a link,
+  `pc.copy` sets the clipboard. `pcfs` lists, makes folders, and walks
+  folders for `pcs.fetch`, which pulls the files as blobs.
+- **The shell.** `Pcs.qml` (topic `pcs`: paired PCs, those nearby, what is
+  on its way, four updates a second at most). The control centre's phone
+  page lists them with *Remove* and the clipboard; the file manager has them
+  under *Other PCs* in the sidebar: a PC that shares its files is a place
+  to walk through (`{ kind: "pc", id, path }`, open fetches into the cache,
+  *Get to …*, F5 between the sides of a split, dragging out of it), and a
+  drop on it sends there. *Send to* in the file manager, the shelves and the
+  drop ring name every linked PC. `qs ipc call pcs sendFile <pc> <path>`,
+  `sendText`, `sendClipboard`, `list`, `pair`.
+
+```
+phonectl pcs                    # paired ● linked ◐ only it reaches here ○ neither; nearby ones
+phonectl pair-pc K7M2Q-XR9TB 192.168.178.32
+phonectl send cogi ~/Photos/2026 notes.txt
+phonectl text cogi https://example.org
+```
+
 ## Not built
 
 - The phone as webcam and microphone.
@@ -354,7 +409,7 @@ while the commands grid or its widget is looked at.
 
 ```
 mobile/build.sh                      # app/build/outputs/apk/debug/app-debug.apk
-scripts/phone/test_daemon.py         # the daemon against a scripted phone
+scripts/phone/test_daemon.py         # the daemon against a scripted phone (and a second daemon: -k PC)
 mobile/tools/adb.sh -e install       # into the emulator (-d: the phone on adb)
 mobile/tools/adb.sh -e pair          # pair it with the daemon on this PC
 mobile/tools/adb.sh -e shot out.png

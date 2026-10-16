@@ -5,11 +5,13 @@
 	"topics": {
 		"link": {
 			"owner": "daemon",
-			"plugins": []
+			"plugins": [],
+			"pc": true
 		},
 		"plugins": {
 			"owner": "daemon",
-			"plugins": []
+			"plugins": [],
+			"pc": true
 		},
 		"theme": {
 			"owner": "daemon",
@@ -24,6 +26,28 @@
 			"owner": "daemon",
 			"plugins": [],
 			"local": true
+		},
+		"pcs": {
+			"owner": "daemon",
+			"plugins": [
+				"pc-link"
+			],
+			"local": true
+		},
+		"pc": {
+			"owner": "daemon",
+			"plugins": [
+				"pc-link"
+			],
+			"pc": true
+		},
+		"pcfs": {
+			"owner": "daemon",
+			"plugins": [
+				"pc-link",
+				"pc-fs"
+			],
+			"pc": true
 		},
 		"phone.status": {
 			"owner": "phone",

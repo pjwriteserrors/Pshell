@@ -138,6 +138,8 @@
 	{ "id": "phone-unlock", "name": "Unlock by phone", "category": "Phone", "default": false, "requires": ["phone", "lock-screen"], "icon": "fingerprint" },
 	{ "id": "phone-terminal", "name": "Terminal on the phone", "category": "Phone", "requires": ["phone"], "icon": "console" },
 	{ "id": "phone-screen", "name": "Screen on the phone", "category": "Phone", "default": false, "requires": ["phone"], "icon": "monitor" },
+	{ "id": "pc-link", "name": "Other PCs", "category": "Phone", "requires": ["phone"], "icon": "laptop" },
+	{ "id": "pc-fs", "name": "Files for other PCs", "category": "Phone", "default": false, "requires": ["pc-link"], "icon": "folder_network_outline" },
 
 	{ "id": "messages", "name": "Messages", "category": "Messages", "default": false, "preview": {"on": ["bar", "mail"], "ipc": ["messages chat 'demo|relaunch'"], "wait": 4} },
 	{ "id": "mail", "name": "Mail", "category": "Messages", "requires": ["messages"], "icon": "email_outline" },

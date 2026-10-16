@@ -681,6 +681,18 @@ Item {
 					drops.gather(drop);
 					return;
 				}
+				// files dropped on a folder of another PC go there
+				if (root.pane.location.kind === "pc" && drop.source !== ghost) {
+					const paths = (drop.urls ?? []).map(url => String(url)).filter(url => url.startsWith("file://")).map(url => decodeURIComponent(url.slice(7)));
+					if (paths.length === 0) return;
+					drop.acceptProposedAction();
+					const loc = root.pane.location;
+					const into = index >= 0 && root.pane.rows[index]?.dir ? root.pane.rows[index].pcPath : String(loc.path || "");
+					// into the folder shown when it shares its files, else into its downloads
+					Pcs.sendFiles(String(loc.id), paths, Pcs.byId(String(loc.id))?.files ? into : undefined);
+					Files.say(paths.length === 1 ? `Sending ${Files.nameOf(paths[0])} to ${Pcs.nameOf(loc.id)}` : `Sending ${paths.length} items to ${Pcs.nameOf(loc.id)}`, "laptop");
+					return;
+				}
 				// files dropped on the phone's place go to the phone
 				if (root.pane.location.kind === "phone" && drop.source !== ghost) {
 					const paths = (drop.urls ?? []).map(url => String(url)).filter(url => url.startsWith("file://")).map(url => decodeURIComponent(url.slice(7)));
@@ -810,9 +822,9 @@ Item {
 		const rows = root.pane.selectedRows();
 		const paths = rows.map(row => row.path);
 		// what lives elsewhere (the phone, the clipboard) becomes a file where it is dropped
-		const elsewhere = rows.filter(row => /^(phone|clip):/.test(row.path));
+		const elsewhere = rows.filter(row => /^(phone|clip|pc):/.test(row.path));
 		root.dragData = elsewhere.length > 0 ? {
-			"application/x-pshell-items": JSON.stringify(elsewhere.map(row => ({ path: row.path, name: row.name, mime: row.mime, size: row.size }))),
+			"application/x-pshell-items": JSON.stringify(elsewhere.map(row => ({ path: row.path, name: row.name, mime: row.mime, size: row.size, dir: !!row.dir }))),
 			"text/plain": elsewhere.map(row => row.name).join("\n")
 		} : {
 			"text/uri-list": paths.map(path => Files.uri(path)).join("\r\n") + "\r\n",

@@ -42,7 +42,8 @@ Singleton {
 		{ id: "reveal", label: "Folder", icon: "folder_search_outline", shown: root.files && Plugins.on("filemanager"), run: items => Files.reveal(items.filter(item => item.kind === "file").map(item => item.path)) },
 		{ id: "ocr", label: "Text", icon: "text_recognition", shown: root.files && Plugins.on("ocr"), run: items => items.filter(item => Shelf.isImage(item)).forEach(item => Shelf.extractText(item)) },
 		{ id: "phone", label: "Phone", icon: "cellphone_arrow_down", shown: Phone.available, run: items => Shelf.sendToPhone(items) }
-	].filter(command => command.shown !== false)
+	].concat(Pcs.reachable.map(pc => ({ id: `pc-${pc.id.slice(0, 12)}`, label: pc.name, icon: "laptop", run: items => Shelf.sendToPc(pc.id, items) })))
+		.filter(command => command.shown !== false)
 
 	readonly property var ai: AiActions.fixed.map(action => ({
 		id: action.id,

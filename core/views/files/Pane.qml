@@ -98,6 +98,7 @@ Item {
 		case "shelf": return Shelf.titleOf(Shelf.shelfById(loc.id)) || "Shelf";
 		case "duplicates": return `Copies in ${loc.path === Files.home ? "your home" : Files.nameOf(loc.path)}`;
 		case "phone": return `${PhoneDrive.collectionOf(loc.id).label} on ${PhoneDrive.name}`;
+		case "pc": return loc.path ? `${Files.nameOf(loc.path)} on ${Pcs.nameOf(loc.id)}` : Pcs.nameOf(loc.id);
 		case "clipboard": return "Clipboard history";
 		case "captures": return "Captures";
 		case "storage": return `Space of ${loc.path === Files.home ? "your home" : (loc.path === "/" ? "the system" : Files.nameOf(loc.path))}`;
@@ -117,6 +118,7 @@ Item {
 		case "duplicates": return "content_duplicate";
 		case "storage": return "chart_donut";
 		case "phone": return PhoneDrive.collectionOf(root.location.id).icon;
+		case "pc": return "laptop";
 		case "clipboard": return "clipboard_text_multiple_outline";
 		case "captures": return "camera_outline";
 		default: return root.location.path === Files.home ? "home_outline" : "folder_outline";
@@ -175,7 +177,13 @@ Item {
 	}
 
 	function openFolder(path) {
-		root.go({ kind: "dir", path: path });
+		root.go(root.placeOf(path));
+	}
+
+	// a folder here, or one of another PC ("pc:<id>/<path there>")
+	function placeOf(path) {
+		const pc = Pcs.split(path);
+		return pc ? { kind: "pc", id: pc.id, path: pc.path } : { kind: "dir", path: path };
 	}
 
 	function goBack() {
@@ -208,6 +216,12 @@ Item {
 
 	// one folder up, with the folder that was left picked
 	function goUp() {
+		// a folder of another PC: up to its parent there
+		if (root.location.kind === "pc" && root.location.path) {
+			const from = `pc:${root.location.id}/${root.location.path}`;
+			root.go({ kind: "pc", id: root.location.id, path: String(root.location.path).replace(/\/?[^/]*$/, "") }, { select: [from], direction: "out" });
+			return true;
+		}
 		if (!root.isFolder || root.location.path === "/") return false;
 		const from = root.location.path;
 		root.go({ kind: "dir", path: Files.parentOf(from) }, { select: [from], direction: "out" });
@@ -309,6 +323,9 @@ Item {
 		case "phone":
 			PhoneDrive.browse(String(loc.id), { limit: 600 }, (entries, error) => done(entries, error === "permission"
 				? `Allow the Pshell app on ${PhoneDrive.name} to see photos: in the app, Files → Let the PC see your photos` : error, {}));
+			break;
+		case "pc":
+			Pcs.browse(String(loc.id), String(loc.path || ""), (entries, error) => done(entries, error, {}));
 			break;
 		case "storage":
 			loadingTimer.stop();

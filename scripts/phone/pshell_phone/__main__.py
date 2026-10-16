@@ -20,6 +20,7 @@ class Daemon:
         self.server = server.Server(self.hub, self.pairing)
         self.discovery = discovery.Discovery(self.fingerprint)
         self.background = []  # coroutine functions the features want running
+        self.closing = []  # and those to await before it ends
 
     async def session(self):
         """The daemon may start before the compositor: what the session then
@@ -61,6 +62,8 @@ class Daemon:
         await stop.wait()
 
         socket.close()
+        for function in self.closing:
+            await function()
         await self.discovery.stop()
         await self.server.stop()
         config.SOCKET.unlink(missing_ok=True)

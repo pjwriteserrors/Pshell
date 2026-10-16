@@ -98,50 +98,63 @@ class DaemonTest(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="pshell-phone-test-"))
-        self.port = free_port()
-        state = self.tmp / "state" / "pshell"
+        self.closers = []
+        self.daemons = []
+        self.port, self.env, self.socket_path = await self.start_daemon(self.tmp, self.plugins)
+        self.daemon = self.daemons[0]
+
+    async def start_daemon(self, folder, plugins):
+        """A daemon with state of its own below folder: (port, environment, socket)."""
+        port = free_port()
+        state = folder / "state" / "pshell"
         state.mkdir(parents=True)
-        (state / "plugins.json").write_text(json.dumps(self.plugins))
-        (self.tmp / "cache" / "wal").mkdir(parents=True)
-        (self.tmp / "cache" / "wal" / "colors.json").write_text(json.dumps({
+        (state / "plugins.json").write_text(json.dumps(plugins))
+        (folder / "cache" / "wal").mkdir(parents=True)
+        (folder / "cache" / "wal" / "colors.json").write_text(json.dumps({
             "wallpaper": "", "special": {"background": "#101010", "foreground": "#eeeeee"},
             "colors": {f"color{i}": "#336699" for i in range(16)},
         }))
-        (self.tmp / "run").mkdir()
-        self.env = dict(
+        (folder / "run").mkdir()
+        env = dict(
             os.environ,
-            XDG_STATE_HOME=str(self.tmp / "state"), XDG_RUNTIME_DIR=str(self.tmp / "run"),
-            XDG_CACHE_HOME=str(self.tmp / "cache"), XDG_CONFIG_HOME=str(self.tmp / "config"),
-            PSHELL_PHONE_PORT=str(self.port), PSHELL_PHONE_DOWNLOADS=str(self.tmp / "downloads"), PYTHONUNBUFFERED="1",
+            XDG_STATE_HOME=str(folder / "state"), XDG_RUNTIME_DIR=str(folder / "run"),
+            XDG_CACHE_HOME=str(folder / "cache"), XDG_CONFIG_HOME=str(folder / "config"),
+            PSHELL_PHONE_PORT=str(port), PSHELL_PHONE_DOWNLOADS=str(folder / "downloads"), PYTHONUNBUFFERED="1",
         )
-        self.daemon = subprocess.Popen([str(ROOT / "scripts" / "phone" / "pshell-phone")], env=self.env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        self.socket_path = self.tmp / "run" / "pshell" / "phone.sock"
+        if (folder / "home").is_dir():
+            env["HOME"] = str(folder / "home")
+        if (folder / "bin").is_dir():
+            env["PATH"] = f"{folder / 'bin'}:{env['PATH']}"
+        daemon = subprocess.Popen([str(ROOT / "scripts" / "phone" / "pshell-phone")], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        self.daemons.append(daemon)
+        socket_path = folder / "run" / "pshell" / "phone.sock"
         deadline = time.time() + 10
         while time.time() < deadline:
-            if self.socket_path.exists():
+            if socket_path.exists():
                 try:
-                    socket.create_connection(("127.0.0.1", self.port), timeout=0.2).close()
+                    socket.create_connection(("127.0.0.1", port), timeout=0.2).close()
                     break
                 except OSError:
                     pass
-            if self.daemon.poll() is not None:
-                self.fail(f"daemon died: {self.daemon.stdout.read()}")
+            if daemon.poll() is not None:
+                self.fail(f"daemon died: {daemon.stdout.read()}")
             await asyncio.sleep(0.05)
-        self.closers = []
+        return port, env, socket_path
 
     async def asyncTearDown(self):
         for closer in self.closers:
             await closer()
-        self.daemon.terminate()
-        try:
-            self.daemon.wait(5)
-        except subprocess.TimeoutExpired:
-            self.daemon.kill()
-        self.daemon.stdout.close()
+        for daemon in self.daemons:
+            daemon.terminate()
+            try:
+                daemon.wait(5)
+            except subprocess.TimeoutExpired:
+                daemon.kill()
+            daemon.stdout.close()
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    async def local(self, role="cli"):
-        client = await Local(str(self.socket_path), role).connect()
+    async def local(self, role="cli", path=None):
+        client = await Local(str(path or self.socket_path), role).connect()
         self.closers.append(client.close)
         return client
 
@@ -509,6 +522,213 @@ class Trust(DaemonTest):
         self.assertTrue(call["device"])
         await shell.send({"type": "result", "id": call["id"], "ok": False, "error": {"code": "failed", "message": "Not allowed"}})
         self.assertFalse((await pending)["ok"])
+
+
+class OtherPCs(DaemonTest):
+    """Two daemons, a PC and a laptop, paired with each other."""
+
+    plugins = {"phone": True, "pc-link": True, "pc-fs": True}
+
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        self.laptop_dir = self.tmp / "laptop"
+        (self.laptop_dir / "bin").mkdir(parents=True)
+        (self.laptop_dir / "home").mkdir()
+        # what the laptop's clipboard and browser are told lands in a file
+        for tool in ("wl-copy", "xdg-open"):
+            script = self.laptop_dir / "bin" / tool
+            script.write_text(f"#!/bin/sh\n{{ echo \"$@\"; cat; }} >> {self.laptop_dir / tool}.log\n" if tool == "wl-copy" else f"#!/bin/sh\necho \"$@\" >> {self.laptop_dir / tool}.log\n")
+            script.chmod(0o755)
+        self.laptop_port, _env, self.laptop_socket = await self.start_daemon(self.laptop_dir, self.laptop_plugins())
+
+    def laptop_plugins(self):
+        return self.plugins
+
+    async def pair(self):
+        # as the shells: they hear the events
+        pc = await self.local("shell")
+        laptop = await self.local("shell", path=self.laptop_socket)
+        for side in (pc, laptop):
+            await side.send({"type": "sub", "topics": ["pcs"]})
+        code = (await laptop.call("pairing", "start"))["data"]["code"]
+        answer = await pc.call("pcs", "pair", {"code": code.lower().replace("-", " "), "address": f"127.0.0.1:{self.laptop_port}"}, timeout=20)
+        self.assertTrue(answer["ok"], answer)
+        linked = lambda side: lambda: any(d["connected"] for d in side.state.get("pcs", {}).get("devices", []))
+        await pc.until(linked(pc), 10)
+        await laptop.until(linked(laptop), 25)
+        return pc, laptop
+
+    async def test_pair_by_code_and_link_both_ways(self):
+        pc, laptop = await self.pair()
+        self.assertEqual(len(pc.state["pcs"]["devices"]), 1)
+        self.assertTrue(laptop.state["pcs"]["devices"][0]["incoming"])
+        # the phones' list knows nothing of them
+        await pc.send({"type": "sub", "topics": ["devices"]})
+        await pc.until(lambda: "devices" in pc.state)
+        self.assertEqual(pc.state["devices"], [])
+
+    async def test_wrong_code_is_refused_and_the_right_one_still_works(self):
+        pc = await self.local()
+        laptop = await self.local(path=self.laptop_socket)
+        code = (await laptop.call("pairing", "start"))["data"]["code"]
+        wrong = "22222-22222" if code != "22222-22222" else "33333-33333"
+        answer = await pc.call("pcs", "pair", {"code": wrong, "address": f"127.0.0.1:{self.laptop_port}"}, timeout=20)
+        self.assertEqual(answer["error"]["code"], "wrong-code")
+        answer = await pc.call("pcs", "pair", {"code": code, "address": f"127.0.0.1:{self.laptop_port}"}, timeout=20)
+        self.assertTrue(answer["ok"], answer)
+
+    async def test_a_link_naming_another_certificate_is_refused(self):
+        pc = await self.local()
+        laptop = await self.local(path=self.laptop_socket)
+        uri = (await laptop.call("pairing", "start"))["data"]["uri"]
+        import re
+        forged = re.sub(r"f=[0-9a-f]{64}", "f=" + "0" * 64, uri)
+        forged = re.sub(r"a=[^&]*", "a=127.0.0.1", forged)
+        answer = await pc.call("pcs", "pair", {"link": forged}, timeout=20)
+        self.assertEqual(answer["error"]["code"], "forged")
+        # the link as it is works
+        answer = await pc.call("pcs", "pair", {"link": re.sub(r"a=[^&]*", "a=127.0.0.1", uri)}, timeout=20)
+        self.assertTrue(answer["ok"], answer)
+
+    async def wait_event(self, side, name, timeout=15):
+        while True:
+            event = await asyncio.wait_for(side.events.get(), timeout)
+            if event["topic"] == "pcs" and event["name"] == name:
+                return event["data"]
+
+    async def test_files_and_folders_go_over(self):
+        pc, laptop = await self.pair()
+        laptop_id = pc.state["pcs"]["devices"][0]["id"]
+        source = self.tmp / "source"
+        (source / "Photos" / "2026").mkdir(parents=True)
+        (source / "Photos" / "a.jpg").write_bytes(b"a" * 1000)
+        (source / "Photos" / "2026" / "b.jpg").write_bytes(os.urandom(700_000))
+        (source / "note.txt").write_text("hello")
+        answer = await pc.call("pcs", "send", {"id": laptop_id[:12], "paths": [str(source / "Photos"), str(source / "note.txt")]})
+        self.assertEqual(answer["data"]["count"], 3, answer)
+        sent = await self.wait_event(pc, "sent")
+        self.assertEqual(sent["files"], 3)
+        received = await self.wait_event(laptop, "received")
+        landed = self.laptop_dir / "downloads"
+        self.assertEqual(sorted(Path(p).name for p in received["paths"]), ["Photos", "note.txt"])
+        self.assertEqual((landed / "Photos" / "2026" / "b.jpg").read_bytes(), (source / "Photos" / "2026" / "b.jpg").read_bytes())
+        self.assertEqual((landed / "note.txt").read_text(), "hello")
+        # again: a folder of its own, nothing overwritten
+        await pc.call("pcs", "send", {"id": laptop_id, "paths": [str(source / "Photos")]})
+        await self.wait_event(laptop, "received")
+        self.assertTrue((landed / "Photos (1)" / "a.jpg").is_file())
+        self.assertEqual(list(landed.rglob("*.part")), [])
+
+    async def test_links_and_text(self):
+        pc, laptop = await self.pair()
+        laptop_id = pc.state["pcs"]["devices"][0]["id"]
+        self.assertTrue((await pc.call("pcs", "text", {"id": laptop_id, "text": "https://example.org/x"}))["data"]["opened"])
+        self.assertTrue((await pc.call("pcs", "text", {"id": laptop_id, "text": "just some words"}))["data"]["copied"])
+        copied = await self.wait_event(laptop, "copied")
+        self.assertEqual(copied["text"], "just some words")
+        await asyncio.sleep(0.3)
+        self.assertIn("https://example.org/x", (self.laptop_dir / "xdg-open.log").read_text())
+        self.assertIn("just some words", (self.laptop_dir / "wl-copy.log").read_text())
+
+    async def test_shared_folder_of_the_other_pc(self):
+        pc, laptop = await self.pair()
+        laptop_id = pc.state["pcs"]["devices"][0]["id"]
+        # it says it shares its files once its plugins came over the link
+        await pc.until(lambda: pc.state["pcs"]["devices"][0]["files"])
+        share = self.laptop_dir / "home"
+        (share / "docs").mkdir(parents=True)
+        (share / "docs" / "plan.md").write_text("plan")
+        (share / "top.txt").write_text("top")
+        # the laptop shares its home (the host profile's phone.files)
+        listing = await pc.call("pcs", "list", {"id": laptop_id, "path": ""})
+        self.assertTrue(listing["ok"], listing)
+        self.assertEqual([e["name"] for e in listing["data"]["entries"]], ["docs", "top.txt"])
+        target = self.tmp / "fetched"
+        answer = await pc.call("pcs", "fetch", {"id": laptop_id, "paths": ["docs", "top.txt"], "folder": str(target)})
+        self.assertTrue(answer["ok"], answer)
+        fetched = await self.wait_event(pc, "fetched")
+        self.assertEqual(fetched["files"], 2)
+        self.assertEqual((target / "docs" / "plan.md").read_text(), "plan")
+        self.assertEqual((target / "top.txt").read_text(), "top")
+        # outside the shared folder: no
+        answer = await pc.call("pcs", "list", {"id": laptop_id, "path": "/../../etc"})
+        self.assertFalse(answer["ok"])
+
+    async def test_removing_unpairs_both(self):
+        pc, laptop = await self.pair()
+        laptop_id = pc.state["pcs"]["devices"][0]["id"]
+        self.assertTrue((await pc.call("pcs", "remove", {"id": laptop_id}))["ok"])
+        await pc.until(lambda: pc.state["pcs"]["devices"] == [])
+        await laptop.until(lambda: laptop.state["pcs"]["devices"] == [], 10)
+
+
+class OtherPCsWithoutTheirFiles(OtherPCs):
+    def laptop_plugins(self):
+        return {"phone": True, "pc-link": True}
+
+    async def test_shared_folder_of_the_other_pc(self):
+        pc, laptop = await self.pair()
+        laptop_id = pc.state["pcs"]["devices"][0]["id"]
+        await asyncio.sleep(0.5)
+        self.assertFalse(pc.state["pcs"]["devices"][0]["files"])
+        answer = await pc.call("pcs", "list", {"id": laptop_id, "path": ""})
+        self.assertEqual(answer["error"]["code"], "plugin-off")
+
+    test_files_and_folders_go_over = None
+    test_links_and_text = None
+    test_removing_unpairs_both = None
+    test_wrong_code_is_refused_and_the_right_one_still_works = None
+    test_a_link_naming_another_certificate_is_refused = None
+    test_pair_by_code_and_link_both_ways = None
+
+
+class WhatAnotherPCMayDo(DaemonTest):
+    """A paired PC is the other end of a transfer, not a remote control."""
+
+    plugins = {"phone": True, "pc-link": True, "phone-fs": True, "phone-files": True, "phone-clipboard": True}
+
+    async def paired_pc(self):
+        # a fake PC: a phone that says it is one, with a proof of the code
+        import hashlib
+        import hmac
+        cli = await self.local()
+        code = (await cli.call("pairing", "start"))["data"]["code"]
+        phone = self.phone("laptop")
+        mine = hashlib.sha256(ssl.PEM_cert_to_DER_cert(phone.cert.read_text())).hexdigest()
+        theirs = hashlib.sha256(ssl.PEM_cert_to_DER_cert((self.tmp / "state" / "pshell" / "phone" / "cert.pem").read_text())).hexdigest()
+        normal = code.replace("-", "")
+        proof = hmac.new(normal.encode(), f"pshell-pc|{theirs}|{mine}".encode(), hashlib.sha256).hexdigest()
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        async with aiohttp.ClientSession() as session:
+            body = {"kind": "pc", "cert": phone.cert.read_text(), "name": "laptop", "proof": proof, "port": 1}
+            async with session.post(f"https://127.0.0.1:{self.port}/pair", json=body, ssl=context) as response:
+                self.assertEqual(response.status, 200)
+                answer = await response.json()
+        back = hmac.new(normal.encode(), f"pshell-pc-back|{mine}|{theirs}".encode(), hashlib.sha256).hexdigest()
+        self.assertEqual(answer["proof"], back)
+        (phone.dir / "pc.json").write_text(json.dumps({"host": "127.0.0.1", "port": self.port, "fingerprint": theirs, "cert": answer["cert"]}))
+        await phone.connect()
+        return phone
+
+    async def test_only_its_own_topics(self):
+        laptop = await self.paired_pc()
+        self.assertTrue((await laptop.call("link", "ping"))["ok"])
+        for topic, action in (("fs", "list"), ("clipboard", "set"), ("pairing", "start"), ("pcs", "send"), ("session", "lock"), ("commands", "run")):
+            answer = await laptop.call(topic, action, {})
+            self.assertFalse(answer["ok"], (topic, answer))
+        await laptop.sub("theme", "devices", "clipboard", "plugins")
+        await laptop.wait_state("plugins")
+        await asyncio.sleep(0.2)
+        for topic in ("theme", "devices", "clipboard"):
+            self.assertNotIn(topic, laptop.state)
+
+    async def test_not_the_phone_paths(self):
+        laptop = await self.paired_pc()
+        async with laptop.session.put(f"https://127.0.0.1:{self.port}/upload/x.txt", data=b"x", ssl=laptop.context()) as response:
+            self.assertEqual(response.status, 403)
+        self.assertEqual((await laptop.get("/stream/screen"))[0], 403)
 
 
 if __name__ == "__main__":

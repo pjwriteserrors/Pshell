@@ -293,7 +293,7 @@ FocusScope {
 			return;
 		}
 		if (row.dir) {
-			if (newTab) root.newTab({ kind: "dir", path: row.path }, false);
+			if (newTab) root.newTab(pane.placeOf(row.path), false);
 			else pane.openFolder(row.path);
 			return;
 		}
@@ -303,8 +303,8 @@ FocusScope {
 	// a double click on an archive takes it apart here, a Windows program
 	// starts with Proton or Wine, everything else opens in its app
 	function openFiles(pane, rows) {
-		// on the phone: each comes over first
-		if (pane.location.kind === "phone") {
+		// on the phone or another PC: each comes over first
+		if (pane.location.kind === "phone" || pane.location.kind === "pc") {
 			for (const row of rows) root.openElsewhere(pane, row);
 			return;
 		}
@@ -329,7 +329,22 @@ FocusScope {
 	}
 
 	function openElsewhere(pane, row) {
+		if (row.pcId) {
+			Files.say(`Getting ${row.name} from ${Pcs.nameOf(row.pcId)}…`, "laptop");
+			Pcs.open(row.pcId, row.pcPath);
+			return;
+		}
 		PhoneDrive.open(Object.assign({ phoneId: row.path.slice(6) }, row));
+	}
+
+	// files and folders of another PC into a folder here
+	function fetchFrom(pane, rows, folder) {
+		const id = String(pane.location.id);
+		Files.say(rows.length === 1 ? `Getting ${rows[0].name} from ${Pcs.nameOf(id)}…` : `Getting ${rows.length} items from ${Pcs.nameOf(id)}…`, "laptop");
+		Pcs.fetch(id, rows.map(row => row.pcPath), folder, paths => {
+			Sounds.play("taskDone");
+			Files.say(paths.length === 1 ? `${Files.nameOf(paths[0])} is here` : `${paths.length} items are here`, "laptop");
+		});
 	}
 
 	function openRows(pane, rows, newTab) {
@@ -337,7 +352,7 @@ FocusScope {
 		const files = rows.filter(row => !row.dir);
 		if (files.length > 0) root.openFiles(pane, files);
 		if (dirs.length === 1 && files.length === 0 && !newTab) pane.openFolder(dirs[0].path);
-		else dirs.forEach(row => root.newTab({ kind: "dir", path: row.path }, false));
+		else dirs.forEach(row => root.newTab(pane.placeOf(row.path), false));
 	}
 
 	function revealIn(pane, paths) {
@@ -856,7 +871,7 @@ FocusScope {
 	}
 
 	function quickLook(pane) {
-		if (pane.location.kind === "phone") {
+		if (pane.location.kind === "phone" || pane.location.kind === "pc") {
 			const row = pane.currentRow ?? pane.selectedRows()[0];
 			if (row) root.openElsewhere(pane, row);
 			return;
@@ -976,7 +991,10 @@ FocusScope {
 			Files.terminal(pane.currentRow?.dir && pane.selectionCount === 1 ? pane.currentRow.path : pane.folder);
 			break;
 		case Qt.Key_F5:
-			if (root.tab.split && targets.length > 0 && root.tab.other.isFolder) Files.transfer(paths, root.tab.other.location.path, "copy");
+			// between this PC and another one: over the link
+			if (root.tab.split && targets.length > 0 && pane.location.kind === "pc" && root.tab.other.isFolder) root.fetchFrom(pane, targets, root.tab.other.location.path);
+			else if (root.tab.split && targets.length > 0 && root.tab.other.location.kind === "pc" && pane.isFolder) Pcs.sendFiles(root.tab.other.location.id, paths, Pcs.byId(root.tab.other.location.id)?.files ? root.tab.other.location.path : undefined);
+			else if (root.tab.split && targets.length > 0 && root.tab.other.isFolder) Files.transfer(paths, root.tab.other.location.path, "copy");
 			else pane.reload(false);
 			break;
 		case Qt.Key_F6:
@@ -988,7 +1006,7 @@ FocusScope {
 			break;
 		case Qt.Key_Delete:
 			if (pane.location.kind === "clipboard") Files.request("clipdelete", { clips: targets.map(row => row.clipId).filter(clip => clip !== "") }, () => pane.reload(false));
-			else if (pane.location.kind === "phone") break;
+			else if (pane.location.kind === "phone" || pane.location.kind === "pc") break;
 			else if (pane.location.kind === "trash" || shift) Files.remove(paths);
 			else Files.trash(paths);
 			break;

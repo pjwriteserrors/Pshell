@@ -14,7 +14,7 @@ def setup(hub, daemon):
     pairing = daemon.pairing
 
     # ── link ───────────────────────────────────────────────────────────────
-    @hub.action("link", "ping")
+    @hub.action("link", "ping", kinds=("phone", "pc", "shell", "cli"))
     async def ping(_peer, args):
         return {"time": int(time.time() * 1000), "echo": args.get("echo")}
 
@@ -42,6 +42,7 @@ def setup(hub, daemon):
                 "address": getattr(connected.get(device["id"]), "address", ""),
             }
             for device in hub.devices.list
+            if device.get("kind", "phone") == "phone"  # other PCs are the topic pcs (features/pcs.py)
         ])
 
     hub.hooks["connect"].append(publish_devices)
@@ -51,7 +52,7 @@ def setup(hub, daemon):
     @hub.action("devices", "remove", kinds=("shell", "cli"))
     async def remove(_peer, args):
         device_id = str(args.get("id", ""))
-        if not hub.devices.remove(device_id):
+        if (hub.devices.get(device_id) or {}).get("kind", "phone") != "phone" or not hub.devices.remove(device_id):
             raise Refused("unknown-device", device_id)
         for peer in hub.phones():
             if peer.device_id == device_id:

@@ -1,17 +1,20 @@
 """The one port phones talk to: /pair, /link (WebSocket) and /blob."""
 
 import asyncio
+import hmac
 import json
 import mimetypes
 import ssl
 
 from aiohttp import WSCloseCode, WSMsgType, web
 
-from . import config, identity
+from . import config, identity, pairing
 from .hub import Peer, encode
 
 
 class PhonePeer(Peer):
+    """A phone, or another PC that connected to this one (kind "pc")."""
+
     kind = "phone"
 
     def __init__(self, socket, device, address):
@@ -20,6 +23,7 @@ class PhonePeer(Peer):
         self.device = device
         self.address = address
         self.name = device["name"]
+        self.kind = device.get("kind", "phone")
 
     async def send(self, message):
         await self.socket.send_str(encode(message))
@@ -45,9 +49,12 @@ class Server:
     def device(self, request):
         return identity.peer_device(self.hub.devices, request.transport.get_extra_info("ssl_object"))
 
-    def require(self, request):
+    def require(self, request, kinds=("phone",)):
+        """The paired device behind a request; paths are a phone's unless they say otherwise."""
         device = self.device(request)
-        if device is None or not self.hub.on("phone"):
+        if device is None or not self.hub.on("phone") or device.get("kind", "phone") not in kinds:
+            raise web.HTTPForbidden()
+        if device.get("kind") == "pc" and not self.hub.on("pc-link"):
             raise web.HTTPForbidden()
         return device
 
@@ -56,19 +63,49 @@ class Server:
             raise web.HTTPForbidden()
         try:
             body = await request.json()
-            secret, cert = str(body["secret"]), str(body["cert"])
-            identity.pem_fingerprint(cert)
+            cert = str(body["cert"])
+            device_id = identity.pem_fingerprint(cert)
         except (ValueError, KeyError, TypeError):
             raise web.HTTPBadRequest() from None
-        if not self.pairing.claim(secret):
+        if body.get("kind") == "pc":
+            return await self.pair_pc(body, cert, device_id)
+        if not self.pairing.claim(str(body.get("secret", ""))):
             raise web.HTTPForbidden()
         device = self.hub.devices.add(str(body.get("name") or "Phone")[:64], str(body.get("model") or "")[:64], cert)
         identity.trust(self.context, cert)
         await self.hub.emit("pairing", "paired", {"id": device["id"], "name": device["name"]})
         return web.json_response({"name": config.hostname(), "id": self.pairing.fingerprint})
 
+    async def pair_pc(self, body, cert, device_id):
+        """Another PC, with the code typed in: a proof of it, bound to both
+        certificates, and one back (pairing.py)."""
+        if not self.hub.on("pc-link"):
+            raise web.HTTPForbidden()
+        mine = self.pairing.fingerprint
+        offered = str(body.get("proof", ""))
+        found = {}
+
+        def check(secret):
+            found["secret"] = secret
+            return hmac.compare_digest(offered.encode(), pairing.proof(secret, "pc", mine, device_id).encode())
+
+        if not self.pairing.claim_by(check):
+            raise web.HTTPForbidden()
+        try:
+            port = int(body.get("port") or 0)
+        except (TypeError, ValueError):
+            port = 0
+        addresses = [str(a)[:64] for a in body.get("addresses", []) if isinstance(a, str)][:16]
+        device = self.hub.devices.add(str(body.get("name") or "PC")[:64], "PC", cert, kind="pc", addresses=addresses, port=port or config.port())
+        identity.trust(self.context, cert)
+        await self.hub.emit("pairing", "paired", {"id": device["id"], "name": device["name"], "kind": "pc"})
+        return web.json_response({
+            "name": config.hostname(), "id": mine, "cert": identity.CERT.read_text(), "port": config.port(),
+            "addresses": pairing.addresses(), "proof": pairing.proof(found["secret"], "pc-back", device_id, mine),
+        })
+
     async def link(self, request):
-        device = self.require(request)
+        device = self.require(request, ("phone", "pc"))
         socket = web.WebSocketResponse(heartbeat=45, max_msg_size=4 * 1024 * 1024)
         await socket.prepare(request)
         peer = PhonePeer(socket, device, request.remote)
@@ -101,7 +138,7 @@ class Server:
         return socket
 
     async def blob(self, request):
-        self.require(request)
+        self.require(request, ("phone", "pc"))
         path = self.hub.blobs.path(request.match_info["token"])
         if path is None:
             raise web.HTTPNotFound()
@@ -119,7 +156,7 @@ class Server:
             self.sites.append(site)
 
     async def stop(self):
-        sockets = [peer.socket.close(code=WSCloseCode.GOING_AWAY) for peer in self.hub.phones()]
+        sockets = [peer.socket.close(code=WSCloseCode.GOING_AWAY) for peer in self.hub.peers if isinstance(peer, PhonePeer)]
         if sockets:
             await asyncio.wait([asyncio.ensure_future(close) for close in sockets], timeout=2)
         if self.runner:

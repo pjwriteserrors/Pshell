@@ -31,7 +31,7 @@ Rectangle {
 	function isAt(kind, value) {
 		if (root.loc.kind !== kind) return false;
 		if (kind === "dir") return root.loc.path === value;
-		if (kind === "tag" || kind === "collection" || kind === "shelf" || kind === "phone") return root.loc.id === value;
+		if (kind === "tag" || kind === "collection" || kind === "shelf" || kind === "phone" || kind === "pc") return root.loc.id === value;
 		if (kind === "search") return String(root.loc.query) === String(value.query) && String(root.loc.path || Files.home) === String(value.path || Files.home);
 		return true;
 	}
@@ -492,6 +492,33 @@ Rectangle {
 						onDropped: drop => {
 							const paths = root.pathsOf(drop);
 							if (paths.length > 0) Phone.sendFiles(paths);
+						}
+					}
+				}
+			}
+
+			// other PCs with Pshell: their shared files, and a drop sends there
+			SideSection {
+				width: parent.width
+				title: "Other PCs"
+				visible: Pcs.devices.length > 0
+
+				Repeater {
+					model: Pcs.devices
+
+					delegate: SideItem {
+						required property var modelData
+
+						width: parent.width
+						icon: modelData.connected ? "laptop" : "laptop_off"
+						label: modelData.name
+						active: root.isAt("pc", modelData.id)
+						opacity: modelData.connected ? 1 : 0.5
+						dropEnabled: modelData.connected
+						onClicked: root.go({ kind: "pc", id: modelData.id, path: "" })
+						onDropped: drop => {
+							const paths = root.pathsOf(drop);
+							if (paths.length > 0) Pcs.sendFiles(modelData.id, paths);
 						}
 					}
 				}

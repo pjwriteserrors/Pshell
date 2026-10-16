@@ -4,6 +4,12 @@ The code carries where the PC is, the fingerprint of its certificate and the
 secret. The phone connects, pins that fingerprint, and proves the secret while
 handing over its own certificate. A secret works once, for two minutes, and
 dies after a few wrong guesses.
+
+The secret is short enough to type (ABCDE-FGHJK), for another PC: it learns
+the certificate only during the handshake, so it never sends the secret
+itself but an HMAC of it over both fingerprints, and the PC answers with one
+of its own. A machine in between holds other certificates, so neither proof
+it could pass on fits, and it cannot guess the secret within two minutes.
 """
 
 import asyncio
@@ -12,6 +18,7 @@ import json
 import secrets
 import subprocess
 import time
+import hashlib
 from urllib.parse import quote
 
 from . import config
@@ -19,6 +26,23 @@ from . import config
 LIFETIME = 120
 MAX_FAILURES = 5
 SKIP_INTERFACES = ("lo", "docker", "br-", "virbr", "veth", "vnet")
+# no 0/O, 1/I/L: what is read off a screen is typed right
+ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
+
+
+def new_secret():
+    code = "".join(secrets.choice(ALPHABET) for _ in range(10))
+    return f"{code[:5]}-{code[5:]}"
+
+
+def normalize(code):
+    return "".join(c for c in str(code).upper() if c.isalnum())
+
+
+def proof(secret, label, first, second):
+    """What a PC sends instead of the secret: bound to both certificates."""
+    message = f"pshell-{label}|{first}|{second}".encode()
+    return hmac.new(normalize(secret).encode(), message, hashlib.sha256).hexdigest()
 
 
 def addresses():
@@ -60,13 +84,13 @@ class Pairing:
     def state(self):
         if not self.active:
             return {"active": False}
-        return {"active": True, "uri": self.uri(), "qr": str(self.qr_path()), "expires": int(self.expires * 1000)}
+        return {"active": True, "uri": self.uri(), "code": self.secret, "qr": str(self.qr_path()), "expires": int(self.expires * 1000)}
 
     def qr_path(self):
         return config.RUNTIME / "pairing.png"
 
     def start(self):
-        self.secret = secrets.token_urlsafe(24)
+        self.secret = new_secret()
         self.expires = time.time() + LIFETIME
         self.failures = 0
         try:
@@ -86,9 +110,13 @@ class Pairing:
 
     def claim(self, secret):
         """True exactly once, for the right secret, while it is valid."""
+        return self.claim_by(lambda known: hmac.compare_digest(normalize(secret).encode(), normalize(known).encode()))
+
+    def claim_by(self, check):
+        """Like claim, for a proof of the secret: check(secret) says whether it fits."""
         if not self.active:
             return False
-        if not hmac.compare_digest(str(secret).encode(), self.secret.encode()):
+        if not check(self.secret):
             self.failures += 1
             if self.failures >= MAX_FAILURES:
                 self.stop()

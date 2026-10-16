@@ -4,6 +4,11 @@
   phonectl pair                      show a pairing code (QR) in the terminal
   phonectl devices                   the paired phones
   phonectl remove <id prefix>        un-pair one
+  phonectl pcs                       the other PCs: paired ones, those nearby
+  phonectl pair-pc <code> [address]  pair with the PC that shows the code
+  phonectl send <pc> <path>…         files and folders to another PC
+  phonectl text <pc> <text>          a link opens there, a text lands in its clipboard
+  phonectl unpair-pc <pc>            forget another PC (it forgets this one too)
   phonectl call <topic> <action> [json args] [--timeout s]
   phonectl watch <topic>…            print a topic whenever it changes
 """
@@ -77,6 +82,48 @@ def main(args):
             sys.exit("No single device with that id.")
         client.call("devices", "remove", {"id": matches[0]["id"]})
         print(f"Removed {matches[0]['name']}.")
+    elif command == "pcs":
+        state = client.state("pcs") or {}
+        for device in state.get("devices", []):
+            mark = "●" if device["connected"] else ("◐" if device["incoming"] else "○")
+            print(f"{mark} {device['name']}  {device['id'][:16]}  {device.get('address') or device.get('error', '')}")
+        for entry in state.get("nearby", []):
+            print(f"  nearby: {entry['name']}  {', '.join(entry['addresses'])}:{entry['port']}  {entry['id'][:16]}")
+    elif command == "pair-pc" and rest:
+        state = client.state("pcs") or {}
+        args = {"code": rest[0]}
+        if rest[0].startswith("pshell://"):
+            args = {"link": rest[0]}
+        if len(rest) > 1:
+            args["address"] = rest[1]
+        elif "link" not in args:
+            nearby = state.get("nearby", [])
+            if len(nearby) != 1:
+                sys.exit("Give the PC's address: " + ("none is nearby" if not nearby else ", ".join(n["name"] for n in nearby) + " are nearby"))
+            args["nearby"] = nearby[0]["id"]
+        device = client.call("pcs", "pair", args, timeout=30)
+        print(f"Paired with {device['name']}.")
+    elif command in ("send", "text", "unpair-pc") and rest:
+        state = client.state("pcs") or {}
+        matches = [d for d in state.get("devices", []) if d["id"].startswith(rest[0]) or d["name"].lower() == rest[0].lower()]
+        if len(matches) != 1:
+            sys.exit("No single paired PC by that name or id.")
+        device = matches[0]
+        if command == "send":
+            answer = client.call("pcs", "send", {"id": device["id"], "paths": [str(Path(p).resolve()) for p in rest[1:]]})
+            print(f"Sending {answer['count']} files to {device['name']}…")
+            for message in client.messages():
+                if message.get("type") == "event" and message.get("topic") == "pcs" and message["data"].get("transfer") == answer["transfer"]:
+                    if message["name"] == "failed":
+                        sys.exit(message["data"]["message"])
+                    if message["name"] == "sent":
+                        print(f"Sent {message['data']['files']} files.")
+                        break
+        elif command == "text":
+            client.call("pcs", "text", {"id": device["id"], "text": " ".join(rest[1:])})
+        else:
+            client.call("pcs", "remove", {"id": device["id"]})
+            print(f"Forgot {device['name']}.")
     elif command == "call" and len(rest) >= 2:
         timeout = 15
         if "--timeout" in rest:

@@ -1,4 +1,4 @@
-"""The PC's certificate and the phones that were paired with it.
+"""The PC's certificate and the phones (and other PCs) that were paired with it.
 
 Both ends hold a self-signed certificate and know the other's fingerprint
 (SHA-256 of the DER certificate). Nothing else is ever trusted: the daemon's
@@ -57,7 +57,9 @@ def ensure_certificate():
 
 
 class Devices:
-    """devices.json: [{ id, name, model, cert, paired, seen }], id being the fingerprint."""
+    """devices.json: [{ id, name, model, cert, paired, seen, kind }], id being the
+    fingerprint; kind is "pc" for another PC (with its addresses and port), a
+    phone otherwise."""
 
     def __init__(self):
         self.list = []
@@ -80,10 +82,15 @@ class Devices:
     def get(self, device_id):
         return next((d for d in self.list if d["id"] == device_id), None)
 
-    def add(self, name, model, cert_pem):
+    def add(self, name, model, cert_pem, kind="phone", **extra):
         device_id = pem_fingerprint(cert_pem)
+        old = self.get(device_id) or {}
         self.list = [d for d in self.list if d["id"] != device_id]
         device = {"id": device_id, "name": name, "model": model, "cert": cert_pem, "paired": int(time.time()), "seen": int(time.time())}
+        if kind != "phone":
+            # a PC pairing again (from the other side) keeps where it was found
+            device.update({key: old[key] for key in ("addresses", "port") if key in old}, kind=kind)
+        device.update(extra)
         self.list.append(device)
         self.save()
         return device
@@ -124,6 +131,24 @@ def trust(context, cert_pem):
         context.load_verify_locations(cadata=cert_pem)
     except ssl.SSLError:
         pass
+
+
+def client_context(cert_pem=None, present=True):
+    """TLS for connecting to another PC: this PC's certificate as the client's,
+    and only the paired PC's certificate trusted, as it is (no name, no CA).
+    Without one, anything is accepted and checked afterwards. While pairing
+    nothing is presented: the other side refuses a certificate it does not know."""
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    context.check_hostname = False
+    if present:
+        context.load_cert_chain(CERT, KEY)
+    if cert_pem:
+        context.verify_flags |= ssl.VERIFY_X509_PARTIAL_CHAIN
+        context.load_verify_locations(cadata=cert_pem)
+    else:
+        context.verify_mode = ssl.CERT_NONE
+    return context
 
 
 def peer_device(devices, ssl_object):

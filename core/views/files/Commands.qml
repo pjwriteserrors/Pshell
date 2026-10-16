@@ -46,6 +46,7 @@ QtObject {
 		const out = [];
 
 		if (kind === "phone") return root.phoneEntries(pane, rows);
+		if (kind === "pc") return root.pcEntries(pane, rows);
 		if (kind === "clipboard") return root.clipEntries(pane, rows);
 		if (kind === "trash") {
 			out.push({ label: rows.length === 1 ? "Restore" : `Restore ${rows.length} items`, icon: "restore", run: () => Files.restore(rows) });
@@ -191,6 +192,11 @@ QtObject {
 			run: () => Files.sendToChat(chat, root.paths(files))
 		})) });
 		if (Phone.available) out.push({ label: Phone.name, icon: "cellphone_arrow_down", enabled: files.length > 0, run: () => files.forEach(row => Phone.shareFile(row.path)) });
+		// another PC takes folders as well
+		for (const pc of Pcs.reachable) out.push({ label: pc.name, icon: "laptop", run: () => {
+			Pcs.sendFiles(pc.id, root.paths(rows));
+			Files.say(rows.length === 1 ? `Sending ${rows[0].name} to ${pc.name}` : `Sending ${rows.length} items to ${pc.name}`, "laptop");
+		} });
 		if (Plugins.on("ssh")) out.push({ label: "A server…", icon: "server_network", run: () => view.sendToServer(rows) });
 		if (out.length > 0) out.push({ separator: true });
 		out.push({ label: "Share a link…", icon: "link_variant", run: () => view.shareDialog(rows) });
@@ -274,6 +280,19 @@ QtObject {
 		out.push({ label: "Import to Downloads", icon: "download", run: () => PhoneDrive.importEntries(entries, `${Files.home}/Downloads`) });
 		if (root.view.tab.split && root.view.tab.other.isFolder) out.push({ label: `Import to ${root.view.tab.other.title}`, icon: "dock_right", run: () => PhoneDrive.importEntries(entries, root.view.tab.other.location.path) });
 		out.push({ label: "Import to…", icon: "folder_arrow_down_outline", run: () => root.view.ask("Import to which folder?", "Folder", PhoneDrive.importFolder(), folder => PhoneDrive.importEntries(entries, folder.replace(/^~/, Files.home))) });
+		return out;
+	}
+
+	// files and folders of another PC: they come over first, opened or fetched
+	function pcEntries(pane, rows) {
+		const view = root.view;
+		const files = rows.filter(row => !row.dir);
+		const out = [];
+		out.push({ label: rows.length === 1 ? "Open" : `Open ${rows.length} items`, icon: "open_in_app", shortcut: "Enter", run: () => view.openRows(pane, rows, false) });
+		out.push({ separator: true });
+		out.push({ label: "Get to Downloads", icon: "download", run: () => view.fetchFrom(pane, rows, `${Files.home}/Downloads`) });
+		if (view.tab.split && view.tab.other.isFolder) out.push({ label: `Get to ${view.tab.other.title}`, icon: "dock_right", shortcut: "F5", run: () => view.fetchFrom(pane, rows, view.tab.other.location.path) });
+		out.push({ label: "Get to…", icon: "folder_arrow_down_outline", run: () => view.ask("Into which folder?", "Folder", `${Files.home}/Downloads`, folder => view.fetchFrom(pane, rows, folder.replace(/^~/, Files.home))) });
 		return out;
 	}
 
@@ -600,6 +619,7 @@ QtObject {
 		if (Plugins.on("clipboard")) go("Clipboard history", "clipboard_text_multiple_outline", { kind: "clipboard" });
 		if (Plugins.on("screenshot") || Plugins.on("recording")) go("Captures", "camera_outline", { kind: "captures" });
 		if (PhoneDrive.enabled) for (const entry of PhoneDrive.collections) go(`${entry.label} on ${PhoneDrive.name}`, entry.icon, { kind: "phone", id: entry.id });
+		for (const pc of Pcs.devices) if (pc.files) go(`Files of ${pc.name}`, "laptop", { kind: "pc", id: pc.id, path: "" });
 		go("What takes the space in your home", "chart_donut", { kind: "storage", path: Files.home });
 		go("Copies in your home", "content_duplicate", { kind: "duplicates", path: Files.home });
 		for (const search of FileLibrary.searches) go(search.name, "magnify", { kind: "search", path: search.path, query: search.query, contents: search.contents });

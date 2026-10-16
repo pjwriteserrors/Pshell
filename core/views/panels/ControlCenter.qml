@@ -1199,6 +1199,13 @@ Drawer {
 					visible: active
 					sourceComponent: PhonePairing {}
 				}
+
+				Loader {
+					Layout.fillWidth: true
+					active: !Phone.legacy && Pcs.enabled
+					visible: active
+					sourceComponent: PcPairing {}
+				}
 			}
 
 			DropArea {

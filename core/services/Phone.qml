@@ -37,6 +37,8 @@ Singleton {
 	property var devices: []
 	// { active, uri, qr, expires }
 	property var pairing: ({ active: false })
+	// the other PCs (Pcs.qml): { devices, nearby, transfers }
+	property var pcs: ({ devices: [], nearby: [], transfers: [] })
 	// device id → the phone's own topics: { "phone.status": { battery, … }, … }
 	property var remote: ({})
 
@@ -315,6 +317,8 @@ Singleton {
 				root.devices = message.data || [];
 			} else if (message.topic === "pairing") {
 				root.pairing = message.data || { active: false };
+			} else if (message.topic === "pcs") {
+				root.pcs = message.data || { devices: [], nearby: [], transfers: [] };
 			}
 			break;
 		case "event":

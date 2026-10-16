@@ -910,6 +910,39 @@ Scope {
 		}
 	}
 
+	// other PCs with Pshell: pc is a name or the start of an id, "" the first connected one
+	IpcHandler {
+		target: "pcs"
+		enabled: Pcs.enabled
+
+		function sendFile(pc: string, path: string): string {
+			const device = Pcs.find(pc);
+			if (!device) return "no such PC connected";
+			Pcs.sendFiles(device.id, [path]);
+			return `sending to ${device.name}`;
+		}
+		function sendText(pc: string, text: string): string {
+			const device = Pcs.find(pc);
+			if (!device) return "no such PC connected";
+			Pcs.sendText(device.id, text);
+			return `sent to ${device.name}`;
+		}
+		function sendClipboard(pc: string): string {
+			const device = Pcs.find(pc);
+			if (!device) return "no such PC connected";
+			Pcs.sendClipboard(device.id);
+			return `sent to ${device.name}`;
+		}
+		function list(): string {
+			return Pcs.devices.map(device => `${device.connected ? "●" : "○"} ${device.name} ${device.id.slice(0, 12)}`).join("\n");
+		}
+		// shows this PC's code (for the other one to type in) and the form to pair
+		function pair(): void {
+			Phone.startPairing();
+			Popups.withFocusedScreen(screen => Popups.open("control", screen, "phone"));
+		}
+	}
+
 	IpcHandler {
 		target: "volume"
 		enabled: Plugins.on("sound")

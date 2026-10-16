@@ -177,6 +177,7 @@ Item {
 		entries.push({ label: many ? "Copy paths" : "Copy path", icon: "clipboard_text", run: () => Shelf.copyPaths(targets) });
 		if (!many && item.kind === "file") entries.push({ label: "Rename", icon: "pencil", run: () => root.renamingItem = item.id });
 		if (Phone.available) entries.push({ label: `Send to ${Phone.name}`, icon: "cellphone_arrow_down", run: () => Shelf.sendToPhone(targets) });
+		for (const pc of Pcs.reachable) entries.push({ label: `Send to ${pc.name}`, icon: "laptop", run: () => Shelf.sendToPc(pc.id, targets) });
 		if (targets.some(t => t.kind === "file")) entries.push({ label: "Compress to ZIP", icon: "package_variant", run: () => Shelf.zip(root.shelfId, targets) });
 		if (targets.every(t => t.kind !== "file")) {
 			entries.push({ label: targets.every(t => t.kind === "link") ? "Open in browser" : "Search", icon: "magnify", run: () => Shelf.search(targets) });
@@ -204,6 +205,7 @@ Item {
 			entries.push({ label: "Copy all paths", icon: "clipboard_text", run: () => Shelf.copyPaths(root.items) });
 			if (root.items.some(t => t.kind === "file")) entries.push({ label: "Compress to ZIP", icon: "package_variant", run: () => Shelf.zip(root.shelfId, root.items) });
 			if (Phone.available) entries.push({ label: `Send all to ${Phone.name}`, icon: "cellphone_arrow_down", run: () => Shelf.sendToPhone(root.items) });
+			for (const pc of Pcs.reachable) entries.push({ label: `Send all to ${pc.name}`, icon: "laptop", run: () => Shelf.sendToPc(pc.id, root.items) });
 			entries.push({ separator: true });
 		}
 		entries.push({ label: "Paste", icon: "content_paste", run: () => Shelf.pasteInto(root.shelfId) });

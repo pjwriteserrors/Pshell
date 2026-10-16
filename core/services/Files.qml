@@ -1583,11 +1583,24 @@ Singleton {
 	}
 
 	// things that are not files yet become files in a folder: phone files are
-	// sent up, clipboard entries are written out
+	// sent up, those of another PC fetched, clipboard entries written out
 	function materialize(items, target) {
 		const phone = items.filter(item => String(item.path).startsWith("phone:"));
 		const clips = items.filter(item => String(item.path).startsWith("clip:"));
 		if (phone.length > 0) PhoneDrive.importEntries(phone.map(item => Object.assign({ phoneId: String(item.path).slice(6) }, item)), target);
+		// those of another PC come over its link, per PC
+		const pcs = {};
+		for (const item of items) {
+			const pc = Pcs.split(item.path);
+			if (pc) (pcs[pc.id] = pcs[pc.id] || []).push(pc.path);
+		}
+		for (const id of Object.keys(pcs)) {
+			root.say(`Getting ${pcs[id].length === 1 ? Files.nameOf(pcs[id][0]) : `${pcs[id].length} items`} from ${Pcs.nameOf(id)}…`, "laptop");
+			Pcs.fetch(id, pcs[id], target, paths => {
+				Sounds.play("taskDone");
+				root.say(paths.length === 1 ? `${root.nameOf(paths[0])} is here` : `${paths.length} items are here`, "laptop");
+			});
+		}
 		if (clips.length > 0) root.startJob("clipsave", { ids: clips.map(item => String(item.path).slice(5)), target: target, names: clips.map(item => item.name) });
 	}
 

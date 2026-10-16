@@ -512,6 +512,16 @@ Singleton {
 		}
 	}
 
+	// to another PC: files and folders into its downloads, links open there, text lands in its clipboard
+	function sendToPc(id, items) {
+		const paths = items.filter(item => item.kind === "file").map(item => item.path);
+		if (paths.length > 0) Pcs.sendFiles(id, paths);
+		for (const item of items) {
+			if (item.kind === "link") Pcs.sendText(id, item.url);
+			else if (item.kind !== "file") Pcs.sendText(id, item.text);
+		}
+	}
+
 	function extractText(item) {
 		if (root.isImage(item)) Screenshot.runOcr(item.path, null, false);
 	}

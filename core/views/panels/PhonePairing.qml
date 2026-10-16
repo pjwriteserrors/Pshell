@@ -103,6 +103,17 @@ ColumnLayout {
 				tone: Theme.textMuted
 				font.pixelSize: Theme.size.small
 			}
+
+			// another PC types it in (PcPairing.qml)
+			StyledText {
+				Layout.fillWidth: true
+				visible: Pcs.enabled && !!Phone.pairing.code
+				horizontalAlignment: Text.AlignHCenter
+				text: `On another PC: ${Phone.pairing.code ?? ""}`
+				font.pixelSize: Theme.size.heading
+				font.weight: Font.DemiBold
+				font.family: Theme.monoFamily
+			}
 		}
 	}
 
@@ -110,7 +121,7 @@ ColumnLayout {
 		Layout.fillWidth: true
 		enabled: Phone.connected
 		icon: root.pairing ? "close" : "qrcode_scan"
-		text: root.pairing ? "Cancel" : "Pair a phone"
+		text: root.pairing ? "Cancel" : (Pcs.enabled ? "Pair a phone or PC" : "Pair a phone")
 		onActivated: root.pairing ? Phone.stopPairing() : Phone.startPairing()
 	}
 }
