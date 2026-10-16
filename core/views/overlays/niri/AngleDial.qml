@@ -114,6 +114,5 @@ Item {
 		}
 		onPressed: mouse => pick(mouse)
 		onPositionChanged: mouse => pick(mouse)
-		onWheel: wheel => root.moved(((Math.round(root.angle / 15) * 15 + (wheel.angleDelta.y > 0 ? 15 : -15)) % 360 + 360) % 360)
 	}
 }

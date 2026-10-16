@@ -10,6 +10,8 @@ Item {
 
 	property real value: 0
 	property real stepSize: 0.05
+	// off where the wheel should scroll the page instead (settings)
+	property bool wheelEnabled: true
 	property string icon: ""
 	property string label: ""
 	property bool iconInteractive: false
@@ -170,6 +172,10 @@ Item {
 			root.dragging = false;
 		}
 		onWheel: wheel => {
+			if (!root.wheelEnabled) {
+				wheel.accepted = false;
+				return;
+			}
 			const direction = (wheel.angleDelta.y || -wheel.angleDelta.x) > 0 ? 1 : -1;
 			root.moved(Math.max(0, Math.min(1, root.value + direction * root.stepSize)));
 		}

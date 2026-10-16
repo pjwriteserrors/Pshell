@@ -95,6 +95,5 @@ Rectangle {
 			input.forceActiveFocus();
 			input.selectAll();
 		}
-		onWheel: wheel => root.moved(root.clampValue(root.value + (wheel.angleDelta.y > 0 ? root.step : -root.step)))
 	}
 }

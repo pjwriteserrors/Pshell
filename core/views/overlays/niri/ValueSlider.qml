@@ -45,6 +45,8 @@ Item {
 		icon: root.icon
 		label: root.label
 		accent: root.accent
+		// the wheel scrolls the page, it never changes a setting by the way
+		wheelEnabled: false
 		valueText: root.text(root.from + slider.display * (root.to - root.from))
 		onMoved: v => root.moved(root.snap(root.from + v * (root.to - root.from)))
 	}
