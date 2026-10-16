@@ -1032,6 +1032,10 @@ class Daemon:
             if mouse and mouse.online:
                 self.config.setdefault("devices", {}).setdefault(mouse.serial, {}).update(command.get("values") or {})
                 self.apply_settings(mouse)
+        elif op == "state":
+            # what the daemon goes by, for `ipc mouse state`
+            emit("state", rules=[f"{r['control']}/{r['trigger']}/{r.get('app', '')}={json.dumps(r.get("action"), sort_keys=True, separators=(",", ":"))}" for r in self.engine.rules],
+                 inCharge=self.in_charge, app=self.app, diverted={m.serial: m.diverted for m in self.mice.values()})
         elif op == "gaming":
             self.gaming = bool(command.get("on"))
             self.rumble.update()

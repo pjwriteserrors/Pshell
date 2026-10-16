@@ -227,6 +227,12 @@ Scope {
 		function profiles(): string {
 			return JSON.stringify({ active: Mouse.activeProfile, profiles: Mouse.profiles.map(p => ({ id: p.id, name: p.name, apps: p.apps ?? [], games: p.games === true })) });
 		}
+		// the rules the page has and the ones the daemon goes by (asked a moment
+		// earlier: call twice), for finding out why a button does something else
+		function state(): string {
+			Mouse.send({ op: "state" });
+			return JSON.stringify({ page: Mouse.ruleKeys(), daemon: Mouse.daemonState, active: Mouse.activeProfile, auto: Mouse.autoProfile, focus: Mouse.focusApp });
+		}
 		// off | games | always
 		function rumble(mode: string): void {
 			Mouse.setOption("rumble", ["off", "games", "always"].includes(mode) ? mode : "off");

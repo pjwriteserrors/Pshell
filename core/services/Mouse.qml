@@ -341,6 +341,12 @@ Singleton {
 	property real bassThreshold: 0
 	signal hit(real strength)
 	property var batteryLog: []
+	// what the daemon last said it goes by (`ipc mouse state`)
+	property var daemonState: ({})
+
+	function ruleKeys() {
+		return root.rules.filter(r => r.on !== false).map(r => `${r.control}/${r.trigger}/${r.app ?? ""}=${JSON.stringify(r.action, Object.keys(r.action ?? {}).sort())}`);
+	}
 
 	Timer {
 		id: saving
@@ -441,6 +447,9 @@ Singleton {
 			break;
 		case "fired":
 			root.fired(data.rule ?? "", data.control ?? "", data.trigger ?? "");
+			break;
+		case "state":
+			root.daemonState = data;
 			break;
 		case "rumble":
 			root.rumbling = data.on === true;
