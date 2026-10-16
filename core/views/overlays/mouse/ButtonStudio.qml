@@ -412,7 +412,7 @@ ColumnLayout {
 				x: parent.width - width
 				y: parent.height + 6
 				width: 380
-				entries: Controls.presets.map(p => ({ value: p.id, label: p.label, detail: `${Controls.byId(p.control).label}: ${p.detail}`, icon: p.icon }))
+				entries: Controls.presets.map(p => ({ value: p.id, label: p.label, detail: `${Controls.byId(p.control).label}${root.app === "" ? "" : ` – only in ${root.app}`}: ${p.detail}`, icon: p.icon }))
 				onPicked: value => root.applyPreset(Controls.presets.find(p => p.id === value))
 			}
 		}

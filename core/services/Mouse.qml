@@ -198,23 +198,25 @@ Singleton {
 	// A profile is a whole set of rules and device settings. The one in use is
 	// the working set (config.rules, config.devices); the others wait in
 	// config.profiles. One can follow apps (apps) or a running game (games):
-	// it comes while they have the focus or run, the picked one comes back
-	// after. Rules switching profiles (and those marked shared) are in all.
+	// it comes when they get the focus or start, the picked one comes back
+	// when they lose it or end. Only such a change switches by itself – a
+	// focus change that leaves the app-or-game situation as it was (a
+	// workspace switch made by the very button press) keeps what was picked
+	// by hand. Rules switching profiles (and those marked shared) are in all.
 	readonly property var profiles: root.config.profiles ?? []
 	readonly property string activeProfile: root.config.active ?? ""
 	readonly property var active: root.profiles.find(p => p.id === root.activeProfile) ?? null
 	property bool gaming: Plugins.on("games") && Games.running.length > 0
 	onGamingChanged: {
 		root.send({ op: "gaming", on: root.gaming });
-		root.override = false;
 		root.followContext();
 	}
-	onFocusAppChanged: {
-		root.override = false;
-		root.followContext();
-	}
-	// a profile picked by hand stays until the app or the game changes
-	property bool override: false
+	onFocusAppChanged: root.followContext()
+	// the profile the app or the game last asked for ("" none); a switch by
+	// itself happens only when this changes
+	property string autoProfile: ""
+	// the one in use came by itself, not by hand
+	readonly property bool automatic: root.autoProfile !== "" && root.autoProfile === root.activeProfile && root.autoProfile !== (root.config.profile ?? "")
 
 	readonly property var profileIcons: ["mouse_variant", "gamepad_variant", "briefcase_outline", "palette_outline", "code_braces", "movie_open_outline", "music_note", "crosshairs", "leaf", "rocket_launch_outline"]
 
@@ -246,7 +248,8 @@ Singleton {
 		});
 	}
 
-	function profileFor() {
+	// the profile the situation asks for: a running game's, the focused app's
+	function autoTarget() {
 		if (root.gaming) {
 			const game = root.profiles.find(p => p.games === true);
 			if (game) return game.id;
@@ -256,12 +259,15 @@ Singleton {
 			const own = root.profiles.find(p => (p.apps ?? []).some(a => a.toLowerCase() === app));
 			if (own) return own.id;
 		}
-		return root.config.profile ?? root.activeProfile;
+		return "";
 	}
 
 	function followContext() {
-		if (!root.loaded || root.override || root.profiles.length < 2) return;
-		const want = root.profileFor();
+		if (!root.loaded || root.profiles.length < 2) return;
+		const auto = root.autoTarget();
+		if (auto === root.autoProfile) return;
+		root.autoProfile = auto;
+		const want = auto || root.config.profile || root.activeProfile;
 		if (want && want !== root.activeProfile) root.load(want, true);
 	}
 
@@ -290,7 +296,6 @@ Singleton {
 		const target = root.profiles.find(p => p.id === id || p.name.toLowerCase() === String(id).toLowerCase());
 		if (!target) return false;
 		root.config = Object.assign({}, root.config, { profile: target.id });
-		root.override = root.profileFor() !== target.id;
 		if (target.id !== root.activeProfile) root.load(target.id, false);
 		else root.commit();
 		return true;
@@ -451,7 +456,7 @@ Singleton {
 			root.batteryLog = data.log ?? [];
 			break;
 		case "latch":
-			Osd.show("mouse", data.on ? "Held down" : "Let go", data.on ? 1 : 0, (data.keys ?? []).join(" + "), "keyboard_outline");
+			// a sticky key says nothing on screen: the pulse is enough
 			break;
 		case "focus":
 			root.focusApp = data.app ?? "";

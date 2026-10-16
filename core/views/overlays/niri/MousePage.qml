@@ -320,7 +320,7 @@ SettingsPage {
 		anchor: "mouse-profiles"
 		visible: !!Mouse.device
 		title: "Profiles"
-		subtitle: Mouse.profiles.length > 1 ? `${Mouse.active?.name ?? ""} is in use${Mouse.override ? " (picked by hand)" : ""}` : "Whole sets of buttons and settings – for games, for drawing, per app. Make a second one to switch."
+		subtitle: Mouse.profiles.length > 1 ? `${Mouse.active?.name ?? ""} is in use${Mouse.automatic ? " (by itself, for what has the focus)" : ""}` : "Whole sets of buttons and settings – for games, for drawing, per app. Make a second one to switch."
 		icon: "account_switch_outline"
 
 		ProfileStrip {

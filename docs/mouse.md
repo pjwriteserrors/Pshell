@@ -105,8 +105,10 @@ A profile is a whole set of rules and device settings (`profiles`, `active`
 and the picked `profile` in `mouse.json`); the one in use is the working set
 the daemon gets. A profile can follow apps (it comes while one of them has
 the focus) or a game (while the Games plugin sees one running); the picked
-one comes back after. Picked by hand it stays until the app or the game
-changes. Rules that switch profiles – and rules marked `shared` – go along
+one comes back after. Only a change of that situation switches by itself:
+a profile picked by hand stays through focus changes that do not bring
+another app-or-game profile (a workspace switch made by the very button
+that was pressed), and comes back when such a profile's app or game is left. Rules that switch profiles – and rules marked `shared` – go along
 into every profile. Switching: the strip on the page, `>mouse` in the
 launcher (a tile per profile, *New Profile*, *Game Haptics*, *Mouse
 Settings*), a button (*Next mouse profile*, *Switch to …*),
