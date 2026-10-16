@@ -56,6 +56,12 @@ USAGE = "https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/cont
 # seconds between two typed keys of a correction; none, so that no key of the
 # real keyboard gets in between
 KEY_DELAY = 0.0
+# key events typed in one go, and the seconds until the next go. Whoever reads
+# a keyboard (the compositor) is handed its events through a buffer of the
+# kernel, and when that is full because the reader was busy for a moment,
+# everything in it is lost: backspaces and letters of a long word alike
+BURST = 14
+PAUSE = 0.003
 # the animations of a correction, and the seconds one picture of each stands
 ANIMATIONS = {"scramble": 0.04, "decode": 0.035, "typewriter": 0.03}
 # pictures of an animation at most: it is over before the next word is
@@ -866,6 +872,20 @@ class Keymap:
     def caps(self) -> bool:
         return self.xkb.xkb_state_mod_name_is_active(self.state, b"Lock", self.LOCKED) > 0
 
+    def parts(self, edit: Edit) -> list[Edit]:
+        """An edit as edits of BURST key events at most, to be typed one after the other."""
+        parts: list[Edit] = []
+        room = 0
+        for delete, char in [(1, "")] * edit.delete + [(0, char) for char in edit.text]:
+            cost = 2 * (1 + sum(self.keys.get(char, (0, False, False))[1:]))
+            if not parts or cost > room:
+                parts.append(Edit(0, ""))
+                room = BURST
+            parts[-1].delete += delete
+            parts[-1].text += char
+            room -= cost
+        return parts
+
     def strokes(self, edit: Edit) -> list[tuple[int, int]] | None:
         """The key events of an edit: (key, 1 down / 0 up). None when a character has no key."""
         events: list[tuple[int, int]] = []
@@ -910,6 +930,7 @@ class Daemon:
         import evdev
 
         self.evdev = evdev
+        ecodes = evdev.ecodes
         self.found = dictionaries()
         if not self.found:
             emit(type="error", reason="dictionaries")
@@ -932,7 +953,11 @@ class Daemon:
             raise SystemExit(2)
         try:
             codes = sorted({14, Keymap.SHIFT, Keymap.ALTGR} | {code for code, _, _ in self.keymap.keys.values()})
-            self.keyboard = evdev.UInput({evdev.ecodes.EV_KEY: codes}, name=NAME)
+            # axes nothing is ever sent on: the kernel sizes the buffer of a
+            # reader (see BURST) by what a device can report, 63 events for
+            # keys alone and 255 with these
+            axes = [ecodes.REL_Z, ecodes.REL_RX, ecodes.REL_RY, ecodes.REL_RZ, ecodes.REL_DIAL, ecodes.REL_MISC] + list(range(ecodes.REL_HWHEEL_HI_RES + 1, ecodes.REL_CNT))
+            self.keyboard = evdev.UInput({ecodes.EV_KEY: codes, ecodes.EV_REL: axes}, name=NAME)
         except (OSError, evdev.UInputError):
             emit(type="error", reason="uinput")
             raise SystemExit(2)
@@ -949,6 +974,8 @@ class Daemon:
         self.said = b""
         # an edit waiting for Shift to be let go
         self.waiting: Edit | None = None
+        # when the last keys were typed
+        self.struck = 0.0
         self.queue: deque = deque()
         self.selector.register(sys.stdin, selectors.EVENT_READ, "control")
         emit(type="ready", languages=sorted(self.found), devices=len(self.devices))
@@ -1046,6 +1073,7 @@ class Daemon:
             self.keyboard.syn()
             if value == 0 and KEY_DELAY:
                 time.sleep(KEY_DELAY)
+        self.struck = time.monotonic()
         return True
 
     def wait(self, seconds: float | None, released: bool = False) -> str:
@@ -1125,11 +1153,21 @@ class Daemon:
                 if self.wait(None, released=True) == "control":
                     break
                 continue
-            step = replace(stand.screen, target)
-            if step.delete or step.text:
-                typed.append((time.time(), step))
-                if not self.strike(step):
+            # in pieces the reader has room for, each with the time to take
+            # them; a key that gets in between is followed like any other
+            came = ""
+            for part in self.keymap.parts(replace(stand.screen, target)):
+                came = self.wait(self.struck + PAUSE - time.monotonic())
+                if came:
                     break
+                typed.append((time.time(), part))
+                if not self.strike(part):
+                    came = "control"
+                    break
+            if came == "control":
+                break
+            if came:
+                continue
             if last:
                 # a key got into the last strokes: once more
                 settled += 1

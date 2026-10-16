@@ -542,7 +542,9 @@ Typing does not wait for a correction: every key pressed since the one that
 called for it is followed, what it typed is put behind the word again, and
 what stands there is compared with what should before the next key is
 answered. So several words corrected in a row at any speed leave the text as
-slow typing would.
+slow typing would. A correction is typed a few keys at a time with a moment
+in between: a compositor that is busy drawing hands on only as many keys as
+its buffer holds, and a long word typed in one go lost backspaces and letters.
 A correction can be animated; each animation is a plugin of its own, and of
 several that are on one is picked each time: `autocorrect-scramble` (other
 letters stand in place of the word a few times), `autocorrect-decode` (the
