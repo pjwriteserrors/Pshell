@@ -52,6 +52,13 @@ ratchet, SmartShift, a haptic pulse), a shortcut (recorded with the keys'
 evdev codes, so it is layout proof; typed names are moved for QWERTZ and
 AZERTY), a mouse button or scroll, a command.
 
+Presets (under the cross) go onto the control that is shown, in the place
+that is picked: sets for any button (workspaces, media, screenshots, undo,
+browser, action ring, precision, zoom or volume while held) and for the
+thumb wheel (tabs, volume, workspaces, windows, zoom); *As it comes* takes
+the control's rules away. `scripts/ipc.sh mouse state` (twice) lists the
+rules the page has next to the ones the daemon goes by.
+
 ## Settings
 
 DPI with stops and a precision speed, ratchet/free spin, SmartShift and its

@@ -62,10 +62,12 @@ function triggersOf(control) {
 	return ["click", "up", "down", "left", "right", "double", "hold", "wheel-up", "wheel-down", "thumb-left", "thumb-right"];
 }
 
-// ready-made sets for the button the page shows
+// ready-made sets for the control the page shows: `for` "button" (any
+// button) or "thumb" (the thumb wheel); they always go onto the control that
+// is picked, in the place that is picked
 var presets = [
 	{
-		id: "workspaces", label: "Workspaces & windows", icon: "view_grid_outline", control: "gesture",
+		id: "workspaces", for: "button", label: "Workspaces & windows", icon: "view_grid_outline",
 		detail: "Click: overview · up/down: workspaces · left/right: windows",
 		rules: [
 			{ trigger: "click", action: { kind: "niri", action: "toggle-overview" } },
@@ -76,7 +78,7 @@ var presets = [
 		]
 	},
 	{
-		id: "media", label: "Media", icon: "music_note", control: "gesture",
+		id: "media", for: "button", label: "Media", icon: "music_note",
 		detail: "Click: play/pause · up/down: volume (again while moving) · left/right: tracks",
 		rules: [
 			{ trigger: "click", action: { kind: "shell", id: "play" } },
@@ -87,7 +89,7 @@ var presets = [
 		]
 	},
 	{
-		id: "capture", label: "Screenshots", icon: "selection_drag", control: "gesture",
+		id: "capture", for: "button", label: "Screenshots", icon: "selection_drag",
 		detail: "Click: region · up: screen · down: window · left: colour · right: text",
 		rules: [
 			{ trigger: "click", action: { kind: "shell", id: "shot-region" } },
@@ -98,33 +100,98 @@ var presets = [
 		]
 	},
 	{
-		id: "ring", label: "Action ring", icon: "circle_slice_8", control: "haptic",
-		detail: "The haptic panel opens the radial menu, like Options+",
+		id: "edit", for: "button", label: "Undo & redo", icon: "undo",
+		detail: "Swipe left: undo · swipe right: redo · click stays",
+		rules: [
+			{ trigger: "left", action: { kind: "keys", keys: ["ctrl", "z"], label: "Ctrl + Z" } },
+			{ trigger: "right", action: { kind: "keys", keys: ["ctrl", "shift", "z"], label: "Ctrl + Shift + Z" } }
+		]
+	},
+	{
+		id: "browse", for: "button", label: "Browser", icon: "web",
+		detail: "Left/right: back and forward · up: new tab · down: close the tab",
+		rules: [
+			{ trigger: "left", action: { kind: "keys", keys: ["alt", "left"], label: "Alt + ←" } },
+			{ trigger: "right", action: { kind: "keys", keys: ["alt", "right"], label: "Alt + →" } },
+			{ trigger: "up", action: { kind: "keys", keys: ["ctrl", "t"], label: "Ctrl + T" } },
+			{ trigger: "down", action: { kind: "keys", keys: ["ctrl", "w"], label: "Ctrl + W" } }
+		]
+	},
+	{
+		id: "ring", for: "button", label: "Action ring", icon: "circle_slice_8",
+		detail: "Click: the radial menu at the pointer, like Options+",
 		rules: [
 			{ trigger: "click", action: { kind: "shell", id: "radial" } }
 		]
 	},
 	{
-		id: "precision", label: "Precision on hold", icon: "crosshairs", control: "shift",
-		detail: "Hold the SmartShift button for a slow, precise pointer; a click still switches the wheel",
+		id: "precision", for: "button", label: "Precision on hold", icon: "crosshairs",
+		detail: "Hold: a slow, precise pointer while it is down; a click does what it did",
 		rules: [
 			{ trigger: "hold", action: { kind: "mouse", op: "dpi-shift" } }
 		]
 	},
 	{
-		id: "tabs", label: "Tabs on the thumb wheel", icon: "tab", control: "thumb",
-		detail: "Turn the thumb wheel to go through tabs (Ctrl+Tab / Ctrl+Shift+Tab)",
+		id: "zoom", for: "button", label: "Zoom while held", icon: "magnify_plus_outline",
+		detail: "Hold it and turn the wheel to zoom (Ctrl + / Ctrl −)",
 		rules: [
-			{ trigger: "right", action: { kind: "keys", keys: ["ctrl", "tab"] } },
-			{ trigger: "left", action: { kind: "keys", keys: ["ctrl", "shift", "tab"] } }
+			{ trigger: "wheel-up", action: { kind: "keys", keys: ["ctrl", "plus"], label: "Ctrl + +" } },
+			{ trigger: "wheel-down", action: { kind: "keys", keys: ["ctrl", "minus"], label: "Ctrl + −" } }
 		]
 	},
 	{
-		id: "zoom", label: "Zoom with wheel click held", icon: "magnify_plus_outline", control: "middle",
-		detail: "Hold the wheel and scroll to zoom (Ctrl + / Ctrl −)",
+		id: "volume-held", for: "button", label: "Volume while held", icon: "volume_high",
+		detail: "Hold it and turn the wheel for the volume",
 		rules: [
-			{ trigger: "wheel-up", action: { kind: "keys", keys: ["ctrl", "plus"] } },
-			{ trigger: "wheel-down", action: { kind: "keys", keys: ["ctrl", "minus"] } }
+			{ trigger: "wheel-up", action: { kind: "shell", id: "volume-up" } },
+			{ trigger: "wheel-down", action: { kind: "shell", id: "volume-down" } }
+		]
+	},
+	{
+		id: "tabs", for: "thumb", label: "Tabs", icon: "tab",
+		detail: "Turn to go through tabs (Ctrl+Tab / Ctrl+Shift+Tab)",
+		rules: [
+			{ trigger: "right", action: { kind: "keys", keys: ["ctrl", "tab"], label: "Ctrl + Tab" } },
+			{ trigger: "left", action: { kind: "keys", keys: ["ctrl", "shift", "tab"], label: "Ctrl + Shift + Tab" } }
+		]
+	},
+	{
+		id: "thumb-volume", for: "thumb", label: "Volume", icon: "volume_high",
+		detail: "Turn for louder and quieter",
+		rules: [
+			{ trigger: "right", action: { kind: "shell", id: "volume-up" } },
+			{ trigger: "left", action: { kind: "shell", id: "volume-down" } }
+		]
+	},
+	{
+		id: "thumb-workspaces", for: "thumb", label: "Workspaces", icon: "view_grid_outline",
+		detail: "Turn to go from workspace to workspace",
+		rules: [
+			{ trigger: "right", action: { kind: "niri", action: "focus-workspace-down" } },
+			{ trigger: "left", action: { kind: "niri", action: "focus-workspace-up" } }
+		]
+	},
+	{
+		id: "thumb-columns", for: "thumb", label: "Windows", icon: "view_column_outline",
+		detail: "Turn to go from window to window",
+		rules: [
+			{ trigger: "right", action: { kind: "niri", action: "focus-column-right" } },
+			{ trigger: "left", action: { kind: "niri", action: "focus-column-left" } }
+		]
+	},
+	{
+		id: "thumb-zoom", for: "thumb", label: "Zoom", icon: "magnify_plus_outline",
+		detail: "Turn to zoom in and out",
+		rules: [
+			{ trigger: "right", action: { kind: "keys", keys: ["ctrl", "plus"], label: "Ctrl + +" } },
+			{ trigger: "left", action: { kind: "keys", keys: ["ctrl", "minus"], label: "Ctrl + −" } }
 		]
 	}
 ];
+
+function presetsFor(control) {
+	var meta = byId(control);
+	if (!meta || meta.triggers === "none") return [];
+	var kind = meta.triggers === "thumb" ? "thumb" : "button";
+	return presets.filter(function (p) { return p.for === kind; });
+}

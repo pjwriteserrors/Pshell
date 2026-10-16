@@ -345,7 +345,8 @@ Singleton {
 	property var daemonState: ({})
 
 	function ruleKeys() {
-		return root.rules.filter(r => r.on !== false).map(r => `${r.control}/${r.trigger}/${r.app ?? ""}=${JSON.stringify(r.action, Object.keys(r.action ?? {}).sort())}`);
+		const canonical = value => Array.isArray(value) ? value.map(canonical) : (value && typeof value === "object" ? Object.keys(value).sort().reduce((out, key) => Object.assign(out, { [key]: canonical(value[key]) }), {}) : value);
+		return root.rules.filter(r => r.on !== false).map(r => `${r.control}/${r.trigger}/${r.app ?? ""}=${JSON.stringify(canonical(r.action))}`);
 	}
 
 	Timer {

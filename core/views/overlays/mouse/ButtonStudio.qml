@@ -42,11 +42,39 @@ ColumnLayout {
 		picker.show(root.control, trigger, root.app);
 	}
 
+	// a preset goes onto the control that is shown, in the place that is
+	// picked; the tiles it changed light up one after the other
 	function applyPreset(preset) {
-		for (const r of preset.rules)
-			Mouse.assign(preset.control, r.trigger, root.app, r.action, { repeat: r.repeat === true });
-		root.controlPicked(preset.control);
+		if (!preset) return;
+		if (preset.id === "reset") {
+			for (const rule of Mouse.rules.filter(r => r.control === root.control && (r.app ?? "") === root.app && (r.mods ?? []).length === 0))
+				Mouse.removeRule(rule.id);
+		} else {
+			for (const r of preset.rules)
+				Mouse.assign(root.control, r.trigger, root.app, r.action, { repeat: r.repeat === true });
+		}
 		Mouse.play("COMPLETED");
+		const triggers = preset.id === "reset" ? Controls.triggersOf(root.control) : preset.rules.map(r => r.trigger);
+		triggers.forEach((trigger, i) => {
+			const tile = root.tiles.find(t => t.trigger === trigger);
+			if (tile) Qt.callLater(() => flashLater.createObject(root, { tile, delay: i * 70 }));
+		});
+	}
+
+	Component {
+		id: flashLater
+
+		Timer {
+			property var tile
+			property int delay: 0
+
+			interval: Math.max(1, delay)
+			running: true
+			onTriggered: {
+				if (tile) tile.flash();
+				destroy();
+			}
+		}
 	}
 
 	// the real mouse: a press picks the control, a fired rule lights its tile
@@ -403,7 +431,7 @@ ColumnLayout {
 			implicitHeight: 30
 			variant: "ghost"
 			icon: "auto_fix"
-			text: "Presets"
+			text: `Presets for the ${(Controls.byId(root.control)?.label ?? "").toLowerCase()}${root.app === "" ? "" : ` in ${root.app}`}`
 			onActivated: presetList.open()
 
 			PickList {
@@ -412,8 +440,9 @@ ColumnLayout {
 				x: parent.width - width
 				y: parent.height + 6
 				width: 380
-				entries: Controls.presets.map(p => ({ value: p.id, label: p.label, detail: `${Controls.byId(p.control).label}${root.app === "" ? "" : ` – only in ${root.app}`}: ${p.detail}`, icon: p.icon }))
-				onPicked: value => root.applyPreset(Controls.presets.find(p => p.id === value))
+				entries: Controls.presetsFor(root.control).map(p => ({ value: p.id, label: p.label, detail: p.detail, icon: p.icon }))
+					.concat([{ value: "reset", label: "As it comes", detail: `Takes every rule of the ${(Controls.byId(root.control)?.label ?? "").toLowerCase()} away${root.app === "" ? "" : ` in ${root.app}`}`, icon: "backup_restore" }])
+				onPicked: value => root.applyPreset(value === "reset" ? { id: "reset", rules: [] } : Controls.presets.find(p => p.id === value))
 			}
 		}
 	}

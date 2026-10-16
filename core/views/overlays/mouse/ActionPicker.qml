@@ -22,6 +22,10 @@ Popup {
 	readonly property bool recording: recorder.recording
 
 	signal chosen(var action, var extra)
+
+	// the shortcut group listens at once: the next keys pressed are the shortcut
+	onGroupChanged: if (root.group === "keys" && root.opened) Qt.callLater(() => recorder.start())
+	onOpened: if (root.group === "keys") recorder.start()
 	signal cleared
 
 	function show(control, trigger, app) {
@@ -133,6 +137,8 @@ Popup {
 	padding: 0
 	modal: true
 	dim: true
+	// keys go to the picker (the recorder, the search), not to the window behind
+	focus: true
 	closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
 	Overlay.modal: Rectangle {
@@ -302,7 +308,6 @@ Popup {
 							onClicked: {
 								search.text = "";
 								root.group = tab.modelData.id;
-								if (tab.modelData.id === "keys" && recorder.keys.length === 0) recorder.start();
 								if (tab.modelData.id === "command") commandField.focusInput();
 							}
 
