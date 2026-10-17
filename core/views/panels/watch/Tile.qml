@@ -36,8 +36,8 @@ Rectangle {
 		comeIn.restart();
 	}
 
-	function hide() {
-		comeIn.stop();
+	// back to where it rises from
+	function reset() {
 		root.opacity = 0;
 		shift.y = root.rise;
 		grow.xScale = grow.yScale = 0.96;
@@ -47,7 +47,7 @@ Rectangle {
 		id: comeIn
 
 		ScriptAction {
-			script: root.hide()
+			script: root.reset()
 		}
 		PauseAnimation {
 			duration: 60 + root.order * 70

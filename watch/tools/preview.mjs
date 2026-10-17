@@ -38,6 +38,17 @@ globalThis.App = (o) => (options = o)
 const realSetInterval = setInterval
 globalThis.setInterval = () => 0
 globalThis.setTimeout = () => 0
+// SETTLE=1: timers run at once on a clock of their own, so an intro plays to its end
+if (process.env.SETTLE) {
+  let clock = Date.now()
+  Date.now = () => clock
+  globalThis.setTimeout = (fn, ms) => {
+    if ((ms || 0) > 5000) return 0
+    clock += ms || 0
+    fn()
+    return 0
+  }
+}
 await import(pathToFileURL(file).href)
 if (options.onInit) options.onInit(process.env.PARAM)
 options.build()

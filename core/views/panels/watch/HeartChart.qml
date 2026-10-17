@@ -52,15 +52,19 @@ Item {
 			ctx.reset();
 			const values = root.values || [];
 			const until = root.slots * root.progress;
-			// runs of measured values: each a stroke and an area of its own
+			// runs of measured values, each a stroke and an area of its own; a
+			// gap of half an hour or less is bridged, a longer one stays open
 			const runs = [];
 			let run = [];
+			let last = -1;
 			for (let i = 0; i < values.length && i < until; i += 1) {
-				if (values[i] > 0) run.push([root.xOf(i), root.yOf(values[i])]);
-				else if (run.length) {
+				if (!(values[i] > 0)) continue;
+				if (last >= 0 && i - last > 3 && run.length) {
 					runs.push(run);
 					run = [];
 				}
+				run.push([root.xOf(i), root.yOf(values[i])]);
+				last = i;
 			}
 			if (run.length) runs.push(run);
 

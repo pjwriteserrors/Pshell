@@ -84,4 +84,5 @@ export const I = {
   weather_windy_variant: '\ue050',
   counter: '\ue051',
   trophy: '\ue052',
+  bed: '\ue053',
 }

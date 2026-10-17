@@ -5,8 +5,8 @@
     "appName": "PShell",
     "appType": "app",
     "version": {
-      "code": 9,
-      "name": "1.3.5"
+      "code": 10,
+      "name": "2.0.0"
     },
     "icon": "icon.png",
     "vender": "pshell",

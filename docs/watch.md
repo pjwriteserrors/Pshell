@@ -1,43 +1,63 @@
 # Watch
 
-A Zepp OS app and a watch face for the Amazfit Active 2 Square (390×450,
-square with rounded corners), in the shell's look: the colour roles of
-`style/theme/Theme.qml` (worked out on the PC from the wal palette), Adwaita
-Sans and the shell's Material icons, filled cards without outlines.
+A watch face and a small Zepp OS app for the Amazfit Active 2 Square
+(390×450, square with rounded corners), in the shell's look: the colour roles
+of `style/theme/Theme.qml` (worked out on the PC from the wallust palette),
+Adwaita Sans and the shell's Material icons, filled cards without outlines.
 
-The watch shows; it does little. **Home** is the PC at a glance – agents,
-what plays, CPU/RAM/disks, the printer, downloads, weather, screen time,
-updates, unread mail, Bluetooth batteries. It **does** two things: the
-**mouse** (trackpad, scroll strip, air mouse on the side key) and the
-**media player** (play/pause, skip, volume). The **face** (`watch/face`)
-shows the time, the day, steps, pulse, and the PC as the app last saw it.
+The **face** (`watch/face`) is what the watch is for: the time, the day, the
+battery, steps and pulse as the bar's pills, a mouse pill that opens the app,
+and last night's sleep as a card (how long, the score, from when to when, the
+stages as a hypnogram). It plays a short intro when the screen comes on (the
+time settles, the pills and the card rise, the stages grow across, the score
+counts up; about half a second) and stands still otherwise. The **app**
+(`watch/app`) is only the **mouse**: a trackpad, a scroll strip, the air mouse
+on the side key, and pairing.
+
+The PC's side is **>watch** in the launcher (`core/views/panels/WatchPanel.qml`,
+`core/services/Watch.qml`): the night first – its length counting up, the
+score as a ring, bed and wake times against the week, the stages as a
+hypnogram that sweeps in – then the last 14 nights as stacked bars (a click
+shows one above), the day's goals as rings, the heart through the day, stress
+and blood oxygen by the hour.
 
 ```
-watch/app/            the app (Zepp OS 5, API 4; built with zeus)
-  lib/link.js         the connection, shared by every page
+watch/app/            the mouse app (Zepp OS 5, API 4; built with zeus)
+  lib/link.js         the connection to the PC (the face uses it too)
   lib/protocol.js     frames, pairing, signing (no Zepp OS: runs in node too)
   lib/sha256.js       SHA-256 and HMAC
   lib/ui.js           the shell's look: roles, fonts, cards, chips, bars, rings
-  lib/store.js        pc.json in the app's data, for the face
-  page/*.js           home (index), detail, mouse, media, pair
-watch/face/           the watch face; reads the app's pc.json (openSync with its appId)
+  lib/store.js        files shared with the face: link.json, theme.json
+  page/*.js           mouse, pair
+watch/face/           the face
+  lib/health.js       what the watch's sensors know, for the PC
 watch/probe/          the probe that found out what the watch can do
 watch/tools/          fonts.py (fonts and icons), preview.py/.mjs (pages drawn on
-                      the PC with fake Zepp modules), fixture.py (live data through
-                      the views), jswatch.mjs (lib/protocol.js for the tests)
+                      the PC with fake Zepp modules; SETTLE=1 plays intros out),
+                      jswatch.mjs (lib/protocol.js for the tests), appwatch.mjs
+                      (the app and the face with the real link, for the tests),
+                      linktest.mjs (link.js against a scripted BLEMaster)
 scripts/phone/pshell_phone/watch.py   the PC's end: pairing, sessions, views, theme roles, the mouse
+scripts/phone/pshell_phone/health.py  the watch's health, kept as history; the topic "watch"
 scripts/phone/pshell_phone/ble.py     the BLE peripheral (BlueZ over D-Bus)
 scripts/phone/test_watch.py           both ends against each other, without Bluetooth
 ```
 
-The face fetches for itself: when it comes on (at most once a minute) it
-connects to the PC with the app's secret (the app's `link.json`, read with the
-app's id), takes the snapshots it shows and disconnects. Between those, and
-when that fails, it shows the newer of its own last fetch and the app's
-`pc.json`; older than 15 minutes, the card says when it was true. An app
-service cannot do this for it: Zepp OS keeps the BLE central API (`mst…`)
-from app services. A tap on the card opens the app; a tap on a card of home
-opens its detail page (system, weather, screen time, updates, connections).
+**Health.** The face syncs when it comes on, at most every 30 minutes, and at
+once when a night ended: it connects with the app's secret and the PC's
+address (the app's `link.json`, read with the app's id), sends
+`{"t":"health","d":…}` – last night with its stages and naps, the heart in
+10-minute means, stress and blood oxygen by the hour, skin temperature by the
+half hour, steps, calories, stand hours, PAI, the battery – takes the theme
+back (kept, and written to `theme.json` for the app) and lets go once the PC
+answered `{"t":"got"}`. The watch counts minutes from 0:00 of its day; the PC
+places them with the `at` and `minute` sent along. `health.py` keeps nights
+by the day they ended and days by date for 120 days
+(`~/.local/state/pshell/phone/watch-health.json`) and publishes the topic
+`watch` (owner daemon, local): the last nights and days, today in full, and
+whether the watch is on the link and the mouse in use. An app service cannot
+sync instead of the face: Zepp OS keeps the BLE central API (`mst…`) from app
+services.
 
 ## How it connects
 
@@ -45,8 +65,8 @@ The watch stays paired with the phone (Gadgetbridge). The app connects to the
 PC on its own as a BLE central; the PC is a peripheral that advertises as
 `pshell` while the plugin `watch` is on (off by default, on in `hosts/pc.json`).
 On the hub the watch is a phone (`watch=True`): it subscribes and calls like
-one, sees topics only through `VIEWS` (cut down for a 390×450 screen) and may
-call only `CALLS` (the media player and the volume). It never answers calls meant for the phone.
+one, sees topics only through `VIEWS` (the face takes only `theme`) and may
+call only `CALLS`. It never answers calls meant for the phone.
 
 **Pairing.** The watch makes a 16-byte secret and shows a four-digit code; the
 PC shows the same code in a notification with *Koppeln* / *Ablehnen*. Only a
@@ -63,11 +83,16 @@ read what the screens show, but cannot act as the watch.
 
 The link keeps the PC's address (localStorage, and link.json for the face)
 and connects to it straight away; a scan only follows when that fails (or
-gives no answer for 15 s). The app keeps the snapshots its home page had
-(cache.json) and shows them at once; the PC sends `{"t":"had"}` after the
-snapshots a subscription asked for, so the face lets go as soon as it has
-them. Once ready the watch sends how long each step took; the daemon logs
-it as `watch app 1.3.0 up: connected=… profile=… notifying=… ready=…`.
+gives no answer for 15 s). While it stands it pings every 5 s and nothing
+else; it goes with the app. Once ready the watch sends how long each step
+took and a line of its own (0x09); the daemon logs them as `watch app 2.0.0
+up: connected=… ready=…` and `watch says: …`.
+
+The app sends no JSON. On the real watch (1.3.x) the app's own JSON never
+reached the PC while its pings did; the face's always arrived, the same code
+in node always works, and the cause was not found. So the face does all the
+talking (health, theme), and the app reads the theme from the face's
+`theme.json`.
 
 Every connection is either used or closed: a connect given up on that
 succeeds later is taken over when nothing else is under way, closed
@@ -108,7 +133,7 @@ Found with the probe (watch/probe), each costing a reboot of the watch:
 ```
 watch/tools/fonts.py                 # once, and when an icon is added (needs fontTools)
 cd watch/app && npm install && zeus build     # dist/*.zab; the same in watch/face
-watch/tools/fixture.py > f.json && watch/tools/preview.py app page/index.js f.json home.png
+SETTLE=1 watch/tools/preview.py face watchface/index.js f.json face.png   # f.json: { "state": {} }
 ```
 
 `zeus` is `@zeppos/zeus-cli`; installed into another folder it needs that

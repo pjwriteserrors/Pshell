@@ -86,15 +86,15 @@ Item {
 
 				required property int index
 
-				readonly property var from: root.stages[step.index]
-				readonly property var to: root.stages[step.index + 1]
-				readonly property real top: Math.min(root.lanes[step.from[0]], root.lanes[step.to[0]])
-				readonly property real bottom: Math.max(root.lanes[step.from[0]], root.lanes[step.to[0]])
+				readonly property var before: root.stages[step.index]
+				readonly property var after: root.stages[step.index + 1]
+				readonly property real upper: Math.min(root.lanes[step.before[0]], root.lanes[step.after[0]])
+				readonly property real lower: Math.max(root.lanes[step.before[0]], root.lanes[step.after[0]])
 
-				x: Math.round(plot.width * step.to[1] / root.length) - 1
-				y: step.top * root.lane + root.lane / 2
+				x: Math.round(plot.width * step.after[1] / root.length) - 1
+				y: step.upper * root.lane + root.lane / 2
 				width: 2
-				height: (step.bottom - step.top) * root.lane
+				height: (step.lower - step.upper) * root.lane
 				radius: 1
 				color: Qt.alpha(Theme.fg, 0.16)
 				visible: plot.sweep >= step.x
@@ -111,14 +111,14 @@ Item {
 				required property var modelData
 				required property int index
 
-				readonly property real left: plot.width * block.modelData[1] / root.length
+				readonly property real start: plot.width * block.modelData[1] / root.length
 				readonly property real full: Math.max(2, plot.width * (block.modelData[2] - block.modelData[1]) / root.length)
-				readonly property bool reached: plot.sweep > block.left
-				readonly property bool pointed: hover.hovered && hover.point.position.x >= block.left && hover.point.position.x < block.left + block.full
+				readonly property bool reached: plot.sweep > block.start
+				readonly property bool pointed: hover.hovered && hover.point.position.x >= block.start && hover.point.position.x < block.start + block.full
 
-				x: block.left
+				x: block.start
 				y: root.lanes[block.modelData[0]] * root.lane + 3
-				width: Math.max(0, Math.min(block.full, plot.sweep - block.left))
+				width: Math.max(0, Math.min(block.full, plot.sweep - block.start))
 				height: root.lane - 6
 				radius: Math.min(5, height / 2, width / 2)
 				color: Watch.tone(block.modelData[0])
