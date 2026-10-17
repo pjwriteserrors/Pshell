@@ -73,7 +73,10 @@ Every connection is either used or closed: a connect given up on that
 succeeds later is taken over when nothing else is under way, closed
 otherwise. One left open is the worst case: while it stands the PC does not
 advertise, so no scan finds it, and it outlives the app (even a reinstall).
-The daemon drops a watch's connection that says nothing for 20 s. Each
+The daemon drops a watch's connection that says nothing for 20 s, so a
+watch with nothing to say (not paired, refused) lets go of the link itself
+and connects again when pairing is asked for; easy-ble reports a link that
+went through the connect callback again, which the link listens to. Each
 attempt uses a new BLEMaster, since easy-ble reports a device only once per
 instance and a second scan on the same one never sees the PC.
 

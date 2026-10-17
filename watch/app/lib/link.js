@@ -181,7 +181,12 @@ export function createLink(options) {
       const ours = attempt === id
       if (ours) attempt = null
       if (!result.connected) {
-        if (!ours || closing) return
+        // easy-ble answers here again when the link goes later on
+        if (!ours) {
+          if (connected && mine === ble && !closing) lost()
+          return
+        }
+        if (closing) return
         // the remembered address failed: look for the PC
         if (straight) {
           times.direct = result.status
@@ -270,10 +275,26 @@ export function createLink(options) {
       return
     }
     if (!secret) {
-      setStatus('unpaired')
+      idle('unpaired')
       return
     }
     sayHello()
+  }
+
+  // nothing to say until someone taps: let go of the link (a silent one is
+  // dropped by the PC after 20 s anyway) and wait for pair()
+  function idle(next, text) {
+    const gone = ble
+    connected = false
+    begun = false
+    session = null
+    if (settled) clearTimeout(settled)
+    settled = null
+    if (retry) clearTimeout(retry)
+    try {
+      gone.disconnect()
+    } catch (e) {}
+    setStatus(next, text)
   }
 
   function sayHello() {
@@ -321,15 +342,15 @@ export function createLink(options) {
       if (pairingSecret) {
         pairingSecret = null
         self.code = ''
-        setStatus('unpaired', reason === 'timeout' ? 'Am PC nicht bestätigt' : reason === 'busy' ? 'Der PC fragt gerade schon' : 'Am PC abgelehnt')
+        idle('unpaired', reason === 'timeout' ? 'Am PC nicht bestätigt' : reason === 'busy' ? 'Der PC fragt gerade schon' : 'Am PC abgelehnt')
       } else if (reason === 'unknown') {
         // the PC forgot this watch (removed there): pair anew
         secret = null
         try {
           localStorage.removeItem('secret')
         } catch (e) {}
-        setStatus('unpaired', 'Der PC kennt die Uhr nicht mehr')
-      } else setStatus('refused', 'Anmeldung abgelehnt')
+        idle('unpaired', 'Der PC kennt die Uhr nicht mehr')
+      } else idle('refused', 'Anmeldung abgelehnt')
     } else if (kind === P.SESSION && session) {
       const messages = P.open(session, frame)
       if (!messages) {
@@ -574,7 +595,11 @@ export function createLink(options) {
     cancelPairing() {
       pairingSecret = null
       self.code = ''
-      setStatus(secret ? 'handshake' : 'unpaired')
+      if (!connected) return setStatus(secret ? 'searching' : 'unpaired')
+      if (secret) {
+        begun = false
+        begin()
+      } else idle('unpaired')
     },
     mouse: {
       pad(dx, dy) {

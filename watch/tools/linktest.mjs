@@ -56,6 +56,8 @@ globalThis.__BLEMaster = class {
     // by the how-manieth connect this is
     const [ok, after] = script.connect ? script.connect(mac, n) : [true, 30]
     if (after !== null) setTimeout(() => cb({ connected: ok, status: ok ? 'connected' : 'failed' }), after)
+    // like easy-ble: the same callback hears when the link goes
+    if (ok) globalThis.__drop = () => cb({ connected: false, status: 'disconnected' })
   }
   disconnect() {
     log.push(['disconnect', this.id])
@@ -78,7 +80,9 @@ async function run(name, options, setup, check) {
   script = setup
   localStorage.removeItem('pcMac')
   const link = createLink({ once: !setup.app, secret: '00112233445566778899aabbccddeeff', connectAtMost: 300, ...options })
+  if (setup.unpaired) localStorage.removeItem('secret')
   link.start()
+  if (setup.then) await setup.then(link)
   await wait(setup.wait)
   link.stop()
   await wait(setup.after || 0)
@@ -134,6 +138,35 @@ await run('a scan after a lost connect sees the PC again', {}, { app: true, conn
   assert.ok(kinds(log, ['scan']).length >= 2)
   assert.ok(kinds(log, ['connect']).length >= 2)
   assert.equal(hellos(log).length, 1)
+})
+
+await run('a link the PC drops is noticed and made again', { mac: KNOWN }, {
+  app: true,
+  cccd: 10,
+  wait: 1500,
+  then: async () => {
+    await wait(500)
+    globalThis.__drop()
+  },
+}, (log) => {
+  assert.equal(kinds(log, ['connect']).length, 2)
+  assert.equal(hellos(log).length, 2)
+})
+
+await run('unpaired: lets go of the link, and comes back for pair()', { mac: KNOWN, secret: null }, {
+  app: true,
+  unpaired: true,
+  cccd: 10,
+  wait: 800,
+  then: async (link) => {
+    await wait(1200)
+    assert.equal(link.status().status, 'unpaired')
+    assert.deepEqual(kinds(log, ['connect', 'disconnect']), ['connect', 'disconnect'])
+    link.pair()
+  },
+}, (log) => {
+  assert.deepEqual(kinds(log, ['connect', 'disconnect']).slice(0, 3), ['connect', 'disconnect', 'connect'])
+  assert.ok(log.some((e) => e[0] === 'write' && e[2] === P.PAIR))
 })
 
 await run('nothing remembered: scan first', {}, { cccd: 10, wait: 600 }, (log) => {

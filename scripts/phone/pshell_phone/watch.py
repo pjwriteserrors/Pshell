@@ -850,6 +850,8 @@ class Service:
     # called on the loop by the peripheral
     def on_come(self, device):
         self.quiet[device] = time.monotonic()
+        if self.is_watch(device):
+            print("phone: a watch came on the link", flush=True)
 
     def on_write(self, device, data, mtu=0):
         self.quiet[device] = time.monotonic()
@@ -923,6 +925,7 @@ class Service:
             return
         self.asked.append(now)
         name = self.peripheral.name_of(link.device) if self.peripheral else "Watch"
+        print(f"phone: {name} asks to pair", flush=True)
         code = pairing_code(secret)
         self.asking = link
         try:
