@@ -33,12 +33,7 @@
             "page/index",
             "page/pair",
             "page/mouse",
-            "page/media",
-            "page/commands",
-            "page/agents",
-            "page/pc",
-            "page/printer",
-            "page/downloads"
+            "page/media"
           ]
         }
       },

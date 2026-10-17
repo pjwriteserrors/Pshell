@@ -1,52 +1,91 @@
-// What every page is built from: the screen (390×450, square with rounded
-// corners), colours that follow the shell's theme, and a few widgets.
+// What every page is built from, in the shell's look (style/theme): its
+// colour roles (worked out on the PC from the wal palette and kept here),
+// Adwaita Sans and the shell's Material icons (watch/tools/fonts.py), filled
+// cards without outlines, a bold title over a muted line, round icon chips,
+// bars and rings in the primary colour. The screen is 390×450, square with
+// rounded corners; coordinates are real pixels.
 
 import { createWidget, deleteWidget, widget, prop, align, text_style, event } from '@zos/ui'
 import { push } from '@zos/router'
+import { localStorage } from '@zos/storage'
+import { I } from './icons.js'
 
 export const W = 390
 export const H = 450
-export const M = 18 // the margin, clear of the rounded corners
+export const M = 20 // the margin, clear of the rounded corners
+export const GAP = 12
+export const RADIUS = 22 // Theme.radius.huge: the shell's cards
 
-export const C = {
-  bg: 0x000000,
-  card: 0x16191e,
-  cardPress: 0x262b33,
-  line: 0x2a3038,
-  text: 0xf2f4f7,
-  dim: 0x8b95a1,
-  faint: 0x4c5560,
-  accent: 0x7aa2f7,
-  good: 0x7bd88f,
-  warn: 0xf2c46d,
-  bad: 0xf27b7b,
+export const F = { sans: 'fonts/sans.ttf', medium: 'fonts/medium.ttf', bold: 'fonts/bold.ttf', icons: 'fonts/icons.ttf' }
+
+// the palette the shell has now, until the PC sends its own
+const FALLBACK = {
+  dark: true, bg: '#030305', fg: '#f4c84c', primary: '#19cef4', secondary: '#a679aa', tertiary: '#206196', onPrimary: '#030305',
+  danger: '#cd5861', warning: '#dfa939', success: '#42ab68', layer1: '#0e0c08', layer2: '#17140b', layer3: '#221d0e',
+  primaryContainer: '#072c35', dangerContainer: '#2b1417', muted: '#a18434', subtle: '#6f5b25', faint: '#453918', outline: '#201b0e',
+}
+
+export const T = {}
+
+function adopt(roles) {
+  Object.keys(FALLBACK).forEach((key) => {
+    const value = roles && roles[key] !== undefined ? roles[key] : FALLBACK[key]
+    T[key] = typeof value === 'string' ? parseInt(value.slice(1), 16) : value
+  })
+}
+
+try {
+  adopt(JSON.parse(localStorage.getItem('theme') || 'null'))
+} catch (e) {
+  adopt(null)
 }
 
 export function link() {
   return getApp()._options.globalData.link
 }
 
-// the accent of the shell's theme, once the PC sent it
+// the theme the PC sent last; kept for the next start
 export function themed() {
-  const theme = link().state('theme')
-  const hex = theme && theme.accent
-  if (hex && /^#[0-9a-fA-F]{6}$/.test(hex)) C.accent = parseInt(hex.slice(1), 16)
-  return C.accent
+  const roles = link().state('theme')
+  if (roles && roles.bg) {
+    adopt(roles)
+    try {
+      localStorage.setItem('theme', JSON.stringify(roles))
+    } catch (e) {}
+  }
+  return T
 }
 
-export function text(x, y, w, h, value, options) {
-  const o = options || {}
+export function text(x, y, w, h, value, o) {
+  o = o || {}
   return createWidget(widget.TEXT, {
     x,
     y,
     w,
     h,
-    color: o.color !== undefined ? o.color : C.text,
-    text_size: o.size || 24,
+    color: o.color !== undefined ? o.color : T.fg,
+    text_size: o.size || 22,
+    font: o.font || F.sans,
     align_h: o.center ? align.CENTER_H : o.right ? align.RIGHT : align.LEFT,
-    align_v: o.top ? align.TOP : align.CENTER_V,
+    align_v: o.top ? align.TOP : o.bottom ? align.BOTTOM : align.CENTER_V,
     text_style: o.wrap ? text_style.WRAP : text_style.ELLIPSIS,
-    text: value || '',
+    line_space: o.lineSpace || 0,
+    text: value === undefined || value === null ? '' : String(value),
+  })
+}
+
+export function icon(x, y, size, name, color) {
+  return createWidget(widget.TEXT, {
+    x,
+    y,
+    w: size,
+    h: size,
+    color: color !== undefined ? color : T.fg,
+    text_size: Math.round(size * 0.86),
+    font: F.icons,
+    align_h: align.CENTER_H,
+    align_v: align.CENTER_V,
+    text: I[name] || '',
   })
 }
 
@@ -54,81 +93,83 @@ export function set(widgetRef, value) {
   if (widgetRef) widgetRef.setProperty(prop.TEXT, value === undefined || value === null ? '' : String(value))
 }
 
+export function setIcon(widgetRef, name) {
+  if (widgetRef) widgetRef.setProperty(prop.TEXT, I[name] || '')
+}
+
 export function color(widgetRef, value) {
   if (widgetRef) widgetRef.setProperty(prop.COLOR, value)
+}
+
+export function show(widgetRef, visible) {
+  if (widgetRef) widgetRef.setProperty(prop.VISIBLE, !!visible)
 }
 
 export function rect(x, y, w, h, fill, radius) {
   return createWidget(widget.FILL_RECT, { x, y, w, h, radius: radius || 0, color: fill })
 }
 
-export function button(x, y, w, h, label, click, options) {
-  const o = options || {}
+export function circle(cx, cy, r, fill) {
+  return createWidget(widget.CIRCLE, { center_x: cx, center_y: cy, radius: r, color: fill })
+}
+
+// a filled card without an outline, like every tile of the shell
+export function card(x, y, w, h, fill) {
+  return rect(x, y, w, h, fill !== undefined ? fill : T.layer1, RADIUS)
+}
+
+// an icon in a round chip of the primary's container colour
+export function chip(x, y, size, name, tone) {
+  const fill = tone === 'danger' ? T.dangerContainer : tone === 'plain' ? T.layer2 : T.primaryContainer
+  const fg = tone === 'danger' ? T.danger : tone === 'plain' ? T.muted : T.primary
+  const back = circle(x + size / 2, y + size / 2, size / 2, fill)
+  const glyph = icon(x + size * 0.2, y + size * 0.2, size * 0.6, name, fg)
+  return { back, glyph, parts: [back, glyph] }
+}
+
+// a card's head: chip, bold title, muted line under it, a value at the right
+export function head(x, y, w, name, title, line, value) {
+  const c = chip(x, y, 44, name)
+  const t = text(x + 56, y - 1, w - 56 - 64, 26, title, { font: F.bold, size: 21 })
+  const l = text(x + 56, y + 24, w - 56, 22, line, { color: T.muted, size: 16 })
+  const v = text(x + w - 64, y - 1, 64, 26, value, { font: F.bold, size: 21, right: true })
+  return { chip: c, title: t, line: l, value: v, parts: c.parts.concat([t, l, v]) }
+}
+
+export function button(x, y, w, h, label, click, o) {
+  o = o || {}
   return createWidget(widget.BUTTON, {
     x,
     y,
     w,
     h,
-    radius: o.radius !== undefined ? o.radius : Math.min(h / 2, 24),
-    normal_color: o.fill !== undefined ? o.fill : C.card,
-    press_color: o.press !== undefined ? o.press : C.cardPress,
-    color: o.color !== undefined ? o.color : C.text,
+    radius: o.radius !== undefined ? o.radius : Math.min(h / 2, RADIUS),
+    normal_color: o.fill !== undefined ? o.fill : T.layer2,
+    press_color: o.press !== undefined ? o.press : T.layer3,
+    color: o.color !== undefined ? o.color : T.fg,
     text: label,
-    text_size: o.size || 24,
+    text_size: o.size || 22,
+    font: o.font || F.medium,
     click_func: () => click(),
   })
+}
+
+// a round button with an icon (the media player's)
+export function iconButton(x, y, size, name, click, o) {
+  o = o || {}
+  const b = button(x, y, size, size, '', click, { radius: size / 2, fill: o.fill, press: o.press })
+  const g = icon(x + size * 0.25, y + size * 0.25, size * 0.5, name, o.color !== undefined ? o.color : T.fg)
+  return { button: b, glyph: g, parts: [b, g] }
 }
 
 export function setLabel(buttonRef, label) {
   if (buttonRef) buttonRef.setProperty(prop.TEXT, label)
 }
 
-// a page's title and the state of the link, at the top
-export function header(title) {
-  const l = link()
-  const t = text(M, 14, W - 2 * M - 30, 44, title, { size: 30, color: C.text })
-  const dot = createWidget(widget.CIRCLE, { center_x: W - M - 10, center_y: 36, radius: 7, color: C.faint })
-  const paint = (s) => dot.setProperty(prop.COLOR, s === 'ready' ? C.good : s === 'unpaired' || s === 'refused' ? C.bad : C.warn)
-  paint(l.status().status)
-  const off = l.onStatus(paint)
-  return { title: t, off }
-}
-
-// a line under the header that says what is wrong with the link, if anything
-export function linkLine(y) {
-  const l = link()
-  const line = text(M, y, W - 2 * M, 30, '', { size: 18, color: C.dim })
-  const words = { searching: 'Suche den PC …', connecting: 'Verbinde …', handshake: 'Melde an …', unpaired: 'Nicht gekoppelt', pairing: 'Koppeln …', refused: 'Abgelehnt', off: 'Bluetooth aus' }
-  const paint = (s, detail) => set(line, s === 'ready' ? '' : detail || words[s] || s)
-  const now = l.status()
-  paint(now.status, now.detail)
-  const off = l.onStatus(paint)
-  return { line, off }
-}
-
-// a card that reacts to a tap anywhere on it, its texts included (a text
-// over a button would take the touch from it)
-export function card(x, y, w, h, tap) {
-  const parts = []
-  let from = null
-  const add = (widgetRef) => {
-    widgetRef.addEventListener(event.CLICK_DOWN, (info) => (from = info))
-    // a finger that scrolled the page did not mean to tap
-    widgetRef.addEventListener(event.CLICK_UP, (info) => {
-      if (from && Math.abs(info.x - from.x) + Math.abs(info.y - from.y) < 12) tap()
-      from = null
-    })
-    parts.push(widgetRef)
-    return widgetRef
-  }
-  add(rect(x, y, w, h, C.card, 24))
-  return { add, parts }
-}
-
-// a bar of 0…1
+// a bar of 0…1: a layer3 track, the value in a colour
 export function bar(x, y, w, h, fill) {
-  const back = rect(x, y, w, h, C.line, h / 2)
-  const front = rect(x, y, Math.max(h, 1), h, fill || C.accent, h / 2)
+  const back = rect(x, y, w, h, T.layer3, h / 2)
+  const front = rect(x, y, Math.max(h, 1), h, fill !== undefined ? fill : T.primary, h / 2)
   return {
     parts: [back, front],
     set(value) {
@@ -141,12 +182,53 @@ export function bar(x, y, w, h, fill) {
   }
 }
 
-// widgets made for a list, deleted together when the list is drawn again
+// a ring of 0…1 starting at twelve o'clock, like the shell's donuts
+export function ring(cx, cy, r, width, fill) {
+  const box = { x: cx - r, y: cy - r, w: 2 * r, h: 2 * r, line_width: width }
+  const back = createWidget(widget.ARC, { ...box, radius: r, start_angle: -90, end_angle: 270, color: T.layer3 })
+  const front = createWidget(widget.ARC, { ...box, radius: r, start_angle: -90, end_angle: -88, color: fill !== undefined ? fill : T.primary })
+  return {
+    parts: [back, front],
+    set(value) {
+      const v = Math.max(0.006, Math.min(1, Number(value) || 0))
+      front.setProperty(prop.MORE, { ...box, radius: r, start_angle: -90, end_angle: -90 + 360 * v })
+    },
+  }
+}
+
+// the page's title, its line, and a dot for the link to the PC
+export function header(title, line) {
+  const l = link()
+  const t = text(M + 6, 18, W - 2 * M - 40, 38, title, { font: F.bold, size: 30 })
+  const sub = text(M + 6, 54, W - 2 * M - 12, 24, line || '', { color: T.muted, size: 17 })
+  const dot = circle(W - M - 16, 38, 6, T.faint)
+  const words = { searching: 'Suche den PC …', connecting: 'Verbinde …', handshake: 'Melde an …', unpaired: 'Nicht gekoppelt', pairing: 'Koppeln …', refused: 'Abgelehnt', off: 'Bluetooth aus' }
+  let own = line || ''
+  const paint = (s, detail) => {
+    dot.setProperty(prop.COLOR, s === 'ready' ? T.success : s === 'unpaired' || s === 'refused' ? T.danger : T.warning)
+    sub.setProperty(prop.TEXT, s === 'ready' ? own : detail || words[s] || s)
+  }
+  const now = l.status()
+  paint(now.status, now.detail)
+  const off = l.onStatus(paint)
+  return {
+    title: t,
+    line: sub,
+    off,
+    setLine(value) {
+      own = value || ''
+      if (l.status().status === 'ready') sub.setProperty(prop.TEXT, own)
+    },
+  }
+}
+
+// widgets made for a list, deleted together when it is drawn again
 export function group() {
   let made = []
   return {
     add(w) {
-      made.push(w)
+      if (w && w.parts) w.parts.forEach((p) => made.push(p))
+      else if (w) made.push(w)
       return w
     },
     clear() {
@@ -156,11 +238,24 @@ export function group() {
   }
 }
 
+// widgets that react to a tap anywhere on them (a text over a button would
+// take the touch from it); a finger that scrolled the page did not mean it
+export function tappable(widgets, tap) {
+  let from = null
+  widgets.forEach((w) => {
+    w.addEventListener(event.CLICK_DOWN, (info) => (from = info))
+    w.addEventListener(event.CLICK_UP, (info) => {
+      if (from && Math.abs(info.x - from.x) + Math.abs(info.y - from.y) < 12) tap()
+      from = null
+    })
+  })
+}
+
 export function go(page) {
   push({ url: 'page/' + page })
 }
 
-// what to do with every subscription a page takes: undo them all on leaving
+// the subscriptions a page takes, undone together when it goes
 export function scope() {
   const offs = []
   return {
@@ -186,4 +281,13 @@ export function clock(seconds) {
   return h ? `${h}:${two(m)}:${two(s)}` : `${m}:${two(s)}`
 }
 
-export { event, prop }
+// "5 h 42", "16 min": how the shell writes a span
+export function span(seconds) {
+  const minutes = Math.round((seconds || 0) / 60)
+  if (minutes < 60) return `${minutes} min`
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  return m ? `${h} h ${m < 10 ? '0' : ''}${m}` : `${h} h`
+}
+
+export { event, prop, I }

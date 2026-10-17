@@ -10,10 +10,10 @@ import { setScrollLock } from '@zos/page'
 import { onGesture, offGesture, onKey, offKey, GESTURE_RIGHT, KEY_BACK, KEY_HOME, KEY_EVENT_CLICK, KEY_EVENT_PRESS, KEY_EVENT_RELEASE, KEY_EVENT_LONG_PRESS } from '@zos/interaction'
 import * as U from '../lib/ui.js'
 
-const { C, M, W } = U
+const { T, F, M, W } = U
 const LONG = 500
-const PAD = { x: 12, y: 70, w: 290, h: 320 }
-const STRIP = { x: 314, y: 70, w: 64, h: 320 }
+const PAD = { x: M, y: 88, w: 282, h: 300 }
+const STRIP = { x: M + 294, y: 88, w: W - 2 * M - 294, h: 300 }
 
 const gyro = new Gyroscope()
 let s = null
@@ -78,8 +78,9 @@ function setAir(on) {
   air = on
   Object.assign(total, { n: 0, x: 0, y: 0, z: 0, last: 0 })
   mouse().air(on)
-  U.set(ui.air, on ? 'Air-Maus an' : 'Seitentaste: Air-Maus')
-  U.color(ui.air, on ? C.accent : C.faint)
+  U.set(ui.air, on ? 'Air-Maus an · Seitentaste aus' : 'Seitentaste: Air-Maus')
+  U.color(ui.air, on ? T.primary : T.muted)
+  U.color(ui.airDot, on ? T.primary : T.faint)
 }
 
 function onKeyEvent(key, keyEvent) {
@@ -96,7 +97,7 @@ function onKeyEvent(key, keyEvent) {
 }
 
 function surface(box, fill, scroll) {
-  const w = createWidget(widget.FILL_RECT, { ...box, radius: 24, color: fill })
+  const w = createWidget(widget.FILL_RECT, { ...box, radius: U.RADIUS, color: fill })
   w.addEventListener(event.CLICK_DOWN, (info) => down(info, scroll))
   w.addEventListener(event.MOVE, move)
   w.addEventListener(event.CLICK_UP, up)
@@ -109,12 +110,13 @@ Page({
     setPageBrightTime({ brightTime: 600000 })
     pauseDropWristScreenOff({ duration: 600000 })
 
-    const line = U.linkLine(20)
-    s.keep(line.off)
-    surface(PAD, C.card, false)
-    surface(STRIP, 0x0f1216, true)
+    const head = U.header('Maus', 'Ziehen · Tippen · Halten für rechts')
+    s.keep(head.off)
+    surface(PAD, T.layer1, false)
+    surface(STRIP, T.layer2, true)
     // nothing over the surfaces: a widget on top would take the touch
-    ui.air = U.text(M, PAD.y + PAD.h + 6, W - 2 * M, 30, '', { size: 20, center: true })
+    ui.airDot = U.circle(M + 14, PAD.y + PAD.h + 25, 5, T.faint)
+    ui.air = U.text(M + 28, PAD.y + PAD.h + 10, W - 2 * M - 28, 30, '', { size: 17 })
     setAir(false)
 
     // a swipe to the right would close the page mid-drag; the back key still does

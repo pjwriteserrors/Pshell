@@ -1,0 +1,61 @@
+{
+  "configVersion": "v3",
+  "app": {
+    "appId": 1073745,
+    "appName": "PShell Face",
+    "appType": "watchface",
+    "version": {
+      "code": 1,
+      "name": "1.0.0"
+    },
+    "icon": "icon.png",
+    "vender": "pshell",
+    "description": "The shell's look on the wrist: the time, the day, and the PC as PShell last saw it"
+  },
+  "permissions": [
+    "data:user.hd.step",
+    "data:user.hd.heart_rate",
+    "data:os.device.info"
+  ],
+  "runtime": {
+    "apiVersion": {
+      "compatible": "3.0",
+      "target": "4.0",
+      "minVersion": "3.0"
+    }
+  },
+  "targets": {
+    "default": {
+      "module": {
+        "watchface": {
+          "path": "watchface/index",
+          "main": 1,
+          "editable": 0,
+          "lockscreen": 0,
+          "hightCost": 0
+        }
+      },
+      "platforms": [
+        {
+          "deviceSource": 10223872
+        },
+        {
+          "deviceSource": 10223873
+        },
+        {
+          "deviceSource": 10223875
+        }
+      ]
+    }
+  },
+  "i18n": {
+    "en-US": {
+      "appName": "PShell Face"
+    },
+    "de-DE": {
+      "appName": "PShell Face"
+    }
+  },
+  "defaultLanguage": "en-US",
+  "designWidth": 390
+}

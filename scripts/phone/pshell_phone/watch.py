@@ -143,29 +143,6 @@ def view_sound(d):
     return {"volume": round(float(d.get("volume") or 0) * 100), "muted": bool(d.get("muted")), "sink": clip(d.get("sink"), 30)}
 
 
-def view_commands(d):
-    if not d:
-        return None
-    states = d.get("states") or {}
-    return {
-        "tiles": [
-            {
-                "id": t["id"],
-                "label": clip(t.get("label"), 24),
-                "icon": t.get("icon", ""),
-                "color": t.get("color", ""),
-                "confirm": bool(t.get("confirm")),
-                # a form or a terminal cannot happen on the watch
-                "plain": not t.get("fields") and not t.get("terminal"),
-                "on": bool((states.get(t["id"]) or {}).get("on")),
-                "text": clip((states.get(t["id"]) or {}).get("text"), 20),
-            }
-            for t in (d.get("tiles") or [])[:40]
-            if t.get("id")
-        ]
-    }
-
-
 def view_agents(d):
     if not d:
         return None
@@ -175,10 +152,6 @@ def view_agents(d):
             for a in (d.get("agents") or [])[:12]
         ]
     }
-
-
-def view_session(d):
-    return {"locked": bool(d.get("locked")), "host": clip(d.get("host"), 20)} if d else None
 
 
 def view_quick(d):
@@ -249,21 +222,161 @@ def view_downloads(d):
     }
 
 
+# ── the shell's colours (style/theme/Theme.qml, worked out here once) ─────
+def _rgb(hex_color):
+    h = str(hex_color or "#808080").lstrip("#")[-6:]
+    return tuple(int(h[i : i + 2], 16) / 255 for i in (0, 2, 4))
+
+
+def _hex(c):
+    return "#" + "".join(f"{max(0, min(255, round(v * 255))):02x}" for v in c)
+
+
+def _luminance(c):
+    lin = lambda v: v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4  # noqa: E731
+    return 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2])
+
+
+def _contrast(a, b):
+    la, lb = _luminance(a), _luminance(b)
+    return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+
+
+def _hsv(c):
+    import colorsys
+
+    return colorsys.rgb_to_hsv(*c)
+
+
+def _lighter(c, factor):
+    """Qt's QColor.lighter/darker: the value scaled, saturation given up past white."""
+    h, sat, v = _hsv(c)
+    sat, v = sat * 255, v * 255 * factor
+    if v > 255:
+        sat = max(0, sat - (v - 255))
+        v = 255
+    import colorsys
+
+    return colorsys.hsv_to_rgb(h, sat / 255, min(v, 255) / 255)
+
+
+def _tint(base, tint, alpha):
+    return tuple(b * (1 - alpha) + t * alpha for b, t in zip(base, tint))
+
+
+def theme_roles(d):
+    """The semantic colours Theme.qml derives from the wal palette."""
+    bg = _rgb(d.get("background") or "#141414")
+    fg = _rgb(d.get("foreground") or "#e6e6e6")
+    palette = [_rgb(c) for c in (d.get("colors") or [])] + [_rgb("#808080")] * 16
+    dark = _luminance(bg) < 0.35
+
+    def legible(c, minimum):
+        for _ in range(12):
+            if _contrast(c, bg) >= minimum:
+                break
+            c = _lighter(c, 1.12) if dark else _lighter(c, 1 / 1.12)
+        return c
+
+    def hue(c):
+        h, sat, v = _hsv(c)
+        return -1 if sat == 0 else h
+
+    ranked = []
+    for i in range(1, 7):
+        c = palette[i]
+        score = _hsv(c)[1] * 1.1 + min(1, max(0, (_contrast(c, bg) - 1.6) / 4.5)) * 1.3
+        ranked.append((score, -i, c))
+    ranked = [c for _, _, c in sorted(ranked, reverse=True)]
+
+    def distinct(reference, offset):
+        for c in ranked[offset:]:
+            h = hue(c)
+            distance = min(abs(h - reference), 1 - abs(h - reference))
+            if reference < 0 or h < 0 or distance > 0.06:
+                return c
+        return ranked[min(offset, len(ranked) - 1)]
+
+    primary = legible(ranked[0], 3.2)
+    secondary = legible(distinct(hue(ranked[0]), 1), 3.0)
+    tertiary = legible(distinct(hue(secondary), 2), 3.0)
+    on_primary = bg if _contrast(primary, bg) >= _contrast(primary, fg) else fg
+    danger = legible(_tint(_rgb("#e5484d"), primary, 0.12), 3.4)
+    warning = legible(_tint(_rgb("#f5a524"), primary, 0.1), 3.4)
+    success = legible(_tint(_rgb("#46a758"), primary, 0.1), 3.4)
+    layer1 = _tint(bg, fg, 0.045)
+    roles = {
+        "dark": dark,
+        "bg": bg, "fg": fg, "primary": primary, "secondary": secondary, "tertiary": tertiary,
+        "onPrimary": on_primary, "danger": danger, "warning": warning, "success": success,
+        "layer1": layer1, "layer2": _tint(bg, fg, 0.085), "layer3": _tint(bg, fg, 0.13),
+        "primaryContainer": _tint(bg, primary, 0.2), "dangerContainer": _tint(bg, danger, 0.2),
+        # text dimmed by alpha in the shell; the watch has no alpha, so blended over a card
+        "muted": _tint(layer1, fg, 0.64), "subtle": _tint(layer1, fg, 0.42), "faint": _tint(layer1, fg, 0.24),
+        "outline": _tint(layer1, fg, 0.08),
+    }
+    return {k: (v if isinstance(v, bool) else _hex(v)) for k, v in roles.items()}
+
+
 def view_theme(d):
     if not d:
         return None
-    colors = d.get("colors") or []
-    return {"background": d.get("background"), "foreground": d.get("foreground"), "accent": colors[4] if len(colors) > 4 else None, "colors": colors[:8]}
+    return theme_roles(d)
 
 
 def view_plugins(d):
     """Only the switches the watch's pages ask about."""
-    wanted = ("media", "sound", "phone-commands", "agents", "quick-settings", "system-monitor", "printer", "downloads", "phone-touchpad")
+    wanted = ("media", "sound", "agents", "system-monitor", "printer", "downloads", "phone-touchpad", "weather", "screentime", "updates", "messages")
     return {k: bool((d or {}).get(k)) for k in wanted}
 
 
 def view_link(d):
     return {"name": clip((d or {}).get("name"), 24)}
+
+
+def view_weather(d):
+    if not d or not d.get("available"):
+        return {"available": False}
+    return {
+        "available": True,
+        "city": clip(d.get("city"), 24),
+        "temperature": d.get("temperature"),
+        "icon": d.get("icon", ""),
+        "description": clip(d.get("description"), 30),
+        "feelsLike": d.get("feelsLike", ""),
+        "humidity": d.get("humidity", ""),
+        "wind": d.get("wind", ""),
+        "sunrise": d.get("sunrise", ""),
+        "sunset": d.get("sunset", ""),
+        "hourly": [{"label": h.get("label"), "temp": h.get("temp"), "icon": h.get("icon", ""), "rain": h.get("rain", 0)} for h in (d.get("hourly") or [])[:6]],
+        "daily": [{"label": clip(x.get("label"), 6), "icon": x.get("icon", ""), "max": x.get("max"), "min": x.get("min")} for x in (d.get("daily") or [])[:5]],
+    }
+
+
+def view_screentime(d):
+    if not d:
+        return None
+    rows = d.get("rows") or {}
+    rows = [r for r in (rows.get("apps", []) if isinstance(rows, dict) else rows) if isinstance(r, dict)][:5]
+    return {
+        "total": d.get("total") or 0,
+        "longest": d.get("longest") or 0,
+        "versus": (d.get("versus") or {}).get("seconds"),
+        "week": [{"label": w.get("label"), "total": w.get("total") or 0, "today": w.get("key") == d.get("today")} for w in (d.get("week") or [])[:7]],
+        "apps": [{"label": clip(r.get("label"), 22), "seconds": r.get("seconds") or 0} for r in rows],
+    }
+
+
+def view_updates(d):
+    if not d:
+        return None
+    return {"count": d.get("count") or 0, "packages": [clip(p.get("name"), 24) for p in (d.get("packages") or [])[:6]]}
+
+
+def view_messages(d):
+    if not d:
+        return None
+    return {"unread": d.get("unread") or 0, "running": bool(d.get("running"))}
 
 
 VIEWS = {
@@ -272,33 +385,27 @@ VIEWS = {
     "theme": view_theme,
     "media": view_media,
     "sound": view_sound,
-    "commands": view_commands,
     "agents": view_agents,
-    "session": view_session,
     "quick": view_quick,
     "system": view_system,
     "printer": view_printer,
     "downloads": view_downloads,
+    "weather": view_weather,
+    "screentime": view_screentime,
+    "updates": view_updates,
+    "messages": view_messages,
 }
 
-# what the watch may do: (topic, action)
+# what the watch may do: the mouse aside, only the media player
 CALLS = {
     ("link", "ping"),
     ("media", "playPause"), ("media", "next"), ("media", "previous"), ("media", "seek"),
     ("sound", "adjust"), ("sound", "mute"), ("sound", "set"),
-    ("commands", "run"),
-    ("agents", "focus"),
-    ("session", "lock"),
-    ("quick", "dnd"), ("quick", "keepAwake"), ("quick", "bluetooth"),
-    ("printer", "pause"), ("printer", "resume"), ("printer", "light"),
-    ("downloads", "pause"), ("downloads", "resume"), ("downloads", "cancel"),
 }
 
 
 def view_result(topic, action, data):
-    """Answers are cut down too: a command's output may be long."""
-    if topic == "commands" and isinstance(data, dict):
-        return {k: (clip(v, 300) if k == "output" else v) for k, v in data.items()}
+    """Answers are cut down too."""
     if isinstance(data, dict) and len(json.dumps(data)) > 600:
         return {}
     return data

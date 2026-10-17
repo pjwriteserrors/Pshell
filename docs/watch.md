@@ -1,23 +1,38 @@
 # Watch
 
-A Zepp OS app for the Amazfit Active 2 Square that steers the shell from the
-wrist: a mouse (trackpad, scroll strip, air mouse), media and volume, the
-phone's commands, the coding agents, the PC (lock, quick switches, load), the
-3D printer, downloads.
+A Zepp OS app and a watch face for the Amazfit Active 2 Square (390×450,
+square with rounded corners), in the shell's look: the colour roles of
+`style/theme/Theme.qml` (worked out on the PC from the wal palette), Adwaita
+Sans and the shell's Material icons, filled cards without outlines.
+
+The watch shows; it does little. **Home** is the PC at a glance – agents,
+what plays, CPU/RAM/disks, the printer, downloads, weather, screen time,
+updates, unread mail, Bluetooth batteries. It **does** two things: the
+**mouse** (trackpad, scroll strip, air mouse on the side key) and the
+**media player** (play/pause, skip, volume). The **face** (`watch/face`)
+shows the time, the day, steps, pulse, and the PC as the app last saw it.
 
 ```
-watch/app/            the watch app (Zepp OS 5, API 4; built with zeus)
+watch/app/            the app (Zepp OS 5, API 4; built with zeus)
   lib/link.js         the connection, shared by every page
   lib/protocol.js     frames, pairing, signing (no Zepp OS: runs in node too)
   lib/sha256.js       SHA-256 and HMAC
-  lib/ui.js           the screen's pieces
-  page/*.js           one file per page
+  lib/ui.js           the shell's look: roles, fonts, cards, chips, bars, rings
+  lib/store.js        pc.json in the app's data, for the face
+  page/*.js           home (index), mouse, media, pair
+watch/face/           the watch face; reads the app's pc.json (openSync with its appId)
 watch/probe/          the probe that found out what the watch can do
-watch/tools/          jswatch.mjs: lib/protocol.js driven from the tests
-scripts/phone/pshell_phone/watch.py   the PC's end: pairing, sessions, views, the mouse
+watch/tools/          fonts.py (fonts and icons), preview.py/.mjs (pages drawn on
+                      the PC with fake Zepp modules), fixture.py (live data through
+                      the views), jswatch.mjs (lib/protocol.js for the tests)
+scripts/phone/pshell_phone/watch.py   the PC's end: pairing, sessions, views, theme roles, the mouse
 scripts/phone/pshell_phone/ble.py     the BLE peripheral (BlueZ over D-Bus)
 scripts/phone/test_watch.py           both ends against each other, without Bluetooth
 ```
+
+The face cannot reach the PC itself: the app writes the latest numbers to
+`pc.json` (at most every 20 s while home is open), and the face reads them
+every minute. Older than 15 minutes, the card says when they were true.
 
 ## How it connects
 
@@ -26,7 +41,7 @@ PC on its own as a BLE central; the PC is a peripheral that advertises as
 `pshell` while the plugin `watch` is on (off by default, on in `hosts/pc.json`).
 On the hub the watch is a phone (`watch=True`): it subscribes and calls like
 one, sees topics only through `VIEWS` (cut down for a 390×450 screen) and may
-call only `CALLS`. It never answers calls meant for the phone.
+call only `CALLS` (the media player and the volume). It never answers calls meant for the phone.
 
 **Pairing.** The watch makes a 16-byte secret and shows a four-digit code; the
 PC shows the same code in a notification with *Koppeln* / *Ablehnen*. Only a
@@ -52,8 +67,9 @@ Found with the probe (watch/probe), each costing a reboot of the watch:
 ## Building and installing
 
 ```
-cd watch/app && npm install
-zeus build            # dist/*.zab
+watch/tools/fonts.py                 # once, and when an icon is added (needs fontTools)
+cd watch/app && npm install && zeus build     # dist/*.zab; the same in watch/face
+watch/tools/fixture.py > f.json && watch/tools/preview.py app page/index.js f.json home.png
 ```
 
 `zeus` is `@zeppos/zeus-cli`; installed into another folder it needs that

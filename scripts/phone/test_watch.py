@@ -246,12 +246,20 @@ class Session(WatchTest):
 
     async def test_long_message_in_parts(self):
         w = await self.paired()
-        tiles = [{"id": f"t{i}", "label": f"Kommando Nummer {i} äöü", "command": "true"} for i in range(30)]
-        await self.hub.publish("commands", {"tiles": tiles, "states": {}})
-        await w.send_json({"t": "sub", "k": ["commands"]})
+        self.plugins["weather"] = True
+        hourly = [{"label": f"{h:02d}", "temp": h, "icon": "weather_cloudy", "rain": 3} for h in range(6)]
+        daily = [{"label": "Mo", "icon": "weather_rainy", "max": 13, "min": 7}] * 5
+        await self.hub.publish("weather", {"available": True, "city": "Paderborn", "temperature": 10, "description": "Regen äöü", "hourly": hourly, "daily": daily})
+        await w.send_json({"t": "sub", "k": ["weather"]})
         state = await w.json("s")
-        self.assertEqual(len(state["d"]["tiles"]), 30)
-        self.assertEqual(state["d"]["tiles"][3]["label"], "Kommando Nummer 3 äöü")
+        self.assertEqual(len(state["d"]["hourly"]), 6)
+        self.assertEqual(state["d"]["description"], "Regen äöü")
+
+    async def test_theme_roles(self):
+        roles = watch.theme_roles({"background": "#030305", "foreground": "#F4C84C", "colors": ["#030305", "#091C37", "#3E2172", "#206196", "#616267", "#A679AA", "#19CEF4", "#F4C84C"] * 2})
+        self.assertEqual(roles["primary"], "#19cef4")
+        self.assertTrue(roles["dark"])
+        self.assertEqual(roles["onPrimary"], "#030305")
 
     async def test_watch_is_not_the_phone_for_calls(self):
         await self.paired()
