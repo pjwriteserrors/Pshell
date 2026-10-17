@@ -31,7 +31,8 @@ Messages inside a session frame are [length, type, …]:
 JSON from the watch: {"t":"sub"|"unsub","k":[topics]}, {"t":"call","i":id,
 "k":topic,"a":action,"g":args}, {"t":"again"} (a part went missing: send the
 snapshots again), {"t":"times","v":version,"face":bool,"ms":{step:ms}} (how
-long it took to come up, for the log). To the watch: {"t":"s","k":topic,"d":view},
+long it took to come up, for the log), {"t":"error","e":text} (a page's
+mistake, for the log). To the watch: {"t":"s","k":topic,"d":view},
 {"t":"r","i":id,"ok":bool,"d":data|"e":message}, {"t":"had","k":topics} (after
 the snapshots a "sub" asked for).
 
@@ -902,6 +903,8 @@ class Service:
             line = " ".join(f"{clip(str(k), 12)}={clip(str(v), 12)}" for k, v in list(steps.items())[:10] if k != "start")
             who = "face" if message.get("face") else "app"
             print(f"phone: watch {who} {clip(str(message.get('v', '?')), 12)} up: {line}", flush=True)
+        elif kind == "error":
+            print(f"phone: watch error: {clip(str(message.get('e', '')), 160)}", flush=True)
         elif kind == "again":
             for topic in list(peer.subs):
                 await self.hub.snapshot(peer, topic)

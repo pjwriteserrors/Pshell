@@ -421,6 +421,81 @@ class JavaScript(WatchTest):
         self.assertEqual((await self.pump("message"))["message"], "820900")
 
 
+class App(WatchTest):
+    """The app's home page and the real link (watch/tools/appwatch.mjs), in
+    node, against the daemon: pairing, then what the page asks for and shows."""
+
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        script = Path(__file__).resolve().parents[2] / "watch" / "tools" / "appwatch.mjs"
+        self.node = await asyncio.create_subprocess_exec(
+            "node", str(script), stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, cwd=self.folder.name
+        )
+        self.lines = asyncio.Queue()
+        loop = asyncio.get_running_loop()
+        self.tasks = [loop.create_task(self.read()), loop.create_task(self.forward())]
+
+    async def asyncTearDown(self):
+        for task in self.tasks:
+            task.cancel()
+        self.node.kill()
+        await self.node.wait()
+        await super().asyncTearDown()
+
+    async def read(self):
+        while True:
+            raw = await self.node.stdout.readline()
+            if not raw:
+                return
+            line = json.loads(raw)
+            if "write" in line:
+                self.service.on_write("/dev/watch", bytes.fromhex(line["write"]), 247)
+            else:
+                await self.lines.put(line)
+
+    async def forward(self):
+        while True:
+            frame = await self.service.peripheral.frames.get()
+            await self.order(notify=frame.hex())
+
+    async def order(self, **order):
+        self.node.stdin.write((json.dumps(order) + "\n").encode())
+        await self.node.stdin.drain()
+
+    async def expect(self, key, timeout=5):
+        while True:
+            line = await asyncio.wait_for(self.lines.get(), timeout)
+            self.assertNotIn("error", line, line.get("error"))
+            if key in line:
+                return line[key]
+
+    async def until_ready(self):
+        for _ in range(100):
+            await self.order(op="status")
+            if (await self.expect("status"))["status"] == "ready":
+                return
+            await asyncio.sleep(0.05)
+        self.fail("never ready")
+
+    async def test_pair_then_the_page_subscribes_and_shows(self):
+        self.answers = [True]
+        await self.hub.publish("media", {"has": True, "playing": True, "title": "Ablaze", "artist": "Floorp"})
+        await asyncio.sleep(0.3)
+        await self.order(op="pair")
+        await self.expect("code")
+        await self.until_ready()
+        await asyncio.sleep(0.8)
+        peer = self.service.links["/dev/watch"].peer
+        self.assertIn("media", peer.subs)
+        await self.order(op="texts")
+        texts = await self.expect("texts")
+        self.assertTrue(any("Ablaze" in t for t in texts), texts)
+
+        await self.order(op="call", topic="media", action="playPause", args={})
+        self.assertTrue((await self.expect("result"))["ok"])
+        self.assertIn(("media", "playPause", {}), self.shell.calls)
+
+
 class Packages(unittest.TestCase):
     def test_link_comes_up_quickly(self):
         # lib/link.js against a scripted BLEMaster (watch/tools/linktest.mjs)

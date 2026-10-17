@@ -89,7 +89,19 @@ export function createLink(options) {
   function setStatus(next, text) {
     status = next
     detail = text || ''
-    listeners.status.forEach((fn) => fn(status, detail))
+    listeners.status.forEach((fn) => guarded('status ' + next, fn, status, detail))
+  }
+
+  // a page's mistake must not stop the link: caught, and told to the PC's log
+  let errors = []
+  function guarded(where, fn, ...args) {
+    try {
+      fn(...args)
+    } catch (e) {
+      const said = `${where}: ${(e && e.message) || e}`.slice(0, 160)
+      if (session) json({ t: 'error', e: said })
+      else if (errors.length < 5) errors.push(said)
+    }
   }
 
   function later(fn, ms) {
@@ -324,10 +336,13 @@ export function createLink(options) {
       answer = null
       lastPong = Date.now()
       mark('ready')
-      setStatus('ready')
+      // asked for before the pages hear of it: what they do cannot hold it up
       const topics = Object.keys(subscribers).filter((t) => subscribers[t].length)
       if (topics.length) json({ t: 'sub', k: topics })
       json({ t: 'times', v: VERSION, face: !!options.once, ms: times })
+      errors.forEach((e) => json({ t: 'error', e }))
+      errors = []
+      setStatus('ready')
     } else if (kind === P.PAIRED && pairingSecret) {
       secret = pairingSecret
       pairingSecret = null
@@ -394,14 +409,14 @@ export function createLink(options) {
           localStorage.setItem('pcName', self.name)
         } catch (e) {}
       }
-      ;(subscribers[message.k] || []).forEach((fn) => fn(message.d))
+      ;(subscribers[message.k] || []).forEach((fn) => guarded(message.k, fn, message.d))
     } else if (message.t === 'had') {
-      listeners.had.forEach((fn) => fn(message.k || []))
+      listeners.had.forEach((fn) => guarded('had', fn, message.k || []))
     } else if (message.t === 'r') {
       const call = calls[message.i]
       if (!call) return
       delete calls[message.i]
-      call.done(message.ok, message.ok ? message.d : message.e)
+      guarded('call', call.done, message.ok, message.ok ? message.d : message.e)
     }
   }
 
