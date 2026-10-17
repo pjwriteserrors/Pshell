@@ -23,6 +23,7 @@ Frames, one GATT write or notification each:
                     "session"‖nonce_watch‖nonce_pc); a counter is never taken twice
 
 Messages inside a session frame are [length, type, …]:
+    0x09 text…  a line for the log (ASCII)
     0x02 ping seq:u16 [frames:u16 refused:u16 longest:u8 lost:u8 again:u8]
          (answered by 0x82 seq; the rest is what the watch got, for the log)   0x03 pad dx:i16 dy:i16
     0x04 button index:u8 down:u8               0x05 gyro n:u8 x y z:u16 (totals, wrapping)
@@ -723,9 +724,10 @@ class Link:
         """The watch's counts of what it got from us: frames, frames refused,
         the longest, JSON lost in parts, snapshots asked for again."""
         frames, bad = struct.unpack("<HH", m[3:7])
-        counts = (bad, m[8], m[9])
+        counts = (frames, bad, m[8], m[9])
         now = time.monotonic()
-        if counts == self.heard[1] and now - self.heard[0] < 60:
+        # at most every 15 s, and only when something changed
+        if counts == self.heard[1] or now - self.heard[0] < 15:
             return
         self.heard = (now, counts)
         print(f"phone: watch heard frames={frames} refused={bad} longest={m[7]} lost={m[8]} again={m[9]} mtu={self.mtu}", flush=True)
@@ -751,6 +753,9 @@ class Link:
             return
         if kind == 0x10 and len(m) >= 4:
             await self.part(m[1], m[2], m[3], m[4:])
+            return
+        if kind == 0x09:
+            print(f"phone: watch says: {m[1:45].decode('ascii', 'replace')}", flush=True)
             return
         pointer = self.mouse() if kind in (0x03, 0x04, 0x05, 0x07, 0x08) else None
         if pointer is None:
@@ -893,6 +898,8 @@ class Service:
         kind = message.get("t")
         if kind in ("sub", "unsub"):
             topics = [str(t) for t in message.get("k") or [] if str(t) in VIEWS]
+            if kind == "sub":
+                print(f"phone: watch subscribes to {len(topics)} topics", flush=True)
             await self.hub.receive(peer, {"type": kind, "topics": topics})
             if kind == "sub":
                 # every snapshot there is went out before this: the face can let go

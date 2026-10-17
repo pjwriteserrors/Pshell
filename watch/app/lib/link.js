@@ -98,10 +98,16 @@ export function createLink(options) {
     try {
       fn(...args)
     } catch (e) {
-      const said = `${where}: ${(e && e.message) || e}`.slice(0, 160)
-      if (session) json({ t: 'error', e: said })
-      else if (errors.length < 5) errors.push(said)
+      say(`${where}: ${(e && e.message) || e}`)
     }
+  }
+
+  // a line for the PC's log, as one small message (0x09): it gets through
+  // where JSON might not, and needs nothing but a session
+  function say(text) {
+    const bytes = P.ascii(String(text).replace(/[^\x20-\x7e]/g, '?').slice(0, 44))
+    if (session) post([0x09].concat(bytes))
+    else if (errors.length < 5) errors.push(bytes)
   }
 
   function later(fn, ms) {
@@ -225,7 +231,13 @@ export function createLink(options) {
           return
         }
         mark('profile')
-        mine.on.charaNotification((uuid, data) => receive(Array.from(new Uint8Array(data))))
+        mine.on.charaNotification((uuid, data) => {
+          try {
+            receive(Array.from(new Uint8Array(data)))
+          } catch (e) {
+            say(`receive: ${(e && e.message) || e}`)
+          }
+        })
         // without this the library's queue waits 5 s for the CCCD write to
         // finish before it sends anything else; it also says when to begin
         mine.on.descWriteComplete(() => {
@@ -337,11 +349,16 @@ export function createLink(options) {
       lastPong = Date.now()
       mark('ready')
       // asked for before the pages hear of it: what they do cannot hold it up
-      const topics = Object.keys(subscribers).filter((t) => subscribers[t].length)
-      if (topics.length) json({ t: 'sub', k: topics })
-      json({ t: 'times', v: VERSION, face: !!options.once, ms: times })
-      errors.forEach((e) => json({ t: 'error', e }))
+      errors.forEach((bytes) => post([0x09].concat(bytes)))
       errors = []
+      const topics = Object.keys(subscribers).filter((t) => subscribers[t].length)
+      try {
+        if (topics.length) json({ t: 'sub', k: topics })
+        json({ t: 'times', v: VERSION, face: !!options.once, ms: times })
+      } catch (e) {
+        say(`sub: ${(e && e.message) || e}`)
+      }
+      say(`v${VERSION} ${options.once ? 'face' : 'app'} ready, ${topics.length} topics, ${queue.length} queued`)
       setStatus('ready')
     } else if (kind === P.PAIRED && pairingSecret) {
       secret = pairingSecret
