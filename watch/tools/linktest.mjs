@@ -1,6 +1,6 @@
 // lib/link.js coming up, against a scripted BLEMaster: straight to the
-// remembered address, a scan when that does not answer, the first write once
-// the notifications are on.
+// remembered address, a scan when that fails, the first write once the
+// notifications are on, and no connection ever left open behind it.
 //
 //   node watch/tools/linktest.mjs
 
@@ -10,13 +10,16 @@ import { register } from 'node:module'
 process.removeAllListeners('warning')
 register('./zos-loader.mjs', import.meta.url)
 const P = await import('../app/lib/protocol.js')
+const { localStorage } = await import('@zos/storage')
 
 const log = []
 let script = {}
+let made = 0
 
 globalThis.__BLEMaster = class {
   constructor() {
-    this.id = log.filter((e) => e[0] === 'new').length
+    this.id = made++
+    this.seen = new Set()
     log.push(['new', this.id])
     const me = this
     this.write = {
@@ -35,21 +38,29 @@ globalThis.__BLEMaster = class {
       },
     }
   }
+  // like easy-ble: a device once per instance
   startScan(cb) {
     log.push(['scan', this.id])
-    setTimeout(() => cb({ dev_name: 'pshell', dev_addr: script.found || 'aa:bb:cc:dd:ee:ff' }), 20)
+    const mac = script.found || 'aa:bb:cc:dd:ee:ff'
+    setTimeout(() => {
+      if (this.seen.has(mac)) return
+      this.seen.add(mac)
+      cb({ dev_name: 'pshell', dev_addr: mac })
+    }, 20)
     return true
   }
   stopScan() {}
   connect(mac, cb) {
+    const n = log.filter((e) => e[0] === 'connect').length
     log.push(['connect', this.id, mac])
-    const answer = script.connect ? script.connect(mac) : true
-    if (answer !== null) setTimeout(() => cb({ connected: answer, status: answer ? 'connected' : 'failed' }), 30)
+    // by the how-manieth connect this is
+    const [ok, after] = script.connect ? script.connect(mac, n) : [true, 30]
+    if (after !== null) setTimeout(() => cb({ connected: ok, status: ok ? 'connected' : 'failed' }), after)
   }
-  disconnect() {}
-  quit() {
-    log.push(['quit', this.id])
+  disconnect() {
+    log.push(['disconnect', this.id])
   }
+  quit() {}
   generateProfileObject() {
     return {}
   }
@@ -63,50 +74,70 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms))
 
 async function run(name, options, setup, check) {
   log.length = 0
+  made = 0
   script = setup
-  const link = createLink({ once: true, secret: '00112233445566778899aabbccddeeff', ...options })
-  const t0 = Date.now()
+  localStorage.removeItem('pcMac')
+  const link = createLink({ once: !setup.app, secret: '00112233445566778899aabbccddeeff', connectAtMost: 300, ...options })
   link.start()
   await wait(setup.wait)
   link.stop()
-  check(log, t0)
+  await wait(setup.after || 0)
+  check(log, link)
   console.log('ok', name)
 }
 
-const kinds = (log) => log.map((e) => e[0])
-const hello = (log) => log.find((e) => e[0] === 'write' && e[2] === P.HELLO)
+const kinds = (log, only) => log.map((e) => e[0]).filter((k) => !only || only.includes(k))
+const hellos = (log) => log.filter((e) => e[0] === 'write' && e[2] === P.HELLO)
+const KNOWN = '11:22:33:44:55:66'
 
-await run('a known PC is reached without a scan, hello right after the CCCD', { mac: '11:22:33:44:55:66' }, { cccd: 40, wait: 700 }, (log, t0) => {
+await run('a known PC is reached without a scan, hello right after the CCCD', { mac: KNOWN }, { cccd: 40, wait: 700 }, (log) => {
   assert.ok(!kinds(log).includes('scan'))
-  assert.deepEqual(log.find((e) => e[0] === 'connect').slice(2), ['11:22:33:44:55:66'])
-  const h = hello(log)
+  assert.equal(log.find((e) => e[0] === 'connect')[2], KNOWN)
+  const h = hellos(log)[0]
   assert.ok(h, 'no hello')
   const cccd = log.find((e) => e[0] === 'cccd')[2]
   assert.ok(h[3] - cccd >= 300 && h[3] - cccd < 500, `hello ${h[3] - cccd} ms after the CCCD`)
 })
 
-await run('no word on the CCCD: hello after 1.5 s all the same', { mac: '11:22:33:44:55:66' }, { wait: 1800 }, (log) => {
-  const h = hello(log)
-  assert.ok(h)
-  assert.ok(h[3] - log.find((e) => e[0] === 'cccd')[2] >= 1500)
-  assert.equal(log.filter((e) => e[0] === 'write').length, 1)
+await run('no word on the CCCD: hello after 1.5 s all the same', { mac: KNOWN }, { wait: 1800 }, (log) => {
+  assert.ok(hellos(log)[0][3] - log.find((e) => e[0] === 'cccd')[2] >= 1500)
+  assert.equal(hellos(log).length, 1)
 })
 
-await run('a remembered address that refuses: scan', { mac: '11:22:33:44:55:66' }, { connect: (mac) => mac !== '11:22:33:44:55:66', found: 'aa:bb:cc:dd:ee:ff', cccd: 10, wait: 600 }, (log) => {
-  assert.deepEqual(kinds(log).filter((k) => k === 'connect' || k === 'scan'), ['connect', 'scan', 'connect'])
+await run('a remembered address that fails: a fresh BLEMaster scans', { mac: KNOWN }, { connect: (mac) => [mac !== KNOWN, 30], cccd: 10, wait: 600 }, (log) => {
+  assert.deepEqual(kinds(log, ['connect', 'scan']), ['connect', 'scan', 'connect'])
+  const scan = log.find((e) => e[0] === 'scan')
+  assert.notEqual(scan[1], log.find((e) => e[0] === 'connect')[1])
   assert.equal(log.filter((e) => e[0] === 'connect')[1][2], 'aa:bb:cc:dd:ee:ff')
-  assert.ok(hello(log))
+  assert.equal(hellos(log).length, 1)
 })
 
-await run('a remembered address that never answers: a fresh BLEMaster scans after 4 s', { mac: '11:22:33:44:55:66' }, { connect: (mac) => (mac === '11:22:33:44:55:66' ? null : true), cccd: 10, wait: 4600 }, (log) => {
-  assert.deepEqual(kinds(log).filter((k) => ['new', 'connect', 'quit', 'scan'].includes(k)).slice(0, 6), ['new', 'connect', 'quit', 'new', 'scan', 'connect'])
-  assert.equal(hello(log)[1], 1)
+await run('a connect that answers late, after another made it: closed', { mac: KNOWN }, { connect: (mac, id) => [true, id === 0 ? 700 : 30], cccd: 10, wait: 1000 }, (log) => {
+  const first = log.find((e) => e[0] === 'connect')[1]
+  assert.equal(hellos(log).length, 1)
+  assert.notEqual(hellos(log)[0][1], first)
+  assert.equal(log.find((e) => e[0] === 'disconnect')[1], first)
 })
 
-const { localStorage } = await import('@zos/storage')
-localStorage.removeItem('pcMac')
+await run('a connect that answers late with nothing else under way: used', { mac: KNOWN }, { app: true, connect: (mac, id) => (id === 0 ? [true, 500] : [false, 30]), cccd: 10, wait: 1100 }, (log) => {
+  const first = log.find((e) => e[0] === 'connect')[1]
+  assert.equal(hellos(log).length, 1)
+  assert.equal(hellos(log)[0][1], first)
+  assert.ok(!log.some((e) => e[0] === 'disconnect' && log.indexOf(e) < log.indexOf(hellos(log)[0])))
+})
+
+await run('stopped while connecting: the connection that comes is closed', { mac: KNOWN }, { connect: () => [true, 200], wait: 50, after: 300 }, (log) => {
+  assert.deepEqual(kinds(log, ['connect', 'disconnect']), ['connect', 'disconnect'])
+})
+
+await run('a scan after a lost connect sees the PC again', {}, { app: true, connect: (mac, id) => [id > 1, 30], cccd: 10, wait: 3200 }, (log) => {
+  assert.ok(kinds(log, ['scan']).length >= 2)
+  assert.ok(kinds(log, ['connect']).length >= 2)
+  assert.equal(hellos(log).length, 1)
+})
+
 await run('nothing remembered: scan first', {}, { cccd: 10, wait: 600 }, (log) => {
-  assert.deepEqual(kinds(log).filter((k) => k === 'connect' || k === 'scan'), ['scan', 'connect'])
-  assert.ok(hello(log))
+  assert.deepEqual(kinds(log, ['connect', 'scan']), ['scan', 'connect'])
+  assert.ok(hellos(log).length)
 })
 process.exit(0)

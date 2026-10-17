@@ -25,13 +25,16 @@ ROOT = "/org/pshell/watch"
 
 
 class Peripheral:
-    """on_write(device, data), on_gone(device) and on_ready(error) are called on
-    the asyncio loop; device is BlueZ's object path of the watch."""
+    """on_write(device, data), on_gone(device), on_come(device) and
+    on_ready(error) are called on the asyncio loop; device is BlueZ's object
+    path of the watch (on_come for every device that connects, and for those
+    connected already when it starts)."""
 
-    def __init__(self, loop, on_write, on_gone, on_ready):
+    def __init__(self, loop, on_write, on_gone, on_ready, on_come=None):
         self.loop = loop
         self.on_write = on_write
         self.on_gone = on_gone
+        self.on_come = on_come or (lambda device: None)
         self.on_ready = on_ready
         self.thread = None
         self.glib_loop = None
@@ -58,6 +61,25 @@ class Peripheral:
         from gi.repository import GLib
 
         GLib.idle_add(self.tx.notify, bytes(data))
+
+    def disconnect(self, device):
+        """Drops a device's connection (one the watch left open and forgot)."""
+        if self.glib_loop is None:
+            return
+        from gi.repository import GLib
+
+        def drop():
+            try:
+                import dbus
+
+                dbus.Interface(dbus.SystemBus().get_object(BLUEZ, device), "org.bluez.Device1").Disconnect(
+                    reply_handler=lambda: None, error_handler=lambda error: None
+                )
+            except Exception:
+                pass
+            return False
+
+        GLib.idle_add(drop)
 
     def name_of(self, device):
         """What the watch calls itself over Bluetooth, for the pairing question."""
@@ -202,8 +224,13 @@ class Peripheral:
         def changed(interface, values, invalidated, path=None):
             if interface == "org.bluez.Device1" and values.get("Connected") is False:
                 self._call(self.on_gone, str(path))
+            elif interface == "org.bluez.Device1" and values.get("Connected") is True:
+                self._call(self.on_come, str(path))
 
         bus.add_signal_receiver(changed, dbus_interface=PROPERTIES, signal_name="PropertiesChanged", path_keyword="path")
+        for path, interfaces in objects.items():
+            if interfaces.get("org.bluez.Device1", {}).get("Connected"):
+                self._call(self.on_come, str(path))
         self.glib_loop = GLib.MainLoop()
 
     def _shutdown(self):
@@ -225,7 +252,7 @@ class Peripheral:
         return False
 
 
-async def start(on_write, on_gone):
+async def start(on_write, on_gone, on_come=None):
     """Starts the peripheral; raises RuntimeError when BlueZ will not have it."""
     loop = asyncio.get_running_loop()
     ready = loop.create_future()
@@ -234,7 +261,7 @@ async def start(on_write, on_gone):
         if not ready.done():
             ready.set_result(error)
 
-    peripheral = Peripheral(loop, on_write, on_gone, on_ready)
+    peripheral = Peripheral(loop, on_write, on_gone, on_ready, on_come)
     peripheral.start()
     error = await asyncio.wait_for(ready, 10)
     if error:

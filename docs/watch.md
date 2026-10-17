@@ -62,12 +62,20 @@ read what the screens show, but cannot act as the watch.
 ## Coming up quickly
 
 The link keeps the PC's address (localStorage, and link.json for the face)
-and connects to it straight away; a scan only follows when that fails or
-gives no answer for 4 s. The app keeps the snapshots its home page had
+and connects to it straight away; a scan only follows when that fails (or
+gives no answer for 15 s). The app keeps the snapshots its home page had
 (cache.json) and shows them at once; the PC sends `{"t":"had"}` after the
 snapshots a subscription asked for, so the face lets go as soon as it has
 them. Once ready the watch sends how long each step took; the daemon logs
 it as `watch app 1.3.0 up: connected=… profile=… notifying=… ready=…`.
+
+Every connection is either used or closed: a connect given up on that
+succeeds later is taken over when nothing else is under way, closed
+otherwise. One left open is the worst case: while it stands the PC does not
+advertise, so no scan finds it, and it outlives the app (even a reinstall).
+The daemon drops a watch's connection that says nothing for 20 s. Each
+attempt uses a new BLEMaster, since easy-ble reports a device only once per
+instance and a second scan on the same one never sees the PC.
 
 The PC advertises every 100–150 ms if BlueZ takes the interval, which it
 does only with `Experimental = true` in /etc/bluetooth/main.conf; otherwise

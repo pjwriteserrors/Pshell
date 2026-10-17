@@ -785,21 +785,58 @@ class Service:
         self.links = {}
         self.asking = None  # the pairing question on screen
         self.asked = []  # when questions were asked, against a flood
+        self.quiet = {}  # device → when it connected or last wrote
+        self.writers = set()  # devices that wrote to us: watches, paired or not
+        self.watchdog = None
 
     async def start(self):
         from . import ble
 
-        self.peripheral = await ble.start(self.on_write, self.on_gone)
+        self.peripheral = await ble.start(self.on_write, self.on_gone, self.on_come)
+        self.watchdog = asyncio.get_running_loop().create_task(self.watch_quiet())
 
     async def stop(self):
+        if self.watchdog:
+            self.watchdog.cancel()
+            self.watchdog = None
         for device in list(self.links):
             self.on_gone(device)
         if self.peripheral:
             self.peripheral.stop()
             self.peripheral = None
 
+    # A watch's app can leave a connection open behind it (one it gave up on,
+    # or quit in the middle of): while it stands the PC does not advertise and
+    # the watch finds it no more, even after a reinstall. A watch that says
+    # nothing for this long is let go; a session pings every 2 s.
+    QUIET = 20
+    QUIET_CHECK = 5
+
+    def is_watch(self, device):
+        name = self.peripheral.name_of(device) if self.peripheral else ""
+        return device in self.writers or any(w.get("name") == name for w in self.watches.list)
+
+    async def watch_quiet(self):
+        while True:
+            await asyncio.sleep(self.QUIET_CHECK)
+            now = time.monotonic()
+            for device, since in list(self.quiet.items()):
+                asking = self.asking is not None and self.asking.device == device
+                if asking or now - since < self.QUIET:
+                    continue
+                del self.quiet[device]
+                if self.is_watch(device):
+                    print(f"phone: a watch connection without word for {self.QUIET} s, dropped", flush=True)
+                    self.on_gone(device)
+                    self.peripheral.disconnect(device)
+
     # called on the loop by the peripheral
+    def on_come(self, device):
+        self.quiet[device] = time.monotonic()
+
     def on_write(self, device, data):
+        self.quiet[device] = time.monotonic()
+        self.writers.add(device)
         link = self.links.get(device)
         if link is None or (data[:1] == b"\x20" and link.state != "new"):
             # a new HELLO starts over: the watch's app was opened again
@@ -809,6 +846,7 @@ class Service:
         self.hub.spawn(link.receive(data))
 
     def on_gone(self, device):
+        self.quiet.pop(device, None)
         link = self.links.pop(device, None)
         if link is None:
             return

@@ -34,7 +34,10 @@ class FakePeripheral:
         self.frames.put_nowait(bytes(data))
 
     def name_of(self, device):
-        return "Test Watch"
+        return "Test Watch" if "watch" in device else "Headphones"
+
+    def disconnect(self, device):
+        self.dropped = getattr(self, "dropped", []) + [device]
 
     def stop(self):
         pass
@@ -264,6 +267,35 @@ class Session(WatchTest):
     async def test_watch_is_not_the_phone_for_calls(self):
         await self.paired()
         self.assertIsNone(self.hub.phone())
+
+    async def test_a_silent_watch_connection_is_dropped(self):
+        await self.paired()
+        self.service.QUIET, self.service.QUIET_CHECK = 0.15, 0.05
+        dog = asyncio.get_running_loop().create_task(self.service.watch_quiet())
+        try:
+            # left open by the watch, after a reinstall: no word, but its name is known
+            self.service.on_come("/dev/watch2")
+            # someone else's device, connected for its own reasons
+            self.service.on_come("/dev/headphones")
+            await asyncio.sleep(0.4)
+        finally:
+            dog.cancel()
+        # the paired watch says nothing either (FakeWatch pings only when told)
+        self.assertIn("/dev/watch2", self.service.peripheral.dropped)
+        self.assertNotIn("/dev/headphones", self.service.peripheral.dropped)
+
+    async def test_a_talking_watch_is_kept(self):
+        w = await self.paired()
+        self.service.QUIET, self.service.QUIET_CHECK = 0.3, 0.05
+        dog = asyncio.get_running_loop().create_task(self.service.watch_quiet())
+        try:
+            for seq in range(8):
+                await w.send(bytes([0x02, seq, 0x00]))
+                await asyncio.sleep(0.08)
+        finally:
+            dog.cancel()
+        self.assertNotIn("/dev/watch", getattr(self.service.peripheral, "dropped", []))
+        self.assertIn("/dev/watch", self.service.links)
 
     async def test_gone_detaches(self):
         await self.paired()

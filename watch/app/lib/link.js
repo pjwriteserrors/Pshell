@@ -30,14 +30,12 @@ const TICK = 30
 // a moment after the notifications are on, or this long when no word comes
 const SETTLE = 300
 const SETTLE_AT_MOST = 1500
-// a remembered address that does not answer: scan instead
-const DIRECT = 4000
+// a connect the watch never answers (it normally gives up by itself)
+const CONNECT_AT_MOST = 15000
 
 export function createLink(options) {
   options = options || {}
   let ble = new BLEMaster()
-  // a callback from a BLEMaster given up on (a direct connect that never answered)
-  let generation = 0
   let parts = P.assembler()
   const listeners = { status: [], had: [] }
   const subscribers = {}
@@ -64,7 +62,8 @@ export function createLink(options) {
   let lastPong = 0
   let closing = false
   let flushTimer = null
-  let direct = null
+  // the connect under way, if any
+  let attempt = null
   let settled = null
   let begun = false
   // when each step was reached, sent to the PC's log once ready
@@ -109,36 +108,33 @@ export function createLink(options) {
     if (!(step in times)) times[step] = Date.now() - times.start
   }
 
-  // the address from last time first, a scan when it does not answer
+  // a BLEMaster per attempt: easy-ble reports a device only once per
+  // instance, so a second scan on the same one never sees the PC again
+  function fresh() {
+    try {
+      ble.stopScan()
+    } catch (e) {}
+    ble = new BLEMaster()
+  }
+
+  // the address from last time first, a scan when that fails
   function find() {
-    if (closing || connected) return
+    if (closing || connected || attempt) return
     times = { start: Date.now() }
+    fresh()
     if (!mac) return scan()
-    setStatus('connecting')
-    const mine = generation
-    direct = later(() => {
-      direct = null
-      if (mine !== generation || connected || closing) return
-      // the stuck attempt belongs to that BLEMaster: start a fresh one
-      generation++
-      try {
-        ble.quit()
-      } catch (e) {}
-      ble = new BLEMaster()
-      times.direct = 'timeout'
-      scan()
-    }, DIRECT)
     connect(true)
   }
 
   function scan() {
-    if (closing || connected) return
+    if (closing || connected || attempt) return
     setStatus('searching')
     mark('scan')
-    const ok = ble.startScan(
+    const mine = ble
+    const ok = mine.startScan(
       (result) => {
-        if (result.dev_name !== NAME) return
-        ble.stopScan()
+        if (result.dev_name !== NAME || mine !== ble || attempt || connected) return
+        mine.stopScan()
         mark('found')
         if (result.dev_addr !== mac) {
           mac = result.dev_addr
@@ -152,56 +148,85 @@ export function createLink(options) {
       {
         duration: options.once ? 8000 : 20000,
         on_duration: () => {
-          if (connected || closing) return
+          if (mine !== ble || connected || closing || attempt) return
           if (options.once) return setStatus('off', 'PC nicht gefunden')
           setStatus('searching', 'PC nicht gefunden')
-          retry = later(scan, 2000)
+          retry = later(find, 1000)
         },
       },
     )
     if (!ok) setStatus('off', 'Bluetooth geht nicht')
   }
 
+  // one connect at a time, and every one either used or closed: one left open
+  // keeps the PC from advertising, and no scan finds it any more
   function connect(straight) {
     setStatus('connecting')
-    const mine = generation
-    ble.connect(mac, (result) => {
-      if (mine !== generation || closing) return
-      if (direct) {
-        clearTimeout(direct)
-        direct = null
-      }
+    const mine = ble
+    const id = (attempt = {})
+    // the watch gives up on its own; this is only for one that never answers
+    const guard = later(() => {
+      if (attempt !== id) return
+      attempt = null
+      times.direct = 'no answer'
+      fresh()
+      if (straight) scan()
+      else lost()
+    }, options.connectAtMost || CONNECT_AT_MOST)
+    mine.connect(mac, (result) => {
+      clearTimeout(guard)
+      const ours = attempt === id
+      if (ours) attempt = null
       if (!result.connected) {
+        if (!ours || closing) return
         // the remembered address failed: look for the PC
         if (straight) {
           times.direct = result.status
+          fresh()
           return scan()
         }
         lost()
         return
       }
+      if (closing || connected || (!ours && mine !== ble && !adopt(mine))) {
+        try {
+          mine.disconnect()
+        } catch (e) {}
+        return
+      }
       connected = true
       mark('connected')
-      const profile = ble.generateProfileObject({ [SERVICE]: { [RX]: [], [TX]: ['2902'] } })
+      const profile = mine.generateProfileObject({ [SERVICE]: { [RX]: [], [TX]: ['2902'] } })
       profile.pair = false
-      ble.startListener(profile, (response) => {
-        if (mine !== generation) return
+      mine.startListener(profile, (response) => {
+        if (mine !== ble || !connected) return
         if (!response.success) {
           setStatus('connecting', response.message)
           return
         }
         mark('profile')
-        ble.on.charaNotification((uuid, data) => receive(Array.from(new Uint8Array(data))))
+        mine.on.charaNotification((uuid, data) => receive(Array.from(new Uint8Array(data))))
         // without this the library's queue waits 5 s for the CCCD write to
         // finish before it sends anything else; it also says when to begin
-        ble.on.descWriteComplete(() => {
+        mine.on.descWriteComplete(() => {
           mark('notifying')
           settle(SETTLE)
         })
-        ble.write.enableCharaNotifications(TX, true)
+        mine.write.enableCharaNotifications(TX, true)
         settle(SETTLE_AT_MOST)
       })
     })
+  }
+
+  // a connect given up on that made it after all, with nothing else under way: use it
+  function adopt(late) {
+    if (attempt) return false
+    try {
+      ble.stopScan()
+    } catch (e) {}
+    ble = late
+    if (retry) clearTimeout(retry)
+    return true
   }
 
   function settle(ms) {
