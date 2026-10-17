@@ -438,6 +438,7 @@ function save() {
   if (Date.now() - lastSave < 20000) return
   lastSave = Date.now()
   writeJson('pc.json', summary((topic) => U.link().state(topic), U.link().name))
+  U.link().keepCache(TOPICS)
 }
 
 Page({
@@ -445,7 +446,7 @@ Page({
     U.themed()
     s = U.scope()
     made = U.group()
-    head = U.header(U.link().name || 'PShell', '')
+    head = U.header(U.link().name || 'PShell', '', true)
     s.keep(head.off)
     paintHeader()
     TOPICS.forEach((topic) =>

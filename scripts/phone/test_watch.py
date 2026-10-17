@@ -362,6 +362,8 @@ class JavaScript(WatchTest):
         await self.order(op="json", data={"t": "sub", "k": ["sound"]})
         state = await self.pump("json")
         self.assertEqual(state["json"], {"t": "s", "k": "sound", "d": {"volume": 50, "muted": False, "sink": "Kopfhörer äöü"}})
+        # then the word that every snapshot went out, for the face to let go
+        self.assertEqual((await self.pump("json"))["json"], {"t": "had", "k": ["sound"]})
 
         await self.order(op="json", data={"t": "call", "i": 9, "k": "sound", "a": "adjust", "g": {"delta": 0.05}})
         result = await self.pump("json")
@@ -374,6 +376,17 @@ class JavaScript(WatchTest):
 
 
 class Packages(unittest.TestCase):
+    def test_link_comes_up_quickly(self):
+        # lib/link.js against a scripted BLEMaster (watch/tools/linktest.mjs)
+        import shutil
+        import subprocess
+
+        if not shutil.which("node"):
+            self.skipTest("no node")
+        root = Path(__file__).resolve().parents[2]
+        run = subprocess.run(["node", str(root / "watch/tools/linktest.mjs")], capture_output=True, text=True, timeout=60)
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+
     def test_versions_agree(self):
         # the version the app and the face show is the one the watch installed
         root = Path(__file__).resolve().parents[2] / "watch"

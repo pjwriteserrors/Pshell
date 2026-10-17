@@ -59,12 +59,28 @@ session key; every frame after that carries a counter and a 4-byte tag. The
 link is authenticated, not encrypted: someone nearby with the right radio can
 read what the screens show, but cannot act as the watch.
 
+## Coming up quickly
+
+The link keeps the PC's address (localStorage, and link.json for the face)
+and connects to it straight away; a scan only follows when that fails or
+gives no answer for 4 s. The app keeps the snapshots its home page had
+(cache.json) and shows them at once; the PC sends `{"t":"had"}` after the
+snapshots a subscription asked for, so the face lets go as soon as it has
+them. Once ready the watch sends how long each step took; the daemon logs
+it as `watch app 1.3.0 up: connected=… profile=… notifying=… ready=…`.
+
+The PC advertises every 100–150 ms if BlueZ takes the interval, which it
+does only with `Experimental = true` in /etc/bluetooth/main.conf; otherwise
+the kernel's 1.28 s, which the watch waits for before it can connect.
+
 ## What the watch does not like
 
 Found with the probe (watch/probe), each costing a reboot of the watch:
 
-- writes while the connection is still being set up: the app waits 1.5 s
-  after subscribing to notifications before it says anything;
+- writes while the connection is still being set up: the app says nothing
+  until the watch confirms the notifications are on (and 300 ms more), or
+  1.5 s when no confirmation comes. easy-ble's write queue waits for that
+  confirmation too, up to 5 s, unless `on.descWriteComplete` is listened to;
 - the app writes at most 33 frames a second, of at most 60 bytes;
 - coordinates are real pixels: without the platform's design width `px()`
   assumes 480.

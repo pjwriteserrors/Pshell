@@ -169,7 +169,16 @@ class Peripheral:
 
             @dbus.service.method(PROPERTIES, in_signature="s", out_signature="a{sv}")
             def GetAll(self, interface):
-                return {"Type": "peripheral", "ServiceUUIDs": dbus.Array([SERVICE], signature="s"), "LocalName": NAME, "Discoverable": True}
+                # every 100 ms rather than the kernel's 1.28 s: the watch finds and
+                # reaches the PC sooner (BlueZ only takes it with Experimental = true)
+                return {
+                    "Type": "peripheral",
+                    "ServiceUUIDs": dbus.Array([SERVICE], signature="s"),
+                    "LocalName": NAME,
+                    "Discoverable": True,
+                    "MinInterval": dbus.UInt32(100),
+                    "MaxInterval": dbus.UInt32(150),
+                }
 
             @dbus.service.method("org.bluez.LEAdvertisement1")
             def Release(self):

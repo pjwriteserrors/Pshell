@@ -5,13 +5,18 @@
 //
 // The face makes one too, with `once`: it connects when the face comes on,
 // takes the snapshots it wants and lets go (createLink({ once, secret })).
+//
+// Quick to come up: the PC's address is kept from the last time, so the link
+// connects straight away and only scans when that fails; the snapshots it
+// had are kept too (cache.json), so a page shows them before the PC answers.
 
 import { BLEMaster } from '@silver-zepp/easy-ble'
 import { localStorage } from '@zos/storage'
 import { Accelerometer } from '@zos/sensor'
 import * as P from './protocol.js'
 import { sha256 } from './sha256.js'
-import { writeJson } from './store.js'
+import { writeJson, readJson } from './store.js'
+import { VERSION } from './version.js'
 
 const NAME = 'pshell'
 const SERVICE = '7A50'
@@ -21,14 +26,20 @@ const TX = '7A52'
 const FRAME = 60
 const ROOM = FRAME - 14
 const TICK = 30
-// writes while the connection is being set up hung the watch (watch/probe)
-const SETTLE = 1500
+// writes while the connection is being set up hung the watch (watch/probe):
+// a moment after the notifications are on, or this long when no word comes
+const SETTLE = 300
+const SETTLE_AT_MOST = 1500
+// a remembered address that does not answer: scan instead
+const DIRECT = 4000
 
 export function createLink(options) {
   options = options || {}
-  const ble = new BLEMaster()
+  let ble = new BLEMaster()
+  // a callback from a BLEMaster given up on (a direct connect that never answered)
+  let generation = 0
   let parts = P.assembler()
-  const listeners = { status: [] }
+  const listeners = { status: [], had: [] }
   const subscribers = {}
   const cache = {}
   const calls = {}
@@ -53,15 +64,25 @@ export function createLink(options) {
   let lastPong = 0
   let closing = false
   let flushTimer = null
+  let direct = null
+  let settled = null
+  let begun = false
+  // when each step was reached, sent to the PC's log once ready
+  let times = {}
   const self = { rtt: 0, code: '', name: '' }
 
   try {
     const stored = options.secret || localStorage.getItem('secret')
     if (stored) secret = P.fromHex(stored)
     self.name = options.name || localStorage.getItem('pcName') || ''
+    mac = options.mac || localStorage.getItem('pcMac') || ''
   } catch (e) {}
   // the face signs in with the app's secret: it reads this file with the app's id
-  if (secret && !options.once) writeJson('link.json', { secret: P.hex(secret), name: self.name })
+  function keep() {
+    if (secret && !options.once) writeJson('link.json', { secret: P.hex(secret), name: self.name, mac })
+  }
+  keep()
+  if (!options.once) Object.assign(cache, readJson('cache.json') || {})
 
   function setStatus(next, text) {
     status = next
@@ -84,15 +105,49 @@ export function createLink(options) {
   }
 
   // ── finding and connecting ──────────────────────────────────────────────
+  function mark(step) {
+    if (!(step in times)) times[step] = Date.now() - times.start
+  }
+
+  // the address from last time first, a scan when it does not answer
+  function find() {
+    if (closing || connected) return
+    times = { start: Date.now() }
+    if (!mac) return scan()
+    setStatus('connecting')
+    const mine = generation
+    direct = later(() => {
+      direct = null
+      if (mine !== generation || connected || closing) return
+      // the stuck attempt belongs to that BLEMaster: start a fresh one
+      generation++
+      try {
+        ble.quit()
+      } catch (e) {}
+      ble = new BLEMaster()
+      times.direct = 'timeout'
+      scan()
+    }, DIRECT)
+    connect(true)
+  }
+
   function scan() {
     if (closing || connected) return
     setStatus('searching')
+    mark('scan')
     const ok = ble.startScan(
       (result) => {
         if (result.dev_name !== NAME) return
         ble.stopScan()
-        mac = result.dev_addr
-        connect()
+        mark('found')
+        if (result.dev_addr !== mac) {
+          mac = result.dev_addr
+          try {
+            localStorage.setItem('pcMac', mac)
+          } catch (e) {}
+          keep()
+        }
+        connect(false)
       },
       {
         duration: options.once ? 8000 : 20000,
@@ -100,38 +155,69 @@ export function createLink(options) {
           if (connected || closing) return
           if (options.once) return setStatus('off', 'PC nicht gefunden')
           setStatus('searching', 'PC nicht gefunden')
-          retry = later(scan, 5000)
+          retry = later(scan, 2000)
         },
       },
     )
     if (!ok) setStatus('off', 'Bluetooth geht nicht')
   }
 
-  function connect() {
+  function connect(straight) {
     setStatus('connecting')
+    const mine = generation
     ble.connect(mac, (result) => {
+      if (mine !== generation || closing) return
+      if (direct) {
+        clearTimeout(direct)
+        direct = null
+      }
       if (!result.connected) {
+        // the remembered address failed: look for the PC
+        if (straight) {
+          times.direct = result.status
+          return scan()
+        }
         lost()
         return
       }
       connected = true
+      mark('connected')
       const profile = ble.generateProfileObject({ [SERVICE]: { [RX]: [], [TX]: ['2902'] } })
       profile.pair = false
       ble.startListener(profile, (response) => {
+        if (mine !== generation) return
         if (!response.success) {
           setStatus('connecting', response.message)
           return
         }
+        mark('profile')
         ble.on.charaNotification((uuid, data) => receive(Array.from(new Uint8Array(data))))
+        // without this the library's queue waits 5 s for the CCCD write to
+        // finish before it sends anything else; it also says when to begin
+        ble.on.descWriteComplete(() => {
+          mark('notifying')
+          settle(SETTLE)
+        })
         ble.write.enableCharaNotifications(TX, true)
-        later(begin, SETTLE)
+        settle(SETTLE_AT_MOST)
       })
     })
+  }
+
+  function settle(ms) {
+    if (settled) clearTimeout(settled)
+    settled = later(() => {
+      settled = null
+      begin()
+    }, ms)
   }
 
   function lost() {
     const was = connected
     connected = false
+    begun = false
+    if (settled) clearTimeout(settled)
+    settled = null
     session = null
     queue = []
     parts = P.assembler()
@@ -143,12 +229,13 @@ export function createLink(options) {
     if (closing) return
     if (options.once) return setStatus('off', 'Verbindung weg')
     setStatus('searching', was ? 'Verbindung weg' : '')
-    retry = later(scan, 2000)
+    retry = later(find, was ? 500 : 2000)
   }
 
   // ── signing in ───────────────────────────────────────────────────────────
   function begin() {
-    if (!connected) return
+    if (!connected || begun) return
+    begun = true
     if (pairingSecret) {
       write(P.pair(pairingSecret))
       setStatus('pairing')
@@ -185,9 +272,11 @@ export function createLink(options) {
       session = P.session(answer.session)
       answer = null
       lastPong = Date.now()
+      mark('ready')
       setStatus('ready')
       const topics = Object.keys(subscribers).filter((t) => subscribers[t].length)
       if (topics.length) json({ t: 'sub', k: topics })
+      json({ t: 'times', v: VERSION, face: !!options.once, ms: times })
     } else if (kind === P.PAIRED && pairingSecret) {
       secret = pairingSecret
       pairingSecret = null
@@ -195,7 +284,7 @@ export function createLink(options) {
       try {
         localStorage.setItem('secret', P.hex(secret))
       } catch (e) {}
-      writeJson('link.json', { secret: P.hex(secret), name: self.name })
+      keep()
       sayHello()
     } else if (kind === P.REFUSED) {
       const reason = P.REASONS[frame[1]] || 'refused'
@@ -244,6 +333,8 @@ export function createLink(options) {
         } catch (e) {}
       }
       ;(subscribers[message.k] || []).forEach((fn) => fn(message.d))
+    } else if (message.t === 'had') {
+      listeners.had.forEach((fn) => fn(message.k || []))
     } else if (message.t === 'r') {
       const call = calls[message.i]
       if (!call) return
@@ -336,7 +427,15 @@ export function createLink(options) {
         flushTimer = setInterval(flush, TICK)
         timers.push(setInterval(everyTwoSeconds, 2000))
       }
-      scan()
+      find()
+    },
+    // what the pages saw, for the next start (written now and then by a page)
+    keepCache(topics) {
+      const out = {}
+      topics.forEach((t) => {
+        if (t in cache) out[t] = cache[t]
+      })
+      writeJson('cache.json', out)
     },
     stop() {
       closing = true
@@ -366,6 +465,10 @@ export function createLink(options) {
     onStatus(fn) {
       listeners.status.push(fn)
       return () => (listeners.status = listeners.status.filter((f) => f !== fn))
+    },
+    // fn(topics) when the PC has sent every snapshot a subscription asked for
+    onHad(fn) {
+      listeners.had.push(fn)
     },
     // fn(data) now with what is known, and with every new snapshot
     subscribe(topic, fn) {
@@ -407,8 +510,10 @@ export function createLink(options) {
     pair() {
       pairingSecret = randomBytes(16)
       self.code = P.pairingCode(pairingSecret)
-      if (connected) begin()
-      else scan()
+      if (connected) {
+        begun = false
+        begin()
+      } else find()
       setStatus('pairing')
       return self.code
     },

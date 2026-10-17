@@ -9,6 +9,8 @@ import { createWidget, deleteWidget, widget, prop, align, text_style, event } fr
 import { push } from '@zos/router'
 import { localStorage } from '@zos/storage'
 import { I } from './icons.js'
+import { VERSION } from './version.js'
+
 
 export const W = 390
 export const H = 450
@@ -197,7 +199,8 @@ export function ring(cx, cy, r, width, fill) {
 }
 
 // the page's title, its line, and a dot for the link to the PC
-export function header(title, line) {
+// version: the build is named while there is no line of the page's own
+export function header(title, line, version) {
   const l = link()
   const t = text(M + 6, 18, W - 2 * M - 40, 38, title, { font: F.bold, size: 30 })
   const sub = text(M + 6, 54, W - 2 * M - 12, 24, line || '', { color: T.muted, size: 17 })
@@ -206,7 +209,8 @@ export function header(title, line) {
   let own = line || ''
   const paint = (s, detail) => {
     dot.setProperty(prop.COLOR, s === 'ready' ? T.success : s === 'unpaired' || s === 'refused' ? T.danger : T.warning)
-    sub.setProperty(prop.TEXT, s === 'ready' ? own : detail || words[s] || s)
+    const said = detail || words[s] || s
+    sub.setProperty(prop.TEXT, s === 'ready' ? own : version ? `${said} · v${VERSION}` : said)
   }
   const now = l.status()
   paint(now.status, now.detail)

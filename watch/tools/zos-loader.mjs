@@ -33,7 +33,8 @@ const MODULES = {
     export function renameSync() { return 0 }`,
   '@zos/utils': `export const px = (v) => v`,
   '@zos/device': `export const getDeviceInfo = () => ({ width: 390, height: 450 })`,
-  '@silver-zepp/easy-ble': `export class BLEMaster { constructor() { this.write = { characteristic() {}, enableCharaNotifications() {} }; this.on = { charaNotification() {}, charaWriteComplete() {} } } startScan() { return true } stopScan() {} connect() {} disconnect() {} quit() {} generateProfileObject() { return {} } startListener() {} }`,
+  // linktest.mjs puts its own in globalThis.__BLEMaster
+  '@silver-zepp/easy-ble': `export class BLEMaster { constructor() { if (globalThis.__BLEMaster) return new globalThis.__BLEMaster(); this.write = { characteristic() {}, enableCharaNotifications() {} }; this.on = { charaNotification() {}, charaWriteComplete() {} } } startScan() { return true } stopScan() {} connect() {} disconnect() {} quit() {} generateProfileObject() { return {} } startListener() {} }`,
 }
 
 export async function resolve(specifier, context, next) {

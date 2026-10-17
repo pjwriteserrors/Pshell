@@ -29,8 +29,10 @@ Messages inside a session frame are [length, type, …]:
     0x10 json  message:u8 part:u8 last:u8 bytes…  (a JSON message in parts)
 JSON from the watch: {"t":"sub"|"unsub","k":[topics]}, {"t":"call","i":id,
 "k":topic,"a":action,"g":args}, {"t":"again"} (a part went missing: send the
-snapshots again). To the watch: {"t":"s","k":topic,"d":view},
-{"t":"r","i":id,"ok":bool,"d":data|"e":message}.
+snapshots again), {"t":"times","v":version,"face":bool,"ms":{step:ms}} (how
+long it took to come up, for the log). To the watch: {"t":"s","k":topic,"d":view},
+{"t":"r","i":id,"ok":bool,"d":data|"e":message}, {"t":"had","k":topics} (after
+the snapshots a "sub" asked for).
 
 The link is authenticated, not encrypted: someone listening nearby with the
 right radio can read what the screen shows, but cannot act as the watch.
@@ -832,6 +834,15 @@ class Service:
         if kind in ("sub", "unsub"):
             topics = [str(t) for t in message.get("k") or [] if str(t) in VIEWS]
             await self.hub.receive(peer, {"type": kind, "topics": topics})
+            if kind == "sub":
+                # every snapshot there is went out before this: the face can let go
+                link.send_json({"t": "had", "k": topics})
+        elif kind == "times":
+            # how long the watch took to come up, step by step (ms since it started)
+            steps = message.get("ms") if isinstance(message.get("ms"), dict) else {}
+            line = " ".join(f"{clip(str(k), 12)}={clip(str(v), 12)}" for k, v in list(steps.items())[:10] if k != "start")
+            who = "face" if message.get("face") else "app"
+            print(f"phone: watch {who} {clip(str(message.get('v', '?')), 12)} up: {line}", flush=True)
         elif kind == "again":
             for topic in list(peer.subs):
                 await self.hub.snapshot(peer, topic)

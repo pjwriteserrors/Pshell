@@ -19,6 +19,8 @@ const link = {
   status: () => ({ status: fixture.status || 'ready', detail: fixture.detail || '' }),
   paired: () => fixture.paired !== false,
   onStatus: () => () => {},
+  onHad: () => {},
+  keepCache: () => {},
   subscribe(topic, fn) {
     if (topic in state) fn(state[topic])
     return () => {}

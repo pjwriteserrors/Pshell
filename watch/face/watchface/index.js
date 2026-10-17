@@ -165,24 +165,27 @@ function fetch() {
     } catch (e) {}
   }
   try {
-    link = createLink({ once: true, secret: key.secret, name: key.name })
+    link = createLink({ once: true, secret: key.secret, name: key.name, mac: key.mac })
   } catch (e) {
     return
   }
   fetching = link
+  // done once the PC has sent what it has, or after GATHER at the latest
+  const take = () => {
+    if (fetching !== link) return
+    const data = summary((topic) => link.state(topic), key.name)
+    try {
+      localStorage.setItem('pc', JSON.stringify(data))
+    } catch (e) {}
+    finish()
+    paint()
+  }
   TOPICS.forEach((topic) => link.subscribe(topic, () => {}))
+  // the PC says when every snapshot there is has gone out
+  link.onHad(() => setTimeout(take, 100))
   link.onStatus((status) => {
-    if (status === 'ready') {
-      setTimeout(() => {
-        if (fetching !== link) return
-        const data = summary((topic) => link.state(topic), key.name)
-        try {
-          localStorage.setItem('pc', JSON.stringify(data))
-        } catch (e) {}
-        finish()
-        paint()
-      }, GATHER)
-    } else if (status === 'off' || status === 'unpaired' || status === 'refused') finish()
+    if (status === 'ready') setTimeout(take, GATHER)
+    else if (status === 'off' || status === 'unpaired' || status === 'refused') finish()
   })
   // never longer than this, whatever happens
   setTimeout(finish, 25000)
