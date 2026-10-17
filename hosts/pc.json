@@ -11,7 +11,8 @@
 		"haptics": true,
 		"mouse": true,
 		"vm-launcher": true,
-		"games": true
+		"games": true,
+		"watch": true
 	},
 	"themeHooks": [
 		"sddm",

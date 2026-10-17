@@ -132,6 +132,7 @@
 	{ "id": "phone-mirror", "name": "Notifications on the phone", "category": "Phone", "requires": ["phone", "notifications"], "icon": "cellphone" },
 	{ "id": "phone-telephony", "name": "Calls and SMS", "category": "Phone", "requires": ["phone"], "icon": "cellphone" },
 	{ "id": "phone-touchpad", "name": "Touchpad", "category": "Phone", "requires": ["phone"], "icon": "mouse" },
+	{ "id": "watch", "name": "Watch", "category": "Phone", "default": false, "requires": ["phone"], "icon": "watch" },
 	{ "id": "phone-keyboard", "name": "Keyboard", "category": "Phone", "requires": ["phone"], "icon": "cellphone" },
 	{ "id": "phone-commands", "name": "Commands", "category": "Phone", "requires": ["phone"], "icon": "cellphone" },
 	{ "id": "phone-presence", "name": "Presence", "category": "Phone", "default": false, "requires": ["phone"], "icon": "cellphone" },
