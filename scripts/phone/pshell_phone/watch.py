@@ -33,7 +33,8 @@ JSON from the watch: {"t":"sub"|"unsub","k":[topics]}, {"t":"call","i":id,
 "k":topic,"a":action,"g":args}, {"t":"again"} (a part went missing: send the
 snapshots again), {"t":"times","v":version,"face":bool,"ms":{step:ms}} (how
 long it took to come up, for the log), {"t":"error","e":text} (a page's
-mistake, for the log). To the watch: {"t":"s","k":topic,"d":view},
+mistake, for the log), {"t":"health","d":…} (what the watch measured,
+pshell_phone/health.py; answered by {"t":"got","k":"health"}). To the watch: {"t":"s","k":topic,"d":view},
 {"t":"r","i":id,"ok":bool,"d":data|"e":message}, {"t":"had","k":topics} (after
 the snapshots a "sub" asked for).
 
@@ -51,6 +52,7 @@ import struct
 import time
 
 from . import config
+from .health import Health
 from .hub import Peer
 
 VERSION = 1
@@ -740,6 +742,7 @@ class Link:
             try:
                 pointer.open()
                 self.pointer = pointer
+                self.service.hub.spawn(self.service.publish())
             except Exception as error:
                 print(f"phone: no mouse for the watch: {error}", flush=True)
         return self.pointer
@@ -811,12 +814,26 @@ class Service:
         self.quiet = {}  # device → when it connected or last wrote
         self.writers = set()  # devices that wrote to us: watches, paired or not
         self.watchdog = None
+        self.health = Health()
 
     async def start(self):
         from . import ble
 
         self.peripheral = await ble.start(self.on_write, self.on_gone, self.on_come)
         self.watchdog = asyncio.get_running_loop().create_task(self.watch_quiet())
+        await self.publish()
+
+    async def publish(self):
+        """The topic "watch": what the watch measured, and whether it is on the link."""
+        sessions = [link for link in self.links.values() if link.peer is not None]
+        here = sessions[-1] if sessions else None
+        state = {
+            "paired": [w["name"] for w in self.watches.list],
+            "connected": here is not None,
+            "name": here.entry["name"] if here else (self.watches.list[-1]["name"] if self.watches.list else ""),
+            "mouse": bool(here and here.pointer),
+        }
+        await self.hub.publish("watch", self.health.view(state))
 
     async def stop(self):
         if self.watchdog:
@@ -881,6 +898,7 @@ class Service:
         if link.peer is not None:
             peer, link.peer = link.peer, None
             self.hub.spawn(self.hub.detach(peer))
+            self.hub.spawn(self.publish())
 
     def forget(self, device):
         self.on_gone(device)
@@ -890,6 +908,7 @@ class Service:
         link.peer = WatchPeer(link, link.entry)
         await self.hub.attach(link.peer)
         print(f"phone: watch {link.entry['name']} connected (mtu {link.mtu or '?'})", flush=True)
+        await self.publish()
 
     async def json(self, link, message):
         peer = link.peer
@@ -910,6 +929,13 @@ class Service:
             line = " ".join(f"{clip(str(k), 12)}={clip(str(v), 12)}" for k, v in list(steps.items())[:10] if k != "start")
             who = "face" if message.get("face") else "app"
             print(f"phone: watch {who} {clip(str(message.get('v', '?')), 12)} up: {line}", flush=True)
+        elif kind == "health":
+            # the face's handover: kept, answered, shown
+            if self.health.add(message.get("d")):
+                link.send_json({"t": "got", "k": "health"})
+                night = self.health.view()["nights"][-1:] or [{}]
+                print(f"phone: watch health synced (last night {night[0].get('total', 0)} min)", flush=True)
+                await self.publish()
         elif kind == "error":
             print(f"phone: watch error: {clip(str(message.get('e', '')), 160)}", flush=True)
         elif kind == "again":

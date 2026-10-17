@@ -34,6 +34,13 @@
 			],
 			"local": true
 		},
+		"watch": {
+			"owner": "daemon",
+			"plugins": [
+				"watch"
+			],
+			"local": true
+		},
 		"pc": {
 			"owner": "daemon",
 			"plugins": [

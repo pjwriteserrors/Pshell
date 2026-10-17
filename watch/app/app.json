@@ -10,7 +10,7 @@
     },
     "icon": "icon.png",
     "vender": "pshell",
-    "description": "The shell on the wrist: mouse, media, commands, agents, the PC"
+    "description": "The PC's mouse on the wrist: a trackpad, a scroll strip and the air mouse"
   },
   "permissions": [
     "device:os.ble",
@@ -30,11 +30,8 @@
       "module": {
         "page": {
           "pages": [
-            "page/index",
-            "page/pair",
             "page/mouse",
-            "page/media",
-            "page/detail"
+            "page/pair"
           ]
         }
       },

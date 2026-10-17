@@ -794,6 +794,18 @@ Scope {
 	}
 
 	IpcHandler {
+		target: "watch"
+		enabled: Plugins.on("watch")
+
+		function toggle(): void {
+			root.drawerOnFocused("watch");
+		}
+		function open(): void {
+			Popups.withFocusedScreen(screen => Popups.open("watch", screen));
+		}
+	}
+
+	IpcHandler {
 		target: "screentime"
 		enabled: Plugins.on("screentime")
 

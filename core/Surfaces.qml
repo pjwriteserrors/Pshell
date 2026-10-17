@@ -114,6 +114,12 @@ Scope {
 	}
 
 	LazyLoader {
+		active: Plugins.on("watch")
+
+		WatchPanel {}
+	}
+
+	LazyLoader {
 		active: Plugins.on("printer")
 
 		PrinterPanel {}

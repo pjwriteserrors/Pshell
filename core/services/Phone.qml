@@ -41,6 +41,8 @@ Singleton {
 	property var pcs: ({ devices: [], nearby: [], transfers: [] })
 	// mouse and keyboard across PCs (Kvm.qml): { edges, hold, keyboard, mode, pc, name, strips }
 	property var kvm: ({ edges: [], strips: [], mode: "local" })
+	// the watch's health and link (Watch.qml): { link, nights, days, today, synced, battery }
+	property var watch: ({})
 	// device id → the phone's own topics: { "phone.status": { battery, … }, … }
 	property var remote: ({})
 
@@ -323,6 +325,8 @@ Singleton {
 				root.pcs = message.data || { devices: [], nearby: [], transfers: [] };
 			} else if (message.topic === "kvm") {
 				root.kvm = message.data || { edges: [], strips: [], mode: "local" };
+			} else if (message.topic === "watch") {
+				root.watch = message.data || {};
 			}
 			break;
 		case "event":

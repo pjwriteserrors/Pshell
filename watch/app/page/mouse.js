@@ -1,7 +1,8 @@
-// The mouse: a trackpad with a scroll strip on its right, and the air mouse
-// (the gyroscope) switched by a short press of a side key. Drag moves, a tap
-// clicks, a finger held still for LONG ms right-clicks. Above and below the
-// two surfaces the page scrolls as usual.
+// The app is the mouse: a trackpad with a scroll strip on its right, and the
+// air mouse (the gyroscope) switched by a short press of a side key. Drag
+// moves, a tap clicks, a finger held still for LONG ms right-clicks. Above
+// and below the two surfaces the page scrolls as usual. Not paired yet, the
+// line under the pad is the way to pairing.
 
 import { createWidget, widget, event } from '@zos/ui'
 import { Gyroscope, FREQ_MODE_HIGH } from '@zos/sensor'
@@ -117,7 +118,16 @@ Page({
     // nothing over the surfaces: a widget on top would take the touch
     ui.airDot = U.circle(M + 14, PAD.y + PAD.h + 25, 5, T.faint)
     ui.air = U.text(M + 28, PAD.y + PAD.h + 10, W - 2 * M - 28, 30, '', { size: 17 })
+    ui.pair = U.button(M + 40, PAD.y + PAD.h + 4, W - 2 * M - 80, 44, 'Mit dem PC koppeln', () => U.go('pair'), { fill: T.primary, press: T.primaryContainer, color: T.onPrimary, font: F.bold, size: 19 })
     setAir(false)
+    const paired = () => {
+      const yes = U.link().paired()
+      U.show(ui.pair, !yes)
+      U.show(ui.air, yes)
+      U.show(ui.airDot, yes)
+    }
+    paired()
+    s.keep(U.link().onStatus(paired))
 
     // a swipe to the right would close the page mid-drag; the back key still does
     onGesture({ callback: (gesture) => gesture === GESTURE_RIGHT })

@@ -9,6 +9,7 @@ import asyncio
 import hashlib
 import hmac
 import json
+import os
 import secrets
 import struct
 import sys
@@ -422,24 +423,42 @@ class JavaScript(WatchTest):
 
 
 class App(WatchTest):
-    """The app's home page and the real link (watch/tools/appwatch.mjs), in
-    node, against the daemon: pairing, then what the page asks for and shows."""
+    """The mouse app and the face with the real link (watch/tools/
+    appwatch.mjs), in node, against the daemon."""
+
+    MODE = "app"
 
     async def asyncSetUp(self):
         await super().asyncSetUp()
+        self.service.health = watch.Health(Path(self.folder.name) / "health.json")
+        self.published = []
+        publish = self.hub.publish
+
+        async def spy(topic, data, **kw):
+            if topic == "watch":
+                self.published.append(data)
+            await publish(topic, data, **kw)
+
+        self.hub.publish = spy
+        self.node = None
+        self.lines = asyncio.Queue()
+        self.tasks = []
+
+    async def launch(self, mode, env=None):
         script = Path(__file__).resolve().parents[2] / "watch" / "tools" / "appwatch.mjs"
         self.node = await asyncio.create_subprocess_exec(
-            "node", str(script), stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, cwd=self.folder.name
+            "node", str(script), mode, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+            cwd=self.folder.name, env={**os.environ, **(env or {})},
         )
-        self.lines = asyncio.Queue()
         loop = asyncio.get_running_loop()
         self.tasks = [loop.create_task(self.read()), loop.create_task(self.forward())]
 
     async def asyncTearDown(self):
         for task in self.tasks:
             task.cancel()
-        self.node.kill()
-        await self.node.wait()
+        if self.node:
+            self.node.kill()
+            await self.node.wait()
         await super().asyncTearDown()
 
     async def read(self):
@@ -477,23 +496,43 @@ class App(WatchTest):
             await asyncio.sleep(0.05)
         self.fail("never ready")
 
-    async def test_pair_then_the_page_subscribes_and_shows(self):
+    async def test_the_mouse_app_pairs_and_moves_the_pointer(self):
         self.answers = [True]
-        await self.hub.publish("media", {"has": True, "playing": True, "title": "Ablaze", "artist": "Floorp"})
-        await asyncio.sleep(0.3)
+        await self.launch("app")
         await self.order(op="pair")
         await self.expect("code")
         await self.until_ready()
-        await asyncio.sleep(0.8)
-        peer = self.service.links["/dev/watch"].peer
-        self.assertIn("media", peer.subs)
-        await self.order(op="texts")
-        texts = await self.expect("texts")
-        self.assertTrue(any("Ablaze" in t for t in texts), texts)
+        await self.order(op="pad", dx=12, dy=-5)
+        await asyncio.sleep(0.3)
+        link = self.service.links["/dev/watch"]
+        self.assertIsNotNone(link.pointer)
+        self.assertNotEqual(link.pointer.pending, [0.0, 0.0])
+        self.assertTrue(self.published[-1]["link"]["mouse"])
 
-        await self.order(op="call", topic="media", action="playPause", args={})
-        self.assertTrue((await self.expect("result"))["ok"])
-        self.assertIn(("media", "playPause", {}), self.shell.calls)
+    async def test_the_face_hands_over_health_and_takes_the_colours(self):
+        secret = secrets.token_bytes(16)
+        self.service.watches.add("Test Watch", secret)
+        await self.hub.publish("theme", {"background": "#101418", "foreground": "#e0e4e8", "colors": ["#101418", "#c04050", "#40a060", "#d0a040", "#4080d0", "#a060c0", "#40b0c0", "#e0e4e8"] * 2})
+        await self.launch("face", {"LINK_JSON": json.dumps({"secret": secret.hex(), "name": "iseeu", "mac": "a8:6e:84:87:57:e9"})})
+        # it lets go once it has handed over and has the colours
+        await self.expect("disconnected", timeout=8)
+        health = self.service.health
+        self.assertTrue(health.nights, "no night kept")
+        night = health.nights[max(health.nights)]
+        self.assertEqual(night["total"], 431)
+        self.assertEqual(night["score"], 82)
+        self.assertEqual(round((night["wake"] - night["bed"]) / 60), 445)
+        self.assertEqual(night["stages"][0][:2], ["light", 0])
+        self.assertEqual(night["stages"][-1][2], 445)
+        self.assertGreater(night["rem"], 0)
+        today = health.days[max(health.days)]
+        self.assertEqual(today["steps"], 6412)
+        self.assertEqual(today["resting"], 54)
+        self.assertEqual(len(today["heart"]), 90)
+        self.assertEqual(len(today["stress"]), 24)
+        view = self.published[-1]
+        self.assertEqual(view["nights"][-1]["score"], 82)
+        self.assertEqual(view["today"]["calories"], 412)
 
 
 class Packages(unittest.TestCase):

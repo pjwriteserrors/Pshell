@@ -6,16 +6,17 @@
 // The face makes one too, with `once`: it connects when the face comes on,
 // takes the snapshots it wants and lets go (createLink({ once, secret })).
 //
-// Quick to come up: the PC's address is kept from the last time, so the link
-// connects straight away and only scans when that fails; the snapshots it
-// had are kept too (cache.json), so a page shows them before the PC answers.
+// Quick to come up and light on the battery: the PC's address is kept from
+// the last time, so the link connects straight away and only scans when that
+// fails; while it stands it says little (a ping every few seconds, so the PC
+// knows it is there), and it is gone as soon as the app or the face is.
 
 import { BLEMaster } from '@silver-zepp/easy-ble'
 import { localStorage } from '@zos/storage'
 import { Accelerometer } from '@zos/sensor'
 import * as P from './protocol.js'
 import { sha256 } from './sha256.js'
-import { writeJson, readJson } from './store.js'
+import { writeJson } from './store.js'
 import { VERSION } from './version.js'
 
 const NAME = 'pshell'
@@ -30,6 +31,10 @@ const TICK = 30
 // a moment after the notifications are on, or this long when no word comes
 const SETTLE = 300
 const SETTLE_AT_MOST = 1500
+// a ping this often keeps the PC from dropping the link (it lets go of a
+// watch silent for 20 s); no answer for LOST: the link is made again
+const PING = 5000
+const LOST = 16000
 // a connect the watch never answers (it normally gives up by itself)
 const CONNECT_AT_MOST = 15000
 
@@ -37,7 +42,7 @@ export function createLink(options) {
   options = options || {}
   let ble = new BLEMaster()
   let parts = P.assembler()
-  const listeners = { status: [], had: [] }
+  const listeners = { status: [], had: [], message: [] }
   const subscribers = {}
   const cache = {}
   const calls = {}
@@ -84,7 +89,6 @@ export function createLink(options) {
     if (secret && !options.once) writeJson('link.json', { secret: P.hex(secret), name: self.name, mac })
   }
   keep()
-  if (!options.once) Object.assign(cache, readJson('cache.json') || {})
 
   function setStatus(next, text) {
     status = next
@@ -429,7 +433,9 @@ export function createLink(options) {
       ;(subscribers[message.k] || []).forEach((fn) => guarded(message.k, fn, message.d))
     } else if (message.t === 'had') {
       listeners.had.forEach((fn) => guarded('had', fn, message.k || []))
-    } else if (message.t === 'r') {
+    } else if (message.t !== 'r') {
+      listeners.message.forEach((fn) => guarded(message.t, fn, message))
+    } else {
       const call = calls[message.i]
       if (!call) return
       delete calls[message.i]
@@ -476,9 +482,9 @@ export function createLink(options) {
     write(P.seal(session, messages))
   }
 
-  function everyTwoSeconds() {
+  function everyFewSeconds() {
     if (!session) return
-    if (Date.now() - lastPong > 10000) {
+    if (Date.now() - lastPong > LOST) {
       // nothing from the PC for a while: say what did come, then start over
       ping()
       flush()
@@ -532,17 +538,20 @@ export function createLink(options) {
       closing = false
       if (!flushTimer) {
         flushTimer = setInterval(flush, TICK)
-        timers.push(setInterval(everyTwoSeconds, 2000))
+        timers.push(setInterval(everyFewSeconds, PING))
       }
       find()
     },
-    // what the pages saw, for the next start (written now and then by a page)
-    keepCache(topics) {
-      const out = {}
-      topics.forEach((t) => {
-        if (t in cache) out[t] = cache[t]
-      })
-      writeJson('cache.json', out)
+    // a JSON message to the PC ({ t, … }); false without a session
+    send(data) {
+      if (!session) return false
+      json(data)
+      return true
+    },
+    // fn(message) for what the PC sends besides snapshots and results
+    onMessage(fn) {
+      listeners.message.push(fn)
+      return () => (listeners.message = listeners.message.filter((f) => f !== fn))
     },
     stop() {
       closing = true

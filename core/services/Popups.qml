@@ -81,6 +81,7 @@ Singleton {
 		messages: "messages",
 		reader: "fast-reader",
 		screentime: "screentime",
+		watch: "watch",
 		printer: "printer",
 		identity: "identities",
 		niri: "niri-settings",

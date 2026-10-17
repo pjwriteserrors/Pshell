@@ -10,6 +10,7 @@ import { push } from '@zos/router'
 import { localStorage } from '@zos/storage'
 import { I } from './icons.js'
 import { VERSION } from './version.js'
+import { readJson, FACE } from './store.js'
 
 
 export const W = 390
@@ -46,9 +47,9 @@ export function link() {
   return getApp()._options.globalData.link
 }
 
-// the theme the PC sent last; kept for the next start
+// the shell's colours: as the face last had them from the PC (theme.json)
 export function themed() {
-  const roles = link().state('theme')
+  const roles = readJson('theme.json', FACE)
   if (roles && roles.bg) {
     adopt(roles)
     try {

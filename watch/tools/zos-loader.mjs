@@ -13,7 +13,17 @@ const MODULES = {
     export class Screen extends Sensor { getStatus() { return 1 } }
     export class Battery extends Sensor { getCurrent() { return 78 } }
     export class Step extends Sensor { getCurrent() { return 6412 } getTarget() { return 8000 } }
-    export class HeartRate extends Sensor { getCurrent() { return 72 } getLast() { return 72 } }
+    export class HeartRate extends Sensor { getCurrent() { return 72 } getLast() { return 72 } getResting() { return 54 } getDailySummary() { return { maximum: { hr_value: 141, time: 1792200000 } } } getToday() { return Array.from({ length: 900 }, (_, i) => (i % 7 ? 60 + (i % 40) : 0)) } }
+    // last night: 23:40 to 07:05, its stages; the minutes count from 0:00
+    export class Sleep { updateInfo() {} getInfo() { return { score: 82, deepTime: 94, startTime: 1420, endTime: 425, totalTime: 431 } } getStageConstantObj() { return { WAKE_STAGE: 7, REM_STAGE: 8, LIGHT_STAGE: 4, DEEP_STAGE: 5 } } getStage() { return [[4, 1420, 1470], [5, 1470, 40], [4, 40, 120], [8, 120, 150], [7, 150, 158], [5, 158, 210], [4, 210, 300], [8, 300, 340], [4, 340, 400], [8, 400, 425]].map(([model, start, stop]) => ({ model, start, stop })) } getNap() { return [] } getSleepingStatus() { return 0 } }
+    export class Stress { getCurrent() { return { value: 31, time: 0 } } getTodayByHour() { return Array.from({ length: 24 }, (_, i) => (i < 15 ? 20 + i * 2 : 0)) } getLastWeek() { return [30, 42, 28, 35, 51, 33, 31] } }
+    export class BloodOxygen { getCurrent() { return { value: 97, time: 0, retCode: 2 } } getLastDay() { return Array.from({ length: 24 }, () => 96) } }
+    export class Calorie extends Sensor { getCurrent() { return 412 } getTarget() { return 600 } }
+    export class Distance extends Sensor { getCurrent() { return 4800 } }
+    export class Stand extends Sensor { getCurrent() { return 7 } getTarget() { return 12 } }
+    export class FatBurning extends Sensor { getCurrent() { return 18 } getTarget() { return 30 } }
+    export class Pai { getTotal() { return 74 } getToday() { return 6 } getLastWeek() { return [8, 12, 0, 9, 14, 25, 6] } }
+    export class BodyTemperature { getToday() { return Array.from({ length: 288 }, (_, i) => (i < 90 ? 33.4 + (i % 10) / 20 : -1000)) } }
     export class Time { onPerMinute() {} onPerDay() {} getHours() { return timeNow.value.getHours() } getMinutes() { return timeNow.value.getMinutes() } getDate() { return timeNow.value.getDate() } getMonth() { return timeNow.value.getMonth() + 1 } getFullYear() { return timeNow.value.getFullYear() } getDay() { return timeNow.value.getDay() || 7 } getTime() { return timeNow.value.getTime() } }
     export const FREQ_MODE_HIGH = 2, FREQ_MODE_NORMAL = 1, FREQ_MODE_LOW = 0`,
   '@zos/display': `export const setPageBrightTime = () => 0, resetPageBrightTime = () => 0, pauseDropWristScreenOff = () => 0, resetDropWristScreenOff = () => 0`,

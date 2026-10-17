@@ -155,6 +155,7 @@ Item {
 		{ id: "mail", plugin: "mail", group: "panels", command: "mail", name: "New Mail", aliases: ["compose"], keywords: "write" },
 		{ id: "updates", plugin: "updates", group: "panels", command: "updates", name: "Updates", aliases: ["update"], keywords: "arch packages", status: Updates.count > 0 ? String(Updates.count) : "" },
 		{ id: "screentime", plugin: "screentime", group: "panels", command: "screentime", name: "Screen Time", aliases: ["time", "usage"], keywords: "statistics", status: Screentime.clock(Screentime.total(Screentime.today)) },
+		{ id: "watch", plugin: "watch", group: "panels", command: "watch", name: "Watch", aliases: ["uhr", "sleep", "schlaf", "amazfit", "health"], keywords: "sleep night heart steps stress blood oxygen amazfit wrist", status: Watch.lastNight ? Watch.span(Watch.lastNight.total) : "" },
 		{ id: "printer", plugin: "printer", group: "panels", command: "printer", name: "3D Printer", aliases: ["print", "kobra", "ace"], keywords: "gcode filament orca slicer", status: Printer.printing ? `${Math.round(Printer.progress * 100)} %` : "" },
 		{ id: "lyrics", plugin: "lyrics", group: "panels", command: "lyrics", name: "Lyrics", keywords: "song words" },
 		{ id: "song", plugin: "song-detection", group: "panels", command: "song", name: "Song Detection", aliases: ["detect"], keywords: "name music" },
@@ -2472,6 +2473,10 @@ Item {
 			root.closeRequested();
 			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "printer", "open"]);
 			break;
+		case "watch":
+			root.closeRequested();
+			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "watch", "open"]);
+			break;
 		case "games":
 			root.closeRequested();
 			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "games", "open"]);
@@ -3017,6 +3022,7 @@ Item {
 		case "vm": return "microsoft_windows";
 		case "games": return "gamepad_variant";
 		case "printer": return "printer_3d";
+		case "watch": return "watch";
 		}
 		return "console";
 	}

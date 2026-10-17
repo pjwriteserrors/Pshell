@@ -1,15 +1,20 @@
-// The app's home page with the real link (lib/link.js) over a BLEMaster that
-// speaks through stdio, for scripts/phone/test_watch.py to put the daemon on
-// the other end: {"write":"<hex>"} out for every write, {"notify":"<hex>"} in
-// for every notification; {"op":"pair"} taps "Koppeln", {"op":"texts"} prints
-// what the screen shows, {"op":"call",...} runs link.call. Errors are printed
-// as {"error"} instead of ending the run.
+// The watch's two programs with the real link (lib/link.js) over a BLEMaster
+// that speaks through stdio, for scripts/phone/test_watch.py to put the
+// daemon on the other end: {"write":"<hex>"} out for every write,
+// {"notify":"<hex>"} in for every notification. Errors are printed as
+// {"error"} instead of ending the run.
+//
+//   node appwatch.mjs app    the mouse app: {"op":"pair"}, {"op":"status"},
+//                            {"op":"pad","dx":…,"dy":…}
+//   node appwatch.mjs face   the face, signing in with LINK_JSON (the app's
+//                            link.json): it syncs as soon as it is built
 import { register } from 'node:module'
 import { createInterface } from 'node:readline'
 
 process.removeAllListeners('warning')
 register('./zos-loader.mjs', import.meta.url)
-const { widgets } = await import('./zos-stub.mjs')
+const mode = process.argv[2] || 'app'
+if (process.env.LINK_JSON) globalThis.__faceFile = new TextEncoder().encode(process.env.LINK_JSON)
 
 const say = (o) => process.stdout.write(JSON.stringify(o) + '\n')
 process.on('uncaughtException', (e) => say({ error: String((e && e.stack) || e) }))
@@ -43,7 +48,9 @@ globalThis.__BLEMaster = class {
   connect(mac, cb) {
     setTimeout(() => cb({ connected: true, status: 'connected' }), 5)
   }
-  disconnect() {}
+  disconnect() {
+    say({ disconnected: true })
+  }
   quit() {}
   generateProfileObject() {
     return {}
@@ -54,13 +61,20 @@ globalThis.__BLEMaster = class {
 }
 
 const { createLink } = await import('../app/lib/link.js')
-const link = createLink()
+let link = null
 let page = null
-globalThis.getApp = () => ({ _options: { globalData: { link } } })
-globalThis.Page = (o) => (page = o)
-await import('../app/page/index.js')
-link.start()
-page.build()
+if (mode === 'face') {
+  globalThis.WatchFace = (o) => (page = o)
+  await import('../face/watchface/index.js')
+  page.build()
+} else {
+  link = createLink()
+  globalThis.getApp = () => ({ _options: { globalData: { link } } })
+  globalThis.Page = (o) => (page = o)
+  await import('../app/page/mouse.js')
+  link.start()
+  page.build()
+}
 
 createInterface({ input: process.stdin }).on('line', (line) => {
   const order = JSON.parse(line)
@@ -68,8 +82,7 @@ createInterface({ input: process.stdin }).on('line', (line) => {
     if (order.notify) notify && notify('7A52', new Uint8Array(Buffer.from(order.notify, 'hex')).buffer)
     else if (order.op === 'pair') say({ code: link.pair() })
     else if (order.op === 'status') say({ status: link.status() })
-    else if (order.op === 'texts') say({ texts: widgets.filter((w) => w.visible && w.props.text).map((w) => w.props.text) })
-    else if (order.op === 'call') link.call(order.topic, order.action, order.args, (ok, data) => say({ result: { ok, data } }))
+    else if (order.op === 'pad') link.mouse.pad(order.dx, order.dy)
   } catch (e) {
     say({ error: String((e && e.stack) || e) })
   }

@@ -10,11 +10,20 @@
     },
     "icon": "icon.png",
     "vender": "pshell",
-    "description": "The shell's look on the wrist: the time, the day, and the PC as PShell last saw it"
+    "description": "The shell's look on the wrist in its wallust colours: the time, the day, last night's sleep; it hands the watch's health data to the PC now and then"
   },
   "permissions": [
     "data:user.hd.step",
     "data:user.hd.heart_rate",
+    "data:user.hd.sleep",
+    "data:user.hd.stress",
+    "data:user.hd.spo",
+    "data:user.hd.calorie",
+    "data:user.hd.distance",
+    "data:user.hd.stand",
+    "data:user.hd.fat_burning",
+    "data:user.hd.pai",
+    "data:user.hd.body_temp",
     "data:os.device.info",
     "device:os.ble",
     "device:os.local_storage",
