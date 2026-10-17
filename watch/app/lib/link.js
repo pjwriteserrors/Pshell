@@ -62,6 +62,9 @@ export function createLink(options) {
   let lastPong = 0
   let closing = false
   let flushTimer = null
+  // what came from the PC, sent along with every ping for its log
+  const heard = { frames: 0, refused: 0, longest: 0, lost: 0, again: 0 }
+  let askedAgain = 0
   // the connect under way, if any
   let attempt = null
   let settled = null
@@ -286,6 +289,8 @@ export function createLink(options) {
 
   function receive(frame) {
     const kind = frame[0]
+    heard.frames++
+    heard.longest = Math.max(heard.longest, frame.length)
     if (kind === P.CHALLENGE && secret) {
       answer = P.prove(secret, frame.slice(1, 9), nonce)
       write(answer.proof)
@@ -327,7 +332,10 @@ export function createLink(options) {
       } else setStatus('refused', 'Anmeldung abgelehnt')
     } else if (kind === P.SESSION && session) {
       const messages = P.open(session, frame)
-      if (!messages) return
+      if (!messages) {
+        heard.refused++
+        return
+      }
       messages.forEach(handle)
     }
   }
@@ -342,7 +350,15 @@ export function createLink(options) {
       lastPong = Date.now()
     } else if (m[0] === 0x10) {
       const message = parts.feed(m)
-      if (message === 'lost') json({ t: 'again' })
+      if (message === 'lost') {
+        heard.lost++
+        // once in a while: every snapshot again for each lost part floods the link
+        if (Date.now() - askedAgain > 3000) {
+          askedAgain = Date.now()
+          heard.again++
+          json({ t: 'again' })
+        }
+      }
       else if (message) onJson(message)
     }
   }
@@ -410,14 +426,27 @@ export function createLink(options) {
   function everyTwoSeconds() {
     if (!session) return
     if (Date.now() - lastPong > 10000) {
-      // nothing from the PC for a while: start over
-      ble.disconnect()
-      lost()
+      // nothing from the PC for a while: say what did come, then start over
+      ping()
+      flush()
+      const gone = ble
+      session = null
+      later(() => {
+        try {
+          gone.disconnect()
+        } catch (e) {}
+        lost()
+      }, 300)
       return
     }
+    ping()
+  }
+
+  function ping() {
     const seq = pingSeq++ & 0xffff
     pings[seq] = Date.now()
-    post([0x02, seq & 0xff, seq >> 8])
+    const u16 = (v) => [v & 0xff, (v >> 8) & 0xff]
+    post([0x02, seq & 0xff, seq >> 8].concat(u16(Math.min(heard.frames, 0xffff)), u16(Math.min(heard.refused, 0xffff)), [Math.min(heard.longest, 255), Math.min(heard.lost, 255), Math.min(heard.again, 255)]))
   }
 
   function i16(v) {

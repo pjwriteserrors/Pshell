@@ -25,7 +25,7 @@ ROOT = "/org/pshell/watch"
 
 
 class Peripheral:
-    """on_write(device, data), on_gone(device), on_come(device) and
+    """on_write(device, data, mtu), on_gone(device), on_come(device) and
     on_ready(error) are called on the asyncio loop; device is BlueZ's object
     path of the watch (on_come for every device that connects, and for those
     connected already when it starts)."""
@@ -139,7 +139,8 @@ class Peripheral:
 
             @dbus.service.method("org.bluez.GattCharacteristic1", in_signature="aya{sv}")
             def WriteValue(self, value, options):
-                peripheral._call(peripheral.on_write, str(options.get("device", "")), bytes(value))
+                # BlueZ says the link's MTU with every write: what a notification may carry
+                peripheral._call(peripheral.on_write, str(options.get("device", "")), bytes(value), int(options.get("mtu", 0)))
 
             @dbus.service.method("org.bluez.GattCharacteristic1")
             def StartNotify(self):

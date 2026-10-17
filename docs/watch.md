@@ -77,6 +77,13 @@ The daemon drops a watch's connection that says nothing for 20 s. Each
 attempt uses a new BLEMaster, since easy-ble reports a device only once per
 instance and a second scan on the same one never sees the PC.
 
+The face and the app share the watch's one link to the PC: the face stops
+its fetch before it opens the app and when it is paused, or its goodbye
+would cut the app's connection. Notifications are cut to the MTU BlueZ
+reports with each write (FRAME_OUT at most); every ping carries what the
+watch got (frames, refused, longest, lost parts, asked again), which the
+daemon logs as `watch heard …` when it changes.
+
 The PC advertises every 100–150 ms if BlueZ takes the interval, which it
 does only with `Experimental = true` in /etc/bluetooth/main.conf; otherwise
 the kernel's 1.28 s, which the watch waits for before it can connect.

@@ -258,6 +258,20 @@ class Session(WatchTest):
         self.assertEqual(len(state["d"]["hourly"]), 6)
         self.assertEqual(state["d"]["description"], "Regen äöü")
 
+    async def test_notifications_fit_the_links_mtu(self):
+        w = await self.paired()
+        self.service.links["/dev/watch"].mtu = 100
+        self.service.peripheral.sent = []
+        notify = self.service.peripheral.notify
+        self.service.peripheral.notify = lambda data: (self.service.peripheral.sent.append(len(data)), notify(data))
+        await self.hub.publish("media", {"has": True, "playing": True, "title": "Song" * 40, "artist": "Artist" * 10})
+        await w.send_json({"t": "sub", "k": ["media"]})
+        state = await w.json("s")
+        self.assertEqual(state["d"]["title"][:8], "SongSong")
+        self.assertGreater(len(json.dumps(state)), 97)
+        self.assertTrue(self.service.peripheral.sent)
+        self.assertLessEqual(max(self.service.peripheral.sent), 97)
+
     async def test_theme_roles(self):
         roles = watch.theme_roles({"background": "#030305", "foreground": "#F4C84C", "colors": ["#030305", "#091C37", "#3E2172", "#206196", "#616267", "#A679AA", "#19CEF4", "#F4C84C"] * 2})
         self.assertEqual(roles["primary"], "#19cef4")

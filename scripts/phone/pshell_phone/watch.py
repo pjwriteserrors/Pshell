@@ -23,7 +23,8 @@ Frames, one GATT write or notification each:
                     "session"‖nonce_watch‖nonce_pc); a counter is never taken twice
 
 Messages inside a session frame are [length, type, …]:
-    0x02 ping seq:u16 (answered by 0x82 seq)   0x03 pad dx:i16 dy:i16
+    0x02 ping seq:u16 [frames:u16 refused:u16 longest:u8 lost:u8 again:u8]
+         (answered by 0x82 seq; the rest is what the watch got, for the log)   0x03 pad dx:i16 dy:i16
     0x04 button index:u8 down:u8               0x05 gyro n:u8 x y z:u16 (totals, wrapping)
     0x07 wheel dy:i16                          0x08 air on:u8
     0x10 json  message:u8 part:u8 last:u8 bytes…  (a JSON message in parts)
@@ -630,6 +631,8 @@ class Link:
         self.calls = {}  # hub call id → (watch call id, topic, action)
         self.peer = None
         self.pointer = None
+        self.mtu = 0  # the link's, once BlueZ has said it (0: not known, FRAME_OUT)
+        self.heard = (0, None)  # when the watch's receive counts were last logged, and them
 
     # ── sending ────────────────────────────────────────────────────────────
     def send(self, frame):
@@ -646,8 +649,9 @@ class Link:
             return
         raw = json.dumps(data, separators=(",", ":"), ensure_ascii=False).encode()
         self.message_id = (self.message_id + 1) & 0xFF
-        # frame head 5, length byte 1, part header 4, tag 4
-        room = FRAME_OUT - 14
+        # frame head 5, length byte 1, part header 4, tag 4; a notification
+        # longer than the link's MTU allows arrives cut off, and is refused
+        room = min(FRAME_OUT, self.mtu - 3 if self.mtu else FRAME_OUT) - 14
         parts = [raw[i : i + room] for i in range(0, len(raw), room)] or [b""]
         for index, part in enumerate(parts):
             last = 1 if index == len(parts) - 1 else 0
@@ -714,6 +718,17 @@ class Link:
             if message:
                 await self.message(message)
 
+    def log_heard(self, m):
+        """The watch's counts of what it got from us: frames, frames refused,
+        the longest, JSON lost in parts, snapshots asked for again."""
+        frames, bad = struct.unpack("<HH", m[3:7])
+        counts = (bad, m[8], m[9])
+        now = time.monotonic()
+        if counts == self.heard[1] and now - self.heard[0] < 60:
+            return
+        self.heard = (now, counts)
+        print(f"phone: watch heard frames={frames} refused={bad} longest={m[7]} lost={m[8]} again={m[9]} mtu={self.mtu}", flush=True)
+
     def mouse(self):
         """The uinput mouse, made when the mouse page first sends something: the
         face's short visits never need one."""
@@ -730,6 +745,8 @@ class Link:
         kind = m[0]
         if kind == 0x02 and len(m) >= 3:
             self.send_session([b"\x82" + m[1:3]])
+            if len(m) >= 10:
+                self.log_heard(m)
             return
         if kind == 0x10 and len(m) >= 4:
             await self.part(m[1], m[2], m[3], m[4:])
@@ -834,7 +851,7 @@ class Service:
     def on_come(self, device):
         self.quiet[device] = time.monotonic()
 
-    def on_write(self, device, data):
+    def on_write(self, device, data, mtu=0):
         self.quiet[device] = time.monotonic()
         self.writers.add(device)
         link = self.links.get(device)
@@ -843,6 +860,8 @@ class Service:
             if link is not None:
                 self.on_gone(device)
             link = self.links[device] = Link(self, device)
+        if mtu:
+            link.mtu = mtu
         self.hub.spawn(link.receive(data))
 
     def on_gone(self, device):
@@ -862,7 +881,7 @@ class Service:
     async def attach(self, link):
         link.peer = WatchPeer(link, link.entry)
         await self.hub.attach(link.peer)
-        print(f"phone: watch {link.entry['name']} connected", flush=True)
+        print(f"phone: watch {link.entry['name']} connected (mtu {link.mtu or '?'})", flush=True)
 
     async def json(self, link, message):
         peer = link.peer
