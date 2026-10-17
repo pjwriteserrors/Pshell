@@ -9,6 +9,7 @@ import { localStorage } from '@zos/storage'
 import { push } from '@zos/router'
 import { writeJson } from '../lib/store.js'
 import { summary } from '../lib/summary.js'
+import { VERSION } from '../lib/version.js'
 import * as U from '../lib/ui.js'
 
 const { T, F, M, W, GAP } = U
@@ -428,7 +429,7 @@ function paintHeader() {
   const two = (n) => (n < 10 ? '0' : '') + n
   if (!head) return
   U.set(head.title, U.link().name || 'PShell')
-  head.setLine(`${WEEKDAYS[now.getDay()]} · ${two(now.getHours())}:${two(now.getMinutes())}`)
+  head.setLine(`${WEEKDAYS[now.getDay()]} · ${two(now.getHours())}:${two(now.getMinutes())} · v${VERSION}`)
 }
 
 // what the face shows of the PC: the latest numbers, written for it to read

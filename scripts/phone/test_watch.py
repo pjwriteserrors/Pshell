@@ -373,5 +373,14 @@ class JavaScript(WatchTest):
         self.assertEqual((await self.pump("message"))["message"], "820900")
 
 
+class Packages(unittest.TestCase):
+    def test_versions_agree(self):
+        # the version the app and the face show is the one the watch installed
+        root = Path(__file__).resolve().parents[2] / "watch"
+        shown = (root / "app/lib/version.js").read_text().split("VERSION = '")[1].split("'")[0]
+        for app in ("app", "face"):
+            self.assertEqual(json.loads((root / app / "app.json").read_text())["app"]["version"]["name"], shown)
+
+
 if __name__ == "__main__":
     unittest.main()

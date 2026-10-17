@@ -13,6 +13,7 @@ import { launchApp } from '@zos/router'
 import { I } from '../lib/icons.js'
 import { createLink } from '../../app/lib/link.js'
 import { summary, TOPICS } from '../../app/lib/summary.js'
+import { VERSION } from '../../app/lib/version.js'
 
 const APP = 1073744
 // at most one fetch a minute, however often the wrist is turned
@@ -231,6 +232,7 @@ function build(data) {
   ui.agent = text(M + 42, y + 92, CW - 58, 32, '', { size: 18 })
   ui.note = icon(M + 14, y + 132, 24, 'music', T.primary)
   ui.media = text(M + 42, y + 128, CW - 58, 32, '', { size: 18 })
+  text(0, 422, W, 22, `v${VERSION}`, { size: 14, color: T.faint, center: true })
   const open = () => launchApp({ appId: APP, url: 'page/index' })
   // everything on the card opens the app: a text over it would take the tap
   made.slice(first).forEach((w) => w.addEventListener(event.CLICK_UP, open))
