@@ -158,9 +158,12 @@ def view_quick(d):
     if not d:
         return None
     bluetooth = d.get("bluetooth") or {}
+    network = d.get("network") or {}
     return {
         "dnd": d.get("dnd"),
         "keepAwake": d.get("keepAwake"),
+        "power": d.get("power"),
+        "network": {"label": clip(network.get("label"), 24), "ip": network.get("ip", ""), "online": bool(network.get("online")), "signal": network.get("signal", -1)},
         "bluetooth": bluetooth.get("powered"),
         "devices": [
             {"address": b.get("address"), "name": clip(b.get("name"), 22), "connected": bool(b.get("connected")), "battery": b.get("battery", "")}
@@ -178,7 +181,10 @@ def view_system(d):
         "cpu": round(float(d.get("cpu") or 0) * 100),
         "memory": round(float(d.get("memory") or 0) * 100),
         "cpuHistory": [round(float(v) * 100) for v in (d.get("cpuHistory") or [])[-24:]],
-        "disks": [{"name": clip(k.get("name"), 10), "usage": round(float(k.get("usage") or 0) * 100), "free": k.get("freeText", "")} for k in (d.get("disks") or [])[:4]],
+        "cores": d.get("cores") or 0,
+        "memoryUsed": round((d.get("memoryUsed") or 0) / 1048576, 1),
+        "memoryTotal": round((d.get("memoryTotal") or 0) / 1048576, 1),
+        "disks": [{"name": clip(k.get("name"), 10), "usage": round(float(k.get("usage") or 0) * 100), "free": k.get("freeText", ""), "used": k.get("usedText", ""), "total": k.get("totalText", "")} for k in (d.get("disks") or [])[:4]],
         "battery": battery.get("text") if isinstance(battery, dict) else None,
         "mouse": mouse.get("text") if mouse else None,
     }
@@ -326,7 +332,7 @@ def view_theme(d):
 
 def view_plugins(d):
     """Only the switches the watch's pages ask about."""
-    wanted = ("media", "sound", "agents", "system-monitor", "printer", "downloads", "phone-touchpad", "weather", "screentime", "updates", "messages")
+    wanted = ("media", "sound", "agents", "system-monitor", "printer", "downloads", "phone-touchpad", "weather", "screentime", "updates", "messages", "connections", "pc-link", "vm-launcher", "recording", "quick-settings")
     return {k: bool((d or {}).get(k)) for k in wanted}
 
 
@@ -361,6 +367,7 @@ def view_screentime(d):
     return {
         "total": d.get("total") or 0,
         "longest": d.get("longest") or 0,
+        "longestEnd": d.get("longestEnd", ""),
         "versus": (d.get("versus") or {}).get("seconds"),
         "week": [{"label": w.get("label"), "total": w.get("total") or 0, "today": w.get("key") == d.get("today")} for w in (d.get("week") or [])[:7]],
         "apps": [{"label": clip(r.get("label"), 22), "seconds": r.get("seconds") or 0} for r in rows],
@@ -379,6 +386,37 @@ def view_messages(d):
     return {"unread": d.get("unread") or 0, "running": bool(d.get("running"))}
 
 
+def view_session(d):
+    return {"locked": bool(d.get("locked")), "host": clip(d.get("host"), 20)} if d else None
+
+
+def view_connections(d):
+    if not d or not d.get("ready"):
+        return None
+    apps = sorted(d.get("apps") or [], key=lambda a: -(a.get("conns") or 0))[:8]
+    places = sorted(d.get("places") or [], key=lambda p: -(p.get("conns") or 0))[:6]
+    return {
+        "apps": [{"title": clip(a.get("title"), 20), "conns": a.get("conns") or 0, "down": a.get("down") or 0, "up": a.get("up") or 0} for a in apps],
+        "places": [{"city": clip(p.get("city"), 20), "cc": p.get("cc", ""), "conns": p.get("conns") or 0} for p in places],
+    }
+
+
+def view_pcs(d):
+    if not d:
+        return None
+    return {"devices": [{"name": clip(x.get("name"), 20), "connected": bool(x.get("connected"))} for x in (d.get("devices") or [])[:6]]}
+
+
+def view_machines(d):
+    if not d:
+        return None
+    return {"vms": [{"name": clip(v.get("name"), 20), "running": bool(v.get("running") or v.get("state") == "running")} for v in (d.get("vms") or [])[:6] if isinstance(v, dict)], "launching": bool(d.get("launching"))}
+
+
+def view_recording(d):
+    return {"active": bool(d.get("active")), "startedAt": d.get("startedAt") or 0} if d else None
+
+
 VIEWS = {
     "link": view_link,
     "plugins": view_plugins,
@@ -394,6 +432,11 @@ VIEWS = {
     "screentime": view_screentime,
     "updates": view_updates,
     "messages": view_messages,
+    "session": view_session,
+    "connections": view_connections,
+    "pcs": view_pcs,
+    "machines": view_machines,
+    "recording": view_recording,
 }
 
 # what the watch may do: the mouse aside, only the media player
@@ -669,14 +712,28 @@ class Link:
             if message:
                 await self.message(message)
 
+    def mouse(self):
+        """The uinput mouse, made when the mouse page first sends something: the
+        face's short visits never need one."""
+        if self.pointer is None and self.service.hub.on("phone-touchpad"):
+            pointer = Pointer()
+            try:
+                pointer.open()
+                self.pointer = pointer
+            except Exception as error:
+                print(f"phone: no mouse for the watch: {error}", flush=True)
+        return self.pointer
+
     async def message(self, m):
         kind = m[0]
-        pointer = self.pointer
         if kind == 0x02 and len(m) >= 3:
             self.send_session([b"\x82" + m[1:3]])
-        elif kind == 0x10 and len(m) >= 4:
+            return
+        if kind == 0x10 and len(m) >= 4:
             await self.part(m[1], m[2], m[3], m[4:])
-        elif pointer is None:
+            return
+        pointer = self.mouse() if kind in (0x03, 0x04, 0x05, 0x07, 0x08) else None
+        if pointer is None:
             return
         elif kind == 0x03 and len(m) >= 5:
             pointer.pad(*struct.unpack("<hh", m[1:5]))
@@ -764,13 +821,6 @@ class Service:
     # ── the hub ────────────────────────────────────────────────────────────
     async def attach(self, link):
         link.peer = WatchPeer(link, link.entry)
-        if self.hub.on("phone-touchpad"):
-            link.pointer = Pointer()
-            try:
-                link.pointer.open()
-            except Exception as error:
-                print(f"phone: no mouse for the watch: {error}", flush=True)
-                link.pointer = None
         await self.hub.attach(link.peer)
         print(f"phone: watch {link.entry['name']} connected", flush=True)
 

@@ -10,6 +10,7 @@ const MODULES = {
     class Sensor { start() {} stop() {} onChange() {} offChange() {} setFreqMode() {} getCurrent() { return 0 } getTarget() { return 10000 } }
     export class Gyroscope extends Sensor { getCurrent() { return { x: 0, y: 0, z: 0 } } }
     export class Accelerometer extends Sensor { getCurrent() { return { x: 0.1, y: 0.2, z: 9.8 } } }
+    export class Screen extends Sensor { getStatus() { return 1 } }
     export class Battery extends Sensor { getCurrent() { return 78 } }
     export class Step extends Sensor { getCurrent() { return 6412 } getTarget() { return 8000 } }
     export class HeartRate extends Sensor { getCurrent() { return 72 } getLast() { return 72 } }

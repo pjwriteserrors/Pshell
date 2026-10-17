@@ -34,6 +34,8 @@ cellphone link_variant lan_disconnect check_circle alert_circle_outline sleep we
 weather_sunny weather_night weather_partly_cloudy weather_night_partly_cloudy weather_cloudy
 weather_fog weather_rainy weather_pouring weather_snowy weather_snowy_rainy weather_lightning
 weather_lightning_rainy weather_windy weather_hail sun_clock headphones speaker cursor_move
+lan lan_connect earth ethernet wifi lock lock_open_variant bell_off bell coffee record_rec server laptop
+weather_sunset_up weather_sunset_down water_percent weather_windy_variant counter trophy
 """.split()
 
 # letters: Latin, German, the punctuation and signs the pages print

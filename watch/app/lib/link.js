@@ -2,12 +2,16 @@
 // globalData. It finds the PC over BLE, signs in with the secret from pairing,
 // and then carries subscriptions, calls and the mouse (lib/protocol.js has the
 // frames, scripts/phone/pshell_phone/watch.py the other end).
+//
+// The face makes one too, with `once`: it connects when the face comes on,
+// takes the snapshots it wants and lets go (createLink({ once, secret })).
 
 import { BLEMaster } from '@silver-zepp/easy-ble'
 import { localStorage } from '@zos/storage'
 import { Accelerometer } from '@zos/sensor'
 import * as P from './protocol.js'
 import { sha256 } from './sha256.js'
+import { writeJson } from './store.js'
 
 const NAME = 'pshell'
 const SERVICE = '7A50'
@@ -20,7 +24,8 @@ const TICK = 30
 // writes while the connection is being set up hung the watch (watch/probe)
 const SETTLE = 1500
 
-export function createLink() {
+export function createLink(options) {
+  options = options || {}
   const ble = new BLEMaster()
   let parts = P.assembler()
   const listeners = { status: [] }
@@ -51,10 +56,12 @@ export function createLink() {
   const self = { rtt: 0, code: '', name: '' }
 
   try {
-    const stored = localStorage.getItem('secret')
+    const stored = options.secret || localStorage.getItem('secret')
     if (stored) secret = P.fromHex(stored)
-    self.name = localStorage.getItem('pcName') || ''
+    self.name = options.name || localStorage.getItem('pcName') || ''
   } catch (e) {}
+  // the face signs in with the app's secret: it reads this file with the app's id
+  if (secret && !options.once) writeJson('link.json', { secret: P.hex(secret), name: self.name })
 
   function setStatus(next, text) {
     status = next
@@ -88,12 +95,12 @@ export function createLink() {
         connect()
       },
       {
-        duration: 20000,
+        duration: options.once ? 8000 : 20000,
         on_duration: () => {
-          if (!connected && !closing) {
-            setStatus('searching', 'PC nicht gefunden')
-            retry = later(scan, 5000)
-          }
+          if (connected || closing) return
+          if (options.once) return setStatus('off', 'PC nicht gefunden')
+          setStatus('searching', 'PC nicht gefunden')
+          retry = later(scan, 5000)
         },
       },
     )
@@ -134,6 +141,7 @@ export function createLink() {
       call.done(false, 'Verbindung weg')
     })
     if (closing) return
+    if (options.once) return setStatus('off', 'Verbindung weg')
     setStatus('searching', was ? 'Verbindung weg' : '')
     retry = later(scan, 2000)
   }
@@ -187,6 +195,7 @@ export function createLink() {
       try {
         localStorage.setItem('secret', P.hex(secret))
       } catch (e) {}
+      writeJson('link.json', { secret: P.hex(secret), name: self.name })
       sayHello()
     } else if (kind === P.REFUSED) {
       const reason = P.REASONS[frame[1]] || 'refused'
@@ -341,6 +350,11 @@ export function createLink() {
       try {
         ble.stopScan()
       } catch (e) {}
+      try {
+        if (connected) ble.disconnect()
+      } catch (e) {}
+      connected = false
+      session = null
       ble.quit()
     },
     status() {

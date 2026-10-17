@@ -1,15 +1,24 @@
 // The face: the shell's look on the wrist. The time large in Adwaita Sans
 // like the bar's clock, the day, the watch's own numbers as chips, and below
-// a card with the PC as the PShell app last saw it (pc.json in the app's
-// data; a face cannot reach the PC itself). A tap on the card opens the app.
+// a card with the PC. When the face comes on it connects to the PC once
+// (with the app's secret, from the app's link.json), takes the snapshots it
+// shows and lets go; between those, and when that fails, it shows what it or
+// the app (pc.json) saw last. A tap on the card opens the app.
 
 import { createWidget, deleteWidget, widget, prop, align, text_style, event } from '@zos/ui'
-import { Time, Battery, Step, HeartRate } from '@zos/sensor'
+import { Time, Battery, Step, HeartRate, Screen } from '@zos/sensor'
+import { localStorage } from '@zos/storage'
 import { openSync, readSync, closeSync, O_RDONLY } from '@zos/fs'
 import { launchApp } from '@zos/router'
 import { I } from '../lib/icons.js'
+import { createLink } from '../../app/lib/link.js'
+import { summary, TOPICS } from '../../app/lib/summary.js'
 
 const APP = 1073744
+// at most one fetch a minute, however often the wrist is turned
+const EVERY = 60 * 1000
+// how long the PC may take to send its snapshots once signed in
+const GATHER = 3500
 const W = 390
 const M = 20
 const CW = W - 2 * M
@@ -100,10 +109,10 @@ function utf8(bytes) {
   return out
 }
 
-// pc.json from the app's /data, or null
-function pc() {
+// a JSON file in the app's /data, or null
+function appFile(path) {
   try {
-    const fd = openSync({ path: 'pc.json', flag: O_RDONLY, options: { appId: APP } })
+    const fd = openSync({ path, flag: O_RDONLY, options: { appId: APP } })
     if (fd === undefined || fd < 0) return null
     const chunk = new ArrayBuffer(1024)
     let bytes = []
@@ -118,6 +127,65 @@ function pc() {
   } catch (e) {
     return null
   }
+}
+
+function own() {
+  try {
+    return JSON.parse(localStorage.getItem('pc') || 'null')
+  } catch (e) {
+    return null
+  }
+}
+
+// the newer of what the face fetched and what the app wrote
+function pc() {
+  const a = own()
+  const b = appFile('pc.json')
+  if (!a) return b
+  if (!b) return a
+  return (a.at || 0) >= (b.at || 0) ? a : b
+}
+
+let lastTry = 0
+let fetching = null
+
+// connect, sign in, take the snapshots, let go
+function fetch() {
+  if (fetching || Date.now() - lastTry < EVERY) return
+  const key = appFile('link.json')
+  if (!key || !key.secret) return
+  lastTry = Date.now()
+  let link = null
+  const finish = () => {
+    if (!fetching) return
+    fetching = null
+    try {
+      link.stop()
+    } catch (e) {}
+  }
+  try {
+    link = createLink({ once: true, secret: key.secret, name: key.name })
+  } catch (e) {
+    return
+  }
+  fetching = link
+  TOPICS.forEach((topic) => link.subscribe(topic, () => {}))
+  link.onStatus((status) => {
+    if (status === 'ready') {
+      setTimeout(() => {
+        if (fetching !== link) return
+        const data = summary((topic) => link.state(topic), key.name)
+        try {
+          localStorage.setItem('pc', JSON.stringify(data))
+        } catch (e) {}
+        finish()
+        paint()
+      }, GATHER)
+    } else if (status === 'off' || status === 'unpaired' || status === 'refused') finish()
+  })
+  // never longer than this, whatever happens
+  setTimeout(finish, 25000)
+  link.start()
 }
 
 function two(n) {
@@ -150,6 +218,7 @@ function build(data) {
 
   // the PC
   const y = 246
+  const first = made.length
   const card = rect(M, y, CW, 172, T.layer1, 22)
   const chipBack = add(createWidget(widget.CIRCLE, { center_x: M + 38, center_y: y + 38, radius: 22, color: T.primaryContainer }))
   icon(M + 25, y + 25, 26, 'monitor', T.primary)
@@ -163,7 +232,8 @@ function build(data) {
   ui.note = icon(M + 14, y + 132, 24, 'music', T.primary)
   ui.media = text(M + 42, y + 128, CW - 58, 32, '', { size: 18 })
   const open = () => launchApp({ appId: APP, url: 'page/index' })
-  ;[card, chipBack].forEach((w) => w.addEventListener(event.CLICK_UP, open))
+  // everything on the card opens the app: a text over it would take the tap
+  made.slice(first).forEach((w) => w.addEventListener(event.CLICK_UP, open))
 }
 
 function paint() {
@@ -206,13 +276,35 @@ function U(w, value) {
   if (w) w.setProperty(prop.TEXT, value === undefined || value === null ? '' : String(value))
 }
 
+// the face comes on: show what is known, then ask the PC
+function wake() {
+  paint()
+  fetch()
+}
+
+let screen = null
+
 WatchFace({
   build() {
-    paint()
+    wake()
     time.onPerMinute(paint)
     battery.onChange(paint)
+    try {
+      screen = new Screen()
+      screen.onChange((status) => status === 1 && wake())
+    } catch (e) {
+      screen = null
+    }
+  },
+  onResume() {
+    wake()
   },
   onDestroy() {
+    if (fetching) {
+      try {
+        fetching.stop()
+      } catch (e) {}
+    }
     made = []
   },
 })

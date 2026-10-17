@@ -130,9 +130,9 @@ export function chip(x, y, size, name, tone) {
 // a card's head: chip, bold title, muted line under it, a value at the right
 export function head(x, y, w, name, title, line, value) {
   const c = chip(x, y, 44, name)
-  const t = text(x + 56, y - 1, w - 56 - 64, 26, title, { font: F.bold, size: 21 })
+  const t = text(x + 56, y - 1, w - 56 - 92, 26, title, { font: F.bold, size: 21 })
   const l = text(x + 56, y + 24, w - 56, 22, line, { color: T.muted, size: 16 })
-  const v = text(x + w - 64, y - 1, 64, 26, value, { font: F.bold, size: 21, right: true })
+  const v = text(x + w - 92, y - 1, 92, 26, value, { font: F.bold, size: 21, right: true })
   return { chip: c, title: t, line: l, value: v, parts: c.parts.concat([t, l, v]) }
 }
 

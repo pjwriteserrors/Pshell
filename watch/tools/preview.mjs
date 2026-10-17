@@ -37,7 +37,7 @@ const realSetInterval = setInterval
 globalThis.setInterval = () => 0
 globalThis.setTimeout = () => 0
 await import(pathToFileURL(file).href)
-if (options.onInit) options.onInit()
+if (options.onInit) options.onInit(process.env.PARAM)
 options.build()
 const plain = (v) => (typeof v === 'function' ? undefined : v)
 process.stdout.write(JSON.stringify(widgets.filter((w) => w.visible).map((w) => ({ type: w.type, props: Object.fromEntries(Object.entries(w.props).map(([k, v]) => [k, plain(v)])) }))))

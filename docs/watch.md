@@ -19,7 +19,7 @@ watch/app/            the app (Zepp OS 5, API 4; built with zeus)
   lib/sha256.js       SHA-256 and HMAC
   lib/ui.js           the shell's look: roles, fonts, cards, chips, bars, rings
   lib/store.js        pc.json in the app's data, for the face
-  page/*.js           home (index), mouse, media, pair
+  page/*.js           home (index), detail, mouse, media, pair
 watch/face/           the watch face; reads the app's pc.json (openSync with its appId)
 watch/probe/          the probe that found out what the watch can do
 watch/tools/          fonts.py (fonts and icons), preview.py/.mjs (pages drawn on
@@ -30,9 +30,14 @@ scripts/phone/pshell_phone/ble.py     the BLE peripheral (BlueZ over D-Bus)
 scripts/phone/test_watch.py           both ends against each other, without Bluetooth
 ```
 
-The face cannot reach the PC itself: the app writes the latest numbers to
-`pc.json` (at most every 20 s while home is open), and the face reads them
-every minute. Older than 15 minutes, the card says when they were true.
+The face fetches for itself: when it comes on (at most once a minute) it
+connects to the PC with the app's secret (the app's `link.json`, read with the
+app's id), takes the snapshots it shows and disconnects. Between those, and
+when that fails, it shows the newer of its own last fetch and the app's
+`pc.json`; older than 15 minutes, the card says when it was true. An app
+service cannot do this for it: Zepp OS keeps the BLE central API (`mst…`)
+from app services. A tap on the card opens the app; a tap on a card of home
+opens its detail page (system, weather, screen time, updates, connections).
 
 ## How it connects
 

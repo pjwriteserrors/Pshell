@@ -6,13 +6,15 @@
 // a print starts); otherwise their texts and bars are updated in place.
 
 import { localStorage } from '@zos/storage'
+import { push } from '@zos/router'
 import { writeJson } from '../lib/store.js'
+import { summary } from '../lib/summary.js'
 import * as U from '../lib/ui.js'
 
 const { T, F, M, W, GAP } = U
 const X = M
 const CW = W - 2 * M
-const TOPICS = ['agents', 'media', 'system', 'printer', 'downloads', 'weather', 'screentime', 'updates', 'messages', 'quick', 'plugins']
+const TOPICS = ['agents', 'media', 'system', 'printer', 'downloads', 'weather', 'screentime', 'updates', 'messages', 'quick', 'plugins', 'session', 'sound', 'connections', 'pcs', 'machines', 'recording']
 
 let s = null
 let made = null
@@ -91,7 +93,48 @@ const CARDS = [
     },
   },
   {
+    id: 'pc',
+    shows: () => st.session || st.quick || st.sound,
+    key: () => (st.recording && st.recording.active ? 'r' : ''),
+    height: () => 76 + 2 * 52 + (st.recording && st.recording.active ? 52 : 0) + 8,
+    build(y, add) {
+      const h = add(U.head(X + 16, y + 16, CW - 32, 'monitor_dashboard', 'Zustand', '', ''))
+      const half = (CW - 32 - GAP) / 2
+      const pill = (x, top, name) => {
+        add(U.rect(x, top, half, 44, T.layer2, 22))
+        const glyph = add(U.icon(x + 12, top + 10, 24, name, T.primary))
+        const words = add(U.text(x + 42, top, half - 50, 44, '', { size: 17, font: F.medium }))
+        return { glyph, words }
+      }
+      const dnd = pill(X + 16, y + 76, 'bell')
+      const awake = pill(X + 16 + half + GAP, y + 76, 'coffee')
+      const volume = pill(X + 16, y + 128, 'volume_high')
+      const net = pill(X + 16 + half + GAP, y + 128, 'ethernet')
+      const rec = st.recording && st.recording.active ? pill(X + 16, y + 180, 'record_rec') : null
+      return () => {
+        const session = st.session || {}
+        const quick = st.quick || {}
+        const sound = st.sound || {}
+        const network = quick.network || {}
+        U.set(h.line, [session.locked ? 'gesperrt' : 'entsperrt', network.online === false ? 'offline' : network.ip].filter(Boolean).join(' · '))
+        U.setIcon(dnd.glyph, quick.dnd ? 'bell_off' : 'bell')
+        U.color(dnd.glyph, quick.dnd ? T.warning : T.muted)
+        U.set(dnd.words, quick.dnd ? 'Nicht stören' : 'Mitteilungen')
+        U.color(awake.glyph, quick.keepAwake ? T.primary : T.muted)
+        U.set(awake.words, quick.keepAwake ? 'Bleibt wach' : 'Schläft ein')
+        U.setIcon(volume.glyph, sound.muted ? 'volume_off' : 'volume_high')
+        U.set(volume.words, sound.muted ? 'stumm' : `${sound.volume || 0} % · ${sound.sink || ''}`)
+        U.setIcon(net.glyph, network.signal >= 0 ? 'wifi' : 'ethernet')
+        U.color(net.glyph, network.online === false ? T.danger : T.primary)
+        U.set(net.words, network.label || '–')
+        if (rec) U.set(rec.words, `Aufnahme · ${U.span((Date.now() - st.recording.startedAt) / 1000)}`)
+        if (rec) U.color(rec.glyph, T.danger)
+      }
+    },
+  },
+  {
     id: 'system',
+    tap: () => detail('system'),
     shows: () => plugin('system-monitor') && st.system,
     key: () => (st.system.disks || []).length,
     height: () => 150 + (st.system.disks || []).length * 40,
@@ -171,7 +214,36 @@ const CARDS = [
     },
   },
   {
+    id: 'connections',
+    shows: () => plugin('connections') && st.connections && st.connections.apps && st.connections.apps.length,
+    key: () => Math.min(4, st.connections.apps.length),
+    height: () => 76 + Math.min(4, st.connections.apps.length) * 40 + 8,
+    tap: () => detail('connections'),
+    build(y, add) {
+      const h = add(U.head(X + 16, y + 16, CW - 32, 'lan', 'Verbindungen', '', ''))
+      const rows = st.connections.apps.slice(0, 4).map((app, i) => {
+        const top = y + 76 + i * 40
+        return {
+          label: add(U.text(X + 16, top, CW - 120, 32, '', { size: 18 })),
+          value: add(U.text(X + CW - 116, top, 100, 32, '', { size: 18, font: F.bold, right: true })),
+        }
+      })
+      return () => {
+        const apps = st.connections.apps
+        const total = apps.reduce((n, a) => n + a.conns, 0)
+        const places = st.connections.places || []
+        U.set(h.value, total)
+        U.set(h.line, places.length ? `nach ${places.slice(0, 2).map((p) => p.city).join(', ')}${places.length > 2 ? ' …' : ''}` : 'offen')
+        apps.slice(0, 4).forEach((app, i) => {
+          U.set(rows[i].label, app.title)
+          U.set(rows[i].value, app.conns)
+        })
+      }
+    },
+  },
+  {
     id: 'weather',
+    tap: () => detail('weather'),
     shows: () => plugin('weather') && st.weather && st.weather.available,
     key: () => (st.weather.hourly || []).length,
     height: () => 186,
@@ -206,6 +278,7 @@ const CARDS = [
   },
   {
     id: 'screentime',
+    tap: () => detail('screentime'),
     shows: () => plugin('screentime') && st.screentime,
     key: () => (st.screentime.week || []).length,
     height: () => 210,
@@ -244,6 +317,7 @@ const CARDS = [
   },
   {
     id: 'small',
+    tap: () => st.updates && st.updates.count && detail('updates'),
     shows: () => smallRows().length,
     key: () => smallRows().map((r) => r.id).join(','),
     height: () => 24 + smallRows().length * 52,
@@ -266,6 +340,10 @@ const CARDS = [
   },
 ]
 
+function detail(kind) {
+  push({ url: 'page/detail', params: kind })
+}
+
 function active() {
   return ((st.downloads && st.downloads.items) || []).filter((i) => i.state === 'running' || i.state === 'paused' || i.state === 'in_progress')
 }
@@ -276,6 +354,12 @@ function smallRows() {
   if (st.messages && st.messages.running && plugin('messages')) out.push({ id: 'mail', icon: 'email_outline', label: 'Ungelesen', value: st.messages.unread })
   ;((st.quick && st.quick.devices) || []).filter((b) => b.connected).forEach((b) => {
     out.push({ id: 'bt' + b.address, icon: 'headphones', label: b.name, value: b.battery || 'verbunden' })
+  })
+  ;((st.machines && st.machines.vms) || []).forEach((v, i) => {
+    out.push({ id: 'vm' + i, icon: 'server', label: v.name, value: v.running ? 'läuft' : 'aus' })
+  })
+  ;((st.pcs && st.pcs.devices) || []).forEach((pc, i) => {
+    out.push({ id: 'pc' + i, icon: 'laptop', label: pc.name, value: pc.connected ? 'verbunden' : 'getrennt' })
   })
   return out
 }
@@ -352,21 +436,7 @@ let lastSave = 0
 function save() {
   if (Date.now() - lastSave < 20000) return
   lastSave = Date.now()
-  const a = (st.agents && st.agents.agents) || []
-  writeJson('pc.json', {
-    at: Date.now(),
-    name: U.link().name,
-    theme: U.link().state('theme') || null,
-    cpu: st.system ? st.system.cpu : null,
-    memory: st.system ? st.system.memory : null,
-    busy: a.filter((x) => x.state === 'busy').length,
-    waiting: a.filter((x) => x.state !== 'busy').length,
-    agent: a.length ? a[0].topic : '',
-    media: st.media && st.media.has ? { title: st.media.title, artist: st.media.artist, playing: st.media.playing } : null,
-    printer: st.printer && (st.printer.printing || st.printer.paused) ? { progress: st.printer.progress, left: st.printer.left } : null,
-    weather: st.weather && st.weather.available ? { temperature: st.weather.temperature, icon: st.weather.icon } : null,
-    screentime: st.screentime ? st.screentime.total : null,
-  })
+  writeJson('pc.json', summary((topic) => U.link().state(topic), U.link().name))
 }
 
 Page({

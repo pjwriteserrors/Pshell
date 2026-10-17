@@ -205,6 +205,13 @@ class Peripheral:
             dbus.Interface(self.adapter, GATT_MANAGER).UnregisterApplication(dbus.ObjectPath(ROOT))
         except Exception:
             pass
+        # the bus outlives us: unexported, so a start after a stop can export them again
+        for obj in (*self.objects, self.advertisement):
+            try:
+                obj.remove_from_connection()
+            except Exception:
+                pass
+        self.tx = None
         self.glib_loop.quit()
         return False
 

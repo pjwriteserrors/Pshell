@@ -5,8 +5,8 @@
     "appName": "PShell Face",
     "appType": "watchface",
     "version": {
-      "code": 1,
-      "name": "1.0.0"
+      "code": 2,
+      "name": "1.1.0"
     },
     "icon": "icon.png",
     "vender": "pshell",
@@ -15,7 +15,10 @@
   "permissions": [
     "data:user.hd.step",
     "data:user.hd.heart_rate",
-    "data:os.device.info"
+    "data:os.device.info",
+    "device:os.ble",
+    "device:os.local_storage",
+    "device:os.accelerometer"
   ],
   "runtime": {
     "apiVersion": {
