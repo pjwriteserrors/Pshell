@@ -32,6 +32,8 @@ Singleton {
 	property var running: []
 	// the surface is up
 	property bool watched: false
+	// scripts/games_guard.py keeps games fullscreen
+	readonly property bool guarding: guard.running
 
 	// ── a launch ───────────────────────────────────────────────────────────
 	property string launching: ""
@@ -139,6 +141,9 @@ Singleton {
 				return;
 			}
 			root.launchVia = answer.via || "";
+			// the game finds a controller switched on later as well; it only has to be on
+			if (answer.pads === 0)
+				Quickshell.execDetached(["notify-send", "--app-name", "Games", "--icon", "input-gaming", "No controller is on", `Switch it on – ${game.name} picks it up once it is.`]);
 			root.started = id;
 			startedTimeout.restart();
 			root.launching = "";
@@ -403,6 +408,15 @@ Singleton {
 			}
 		}
 		onExited: root.pads = 0
+	}
+
+	// every game's window fullscreen, also one started in Steam itself
+	Process {
+		id: guard
+
+		running: Plugins.on("games")
+		stdinEnabled: true
+		command: ["python3", "-u", `${Paths.scripts}/games_guard.py`]
 	}
 
 	Component {

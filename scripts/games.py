@@ -15,6 +15,9 @@
     scripts/games.py launch <id> [runner] starts it: through Steam, Proton, Wine or as it is
     scripts/games.py steam-add <id> [tool] adds a game of here to Steam as a non-Steam game
                                           (Steam is restarted for it), progress as JSON lines
+    scripts/games.py steam-pads           turns Steam's desktop layout off for every non-Steam
+                                          game, so the controller reaches the game (Steam is
+                                          restarted for it when it runs)
     scripts/games.py running              the ids of the games that run right now
     scripts/games.py key [<key>]          the SteamGridDB API key, kept in the keyring
 
@@ -742,15 +745,31 @@ def steam_url(gameid):
     return f"steam://rungameid/{gameid}"
 
 
+def pads():
+    """How many controllers are plugged in and on (each has a joystick node)."""
+    try:
+        with open("/proc/bus/input/devices") as file:
+            text = file.read()
+    except OSError:
+        return -1
+    return len(re.findall(r"^H: Handlers=.*\bjs\d+", text, re.M))
+
+
 def cmd_launch(args):
     game = find(args[0])
     runner = args[1] if len(args) > 1 and args[1] else game.get("runner", "")
     if game["kind"] in ("steam", "shortcut") or (runner == "steam" and game.get("gameid")):
         if not shutil.which("steam"):
             fail("Steam is not installed")
+        # a closed Steam can take the controller fix for its non-Steam games on the way
+        if game["kind"] != "steam" and not windows.steam_running():
+            try:
+                windows.pads_to_games()
+            except Exception:  # noqa: BLE001 – the game starts anyway
+                pass
         subprocess.Popen(["steam", steam_url(game["gameid"])], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                          stderr=subprocess.DEVNULL, start_new_session=True)
-        out({"via": "Steam", "id": game["id"]})
+        out({"via": "Steam", "id": game["id"], "pads": pads()})
         return
     exe = game.get("exe", "")
     if not os.path.isfile(exe):
@@ -765,7 +784,7 @@ def cmd_launch(args):
         answer = {"error": "The game did not start"}
     if answer.get("error"):
         fail(answer["error"])
-    out({"via": answer.get("via", ""), "id": game["id"], "pid": answer.get("pid")})
+    out({"via": answer.get("via", ""), "id": game["id"], "pid": answer.get("pid"), "pads": pads()})
 
 
 def cmd_play(args):
@@ -781,7 +800,7 @@ def cmd_play(args):
         else:
             if not os.access(exe, os.X_OK) and not exe.endswith(".sh"):
                 os.chmod(exe, os.stat(exe).st_mode | 0o100)
-            command, env, via = ([exe] if not exe.endswith(".sh") else ["sh", exe]), dict(os.environ), "Linux"
+            command, env, via = ([exe] if not exe.endswith(".sh") else ["sh", exe]), windows.clean_env(), "Linux"
         if game.get("args"):
             import shlex
             command += shlex.split(game["args"])
@@ -796,7 +815,7 @@ def cmd_play(args):
     RUNNING.mkdir(parents=True, exist_ok=True)
     marker = RUNNING / (safe(game_id) + ".json")
     started = int(time.time())
-    marker.write_text(json.dumps({"id": game_id, "pid": os.getpid(), "started": started}))
+    marker.write_text(json.dumps({"id": game_id, "pid": os.getpid(), "started": started, "name": game["name"]}))
     out({"via": via, "pid": process.pid})
     sys.stdout.close()
     with Store() as data:
@@ -883,6 +902,15 @@ def cmd_steam_add(args):
     out({"done": True, "gameid": result["gameid"], "restarted": result.get("restarted", False)})
 
 
+def cmd_steam_pads(_args):
+    report = lambda text: out({"progress": text})  # noqa: E731
+    try:
+        result = windows.pads_to_games(report=report)
+    except Exception as error:  # noqa: BLE001
+        fail(error)
+    out({"done": True, **result})
+
+
 def cmd_key(args):
     if not args:
         out({"key": bool(load().get("gridKey"))})
@@ -909,7 +937,7 @@ def cmd_key(args):
 COMMANDS = {
     "list": cmd_list, "art": cmd_art, "search": cmd_search, "guess": cmd_guess, "add": cmd_add, "update": cmd_update,
     "remove": cmd_remove, "launch": cmd_launch, "_play": cmd_play, "running": cmd_running, "steam-add": cmd_steam_add,
-    "key": cmd_key,
+    "steam-pads": cmd_steam_pads, "key": cmd_key,
 }
 
 

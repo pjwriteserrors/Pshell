@@ -71,3 +71,29 @@ button or Ctrl+Enter opens the full library on the same game, the menu
 button or a right click on a cover opens it there with its menu. A right
 click on the bar's gamepad opens the full library straight away; it turns
 green while a game runs.
+
+Fullscreen and the controller, for every game however it starts:
+
+- `scripts/games_guard.py` runs with the shell while the plugin is on and
+  follows niri's event stream. A window is a game's when its app-id is
+  `steam_app_<n>` (Proton, through Steam or a shortcut) or it belongs to a
+  game that runs – Steam's reaper (also a game started in Steam itself) or a
+  watcher of here: its process, its app-id being one of the game's programs
+  (Wine, X11) or its title the game's name. It is made fullscreen when it
+  opens and again when it leaves fullscreen in its first 30 s (games that
+  size their window while they load); niri only toggles, so a window is
+  asked again only after it was seen fullscreen. After that Mod+Shift+F is
+  the user's. `dotfiles/niri/pshell.kdl` also opens `steam_app_<n>` windows
+  fullscreen right away, with the shell down too.
+- Games started here outside Steam (Proton, Wine, Linux) get an environment
+  without what Steam leaves for its games (`SDL_GAMECONTROLLER_IGNORE_DEVICES`,
+  `SteamVirtualGamepadInfo`, the overlay in `LD_PRELOAD`, …), which would hide
+  the real controller (`windows.clean_env`).
+- Non-Steam games in Steam run without the desktop layout
+  (`AllowDesktopConfig 0`): on Wayland Steam cannot tell the game's window
+  has the focus, keeps its desktop layout, and the controller moves the
+  mouse instead of reaching the game. *Add to Steam* sets it for every
+  shortcut, a shortcut started while Steam is closed fixes them on the way,
+  `games.py steam-pads` does it now (restarting Steam if it runs).
+- A launch with no controller on (no joystick node) says so in a
+  notification; Wine, Proton and SDL pick one up that is switched on later.
