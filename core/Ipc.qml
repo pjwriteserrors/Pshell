@@ -162,7 +162,14 @@ Scope {
 			Torrents.toggle();
 		}
 		function close(): void {
-			Torrents.windowOpen = false;
+			Torrents.close();
+		}
+		// under the bar ↔ a window of its own
+		function popOut(): void {
+			Torrents.popOut();
+		}
+		function dock(): void {
+			Torrents.dock();
 		}
 		// a magnet link, a .torrent file (path or file://) or a link to one:
 		// the window asks where it goes

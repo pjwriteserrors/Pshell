@@ -273,6 +273,13 @@ Scope {
 		TorrentsWindow {}
 	}
 
+	// under the bar, from the magnet in the bar
+	LazyLoader {
+		active: Plugins.on("torrents-bar")
+
+		TorrentsPanel {}
+	}
+
 	LazyLoader {
 		active: Plugins.on("radial-menu")
 

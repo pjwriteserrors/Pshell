@@ -89,6 +89,7 @@ Singleton {
 		vm: "vm-launcher",
 		games: "games",
 		gamebar: "games-bar",
+		torrents: "torrents-bar",
 		radial: "radial-menu",
 		eyerest: "eye-rest",
 		stretch: "stretch",

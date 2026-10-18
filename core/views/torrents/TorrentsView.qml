@@ -14,6 +14,8 @@ import qs.core.views.overlays.launcher
 Item {
 	id: root
 
+	// in a window of its own, or under the bar
+	property bool windowed: true
 	// "all" | "active" | "done"
 	property string filter: "all"
 	readonly property var shownList: Torrents.torrents.filter(item => {
@@ -41,7 +43,7 @@ Item {
 			if (settings.shown) settings.shown = false;
 			else if (Torrents.pending.length > 0) addSheet.dismiss();
 			else if (Torrents.selected !== "") Torrents.select("");
-			else Torrents.windowOpen = false;
+			else Torrents.close();
 		}
 		Keys.onReturnPressed: if (Torrents.pending.length > 0) addSheet.accept()
 		Keys.onPressed: event => {
@@ -132,6 +134,13 @@ Item {
 			IconButton {
 				icon: "cog_outline"
 				onClicked: settings.shown = true
+			}
+
+			// under the bar ↔ a window of its own
+			IconButton {
+				visible: Plugins.on("torrents-bar")
+				icon: root.windowed ? "dock_window" : "open_in_new"
+				onClicked: root.windowed ? Torrents.dock() : Torrents.popOut()
 			}
 		}
 

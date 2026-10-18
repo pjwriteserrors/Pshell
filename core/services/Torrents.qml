@@ -66,15 +66,79 @@ Singleton {
 
 	signal finishedOne(var torrent)
 
-	// ── what the window does ───────────────────────────────────────────────
+	// ── where it shows ─────────────────────────────────────────────────────
+	// under the bar (torrents-bar, a panel of the bar's icon) or popped out
+	// into a window of its own; which one is kept (torrents-ui.json)
+	property bool windowed: false
+	readonly property bool panelled: Plugins.on("torrents-bar") && !root.windowed
+	readonly property bool shown: root.panelled ? Popups.current === "torrents" : root.windowOpen
+
 	function open() {
-		root.windowOpen = true;
+		if (!root.enabled) return;
+		if (root.panelled) {
+			if (Popups.current !== "torrents") Popups.withFocusedScreen(screen => Popups.open("torrents", screen));
+		} else {
+			root.windowOpen = true;
+		}
 		root.wake();
 	}
 
+	function close() {
+		if (root.panelled) {
+			if (Popups.current === "torrents") Popups.close();
+		} else {
+			root.windowOpen = false;
+		}
+	}
+
 	function toggle() {
-		if (root.windowOpen) root.windowOpen = false;
+		if (root.shown) root.close();
 		else root.open();
+	}
+
+	function popOut() {
+		if (Popups.current === "torrents") Popups.close();
+		root.windowed = true;
+		root.windowOpen = true;
+		root.saveUi();
+	}
+
+	function dock() {
+		root.windowOpen = false;
+		root.windowed = false;
+		root.saveUi();
+		root.open();
+	}
+
+	function saveUi() {
+		uiFile.setText(JSON.stringify({ windowed: root.windowed }) + "\n");
+	}
+
+	FileView {
+		id: uiFile
+
+		path: Paths.stateFile("torrents-ui.json")
+		printErrors: false
+		onLoaded: {
+			try {
+				root.windowed = JSON.parse(String(text() || "{}")).windowed === true;
+			} catch (error) {}
+		}
+	}
+
+	// A chooser of the portal is a window: under the panel (an overlay) it
+	// could not be reached, so the panel steps aside while it is up and comes
+	// back with what was picked.
+	property bool stepAside: false
+
+	function asideForPicker() {
+		root.stepAside = root.panelled && Popups.current === "torrents";
+		if (root.stepAside) Popups.close();
+	}
+
+	function backFromPicker() {
+		if (root.stepAside) root.open();
+		root.stepAside = false;
 	}
 
 	function select(hash) {
@@ -233,6 +297,7 @@ Singleton {
 
 	function pickFolder(start, done) {
 		root.folderDone = done;
+		root.asideForPicker();
 		picker.command = ["python3", `${Paths.scripts}/pick_files.py`, "--folder", "Where should it go?", start || root.settings.destination];
 		picker.running = true;
 	}
@@ -245,6 +310,7 @@ Singleton {
 				const path = String(text).split("\n").filter(line => line !== "")[0] || "";
 				const done = root.folderDone;
 				root.folderDone = null;
+				root.backFromPicker();
 				if (done) done(path);
 			}
 		}
@@ -252,6 +318,7 @@ Singleton {
 
 	// a .torrent file picked from disk
 	function pickFile() {
+		root.asideForPicker();
 		filePicker.running = true;
 	}
 
@@ -260,7 +327,10 @@ Singleton {
 
 		command: ["python3", `${Paths.scripts}/pick_files.py`, "Open a torrent file"]
 		stdout: StdioCollector {
-			onStreamFinished: String(text).split("\n").filter(line => line.endsWith(".torrent")).forEach(path => root.add(path))
+			onStreamFinished: {
+				root.backFromPicker();
+				String(text).split("\n").filter(line => line.endsWith(".torrent")).forEach(path => root.add(path));
+			}
 		}
 	}
 
@@ -536,7 +606,7 @@ Singleton {
 	// The daemon is only kept while there is something for it: torrents, the
 	// window, a link waiting. Without, the shell lets go and it leaves a
 	// minute later.
-	readonly property bool needed: root.enabled && (root.windowOpen || root.pending.length > 0 || root.torrents.length > 0 || root.stored)
+	readonly property bool needed: root.enabled && (root.shown || root.pending.length > 0 || root.torrents.length > 0 || root.stored)
 	// torrents of an earlier session, before the daemon told of them
 	property bool stored: false
 
@@ -582,7 +652,7 @@ Singleton {
 
 	// what the window shows of one torrent, while it is open
 	Timer {
-		running: root.enabled && root.connected && root.windowOpen && root.selected !== ""
+		running: root.enabled && root.connected && root.shown && root.selected !== ""
 		repeat: true
 		interval: 1000
 		onTriggered: root.fetchDetails()

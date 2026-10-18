@@ -44,5 +44,6 @@ FloatingWindow {
 		id: view
 
 		anchors.fill: parent
+		windowed: true
 	}
 }
