@@ -152,6 +152,34 @@ Scope {
 
 	// the game library: `games add <path>` opens it to add a program
 	IpcHandler {
+		target: "torrents"
+		enabled: Plugins.on("torrents")
+
+		function open(): void {
+			Torrents.open();
+		}
+		function toggle(): void {
+			Torrents.toggle();
+		}
+		function close(): void {
+			Torrents.windowOpen = false;
+		}
+		// a magnet link, a .torrent file (path or file://) or a link to one:
+		// the window asks where it goes
+		function add(uri: string): void {
+			Torrents.add(uri);
+		}
+		// the window on one torrent ("" for all of them)
+		function select(hash: string): void {
+			Torrents.select(hash);
+			Torrents.open();
+		}
+		function list(): string {
+			return JSON.stringify(Torrents.torrents.map(item => ({ hash: item.hash, name: item.name, phase: item.phase, progress: item.progress, eta: item.eta })));
+		}
+	}
+
+	IpcHandler {
 		target: "games"
 		enabled: Plugins.on("games")
 

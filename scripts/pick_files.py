@@ -3,6 +3,7 @@
 and prints their paths, one per line.
 
   pick_files.py [title]
+  pick_files.py --folder [title] [start]   one folder instead
 """
 
 import sys
@@ -16,7 +17,16 @@ from gi.repository import Gio, GLib  # noqa: E402
 
 
 def main():
-    title = sys.argv[1] if len(sys.argv) > 1 else "Attach files"
+    args = sys.argv[1:]
+    folder = bool(args) and args[0] == "--folder"
+    if folder:
+        args = args[1:]
+    title = args[0] if args else ("Choose a folder" if folder else "Attach files")
+    options = {"multiple": GLib.Variant("b", not folder)}
+    if folder:
+        options["directory"] = GLib.Variant("b", True)
+        if len(args) > 1:
+            options["current_folder"] = GLib.Variant("ay", args[1].encode() + b"\0")
     bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
     token = "pshell" + uuid.uuid4().hex
     sender = bus.get_unique_name()[1:].replace(".", "_")
@@ -35,7 +45,7 @@ def main():
     try:
         bus.call_sync(
             "org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop", "org.freedesktop.portal.FileChooser", "OpenFile",
-            GLib.Variant("(ssa{sv})", ("", title, {"handle_token": GLib.Variant("s", token), "multiple": GLib.Variant("b", True)})),
+            GLib.Variant("(ssa{sv})", ("", title, dict(options, handle_token=GLib.Variant("s", token)))),
             None, Gio.DBusCallFlags.NONE, -1, None)
     except GLib.Error as error:
         print(error.message, file=sys.stderr)

@@ -9,6 +9,7 @@ import qs.core.views.overlays
 import qs.core.views.rpg
 import qs.core.views.overlays.studio
 import qs.core.views.files
+import qs.core.views.torrents
 // last, so a view of the same name in style/views wins
 import qs.style.views
 
@@ -263,6 +264,13 @@ Scope {
 		active: Plugins.on("filemanager")
 
 		FilesWindow {}
+	}
+
+	// the torrent client's window; the downloads run in its daemon
+	LazyLoader {
+		active: Plugins.on("torrents")
+
+		TorrentsWindow {}
 	}
 
 	LazyLoader {

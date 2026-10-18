@@ -181,6 +181,7 @@ Item {
 					{ id: "niri-settings", command: "mouse settings", page: "mouse", name: "Mouse Settings", glyph: "tune_variant", keywords: "buttons gestures dpi" }
 				])
 		},
+		{ id: "torrents", plugin: "torrents", group: "tools", command: "torrents", name: "Torrents", aliases: ["torrent", "magnet", "bittorrent", "p2p"], keywords: "download magnet link seed peers mirror", status: Torrents.running.length > 0 && Torrents.ratio >= 0 ? `${Math.floor(Torrents.ratio * 100)} %` : "" },
 		{ id: "games", plugin: "games", group: "tools", command: "games", name: "Games", aliases: ["game", "play", "steam", "library"], keywords: "steam proton wine library play launch covers", status: Games.running.length > 0 ? "Playing" : "" },
 		{ id: "vm", plugin: "vm-launcher", group: "system", command: "vm", name: "Virtual Machines", aliases: ["vms", "windows", "win", "virt"], keywords: "looking glass qemu libvirt start boot", status: Machines.vms.some(vm => vm.running) ? "On" : "" },
 		{ id: "dnd", plugin: "dnd", group: "system", command: "dnd", name: "Do Not Disturb", aliases: ["quiet", "silent"], keywords: "notifications", status: Notifs.dnd ? "On" : "" },
@@ -2477,6 +2478,10 @@ Item {
 			root.closeRequested();
 			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "watch", "open"]);
 			break;
+		case "torrents":
+			root.closeRequested();
+			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "torrents", "open"]);
+			break;
 		case "games":
 			root.closeRequested();
 			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "games", "open"]);
@@ -3021,6 +3026,7 @@ Item {
 		case "dnd": return "minus_circle";
 		case "vm": return "microsoft_windows";
 		case "games": return "gamepad_variant";
+		case "torrents": return "magnet";
 		case "printer": return "printer_3d";
 		case "watch": return "watch";
 		}
