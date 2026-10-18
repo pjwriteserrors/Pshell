@@ -228,17 +228,6 @@ PanelWindow {
 
 			BarIcon {
 				bar: root
-				panelId: "torrents"
-				visible: Plugins.on("torrents-bar")
-				icon: "magnet"
-				tooltip: Torrents.running.length > 0 && Torrents.ratio >= 0 ? `Torrents · ${Math.floor(Torrents.ratio * 100)} % · ${Torrents.rate(Torrents.down)}` : "Torrents · right-click for a window"
-				iconColor: Torrents.running.length > 0 ? Theme.primary : (active ? Theme.primary : Theme.text)
-				onClicked: Torrents.windowed ? Torrents.toggle() : toggle()
-				onRightClicked: Torrents.windowed ? Torrents.dock() : Torrents.popOut()
-			}
-
-			BarIcon {
-				bar: root
 				panelId: "ssh"
 				visible: Plugins.on("ssh")
 				icon: "server_network"

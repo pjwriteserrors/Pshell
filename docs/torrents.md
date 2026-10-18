@@ -23,10 +23,11 @@ minute and the browser asks once per link (its "always" box does the same).
 
 ## Under the bar or a window
 
-`torrents-bar` puts a magnet into the bar: a click opens the client as a
-panel under the bar (`core/views/torrents/TorrentsPanel.qml`), the button
+`torrents-bar` opens the client as a panel under the bar
+(`core/views/torrents/TorrentsPanel.qml`; `>torrents`, `ipc torrents
+toggle`, a link that arrives), without an icon in the bar; the button
 beside the settings pops it out into a window of its own and back
-(`ipc torrents popOut|dock`, a right click on the magnet does the same);
+(`ipc torrents popOut|dock`);
 which one is kept in `~/.local/state/pshell/torrents-ui.json`. A link that
 arrives opens the one in use. While the portal's folder or file chooser is
 up the panel steps aside (it is an overlay the chooser would be under) and
