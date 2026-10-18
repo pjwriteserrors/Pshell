@@ -318,6 +318,8 @@ awww_outputs_missing() {
 	local image_path="$1"
 	local painted=""
 
+	# without a daemon `awww query` fails, and under pipefail + errexit that
+	# would end this function before it names a single output as missing
 	painted="$(awww query 2>/dev/null | python3 -c '
 import sys
 wanted = sys.argv[1]
@@ -330,7 +332,7 @@ for line in sys.stdin:
     index = rest.find(marker)
     if index >= 0 and rest[index + len(marker):].strip() == wanted:
         print(name.strip())
-' "$image_path")"
+' "$image_path" || true)"
 
 	comm -23 <(list_outputs) <(printf '%s\n' "$painted" | awk 'NF' | sort -u)
 }
@@ -386,12 +388,26 @@ mpvpaper_outputs_missing() {
 	done < <(list_outputs)
 }
 
-stop_mpvpaper_output() {
-	local unit=""
+# mpvpaper that failed to open its file deadlocks and ignores SIGTERM; a plain
+# `systemctl stop` then waits out the 90 s stop timeout per output while the
+# whole theme apply (and its hooks) queues behind this script's lock. So TERM,
+# a short grace, then KILL.
+stop_mpvpaper_unit() {
+	local unit="$1"
+	local attempt=0
 
-	unit="$(mpvpaper_unit "$1")"
+	systemctl --user kill --signal=SIGTERM "$unit" >/dev/null 2>&1 || true
+	for ((attempt = 0; attempt < 10; attempt++)); do
+		[[ "$(systemctl --user show --property=MainPID --value "$unit" 2>/dev/null)" =~ ^[1-9] ]] || break
+		sleep 0.1
+	done
+	systemctl --user kill --signal=SIGKILL "$unit" >/dev/null 2>&1 || true
 	systemctl --user stop "$unit" >/dev/null 2>&1 || true
 	systemctl --user reset-failed "$unit" >/dev/null 2>&1 || true
+}
+
+stop_mpvpaper_output() {
+	stop_mpvpaper_unit "$(mpvpaper_unit "$1")"
 	rm -f "$(mpvpaper_socket_path "$1")"
 }
 
@@ -401,8 +417,7 @@ stop_mpvpaper() {
 
 	while IFS= read -r unit; do
 		[[ -n "$unit" ]] || continue
-		systemctl --user stop "$unit" >/dev/null 2>&1 || true
-		systemctl --user reset-failed "$unit" >/dev/null 2>&1 || true
+		stop_mpvpaper_unit "$unit"
 	done < <(systemctl --user list-units --all --plain --no-legend "${MPVPAPER_UNIT_PREFIX}*" 2>/dev/null | awk '{print $1}')
 
 	pkill -TERM -x mpvpaper >/dev/null 2>&1 || true
@@ -427,7 +442,7 @@ start_mpvpaper_output() {
 	for ((attempt = 0; attempt < 6; attempt++)); do
 		stop_mpvpaper_output "$output"
 		if systemd-run --user --quiet --collect --service-type=exec \
-			--unit="$unit" \
+			--unit="$unit" --property=TimeoutStopSec=2 \
 			mpvpaper -l "$MPVPAPER_LAYER" \
 			-o "no-audio loop panscan=1.0 input-ipc-server=$socket_path" \
 			"$output" "$video_path"; then
