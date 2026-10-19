@@ -5,7 +5,11 @@
 #   apply_wallpaper_runtime.sh <image-or-video>   select new media and paint it
 #   apply_wallpaper_runtime.sh --ensure           repaint only what is missing
 #
-# The wallpaper stack has three layers, from bottom to top:
+# The wallpaper stack has three layers, from bottom to top, all on the
+# background layer of the compositor - the shell keeps its widgets on the
+# wallpaper in the bottom layer, and a player there would cover them whenever
+# it maps after the shell. Within one layer the surface mapped last is on top,
+# so a player is always started after swaybg:
 #
 #   swaybg     a still frame of the media. swaybg follows output hotplug on its
 #              own, so a monitor that wakes up late is never black.
@@ -25,7 +29,7 @@ source "$SCRIPT_DIR/theme_paths.sh"
 export PATH="/usr/local/bin:/usr/bin:/bin:$HOME/.local/bin:$HOME/.pyenv/shims:$PATH"
 
 LOG_FILE="${THEME_STATE_DIR}/wallpaper-runtime.log"
-MPVPAPER_LAYER="bottom"
+MPVPAPER_LAYER="background"
 MPVPAPER_UNIT_PREFIX="quickshell-mpvpaper-"
 AWWW_UNIT="quickshell-awww.service"
 SWAYBG_UNIT="quickshell-swaybg.service"
@@ -297,7 +301,7 @@ ensure_awww() {
 	stop_awww
 	if ! systemd-run --user --quiet --collect --service-type=exec \
 		--unit="$AWWW_UNIT" \
-		awww-daemon --layer bottom --no-cache --quiet; then
+		awww-daemon --layer background --no-cache --quiet; then
 		echo "could not start awww daemon" >&2
 		return 1
 	fi
@@ -520,6 +524,13 @@ log "painting type=$MEDIA_TYPE outputs=${TARGETS[*]:-none} media=$MEDIA_PATH"
 
 if (( RESTART_BASE_LAYER )) || ! swaybg_running; then
 	restart_swaybg "$THEME_CURRENT_FRAME_FILE" || true
+	# a new swaybg lies above the player that was already there
+	if [[ "$MEDIA_TYPE" == "video" ]]; then
+		stop_mpvpaper
+	else
+		stop_awww
+	fi
+	readarray -t TARGETS < <(printf '%s\n' "${OUTPUTS[@]}")
 fi
 
 # Exactly one of the two players may be alive, whatever left over the last
