@@ -21,7 +21,9 @@ PanelWindow {
 
 	required property var modelData
 	property bool backdrop: false
-	readonly property real longest: Math.ceil(Math.max(root.width, root.height) * (root.devicePixelRatio || 1))
+	// a blurred copy loses nothing at a third of the size: less to decode and keep
+	readonly property real detail: root.backdrop && Wallpaper.backdrop === "blur" ? 0.35 : 1
+	readonly property real longest: Math.ceil(Math.max(root.width, root.height) * (root.devicePixelRatio || 1) * root.detail)
 	// the one that shows, and the one coming
 	property Image front: one
 	property Image back: two
