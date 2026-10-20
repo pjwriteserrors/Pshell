@@ -6,14 +6,49 @@ import qs.style.theme
 import qs.style.widgets
 import qs.core.services
 
-// What the bar shows and where (BarLayout, BarEditor), and how a new
+// What the bar shows and where (BarLayout, BarEditor), how a new
 // wallpaper comes in (Wallpaper): out of the bar, a fade or at once, and
-// what the overview shows behind the workspaces.
+// what the overview shows behind the workspaces; what game mode does.
 SettingsPage {
 	id: root
 
-	title: "Bar & wallpaper"
-	description: "Put the bar together from everything the plugins that are on offer, and choose how a new wallpaper comes in."
+	title: "Desktop"
+	description: "Put the bar together from everything the plugins that are on offer, choose how a new wallpaper comes in and what game mode does."
+
+	component Switch: RowLayout {
+		id: line
+
+		property string text: ""
+		property string detail: ""
+		property bool checked: false
+		signal toggled(bool on)
+
+		Layout.fillWidth: true
+		spacing: 14
+
+		ColumnLayout {
+			Layout.fillWidth: true
+			spacing: 1
+
+			StyledText {
+				text: line.text
+				font.weight: Font.Medium
+			}
+
+			StyledText {
+				Layout.fillWidth: true
+				text: line.detail
+				tone: Theme.textSubtle
+				font.pixelSize: Theme.size.small
+				wrapMode: Text.WordWrap
+			}
+		}
+
+		Toggle {
+			checked: line.checked
+			onToggled: on => line.toggled(on)
+		}
+	}
 
 	SettingCard {
 		anchor: "bar-items"
@@ -53,6 +88,35 @@ SettingsPage {
 			options: [{ value: "sharp", label: "The wallpaper" }, { value: "blur", label: "Blurred" }, { value: "dim", label: "Dimmed" }]
 			current: Wallpaper.backdrop
 			onSelected: value => Wallpaper.setBackdrop(value)
+		}
+	}
+
+	SettingCard {
+		anchor: "game-mode"
+		title: "Game mode"
+		subtitle: GameMode.active ? `On${GameMode.title !== "" ? ` – ${GameMode.title}` : ""}` : "Comes on by itself while a game's window is open"
+		icon: "gamepad_variant"
+		visible: GameMode.enabled
+
+		Segmented {
+			Layout.fillWidth: true
+			options: [{ value: "auto", label: "With the games" }, { value: "on", label: "Always on" }, { value: "off", label: "Off" }]
+			current: GameMode.force
+			onSelected: value => GameMode.setForce(value)
+		}
+
+		Switch {
+			text: "Rest Find my mouse"
+			detail: "Shaking the mouse in a game does not light it up"
+			checked: GameMode.pauseFindMouse
+			onToggled: on => GameMode.setOption("pauseFindMouse", on)
+		}
+
+		Switch {
+			text: "Quiet notifications"
+			detail: "Do not disturb while a game runs"
+			checked: GameMode.quietNotifications
+			onToggled: on => GameMode.setOption("quietNotifications", on)
 		}
 	}
 }
