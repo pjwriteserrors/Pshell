@@ -370,7 +370,7 @@ Singleton {
 	}
 
 	function toast(text, error) {
-		Quickshell.execDetached(["notify-send", "--app-name", "Torrents", "--icon", `${Paths.assets}/icons/pshell-torrents.svg`, error ? "Torrent failed" : "Torrents", String(text)]);
+		Notifs.post({ app: "Torrents", icon: `${Paths.assets}/icons/pshell-torrents.svg`, summary: error ? "Torrent failed" : "Torrents", body: String(text) });
 	}
 
 	// ── what the daemon tells ──────────────────────────────────────────────
@@ -436,29 +436,19 @@ Singleton {
 		root.finishedOne(torrent);
 		// the downloads list plays its sound for what it shows
 		if (!Plugins.on("downloads")) Sounds.play("download");
-		finishNote.command = ["notify-send", "--app-name", "Torrents", "--icon", `${Paths.assets}/icons/pshell-torrents.svg`,
-			"--action=show=Show folder", "--action=open=Torrents",
-			"Download complete", `${torrent.name} · ${Format.bytes(torrent.size)}`];
-		finishNote.hash = torrent.hash;
-		finishNote.running = true;
+		const hash = torrent.hash;
+		Notifs.post({
+			app: "Torrents",
+			icon: `${Paths.assets}/icons/pshell-torrents.svg`,
+			summary: "Download complete",
+			body: `${torrent.name} · ${Format.bytes(torrent.size)}`,
+			actions: [{ text: "Show folder", invoke: () => root.reveal(hash) }, { text: "Torrents", invoke: () => {
+				root.select(hash);
+				root.open();
+			} }]
+		});
 	}
 
-	Process {
-		id: finishNote
-
-		property string hash: ""
-
-		stdout: StdioCollector {
-			onStreamFinished: {
-				const action = String(text).trim();
-				if (action === "show") root.reveal(finishNote.hash);
-				else if (action === "open") {
-					root.select(finishNote.hash);
-					root.open();
-				}
-			}
-		}
-	}
 
 	// ── talking to the daemon ──────────────────────────────────────────────
 	property int counter: 0

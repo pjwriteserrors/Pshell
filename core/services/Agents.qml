@@ -50,10 +50,14 @@ Singleton {
 
 	function announce(window, agent, seconds) {
 		const minutes = Math.round(seconds / 60);
-		const proc = notifier.createObject(root, { windowId: Number(window.id) });
-		proc.command = ["notify-send", "--app-name", agent, "--icon", window.app_id || "utilities-terminal",
-			"--action", "default=Show", "--wait", `${agent} is done`, `${root.topic(window.title) || window.app_id} · ${minutes} min`];
-		proc.running = true;
+		const id = Number(window.id);
+		Notifs.post({
+			app: agent,
+			icon: window.app_id || "utilities-terminal",
+			summary: `${agent} is done`,
+			body: `${root.topic(window.title) || window.app_id} · ${minutes} min`,
+			actions: [{ text: "", invoke: () => Niri.focusWindow(id) }]
+		});
 	}
 
 	// the hook of an agent that shows no spinner (Codex)
@@ -91,20 +95,4 @@ Singleton {
 		}
 	}
 
-	Component {
-		id: notifier
-
-		Process {
-			id: proc
-
-			property int windowId: -1
-
-			stdout: SplitParser {
-				onRead: line => {
-					if (line.trim() === "default") Niri.focusWindow(proc.windowId);
-				}
-			}
-			onExited: proc.destroy()
-		}
-	}
 }

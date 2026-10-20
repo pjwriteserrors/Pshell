@@ -143,7 +143,7 @@ Singleton {
 			root.launchVia = answer.via || "";
 			// the game finds a controller switched on later as well; it only has to be on
 			if (answer.pads === 0)
-				Quickshell.execDetached(["notify-send", "--app-name", "Games", "--icon", "input-gaming", "No controller is on", `Switch it on – ${game.name} picks it up once it is.`]);
+				Notifs.post({ app: "Games", icon: "input-gaming", summary: "No controller is on", body: `Switch it on – ${game.name} picks it up once it is.` });
 			root.started = id;
 			startedTimeout.restart();
 			root.launching = "";

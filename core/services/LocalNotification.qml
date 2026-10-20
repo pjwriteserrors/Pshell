@@ -2,8 +2,9 @@ import QtQuick
 import Quickshell.Services.Notifications
 
 // A notification that did not come over D-Bus but looks like one to Notifs
-// and its views: a notification of the phone, or a question the phone asks.
-// What happens on a click is up to whoever made it (the callbacks).
+// and its views: one of the shell's own (Notifs.post), a notification of the
+// phone, or a question the phone asks. What happens on a click is up to
+// whoever made it (the callbacks).
 QtObject {
 	id: root
 
@@ -24,8 +25,8 @@ QtObject {
 	property real expireTimeout: -1
 	property bool lastGeneration: false
 	property bool tracked: true
-	// never mirrored back to the phone
-	readonly property bool local: true
+	// never mirrored to the phone (the phone's own, its questions)
+	property bool local: true
 
 	property var onDismissed: null
 	property var onReplied: null

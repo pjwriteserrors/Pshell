@@ -205,6 +205,44 @@ Singleton {
 		}]);
 	}
 
+	// A notification of the shell's own, in the centre and as a toast, like
+	// one that came over D-Bus (and mirrored to the phone like one):
+	//   app, icon (an icon name or path), image, summary, body
+	//   urgency  – NotificationUrgency (Normal)
+	//   actions  – [{ text, invoke: function }]; the one with identifier
+	//              "default" (text "") is the click on the notification
+	// Returns the notification; close() takes it away.
+	property int posted: 0
+
+	function post(options) {
+		const extra = options || {};
+		root.posted += 1;
+		const notification = localNotification.createObject(root, {
+			id: -(2000000 + root.posted),
+			appName: String(extra.app || "Pshell"),
+			summary: String(extra.summary || ""),
+			body: String(extra.body || ""),
+			image: String(extra.image || ""),
+			appIcon: String(extra.icon || ""),
+			urgency: extra.urgency ?? NotificationUrgency.Normal,
+			actions: (extra.actions || []).map((action, i) => ({
+				text: String(action.text ?? ""),
+				identifier: String(action.identifier ?? (action.text ? `action-${i}` : "default")),
+				invoke: action.invoke ?? (() => {})
+			})),
+			local: false
+		});
+		notification.closed.connect(() => root.markClosed(notification.id));
+		root.register(notification);
+		return notification;
+	}
+
+	Component {
+		id: localNotification
+
+		LocalNotification {}
+	}
+
 	// status: "running" | "done" | "error" | anything
 	// options (all optional):
 	//   icon     – glyph name instead of the status glyph
