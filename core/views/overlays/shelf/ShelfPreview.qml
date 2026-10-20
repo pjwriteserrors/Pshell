@@ -286,17 +286,6 @@ Item {
 		}
 	}
 
-	Process {
-		id: mathProc
-
-		command: ["qalc", "-t", `(${String(root.item?.text ?? "").trim().replace(/\*\*/g, "^")})`]
-		stdout: StdioCollector {
-			onStreamFinished: {
-				const value = String(text).trim();
-				root.result = value.length > 0 && value.length < 60 && !/error|warning/i.test(value) ? value : "";
-			}
-		}
-	}
 
 	// items are replaced whenever the shelf learns more about them
 	readonly property string key: `${root.fileKind}|${root.item?.path ?? ""}|${root.item?.text ?? ""}|${root.linkPicture}|${root.mode}`
@@ -306,7 +295,7 @@ Item {
 		root.thumbText = "";
 		root.result = "";
 		if (["pdf", "video", "audio", "code", "thumb"].includes(root.fileKind)) thumbProc.running = true;
-		if (root.textKind.type === "math") mathProc.running = true;
+		if (root.textKind.type === "math") root.result = Calc.evaluate(String(root.item?.text ?? "")).text;
 	}
 
 	onKeyChanged: Qt.callLater(root.load)

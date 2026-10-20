@@ -1037,62 +1037,12 @@ Item {
 		return "";
 	}
 
-	function normalizeCalculatorExpression(expression) {
-		return String(expression || "")
-			.trim()
-			.replace(/,/g, ".")
-			.replace(/[×·]/g, "*")
-			.replace(/[÷:]/g, "/")
-			.replace(/\^/g, "**");
-	}
-
-	function formatCalculatorResult(value) {
-		if (!Number.isFinite(value)) return "";
-		if (Number.isInteger(value)) return String(value);
-		return String(Number(value.toPrecision(12)));
-	}
-
 	function evaluateCalculatorExpression(expression) {
 		const raw = String(expression || "").trim();
-		if (raw === "") {
-			return {
-				valid: false,
-				result: "",
-				message: "Type an expression, for example >c 5+5"
-			};
-		}
-
-		const normalized = root.normalizeCalculatorExpression(raw);
-		if (!/^[0-9+\-*/%().\sEe]+$/.test(normalized)) {
-			return {
-				valid: false,
-				result: "",
-				message: "Only numbers and + - * / % ^ ( ) are supported"
-			};
-		}
-
-		try {
-			const value = Function(`"use strict"; return (${normalized});`)();
-			const result = root.formatCalculatorResult(Number(value));
-			if (result === "") {
-				return {
-					valid: false,
-					result: "",
-					message: "Calculation has no finite result"
-				};
-			}
-			return {
-				valid: true,
-				result,
-				message: `${raw} = ${result}`
-			};
-		} catch (error) {
-			return {
-				valid: false,
-				result: "",
-				message: "Invalid expression"
-			};
-		}
+		if (raw === "") return { valid: false, result: "", message: "Type an expression, for example >c 5+5" };
+		const evaluation = Calc.evaluate(raw);
+		if (!evaluation.ok) return { valid: false, result: "", message: evaluation.error === "no finite result" ? "Calculation has no finite result" : "Invalid expression" };
+		return { valid: true, result: evaluation.text, message: `${raw} = ${evaluation.text}` };
 	}
 
 	function calculatorCommand() {
