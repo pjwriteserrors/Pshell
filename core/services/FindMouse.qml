@@ -5,7 +5,7 @@ import Quickshell
 import Quickshell.Io
 
 // Shaking the pointer with nothing held shows where it is
-// (scripts/find_mouse.py tells of the shake, MouseFinder draws the light).
+// (Input tells of the shake, MouseFinder draws the light).
 // The shell does not know where the pointer is: while the light is wanted
 // every screen listens for it, and the one it moves on says so here.
 Singleton {
@@ -44,20 +44,20 @@ Singleton {
 		root.y = y;
 	}
 
-	function handle(line) {
-		let data = null;
-		try {
-			data = JSON.parse(line);
-		} catch (error) {
-			return;
-		}
-		if (data.type === "shake") {
+	Connections {
+		target: Input
+		enabled: root.available
+
+		function onShaken() {
 			root.show();
-		} else if (data.type === "press") {
+		}
+		function onPressed() {
 			root.hide();
-		} else if (data.type === "error") {
+		}
+		function onErrorChanged() {
+			if (Input.error === "" || !Input.shaking) return;
 			root.failed = true;
-			Notifs.pushInternal("error", "Find my mouse", root.failures[data.reason] ?? "", { icon: "mouse_variant" });
+			Notifs.pushInternal("error", "Find my mouse", root.failures[Input.error] ?? "", { icon: "mouse_variant" });
 		}
 	}
 
@@ -74,24 +74,5 @@ Singleton {
 		onTriggered: root.active = false
 	}
 
-	Process {
-		id: daemon
 
-		running: root.available && !root.failed
-		command: ["python3", "-u", `${Paths.scripts}/find_mouse.py`]
-		stdout: SplitParser {
-			onRead: line => root.handle(line)
-		}
-		onExited: {
-			if (root.available && !root.failed) revive.restart();
-		}
-	}
-
-	// a daemon that died comes back
-	Timer {
-		id: revive
-
-		interval: 5000
-		onTriggered: if (root.available && !root.failed && !daemon.running) daemon.running = true
-	}
 }

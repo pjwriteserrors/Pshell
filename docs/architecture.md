@@ -99,7 +99,7 @@ or when a plugin has neither picture, scene nor icon.
 
 Shaking the pointer to open a shelf reads the mouse and touchpad event
 devices; the session gets read access to them with
-`scripts/setup-rpg-input-access.sh` (once per machine). Codex reports its
+`scripts/setup-input-access.sh` (once per machine). Codex reports its
 turns through `~/.codex/hooks.json` (seeded by install.sh, trusted once in
 Codex with `/hooks`); Claude Code needs nothing, its window title says when
 it works.
@@ -114,7 +114,8 @@ pause at punctuation and the countdown are kept in
 `find-mouse` shows where the pointer is: shaking it with no key or button
 held dims the screens but a circle around it, which closes in on the pointer
 and sends rings off until the shaking ends; a click ends it at once.
-`scripts/find_mouse.py` reads mice, touchpads and keyboards (evdev) for the
+`scripts/input_watch.py` (the shell's one reader of mice, touchpads and
+keyboards, also for the shaken drag of the shelves and the RPG's counts) reads them for the
 shake, the screens take the pointer while the light is on to learn where it
 is. `scripts/ipc.sh findmouse find` asks for it from a key; the light then
 comes with the pointer's next move.
@@ -539,7 +540,7 @@ where to work (`core/services/Autocorrect.qml`): in windows, and of the shell
 itself only in fields that ask for it with `autocorrect: true` (`Field`,
 `AreaField`) – what is written in Messages. A tile of the quick settings
 and `scripts/ipc.sh autocorrect toggle` switch it off and on. The session reads the
-keyboards with `scripts/setup-rpg-input-access.sh`.
+keyboards with `scripts/setup-input-access.sh`.
 `scripts/autocorrect.py try "text"` shows what typing a text leaves.
 Typing does not wait for a correction: every key pressed since the one that
 called for it is followed, what it typed is put behind the word again, and

@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
-"""Tells when the pointer is shaken with nothing held, for FindMouse.
+"""What the shell needs to know of the mice, touchpads and keyboards, read
+once (evdev) for everything that asks (core/services/Input.qml). It prints
+one JSON line per event, only for what it was started with:
 
-The daemon reads the mice, touchpads and keyboards (evdev) and prints one
-JSON line per event:
+  --shake      {"type": "shake"}  the pointer went back and forth several
+                                  times in a moment, no key or button down;
+                                  again for every further turn (FindMouse)
+               {"type": "press"}  a key or button went down shortly after
+  --drag       {"type": "dragshake"}  the same while only the left button is
+                                  held: something is dragged (Shelf)
+  --count S    {"type": "activity", "keys": n, "clicks": n} every S seconds
+                                  with something pressed (the RPG)
 
-  {"type": "shake"}   the pointer went back and forth several times in a
-                      moment, no key or button down; again for every further
-                      turn while the shaking goes on
-  {"type": "press"}   a key or button went down shortly after a shake
-
+and {"type": "ready"} or {"type": "error", "reason": "permission"|"devices"}.
 Nothing else leaves it: no positions, no key codes.
 
-  find_mouse.py           the daemon
-  find_mouse.py --test    runs the detector against made-up movements
+  input_watch.py --shake --drag --count 2   the daemon
+  input_watch.py --test                     the detector against made-up movements
 """
 
 from __future__ import annotations
@@ -45,6 +49,10 @@ TOUCH_STROKE = 0.06
 # how long after a shake a press is told
 ARMED = 2.5
 RESCAN = 5.0
+# a drag shaken twice within this is one shake
+DRAG_COOLDOWN = 1.5
+BTN_LEFT = 0x110
+BTN_MISC = 0x100
 
 
 class Detector:
@@ -91,6 +99,7 @@ class Device:
         self.name = name
         self.touchpad = touchpad
         self.detector = Detector(stroke)
+        self.dragging = Detector(stroke)
         self.held: set[int] = set()
         self.dx = 0.0
         self.dy = 0.0
@@ -154,11 +163,16 @@ def emit(**payload: object) -> None:
 
 
 class Daemon:
-    def __init__(self) -> None:
+    def __init__(self, shake: bool, drag: bool, count: float) -> None:
         self.selector = selectors.DefaultSelector()
         self.devices: dict[str, Device] = {}
         self.denied = 0
         self.armed = 0.0
+        self.shake = shake
+        self.drag = drag
+        self.count = count
+        self.keys = self.clicks = 0
+        self.last_drag = float("-inf")
 
     def scan(self) -> None:
         try:
@@ -211,11 +225,18 @@ class Daemon:
                 return
             if value == 0:
                 device.held.discard(code)
+                if code == BTN_LEFT:
+                    device.dragging.reset()
             elif value == 1:
                 device.held.add(code)
+                if code >= BTN_MISC:
+                    self.clicks += 1
+                else:
+                    self.keys += 1
                 for other in self.devices.values():
                     other.detector.reset()
-                if now < self.armed:
+                    other.dragging.reset()
+                if self.shake and now < self.armed:
                     self.armed = 0.0
                     emit(type="press")
         elif kind == EV_REL:
@@ -241,9 +262,16 @@ class Daemon:
             else:
                 dx, dy = device.dx, device.dy
                 device.dx = device.dy = 0.0
-            if (dx or dy) and not self.held() and device.detector.move(dx, dy, now):
+            if not (dx or dy):
+                return
+            if self.shake and not self.held() and device.detector.move(dx, dy, now):
                 self.armed = now + ARMED
                 emit(type="shake")
+            # something dragged: only the left button down, on this device
+            elif self.drag and device.held == {BTN_LEFT} and device.dragging.move(dx, dy, now) and now - self.last_drag > DRAG_COOLDOWN:
+                self.last_drag = now
+                device.dragging.reset()
+                emit(type="dragshake")
 
     def run(self) -> int:
         self.scan()
@@ -252,8 +280,9 @@ class Daemon:
             return 2
         emit(type="ready")
         rescan = time.monotonic() + RESCAN
+        tally = time.monotonic() + self.count if self.count else float("inf")
         while True:
-            for key, _ in self.selector.select(max(0.0, rescan - time.monotonic())):
+            for key, _ in self.selector.select(max(0.0, min(rescan, tally) - time.monotonic())):
                 device: Device = key.data
                 try:
                     block = os.read(device.fd, EVENT.size * 64)
@@ -267,6 +296,11 @@ class Daemon:
                 for offset in range(0, len(block) - len(block) % EVENT.size, EVENT.size):
                     _, _, kind, code, value = EVENT.unpack_from(block, offset)
                     self.handle(device, kind, code, value, now)
+            if time.monotonic() >= tally:
+                if self.keys or self.clicks:
+                    emit(type="activity", keys=self.keys, clicks=self.clicks)
+                self.keys = self.clicks = 0
+                tally = time.monotonic() + self.count
             if time.monotonic() >= rescan:
                 self.scan()
                 rescan = time.monotonic() + RESCAN
@@ -305,7 +339,9 @@ def test() -> int:
 if __name__ == "__main__":
     if "--test" in sys.argv[1:]:
         sys.exit(test())
+    args = sys.argv[1:]
+    count = float(args[args.index("--count") + 1]) if "--count" in args else 0.0
     try:
-        sys.exit(Daemon().run())
+        sys.exit(Daemon("--shake" in args, "--drag" in args, max(0.5, min(10.0, count)) if count else 0.0).run())
     except (KeyboardInterrupt, BrokenPipeError):
         sys.exit(0)

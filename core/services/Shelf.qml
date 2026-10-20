@@ -767,16 +767,16 @@ Singleton {
 		}
 	}
 
-	Process {
-		id: shaker
+	// shaking a drag (Input) brings up the commands
+	Connections {
+		target: Input
+		enabled: Input.dragging
 
-		running: Plugins.on("drop-commands") && root.shake
-		command: ["python3", root.helper, "shake"]
-		stdout: SplitParser {
-			onRead: line => {
-				if (line === "shake") root.shaken();
-				else if (line === "noaccess") root.shakeAccess = false;
-			}
+		function onDragShaken() {
+			root.shaken();
+		}
+		function onErrorChanged() {
+			root.shakeAccess = Input.error !== "permission";
 		}
 	}
 }

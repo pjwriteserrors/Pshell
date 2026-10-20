@@ -242,7 +242,7 @@ def doctor():
                 report.fail(f"no hunspell dictionary for {language} ({package})")
         keyboards = glob.glob("/dev/input/by-path/*-event-kbd") + glob.glob("/dev/input/by-id/*-event-kbd")
         if not any(os.access(path, os.R_OK) for path in keyboards):
-            report.fail("the keyboard is not readable (scripts/setup-rpg-input-access.sh)")
+            report.fail("the keyboard is not readable (scripts/setup-input-access.sh)")
         if not os.access("/dev/uinput", os.W_OK):
             report.fail("/dev/uinput is not writable – typing the corrections (a udev rule or the input group)")
         if not any(autocorrect.usage_file(language).exists() for language in autocorrect.LANGUAGES):
@@ -257,7 +257,7 @@ def doctor():
             report.fail("evdev – taking the keyboard (python-evdev)")
         keyboards = glob.glob("/dev/input/by-path/*-event-kbd") + glob.glob("/dev/input/by-id/*-event-kbd")
         if not any(os.access(path, os.R_OK) for path in keyboards):
-            report.fail("the keyboard is not readable (scripts/setup-rpg-input-access.sh)")
+            report.fail("the keyboard is not readable (scripts/setup-input-access.sh)")
         if not os.access("/dev/uinput", os.W_OK):
             report.fail("/dev/uinput is not writable – handing the keys on (a udev rule or the input group)")
         if report.failures == before:
@@ -269,7 +269,7 @@ def doctor():
         if any(os.access(path, os.R_OK) for path in mice):
             report.ok("the mouse is readable")
         else:
-            report.fail("the mouse is not readable (scripts/setup-rpg-input-access.sh)")
+            report.fail("the mouse is not readable (scripts/setup-input-access.sh)")
 
     report.section("Fonts")
     for family, why in FONTS:
