@@ -33,7 +33,8 @@ BarButton {
 				delegate: Rectangle {
 					required property real modelData
 
-					anchors.verticalCenter: parent.verticalCenter
+					// gone with the bar's zone, it has no parent any more
+					anchors.verticalCenter: parent?.verticalCenter
 					width: 4
 					height: 15
 					radius: 2

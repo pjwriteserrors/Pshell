@@ -51,6 +51,7 @@ ModalWindow {
 		{ id: "workspaces", label: "Workspaces", icon: "view_grid_outline", hint: "Named workspaces" },
 		{ id: "overview", label: "Overview & gestures", icon: "gesture_swipe", hint: "Overview, hot corners, Alt-Tab" },
 		{ id: "system", label: "System", icon: "cog_outline", hint: "Startup, environment, screenshots, blur" },
+		{ id: "bar", label: "Bar & wallpaper", icon: "dock_window", hint: "What the bar shows, how a wallpaper comes in", plugin: "bar" },
 		{ id: "sounds", label: "Sounds", icon: "volume_high", hint: "Clicks, notifications, devices", plugin: "sounds" },
 		{ id: "lighting", label: "Lighting", icon: "led_strip_variant", hint: "Keyboard and LEDs: wallpaper or screen", shown: Lighting.enabled },
 		{ id: "phone", label: "Notifications", icon: "bell_outline", hint: "Which programs notify, here and on the phone", plugin: "notifications" },
@@ -117,6 +118,9 @@ ModalWindow {
 		{ page: "system", anchor: "decorations", title: "Title bars (CSD)", words: "prefer-no-csd decorations title bar", take: ["prefer-no-csd"] },
 		{ page: "system", anchor: "blur", title: "Blur", words: "blur passes offset noise saturation", take: ["blur"] },
 		{ page: "system", anchor: "system-more", title: "Clipboard, hotkey overlay, notifications, Xwayland", words: "clipboard disable-primary hotkey-overlay config-notification xwayland-satellite", take: ["clipboard", "hotkey-overlay", "config-notification", "xwayland-satellite"] },
+		{ page: "bar", anchor: "bar-items", title: "Bar items", words: "bar panel widgets order drag customize customise plugins buttons tray clock" },
+		{ page: "bar", anchor: "wallpaper-change", title: "Wallpaper transition", words: "wallpaper animation transition fade bloom change" },
+		{ page: "bar", anchor: "wallpaper-backdrop", title: "Overview backdrop", words: "wallpaper overview backdrop blur dim workspaces" },
 		{ page: "sounds", anchor: "sound-pack", title: "Sound pack", words: "sound pack theme cosy cozy install zip" },
 		{ page: "sounds", anchor: "sounds", title: "Sounds", words: "sound audio click volume mute quiet feedback do not disturb" },
 		{ page: "sounds", anchor: "sounds-list", title: "Every sound", words: "sound notification usb drive display monitor bluetooth error battery charger lock workspace screenshot" },
@@ -129,7 +133,7 @@ ModalWindow {
 	]
 
 	// a page of the shell's own: no niri file behind it, nothing to undo
-	readonly property bool shellPage: ["multicursor", "sounds", "lighting", "phone", "mouse"].includes(root.current)
+	readonly property bool shellPage: ["bar", "multicursor", "sounds", "lighting", "phone", "mouse"].includes(root.current)
 
 	readonly property var results: {
 		if (root.query === "") return [];
@@ -556,7 +560,7 @@ ModalWindow {
 									variant: "ghost"
 									icon: "tray_arrow_down"
 									text: "Export"
-									visible: root.current !== "sounds" && root.current !== "lighting" && root.current !== "phone" && root.current !== "mouse"
+									visible: root.current !== "bar" && root.current !== "sounds" && root.current !== "lighting" && root.current !== "phone" && root.current !== "mouse"
 									enabled: NiriSettings.loaded
 									onActivated: exportSheet.show(root.current)
 								}
@@ -615,6 +619,7 @@ ModalWindow {
 							case "workspaces": return workspacesPage;
 							case "overview": return overviewPage;
 							case "system": return systemPage;
+							case "bar": return barPage;
 							case "sounds": return soundsPage;
 							case "lighting": return lightingPage;
 							case "phone": return phonePage;
@@ -890,6 +895,12 @@ ModalWindow {
 		id: systemPage
 
 		SystemPage {}
+	}
+
+	Component {
+		id: barPage
+
+		BarPage {}
 	}
 
 	Component {
