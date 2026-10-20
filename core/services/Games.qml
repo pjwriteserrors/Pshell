@@ -264,7 +264,7 @@ Singleton {
 			common = common.slice(0, i);
 		}
 		const start = common.length > 1 ? common.join("/") : Paths.home;
-		picker.command = ["zenity", "--file-selection", "--title=Add a game", `--filename=${start}/`, "--file-filter=Games | *.exe *.EXE *.msi *.bat *.sh *.x86_64 *.AppImage *.appimage", "--file-filter=Everything | *"];
+		picker.command = ["python3", `${Paths.scripts}/pick_files.py`, "--single", "--start", start, "--filter", "Games|*.exe *.EXE *.msi *.bat *.sh *.x86_64 *.AppImage *.appimage", "--filter", "Everything|*", "Add a game"];
 		picker.running = true;
 	}
 
