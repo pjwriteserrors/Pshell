@@ -199,14 +199,21 @@ Singleton {
 		process.running = true;
 	}
 
-	// what needs root runs in a terminal with sudo: the fstab entry with
-	// `user` once, freeing a passed-through drive every time it is mounted
+	// what needs root: the fstab entry with `user` once, freeing a
+	// passed-through drive every time it is mounted. Through pkexec when the
+	// shell is the polkit agent (it asks for the password), else in a
+	// terminal with sudo
 	function authorize() {
 		if (root.target === "" || root.authorizing) return;
 		root.authorizing = true;
 		const state = `${Paths.state}/vms.json`;
+		if (Polkit.registered) {
+			authorizer.command = ["pkexec", "python3", root.script, "allow", root.target, state];
+			authorizer.running = true;
+			return;
+		}
 		const inner = `printf '\\n  Pshell needs your password to prepare ${root.target}.\\n\\n'; sudo python3 '${root.script}' allow '${root.target}' '${state}'; code=$?; if [ $code -ne 0 ]; then printf '\\n  Press Enter to close.'; read _; fi; exit $code`;
-		authorizer.command = ["kitty", "--class", "pshell-vm-auth", "--title", "Pshell · virtual machine", "-o", "initial_window_width=72c", "-o", "initial_window_height=14c", "sh", "-c", inner];
+		authorizer.command = Terminal.command({ appId: "pshell-vm-auth", title: "Pshell · virtual machine", columns: 72, rows: 14 }, ["sh", "-c", inner]);
 		authorizer.running = true;
 	}
 

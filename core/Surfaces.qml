@@ -18,7 +18,7 @@ import qs.style.views
 // here and by the plugin switches, never by the style.
 Scope {
 	// services that act on their own, without a surface to pull them in
-	readonly property var background: [Agents, TimerGuard, Clipboard, ClipboardHints, Phone, Mail, WhatsApp, Autocorrect, Screentime, Multicursor, Sounds, FindMouse]
+	readonly property var background: [Polkit, Agents, TimerGuard, Clipboard, ClipboardHints, Phone, Mail, WhatsApp, Autocorrect, Screentime, Multicursor, Sounds, FindMouse]
 
 	// notifications and the shell's own messages
 	Variants {
@@ -367,6 +367,13 @@ Scope {
 		active: Plugins.on("studio-sounds") && Popups.wanted("sounds")
 
 		SoundPackPage {}
+	}
+
+	// a program asks for an administrator's password
+	LazyLoader {
+		active: Polkit.active
+
+		PolkitDialog {}
 	}
 
 	LazyLoader {
