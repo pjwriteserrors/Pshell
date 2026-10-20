@@ -155,6 +155,53 @@ Singleton {
 		});
 	}
 
+	// ── a game's landing page ─────────────────────────────────────────────
+	// by id: what games.py stats said (play time, days, time to beat, achievements)
+	property var stats: ({})
+	property string statsLoading: ""
+
+	function loadStats(id) {
+		if (!id) return;
+		root.statsLoading = id;
+		root.call(["stats", id], answer => {
+			if (root.statsLoading === id) root.statsLoading = "";
+			if (answer.error || !answer.id) return;
+			const next = Object.assign({}, root.stats);
+			next[id] = answer;
+			root.stats = next;
+		});
+	}
+
+	// what beaten means: main | plus | full | done | "" (main)
+	function setGoal(id, goal) {
+		const known = root.stats[id];
+		if (known) {
+			const next = Object.assign({}, root.stats);
+			next[id] = Object.assign({}, known, { goal });
+			root.stats = next;
+		}
+		root.call(["goal", id, goal]);
+	}
+
+	// sessions of play: from when a game was first seen running to when it
+	// was gone (games.py merges one its own watcher kept as well)
+	property var sessionStarts: ({})
+
+	function followSessions(now) {
+		const at = Math.floor(Date.now() / 1000);
+		const starts = Object.assign({}, root.sessionStarts);
+		for (const id of now)
+			if (starts[id] === undefined) starts[id] = at;
+		for (const id of Object.keys(starts)) {
+			if (now.indexOf(id) >= 0) continue;
+			root.call(["session", id, String(starts[id]), String(at)]);
+			delete starts[id];
+		}
+		root.sessionStarts = starts;
+	}
+
+	onWindowsChanged: root.pollRunning()
+
 	function pollRunning() {
 		if (!runningPoll.running) runningPoll.running = true;
 	}
@@ -349,7 +396,7 @@ Singleton {
 	Timer {
 		interval: root.started !== "" ? 1500 : 4000
 		repeat: true
-		running: Plugins.on("games") && (root.watched || root.running.length > 0 || root.started !== "")
+		running: Plugins.on("games") && (root.watched || root.running.length > 0 || root.windows.length > 0 || root.started !== "")
 		triggeredOnStart: true
 		onTriggered: root.pollRunning()
 	}
@@ -371,6 +418,7 @@ Singleton {
 				if (!data.running) return;
 				const ended = root.running.filter(id => data.running.indexOf(id) < 0);
 				if (JSON.stringify(data.running) !== JSON.stringify(root.running)) root.running = data.running;
+				root.followSessions(data.running);
 				if (root.started !== "" && root.running.indexOf(root.started) >= 0) root.started = "";
 				// a game that ended has a new play time
 				if (ended.length > 0 && root.watched) root.refresh();

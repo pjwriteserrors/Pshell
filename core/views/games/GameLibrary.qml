@@ -538,6 +538,11 @@ ModalWindow {
 				event.accepted = true;
 				return;
 			}
+			if ((text === "i" || text === "I") && root.selected) {
+				stats.show(root.selected);
+				event.accepted = true;
+				return;
+			}
 		}
 		if (/^\S$/.test(text)) {
 			search.input.forceActiveFocus();
@@ -1171,6 +1176,18 @@ ModalWindow {
 				}
 			}
 
+			// the landing page: how far along, how long it takes, the last weeks
+			IconButton {
+				implicitWidth: 52
+				implicitHeight: 52
+				radius: 26
+				variant: "tonal"
+				color: Qt.rgba(1, 1, 1, 0.12)
+				icon: "chart_bar"
+				iconColor: "white"
+				onClicked: if (root.selected) stats.show(root.selected)
+			}
+
 			IconButton {
 				id: moreButton
 
@@ -1470,6 +1487,7 @@ ModalWindow {
 				{ key: "Tab", what: "Filter" },
 				{ key: "G", what: root.grid ? "Shelf" : "Grid" },
 				{ key: "*", what: "Favourite" },
+				{ key: "I", what: "Stats" },
 				{ key: "☰", what: "More" },
 				{ key: "+", what: "Add" },
 				{ key: "Esc", what: root.query !== "" ? "Clear" : "Close" }
@@ -1569,6 +1587,12 @@ ModalWindow {
 			});
 		}
 		onOpenChanged: if (!sheet.open) keys.forceActiveFocus()
+	}
+
+	GameStats {
+		id: stats
+
+		onClosed: keys.forceActiveFocus()
 	}
 
 	GameMenu {
