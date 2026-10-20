@@ -34,6 +34,9 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import niri_kdl as kdl  # noqa: E402
+
 HOME = Path.home()
 CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME") or HOME / ".config") / "niri"
 CONFIG = Path(os.environ.get("NIRI_CONFIG") or CONFIG_DIR / "config.kdl")
@@ -626,21 +629,6 @@ def summarize(output, root):
     return message
 
 
-def atomic_write(path, text):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f".{path.name}.tmp")
-    tmp.write_text(text)
-    os.replace(tmp, path)
-
-
-def backup(path):
-    target = path.with_name(f"{path.name}.bak-before-keybinds")
-    if target.exists():
-        target = path.with_name(f"{path.name}.bak-before-keybinds-{time.strftime('%Y%m%d-%H%M%S')}")
-    shutil.copy2(path, target)
-    return target
-
-
 def write(binds):
     binds = [clean(b) for b in binds]
     live = {}
@@ -662,11 +650,11 @@ def write(binds):
     if error:
         return {"ok": False, "error": error}
     if new_config != config_text:
-        saved = backup(CONFIG)
-        atomic_write(MANAGED, changes[str(MANAGED)])
-        atomic_write(CONFIG, new_config)
+        saved = kdl.backup(CONFIG, "before-keybinds")
+        kdl.atomic_write(MANAGED, changes[str(MANAGED)])
+        kdl.atomic_write(CONFIG, new_config)
         return {"ok": True, "adopted": True, "backup": str(saved)}
-    atomic_write(MANAGED, changes[str(MANAGED)])
+    kdl.atomic_write(MANAGED, changes[str(MANAGED)])
     return {"ok": True}
 
 

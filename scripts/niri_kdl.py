@@ -7,7 +7,11 @@ line between) and whether it was switched off with `/-`. `to_json` and
 it back as niri reads it.
 """
 
+import os
 import re
+import shutil
+import time
+from pathlib import Path
 
 # ── reading ────────────────────────────────────────────────────────────────
 
@@ -442,10 +446,21 @@ def validate(config, files):
 
 
 def atomic_write(path, text):
-    import os
-    from pathlib import Path
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f".{path.name}.tmp")
     tmp.write_text(text)
     os.replace(tmp, path)
+
+
+def backup(path, reason):
+    """Copies a niri file into backups/ next to it before the shell changes it
+    for the first time: <name>.bak-<reason>, later ones with a timestamp."""
+    path = Path(path)
+    folder = path.parent / "backups"
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / f"{path.name}.bak-{reason}"
+    if target.exists():
+        target = folder / f"{path.name}.bak-{reason}-{time.strftime('%Y%m%d-%H%M%S')}"
+    shutil.copy2(path, target)
+    return target

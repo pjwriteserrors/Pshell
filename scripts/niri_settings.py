@@ -379,20 +379,13 @@ def adopt():
     error = kdl.validate(CONFIG, changes)
     if error:
         return {"ok": False, "error": error}
-    saved = backup(CONFIG)
+    saved = kdl.backup(CONFIG, "before-niri-settings")
     if PROFILE.exists() and str(PROFILE) in changes:
-        backup(PROFILE)
+        kdl.backup(PROFILE, "before-niri-settings")
     for path, content in changes.items():
         kdl.atomic_write(path, content)
     return {"ok": True, "adopted": True, "backup": str(saved), "count": len(taken)}
 
-
-def backup(path):
-    target = path.with_name(f"{path.name}.bak-before-niri-settings")
-    if target.exists():
-        target = path.with_name(f"{path.name}.bak-before-niri-settings-{time.strftime('%Y%m%d-%H%M%S')}")
-    shutil.copy2(path, target)
-    return target
 
 
 def render_profile(name, outputs, others):
