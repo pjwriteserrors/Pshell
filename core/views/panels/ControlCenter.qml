@@ -48,6 +48,15 @@ Drawer {
 		}
 	}
 
+	// the throughput graphs of the main page
+	Binding {
+		target: Network
+		property: "watchers"
+		value: root.shown && root.page === "main" ? 1 : 0
+		when: root.shown
+		restoreMode: Binding.RestoreValue
+	}
+
 	Binding {
 		target: Bluetooth
 		property: "watchers"

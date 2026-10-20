@@ -3,18 +3,26 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Networking
 
-// Active link (sysfs), Wi-Fi SSID/signal (nmcli) and live throughput from
-// /proc/net/dev, sampled every two seconds with a short history.
+// The connection from NetworkManager (Quickshell.Networking, as it changes):
+// a wired link first, else Wi-Fi with its network and signal. The address is
+// asked once a link comes up; the throughput is read from /proc/net/dev
+// every two seconds while something shows it (`watchers`).
 Singleton {
 	id: root
 
 	readonly property int historyLength: 30
-	property string type: "offline"
-	property string iface: ""
+	readonly property bool enabled: Plugins.on("network")
+	readonly property var devices: root.enabled ? Networking.devices.values : []
+	readonly property var device: root.devices.find(d => d.connected && d.type === DeviceType.Wired)
+		?? root.devices.find(d => d.connected && d.type === DeviceType.Wifi) ?? null
+	readonly property var wifi: root.device?.type === DeviceType.Wifi ? (root.device.networks.values.find(n => n.connected) ?? null) : null
+	readonly property string type: !root.device ? "offline" : (root.device.type === DeviceType.Wired ? "ethernet" : "wifi")
+	readonly property string iface: root.device?.name ?? ""
 	property string ip: ""
-	property string ssid: ""
-	property int signal: -1
+	readonly property string ssid: root.wifi?.name ?? ""
+	readonly property int signal: root.wifi ? Math.round(root.wifi.signalStrength * 100) : -1
 	property real upload: 0
 	property real download: 0
 	property real lastRx: 0
@@ -22,6 +30,8 @@ Singleton {
 	property bool sampleReady: false
 	property var uploadHistory: root.zeros()
 	property var downloadHistory: root.zeros()
+	// views that show the throughput raise this while they are up
+	property int watchers: 0
 
 	readonly property bool online: root.type !== "offline"
 	readonly property string icon: {
@@ -33,6 +43,21 @@ Singleton {
 		return "wifi_strength_1";
 	}
 	readonly property string label: root.type === "offline" ? "Offline" : (root.type === "ethernet" ? "Ethernet" : (root.ssid || "Wi-Fi"))
+
+	onIfaceChanged: {
+		root.resetThroughput();
+		root.ip = "";
+		root.askAddress();
+	}
+	// another Wi-Fi on the same device has another address
+	onSsidChanged: root.askAddress()
+
+	function askAddress() {
+		if (root.iface === "") return;
+		addressProc.running = false;
+		addressProc.command = ["ip", "-j", "-4", "addr", "show", "dev", root.iface, "scope", "global"];
+		addressProc.running = true;
+	}
 
 	function zeros() {
 		const out = [];
@@ -86,85 +111,33 @@ Singleton {
 		root.downloadHistory = root.zeros();
 	}
 
-	function applyStatus(raw) {
-		const parsed = {};
-		for (const line of String(raw || "").split("\n")) {
-			const separator = line.indexOf("=");
-			if (separator !== -1) parsed[line.slice(0, separator)] = line.slice(separator + 1);
-		}
-		const nextType = parsed.type || "offline";
-		const nextIface = parsed.iface || "";
-		const changed = nextIface !== root.iface;
-		root.type = nextType;
-		root.iface = nextIface;
-		root.ip = parsed.ip || "";
-		if (changed || nextType === "offline") root.resetThroughput();
-		if (nextType === "wifi") {
-			if (!wifiProc.running) wifiProc.running = true;
-		} else {
-			root.ssid = "";
-			root.signal = -1;
-		}
-	}
-
 	function disconnect() {
-		if (!root.iface || root.type === "offline") return;
-		if (root.type === "ethernet")
-			Quickshell.execDetached(["sh", "-lc", `nmcli device set '${root.iface}' autoconnect no && nmcli device down '${root.iface}' || nmcli device disconnect '${root.iface}'`]);
-		else
-			Quickshell.execDetached(["sh", "-lc", `nmcli device disconnect '${root.iface}'`]);
-		root.type = "offline";
-		root.ip = "";
-		root.resetThroughput();
+		const device = root.device;
+		if (!device) return;
+		// a cable would come right back: it stays down until it is asked for
+		if (device.type === DeviceType.Wired) device.autoconnect = false;
+		device.disconnect();
 	}
 
 	Timer {
-		running: Plugins.on("network")
+		running: root.enabled && root.watchers > 0
 		repeat: true
 		interval: 2000
 		triggeredOnStart: true
-		onTriggered: {
-			statusProc.running = true;
-			netDev.reload();
-		}
+		onTriggered: netDev.reload()
+		onRunningChanged: if (!running) root.resetThroughput()
 	}
 
 	Process {
-		id: statusProc
-		command: ["sh", "-lc", `for iface in /sys/class/net/*; do
-name=$(basename "$iface")
-case "$name" in
-  lo|docker*|br-*|virbr*|veth*|podman*|zt*|tun*|tap*) continue ;;
-esac
-state=$(cat "$iface/operstate" 2>/dev/null || printf 'down')
-carrier=$(cat "$iface/carrier" 2>/dev/null || printf '0')
-if [ -d "$iface/wireless" ]; then
-  [ "$state" = "up" ] || [ "$carrier" = "1" ] || continue
-  ip=$(ip -4 -o addr show dev "$name" scope global 2>/dev/null | awk '{split($4,a,"/"); print a[1]; exit}')
-  printf 'type=wifi\\niface=%s\\nip=%s\\n' "$name" "$ip"
-  exit 0
-fi
-[ "$carrier" = "1" ] || [ "$state" = "up" ] || continue
-ip=$(ip -4 -o addr show dev "$name" scope global 2>/dev/null | awk '{split($4,a,"/"); print a[1]; exit}')
-printf 'type=ethernet\\niface=%s\\nip=%s\\n' "$name" "$ip"
-exit 0
-done
-printf 'type=offline\\niface=\\nip=\\n'`]
-		stdout: StdioCollector {
-			onStreamFinished: root.applyStatus(text)
-		}
-	}
+		id: addressProc
 
-	Process {
-		id: wifiProc
-		command: ["sh", "-lc", "nmcli -t -f active,ssid,signal dev wifi 2>/dev/null | grep '^yes' | head -n1"]
 		stdout: StdioCollector {
 			onStreamFinished: {
-				const line = String(text || "").trim();
-				if (line === "") return;
-				const parts = line.split(":");
-				root.signal = Number(parts[parts.length - 1]) || -1;
-				root.ssid = parts.slice(1, parts.length - 1).join(":").replace(/\\:/g, ":");
+				try {
+					root.ip = JSON.parse(text)[0]?.addr_info?.[0]?.local ?? "";
+				} catch (error) {
+					root.ip = "";
+				}
 			}
 		}
 	}
