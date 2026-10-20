@@ -40,7 +40,6 @@ Drawer {
 		if (Plugins.on("backlight")) Brightness.refresh(false);
 		Ddc.refresh();
 		PowerProfile.refresh();
-		Phone.refresh();
 	}
 
 	Connections {
@@ -58,13 +57,6 @@ Drawer {
 		restoreMode: Binding.RestoreValue
 	}
 
-	Binding {
-		target: KdeConnect
-		property: "watchers"
-		value: root.shown && root.page === "phone" ? 1 : 0
-		when: root.shown
-		restoreMode: Binding.RestoreValue
-	}
 
 	Process {
 		id: statsProc
@@ -1073,11 +1065,6 @@ Drawer {
 					title: Phone.name
 					subtitle: Phone.summary
 					onBack: root.page = "main"
-
-					IconButton {
-						icon: "refresh"
-						onClicked: Phone.refresh()
-					}
 				}
 
 				Rectangle {
@@ -1130,7 +1117,7 @@ Drawer {
 
 				GridLayout {
 					Layout.fillWidth: true
-					columns: Phone.legacy || !Plugins.on("phone-handoff") ? 3 : 4
+					columns: !Plugins.on("phone-handoff") ? 3 : 4
 					columnSpacing: 8
 					rowSpacing: 8
 					enabled: Phone.reachable
@@ -1144,7 +1131,7 @@ Drawer {
 								Popups.open("launcher", root.targetScreen, "", ">file ");
 							} },
 							{ icon: "phone_ring", label: "Ring", run: () => Phone.ring() }
-						].concat(Phone.legacy || !Plugins.on("phone-handoff") ? [] : [{ icon: "cellphone_play", label: "Continue", run: () => Phone.handoffMedia() }])
+						].concat(!Plugins.on("phone-handoff") ? [] : [{ icon: "cellphone_play", label: "Continue", run: () => Phone.handoffMedia() }])
 
 						delegate: Clickable {
 							id: action
@@ -1195,14 +1182,14 @@ Drawer {
 
 				Loader {
 					Layout.fillWidth: true
-					active: !Phone.legacy
+					active: Phone.enabled
 					visible: active
 					sourceComponent: PhonePairing {}
 				}
 
 				Loader {
 					Layout.fillWidth: true
-					active: !Phone.legacy && Pcs.enabled
+					active: Pcs.enabled
 					visible: active
 					sourceComponent: PcPairing {}
 				}

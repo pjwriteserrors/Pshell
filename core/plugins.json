@@ -118,7 +118,6 @@
 	{ "id": "mouse-battery", "name": "Mouse battery", "category": "Hardware", "default": false, "icon": "mouse" },
 	{ "id": "power-profiles", "name": "Power profiles", "category": "Hardware", "default": false, "icon": "speedometer" },
 	{ "id": "fingerprint", "name": "Fingerprint unlock", "category": "Hardware", "default": false, "requires": ["lock-screen"], "icon": "fingerprint" },
-	{ "id": "kdeconnect", "name": "KDE Connect", "category": "Hardware", "default": false, "icon": "cellphone" },
 	{ "id": "haptics", "name": "Mouse haptics", "category": "Hardware", "default": false, "icon": "mouse" },
 	{ "id": "mouse", "name": "Logitech mouse", "category": "Hardware", "default": false, "requires": ["niri-settings"], "icon": "mouse_variant" },
 	{ "id": "printer", "name": "3D printer", "category": "Hardware", "default": false, "icon": "printer_3d" },

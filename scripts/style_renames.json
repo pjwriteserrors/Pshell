@@ -1,19 +1,73 @@
 {
 	"_": "Names main renamed or removed, as regular expressions: sync_styles.sh rewrites style/ with them after merging main, so a style follows without a port by hand. Oldest first.",
 	"renames": [
-		["\\bNetwork\\.formatSpeed\\(", "Format.rate("],
-		["\\bDownloads\\.formatSize\\(", "Format.bytes("],
-		["\\b(Files|Pcs|Shelf)\\.sizeText\\(", "Format.bytes("],
-		["\\bUpdates\\.formatBytes\\(", "Format.bytes("],
-		["\\bTorrents\\.size\\(", "Format.bytes("],
-		["\\bTorrents\\.rate\\(", "Format.rate("],
-		["\\bTorrents\\.duration\\(", "Format.duration("],
-		["\\bWhatsApp\\.size\\(", "Format.bytes("],
-		["\\bWhatsApp\\.clock\\(", "Format.clock("],
-		["\\bWhatsApp\\.stamp\\(", "Format.stamp("],
-		["\\bPrinter\\.duration\\(", "Format.duration("],
-		["\\bBreaks\\.formatDuration\\(", "Format.duration("],
-		["\\bIdentities\\.ago\\(", "Format.ago("],
-		["\\bSysStats\\.formatStorage\\(", "Format.bytes(1024 * "]
+		[
+			"\\bNetwork\\.formatSpeed\\(",
+			"Format.rate("
+		],
+		[
+			"\\bDownloads\\.formatSize\\(",
+			"Format.bytes("
+		],
+		[
+			"\\b(Files|Pcs|Shelf)\\.sizeText\\(",
+			"Format.bytes("
+		],
+		[
+			"\\bUpdates\\.formatBytes\\(",
+			"Format.bytes("
+		],
+		[
+			"\\bTorrents\\.size\\(",
+			"Format.bytes("
+		],
+		[
+			"\\bTorrents\\.rate\\(",
+			"Format.rate("
+		],
+		[
+			"\\bTorrents\\.duration\\(",
+			"Format.duration("
+		],
+		[
+			"\\bWhatsApp\\.size\\(",
+			"Format.bytes("
+		],
+		[
+			"\\bWhatsApp\\.clock\\(",
+			"Format.clock("
+		],
+		[
+			"\\bWhatsApp\\.stamp\\(",
+			"Format.stamp("
+		],
+		[
+			"\\bPrinter\\.duration\\(",
+			"Format.duration("
+		],
+		[
+			"\\bBreaks\\.formatDuration\\(",
+			"Format.duration("
+		],
+		[
+			"\\bIdentities\\.ago\\(",
+			"Format.ago("
+		],
+		[
+			"\\bSysStats\\.formatStorage\\(",
+			"Format.bytes(1024 * "
+		],
+		[
+			"\\bKdeConnect\\.",
+			"Phone."
+		],
+		[
+			"\\bPhone\\.refresh\\(\\);?",
+			""
+		],
+		[
+			"\\bPhone\\.legacy\\b",
+			"false"
+		]
 	]
 }

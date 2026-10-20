@@ -58,7 +58,6 @@ PROGRAMS = {
     "backlight": [("brightnessctl", "screen brightness")],
     "ddc": [("ddcutil", "monitor brightness")],
     "power-profiles": [("powerprofilesctl", "power profiles")],
-    "kdeconnect": [("kdeconnect-cli", "phone")],
     "phone": [("qrencode", "pairing code"), ("ip", "finding this PC's addresses")],
     "phone-keyboard": [("wtype", "typing from the phone")],
     "phone-presence": [("playerctl", "pausing when the phone leaves")],

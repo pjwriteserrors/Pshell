@@ -28,8 +28,7 @@ core/services/Phone.qml   the shell's end; core/phone/ holds one file per topic
   `$XDG_RUNTIME_DIR/pshell/phone.sock`. The topics in `core/phone/` publish
   what the services know and run what the phone asks for; the services do not
   learn about the phone. `Phone` is also what the shell's phone views ask
-  (control centre, `>phone`, bar): with the `phone` plugin off and
-  `kdeconnect` on, it hands everything to `KdeConnect`.
+  (control centre, `>phone`, bar).
 - **App.** One foreground service holds the connection; screens subscribe to
   topics and send calls. The features fall into groups (`features/Feature.kt`):
   **Remote** (touchpad, keyboard, commands, terminal, windows, launcher,

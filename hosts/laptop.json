@@ -11,7 +11,7 @@
 		"battery": true,
 		"mouse-battery": true,
 		"fingerprint": true,
-		"kdeconnect": true,
+		"phone": true,
 		"haptics": true,
 		"ssh": true,
 		"niri-settings": true,

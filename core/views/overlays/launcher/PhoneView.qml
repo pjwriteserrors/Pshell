@@ -24,7 +24,7 @@ ColumnLayout {
 			{ id: "clipboard", icon: "content_paste", title: "Send clipboard" },
 			{ id: "ring", icon: "phone_ring", title: "Ring" },
 			{ id: "file", icon: "file_send", title: "Send file" }
-		].concat(Phone.legacy ? [] : [
+		].concat([
 			{ id: "continue", icon: "cellphone_play", title: "Continue on the phone what plays here" },
 			{ id: "pair", icon: "qrcode_scan", title: "Pair a phone" }
 		].filter(action => action.id !== "continue" || Plugins.on("phone-handoff")));
@@ -40,7 +40,6 @@ ColumnLayout {
 	onActiveChanged: {
 		if (!root.active) return;
 		root.currentIndex = 0;
-		Phone.refresh();
 	}
 	onTextChanged: root.currentIndex = 0
 

@@ -140,7 +140,6 @@ FocusScope {
 	}
 
 	Component.onCompleted: {
-		Phone.refresh();
 		const initial = editor.initialCrop.width > 0 && editor.initialCrop.height > 0 ? editor.initialCrop : Qt.rect(0, 0, editor.srcW, editor.srcH);
 		editor.crop = initial;
 		editor.cropDraft = initial;
