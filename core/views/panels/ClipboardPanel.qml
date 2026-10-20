@@ -12,7 +12,7 @@ import qs.style.widgets
 
 // Clipboard history. Type to filter, arrows to move, Enter to copy back,
 // Delete to drop an entry. Images show as thumbnails. With the phone
-// reachable over KDE Connect every entry can be sent to it.
+// reachable every entry can be sent to it.
 Drawer {
 	id: root
 
@@ -192,20 +192,12 @@ Drawer {
 							color: Theme.layer2
 
 							Image {
-								id: thumb
-
 								anchors.fill: parent
+								source: entry.modelData.isImage ? `file://${entry.modelData.previewPath}` : ""
+								sourceSize: Qt.size(208, 144)
 								fillMode: Image.PreserveAspectCrop
 								asynchronous: true
-								cache: false
 								smooth: true
-								mipmap: true
-							}
-
-							Process {
-								running: entry.modelData.isImage
-								command: Clipboard.decodeCommand(entry.modelData)
-								onExited: thumb.source = `file://${entry.modelData.previewPath}?t=${Date.now()}`
 							}
 						}
 

@@ -154,12 +154,15 @@ Singleton {
 		clipboardReader.running = true;
 	}
 
+	// an entry of the clipboard history: a picture as a file, text as text
 	function sendClipboardEntry(entry) {
-		if (!entry?.id) return;
-		const sender = entrySender.createObject(root, { image: !!entry.isImage });
-		const id = String(entry.id).replace(/[^0-9]/g, "");
-		const file = `${Quickshell.env("XDG_RUNTIME_DIR") || "/tmp"}/qs-phone-${id}.${entry.extension || "png"}`;
-		sender.command = entry.isImage ? ["sh", "-c", 'cliphist decode "$1" > "$2" && printf %s "$2"', "sh", id, file] : ["cliphist", "decode", id];
+		if (!entry?.path) return;
+		if (entry.isImage) {
+			root.sendFiles([entry.path]);
+			return;
+		}
+		const sender = entrySender.createObject(root);
+		sender.command = ["cat", "--", entry.path];
 		sender.running = true;
 	}
 
@@ -178,13 +181,8 @@ Singleton {
 		Process {
 			id: sender
 
-			property bool image: false
-
 			stdout: StdioCollector {
-				onStreamFinished: {
-					if (sender.image) root.sendFiles([String(text).trim()]);
-					else root.sendText(text);
-				}
+				onStreamFinished: root.sendText(text)
 			}
 			onExited: sender.destroy()
 		}

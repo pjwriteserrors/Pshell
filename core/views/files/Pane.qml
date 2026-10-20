@@ -317,8 +317,8 @@ Item {
 			break;
 		case "clipboard":
 			Files.request("clips", {}, (data, error) => done(data?.entries ?? [], error, {}));
-			// a new entry (cliphist writes its database) reads the list again
-			Files.watch(root.paneId, `${Quickshell.env("XDG_CACHE_HOME") || Files.home + "/.cache"}/cliphist`);
+			// a new entry (the history's index is written anew) reads the list again
+			Files.watch(root.paneId, `${Quickshell.env("XDG_CACHE_HOME") || Files.home + "/.cache"}/pshell/clipboard`);
 			break;
 		case "phone":
 			PhoneDrive.browse(String(loc.id), { limit: 600 }, (entries, error) => done(entries, error === "permission"
@@ -453,7 +453,7 @@ Item {
 
 		function onFolderChanged(path) {
 			if (root.location.kind === "dir" && path === root.location.path) changedTimer.restart();
-			else if (root.location.kind === "clipboard" && path.endsWith("/cliphist")) changedTimer.restart();
+			else if (root.location.kind === "clipboard" && path.endsWith("/pshell/clipboard")) changedTimer.restart();
 			else if (root.location.kind === "captures" && /\/(Screenshots|Recordings|Screencasts)$/.test(path)) changedTimer.restart();
 			else if (root.location.kind === "trash" && path.endsWith("/Trash/files")) changedTimer.restart();
 		}

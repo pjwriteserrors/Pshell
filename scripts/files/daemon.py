@@ -774,7 +774,7 @@ class Daemon:
     @on_main("slow")
     def op_clips(self, client, request):
         if not clips.available():
-            raise RuntimeError("cliphist is not installed")
+            raise RuntimeError("The clipboard history is off")
         return clips.listing()
 
     def op_cliprestore(self, client, request):

@@ -42,7 +42,7 @@ import host  # noqa: E402
 PROGRAMS = {
     "core": [
         ("quickshell", "the shell"), ("niri", "compositor"), ("python3", "scripts"),
-        ("cliphist", "clipboard"), ("wl-copy", "clipboard"), ("wl-paste", "clipboard"),
+        ("wl-copy", "clipboard"), ("wl-paste", "clipboard"),
         ("grim", "screenshots"), ("slurp", "recording"), ("wf-recorder", "recording"),
         ("magick", "screenshot editor"), ("tesseract", "OCR"), ("zbarimg", "QR codes"),
         ("ffmpeg", "wallpaper frames"), ("wallust", "colours"), ("swaybg", "wallpaper"),
@@ -70,7 +70,7 @@ PROGRAMS = {
     "filemanager": [("fd", "searching names"), ("rg", "searching contents"), ("pdftoppm", "PDF thumbnails"),
                     ("git", "what changed in a repository"), ("rsync", "syncing two folders, sending to a server"),
                     ("tesseract", "text in pictures: names for screenshots, search"), ("curl", "sharing a link"),
-                    ("mpv", "playing and queueing music"), ("cliphist", "the clipboard history as a place"),
+                    ("mpv", "playing and queueing music"),
                     ("ffmpeg", "video thumbnails, album covers"), ("ffprobe", "video and music details"),
                     ("bsdtar", "packing"), ("7z", "extracting 7z, rar and others"), ("pdfinfo", "PDF details"),
                     ("gs", "compressing PDFs, PDF/A"), ("pdftotext", "PDF text, comparing, blacking out"),

@@ -478,8 +478,11 @@ def prepare(work: Path):
     answer.parent.mkdir(parents=True)
     answer.write_text(json.dumps({"state": "found", "synced": True, "lines": [{"t": t, "text": text} for t, text in LYRICS]}))
     env = environment(work)
-    for line in ["https://quickshell.org/docs", "git rebase --onto main feature~3", "Paderborn, 14:30, room 2"]:
-        subprocess.run(["cliphist", "store"], input=line, text=True, env=env)
+    # the clipboard history of the preview: its own cache, written straight
+    subprocess.run([sys.executable, "-c", "import sys; sys.path.insert(0, sys.argv[1]); import clipstore\n"
+                            "for line in sys.argv[2:]: clipstore.add('text/plain', line.encode())",
+                            str(Path(__file__).resolve().parent / "clipboard"),
+                            "Paderborn, 14:30, room 2", "git rebase --onto main feature~3", "https://quickshell.org/docs"], env=env)
 
 
 def environment(work: Path):

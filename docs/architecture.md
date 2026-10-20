@@ -136,7 +136,8 @@ the clipboard: it reads by selecting and copying, moves by arrow keys, writes
 by pasting or by the keys that were typed, and compares what it selected with
 what it read before anything is pasted over or typed at another cursor – a
 field that answers differently is left as it is. The clipboard gets back what
-it held, in every format, and what was read is taken out of cliphist again.
+it held, in every format, and what was read is taken out of the clipboard
+history again.
 To see a shortcut before the window does the daemon takes the keyboards
 (evdev grab) and hands every key on through one of its own (uinput), only
 while a window has the keyboard that is not left alone; both Shift keys and
@@ -334,9 +335,9 @@ asking before the trash, dates and sizes, previews, archives, Windows
 programs, VirusTotal, PDF compression, the caches.
 
 What a place can be goes beyond folders (`Pane.qml` knows the kinds, the
-sidebar and Ctrl+K lead to them): the clipboard history (`clips.py`:
-cliphist's entries written out once into the runtime folder, so nothing of
-the clipboard stays on disk; dragged into a folder an entry is a file), the
+sidebar and Ctrl+K lead to them): the clipboard history (`clips.py`: its
+entries written out once into the runtime folder under names that say what
+they are; dragged into a folder an entry is a file), the
 captures on a timeline (`captures.py`: a screenshot gets a name from what
 it says – Tesseract reads it, a model of Ollama names it –, its text beside
 it as .txt; a recording is cut or becomes a GIF with ffmpeg), the phone
