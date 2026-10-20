@@ -36,8 +36,8 @@ Rectangle {
 	}
 
 	function rate(down, up, conns) {
-		if (down >= 1024 && down >= up) return Network.formatSpeed(down);
-		if (up >= 1024) return Network.formatSpeed(up);
+		if (down >= 1024 && down >= up) return Format.rate(down);
+		if (up >= 1024) return Format.rate(up);
 		return String(conns);
 	}
 

@@ -78,7 +78,7 @@ Item {
 						const summary = root.pane.dupeSummary;
 						if (!summary) return root.pane.searching ? "Looking for copies…" : "No copies found";
 						if (summary.groups === 0) return "No copies found – every file is there once";
-						return `${summary.groups} group${summary.groups === 1 ? "" : "s"} of copies · ${Files.sizeText(summary.waste)} could go · the oldest of each stays first`;
+						return `${summary.groups} group${summary.groups === 1 ? "" : "s"} of copies · ${Format.bytes(summary.waste)} could go · the oldest of each stays first`;
 					}
 					if (root.mode === "compare") {
 						const parts = [];

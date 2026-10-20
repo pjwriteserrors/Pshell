@@ -520,7 +520,7 @@ Drawer {
 								}
 
 								StyledText {
-									text: Network.formatSpeed(graph.modelData.speed)
+									text: Format.rate(graph.modelData.speed)
 									tabular: true
 									font.pixelSize: Theme.size.title
 									font.weight: Font.Bold

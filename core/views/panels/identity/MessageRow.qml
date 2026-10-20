@@ -89,7 +89,7 @@ Clickable {
 			}
 
 			StyledText {
-				text: Identities.ago(root.at, root.now)
+				text: Format.ago(root.at, root.now)
 				tone: Theme.textSubtle
 				font.pixelSize: Theme.size.small
 				tabular: true

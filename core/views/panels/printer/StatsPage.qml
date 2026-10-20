@@ -55,7 +55,7 @@ Item {
 				model: [
 					{ icon: "printer_3d", label: "Prints", value: root.stats.count * root.grow, text: v => Math.round(v), color: Theme.primary },
 					{ icon: "check_circle", label: "Succeeded", value: root.stats.rate * 100 * root.grow, text: v => `${Math.round(v)} %`, color: Theme.success, ring: root.stats.rate },
-					{ icon: "timer_outline", label: "Printed", value: root.stats.minutes * root.grow, text: v => v >= 600 ? `${Math.round(v / 60)} h` : Printer.duration(v * 60), color: Printer.hot },
+					{ icon: "timer_outline", label: "Printed", value: root.stats.minutes * root.grow, text: v => v >= 600 ? `${Math.round(v / 60)} h` : Format.duration(v * 60), color: Printer.hot },
 					{ icon: "weight_gram", label: "Filament", value: root.stats.grams * root.grow, text: v => Printer.grams(v), color: Theme.secondary }
 				]
 
@@ -178,7 +178,7 @@ Item {
 						}
 
 						StyledText {
-							text: `${root.stats.days.reduce((s, d) => s + d.count, 0)} prints · Ø ${Printer.duration(root.stats.average * 60)}`
+							text: `${root.stats.days.reduce((s, d) => s + d.count, 0)} prints · Ø ${Format.duration(root.stats.average * 60)}`
 							tone: Theme.textMuted
 							font.pixelSize: Theme.size.small
 							tabular: true
@@ -363,7 +363,7 @@ Item {
 								id: tipText
 
 								anchors.centerIn: parent
-								text: tip.day ? `${Qt.formatDate(new Date(tip.day.start), "ddd d MMM")} · ${tip.day.count === 0 ? "nothing" : `${tip.day.count} · ${Printer.duration(tip.day.minutes * 60)}`}${tip.day.failed > 0 ? ` · ${tip.day.failed} failed` : ""}` : ""
+								text: tip.day ? `${Qt.formatDate(new Date(tip.day.start), "ddd d MMM")} · ${tip.day.count === 0 ? "nothing" : `${tip.day.count} · ${Format.duration(tip.day.minutes * 60)}`}${tip.day.failed > 0 ? ` · ${tip.day.failed} failed` : ""}` : ""
 								font.pixelSize: Theme.size.small
 								font.weight: Font.DemiBold
 								tabular: true
@@ -639,7 +639,7 @@ Item {
 						StyledText {
 							Layout.fillWidth: true
 							visible: root.stats.longest !== null
-							text: `Longest: ${Printer.nameOf(root.stats.longest?.name)} · ${Printer.duration(Number(root.stats.longest?.minutes ?? 0) * 60)}`
+							text: `Longest: ${Printer.nameOf(root.stats.longest?.name)} · ${Format.duration(Number(root.stats.longest?.minutes ?? 0) * 60)}`
 							elide: Text.ElideRight
 							tone: Theme.textSubtle
 							font.pixelSize: Theme.size.small

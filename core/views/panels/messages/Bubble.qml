@@ -68,12 +68,6 @@ Item {
 		return Qt.formatDate(root.when, root.when.getFullYear() === now.getFullYear() ? "dddd, d MMMM" : "d MMMM yyyy");
 	}
 
-	function size(bytes) {
-		if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-		if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
-		return bytes > 0 ? `${bytes} B` : "";
-	}
-
 	function fileIcon(type, name) {
 		if (String(type).startsWith("image/")) return "file_image";
 		if (String(type).includes("pdf") || String(name).toLowerCase().endsWith(".pdf")) return "file_pdf_box";
@@ -682,7 +676,7 @@ Item {
 
 										StyledText {
 											visible: text !== ""
-											text: root.size(file.modelData.size)
+											text: Format.bytes(file.modelData.size, "")
 											tone: Theme.textSubtle
 											font.pixelSize: Theme.size.tiny
 										}

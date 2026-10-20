@@ -484,12 +484,6 @@ Singleton {
 		return Qt.rgba(c[0] / 255, c[1] / 255, c[2] / 255, 1);
 	}
 
-	function duration(seconds) {
-		const total = Math.max(0, Math.round(seconds / 60));
-		const hours = Math.floor(total / 60);
-		return hours > 0 ? `${hours} h ${String(total % 60).padStart(2, "0")} min` : `${total} min`;
-	}
-
 	function grams(value) {
 		return value >= 1000 ? `${(value / 1000).toFixed(2)} kg` : `${Math.round(value)} g`;
 	}
@@ -593,7 +587,7 @@ Singleton {
 			const actions = [{ label: "Show", icon: "printer_3d", run: () => root.open() }];
 			if (data.result === "finished") root.finished(name);
 			if (data.result === "finished")
-				Notifs.pushInternal("done", "Print finished", `${name} · ${root.duration(Number(data.minutes) * 60)}`, { icon: "printer_3d", sound: "taskDone", actions, duration: 15000 });
+				Notifs.pushInternal("done", "Print finished", `${name} · ${Format.duration(Number(data.minutes) * 60)}`, { icon: "printer_3d", sound: "taskDone", actions, duration: 15000 });
 			else
 				Notifs.pushInternal("error", data.result === "failed" ? "Print failed" : "Print stopped", `${name} · at ${data.progress} %`, { icon: "printer_3d", actions, duration: 15000 });
 			break;

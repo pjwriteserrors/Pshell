@@ -40,14 +40,6 @@ Singleton {
 		return out;
 	}
 
-	function formatSpeed(bytesPerSecond) {
-		const value = Math.max(0, Number(bytesPerSecond) || 0);
-		if (value >= 1024 * 1024 * 1024) return `${(value / (1024 * 1024 * 1024)).toFixed(1)} GB/s`;
-		if (value >= 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(1)} MB/s`;
-		if (value >= 1024) return `${(value / 1024).toFixed(1)} KB/s`;
-		return `${Math.round(value)} B/s`;
-	}
-
 	function push(history, value) {
 		const next = history.slice();
 		next.push(Math.max(0, Number(value) || 0));

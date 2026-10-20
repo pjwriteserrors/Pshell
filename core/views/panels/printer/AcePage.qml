@@ -294,7 +294,7 @@ Item {
 
 							StyledText {
 								anchors.horizontalCenter: parent.horizontalCenter
-								text: `${Printer.duration(Number(root.drying?.remain_time ?? 0) * 60)} left`
+								text: `${Format.duration(Number(root.drying?.remain_time ?? 0) * 60)} left`
 								tone: Theme.textMuted
 								font.pixelSize: Theme.size.label
 								tabular: true

@@ -357,7 +357,7 @@ Item {
 						const parts = [];
 						if (root.rows.length > 1) parts.push(`${root.index + 1} of ${root.rows.length}`);
 						if (root.info?.kind) parts.push(root.info.kind);
-						if (root.row && !root.row.dir) parts.push(Files.sizeText(root.row.size));
+						if (root.row && !root.row.dir) parts.push(Format.bytes(root.row.size));
 						for (const fact of (root.info?.facts ?? []).slice(0, 2)) parts.push(fact[1]);
 						return parts.join("  ·  ");
 					}
@@ -873,7 +873,7 @@ Item {
 						model: [
 							{ icon: "file_outline", text: `${root.archive?.files ?? 0} file${root.archive?.files === 1 ? "" : "s"}` },
 							{ icon: "folder_outline", text: `${root.archive?.folders ?? 0} folder${root.archive?.folders === 1 ? "" : "s"}` },
-							{ icon: "arrow_expand_all", text: `${Files.sizeText(root.archive?.size ?? 0)} unpacked` },
+							{ icon: "arrow_expand_all", text: `${Format.bytes(root.archive?.size ?? 0)} unpacked` },
 							{ icon: "package_variant_closed", text: root.archive?.size > 0 ? `packed to ${Math.min(100, Math.round((root.archive?.packed ?? 0) * 100 / root.archive.size))} %` : "" }
 						].filter(item => item.text !== "")
 
@@ -999,7 +999,7 @@ Item {
 							anchors.right: parent.right
 							anchors.rightMargin: 14
 							anchors.verticalCenter: parent.verticalCenter
-							text: archived.modelData.dir ? "" : Files.sizeText(archived.modelData.size)
+							text: archived.modelData.dir ? "" : Format.bytes(archived.modelData.size)
 							tone: Theme.textSubtle
 							font.pixelSize: Theme.size.small
 							font.features: { "tnum": 1 }

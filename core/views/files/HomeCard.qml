@@ -99,7 +99,7 @@ Item {
 		anchors.top: label.bottom
 		anchors.topMargin: 2
 		width: root.width
-		text: [Files.whenText(root.when), root.entry.dir ? "" : Files.sizeText(root.entry.size)].filter(part => part !== "").join(" · ")
+		text: [Files.whenText(root.when), root.entry.dir ? "" : Format.bytes(root.entry.size)].filter(part => part !== "").join(" · ")
 		color: Theme.textSubtle
 		font.family: Theme.fontFamily
 		font.pixelSize: Theme.size.small

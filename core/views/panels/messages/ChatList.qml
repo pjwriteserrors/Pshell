@@ -197,14 +197,6 @@ ColumnLayout {
 		}
 	}
 
-	function stamp(seconds) {
-		const date = new Date(seconds * 1000);
-		const now = new Date();
-		if (date.toDateString() === now.toDateString()) return Qt.formatTime(date, "HH:mm");
-		if (now - date < 6 * 86400 * 1000) return Qt.formatDate(date, "ddd");
-		return Qt.formatDate(date, date.getFullYear() === now.getFullYear() ? "d MMM" : "d MMM yy");
-	}
-
 	spacing: 10
 
 	// another mailbox shows nothing of this one's
@@ -509,7 +501,7 @@ ColumnLayout {
 						readonly property var activity: root.activity(entry.customer)
 
 						Layout.fillWidth: true
-						text: activity.count > 0 ? `${activity.count} ${activity.count === 1 ? "chat" : "chats"} · ${root.stamp(activity.last)}` : entry.customer.people.map(email => Mail.nameOf(email)).join(", ")
+						text: activity.count > 0 ? `${activity.count} ${activity.count === 1 ? "chat" : "chats"} · ${Format.stamp(activity.last)}` : entry.customer.people.map(email => Mail.nameOf(email)).join(", ")
 						tone: Theme.textMuted
 						elide: Text.ElideRight
 						font.pixelSize: Theme.size.small
@@ -906,7 +898,7 @@ ColumnLayout {
 						}
 
 						StyledText {
-							text: item.chat ? root.stamp(item.chat.date) : ""
+							text: item.chat ? Format.stamp(item.chat.date) : ""
 							tone: item.fresh ? Theme.primary : Theme.textSubtle
 							font.pixelSize: Theme.size.small
 							font.weight: item.fresh ? Font.Bold : Font.Normal

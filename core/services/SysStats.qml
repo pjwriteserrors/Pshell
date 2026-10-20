@@ -30,7 +30,7 @@ Singleton {
 	property real lastTotal: 0
 	property bool cpuReady: false
 
-	readonly property string memoryText: `${root.formatStorage(root.memoryUsedKiB)} / ${root.formatStorage(root.memoryTotalKiB)}`
+	readonly property string memoryText: `${Format.bytes(root.memoryUsedKiB * 1024)} / ${Format.bytes(root.memoryTotalKiB * 1024)}`
 	readonly property string cpuText: root.cpuCores > 0 ? `${root.cpuCores} cores` : ""
 	readonly property bool batteryAvailable: Plugins.on("battery") && root.batteryPercent >= 0
 	readonly property bool charging: String(root.batteryStatus).toLowerCase() === "charging"
@@ -58,13 +58,6 @@ Singleton {
 
 	function clamp01(value) {
 		return Math.max(0, Math.min(1, Number(value) || 0));
-	}
-
-	function formatStorage(kib) {
-		const gib = (Number(kib) || 0) / (1024 * 1024);
-		if (gib >= 1000) return `${(gib / 1024).toFixed(1)} TB`;
-		if (gib >= 100) return `${Math.round(gib)} GB`;
-		return `${gib.toFixed(1)} GB`;
 	}
 
 	function updateMemory(raw) {
@@ -172,9 +165,9 @@ Singleton {
 			walk(data.blockdevices || [], "");
 			root.disks = Object.values(diskMap).map(disk => ({
 				name: disk.name,
-				usedText: root.formatStorage(disk.used / 1024),
-				totalText: root.formatStorage(disk.total / 1024),
-				freeText: root.formatStorage(Math.max(0, (disk.total - disk.used) / 1024)),
+				usedText: Format.bytes(disk.used),
+				totalText: Format.bytes(disk.total),
+				freeText: Format.bytes(Math.max(0, disk.total - disk.used)),
 				usage: disk.total > 0 ? root.clamp01(disk.used / disk.total) : 0
 			}));
 		} catch (error) {}

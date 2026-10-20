@@ -201,7 +201,7 @@ ColumnLayout {
 
 						StyledText {
 							opacity: tools.shown ? 0 : 1
-							text: item.chat && item.chat.date > 0 ? WhatsApp.stamp(item.chat.date) : ""
+							text: item.chat && item.chat.date > 0 ? Format.stamp(item.chat.date) : ""
 							tone: item.fresh ? Theme.primary : Theme.textSubtle
 							font.pixelSize: Theme.size.small
 							font.weight: item.fresh ? Font.Bold : Font.Normal
@@ -371,7 +371,7 @@ ColumnLayout {
 							}
 
 							StyledText {
-								text: WhatsApp.stamp(hit.modelData.date)
+								text: Format.stamp(hit.modelData.date)
 								tone: Theme.textSubtle
 								font.pixelSize: Theme.size.tiny
 							}

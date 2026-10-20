@@ -329,7 +329,7 @@ Item {
 					const info = root.info;
 					if (!info) return "";
 					if (info.dir) return info.items !== undefined ? `Folder · ${info.items} items` : "Folder";
-					return `${info.kind ?? ""} · ${Files.sizeText(info.size)} · ${Files.whenText(info.mtime)}`;
+					return `${info.kind ?? ""} · ${Format.bytes(info.size)} · ${Files.whenText(info.mtime)}`;
 				}
 				color: Theme.textMuted
 				font.family: Theme.fontFamily

@@ -482,7 +482,7 @@ Item {
 									id: length
 
 									anchors.centerIn: parent
-									text: WhatsApp.clock(root.media?.seconds ?? 0)
+									text: Format.clock(root.media?.seconds ?? 0)
 									color: "white"
 									font.family: Theme.fontFamily
 									font.pixelSize: Theme.size.tiny
@@ -633,7 +633,7 @@ Item {
 							}
 
 							StyledText {
-								text: WhatsApp.clock(sound.item ? sound.item.position / 1000 : (root.media?.seconds ?? 0))
+								text: Format.clock(sound.item ? sound.item.position / 1000 : (root.media?.seconds ?? 0))
 								tone: Theme.textMuted
 								tabular: true
 								font.pixelSize: Theme.size.small
@@ -719,7 +719,7 @@ Item {
 
 							StyledText {
 								visible: hearing.known && hearing.remaining > 0
-								text: WhatsApp.clock(hearing.remaining)
+								text: Format.clock(hearing.remaining)
 								tone: Theme.textMuted
 								tabular: true
 								font.pixelSize: Theme.size.small
@@ -780,7 +780,7 @@ Item {
 									}
 
 									StyledText {
-										text: WhatsApp.size(root.media?.size ?? 0)
+										text: Format.bytes(root.media?.size ?? 0, "")
 										tone: Theme.textSubtle
 										font.pixelSize: Theme.size.tiny
 									}

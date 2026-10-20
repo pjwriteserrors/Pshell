@@ -35,7 +35,7 @@ Item {
 		if (WhatsApp.typing.length > 0) return root.chat.group ? `${WhatsApp.typing.join(", ")} typing…` : "typing…";
 		if (root.chat.group) return "";
 		if (WhatsApp.online) return "online";
-		if (WhatsApp.seen > 0) return `last seen ${WhatsApp.stamp(WhatsApp.seen)}`;
+		if (WhatsApp.seen > 0) return `last seen ${Format.stamp(WhatsApp.seen)}`;
 		return root.chat.phone ?? "";
 	}
 

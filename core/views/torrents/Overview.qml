@@ -27,7 +27,7 @@ Item {
 		}
 
 		StyledText {
-			text: root.running.length > 0 ? `${Torrents.size(root.remaining)} to go${root.eta >= 0 ? ` · ${Torrents.duration(root.eta)}` : ""}` : "Pick a torrent on the left to see it up close"
+			text: root.running.length > 0 ? `${Format.bytes(root.remaining)} to go${root.eta >= 0 ? ` · ${Format.duration(root.eta, true)}` : ""}` : "Pick a torrent on the left to see it up close"
 			font.pixelSize: Theme.size.body
 			tone: Theme.textMuted
 		}
@@ -68,7 +68,7 @@ Item {
 				icon: "arrow_down_bold"
 				label: "Downloading"
 				value: `${root.running.length}`
-				note: Torrents.rate(Torrents.down)
+				note: Format.rate(Torrents.down)
 			}
 
 			StatTile {
@@ -77,7 +77,7 @@ Item {
 				accent: Torrents.upColor
 				label: "Seeding"
 				value: `${root.seeding.length}`
-				note: Torrents.rate(Torrents.up)
+				note: Format.rate(Torrents.up)
 			}
 
 			StatTile {
@@ -86,7 +86,7 @@ Item {
 				accent: Theme.success
 				label: "Complete"
 				value: `${Torrents.torrents.filter(item => item.finished > 0).length}`
-				note: Torrents.size(Torrents.torrents.filter(item => item.finished > 0).reduce((sum, item) => sum + Math.max(0, item.size), 0))
+				note: Format.bytes(Torrents.torrents.filter(item => item.finished > 0).reduce((sum, item) => sum + Math.max(0, item.size), 0))
 			}
 
 			StatTile {
@@ -94,8 +94,8 @@ Item {
 				icon: "swap_vertical"
 				accent: Theme.secondary
 				label: "Shared"
-				value: Torrents.size(Torrents.torrents.reduce((sum, item) => sum + item.uploaded, 0))
-				note: `${Torrents.size(Torrents.torrents.reduce((sum, item) => sum + item.downloaded, 0))} received`
+				value: Format.bytes(Torrents.torrents.reduce((sum, item) => sum + item.uploaded, 0))
+				note: `${Format.bytes(Torrents.torrents.reduce((sum, item) => sum + item.downloaded, 0))} received`
 			}
 		}
 

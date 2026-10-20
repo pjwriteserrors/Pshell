@@ -384,7 +384,7 @@ Item {
 		const labels = {};
 		found.groups.forEach((group, rank) => {
 			const first = group.paths[0];
-			let label = `${Files.nameOf(first.path)} · ${group.kind === "same" ? `${group.paths.length} copies, ${Files.sizeText(group.size)} each` : `${group.paths.length} look alike`}`;
+			let label = `${Files.nameOf(first.path)} · ${group.kind === "same" ? `${group.paths.length} copies, ${Format.bytes(group.size)} each` : `${group.paths.length} look alike`}`;
 			while (labels[label]) label += " ";
 			labels[label] = true;
 			waste += group.kind === "same" ? group.size * (group.paths.length - 1) : 0;

@@ -209,7 +209,7 @@ FloatingWindow {
 			anchors.bottom: bar.top
 			anchors.margins: 14
 			anchors.bottomMargin: 8
-			text: `${Math.round(Printer.progress * 100)} % · ${Printer.duration(Printer.secondsLeft)} left`
+			text: `${Math.round(Printer.progress * 100)} % · ${Format.duration(Printer.secondsLeft)} left`
 			color: "white"
 			opacity: 0.85
 			font.family: Theme.fontFamily

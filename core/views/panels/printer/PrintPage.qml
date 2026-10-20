@@ -987,7 +987,7 @@ Item {
 									}
 
 									StyledText {
-										text: fact.index === 0 ? Printer.duration(Printer.secondsLeft) : Printer.duration(Number(Printer.project?.print_time ?? 0) * 60)
+										text: fact.index === 0 ? Format.duration(Printer.secondsLeft) : Format.duration(Number(Printer.project?.print_time ?? 0) * 60)
 										font.pixelSize: Theme.size.title
 										font.weight: Font.DemiBold
 										tabular: true
@@ -1146,7 +1146,7 @@ Item {
 						const meta = root.job?.meta;
 						if (!meta) return [];
 						return [
-							{ icon: "clock_outline", text: meta.seconds > 0 ? Printer.duration(meta.seconds) : "–" },
+							{ icon: "clock_outline", text: meta.seconds > 0 ? Format.duration(meta.seconds) : "–" },
 							{ icon: "weight_gram", text: `${meta.grams} g` },
 							{ icon: "layers_outline", text: `${meta.layers} layers` },
 							{ icon: "ruler", text: `${meta.height} mm` }

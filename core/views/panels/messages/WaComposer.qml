@@ -431,7 +431,7 @@ ColumnLayout {
 					property real now: Date.now()
 
 					Layout.fillWidth: true
-					text: WhatsApp.clock((elapsed.now - WhatsApp.recordingSince) / 1000)
+					text: Format.clock((elapsed.now - WhatsApp.recordingSince) / 1000)
 					tabular: true
 					font.pixelSize: Theme.size.body
 

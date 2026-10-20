@@ -1193,7 +1193,7 @@ DialogFrame {
 					title: "Thumbnails"
 
 					Line {
-						label: root.cache ? `${Files.sizeText(root.cache.size)} in ${root.cache.files} pictures (shared with other apps)` : "Measuring…"
+						label: root.cache ? `${Format.bytes(root.cache.size)} in ${root.cache.files} pictures (shared with other apps)` : "Measuring…"
 						icon: "image_multiple_outline"
 
 						TextButton {

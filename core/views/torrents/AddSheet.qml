@@ -191,7 +191,7 @@ Item {
 							if (entry.loading) return "Reading the link…";
 							if (!entry.hasMetadata) return entry.peers > 0 ? `Getting the file list from ${entry.peers} peer${entry.peers === 1 ? "" : "s"}…` : "Looking for peers…";
 							const count = entry.files.length;
-							return `${Torrents.size(entry.total)} · ${count} file${count === 1 ? "" : "s"}`;
+							return `${Format.bytes(entry.total)} · ${count} file${count === 1 ? "" : "s"}`;
 						}
 						font.pixelSize: Theme.size.small
 						tone: root.entry?.error ? Theme.danger : Theme.textMuted
@@ -310,7 +310,7 @@ Item {
 				StyledText {
 					text: {
 						if (!root.space) return "";
-						const free = `${Torrents.size(root.space.free)} free`;
+						const free = `${Format.bytes(root.space.free)} free`;
 						if (root.tight) return `${free} – not enough`;
 						if (!root.space.exists) return `${free} · the folder will be made`;
 						return free;
@@ -327,7 +327,7 @@ Item {
 				visible: (root.entry?.files ?? []).length > 1
 
 				SectionLabel {
-					text: `Files · ${Torrents.size(root.wantedSize)} wanted`
+					text: `Files · ${Format.bytes(root.wantedSize)} wanted`
 				}
 
 				Item {
@@ -388,7 +388,7 @@ Item {
 						}
 
 						StyledText {
-							text: Torrents.size(line.modelData.size)
+							text: Format.bytes(line.modelData.size)
 							font.pixelSize: Theme.size.small
 							tone: Theme.textMuted
 							tabular: true

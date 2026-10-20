@@ -109,8 +109,8 @@ Clickable {
 					text: {
 						const item = root.item;
 						if (!item) return "";
-						if (item.phase === "downloading") return `↓ ${Torrents.rate(item.down)}`;
-						if (item.phase === "seeding") return `↑ ${Torrents.rate(item.up)} · ratio ${item.ratio.toFixed(2)}`;
+						if (item.phase === "downloading") return `↓ ${Format.rate(item.down)}`;
+						if (item.phase === "seeding") return `↑ ${Format.rate(item.up)} · ratio ${item.ratio.toFixed(2)}`;
 						if (item.phase === "error") return item.error;
 						return Torrents.phaseLabel(item.phase);
 					}
@@ -129,9 +129,9 @@ Clickable {
 					text: {
 						const item = root.item;
 						if (!item) return "";
-						if (root.complete) return item.size > 0 ? Torrents.size(item.size) : "";
+						if (root.complete) return item.size > 0 ? Format.bytes(item.size) : "";
 						if (item.phase === "downloading" && item.eta >= 0) return `done ${Torrents.finishTime(item.eta)}`;
-						return item.size > 0 ? `${Math.floor(item.progress * 100)} % of ${Torrents.size(item.size)}` : "";
+						return item.size > 0 ? `${Math.floor(item.progress * 100)} % of ${Format.bytes(item.size)}` : "";
 					}
 					font.pixelSize: Theme.size.small
 					tone: Theme.textSubtle

@@ -59,14 +59,6 @@ Singleton {
 	// a download that was seen running is complete (the file manager may check it)
 	signal finished(var item)
 
-	function formatSize(bytes) {
-		const value = Math.max(0, Number(bytes) || 0);
-		if (value >= 1024 * 1024 * 1024) return `${(value / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-		if (value >= 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(1)} MB`;
-		if (value >= 1024) return `${Math.round(value / 1024)} KB`;
-		return `${Math.round(value)} B`;
-	}
-
 	function formatEta(seconds) {
 		if (!(seconds >= 0)) return "";
 		const total = Math.round(seconds);
@@ -266,7 +258,7 @@ Singleton {
 		const folder = item.path.slice(0, item.path.lastIndexOf("/")) || "/";
 		const manager = root.managers.includes(root.fileManager) ? root.fileManager : "auto";
 		if (manager === "auto") {
-			const uri = "file://" + item.path.split("/").map(part => encodeURIComponent(part).replace(/'/g, "%27")).join("/");
+			const uri = Format.fileUri(item.path);
 			Quickshell.execDetached(["sh", "-c", 'gdbus call --session --dest org.freedesktop.FileManager1 --object-path /org/freedesktop/FileManager1 --method org.freedesktop.FileManager1.ShowItems "[\'$1\']" "" >/dev/null 2>&1 || xdg-open "$2"',
 				"reveal", uri, folder]);
 		} else if (manager === "nautilus" || manager === "dolphin") {

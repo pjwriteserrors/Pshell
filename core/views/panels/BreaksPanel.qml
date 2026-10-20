@@ -58,7 +58,7 @@ Drawer {
 					spacing: 6
 
 					StyledText {
-						text: `${Breaks.formatDuration(Breaks.screenSeconds)} screen · ${Breaks.todayEntry.breaks} breaks today`
+						text: `${Format.duration(Breaks.screenSeconds)} screen · ${Breaks.todayEntry.breaks} breaks today`
 						tone: Theme.textMuted
 						font.pixelSize: Theme.size.label
 					}
@@ -444,7 +444,7 @@ Drawer {
 						Repeater {
 							model: [
 								{ icon: "cup_water", text: `Ø ${Breaks.formatLitres(Math.round(card.modelData.side.ml / 50) * 50)}` },
-								{ icon: "monitor", text: `Ø ${Breaks.formatDuration(card.modelData.side.screen)} screen` },
+								{ icon: "monitor", text: `Ø ${Format.duration(card.modelData.side.screen)} screen` },
 								{ icon: "walk", text: `Ø ${card.modelData.side.breaks.toFixed(1)} breaks` },
 								{ icon: "weather_windy", text: `Ø ${card.modelData.side.swing.toFixed(1)} hPa swing`, shown: card.modelData.side.swingDays > 0 }
 							].filter(row => row.shown !== false)

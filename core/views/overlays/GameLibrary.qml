@@ -885,7 +885,7 @@ ModalWindow {
 					if (time) out.push({ icon: "clock_outline", text: time });
 					const last = GameText.ago(game.lastPlayed);
 					out.push({ icon: "history", text: last || "Not played yet" });
-					const size = GameText.size(game.size);
+					const size = Format.bytes(game.size, "");
 					if (size) out.push({ icon: "harddisk", text: size });
 					return out;
 				}

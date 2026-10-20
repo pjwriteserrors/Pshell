@@ -127,17 +127,6 @@ Singleton {
 		root.markRead(item.link);
 	}
 
-	function formatBytes(bytes) {
-		const units = ["B", "KB", "MB", "GB", "TB"];
-		let value = Number(bytes) || 0;
-		let unit = 0;
-		while (value >= 1024 && unit < units.length - 1) {
-			value /= 1024;
-			unit += 1;
-		}
-		return `${value >= 10 || unit === 0 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
-	}
-
 	// pacnew | orphans | cache | paccache, in a terminal like the updates
 	function runTask(name) {
 		if (root.busy || !name) return;

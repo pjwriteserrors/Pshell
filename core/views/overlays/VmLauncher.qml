@@ -114,16 +114,9 @@ ModalWindow {
 		if (m.cpus) out.push({ icon: "cpu_64_bit", text: `${m.cpus} threads` });
 		if (m.memory) out.push({ icon: "memory", text: `${Math.round(m.memory)} GB` });
 		if (m.gpu) out.push({ icon: "expansion_card", text: m.gpu.replace(/^GeForce /, "").replace(/^Radeon /, "Radeon ") });
-		for (const drive of m.drives ?? []) out.push({ icon: "harddisk", text: drive.label && /\d\s*[TG]B/i.test(drive.label) ? drive.label : [drive.label, root.bytes(drive.size)].filter(v => v).join(" · "), warn: drive.busy.length > 0 });
-		for (const item of m.storage ?? []) if (item.size) out.push({ icon: "file_outline", text: `${root.bytes(item.size)} image` });
+		for (const drive of m.drives ?? []) out.push({ icon: "harddisk", text: drive.label && /\d\s*[TG]B/i.test(drive.label) ? drive.label : [drive.label, Format.bytes(drive.size, "")].filter(v => v).join(" · "), warn: drive.busy.length > 0 });
+		for (const item of m.storage ?? []) if (item.size) out.push({ icon: "file_outline", text: `${Format.bytes(item.size, "")} image` });
 		return out;
-	}
-
-	function bytes(value) {
-		if (!value) return "";
-		const tb = value / 1e12;
-		if (tb >= 1) return `${tb.toFixed(tb >= 10 ? 0 : 1).replace(/\.0$/, "")} TB`;
-		return `${Math.round(value / 1e9)} GB`;
 	}
 
 	function pick(next) {

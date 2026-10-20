@@ -278,7 +278,7 @@ Singleton {
 		const change3h = hPa !== null ? Math.round(root.pressureChange3h * 10) / 10 : null;
 		root.change(entry => entry.headaches = entry.headaches.concat([{ at: Date.now(), ml: entry.ml, screen: entry.screen, sinceMove: since, hPa: hPa, change3h: change3h }]));
 		const pressure = hPa !== null ? ` · ${change3h > 0 ? "+" : ""}${change3h.toFixed(1)} hPa in 3 h` : "";
-		Notifs.pushInternal("done", "Headache logged", `${root.formatLitres(root.waterMl)} · ${root.formatDuration(root.screenSeconds)} screen · ${since} min without a break${pressure}`, {
+		Notifs.pushInternal("done", "Headache logged", `${root.formatLitres(root.waterMl)} · ${Format.duration(root.screenSeconds)} screen · ${since} min without a break${pressure}`, {
 			icon: "head_alert_outline",
 			actions: [
 				{ label: "Bottle", icon: "cup_water", run: () => root.openPanel() },
@@ -291,11 +291,6 @@ Singleton {
 	function setEnabled(on) {
 		root.enabled = on;
 		saveDelay.restart();
-	}
-
-	function formatDuration(seconds) {
-		const minutes = Math.round(seconds / 60);
-		return minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, "0")}`;
 	}
 
 	function tookBreak() {

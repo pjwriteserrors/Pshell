@@ -36,12 +36,6 @@ DialogFrame {
 		});
 	}
 
-	function clock(seconds) {
-		const value = Math.max(0, seconds);
-		const minutes = Math.floor(value / 60);
-		return `${minutes}:${(value - minutes * 60).toFixed(1).padStart(4, "0")}`;
-	}
-
 	function run() {
 		if (root.end - root.start < 0.2) return;
 		if (root.mode === "gif") Files.startJob("gif", { path: root.path, start: root.start, end: root.end, fps: root.fps, width: root.gifWidth });
@@ -120,7 +114,7 @@ DialogFrame {
 
 				StyledText {
 					Layout.fillWidth: true
-					text: `${Files.nameOf(root.path)} · ${root.clock(root.start)} – ${root.clock(root.end)} (${(root.end - root.start).toFixed(1)} s of ${root.length.toFixed(1)} s)`
+					text: `${Files.nameOf(root.path)} · ${Format.clock(root.start, 1)} – ${Format.clock(root.end, 1)} (${(root.end - root.start).toFixed(1)} s of ${root.length.toFixed(1)} s)`
 					tone: Theme.textSubtle
 					font.pixelSize: Theme.size.small
 					elide: Text.ElideMiddle

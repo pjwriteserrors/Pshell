@@ -104,7 +104,7 @@ Item {
 
 			x: 4
 			y: canvas.y + canvas.height * (1 - modelData) + 2
-			text: Torrents.rate(root.scale_ * modelData)
+			text: Format.rate(root.scale_ * modelData)
 			font.pixelSize: Theme.size.tiny
 			tone: Theme.textSubtle
 			tabular: true
@@ -313,7 +313,7 @@ Item {
 			id: readout
 
 			anchors.centerIn: parent
-			text: root.hovered ? `↓ ${Torrents.rate(root.hovered.down)}   ↑ ${Torrents.rate(root.hovered.up)}   ${root.hovered.label}` : ""
+			text: root.hovered ? `↓ ${Format.rate(root.hovered.down)}   ↑ ${Format.rate(root.hovered.up)}   ${root.hovered.label}` : ""
 			font.pixelSize: Theme.size.small
 			tabular: true
 		}

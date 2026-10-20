@@ -239,7 +239,7 @@ Item {
 			visible: root.sizeWidth > 0
 			rightPadding: 16
 			horizontalAlignment: Text.AlignRight
-			text: root.dir ? root.count : Files.sizeText(root.size)
+			text: root.dir ? root.count : Format.bytes(root.size)
 			color: Theme.textMuted
 			font.family: Theme.fontFamily
 			font.pixelSize: Theme.size.label

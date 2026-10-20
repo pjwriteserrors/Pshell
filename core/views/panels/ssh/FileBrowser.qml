@@ -5,6 +5,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import qs.style.theme
 import qs.style.widgets
+import qs.core.services
 
 // One folder as a list: the path on top takes a typed or pasted one, below
 // it the folders to step into and the files. With `picking` a click on a
@@ -37,17 +38,6 @@ ColumnLayout {
 
 	function upPath() {
 		return root.path.replace(/\/[^\/]+\/*$/, "") || "/";
-	}
-
-	function sizeText(bytes) {
-		const units = ["B", "KB", "MB", "GB", "TB"];
-		let value = Number(bytes) || 0;
-		let unit = 0;
-		while (value >= 1024 && unit < units.length - 1) {
-			value /= 1024;
-			unit += 1;
-		}
-		return `${unit === 0 || value >= 100 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
 	}
 
 	// What an edit put in. More than one character at once came from the
@@ -174,7 +164,7 @@ ColumnLayout {
 
 					StyledText {
 						visible: !row.dir && root.picking
-						text: root.sizeText(row.modelData.size)
+						text: Format.bytes(row.modelData.size)
 						tone: Theme.textSubtle
 						font.pixelSize: Theme.size.small
 						tabular: true

@@ -89,25 +89,6 @@ Singleton {
 	}
 
 	// ── how things are written ───────────────────────────────────────────
-	function stamp(seconds) {
-		const date = new Date(seconds * 1000);
-		const now = new Date();
-		if (date.toDateString() === now.toDateString()) return Qt.formatTime(date, "HH:mm");
-		if (now - date < 6 * 86400 * 1000) return Qt.formatDate(date, "ddd");
-		return Qt.formatDate(date, date.getFullYear() === now.getFullYear() ? "d MMM" : "d MMM yy");
-	}
-
-	function clock(seconds) {
-		const whole = Math.max(0, Math.round(seconds));
-		return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
-	}
-
-	function size(bytes) {
-		if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-		if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
-		return bytes > 0 ? `${bytes} B` : "";
-	}
-
 	// ── signing in ───────────────────────────────────────────────────────
 	function signIn() {
 		root.command("login");

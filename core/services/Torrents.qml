@@ -277,7 +277,7 @@ Singleton {
 		const item = root.byHash[hash];
 		if (!item) return;
 		const path = `${item.destination}/${item.name}`;
-		const uri = "file://" + path.split("/").map(part => encodeURIComponent(part).replace(/'/g, "%27")).join("/");
+		const uri = Format.fileUri(path);
 		Quickshell.execDetached(["sh", "-c", 'gdbus call --session --dest org.freedesktop.FileManager1 --object-path /org/freedesktop/FileManager1 --method org.freedesktop.FileManager1.ShowItems "[\'$1\']" "" >/dev/null 2>&1 || xdg-open "$2"',
 			"reveal", uri, item.destination]);
 	}
@@ -335,28 +335,6 @@ Singleton {
 	}
 
 	// ── how things are said ────────────────────────────────────────────────
-	function size(bytes) {
-		const value = Math.max(0, Number(bytes) || 0);
-		if (value >= 1024 ** 4) return `${(value / 1024 ** 4).toFixed(2)} TB`;
-		if (value >= 1024 ** 3) return `${(value / 1024 ** 3).toFixed(value >= 10 * 1024 ** 3 ? 1 : 2)} GB`;
-		if (value >= 1024 ** 2) return `${(value / 1024 ** 2).toFixed(value >= 100 * 1024 ** 2 ? 0 : 1)} MB`;
-		if (value >= 1024) return `${Math.round(value / 1024)} KB`;
-		return `${Math.round(value)} B`;
-	}
-
-	function rate(bytes) {
-		return `${root.size(bytes)}/s`;
-	}
-
-	function duration(seconds) {
-		if (!(seconds >= 0)) return "∞";
-		const total = Math.round(seconds);
-		if (total < 60) return `${total} s`;
-		if (total < 3600) return `${Math.floor(total / 60)} min ${total % 60 < 10 ? "0" : ""}${total % 60} s`;
-		if (total < 86400) return `${Math.floor(total / 3600)} h ${Math.floor(total % 3600 / 60)} min`;
-		return `${Math.floor(total / 86400)} d ${Math.floor(total % 86400 / 3600)} h`;
-	}
-
 	// when something that takes `seconds` from now will be over, as a clock
 	function finishTime(seconds) {
 		if (!(seconds >= 0)) return "";
@@ -463,7 +441,7 @@ Singleton {
 		if (!Plugins.on("downloads")) Sounds.play("download");
 		finishNote.command = ["notify-send", "--app-name", "Torrents", "--icon", `${Paths.assets}/icons/pshell-torrents.svg`,
 			"--action=show=Show folder", "--action=open=Torrents",
-			"Download complete", `${torrent.name} · ${root.size(torrent.size)}`];
+			"Download complete", `${torrent.name} · ${Format.bytes(torrent.size)}`];
 		finishNote.hash = torrent.hash;
 		finishNote.running = true;
 	}

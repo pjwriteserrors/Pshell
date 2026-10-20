@@ -105,7 +105,7 @@ Item {
 
 					StyledText {
 						Layout.preferredWidth: 78
-						text: Torrents.rate(rate.modelData.value)
+						text: Format.rate(rate.modelData.value)
 						font.pixelSize: Theme.size.body
 						tabular: true
 					}

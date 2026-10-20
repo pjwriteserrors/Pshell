@@ -33,12 +33,8 @@ Drawer {
 
 	function ago(stamp) {
 		if (!stamp) return "never checked";
-		const minutes = Math.floor((Date.now() - stamp) / 60000);
-		if (minutes < 1) return "checked just now";
-		if (minutes < 60) return `checked ${minutes} min ago`;
-		const hours = Math.floor(minutes / 60);
-		if (hours < 24) return `checked ${hours} h ago`;
-		return `checked ${Math.floor(hours / 24)} d ago`;
+		const since = Format.ago(stamp);
+		return since === "now" ? "checked just now" : `checked ${since} ago`;
 	}
 
 	// package names are usually icon names too; strip the usual AUR suffixes
@@ -688,7 +684,7 @@ Drawer {
 					CardHeader {
 						icon: "harddisk"
 						title: "Package cache"
-						detail: `pacman ${Updates.formatBytes(Updates.pacmanCache)}  ·  yay ${Updates.formatBytes(Updates.yayCache)}`
+						detail: `pacman ${Format.bytes(Updates.pacmanCache)}  ·  yay ${Format.bytes(Updates.yayCache)}`
 						attention: Updates.cacheLarge
 
 						TextButton {

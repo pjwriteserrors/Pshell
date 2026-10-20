@@ -55,11 +55,6 @@ ColumnLayout {
 		root.ticked = next;
 	}
 
-	function stamp(seconds) {
-		const date = new Date(seconds * 1000);
-		return Qt.formatDate(date, date.getFullYear() === new Date().getFullYear() ? "d MMM" : "d MMM yy");
-	}
-
 	function how(entry) {
 		if (entry.status === "needs-you") return "Confirm in the browser";
 		return { "one-click": "One click", "email": "By mail", "page": "On its page" }[entry.method] ?? "";
@@ -241,7 +236,7 @@ ColumnLayout {
 
 						StyledText {
 							Layout.alignment: Qt.AlignRight
-							text: row.entry.last > 0 ? root.stamp(row.entry.last) : ""
+							text: row.entry.last > 0 ? Format.day(row.entry.last) : ""
 							tone: Theme.textSubtle
 							font.pixelSize: Theme.size.small
 						}

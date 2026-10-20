@@ -18,7 +18,7 @@ BarButton {
 		const parts = [];
 		if (Downloads.showPercent && Downloads.ratio >= 0) parts.push(`${Math.floor(Downloads.ratio * 100)}%`);
 		if (root.phase === "paused") return parts.join("");
-		if (Downloads.showSpeed) parts.push(Network.formatSpeed(Downloads.speed));
+		if (Downloads.showSpeed) parts.push(Format.rate(Downloads.speed));
 		if (Downloads.eta >= 0) parts.push(Downloads.formatEta(Downloads.eta));
 		return parts.join("  ·  ");
 	}

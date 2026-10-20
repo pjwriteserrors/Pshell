@@ -33,12 +33,7 @@ Item {
 	signal done
 
 	function stamp(seconds) {
-		if (!seconds) return "–";
-		const date = new Date(seconds * 1000);
-		const now = new Date();
-		if (date.toDateString() === now.toDateString()) return Qt.formatTime(date, "HH:mm");
-		if (now - date < 6 * 86400 * 1000) return Qt.formatDate(date, "dddd");
-		return Qt.formatDate(date, date.getFullYear() === now.getFullYear() ? "d MMM" : "d MMM yy");
+		return seconds ? Format.stamp(seconds, true) : "–";
 	}
 
 	ColumnLayout {

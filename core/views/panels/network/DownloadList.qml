@@ -71,7 +71,7 @@ ColumnLayout {
 
 		StyledText {
 			visible: Downloads.running.length > 0
-			text: Network.formatSpeed(Downloads.speed)
+			text: Format.rate(Downloads.speed)
 			tabular: true
 			tone: Theme.primary
 			font.pixelSize: Theme.size.label
@@ -284,9 +284,9 @@ ColumnLayout {
 						text: {
 							const item = card.item;
 							if (!item) return "";
-							if (card.done) return Downloads.formatSize(item.total || item.received);
+							if (card.done) return Format.bytes(item.total || item.received);
 							if (card.state_ === "failed") return "Failed";
-							const size = card.sized ? `${Downloads.formatSize(item.received)} of ${Downloads.formatSize(item.total)}` : Downloads.formatSize(item.received);
+							const size = card.sized ? `${Format.bytes(item.received)} of ${Format.bytes(item.total)}` : Format.bytes(item.received);
 							return card.running ? size : `Paused  ·  ${size}`;
 						}
 						tabular: true
@@ -312,7 +312,7 @@ ColumnLayout {
 					StyledText {
 						Layout.alignment: Qt.AlignRight
 						visible: card.running
-						text: card.item ? [Network.formatSpeed(card.item.speed), Downloads.formatEta(card.item.eta)].filter(part => part !== "").join("  ·  ") : ""
+						text: card.item ? [Format.rate(card.item.speed), Downloads.formatEta(card.item.eta)].filter(part => part !== "").join("  ·  ") : ""
 						tabular: true
 						tone: Theme.textMuted
 						font.pixelSize: Theme.size.small

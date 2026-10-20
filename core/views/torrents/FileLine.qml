@@ -83,7 +83,7 @@ Clickable {
 		StyledText {
 			Layout.preferredWidth: 70
 			horizontalAlignment: Text.AlignRight
-			text: Torrents.size(root.file.size)
+			text: Format.bytes(root.file.size)
 			font.pixelSize: Theme.size.small
 			tone: Theme.textMuted
 			tabular: true

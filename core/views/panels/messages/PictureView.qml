@@ -101,11 +101,6 @@ Rectangle {
 			readonly property bool playing: player.playbackState === MediaPlayer.PlayingState
 			readonly property real room: Math.min((screen.width - 48) / Math.max(1, output.sourceRect.width), (screen.height - 190) / Math.max(1, output.sourceRect.height))
 
-			function clock(ms) {
-				const seconds = Math.max(0, Math.floor(ms / 1000));
-				return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-			}
-
 			function toggle() {
 				if (screen.playing) player.pause();
 				else player.play();
@@ -208,7 +203,7 @@ Rectangle {
 					anchors.leftMargin: 10
 					anchors.verticalCenter: parent.verticalCenter
 					width: 38
-					text: screen.clock(player.position)
+					text: Format.clock(Math.floor(player.position / 1000))
 					tone: Theme.textMuted
 					tabular: true
 					font.pixelSize: Theme.size.label
@@ -266,7 +261,7 @@ Rectangle {
 					anchors.right: mute.left
 					anchors.rightMargin: 4
 					anchors.verticalCenter: parent.verticalCenter
-					text: screen.clock(player.duration)
+					text: Format.clock(Math.floor(player.duration / 1000))
 					tone: Theme.textMuted
 					tabular: true
 					font.pixelSize: Theme.size.label

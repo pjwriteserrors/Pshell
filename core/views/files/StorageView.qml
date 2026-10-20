@@ -124,7 +124,7 @@ Item {
 
 			StyledText {
 				Layout.fillWidth: true
-				text: root.tree ? `${Files.sizeText(root.tree.size)} in ${Files.pretty(root.at)}` : (root.running ? "Measuring…" : "Not measured yet")
+				text: root.tree ? `${Format.bytes(root.tree.size)} in ${Files.pretty(root.at)}` : (root.running ? "Measuring…" : "Not measured yet")
 				font.pixelSize: Theme.size.title
 				font.weight: Font.DemiBold
 				elide: Text.ElideMiddle
@@ -137,7 +137,7 @@ Item {
 					if (!root.tree) return "";
 					const disk = root.tree.disk;
 					const parts = [`${Number(root.tree.files).toLocaleString()} files`];
-					if (disk?.total) parts.push(`${Files.sizeText(disk.free)} of ${Files.sizeText(disk.total)} free on the drive`);
+					if (disk?.total) parts.push(`${Format.bytes(disk.free)} of ${Format.bytes(disk.total)} free on the drive`);
 					if (root.tree.scanned) parts.push(`measured ${Files.whenText(root.tree.scanned).toLowerCase()}`);
 					return parts.join(" · ");
 				}
@@ -306,7 +306,7 @@ Item {
 						x: 9
 						y: 22
 						width: parent.width - 18
-						text: Files.sizeText(tile.modelData.size)
+						text: Format.bytes(tile.modelData.size)
 						tone: Theme.textMuted
 						font.pixelSize: Theme.size.tiny
 					}
@@ -351,7 +351,7 @@ Item {
 				id: tip
 
 				anchors.centerIn: parent
-				text: parent.node ? `${parent.node.name} · ${Files.sizeText(parent.node.size)}` : ""
+				text: parent.node ? `${parent.node.name} · ${Format.bytes(parent.node.size)}` : ""
 				font.pixelSize: Theme.size.small
 			}
 		}
@@ -449,7 +449,7 @@ Item {
 							}
 
 							StyledText {
-								text: Files.sizeText(suggestion.modelData.size)
+								text: Format.bytes(suggestion.modelData.size)
 								tone: Theme.primary
 								font.weight: Font.DemiBold
 							}
@@ -543,7 +543,7 @@ Item {
 						anchors.right: parent.right
 						anchors.rightMargin: 8
 						anchors.verticalCenter: parent.verticalCenter
-						text: Files.sizeText(biggest.modelData.size)
+						text: Format.bytes(biggest.modelData.size)
 						tone: Theme.textMuted
 						font.pixelSize: Theme.size.small
 					}

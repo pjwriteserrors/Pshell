@@ -47,7 +47,7 @@ RowLayout {
 				if (!item) return "";
 				const parts = [];
 				if (item.ended > 0) parts.push(Qt.formatDateTime(new Date(item.ended), "d MMM, HH:mm"));
-				parts.push(Printer.duration(Number(item.minutes) * 60));
+				parts.push(Format.duration(Number(item.minutes) * 60));
 				if (item.grams > 0) parts.push(`${Math.round(item.grams)} g`);
 				if (item.result !== "finished") parts.push(`${item.result} at ${item.progress} %`);
 				return parts.join(" · ");

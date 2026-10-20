@@ -261,7 +261,7 @@ Flickable {
 					}
 
 					StyledText {
-						text: (root.item?.size ?? -1) > 0 ? `${Torrents.size(root.item.done)} of ${Torrents.size(root.item.size)}` : "Size not known yet"
+						text: (root.item?.size ?? -1) > 0 ? `${Format.bytes(root.item.done)} of ${Format.bytes(root.item.size)}` : "Size not known yet"
 						font.pixelSize: Theme.size.small
 						tone: Theme.textMuted
 						tabular: true
@@ -308,8 +308,8 @@ Flickable {
 						text: {
 							const item = root.item;
 							if (!item) return "";
-							if (item.finished > 0) return `took ${Torrents.duration(item.finished - item.added)} · added ${Torrents.when(item.added)}`;
-							if (item.phase === "downloading" && item.eta >= 0) return `${Torrents.duration(item.eta)} left at ${Torrents.rate(item.down)}`;
+							if (item.finished > 0) return `took ${Format.duration(item.finished - item.added, true)} · added ${Torrents.when(item.added)}`;
+							if (item.phase === "downloading" && item.eta >= 0) return `${Format.duration(item.eta, true)} left at ${Format.rate(item.down)}`;
 							return `added ${Torrents.when(item.added)}`;
 						}
 						font.pixelSize: Theme.size.small
@@ -408,8 +408,8 @@ Flickable {
 				Layout.fillWidth: true
 				icon: "arrow_down_bold"
 				label: "Download"
-				value: Torrents.rate(root.item?.down ?? 0)
-				note: `${Torrents.size(root.item?.downloaded ?? 0)} received`
+				value: Format.rate(root.item?.down ?? 0)
+				note: `${Format.bytes(root.item?.downloaded ?? 0)} received`
 			}
 
 			StatTile {
@@ -417,8 +417,8 @@ Flickable {
 				icon: "arrow_up_bold"
 				accent: Torrents.upColor
 				label: "Upload"
-				value: Torrents.rate(root.item?.up ?? 0)
-				note: `${Torrents.size(root.item?.uploaded ?? 0)} sent`
+				value: Format.rate(root.item?.up ?? 0)
+				note: `${Format.bytes(root.item?.uploaded ?? 0)} sent`
 			}
 
 			StatTile {
@@ -570,7 +570,7 @@ Flickable {
 						StyledText {
 							Layout.preferredWidth: 90
 							horizontalAlignment: Text.AlignRight
-							text: peer.modelData.down > 0 ? `↓ ${Torrents.rate(peer.modelData.down)}` : ""
+							text: peer.modelData.down > 0 ? `↓ ${Format.rate(peer.modelData.down)}` : ""
 							font.pixelSize: Theme.size.small
 							tabular: true
 						}
@@ -578,7 +578,7 @@ Flickable {
 						StyledText {
 							Layout.preferredWidth: 90
 							horizontalAlignment: Text.AlignRight
-							text: peer.modelData.up > 0 ? `↑ ${Torrents.rate(peer.modelData.up)}` : ""
+							text: peer.modelData.up > 0 ? `↑ ${Format.rate(peer.modelData.up)}` : ""
 							font.pixelSize: Theme.size.small
 							tone: Theme.textMuted
 							tabular: true
