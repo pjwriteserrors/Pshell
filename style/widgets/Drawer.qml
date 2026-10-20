@@ -42,12 +42,17 @@ PanelWindow {
 	property real belowReveal: root.belowShown ? 1 : 0
 	readonly property bool shown: Popups.current === root.panelId
 	property var targetScreen: Popups.primaryScreen
-	property real reveal: root.shown ? 1 : 0
+	property real reveal: 0
 
 	signal panelOpened
 	signal panelClosed
 
-	onShownChanged: {
+	// the panel is built when it opens (Popups.wanted): then it grows out
+	// of the bar just the same
+	onShownChanged: root.followShown()
+	Component.onCompleted: if (root.shown) root.followShown()
+
+	function followShown() {
 		if (root.shown) {
 			root.targetScreen = Popups.screen || Popups.primaryScreen;
 			root.panelOpened();
@@ -55,6 +60,7 @@ PanelWindow {
 		} else {
 			root.panelClosed();
 		}
+		root.reveal = root.shown ? 1 : 0;
 	}
 
 	Behavior on reveal {

@@ -18,7 +18,7 @@ import qs.style.views
 // here and by the plugin switches, never by the style.
 Scope {
 	// services that act on their own, without a surface to pull them in
-	readonly property var background: [Agents, TimerGuard, ClipboardHints, Phone, Mail, WhatsApp, Autocorrect, Screentime, Multicursor, Sounds, FindMouse]
+	readonly property var background: [Agents, TimerGuard, Clipboard, ClipboardHints, Phone, Mail, WhatsApp, Autocorrect, Screentime, Multicursor, Sounds, FindMouse]
 
 	// notifications and the shell's own messages
 	Variants {
@@ -87,7 +87,10 @@ Scope {
 		CommandRing {}
 	}
 
-	// panels (one instance each, they follow the screen they are opened on)
+	// panels (one instance each, they follow the screen they are opened on).
+	// Each is built when it first opens and kept a while after it closed
+	// (Popups.wanted); the launcher, the control centre and today stay
+	// built, they open all the time and have to be there at once.
 	Launcher {}
 
 	LazyLoader {
@@ -103,25 +106,25 @@ Scope {
 	}
 
 	LazyLoader {
-		active: Plugins.on("breaks")
+		active: Plugins.on("breaks") && Popups.wanted("breaks")
 
 		BreaksPanel {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("screentime")
+		active: Plugins.on("screentime") && Popups.wanted("screentime")
 
 		ScreentimePanel {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("watch")
+		active: Plugins.on("watch") && Popups.wanted("watch")
 
 		WatchPanel {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("printer")
+		active: Plugins.on("printer") && Popups.wanted("printer")
 
 		PrinterPanel {}
 	}
@@ -140,61 +143,61 @@ Scope {
 	}
 
 	LazyLoader {
-		active: Plugins.on("media")
+		active: Plugins.on("media") && Popups.wanted("media")
 
 		MediaPanel {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("clipboard")
+		active: Plugins.on("clipboard") && Popups.wanted("clipboard")
 
 		ClipboardPanel {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("tray")
+		active: Plugins.on("tray") && Popups.wanted("tray")
 
 		TrayMenuPanel {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("overview")
+		active: Plugins.on("overview") && Popups.wanted("overview")
 
 		OverviewPanel {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("updates")
+		active: Plugins.on("updates") && Popups.wanted("updates")
 
 		UpdatesPanel {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("qtrack")
+		active: Plugins.on("qtrack") && Popups.wanted("timer")
 
 		TimerPanel {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("qtrack")
+		active: Plugins.on("qtrack") && Popups.wanted("tracking")
 
 		TrackingPanel {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("ssh")
+		active: Plugins.on("ssh") && Popups.wanted("ssh")
 
 		SshPanel {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("notes")
+		active: Plugins.on("notes") && Popups.wanted("notes")
 
 		NotesPanel {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("messages")
+		active: Plugins.on("messages") && Popups.wanted("messages")
 
 		MessagesPanel {}
 	}
@@ -207,7 +210,7 @@ Scope {
 	}
 
 	LazyLoader {
-		active: Plugins.on("identities")
+		active: Plugins.on("identities") && Popups.wanted("identity")
 
 		IdentityPanel {}
 	}
@@ -220,41 +223,45 @@ Scope {
 	}
 
 	LazyLoader {
-		active: Plugins.on("fast-reader")
+		active: Plugins.on("fast-reader") && Popups.wanted("reader")
 
 		ReaderPanel {}
 	}
 
 	// full-screen overlays
-	PluginsWindow {}
+	LazyLoader {
+		active: Popups.wanted("plugins")
+
+		PluginsWindow {}
+	}
 
 	LazyLoader {
-		active: Plugins.on("niri-settings")
+		active: Plugins.on("niri-settings") && Popups.wanted("niri")
 
 		NiriSettingsWindow {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("power-menu")
+		active: Plugins.on("power-menu") && Popups.wanted("power")
 
 		PowerMenu {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("vm-launcher")
+		active: Plugins.on("vm-launcher") && Popups.wanted("vm")
 
 		VmLauncher {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("games")
+		active: Plugins.on("games") && Popups.wanted("games")
 
 		GameLibrary {}
 	}
 
 	// … and as a panel under the bar
 	LazyLoader {
-		active: Plugins.on("games-bar")
+		active: Plugins.on("games-bar") && Popups.wanted("gamebar")
 
 		GamesPanel {}
 	}
@@ -275,7 +282,7 @@ Scope {
 
 	// under the bar, from the magnet in the bar
 	LazyLoader {
-		active: Plugins.on("torrents-bar")
+		active: Plugins.on("torrents-bar") && Popups.wanted("torrents")
 
 		TorrentsPanel {}
 	}
@@ -287,50 +294,50 @@ Scope {
 	}
 
 	LazyLoader {
-		active: Plugins.on("eye-rest")
+		active: Plugins.on("eye-rest") && Popups.wanted("eyerest")
 
 		EyeRest {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("stretch")
+		active: Plugins.on("stretch") && Popups.wanted("stretch")
 
 		StretchBreak {}
 	}
 
 	// Studio
 	LazyLoader {
-		active: Plugins.on("studio-wallpaper")
+		active: Plugins.on("studio-wallpaper") && Popups.wanted("theme")
 
 		ThemePicker {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("studio-motion")
+		active: Plugins.on("studio-motion") && Popups.wanted("animation")
 
 		AnimationPicker {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("studio-dress")
+		active: Plugins.on("studio-dress") && Popups.wanted("dress")
 
 		DressPage {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("studio-styles")
+		active: Plugins.on("studio-styles") && Popups.wanted("styles")
 
 		StylePage {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("studio-combinations")
+		active: Plugins.on("studio-combinations") && Popups.wanted("combinations")
 
 		CombinationsPage {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("studio-sounds")
+		active: Plugins.on("studio-sounds") && Popups.wanted("sounds")
 
 		SoundPackPage {}
 	}
