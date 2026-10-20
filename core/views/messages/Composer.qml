@@ -326,7 +326,7 @@ ColumnLayout {
 				implicitWidth: 40
 				implicitHeight: 40
 				icon: "paperclip"
-				onClicked: if (!picker.running) picker.running = true
+				onClicked: Files.pick({ title: "Attach files", multiple: true }, paths => root.add(paths))
 			}
 
 			IconButton {
@@ -463,15 +463,6 @@ ColumnLayout {
 		onActivated: root.toggle("underline")
 	}
 
-	// the desktop's own file chooser
-	Process {
-		id: picker
-
-		command: ["python3", `${Paths.scripts}/pick_files.py`]
-		stdout: SplitParser {
-			onRead: line => root.add([line])
-		}
-	}
 
 	// Ctrl+V: a picture or copied files go with the mail, words into it
 	Process {

@@ -252,7 +252,7 @@ Singleton {
 	property bool picking: false
 
 	function pickProgram(done) {
-		if (picker.running) return;
+		if (root.picking) return;
 		root.pickDone = done;
 		root.picking = true;
 		// where the other games are: the folder all of them share
@@ -264,8 +264,12 @@ Singleton {
 			common = common.slice(0, i);
 		}
 		const start = common.length > 1 ? common.join("/") : Paths.home;
-		picker.command = ["python3", `${Paths.scripts}/pick_files.py`, "--single", "--start", start, "--filter", "Games|*.exe *.EXE *.msi *.bat *.sh *.x86_64 *.AppImage *.appimage", "--filter", "Everything|*", "Add a game"];
-		picker.running = true;
+		Files.pick({ title: "Add a game", folder: start, filters: ["*.exe", "*.msi", "*.bat", "*.sh", "*.x86_64", "*.AppImage"] }, paths => {
+			root.picking = false;
+			const done = root.pickDone;
+			root.pickDone = null;
+			if (done) done(paths[0] ?? "");
+		});
 	}
 
 	function setKey(key, done) {
@@ -338,20 +342,6 @@ Singleton {
 		}
 	}
 
-	Process {
-		id: picker
-
-		stdout: StdioCollector {
-			id: pickedOut
-		}
-		onExited: code => {
-			root.picking = false;
-			const path = code === 0 ? String(pickedOut.text || "").trim() : "";
-			const done = root.pickDone;
-			root.pickDone = null;
-			if (done) done(path);
-		}
-	}
 
 	// what runs: often while someone looks or a game was just started
 	Timer {

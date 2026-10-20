@@ -274,7 +274,7 @@ Rectangle {
 				pressedScale: 0.92
 				onClicked: {
 					if (tile.entry) root.sticker(tile.entry.file);
-					else if (!picker.running) picker.running = true;
+					else Files.pick({ title: "A sticker of your own", filters: ["*.png", "*.jpg", "*.jpeg", "*.webp", "*.gif"] }, paths => paths.forEach(path => WhatsApp.command("keepSticker", { path: path })));
 				}
 
 				Glyph {
@@ -374,13 +374,4 @@ Rectangle {
 		}
 	}
 
-	// a picture becomes a sticker of one's own
-	Process {
-		id: picker
-
-		command: ["python3", `${Paths.scripts}/pick_files.py`]
-		stdout: SplitParser {
-			onRead: line => WhatsApp.command("keepSticker", { path: line })
-		}
-	}
 }

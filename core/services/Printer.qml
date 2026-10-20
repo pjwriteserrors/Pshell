@@ -345,9 +345,14 @@ Singleton {
 	// a print that finished, while the shell runs (the panel throws confetti)
 	signal finished(string name)
 
-	// the desktop's file chooser; a preset or a bundle goes into Orca's presets
+	// the shell's file chooser; a preset or a bundle goes into Orca's presets
 	function importProfile() {
-		if (!picker.running) picker.running = true;
+		Files.pick({ title: "Import a slicer profile", multiple: true, filters: ["*.json", "*.orca_printer", "*.orca_filament", "*.bbscfg", "*.bbsflmt", "*.zip"] }, paths => {
+			for (const path of paths) {
+				root.importing = true;
+				root.send({ op: "import", path: path });
+			}
+		});
 	}
 
 	function setOption(key, value) {
@@ -663,18 +668,6 @@ Singleton {
 		onTriggered: root.aceSyncing = false
 	}
 
-	Process {
-		id: picker
-
-		command: ["python3", `${Paths.scripts}/pick_files.py`, "Import a slicer profile"]
-		stdout: SplitParser {
-			onRead: line => {
-				if (line.trim() === "") return;
-				root.importing = true;
-				root.send({ op: "import", path: line.trim() });
-			}
-		}
-	}
 
 	Timer {
 		interval: 5000

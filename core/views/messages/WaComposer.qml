@@ -498,7 +498,7 @@ ColumnLayout {
 				implicitWidth: 40
 				implicitHeight: 40
 				icon: "paperclip"
-				onClicked: if (!chooser.running) chooser.running = true
+				onClicked: Files.pick({ title: "Send files", multiple: true }, paths => root.add(paths))
 			}
 
 			IconButton {
@@ -583,15 +583,6 @@ ColumnLayout {
 		}
 	}
 
-	// the desktop's own file chooser
-	Process {
-		id: chooser
-
-		command: ["python3", `${Paths.scripts}/pick_files.py`]
-		stdout: SplitParser {
-			onRead: line => root.add([line])
-		}
-	}
 
 	// Ctrl+V: a picture or copied files go with the message, words into it
 	Process {

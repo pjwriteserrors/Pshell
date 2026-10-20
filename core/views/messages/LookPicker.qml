@@ -36,7 +36,9 @@ Rectangle {
 	signal done
 
 	function choose() {
-		if (!chooser.running) chooser.running = true;
+		Files.pick({ title: "Chat background", filters: ["*.png", "*.jpg", "*.jpeg", "*.webp", "*.bmp", "*.gif", "*.avif", "*.svg"] }, paths => {
+			if (paths.length > 0) Messages.setBackdrop({ kind: "image", image: paths[0] });
+		});
 	}
 
 	implicitWidth: 320
@@ -479,15 +481,4 @@ Rectangle {
 		onActivated: root.done()
 	}
 
-	// the desktop's own file chooser
-	Process {
-		id: chooser
-
-		command: ["python3", `${Paths.scripts}/pick_files.py`, "Chat background"]
-		stdout: SplitParser {
-			onRead: line => {
-				if (/\.(png|jpe?g|webp|bmp|gif|avif|svg)$/i.test(line)) Messages.setBackdrop({ kind: "image", image: line });
-			}
-		}
-	}
 }

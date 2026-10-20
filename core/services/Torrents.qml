@@ -123,21 +123,6 @@ Singleton {
 		}
 	}
 
-	// A chooser of the portal is a window: under the panel (an overlay) it
-	// could not be reached, so the panel steps aside while it is up and comes
-	// back with what was picked.
-	property bool stepAside: false
-
-	function asideForPicker() {
-		root.stepAside = root.panelled && Popups.current === "torrents";
-		if (root.stepAside) Popups.close();
-	}
-
-	function backFromPicker() {
-		if (root.stepAside) root.open();
-		root.stepAside = false;
-	}
-
 	function select(hash) {
 		root.selected = hash;
 		root.details = null;
@@ -289,47 +274,21 @@ Singleton {
 		Quickshell.execDetached(["wl-copy", "--", String(text)]);
 	}
 
-	// the portal's folder chooser; done(path) with "" when nothing was picked
-	property var folderDone: null
-
+	// the shell's folder chooser; done(path) with "" when nothing was picked
 	function pickFolder(start, done) {
-		root.folderDone = done;
-		root.asideForPicker();
-		picker.command = ["python3", `${Paths.scripts}/pick_files.py`, "--folder", "Where should it go?", start || root.settings.destination];
-		picker.running = true;
+		Files.pick({ title: "Where should it go?", directory: true, folder: start || root.settings.destination }, paths => {
+			if (done) done(paths[0] ?? "");
+		});
 	}
 
-	Process {
-		id: picker
-
-		stdout: StdioCollector {
-			onStreamFinished: {
-				const path = String(text).split("\n").filter(line => line !== "")[0] || "";
-				const done = root.folderDone;
-				root.folderDone = null;
-				root.backFromPicker();
-				if (done) done(path);
-			}
-		}
-	}
 
 	// a .torrent file picked from disk
 	function pickFile() {
-		root.asideForPicker();
-		filePicker.running = true;
+		Files.pick({ title: "Open a torrent file", multiple: true, filters: ["*.torrent"] }, paths => {
+			paths.filter(path => path.endsWith(".torrent")).forEach(path => root.add(path));
+		});
 	}
 
-	Process {
-		id: filePicker
-
-		command: ["python3", `${Paths.scripts}/pick_files.py`, "Open a torrent file"]
-		stdout: StdioCollector {
-			onStreamFinished: {
-				root.backFromPicker();
-				String(text).split("\n").filter(line => line.endsWith(".torrent")).forEach(path => root.add(path));
-			}
-		}
-	}
 
 	// ── how things are said ────────────────────────────────────────────────
 	// when something that takes `seconds` from now will be over, as a clock

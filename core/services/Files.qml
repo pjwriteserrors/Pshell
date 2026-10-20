@@ -70,6 +70,100 @@ Singleton {
 		root.focusWindow();
 	}
 
+	// ── the shell's file chooser ──────────────────────────────────────────
+	// pick(options, done): the window opens to choose; done(paths) gets what
+	// was chosen, [] when it was given up. options: { title, folder,
+	// multiple, directory, filters: ["*.torrent", …] }. With the file manager
+	// off the portal's chooser asks (scripts/pick_files.py).
+	property var picking: null
+	// the window was opened for the pick: it closes again after
+	property bool pickOpened: false
+	// a panel under the bar would cover the chooser: it steps aside while
+	// one chooses and comes back after
+	property string asidePanel: ""
+	property string asidePage: ""
+
+	function stepAside() {
+		root.asidePanel = Popups.current;
+		root.asidePage = Popups.page;
+		if (root.asidePanel !== "") Popups.close();
+	}
+
+	function stepBack() {
+		const panel = root.asidePanel;
+		root.asidePanel = "";
+		if (panel !== "") Popups.withFocusedScreen(screen => Popups.open(panel, screen, root.asidePage));
+	}
+
+	function pick(options, done) {
+		const o = options ?? {};
+		root.stepAside();
+		if (!root.enabled) {
+			const asker = portalPicker.createObject(root, { done: paths => {
+				root.stepBack();
+				if (done) done(paths);
+			} });
+			asker.command = ["python3", `${Paths.scripts}/pick_files.py`]
+				.concat(o.directory ? ["--folder"] : (o.multiple ? [] : ["--single"]))
+				.concat(o.folder && !o.directory ? ["--start", String(o.folder)] : [])
+				.concat((o.filters ?? []).length > 0 ? ["--filter", `${o.title || "Files"}|${o.filters.join(" ")}`] : [])
+				.concat([String(o.title || (o.directory ? "Choose a folder" : "Choose a file"))])
+				.concat(o.folder && o.directory ? [String(o.folder)] : []);
+			asker.running = true;
+			return;
+		}
+		if (root.picking) root.finishPick([]);
+		root.pickOpened = !root.windowOpen;
+		root.picking = {
+			title: String(o.title || (o.directory ? "Choose a folder" : "Choose a file")),
+			multiple: !!o.multiple,
+			directory: !!o.directory,
+			filters: (o.filters ?? []).map(glob => root.globPattern(glob)),
+			done: done
+		};
+		root.show({ paths: o.folder ? [String(o.folder)] : [], kind: "folders", newTab: false });
+	}
+
+	// *.torrent → a pattern for names
+	function globPattern(glob) {
+		const escaped = String(glob).split("").map(c => c === "*" ? ".*" : (c === "?" ? "." : c.replace(/[.+^$()|{}[\]\\]/, "\\$&"))).join("");
+		return new RegExp(`^${escaped}$`, "i");
+	}
+
+	// a file the pick may take (its filters)
+	function pickable(path) {
+		if (!root.picking || root.picking.filters.length === 0) return true;
+		const name = root.nameOf(path);
+		return root.picking.filters.some(filter => filter.test(name));
+	}
+
+	function finishPick(paths) {
+		const pick = root.picking;
+		if (!pick) return;
+		root.picking = null;
+		if (root.pickOpened) root.windowOpen = false;
+		root.pickOpened = false;
+		root.stepBack();
+		if (pick.done) pick.done(paths);
+	}
+
+	Component {
+		id: portalPicker
+
+		Process {
+			id: asker
+
+			property var done: null
+
+			stdout: StdioCollector {
+				onStreamFinished: {
+					if (asker.done) asker.done(String(text).split("\n").filter(line => line !== ""));
+				}
+			}
+			onExited: asker.destroy()
+		}
+	}
+
 	function toggle() {
 		if (root.windowOpen && root.windowActive) root.windowOpen = false;
 		else root.show({ paths: [], kind: "folders", newTab: false });
@@ -553,7 +647,11 @@ Singleton {
 		});
 	}
 
-	onWindowOpenChanged: if (root.windowOpen) root.checkTagged()
+	onWindowOpenChanged: {
+		if (root.windowOpen) root.checkTagged();
+		// closed while choosing: nothing was chosen
+		else if (root.picking) root.finishPick([]);
+	}
 
 	Connections {
 		target: FileLibrary
