@@ -11,6 +11,7 @@ import qs.style.widgets
 // One top bar per screen. Flush with the screen edge; the lower screen
 // corners are rounded off by concave fillets so the bar reads as part of
 // the display frame. A single highlight glides between hovered elements.
+// Its three zones show what BarLayout says, in that order.
 PanelWindow {
 	id: root
 
@@ -25,27 +26,17 @@ PanelWindow {
 	readonly property real edge: 8
 	readonly property real gap: 12
 
-	// width of a row with its flexible element at its narrowest
-	function rowMin(row, flexible) {
-		let sum = 0;
-		let shown = 0;
-		for (let i = 0; i < row.children.length; i += 1) {
-			const child = row.children[i];
-			if (!child.visible) continue;
-			sum += child === flexible ? flexible.fixedWidth : child.width;
-			shown += 1;
-		}
-		return sum + row.spacing * Math.max(0, shown - 1);
-	}
-
-	readonly property real leftMin: root.rowMin(left, media)
-	readonly property real rightMin: root.rowMin(right, notes)
+	// what the zones need at their narrowest, the centre first: it gets
+	// what is left between the wider side twice, the sides share the rest
+	readonly property real leftMin: left.fixedWidth
+	readonly property real rightMin: right.fixedWidth
 	readonly property real centerRoom: barBody.width - 2 * (root.edge + root.gap) - 2 * Math.max(root.leftMin, root.rightMin) - center.fixedWidth
 	readonly property real centerWidth: center.fixedWidth + Math.max(0, Math.min(root.centerRoom, center.textWant))
 	readonly property real sideRoom: (barBody.width - root.centerWidth) / 2 - root.edge - root.gap
+	// what the sides do not use: the clock's date slides out only into this
 	readonly property real sideSlack: root.sideRoom - Math.max(
-		root.leftMin + Math.max(0, Math.min(media.room, media.textWant)),
-		root.rightMin + (notes.visible ? Math.max(0, Math.min(notes.room, notes.textWant)) : 0))
+		root.leftMin + Math.max(0, Math.min(left.room, left.textWant)),
+		root.rightMin + Math.max(0, Math.min(right.room, right.textWant)))
 
 	property Item hoverItem: null
 	property Item tooltipItem: null
@@ -145,119 +136,37 @@ PanelWindow {
 			onPressed: Popups.closeAll()
 		}
 
-		Row {
+		// what goes where: BarLayout (Pshell settings › Bar)
+		BarZone {
 			id: left
 
 			anchors.left: parent.left
 			anchors.leftMargin: root.edge
 			anchors.verticalCenter: parent.verticalCenter
-			spacing: 2
-
-			LauncherButton {
-				bar: root
-				visible: Plugins.on("launcher-button")
-			}
-
-			Workspaces {
-				bar: root
-			}
-
-			TrayButton {
-				bar: root
-			}
-
-			Taskbar {
-				bar: root
-				visible: Plugins.on("taskbar")
-			}
-
-			MediaChip {
-				id: media
-
-				bar: root
-				visible: Plugins.on("media")
-				room: root.sideRoom - root.leftMin
-			}
+			bar: root
+			ids: BarLayout.left
+			room: root.sideRoom - root.leftMin
 		}
 
-		CenterCluster {
+		BarZone {
 			id: center
 
 			anchors.centerIn: parent
+			spacing: 4
 			bar: root
+			ids: BarLayout.center
 			room: Math.max(0, root.centerRoom)
-			dateFits: root.sideSlack >= center.dateWidth / 2
 		}
 
-		Row {
+		BarZone {
 			id: right
 
 			anchors.right: parent.right
 			anchors.rightMargin: root.edge
 			anchors.verticalCenter: parent.verticalCenter
-			spacing: 2
-			layoutDirection: Qt.LeftToRight
-
-			NotesStrip {
-				id: notes
-
-				bar: root
-				visible: Plugins.on("notes")
-				room: root.sideRoom - root.rightMin
-			}
-
-			BarIcon {
-				bar: root
-				panelId: "clipboard"
-				visible: Plugins.on("clipboard")
-				icon: "clipboard_text_multiple_outline"
-				tooltip: "Clipboard history"
-				onClicked: toggle()
-			}
-
-			BarIcon {
-				bar: root
-				panelId: "gamebar"
-				visible: Plugins.on("games-bar")
-				icon: "gamepad_variant"
-				tooltip: Games.running.length > 0 ? "Games · playing" : "Games · right-click for the library"
-				iconColor: Games.running.length > 0 ? Theme.success : (active ? Theme.primary : Theme.text)
-				onClicked: toggle()
-				onRightClicked: Popups.toggleModal("games", root.screen)
-			}
-
-			BarIcon {
-				bar: root
-				panelId: "ssh"
-				visible: Plugins.on("ssh")
-				icon: "server_network"
-				tooltip: "SSH logins"
-				onClicked: toggle()
-			}
-
-			MessagesButton {
-				bar: root
-				visible: Plugins.on("messages")
-			}
-
-			StatusCluster {
-				bar: root
-				visible: Plugins.on("status")
-			}
-
-			BellButton {
-				bar: root
-				visible: Plugins.on("notifications")
-			}
-
-			BarIcon {
-				bar: root
-				visible: Plugins.on("power-menu")
-				icon: "power"
-				tooltip: "Session"
-				iconColor: hovered ? Theme.danger : Theme.textMuted
-				onClicked: Popups.toggleModal("power", root.screen)
-			}
+			bar: root
+			ids: BarLayout.right
+			room: root.sideRoom - root.rightMin
 		}
 	}
 
