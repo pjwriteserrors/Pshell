@@ -96,7 +96,7 @@ Rectangle {
 	}
 
 	readonly property var examples: [
-		"playerctl play-pause",
+		"qs -c shell ipc call media playPause",
 		"wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+",
 		"wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-",
 		"notify-send \"Hello\"",

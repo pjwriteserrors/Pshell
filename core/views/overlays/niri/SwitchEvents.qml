@@ -27,7 +27,7 @@ GridLayout {
 	readonly property var quick: [
 		{ label: "Lock the screen", args: ["qs", "-c", "shell", "ipc", "call", "lock", "lock"] },
 		{ label: "Sleep", args: ["systemctl", "suspend"] },
-		{ label: "Pause the music", args: ["playerctl", "pause"] },
+		{ label: "Pause the music", args: ["qs", "-c", "shell", "ipc", "call", "media", "pauseAll"] },
 		{ label: "Screen keyboard on", args: ["sh", "-c", "gsettings set org.gnome.desktop.a11y.applications screen-keyboard-enabled true"] },
 		{ label: "Screen keyboard off", args: ["sh", "-c", "gsettings set org.gnome.desktop.a11y.applications screen-keyboard-enabled false"] }
 	]

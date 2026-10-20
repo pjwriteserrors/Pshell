@@ -20,7 +20,7 @@ async def act(action):
     elif action == "lock":
         command = [str(SCRIPTS / "ipc.sh"), "lock", "lock"]
     elif action == "pause":
-        command = ["playerctl", "--all-players", "pause"]
+        command = [str(SCRIPTS / "ipc.sh"), "media", "pauseAll"]
     elif action == "timer":
         command = ["python3", str(SCRIPTS / "qtrack" / "qtrack-local"), "pause"]
     else:

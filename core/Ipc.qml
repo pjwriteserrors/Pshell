@@ -516,6 +516,28 @@ Scope {
 		}
 	}
 
+	// what plays (MPRIS): for key binds and scripts, instead of playerctl
+	IpcHandler {
+		target: "media"
+
+		function playPause(): void {
+			Media.player?.togglePlaying();
+		}
+		function pause(): void {
+			if (Media.player?.canPause) Media.player.pause();
+		}
+		function next(): void {
+			if (Media.player?.canGoNext) Media.player.next();
+		}
+		function previous(): void {
+			if (Media.player?.canGoPrevious) Media.player.previous();
+		}
+		// every player that plays
+		function pauseAll(): void {
+			Media.pauseAll();
+		}
+	}
+
 	// the workspace above or below, with a pulse of the mouse (key binds)
 	IpcHandler {
 		target: "workspace"

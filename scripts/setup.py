@@ -60,7 +60,6 @@ PROGRAMS = {
     "power-profiles": [("powerprofilesctl", "power profiles: power-profiles-daemon")],
     "phone": [("qrencode", "pairing code"), ("ip", "finding this PC's addresses")],
     "phone-keyboard": [("wtype", "typing from the phone")],
-    "phone-presence": [("playerctl", "pausing when the phone leaves")],
     "fingerprint": [("fprintd-list", "fingerprint unlock")],
     "ssh": [("secret-tool", "SSH passwords")],
     "niri-settings": [("jq", "display setups")],
