@@ -1059,6 +1059,15 @@ Scope {
 		}
 	}
 
+	// whether the shell draws the wallpaper (scripts/apply_wallpaper_runtime.sh asks)
+	IpcHandler {
+		target: "wallpaper"
+
+		function owned(): bool {
+			return Wallpaper.enabled;
+		}
+	}
+
 	IpcHandler {
 		target: "theme"
 

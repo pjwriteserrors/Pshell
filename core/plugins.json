@@ -74,6 +74,7 @@
 	{ "id": "rpg", "name": "Productivity RPG", "category": "Desktop", "default": false, "icon": "gamepad_variant" },
 	{ "id": "fast-reader", "name": "Fast reader", "category": "Desktop", "requires": ["drop-commands"], "preview": {"on": ["bar", "clock"], "ipc": ["reader read 'Vielen Dank für die Aufmerksamkeit. Ein Wort nach dem anderen, immer an derselben Stelle.'"], "wait": 4.3} },
 	{ "id": "niri-settings", "name": "Pshell settings", "category": "Desktop", "default": false, "icon": "tune_variant" },
+	{ "id": "wallpaper-layer", "name": "Wallpaper", "category": "Desktop", "icon": "wallpaper" },
 	{ "id": "polkit", "name": "Password prompts", "category": "Desktop", "default": false, "icon": "shield_key" },
 	{ "id": "sounds", "name": "Sounds", "category": "Desktop", "icon": "volume_high" },
 	{ "id": "vm-launcher", "name": "VM launcher", "category": "Desktop", "default": false, "icon": "microsoft_windows" },

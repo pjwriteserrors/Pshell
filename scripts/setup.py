@@ -45,8 +45,8 @@ PROGRAMS = {
         ("wl-copy", "clipboard"), ("wl-paste", "clipboard"),
         ("grim", "screenshots"), ("slurp", "recording"), ("wf-recorder", "recording"),
         ("magick", "screenshot editor"), ("tesseract", "OCR"), ("zbarimg", "QR codes"),
-        ("ffmpeg", "wallpaper frames"), ("wallust", "colours"), ("swaybg", "wallpaper"),
-        ("awww", "image wallpapers"), ("awww-daemon", "image wallpapers"), ("mpvpaper", "video wallpapers"),
+        ("ffmpeg", "wallpaper frames"), ("wallust", "colours"),
+        ("mpvpaper", "video wallpapers"),
         ("app2unit", "launching apps"), ("curl", "weather, updates, exchange rates"), ("nmcli", "network"),
         ("wpctl", "audio"), ("pactl", "audio"), ("cava", "media spectrum"),
         ("pacman", "updates"), ("yay", "AUR updates"), ("fakeroot", "update check"),
@@ -81,6 +81,7 @@ PROGRAMS = {
                  ("xdg-open", "videos and documents"), ("wl-copy", "copying a message")],
 }
 OPTIONAL_PROGRAMS = [
+    ("swaybg", "the wallpaper while the shell does not draw it"), ("awww", "the same, with a transition"),
     ("chromium", "mails and signatures drawn as they were laid out"),
     ("ollama", "launcher chat and >ollama"), ("pdftotext", "chat attachments"), ("pandoc", "chat attachments"),
     ("upower", "battery and mouse battery: the UPower daemon"), ("qsb", "shader animation previews"),

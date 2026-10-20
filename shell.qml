@@ -31,10 +31,4 @@ ShellRoot {
 	// games fullscreen from the start, also those started in Steam
 	// (core/services/Games.qml)
 	readonly property bool games: Games.guarding
-
-	// repaints outputs that appear later (hotplug, monitors off at login)
-	Process {
-		running: true
-		command: ["bash", `${Quickshell.shellDir}/scripts/wallpaper_watch.sh`]
-	}
 }

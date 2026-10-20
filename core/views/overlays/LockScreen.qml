@@ -22,7 +22,7 @@ Scope {
 
 	property bool locked: false
 
-	readonly property string wallpaperFramePath: `${Quickshell.env("HOME")}/.local/state/quickshell-theme/current/frame.png`
+	readonly property string wallpaperFramePath: `${Paths.themeState}/current/frame.png`
 	readonly property string wallpaperFrameSource: `file://${root.wallpaperFramePath}?v=${root.wallpaperFrameSerial}`
 	readonly property string statusText: {
 		if (root.passwordActive) return "Checking…";

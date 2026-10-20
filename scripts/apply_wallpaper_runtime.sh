@@ -5,7 +5,12 @@
 #   apply_wallpaper_runtime.sh <image-or-video>   select new media and paint it
 #   apply_wallpaper_runtime.sh --ensure           repaint only what is missing
 #
-# The wallpaper stack has three layers, from bottom to top:
+# The shell draws the wallpaper itself (core/services/Wallpaper.qml, plugin
+# wallpaper-layer): this script only writes current/ – the shell follows it –
+# and for a video starts mpvpaper on every output, above the shell's frame.
+#
+# When the shell does not answer (not running yet, the plugin off), the old
+# stack paints instead, from bottom to top:
 #
 #   swaybg     a still frame of the media. swaybg follows output hotplug on its
 #              own, so a monitor that wakes up late is never black.
@@ -483,6 +488,18 @@ stale_player_running() {
 	fi
 }
 
+# ------------------------------------------------------------------ shell ---
+
+# the shell draws the wallpaper: asked a few times, it may just be starting
+shell_paints() {
+	local attempt=0
+	for ((attempt = 0; attempt < 3; attempt++)); do
+		[[ "$("$SCRIPT_DIR/ipc.sh" wallpaper owned 2>/dev/null)" == "true" ]] && return 0
+		sleep 0.5
+	done
+	return 1
+}
+
 # -------------------------------------------------------------------- main ---
 
 readarray -t OUTPUTS < <(wait_for_outputs)
@@ -490,6 +507,9 @@ if (( ${#OUTPUTS[@]} == 0 )); then
 	log "no outputs reported; nothing to paint"
 	exit 0
 fi
+
+SHELL_PAINTS=0
+shell_paints && SHELL_PAINTS=1
 
 if selection_is_unchanged; then
 	media_signature "$MEDIA_PATH" >"$THEME_CURRENT_MEDIA_SIGNATURE_FILE"
@@ -503,12 +523,19 @@ if selection_is_unchanged; then
 		# only the outputs that do not show it, so nothing else flickers.
 		if [[ "$MEDIA_TYPE" == "video" ]]; then
 			readarray -t TARGETS < <(mpvpaper_outputs_missing)
+		elif (( SHELL_PAINTS )); then
+			TARGETS=()
 		else
 			readarray -t TARGETS < <(awww_outputs_missing "$MEDIA_PATH")
 		fi
 		RESTART_BASE_LAYER=0
 
-		if (( ${#TARGETS[@]} == 0 )) && swaybg_running && ! stale_player_running; then
+		if (( SHELL_PAINTS )) && (( ${#TARGETS[@]} == 0 )) && ! pgrep -x swaybg >/dev/null 2>&1 && ! awww_daemon_ready \
+			&& { [[ "$MEDIA_TYPE" == "video" ]] || ! pgrep -x mpvpaper >/dev/null 2>&1; }; then
+			log "wallpaper unchanged, the shell draws it, every player is in place media=$MEDIA_PATH"
+			exit 0
+		fi
+		if (( ! SHELL_PAINTS )) && (( ${#TARGETS[@]} == 0 )) && swaybg_running && ! stale_player_running; then
 			log "wallpaper unchanged and every output is painted media=$MEDIA_PATH"
 			exit 0
 		fi
@@ -531,7 +558,22 @@ else
 	RESTART_BASE_LAYER=1
 fi
 
-log "painting type=$MEDIA_TYPE outputs=${TARGETS[*]:-none} media=$MEDIA_PATH"
+log "painting type=$MEDIA_TYPE outputs=${TARGETS[*]:-none} media=$MEDIA_PATH shell=$SHELL_PAINTS"
+
+# the shell has read current/ by now; what it draws needs no swaybg or awww
+if (( SHELL_PAINTS )); then
+	pgrep -x swaybg >/dev/null 2>&1 && stop_swaybg
+	awww_daemon_ready && stop_awww
+	status=0
+	if [[ "$MEDIA_TYPE" == "video" ]]; then
+		(( ${#TARGETS[@]} )) && { apply_mpvpaper "$MEDIA_PATH" "${TARGETS[@]}" || status=$?; }
+	else
+		pgrep -x mpvpaper >/dev/null 2>&1 && stop_mpvpaper
+	fi
+	log "wallpaper runtime done (shell draws) type=$MEDIA_TYPE media=$MEDIA_PATH status=$status"
+	"$SCRIPT_DIR/ipc.sh" theme painted >/dev/null 2>&1 || true
+	exit "$status"
+fi
 
 if (( RESTART_BASE_LAYER )) || ! swaybg_running; then
 	restart_swaybg "$THEME_CURRENT_FRAME_FILE" || true
