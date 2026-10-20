@@ -259,6 +259,20 @@ Singleton {
 		return root.modifierKeys.includes(event.key);
 	}
 
+	// the modifier keys, in the order niri writes them: name (for the mouse
+	// daemon), niri's word, Qt's mask, the evdev code and the Qt keys
+	readonly property var modifiers: [
+		{ name: "super", niri: "Mod", mask: Qt.MetaModifier, code: 125, keys: [Qt.Key_Meta, Qt.Key_Super_L, Qt.Key_Super_R] },
+		{ name: "ctrl", niri: "Ctrl", mask: Qt.ControlModifier, code: 29, keys: [Qt.Key_Control] },
+		{ name: "alt", niri: "Alt", mask: Qt.AltModifier, code: 56, keys: [Qt.Key_Alt, Qt.Key_AltGr] },
+		{ name: "shift", niri: "Shift", mask: Qt.ShiftModifier, code: 42, keys: [Qt.Key_Shift] }
+	]
+
+	// the modifier a key is, or null
+	function modifierOf(key) {
+		return root.modifiers.find(modifier => modifier.keys.includes(key)) ?? null;
+	}
+
 	function modsOf(modifiers) {
 		const mods = [];
 		if (modifiers & Qt.MetaModifier) mods.push("Mod");

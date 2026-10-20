@@ -106,7 +106,7 @@ Rectangle {
 			if (!root.recording) return;
 			event.accepted = true;
 			if (Keybinds.isModifierKey(event)) {
-				root.held = Keybinds.modsOf(event.modifiers | (event.key === Qt.Key_Meta || event.key === Qt.Key_Super_L || event.key === Qt.Key_Super_R ? Qt.MetaModifier : 0) | (event.key === Qt.Key_Shift ? Qt.ShiftModifier : 0) | (event.key === Qt.Key_Control ? Qt.ControlModifier : 0) | (event.key === Qt.Key_Alt ? Qt.AltModifier : 0));
+				root.held = Keybinds.modsOf(event.modifiers | (Keybinds.modifierOf(event.key)?.mask ?? 0));
 				return;
 			}
 			const mods = Keybinds.modsOf(event.modifiers);
@@ -121,12 +121,7 @@ Rectangle {
 			if (!root.recording) return;
 			event.accepted = true;
 			if (Keybinds.isModifierKey(event)) {
-				let mods = event.modifiers;
-				if (event.key === Qt.Key_Meta || event.key === Qt.Key_Super_L || event.key === Qt.Key_Super_R) mods &= ~Qt.MetaModifier;
-				if (event.key === Qt.Key_Shift) mods &= ~Qt.ShiftModifier;
-				if (event.key === Qt.Key_Control) mods &= ~Qt.ControlModifier;
-				if (event.key === Qt.Key_Alt) mods &= ~Qt.AltModifier;
-				root.held = Keybinds.modsOf(mods);
+				root.held = Keybinds.modsOf(event.modifiers & ~(Keybinds.modifierOf(event.key)?.mask ?? 0));
 			}
 		}
 	}

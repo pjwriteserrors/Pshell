@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import qs.style.theme
 import qs.style.widgets
+import qs.core.services
 
 // Takes a shortcut as it is pressed: the modifiers held and one key, or
 // modifiers alone (Super pressed and let go is Super). Keeps
@@ -19,12 +20,8 @@ Rectangle {
 
 	signal recorded(var keys, var codes, string label)
 
-	readonly property var modifierOrder: [
-		{ name: "ctrl", code: 29, keys: [Qt.Key_Control] },
-		{ name: "shift", code: 42, keys: [Qt.Key_Shift] },
-		{ name: "alt", code: 56, keys: [Qt.Key_Alt, Qt.Key_AltGr] },
-		{ name: "super", code: 125, keys: [Qt.Key_Meta, Qt.Key_Super_L, Qt.Key_Super_R] }
-	]
+	// ctrl, shift, alt, super: the order the daemon presses them in
+	readonly property var modifierOrder: ["ctrl", "shift", "alt", "super"].map(name => Keybinds.modifiers.find(modifier => modifier.name === name))
 
 	function start() {
 		root.pending = [];
