@@ -16,6 +16,10 @@ action}, {op: "refresh"}, {op: "takeover"}, {op: "quit"}.
 Events: devices, battery, press, move, fired, wheel, focus, stats, solaar,
 imported, action (a shell action for the page to run), error.
 
+PSHELL_MOUSE_MODE=haptics (the `haptics` plugin without the `mouse` plugin):
+only {op: "play"} and the battery – no settings, rules, diversion or rumble,
+the mouse stays as it is.
+
 Solaar running means it handles the buttons: the daemon then only reads and
 sets what the page changes, diverts nothing and acts on nothing. Once
 Solaar is gone it diverts the buttons the rules need, and gives them back
@@ -47,6 +51,7 @@ from engine import CIDS, CONTROLS, Engine  # noqa: E402
 STATE = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state") / "pshell"
 STATS_FILE = STATE / "mouse-stats.json"
 CONFIG_FILE = STATE / "mouse.json"
+HAPTICS_ONLY = os.environ.get("PSHELL_MOUSE_MODE") == "haptics"
 SOLAAR = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "solaar"
 
 # tests: PSHELL_MOUSE_DRY=1 reads the mouse but writes nothing to it and runs
@@ -262,7 +267,8 @@ class Daemon:
     # ── setup ───────────────────────────────────────────────────────────
     def start(self):
         try:
-            self.config = merge_config(json.loads(CONFIG_FILE.read_text()))
+            if not HAPTICS_ONLY:
+                self.config = merge_config(json.loads(CONFIG_FILE.read_text()))
         except (OSError, ValueError):
             pass
         self.engine.configure(self.config["rules"], self.config["options"])
@@ -277,7 +283,8 @@ class Daemon:
         # the shell hands niri's events over as {"op": "niri"} (one stream for all)
         if os.environ.get("PSHELL_NIRI_EVENTS") != "stdin":
             threading.Thread(target=self.follow_focus, daemon=True).start()
-        threading.Thread(target=self.stats.follow, args=(self,), daemon=True).start()
+        if not HAPTICS_ONLY:
+            threading.Thread(target=self.stats.follow, args=(self,), daemon=True).start()
         self.ensure_mods()
         emit("solaar", running=self.solaar)
         self.loop.run()
@@ -296,6 +303,8 @@ class Daemon:
 
     @property
     def in_charge(self):
+        if HAPTICS_ONLY:
+            return False
         return not self.solaar or os.environ.get("PSHELL_MOUSE_CHARGE") == "1"
 
     def scan(self):
@@ -448,6 +457,8 @@ class Daemon:
 
     def apply_settings(self, mouse, initial=False):
         """Writes what the page keeps for this mouse where the mouse differs."""
+        if HAPTICS_ONLY:
+            return False
         want = self.settings_of(mouse)
         d = DryDevice(mouse) if DRY else mouse.device
         state = mouse.state
@@ -1023,6 +1034,8 @@ class Daemon:
                 self.engine.move(command.get("dx", 0), command.get("dy", 0))
             return
         if op == "config":
+            if HAPTICS_ONLY:
+                return
             self.config = merge_config(command.get("config") or {})
             self.engine.configure(self.config["rules"], self.config["options"])
             self.ensure_mods()

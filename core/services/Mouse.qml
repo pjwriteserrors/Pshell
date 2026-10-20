@@ -18,6 +18,9 @@ Singleton {
 	id: root
 
 	readonly property bool enabled: Plugins.on("mouse")
+	// the haptics plugin without the mouse plugin: the daemon only plays
+	// (scripts/mouse/mouse.py, PSHELL_MOUSE_MODE=haptics) and leaves the mouse be
+	readonly property bool hapticsOnly: !root.enabled && Plugins.on("haptics")
 	readonly property string script: `${Paths.scripts}/mouse/mouse.py`
 
 	// ── what the daemon says ───────────────────────────────────────────────
@@ -534,10 +537,10 @@ Singleton {
 	Process {
 		id: daemon
 
-		running: root.enabled && root.loaded
+		running: (root.enabled || root.hapticsOnly) && root.loaded
 		stdinEnabled: true
 		command: ["python3", "-u", root.script]
-		environment: ({ PSHELL_NIRI_EVENTS: "stdin" })
+		environment: ({ PSHELL_NIRI_EVENTS: "stdin", PSHELL_MOUSE_MODE: root.hapticsOnly ? "haptics" : "" })
 		stdout: SplitParser {
 			onRead: line => root.handle(line)
 		}
@@ -545,14 +548,14 @@ Singleton {
 			onRead: line => console.warn(line)
 		}
 		onRunningChanged: if (daemon.running) {
-			root.send({ op: "config", config: root.config });
+			if (!root.hapticsOnly) root.send({ op: "config", config: root.config });
 			// niri's events from the shell's own stream, the whole state first
 			if (Niri.ready) for (const line of Niri.replay()) daemon.write(`{"op":"niri","event":${line}}\n`);
 			if (root.watching) root.send({ op: "watch", on: true });
 		}
 		onExited: {
 			root.devices = root.devices.map(d => Object.assign({}, d, { online: false }));
-			if (root.enabled) revive.restart();
+			if (root.enabled || root.hapticsOnly) revive.restart();
 		}
 	}
 

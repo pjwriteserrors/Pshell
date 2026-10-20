@@ -86,10 +86,12 @@ MouseClick, MouseScroll; others are counted as skipped), stops Solaar and
 switches its line in niri's startup off (it stays in the file). *Give it
 back* turns it on again and starts Solaar; the daemon notices and lets go.
 
-The `haptics` plugin plays through the daemon while it has the mouse
-(otherwise through `mxh` and mx4-hapticd), and the bar's mouse battery
-falls back to the daemon's reading when the kernel reports none (a mouse on
-a Bolt receiver).
+The `haptics` plugin plays through the daemon. With the `mouse` plugin off
+the daemon still runs, but only plays (`PSHELL_MOUSE_MODE=haptics`): no
+settings, rules, diversion or rumble, the mouse stays as it is. The bar's
+mouse battery falls back to the daemon's reading when the kernel reports
+none (a mouse on a Bolt receiver). `scripts/ipc.sh workspace up|down` moves
+a workspace with a pulse, for key binds.
 
 ## Testing
 

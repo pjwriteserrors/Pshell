@@ -516,6 +516,20 @@ Scope {
 		}
 	}
 
+	// the workspace above or below, with a pulse of the mouse (key binds)
+	IpcHandler {
+		target: "workspace"
+
+		function up(): void {
+			Niri.focusWorkspaceRelative(-1);
+			Haptics.play("workspace");
+		}
+		function down(): void {
+			Niri.focusWorkspaceRelative(1);
+			Haptics.play("workspace");
+		}
+	}
+
 	// the same under its old name, which key binds may still call
 	IpcHandler {
 		target: "niri"
