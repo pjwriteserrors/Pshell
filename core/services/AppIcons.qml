@@ -39,6 +39,34 @@ Singleton {
 		return root.resolveIconSource(icon, fallbacks);
 	}
 
+	// a launcher entry's icon: { icon, id } of a desktop entry
+	function forEntry(entry) {
+		if (!entry) return "";
+		const iconName = String(entry.icon || "");
+		const entryId = String(entry.id || "");
+		// two terminal apps whose own icons do not read at launcher size
+		if (iconName.toLowerCase() === "alacritty" || entryId.toLowerCase().includes("alacritty"))
+			return "/usr/share/icons/Adwaita/symbolic/actions/system-run-symbolic.svg";
+		if (iconName.toLowerCase() === "btop" || entryId.toLowerCase().includes("btop"))
+			return "/usr/share/icons/hicolor/48x48/apps/btop.png";
+		const hit = root.papirus(iconName) || root.papirus(entryId);
+		if (hit !== "") return hit;
+		if (iconName !== "") {
+			const direct = Quickshell.iconPath(iconName, true);
+			if (direct !== "") return direct;
+			const normalized = iconName.replace(/\.(png|svg|xpm)$/i, "");
+			if (normalized !== iconName) {
+				const normalizedDirect = Quickshell.iconPath(normalized, true);
+				if (normalizedDirect !== "") return normalizedDirect;
+			}
+		}
+		if (entryId !== "") {
+			const desktopPath = Quickshell.iconPath(entryId, true);
+			if (desktopPath !== "") return desktopPath;
+		}
+		return Quickshell.iconPath("application-x-executable", true);
+	}
+
 	// window / task icons by app id
 	function forAppId(appId) {
 		if (!appId) return Quickshell.iconPath("application-x-executable", true);

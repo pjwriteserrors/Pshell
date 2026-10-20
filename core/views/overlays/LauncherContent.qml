@@ -32,71 +32,13 @@ Item {
 
 
 	property string searchText: ""
-	property var usageMap: ({})
-	property var aiModels: []
-	property string selectedAiModel: ""
-	property bool aiThinkingEnabled: false
-	property bool aiShortResponseEnabled: false
-	property var aiChats: []
-	property string activeChatId: ""
-	property bool aiStreaming: false
-	property string aiStreamingChatId: ""
-	property bool aiStreamingTemporary: false
-	property string aiStreamingModel: ""
-	property string aiPendingUnloadModel: ""
 	property bool chatAutoFollow: true
 	property bool chatSelectionActive: false
-	property string aiError: ""
-	property string aiProcessError: ""
-	property bool aiModelsLoading: false
-	property bool aiModelsFallbackRunning: false
-	property bool aiStateLoaded: false
-	property bool aiInlineThinking: false
-	property string aiSuppressedThinkingBuffer: ""
-	property string aiInlineProbeBuffer: ""
-	property bool aiTemporaryChatEnabled: true
-	property var aiTemporaryChat: null
-	property var aiThinkingExpandedMap: ({})
-	property var aiModelInfo: ({})
-	property var aiModelCapabilities: []
-	property int aiModelContextWindow: 0
-	property bool aiModelInfoLoading: false
-	property string aiModelInfoTarget: ""
-	property string editingMessageId: ""
-	property string ollamaVersion: ""
-	property var ollamaRunningModels: []
-	property bool ollamaRunningLoading: false
-	property string ollamaManagerError: ""
-	property string ollamaPsProcessError: ""
-	property bool ollamaPsFallbackRunning: false
-	property real ollamaRunningLastRefresh: 0
-	property real modelLoadedNow: Date.now()
-	property string ollamaRemovingModel: ""
-	property string ollamaPullModel: ""
-	property bool ollamaPulling: false
-	property string ollamaPullStatus: ""
-	property string ollamaPullDigest: ""
-	property real ollamaPullProgress: 0
-	property real ollamaPullCompleted: 0
-	property real ollamaPullTotal: 0
-	property real ollamaPullSpeed: 0
-	property real ollamaPullEtaSeconds: 0
-	property real ollamaPullStartedAt: 0
 	property bool commandInputActive: false
 	property bool commandInputHasSeparator: false
 	property bool commandInputSyncing: false
-	property var aiPendingAttachments: []
 	property bool aiAttachmentPickerOpen: false
 	property string aiAttachmentDirectory: Quickshell.env("HOME")
-	property string aiAttachmentLoadingId: ""
-	property string aiAttachmentReadOutput: ""
-	property string aiAttachmentReadError: ""
-	property bool aiPrimarySelectionLoading: false
-	property string aiPrimarySelectionOutput: ""
-	property string aiPrimarySelectionError: ""
-	property string aiPrimarySelectionMode: ""
-	property string aiLastPrimarySelectionContent: ""
-	property string aiRequestPayload: ""
 	property var aiAttachmentEntries: []
 	property bool aiAttachmentDirectoryLoading: false
 	property string aiAttachmentDirectoryError: ""
@@ -205,7 +147,7 @@ Item {
 	readonly property string paletteFilter: root.openGroup ? root.commandQuery.slice(root.openGroup.command.length).trim() : root.commandQuery
 
 	function commandUsage(command) {
-		return Number(root.usageMap[`>${command.command}`] || 0);
+		return Number(AppUsage.usageMap[`>${command.command}`] || 0);
 	}
 
 	// how well a command answers what is typed; 0 when it does not, 60 and
@@ -343,8 +285,6 @@ Item {
 		}
 	}
 
-	readonly property string usageFilePath: Paths.stateFile("launcher-usage.json")
-	readonly property string aiStateFilePath: Paths.stateFile("launcher-ai-state.json")
 	readonly property bool inCommandMode: root.searchText.trim().startsWith(">") || root.searchText.trim().startsWith("/")
 	readonly property string commandQuery: root.searchText.trim().slice(1).trim().toLowerCase()
 	readonly property bool inCalculatorMode: Plugins.on("calculator") && root.isCalculatorQuery(root.commandQuery)
@@ -379,9 +319,9 @@ Item {
 	readonly property string fileBrowserSearchQuery: root.fileBrowserSearchQueryFromInput(root.searchText)
 	readonly property var filteredAiChats: {
 		const query = root.chatsSearchQuery.toLowerCase();
-		if (query === "") return root.aiChats;
+		if (query === "") return AiChat.aiChats;
 		const words = query.split(/\s+/).filter(word => word !== "");
-		return root.aiChats.filter(chat => {
+		return AiChat.aiChats.filter(chat => {
 			const title = String(chat?.title || "").toLowerCase();
 			return words.every(word => title.includes(word));
 		});
@@ -396,56 +336,6 @@ Item {
 		});
 	}
 	readonly property string chatPrompt: root.chatPromptFromSearch(root.searchText)
-	readonly property int activeChatIndex: root.findChatIndex(root.activeChatId)
-	readonly property var activeChat: root.aiTemporaryChatEnabled
-		? root.aiTemporaryChat
-		: (root.activeChatIndex >= 0 ? root.aiChats[root.activeChatIndex] : null)
-	readonly property var activeMessages: root.activeChat ? (root.activeChat.messages || []) : []
-	readonly property bool selectedAiSupportsThinking: root.aiModelCapabilities.includes("thinking")
-	readonly property bool selectedAiSupportsVision: root.aiModelCapabilities.includes("vision")
-	readonly property bool effectiveAiThinkingEnabled: root.selectedAiSupportsThinking && root.aiThinkingEnabled
-	readonly property bool pendingAttachmentsReady: root.aiPendingAttachments.every(
-		attachment => String(attachment?.status || "") === "ready"
-	)
-	readonly property bool pendingAttachmentsCompatible: root.aiPendingAttachments.every(
-		attachment => String(attachment?.kind || "") !== "image" || root.selectedAiSupportsVision
-	)
-	readonly property int aiRequestContextWindow: Math.min(
-		root.aiModelContextWindow > 0 ? root.aiModelContextWindow : 4096,
-		8192
-	)
-	readonly property int activeContextUsed: Number(root.activeChat?.contextUsed || 0)
-	readonly property int activeContextLimit: Number(root.activeChat?.contextLimit || root.aiRequestContextWindow)
-	readonly property real activeContextProgress: root.activeContextLimit > 0
-		? Math.min(1, root.activeContextUsed / root.activeContextLimit)
-		: 0
-	readonly property real activeTokensPerSecond: Number(root.activeChat?.tokensPerSecond || 0)
-	readonly property int activeResponseTokens: Number(root.activeChat?.responseTokens || 0)
-	readonly property string chatLoadedModelName: String(
-		root.aiStreaming
-			? root.aiStreamingModel
-			: (root.activeChat?.model || root.selectedAiModel || "")
-	)
-	readonly property var chatLoadedModel: root.ollamaRunningModels.find(model =>
-		String(model?.name || model?.model || "") === root.chatLoadedModelName
-	)
-	readonly property real chatLoadedExpiresAtMs: Date.parse(String(root.chatLoadedModel?.expires_at || ""))
-	readonly property real chatLoadedSecondsRemaining: Number.isFinite(root.chatLoadedExpiresAtMs)
-		? Math.max(0, Math.ceil((root.chatLoadedExpiresAtMs - root.modelLoadedNow) / 1000))
-		: 0
-	readonly property string chatLoadedTimerText: {
-		if (root.chatLoadedModelName === "") return "";
-		if (!root.chatLoadedModel) return root.ollamaRunningLoading ? "Checking model" : "Model not loaded";
-		if (!Number.isFinite(root.chatLoadedExpiresAtMs)) return "Model loaded";
-		if (root.chatLoadedSecondsRemaining <= 0) return "Unload soon";
-		return `Loaded ${root.formatDuration(root.chatLoadedSecondsRemaining)}`;
-	}
-	readonly property real ollamaRunningVram: root.ollamaRunningModels.reduce(
-		(total, model) => total + Number(model?.size_vram || 0),
-		0
-	)
-	readonly property bool legacyQwenThinkingWorkaround: root.ollamaVersion === ""
-		|| root.versionBefore(root.ollamaVersion, 0, 12, 0)
 	readonly property string calculatorExpression: root.calculatorExpressionFromQuery(root.searchText.trim().slice(1).trim())
 	readonly property var calculatorEvaluation: root.evaluateCalculatorExpression(root.calculatorExpression)
 	ListModel {
@@ -476,25 +366,7 @@ Item {
 		}
 	}
 
-	Timer {
-		id: aiUnloadTimer
-		interval: 150
-		repeat: false
-		onTriggered: root.unloadPendingAiModel()
-	}
 
-	Timer {
-		id: modelLoadedTimer
-		interval: 1000
-		repeat: true
-		running: root.inChatMode || root.aiStreaming
-		triggeredOnStart: true
-		onTriggered: {
-			root.modelLoadedNow = Date.now();
-			if (root.modelLoadedNow - root.ollamaRunningLastRefresh > 5000)
-				root.refreshOllamaRunningModels();
-		}
-	}
 
 	function isCalculatorQuery(query) {
 		const value = String(query || "").trim().toLowerCase();
@@ -569,70 +441,12 @@ Item {
 		return `${Quickshell.shellDir}/${value.replace(/^\.\//, "")}`;
 	}
 
-	function fileNameFromPath(path) {
-		const parts = String(path || "").split("/").filter(part => part !== "");
-		return parts.length > 0 ? parts[parts.length - 1] : String(path || "");
-	}
 
-	function attachmentKind(entry) {
-		const mimeType = String(entry?.mimeType || "").toLowerCase();
-		const suffix = String(entry?.suffix || root.fileNameFromPath(entry?.path).split(".").pop() || "").toLowerCase();
-		if (Boolean(entry?.isImage) || mimeType.startsWith("image/")) return "image";
-		if (mimeType === "application/pdf" || suffix === "pdf") return "pdf";
-		if (["docx", "odt", "epub", "rtf"].includes(suffix)) return "document";
-		if (
-			mimeType.startsWith("text/")
-			|| [
-				"application/json",
-				"application/ld+json",
-				"application/xml",
-				"application/x-yaml",
-				"application/toml",
-				"application/javascript"
-			].includes(mimeType)
-			|| [
-				"txt", "md", "markdown", "rst", "log", "csv", "tsv", "json", "jsonl",
-				"yaml", "yml", "toml", "xml", "html", "htm", "css", "scss", "sass",
-				"js", "jsx", "ts", "tsx", "qml", "py", "rb", "php", "go", "rs",
-				"c", "h", "cc", "cpp", "hpp", "java", "kt", "kts", "swift", "sh",
-				"bash", "zsh", "fish", "sql", "ini", "conf", "cfg", "env", "diff",
-				"patch", "dockerfile", "makefile"
-			].includes(suffix)
-		) return "text";
-		return "";
-	}
 
-	function attachmentSupported(entry) {
-		if (!entry || Boolean(entry.isDir)) return false;
-		const kind = root.attachmentKind(entry);
-		return kind === "text"
-			|| kind === "pdf"
-			|| kind === "document"
-			|| (kind === "image" && root.selectedAiSupportsVision);
-	}
 
-	function formatAttachmentSize(bytes) {
-		const value = Number(bytes || 0);
-		if (value < 1000) return `${value} B`;
-		if (value < 1000000) return `${(value / 1000).toFixed(value < 10000 ? 1 : 0)} KB`;
-		return `${(value / 1000000).toFixed(1)} MB`;
-	}
 
-	function updatePendingAttachment(attachmentId, changes) {
-		root.aiPendingAttachments = root.aiPendingAttachments.map(attachment =>
-			String(attachment?.id || "") === String(attachmentId || "")
-				? Object.assign({}, attachment, changes)
-				: attachment
-		);
-	}
 
-	function isAttachmentSelected(path) {
-		return root.aiPendingAttachments.some(attachment => String(attachment?.path || "") === String(path || ""));
-	}
 
-	function isPrimarySelectionAttachment(attachment) {
-		return String(attachment?.source || "") === "primary-selection";
-	}
 
 	function parseAttachmentDirectory(raw) {
 		if (root.aiAttachmentListTargetDirectory !== root.aiAttachmentDirectory) return;
@@ -682,7 +496,7 @@ Item {
 	}
 
 	function openAttachmentPicker() {
-		if (!root.inChatMode || root.aiStreaming) return;
+		if (!root.inChatMode || AiChat.aiStreaming) return;
 		root.aiAttachmentPickerOpen = true;
 		if (root.aiAttachmentDirectory === "") root.aiAttachmentDirectory = Quickshell.env("HOME");
 		root.refreshAttachmentDirectory();
@@ -800,222 +614,21 @@ Item {
 			root.refreshAttachmentDirectory();
 			return;
 		}
-		root.addPendingAttachment(entry);
+		AiChat.addPendingAttachment(entry);
 	}
 
-	function addPendingAttachment(entry) {
-		if (!entry || Boolean(entry.isDir) || root.aiAttachmentLoadingId !== "") return;
-		const path = String(entry.path || "");
-		const name = String(entry.name || root.fileNameFromPath(path));
-		const mimeType = String(entry.mimeType || "");
-		const size = Number(entry.size || 0);
-		const kind = root.attachmentKind(entry);
-		if (path === "" || root.isAttachmentSelected(path)) return;
-		if (root.aiPendingAttachments.length >= 6) {
-			root.aiError = "A maximum of 6 files can be attached";
-			return;
-		}
-		if (kind === "") {
-			root.aiError = "Only text, code, document, PDF, and image files are supported";
-			return;
-		}
-		if (kind === "image" && !root.selectedAiSupportsVision) {
-			root.aiError = "The selected model does not support images";
-			return;
-		}
-		const maximumBytes = kind === "image"
-			? 20000000
-			: ((kind === "pdf" || kind === "document") ? 10000000 : 2000000);
-		if (size > maximumBytes) {
-			root.aiError = `${name} is too large`;
-			return;
-		}
-		const totalBytes = root.aiPendingAttachments.reduce(
-			(total, attachment) => total + Number(attachment?.size || 0),
-			0
-		);
-		if (totalBytes + size > 30000000) {
-			root.aiError = "Attached files exceed the 30 MB limit";
-			return;
-		}
 
-		const attachmentId = root.makeId("attachment");
-		root.aiPendingAttachments = root.aiPendingAttachments.concat([{
-			id: attachmentId,
-			path,
-			name,
-			mimeType,
-			size,
-			kind,
-			status: "loading",
-			content: "",
-			data: ""
-		}]);
-		root.aiAttachmentLoadingId = attachmentId;
-		root.aiAttachmentReadOutput = "";
-		root.aiAttachmentReadError = "";
-		root.aiError = "";
-		if (kind === "image") attachmentReadProcess.exec(["base64", "-w", "0", path]);
-		else if (kind === "pdf") attachmentReadProcess.exec(["pdftotext", "-layout", path, "-"]);
-		else if (kind === "document") attachmentReadProcess.exec(["pandoc", "-t", "plain", path]);
-		else attachmentReadProcess.exec(["cat", "--", path]);
-	}
 
-	function finishPendingAttachmentRead(exitCode) {
-		const attachmentId = root.aiAttachmentLoadingId;
-		if (attachmentId === "") return;
-		const attachment = root.aiPendingAttachments.find(item => String(item?.id || "") === attachmentId);
-		const output = String(root.aiAttachmentReadOutput || "");
-		const error = String(root.aiAttachmentReadError || "").trim();
-		root.aiAttachmentLoadingId = "";
-		root.aiAttachmentReadOutput = "";
-		root.aiAttachmentReadError = "";
-		if (!attachment) return;
-		if (exitCode !== 0 || output === "") {
-			root.aiPendingAttachments = root.aiPendingAttachments.filter(item => String(item?.id || "") !== attachmentId);
-			root.aiError = error || `Could not read ${attachment.name}`;
-			return;
-		}
-		if (attachment.kind !== "image" && output.length > 500000) {
-			root.aiPendingAttachments = root.aiPendingAttachments.filter(item => String(item?.id || "") !== attachmentId);
-			root.aiError = `${attachment.name} contains too much text`;
-			return;
-		}
-		root.updatePendingAttachment(attachmentId, attachment.kind === "image"
-			? { status: "ready", data: output }
-			: { status: "ready", content: output });
-	}
 
-	function capturePrimarySelection() {
-		if (!root.inChatMode || root.aiStreaming || root.editingMessageId !== "") return;
-		root.readPrimarySelection("chat");
-	}
 
-	function primePrimarySelection() {
-		if (root.inChatMode || root.aiStreaming || primarySelectionProcess.running) return;
-		root.readPrimarySelection("prime");
-	}
 
-	function readPrimarySelection(mode) {
-		if (primarySelectionProcess.running) primarySelectionProcess.running = false;
-		if (mode === "chat") root.clearPrimarySelectionAttachment();
-		root.aiPrimarySelectionLoading = true;
-		root.aiPrimarySelectionOutput = "";
-		root.aiPrimarySelectionError = "";
-		root.aiPrimarySelectionMode = String(mode || "chat");
-		primarySelectionProcess.exec([
-			"timeout",
-			"2s",
-			"wl-paste",
-			"--primary",
-			"--no-newline",
-			"--type",
-			"text/plain"
-		]);
-	}
 
-	function finishPrimarySelectionRead(exitCode) {
-		const output = String(root.aiPrimarySelectionOutput || "").replace(/\r\n/g, "\n").trim();
-		const error = String(root.aiPrimarySelectionError || "").trim();
-		const mode = root.aiPrimarySelectionMode;
-		root.aiPrimarySelectionLoading = false;
-		root.aiPrimarySelectionOutput = "";
-		root.aiPrimarySelectionError = "";
-		root.aiPrimarySelectionMode = "";
-		if (mode === "prime") {
-			root.aiLastPrimarySelectionContent = output;
-			return;
-		}
-		if (!root.inChatMode || root.aiStreaming || root.editingMessageId !== "") return;
-		if (exitCode !== 0 || output === "") return;
-		if (output === root.aiLastPrimarySelectionContent) return;
-		if (output.length > 500000) {
-			root.aiError = "Selected text is too long";
-			return;
-		}
-		root.clearPrimarySelectionAttachment();
-		root.aiPendingAttachments = root.aiPendingAttachments.concat([{
-			id: root.makeId("selection"),
-			path: "",
-			name: "Selected text",
-			mimeType: "text/plain",
-			size: output.length,
-			kind: "text",
-			status: "ready",
-			content: output,
-			data: "",
-			source: "primary-selection"
-		}]);
-		root.aiLastPrimarySelectionContent = output;
-		root.aiError = error === "" ? "" : root.aiError;
-	}
 
-	function removePendingAttachment(attachmentId) {
-		if (String(attachmentId || "") === root.aiAttachmentLoadingId) attachmentReadProcess.running = false;
-		root.aiPendingAttachments = root.aiPendingAttachments.filter(
-			attachment => String(attachment?.id || "") !== String(attachmentId || "")
-		);
-		if (String(attachmentId || "") === root.aiAttachmentLoadingId) {
-			root.aiAttachmentLoadingId = "";
-			root.aiAttachmentReadOutput = "";
-			root.aiAttachmentReadError = "";
-		}
-	}
 
-	function clearPrimarySelectionAttachment() {
-		root.aiPendingAttachments = root.aiPendingAttachments.filter(
-			attachment => !root.isPrimarySelectionAttachment(attachment)
-		);
-	}
 
-	function clearPendingAttachments() {
-		if (attachmentReadProcess.running) attachmentReadProcess.running = false;
-		if (primarySelectionProcess.running) primarySelectionProcess.running = false;
-		root.aiPendingAttachments = [];
-		root.aiAttachmentLoadingId = "";
-		root.aiAttachmentReadOutput = "";
-		root.aiAttachmentReadError = "";
-		root.aiPrimarySelectionLoading = false;
-		root.aiPrimarySelectionOutput = "";
-		root.aiPrimarySelectionError = "";
-		root.aiPrimarySelectionMode = "";
-	}
 
-	function messageAttachments(message) {
-		const attachments = message?.attachments;
-		if (Array.isArray(attachments)) return attachments;
-		if (!attachments || typeof attachments.length !== "number") return [];
-		const result = [];
-		for (let index = 0; index < attachments.length; index += 1)
-			result.push(attachments[index]);
-		return result;
-	}
 
-	function attachmentApiContent(attachment) {
-		if (!attachment || !["text", "pdf", "document"].includes(attachment.kind)) return "";
-		const content = String(attachment.content || "");
-		if (content === "") return "";
-		if (root.isPrimarySelectionAttachment(attachment))
-			return `<selected_text>\n${content}\n</selected_text>`;
-		return `<attached_file name="${String(attachment.name || "file").replace(/"/g, "'")}">\n${content}\n</attached_file>`;
-	}
 
-	function stateAttachment(attachment) {
-		const copy = Object.assign({}, attachment);
-		copy.data = "";
-		copy.status = copy.kind === "image" ? "unavailable" : String(copy.content || "") !== "" ? "ready" : "unavailable";
-		return copy;
-	}
-
-	function stateChat(chat) {
-		const copy = Object.assign({}, chat);
-		copy.messages = (chat?.messages || []).map(message => {
-			const messageCopy = Object.assign({}, message);
-			messageCopy.attachments = root.messageAttachments(message).map(root.stateAttachment);
-			return messageCopy;
-		});
-		return copy;
-	}
 
 	function chatsSearchQueryFromInput(text) {
 		const match = /^>chats(?:\s+([\s\S]*))?$/i.exec(String(text || "").trim());
@@ -1067,374 +680,33 @@ Item {
 		return "";
 	}
 
-	function makeId(prefix) {
-		return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
-	}
 
-	function versionBefore(version, major, minor, patch) {
-		const parts = String(version || "").replace(/^v/, "").split(".").map(value => Number(value) || 0);
-		const current = [parts[0] || 0, parts[1] || 0, parts[2] || 0];
-		const target = [major, minor, patch];
-		for (let i = 0; i < target.length; i += 1) {
-			if (current[i] !== target[i]) return current[i] < target[i];
-		}
-		return false;
-	}
 
-	function findChatIndex(chatId) {
-		if (!chatId) return -1;
-		for (let i = 0; i < root.aiChats.length; i += 1) {
-			if (String(root.aiChats[i]?.id || "") === String(chatId)) return i;
-		}
-		return -1;
-	}
 
-	function parseAiState(raw) {
-		try {
-			const parsed = JSON.parse(raw);
-			root.selectedAiModel = String(parsed?.selectedModel || "");
-			root.aiThinkingEnabled = Boolean(parsed?.thinkingEnabled);
-			root.aiShortResponseEnabled = Boolean(parsed?.shortResponseEnabled);
-			root.aiThinkingExpandedMap = ({});
-			const chats = [];
-			for (const candidate of (Array.isArray(parsed?.chats) ? parsed.chats : [])) {
-				if (!candidate || !candidate.id || !Array.isArray(candidate.messages)) continue;
-				const messages = candidate.messages.map(message => Object.assign({}, message, {
-					streaming: false,
-					thinking: Boolean(candidate.thinkingEnabled) ? String(message.thinking || "") : "",
-					attachments: root.messageAttachments(message).map(attachment => Object.assign({}, attachment, {
-						data: "",
-						status: attachment.kind === "image"
-							? "unavailable"
-							: (String(attachment.content || "") !== "" ? "ready" : "unavailable")
-					}))
-				}));
-				if (
-					messages.length > 0
-					&& messages[messages.length - 1].role === "assistant"
-					&& String(messages[messages.length - 1].content || "") === ""
-				) {
-					messages.pop();
-				}
-				chats.push(Object.assign({}, candidate, {
-					messages
-				}));
-			}
-			root.aiChats = chats.slice(0, 100);
-		} catch (error) {
-			root.selectedAiModel = "";
-			root.aiThinkingEnabled = false;
-			root.aiShortResponseEnabled = false;
-			root.aiChats = [];
-		}
 
-		root.aiStateLoaded = true;
-		root.ensureSelectedAiModel();
-		root.saveAiState();
-	}
 
-	function saveAiState() {
-		if (!root.aiStateLoaded) return;
-		aiStateFile.setText(JSON.stringify({
-			version: 1,
-			selectedModel: root.selectedAiModel,
-			thinkingEnabled: root.aiThinkingEnabled,
-			shortResponseEnabled: root.aiShortResponseEnabled,
-			chats: root.aiChats.slice(0, 100).map(root.stateChat)
-		}, null, 2));
-	}
 
-	function ensureSelectedAiModel() {
-		if (root.aiModels.length === 0) {
-			root.selectedAiModel = "";
-			root.saveAiState();
-			return;
-		}
-		const exists = root.aiModels.some(model => String(model.name || model.model || "") === root.selectedAiModel);
-		if (exists) return;
-		root.selectedAiModel = String(root.aiModels[0].name || root.aiModels[0].model || "");
-		root.saveAiState();
-	}
 
-	function refreshAiModels() {
-		if (aiModelsProcess.running || root.aiModelsFallbackRunning) return;
-		root.aiModelsLoading = true;
-		root.aiError = "";
-		aiModelsProcess.exec(["curl", "-fsS", "http://127.0.0.1:11434/api/tags"]);
-	}
 
-	function parseAiModels(raw) {
-		try {
-			const parsed = JSON.parse(raw);
-			root.aiModels = Array.isArray(parsed?.models) ? parsed.models : [];
-			root.aiError = root.aiModels.length === 0 ? "No Ollama models installed" : "";
-			root.ensureSelectedAiModel();
-		} catch (error) {
-			root.aiModels = [];
-			root.aiError = "Could not read Ollama models";
-		}
-	}
 
-	function parseOllamaModelList(raw) {
-		const models = [];
-		const sizeMultipliers = {
-			KB: 1000,
-			MB: 1000000,
-			GB: 1000000000,
-			TB: 1000000000000
-		};
-		const lines = String(raw || "").split("\n").map(line => line.trim()).filter(line => line !== "");
-		for (let index = 1; index < lines.length; index += 1) {
-			const match = /^(\S+)\s+(\S+)\s+([\d.]+)\s+(KB|MB|GB|TB)(?:\s+.*)?$/i.exec(lines[index]);
-			if (!match) continue;
-			const name = String(match[1] || "");
-			const unit = String(match[4] || "").toUpperCase();
-			models.push({
-				name,
-				model: name,
-				digest: String(match[2] || ""),
-				size: Number(match[3] || 0) * Number(sizeMultipliers[unit] || 0),
-				details: ({})
-			});
-		}
-		root.aiModels = models;
-		root.aiError = models.length === 0 ? "No Ollama models installed" : "";
-		root.ensureSelectedAiModel();
-	}
 
-	function refreshOllamaOverview(clearError) {
-		if (clearError !== false) root.ollamaManagerError = "";
-		root.ollamaPsProcessError = "";
-		root.refreshAiModels();
-		root.refreshOllamaRunningModels();
-	}
 
-	function refreshOllamaRunningModels() {
-		if (ollamaPsProcess.running || root.ollamaPsFallbackRunning) return;
-		root.ollamaPsProcessError = "";
-		root.ollamaRunningLoading = true;
-		ollamaPsProcess.exec(["curl", "-fsS", "http://127.0.0.1:11434/api/ps"]);
-	}
 
-	function parseOllamaRunningModels(raw) {
-		try {
-			const parsed = JSON.parse(raw);
-			root.ollamaRunningModels = Array.isArray(parsed?.models) ? parsed.models : [];
-			root.ollamaRunningLastRefresh = Date.now();
-		} catch (error) {
-			root.ollamaRunningModels = [];
-			root.ollamaManagerError = "Could not read running Ollama models";
-		}
-	}
 
-	function parseOllamaRunningList(raw) {
-		const models = [];
-		const lines = String(raw || "").split("\n").map(line => line.trim()).filter(line => line !== "");
-		for (let index = 1; index < lines.length; index += 1) {
-			const name = String(lines[index].split(/\s+/)[0] || "");
-			if (name !== "") models.push({ name, model: name });
-		}
-		root.ollamaRunningModels = models;
-		root.ollamaRunningLastRefresh = Date.now();
-	}
 
-	function isOllamaModelRunning(modelName) {
-		const name = String(modelName || "");
-		return root.ollamaRunningModels.some(model => String(model?.name || model?.model || "") === name);
-	}
 
-	function startNewChatWithModel(modelName) {
-		const name = String(modelName || "");
-		if (name === "" || root.aiStreaming) return;
-		root.selectedAiModel = name;
-		root.saveAiState();
-		root.startNewChat();
-	}
 
-	function removeOllamaModel(modelName) {
-		const name = String(modelName || "");
-		if (name === "" || root.aiStreaming || ollamaRemoveProcess.running) return;
-		root.ollamaManagerError = "";
-		root.ollamaRemovingModel = name;
-		ollamaRemoveProcess.exec(["ollama", "rm", name]);
-	}
 
-	function startOllamaPull(modelName) {
-		const name = String(modelName || "").trim();
-		if (name === "" || root.ollamaPulling) return;
-		root.ollamaManagerError = "";
-		root.ollamaPullModel = name;
-		root.ollamaPulling = true;
-		root.ollamaPullStatus = "Preparing download";
-		root.ollamaPullDigest = "";
-		root.ollamaPullProgress = 0;
-		root.ollamaPullCompleted = 0;
-		root.ollamaPullTotal = 0;
-		root.ollamaPullSpeed = 0;
-		root.ollamaPullEtaSeconds = 0;
-		root.ollamaPullStartedAt = Date.now();
-		ollamaPullProcess.exec([
-			"curl",
-			"-sS",
-			"--no-buffer",
-			"--fail-with-body",
-			"-H",
-			"Content-Type: application/json",
-			"-d",
-			JSON.stringify({
-				model: name,
-				stream: true
-			}),
-			"http://127.0.0.1:11434/api/pull"
-		]);
-	}
 
-	function handleOllamaPullData(data) {
-		for (const rawLine of String(data || "").split("\n")) {
-			const line = rawLine.trim();
-			if (line === "") continue;
-			try {
-				const chunk = JSON.parse(line);
-				if (chunk.error) {
-					root.ollamaManagerError = String(chunk.error);
-					continue;
-				}
 
-				root.ollamaPullStatus = String(chunk.status || root.ollamaPullStatus);
-				const digest = String(chunk.digest || "");
-				if (digest !== "" && digest !== root.ollamaPullDigest) {
-					root.ollamaPullDigest = digest;
-					root.ollamaPullStartedAt = Date.now();
-					root.ollamaPullSpeed = 0;
-					root.ollamaPullEtaSeconds = 0;
-				}
 
-				const total = Number(chunk.total || 0);
-				const completed = Number(chunk.completed || 0);
-				if (total > 0) {
-					root.ollamaPullTotal = total;
-					root.ollamaPullCompleted = completed;
-					root.ollamaPullProgress = Math.max(0, Math.min(1, completed / total));
-					const elapsed = Math.max(0.1, (Date.now() - root.ollamaPullStartedAt) / 1000);
-					root.ollamaPullSpeed = completed / elapsed;
-					root.ollamaPullEtaSeconds = root.ollamaPullSpeed > 0
-						? Math.max(0, (total - completed) / root.ollamaPullSpeed)
-						: 0;
-				}
-				if (chunk.status === "success") {
-					root.ollamaPullProgress = 1;
-					root.ollamaPullEtaSeconds = 0;
-				}
-			} catch (error) {
-				root.ollamaManagerError = "Invalid response while pulling model";
-			}
-		}
-	}
 
-	function refreshAiModelInfo() {
-		if (root.selectedAiModel === "") {
-			root.aiModelInfo = ({});
-			root.aiModelCapabilities = [];
-			root.aiModelContextWindow = 0;
-			return;
-		}
-		if (aiModelInfoProcess.running) return;
-		root.aiModelInfoLoading = true;
-		root.aiModelInfoTarget = root.selectedAiModel;
-		aiModelInfoProcess.exec([
-			"curl",
-			"-fsS",
-			"-H",
-			"Content-Type: application/json",
-			"-d",
-			JSON.stringify({
-				model: root.aiModelInfoTarget
-			}),
-			"http://127.0.0.1:11434/api/show"
-		]);
-	}
 
-	function parseAiModelInfo(raw) {
-		if (root.aiModelInfoTarget !== root.selectedAiModel) return;
-		try {
-			const parsed = JSON.parse(raw);
-			const info = parsed?.model_info || {};
-			let contextWindow = 0;
-			for (const key of Object.keys(info)) {
-				if (!key.endsWith(".context_length")) continue;
-				contextWindow = Math.max(contextWindow, Number(info[key] || 0));
-			}
-			root.aiModelInfo = parsed;
-			root.aiModelCapabilities = Array.isArray(parsed?.capabilities) ? parsed.capabilities : [];
-			root.aiModelContextWindow = contextWindow;
-		} catch (error) {
-			root.aiModelInfo = ({});
-			root.aiModelCapabilities = [];
-			root.aiModelContextWindow = 0;
-		}
-	}
 
-	function formatModelSize(bytes) {
-		const value = Number(bytes || 0);
-		if (value <= 0) return "";
-		return `${(value / 1000000000).toFixed(1)} GB`;
-	}
 
-	function formatTransferRate(bytesPerSecond) {
-		const value = Number(bytesPerSecond || 0);
-		if (value <= 0) return "";
-		if (value >= 1000000000) return `${(value / 1000000000).toFixed(1)} GB/s`;
-		if (value >= 1000000) return `${(value / 1000000).toFixed(1)} MB/s`;
-		return `${(value / 1000).toFixed(0)} KB/s`;
-	}
 
-	function formatDuration(seconds) {
-		const value = Math.max(0, Math.ceil(Number(seconds || 0)));
-		if (value <= 0) return "";
-		if (value < 60) return `${value}s`;
-		const minutes = Math.floor(value / 60);
-		const remainingSeconds = value % 60;
-		if (minutes < 60) return `${minutes}m ${remainingSeconds}s`;
-		const hours = Math.floor(minutes / 60);
-		return `${hours}h ${minutes % 60}m`;
-	}
 
-	function ollamaRunningSummary() {
-		if (root.ollamaRunningLoading) return "Loading...";
-		if (root.ollamaRunningModels.length === 0) return "No models loaded";
-		const names = root.ollamaRunningModels
-			.map(model => String(model?.name || model?.model || ""))
-			.filter(name => name !== "")
-			.join(", ");
-		const vram = root.formatModelSize(root.ollamaRunningVram);
-		return vram !== "" ? `${names} · ${vram} VRAM` : names;
-	}
 
-	function formatTokenCount(count) {
-		const value = Number(count || 0);
-		if (value < 1000) return String(Math.round(value));
-		if (value < 1000000) return `${(value / 1000).toFixed(value < 10000 ? 1 : 0)}K`;
-		return `${(value / 1000000).toFixed(1)}M`;
-	}
-
-	function selectAiModel(modelName) {
-		if (!modelName || root.aiStreaming) return;
-		root.selectedAiModel = String(modelName);
-		root.aiError = "";
-		root.saveAiState();
-	}
-
-	function toggleAiThinking() {
-		if (root.aiStreaming) return;
-		root.aiThinkingEnabled = !root.aiThinkingEnabled;
-		root.saveAiState();
-	}
-
-	function toggleShortResponse() {
-		if (root.aiStreaming) return;
-		root.aiShortResponseEnabled = !root.aiShortResponseEnabled;
-		root.saveAiState();
-	}
 
 	function syncLauncherSearch() {
 		if (root.commandInputSyncing) return;
@@ -1536,12 +808,12 @@ Item {
 
 	function syncChatMessageModel() {
 		chatMessageModel.clear();
-		for (const message of root.activeMessages)
+		for (const message of AiChat.activeMessages)
 			chatMessageModel.append({ entry: message });
 	}
 
 	function updateVisibleChatMessage(index, message) {
-		if (!root.streamingChatMatchesView() || root.chatSelectionActive) return;
+		if (!AiChat.streamingChatMatchesView() || root.chatSelectionActive) return;
 		if (index < 0 || index >= chatMessageModel.count) {
 			root.syncChatMessageModel();
 			return;
@@ -1559,549 +831,43 @@ Item {
 		if (root.chatSelectionActive) chatSelectionReleaseTimer.restart();
 	}
 
-	function startNewChat() {
-		if (root.aiStreaming) return;
-		const wasInChatMode = root.inChatMode;
-		root.editingMessageId = "";
-		root.clearPendingAttachments();
-		root.aiAttachmentPickerOpen = false;
-		root.aiTemporaryChatEnabled = true;
-		root.aiTemporaryChat = null;
-		root.activeChatId = "";
-		root.aiError = "";
-		root.setLauncherSearch(">chat ");
-		root.syncChatMessageModel();
-		if (wasInChatMode) Qt.callLater(root.capturePrimarySelection);
-	}
 
-	function openPastChat(chat) {
-		if (!chat) return;
-		root.editingMessageId = "";
-		root.clearPendingAttachments();
-		root.aiAttachmentPickerOpen = false;
-		const preserveTemporaryChat = root.aiStreaming && root.aiStreamingTemporary && root.aiTemporaryChat;
-		root.aiTemporaryChatEnabled = false;
-		if (!preserveTemporaryChat) root.aiTemporaryChat = null;
-		root.activeChatId = String(chat.id || "");
-		if (chat.model && root.aiModels.some(model => String(model.name || model.model || "") === String(chat.model)))
-			root.selectedAiModel = String(chat.model);
-		root.aiThinkingEnabled = Boolean(chat.thinkingEnabled);
-		root.aiShortResponseEnabled = Boolean(chat.shortResponseEnabled);
-		root.aiError = "";
-		root.saveAiState();
-		root.setLauncherSearch(">chat ");
-		root.syncChatMessageModel();
-		Qt.callLater(function() {
-			root.syncChatMessageModel();
-			root.scrollChatToEnd(true);
-		});
-	}
 
 	function openAiOverview() {
-		root.editingMessageId = "";
-		root.clearPendingAttachments();
+		AiChat.editingMessageId = "";
+		AiChat.clearPendingAttachments();
 		root.aiAttachmentPickerOpen = false;
 		root.setLauncherSearch(">chats ");
 	}
 
-	function toggleTemporaryChat() {
-		if (root.aiStreaming) return;
-		root.editingMessageId = "";
-		root.clearPendingAttachments();
-		root.aiTemporaryChatEnabled = !root.aiTemporaryChatEnabled;
-		if (!root.aiTemporaryChatEnabled) root.aiTemporaryChat = null;
-		root.activeChatId = "";
-		root.aiError = "";
-		root.syncChatMessageModel();
-		root.scrollChatToEnd(true);
-	}
 
-	function deleteChat(chat) {
-		if (!chat) return;
-		const chatId = String(chat.id || "");
-		if (chatId === "") return;
-		if (root.aiStreaming && chatId === root.aiStreamingChatId) return;
-		root.aiChats = root.aiChats.filter(item => String(item.id || "") !== chatId);
-		if (root.activeChatId === chatId) {
-			root.activeChatId = "";
-			root.syncChatMessageModel();
-		}
-		const expanded = Object.assign({}, root.aiThinkingExpandedMap);
-		delete expanded[chatId];
-		root.aiThinkingExpandedMap = expanded;
-		root.saveAiState();
-	}
 
-	function thinkingExpanded(messageId) {
-		return Boolean(root.aiThinkingExpandedMap[String(messageId || "")]);
-	}
 
-	function toggleThinkingExpanded(messageId) {
-		const key = String(messageId || "");
-		if (key === "") return;
-		const expanded = Object.assign({}, root.aiThinkingExpandedMap);
-		expanded[key] = !Boolean(expanded[key]);
-		root.aiThinkingExpandedMap = expanded;
-	}
 
-	function streamingChatMatchesView() {
-		if (!root.aiStreaming) return true;
-		if (root.aiStreamingTemporary) return root.aiTemporaryChatEnabled && root.activeChat === root.aiTemporaryChat;
-		return String(root.activeChat?.id || "") === root.aiStreamingChatId;
-	}
 
-	function chatTitle(message) {
-		const compact = String(message || "").replace(/\s+/g, " ").trim();
-		if (compact.length <= 54) return compact;
-		return `${compact.slice(0, 51)}...`;
-	}
 
-	function apiMessages(messages, shortResponseEnabled) {
-		const apiMessages = messages
-			.filter(message => {
-				if (message.role !== "user" && message.role !== "assistant") return false;
-				if (String(message.content || "") !== "") return true;
-				return root.messageAttachments(message).some(attachment =>
-					String(root.attachmentApiContent(attachment)) !== ""
-					|| (attachment.kind === "image" && String(attachment.data || "") !== "")
-				);
-			})
-			.map(message => {
-				const attachments = root.messageAttachments(message);
-				const fileBlocks = attachments.map(root.attachmentApiContent).filter(content => content !== "");
-				const apiMessage = {
-					role: message.role,
-					content: [String(message.content || ""), ...fileBlocks].filter(content => content !== "").join("\n\n")
-				};
-				const images = attachments
-					.filter(attachment => attachment.kind === "image" && String(attachment.data || "") !== "")
-					.map(attachment => String(attachment.data));
-				if (images.length > 0) apiMessage.images = images;
-					if (root.effectiveAiThinkingEnabled && message.role === "assistant" && String(message.thinking || "") !== "")
-						apiMessage.thinking = String(message.thinking);
-					return apiMessage;
-				});
-		if (shortResponseEnabled) {
-			apiMessages.unshift({
-				role: "system",
-				content: "Answer briefly and directly. Keep the response short, usually 1-3 concise sentences, unless the user explicitly asks for detail."
-			});
-		}
-		return apiMessages;
-	}
 
-	function storeChat(chat, chats, index, temporary) {
-		if (temporary) {
-			root.aiTemporaryChat = chat;
-		} else {
-			chats[index] = chat;
-			root.aiChats = chats;
-		}
-	}
 
-	function startAiRequest(chat, chats, index, temporary) {
-		const requestModel = String(root.selectedAiModel || "");
-		chat.model = requestModel;
-		chat.thinkingEnabled = root.effectiveAiThinkingEnabled;
-		chat.shortResponseEnabled = root.aiShortResponseEnabled;
-		const requestMessages = root.apiMessages(chat.messages || [], chat.shortResponseEnabled);
-		const assistantMessage = {
-			id: root.makeId("assistant"),
-			role: "assistant",
-			model: requestModel,
-			content: "",
-			thinking: "",
-			streaming: true
-		};
-		chat.contextLimit = root.aiRequestContextWindow;
-		chat.updatedAt = Date.now();
-		chat.messages = (chat.messages || []).concat([assistantMessage]);
-		root.storeChat(chat, chats, index, temporary);
-		root.aiStreaming = true;
-		root.aiStreamingChatId = String(chat.id || "");
-		root.aiStreamingTemporary = Boolean(temporary);
-		root.aiStreamingModel = requestModel;
-		root.aiInlineThinking = false;
-		root.aiSuppressedThinkingBuffer = "";
-		root.aiInlineProbeBuffer = "";
-		root.aiError = "";
-		root.aiProcessError = "";
-		root.editingMessageId = "";
-		root.clearPendingAttachments();
-		root.aiAttachmentPickerOpen = false;
-		root.chatAutoFollow = true;
-		root.chatSelectionActive = false;
-		if (!temporary) root.saveAiState();
-		root.setLauncherSearch(">chat ");
-		root.syncChatMessageModel();
-		root.scrollChatToEnd(true);
-		root.refreshOllamaRunningModels();
 
-		const payload = {
-			model: requestModel,
-			messages: requestMessages,
-			stream: true,
-			keep_alive: "10m",
-			options: {
-				num_ctx: root.aiRequestContextWindow
-			}
-		};
-		payload.think = root.effectiveAiThinkingEnabled;
 
-		root.aiRequestPayload = JSON.stringify(payload);
-		aiChatProcess.stdinEnabled = true;
-		aiChatProcess.exec([
-			"curl",
-			"-sS",
-			"--no-buffer",
-			"--fail-with-body",
-			"-H",
-			"Content-Type: application/json",
-			"--data-binary",
-			"@-",
-			"http://127.0.0.1:11434/api/chat"
-		]);
-	}
 
-	function cancelAiStream() {
-		if (!root.aiStreaming) return;
-		const modelName = String(root.aiStreamingModel || root.activeChat?.model || root.selectedAiModel || "");
-		root.finishAiStream("", true);
-		aiChatProcess.running = false;
-		root.aiPendingUnloadModel = modelName;
-		aiUnloadTimer.restart();
-	}
 
-	function unloadPendingAiModel() {
-		const modelName = String(root.aiPendingUnloadModel || "");
-		root.aiPendingUnloadModel = "";
-		if (modelName === "") return;
-		aiUnloadProcess.exec([
-			"curl",
-			"-sS",
-			"--fail-with-body",
-			"-H",
-			"Content-Type: application/json",
-			"-d",
-			JSON.stringify({
-				model: modelName,
-				keep_alive: 0
-			}),
-			"http://127.0.0.1:11434/api/generate"
-		]);
-	}
 
-	function sendChatPrompt(prompt) {
-		const pendingAttachments = root.aiPendingAttachments.map(attachment => Object.assign({}, attachment));
-		let text = String(prompt || "").trim();
-		if ((text === "" && pendingAttachments.length === 0) || root.aiStreaming) return;
-		if (root.selectedAiModel === "") {
-			root.aiError = "Select an Ollama model first";
-			return;
-		}
-		if (root.aiPrimarySelectionLoading) {
-			root.aiError = "Wait until selected text is ready";
-			return;
-		}
-		if (!root.pendingAttachmentsReady) {
-			root.aiError = "Wait until all attached files are ready";
-			return;
-		}
-		if (!root.pendingAttachmentsCompatible) {
-			root.aiError = "The selected model does not support the attached images";
-			return;
-		}
-		if (text === "") text = "Analyze the attached files.";
 
-		const now = Date.now();
-		const chats = root.aiChats.slice();
-		let index = root.findChatIndex(root.activeChatId);
-		let chat;
 
-		if (root.aiTemporaryChatEnabled) {
-			chat = root.aiTemporaryChat
-				? Object.assign({}, root.aiTemporaryChat, {
-					model: root.selectedAiModel,
-					thinkingEnabled: root.aiThinkingEnabled,
-					updatedAt: now,
-					messages: (root.aiTemporaryChat.messages || []).slice()
-				})
-				: {
-					id: root.makeId("temporary-chat"),
-					title: root.chatTitle(text),
-					model: root.selectedAiModel,
-					thinkingEnabled: root.aiThinkingEnabled,
-					createdAt: now,
-					updatedAt: now,
-					messages: []
-				};
-		} else if (index < 0) {
-			chat = {
-				id: root.makeId("chat"),
-				title: root.chatTitle(text),
-				model: root.selectedAiModel,
-				thinkingEnabled: root.aiThinkingEnabled,
-				createdAt: now,
-				updatedAt: now,
-				messages: []
-			};
-			chats.unshift(chat);
-			index = 0;
-			root.activeChatId = chat.id;
-		} else {
-			chat = Object.assign({}, chats[index], {
-				model: root.selectedAiModel,
-				thinkingEnabled: root.aiThinkingEnabled,
-				updatedAt: now,
-				messages: (chats[index].messages || []).slice()
-			});
-			chats[index] = chat;
-		}
 
-		const userMessage = {
-			id: root.makeId("user"),
-			role: "user",
-			content: text,
-			attachments: pendingAttachments,
-			thinking: "",
-			streaming: false
-		};
-		chat.messages = (chat.messages || []).concat([userMessage]);
-		root.startAiRequest(chat, chats, index, root.aiTemporaryChatEnabled);
-	}
 
-	function beginEditMessage(message) {
-		if (root.aiStreaming || !message || message.role !== "user") return;
-		root.editingMessageId = String(message.id || "");
-		root.aiPendingAttachments = root.messageAttachments(message).map(attachment => Object.assign({}, attachment));
-		root.setLauncherSearch(`>chat ${String(message.content || "")}`);
-	}
 
-	function cancelMessageEdit() {
-		root.editingMessageId = "";
-		root.clearPendingAttachments();
-		root.setLauncherSearch(">chat ");
-	}
-
-	function submitEditedMessage(prompt) {
-		const pendingAttachments = root.aiPendingAttachments.map(attachment => Object.assign({}, attachment));
-		let text = String(prompt || "").trim();
-		if ((text === "" && pendingAttachments.length === 0) || root.aiStreaming || root.editingMessageId === "") return;
-		if (root.selectedAiModel === "") {
-			root.aiError = "Select an Ollama model first";
-			return;
-		}
-		if (!root.pendingAttachmentsReady) {
-			root.aiError = "Wait until all attached files are ready";
-			return;
-		}
-		if (!root.pendingAttachmentsCompatible) {
-			root.aiError = "The selected model does not support the attached images";
-			return;
-		}
-		if (text === "") text = "Analyze the attached files.";
-
-		const temporary = root.aiTemporaryChatEnabled;
-		const chats = temporary ? [] : root.aiChats.slice();
-		const index = temporary ? -1 : root.findChatIndex(root.activeChatId);
-		if ((temporary && !root.aiTemporaryChat) || (!temporary && index < 0)) return;
-		const chat = Object.assign({}, temporary ? root.aiTemporaryChat : chats[index]);
-		const messages = (chat.messages || []).slice();
-		let messageIndex = -1;
-		for (let i = 0; i < messages.length; i += 1) {
-			if (String(messages[i]?.id || "") === root.editingMessageId) {
-				messageIndex = i;
-				break;
-			}
-		}
-		if (messageIndex < 0 || messages[messageIndex]?.role !== "user") return;
-
-		const editedMessage = Object.assign({}, messages[messageIndex], {
-			content: text,
-			attachments: pendingAttachments,
-			thinking: "",
-			streaming: false
-		});
-		chat.messages = messages.slice(0, messageIndex).concat([editedMessage]);
-		chat.model = root.selectedAiModel;
-		chat.thinkingEnabled = root.effectiveAiThinkingEnabled;
-		chat.updatedAt = Date.now();
-		if (messageIndex === 0) chat.title = root.chatTitle(text);
-		root.startAiRequest(chat, chats, index, temporary);
-	}
-
-	function updateStreamingAssistant(contentDelta, thinkingDelta) {
-		const temporary = root.aiStreamingTemporary;
-		const index = temporary ? -1 : root.findChatIndex(root.aiStreamingChatId);
-		if ((!temporary && index < 0) || (temporary && !root.aiTemporaryChat)) return;
-		const chats = temporary ? [] : root.aiChats.slice();
-		const chat = Object.assign({}, temporary ? root.aiTemporaryChat : chats[index]);
-		const messages = (chat.messages || []).slice();
-		if (messages.length === 0) return;
-		const lastIndex = messages.length - 1;
-		const assistant = Object.assign({}, messages[lastIndex]);
-		if (assistant.role !== "assistant") return;
-		let content = String(assistant.content || "");
-		let thinking = String(assistant.thinking || "");
-		const incomingContent = String(contentDelta || "");
-		const incomingThinking = String(thinkingDelta || "");
-		const thinkingEnabled = Boolean(chat.thinkingEnabled);
-		const streamModelName = String(root.aiStreamingModel || chat.model || root.selectedAiModel || "").toLowerCase();
-
-		if (incomingThinking !== "") {
-			if (thinkingEnabled) thinking += incomingThinking;
-			else root.aiSuppressedThinkingBuffer += incomingThinking;
-		}
-
-		if (
-			!thinkingEnabled
-			&& root.legacyQwenThinkingWorkaround
-			&& streamModelName.startsWith("qwen3")
-			&& content === ""
-		) {
-			const combined = root.aiInlineProbeBuffer + incomingContent;
-			const trimmed = combined.replace(/^\s+/, "");
-			if (root.aiInlineThinking || trimmed.startsWith("<think>")) {
-				root.aiInlineThinking = true;
-				root.aiInlineProbeBuffer = combined;
-				const closeIndex = combined.indexOf("</think>");
-				if (closeIndex >= 0) {
-					content += combined.slice(closeIndex + 8).replace(/^\s+/, "");
-					root.aiInlineThinking = false;
-					root.aiInlineProbeBuffer = "";
-				}
-			} else if (trimmed === "" || "<think>".startsWith(trimmed)) {
-				root.aiInlineProbeBuffer = combined;
-			} else {
-				content += combined.replace(/^\s+/, "");
-				root.aiInlineProbeBuffer = "";
-			}
-		} else {
-			content += content === "" ? incomingContent.replace(/^\s+/, "") : incomingContent;
-		}
-
-		assistant.content = content;
-		assistant.thinking = thinkingEnabled ? thinking : "";
-		messages[lastIndex] = assistant;
-		chat.messages = messages;
-		chat.updatedAt = Date.now();
-		if (temporary) {
-			root.aiTemporaryChat = chat;
-		} else {
-			chats[index] = chat;
-			root.aiChats = chats;
-		}
-		root.updateVisibleChatMessage(lastIndex, assistant);
-	}
-
-	function finishAiStream(errorMessage, cancelled) {
-		const temporary = root.aiStreamingTemporary;
-		const index = temporary ? -1 : root.findChatIndex(root.aiStreamingChatId);
-		const shouldScroll = root.streamingChatMatchesView();
-		const preserveSelection = root.chatSelectionActive;
-		const wasCancelled = Boolean(cancelled);
-		if ((temporary && root.aiTemporaryChat) || (!temporary && index >= 0)) {
-			const chats = temporary ? [] : root.aiChats.slice();
-			const chat = Object.assign({}, temporary ? root.aiTemporaryChat : chats[index]);
-			const messages = (chat.messages || []).slice();
-			if (messages.length > 0) {
-				const lastIndex = messages.length - 1;
-				const assistant = Object.assign({}, messages[lastIndex]);
-				if (assistant.role === "assistant") {
-					const removeCancelledPlaceholder = wasCancelled
-						&& String(assistant.content || "") === ""
-						&& String(assistant.thinking || "") === "";
-					if (removeCancelledPlaceholder) {
-						messages.pop();
-					} else {
-					if (!Boolean(chat.thinkingEnabled) && String(assistant.content || "") === "" && !errorMessage) {
-						const fallbackContent = String(root.aiInlineProbeBuffer || root.aiSuppressedThinkingBuffer || "")
-							.replace(/^\s*<think>\s*/, "")
-							.replace(/\s*<\/think>\s*$/, "")
-							.trim();
-						if (fallbackContent !== "") assistant.content = fallbackContent;
-						assistant.thinking = "";
-					}
-					assistant.streaming = false;
-					if (String(assistant.content || "") === "" && errorMessage)
-						assistant.content = errorMessage;
-					if (!Boolean(chat.thinkingEnabled)) assistant.thinking = "";
-					messages[lastIndex] = assistant;
-					root.updateVisibleChatMessage(lastIndex, assistant);
-					}
-				}
-			}
-			chat.messages = messages;
-			chat.updatedAt = Date.now();
-			if (temporary) {
-				root.aiTemporaryChat = chat;
-			} else {
-				chats[index] = chat;
-				root.aiChats = chats;
-			}
-		}
-
-		root.aiStreaming = false;
-		root.aiStreamingChatId = "";
-		root.aiStreamingTemporary = false;
-		root.aiStreamingModel = "";
-		root.aiInlineThinking = false;
-		root.aiSuppressedThinkingBuffer = "";
-		root.aiInlineProbeBuffer = "";
-		if (errorMessage) root.aiError = errorMessage;
-		if (!temporary) root.saveAiState();
-		if (shouldScroll && !preserveSelection && wasCancelled) root.syncChatMessageModel();
-		if (shouldScroll && !preserveSelection) root.scrollChatToEnd();
-	}
-
-	function updateAiStreamStats(chunk) {
-		const temporary = root.aiStreamingTemporary;
-		const index = temporary ? -1 : root.findChatIndex(root.aiStreamingChatId);
-		if ((temporary && !root.aiTemporaryChat) || (!temporary && index < 0)) return;
-		const chats = temporary ? [] : root.aiChats.slice();
-		const chat = Object.assign({}, temporary ? root.aiTemporaryChat : chats[index]);
-		const promptTokens = Number(chunk?.prompt_eval_count || 0);
-		const responseTokens = Number(chunk?.eval_count || 0);
-		const evalDuration = Number(chunk?.eval_duration || 0);
-		chat.contextUsed = promptTokens + responseTokens;
-		chat.contextLimit = Number(chat.contextLimit || root.aiRequestContextWindow);
-		chat.responseTokens = responseTokens;
-		chat.tokensPerSecond = evalDuration > 0 ? responseTokens / (evalDuration / 1000000000) : 0;
-		root.storeChat(chat, chats, index, temporary);
-	}
-
-	function handleAiStreamData(data) {
-		const lines = String(data || "").split("\n");
-		for (const rawLine of lines) {
-			const line = rawLine.trim();
-			if (line === "") continue;
-			try {
-				const chunk = JSON.parse(line);
-				if (chunk.error) {
-					root.finishAiStream(String(chunk.error));
-					continue;
-				}
-				const message = chunk.message || {};
-				root.updateStreamingAssistant(message.content || "", message.thinking || "");
-				if (chunk.done) {
-					root.updateAiStreamStats(chunk);
-					root.finishAiStream("");
-				}
-			} catch (error) {
-				root.aiProcessError = "Invalid response from Ollama";
-			}
-		}
-	}
 
 	function scrollChatToEnd(force) {
-		if (root.aiStreaming && !root.streamingChatMatchesView()) return;
+		if (AiChat.aiStreaming && !AiChat.streamingChatMatchesView()) return;
 		if (force) root.chatAutoFollow = true;
 		if (!root.chatAutoFollow || root.chatSelectionActive) return;
 		chatScrollTimer.restart();
 	}
 
 	function followChatImmediately() {
-		if (!root.aiStreaming || !root.streamingChatMatchesView()) return;
+		if (!AiChat.aiStreaming || !AiChat.streamingChatMatchesView()) return;
 		if (!root.chatAutoFollow || root.chatSelectionActive) return;
 		chatList.contentY = Math.max(0, chatList.contentHeight - chatList.height);
 	}
@@ -2114,94 +880,6 @@ Item {
 		return Qt.formatDateTime(new Date(Number(timestamp || Date.now())), "dd.MM. HH:mm");
 	}
 
-	function usageKey(entry) {
-		return String(entry?.id || entry?.name || "");
-	}
-
-	function appUsage(entry) {
-		const key = root.usageKey(entry);
-		return key !== "" ? Number(root.usageMap[key] || 0) : 0;
-	}
-
-	function compareApps(left, right) {
-		const usageDelta = root.appUsage(right) - root.appUsage(left);
-		if (usageDelta !== 0) return usageDelta;
-		return String(left.name || left.id || "").localeCompare(String(right.name || right.id || ""));
-	}
-
-	function parseUsageJson(raw) {
-		try {
-			const parsed = JSON.parse(raw);
-			root.usageMap = parsed && typeof parsed === "object" ? parsed : ({});
-		} catch (error) {
-			root.usageMap = ({});
-		}
-	}
-
-	function shellEscape(value) {
-		return String(value).replace(/'/g, `'\"'\"'`);
-	}
-
-	function saveUsageMap() {
-		const payload = JSON.stringify(root.usageMap);
-		saveUsageProcess.exec([
-			"sh",
-			"-lc",
-			`printf '%s' '${root.shellEscape(payload)}' > '${root.shellEscape(root.usageFilePath)}'`
-		]);
-	}
-
-	function recordLaunch(entry) {
-		const key = root.usageKey(entry);
-		if (key === "") return;
-		const next = Object.assign({}, root.usageMap);
-		next[key] = Number(next[key] || 0) + 1;
-		root.usageMap = next;
-		root.saveUsageMap();
-	}
-
-	function iconSource(entry) {
-		if (!entry) return "";
-		const iconName = String(entry.icon || "");
-		const entryId = String(entry.id || "");
-
-		if (iconName.toLowerCase() === "alacritty" || entryId.toLowerCase().includes("alacritty"))
-			return "/usr/share/icons/Adwaita/symbolic/actions/system-run-symbolic.svg";
-		if (iconName.toLowerCase() === "btop" || entryId.toLowerCase().includes("btop"))
-			return "/usr/share/icons/hicolor/48x48/apps/btop.png";
-
-		const papirusIcon = root.papirusAppIcon(iconName) || root.papirusAppIcon(entryId);
-		if (papirusIcon !== "") return papirusIcon;
-
-		if (entry.icon) {
-			const direct = Quickshell.iconPath(entry.icon, true);
-			if (direct !== "") return direct;
-
-			const normalizedIcon = iconName.replace(/\.(png|svg|xpm)$/i, "");
-			if (normalizedIcon !== iconName) {
-				const normalizedDirect = Quickshell.iconPath(normalizedIcon, true);
-				if (normalizedDirect !== "") return normalizedDirect;
-			}
-		}
-
-		if (entry.id) {
-			const desktopPath = Quickshell.iconPath(entry.id, true);
-			if (desktopPath !== "") return desktopPath;
-		}
-
-		return Quickshell.iconPath("application-x-executable", true);
-	}
-
-	function papirusAppIcon(icon) {
-		if (!icon) return "";
-		const raw = String(icon);
-		if (raw.startsWith("/") || raw.startsWith("file:") || raw.startsWith("image:") || raw.startsWith("qrc:")) return "";
-		const lower = raw.toLowerCase();
-		const noDesktop = lower.endsWith(".desktop") ? lower.slice(0, -8) : lower;
-		const noExtension = noDesktop.replace(/\.(png|svg|xpm)$/i, "");
-		return AppIcons.map[lower] || AppIcons.map[noDesktop] || AppIcons.map[noExtension] || AppIcons.map[`${noExtension}.desktop`] || "";
-	}
-
 	function activateCurrent(modifiers) {
 		if (root.activeModeView) {
 			root.activeModeView.activate(modifiers || 0);
@@ -2209,8 +887,8 @@ Item {
 		}
 
 		if (root.inChatMode) {
-			if (root.editingMessageId !== "") root.submitEditedMessage(root.chatPrompt);
-			else root.sendChatPrompt(root.chatPrompt);
+			if (AiChat.editingMessageId !== "") AiChat.submitEditedMessage(root.chatPrompt);
+			else AiChat.sendChatPrompt(root.chatPrompt);
 			return;
 		}
 
@@ -2239,7 +917,7 @@ Item {
 	function launchApp(entry) {
 		if (!entry) return;
 
-		root.recordLaunch(entry);
+		AppUsage.recordLaunch(entry);
 		Quickshell.execDetached({
 			command: entry.runInTerminal ? ["app2unit", "--", "kitty", "-e", ...entry.command] : ["app2unit", "--", ...entry.command],
 			workingDirectory: entry.workingDirectory
@@ -2251,7 +929,7 @@ Item {
 	function launchAppAction(entry, action) {
 		if (!entry || !action) return;
 
-		root.recordLaunch(entry);
+		AppUsage.recordLaunch(entry);
 		Quickshell.execDetached({
 			command: entry.runInTerminal ? ["app2unit", "--", "kitty", "-e", ...action.command] : ["app2unit", "--", ...action.command],
 			workingDirectory: entry.workingDirectory
@@ -2272,7 +950,7 @@ Item {
 
 	function launchCommand(command) {
 		if (!command) return;
-		if (command.id !== "calculator-result" && command.id !== "studio-page") root.recordLaunch({ id: `>${command.command}` });
+		if (command.id !== "calculator-result" && command.id !== "studio-page") AppUsage.recordLaunch({ id: `>${command.command}` });
 		// a group shows what is in it
 		if (command.children) {
 			root.setLauncherSearch(`>${command.command} `);
@@ -2326,7 +1004,7 @@ Item {
 			root.setLauncherSearch(">ollama");
 			break;
 		case "chat":
-			root.startNewChat();
+			AiChat.startNewChat();
 			break;
 		case "translate":
 			root.setLauncherSearch(">t ");
@@ -2454,7 +1132,7 @@ Item {
 	}
 
 	function reset() {
-		root.editingMessageId = "";
+		AiChat.editingMessageId = "";
 		root.aiAttachmentPickerOpen = false;
 		root.resetting = true;
 		root.leaveCommandInput("");
@@ -2479,16 +1157,16 @@ Item {
 	function runClipboardAction(prompt, text) {
 		const content = String(text || "");
 		if (!Plugins.on("ai-actions")) return;
-		if (content.trim() === "" || root.aiStreaming) return;
+		if (content.trim() === "" || AiChat.aiStreaming) return;
 		if (content.length > 500000) {
-			root.aiError = "Clipboard text is too long";
+			AiChat.aiError = "Clipboard text is too long";
 			return;
 		}
-		root.startNewChat();
-		if (AiActions.model !== "" && root.aiModels.some(model => String(model.name || model.model || "") === AiActions.model))
-			root.selectedAiModel = AiActions.model;
-		root.aiPendingAttachments = [{
-			id: root.makeId("clipboard"),
+		AiChat.startNewChat();
+		if (AiActions.model !== "" && AiChat.aiModels.some(model => String(model.name || model.model || "") === AiActions.model))
+			AiChat.selectedAiModel = AiActions.model;
+		AiChat.aiPendingAttachments = [{
+			id: AiChat.makeId("clipboard"),
 			path: "",
 			name: "Clipboard",
 			mimeType: "text/plain",
@@ -2499,7 +1177,7 @@ Item {
 			data: "",
 			source: "clipboard"
 		}];
-		root.sendChatPrompt(prompt);
+		AiChat.sendChatPrompt(prompt);
 	}
 
 	function pickFileForPhone() {
@@ -2519,6 +1197,7 @@ Item {
 
 	onInAiModeChanged: {
 		if (!inAiMode) return;
+		AiChat.wake();
 		if (root.commandInputHasSeparator)
 			Qt.callLater(function() {
 				searchField.forceActiveFocus();
@@ -2527,13 +1206,14 @@ Item {
 
 	onInChatModeChanged: {
 		if (inChatMode) {
+			AiChat.wake();
 			root.syncChatMessageModel();
 			root.scrollChatToEnd(true);
-			root.refreshOllamaRunningModels();
-			Qt.callLater(root.capturePrimarySelection);
+			AiChat.refreshOllamaRunningModels();
+			Qt.callLater(AiChat.capturePrimarySelection);
 		} else {
-			root.editingMessageId = "";
-			Qt.callLater(root.primePrimarySelection);
+			AiChat.editingMessageId = "";
+			Qt.callLater(AiChat.primePrimarySelection);
 		}
 	}
 
@@ -2552,18 +1232,12 @@ Item {
 
 	onInOllamaModeChanged: {
 		if (!inOllamaMode) return;
-		root.refreshOllamaOverview();
+		AiChat.wake();
+		AiChat.refreshOllamaOverview();
 		if (root.commandInputHasSeparator)
 			Qt.callLater(function() {
 				searchField.forceActiveFocus();
 			});
-	}
-
-	onSelectedAiModelChanged: {
-		root.aiModelInfo = ({});
-		root.aiModelCapabilities = [];
-		root.aiModelContextWindow = 0;
-		root.refreshAiModelInfo();
 	}
 
 	onAiAttachmentDirectoryChanged: {
@@ -2574,222 +1248,17 @@ Item {
 		if (root.inFileMode) root.refreshFileBrowserDirectory();
 	}
 
-	FileView {
-		id: usageFile
-		path: root.usageFilePath
-		onLoaded: root.parseUsageJson(text())
-		onLoadFailed: root.usageMap = ({})
-	}
 
-	FileView {
-		id: aiStateFile
-		path: root.aiStateFilePath
-		printErrors: false
-		onLoaded: root.parseAiState(text())
-		onLoadFailed: {
-			root.aiStateLoaded = true;
-			root.ensureSelectedAiModel();
-			root.saveAiState();
-		}
-	}
 
-	Process {
-		id: saveUsageProcess
-		command: ["true"]
-	}
 
-	Process {
-		id: aiModelsProcess
 
-		stdout: StdioCollector {
-			onStreamFinished: root.parseAiModels(text)
-		}
 
-		stderr: StdioCollector {
-			onStreamFinished: {
-				const message = String(text || "").trim();
-				if (message !== "") root.aiError = message;
-			}
-		}
 
-		onExited: function(exitCode) {
-			if (exitCode !== 0) {
-				if (!root.aiModelsFallbackRunning) {
-					root.aiModelsFallbackRunning = true;
-					aiModelsFallbackProcess.exec(["ollama", "list"]);
-				}
-				return;
-			}
-			root.aiModelsLoading = false;
-		}
-	}
 
-	Process {
-		id: aiModelsFallbackProcess
 
-		stdout: StdioCollector {
-			onStreamFinished: root.parseOllamaModelList(text)
-		}
 
-		stderr: StdioCollector {
-			onStreamFinished: {
-				const message = String(text || "").trim();
-				if (message !== "") root.aiError = message;
-			}
-		}
 
-		onExited: function(exitCode) {
-			root.aiModelsFallbackRunning = false;
-			root.aiModelsLoading = false;
-			if (exitCode !== 0 && root.aiModels.length === 0 && root.aiError === "")
-				root.aiError = "Could not read Ollama models";
-		}
-	}
 
-	Process {
-		id: aiModelInfoProcess
-
-		stdout: StdioCollector {
-			onStreamFinished: root.parseAiModelInfo(text)
-		}
-
-		onExited: function() {
-			root.aiModelInfoLoading = false;
-			if (root.aiModelInfoTarget !== root.selectedAiModel)
-				root.refreshAiModelInfo();
-		}
-	}
-
-	Process {
-		id: ollamaVersionProcess
-
-		command: ["curl", "-fsS", "http://127.0.0.1:11434/api/version"]
-		stdout: StdioCollector {
-			onStreamFinished: {
-				try {
-					root.ollamaVersion = String(JSON.parse(text)?.version || "");
-				} catch (error) {
-					root.ollamaVersion = "";
-				}
-			}
-		}
-	}
-
-	Process {
-		id: ollamaPsProcess
-
-		stdout: StdioCollector {
-			onStreamFinished: root.parseOllamaRunningModels(text)
-		}
-
-		stderr: StdioCollector {
-			onStreamFinished: {
-				const message = String(text || "").trim();
-				if (message !== "") root.ollamaPsProcessError = message;
-			}
-		}
-
-		onExited: function(exitCode) {
-			if (exitCode !== 0) {
-				if (!root.ollamaPsFallbackRunning) {
-					root.ollamaPsFallbackRunning = true;
-					ollamaPsFallbackProcess.exec(["ollama", "ps"]);
-				}
-				return;
-			}
-			root.ollamaRunningLoading = false;
-			root.ollamaPsProcessError = "";
-		}
-	}
-
-	Process {
-		id: ollamaPsFallbackProcess
-
-		stdout: StdioCollector {
-			onStreamFinished: root.parseOllamaRunningList(text)
-		}
-
-		stderr: StdioCollector {
-			onStreamFinished: {
-				const message = String(text || "").trim();
-				if (message !== "") root.ollamaPsProcessError = message;
-			}
-		}
-
-		onExited: function(exitCode) {
-			root.ollamaPsFallbackRunning = false;
-			root.ollamaRunningLoading = false;
-			if (exitCode !== 0 && root.ollamaManagerError === "")
-				root.ollamaManagerError = root.ollamaPsProcessError || "Could not read running Ollama models";
-			root.ollamaPsProcessError = "";
-		}
-	}
-
-	Process {
-		id: ollamaRemoveProcess
-
-		stderr: StdioCollector {
-			onStreamFinished: {
-				const message = String(text || "").trim();
-				if (message !== "") root.ollamaManagerError = message;
-			}
-		}
-
-		onExited: function(exitCode) {
-			root.ollamaRemovingModel = "";
-			if (exitCode !== 0 && root.ollamaManagerError === "")
-				root.ollamaManagerError = "Could not remove model";
-			root.refreshOllamaOverview(false);
-		}
-	}
-
-	Process {
-		id: ollamaPullProcess
-
-		stdout: SplitParser {
-			onRead: data => root.handleOllamaPullData(data)
-		}
-
-		stderr: StdioCollector {
-			onStreamFinished: {
-				const message = String(text || "").trim();
-				if (message !== "") root.ollamaManagerError = message;
-			}
-		}
-
-		onExited: function(exitCode) {
-			root.ollamaPulling = false;
-			if (exitCode !== 0 && root.ollamaManagerError === "")
-				root.ollamaManagerError = "Could not pull model";
-			root.refreshOllamaOverview(false);
-		}
-	}
-
-	Process {
-		id: aiChatProcess
-		stdinEnabled: true
-
-		onStarted: {
-			aiChatProcess.write(root.aiRequestPayload);
-			aiChatProcess.stdinEnabled = false;
-			root.aiRequestPayload = "";
-		}
-
-		stdout: SplitParser {
-			onRead: data => root.handleAiStreamData(data)
-		}
-
-		stderr: StdioCollector {
-			onStreamFinished: root.aiProcessError = String(text || "").trim()
-		}
-
-		onExited: function(exitCode) {
-			aiChatProcess.stdinEnabled = true;
-			if (!root.aiStreaming) return;
-			if (exitCode === 0) root.finishAiStream(root.aiProcessError);
-			else root.finishAiStream(root.aiProcessError || "Could not reach Ollama");
-		}
-	}
 
 	Process {
 		id: attachmentListProcess
@@ -2851,42 +1320,44 @@ Item {
 		}
 	}
 
-	Process {
-		id: attachmentReadProcess
 
-		stdout: StdioCollector {
-			onStreamFinished: root.aiAttachmentReadOutput = String(text || "")
-		}
 
-		stderr: StdioCollector {
-			onStreamFinished: root.aiAttachmentReadError = String(text || "")
-		}
 
-		onExited: exitCode => root.finishPendingAttachmentRead(exitCode)
+	// the chat views: their state is AiChat's, what the view does it asks for
+	Binding {
+		target: AiChat
+		property: "chatOpen"
+		value: root.inChatMode
 	}
 
-	Process {
-		id: primarySelectionProcess
-
-		stdout: StdioCollector {
-			onStreamFinished: root.aiPrimarySelectionOutput = String(text || "")
-		}
-
-		stderr: StdioCollector {
-			onStreamFinished: root.aiPrimarySelectionError = String(text || "")
-		}
-
-		onExited: exitCode => root.finishPrimarySelectionRead(exitCode)
+	Binding {
+		target: AiChat
+		property: "selecting"
+		value: root.chatSelectionActive
 	}
 
-	Process {
-		id: aiUnloadProcess
-	}
+	Connections {
+		target: AiChat
 
-	Component.onCompleted: {
-		root.refreshAiModels();
-		Qt.callLater(root.primePrimarySelection);
-		ollamaVersionProcess.running = true;
+		function onSearchRequested(text) {
+			root.setLauncherSearch(text);
+		}
+		function onMessagesReplaced() {
+			root.syncChatMessageModel();
+		}
+		function onMessageUpdated(index, message) {
+			root.updateVisibleChatMessage(index, message);
+		}
+		function onScrollRequested(force) {
+			root.scrollChatToEnd(force);
+		}
+		function onFollowRequested() {
+			root.chatAutoFollow = true;
+			root.chatSelectionActive = false;
+		}
+		function onPickerClosed() {
+			root.aiAttachmentPickerOpen = false;
+		}
 	}
 
 	// ══ presentation ═══════════════════════════════════════════════════════
@@ -2909,7 +1380,7 @@ Item {
 		return "apps";
 	}
 	readonly property string inputGlyph: {
-		if (root.editingMessageId !== "") return "pencil";
+		if (AiChat.editingMessageId !== "") return "pencil";
 		switch (root.mode) {
 		case "calc": return "calculator";
 		case "files": return Phone.pickingFile ? "cellphone" : "folder";
@@ -3031,7 +1502,7 @@ Item {
 	}
 	readonly property string enterHint: {
 		switch (root.mode) {
-		case "chat": return root.editingMessageId !== "" ? "resend" : "send";
+		case "chat": return AiChat.editingMessageId !== "" ? "resend" : "send";
 		case "calc":
 		case "convert":
 		case "translate": return "copy";
@@ -3068,7 +1539,7 @@ Item {
 	function fileGlyph(file) {
 		if (file.isDir) return "folder";
 		if (file.isImage) return "image";
-		const kind = root.attachmentKind(file);
+		const kind = AiChat.attachmentKind(file);
 		if (kind === "pdf" || kind === "document") return "file_document";
 		if (kind === "text") return "text_box";
 		return "file";
@@ -3156,7 +1627,7 @@ Item {
 		Rectangle {
 			id: searchBox
 
-			readonly property bool lit: searchField.activeFocus || commandTokenField.activeFocus || root.editingMessageId !== ""
+			readonly property bool lit: searchField.activeFocus || commandTokenField.activeFocus || AiChat.editingMessageId !== ""
 
 			Layout.fillWidth: true
 			implicitHeight: root.inChatMode
@@ -3165,7 +1636,7 @@ Item {
 			radius: Theme.radius.huge
 			color: searchBox.lit ? Theme.layer2 : Theme.layer1
 			border.width: 1
-			border.color: root.editingMessageId !== "" ? Theme.warning : (searchBox.lit ? Qt.alpha(Theme.primary, 0.45) : Theme.outline)
+			border.color: AiChat.editingMessageId !== "" ? Theme.warning : (searchBox.lit ? Qt.alpha(Theme.primary, 0.45) : Theme.outline)
 
 			// a soft light around the field while something is typed into it
 			RectangularShadow {
@@ -3174,7 +1645,7 @@ Item {
 				radius: parent.radius
 				blur: 22
 				spread: -2
-				color: root.editingMessageId !== "" ? Theme.warning : Theme.primary
+				color: AiChat.editingMessageId !== "" ? Theme.warning : Theme.primary
 				opacity: searchBox.lit && root.searchText !== "" ? (Theme.dark ? 0.32 : 0.22) : 0
 
 				Behavior on opacity {
@@ -3360,7 +1831,7 @@ Item {
 				placeholderText: root.activeModeView
 					? root.modePlaceholder
 					: root.inChatMode
-					? (root.editingMessageId !== "" ? "Edit your message" : "Message  ·  Shift+Enter for a new line")
+					? (AiChat.editingMessageId !== "" ? "Edit your message" : "Message  ·  Shift+Enter for a new line")
 					: (root.inAiMode
 						? "Search chats"
 						: (root.inFileMode
@@ -3503,7 +1974,7 @@ Item {
 				spacing: 4
 
 				IconButton {
-					visible: root.inChatMode && !root.aiStreaming
+					visible: root.inChatMode && !AiChat.aiStreaming
 					width: 36
 					height: 36
 					icon: "paperclip"
@@ -3513,26 +1984,26 @@ Item {
 				}
 
 				IconButton {
-					visible: root.inChatMode && !root.aiStreaming
+					visible: root.inChatMode && !AiChat.aiStreaming
 					width: 36
 					height: 36
 					icon: "send"
 					iconSize: 17
 					variant: "filled"
-					enabled: root.chatPrompt !== "" || root.aiPendingAttachments.length > 0
+					enabled: root.chatPrompt !== "" || AiChat.aiPendingAttachments.length > 0
 					onClicked: root.activateCurrent()
 				}
 
 				IconButton {
-					visible: (root.aiStreaming && root.inChatMode) || root.commandInputActive || searchField.text !== ""
+					visible: (AiChat.aiStreaming && root.inChatMode) || root.commandInputActive || searchField.text !== ""
 					width: 36
 					height: 36
-					icon: root.aiStreaming && root.inChatMode ? "stop" : "close"
+					icon: AiChat.aiStreaming && root.inChatMode ? "stop" : "close"
 					iconSize: 18
-					variant: root.aiStreaming && root.inChatMode ? "danger" : "ghost"
+					variant: AiChat.aiStreaming && root.inChatMode ? "danger" : "ghost"
 					onClicked: {
-						if (root.aiStreaming && root.inChatMode) root.cancelAiStream();
-						else if (root.editingMessageId !== "") root.cancelMessageEdit();
+						if (AiChat.aiStreaming && root.inChatMode) AiChat.cancelAiStream();
+						else if (AiChat.editingMessageId !== "") AiChat.cancelMessageEdit();
 						else root.leaveCommandInput("");
 					}
 				}
@@ -3556,11 +2027,11 @@ Item {
 					anchors.fill: parent
 					active: root.mode === "apps"
 					query: root.mode === "apps" ? root.searchText : ""
-					usage: root.usageMap
+					usage: AppUsage.usageMap
 					commands: root.appCommands
 					commandPins: root.commandPins
 					cursorAtEnd: searchField.cursorPosition === searchField.length
-					iconFor: entry => root.iconSource(entry)
+					iconFor: entry => AppIcons.forEntry(entry)
 					glyphFor: command => root.commandGlyph(command)
 					onLaunchRequested: entry => root.launchApp(entry)
 					onActionRequested: (entry, action) => root.launchAppAction(entry, action)
@@ -3741,13 +2212,13 @@ Item {
 					anchors.fill: parent
 					active: root.mode === "ai"
 					argument: root.modeArgument
-					model: root.selectedAiModel
-					models: root.aiModels.map(model => String(model.name || model.model || ""))
-					busy: root.aiStreaming
+					model: AiChat.selectedAiModel
+					models: AiChat.aiModels.map(model => String(model.name || model.model || ""))
+					busy: AiChat.aiStreaming
 					onRunRequested: (prompt, text) => root.runClipboardAction(prompt, text)
 					onChatRequested: prompt => {
-						root.startNewChat();
-						if (prompt !== "") root.sendChatPrompt(prompt);
+						AiChat.startNewChat();
+						if (prompt !== "") AiChat.sendChatPrompt(prompt);
 					}
 					onCommandRequested: query => root.setLauncherSearch(query)
 					onFilesRequested: query => {
@@ -4005,7 +2476,7 @@ Item {
 
 										Meta {
 											Layout.fillWidth: true
-											text: fileRow.file.isDir ? "Folder" : `${fileRow.file.suffix || "file"} · ${root.formatAttachmentSize(fileRow.file.size)}`
+											text: fileRow.file.isDir ? "Folder" : `${fileRow.file.suffix || "file"} · ${Format.bytes(fileRow.file.size)}`
 										}
 									}
 
@@ -4077,7 +2548,7 @@ Item {
 							text: "New chat"
 							icon: "plus"
 							variant: "filled"
-							onActivated: root.startNewChat()
+							onActivated: AiChat.startNewChat()
 						}
 					}
 
@@ -4106,14 +2577,14 @@ Item {
 								id: chatRow
 
 								required property var modelData
-								readonly property bool streamingHere: root.aiStreaming && String(chatRow.modelData.id || "") === root.aiStreamingChatId
+								readonly property bool streamingHere: AiChat.aiStreaming && String(chatRow.modelData.id || "") === AiChat.aiStreamingChatId
 
 								width: pastChatList.width
 								icon: chatRow.streamingHere ? "progress_clock" : "chat"
 								title: chatRow.modelData.title || "Untitled chat"
 								subtitle: `${chatRow.modelData.model || "Unknown model"} · ${root.formatChatTime(chatRow.modelData.updatedAt)} · ${(chatRow.modelData.messages || []).length} messages`
-								selected: String(chatRow.modelData.id || "") === root.activeChatId
-								onClicked: root.openPastChat(chatRow.modelData)
+								selected: String(chatRow.modelData.id || "") === AiChat.activeChatId
+								onClicked: AiChat.openPastChat(chatRow.modelData)
 
 								IconButton {
 									Layout.preferredWidth: 30
@@ -4123,7 +2594,7 @@ Item {
 									variant: "danger"
 									enabled: !chatRow.streamingHere
 									opacity: chatRow.hovered ? 1 : 0
-									onClicked: root.deleteChat(chatRow.modelData)
+									onClicked: AiChat.deleteChat(chatRow.modelData)
 
 									Behavior on opacity {
 										Anim {
@@ -4145,8 +2616,8 @@ Item {
 
 					StyledText {
 						Layout.fillWidth: true
-						visible: root.aiError !== ""
-						text: root.aiError
+						visible: AiChat.aiError !== ""
+						text: AiChat.aiError
 						tone: Theme.danger
 						horizontalAlignment: Text.AlignHCenter
 						font.pixelSize: Theme.size.small
@@ -4178,17 +2649,17 @@ Item {
 
 							Meta {
 								Layout.fillWidth: true
-								text: root.ollamaVersion !== "" ? `v${root.ollamaVersion} · ${root.aiModels.length} models installed` : `${root.aiModels.length} models installed`
+								text: AiChat.ollamaVersion !== "" ? `v${AiChat.ollamaVersion} · ${AiChat.aiModels.length} models installed` : `${AiChat.aiModels.length} models installed`
 							}
 						}
 
 						IconButton {
 							icon: "refresh"
 							variant: "tonal"
-							onClicked: root.refreshOllamaOverview()
+							onClicked: AiChat.refreshOllamaOverview()
 
 							RotationAnimator on rotation {
-								running: root.aiModelsLoading || root.ollamaRunningLoading
+								running: AiChat.aiModelsLoading || AiChat.ollamaRunningLoading
 								loops: Animation.Infinite
 								from: 0
 								to: 360
@@ -4221,25 +2692,25 @@ Item {
 									Layout.fillWidth: true
 									icon: "download"
 									placeholder: "Pull a model, e.g. qwen3:4b"
-									text: root.ollamaPullModel
-									enabled: !root.ollamaPulling
-									onEdited: text => root.ollamaPullModel = text
-									onAccepted: root.startOllamaPull(ollamaPullField.text)
+									text: AiChat.ollamaPullModel
+									enabled: !AiChat.ollamaPulling
+									onEdited: text => AiChat.ollamaPullModel = text
+									onAccepted: AiChat.startOllamaPull(ollamaPullField.text)
 								}
 
 								TextButton {
 									implicitHeight: 40
 									text: "Pull"
 									variant: "filled"
-									enabled: root.ollamaPullModel.trim() !== "" && !root.ollamaPulling
-									busy: root.ollamaPulling
-									onActivated: root.startOllamaPull(root.ollamaPullModel)
+									enabled: AiChat.ollamaPullModel.trim() !== "" && !AiChat.ollamaPulling
+									busy: AiChat.ollamaPulling
+									onActivated: AiChat.startOllamaPull(AiChat.ollamaPullModel)
 								}
 							}
 
 							ColumnLayout {
 								Layout.fillWidth: true
-								visible: root.ollamaPulling
+								visible: AiChat.ollamaPulling
 								spacing: 6
 
 								RowLayout {
@@ -4247,16 +2718,16 @@ Item {
 
 									StyledText {
 										Layout.fillWidth: true
-										text: root.ollamaPullStatus
+										text: AiChat.ollamaPullStatus
 										font.pixelSize: Theme.size.small
 										font.weight: Font.Medium
 									}
 
 									Meta {
 										text: [
-											root.ollamaPullTotal > 0 ? `${Math.round(root.ollamaPullProgress * 100)}%` : "",
-											root.formatTransferRate(root.ollamaPullSpeed),
-											root.formatDuration(root.ollamaPullEtaSeconds) !== "" ? `${root.formatDuration(root.ollamaPullEtaSeconds)} left` : ""
+											AiChat.ollamaPullTotal > 0 ? `${Math.round(AiChat.ollamaPullProgress * 100)}%` : "",
+											AiChat.formatTransferRate(AiChat.ollamaPullSpeed),
+											AiChat.formatDuration(AiChat.ollamaPullEtaSeconds) !== "" ? `${AiChat.formatDuration(AiChat.ollamaPullEtaSeconds)} left` : ""
 										].filter(value => value !== "").join(" · ")
 										tabular: true
 									}
@@ -4271,7 +2742,7 @@ Item {
 									Rectangle {
 										height: parent.height
 										radius: 4
-										width: parent.width * root.ollamaPullProgress
+										width: parent.width * AiChat.ollamaPullProgress
 										color: Theme.primary
 
 										Behavior on width {
@@ -4291,7 +2762,7 @@ Item {
 							Layout.preferredWidth: 10
 							Layout.preferredHeight: 10
 							radius: 5
-							color: root.ollamaRunningModels.length > 0 ? Theme.success : Theme.textFaint
+							color: AiChat.ollamaRunningModels.length > 0 ? Theme.success : Theme.textFaint
 						}
 
 						StyledText {
@@ -4301,7 +2772,7 @@ Item {
 
 						Meta {
 							Layout.fillWidth: true
-							text: root.ollamaRunningSummary()
+							text: AiChat.ollamaRunningSummary()
 						}
 					}
 
@@ -4319,7 +2790,7 @@ Item {
 							anchors.fill: parent
 							clip: true
 							spacing: 2
-							model: root.aiModels
+							model: AiChat.aiModels
 							boundsBehavior: Flickable.StopAtBounds
 							ScrollBar.vertical: ThinScrollBar {}
 
@@ -4328,8 +2799,8 @@ Item {
 
 								required property var modelData
 								readonly property string modelName: String(modelData?.name || modelData?.model || "")
-								readonly property bool running: root.isOllamaModelRunning(modelName)
-								readonly property bool removing: root.ollamaRemovingModel === modelName
+								readonly property bool running: AiChat.isOllamaModelRunning(modelName)
+								readonly property bool removing: AiChat.ollamaRemovingModel === modelName
 
 								width: ollamaInstalledList.width
 								icon: "robot"
@@ -4339,17 +2810,17 @@ Item {
 									modelRow.running ? "running" : "",
 									String(modelRow.modelData?.details?.parameter_size || ""),
 									String(modelRow.modelData?.details?.quantization_level || ""),
-									root.formatModelSize(modelRow.modelData?.size)
+									AiChat.formatModelSize(modelRow.modelData?.size)
 								].filter(value => value !== "").join(" · ")
-								selected: modelRow.modelName === root.selectedAiModel
+								selected: modelRow.modelName === AiChat.selectedAiModel
 								showHover: true
 
 								TextButton {
 									implicitHeight: 30
 									text: "Chat"
 									icon: "chat"
-									enabled: !root.aiStreaming
-									onActivated: root.startNewChatWithModel(modelRow.modelName)
+									enabled: !AiChat.aiStreaming
+									onActivated: AiChat.startNewChatWithModel(modelRow.modelName)
 								}
 
 								TextButton {
@@ -4360,15 +2831,15 @@ Item {
 									confirm: true
 									confirmText: "Remove"
 									busy: modelRow.removing
-									enabled: !root.aiStreaming && !ollamaRemoveProcess.running
-									onActivated: root.removeOllamaModel(modelRow.modelName)
+									enabled: !AiChat.aiStreaming && AiChat.ollamaRemovingModel === ""
+									onActivated: AiChat.removeOllamaModel(modelRow.modelName)
 								}
 							}
 						}
 
 						EmptyState {
 							anchors.centerIn: parent
-							visible: !root.aiModelsLoading && root.aiModels.length === 0
+							visible: !AiChat.aiModelsLoading && AiChat.aiModels.length === 0
 							icon: "robot"
 							title: "No models installed"
 							subtitle: "Pull one above to start chatting."
@@ -4377,8 +2848,8 @@ Item {
 
 					StyledText {
 						Layout.fillWidth: true
-						visible: root.ollamaManagerError !== "" || (!root.aiModelsLoading && root.aiModels.length === 0 && root.aiError !== "")
-						text: root.ollamaManagerError !== "" ? root.ollamaManagerError : root.aiError
+						visible: AiChat.ollamaManagerError !== "" || (!AiChat.aiModelsLoading && AiChat.aiModels.length === 0 && AiChat.aiError !== "")
+						text: AiChat.ollamaManagerError !== "" ? AiChat.ollamaManagerError : AiChat.aiError
 						tone: Theme.danger
 						horizontalAlignment: Text.AlignHCenter
 						font.pixelSize: Theme.size.small
@@ -4413,14 +2884,14 @@ Item {
 
 							StyledText {
 								Layout.fillWidth: true
-								text: root.activeChat?.title || (root.aiTemporaryChatEnabled ? "Temporary chat" : "New chat")
+								text: AiChat.activeChat?.title || (AiChat.aiTemporaryChatEnabled ? "Temporary chat" : "New chat")
 								font.pixelSize: Theme.size.title
 								font.weight: Font.Bold
 							}
 
 							Meta {
 								Layout.fillWidth: true
-								text: root.aiTemporaryChatEnabled ? "Not saved to history" : "Saved to history"
+								text: AiChat.aiTemporaryChatEnabled ? "Not saved to history" : "Saved to history"
 							}
 						}
 
@@ -4431,7 +2902,7 @@ Item {
 							implicitWidth: Math.min(220, modelChipRow.implicitWidth + 24)
 							radius: 16
 							color: root.modelMenuOpen ? Theme.primaryContainer : Theme.layer2
-							interactive: !root.aiStreaming && root.aiModels.length > 0
+							interactive: !AiChat.aiStreaming && AiChat.aiModels.length > 0
 							opacity: interactive ? 1 : 0.55
 							pressedScale: 0.94
 							onClicked: root.modelMenuOpen = !root.modelMenuOpen
@@ -4451,7 +2922,7 @@ Item {
 
 								StyledText {
 									Layout.fillWidth: true
-									text: root.selectedAiModel || "No model"
+									text: AiChat.selectedAiModel || "No model"
 									font.pixelSize: Theme.size.small
 									font.weight: Font.DemiBold
 								}
@@ -4474,28 +2945,28 @@ Item {
 						Chip {
 							text: "Think"
 							icon: "brain"
-							selected: root.effectiveAiThinkingEnabled
-							enabled: !root.aiStreaming && root.selectedAiSupportsThinking
+							selected: AiChat.effectiveAiThinkingEnabled
+							enabled: !AiChat.aiStreaming && AiChat.selectedAiSupportsThinking
 							opacity: enabled ? 1 : 0.45
-							onClicked: root.toggleAiThinking()
+							onClicked: AiChat.toggleAiThinking()
 						}
 
 						Chip {
 							text: "Short"
 							icon: "lightning_bolt"
-							selected: root.aiShortResponseEnabled
-							enabled: !root.aiStreaming
+							selected: AiChat.aiShortResponseEnabled
+							enabled: !AiChat.aiStreaming
 							opacity: enabled ? 1 : 0.45
-							onClicked: root.toggleShortResponse()
+							onClicked: AiChat.toggleShortResponse()
 						}
 
 						Chip {
 							text: "Temporary"
 							icon: "ghost"
-							selected: root.aiTemporaryChatEnabled
-							enabled: !root.aiStreaming
+							selected: AiChat.aiTemporaryChatEnabled
+							enabled: !AiChat.aiStreaming
 							opacity: enabled ? 1 : 0.45
-							onClicked: root.toggleTemporaryChat()
+							onClicked: AiChat.toggleTemporaryChat()
 						}
 					}
 
@@ -4518,8 +2989,8 @@ Item {
 							Rectangle {
 								height: parent.height
 								radius: 3
-								width: parent.width * root.activeContextProgress
-								color: root.activeContextProgress > 0.85 ? Theme.danger : Theme.primary
+								width: parent.width * AiChat.activeContextProgress
+								color: AiChat.activeContextProgress > 0.85 ? Theme.danger : Theme.primary
 
 								Behavior on width {
 									Anim {}
@@ -4528,13 +2999,13 @@ Item {
 						}
 
 						Meta {
-							text: `${root.formatTokenCount(root.activeContextUsed)} / ${root.formatTokenCount(root.activeContextLimit)}`
+							text: `${AiChat.formatTokenCount(AiChat.activeContextUsed)} / ${AiChat.formatTokenCount(AiChat.activeContextLimit)}`
 							tabular: true
 						}
 
 						Meta {
-							visible: root.activeResponseTokens > 0
-							text: `${root.activeTokensPerSecond.toFixed(1)} tok/s · ${root.activeResponseTokens} tokens`
+							visible: AiChat.activeResponseTokens > 0
+							text: `${AiChat.activeTokensPerSecond.toFixed(1)} tok/s · ${AiChat.activeResponseTokens} tokens`
 							tabular: true
 						}
 
@@ -4543,7 +3014,7 @@ Item {
 						}
 
 						Rectangle {
-							visible: root.chatLoadedTimerText !== ""
+							visible: AiChat.chatLoadedTimerText !== ""
 							Layout.preferredHeight: 22
 							Layout.preferredWidth: loadedRow.implicitWidth + 16
 							radius: 11
@@ -4559,11 +3030,11 @@ Item {
 									Layout.preferredWidth: 7
 									Layout.preferredHeight: 7
 									radius: 3.5
-									color: root.chatLoadedModel ? Theme.success : Theme.textFaint
+									color: AiChat.chatLoadedModel ? Theme.success : Theme.textFaint
 								}
 
 								Meta {
-									text: root.chatLoadedTimerText
+									text: AiChat.chatLoadedTimerText
 									tabular: true
 									font.pixelSize: Theme.size.tiny
 								}
@@ -4615,7 +3086,7 @@ Item {
 								readonly property bool fromUser: entry.role === "user"
 								readonly property string responseModelName: !fromUser && String(entry.model || "") !== "" ? String(entry.model) : ""
 								readonly property bool hasThinking: entry.role === "assistant"
-									&& Boolean(root.activeChat?.thinkingEnabled)
+									&& Boolean(AiChat.activeChat?.thinkingEnabled)
 									&& String(entry.thinking || "") !== ""
 								readonly property bool loadingModel: entry.role === "assistant"
 									&& entry.streaming
@@ -4624,14 +3095,14 @@ Item {
 								readonly property string displayText: String(entry.content || "") !== ""
 									? String(entry.content)
 									: (loadingModel ? "" : (entry.streaming ? "..." : ""))
-								readonly property var attachments: root.messageAttachments(entry)
+								readonly property var attachments: AiChat.messageAttachments(entry)
 								readonly property var markdownSegments: root.markdownImageSegments(displayText)
 								readonly property bool hasMarkdownImages: markdownSegments.some(segment => segment.kind === "image")
 								readonly property string markdownTextOnly: markdownSegments
 									.filter(segment => segment.kind === "text")
 									.map(segment => String(segment.text || ""))
 									.join("\n")
-								readonly property bool editingThis: root.editingMessageId !== "" && root.editingMessageId === String(entry.id || "")
+								readonly property bool editingThis: AiChat.editingMessageId !== "" && AiChat.editingMessageId === String(entry.id || "")
 
 								width: chatList.width
 								height: bubble.height + (messageRow.responseModelName !== "" ? 18 : 0)
@@ -4706,7 +3177,7 @@ Item {
 											radius: 14
 											color: Theme.layer2
 											pressedScale: 0.98
-											onClicked: root.toggleThinkingExpanded(messageRow.entry.id)
+											onClicked: AiChat.toggleThinkingExpanded(messageRow.entry.id)
 
 											RowLayout {
 												anchors.fill: parent
@@ -4724,7 +3195,7 @@ Item {
 													Layout.fillWidth: true
 													text: messageRow.entry.streaming && String(messageRow.entry.thinking || "") !== ""
 														? "Thinking…"
-														: (root.thinkingExpanded(messageRow.entry.id) ? "Reasoning" : "Show reasoning")
+														: (AiChat.thinkingExpanded(messageRow.entry.id) ? "Reasoning" : "Show reasoning")
 													tone: Theme.textMuted
 													font.pixelSize: Theme.size.small
 													font.weight: Font.Medium
@@ -4734,7 +3205,7 @@ Item {
 													icon: "chevron_down"
 													size: 14
 													color: Theme.textMuted
-													rotation: root.thinkingExpanded(messageRow.entry.id) ? 180 : 0
+													rotation: AiChat.thinkingExpanded(messageRow.entry.id) ? 180 : 0
 
 													Behavior on rotation {
 														SpatialAnim {
@@ -4784,7 +3255,7 @@ Item {
 														Glyph {
 															anchors.centerIn: parent
 															visible: sentChip.modelData.kind !== "image"
-															icon: root.isPrimarySelectionAttachment(sentChip.modelData) ? "text_box" : "paperclip"
+															icon: AiChat.isPrimarySelectionAttachment(sentChip.modelData) ? "text_box" : "paperclip"
 															size: 12
 														}
 													}
@@ -4807,7 +3278,7 @@ Item {
 										TextEdit {
 											id: thinkingText
 
-											visible: messageRow.hasThinking && root.thinkingExpanded(messageRow.entry.id)
+											visible: messageRow.hasThinking && AiChat.thinkingExpanded(messageRow.entry.id)
 											width: parent.width
 											color: Theme.textMuted
 											text: String(messageRow.entry.thinking || "")
@@ -4955,9 +3426,9 @@ Item {
 									height: 30
 									icon: "pencil"
 									iconSize: 15
-									enabled: !root.aiStreaming
+									enabled: !AiChat.aiStreaming
 									opacity: rowHover.hovered || messageRow.editingThis ? 1 : 0
-									onClicked: root.beginEditMessage(messageRow.entry)
+									onClicked: AiChat.beginEditMessage(messageRow.entry)
 
 									Behavior on opacity {
 										Anim {
@@ -4970,10 +3441,10 @@ Item {
 
 						EmptyState {
 							anchors.centerIn: parent
-							visible: root.activeMessages.length === 0
+							visible: AiChat.activeMessages.length === 0
 							icon: "chat"
-							title: root.selectedAiModel === "" ? "No model selected" : `Ask ${root.selectedAiModel}`
-							subtitle: root.selectedAiModel === ""
+							title: AiChat.selectedAiModel === "" ? "No model selected" : `Ask ${AiChat.selectedAiModel}`
+							subtitle: AiChat.selectedAiModel === ""
 								? "Install or pick an Ollama model first (>ollama)."
 								: "Type below and press Enter. Selected text is attached automatically."
 						}
@@ -4984,11 +3455,11 @@ Item {
 
 						Layout.fillWidth: true
 						Layout.preferredHeight: visible ? 32 : 0
-						visible: root.aiPendingAttachments.length > 0
+						visible: AiChat.aiPendingAttachments.length > 0
 						orientation: ListView.Horizontal
 						spacing: 6
 						clip: true
-						model: root.aiPendingAttachments
+						model: AiChat.aiPendingAttachments
 						boundsBehavior: Flickable.StopAtBounds
 
 						add: Transition {
@@ -5012,7 +3483,7 @@ Item {
 							color: Theme.layer2
 							border.width: pendingChip.loading ? 1 : 0
 							border.color: Qt.alpha(Theme.primary, 0.6)
-							opacity: pendingChip.modelData.kind === "image" && !root.selectedAiSupportsVision ? 0.45 : 1
+							opacity: pendingChip.modelData.kind === "image" && !AiChat.selectedAiSupportsVision ? 0.45 : 1
 
 							ClippingRectangle {
 								x: 5
@@ -5039,7 +3510,7 @@ Item {
 								Glyph {
 									anchors.centerIn: parent
 									visible: pendingChip.modelData.kind !== "image" && !pendingChip.loading
-									icon: root.isPrimarySelectionAttachment(pendingChip.modelData) ? "text_box" : "paperclip"
+									icon: AiChat.isPrimarySelectionAttachment(pendingChip.modelData) ? "text_box" : "paperclip"
 									size: 12
 								}
 							}
@@ -5062,7 +3533,7 @@ Item {
 								height: 24
 								icon: "close"
 								iconSize: 13
-								onClicked: root.removePendingAttachment(pendingChip.modelData.id)
+								onClicked: AiChat.removePendingAttachment(pendingChip.modelData.id)
 							}
 						}
 					}
@@ -5071,8 +3542,8 @@ Item {
 						id: chatError
 
 						Layout.fillWidth: true
-						visible: root.aiError !== ""
-						text: root.aiError
+						visible: AiChat.aiError !== ""
+						text: AiChat.aiError
 						tone: Theme.danger
 						horizontalAlignment: Text.AlignHCenter
 						font.pixelSize: Theme.size.small
@@ -5115,7 +3586,7 @@ Item {
 						anchors.margins: 6
 						clip: true
 						spacing: 2
-						model: root.aiModels
+						model: AiChat.aiModels
 						boundsBehavior: Flickable.StopAtBounds
 						ScrollBar.vertical: ThinScrollBar {}
 
@@ -5124,7 +3595,7 @@ Item {
 
 							required property var modelData
 							readonly property string modelName: String(modelData?.name || modelData?.model || "")
-							readonly property bool picked: modelOption.modelName === root.selectedAiModel
+							readonly property bool picked: modelOption.modelName === AiChat.selectedAiModel
 
 							width: modelMenuList.width
 							implicitHeight: 36
@@ -5132,7 +3603,7 @@ Item {
 							pressedScale: 0.97
 							color: modelOption.picked ? Theme.primaryContainer : (modelOption.hovered ? Theme.layer3 : "transparent")
 							onClicked: {
-								root.selectAiModel(modelOption.modelName);
+								AiChat.selectAiModel(modelOption.modelName);
 								root.modelMenuOpen = false;
 								searchField.forceActiveFocus();
 							}
@@ -5151,7 +3622,7 @@ Item {
 								}
 
 								Meta {
-									text: root.formatModelSize(modelOption.modelData?.size)
+									text: AiChat.formatModelSize(modelOption.modelData?.size)
 									font.pixelSize: Theme.size.tiny
 								}
 
@@ -5380,7 +3851,7 @@ Item {
 			}
 
 			KeyHint {
-				visible: root.mode === "chat" && root.aiStreaming
+				visible: root.mode === "chat" && AiChat.aiStreaming
 				key: "…"
 				label: "generating"
 			}
@@ -5481,7 +3952,7 @@ Item {
 				}
 
 				Meta {
-					text: root.selectedAiSupportsVision ? "Text, documents, PDF and images" : "Text, documents and PDF · images need a vision model"
+					text: AiChat.selectedAiSupportsVision ? "Text, documents, PDF and images" : "Text, documents and PDF · images need a vision model"
 				}
 			}
 
@@ -5511,8 +3982,8 @@ Item {
 						required property var modelData
 						required property int index
 						readonly property var file: modelData || ({})
-						readonly property bool supported: Boolean(file.isDir) || root.attachmentSupported(file)
-						readonly property bool picked: root.isAttachmentSelected(file.path)
+						readonly property bool supported: Boolean(file.isDir) || AiChat.attachmentSupported(file)
+						readonly property bool picked: AiChat.isAttachmentSelected(file.path)
 						readonly property bool current: attachmentFileList.currentIndex === attachRow.index
 
 						width: attachmentFileList.width
@@ -5520,7 +3991,7 @@ Item {
 						radius: Theme.radius.medium
 						pressedScale: 0.98
 						showHover: false
-						interactive: attachRow.file.isDir || (attachRow.supported && root.aiAttachmentLoadingId === "")
+						interactive: attachRow.file.isDir || (attachRow.supported && AiChat.aiAttachmentLoadingId === "")
 						opacity: attachRow.supported ? 1 : 0.4
 						color: attachRow.picked ? Theme.primaryContainer : (attachRow.current || attachRow.hovered ? Theme.layer1 : "transparent")
 						onPointed: attachmentFileList.currentIndex = attachRow.index
@@ -5573,7 +4044,7 @@ Item {
 									text: attachRow.file.isDir
 										? "Folder"
 										: (attachRow.supported
-											? `${attachRow.file.mimeType || root.attachmentKind(attachRow.file)} · ${root.formatAttachmentSize(attachRow.file.size)}`
+											? `${attachRow.file.mimeType || AiChat.attachmentKind(attachRow.file)} · ${Format.bytes(attachRow.file.size)}`
 											: (attachRow.file.isImage ? "Requires a vision model" : "Unsupported file"))
 								}
 							}
