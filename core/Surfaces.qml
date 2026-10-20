@@ -128,7 +128,7 @@ Scope {
 
 	// popped out, and the camera's feed
 	LazyLoader {
-		active: Plugins.on("printer") && Printer.windowed
+		active: Plugins.on("printer") && !Printer.surface.panelled && Printer.windowOpen
 
 		PrinterWindow {}
 	}
@@ -201,7 +201,7 @@ Scope {
 
 	// … and the same as a window of its own
 	LazyLoader {
-		active: Plugins.on("messages")
+		active: Plugins.on("messages") && !Messages.surface.panelled && Messages.windowOpen
 
 		MessagesWindow {}
 	}
@@ -214,7 +214,7 @@ Scope {
 
 	// … and the same as a window of its own
 	LazyLoader {
-		active: Plugins.on("identities")
+		active: Plugins.on("identities") && !Identities.surface.panelled && Identities.windowOpen
 
 		IdentityWindow {}
 	}
@@ -268,7 +268,7 @@ Scope {
 
 	// the torrent client's window; the downloads run in its daemon
 	LazyLoader {
-		active: Plugins.on("torrents")
+		active: Plugins.on("torrents") && !Torrents.surface.panelled && Torrents.windowOpen
 
 		TorrentsWindow {}
 	}

@@ -23,7 +23,6 @@ Singleton {
 	readonly property string socketPath: `${Paths.runtime}/torrents.sock`
 
 	property bool connected: false
-	property bool windowOpen: false
 
 	// every torrent as the daemon last told: { hash, name, phase, progress, done, size, down, up, peers, seeds, swarmSeeds, swarmPeers, eta, uploaded, downloaded, ratio, destination, added, finished, error, sequential, queue, pieces, availability }
 	// phase: "metadata" | "checking" | "queued" | "downloading" | "stalled" | "seeding" | "done" | "paused" | "error" | "moving"
@@ -69,26 +68,27 @@ Singleton {
 	// ── where it shows ─────────────────────────────────────────────────────
 	// under the bar (torrents-bar, a panel of the bar's icon) or popped out
 	// into a window of its own; which one is kept (torrents-ui.json)
-	property bool windowed: false
-	readonly property bool panelled: Plugins.on("torrents-bar") && !root.windowed
-	readonly property bool shown: root.panelled ? Popups.current === "torrents" : root.windowOpen
+	property alias surface: popout
+	property alias windowed: popout.windowed
+	property alias windowOpen: popout.windowOpen
+	readonly property bool panelled: popout.panelled
+	readonly property bool shown: popout.shown
+
+	Popout {
+		id: popout
+
+		popup: "torrents"
+		panel: Plugins.on("torrents-bar")
+	}
 
 	function open() {
 		if (!root.enabled) return;
-		if (root.panelled) {
-			if (Popups.current !== "torrents") Popups.withFocusedScreen(screen => Popups.open("torrents", screen));
-		} else {
-			root.windowOpen = true;
-		}
+		popout.open();
 		root.wake();
 	}
 
 	function close() {
-		if (root.panelled) {
-			if (Popups.current === "torrents") Popups.close();
-		} else {
-			root.windowOpen = false;
-		}
+		popout.close();
 	}
 
 	function toggle() {
@@ -97,15 +97,12 @@ Singleton {
 	}
 
 	function popOut() {
-		if (Popups.current === "torrents") Popups.close();
-		root.windowed = true;
-		root.windowOpen = true;
+		popout.popOut();
 		root.saveUi();
 	}
 
 	function dock() {
-		root.windowOpen = false;
-		root.windowed = false;
+		popout.dock();
 		root.saveUi();
 		root.open();
 	}

@@ -28,9 +28,17 @@ Singleton {
 	readonly property bool configured: root.address !== ""
 
 	// ── surface: a panel under the bar, or a window of its own ───────────
-	property bool windowed: false
-	property bool windowOpen: false
-	readonly property bool shown: root.windowed ? root.windowOpen : Popups.current === "printer"
+	property alias surface: popout
+	property alias windowed: popout.windowed
+	property alias windowOpen: popout.windowOpen
+	readonly property bool shown: popout.shown
+
+	Popout {
+		id: popout
+
+		popup: "printer"
+	}
+
 	// "print" | "ace" | "stats"
 	property string tab: "print"
 
@@ -361,13 +369,11 @@ Singleton {
 	// ── surface ───────────────────────────────────────────────────────────
 	function open() {
 		if (!root.enabled) return;
-		if (root.windowed) root.windowOpen = true;
-		else Popups.withFocusedScreen(screen => Popups.open("printer", screen));
+		popout.open();
 	}
 
 	function close() {
-		if (root.windowed) root.windowOpen = false;
-		else if (Popups.current === "printer") Popups.close();
+		popout.close();
 	}
 
 	function toggle() {
@@ -382,15 +388,12 @@ Singleton {
 	}
 
 	function popOut() {
-		if (Popups.current === "printer") Popups.close();
-		root.windowed = true;
-		root.windowOpen = true;
+		popout.popOut();
 		root.save();
 	}
 
 	function dock() {
-		root.windowOpen = false;
-		root.windowed = false;
+		popout.dock();
 		root.save();
 		root.open();
 	}

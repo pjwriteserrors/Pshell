@@ -50,9 +50,16 @@ Singleton {
 	property real awakeUntil: 0
 
 	// a window of its own instead of the panel, and whether that window is up
-	property bool windowed: false
-	property bool windowOpen: false
-	readonly property bool shown: root.windowed ? root.windowOpen : Popups.current === "identity"
+	property alias surface: popout
+	property alias windowed: popout.windowed
+	property alias windowOpen: popout.windowOpen
+	readonly property bool shown: popout.shown
+
+	Popout {
+		id: popout
+
+		popup: "identity"
+	}
 
 	// looked at from the phone (core/phone/IdentitiesTopic.qml), and which one:
 	// that counts like the surface being up, for that identity
@@ -74,13 +81,11 @@ Singleton {
 	function open(view) {
 		if (!root.enabled) return;
 		root.view = view || (root.current ? "card" : "list");
-		if (root.windowed) root.windowOpen = true;
-		else Popups.withFocusedScreen(screen => Popups.open("identity", screen));
+		popout.open();
 	}
 
 	function close() {
-		if (root.windowed) root.windowOpen = false;
-		else if (Popups.current === "identity") Popups.close();
+		popout.close();
 	}
 
 	function toggle() {
@@ -89,15 +94,12 @@ Singleton {
 	}
 
 	function popOut() {
-		if (Popups.current === "identity") Popups.close();
-		root.windowed = true;
-		root.windowOpen = true;
+		popout.popOut();
 		root.save();
 	}
 
 	function dock() {
-		root.windowOpen = false;
-		root.windowed = false;
+		popout.dock();
 		root.save();
 		root.open(root.view);
 	}
