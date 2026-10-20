@@ -209,11 +209,14 @@ Singleton {
 	readonly property var profiles: root.config.profiles ?? []
 	readonly property string activeProfile: root.config.active ?? ""
 	readonly property var active: root.profiles.find(p => p.id === root.activeProfile) ?? null
-	property bool gaming: Plugins.on("games") && Games.running.length > 0
+	readonly property bool gaming: GameMode.playing
+	// game haptics play only while the game has the focus
+	readonly property bool gameFocused: GameMode.focused
 	onGamingChanged: {
-		root.send({ op: "gaming", on: root.gaming });
+		root.send({ op: "gaming", on: root.gaming, focused: root.gameFocused });
 		root.followContext();
 	}
+	onGameFocusedChanged: root.send({ op: "gaming", on: root.gaming, focused: root.gameFocused })
 	onFocusAppChanged: root.followContext()
 	// the profile the app or the game last asked for ("" none); a switch by
 	// itself happens only when this changes
@@ -340,6 +343,9 @@ Singleton {
 
 	// ── live game haptics ─────────────────────────────────────────────────
 	property bool rumbling: false
+	// the presses of a game are felt (Triggers in the daemon)
+	property bool triggering: false
+	signal triggered(string key, string label)
 	property real bass: 0
 	property real bassThreshold: 0
 	signal hit(real strength)
@@ -458,6 +464,12 @@ Singleton {
 		case "rumble":
 			root.rumbling = data.on === true;
 			break;
+		case "triggers":
+			root.triggering = data.on === true;
+			break;
+		case "trigger":
+			root.triggered(data.key ?? "", data.label ?? "");
+			break;
 		case "bass":
 			root.bass = data.level ?? 0;
 			root.bassThreshold = data.threshold ?? 0;
@@ -549,6 +561,7 @@ Singleton {
 		}
 		onRunningChanged: if (daemon.running) {
 			if (!root.hapticsOnly) root.send({ op: "config", config: root.config });
+			root.send({ op: "gaming", on: root.gaming, focused: root.gameFocused });
 			// niri's events from the shell's own stream, the whole state first
 			if (Niri.ready) for (const line of Niri.replay()) daemon.write(`{"op":"niri","event":${line}}\n`);
 			if (root.watching) root.send({ op: "watch", on: true });

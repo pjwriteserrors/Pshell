@@ -11,7 +11,8 @@ import Quickshell.Io
 Singleton {
 	id: root
 
-	readonly property bool available: Plugins.on("find-mouse")
+	// a game (game mode) has the mouse to itself
+	readonly property bool available: Plugins.on("find-mouse") && !(GameMode.active && GameMode.pauseFindMouse)
 	// wanted: the pointer is being shaken, or was a moment ago
 	property bool active: false
 	// the screen the pointer is on and where, once it is known

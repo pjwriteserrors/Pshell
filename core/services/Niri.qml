@@ -23,6 +23,8 @@ Singleton {
 	property string tasksKey: ""
 	// the focused window covers its whole output (fullscreen video, games …)
 	property bool focusedFullscreen: false
+	// the focused window's id, -1 none
+	property int focusedId: -1
 	// screencasts: [{ session_id, target: { Output | Window }, is_active, pw_node_id, … }]
 	property var casts: []
 	// the stream is up and has told the whole state
@@ -218,6 +220,7 @@ Singleton {
 		root.windows = windows.map(window => Object.assign({}, window));
 
 		const focused = windows.find(w => w.is_focused);
+		root.focusedId = focused ? Number(focused.id) : -1;
 		const screen = focused ? Quickshell.screens.find(s => String(s.name) === String(wsById[focused.workspace_id]?.output ?? "")) : null;
 		const size = focused?.layout?.tile_size;
 		root.focusedFullscreen = !!screen && Array.isArray(size) && !focused.is_floating

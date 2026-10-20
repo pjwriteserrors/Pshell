@@ -1059,6 +1059,18 @@ Scope {
 		}
 	}
 
+	// game mode: on, off or auto (follows the games)
+	IpcHandler {
+		target: "gamemode"
+
+		function set(value: string): void {
+			GameMode.setForce(value);
+		}
+		function state(): string {
+			return JSON.stringify({ active: GameMode.active, focused: GameMode.focused, force: GameMode.force, windows: Games.windows });
+		}
+	}
+
 	// whether the shell draws the wallpaper (scripts/apply_wallpaper_runtime.sh asks)
 	IpcHandler {
 		target: "wallpaper"

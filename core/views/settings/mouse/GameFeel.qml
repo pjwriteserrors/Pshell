@@ -7,11 +7,16 @@ import qs.style.widgets
 import qs.core.services
 import qs.core.views.settings
 
-// Game haptics: the low end of what plays (a shot, an explosion, a kick
-// drum) felt under the thumb. When, how easily it fires, and a meter that
-// shows what it hears and each hit as it lands.
+// Game haptics: what is pressed in a game (the button that shoots, the key
+// that reloads – TriggerBinds), or the low end of what plays (a shot, an
+// explosion, a kick drum), or both, felt under the thumb. When, from what,
+// and for the sound a meter that shows what it hears and each hit.
 ColumnLayout {
 	id: root
+
+	readonly property string source: Mouse.option("rumbleSource", "input")
+	readonly property bool on: Mouse.option("rumble", "off") !== "off"
+	readonly property bool sound: root.on && root.source !== "input"
 
 	spacing: 12
 
@@ -23,7 +28,7 @@ ColumnLayout {
 			Layout.preferredWidth: 36
 			Layout.preferredHeight: 36
 			radius: Theme.radius.medium
-			color: Mouse.rumbling ? Theme.primary : Theme.primarySoft
+			color: Mouse.rumbling || Mouse.triggering ? Theme.primary : Theme.primarySoft
 
 			Behavior on color {
 				ColorAnim {}
@@ -33,7 +38,7 @@ ColumnLayout {
 				anchors.centerIn: parent
 				icon: "gamepad_variant"
 				size: 18
-				color: Mouse.rumbling ? Theme.onPrimary : Theme.primary
+				color: Mouse.rumbling || Mouse.triggering ? Theme.onPrimary : Theme.primary
 			}
 		}
 
@@ -48,7 +53,7 @@ ColumnLayout {
 
 			StyledText {
 				Layout.fillWidth: true
-				text: Mouse.rumbling ? "Listening – every hit of the bass is felt" : (Mouse.option("rumble", "off") === "games" ? (Plugins.on("games") ? "Starts with a game from the library and stops with it" : "Needs the Games plugin to know when you play") : "The bass of what plays, felt under the thumb")
+				text: Mouse.triggering || Mouse.rumbling ? (Mouse.triggering ? "On – the game's presses are felt" : "Listening – every hit of the bass is felt") : (Mouse.option("rumble", "off") === "games" ? (Plugins.on("games") ? "While a game has the focus, whatever started it" : "Needs the Games plugin to know when you play") : "Shots, reloads and hits, felt under the thumb")
 				tone: Theme.textSubtle
 				font.pixelSize: Theme.size.small
 				wrapMode: Text.WordWrap
@@ -61,6 +66,32 @@ ColumnLayout {
 			current: Mouse.option("rumble", "off")
 			onSelected: value => Mouse.setOption("rumble", value)
 		}
+	}
+
+	RowLayout {
+		Layout.fillWidth: true
+		visible: root.on
+		spacing: 14
+
+		StyledText {
+			Layout.fillWidth: true
+			text: root.source === "sound" ? "The sound fires on anything loud enough – voices and music too." : (root.source === "both" ? "Presses, and the bass of the sound on top." : "Only what you press – exact, whatever the game, silent when people talk.")
+			tone: Theme.textSubtle
+			font.pixelSize: Theme.size.small
+			wrapMode: Text.WordWrap
+		}
+
+		Segmented {
+			Layout.preferredWidth: 300
+			options: [{ value: "input", label: "Presses", icon: "mouse" }, { value: "sound", label: "Sound", icon: "volume_high" }, { value: "both", label: "Both" }]
+			current: root.source
+			onSelected: value => Mouse.setOption("rumbleSource", value)
+		}
+	}
+
+	TriggerBinds {
+		Layout.fillWidth: true
+		visible: root.on && root.source !== "sound"
 	}
 
 	// what it hears: the bass, the line a hit has to cross, the hits
@@ -189,7 +220,7 @@ ColumnLayout {
 	}
 
 	ValueSlider {
-		visible: Mouse.option("rumble", "off") !== "off"
+		visible: root.sound
 		from: 0
 		to: 100
 		step: 5
@@ -201,7 +232,7 @@ ColumnLayout {
 	}
 
 	ValueSlider {
-		visible: Mouse.option("rumble", "off") !== "off"
+		visible: root.sound
 		from: 60
 		to: 400
 		step: 10
@@ -214,7 +245,7 @@ ColumnLayout {
 
 	StyledText {
 		Layout.fillWidth: true
-		visible: Mouse.option("rumble", "off") !== "off"
+		visible: root.sound
 		text: "It listens to the default output (its monitor) at 8 kHz, about 1 % of one core, and only while it is on. Strong hits play a hard bump, weaker ones a soft bump or a tick."
 		tone: Theme.textFaint
 		font.pixelSize: Theme.size.small

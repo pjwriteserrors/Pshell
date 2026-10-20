@@ -11,7 +11,7 @@ import Quickshell.Io
 Singleton {
 	id: root
 
-	readonly property bool shaking: Plugins.on("find-mouse")
+	readonly property bool shaking: FindMouse.available
 	readonly property bool dragging: Plugins.on("drop-commands") && Shelf.shake
 	// set by the RPG while it plays
 	property bool counting: false

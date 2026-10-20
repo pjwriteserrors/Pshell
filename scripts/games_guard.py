@@ -13,6 +13,10 @@ is its process (Wayland windows), its app-id being the name of one of the
 game's programs (Wine and X11 games, whose pid niri only knows as
 xwayland-satellite's) or its title being the game's name.
 
+Every window is decided once when it opens (again when it changes in its
+first HOLD seconds); whenever the set of game windows changes a line
+{"gaming": [{id, app, title}]} tells the shell (game mode).
+
 A game's window is made fullscreen when it opens and again whenever it
 leaves fullscreen within its first HOLD seconds (games that size their
 window while they start); after that Mod+Shift+F is the user's. niri only
@@ -123,6 +127,16 @@ class Guard:
         self.outputs = {}
         self.outputs_at = -10.0
         self.workspaces = {}
+        self.told = None
+
+    def tell(self):
+        """The game windows, when they are not what was said last."""
+        now = sorted(wid for wid, state in self.state.items() if state.get("game") and wid in self.windows)
+        if now == self.told:
+            return
+        self.told = now
+        print(json.dumps({"gaming": [{"id": wid, "app": self.windows[wid].get("app_id") or "",
+                                      "title": self.windows[wid].get("title") or ""} for wid in now]}), flush=True)
 
     def load_outputs(self):
         self.outputs_at = time.monotonic()
@@ -171,7 +185,11 @@ class Guard:
         for wid in ids:
             window = self.windows.get(wid)
             state = self.state.get(wid)
-            if not window or not state or now - state["seen"] > HOLD:
+            if not window or not state:
+                continue
+            fresh = now - state["seen"] <= HOLD
+            # a window from before: decided once, never made fullscreen
+            if not fresh and state["game"] is not None:
                 continue
             if not state["game"]:
                 if state["game"] is False and not state.get("changed"):
@@ -180,7 +198,7 @@ class Guard:
                     games = games_now()
                 state["game"] = self.is_game(window, games)
                 state["changed"] = False
-                if not state["game"]:
+                if not state["game"] or not fresh:
                     continue
             if self.fullscreen(window):
                 state["asked"] = False
@@ -211,10 +229,12 @@ class Guard:
             for window in event["WindowsChanged"]["windows"]:
                 self.opened(window, not first)
             self.consider(list(self.windows))
+            self.tell()
         elif "WindowOpenedOrChanged" in event:
             window = event["WindowOpenedOrChanged"]["window"]
             self.opened(window, True)
             self.consider([window["id"]])
+            self.tell()
         elif "WindowLayoutsChanged" in event:
             changed = []
             for wid, layout in event["WindowLayoutsChanged"]["changes"]:
@@ -226,6 +246,7 @@ class Guard:
             wid = event["WindowClosed"]["id"]
             self.windows.pop(wid, None)
             self.state.pop(wid, None)
+            self.tell()
 
 
 def once():

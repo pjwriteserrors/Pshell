@@ -30,6 +30,8 @@ Singleton {
 	property bool gridKey: false
 	// ids of the games that run
 	property var running: []
+	// the windows games_guard.py takes for games: [{id, app, title}]
+	property var windows: []
 	// the surface is up
 	property bool watched: false
 	// scripts/games_guard.py keeps games fullscreen
@@ -408,6 +410,18 @@ Singleton {
 		stdinEnabled: true
 		command: ["python3", "-u", `${Paths.scripts}/games_guard.py`]
 		environment: ({ PSHELL_NIRI_EVENTS: "stdin" })
+		stdout: SplitParser {
+			onRead: line => {
+				let data = null;
+				try {
+					data = JSON.parse(line);
+				} catch (error) {
+					return;
+				}
+				if (Array.isArray(data.gaming)) root.windows = data.gaming;
+			}
+		}
+		onExited: root.windows = []
 		// niri's events from the shell's own stream, the whole state first
 		onRunningChanged: if (guard.running && Niri.ready) for (const line of Niri.replay()) guard.write(line + "\n")
 	}
