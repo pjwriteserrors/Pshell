@@ -1,4 +1,6 @@
 {
+	"terminal": "kitty",
+	"browser": "floorp",
 	"primaryOutput": "DP-2",
 	"weather": {
 		"city": "Paderborn"

@@ -990,7 +990,7 @@ Singleton {
 			root.say("Install ClamAV with your package manager", "alert_circle_outline");
 			return;
 		}
-		Quickshell.execDetached(["kitty", "--title", "Install ClamAV", "sh", "-c", `${command}; echo; echo 'Done – this window can close.'; read -r _`]);
+		Quickshell.execDetached(Terminal.command({ title: "Install ClamAV" }, ["sh", "-c", `${command}; echo; echo 'Done – this window can close.'; read -r _`]));
 	}
 	// the window opens its settings (on a page)
 	signal settingsAsked(string page)
@@ -1615,12 +1615,12 @@ Singleton {
 	}
 
 	function terminal(folder) {
-		root.spawnFor(String(folder), ["kitty", "--directory", String(folder)], true);
+		root.spawnFor(String(folder), Terminal.command({ dir: String(folder) }, []), true);
 	}
 
 	// a coding agent in a terminal, in that folder
 	function agent(folder) {
-		root.spawnFor(String(folder), ["kitty", "--directory", String(folder), "claude"], true);
+		root.spawnFor(String(folder), Terminal.command({ dir: String(folder) }, ["claude"]), true);
 	}
 
 	// ── reading ────────────────────────────────────────────────────────────

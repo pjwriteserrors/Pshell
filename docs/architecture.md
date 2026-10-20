@@ -84,6 +84,8 @@ or when a plugin has neither picture, scene nor icon.
 | --- | --- |
 | `plugins` | what a fresh setup of this machine starts with, where it differs from the registry's defaults |
 | `primaryOutput` | output for desktop widgets and the default screen |
+| `terminal` | the terminal things open in (kitty, foot, alacritty, ghostty, wezterm or any that takes `-e`); else `$TERMINAL`, else kitty |
+| `browser` | the browser pages and searches open in; else `$BROWSER`, else the desktop's default (`xdg-open`) |
 | `weather.city` | |
 | `asteroids.magnitude` | the faintest asteroid `asteroid-alerts` speaks of (default 10, binoculars; 6 is the naked eye) |
 | `wallpapers` | the wallpaper library (outside the repo) |

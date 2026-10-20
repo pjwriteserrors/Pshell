@@ -919,7 +919,7 @@ Item {
 
 		AppUsage.recordLaunch(entry);
 		Quickshell.execDetached({
-			command: entry.runInTerminal ? ["app2unit", "--", "kitty", "-e", ...entry.command] : ["app2unit", "--", ...entry.command],
+			command: entry.runInTerminal ? ["app2unit", "--"].concat(Terminal.command({}, entry.command)) : ["app2unit", "--", ...entry.command],
 			workingDirectory: entry.workingDirectory
 		});
 		closeAfterLaunch.restart();
@@ -931,7 +931,7 @@ Item {
 
 		AppUsage.recordLaunch(entry);
 		Quickshell.execDetached({
-			command: entry.runInTerminal ? ["app2unit", "--", "kitty", "-e", ...action.command] : ["app2unit", "--", ...action.command],
+			command: entry.runInTerminal ? ["app2unit", "--"].concat(Terminal.command({}, action.command)) : ["app2unit", "--", ...action.command],
 			workingDirectory: entry.workingDirectory
 		});
 		closeAfterLaunch.restart();

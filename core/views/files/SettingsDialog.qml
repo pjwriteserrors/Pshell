@@ -1033,7 +1033,7 @@ DialogFrame {
 							text: "Install"
 							icon: "download"
 							onClicked: {
-								Quickshell.execDetached(["kitty", "--title", "Install gocryptfs", "sh", "-c", `${Files.vaults.install}; echo; echo 'Done – this window can close.'; read -r _`]);
+								Quickshell.execDetached(Terminal.command({ title: "Install gocryptfs" }, ["sh", "-c", `${Files.vaults.install}; echo; echo 'Done – this window can close.'; read -r _`]));
 								vaultRecheck.restart();
 							}
 						}
