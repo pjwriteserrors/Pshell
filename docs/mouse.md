@@ -127,11 +127,19 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
 
 ## Haptics beyond clicks
 
-- **Game haptics** (`rumble`: off, games, always): `parec` takes the default
-  output's monitor at 8 kHz, the low end of each 20 ms is weighed against the
-  last second, and a hit that stands out plays a hard bump, a soft bump or a
-  tick by its strength (`rumbleSensitivity`, at most every `rumbleGap` ms).
-  The page shows the bass, the line to cross and each hit.
+- **Game haptics** (`rumble`: off, games, always; `rumbleSource`: input,
+  sound, both). *Presses* (the default): while a game's window has the focus
+  (game mode, `GameMode.focused`) the daemon reads the keys and buttons
+  (`Triggers`: evdev, nothing grabbed, its own virtual devices left out) and
+  plays a waveform for every bound press – `rumbleBinds`: `{key: "BTN_LEFT"
+  | code, label, feel, repeat (ms of automatic fire while held), then:
+  [[ms, feel]]}`; shoot, aim and reload (with its own pattern) come bound.
+  Exact and the same in every game; talk and music are never felt. *Sound*:
+  `parec` takes the default output's monitor at 8 kHz, the low end of each
+  20 ms is weighed against the last second, and a hit that stands out plays
+  a hard bump, a soft bump or a tick by its strength (`rumbleSensitivity`,
+  at most every `rumbleGap` ms). The page records keys and buttons for the
+  presses, and shows the bass, the line to cross and each hit for the sound.
 - **Feel the desktop** (`feel`: moment → waveform): another workspace, the
   focus on another monitor, a window opening or closing, a window wanting
   attention – from niri's event stream.

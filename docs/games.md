@@ -97,3 +97,27 @@ Fullscreen and the controller, for every game however it starts:
   `games.py steam-pads` does it now (restarting Steam if it runs).
 - A launch with no controller on (no joystick node) says so in a
   notification; Wine, Proton and SDL pick one up that is switched on later.
+
+## A game's landing page
+
+I (or the chart button; the bar's panel has one too) opens a page over the
+library: how far along the game is – the play time against HowLongToBeat's
+story, story with extras or everything (`games.py stats`; the goal is kept
+per game with `games.py goal`, or the game is marked beaten) –, Steam's
+achievements from the client's own cache (`appcache/stats`, the latest
+unlocked with their icons), and the play of the last four weeks, a bar a
+day, from the sessions the shell keeps (`game-sessions.json`: every game
+seen running, from first to last seen; the watcher of a game started here
+keeps its own, merged). HowLongToBeat answers are cached for 30 days
+(`~/.cache/pshell/games/hltb.json`), a game it does not know is asked again
+after a day.
+
+## Game mode
+
+While a game's window is open (`games_guard.py` decides every window once
+and tells the shell; Steam games started in Steam count too) game mode is
+on (plugin `game-mode`, `ipc.sh gamemode set on|off|auto`): shaking the
+mouse no longer looks for it, notifications go quiet if wanted
+(`gamemode.json`), and the mouse's game haptics play while the game has the
+focus.
+

@@ -41,6 +41,11 @@ system/          root-level setup: SDDM theme, fingerprint PAM
 
 ## Done by the shell itself
 
+The bar's items and their order are `BarLayout` (`bar.json`, Pshell
+settings › Bar & wallpaper); `style/bar/BarZone.qml` maps an item id to
+what the style draws for it. Game mode (`GameMode`, plugin `game-mode`)
+follows the game windows `games_guard.py` reports.
+
 What desktops usually leave to helpers the shell does, so it looks like the
 shell and costs nothing extra: the wallpaper (`Wallpaper`, swaybg and awww are
 only a fallback), the clipboard history (`Clipboard`, `scripts/clipboard`),
@@ -766,7 +771,9 @@ stay on the phone. A file `demo` in the state folder, or
 2. the wallpaper runtime in the background (`apply_wallpaper_runtime.sh`):
    it writes `current/` of the theme state, which the shell follows and draws
    (`Wallpaper`, plugin `wallpaper-layer`: one background surface a screen,
-   the picture fading in); a video plays in mpvpaper above the shell's still
+   the new picture blooming out of the bar – `wallpaper_reveal.frag` – or
+   fading in, and a second one niri puts into the overview's backdrop by
+   the layer-rule in `pshell.kdl`); a video plays in mpvpaper above the shell's still
    frame, one systemd user unit an output. While the shell does not answer
    (`ipc.sh wallpaper owned`), swaybg and awww paint instead. Beside it
 3. niri window animation, if given, then wallust (`~/.cache/wal`), GTK
