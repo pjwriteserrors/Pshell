@@ -18,7 +18,7 @@ PanelWindow {
 	required property var modelData
 	screen: modelData
 
-	readonly property bool here: (Niri.workspaces.find(workspace => workspace.focused)?.output ?? root.modelData.name) === root.modelData.name
+	readonly property bool here: (Niri.workspaces.find(workspace => workspace.is_focused)?.output ?? root.modelData.name) === root.modelData.name
 	property string control: ""
 	property bool wanted: false
 	property string firedWay: ""

@@ -4,7 +4,8 @@
     scripts/games_guard.py          runs until stdin closes (the shell went)
     scripts/games_guard.py --once   decides the windows open now and exits
 
-Follows niri's event stream. A window is a game's when its app-id is
+Follows niri's event stream (the shell's, on stdin, when PSHELL_NIRI_EVENTS
+is "stdin"; else one of its own). A window is a game's when its app-id is
 `steam_app_<n>` (Proton, through Steam or a shortcut), or it belongs to a
 game that runs: Steam's reaper (`SteamLaunch AppId=<id>`, also when the game
 was started in Steam itself) or a watcher of games.py (`_play`). Belonging
@@ -238,6 +239,16 @@ def once():
 def main():
     if "--once" in sys.argv:
         once()
+        return
+    # the shell hands its own stream over (core/services/Niri.qml), one
+    # event a line, starting with the whole state; its end is the shell's
+    if os.environ.get("PSHELL_NIRI_EVENTS") == "stdin":
+        guard = Guard()
+        for line in sys.stdin:
+            try:
+                guard.event(json.loads(line))
+            except (ValueError, KeyError, TypeError, subprocess.SubprocessError):
+                continue
         return
     stream = subprocess.Popen(["niri", "msg", "-j", "event-stream"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     guard = Guard()

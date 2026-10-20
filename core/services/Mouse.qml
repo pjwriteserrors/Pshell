@@ -522,12 +522,22 @@ Singleton {
 		onTriggered: root.error = ""
 	}
 
+	Connections {
+		target: Niri
+		enabled: daemon.running
+
+		function onLine(text, event) {
+			if (/^\{"(Window|Workspace)/.test(text)) daemon.write(`{"op":"niri","event":${text}}\n`);
+		}
+	}
+
 	Process {
 		id: daemon
 
 		running: root.enabled && root.loaded
 		stdinEnabled: true
 		command: ["python3", "-u", root.script]
+		environment: ({ PSHELL_NIRI_EVENTS: "stdin" })
 		stdout: SplitParser {
 			onRead: line => root.handle(line)
 		}
@@ -536,6 +546,8 @@ Singleton {
 		}
 		onRunningChanged: if (daemon.running) {
 			root.send({ op: "config", config: root.config });
+			// niri's events from the shell's own stream, the whole state first
+			if (Niri.ready) for (const line of Niri.replay()) daemon.write(`{"op":"niri","event":${line}}\n`);
 			if (root.watching) root.send({ op: "watch", on: true });
 		}
 		onExited: {

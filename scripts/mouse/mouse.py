@@ -274,7 +274,9 @@ class Daemon:
         threading.Thread(target=self.read_stdin, daemon=True).start()
         if INJECT:
             threading.Thread(target=self.read_inject, daemon=True).start()
-        threading.Thread(target=self.follow_focus, daemon=True).start()
+        # the shell hands niri's events over as {"op": "niri"} (one stream for all)
+        if os.environ.get("PSHELL_NIRI_EVENTS") != "stdin":
+            threading.Thread(target=self.follow_focus, daemon=True).start()
         threading.Thread(target=self.stats.follow, args=(self,), daemon=True).start()
         self.ensure_mods()
         emit("solaar", running=self.solaar)
@@ -1001,6 +1003,9 @@ class Daemon:
 
     def command(self, command):
         op = command.get("op")
+        if op == "niri":
+            self.on_niri(command.get("event") or {})
+            return
         if op == "inject":
             mouse = self.current()
             if mouse is None:

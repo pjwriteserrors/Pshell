@@ -417,6 +417,18 @@ Singleton {
 		running: Plugins.on("games")
 		stdinEnabled: true
 		command: ["python3", "-u", `${Paths.scripts}/games_guard.py`]
+		environment: ({ PSHELL_NIRI_EVENTS: "stdin" })
+		// niri's events from the shell's own stream, the whole state first
+		onRunningChanged: if (guard.running && Niri.ready) for (const line of Niri.replay()) guard.write(line + "\n")
+	}
+
+	Connections {
+		target: Niri
+		enabled: guard.running
+
+		function onLine(text, event) {
+			if (/^\{"(Window|Workspace)/.test(text)) guard.write(text + "\n");
+		}
 	}
 
 	Component {
