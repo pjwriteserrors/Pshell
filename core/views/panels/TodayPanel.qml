@@ -7,8 +7,8 @@ import Quickshell
 import qs.style.theme
 import qs.core.services
 import qs.style.widgets
-import qs.core.views.panels.calendar
-import qs.core.views.panels.asteroids
+import qs.core.views.calendar
+import qs.core.views.asteroids
 
 // Hangs from the clock: notification center on the left, date, calendar,
 // the day's Microsoft events and weather on the right. A picked event opens

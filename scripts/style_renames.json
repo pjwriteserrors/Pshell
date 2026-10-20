@@ -68,6 +68,94 @@
 		[
 			"\\bPhone\\.legacy\\b",
 			"false"
+		],
+		[
+			"^import qs\\.core\\.views\\.panels\\.asteroids$",
+			"import qs.core.views.asteroids"
+		],
+		[
+			"^import qs\\.core\\.views\\.panels\\.breaks$",
+			"import qs.core.views.breaks"
+		],
+		[
+			"^import qs\\.core\\.views\\.panels\\.calendar$",
+			"import qs.core.views.calendar"
+		],
+		[
+			"^import qs\\.core\\.views\\.panels\\.identity$",
+			"import qs.core.views.identity"
+		],
+		[
+			"^import qs\\.core\\.views\\.panels\\.media$",
+			"import qs.core.views.media"
+		],
+		[
+			"^import qs\\.core\\.views\\.panels\\.messages$",
+			"import qs.core.views.messages"
+		],
+		[
+			"^import qs\\.core\\.views\\.panels\\.network$",
+			"import qs.core.views.network"
+		],
+		[
+			"^import qs\\.core\\.views\\.panels\\.printer$",
+			"import qs.core.views.printer"
+		],
+		[
+			"^import qs\\.core\\.views\\.panels\\.screentime$",
+			"import qs.core.views.screentime"
+		],
+		[
+			"^import qs\\.core\\.views\\.panels\\.ssh$",
+			"import qs.core.views.ssh"
+		],
+		[
+			"^import qs\\.core\\.views\\.panels\\.tracking$",
+			"import qs.core.views.tracking"
+		],
+		[
+			"^import qs\\.core\\.views\\.panels\\.watch$",
+			"import qs.core.views.watch"
+		],
+		[
+			"^import qs\\.core\\.views\\.overlays\\.games$",
+			"import qs.core.views.games"
+		],
+		[
+			"^import qs\\.core\\.views\\.overlays\\.launcher$",
+			"import qs.core.views.launcher"
+		],
+		[
+			"^import qs\\.core\\.views\\.overlays\\.screenshot$",
+			"import qs.core.views.screenshot"
+		],
+		[
+			"^import qs\\.core\\.views\\.overlays\\.shelf$",
+			"import qs.core.views.shelf"
+		],
+		[
+			"^import qs\\.core\\.views\\.overlays\\.studio$",
+			"import qs.core.views.studio"
+		],
+		[
+			"^import qs\\.core\\.views\\.overlays\\.vm$",
+			"import qs.core.views.vm"
+		],
+		[
+			"^import qs\\.core\\.views\\.overlays\\.niri$",
+			"import qs.core.views.settings"
+		],
+		[
+			"^import qs\\.core\\.views\\.overlays\\.keybinds$",
+			"import qs.core.views.settings.keybinds"
+		],
+		[
+			"^import qs\\.core\\.views\\.overlays\\.mouse$",
+			"import qs.core.views.settings.mouse"
+		],
+		[
+			"\\bNiriSettingsWindow\\b",
+			"SettingsWindow"
 		]
 	]
 }

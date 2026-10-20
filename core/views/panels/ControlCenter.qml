@@ -8,7 +8,7 @@ import Quickshell.Io
 import qs.style.theme
 import qs.core.services
 import qs.style.widgets
-import qs.core.views.panels.network
+import qs.core.views.network
 
 // Quick settings: tiles for network / bluetooth / sound / mic, do not
 // disturb, keep awake, power profile and the phone (KDE Connect); volume,

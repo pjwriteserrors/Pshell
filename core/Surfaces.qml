@@ -3,13 +3,28 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import qs.core.services
-import qs.core.views.panels
-import qs.core.views.panels.printer
-import qs.core.views.overlays
-import qs.core.views.rpg
-import qs.core.views.overlays.studio
+import qs.core.views.breaks
 import qs.core.views.files
+import qs.core.views.games
+import qs.core.views.identity
+import qs.core.views.launcher
+import qs.core.views.media
+import qs.core.views.messages
+import qs.core.views.overlays
+import qs.core.views.panels
+import qs.core.views.printer
+import qs.core.views.rpg
+import qs.core.views.screenshot
+import qs.core.views.screentime
+import qs.core.views.settings
+import qs.core.views.shelf
+import qs.core.views.ssh
+import qs.core.views.studio
+import qs.core.views.todos
 import qs.core.views.torrents
+import qs.core.views.tracking
+import qs.core.views.vm
+import qs.core.views.watch
 // last, so a view of the same name in style/views wins
 import qs.style.views
 
@@ -272,7 +287,7 @@ Scope {
 	LazyLoader {
 		active: Plugins.on("niri-settings") && Popups.wanted("niri")
 
-		NiriSettingsWindow {}
+		SettingsWindow {}
 	}
 
 	LazyLoader {

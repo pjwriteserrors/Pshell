@@ -6,7 +6,8 @@ import QtQuick.Layouts
 import qs.style.theme
 import qs.style.widgets
 import qs.core.services
-import qs.core.views.overlays.launcher
+import qs.core.views.launcher
+import qs.core.views
 
 // The torrent client: the session's rates along the top, the torrents on the
 // left, the one picked (or all of them) on the right; the add sheet over it

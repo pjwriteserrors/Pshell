@@ -6,7 +6,7 @@ import Quickshell.Wayland
 import qs.style.theme
 import qs.style.widgets
 import qs.core.services
-import "mouse/Controls.js" as Controls
+import "../settings/mouse/Controls.js" as Controls
 
 // What the swipes of a held mouse button do, in the middle of the focused
 // screen: it comes after a moment of holding (a quick swipe never sees it),
