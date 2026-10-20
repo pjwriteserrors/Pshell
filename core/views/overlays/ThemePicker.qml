@@ -852,6 +852,8 @@ ModalWindow {
 						property string wanted: ""
 
 						anchors.fill: parent
+						// a screen's worth is plenty for the backdrop
+						sourceSize: Qt.size(2560, 2560)
 						fillMode: Image.PreserveAspectCrop
 						asynchronous: true
 						smooth: true
@@ -866,6 +868,7 @@ ModalWindow {
 						property string wanted: ""
 
 						anchors.fill: parent
+						sourceSize: Qt.size(2560, 2560)
 						fillMode: Image.PreserveAspectCrop
 						asynchronous: true
 						smooth: true

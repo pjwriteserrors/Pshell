@@ -910,6 +910,7 @@ Item {
 									Image {
 										anchors.fill: parent
 										source: root.message.link?.thumb ? `file://${root.message.link.thumb}` : ""
+										sourceSize: Qt.size(320, 320)
 										fillMode: Image.PreserveAspectCrop
 										asynchronous: true
 									}

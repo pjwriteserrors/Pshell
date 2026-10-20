@@ -141,6 +141,7 @@ Item {
 	Image {
 		anchors.fill: parent
 		source: root.game?.art?.hero ? `file://${root.game.art.hero}` : ""
+		sourceSize: Qt.size(Math.ceil(Math.max(width, height)), Math.ceil(Math.max(width, height)))
 		fillMode: Image.PreserveAspectCrop
 		asynchronous: true
 		opacity: (root.up ? 0.35 : 0) * root.fly

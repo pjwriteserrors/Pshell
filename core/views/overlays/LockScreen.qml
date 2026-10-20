@@ -223,6 +223,7 @@ Scope {
 
 				anchors.fill: parent
 				source: root.wallpaperFrameSource
+				sourceSize: Qt.size(Math.ceil(Math.max(width, height)), Math.ceil(Math.max(width, height)))
 				fillMode: Image.PreserveAspectCrop
 				cache: false
 				visible: false

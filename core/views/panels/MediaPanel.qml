@@ -56,6 +56,7 @@ Drawer {
 
 				anchors.fill: parent
 				source: Media.art
+				sourceSize: Qt.size(256, 256)
 				fillMode: Image.PreserveAspectCrop
 				visible: false
 				asynchronous: true
@@ -171,6 +172,7 @@ Drawer {
 					Image {
 						anchors.fill: parent
 						source: Media.art
+						sourceSize: Qt.size(512, 512)
 						visible: Media.art !== ""
 						fillMode: Image.PreserveAspectCrop
 						asynchronous: true
