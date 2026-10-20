@@ -44,9 +44,10 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "files"))
 import windows  # noqa: E402
+import host  # noqa: E402
 
 HOME = Path.home()
-STATE = Path(os.environ.get("XDG_STATE_HOME") or HOME / ".local/state") / "pshell"
+STATE = host.state_dir()
 CACHE = Path(os.environ.get("XDG_CACHE_HOME") or HOME / ".cache") / "pshell/games"
 STORE = STATE / "games.json"
 ART = CACHE / "art"

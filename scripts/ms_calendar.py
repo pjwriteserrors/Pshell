@@ -30,15 +30,14 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import date, datetime, timedelta, timezone
+import host  # noqa: E402
 
 CLIENT_ID = os.environ.get("PSHELL_MS_CLIENT_ID") or "d3590ed6-52b3-4102-aeff-aad2292ab01c"
 TENANT = os.environ.get("PSHELL_MS_TENANT") or "organizations"
 AUTHORITY = f"https://login.microsoftonline.com/{TENANT}/oauth2/v2.0"
 SCOPE = "https://graph.microsoft.com/.default openid profile offline_access"
 GRAPH = "https://graph.microsoft.com/v1.0"
-STATE = os.path.join(
-    os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "pshell", "microsoft.json"
-)
+STATE = str(host.state_dir() / "microsoft.json")
 JOIN_URL = re.compile(r"https://(?:teams\.microsoft\.com/l/meetup-join|teams\.live\.com/meet|[\w.-]*zoom\.us/j|meet\.google\.com)/[^\s<>\"')\]]+")
 
 

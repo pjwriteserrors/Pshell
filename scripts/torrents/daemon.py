@@ -30,10 +30,12 @@ import urllib.parse
 import urllib.request
 
 import libtorrent as lt
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import host  # noqa: E402
 
 RUNTIME = os.environ.get("PSHELL_RUNTIME_DIR") or os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "pshell")
 SOCKET = os.path.join(RUNTIME, "torrents.sock")
-STATE = os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "pshell", "torrents")
+STATE = str(host.state_dir() / "torrents")
 IDLE = 60
 # live rates: one a second for this many seconds
 LIVE = 180

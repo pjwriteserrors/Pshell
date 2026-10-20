@@ -24,8 +24,11 @@ gi.require_version("Gio", "2.0")
 from gi.repository import Gio, GLib  # noqa: E402
 
 import lookup  # noqa: E402
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import host  # noqa: E402
 
-STATE = os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.join(lookup.HOME, ".local/state"), "pshell")
+STATE = str(host.state_dir())
 PATH = os.path.join(STATE, "files-rules.json")
 PARTIAL = (".part", ".crdownload", ".tmp", ".download", ".partial", "~")
 KINDS = {

@@ -47,8 +47,10 @@ import hidpp  # noqa: E402
 from hidpp import HidppError, Offline  # noqa: E402
 import actions  # noqa: E402
 from engine import CIDS, CONTROLS, Engine  # noqa: E402
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import host  # noqa: E402
 
-STATE = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state") / "pshell"
+STATE = host.state_dir()
 STATS_FILE = STATE / "mouse-stats.json"
 CONFIG_FILE = STATE / "mouse.json"
 HAPTICS_ONLY = os.environ.get("PSHELL_MOUSE_MODE") == "haptics"

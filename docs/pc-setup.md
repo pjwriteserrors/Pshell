@@ -134,7 +134,7 @@ Sie gehören nach `dotfiles/` mit einem Eintrag in `dotfiles/manifest` und `when
   Animationen.
 - die systemd-User-Units `openrgb-theme.service` und `quickshell-lighting.service`.
   `quickshell-lighting.service` muss `scripts/apply_lighting.py --restore` aus dem neuen
-  Repo aufrufen. Die Lighting-Config liegt jetzt in `hosts/pc-lighting.json`.
+  Repo aufrufen. Die Lighting-Config ist `lighting` in `hosts/pc.json`.
   Nötig sind die Units nicht mehr: `apply_lighting.py` startet selbst einen OpenRGB-Server
   (`quickshell-openrgb.service`, transient), wenn keiner läuft, und die Shell lässt
   `apply_lighting.py --watch` mitlaufen, das die Farben nach dem Wiedereinstecken der

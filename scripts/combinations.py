@@ -49,6 +49,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+import host  # noqa: E402
 
 HOME = Path(os.environ.get("HOME", "~")).expanduser()
 STATE_DIR = Path(os.environ.get("THEME_STATE_DIR") or HOME / ".local/state/quickshell-theme")
@@ -57,7 +58,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 
 FIELDS = ["theme", "backend", "palette", "style", "animation", "icons", "cursor", "cursorSize", "branch", "sounds"]
 # the shell's sound settings; the shell follows the file when it changes
-SOUNDS_FILE = Path(os.environ.get("XDG_STATE_HOME") or HOME / ".local/state") / "pshell" / "sounds.json"
+SOUNDS_FILE = host.state_dir() / "sounds.json"
 
 
 # ----------------------------------------------------------------- the store

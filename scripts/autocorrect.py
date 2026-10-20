@@ -48,6 +48,7 @@ import time
 import urllib.request
 from collections import deque
 from pathlib import Path
+import host  # noqa: E402
 
 NAME = "pshell autocorrect"
 LANGUAGES = {"de": ("de_DE", "de_AT", "de_CH"), "en": ("en_US", "en_GB")}
@@ -136,7 +137,7 @@ TOKEN = re.compile(rf"([{re.escape(OPENING)}]*)(.*?)([{re.escape(CLOSING)}]*)")
 
 
 def state_file() -> Path:
-    return Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / "pshell" / "autocorrect.json"
+    return host.state_dir() / "autocorrect.json"
 
 
 # ── dictionaries ─────────────────────────────────────────────────────────────

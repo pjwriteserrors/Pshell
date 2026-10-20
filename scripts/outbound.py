@@ -39,9 +39,10 @@ import threading
 import time
 import urllib.request
 from pathlib import Path
+import host  # noqa: E402
 
 CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "pshell" / "outbound"
-STATE = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / "pshell"
+STATE = host.state_dir()
 DATABASE = CACHE / "city.mmdb"
 SOURCE = "https://download.db-ip.com/free/dbip-city-lite-{month}.mmdb.gz"
 MAX_AGE = 62 * 86400

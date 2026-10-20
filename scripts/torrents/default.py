@@ -18,12 +18,14 @@ import json
 import os
 import subprocess
 import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import host  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SHELL = os.path.dirname(os.path.dirname(HERE))
 DESKTOP_ID = "pshell-torrents.desktop"
 APPS = os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "applications")
-STATE = os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "pshell", "torrents-default.json")
+STATE = str(host.state_dir() / "torrents-default.json")
 CONFIG = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
 MIMES = ["x-scheme-handler/magnet", "application/x-bittorrent"]
 FALLBACK = "org.qbittorrent.qBittorrent.desktop"

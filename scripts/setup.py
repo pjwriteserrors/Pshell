@@ -28,7 +28,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 HOME = Path.home()
 CONFIG_DIR = HOME / ".config" / "quickshell" / "shell"
-STATE_DIR = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local" / "state")) / "pshell"
 OLD_SHELL = HOME / ".config" / "quickshell" / "main"
 OLD_STATE_FILES = [
     "notes.json", "dnd.json", "updates.json", "launcher-usage.json", "launcher-ai-state.json",
@@ -37,6 +36,8 @@ OLD_STATE_FILES = [
 
 sys.path.insert(0, str(ROOT / "scripts"))
 import host  # noqa: E402
+
+STATE_DIR = host.state_dir()
 
 # (program, why) per plugin; "core" is every machine
 PROGRAMS = {

@@ -34,9 +34,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import niri_outputs  # noqa: E402
+import host  # noqa: E402
 
 BUILTIN = Path(__file__).resolve().parent / "display-profiles"
-SAVED = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state") / "pshell" / "display-profiles"
+SAVED = host.state_dir() / "display-profiles"
 ACTIVE = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "niri" / "display-profile.kdl"
 
 NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _.-]{0,39}$")

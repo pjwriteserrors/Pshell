@@ -28,9 +28,10 @@ import subprocess
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
+import host  # noqa: E402
 
 CONNECT = os.environ.get("PSHELL_LIBVIRT", "qemu:///system")
-STATE = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / "pshell" / "vms.json"
+STATE = host.state_dir() / "vms.json"
 RUNTIME = Path(os.environ.get("PSHELL_RUNTIME_DIR") or Path(os.environ.get("XDG_RUNTIME_DIR") or "/tmp") / "pshell")
 LG_LOG = RUNTIME / "looking-glass.log"
 FSTAB = Path("/etc/fstab")
