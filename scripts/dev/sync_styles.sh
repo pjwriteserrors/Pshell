@@ -2,16 +2,16 @@
 
 # Brings main ($BASE) into every style branch (style/*), each in a temporary worktree
 # so the running shell keeps its files. A branch is only committed when the
-# merged shell compiles; names main renamed (scripts/style_renames.json) are
-# followed in the style's own files. Then scripts/check_style.py checks the contract and
+# merged shell compiles; names main renamed (scripts/dev/style_renames.json) are
+# followed in the style's own files. Then scripts/dev/check_style.py checks the contract and
 # lists what main changed that the style draws itself and has to port.
 #
-#   scripts/sync_styles.sh [style/<name>...]
+#   scripts/dev/sync_styles.sh [style/<name>...]
 
 set -uo pipefail
 
 BASE="${BASE:-main}"
-REPO="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO" || exit 1
 
 # see .gitattributes: conflicts inside style/ resolve to the style's version
@@ -42,9 +42,9 @@ for branch in "${branches[@]}"; do
 	fi
 
 	# names main renamed or removed: the style's own files follow
-	renamed="$(python3 "$worktree/scripts/style_renames.py" "$worktree")"
+	renamed="$(python3 "$worktree/scripts/dev/style_renames.py" "$worktree")"
 	if [[ -n "$renamed" ]]; then
-		git -C "$worktree" commit --quiet -am "Follow main's renames (scripts/style_renames.json)"
+		git -C "$worktree" commit --quiet -am "Follow main's renames (scripts/dev/style_renames.json)"
 		echo "   followed main's renames in: $(printf '%s ' $renamed)"
 	fi
 
@@ -66,7 +66,7 @@ for branch in "${branches[@]}"; do
 	echo "   own views (${#own[@]}): ${own[*]:-none}"
 	echo "   core views drawn with this style's widgets (${#fallback[@]}): ${fallback[*]:-none}"
 
-	(cd "$worktree" && python3 scripts/check_style.py --ref HEAD --base "$BASE" --since "$since") \
+	(cd "$worktree" && python3 scripts/dev/check_style.py --ref HEAD --base "$BASE" --since "$since") \
 		| sed 's/^/   /' || status=1
 
 	git worktree remove --force "$worktree"

@@ -23,7 +23,7 @@ import tempfile
 import time
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parent.parent
+REPO = Path(__file__).resolve().parents[2]
 OUT = REPO / "assets" / "plugins"
 BAR = 38
 
@@ -481,7 +481,7 @@ def prepare(work: Path):
     # the clipboard history of the preview: its own cache, written straight
     subprocess.run([sys.executable, "-c", "import sys; sys.path.insert(0, sys.argv[1]); import clipstore\n"
                             "for line in sys.argv[2:]: clipstore.add('text/plain', line.encode())",
-                            str(Path(__file__).resolve().parent / "clipboard"),
+                            str(REPO / "scripts" / "clipboard"),
                             "Paderborn, 14:30, room 2", "git rebase --onto main feature~3", "https://quickshell.org/docs"], env=env)
 
 

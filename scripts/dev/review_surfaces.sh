@@ -4,7 +4,7 @@
 # bus, so the running desktop is not touched (a niri window shows up while it
 # runs). For reviewing a style, or checking that a feature reached it.
 #
-#   scripts/review_surfaces.sh [--host PROFILE] [--out DIR] [surface...]
+#   scripts/dev/review_surfaces.sh [--host PROFILE] [--out DIR] [surface...]
 #
 # Surfaces: bar launcher control network bluetooth system today media
 # clipboard tray overview updates timer ssh notes power radial wallpaper motion dress
@@ -15,7 +15,7 @@
 
 set -euo pipefail
 
-REPO="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 PROFILE="$(python3 "$REPO/scripts/host.py" name)"
 OUT="${XDG_RUNTIME_DIR:-/tmp}/pshell-review"
 declare -a SURFACES=()

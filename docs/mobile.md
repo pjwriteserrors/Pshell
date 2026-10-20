@@ -170,7 +170,7 @@ the phone alone have plugins of their own in the tab **Phone**, all requiring
 | Presence | `phone-presence` (off) | | lock, pause when the phone leaves |
 | Session | | locked or not | lock, suspend, log out, restart, shut down |
 
-`scripts/plugin.py check` fails when a topic names a plugin that is not
+`scripts/dev/plugin.py check` fails when a topic names a plugin that is not
 registered.
 
 The app's colours are the shell's: the topic `theme` carries the wallust

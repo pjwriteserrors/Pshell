@@ -55,21 +55,21 @@ QML asks `Plugins.on("id")`, scripts `scripts/host.py has id`. A plugin that
 is off neither shows up nor polls; its IPC target is disabled.
 `scripts/ipc.sh plugins enable|disable <id>` switches from a script.
 
-A new plugin goes through `scripts/plugin.py`:
+A new plugin goes through `scripts/dev/plugin.py`:
 
 ```
-scripts/plugin.py new pomodoro --name "Pomodoro" --category Panels \
+scripts/dev/plugin.py new pomodoro --name "Pomodoro" --category Panels \
     --on bar,clock --ipc "panels toggle pomodoro"     # registers it
 # gate it: Plugins.on("pomodoro") at its surface (core/Surfaces.qml), bar
 # element, launcher command (`plugin: "pomodoro"`), IPC target, timers
-scripts/plugin.py check                               # complete?
-scripts/plugin.py preview pomodoro                    # its picture
+scripts/dev/plugin.py check                               # complete?
+scripts/dev/plugin.py preview pomodoro                    # its picture
 ```
 
 A `--category` that does not exist yet becomes a new tab of `>plugins`; tabs
 appear in the order of the registry. `--ipc`, `--on` and `--base` are the
 scene its preview picture (`assets/plugins/<id>.png`) is taken with, in a
-nested niri (`scripts/plugin_previews.py` explains the keys); a plugin that
+nested niri (`scripts/dev/plugin_previews.py` explains the keys); a plugin that
 cannot be shown gets `--icon` instead. `check` fails when a plugin is
 registered but nothing asks `Plugins.on()` for it, when the shell asks for one
 that is not registered, when `requires` or a host profile name an unknown one,
@@ -146,7 +146,7 @@ To see a shortcut before the window does the daemon takes the keyboards
 while a window has the keyboard that is not left alone; both Shift keys and
 Escape together switch it off. `multicursor.py try "one\ntw|o" move-up`
 shows what steps leave in a text field, without one;
-`scripts/multicursor_test.py` runs it and the daemon's key handling against
+`scripts/tests/test_multicursor.py` runs it and the daemon's key handling against
 such a field. What it cannot do: rich
 text editors that copy something else than they show (the comparison fails,
 nothing happens), dead keys and Enter with several cursors (they end it), and
@@ -800,13 +800,13 @@ mock window. A style that draws its own Motion page keeps that stage.
 
 Everything else comes from `main` by merge, so a new feature reaches every
 style at once, drawn with the style's widgets, until the style gives it a view
-of its own. `scripts/sync_styles.sh` merges `main` into every style branch in a
+of its own. `scripts/dev/sync_styles.sh` merges `main` into every style branch in a
 temporary worktree, commits only what compiles, and lists which surfaces each
 style draws itself. Inside `style/`, a file both sides changed keeps the
 style's version (`.gitattributes`).
 
 How to build one, and how to keep one in step with main: `docs/styles.md`.
-`scripts/check_style.py` checks the contract (`--contract` prints it), derived
+`scripts/dev/check_style.py` checks the contract (`--contract` prints it), derived
 from main each time, so it moves with the logic.
 
 ## Setup
@@ -823,10 +823,10 @@ and hooks need, the dotfile links and the niri include.
 
 ```
 quickshell -p ./Validate.qml      # compiles the whole shell without a window
-scripts/review_surfaces.sh        # screenshots of every surface, in a nested niri
-python3 scripts/plugin.py check   # every plugin registered, gated and pictured
-python3 scripts/test_branch_styles.py
-python3 scripts/check_style.py        # the style contract (on a style branch)
+scripts/dev/review_surfaces.sh        # screenshots of every surface, in a nested niri
+python3 scripts/dev/plugin.py check   # every plugin registered, gated and pictured
+python3 scripts/tests/test_branch_styles.py
+python3 scripts/dev/check_style.py        # the style contract (on a style branch)
 quickshell -p ./ThemeProbe.qml       # the Theme's colours for the current palette
-python3 scripts/test_check_style.py
+python3 scripts/tests/test_check_style.py
 ```

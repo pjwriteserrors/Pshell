@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 """Multicursor against a text field of its own: no window, no keyboard taken.
 
-  scripts/multicursor_test.py            every test
-  scripts/multicursor_test.py -k Keys    some
+  scripts/tests/test_multicursor.py            every test
+  scripts/tests/test_multicursor.py -k Keys    some
 
 The text field is multicursor.Paper: it knows the keys a text field knows,
 wraps its lines and, as Firefox does, can stop twice where a line wraps. The
@@ -17,7 +17,7 @@ import time
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import autocorrect  # noqa: E402
 import multicursor as m  # noqa: E402

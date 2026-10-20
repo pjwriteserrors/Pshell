@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Rewrites a style's own files (style/) after names main renamed or removed
-(scripts/style_renames.json), so a style follows without a port by hand.
+(scripts/dev/style_renames.json), so a style follows without a port by hand.
 
     style_renames.py <tree>      prints the files it changed
 """

@@ -51,7 +51,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parent.parent
+REPO = Path(__file__).resolve().parents[2]
 MANIFEST = ".quickshell-style.json"
 KIT_DIRS = ("style/theme", "style/widgets")
 # What makes a view "logic": it talks to processes, files, sockets or D-Bus

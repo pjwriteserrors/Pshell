@@ -3,7 +3,7 @@ import Quickshell
 import qs.style.theme
 
 // Prints the colour roles of this tree's Theme for the palette in
-// $XDG_CACHE_HOME/wal/colors.json. Used by scripts/check_style.py to see how
+// $XDG_CACHE_HOME/wal/colors.json. Used by scripts/dev/check_style.py to see how
 // closely a style follows the wallpaper. Run: quickshell -p ./ThemeProbe.qml
 Scope {
 	Timer {

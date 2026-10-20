@@ -37,11 +37,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 REGISTRY = ROOT / "core" / "plugins.json"
 PICTURES = ROOT / "assets" / "plugins"
 
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(ROOT / "scripts" / "dev"))
 import host  # noqa: E402
 import plugin_previews  # noqa: E402
 

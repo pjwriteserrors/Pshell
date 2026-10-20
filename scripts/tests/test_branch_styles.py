@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Isolated Git safety tests; never touches the desktop or user's branches."""
 import json
+import sys
 from pathlib import Path
 import tempfile
 import unittest
-import branch_styles as styles
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import branch_styles as styles  # noqa: E402
 
 
 class BranchStylesTest(unittest.TestCase):

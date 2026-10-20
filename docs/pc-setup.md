@@ -178,7 +178,7 @@ Dann prüfen:
   `kdeconnectd` neu starten, denn die Befehle hält er im Speicher.
 
 - **Tests nie gegen den echten Zustand laufen lassen.**
-  - `scripts/review_surfaces.sh` startet die Shell in einem verschachtelten niri, legt
+  - `scripts/dev/review_surfaces.sh` startet die Shell in einem verschachtelten niri, legt
     aber Dateien in `~/.local/state/pshell` an. Das ist am Laptop einmal passiert, und
     Testdateien hätten fast den echten RPG-Spielstand verdeckt.
   - `wallust run` setzt die Farben in allen offenen Terminals.
@@ -191,7 +191,7 @@ Dann prüfen:
   solange es nicht committete Änderungen gibt.
 - **Checks vor jedem Commit:**
   - `quickshell -p ./Validate.qml` muss `VALIDATE: ok` ausgeben
-  - `python3 scripts/test_branch_styles.py` für den Style-Wechsler
+  - `python3 scripts/tests/test_branch_styles.py` für den Style-Wechsler
 - **Keine unnötigen Hilfetexte in der UI.** Der Benutzer will kurze, selbsterklärende
   Labels.
 
