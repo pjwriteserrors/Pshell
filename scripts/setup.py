@@ -57,7 +57,7 @@ PROGRAMS = {
     "song-detection": [("parec", "listening to what plays")],
     "backlight": [("brightnessctl", "screen brightness")],
     "ddc": [("ddcutil", "monitor brightness")],
-    "power-profiles": [("powerprofilesctl", "power profiles")],
+    "power-profiles": [("powerprofilesctl", "power profiles: power-profiles-daemon")],
     "phone": [("qrencode", "pairing code"), ("ip", "finding this PC's addresses")],
     "phone-keyboard": [("wtype", "typing from the phone")],
     "phone-presence": [("playerctl", "pausing when the phone leaves")],
@@ -85,7 +85,7 @@ PROGRAMS = {
 OPTIONAL_PROGRAMS = [
     ("chromium", "mails and signatures drawn as they were laid out"),
     ("ollama", "launcher chat and >ollama"), ("pdftotext", "chat attachments"), ("pandoc", "chat attachments"),
-    ("upower", "mouse battery"), ("qsb", "shader animation previews"),
+    ("upower", "battery and mouse battery: the UPower daemon"), ("qsb", "shader animation previews"),
     ("gst-inspect-1.0", "live pins (with gst-plugin-pipewire)"),
 ]
 HOOK_PROGRAMS = {

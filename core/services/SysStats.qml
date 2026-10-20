@@ -3,9 +3,10 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Services.UPower
 
-// CPU, memory, disks, mouse battery (scripts/mouse_battery_status.sh) and
-// the laptop battery from sysfs. CPU/RAM keep a short history for charts.
+// CPU, memory, disks, the mouse battery (the mouse daemon, UPower or a Razer
+// mouse's sysfs) and the laptop battery (UPower, as it changes). CPU/RAM keep a short history for charts.
 Singleton {
 	id: root
 
@@ -18,14 +19,31 @@ Singleton {
 	property var memoryHistory: root.zeros()
 	property var disks: []
 	// the mouse reported a level
-	property bool mouseFound: false
-	readonly property bool mouseAvailable: Plugins.on("mouse-battery") && root.mouseFound
-	property real mouseLevel: 0
-	property string mouseText: ""
-	property string mouseName: "Mouse"
-	property string mouseStatus: ""
-	property int batteryPercent: -1
-	property string batteryStatus: ""
+	// the mouse: { name, percent, status } of the first source that knows it
+	property var razer: null
+	readonly property var upowerMouse: {
+		if (!Plugins.on("mouse-battery")) return null;
+		const device = UPower.devices.values.find(d => d.type === UPowerDeviceType.Mouse && d.isPresent);
+		return device ? { name: device.model || "Mouse", percent: device.percentage * 100, status: root.stateName(device.state) } : null;
+	}
+	readonly property var mouseSource: {
+		if (!Plugins.on("mouse-battery")) return null;
+		const battery = Mouse.online ? Mouse.state.battery : null;
+		// a Logitech mouse on its receiver: the daemon's word (the kernel says nothing)
+		if (battery && Number.isFinite(Number(battery.percent)))
+			return { name: Mouse.device.name, percent: Number(battery.percent), status: battery.status === "discharging" ? "Discharging" : (battery.status === "full" ? "Full" : "Charging") };
+		return root.upowerMouse ?? root.razer;
+	}
+	readonly property bool mouseFound: root.mouseSource !== null
+	readonly property bool mouseAvailable: root.mouseFound
+	readonly property real mouseLevel: root.mouseFound ? root.clamp01(root.mouseSource.percent / 100) : 0
+	readonly property string mouseText: root.mouseFound ? `${Math.round(root.mouseSource.percent)}%` : ""
+	readonly property string mouseName: root.mouseSource?.name || "Mouse"
+	readonly property string mouseStatus: root.mouseSource?.status ?? ""
+	// the laptop's battery
+	readonly property var laptop: Plugins.on("battery") && UPower.displayDevice.ready && UPower.displayDevice.isLaptopBattery ? UPower.displayDevice : null
+	readonly property int batteryPercent: root.laptop ? Math.round(root.laptop.percentage * 100) : -1
+	readonly property string batteryStatus: root.laptop ? root.stateName(root.laptop.state) : ""
 	property real lastIdle: 0
 	property real lastTotal: 0
 	property bool cpuReady: false
@@ -54,6 +72,19 @@ Singleton {
 		const next = history.slice(1);
 		next.push(value);
 		return next;
+	}
+
+	// UPower's state as the power supply class says it
+	function stateName(state) {
+		switch (state) {
+		case UPowerDeviceState.Charging: return "Charging";
+		case UPowerDeviceState.FullyCharged: return "Full";
+		case UPowerDeviceState.PendingCharge:
+		case UPowerDeviceState.PendingDischarge: return "Not charging";
+		case UPowerDeviceState.Discharging:
+		case UPowerDeviceState.Empty: return "Discharging";
+		}
+		return "";
 	}
 
 	function clamp01(value) {
@@ -91,52 +122,6 @@ Singleton {
 		root.lastIdle = idle;
 		root.lastTotal = total;
 		root.cpuHistory = root.push(root.cpuHistory, root.cpu);
-	}
-
-	function updateMouse(raw) {
-		const values = {};
-		for (const line of String(raw || "").split("\n")) {
-			const index = line.indexOf("=");
-			if (index > 0) values[line.slice(0, index).trim()] = line.slice(index + 1).trim();
-		}
-		const percent = Math.max(0, Math.min(100, Number(values.percent)));
-		root.mouseFound = values.available === "1" && Number.isFinite(percent);
-		// a Logitech mouse the kernel says nothing about: its own word (Mouse)
-		if (!root.mouseFound && Mouse.online && Number.isFinite(Number(Mouse.state.battery?.percent))) {
-			const battery = Mouse.state.battery;
-			root.mouseFound = true;
-			root.mouseName = Mouse.device.name;
-			root.mouseStatus = battery.status === "discharging" ? "Discharging" : (battery.status === "full" ? "Full" : "Charging");
-			root.mouseLevel = root.clamp01(battery.percent / 100);
-			root.mouseText = `${Math.round(battery.percent)}%`;
-			return;
-		}
-		if (!root.mouseFound) {
-			root.mouseText = "";
-			root.mouseLevel = 0;
-			root.mouseStatus = "";
-			return;
-		}
-		root.mouseName = values.name || "Mouse";
-		root.mouseStatus = values.status || "";
-		root.mouseLevel = root.clamp01(percent / 100);
-		root.mouseText = `${Math.round(percent)}%`;
-	}
-
-	function updateBattery(text) {
-		let percent = -1;
-		let status = "";
-		for (const rawLine of String(text).split(/\r?\n/)) {
-			const line = rawLine.trim();
-			if (line.startsWith("percent=")) {
-				const value = Number(line.slice(8).trim());
-				if (line.slice(8).trim() !== "" && Number.isFinite(value)) percent = Math.max(0, Math.min(100, Math.round(value)));
-			} else if (line.startsWith("status=")) {
-				status = line.slice(7).trim();
-			}
-		}
-		root.batteryPercent = percent;
-		root.batteryStatus = percent >= 0 ? status : "";
 	}
 
 	function parseDisks(text) {
@@ -185,22 +170,21 @@ Singleton {
 	}
 
 	Timer {
-		running: Plugins.on("system-monitor") || Plugins.on("battery")
+		running: Plugins.on("system-monitor")
 		repeat: true
 		interval: 30000
 		triggeredOnStart: true
-		onTriggered: {
-			storageProc.running = true;
-			batteryProc.running = true;
-		}
+		onTriggered: storageProc.running = true
 	}
 
+	// a Razer mouse (OpenRazer's kernel driver) is in neither UPower nor the
+	// daemon; asked only while nothing else knows a mouse
 	Timer {
-		running: Plugins.on("mouse-battery")
+		running: Plugins.on("mouse-battery") && root.upowerMouse === null && !(Mouse.online && Mouse.state.battery)
 		repeat: true
 		interval: 60000
 		triggeredOnStart: true
-		onTriggered: mouseProc.running = true
+		onTriggered: razerProc.running = true
 	}
 
 	FileView {
@@ -238,27 +222,16 @@ Singleton {
 	}
 
 	Process {
-		id: mouseProc
-		command: ["bash", `${Quickshell.shellDir}/scripts/mouse_battery_status.sh`]
-		stdout: StdioCollector {
-			onStreamFinished: root.updateMouse(text)
-		}
-	}
+		id: razerProc
 
-	Process {
-		id: batteryProc
-		command: ["sh", "-lc", "for dir in /sys/class/power_supply/*; do\n"
-			+ "  [ -r \"$dir/type\" ] || continue\n"
-			+ "  [ \"$(cat \"$dir/type\" 2>/dev/null)\" = \"Battery\" ] || continue\n"
-			+ "  capacity=$(cat \"$dir/capacity\" 2>/dev/null || true)\n"
-			+ "  status=$(cat \"$dir/status\" 2>/dev/null || true)\n"
-			+ "  [ -n \"$capacity\" ] || continue\n"
-			+ "  printf 'percent=%s\\nstatus=%s\\n' \"$capacity\" \"$status\"\n"
-			+ "  exit 0\n"
-			+ "done\n"
-			+ "printf 'percent=\\nstatus=\\n'\n"]
+		command: ["sh", "-c", "for dir in /sys/bus/hid/drivers/razermouse/*/; do [ -r \"$dir/charge_level\" ] && printf '%s|%s|%s\\n' \"$(cat \"$dir/charge_level\")\" \"$(cat \"$dir/charge_status\" 2>/dev/null)\" \"$(cat \"$dir/device_type\" 2>/dev/null)\" && break; done"]
 		stdout: StdioCollector {
-			onStreamFinished: root.updateBattery(text)
+			onStreamFinished: {
+				const [level, status, name] = String(text).trim().split("|");
+				// 0 … 255
+				const value = Number(level);
+				root.razer = level && Number.isFinite(value) ? { name: name || "Razer mouse", percent: Math.min(100, value > 100 ? value * 100 / 255 : value), status: status === "1" ? "Charging" : "Discharging" } : null;
+			}
 		}
 	}
 }

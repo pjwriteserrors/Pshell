@@ -2,16 +2,19 @@ pragma Singleton
 
 import QtQuick
 import Quickshell
-import Quickshell.Io
+// qualified: this singleton shares its name with UPower's enum
+import Quickshell.Services.UPower as UPower
 
-// power-profiles-daemon via powerprofilesctl: read on demand, cycle or set.
+// power-profiles-daemon through Quickshell's PowerProfiles: follows it as it
+// changes, cycles or sets.
 Singleton {
 	id: root
 
-	property string current: ""
-	property var profiles: []
 	readonly property bool wanted: Plugins.on("power-profiles")
-	readonly property bool available: root.wanted && root.profiles.length > 0
+	readonly property var names: ({ [UPower.PowerProfile.PowerSaver]: "power-saver", [UPower.PowerProfile.Balanced]: "balanced", [UPower.PowerProfile.Performance]: "performance" })
+	readonly property string current: root.wanted ? (root.names[UPower.PowerProfiles.profile] ?? "") : ""
+	readonly property var profiles: root.wanted ? ["power-saver", "balanced"].concat(UPower.PowerProfiles.hasPerformanceProfile ? ["performance"] : []) : []
+	readonly property bool available: root.wanted && root.current !== ""
 
 	readonly property var labels: ({ "power-saver": "Power saver", "balanced": "Balanced", "performance": "Performance" })
 	readonly property var icons: ({ "power-saver": "leaf", "balanced": "scale_balance", "performance": "speedometer" })
@@ -24,49 +27,15 @@ Singleton {
 		return root.icons[profile] ?? "speedometer";
 	}
 
-	function refresh() {
-		if (root.wanted && !readProc.running) readProc.running = true;
-	}
-
 	function set(profile) {
-		if (!profile || profile === root.current) return;
-		root.current = profile;
-		const proc = setter.createObject(root);
-		proc.command = ["powerprofilesctl", "set", profile];
-		proc.running = true;
+		if (!root.wanted || !profile || profile === root.current) return;
+		const value = Object.keys(root.names).find(key => root.names[key] === profile);
+		if (value !== undefined) UPower.PowerProfiles.profile = Number(value);
 	}
 
 	function cycle() {
-		const order = ["power-saver", "balanced", "performance"].filter(p => root.profiles.includes(p));
+		const order = root.profiles;
 		if (order.length === 0) return;
 		root.set(order[(order.indexOf(root.current) + 1) % order.length]);
 	}
-
-	Component {
-		id: setter
-
-		Process {
-			onExited: {
-				root.refresh();
-				destroy();
-			}
-		}
-	}
-
-	Process {
-		id: readProc
-
-		command: ["sh", "-c", "powerprofilesctl get; powerprofilesctl list | sed -n 's/^[* ] *\\([a-z-]*\\):$/\\1/p'"]
-		stdout: StdioCollector {
-			onStreamFinished: {
-				const lines = String(text).split("\n").map(l => l.trim()).filter(l => l !== "");
-				if (lines.length === 0) return;
-				root.current = lines[0];
-				root.profiles = lines.slice(1);
-			}
-		}
-	}
-
-	onWantedChanged: root.refresh()
-	Component.onCompleted: root.refresh()
 }

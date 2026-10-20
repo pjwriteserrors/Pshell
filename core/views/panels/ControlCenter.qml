@@ -39,7 +39,6 @@ Drawer {
 		Audio.refreshSinks();
 		if (Plugins.on("backlight")) Brightness.refresh(false);
 		Ddc.refresh();
-		PowerProfile.refresh();
 	}
 
 	Connections {
