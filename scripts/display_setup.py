@@ -12,6 +12,8 @@
                                       of what they had (VRR, hot corners, …)
   display_setup.py connector <name> -> the connector of the plugged-in monitor
                                       an output name means
+  display_setup.py place <file>     -> open windows onto the monitors the
+                                      setup's rules name
 
 Monitors are named by connector here and for the shell; the files name them
 by make, model and serial (niri_outputs.py), so a setup finds its monitors on
@@ -308,6 +310,44 @@ def cmd_activate(source, name):
     kdl.atomic_write(ACTIVE, text)
 
 
+def placements(path):
+    """(app-id, output) of every window rule of a setup that opens on an output."""
+    out = []
+    apps = []
+    for line in Path(path).read_text().splitlines():
+        if line.lstrip().startswith("window-rule"):
+            apps = []
+        found = re.search(r'match app-id="([^"]*)"', line)
+        if found:
+            apps.append(found.group(1))
+        found = re.search(r'open-on-output "([^"]*)"', line)
+        if found:
+            out.extend((app, found.group(1)) for app in apps)
+    return out
+
+
+def cmd_place(source):
+    """Moves the open windows of the setup's rules onto their monitors, the
+    focus staying where it was."""
+    try:
+        windows = json.loads(subprocess.run(["niri", "msg", "-j", "windows"], capture_output=True, text=True, timeout=5).stdout or "[]")
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return
+    connected = niri_outputs.connected()
+    focused = next((w["id"] for w in windows if w.get("is_focused")), None)
+    for app, output in placements(source):
+        # a rule may name the monitor by make, model and serial
+        target = niri_outputs.connector(output, connected)
+        if not target:
+            continue
+        for window in windows:
+            if window.get("app_id") == app:
+                subprocess.run(["niri", "msg", "action", "move-window-to-monitor", "--id", str(window["id"]), target],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+    if focused is not None:
+        subprocess.run(["niri", "msg", "action", "focus-window", "--id", str(focused)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+
+
 def main():
     args = sys.argv[1:]
     if args == ["list"]:
@@ -323,6 +363,8 @@ def main():
         if not found:
             sys.exit(1)
         print(found)
+    elif len(args) == 2 and args[0] == "place":
+        cmd_place(args[1])
     elif len(args) == 2 and args[0] == "delete":
         cmd_delete(args[1])
     else:

@@ -62,7 +62,6 @@ PROGRAMS = {
     "phone-keyboard": [("wtype", "typing from the phone")],
     "fingerprint": [("fprintd-list", "fingerprint unlock")],
     "ssh": [("secret-tool", "SSH passwords")],
-    "niri-settings": [("jq", "display setups")],
     "sounds": [("udevadm", "USB sounds"), ("findmnt", "drive sounds"), ("ffmpeg", "installing sound packs")],
     "connections": [("ss", "the sockets of the apps")],
     "printer": [("orca-slicer", "slicing STL and 3MF models (OrcaSlicer)")],
