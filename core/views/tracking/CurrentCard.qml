@@ -10,7 +10,7 @@ Rectangle {
 	id: root
 
 	radius: Theme.radius.large
-	color: Tmpo.tracking ? Theme.primaryContainer : Theme.layer1
+	color: QtrackTimer.tracking ? Theme.primaryContainer : Theme.layer1
 	clip: true
 
 	Behavior on color {
@@ -36,10 +36,10 @@ Rectangle {
 				implicitWidth: 8
 				implicitHeight: 8
 				radius: 4
-				color: Tmpo.tracking ? Theme.primary : Theme.textSubtle
+				color: QtrackTimer.tracking ? Theme.primary : Theme.textSubtle
 
 				SequentialAnimation {
-					running: Tmpo.tracking && root.visible
+					running: QtrackTimer.tracking && root.visible
 					loops: Animation.Infinite
 					onStopped: {
 						dot.opacity = 1;
@@ -59,21 +59,21 @@ Rectangle {
 
 			SectionLabel {
 				Layout.fillWidth: true
-				text: Tmpo.tracking ? `Running since ${Tmpo.started || "--"}` : "Paused"
+				text: QtrackTimer.tracking ? `Running since ${QtrackTimer.started || "--"}` : "Paused"
 			}
 		}
 
 		StyledText {
 			Layout.fillWidth: true
 			Layout.topMargin: 4
-			text: Tmpo.description || Tmpo.project
+			text: QtrackTimer.description || QtrackTimer.project
 			font.pixelSize: Theme.size.title
 			font.weight: Font.Bold
 		}
 
 		StyledText {
 			Layout.fillWidth: true
-			text: Tmpo.project || "No project"
+			text: QtrackTimer.project || "No project"
 			tone: Theme.textMuted
 			font.pixelSize: Theme.size.small
 		}
@@ -83,7 +83,7 @@ Rectangle {
 		}
 
 		StyledText {
-			text: Tmpo.duration || "--"
+			text: QtrackTimer.duration || "--"
 			tabular: true
 			font.family: Theme.monoFamily
 			font.pixelSize: 28

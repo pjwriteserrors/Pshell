@@ -229,9 +229,9 @@ Singleton {
 
 	function meetingStarted(event, fromAnother) {
 		if (!Plugins.on("qtrack")) return;
-		if (!fromAnother) root.trackedBefore = Tmpo.tracking && !Tmpo.paused ? { project: Tmpo.project, description: Tmpo.description } : null;
-		if (Tmpo.tracking && !Tmpo.paused && Tmpo.description === event.subject) return;
-		Notifs.pushInternal("running", event.subject, Tmpo.tracking && !Tmpo.paused ? `Timer: ${Tmpo.description || Tmpo.project}` : "No timer running", {
+		if (!fromAnother) root.trackedBefore = QtrackTimer.tracking && !QtrackTimer.paused ? { project: QtrackTimer.project, description: QtrackTimer.description } : null;
+		if (QtrackTimer.tracking && !QtrackTimer.paused && QtrackTimer.description === event.subject) return;
+		Notifs.pushInternal("running", event.subject, QtrackTimer.tracking && !QtrackTimer.paused ? `Timer: ${QtrackTimer.description || QtrackTimer.project}` : "No timer running", {
 			icon: "timer_outline",
 			duration: 60000,
 			actions: [{ label: "Switch timer", icon: "timer_outline", run: () => root.trackMeeting(event) }]
@@ -239,8 +239,8 @@ Singleton {
 	}
 
 	function trackMeeting(event) {
-		Tmpo.selectedTodayTaskKey = "";
-		Tmpo.editDescription(event.subject);
+		QtrackTimer.selectedTodayTaskKey = "";
+		QtrackTimer.editDescription(event.subject);
 		Popups.withFocusedScreen(screen => Popups.open("timer", screen));
 	}
 
@@ -248,15 +248,15 @@ Singleton {
 		const before = root.trackedBefore;
 		root.trackedBefore = null;
 		if (!Plugins.on("qtrack") || !before) return;
-		if (Tmpo.tracking && !Tmpo.paused && Tmpo.project === before.project && Tmpo.description === before.description) return;
+		if (QtrackTimer.tracking && !QtrackTimer.paused && QtrackTimer.project === before.project && QtrackTimer.description === before.description) return;
 		const label = before.description || before.project;
-		Notifs.pushInternal("running", "Meeting over", Tmpo.tracking && !Tmpo.paused ? `Timer: ${Tmpo.description || Tmpo.project}` : "No timer running", {
+		Notifs.pushInternal("running", "Meeting over", QtrackTimer.tracking && !QtrackTimer.paused ? `Timer: ${QtrackTimer.description || QtrackTimer.project}` : "No timer running", {
 			icon: "timer_outline",
 			duration: 60000,
 			actions: [{
 				label: `Back to “${label.length > 28 ? label.slice(0, 27) + "…" : label}”`,
 				icon: "play",
-				run: () => Tmpo.runAction(Tmpo.buildStartArgs(before.project, before.description, Tmpo.findTodayTask(before.project, before.description)))
+				run: () => QtrackTimer.runAction(QtrackTimer.buildStartArgs(before.project, before.description, QtrackTimer.findTodayTask(before.project, before.description)))
 			}]
 		});
 	}

@@ -34,14 +34,14 @@ ColumnLayout {
 		root.selected = new Date();
 	}
 
-	onShownChanged: Outlook.ensure(root.shown)
-	Component.onCompleted: Outlook.ensure(root.shown)
+	onShownChanged: MsCalendar.ensure(root.shown)
+	Component.onCompleted: MsCalendar.ensure(root.shown)
 
 	Connections {
-		target: Outlook
+		target: MsCalendar
 
 		function onSignedInChanged() {
-			Outlook.ensure(root.shown);
+			MsCalendar.ensure(root.shown);
 		}
 	}
 
@@ -123,7 +123,7 @@ ColumnLayout {
 				readonly property bool inMonth: day.date.getMonth() === root.shown.getMonth()
 				readonly property bool today: day.date.toDateString() === clock.date.toDateString()
 				readonly property bool picked: !day.today && day.date.toDateString() === root.selected.toDateString()
-				readonly property var events: Outlook.eventsOn(day.date).filter(event => Outlook.active(event))
+				readonly property var events: MsCalendar.eventsOn(day.date).filter(event => MsCalendar.active(event))
 
 				Layout.fillWidth: true
 				Layout.preferredHeight: 34

@@ -18,7 +18,7 @@ ColumnLayout {
 	signal picked(var task)
 
 	readonly property string currentId: String(root.entry.teamwork_task_id || "")
-	readonly property var tasks: Array.isArray(Tmpo.teamworkTasks) ? Tmpo.teamworkTasks : []
+	readonly property var tasks: Array.isArray(QtrackTimer.teamworkTasks) ? QtrackTimer.teamworkTasks : []
 	readonly property var matches: root.tasks.filter(task => root.haystack(task).includes(root.search.trim().toLowerCase())).slice(0, 80)
 
 	function taskId(task) {
@@ -80,7 +80,7 @@ ColumnLayout {
 			StyledText {
 				Layout.fillWidth: true
 				text: {
-					if (root.currentId === "") return root.tasks.length > 0 ? "Choose a ticket …" : Tmpo.teamworkStatus;
+					if (root.currentId === "") return root.tasks.length > 0 ? "Choose a ticket …" : QtrackTimer.teamworkStatus;
 					const known = root.tasks.find(task => root.taskId(task) === root.currentId);
 					return known ? root.title(known) : String(root.entry.teamwork_task_name || `Ticket ${root.currentId}`);
 				}

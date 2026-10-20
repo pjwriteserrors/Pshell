@@ -335,11 +335,11 @@ Item {
 				property int back: 0
 				property var files: []
 				readonly property var events: {
-					Outlook.byDay;
-					if (!Outlook.enabled || !Outlook.signedIn) return [];
+					MsCalendar.byDay;
+					if (!MsCalendar.enabled || !MsCalendar.signedIn) return [];
 					const date = new Date();
 					date.setDate(date.getDate() - day.back);
-					return Outlook.eventsOn(date).filter(event => !event.allDay && Outlook.active(event));
+					return MsCalendar.eventsOn(date).filter(event => !event.allDay && MsCalendar.active(event));
 				}
 				// files and meetings in one line of time, newest first
 				readonly property var line: {
@@ -357,12 +357,12 @@ Item {
 						// the page may be gone by the time the answer is in
 						if (day) day.files = data?.entries ?? [];
 					});
-					if (Outlook.enabled) Outlook.ensure(start);
+					if (MsCalendar.enabled) MsCalendar.ensure(start);
 				}
 
 				order: 3
 				title: day.back === 0 ? "Your day" : "Yesterday"
-				subtitle: Outlook.enabled && Outlook.signedIn ? "What you saved, and the meetings around it" : "What you saved"
+				subtitle: MsCalendar.enabled && MsCalendar.signedIn ? "What you saved, and the meetings around it" : "What you saved"
 				visible: day.line.length > 0
 				action: day.back === 0 ? "Yesterday" : "Today"
 				onActionClicked: {

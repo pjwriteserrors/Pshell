@@ -13,8 +13,8 @@ Topic {
 		const today = new Date();
 		for (let offset = 0; offset < 14; offset += 1) {
 			const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + offset);
-			const key = Outlook.dayKey(date);
-			for (const event of Outlook.eventsOn(date))
+			const key = MsCalendar.dayKey(date);
+			for (const event of MsCalendar.eventsOn(date))
 				out.push({
 					id: String(event.id),
 					day: key,
@@ -25,43 +25,43 @@ Topic {
 					location: String(event.location || ""),
 					join: String(event.joinUrl || event.onlineMeetingUrl || ""),
 					link: String(event.webLink || ""),
-					running: Outlook.active(event)
+					running: MsCalendar.active(event)
 				});
 		}
 		return out;
 	}
 
-	onWantedChanged: if (topic.wanted && Outlook.signedIn) Outlook.refresh()
+	onWantedChanged: if (topic.wanted && MsCalendar.signedIn) MsCalendar.refresh()
 
 	data: topic.wanted ? ({
 		microsoft: Plugins.on("microsoft-calendar"),
-		signedIn: Outlook.signedIn,
-		account: Outlook.account,
-		name: Outlook.name,
-		signingIn: Outlook.signingIn,
-		loginCode: Outlook.loginCode,
-		loginUrl: Outlook.loginUrl,
-		error: Outlook.error,
-		loading: Outlook.loading,
-		events: Outlook.signedIn ? topic.upcoming() : []
+		signedIn: MsCalendar.signedIn,
+		account: MsCalendar.account,
+		name: MsCalendar.name,
+		signingIn: MsCalendar.signingIn,
+		loginCode: MsCalendar.loginCode,
+		loginUrl: MsCalendar.loginUrl,
+		error: MsCalendar.error,
+		loading: MsCalendar.loading,
+		events: MsCalendar.signedIn ? topic.upcoming() : []
 	}) : null
 
 	function call(action, args, done) {
 		switch (action) {
 		case "refresh":
-			Outlook.refresh();
+			MsCalendar.refresh();
 			return {};
 		case "signIn":
-			Outlook.signIn();
+			MsCalendar.signIn();
 			return {};
 		case "cancelSignIn":
-			Outlook.cancelSignIn();
+			MsCalendar.cancelSignIn();
 			return {};
 		case "signOut":
-			Outlook.signOut();
+			MsCalendar.signOut();
 			return {};
 		case "open":
-			Outlook.open(String(args.url));
+			MsCalendar.open(String(args.url));
 			return {};
 		}
 		throw new Error("unknown-action");

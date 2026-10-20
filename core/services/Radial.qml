@@ -80,17 +80,17 @@ Singleton {
 	})))
 
 	readonly property var timerEntries: [
-		{ id: "pause", label: "Pause", icon: "pause", enabled: Tmpo.tracking, run: () => Tmpo.pause() },
-		{ id: "resume", label: "Resume", icon: "play", enabled: !Tmpo.tracking && Tmpo.canResume, run: () => Tmpo.runAction(["resume"]) },
+		{ id: "pause", label: "Pause", icon: "pause", enabled: QtrackTimer.tracking, run: () => QtrackTimer.pause() },
+		{ id: "resume", label: "Resume", icon: "play", enabled: !QtrackTimer.tracking && QtrackTimer.canResume, run: () => QtrackTimer.runAction(["resume"]) },
 		{
 			id: "tasks", label: "Timer", icon: "timer_outline",
-			enabled: Tmpo.todayTasks.length > 0,
-			children: Tmpo.todayTasks.slice(0, 10).map((task, index) => ({
+			enabled: QtrackTimer.todayTasks.length > 0,
+			children: QtrackTimer.todayTasks.slice(0, 10).map((task, index) => ({
 				id: `task-${index}`,
 				label: String(task.description || task.project || ""),
 				icon: "play",
-				active: (Tmpo.tracking || Tmpo.paused) && Tmpo.taskKey(task.project, task.description) === Tmpo.taskKey(Tmpo.project, Tmpo.description),
-				run: () => Tmpo.switchTo(task)
+				active: (QtrackTimer.tracking || QtrackTimer.paused) && QtrackTimer.taskKey(task.project, task.description) === QtrackTimer.taskKey(QtrackTimer.project, QtrackTimer.description),
+				run: () => QtrackTimer.switchTo(task)
 			}))
 		}
 	]
@@ -111,7 +111,7 @@ Singleton {
 		if (Plugins.on("ssh"))
 			entries.push({ id: "ssh", label: Words.of("radial.ssh", "SSH"), icon: "console", enabled: root.sshEntries.length > 0, children: root.sshEntries });
 		if (Plugins.on("qtrack"))
-			entries.push({ id: "qtrack", label: Words.of("radial.timer", "Timer"), icon: "timer_outline", active: Tmpo.tracking, children: root.timerEntries });
+			entries.push({ id: "qtrack", label: Words.of("radial.timer", "Timer"), icon: "timer_outline", active: QtrackTimer.tracking, children: root.timerEntries });
 		return entries;
 	}
 

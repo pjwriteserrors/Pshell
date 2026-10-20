@@ -40,7 +40,7 @@ Drawer {
 	function follow(entry, project, description) {
 		if (!root.opened[Tracking.key(entry)]) return;
 		const next = Object.assign({}, root.opened);
-		next[Tmpo.taskKey(project, description)] = true;
+		next[QtrackTimer.taskKey(project, description)] = true;
 		root.opened = next;
 	}
 
@@ -106,7 +106,7 @@ Drawer {
 	}
 
 	Connections {
-		target: Tmpo
+		target: QtrackTimer
 		enabled: root.shown
 		function onTrackingChanged() {
 			Tracking.reload();
@@ -129,7 +129,7 @@ Drawer {
 		repeat: true
 		triggeredOnStart: true
 		interval: 300000
-		onTriggered: Tmpo.refreshTeamworkTasks()
+		onTriggered: QtrackTimer.refreshTeamworkTasks()
 	}
 
 	RowLayout {
@@ -238,7 +238,7 @@ Drawer {
 						CurrentCard {
 							id: current
 
-							readonly property bool wanted: Tracking.isToday && (Tmpo.tracking || Tmpo.paused)
+							readonly property bool wanted: Tracking.isToday && (QtrackTimer.tracking || QtrackTimer.paused)
 							property real room: current.wanted ? 294 : 0
 
 							Layout.preferredWidth: Math.max(0, current.room - 14)

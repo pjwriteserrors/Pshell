@@ -20,10 +20,10 @@ Drawer {
 	panelWidth: 470
 	contentHeight: layout.implicitHeight
 
-	readonly property var todayTasks: Array.isArray(Tmpo.todayTasks) ? Tmpo.todayTasks : []
-	readonly property var teamwork: (Array.isArray(Tmpo.teamworkTasks) ? Tmpo.teamworkTasks : []).filter(task => root.matches(task, root.search))
-	readonly property bool hasSelectedToday: Tmpo.findTodayTaskByKey(Tmpo.selectedTodayTaskKey) !== null
-	readonly property bool canPrimary: Tmpo.tracking || Tmpo.canResume || root.hasSelectedToday || Tmpo.canStart
+	readonly property var todayTasks: Array.isArray(QtrackTimer.todayTasks) ? QtrackTimer.todayTasks : []
+	readonly property var teamwork: (Array.isArray(QtrackTimer.teamworkTasks) ? QtrackTimer.teamworkTasks : []).filter(task => root.matches(task, root.search))
+	readonly property bool hasSelectedToday: QtrackTimer.findTodayTaskByKey(QtrackTimer.selectedTodayTaskKey) !== null
+	readonly property bool canPrimary: QtrackTimer.tracking || QtrackTimer.canResume || root.hasSelectedToday || QtrackTimer.canStart
 
 	function label(task) {
 		return String(task.label || task.task_name || task.name || "Teamwork task");
@@ -47,23 +47,23 @@ Drawer {
 	}
 
 	function primaryAction() {
-		if (Tmpo.tracking) Tmpo.pause();
-		else if (root.tab === "new" && Tmpo.canStart && !root.hasSelectedToday) Tmpo.start();
-		else if (root.hasSelectedToday || Tmpo.canResume) Tmpo.resume();
-		else if (Tmpo.canStart) Tmpo.start();
+		if (QtrackTimer.tracking) QtrackTimer.pause();
+		else if (root.tab === "new" && QtrackTimer.canStart && !root.hasSelectedToday) QtrackTimer.start();
+		else if (root.hasSelectedToday || QtrackTimer.canResume) QtrackTimer.resume();
+		else if (QtrackTimer.canStart) QtrackTimer.start();
 	}
 
 	Connections {
-		target: Tmpo
+		target: QtrackTimer
 		function onDraftDescriptionChanged() {
-			if (!description.focused && description.text !== Tmpo.draftDescription) description.text = Tmpo.draftDescription;
+			if (!description.focused && description.text !== QtrackTimer.draftDescription) description.text = QtrackTimer.draftDescription;
 		}
 	}
 
 	onPanelOpened: {
-		Tmpo.seedDraft(false);
-		Tmpo.refresh();
-		root.tab = root.hasSelectedToday || (Tmpo.paused && root.todayTasks.length > 0) ? "today" : "new";
+		QtrackTimer.seedDraft(false);
+		QtrackTimer.refresh();
+		root.tab = root.hasSelectedToday || (QtrackTimer.paused && root.todayTasks.length > 0) ? "today" : "new";
 		if (root.tab === "new") Qt.callLater(() => description.focusInput());
 	}
 
@@ -86,8 +86,8 @@ Drawer {
 				Ring {
 					anchors.fill: parent
 					thickness: 7
-					value: Math.min(1, Tmpo.todayLive / (8 * 3600))
-					color: Tmpo.tracking ? Theme.primary : Theme.textSubtle
+					value: Math.min(1, QtrackTimer.todayLive / (8 * 3600))
+					color: QtrackTimer.tracking ? Theme.primary : Theme.textSubtle
 					trackColor: Theme.layer2
 				}
 
@@ -97,10 +97,10 @@ Drawer {
 					anchors.centerIn: parent
 					width: 62
 					height: 62
-					radius: Tmpo.tracking ? 20 : 31
-					color: root.canPrimary ? (Tmpo.tracking ? Theme.primary : Theme.primaryContainer) : Theme.layer2
-					tint: Tmpo.tracking ? Theme.onPrimary : Theme.text
-					interactive: root.canPrimary && !Tmpo.actionRunning
+					radius: QtrackTimer.tracking ? 20 : 31
+					color: root.canPrimary ? (QtrackTimer.tracking ? Theme.primary : Theme.primaryContainer) : Theme.layer2
+					tint: QtrackTimer.tracking ? Theme.onPrimary : Theme.text
+					interactive: root.canPrimary && !QtrackTimer.actionRunning
 					pressedScale: 0.86
 					onClicked: root.primaryAction()
 
@@ -112,9 +112,9 @@ Drawer {
 
 					Glyph {
 						anchors.centerIn: parent
-						icon: Tmpo.actionRunning ? "sync" : (Tmpo.tracking ? "pause" : "play")
+						icon: QtrackTimer.actionRunning ? "sync" : (QtrackTimer.tracking ? "pause" : "play")
 						size: 30
-						color: Tmpo.tracking ? Theme.onPrimary : (root.canPrimary ? Theme.primary : Theme.textSubtle)
+						color: QtrackTimer.tracking ? Theme.onPrimary : (root.canPrimary ? Theme.primary : Theme.textSubtle)
 					}
 				}
 			}
@@ -130,14 +130,14 @@ Drawer {
 						Layout.preferredHeight: 22
 						Layout.preferredWidth: statusLabel.implicitWidth + 18
 						radius: 11
-						color: Tmpo.tracking ? Theme.primary : Theme.layer2
+						color: QtrackTimer.tracking ? Theme.primary : Theme.layer2
 
 						StyledText {
 							id: statusLabel
 
 							anchors.centerIn: parent
-							text: Tmpo.tracking ? "TRACKING" : (Tmpo.paused ? "PAUSED" : "READY")
-							tone: Tmpo.tracking ? Theme.onPrimary : Theme.textMuted
+							text: QtrackTimer.tracking ? "TRACKING" : (QtrackTimer.paused ? "PAUSED" : "READY")
+							tone: QtrackTimer.tracking ? Theme.onPrimary : Theme.textMuted
 							font.pixelSize: Theme.size.tiny
 							font.weight: Font.Bold
 							font.letterSpacing: 1
@@ -145,15 +145,15 @@ Drawer {
 					}
 
 					StyledText {
-						visible: Tmpo.started !== ""
-						text: `since ${Tmpo.started}`
+						visible: QtrackTimer.started !== ""
+						text: `since ${QtrackTimer.started}`
 						tone: Theme.textSubtle
 						font.pixelSize: Theme.size.small
 					}
 				}
 
 				StyledText {
-					text: Tmpo.tracking || Tmpo.paused ? (Tmpo.duration || "--") : Tmpo.todayTotal
+					text: QtrackTimer.tracking || QtrackTimer.paused ? (QtrackTimer.duration || "--") : QtrackTimer.todayTotal
 					font.family: Theme.monoFamily
 					font.pixelSize: 38
 					font.weight: Font.Bold
@@ -162,8 +162,8 @@ Drawer {
 
 				StyledText {
 					Layout.fillWidth: true
-					text: Tmpo.tracking || Tmpo.paused
-						? (Tmpo.project || "No project")
+					text: QtrackTimer.tracking || QtrackTimer.paused
+						? (QtrackTimer.project || "No project")
 						: "today in total"
 					tone: Theme.textMuted
 					font.pixelSize: Theme.size.label
@@ -172,8 +172,8 @@ Drawer {
 
 				StyledText {
 					Layout.fillWidth: true
-					visible: (Tmpo.tracking || Tmpo.paused) && Tmpo.description !== ""
-					text: Tmpo.description
+					visible: (QtrackTimer.tracking || QtrackTimer.paused) && QtrackTimer.description !== ""
+					text: QtrackTimer.description
 					tone: Theme.textSubtle
 					font.pixelSize: Theme.size.small
 				}
@@ -220,24 +220,24 @@ Drawer {
 					id: todayRow
 
 					required property var modelData
-					readonly property string key: Tmpo.taskKey(todayRow.modelData.project, todayRow.modelData.description)
-					readonly property bool isCurrent: (Tmpo.tracking || Tmpo.paused) && key === Tmpo.taskKey(Tmpo.project, Tmpo.description)
+					readonly property string key: QtrackTimer.taskKey(todayRow.modelData.project, todayRow.modelData.description)
+					readonly property bool isCurrent: (QtrackTimer.tracking || QtrackTimer.paused) && key === QtrackTimer.taskKey(QtrackTimer.project, QtrackTimer.description)
 
 					width: ListView.view.width
-					icon: todayRow.isCurrent && Tmpo.tracking ? "progress_clock" : "clock_outline"
+					icon: todayRow.isCurrent && QtrackTimer.tracking ? "progress_clock" : "clock_outline"
 					title: String(todayRow.modelData.description || "No description")
 					subtitle: [String(todayRow.modelData.project || ""), String(todayRow.modelData.duration_label || todayRow.modelData.total_label || "")].filter(v => v !== "").join(" · ")
-					selected: Tmpo.selectedTodayTaskKey === todayRow.key
-					onClicked: Tmpo.selectTodayTask(todayRow.modelData.project, todayRow.modelData.description)
+					selected: QtrackTimer.selectedTodayTaskKey === todayRow.key
+					onClicked: QtrackTimer.selectTodayTask(todayRow.modelData.project, todayRow.modelData.description)
 
 					IconButton {
-						visible: !(todayRow.isCurrent && Tmpo.tracking)
+						visible: !(todayRow.isCurrent && QtrackTimer.tracking)
 						icon: "play"
 						variant: todayRow.selected ? "filled" : "tonal"
 						opacity: todayRow.hovered || todayRow.selected ? 1 : 0
 						onClicked: {
-							Tmpo.selectTodayTask(todayRow.modelData.project, todayRow.modelData.description);
-							Tmpo.resume();
+							QtrackTimer.selectTodayTask(todayRow.modelData.project, todayRow.modelData.description);
+							QtrackTimer.resume();
 						}
 
 						Behavior on opacity {
@@ -262,7 +262,7 @@ Drawer {
 
 				SectionLabel {
 					Layout.fillWidth: true
-					text: Tmpo.teamworkStatus
+					text: QtrackTimer.teamworkStatus
 				}
 
 				IconButton {
@@ -270,11 +270,11 @@ Drawer {
 					Layout.preferredHeight: 28
 					icon: "refresh"
 					iconSize: 16
-					enabled: !Tmpo.teamworkRefreshing
-					onClicked: Tmpo.refreshTeamworkTasks()
+					enabled: !QtrackTimer.teamworkRefreshing
+					onClicked: QtrackTimer.refreshTeamworkTasks()
 
 					RotationAnimator on rotation {
-						running: Tmpo.teamworkRefreshing
+						running: QtrackTimer.teamworkRefreshing
 						loops: Animation.Infinite
 						from: 0
 						to: 360
@@ -293,7 +293,7 @@ Drawer {
 				onUpPressed: taskList.decrementCurrentIndex()
 				onAccepted: {
 					const task = root.teamwork[taskList.currentIndex];
-					if (task) Tmpo.selectTeamworkTask(String(task.task_id || task.id || ""));
+					if (task) QtrackTimer.selectTeamworkTask(String(task.task_id || task.id || ""));
 					description.focusInput();
 				}
 			}
@@ -323,7 +323,7 @@ Drawer {
 						required property var modelData
 						required property int index
 						readonly property string taskId: String(taskRow.modelData.task_id || taskRow.modelData.id || "")
-						readonly property bool picked: taskRow.taskId === Tmpo.selectedTeamworkTaskId
+						readonly property bool picked: taskRow.taskId === QtrackTimer.selectedTeamworkTaskId
 
 						width: ListView.view.width
 						implicitHeight: 46
@@ -331,7 +331,7 @@ Drawer {
 						pressedScale: 0.98
 						color: taskRow.picked ? Theme.primaryContainer : (taskRow.hovered || taskList.currentIndex === taskRow.index ? Theme.layer2 : "transparent")
 						onClicked: {
-							Tmpo.selectTeamworkTask(taskRow.taskId);
+							QtrackTimer.selectTeamworkTask(taskRow.taskId);
 							description.focusInput();
 						}
 
@@ -384,21 +384,21 @@ Drawer {
 				Layout.fillWidth: true
 				Layout.preferredHeight: 84
 				placeholder: "What are you working on?"
-				text: Tmpo.draftDescription
+				text: QtrackTimer.draftDescription
 				onEdited: text => {
-					if (text !== Tmpo.draftDescription) Tmpo.editDescription(text);
+					if (text !== QtrackTimer.draftDescription) QtrackTimer.editDescription(text);
 				}
 			}
 
 			TextButton {
 				Layout.fillWidth: true
 				implicitHeight: 42
-				text: Tmpo.tracking ? "Pause the running timer first" : "Start timer"
+				text: QtrackTimer.tracking ? "Pause the running timer first" : "Start timer"
 				icon: "play"
 				variant: "filled"
-				enabled: Tmpo.canStart
-				busy: Tmpo.actionRunning
-				onActivated: Tmpo.start()
+				enabled: QtrackTimer.canStart
+				busy: QtrackTimer.actionRunning
+				onActivated: QtrackTimer.start()
 			}
 		}
 
@@ -425,7 +425,7 @@ Drawer {
 						spacing: 0
 						SectionLabel { text: Words.of("timer.today", "Today") }
 						StyledText {
-							text: Tmpo.todayTotal
+							text: QtrackTimer.todayTotal
 							tabular: true
 							font.pixelSize: Theme.size.title
 							font.weight: Font.Bold
@@ -436,7 +436,7 @@ Drawer {
 						spacing: 0
 						SectionLabel { text: Words.of("timer.tasks", "Tasks") }
 						StyledText {
-							text: Tmpo.todayEntries
+							text: QtrackTimer.todayEntries
 							tabular: true
 							font.pixelSize: Theme.size.title
 							font.weight: Font.Bold

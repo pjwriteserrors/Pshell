@@ -5,7 +5,8 @@ import Quickshell
 import Quickshell.Io
 
 // qtrack time tracking (qtrack-local CLI) incl. Teamwork task picking/sync.
-// Status polls every second so the bar timer is always live.
+// Status is asked when qtrack's database changes; the bar's clock counts on
+// by itself every second.
 Singleton {
 	id: root
 
@@ -358,12 +359,39 @@ Singleton {
 		onExited: root.refresh()
 	}
 
+	// qtrack's database changed (a timer started, stopped, an entry edited,
+	// also from its own CLI): status and day are asked anew. A slow poll stays
+	// for what the file does not tell (the day turning)
+	property real lastAsked: 0
+
+	function ask() {
+		root.lastAsked = Date.now();
+		if (!statusProcess.running) statusProcess.running = true;
+		if (!snapshotProcess.running) snapshotProcess.running = true;
+	}
+
+	FileView {
+		path: Plugins.on("qtrack") ? `${Quickshell.env("QTRACK_STATE_DIR") || (Quickshell.env("XDG_STATE_HOME") || Paths.home + "/.local/state") + "/qtrack"}/tracker.db` : ""
+		preload: false
+		watchChanges: true
+		printErrors: false
+		// reading it ourselves may touch the file: that is no news
+		onFileChanged: if (Date.now() - root.lastAsked > 2000) changed.restart()
+	}
+
+	Timer {
+		id: changed
+
+		interval: 300
+		onTriggered: root.ask()
+	}
+
 	Timer {
 		running: Plugins.on("qtrack")
 		repeat: true
 		triggeredOnStart: true
-		interval: 5000
-		onTriggered: if (!statusProcess.running) statusProcess.running = true
+		interval: 60000
+		onTriggered: root.ask()
 	}
 
 	Timer {
@@ -373,11 +401,4 @@ Singleton {
 		onTriggered: root.now = Date.now()
 	}
 
-	Timer {
-		running: Plugins.on("qtrack")
-		repeat: true
-		triggeredOnStart: true
-		interval: 15000
-		onTriggered: if (!snapshotProcess.running) snapshotProcess.running = true
-	}
 }

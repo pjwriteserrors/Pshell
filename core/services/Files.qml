@@ -1276,7 +1276,7 @@ Singleton {
 				}
 				Sounds.play("taskDone");
 				root.say(answer.imported === 1 ? "The event is in the calendar" : `${answer.imported} events are in the calendar`, "calendar_check");
-				Outlook.refresh();
+				MsCalendar.refresh();
 			}
 		}
 	}

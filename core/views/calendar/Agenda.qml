@@ -13,7 +13,7 @@ ColumnLayout {
 	id: root
 
 	property date day: new Date()
-	readonly property var events: Outlook.eventsOn(root.day)
+	readonly property var events: MsCalendar.eventsOn(root.day)
 	readonly property int rowHeight: 48
 
 	SystemClock {
@@ -34,38 +34,38 @@ ColumnLayout {
 		if (event.allDay) return "All day";
 		const start = new Date(event.start);
 		const end = new Date(event.end);
-		const key = Outlook.dayKey(root.day);
-		const from = Outlook.dayKey(start) === key ? Qt.formatTime(start, "HH:mm") : "…";
-		const to = Outlook.dayKey(end) === key ? Qt.formatTime(end, "HH:mm") : "…";
+		const key = MsCalendar.dayKey(root.day);
+		const from = MsCalendar.dayKey(start) === key ? Qt.formatTime(start, "HH:mm") : "…";
+		const to = MsCalendar.dayKey(end) === key ? Qt.formatTime(end, "HH:mm") : "…";
 		return `${from} – ${to}`;
 	}
 
-	visible: Outlook.enabled && Outlook.checked
+	visible: MsCalendar.enabled && MsCalendar.checked
 	spacing: 6
 
 	// ── signed out ───────────────────────────────────────────────────────
 	TextButton {
-		visible: !Outlook.signedIn && !Outlook.signingIn
+		visible: !MsCalendar.signedIn && !MsCalendar.signingIn
 		Layout.fillWidth: true
 		text: "Sign in to Microsoft"
 		icon: "microsoft"
-		onActivated: Outlook.signIn()
+		onActivated: MsCalendar.signIn()
 	}
 
 	RowLayout {
-		visible: !Outlook.signedIn && Outlook.signingIn
+		visible: !MsCalendar.signedIn && MsCalendar.signingIn
 		Layout.fillWidth: true
 		spacing: 8
 
 		Spinner {
-			visible: Outlook.loginCode === ""
+			visible: MsCalendar.loginCode === ""
 			Layout.preferredWidth: 16
 			Layout.preferredHeight: 16
 		}
 
 		StyledText {
-			visible: Outlook.loginCode !== ""
-			text: Outlook.loginCode
+			visible: MsCalendar.loginCode !== ""
+			text: MsCalendar.loginCode
 			font.family: Theme.monoFamily
 			font.pixelSize: Theme.size.heading
 			font.weight: Font.Bold
@@ -77,23 +77,23 @@ ColumnLayout {
 		}
 
 		TextButton {
-			visible: Outlook.loginCode !== ""
+			visible: MsCalendar.loginCode !== ""
 			text: "Copy & open"
 			icon: "open_in_new"
 			variant: "filled"
-			onActivated: Outlook.openSignInPage()
+			onActivated: MsCalendar.openSignInPage()
 		}
 
 		IconButton {
 			icon: "close"
-			onClicked: Outlook.cancelSignIn()
+			onClicked: MsCalendar.cancelSignIn()
 		}
 	}
 
 	StyledText {
-		visible: Outlook.error !== ""
+		visible: MsCalendar.error !== ""
 		Layout.fillWidth: true
-		text: Outlook.error
+		text: MsCalendar.error
 		tone: Theme.danger
 		font.pixelSize: Theme.size.small
 		wrapMode: Text.Wrap
@@ -102,7 +102,7 @@ ColumnLayout {
 
 	// ── signed in ────────────────────────────────────────────────────────
 	RowLayout {
-		visible: Outlook.signedIn
+		visible: MsCalendar.signedIn
 		Layout.fillWidth: true
 		spacing: 6
 
@@ -115,7 +115,7 @@ ColumnLayout {
 		}
 
 		Spinner {
-			visible: Outlook.loading
+			visible: MsCalendar.loading
 			Layout.preferredWidth: 12
 			Layout.preferredHeight: 12
 		}
@@ -124,7 +124,7 @@ ColumnLayout {
 			implicitWidth: 26
 			implicitHeight: 26
 			icon: "refresh"
-			onClicked: Outlook.refresh()
+			onClicked: MsCalendar.refresh()
 		}
 
 		// two clicks, it sits next to refresh
@@ -139,7 +139,7 @@ ColumnLayout {
 			variant: signOut.armed ? "danger" : "ghost"
 			onClicked: {
 				if (signOut.armed)
-					Outlook.signOut();
+					MsCalendar.signOut();
 				signOut.armed = !signOut.armed;
 				disarm.restart();
 			}
@@ -153,7 +153,7 @@ ColumnLayout {
 	}
 
 	StyledText {
-		visible: Outlook.signedIn && root.events.length === 0
+		visible: MsCalendar.signedIn && root.events.length === 0
 		Layout.fillWidth: true
 		text: "No events"
 		tone: Theme.textSubtle
@@ -163,7 +163,7 @@ ColumnLayout {
 	ListView {
 		id: list
 
-		visible: Outlook.signedIn && root.events.length > 0
+		visible: MsCalendar.signedIn && root.events.length > 0
 		Layout.fillWidth: true
 		Layout.preferredHeight: Math.min(4, root.events.length) * (root.rowHeight + spacing) - spacing
 		clip: true
@@ -177,15 +177,15 @@ ColumnLayout {
 
 			required property var modelData
 			readonly property bool running: !modelData.allDay && Date.parse(modelData.start) <= clock.date.getTime() && clock.date.getTime() < Date.parse(modelData.end)
-			readonly property bool picked: Outlook.selected?.id === modelData.id && Outlook.selected?.start === modelData.start
-			readonly property bool faded: !Outlook.active(modelData) || modelData.showAs === "free"
+			readonly property bool picked: MsCalendar.selected?.id === modelData.id && MsCalendar.selected?.start === modelData.start
+			readonly property bool faded: !MsCalendar.active(modelData) || modelData.showAs === "free"
 
 			width: ListView.view.width
 			height: root.rowHeight
 			radius: Theme.radius.medium
 			pressedScale: 0.98
 			color: row.picked ? Theme.primarySoft : (row.hovered ? Theme.layer1 : (row.running ? Qt.alpha(Theme.primary, 0.07) : "transparent"))
-			onClicked: Outlook.select(modelData)
+			onClicked: MsCalendar.select(modelData)
 
 			Rectangle {
 				x: 6

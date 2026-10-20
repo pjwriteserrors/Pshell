@@ -70,8 +70,8 @@ Singleton {
 	readonly property int waterMl: root.todayEntry.ml
 	readonly property int screenSeconds: root.todayEntry.screen
 	// ── workday (qtrack) ─────────────────────────────────────────────────
-	readonly property bool workKnown: Plugins.on("qtrack") && Tmpo.todaySegments.length > 0
-	readonly property int workedSeconds: root.workKnown ? Tmpo.todaySeconds : 0
+	readonly property bool workKnown: Plugins.on("qtrack") && QtrackTimer.todaySegments.length > 0
+	readonly property int workedSeconds: root.workKnown ? QtrackTimer.todaySeconds : 0
 	// what should be drunk by now
 	readonly property int paceMl: root.workKnown ? Math.round(Math.min(1, root.workedSeconds / root.workdaySeconds) * root.goalMl) : root.goalMl
 

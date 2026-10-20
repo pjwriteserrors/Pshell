@@ -25,10 +25,10 @@ Singleton {
 	property bool dndFullscreen: true
 	property bool dndSharing: true
 	property bool dndMeetings: true
-	readonly property bool trackingNow: Tmpo.tracking && !Tmpo.paused
+	readonly property bool trackingNow: QtrackTimer.tracking && !QtrackTimer.paused
 	// a screencast of someone else than the shell's own live pins
 	readonly property bool sharing: Niri.casts.some(cast => cast.is_active && !Screenshot.liveNodes.includes(Number(cast.pw_node_id)))
-	readonly property bool dndAuto: (root.dndWhileTracking && root.trackingNow) || (root.dndFullscreen && Niri.focusedFullscreen) || (root.dndSharing && root.sharing) || (root.dndMeetings && Outlook.inMeeting)
+	readonly property bool dndAuto: (root.dndWhileTracking && root.trackingNow) || (root.dndFullscreen && Niri.focusedFullscreen) || (root.dndSharing && root.sharing) || (root.dndMeetings && MsCalendar.inMeeting)
 	// switched off by hand while a rule applied: stays off until the rule ends
 	property bool dndAutoSuppressed: false
 	readonly property bool dnd: Plugins.on("dnd") && (root.dndManual || (root.dndAuto && !root.dndAutoSuppressed))
@@ -36,7 +36,7 @@ Singleton {
 		if (root.dndManual) return "On";
 		if (!root.dnd) return "Off";
 		if (root.dndSharing && root.sharing) return "Sharing";
-		if (root.dndMeetings && Outlook.inMeeting) return "Meeting";
+		if (root.dndMeetings && MsCalendar.inMeeting) return "Meeting";
 		return root.dndFullscreen && Niri.focusedFullscreen ? "Fullscreen" : "Tracking";
 	}
 

@@ -156,6 +156,22 @@
 		[
 			"\\bNiriSettingsWindow\\b",
 			"SettingsWindow"
+		],
+		[
+			"\\bOutlook\\.",
+			"MsCalendar."
+		],
+		[
+			"\\bTmpo\\.",
+			"QtrackTimer."
+		],
+		[
+			"target: Outlook\\b",
+			"target: MsCalendar"
+		],
+		[
+			"target: Tmpo\\b",
+			"target: QtrackTimer"
 		]
 	]
 }

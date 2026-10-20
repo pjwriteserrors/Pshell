@@ -315,7 +315,7 @@ FocusScope {
 				Sounds.play("open");
 			} else if (Kinds.isWindows(row)) {
 				Files.runWindows(row.path, "auto");
-			} else if (/\.ics$/i.test(row.name) && Outlook.enabled && Outlook.signedIn) {
+			} else if (/\.ics$/i.test(row.name) && MsCalendar.enabled && MsCalendar.signedIn) {
 				// an invitation or a calendar file: into the calendar, once agreed
 				Files.confirmRequested({ title: `Add ${row.name} to the calendar?`, detail: "Its events go into your Microsoft 365 calendar.", confirm: "Add", danger: false, run: () => Files.importCalendar(row.path) });
 			} else {

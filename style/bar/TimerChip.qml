@@ -9,8 +9,8 @@ import qs.style.widgets
 BarButton {
 	id: root
 
-	readonly property bool live: Tmpo.tracking
-	readonly property bool held: !Tmpo.tracking && Tmpo.paused
+	readonly property bool live: QtrackTimer.tracking
+	readonly property bool held: !QtrackTimer.tracking && QtrackTimer.paused
 	// width without the project name, and what the name would add
 	readonly property real fixedWidth: root.padding * 2 + 22 + 14 + (duration.visible ? 7 + duration.implicitWidth : 0)
 	readonly property real textWant: 7 + Math.min(170, project.implicitWidth)
@@ -18,12 +18,12 @@ BarButton {
 	property real room: 1e6
 
 	panelId: "timer"
-	tooltip: Tmpo.tracking ? `${Tmpo.project} — ${Tmpo.description}` : (Tmpo.paused ? "Timer paused · click to resume" : "Start a timer")
+	tooltip: QtrackTimer.tracking ? `${QtrackTimer.project} — ${QtrackTimer.description}` : (QtrackTimer.paused ? "Timer paused · click to resume" : "Start a timer")
 	padding: 6
 	onClicked: toggle()
 	onMiddleClicked: {
-		if (Tmpo.tracking) Tmpo.pause();
-		else if (Tmpo.canResume || Tmpo.paused) Tmpo.resume();
+		if (QtrackTimer.tracking) QtrackTimer.pause();
+		else if (QtrackTimer.canResume || QtrackTimer.paused) QtrackTimer.resume();
 	}
 
 	Rectangle {
@@ -118,7 +118,7 @@ BarButton {
 
 				anchors.verticalCenter: parent.verticalCenter
 				visible: root.live || root.held
-				text: Tmpo.duration || "--"
+				text: QtrackTimer.duration || "--"
 				tabular: true
 				font.pixelSize: Theme.size.body
 				font.weight: Font.Bold
@@ -131,7 +131,7 @@ BarButton {
 				anchors.verticalCenter: parent.verticalCenter
 				visible: width > 0
 				width: root.room >= 7 + 40 ? Math.min(implicitWidth, 170, root.room - 7) : 0
-				text: root.live || root.held ? (Tmpo.project || "No project") : "Track"
+				text: root.live || root.held ? (QtrackTimer.project || "No project") : "Track"
 				font.pixelSize: Theme.size.label
 				font.weight: Font.Medium
 				tone: root.live ? Theme.textMuted : Theme.textSubtle

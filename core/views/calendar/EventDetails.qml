@@ -30,10 +30,10 @@ Item {
 		const end = new Date(event.end);
 		if (event.allDay) {
 			const last = new Date(end.getTime() - 1);
-			if (Outlook.dayKey(start) === Outlook.dayKey(last)) return "All day";
+			if (MsCalendar.dayKey(start) === MsCalendar.dayKey(last)) return "All day";
 			return `${Qt.formatDate(start, "ddd, d. MMM")} – ${Qt.formatDate(last, "ddd, d. MMM")}`;
 		}
-		if (Outlook.dayKey(start) === Outlook.dayKey(end))
+		if (MsCalendar.dayKey(start) === MsCalendar.dayKey(end))
 			return `${Qt.formatTime(start, "HH:mm")} – ${Qt.formatTime(end, "HH:mm")}`;
 		return `${Qt.formatDateTime(start, "ddd HH:mm")} – ${Qt.formatDateTime(end, "ddd HH:mm")}`;
 	}
@@ -124,7 +124,7 @@ Item {
 					implicitWidth: 28
 					implicitHeight: 28
 					icon: "close"
-					onClicked: Outlook.selected = null
+					onClicked: MsCalendar.selected = null
 				}
 			}
 
@@ -342,14 +342,14 @@ Item {
 					text: "Join"
 					icon: "video"
 					variant: "filled"
-					onActivated: Outlook.open(card.event.joinUrl)
+					onActivated: MsCalendar.open(card.event.joinUrl)
 				}
 
 				TextButton {
 					visible: (card.event.webLink ?? "") !== ""
 					text: "Open in Outlook"
 					icon: "open_in_new"
-					onActivated: Outlook.open(card.event.webLink)
+					onActivated: MsCalendar.open(card.event.webLink)
 				}
 
 				Item {
