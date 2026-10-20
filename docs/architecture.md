@@ -14,8 +14,10 @@ core/            features: services, IPC, every surface, the views styles fall b
   Surfaces.qml   instantiates every surface, gated by its plugin
 style/           the look: Frame.qml (what hangs on the screen edges), theme/, widgets/, bar/
   phone/         what the shell publishes to the phone app, one topic a file
-scripts/         theme pipeline, wallpaper runtime, style switching, setup
+scripts/         what the shell runs: theme pipeline, wallpaper runtime, daemons, setup
   phone/         the daemon between the phone app and the shell (docs/mobile.md)
+  dev/           tools for building: plugin.py, check_style.py, sync_styles.sh, …
+  tests/         the tests that run without a desktop
 mobile/          the Android app and the protocol both ends speak
 hosts/           machines.json (hostname → profile) and one profile per machine
 dotfiles/        files outside the repo, placed by install.sh (see manifest)
@@ -36,6 +38,20 @@ system/          root-level setup: SDDM theme, fingerprint PAM
 - **Nothing addresses the shell by config name from scripts.** Scripts use
   `scripts/ipc.sh <target> <function>`; niri binds use `qs -c shell`.
 - **No absolute home paths.** `$HOME`, `Paths`, `Host`.
+
+## Done by the shell itself
+
+What desktops usually leave to helpers the shell does, so it looks like the
+shell and costs nothing extra: the wallpaper (`Wallpaper`, swaybg and awww are
+only a fallback), the clipboard history (`Clipboard`, `scripts/clipboard`),
+password prompts (`Polkit`, plugin `polkit`), notifications of its own
+(`Notifs.post`), the battery and power profiles (UPower), the network
+(NetworkManager through `Quickshell.Networking`), what plays (MPRIS, `ipc.sh
+media`), arithmetic (`Calc`). niri's events come through one stream
+(`Niri`), handed on to the daemons that follow it; mice and keyboards are read
+by one daemon (`Input`, `scripts/input_watch.py`); one cava serves every
+visualizer (`Cava`). Panels, modals and the overlays of every screen are built
+when they are wanted (`Popups.wanted`, `Hold`), not at start.
 
 ## Plugins
 
@@ -86,6 +102,7 @@ or when a plugin has neither picture, scene nor icon.
 | `primaryOutput` | output for desktop widgets and the default screen |
 | `terminal` | the terminal things open in (kitty, foot, alacritty, ghostty, wezterm or any that takes `-e`); else `$TERMINAL`, else kitty |
 | `browser` | the browser pages and searches open in; else `$BROWSER`, else the desktop's default (`xdg-open`) |
+| `lighting` | the OpenRGB devices of the machine: roles, gains, the LED count of each ARGB header (`scripts/apply_lighting.py`) |
 | `weather.city` | |
 | `asteroids.magnitude` | the faintest asteroid `asteroid-alerts` speaks of (default 10, binoculars; 6 is the naked eye) |
 | `wallpapers` | the wallpaper library (outside the repo) |
@@ -381,7 +398,7 @@ Google, or Ollama on the machine), notes stuck to files and folders (in
 And the shell around it: `>file` finds files in the launcher itself (the
 folders looked into lately, favourites, results as you type with the one
 under the cursor large beside them; Shift+Enter is quick look,
-`core/views/overlays/launcher/FileFinderView.qml`), the bar shows long jobs
+`core/views/launcher/FileFinderView.qml`), the bar shows long jobs
 (`style/bar/FileJobChip.qml`), the radial menu has a ring of the last
 folders, a finished download says so with what can be done with it, a
 folder can have a workspace of its own for its terminals, agents and apps
@@ -405,7 +422,7 @@ the shelves and the downloads panel calls) and is the default for folders
 that was the default before is again. Without a running shell, those calls
 go to Nautilus or the folder's old app.
 
-The launcher's apps (`core/views/overlays/launcher/AppsView.qml`): with
+The launcher's apps (`core/views/launcher/AppsView.qml`): with
 nothing typed a dock of favourites (what is pinned, filled up with what is
 used most; Alt+1…8 starts one) over every app on shelves by its freedesktop
 category (All, Internet, Develop, Games, Graphics, Media, Office, System,
@@ -422,7 +439,7 @@ kept in `launcher-apps.json`. Tab walks the modes the footer shows (Apps,
 Calculator, Files, Chat, Chats, Ollama, those whose plugin is on).
 
 The launcher's commands (`allCommands` in
-`core/views/overlays/LauncherContent.qml`) are shown by `>` as a palette of
+`core/views/launcher/LauncherContent.qml`) are shown by `>` as a palette of
 tiles: a band a group (`group`: tools, ai, panels, system), on top what is
 pinned (Ctrl+P or a right click, `launcher-commands.json`) filled up with
 what is used most. What is typed leaves the tiles where they are and dims
@@ -746,9 +763,12 @@ stay on the phone. A file `demo` in the state folder, or
 `scripts/apply_theme_selection.sh <theme>`:
 
 1. a still frame of the media (`theme_write_frame` in `theme_paths.sh`)
-2. the wallpaper runtime in the background (`apply_wallpaper_runtime.sh`:
-   swaybg still frame, awww for images, mpvpaper for videos, as systemd user
-   units), beside
+2. the wallpaper runtime in the background (`apply_wallpaper_runtime.sh`):
+   it writes `current/` of the theme state, which the shell follows and draws
+   (`Wallpaper`, plugin `wallpaper-layer`: one background surface a screen,
+   the picture fading in); a video plays in mpvpaper above the shell's still
+   frame, one systemd user unit an output. While the shell does not answer
+   (`ipc.sh wallpaper owned`), swaybg and awww paint instead. Beside it
 3. niri window animation, if given, then wallust (`~/.cache/wal`), GTK
    colours, shell reload: the shell wears the palette about a second after
    the choice, while the wallpaper is still coming up
@@ -774,8 +794,9 @@ waiting. Applying one links it into the library's `Wallpaper of the day` and
 applies that.
 
 At shell start `restore_theme.sh` only restarts the wallpaper, unless colours
-are missing or the wallpaper of the day changed. `wallpaper_watch.sh` repaints
-outputs that appear later.
+are missing or the wallpaper of the day changed. Screens that appear later get
+the shell's wallpaper at once; for a video the shell asks the runtime
+(`--ensure`) to start mpvpaper on them.
 
 ## Styles
 
@@ -795,7 +816,7 @@ A style branch changes `style/` only:
 
 The Motion page plays the animation itself, not a clip or a sketch:
 `scripts/build_animation_preview.py` compiles the niri shader with `qsb` and
-writes its timing, `core/views/overlays/studio/AnimationStage.qml` runs it on a
+writes its timing, `core/views/studio/AnimationStage.qml` runs it on a
 mock window. A style that draws its own Motion page keeps that stage.
 
 Everything else comes from `main` by merge, so a new feature reaches every

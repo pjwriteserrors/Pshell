@@ -125,7 +125,7 @@ compares. Value options are given as `--opt=value`: with a space,
 about two thirds remain) into one row of a Qt Quick 3D instance table:
 a `#Cube` stretched to the move's length, line width and layer height. The
 panel draws the table twice with `FileInstancing` and its own shaders
-(`core/views/panels/printer/shaders/`): solid below the cut, outer walls
+(`core/views/printer/shaders/`): solid below the cut, outer walls
 faint above it. The cut is a uniform, so following the printer costs
 nothing. Needs `qt6-quick3d`.
 

@@ -2,7 +2,7 @@
 
 `games` is a library of every game on the machine (`>games`,
 `scripts/ipc.sh games toggle|open|add <path>|launch <id>|list`;
-`core/views/overlays/GameLibrary.qml` and `games/` beside it,
+`core/views/games/GameLibrary.qml` and `games/` beside it,
 `core/services/Games.qml`, `scripts/games.py`).
 
 What is in it:
@@ -61,7 +61,7 @@ favourite, Y or Start the menu, LB/RB the filters, Select the grid.
 `games.py running` finds what runs: Steam's reaper (`SteamLaunch
 AppId=<id>`) and the watchers of games started here.
 
-`games-bar` puts the library under the bar as well (`core/views/panels/GamesPanel.qml`,
+`games-bar` puts the library under the bar as well (`core/views/games/GamesPanel.qml`,
 `scripts/ipc.sh games panel`): the gamepad in the bar opens a panel with the
 picked game as a banner (its hero, logo, what is known, favourite, Play)
 over its covers – Recent (what runs first), Favourites or All, two rows to

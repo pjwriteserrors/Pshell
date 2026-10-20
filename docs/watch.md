@@ -14,7 +14,7 @@ counts up; about half a second) and stands still otherwise. The **app**
 (`watch/app`) is only the **mouse**: a trackpad, a scroll strip, the air mouse
 on the side key, and pairing.
 
-The PC's side is **>watch** in the launcher (`core/views/panels/WatchPanel.qml`,
+The PC's side is **>watch** in the launcher (`core/views/watch/WatchPanel.qml`,
 `core/services/Watch.qml`): the night first – its length counting up, the
 score as a ring, bed and wake times against the week, the stages as a
 hypnogram that sweeps in – then the last 14 nights as stacked bars (a click

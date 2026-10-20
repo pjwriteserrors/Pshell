@@ -20,7 +20,7 @@ not running.
   `dump` prints what the mice say, `solaar` what would be taken over.
 - `core/services/Mouse.qml` – starts the daemon, keeps `mouse.json`, runs
   the shell's own actions (launcher, radial menu, media …) at once.
-- `core/views/overlays/niri/MousePage.qml` and `core/views/overlays/mouse/`
+- `core/views/settings/MousePage.qml` and `core/views/settings/mouse/`
   – the page: `MouseFigure` (the drawn mouse, live), `ButtonStudio` (a
   control's ways of use, laid out as a cross of swipes around the click),
   `ActionPicker`, `KeyRecorder`, `RuleList`, `WaveTile`.
