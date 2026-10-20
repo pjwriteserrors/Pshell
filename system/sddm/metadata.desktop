@@ -1,13 +1,13 @@
 [SddmGreeterTheme]
-Name=Silent
-Description=Quickshell lock-screen styled SDDM theme with dynamic wallpaper frame
+Name=Pshell
+Description=Pshell login screen: the lock screen's look on the current theme's wallpaper
 Type=sddm-theme
 Author=philippjung
 Copyright=2026, philippjung
 License=MIT
-Version=1.0
+Version=2.0
 MainScript=Main.qml
 ConfigFile=theme.conf
-Theme-Id=silent
+Theme-Id=pshell
 Theme-API=2.0
 QtVersion=6

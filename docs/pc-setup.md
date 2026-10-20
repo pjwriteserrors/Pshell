@@ -146,8 +146,10 @@ Sie gehören nach `dotfiles/` mit einem Eintrag in `dotfiles/manifest` und `when
 
 ### 8. SDDM
 
-Die neue Shell nutzt das Greeter-Theme „silent“ aus `system/sddm`, nicht mehr
-`quickshell-lock`. Installiert wird es mit `system/install-sddm-silent-theme.sh` (braucht
+Die neue Shell nutzt das eigene Greeter-Theme „pshell“ aus `system/sddm`
+(`/usr/share/sddm/themes/pshell`), nicht mehr `quickshell-lock` oder das AUR-Paket
+`sddm-silent-theme`; es braucht nur SDDM mit dem Qt6-Greeter, qt6-multimedia nur für
+Video-Hintergründe. Installiert wird es mit `system/install-sddm-theme.sh` (braucht
 sudo, also vorher fragen). `install-fingerprint-auth.sh` ist **nur für den Laptop**.
 
 ### 9. Umschalten

@@ -22,7 +22,7 @@ else
 	sudo ln -s "$QT6_GREETER" "$QT5_GREETER"
 fi
 
-printf '[Theme]\nCurrent=silent\n' | sudo tee "$THEME_CONF" >/dev/null
+printf '[Theme]\nCurrent=pshell\n' | sudo tee "$THEME_CONF" >/dev/null
 
 echo "Fixed SDDM greeter binary:"
 ls -l "$QT5_GREETER" "$QT6_GREETER"
@@ -30,7 +30,7 @@ echo "Theme config:"
 sed -n '1,20p' "$THEME_CONF"
 echo
 echo "Test with:"
-echo "  sddm-greeter-qt6 --test-mode --theme /usr/share/sddm/themes/silent"
+echo "  sddm-greeter-qt6 --test-mode --theme /usr/share/sddm/themes/pshell"
 echo
 echo "Then restart only when ready:"
 echo "  sudo systemctl restart sddm"

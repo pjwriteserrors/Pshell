@@ -22,7 +22,7 @@ fi
 SRC_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 HELPER=/usr/local/lib/sddm/pam-empty-authtok
 PAM_FILE=/etc/pam.d/sddm
-THEME_DIR=/usr/share/sddm/themes/silent
+THEME_DIR=/usr/share/sddm/themes/pshell
 
 install -d -m 755 "$(dirname "$HELPER")"
 cat >"$HELPER" <<'EOF'
@@ -63,7 +63,7 @@ chmod 644 "$PAM_FILE"
 
 # theme: install the current greeter and let it keep the sensor listening
 if [[ -d "$THEME_DIR" ]]; then
-	install -m 644 "$SRC_DIR/sddm/Main.qml" "$THEME_DIR/Main.qml"
+	install -m 644 "$SRC_DIR/sddm/Main.qml" "$SRC_DIR/sddm/VideoBackground.qml" "$THEME_DIR/"
 	conf="$THEME_DIR/theme.conf"
 	content="$(grep -v -E '^fingerprint(Loop)?=' "$conf")"$'\n'"fingerprint=true"$'\n'"fingerprintLoop=true"
 	printf '%s\n' "$content" >"$conf"
