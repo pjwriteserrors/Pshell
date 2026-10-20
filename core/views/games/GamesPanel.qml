@@ -71,9 +71,10 @@ Drawer {
 	}
 
 	// the full library, on this game (and its menu)
-	function expand(menu) {
+	function expand(menu, stats) {
 		Games.focusId = root.selected?.id ?? "";
 		Games.focusMenu = !!menu;
+		Games.focusStats = !!stats;
 		const screen = Popups.screen;
 		Popups.close();
 		Popups.openModal("games", screen);
@@ -429,6 +430,19 @@ Drawer {
 						elide: Text.ElideRight
 						font.pixelSize: Theme.size.body
 						font.weight: Font.Medium
+					}
+
+					// its landing page, in the library
+					IconButton {
+						implicitWidth: 40
+						implicitHeight: 40
+						radius: 20
+						variant: "tonal"
+						color: Qt.rgba(1, 1, 1, 0.14)
+						icon: "chart_bar"
+						iconColor: "white"
+						visible: root.selected !== null
+						onClicked: root.expand(false, true)
 					}
 
 					IconButton {

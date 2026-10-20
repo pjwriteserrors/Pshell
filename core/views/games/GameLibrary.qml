@@ -234,8 +234,10 @@ ModalWindow {
 		root.selectedId = "";
 		const focus = Games.focusId;
 		const withMenu = Games.focusMenu;
+		const withStats = Games.focusStats;
 		Games.focusId = "";
 		Games.focusMenu = false;
+		Games.focusStats = false;
 		Qt.callLater(() => {
 			root.select(0, true);
 			shelf.positionViewAtBeginning();
@@ -245,6 +247,7 @@ ModalWindow {
 				root.selectedId = focus;
 				shelf.positionViewAtIndex(root.index, ListView.Beginning);
 				if (withMenu) Qt.callLater(() => root.openMenu(root.side + 300, root.height / 2));
+				if (withStats) Qt.callLater(() => stats.show(root.selected));
 			}
 		});
 		rising.restart();
