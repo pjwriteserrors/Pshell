@@ -2,7 +2,8 @@
 
 # Brings main ($BASE) into every style branch (style/*), each in a temporary worktree
 # so the running shell keeps its files. A branch is only committed when the
-# merged shell compiles. Then scripts/check_style.py checks the contract and
+# merged shell compiles; names main renamed (scripts/style_renames.json) are
+# followed in the style's own files. Then scripts/check_style.py checks the contract and
 # lists what main changed that the style draws itself and has to port.
 #
 #   scripts/sync_styles.sh [style/<name>...]
@@ -38,6 +39,13 @@ for branch in "${branches[@]}"; do
 		echo "   merge conflict outside style/ – resolve in $worktree, then commit and remove the worktree"
 		status=1
 		continue
+	fi
+
+	# names main renamed or removed: the style's own files follow
+	renamed="$(python3 "$worktree/scripts/style_renames.py" "$worktree")"
+	if [[ -n "$renamed" ]]; then
+		git -C "$worktree" commit --quiet -am "Follow main's renames (scripts/style_renames.json)"
+		echo "   followed main's renames in: $(printf '%s ' $renamed)"
 	fi
 
 	result="$(cd "$worktree" && timeout 60 quickshell -p ./Validate.qml 2>&1 | grep -A20 'VALIDATE:')"

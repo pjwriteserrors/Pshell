@@ -123,7 +123,7 @@
 		],
 		[
 			"^import qs\\.core\\.views\\.overlays\\.launcher$",
-			"import qs.core.views.launcher"
+			"import qs.core.views.launcher\nimport qs.core.views.todos"
 		],
 		[
 			"^import qs\\.core\\.views\\.overlays\\.screenshot$",
