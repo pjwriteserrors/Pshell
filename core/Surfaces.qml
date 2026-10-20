@@ -53,36 +53,63 @@ Scope {
 		KvmEdge {}
 	}
 
+	// the overlays of a screen exist while they are wanted, and a moment
+	// after for their way out: four screens of them cost memory for nothing
+	Hold {
+		id: finding
+		when: FindMouse.active
+	}
+
+	Hold {
+		id: capturing
+		when: Screenshot.phase !== "idle"
+	}
+
+	Hold {
+		id: shelving
+		when: Shelf.shelves.length > 0 || Shelf.locating !== ""
+	}
+
+	Hold {
+		id: dropping
+		when: DropCommands.active
+	}
+
+	Hold {
+		id: pinning
+		when: Screenshot.pins.length > 0
+	}
+
 	// the light on a pointer that is shaken
 	Variants {
-		model: Plugins.on("find-mouse") ? Quickshell.screens : []
+		model: Plugins.on("find-mouse") && finding.held ? Quickshell.screens : []
 
 		MouseFinder {}
 	}
 
 	Variants {
-		model: Plugins.on("screenshot") ? Quickshell.screens : []
+		model: Plugins.on("screenshot") && capturing.held ? Quickshell.screens : []
 
 		ScreenshotOverlay {}
 	}
 
 	// pinned screenshots, always on top
 	Variants {
-		model: Plugins.on("pins") ? Quickshell.screens : []
+		model: Plugins.on("pins") && pinning.held ? Quickshell.screens : []
 
 		ScreenshotPins {}
 	}
 
 	// shelves (Dropover-like stashes), above the windows
 	Variants {
-		model: Plugins.on("shelves") ? Quickshell.screens : []
+		model: Plugins.on("shelves") && shelving.held ? Quickshell.screens : []
 
 		Shelves {}
 	}
 
 	// commands for what is being dragged, around the pointer
 	Variants {
-		model: Plugins.on("drop-commands") ? Quickshell.screens : []
+		model: Plugins.on("drop-commands") && dropping.held ? Quickshell.screens : []
 
 		CommandRing {}
 	}
