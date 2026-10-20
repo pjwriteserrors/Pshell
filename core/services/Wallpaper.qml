@@ -22,6 +22,44 @@ Singleton {
 
 	onSourceChanged: root.serial += 1
 
+	// how a new picture comes in: "bloom" (out of the bar), "fade", "none"
+	property string transition: "bloom"
+	// the copy in the niri overview: "sharp", "blur", "dim"
+	property string backdrop: "sharp"
+	readonly property var transitions: ["bloom", "fade", "none"]
+	readonly property var backdrops: ["sharp", "blur", "dim"]
+
+	function setTransition(name) {
+		if (root.transitions.indexOf(name) < 0) return;
+		root.transition = name;
+		root.save();
+	}
+
+	function setBackdrop(name) {
+		if (root.backdrops.indexOf(name) < 0) return;
+		root.backdrop = name;
+		root.save();
+	}
+
+	function save() {
+		settings.setText(JSON.stringify({ transition: root.transition, backdrop: root.backdrop }, null, 2));
+	}
+
+	FileView {
+		id: settings
+
+		path: Paths.stateFile("wallpaper.json")
+		blockLoading: true
+		printErrors: false
+		onLoaded: {
+			try {
+				const data = JSON.parse(String(settings.text() || "{}"));
+				if (root.transitions.indexOf(data.transition) >= 0) root.transition = data.transition;
+				if (root.backdrops.indexOf(data.backdrop) >= 0) root.backdrop = data.backdrop;
+			} catch (error) {}
+		}
+	}
+
 	FileView {
 		id: typeFile
 

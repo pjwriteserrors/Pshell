@@ -42,6 +42,15 @@ Scope {
 		WallpaperLayer {}
 	}
 
+	// and its copy in the niri overview, between the workspaces
+	Variants {
+		model: Wallpaper.enabled ? Quickshell.screens : []
+
+		WallpaperLayer {
+			backdrop: true
+		}
+	}
+
 	// notifications and the shell's own messages
 	Variants {
 		model: Quickshell.screens

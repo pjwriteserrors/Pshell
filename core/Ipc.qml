@@ -1066,6 +1066,14 @@ Scope {
 		function owned(): bool {
 			return Wallpaper.enabled;
 		}
+		// bloom, fade or none
+		function transition(name: string): void {
+			Wallpaper.setTransition(name);
+		}
+		// the overview's copy: sharp, blur or dim
+		function backdrop(name: string): void {
+			Wallpaper.setBackdrop(name);
+		}
 	}
 
 	IpcHandler {

@@ -13,6 +13,13 @@ window-rule {
     open-fullscreen true
 }
 
+// the shell's copy of the wallpaper for the overview and the gaps between
+// workspaces (core/views/overlays/WallpaperLayer.qml, backdrop)
+layer-rule {
+    match namespace="^shell-wallpaper-backdrop$"
+    place-within-backdrop true
+}
+
 binds {
     Mod+D { spawn "qs" "-c" "shell" "ipc" "call" "launcher" "toggle"; }
     Super+Ctrl+L { spawn "qs" "-c" "shell" "ipc" "call" "lock" "lock"; }
