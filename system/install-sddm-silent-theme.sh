@@ -6,6 +6,9 @@ THEME_DST="/usr/share/sddm/themes/silent"
 WALLPAPER_DST="$THEME_DST/backgrounds/wallpaper.png"
 VIDEO_DST="$THEME_DST/backgrounds/wallpaper.mp4"
 THEME_CONFIG_DST="$THEME_DST/theme.conf"
+# run as `sudo ./install-…` $USER is root, which would leave the backgrounds
+# root-owned and sync_sddm_wallpaper.sh unable to update them
+OWNER="${SUDO_USER:-$USER}"
 
 sudo install -d -m 755 "$THEME_DST" "$THEME_DST/backgrounds"
 sudo install -m 644 "$THEME_SRC/Main.qml" "$THEME_DST/Main.qml"
@@ -18,21 +21,30 @@ if [[ -f "$THEME_SRC/backgrounds/wallpaper.png" ]]; then
 fi
 if [[ -f "$THEME_SRC/backgrounds/wallpaper.mp4" ]]; then
 	sudo install -m 644 "$THEME_SRC/backgrounds/wallpaper.mp4" "$VIDEO_DST"
-	sudo chown "$USER:$USER" "$VIDEO_DST"
+	sudo chown "$OWNER:$OWNER" "$VIDEO_DST"
 	sudo chmod 644 "$VIDEO_DST"
 fi
 if [[ -f "$WALLPAPER_DST" ]]; then
-	sudo chown "$USER:$USER" "$WALLPAPER_DST"
+	sudo chown "$OWNER:$OWNER" "$WALLPAPER_DST"
 	sudo chmod 644 "$WALLPAPER_DST"
 fi
-sudo chown "$USER:$USER" "$THEME_CONFIG_DST"
+sudo chown "$OWNER:$OWNER" "$THEME_CONFIG_DST"
 # sync_sddm_wallpaper.sh swaps backgrounds atomically (temp link + rename),
 # which needs write access to the directory itself.
-sudo chown "$USER:$USER" "$THEME_DST/backgrounds"
+sudo chown "$OWNER:$OWNER" "$THEME_DST/backgrounds"
 sudo chmod 644 "$THEME_CONFIG_DST"
 
-# keep the greeter's fingerprint loop when the fingerprint-only PAM path
-# from install-fingerprint-auth.sh is in place
+# the greeter only scans for a fingerprint when PAM can take one; without
+# pam_fprintd its empty-password scan is a failed login (and counts in
+# faillock). The loop needs the fingerprint-only path from
+# install-fingerprint-auth.sh.
+if grep -q "pam_fprintd" /etc/pam.d/sddm 2>/dev/null; then
+	fingerprint=true
+else
+	fingerprint=false
+fi
+conf_content="$(sed "s/^fingerprint=.*/fingerprint=$fingerprint/" "$THEME_CONFIG_DST")"
+printf '%s\n' "$conf_content" | sudo tee "$THEME_CONFIG_DST" >/dev/null
 if grep -q "pam-empty-authtok" /etc/pam.d/sddm 2>/dev/null; then
 	printf 'fingerprintLoop=true\n' | sudo tee -a "$THEME_CONFIG_DST" >/dev/null
 fi

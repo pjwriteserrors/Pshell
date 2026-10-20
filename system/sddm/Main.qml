@@ -16,7 +16,11 @@ Rectangle {
 	property color background: "#0d0d0f"
 	property color primary: "#d7c477"
 	property color danger: "#d95c5c"
-	property bool fingerprintEnabled: String(config.fingerprint || "true").toLowerCase() !== "false"
+	// set by install-sddm-silent-theme.sh only when /etc/pam.d/sddm has
+	// pam_fprintd; without it the empty-password scan is just a failed login.
+	// SDDM loads this file once per screen and every instance would start its
+	// own scan, so only the primary screen listens.
+	property bool fingerprintEnabled: String(config.fingerprint || "false").toLowerCase() === "true" && (typeof primaryScreen === "undefined" || primaryScreen)
 	// only safe with the fingerprint-only PAM path from install-fingerprint-auth.sh;
 	// with the stock stack every round would count as a failed login
 	property bool fingerprintLoop: String(config.fingerprintLoop || "false").toLowerCase() === "true"

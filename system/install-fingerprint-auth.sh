@@ -65,11 +65,7 @@ chmod 644 "$PAM_FILE"
 if [[ -d "$THEME_DIR" ]]; then
 	install -m 644 "$SRC_DIR/sddm/Main.qml" "$THEME_DIR/Main.qml"
 	conf="$THEME_DIR/theme.conf"
-	if grep -q '^fingerprintLoop=' "$conf"; then
-		content="$(sed 's/^fingerprintLoop=.*/fingerprintLoop=true/' "$conf")"
-	else
-		content="$(cat "$conf")"$'\n'"fingerprintLoop=true"
-	fi
+	content="$(grep -v -E '^fingerprint(Loop)?=' "$conf")"$'\n'"fingerprint=true"$'\n'"fingerprintLoop=true"
 	printf '%s\n' "$content" >"$conf"
 fi
 
