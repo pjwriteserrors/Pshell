@@ -648,7 +648,7 @@ Scope {
 
 	Process {
 		id: fingerprintAvailableCheck
-		command: ["sh", "-lc", "fprintd-list \"$USER\""]
+		command: ["fprintd-list", Host.user]
 		onExited: exitCode => {
 			root.fingerprintAvailable = exitCode === 0;
 			if (root.fingerprintAvailable) root.startFingerprintAuth();

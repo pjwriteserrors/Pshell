@@ -354,7 +354,7 @@ Singleton {
 
 	Process {
 		id: actionProcess
-		command: ["sh", "-lc", ":"]
+		command: ["true"]
 		onExited: root.refresh()
 	}
 

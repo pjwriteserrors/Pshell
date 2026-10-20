@@ -126,7 +126,7 @@ ModalWindow {
 
 	Process {
 		id: readAnimationStateProcess
-		command: ["sh", "-lc", `
+		command: ["sh", "-c", `
 if [ -f "${root.animationStatePath}" ]; then
 	cat "${root.animationStatePath}"
 elif [ -f "${root.shaderCurrentPath}" ]; then

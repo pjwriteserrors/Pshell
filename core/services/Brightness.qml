@@ -50,7 +50,7 @@ Singleton {
 
 	Process {
 		id: readProc
-		command: ["sh", "-lc", "current=$(brightnessctl g 2>/dev/null || echo 0); max=$(brightnessctl m 2>/dev/null || echo 0); printf '%s/%s\\n' \"$current\" \"$max\""]
+		command: ["sh", "-c", "current=$(brightnessctl g 2>/dev/null || echo 0); max=$(brightnessctl m 2>/dev/null || echo 0); printf '%s/%s\\n' \"$current\" \"$max\""]
 		stdout: StdioCollector {
 			onStreamFinished: {
 				const match = String(text).trim().match(/^(\d+)\/(\d+)$/);

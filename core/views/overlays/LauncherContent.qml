@@ -2446,7 +2446,7 @@ Item {
 			break;
 		case "calculator-result":
 			if (!command.valid) return;
-			Quickshell.execDetached(["sh", "-lc", `printf '%s' '${root.shellEscape(command.result)}' | wl-copy`]);
+			Quickshell.execDetached(["wl-copy", "--", String(command.result)]);
 			root.closeRequested();
 			root.launchRequested();
 			break;
@@ -2595,7 +2595,7 @@ Item {
 
 	Process {
 		id: saveUsageProcess
-		command: ["sh", "-lc", ":"]
+		command: ["true"]
 	}
 
 	Process {

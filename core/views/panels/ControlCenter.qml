@@ -35,7 +35,8 @@ Drawer {
 
 	onPanelOpened: {
 		root.page = Popups.page !== "" && root.offers(Popups.page) ? Popups.page : "main";
-		statsProc.running = true;
+		root.userHost = `${Host.user}@${Host.hostname}`;
+		root.uptime = Host.uptime();
 		Audio.refreshSinks();
 		if (Plugins.on("backlight")) Brightness.refresh(false);
 		Ddc.refresh();
@@ -65,18 +66,6 @@ Drawer {
 		restoreMode: Binding.RestoreValue
 	}
 
-
-	Process {
-		id: statsProc
-		command: ["sh", "-lc", `printf '%s|%s' "$USER@$(cat /etc/hostname 2>/dev/null || uname -n)" "$(uptime -p | sed 's/^up //')"`]
-		stdout: StdioCollector {
-			onStreamFinished: {
-				const parts = String(text || "").split("|");
-				root.userHost = parts[0] || "";
-				root.uptime = parts[1] || "";
-			}
-		}
-	}
 
 	PageView {
 		id: pages

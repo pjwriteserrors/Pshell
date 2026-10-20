@@ -200,7 +200,7 @@ Singleton {
 	Process {
 		id: mapProcess
 		running: true
-		command: ["sh", "-lc", `
+		command: ["sh", "-c", `
 python3 - <<'PY'
 import json
 import os

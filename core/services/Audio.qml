@@ -165,7 +165,7 @@ Singleton {
 
 	Process {
 		id: sinkListProc
-		command: ["sh", "-lc", "pactl --format=json list sinks; printf '@@@%s' \"$(pactl get-default-sink)\""]
+		command: ["sh", "-c", "pactl --format=json list sinks; printf '@@@%s' \"$(pactl get-default-sink)\""]
 		stdout: StdioCollector {
 			onStreamFinished: {
 				const raw = String(text || "");
