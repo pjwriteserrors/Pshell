@@ -7,10 +7,11 @@ stream, the input reader, the mouse daemon … go on, now children of the
 user's systemd, and keep their connections (PipeWire allows 64 clients; a
 pile of old `pactl subscribe` makes the next shell's audio fail to connect).
 
-Only processes of this user whose command is one the shell starts, and whose
-parent is not a running quickshell, are ended. The daemons that are meant to
-outlive the shell (the file and torrent daemons, the phone service, the
-browser's download host, video wallpapers) are not on the list.
+Only processes of this user whose command is one of the monitors or helpers
+the shell keeps running, and whose parent is gone (systemd took them over),
+are ended – never the one running this, never a one-off job of the shell and
+never the daemons meant to outlive it (files, torrents, the phone service,
+the browser's download host, video wallpapers).
 
     reap_orphans.py            end them, say how many
     reap_orphans.py --dry-run  only list them
@@ -33,8 +34,11 @@ STARTED = [
     r"^(/usr/bin/)?wl-paste (--type \S+ )?--watch ",
     r"^(/usr/bin/)?cava ",
 ]
-# the shell's own scripts, except those meant to outlive it
-KEEP = re.compile(r"/scripts/(files/daemon\.py|torrents/daemon\.py|phone/|downloads_host\.py|apply_wallpaper_runtime\.sh)")
+# the shell's helpers that run as long as it does; one-off jobs (a theme
+# being applied, a download) and the daemons meant to outlive it are not here
+HELPERS = re.compile(r"/scripts/(input_watch|mouse/mouse|multicursor|autocorrect|games_guard|games_pad|printer/printer"
+                     r"|clipboard/history|shelf|apply_lighting|lighting_live|bluetooth_agent|messages/daemon|lyrics"
+                     r"|song_detect)\.py$")
 
 
 def cmdline(pid):
@@ -70,9 +74,16 @@ def main():
         roots.append(sys.argv[sys.argv.index("--under") + 1])
     uid = os.getuid()
     me = os.getpid()
+    # whoever runs this (start_shell.sh, which niri's spawn leaves to systemd
+    # as a parent, so it looks left over itself) is never ended
+    ancestors = set()
+    pid = me
+    while pid > 1 and pid not in ancestors:
+        ancestors.add(pid)
+        pid = stat(pid)
     found = []
     for name in os.listdir("/proc"):
-        if not name.isdigit() or int(name) == me:
+        if not name.isdigit() or int(name) in ancestors:
             continue
         pid = int(name)
         try:
@@ -87,7 +98,7 @@ def main():
         ours = any(re.search(pattern, line) for pattern in STARTED)
         if not ours:
             script = next((part for part in parts[1:3] if part.endswith((".py", ".sh"))), "")
-            ours = any(script.startswith(root + "/scripts/") for root in roots) and not KEEP.search(script)
+            ours = any(script.startswith(root + "/scripts/") for root in roots) and bool(HELPERS.search(script))
         if not ours:
             continue
         parent = stat(pid)
