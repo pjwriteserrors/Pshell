@@ -362,6 +362,8 @@ Singleton {
 		path: Paths.stateFile("switcher.json")
 		blockLoading: true
 		printErrors: false
+		watchChanges: true
+		onFileChanged: reload()
 		onLoaded: {
 			let saved = {};
 			try {
@@ -380,12 +382,54 @@ Singleton {
 	// the shell's switcher they become spawn binds in keybinds.kdl and niri's
 	// own is switched off; with niri's they go away again.
 	property var pendingBinds: null
+	property bool pendingEngine: false
+	property var engineBinds: null
 	property string bindNote: ""
 
+	readonly property var defaultBinds: [
+		{ key: "Alt+Tab", action: "next-window", props: {} },
+		{ key: "Alt+Shift+Tab", action: "previous-window", props: {} },
+		{ key: "Alt+grave", action: "next-window", props: { filter: "app-id" } },
+		{ key: "Alt+Shift+grave", action: "previous-window", props: { filter: "app-id" } },
+		{ key: "Mod+Tab", action: "next-window", props: {} },
+		{ key: "Mod+Shift+Tab", action: "previous-window", props: {} },
+		{ key: "Mod+grave", action: "next-window", props: { filter: "app-id" } },
+		{ key: "Mod+Shift+grave", action: "previous-window", props: { filter: "app-id" } }
+	]
+
+	// the switcher's keys as niri's recent-windows block lists them
+	function niriBinds() {
+		const block = NiriSettings.node(["recent-windows", "binds"]);
+		if (!block) return root.defaultBinds;
+		return (block.children || []).filter(b => !b.disabled).map(b => ({ key: b.name, action: b.children?.[0]?.name ?? "next-window", props: b.children?.[0]?.props ?? {} }));
+	}
+
+	// `binds` may be left out: then niri's list. niri's settings are only
+	// written once they are read – an edit of an unread list would write a
+	// settings.kdl with nothing else in it.
 	function useEngine(engine, binds) {
 		root.set("engine", engine === "shell" ? "shell" : "niri");
-		NiriSettings.setFlag(["recent-windows", "off"], root.engine === "shell", root.engine === "shell" ? "The shell's window switcher" : "niri's window switcher");
-		root.syncBinds(binds);
+		root.engineBinds = binds || null;
+		root.pendingEngine = true;
+		if (NiriSettings.loaded && !NiriSettings.loading) root.applyEngine();
+		else NiriSettings.load();
+	}
+
+	function applyEngine() {
+		root.pendingEngine = false;
+		const shell = root.engine === "shell";
+		if (NiriSettings.flag(["recent-windows", "off"]) !== shell)
+			NiriSettings.setFlag(["recent-windows", "off"], shell, shell ? "The shell's window switcher" : "niri's window switcher");
+		root.syncBinds(root.engineBinds || root.niriBinds());
+		root.engineBinds = null;
+	}
+
+	Connections {
+		target: NiriSettings
+
+		function onLoadedChanged() {
+			if (root.pendingEngine && NiriSettings.loaded) root.applyEngine();
+		}
 	}
 
 	function syncBinds(binds) {

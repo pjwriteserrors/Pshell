@@ -20,21 +20,8 @@ SettingsPage {
 	readonly property var shadow: NiriSettings.node(["overview", "workspace-shadow"])
 	readonly property var recent: NiriSettings.node(["recent-windows"])
 	readonly property bool recentOn: !NiriSettings.flag(["recent-windows", "off"])
-	readonly property var defaultBinds: [
-		{ key: "Alt+Tab", action: "next-window", props: {} },
-		{ key: "Alt+Shift+Tab", action: "previous-window", props: {} },
-		{ key: "Alt+grave", action: "next-window", props: { filter: "app-id" } },
-		{ key: "Alt+Shift+grave", action: "previous-window", props: { filter: "app-id" } },
-		{ key: "Mod+Tab", action: "next-window", props: {} },
-		{ key: "Mod+Shift+Tab", action: "previous-window", props: {} },
-		{ key: "Mod+grave", action: "next-window", props: { filter: "app-id" } },
-		{ key: "Mod+Shift+grave", action: "previous-window", props: { filter: "app-id" } }
-	]
-	readonly property var switcherBinds: {
-		const block = NiriSettings.node(["recent-windows", "binds"]);
-		if (!block) return root.defaultBinds;
-		return (block.children || []).filter(b => !b.disabled).map(b => ({ key: b.name, action: b.children?.[0]?.name ?? "next-window", props: b.children?.[0]?.props ?? {} }));
-	}
+	readonly property var defaultBinds: Switcher.defaultBinds
+	readonly property var switcherBinds: Switcher.niriBinds()
 
 	readonly property bool shellSwitcher: Plugins.on("window-switcher") && Switcher.engine === "shell"
 

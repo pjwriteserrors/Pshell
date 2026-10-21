@@ -123,6 +123,10 @@ Scope {
 		function layout(name: string): void {
 			Switcher.set("layout", name);
 		}
+		// shell | niri: whose switcher Alt+Tab opens (writes niri's binds)
+		function engine(name: string): void {
+			Switcher.useEngine(name, null);
+		}
 		function status(): string {
 			return JSON.stringify({ engine: Switcher.engine, layout: Switcher.layout, open: Switcher.open, shown: Switcher.shown,
 				held: Switcher.held, index: Switcher.index, items: Switcher.items.map(item => `${item.id} ${item.appId}`) });
