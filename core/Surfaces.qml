@@ -35,9 +35,9 @@ Scope {
 	// services that act on their own, without a surface to pull them in
 	readonly property var background: [Polkit, Agents, TimerGuard, Clipboard, ClipboardHints, Phone, Mail, WhatsApp, Autocorrect, Screentime, Multicursor, Sounds, FindMouse]
 
-	// the wallpaper, under everything
+	// the wallpaper, under everything (a video's players cover it)
 	Variants {
-		model: Wallpaper.enabled ? Quickshell.screens : []
+		model: Wallpaper.enabled && !Wallpaper.covered ? Quickshell.screens : []
 
 		WallpaperLayer {}
 	}

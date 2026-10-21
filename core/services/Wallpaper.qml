@@ -20,7 +20,29 @@ Singleton {
 	property int serial: 0
 	readonly property string image: root.source === "" ? "" : (root.type === "video" ? `${root.current}/frame.png` : root.source)
 
-	onSourceChanged: root.serial += 1
+	onSourceChanged: {
+		root.serial += 1;
+		root.covered = false;
+		coverTimer.restart();
+	}
+
+	// a video plays in mpvpaper above the shell's still frame: once the
+	// players are up the frame's surfaces (a 4K picture and a GL context a
+	// screen) go; the overview's copy stays, mpvpaper does not reach there
+	property bool covered: false
+
+	Timer {
+		id: coverTimer
+
+		interval: 20000
+		running: root.enabled && root.type === "video"
+		onTriggered: root.covered = root.type === "video"
+	}
+
+	onTypeChanged: {
+		root.covered = false;
+		coverTimer.restart();
+	}
 
 	// how a new picture comes in: "bloom" (out of the bar), "fade", "none"
 	property string transition: "bloom"

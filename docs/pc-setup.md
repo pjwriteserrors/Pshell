@@ -155,7 +155,7 @@ ask first). `install-fingerprint-auth.sh` is **for the laptop only**.
 
 ```
 quickshell kill -p ~/.config/quickshell/shell   # or the PID from `quickshell list --all`
-niri msg action spawn -- quickshell -c shell
+niri msg action spawn -- ~/.config/quickshell/shell/scripts/start_shell.sh
 ```
 
 Then check:
@@ -198,4 +198,4 @@ Then check:
 2. restore `files.tar.gz` and load the dconf backup
 3. restore the old working copy in the repository: check out the kept branch, such as
    `archive/arcanum`, or the bundle
-4. run `niri msg action spawn -- quickshell -c shell`
+4. run `niri msg action spawn -- ~/.config/quickshell/shell/scripts/start_shell.sh`

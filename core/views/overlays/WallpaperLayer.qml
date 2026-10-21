@@ -21,9 +21,12 @@ PanelWindow {
 
 	required property var modelData
 	property bool backdrop: false
-	// a blurred copy loses nothing at a third of the size: less to decode and keep
-	readonly property real detail: root.backdrop && Wallpaper.backdrop === "blur" ? 0.35 : 1
-	readonly property real longest: Math.ceil(Math.max(root.width, root.height) * (root.devicePixelRatio || 1) * root.detail)
+	// Decoded to just cover the screen (a square of the longest side, cropped,
+	// was 105 MB a 4K screen instead of 33). The overview's copy shows behind
+	// zoomed-out workspaces: half the size is plenty, a blurred one a third.
+	readonly property real detail: root.backdrop ? (Wallpaper.backdrop === "blur" ? 0.3 : 0.5) : 1
+	readonly property size decoded: Qt.size(Math.ceil(root.width * (root.devicePixelRatio || 1) * root.detail), Math.ceil(root.height * (root.devicePixelRatio || 1) * root.detail))
+	readonly property real longest: Math.max(root.decoded.width, root.decoded.height)
 	// the one that shows, and the one coming
 	property Image front: one
 	property Image back: two
@@ -150,7 +153,7 @@ PanelWindow {
 
 	component Layer: Image {
 		anchors.fill: parent
-		sourceSize: Qt.size(root.longest, root.longest)
+		sourceSize: root.decoded
 		fillMode: Image.PreserveAspectCrop
 		asynchronous: true
 		cache: false

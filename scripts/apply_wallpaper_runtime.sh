@@ -32,6 +32,11 @@ export PATH="/usr/local/bin:/usr/bin:/bin:$HOME/.local/bin:$HOME/.pyenv/shims:$P
 LOG_FILE="${THEME_STATE_DIR}/wallpaper-runtime.log"
 MPVPAPER_LAYER="bottom"
 MPVPAPER_UNIT_PREFIX="quickshell-mpvpaper-"
+# Every output plays its own copy, so each has to be cheap: the GPU decodes
+# (a 4K/60 video in software is more than a core per screen), a looping file
+# needs no read-ahead cache, and -p pauses a player while niri does not
+# show its output (a fullscreen window, a locked screen).
+MPVPAPER_OPTIONS="no-audio loop panscan=1.0 hwdec=auto-safe cache=no demuxer-max-bytes=24MiB demuxer-max-back-bytes=4MiB"
 AWWW_UNIT="quickshell-awww.service"
 SWAYBG_UNIT="quickshell-swaybg.service"
 
@@ -448,8 +453,8 @@ start_mpvpaper_output() {
 		stop_mpvpaper_output "$output"
 		if systemd-run --user --quiet --collect --service-type=exec \
 			--unit="$unit" --property=TimeoutStopSec=2 \
-			mpvpaper -l "$MPVPAPER_LAYER" \
-			-o "no-audio loop panscan=1.0 input-ipc-server=$socket_path" \
+			mpvpaper -p -l "$MPVPAPER_LAYER" \
+			-o "$MPVPAPER_OPTIONS input-ipc-server=$socket_path" \
 			"$output" "$video_path"; then
 			sleep 0.3
 			if mpvpaper_output_active "$output"; then
