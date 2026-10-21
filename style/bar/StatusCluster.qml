@@ -10,27 +10,7 @@ import qs.style.widgets
 BarButton {
 	id: root
 
-	component Meter: Rectangle {
-		required property real value
 
-		anchors.verticalCenter: parent.verticalCenter
-		width: 4
-		height: 15
-		radius: 2
-		color: Theme.layer3
-
-		Rectangle {
-			anchors.bottom: parent.bottom
-			width: parent.width
-			radius: 2
-			height: Math.max(2, parent.height * parent.value)
-			color: parent.value > 0.85 ? Theme.danger : Theme.secondary
-
-			Behavior on height {
-				Anim {}
-			}
-		}
-	}
 
 	panelId: "control"
 	tooltip: "Quick settings · scroll for volume · middle-click mute"
@@ -50,11 +30,11 @@ BarButton {
 			spacing: 2.5
 
 			// two fixed meters: a Repeater over [cpu, memory] made them anew every update
-			Meter {
+			BarMeter {
 				value: SysStats.cpu
 			}
 
-			Meter {
+			BarMeter {
 				value: SysStats.memory
 			}
 		}
