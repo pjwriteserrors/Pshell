@@ -10,6 +10,28 @@ import qs.style.widgets
 BarButton {
 	id: root
 
+	component Meter: Rectangle {
+		required property real value
+
+		anchors.verticalCenter: parent.verticalCenter
+		width: 4
+		height: 15
+		radius: 2
+		color: Theme.layer3
+
+		Rectangle {
+			anchors.bottom: parent.bottom
+			width: parent.width
+			radius: 2
+			height: Math.max(2, parent.height * parent.value)
+			color: parent.value > 0.85 ? Theme.danger : Theme.secondary
+
+			Behavior on height {
+				Anim {}
+			}
+		}
+	}
+
 	panelId: "control"
 	tooltip: "Quick settings · scroll for volume · middle-click mute"
 	wheelEnabled: true
@@ -27,31 +49,13 @@ BarButton {
 			visible: Plugins.on("system-monitor")
 			spacing: 2.5
 
-			Repeater {
-				model: [SysStats.cpu, SysStats.memory]
+			// two fixed meters: a Repeater over [cpu, memory] made them anew every update
+			Meter {
+				value: SysStats.cpu
+			}
 
-				delegate: Rectangle {
-					required property real modelData
-
-					// gone with the bar's zone, it has no parent any more
-					anchors.verticalCenter: parent?.verticalCenter
-					width: 4
-					height: 15
-					radius: 2
-					color: Theme.layer3
-
-					Rectangle {
-						anchors.bottom: parent.bottom
-						width: parent.width
-						radius: 2
-						height: Math.max(2, parent.height * parent.modelData)
-						color: parent.modelData > 0.85 ? Theme.danger : Theme.secondary
-
-						Behavior on height {
-							Anim {}
-						}
-					}
-				}
+			Meter {
+				value: SysStats.memory
 			}
 		}
 
