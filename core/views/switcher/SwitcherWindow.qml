@@ -32,7 +32,11 @@ PanelWindow {
 	readonly property var placed: Layouts.compute(Switcher.layout, Switcher.items, Switcher.index, stage.width, stage.height, Switcher.size, name => Niri.outputOrder(name))
 
 	screen: Switcher.screen
-	visible: root.open || root.leaving
+	// mapped only once it shows: a quick Alt+Tab is over before that, and a
+	// layer surface mapped and unmapped within a few milliseconds crashed
+	// Qt's Wayland client (QWaylandWindow::handleScreensChanged on a screen
+	// already gone). Until then held_keys.py watches the modifier.
+	visible: root.shown || root.leaving
 	color: "transparent"
 	anchors {
 		top: true
@@ -67,13 +71,16 @@ PanelWindow {
 			root.pointerMoved = false;
 			root.settled = false;
 			keys.forceActiveFocus();
-		} else {
+		} else if (root.visible) {
 			root.leaving = true;
 			leaveTimer.restart();
 		}
 	}
 
-	onShownChanged: if (root.shown) settleTimer.restart()
+	onShownChanged: if (root.shown) {
+		settleTimer.restart();
+		keys.forceActiveFocus();
+	}
 
 	Timer {
 		id: leaveTimer
