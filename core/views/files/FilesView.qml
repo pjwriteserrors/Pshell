@@ -1547,11 +1547,41 @@ FocusScope {
 		onClosed: keyTarget.forceActiveFocus()
 	}
 
-	PageOrganizer {
+	// loaded by URL on first use: it needs QtQuick.Pdf (qt6-webengine), and
+	// without it only this tool is missing instead of the whole shell
+	Loader {
 		id: organizer
 
+		property var waiting: null
+
+		function open(row) {
+			if (organizer.item) {
+				organizer.item.open(row);
+				return;
+			}
+			organizer.waiting = row;
+			organizer.source = Qt.resolvedUrl("PageOrganizer.qml");
+		}
+
 		anchors.fill: parent
-		onClosed: keyTarget.forceActiveFocus()
+		onLoaded: {
+			if (organizer.waiting) organizer.item.open(organizer.waiting);
+			organizer.waiting = null;
+		}
+		onStatusChanged: if (organizer.status === Loader.Error) {
+			organizer.waiting = null;
+			organizer.source = "";
+			Files.fail("The PDF tools need QtQuick.Pdf (qt6-webengine)");
+		}
+
+		Connections {
+			target: organizer.item
+			ignoreUnknownSignals: true
+
+			function onClosed() {
+				keyTarget.forceActiveFocus();
+			}
+		}
 	}
 
 	SignDialog {
