@@ -774,7 +774,9 @@ stay on the phone. A file `demo` in the state folder, or
    the new picture blooming out of the bar – `wallpaper_reveal.frag` – or
    fading in, and a second one niri puts into the overview's backdrop by
    the layer-rule in `pshell.kdl`); a video plays in mpvpaper above the shell's still
-   frame, one systemd user unit an output. While the shell does not answer
+   frame, one player for all outputs (`mpvpaper ALL`, one systemd user unit:
+   the video is decoded once, which leaves the GPU's decoder room for a
+   browser's video). While the shell does not answer
    (`ipc.sh wallpaper owned`), swaybg and awww paint instead. Beside it
 3. niri window animation, if given, then wallust (`~/.cache/wal`), GTK
    colours, shell reload: the shell wears the palette about a second after
@@ -802,8 +804,8 @@ applies that.
 
 At shell start `restore_theme.sh` only restarts the wallpaper, unless colours
 are missing or the wallpaper of the day changed. Screens that appear later get
-the shell's wallpaper at once; for a video the shell asks the runtime
-(`--ensure`) to start mpvpaper on them.
+the shell's wallpaper at once; mpvpaper puts a video on them itself, and
+`--ensure` from the shell starts it again if it is not running.
 
 ## Styles
 

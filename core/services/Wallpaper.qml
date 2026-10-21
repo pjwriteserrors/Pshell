@@ -8,7 +8,8 @@ import Quickshell.Io
 // views/overlays/WallpaperLayer.qml): the picture the theme pipeline chose
 // (scripts/apply_wallpaper_runtime.sh writes current/), or for a video its
 // still frame under mpvpaper. A screen that comes later has it at once; for
-// a video the runtime is asked to start mpvpaper on it.
+// a video the runtime is asked to make sure mpvpaper runs (its one player
+// puts new screens up itself).
 Singleton {
 	id: root
 

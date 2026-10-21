@@ -7,7 +7,7 @@
 #
 # The shell draws the wallpaper itself (core/services/Wallpaper.qml, plugin
 # wallpaper-layer): this script only writes current/ – the shell follows it –
-# and for a video starts mpvpaper on every output, above the shell's frame.
+# and for a video starts mpvpaper on all outputs, above the shell's frame.
 #
 # When the shell does not answer (not running yet, the plugin off), the old
 # stack paints instead, from bottom to top:
@@ -17,7 +17,8 @@
 #   awww       the image wallpaper, with a transition. awww paints only the
 #              outputs that existed when `awww img` ran, so new outputs have to
 #              be filled in explicitly - that is what --ensure is for.
-#   mpvpaper   one instance per output for video wallpapers, same reason.
+#   mpvpaper   one instance for all outputs (ALL): it decodes the video once and
+#              draws that frame on every screen, and puts new outputs up itself.
 #
 # Every step is idempotent: re-running for the media that is already up only
 # touches outputs that do not show it yet.
@@ -32,11 +33,17 @@ export PATH="/usr/local/bin:/usr/bin:/bin:$HOME/.local/bin:$HOME/.pyenv/shims:$P
 LOG_FILE="${THEME_STATE_DIR}/wallpaper-runtime.log"
 MPVPAPER_LAYER="bottom"
 MPVPAPER_UNIT_PREFIX="quickshell-mpvpaper-"
-# Every output plays its own copy, so each has to be cheap: the GPU decodes
-# (a 4K/60 video in software is more than a core per screen), a looping file
-# needs no read-ahead cache, and -p pauses a player while niri does not
-# show its output (a fullscreen window, a locked screen).
-MPVPAPER_OPTIONS="no-audio loop panscan=1.0 hwdec=auto-safe cache=no demuxer-max-bytes=24MiB demuxer-max-back-bytes=4MiB"
+MPVPAPER_UNIT="${MPVPAPER_UNIT_PREFIX}all.service"
+MPVPAPER_SOCKET="$THEME_RUNTIME_DIR/mpvpaper-all.sock"
+# One player for every screen: the GPU's video decoder (VCN) handles about
+# four 4K/60 streams in all, so a player per output left nothing for a
+# browser's video. The GPU decodes (in software a 4K/60 video is more than
+# a core), a looping file needs no read-ahead cache, and -p pauses it while
+# niri shows none of its surfaces. profile=fast drops what a picture that is
+# shown at its own size does not need (the default chain cost ~30 % of the
+# GPU per 4K screen, now ~6 %); a smaller screen still gets a proper
+# downscaling filter (hermite, mpv's default).
+MPVPAPER_OPTIONS="no-audio loop panscan=1.0 hwdec=auto-safe cache=no demuxer-max-bytes=24MiB demuxer-max-back-bytes=4MiB profile=fast dscale=hermite"
 AWWW_UNIT="quickshell-awww.service"
 SWAYBG_UNIT="quickshell-swaybg.service"
 
@@ -377,25 +384,14 @@ apply_awww() {
 
 # ---------------------------------------------------------------- mpvpaper ---
 
-mpvpaper_unit() {
-	printf '%s%s.service\n' "$MPVPAPER_UNIT_PREFIX" "$(sanitize_output_name "$1")"
+mpvpaper_active() {
+	[[ "$(systemctl --user show --property=ActiveState --value "$MPVPAPER_UNIT" 2>/dev/null)" == "active" ]]
 }
 
-mpvpaper_socket_path() {
-	printf '%s/mpvpaper-%s.sock\n' "$THEME_RUNTIME_DIR" "$(sanitize_output_name "$1")"
-}
-
-mpvpaper_output_active() {
-	[[ "$(systemctl --user show --property=ActiveState --value "$(mpvpaper_unit "$1")" 2>/dev/null)" == "active" ]]
-}
-
+# the outputs without a video: all of them while the player is down, none
+# while it runs (it puts up a screen that comes later itself)
 mpvpaper_outputs_missing() {
-	local name=""
-
-	while IFS= read -r name; do
-		[[ -n "$name" ]] || continue
-		mpvpaper_output_active "$name" || printf '%s\n' "$name"
-	done < <(list_outputs)
+	mpvpaper_active || list_outputs
 }
 
 # mpvpaper that failed to open its file deadlocks and ignores SIGTERM; a plain
@@ -416,11 +412,6 @@ stop_mpvpaper_unit() {
 	systemctl --user reset-failed "$unit" >/dev/null 2>&1 || true
 }
 
-stop_mpvpaper_output() {
-	stop_mpvpaper_unit "$(mpvpaper_unit "$1")"
-	rm -f "$(mpvpaper_socket_path "$1")"
-}
-
 stop_mpvpaper() {
 	local unit=""
 	local attempt=0
@@ -439,48 +430,33 @@ stop_mpvpaper() {
 	rm -f "$THEME_RUNTIME_DIR"/mpvpaper-*.sock "$THEME_RUNTIME_DIR"/mpvpaper-*.options
 }
 
-start_mpvpaper_output() {
-	local output="$1"
-	local video_path="$2"
-	local unit=""
-	local socket_path=""
+# the outputs passed are only the ones found missing; the one player covers
+# them all
+apply_mpvpaper() {
+	local video_path="$1"
 	local attempt=0
 
-	unit="$(mpvpaper_unit "$output")"
-	socket_path="$(mpvpaper_socket_path "$output")"
+	command -v mpvpaper >/dev/null 2>&1 || { echo "mpvpaper not found" >&2; return 1; }
 
 	for ((attempt = 0; attempt < 6; attempt++)); do
-		stop_mpvpaper_output "$output"
+		# also the players of one output each that an older version started
+		stop_mpvpaper
 		if systemd-run --user --quiet --collect --service-type=exec \
-			--unit="$unit" --property=TimeoutStopSec=2 \
+			--unit="$MPVPAPER_UNIT" --property=TimeoutStopSec=2 \
 			mpvpaper -p -l "$MPVPAPER_LAYER" \
-			-o "$MPVPAPER_OPTIONS input-ipc-server=$socket_path" \
-			"$output" "$video_path"; then
+			-o "$MPVPAPER_OPTIONS input-ipc-server=$MPVPAPER_SOCKET" \
+			ALL "$video_path"; then
 			sleep 0.3
-			if mpvpaper_output_active "$output"; then
-				log "mpvpaper started output=$output video=$video_path"
+			if mpvpaper_active; then
+				log "mpvpaper started outputs=ALL video=$video_path"
 				return 0
 			fi
 		fi
 		sleep 0.4
 	done
 
-	log "mpvpaper failed output=$output video=$video_path"
+	log "mpvpaper failed video=$video_path"
 	return 1
-}
-
-apply_mpvpaper() {
-	local video_path="$1"
-	shift
-	local output=""
-	local failed=0
-
-	command -v mpvpaper >/dev/null 2>&1 || { echo "mpvpaper not found" >&2; return 1; }
-
-	for output in "$@"; do
-		start_mpvpaper_output "$output" "$video_path" || failed=1
-	done
-	return "$failed"
 }
 
 # The player that does not belong to this media type. Left over from a crashed
