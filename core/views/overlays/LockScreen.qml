@@ -222,9 +222,12 @@ Scope {
 				id: wallpaper
 
 				anchors.fill: parent
-				source: root.wallpaperFrameSource
-				sourceSize: Qt.size(Math.ceil(Math.max(width, height)), Math.ceil(Math.max(width, height)))
+				// only while locked, and at half the screen's size under the blur:
+				// kept all the time it was a 4K picture a screen for nothing
+				source: root.locked ? root.wallpaperFrameSource : ""
+				sourceSize: Qt.size(Math.ceil(width * (lockWindow.devicePixelRatio || 1) / 2), Math.ceil(height * (lockWindow.devicePixelRatio || 1) / 2))
 				fillMode: Image.PreserveAspectCrop
+				asynchronous: true
 				cache: false
 				visible: false
 			}

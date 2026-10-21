@@ -636,7 +636,10 @@ Item {
 		property var item: null
 
 		source: root.iconFor(item?.entry)
-		sourceSize: Qt.size(width * 2, height * 2)
+		// a fixed size: from the width it was 0 while the tile was made, and
+		// an icon of 0 is decoded whole (a 1024 px PNG is 4 MB a tile);
+		// no icon here is drawn larger than 72 px
+		sourceSize: Qt.size(160, 160)
 		fillMode: Image.PreserveAspectFit
 		smooth: true
 		mipmap: true

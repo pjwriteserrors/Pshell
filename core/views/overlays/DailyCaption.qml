@@ -111,9 +111,10 @@ PanelWindow {
 			y: root.height - (root.screen?.height ?? root.height)
 			width: root.screen?.width ?? root.width
 			height: root.screen?.height ?? root.height
-			source: root.info.media_path ? `file://${root.info.media_path}?${root.info.candidate_id ?? ""}` : ""
-			sourceSize.width: width
-			sourceSize.height: height
+			// a video's still frame; blurred, a third of the size is plenty
+			source: !root.info.media_path ? "" : (/\.(mp4|webm|mkv|mov)$/i.test(root.info.media_path) ? `file://${Wallpaper.current}/frame.png?${root.info.candidate_id ?? ""}` : `file://${root.info.media_path}?${root.info.candidate_id ?? ""}`)
+			sourceSize.width: Math.max(64, Math.ceil(width / 3))
+			sourceSize.height: Math.max(64, Math.ceil(height / 3))
 			fillMode: Image.PreserveAspectCrop
 			cache: false
 			asynchronous: true

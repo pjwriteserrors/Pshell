@@ -3,6 +3,7 @@
 # `niri msg action spawn -- ~/.config/quickshell/shell/scripts/start_shell.sh`
 # by hand).
 #
+#   reap_orphans.py             helpers of a shell that is gone end first
 #   QT_QPA_PLATFORMTHEME=gtk3   Qt takes the GTK icon theme (Papirus-Wal)
 #   only Mesa's EGL             when no output hangs on an NVIDIA card. glvnd
 #                               otherwise loads NVIDIA's EGL beside Mesa's
@@ -10,6 +11,10 @@
 #                               nothing here (a card passed to a VM, or one
 #                               only for compute)
 export QT_QPA_PLATFORMTHEME=gtk3
+here="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+# what a shell that crashed or was killed left running
+python3 "$here/reap_orphans.py" >/dev/null 2>&1
 
 mesa=/usr/share/glvnd/egl_vendor.d/50_mesa.json
 nvidia_outputs=0
