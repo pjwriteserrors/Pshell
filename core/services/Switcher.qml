@@ -467,6 +467,13 @@ Singleton {
 				});
 			}
 		}
+		// Shift goes back: without the key it goes back from, it is left out too
+		const plain = key => Keybinds.norm(String(key).replace(/\+?Shift\+?/i, "+").replace(/^\+|\+$/g, "").replace(/\+\+/g, "+"));
+		const lone = added.filter(bind => /shift/i.test(bind.key) && skipped.some(key => Keybinds.norm(key) === plain(bind.key)));
+		for (const bind of lone) {
+			added.splice(added.indexOf(bind), 1);
+			skipped.push(bind.key);
+		}
 		const before = Keybinds.binds.filter(root.isOurs).map(bind => `${bind.key}|${bind.args.join(" ")}`).sort().join(",");
 		const after = added.map(bind => `${bind.key}|${bind.args.join(" ")}`).sort().join(",");
 		root.bindNote = skipped.length > 0 ? `${skipped.join(", ")} already ${skipped.length === 1 ? "does" : "do"} something else` : "";
