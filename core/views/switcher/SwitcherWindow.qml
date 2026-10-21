@@ -10,9 +10,10 @@ import qs.core.services
 import "Layouts.js" as Layouts
 
 // The window switcher on the focused screen (core/services/Switcher.qml has
-// the logic). It takes the keyboard and holds niri's shortcuts off while it
-// is open, so Tab and the arrows come straight here; letting go of Alt or
-// Super picks. The cards are one set whatever the layout: a new pick or a
+// the logic). It takes the keyboard: the arrows, Enter, Esc, digits come
+// here, Tab with the modifier still goes through niri's bind (holding
+// niri's shortcuts off with a ShortcutInhibitor crashed the shell when the
+// surface went away). Letting go of Alt or Super picks. The cards are one set whatever the layout: a new pick or a
 // new layout moves them (Layouts.js), the blur behind is one capture of the
 // screen taken as it opens, at a quarter of its size.
 PanelWindow {
@@ -57,11 +58,6 @@ PanelWindow {
 		id: fullMask
 
 		anchors.fill: parent
-	}
-
-	ShortcutInhibitor {
-		window: root
-		enabled: root.open
 	}
 
 	onOpenChanged: {
