@@ -593,7 +593,10 @@ if (( ${#OUTPUTS[@]} == 0 )); then
 fi
 
 SHELL_PAINTS=0
-shell_paints && SHELL_PAINTS=1
+# a handoff comes from the shell, which may just be too busy to answer
+if (( HANDOFF )) || shell_paints; then
+	SHELL_PAINTS=1
+fi
 DEFER_PLAYER=0
 
 if selection_is_unchanged; then

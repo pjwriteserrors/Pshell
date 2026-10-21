@@ -46,10 +46,16 @@ Singleton {
 
 	onSignatureChanged: {
 		if (root.signature === "" || root.signature === root.seen) return;
-		root.seen = root.signature;
 		// the runtime wrote type and source before the signature
 		typeFile.reload();
 		sourceFile.reload();
+		// the first one read is what is up already, not a change
+		if (root.seen === "") {
+			root.seen = root.signature;
+			root.playing = root.type === "video" ? root.signature : "";
+			return;
+		}
+		root.seen = root.signature;
 		root.serial += 1;
 		root.covered = false;
 		root.curtain = root.playing !== "";
@@ -115,7 +121,7 @@ Singleton {
 
 	Component.onCompleted: {
 		root.seen = root.signature;
-		if (root.type === "video") root.playing = root.signature;
+		root.playing = root.type === "video" ? root.signature : "";
 	}
 
 	// a video plays in mpvpaper above the shell's still frame: once the
