@@ -14,8 +14,8 @@ import "Layouts.js" as Layouts
 // here, Tab with the modifier still goes through niri's bind (holding
 // niri's shortcuts off with a ShortcutInhibitor crashed the shell when the
 // surface went away). Letting go of Alt or Super picks. The cards are one set whatever the layout: a new pick or a
-// new layout moves them (Layouts.js), the blur behind is one capture of the
-// screen taken as it opens, at a quarter of its size.
+// new layout moves them (Layouts.js), the blur behind is one grim capture
+// of the screen taken as it opens, decoded at a third of its size.
 PanelWindow {
 	id: root
 
@@ -93,7 +93,7 @@ PanelWindow {
 	}
 
 	// how far it is open: 0 hidden, 1 there; a little bloom in, quick out
-	readonly property bool wanted: root.shown && (Switcher.backdrop !== "blur" || capture.hasContent || blurWait.waited)
+	readonly property bool wanted: root.shown && (Switcher.backdrop !== "blur" || capture.fresh || blurWait.waited)
 
 	onWantedChanged: {
 		revealAnim.stop();
@@ -130,20 +130,25 @@ PanelWindow {
 		anchors.fill: parent
 		opacity: root.reveal
 
-		ScreencopyView {
+		// the screen as it was when it opened (Switcher.captureBackdrop)
+		Image {
 			id: capture
+
+			readonly property bool fresh: capture.status === Image.Ready && capture.rev === Switcher.backdropRev
+			property int rev: -1
 
 			anchors.fill: parent
 			visible: false
-			// a new capture every opening: the screen as it is now
-			captureSource: root.open && Switcher.backdrop === "blur" ? root.screen : null
-			live: false
-			constraintSize: Qt.size(Math.round(root.width / 3), Math.round(root.height / 3))
+			source: Switcher.backdropFile !== "" ? `file://${Switcher.backdropFile}?${Switcher.backdropRev}` : ""
+			sourceSize: Qt.size(Math.round(root.width / 3), Math.round(root.height / 3))
+			cache: false
+			asynchronous: true
+			onStatusChanged: if (status === Image.Ready) capture.rev = Switcher.backdropRev
 		}
 
 		MultiEffect {
 			anchors.fill: parent
-			visible: Switcher.backdrop === "blur" && capture.hasContent
+			visible: Switcher.backdrop === "blur" && capture.status === Image.Ready
 			source: capture
 			blurEnabled: true
 			blurMax: 48

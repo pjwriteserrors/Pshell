@@ -131,6 +131,7 @@ Singleton {
 		root.index = items.length === 1 ? 0 : (direction > 0 ? start % items.length : items.length - 1);
 		root.screen = Popups.focusedScreen();
 		root.picked = -1;
+		root.captureBackdrop();
 		root.held = held;
 		root.open = true;
 		if (held) {
@@ -279,6 +280,32 @@ Singleton {
 
 		interval: Math.max(0, root.delay)
 		onTriggered: if (root.open) root.shown = true
+	}
+
+	// ── the screen behind it, for the blur ─────────────────────────────────
+	// grim in a process of its own, before the switcher draws anything: a
+	// ScreencopyView in the shell bound an output of its own and took it
+	// down again as the switcher closed, and Qt's Wayland client crashed on
+	// the next surface enter (handleScreensChanged on a gone screen)
+	property string backdropFile: ""
+	property int backdropRev: 0
+
+	function captureBackdrop() {
+		if (root.backdrop !== "blur" || !root.screen) return;
+		backdropShot.running = false;
+		// full size (grim scales on the CPU: 450 ms for 4K); the Image decodes it small
+		backdropShot.command = ["sh", "-c", 'mkdir -p "$1" && exec grim -o "$2" -t jpeg -q 60 "$1/backdrop.jpg"', "sh", root.shotDir, String(root.screen.name)];
+		backdropShot.running = true;
+	}
+
+	Process {
+		id: backdropShot
+
+		onExited: code => {
+			if (code !== 0) return;
+			root.backdropFile = `${root.shotDir}/backdrop.jpg`;
+			root.backdropRev++;
+		}
 	}
 
 	// ── the held modifier ──────────────────────────────────────────────────
