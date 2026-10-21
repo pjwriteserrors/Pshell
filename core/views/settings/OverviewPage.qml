@@ -139,6 +139,94 @@ SettingsPage {
 		}
 	}
 
+	// ── the shell's overview panel ─────────────────────────────────────────
+	SettingCard {
+		anchor: "overview-cards"
+		title: "Overview panel cards"
+		subtitle: "The workspaces in the overview panel (right click on the workspaces). Unset, they are as round as your windows."
+		icon: "rounded_corner"
+		modified: !OverviewCards.followsWindows
+		onReset: OverviewCards.setCorner(-1)
+
+		RowLayout {
+			Layout.fillWidth: true
+			spacing: 20
+
+			// two workspace cards with windows on them, as the panel draws them
+			Item {
+				Layout.preferredWidth: 300
+				Layout.preferredHeight: 120
+
+				Row {
+					anchors.centerIn: parent
+					spacing: 14
+
+					Repeater {
+						model: 2
+
+						delegate: Rectangle {
+							id: sample
+
+							required property int index
+
+							width: 136
+							height: 78
+							radius: Math.min(OverviewCards.radius, height / 2)
+							color: sample.index === 0 ? Qt.alpha(Theme.primary, 0.08) : Theme.layer1
+							border.width: sample.index === 0 ? 2 : 1
+							border.color: sample.index === 0 ? Theme.primary : Theme.outline
+
+							Behavior on radius {
+								SpatialAnim {}
+							}
+
+							Row {
+								anchors.fill: parent
+								anchors.margins: 4
+								spacing: 3
+
+								Repeater {
+									model: sample.index === 0 ? [0.55, 0.42] : [0.98]
+
+									delegate: Rectangle {
+										required property real modelData
+
+										width: (parent.width - 3) * modelData
+										height: parent.height
+										radius: Math.min(Math.max(2, OverviewCards.radius - 4), width / 2, height / 2)
+										color: sample.index === 0 && modelData > 0.5 ? Theme.primaryContainer : Theme.layer3
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+
+			ColumnLayout {
+				Layout.fillWidth: true
+				spacing: 10
+
+				ValueSlider {
+					from: 0
+					to: OverviewCards.max
+					step: 1
+					label: "Corners"
+					unit: " px"
+					value: OverviewCards.radius
+					onMoved: v => OverviewCards.setCorner(v)
+				}
+
+				FlagRow {
+					title: "As round as the windows"
+					subtitle: Theme.windowRadius > 0 ? `Your windows have ${Theme.windowRadius} px corners` : "Your windows have square corners"
+					checked: OverviewCards.followsWindows
+					onToggled: on => OverviewCards.setCorner(on ? -1 : OverviewCards.radius)
+				}
+			}
+		}
+	}
+
 	// ── hot corners ────────────────────────────────────────────────────────
 	SettingCard {
 		anchor: "hot-corners"
