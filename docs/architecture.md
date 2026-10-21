@@ -58,6 +58,16 @@ by one daemon (`Input`, `scripts/input_watch.py`); one cava serves every
 visualizer (`Cava`). Panels, modals and the overlays of every screen are built
 when they are wanted (`Popups.wanted`, `Hold`), not at start.
 
+Alt+Tab can be the shell's (`Switcher`, plugin `window-switcher`, Overview
+page): it writes spawn binds into `keybinds.kdl` and switches niri's
+`recent-windows` off. Pictures of the windows come from niri's ScreenCast,
+one cast per window (`scripts/window_shots.py`, also windows on hidden
+workspaces); the held modifier is read from evdev while it is open
+(`scripts/held_keys.py`), so a quick Alt+Tab switches before anything is
+mapped. Its window is mapped only once it shows, and the screen behind it is
+taken with grim: an in-process ScreencopyView (and a ShortcutInhibitor)
+taken down with the surface crashed Qt's Wayland client.
+
 ## Plugins
 
 `core/plugins.json` lists every plugin: `id`, `name`, `category`, optionally
