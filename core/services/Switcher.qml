@@ -66,7 +66,7 @@ Singleton {
 	// drawn (after `delay`; a quick Alt+Tab switches before)
 	property bool shown: false
 	// held open by a modifier: letting go switches. Opened by a click or by
-	// `switcher show` it stays until something is picked.
+	// `switcher open` it stays until something is picked.
 	property bool held: false
 	property var items: []
 	property int index: 0
@@ -110,7 +110,7 @@ Singleton {
 		if (index >= 0 && index < root.items.length) root.index = index;
 	}
 
-	// opened without a held key (a click, `switcher show`): stays until picked
+	// opened without a held key (a click, `switcher open`): stays until picked
 	function show(scope, filter) {
 		if (root.open) {
 			root.cancel();

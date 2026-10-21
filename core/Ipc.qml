@@ -113,7 +113,8 @@ Scope {
 			if (Plugins.on("window-switcher")) Switcher.step(-1, scope, filter);
 		}
 		// open without a held key: stays until something is picked
-		function show(): void {
+		// (`show` would be taken by `qs ipc` itself)
+		function open(): void {
 			if (Plugins.on("window-switcher")) Switcher.show("", "");
 		}
 		function cancel(): void {

@@ -36,8 +36,13 @@ SettingsPage {
 		return (block.children || []).filter(b => !b.disabled).map(b => ({ key: b.name, action: b.children?.[0]?.name ?? "next-window", props: b.children?.[0]?.props ?? {} }));
 	}
 
+	readonly property bool shellSwitcher: Plugins.on("window-switcher") && Switcher.engine === "shell"
+
+	// the keys stay in niri's recent-windows block either way; with the
+	// shell's switcher they are written as binds that call it as well
 	function writeBinds(list, note) {
 		NiriSettings.setChildren(["recent-windows", "binds"], list.map(b => Nodes.make(b.key, [], {}, [Nodes.make(b.action, [], b.props)])), note, "");
+		if (root.shellSwitcher) Switcher.syncBinds(list);
 	}
 
 	// ── overview ───────────────────────────────────────────────────────────
@@ -345,15 +350,44 @@ SettingsPage {
 		modified: !!root.recent && NiriSettings.kids(["recent-windows"]).length > 0
 		onReset: NiriSettings.reset(["recent-windows"])
 		trailing: Toggle {
+			visible: !root.shellSwitcher
 			checked: root.recentOn
 			onToggled: on => NiriSettings.setFlag(["recent-windows", "off"], !on, `Window switcher ${on ? "on" : "off"}`)
+		}
+
+		// whose switcher Alt+Tab opens
+		RowLayout {
+			Layout.fillWidth: true
+			visible: Plugins.on("window-switcher")
+			spacing: 12
+
+			Segmented {
+				Layout.preferredWidth: 360
+				implicitHeight: 32
+				options: [{ value: "shell", label: "Pshell", icon: "shimmer" }, { value: "niri", label: "niri's own", icon: "swap_horizontal_variant" }]
+				current: Switcher.engine
+				onSelected: value => Switcher.useEngine(value, root.switcherBinds)
+			}
+
+			StyledText {
+				Layout.fillWidth: true
+				text: root.shellSwitcher ? "Live pictures, six layouts, blur – the keys below open it" : "niri draws it; the shell's has more to it"
+				tone: Theme.textSubtle
+				font.pixelSize: Theme.size.small
+				wrapMode: Text.WordWrap
+			}
+		}
+
+		SwitcherSettings {
+			Layout.fillWidth: true
+			visible: root.shellSwitcher
 		}
 
 		ColumnLayout {
 			Layout.fillWidth: true
 			spacing: 14
-			enabled: root.recentOn
-			opacity: root.recentOn ? 1 : 0.45
+			enabled: root.shellSwitcher || root.recentOn
+			opacity: root.shellSwitcher || root.recentOn ? 1 : 0.45
 
 			Behavior on opacity {
 				Anim {}
@@ -361,6 +395,7 @@ SettingsPage {
 
 			RowLayout {
 				Layout.fillWidth: true
+				visible: !root.shellSwitcher
 				spacing: 18
 
 				SwitcherPreview {
@@ -418,6 +453,7 @@ SettingsPage {
 
 			RowLayout {
 				Layout.fillWidth: true
+				visible: !root.shellSwitcher
 				spacing: 12
 
 				ValueSlider {
@@ -443,6 +479,7 @@ SettingsPage {
 
 			TimeLine {
 				Layout.fillWidth: true
+				visible: !root.shellSwitcher
 				maximum: 1000
 				start: "Alt+Tab"
 				happens: "Shows"
@@ -453,6 +490,7 @@ SettingsPage {
 
 			TimeLine {
 				Layout.fillWidth: true
+				visible: !root.shellSwitcher
 				maximum: 3000
 				step: 50
 				start: "Focused"

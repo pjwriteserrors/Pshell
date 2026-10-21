@@ -62,7 +62,8 @@ function grid(items, index, W, H, size) {
 	const ratio = 1.6;
 	const maxCell = 420 * size;
 	let best = null;
-	for (let cols = 1; cols <= n; cols++) {
+	// widest cells win; of equal ones the squarer arrangement (more columns)
+	for (let cols = n; cols >= 1; cols--) {
 		const rows = Math.ceil(n / cols);
 		let cw = Math.min(maxCell, (W * 0.86 - GAP * (cols - 1)) / cols);
 		let ch = cw / ratio;
