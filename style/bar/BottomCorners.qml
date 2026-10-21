@@ -22,7 +22,8 @@ PanelWindow {
 	readonly property bool all: Corners.all
 	readonly property int side: root.all ? root.frame : 0
 	// where the frame starts below the upper edge
-	readonly property int head: Plugins.on("bar") ? Theme.barHeight : root.frame
+	// on whole pixels of this screen, like the bar's body (Bar.qml)
+	readonly property real head: Plugins.on("bar") ? Math.ceil(Theme.barHeight * (root.devicePixelRatio || 1) - 0.01) / (root.devicePixelRatio || 1) : root.frame
 
 	anchors {
 		top: root.all

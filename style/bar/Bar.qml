@@ -23,6 +23,13 @@ PanelWindow {
 	// cluster. Texts give way first on the sides (media title, note tabs),
 	// then in the centre (timer project); the hover date only slides out
 	// when there is room for it.
+	// the bar's height on whole pixels of this screen: at 125 % its 38 points
+	// are 47.5 pixels, and the half row left between the bar and a panel
+	// hanging from it (niri puts the panel at pixel 48) let the wallpaper
+	// through as a bright seam
+	readonly property real dpr: root.devicePixelRatio || 1
+	readonly property real body: Math.ceil(Theme.barHeight * root.dpr - 0.01) / root.dpr
+
 	readonly property real edge: 8
 	readonly property real gap: 12
 
@@ -57,7 +64,7 @@ PanelWindow {
 		left: true
 		right: true
 	}
-	implicitHeight: Theme.barHeight + Theme.screenCorner
+	implicitHeight: Math.ceil(root.body + Theme.screenCorner)
 	exclusiveZone: Theme.barHeight
 	color: "transparent"
 	WlrLayershell.namespace: "shell-bar"
@@ -83,7 +90,7 @@ PanelWindow {
 		anchors.left: parent.left
 		anchors.right: parent.right
 		anchors.top: parent.top
-		height: Theme.barHeight
+		height: root.body
 		color: Theme.glass
 
 		// gliding hover highlight
@@ -175,7 +182,7 @@ PanelWindow {
 		// the frame around the screen has its own
 		visible: !Corners.all
 		x: 0
-		y: Theme.barHeight
+		y: root.body
 		width: Theme.screenCorner
 		height: Theme.screenCorner
 		preferredRendererType: Shape.CurveRenderer
@@ -202,7 +209,7 @@ PanelWindow {
 	Shape {
 		visible: !Corners.all
 		x: root.width - Theme.screenCorner
-		y: Theme.barHeight
+		y: root.body
 		width: Theme.screenCorner
 		height: Theme.screenCorner
 		preferredRendererType: Shape.CurveRenderer
