@@ -9,9 +9,11 @@ import qs.core.services
 
 // A panel that grows out of the bar underneath the button that opened it.
 //
-// Open:  the silhouette extrudes downward with a soft overshoot while it
-//        widens from a narrow neck to full width; content settles in after
-//        the shape, sliding down a few pixels.
+// How it opens is the user's (PopupMotion, Desktop page): classic extrudes
+// downward with a soft overshoot while the neck widens, the others come out
+// of the button, wobble, unroll, settle out of a blur or spring. All of them
+// are one progress value (`reveal`) turned into the panel's size and its
+// content's way in by PopupMotion.shape().
 // Close: the shape retracts back into the bar quickly, content leaves first.
 // Size changes (switching pages, lists growing) morph the silhouette.
 PanelWindow {
@@ -63,11 +65,16 @@ PanelWindow {
 		root.reveal = root.shown ? 1 : 0;
 	}
 
+	readonly property var motion: root.shown ? PopupMotion.opening(PopupMotion.style) : PopupMotion.closing(PopupMotion.style)
+
 	Behavior on reveal {
 		NumberAnimation {
-			duration: root.shown ? Motion.long : Motion.medium - 60
-			easing.type: Easing.BezierSpline
-			easing.bezierCurve: root.shown ? Motion.spatial : Motion.accel
+			duration: root.motion.duration
+			easing.type: root.motion.type
+			easing.bezierCurve: root.motion.curve
+			easing.amplitude: root.motion.amplitude ?? 1
+			easing.period: root.motion.period ?? 0.3
+			easing.overshoot: root.motion.overshoot ?? 1.70158
 		}
 	}
 
@@ -102,8 +109,10 @@ PanelWindow {
 	}
 
 	readonly property real anchorX: root.centered ? root.width / 2 : Popups.anchorFor(root.targetScreen, root.panelId)
-	readonly property real bodyWidth: root.panelWidth * (0.62 + 0.38 * Math.min(1.04, root.reveal))
 	property real animatedHeight: root.targetHeight
+	// the panel at this point of its way in or out
+	readonly property var form: PopupMotion.shape(PopupMotion.style, root.reveal, root.panelWidth, root.animatedHeight, 44, root.shown)
+	readonly property real bodyWidth: root.form.w
 
 	Behavior on animatedHeight {
 		enabled: root.reveal > 0.98
@@ -120,7 +129,9 @@ PanelWindow {
 		spread: -4
 		offset.y: 10
 		color: Theme.shadow
-		opacity: Math.min(1, root.reveal)
+		opacity: Math.min(1, root.reveal) * root.form.opacity
+		scale: body.scale
+		transformOrigin: Item.Top
 	}
 
 	Item {
@@ -130,7 +141,10 @@ PanelWindow {
 		x: Math.round(Math.max(Theme.panelFillet + body.edge, Math.min(root.width - width - Theme.panelFillet - body.edge, root.anchorX - width / 2)))
 		y: 0
 		width: root.bodyWidth
-		height: Math.max(0, root.animatedHeight * root.reveal)
+		height: Math.max(0, root.form.h)
+		scale: root.form.scale
+		opacity: root.form.opacity
+		transformOrigin: Item.Top
 
 		// when another button re-targets an open panel, it glides over
 		Behavior on x {
@@ -151,17 +165,35 @@ PanelWindow {
 		}
 
 		Item {
+			id: inside
+
+			// blurred or behind a curtain only while it comes in
+			readonly property bool effected: root.form.blur > 0.01 || root.form.wipe < 0.999
+
 			anchors.fill: parent
 			clip: true
+			layer.enabled: inside.effected
+			layer.effect: MultiEffect {
+				blurEnabled: root.form.blur > 0.01
+				blur: root.form.blur
+				blurMax: 32
+				maskEnabled: root.form.wipe < 0.999
+				maskSource: curtain
+				// the curtain's edge: soft, a third of the panel high
+				maskThresholdMin: 1 - root.form.wipe * 1.35
+				maskSpreadAtMin: 0.35
+			}
 
 			FocusScope {
 				id: scope
 
 				x: (parent.width - root.innerWidth) / 2
-				y: root.padding - 14 * (1 - Math.min(1, root.reveal))
+				y: root.padding + root.form.y
 				width: root.innerWidth
 				height: root.innerHeight
-				opacity: Math.max(0, Math.min(1, (root.reveal - 0.35) / 0.65))
+				opacity: root.form.co
+				scale: root.form.cs
+				transformOrigin: Item.Top
 				focus: true
 
 				Keys.onEscapePressed: Popups.close()
@@ -170,6 +202,59 @@ PanelWindow {
 					id: holder
 
 					anchors.fill: parent
+				}
+			}
+		}
+
+		// the curtain's mask: solid at the top, gone at the bottom
+		Rectangle {
+			id: curtain
+
+			anchors.fill: parent
+			visible: false
+			layer.enabled: inside.effected && root.form.wipe < 0.999
+			gradient: Gradient {
+				GradientStop {
+					position: 0
+					color: "white"
+				}
+				GradientStop {
+					position: 1
+					color: "transparent"
+				}
+			}
+		}
+
+		// glass: a light sweeping across once as it settles
+		Item {
+			anchors.fill: parent
+			clip: true
+			visible: root.form.sheen >= 0
+
+			Rectangle {
+				readonly property real band: Math.max(120, parent.width * 0.35)
+
+				x: -band * 2 + (parent.width + band * 3) * Math.max(0, root.form.sheen)
+				y: -parent.height * 0.25
+				width: band
+				height: parent.height * 1.5
+				rotation: 18
+				opacity: 0.16 * Math.sin(Math.PI * Math.max(0, root.form.sheen))
+				gradient: Gradient {
+					orientation: Gradient.Horizontal
+
+					GradientStop {
+						position: 0
+						color: "transparent"
+					}
+					GradientStop {
+						position: 0.5
+						color: "white"
+					}
+					GradientStop {
+						position: 1
+						color: "transparent"
+					}
 				}
 			}
 		}

@@ -61,6 +61,55 @@ SettingsPage {
 		}
 	}
 
+	// how the panels hanging from the bar open
+	SettingCard {
+		anchor: "popup-motion"
+		title: "Popups"
+		subtitle: "How the panels open out of the bar. Each tile plays its motion; click one to use it."
+		icon: "animation_play_outline"
+		modified: PopupMotion.style !== "classic" || PopupMotion.speed !== 1
+		onReset: {
+			PopupMotion.set("style", "classic");
+			PopupMotion.set("speed", 1);
+		}
+
+		GridLayout {
+			Layout.fillWidth: true
+			columns: 3
+			columnSpacing: 10
+			rowSpacing: 10
+
+			Repeater {
+				model: PopupMotion.styles
+
+				delegate: PopupMotionTile {
+					required property var modelData
+
+					Layout.fillWidth: true
+					Layout.preferredHeight: 150
+					entry: modelData
+					playing: root.active
+					onPicked: PopupMotion.set("style", modelData.id)
+				}
+			}
+		}
+
+		RowLayout {
+			Layout.fillWidth: true
+			spacing: 12
+
+			ValueSlider {
+				from: 0.6
+				to: 1.6
+				step: 0.05
+				label: "Speed"
+				value: PopupMotion.speed
+				format: v => v < 0.9 ? `${Math.round(v * 100)}% – slower` : (v > 1.1 ? `${Math.round(v * 100)}% – quicker` : `${Math.round(v * 100)}%`)
+				onMoved: v => PopupMotion.set("speed", Math.round(v * 20) / 20)
+			}
+		}
+	}
+
 	SettingCard {
 		anchor: "wallpaper-change"
 		title: "New wallpaper"
