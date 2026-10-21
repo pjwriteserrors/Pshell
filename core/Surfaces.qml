@@ -42,6 +42,15 @@ Scope {
 		WallpaperLayer {}
 	}
 
+	// above a video's player while a change leaves it
+	Variants {
+		model: Wallpaper.enabled && Wallpaper.curtain ? Quickshell.screens : []
+
+		WallpaperLayer {
+			curtain: true
+		}
+	}
+
 	// and its copy in the niri overview, between the workspaces
 	Variants {
 		model: Wallpaper.enabled ? Quickshell.screens : []

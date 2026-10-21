@@ -16,11 +16,17 @@ import qs.core.services
 // (namespace shell-wallpaper-backdrop, placed there by a layer-rule in
 // dotfiles/niri/pshell.kdl), sharp, blurred or dimmed. It changes with a
 // plain fade: nobody watches it while it happens.
+//
+// `curtain`: up only while a change leaves a video (Wallpaper.curtain). On
+// the bottom layer and newer than the player, so above it, it starts from
+// the frame the player was showing and animates into the new wallpaper;
+// it goes when the player was handed over.
 PanelWindow {
 	id: root
 
 	required property var modelData
 	property bool backdrop: false
+	property bool curtain: false
 	// Decoded to just cover the screen (a square of the longest side, cropped,
 	// was 105 MB a 4K screen instead of 33). The overview's copy shows behind
 	// zoomed-out workspaces: half the size is plenty, a blurred one a third.
@@ -33,7 +39,8 @@ PanelWindow {
 	readonly property string transition: root.backdrop ? "fade" : Wallpaper.transition
 
 	screen: root.modelData
-	color: "black"
+	// the curtain lets the player show through until its first picture is in
+	color: root.curtain ? "transparent" : "black"
 	anchors {
 		left: true
 		right: true
@@ -41,8 +48,8 @@ PanelWindow {
 		bottom: true
 	}
 	exclusiveZone: 0
-	WlrLayershell.namespace: root.backdrop ? "shell-wallpaper-backdrop" : "shell-wallpaper"
-	WlrLayershell.layer: WlrLayer.Background
+	WlrLayershell.namespace: root.backdrop ? "shell-wallpaper-backdrop" : (root.curtain ? "shell-wallpaper-curtain" : "shell-wallpaper")
+	WlrLayershell.layer: root.curtain ? WlrLayer.Bottom : WlrLayer.Background
 	WlrLayershell.exclusionMode: ExclusionMode.Ignore
 	WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
 	// clicks go to the desktop beneath (the niri overview, the bar's)
@@ -52,13 +59,32 @@ PanelWindow {
 
 	function follow() {
 		if (root.wanted === "" || root.wanted === root.front.source.toString()) return;
+		// the curtain first shows where the player was
+		if (root.curtain && (root.front.status === Image.Null || root.front.status === Image.Loading)) {
+			root.raise();
+			return;
+		}
 		root.back.source = root.wanted;
 	}
+
+	// the curtain's first picture, once it knows the size to decode it at
+	function raise() {
+		if (!root.curtain || root.longest <= 0 || one.source.toString() !== "") return;
+		one.opacity = 1;
+		one.z = 1;
+		one.source = `file://${Wallpaper.leaving}?${Wallpaper.serial}`;
+	}
+
+	Component.onCompleted: root.raise()
 
 	onWantedChanged: root.follow()
 	onLongestChanged: if (root.longest > 0) root.follow()
 
 	function arrived(image) {
+		if (root.curtain && image === root.front && image.status !== Image.Loading) {
+			root.follow();
+			return;
+		}
 		if (image !== root.back || image.status !== Image.Ready || image.source.toString() !== root.wanted) return;
 		fade.stop();
 		zoom.stop();
@@ -96,6 +122,7 @@ PanelWindow {
 		old.z = 0;
 		old.opacity = 0;
 		old.source = "";
+		if (!root.backdrop) Wallpaper.settled(root.curtain);
 	}
 
 	// how much of its texture the cropped picture shows, per axis
