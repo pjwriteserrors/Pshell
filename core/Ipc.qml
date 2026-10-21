@@ -100,6 +100,34 @@ Scope {
 		}
 	}
 
+	// the window switcher (Alt+Tab). niri's binds call next/prev with the
+	// scope (all, others, output, workspace; "" = the setting) and the
+	// filter ("app": only windows of the focused app)
+	IpcHandler {
+		target: "switcher"
+
+		function next(scope: string, filter: string): void {
+			if (Plugins.on("window-switcher")) Switcher.step(1, scope, filter);
+		}
+		function prev(scope: string, filter: string): void {
+			if (Plugins.on("window-switcher")) Switcher.step(-1, scope, filter);
+		}
+		// open without a held key: stays until something is picked
+		function show(): void {
+			if (Plugins.on("window-switcher")) Switcher.show("", "");
+		}
+		function cancel(): void {
+			Switcher.cancel();
+		}
+		function layout(name: string): void {
+			Switcher.set("layout", name);
+		}
+		function status(): string {
+			return JSON.stringify({ engine: Switcher.engine, layout: Switcher.layout, open: Switcher.open, shown: Switcher.shown,
+				held: Switcher.held, index: Switcher.index, items: Switcher.items.map(item => `${item.id} ${item.appId}`) });
+		}
+	}
+
 	// the plugin switches (>plugins)
 	IpcHandler {
 		target: "plugins"

@@ -23,6 +23,7 @@
 	{ "id": "media", "name": "Media", "category": "Panels" },
 	{ "id": "clipboard", "name": "Clipboard history", "category": "Panels" },
 	{ "id": "overview", "name": "Overview", "category": "Panels" },
+	{ "id": "window-switcher", "name": "Window switcher", "category": "Desktop", "icon": "swap_horizontal_variant" },
 	{ "id": "updates", "name": "Updates", "category": "Panels" },
 	{ "id": "breaks", "name": "Breaks", "category": "Panels" },
 	{ "id": "eye-rest", "name": "Eye rest", "category": "Panels", "requires": ["breaks"] },

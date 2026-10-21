@@ -19,6 +19,7 @@ import qs.core.views.screentime
 import qs.core.views.settings
 import qs.core.views.shelf
 import qs.core.views.ssh
+import qs.core.views.switcher
 import qs.core.views.studio
 import qs.core.views.todos
 import qs.core.views.torrents
@@ -118,6 +119,19 @@ Scope {
 	Hold {
 		id: pinning
 		when: Screenshot.pins.length > 0
+	}
+
+	// Alt+Tab: kept a minute after it closed, the next Alt+Tab comes soon
+	Hold {
+		id: switching
+		when: Switcher.open
+		keep: 60000
+	}
+
+	LazyLoader {
+		active: Plugins.on("window-switcher") && switching.held
+
+		SwitcherWindow {}
 	}
 
 	// the light on a pointer that is shaken
