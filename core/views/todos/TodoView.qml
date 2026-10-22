@@ -368,6 +368,21 @@ ColumnLayout {
 						}
 					}
 
+					// the group's categories (in "All tasks" each group header has this)
+					IconButton {
+						readonly property Item group: root.selectedGroup === "" ? null : board.groupItem(root.selectedGroup)
+
+						visible: root.selectedGroup !== ""
+						icon: "tag_multiple_outline"
+						iconSize: 16
+						variant: "tonal"
+						checked: group?.sorting ?? false
+						onClicked: {
+							if (!group) return;
+							group.sorting = !group.sorting;
+						}
+					}
+
 					IconButton {
 						icon: "pin"
 						iconSize: 16

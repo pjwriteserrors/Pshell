@@ -465,6 +465,28 @@ PanelWindow {
 							font.weight: Font.DemiBold
 						}
 
+						// the categories of a group's board
+						IconButton {
+							readonly property Item groupItem: card.group !== "" ? (boardLoader.item?.groupItem(card.group) ?? null) : null
+
+							Layout.preferredWidth: card.px(28)
+							Layout.preferredHeight: card.px(28)
+							visible: !card.collapsed && card.group !== ""
+							icon: "tag_multiple_outline"
+							iconSize: card.px(14)
+							checked: groupItem?.sorting ?? false
+							opacity: cardHover.hovered || checked ? 1 : 0
+							onClicked: {
+								if (groupItem) groupItem.sorting = !groupItem.sorting;
+							}
+
+							Behavior on opacity {
+								Anim {
+									duration: Motion.short
+								}
+							}
+						}
+
 						IconButton {
 							Layout.preferredWidth: card.px(28)
 							Layout.preferredHeight: card.px(28)

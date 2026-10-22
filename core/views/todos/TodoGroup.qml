@@ -94,7 +94,10 @@ Item {
 	onSortingChanged: {
 		const window = QsWindow.window;
 		if (window && window.typing !== undefined) window.typing += root.sorting ? 1 : -1;
-		if (root.sorting) Todos.lookForModels();
+		if (!root.sorting) return;
+		Todos.lookForModels();
+		// once the panel has started to open (a hidden field takes no focus)
+		focusCategory.restart();
 	}
 	Component.onDestruction: {
 		const window = QsWindow.window;
@@ -102,6 +105,13 @@ Item {
 	}
 
 	implicitHeight: column.implicitHeight
+
+	Timer {
+		id: focusCategory
+
+		interval: 80
+		onTriggered: categoryField.focusInput()
+	}
 
 	SyncedModel {
 		id: openModel
@@ -230,7 +240,6 @@ Item {
 							checked: root.sorting
 							onClicked: {
 								root.sorting = !root.sorting;
-								if (root.sorting) categoryField.focusInput();
 							}
 						}
 
