@@ -23,7 +23,7 @@ ColumnLayout {
 	readonly property bool on: Mouse.option("rumble", "off") !== "off"
 	readonly property bool automatic: root.on && root.source === "auto"
 	readonly property bool sound: root.on && root.source !== "input"
-	readonly property bool padWanted: Mouse.option("rumblePad", true) !== false
+	readonly property bool padWanted: Mouse.option("rumblePad", false) === true
 	readonly property bool soundWanted: Mouse.option("rumbleSound", true) !== false
 	// what was felt lately: [{source, kind, strength, label, at}]
 	property var recent: []
@@ -130,7 +130,7 @@ ColumnLayout {
 
 		StyledText {
 			Layout.fillWidth: true
-			text: root.source === "auto" ? "Nothing to set up: the game's own controller haptics, else its sound after your presses – every bullet of a slow reload, one clack of a magazine, the swing and the break – and blasts and hits from anywhere." : (root.source === "sound" ? "Every new sound of the game that stands out – also what others do. Only the game's own stream, never voices or music." : "Only what you press, as bound below – exact, the same in every game.")
+			text: root.source === "auto" ? "Nothing to set up: the game's sound after your presses – every bullet of a slow reload, one clack of a magazine, the swing and the break – and blasts from anywhere. The game's own controller haptics on top, when you turn them on." : (root.source === "sound" ? "Every new sound of the game that stands out – also what others do. Only the game's own stream, never voices or music." : "Only what you press, as bound below – exact, the same in every game.")
 			tone: Theme.textSubtle
 			font.pixelSize: Theme.size.small
 			wrapMode: Text.WordWrap
@@ -152,7 +152,7 @@ ColumnLayout {
 				label: "The game's own haptics",
 				on: root.padWanted,
 				live: Mouse.padOn,
-				text: !root.padWanted ? "A virtual controller the game can rumble – off" : (Mouse.padOn ? (Mouse.padPulses > 0 ? `Plugged in – the game rumbled it ${Mouse.padPulses} times` : "Plugged in, nothing felt yet – not every game rumbles while you play with the mouse") : (Mouse.padBlocked ? `Your ${Mouse.padBlocked} is on: the game rumbles that one` : "A virtual controller, plugged in while a game runs; most games rumble it even when you play with the mouse"))
+				text: !root.padWanted ? "Off. A virtual controller the game can rumble with the haptics its makers designed – but a game that takes the first controller as its only input leaves mouse and keyboard dead; turn it on per game, off again if that happens" : (Mouse.padOn ? (Mouse.padPulses > 0 ? `Plugged in – the game rumbled it ${Mouse.padPulses} times` : "Plugged in, nothing felt yet – not every game rumbles while you play with the mouse") : (Mouse.padBlocked ? `Your ${Mouse.padBlocked} is on: the game rumbles that one` : "A virtual controller, plugged in while a game runs; most games rumble it even when you play with the mouse"))
 			}, {
 				id: "sound",
 				icon: "volume_high",

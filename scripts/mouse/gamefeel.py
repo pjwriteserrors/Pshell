@@ -6,9 +6,11 @@
   the recoil of that one, a hit taken, an explosion nearby – even while you
   play with mouse and keyboard, which most engines do. Every effect the
   game uploads and plays becomes pulses under the thumb, by its strength
-  and for as long as it runs. The pad is only there while no real
-  controller is plugged in (a game would take ours as player one), and goes
-  as soon as one appears.
+  and for as long as it runs. Off until the page turns it on: some games
+  take the first controller they see as their only input, and mouse and
+  keyboard go dead. The pad is only there while no real controller is
+  plugged in (a game would take ours as player one), and goes as soon as
+  one appears.
 - Ears: the game's own sound, nothing else's – its PipeWire stream (found
   by the game's processes; voice chat, music and the browser are never in
   it). Each 20 ms is weighed against the moment before (spectral flux: an
@@ -169,7 +171,9 @@ class Pad:
 
     def wanted(self):
         options = self.daemon.config["options"]
-        if evdev is None or options.get("rumblePad", True) is False:
+        # off until asked for: a game that takes the first controller as its
+        # only input would leave mouse and keyboard dead
+        if evdev is None or options.get("rumblePad", False) is not True:
             return False
         if options.get("rumbleSource", "auto") not in ("auto", "both"):
             return False

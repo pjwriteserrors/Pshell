@@ -130,8 +130,10 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
 - **Game haptics** (`rumble`: off, games, always; `rumbleSource`: auto,
   input, sound; `scripts/mouse/gamefeel.py`). *By itself* (the default)
   needs no setting up and is not the same in every game:
-  - *The game's own haptics* (`rumblePad`): while a game runs the daemon
-    plugs in a virtual controller (uinput, the ids of an Xbox 360 pad with
+  - *The game's own haptics* (`rumblePad`, off until turned on – some
+    games take the first controller they see as their only input and
+    mouse and keyboard go dead; `ipc mouse pad on|off`): while a game runs
+    the daemon plugs in a virtual controller (uinput, the ids of an Xbox 360 pad with
     force feedback, "Pshell haptic pad"; it never presses anything). Games
     that rumble a controller rumble it – most engines do so even while you
     play with mouse and keyboard – with the haptics their makers designed:
