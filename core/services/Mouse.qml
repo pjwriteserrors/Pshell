@@ -249,6 +249,10 @@ Singleton {
 	function forgetGame() {
 		root.send({ op: "forget" });
 	}
+	// what the ears hear and every press, kept for tuning (~/.cache/pshell/ears-<game>.*)
+	function recordEars(seconds) {
+		root.send({ op: "record", seconds: seconds ?? 120 });
+	}
 	onGamingChanged: {
 		root.tellGaming();
 		root.followContext();

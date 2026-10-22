@@ -168,8 +168,9 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
     the title, versioned – an older fingerprint's memories are dropped):
     every onset gets a fingerprint (how much each of 24 log-spaced bands
     80 Hz–7.5 kHz rises over its first 60 ms, shape only) and joins the
-    nearest cluster of sounds alike (cosine distance ≤ 0.17, else a new
-    one; 120 per game, the rarest makes room). A cluster counts how often
+    nearest cluster of sounds alike (cosine distance ≤ 0.33 – a real game's
+    sounds spread far more than clean samples –, else a new one; 120 per
+    game, the rarest makes room). A cluster counts how often
     it was heard, how often inside a fresh press's window, and after which
     key with what delay (credited to the press it follows, in 100 ms bins
     up to 4 s), and how loud against the game's loud moments. A sound is
@@ -209,7 +210,10 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
     quiet (its own
     haptics are the better ones, nothing plays twice). `rumbleGap` (at
     most every so many ms, 70). `PSHELL_EARS_DUMP=<file>` writes every
-    frame's flux, bar, level and onset flag, for tuning.
+    frame's flux, bar, level and onset flag, for tuning; `ipc mouse feel
+    record` (`{op: "record", seconds}`) keeps two minutes of what the ears
+    hear (16 kHz stereo float) and every press with its time in
+    `~/.cache/pshell/ears-<game>.raw` and `.presses`, to tune on a real game.
   - Bound presses (`rumbleBinds`, below) play on top; by itself nothing is
     bound until the page binds something.
   *Presses*: only the bound keys and buttons (`Triggers`: evdev, nothing

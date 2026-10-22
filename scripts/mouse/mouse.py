@@ -1170,6 +1170,8 @@ class Daemon:
                 self.play("WHISPER COLLISION")
                 self.ears.memory.save()
             emit("learning", **self.ears.memory.summary())
+        elif op == "record":
+            self.ears.record(float(command.get("seconds", 120)))
         elif op == "forget":
             self.ears.memory.forget(command.get("game") or None)
             self.ears.memory.save()

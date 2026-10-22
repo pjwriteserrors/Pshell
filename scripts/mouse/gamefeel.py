@@ -54,6 +54,7 @@ import collections
 import json
 import math
 import os
+import pathlib
 import select
 import subprocess
 import threading
@@ -389,7 +390,10 @@ class Memory:
     BANDS = 24
     LAG_BINS = 40        # 100 ms each, 4 s
     KNOWN = 6            # times heard before a cluster is judged
-    SAME = 0.17          # cosine distance within which a sound is the same
+    # cosine distance within which a sound is the same: a real game's sounds
+    # spread far more than clean samples (the same step on another floor,
+    # over other ambience)
+    SAME = 0.33
     MOST = 120           # clusters kept per game
     VERSION = 2          # of the fingerprint: older memories are dropped
 
@@ -682,6 +686,18 @@ class Stream:
             data = proc.stdout.read(block)
             if not data or len(data) < block:
                 break
+            recording = self.ears.recording
+            if recording and self is self.ears.primary:
+                if time.monotonic() < recording[0]:
+                    try:
+                        recording[1].write(data)
+                    except OSError:
+                        pass
+                else:
+                    self.ears.recording = None
+                    for file in recording[1:]:
+                        file.close()
+                    self.ears.daemon.log("ears: recording done")
             # on the scale of 16-bit samples, which the numbers below assume
             samples = np.frombuffer(data, dtype="<f4") * 32767.0
             left, right = samples[0::2], samples[1::2]
@@ -785,6 +801,8 @@ class Ears:
         self.primary = None
         self.last_tick = 0.0
         self.last_summary = 0.0
+        # a recording for tuning: (until, audio file, presses file)
+        self.recording = None
 
     def options(self):
         return self.daemon.config["options"]
@@ -913,8 +931,31 @@ class Ears:
 
     def press(self, code, down):
         self.gate.press(code, down)
+        if self.recording and down:
+            try:
+                self.recording[2].write(f"{time.monotonic():.3f} {code} {key_name(code)}\n")
+                self.recording[2].flush()
+            except OSError:
+                pass
         if self.daemon.watching and code not in self.gate.quiet:
             self.tell_gate()
+
+    def record(self, seconds):
+        """Keep what the first stream hears (16 kHz stereo float) and every
+        press, for tuning on a real game: ~/.cache/pshell/ears-<game>.raw
+        and .presses."""
+        base = pathlib.Path(os.environ.get("XDG_CACHE_HOME") or pathlib.Path.home() / ".cache") / "pshell"
+        base.mkdir(parents=True, exist_ok=True)
+        name = "".join(ch if ch.isalnum() else "_" for ch in (self.memory.game or "game"))
+        try:
+            audio = open(base / f"ears-{name}.raw", "wb")
+            presses = open(base / f"ears-{name}.presses", "w")
+        except OSError as error:
+            self.daemon.log(f"ears: record: {error}")
+            return
+        presses.write(f"# start {time.monotonic():.3f}\n")
+        self.recording = (time.monotonic() + float(seconds), audio, presses)
+        self.daemon.log(f"ears: recording {seconds:.0f} s to {audio.name}")
 
     def tell_gate(self):
         now = time.monotonic()
