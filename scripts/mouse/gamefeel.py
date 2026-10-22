@@ -24,6 +24,23 @@
   explosion, something hitting you. Movement keys open no window (else
   every footstep would count), and whatever is held keeps its window open
   (automatic fire, mining).
+- Memory: the game is learned while it is played (mouse-gamefeel.json, per
+  game). Every onset gets a fingerprint (how much each of 24 bands rises
+  over its first 60 ms) and joins a cluster of sounds alike; each cluster counts how often
+  it came inside a press's window, after which key and with what delay,
+  (credited to the press it follows) and how often on its own. Once a
+  cluster is known (6 times) only those
+  that nearly always follow a press – and at the delay they were learned
+  with – are felt: the bullets of this weapon after R, its shot after the
+  click, the spell after the click that cast it; footsteps, music, the
+  enemy's fire and the world fall out even when they land in a window. A
+  key's window grows to the delays its sounds were seen at (a slow reload). Quiet sounds known only from mouse clicks (the
+  UI's ticks) stay silent. The onset threshold regulates itself per game so
+  that raw onsets stay in a workable band; the sensitivity slider shifts
+  on top. A sound that should not have been felt is muted for good from
+  the page (its chip) or `ipc mouse feel no`; *Forget this game* starts
+  over. While a sound is still new it is felt only when clearly an action
+  (loud enough, after a key rather than a click).
 - Right after the game rumbles the pad its sound stays quiet: the game's
   own haptics are the better ones, and they must not play twice. A game
   that rumbles only now and then (a hit taken, never a reload) gets the
@@ -103,18 +120,27 @@ def code_names(names):
 
 
 class Gate:
-    """Windows the presses open: a sound inside one is the player's."""
+    """The presses, remembered: a sound right after one is the player's.
+    How long after is learned per key (Memory.window), from what each
+    key's sounds were seen at."""
 
     def __init__(self):
         self.lock = threading.Lock()
-        self.windows = {}     # code -> (opened, closes)
-        self.held = {}        # code -> since
+        self.presses = collections.deque(maxlen=256)   # (time, code)
+        self.held = {}                                 # code -> since
         self.quiet = code_names(QUIET_KEYS)
         self.buttons = code_names(("BTN_LEFT", "BTN_RIGHT", "BTN_MIDDLE", "BTN_SIDE", "BTN_EXTRA", "BTN_FORWARD", "BTN_BACK", "BTN_TASK"))
+        # how much of the time a window is open lately (0..1)
+        self.duty = 0.0
 
     def configure(self, quiet):
         if isinstance(quiet, list):
             self.quiet = code_names(quiet)
+
+    def default_window(self, code):
+        # a button is one shot (or a swing), a key often starts something
+        # longer: a reload, a spell
+        return 0.45 if code in self.buttons else 2.0
 
     def press(self, code, down):
         if code in self.quiet:
@@ -122,37 +148,40 @@ class Gate:
         now = time.monotonic()
         with self.lock:
             if down:
-                # a button is one shot (or a swing), a key often starts something
-                # longer: a reload, a spell
-                length = 0.45 if code in self.buttons else 2.0
-                self.windows[code] = (now, now + length)
+                self.presses.append((now, code))
                 self.held[code] = now
             else:
                 self.held.pop(code, None)
-                opened, closes = self.windows.get(code, (now, now))
-                self.windows[code] = (opened, max(closes, now + 0.4))
 
-    def open(self):
-        """Is a press fresh, and since when; prunes what has closed."""
-        now = time.monotonic()
+    def recent(self, now, horizon=4.0):
+        """[(code, age)] of the presses of the last seconds, newest first,
+        and the keys still held (age since they went down)."""
+        out = []
         with self.lock:
-            if self.held:
-                return min(self.held.values())
-            best = None
-            for code, (opened, closes) in list(self.windows.items()):
-                if closes <= now:
-                    del self.windows[code]
-                elif best is None or opened > best:
-                    best = opened
-            return best
+            for since, code in reversed(self.presses):
+                age = now - since
+                if age > horizon:
+                    break
+                out.append((code, age))
+            for code, since in self.held.items():
+                if not any(c == code for c, _ in out):
+                    out.append((code, now - since))
+        return out
 
-    def extend(self):
-        """An onset was taken: the action goes on (bullet after bullet)."""
-        now = time.monotonic()
+    def fresh(self, now, window):
+        """The presses whose window (by key) is still open, and the held ones."""
         with self.lock:
-            for code, (opened, closes) in self.windows.items():
-                if closes > now:
-                    self.windows[code] = (opened, min(opened + 8.0, max(closes, now + 0.6)))
+            held = set(self.held)
+        out = []
+        for code, age in self.recent(now):
+            if code in held or age <= window(code):
+                out.append((code, age))
+        return out
+
+    def sample(self, now, window):
+        """Called every 20 ms: how much of the time a window is open."""
+        opened = 1.0 if self.fresh(now, window) else 0.0
+        self.duty = self.duty * 0.998 + opened * 0.002
 
 
 class Pad:
@@ -339,6 +368,210 @@ class Pad:
         return self.last_rumble > 0 and time.monotonic() - self.last_rumble < seconds
 
 
+class Memory:
+    """What a game sounds like and which of its sounds are the player's,
+    learned while it is played and kept per game (mouse-gamefeel.json)."""
+
+    BANDS = 24
+    LAG_BINS = 40        # 100 ms each, 4 s
+    KNOWN = 6            # times heard before a cluster is judged
+    SAME = 0.17          # cosine distance within which a sound is the same
+    MOST = 120           # clusters kept per game
+    VERSION = 2          # of the fingerprint: older memories are dropped
+
+    def __init__(self, path):
+        self.path = path
+        self.lock = threading.Lock()
+        self.data = {}
+        self.game = ""
+        self.entry = None
+        self.dirty = False
+        self.windows = {}
+        self.last_cluster = -1
+        try:
+            data = json.loads(path.read_text())
+            if isinstance(data, dict) and data.get("_v") == self.VERSION:
+                self.data = data
+        except (OSError, ValueError):
+            pass
+        self.data["_v"] = self.VERSION
+
+    def use(self, game):
+        game = game or "_"
+        with self.lock:
+            if game == self.game and self.entry is not None:
+                return
+            self.game = game
+            self.entry = self.data.setdefault(game, {"clusters": [], "gain": 1.0, "seconds": 0.0, "onsets": 0})
+            self.windows = {}
+            self.last_cluster = -1
+
+    def save(self):
+        with self.lock:
+            if not self.dirty:
+                return
+            self.dirty = False
+            data = json.dumps(self.data, separators=(",", ":"))
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self.path.with_suffix(".tmp")
+            tmp.write_text(data)
+            tmp.replace(self.path)
+        except OSError:
+            pass
+
+    def forget(self, game=None):
+        with self.lock:
+            self.data.pop(game or self.game, None)
+            self.entry = None
+            self.dirty = True
+        self.use(game or self.game)
+
+    # ── the sounds
+    def match(self, vector):
+        """The cluster this sound belongs to, a new one when none is near."""
+        with self.lock:
+            clusters = self.entry["clusters"]
+            best, best_distance = -1, 1e9
+            for index, cluster in enumerate(clusters):
+                centre = cluster["v"]
+                distance = 1.0 - sum(a * b for a, b in zip(centre, vector))
+                if distance < best_distance:
+                    best, best_distance = index, distance
+            if best >= 0 and best_distance <= self.SAME:
+                cluster = clusters[best]
+                weight = min(cluster["n"], 30)
+                centre = [(a * weight + b) / (weight + 1) for a, b in zip(cluster["v"], vector)]
+                norm = math.sqrt(sum(a * a for a in centre)) or 1.0
+                cluster["v"] = [a / norm for a in centre]
+                return best
+            if len(clusters) >= self.MOST:
+                # the rarest sound makes room (never a muted one)
+                victim = min((i for i, c in enumerate(clusters) if not c.get("muted")), key=lambda i: clusters[i]["n"], default=None)
+                if victim is None:
+                    return -1
+                clusters.pop(victim)
+            clusters.append({"v": list(vector), "n": 0, "win": 0, "lvl": 0.0, "keys": {}, "muted": False})
+            self.dirty = True
+            return len(clusters) - 1
+
+    def observe(self, index, over, presses, fresh):
+        """One more time this sound was heard: how loud, after which presses
+        (code, age) and whether one of them was still fresh."""
+        if index < 0:
+            return
+        with self.lock:
+            cluster = self.entry["clusters"][index]
+            cluster["n"] += 1
+            cluster["lvl"] += (over - cluster["lvl"]) / min(cluster["n"], 20)
+            if fresh:
+                cluster["win"] += 1
+            for code, age in presses:
+                hist = cluster["keys"].setdefault(str(code), [0] * self.LAG_BINS)
+                hist[min(self.LAG_BINS - 1, int(age * 10))] += 1
+            self.entry["onsets"] += 1
+            self.dirty = True
+            if cluster["n"] in (self.KNOWN, 20, 50):
+                self.windows = {}
+
+    def verdict(self, index, fresh, duty, buttons):
+        """Is this sound the player's? "yes" with the key it follows, "no",
+        or "new" while too little is known."""
+        if index < 0:
+            return "new", None
+        with self.lock:
+            cluster = self.entry["clusters"][index]
+            if cluster.get("muted"):
+                return "no", None
+            if cluster["n"] < self.KNOWN:
+                return "new", None
+            # nearly always inside a window – and more than the windows'
+            # share of the time would give by chance
+            if cluster["win"] / cluster["n"] < max(0.6, min(0.85, duty + 0.3)):
+                return "no", None
+            for code, age in fresh:
+                hist = cluster["keys"].get(str(code))
+                if not hist:
+                    continue
+                total = sum(hist)
+                at = min(self.LAG_BINS - 1, int(age * 10))
+                mass = sum(hist[max(0, at - 1):at + 2]) / total if total else 0.0
+                if total >= 4 and mass >= 0.12:
+                    # a quiet sound known only from clicks: the UI, not a cast
+                    if code in buttons and cluster["lvl"] < -16:
+                        return "no", None
+                    return "yes", code
+            return "no", None
+
+    def window(self, code, default):
+        """How long after this key its sounds still come: the latest delay
+        its own clusters were seen at, else the default."""
+        if code in self.windows:
+            return self.windows[code]
+        with self.lock:
+            latest = 0.0
+            for cluster in self.entry["clusters"]:
+                if cluster["n"] < self.KNOWN or cluster.get("muted") or cluster["win"] / cluster["n"] < 0.6:
+                    continue
+                hist = cluster["keys"].get(str(code))
+                if not hist or sum(hist) < 4:
+                    continue
+                # the 90th percentile of its delays
+                total, seen = sum(hist), 0
+                for bin_index, count in enumerate(hist):
+                    seen += count
+                    if seen >= total * 0.9:
+                        latest = max(latest, (bin_index + 1) / 10 + 0.3)
+                        break
+        # never shorter than the default, never absurd (a key 5 s, a button 1.5 s)
+        result = max(default, min(latest, 1.5 if default < 1 else 5.0))
+        self.windows[code] = result
+        return result
+
+    def mute(self, index=None):
+        index = self.last_cluster if index is None or index < 0 else index
+        with self.lock:
+            clusters = self.entry["clusters"] if self.entry else []
+            if 0 <= index < len(clusters):
+                clusters[index]["muted"] = True
+                self.dirty = True
+                self.windows = {}
+                return True
+        return False
+
+    def rate(self, index):
+        """How often this sound comes, per minute of listening."""
+        with self.lock:
+            seconds = max(30.0, self.entry["seconds"])
+            return self.entry["clusters"][index]["n"] / seconds * 60
+
+    def gain(self):
+        with self.lock:
+            return float(self.entry.get("gain", 1.0)) if self.entry else 1.0
+
+    def adjust(self, factor):
+        with self.lock:
+            self.entry["gain"] = max(0.5, min(2.5, float(self.entry.get("gain", 1.0)) * factor))
+            self.dirty = True
+
+    def listened(self, seconds):
+        with self.lock:
+            self.entry["seconds"] += seconds
+            if int(self.entry["seconds"]) % 30 == 0:
+                self.dirty = True
+
+    def summary(self):
+        with self.lock:
+            if not self.entry:
+                return {}
+            clusters = self.entry["clusters"]
+            known = [c for c in clusters if c["n"] >= self.KNOWN]
+            yours = [c for c in known if not c.get("muted") and c["win"] / c["n"] >= 0.6 and c["keys"]]
+            return {"game": self.game, "sounds": len(clusters), "known": len(known), "yours": len(yours),
+                    "muted": sum(1 for c in clusters if c.get("muted")), "minutes": round(self.entry["seconds"] / 60, 1),
+                    "gain": round(float(self.entry.get("gain", 1.0)), 2)}
+
+
 class Stream:
     """One captured stream and what is heard in it."""
 
@@ -350,7 +583,9 @@ class Stream:
 
     def start(self):
         props = {"node.name": "pshell-ears", "application.name": "Pshell game haptics"}
-        cmd = ["pw-record", "--rate", str(RATE), "--channels", "2", "--format", "s16", "--raw", "--latency", "20ms"]
+        # float, not s16: the conversion to 16 bits dithers, and that noise
+        # floor would be onsets
+        cmd = ["pw-record", "--rate", str(RATE), "--channels", "2", "--format", "f32", "--raw", "--latency", "20ms"]
         if self.serial == "monitor":
             props["stream.capture.sink"] = True
         else:
@@ -369,11 +604,14 @@ class Stream:
             self.proc = None
 
     def listen(self, proc):
-        block = HOP * 2 * 2
+        block = HOP * 2 * 4
         window = np.hanning(FFT).astype(np.float32)
         freqs = np.fft.rfftfreq(FFT, 1 / RATE)
         low = freqs < 160
         high = freqs > 2500
+        # 24 bands, log-spaced from 80 Hz to 7.5 kHz: the fingerprint's axes
+        edges = np.geomspace(80, 7500, Memory.BANDS + 1)
+        bands = [(int(np.searchsorted(freqs, lo)), max(int(np.searchsorted(freqs, lo)) + 1, int(np.searchsorted(freqs, hi)))) for lo, hi in zip(edges[:-1], edges[1:])]
         mid_buffer = np.zeros(FFT, dtype=np.float32)
         previous = np.zeros(FFT // 2 + 1, dtype=np.float32)
         fluxes = collections.deque(maxlen=50)
@@ -383,51 +621,94 @@ class Stream:
         last_flux = 0.0
         last_onset = 0.0
         last_meter = 0.0
+        band_before = None
+        pending = None
+        loudest = 50.0
+        onsets, since = 0, time.monotonic()
+        dump = open(os.environ["PSHELL_EARS_DUMP"], "a") if os.environ.get("PSHELL_EARS_DUMP") else None
         while proc.poll() is None:
             data = proc.stdout.read(block)
             if not data or len(data) < block:
                 break
-            samples = np.frombuffer(data, dtype="<i2").astype(np.float32)
+            # on the scale of 16-bit samples, which the numbers below assume
+            samples = np.frombuffer(data, dtype="<f4") * 32767.0
             left, right = samples[0::2], samples[1::2]
             mid = (left + right) * 0.5
             side = (left - right) * 0.5
             mid_buffer = np.concatenate((mid_buffer[HOP:], mid))
             spectrum = np.abs(np.fft.rfft(mid_buffer * window))
-            logmag = np.log10(spectrum + 1.0)
+            # bins near silence jitter wildly in the log: a floor under them,
+            # absolute and a little below the loudest the game gets
+            loudest = max(loudest * 0.999, float(np.max(spectrum)))
+            logmag = np.log10(spectrum + max(50.0, loudest * 0.01))
             diff = logmag - previous
             previous = logmag
-            flux = float(np.sum(diff[2:][diff[2:] > 0]))
-            total = float(np.sum(spectrum[1:] ** 2)) + 1e-6
-            lowness = float(np.sum(spectrum[low] ** 2)) / total
-            highness = float(np.sum(spectrum[high] ** 2)) / total
+            # rises of at least 0.08 (about 1 dB) count: the jitter of steady
+            # noise summed over 250 bins would otherwise be an onset
+            rise = diff[2:]
+            flux = float(np.sum(rise[rise > 0.08]))
+            power = spectrum * spectrum
+            band_now = np.array([math.log10(float(np.sum(power[lo:hi])) + 1.0) for lo, hi in bands], dtype=np.float32)
+            total = float(np.sum(power[1:])) + 1e-6
+            lowness = float(np.sum(power[low])) / total
+            highness = float(np.sum(power[high])) / total
             rms_mid = float(np.sqrt(np.mean(mid * mid))) + 1.0
             rms_side = float(np.sqrt(np.mean(side * side))) + 1.0
             level = 20 * math.log10(rms_mid)
             now = time.monotonic()
             sensitivity = self.ears.sensitivity()
-            floor = 2.0 - sensitivity * 1.2
+            # with the floor under the log, steady sound has a flux near 0
+            # and a faint far footstep about 7, a bullet going in 60, a shot
+            # 100: an absolute bar (3..12 by sensitivity), raised when the
+            # quieter frames of the last second are themselves restless – a
+            # busy world must not drown the quiet click of a bullet
+            floor = 12.0 - sensitivity * 9.0
             if len(fluxes) >= 10:
-                base = float(np.median(fluxes))
-                needed = base * (3.4 - sensitivity * 2.0) + floor
+                base = float(np.percentile(fluxes, 30))
+                needed = max(floor, base * 2.5) * self.ears.gain()
             else:
                 needed = 1e9
             quiet = float(np.median(levels)) if levels else level
             loud_ref = float(np.percentile(history, 95)) if len(history) >= 50 else level
-            if flux > needed and flux > last_flux and now - last_onset > 0.06:
+            if pending is not None:
+                # the two frames after the onset finish its fingerprint
+                pending["after"].append(band_now)
+                if len(pending["after"]) >= 2:
+                    # the loudest each band got over the onset's first 60 ms,
+                    # above what was there before: robust to where in a frame
+                    # the sound started
+                    before = pending["before"]
+                    peak = np.maximum(pending["at"], np.maximum(pending["after"][0], pending["after"][1]))
+                    vector = np.maximum(peak - before, 0.0)
+                    vector = vector - float(np.mean(vector))
+                    norm = float(np.linalg.norm(vector)) or 1.0
+                    info = pending["info"]
+                    pending = None
+                    self.ears.onset(self, info, [float(x) for x in vector / norm])
+            if flux > needed and flux > last_flux and now - last_onset > 0.06 and pending is None:
                 last_onset = now
+                onsets += 1
                 ratio = flux / needed
                 loud = level - quiet
                 # as strong as it is against the loud moments of this game
                 strength = max(0.05, min(1.0, 0.55 + (level - loud_ref) / 24))
-                self.ears.onset(self, {
-                    "strength": strength, "ratio": ratio, "loud": loud, "level": level,
+                pending = {"at": band_now, "before": band_before if band_before is not None else band_now, "after": [], "info": {
+                    "strength": strength, "ratio": ratio, "loud": loud, "level": level, "at": now,
                     "over": level - loud_ref,
                     "lowness": lowness, "highness": highness, "panned": rms_side / rms_mid,
-                })
+                }}
+            if dump:
+                dump.write(f"{now:.3f} {flux:.2f} {needed if needed < 1e8 else -1:.2f} {level:.1f} {1 if pending is not None and len(pending['after']) == 0 else 0}\n")
             fluxes.append(flux)
             levels.append(level)
             history.append(level)
             last_flux = flux
+            band_before = band_now
+            self.ears.tick(self, now, level - quiet)
+            if now - since >= 15:
+                # the threshold follows the game: raw onsets in a workable band
+                self.ears.regulate(self, onsets / (now - since) * 60)
+                onsets, since = 0, now
             if self.ears.daemon.watching and now - last_meter > 0.066:
                 last_meter = now
                 self.ears.daemon.emit("bass", level=round(min(1.0, flux / max(needed, 0.1) * 0.5), 3),
@@ -437,15 +718,20 @@ class Stream:
 class Ears:
     """The game's own sound, judged."""
 
-    def __init__(self, daemon):
+    def __init__(self, daemon, memory):
         self.daemon = daemon
         self.gate = Gate()
+        self.memory = memory
         self.streams = {}
         self.on = False
         self.lock = threading.Lock()
         self.last_pulse = 0.0
         self.last_blast = 0.0
+        self.last_yes = 0.0
         self.generation = 0
+        self.primary = None
+        self.last_tick = 0.0
+        self.last_summary = 0.0
 
     def options(self):
         return self.daemon.config["options"]
@@ -470,6 +756,7 @@ class Ears:
 
     def update(self):
         self.gate.configure(self.options().get("rumbleQuietKeys"))
+        self.memory.use(self.daemon.game_name if self.daemon.gaming else "")
         wanted = self.wanted()
         if wanted and not self.on:
             self.on = True
@@ -517,6 +804,12 @@ class Ears:
         except (OSError, ValueError, subprocess.TimeoutExpired):
             dump = []
         streams, others = {}, {}
+        # a native client's node may carry no process id: its client does
+        clients = {}
+        for node in dump:
+            if node.get("type") == "PipeWire:Interface:Client":
+                props = (node.get("info") or {}).get("props") or {}
+                clients[node.get("id")] = props.get("application.process.id")
         for node in dump:
             props = (node.get("info") or {}).get("props") or {}
             if props.get("media.class") != "Stream/Output/Audio":
@@ -527,6 +820,8 @@ class Ears:
             name = str(props.get("application.name") or props.get("node.name") or "")
             binary = str(props.get("application.process.binary") or "")
             pid = props.get("application.process.id")
+            if pid is None:
+                pid = clients.get(props.get("client.id"))
             try:
                 pid = int(pid)
             except (TypeError, ValueError):
@@ -537,13 +832,12 @@ class Ears:
                 others[serial] = name
         if streams:
             return dict(list(streams.items())[:3])
-        if self.daemon.gaming and pids:
+        if self.daemon.gaming:
             # the game's sound comes through something else (a Wine process
-            # niri's windows do not name): the streams no desktop app owns
+            # niri's windows do not name, a game with no window known yet):
+            # the streams no desktop app owns
             return dict(list(others.items())[:3])
-        if not self.daemon.gaming:
-            return {"monitor": "the default output"}
-        return {}
+        return {"monitor": "the default output"}
 
     @staticmethod
     def ancestor_in(pid, pids):
@@ -567,7 +861,43 @@ class Ears:
     def press(self, code, down):
         self.gate.press(code, down)
 
-    def onset(self, stream, info):
+    def window(self, code):
+        return self.memory.window(code, self.gate.default_window(code))
+
+    def gain(self):
+        return self.memory.gain()
+
+    def tick(self, stream, now, activity):
+        """Every 20 ms of the first stream: the windows' share of the time,
+        the minutes the game was listened to."""
+        if self.primary is None or self.primary not in self.streams.values():
+            self.primary = stream
+        if stream is not self.primary:
+            return
+        self.gate.sample(now, self.window)
+        if self.last_tick:
+            self.memory.listened(min(0.1, now - self.last_tick))
+        self.last_tick = now
+        if self.daemon.watching and now - self.last_summary > 5:
+            self.last_summary = now
+            self.daemon.emit("learning", **self.memory.summary())
+
+    def regulate(self, stream, rate):
+        """Raw onsets per minute, every 15 s: too many and the threshold
+        rises, too few (while something plays) and it falls."""
+        if stream is not self.primary:
+            return
+        # a busy shooter has 200 real onsets a minute: only an absurd rate
+        # (the noise floor itself) raises the threshold, and only so far
+        if rate > 400:
+            self.memory.adjust(1.15)
+        elif 0 < rate < 10:
+            self.memory.adjust(1 / 1.08)
+        if self.daemon.watching:
+            self.daemon.log(f"ears: {rate:.0f} onsets/min, threshold x{self.memory.gain():.2f}")
+        self.memory.save()
+
+    def onset(self, stream, info, vector):
         """Something started in the game's sound: is it felt, and how?"""
         now = time.monotonic()
         gap = 0.07
@@ -575,6 +905,14 @@ class Ears:
             gap = max(0.04, float(self.options().get("rumbleGap", 70)) / 1000)
         except (TypeError, ValueError):
             pass
+        at = info.get("at", now)
+        presses = self.gate.recent(at)
+        fresh = self.gate.fresh(at, self.window)
+        cluster = self.memory.match(vector)
+        # credited to the press it follows (and one almost at the same
+        # time), not to everything pressed in the last seconds
+        nearest = presses[:1] + [(code, age) for code, age in presses[1:2] if age - presses[0][1] < 0.5]
+        self.memory.observe(cluster, info["over"], nearest, bool(fresh))
         if now - self.last_pulse < gap:
             return
         pad = self.daemon.pad
@@ -582,6 +920,9 @@ class Ears:
         kind = "tick" if (info["highness"] > 0.45 or info["lowness"] < 0.08) else "thud"
         label = ""
         if not self.gated():
+            if self.memory.verdict(cluster, fresh, self.gate.duty, self.gate.buttons)[0] == "no" and cluster >= 0 \
+                    and self.memory.entry["clusters"][cluster].get("muted"):
+                return
             label = "Sound"
         else:
             # a blast: broadband, bass-heavy, far above what was playing –
@@ -589,24 +930,35 @@ class Ears:
             # (something far to one side is far away, however loud)
             blast = (info["lowness"] > 0.3 and info["ratio"] > 2.2 and info["loud"] > 12 and info["over"] > 3
                      and info["panned"] < 0.6)
-            opened = self.gate.open()
             if now - self.last_blast < 0.3:
                 # an explosion is one event, however long it rolls
                 return
             if pad and pad.recent():
                 # the game's own haptics run: its sound would double them
                 return
-            if blast:
+            verdict, key = self.memory.verdict(cluster, fresh, self.gate.duty, self.gate.buttons)
+            if blast and verdict != "yes":
+                # a blast that keeps coming is the music, or the world's noise
+                if cluster >= 0 and (self.memory.entry["clusters"][cluster].get("muted") or self.memory.rate(cluster) > 10):
+                    return
                 kind, label = "blast", "Blast"
                 strength = min(1.0, max(strength, 0.6 + info["over"] / 20))
                 self.last_blast = now
-            elif opened is not None:
-                # far to one side is the world, not the hand
+            elif verdict == "yes":
+                label = "Action"
+                self.last_yes = now
+            elif verdict == "new" and fresh:
+                # still learning this sound: only what is clearly an action –
+                # loud enough, more so after a click than after a key
                 if info["panned"] > 0.9 and strength < 0.6:
                     return
+                keyed = any(code not in self.gate.buttons for code, _ in fresh)
+                if strength < (0.35 if keyed else 0.5):
+                    return
                 label = "Action"
-                self.gate.extend()
+                self.last_yes = now
             else:
                 return
         self.last_pulse = now
-        self.daemon.felt("sound", kind, strength, wave_for(kind, strength), label, stream=stream.name)
+        self.memory.last_cluster = cluster
+        self.daemon.felt("sound", kind, strength, wave_for(kind, strength), label, stream=stream.name, cluster=cluster)

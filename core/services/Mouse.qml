@@ -220,8 +220,28 @@ Singleton {
 		return Array.from(pids);
 	}
 	readonly property string gamePidKey: (root.gamePids ?? []).join(",")
+	// what the daemon learns a game's sounds under: Steam's app id (titles
+	// change with the level), else the title
+	readonly property string gameKey: {
+		const windows = Array.isArray(Games.windows) ? Games.windows : [];
+		const first = windows.length > 0 ? windows[0] : null;
+		const app = String(first?.app ?? "");
+		return /^steam_app_/.test(app) ? app : (GameMode.title || app);
+	}
 	function tellGaming() {
-		root.send({ op: "gaming", on: root.gaming, focused: root.gameFocused, pids: root.gamePids, game: GameMode.title });
+		root.send({ op: "gaming", on: root.gaming, focused: root.gameFocused, pids: root.gamePids, game: root.gameKey });
+	}
+	onGameKeyChanged: if (root.gaming) root.tellGaming()
+
+	// what the daemon learned about the game's sounds (gamefeel.Memory):
+	// {game, sounds, known, yours, muted, minutes, gain}
+	property var learning: ({})
+	// a sound that should not have been felt: never again (-1: the last one)
+	function muteSound(cluster) {
+		root.send({ op: "mute", cluster: cluster ?? -1 });
+	}
+	function forgetGame() {
+		root.send({ op: "forget" });
 	}
 	onGamingChanged: {
 		root.tellGaming();
@@ -371,7 +391,7 @@ Singleton {
 	signal hit(real strength)
 	// a game event the mouse played: source "pad" | "sound" | "press",
 	// kind "rumble" | "tick" | "thud" | "blast" | "press", the waveform
-	signal felt(string source, string kind, real strength, string wave, string label)
+	signal felt(string source, string kind, real strength, string wave, string label, int cluster)
 	property var batteryLog: []
 	// what the daemon last said it goes by (`ipc mouse state`)
 	property var daemonState: ({})
@@ -488,13 +508,16 @@ Singleton {
 			root.rumbling = data.on === true;
 			root.hearing = Array.isArray(data.streams) ? data.streams : [];
 			break;
+		case "learning":
+			root.learning = data;
+			break;
 		case "pad":
 			root.padOn = data.on === true;
 			root.padBlocked = String(data.blocked ?? "");
 			root.padPulses = Number(data.pulses ?? 0);
 			break;
 		case "felt":
-			root.felt(String(data.source ?? ""), String(data.kind ?? ""), Number(data.strength ?? 0), String(data.wave ?? ""), String(data.label ?? ""));
+			root.felt(String(data.source ?? ""), String(data.kind ?? ""), Number(data.strength ?? 0), String(data.wave ?? ""), String(data.label ?? ""), Number(data.cluster ?? -1));
 			if (data.source === "pad") root.padPulses += 1;
 			if (data.source === "sound") root.hit(Number(data.strength ?? 0));
 			break;

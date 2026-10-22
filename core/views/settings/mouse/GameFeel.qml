@@ -25,8 +25,18 @@ ColumnLayout {
 	readonly property bool sound: root.on && root.source !== "input"
 	readonly property bool padWanted: Mouse.option("rumblePad", false) === true
 	readonly property bool soundWanted: Mouse.option("rumbleSound", true) !== false
-	// what was felt lately: [{source, kind, strength, label, at}]
+	// what was felt lately: [{source, kind, strength, label, cluster, muted, at}]
 	property var recent: []
+	readonly property var learning: Mouse.learning ?? ({})
+
+	// a chip clicked: that sound was no action – never again
+	function mute(index) {
+		const item = root.recent[index];
+		if (!item || item.source !== "sound" || item.cluster < 0) return;
+		Mouse.muteSound(item.cluster);
+		const list = root.recent.map(f => f.cluster === item.cluster ? Object.assign({}, f, { muted: true }) : f);
+		root.recent = list;
+	}
 
 	spacing: 12
 
@@ -41,9 +51,9 @@ ColumnLayout {
 	Connections {
 		target: Mouse
 
-		function onFelt(source, kind, strength, wave, label) {
+		function onFelt(source, kind, strength, wave, label, cluster) {
 			const list = root.recent.slice(0, 7);
-			list.unshift({ source, kind, strength, label, wave, at: Date.now() });
+			list.unshift({ source, kind, strength, label, wave, cluster, muted: false, at: Date.now() });
 			root.recent = list;
 			prune.restart();
 		}
@@ -234,10 +244,18 @@ ColumnLayout {
 				width: chipRow.implicitWidth + 18
 				height: 26
 				radius: 13
-				color: chip.modelData.kind === "blast" ? Theme.primary : Theme.layer2
+				color: chip.modelData.muted ? Theme.layer1 : (chip.modelData.kind === "blast" ? Theme.primary : Theme.layer2)
+				border.width: chip.modelData.muted ? 1 : 0
+				border.color: Theme.outline
 				opacity: 1 - chip.index * 0.11
 				scale: 1
 				Component.onCompleted: pop.start()
+
+				MouseArea {
+					anchors.fill: parent
+					cursorShape: chip.modelData.source === "sound" && !chip.modelData.muted ? Qt.PointingHandCursor : Qt.ArrowCursor
+					onClicked: root.mute(chip.index)
+				}
 
 				Behavior on opacity {
 					Anim {}
@@ -271,7 +289,8 @@ ColumnLayout {
 					StyledText {
 						text: root.kindName(chip.modelData.kind, chip.modelData.label)
 						font.pixelSize: Theme.size.small
-						color: chip.modelData.kind === "blast" ? Theme.onPrimary : Theme.text
+						font.strikeout: chip.modelData.muted
+						color: chip.modelData.muted ? Theme.textFaint : (chip.modelData.kind === "blast" ? Theme.onPrimary : Theme.text)
 					}
 
 					// how hard it was
@@ -290,6 +309,43 @@ ColumnLayout {
 					}
 				}
 			}
+		}
+	}
+
+	// what it learned about this game, and the way out
+	RowLayout {
+		Layout.fillWidth: true
+		Layout.leftMargin: 10
+		visible: root.automatic && root.soundWanted && !!root.learning.game && root.learning.game !== "_"
+		spacing: 10
+
+		Glyph {
+			icon: "head_outline"
+			size: 15
+			color: Theme.textSubtle
+		}
+
+		StyledText {
+			Layout.fillWidth: true
+			text: {
+				const l = root.learning;
+				const parts = [`${l.sounds ?? 0} sounds told apart`, `${l.yours ?? 0} are yours`];
+				if ((l.muted ?? 0) > 0) parts.push(`${l.muted} muted`);
+				parts.push(`${l.minutes ?? 0} min listened`);
+				if (l.gain && Math.abs(l.gain - 1) > 0.05) parts.push(`threshold ×${l.gain}`);
+				return `Learning ${l.game} – ` + parts.join(", ") + ". A sound that was wrong: click its chip, it is never felt again.";
+			}
+			tone: Theme.textSubtle
+			font.pixelSize: Theme.size.small
+			wrapMode: Text.WordWrap
+		}
+
+		TextButton {
+			text: "Forget this game"
+			icon: "eraser"
+			variant: "text"
+			confirm: true
+			onActivated: Mouse.forgetGame()
 		}
 	}
 
@@ -466,7 +522,7 @@ ColumnLayout {
 	StyledText {
 		Layout.fillWidth: true
 		visible: root.sound
-		text: root.automatic ? "The sound is the game's own stream at 16 kHz (about 2 % of one core while a game runs). A new sound is yours when a key or button of yours is fresh – movement keys, modifiers and Tab, Esc, Enter open nothing – and plays as a tick or a bump by what it sounds like, harder for louder. A blast is felt whoever caused it. While the game rumbles the controller its sound stays quiet." : "The sound is the game's own stream at 16 kHz, about 2 % of one core. Every new sound that stands out plays – a tick for a click, a bump for a thud, harder for louder."
+		text: root.automatic ? "The sound is the game's own stream at 16 kHz (about 2 % of one core while a game runs). It learns the game as you play: every new sound is told apart by its fingerprint, and only sounds that nearly always follow a press of yours – at the delay they were learned with – are felt; footsteps, music and the world fall out, and a key's window grows to its slow reload. Movement keys, modifiers and Tab, Esc, Enter open nothing. A blast is felt whoever caused it. While the game rumbles the controller its sound stays quiet. The threshold regulates itself per game; the sensitivity shifts on top." : "The sound is the game's own stream at 16 kHz, about 2 % of one core. Every new sound that stands out plays – a tick for a click, a bump for a thud, harder for louder."
 		tone: Theme.textFaint
 		font.pixelSize: Theme.size.small
 		wrapMode: Text.WordWrap

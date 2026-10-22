@@ -11,7 +11,9 @@ Solaar: settings, buttons, gestures, the thumb wheel, haptics, statistics.
 Commands: {op: "config", config} (everything the page keeps: per device
 settings, rules, options), {op: "watch", on} (live presses and movement for
 the page), {op: "play", waveform}, {op: "host", device, index}, {op: "test",
-action}, {op: "refresh"}, {op: "takeover"}, {op: "quit"}.
+action}, {op: "refresh"}, {op: "takeover"}, {op: "gaming", on, focused,
+pids, game}, {op: "mute", cluster} and {op: "forget", game} (game haptics,
+gamefeel.py), {op: "quit"}.
 
 Events: devices, battery, press, move, fired, wheel, focus, stats, solaar,
 imported, action (a shell action for the page to run), error.
@@ -297,7 +299,7 @@ class Daemon:
         self.engine.configure(self.config["rules"], self.config["options"])
         self.output = actions.Output()
         self.pad = gamefeel.Pad(self)
-        self.ears = gamefeel.Ears(self)
+        self.ears = gamefeel.Ears(self, gamefeel.Memory(STATE / "mouse-gamefeel.json"))
         self.triggers = Triggers(self)
         self.update_gamefeel()
         self.loop.post(self.scan)
@@ -322,6 +324,7 @@ class Daemon:
             self.ears.on = False
             for stream in list(self.ears.streams.values()):
                 stream.close()
+            self.ears.memory.save()
         if self.triggers and self.triggers.stop:
             self.triggers.stop.set()
         for mouse in list(self.mice.values()):
@@ -938,15 +941,16 @@ class Daemon:
     def log(self, text):
         log(text)
 
-    def felt(self, source, kind, strength, waveform, label, stream=""):
+    def felt(self, source, kind, strength, waveform, label, stream="", cluster=-1):
         """A game event to feel (the pad, the sound, a bound press): plays
-        it and, while the page watches, says what it was."""
+        it and, while the page watches, says what it was (`cluster`: the
+        learned sound, for the page to mute)."""
         def go():
             self.felt_count[source] = self.felt_count.get(source, 0) + 1
             self.play(waveform)
             if self.watching:
                 emit("felt", source=source, kind=kind, strength=round(float(strength), 2), wave=waveform,
-                     label=label, stream=stream)
+                     label=label, stream=stream, cluster=cluster)
         self.loop.post(go)
 
     def tell_pad(self):
@@ -954,6 +958,7 @@ class Daemon:
 
     def tell_ears(self):
         emit("ears", on=self.ears.on, streams=self.ears.names())
+        emit("learning", **self.ears.memory.summary())
 
     def feel_desktop(self, moment):
         """A pulse for something on the desktop (options.feel: moment -> waveform)."""
@@ -1158,6 +1163,17 @@ class Daemon:
             self.publish()
         elif op == "play":
             self.play(command.get("waveform", FEEL_DEFAULT), self.find(command.get("device")))
+        elif op == "mute":
+            # a sound of the game that should not have been felt (-1: the last)
+            cluster = command.get("cluster", -1)
+            if self.ears.memory.mute(cluster if isinstance(cluster, int) else -1):
+                self.play("WHISPER COLLISION")
+                self.ears.memory.save()
+            emit("learning", **self.ears.memory.summary())
+        elif op == "forget":
+            self.ears.memory.forget(command.get("game") or None)
+            self.ears.memory.save()
+            emit("learning", **self.ears.memory.summary())
         elif op == "host":
             mouse = self.find(command.get("device"))
             if DRY:

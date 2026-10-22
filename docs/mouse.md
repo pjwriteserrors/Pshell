@@ -152,23 +152,56 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
     descendant; with none matching, the streams no desktop app owns; voice
     chat, music, browsers are never in it) and captured with `pw-record
     --target <object.serial>` at 16 kHz stereo (`always` with no game: the
-    default output's monitor). Every 20 ms the spectral flux (what is new
-    against the frame before – an onset, not something loud going on) is
-    weighed against the median of the last second; an onset is felt only
-    when a press of yours is fresh (`Gate`: a mouse button opens 450 ms, a
-    key 2 s, whatever is held keeps its window open, every onset taken
-    extends it by 600 ms up to 8 s – so each bullet of a slow reload, the
-    clack of a magazine, the swing and the crack when the block breaks –
-    movement keys, modifiers, Tab, Esc, Enter, F-keys open nothing
-    (`rumbleQuietKeys` overrides)), or when it is a blast: bass-heavy,
-    far above the last second and above the loud moments of the last 10 s,
-    not panned far to one side – an explosion, something hitting you,
-    whoever caused it. Kind by spectrum (a tick for clicks, a bump for
-    thuds, a knock for blasts), strength by how loud it is against the
-    game's own loud moments. Something far to one side is the world, not
-    the hand. For 3 s after the game rumbled the pad its sound stays
-    quiet (its own haptics are the better ones, nothing plays twice).
-    `rumbleSensitivity`, `rumbleGap` (at most every so many ms, 70).
+    default output's monitor; captured as float – 16-bit conversion
+    dithers, and that noise floor would be onsets). Every 20 ms the
+    spectral flux (rises of at least 1 dB in the log spectrum over the
+    frame before, with a floor under near-silent bins – an onset, not
+    something loud going on; steady sound comes to ~0, a far footstep ~7,
+    a bullet going in ~60, a shot ~100) is weighed against an absolute bar
+    (3..12 by `rumbleSensitivity`), raised when the quieter frames of the
+    last second are restless. Kind by spectrum (a tick for clicks, a bump
+    for thuds, a knock for blasts), strength by how loud it is against the
+    game's own loud moments.
+
+    Which onsets are felt is **learned per game** (`Memory`,
+    `~/.local/state/pshell/mouse-gamefeel.json`, keyed by Steam's app id or
+    the title, versioned – an older fingerprint's memories are dropped):
+    every onset gets a fingerprint (how much each of 24 log-spaced bands
+    80 Hz–7.5 kHz rises over its first 60 ms, shape only) and joins the
+    nearest cluster of sounds alike (cosine distance ≤ 0.17, else a new
+    one; 120 per game, the rarest makes room). A cluster counts how often
+    it was heard, how often inside a fresh press's window, and after which
+    key with what delay (credited to the press it follows, in 100 ms bins
+    up to 4 s), and how loud against the game's loud moments. A sound is
+    *new* until heard 6 times: inside a window it is felt only when
+    clearly an action (strength ≥ 0.35 after a key, ≥ 0.5 after a click).
+    Known, it is felt only when nearly always inside a window (≥ 60 %, and
+    more than the windows' share of the time plus 30 % – held fire opens
+    them all the time), and when the press it follows now is one it was
+    learned after, at that delay (≥ 12 % of its delays within ±100 ms) –
+    so each bullet of this weapon after R, its shot after the click, the
+    spell after the click that cast it, while footsteps, music, the
+    enemy's fire and the UI's quiet ticks (a cluster below −16 dB known
+    only from clicks) fall out even when they land in a window. A key's
+    window (`Gate`: a button 450 ms, a key 2 s by default; whatever is held
+    stays open; movement keys, modifiers, Tab, Esc, Enter, F-keys open
+    nothing, `rumbleQuietKeys` overrides) grows to the 90th percentile of
+    the delays its own sounds were seen at (a key up to 5 s, a button
+    1.5 s), never shrinks below the default. A blast – bass-heavy, far
+    above the last second and above the loud moments of the last 10 s, not
+    panned far to one side – is felt whoever caused it, unless its cluster
+    is muted or comes more than 10 times a minute (the music, the world's
+    noise). The threshold regulates itself per game (`gain` 0.5–2.5: an
+    absurd raw rate of > 400 onsets/min raises it, < 10/min while
+    something plays lowers it). A sound that was felt wrongly is muted
+    for good: its chip on the page, `ipc mouse feel no` (the last one),
+    `{op: "mute", cluster}`; *Forget this game* (`ipc mouse feel forget`,
+    `{op: "forget"}`) starts over. The daemon tells the page what it
+    learned (`learning`: sounds, known, yours, muted, minutes, gain).
+    For 3 s after the game rumbled the pad its sound stays quiet (its own
+    haptics are the better ones, nothing plays twice). `rumbleGap` (at
+    most every so many ms, 70). `PSHELL_EARS_DUMP=<file>` writes every
+    frame's flux, bar, level and onset flag, for tuning.
   - Bound presses (`rumbleBinds`, below) play on top; by itself nothing is
     bound until the page binds something.
   *Presses*: only the bound keys and buttons (`Triggers`: evdev, nothing

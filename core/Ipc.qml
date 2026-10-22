@@ -309,6 +309,12 @@ Scope {
 		function pad(on: string): void {
 			Mouse.setOption("rumblePad", on === "on" || on === "true" || on === "1");
 		}
+		// game haptics: `mouse feel no` – the sound just felt was not an
+		// action, never feel it again; `mouse feel forget` starts the game over
+		function feel(what: string): void {
+			if (what === "forget") Mouse.forgetGame();
+			else Mouse.muteSound(-1);
+		}
 
 	}
 
