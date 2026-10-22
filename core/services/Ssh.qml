@@ -210,7 +210,7 @@ Singleton {
 		root.actionMode = "";
 		root.actionMessage = "";
 		root.actionError = "";
-		actionProcess.command = ["sh", "-lc", ":"];
+		actionProcess.command = ["true"];
 	}
 
 	Process {
@@ -227,7 +227,7 @@ Singleton {
 
 	Process {
 		id: actionProcess
-		command: ["sh", "-lc", ":"]
+		command: ["true"]
 		stdout: StdioCollector {
 			onStreamFinished: {
 				try {

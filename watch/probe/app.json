@@ -1,0 +1,60 @@
+{
+  "configVersion": "v3",
+  "app": {
+    "appId": 1073742,
+    "appName": "PShell Probe",
+    "appType": "app",
+    "version": {
+      "code": 8,
+      "name": "0.8.0"
+    },
+    "icon": "icon.png",
+    "vender": "pshell",
+    "description": "Tests the watch's link to the shell: BLE to the PC, the gyroscope, a trackpad"
+  },
+  "permissions": [
+    "device:os.ble",
+    "device:os.gyroscope",
+    "device:os.accelerometer",
+    "device:os.local_storage"
+  ],
+  "runtime": {
+    "apiVersion": {
+      "compatible": "3.0",
+      "target": "4.0",
+      "minVersion": "3.0"
+    }
+  },
+  "targets": {
+    "default": {
+      "module": {
+        "page": {
+          "pages": [
+            "page/index"
+          ]
+        }
+      },
+      "platforms": [
+        {
+          "deviceSource": 10223872
+        },
+        {
+          "deviceSource": 10223873
+        },
+        {
+          "deviceSource": 10223875
+        }
+      ]
+    }
+  },
+  "i18n": {
+    "en-US": {
+      "appName": "PShell Probe"
+    },
+    "de-DE": {
+      "appName": "PShell Probe"
+    }
+  },
+  "defaultLanguage": "en-US",
+  "designWidth": 390
+}

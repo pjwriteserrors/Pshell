@@ -58,7 +58,7 @@ linked file itself: after editing the sheet, reload Discord (Ctrl+R).
 
 `openrgb` projects the wallpaper onto the keyboard, `openrgb-leds` puts the
 accent colour on GPU and ARGB headers; both are `scripts/apply_lighting.py`,
-with `hosts/<profile>-lighting.json` (without one the keyboard's defaults
+with the `lighting` of `hosts/<profile>.json` (without one the keyboard's defaults
 apply, and a device that is not there is left out). The colours only stay
 while an OpenRGB server holds the devices, so the script starts one
 (`quickshell-openrgb.service`, transient) when none listens, and the shell

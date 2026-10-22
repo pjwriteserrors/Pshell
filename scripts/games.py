@@ -15,8 +15,16 @@
     scripts/games.py launch <id> [runner] starts it: through Steam, Proton, Wine or as it is
     scripts/games.py steam-add <id> [tool] adds a game of here to Steam as a non-Steam game
                                           (Steam is restarted for it), progress as JSON lines
+    scripts/games.py steam-pads           turns Steam's desktop layout off for every non-Steam
+                                          game, so the controller reaches the game (Steam is
+                                          restarted for it when it runs)
     scripts/games.py running              the ids of the games that run right now
     scripts/games.py key [<key>]          the SteamGridDB API key, kept in the keyring
+    scripts/games.py stats <id>           the landing page of a game: play time, the sessions
+                                          of the last weeks, how long it takes to beat
+                                          (HowLongToBeat, cached), Steam's achievements
+    scripts/games.py session <id> <from> <to>  keeps one session of play (seconds since epoch)
+    scripts/games.py goal <id> <main|plus|full|done|''>  what "beaten" means for this game
 
 Games added here live in ~/.local/state/pshell/games.json with what the user
 set for any game (name, cover, favourite, hidden). Pictures come from
@@ -41,15 +49,22 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "files"))
 import windows  # noqa: E402
+import host  # noqa: E402
 
 HOME = Path.home()
-STATE = Path(os.environ.get("XDG_STATE_HOME") or HOME / ".local/state") / "pshell"
+STATE = host.state_dir()
 CACHE = Path(os.environ.get("XDG_CACHE_HOME") or HOME / ".cache") / "pshell/games"
 STORE = STATE / "games.json"
 ART = CACHE / "art"
 FOUND = CACHE / "search"
 RUNNING = CACHE / "running"
 LOG = CACHE / "launch.log"
+SESSIONS = STATE / "game-sessions.json"
+HLTB = CACHE / "hltb.json"
+HLTB_SITE = "https://howlongtobeat.com"
+# a time to beat is asked again after this, one that was not found sooner
+HLTB_KEEP = 30 * 86400
+HLTB_RETRY = 86400
 
 ASSETS = "https://shared.cloudflare.steamstatic.com/store_item_assets/"
 CDN = "https://cdn.cloudflare.steamstatic.com/steam/apps/"
@@ -742,15 +757,31 @@ def steam_url(gameid):
     return f"steam://rungameid/{gameid}"
 
 
+def pads():
+    """How many controllers are plugged in and on (each has a joystick node)."""
+    try:
+        with open("/proc/bus/input/devices") as file:
+            text = file.read()
+    except OSError:
+        return -1
+    return len(re.findall(r"^H: Handlers=.*\bjs\d+", text, re.M))
+
+
 def cmd_launch(args):
     game = find(args[0])
     runner = args[1] if len(args) > 1 and args[1] else game.get("runner", "")
     if game["kind"] in ("steam", "shortcut") or (runner == "steam" and game.get("gameid")):
         if not shutil.which("steam"):
             fail("Steam is not installed")
+        # a closed Steam can take the controller fix for its non-Steam games on the way
+        if game["kind"] != "steam" and not windows.steam_running():
+            try:
+                windows.pads_to_games()
+            except Exception:  # noqa: BLE001 – the game starts anyway
+                pass
         subprocess.Popen(["steam", steam_url(game["gameid"])], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                          stderr=subprocess.DEVNULL, start_new_session=True)
-        out({"via": "Steam", "id": game["id"]})
+        out({"via": "Steam", "id": game["id"], "pads": pads()})
         return
     exe = game.get("exe", "")
     if not os.path.isfile(exe):
@@ -765,7 +796,7 @@ def cmd_launch(args):
         answer = {"error": "The game did not start"}
     if answer.get("error"):
         fail(answer["error"])
-    out({"via": answer.get("via", ""), "id": game["id"], "pid": answer.get("pid")})
+    out({"via": answer.get("via", ""), "id": game["id"], "pid": answer.get("pid"), "pads": pads()})
 
 
 def cmd_play(args):
@@ -781,7 +812,7 @@ def cmd_play(args):
         else:
             if not os.access(exe, os.X_OK) and not exe.endswith(".sh"):
                 os.chmod(exe, os.stat(exe).st_mode | 0o100)
-            command, env, via = ([exe] if not exe.endswith(".sh") else ["sh", exe]), dict(os.environ), "Linux"
+            command, env, via = ([exe] if not exe.endswith(".sh") else ["sh", exe]), windows.clean_env(), "Linux"
         if game.get("args"):
             import shlex
             command += shlex.split(game["args"])
@@ -796,7 +827,7 @@ def cmd_play(args):
     RUNNING.mkdir(parents=True, exist_ok=True)
     marker = RUNNING / (safe(game_id) + ".json")
     started = int(time.time())
-    marker.write_text(json.dumps({"id": game_id, "pid": os.getpid(), "started": started}))
+    marker.write_text(json.dumps({"id": game_id, "pid": os.getpid(), "started": started, "name": game["name"]}))
     out({"via": via, "pid": process.pid})
     sys.stdout.close()
     with Store() as data:
@@ -810,6 +841,7 @@ def cmd_play(args):
         own["playtime"] = int(own.get("playtime") or 0) + minutes
         own["lastPlayed"] = int(time.time())
     marker.unlink(missing_ok=True)
+    keep_session(game_id, started, int(time.time()))
 
 
 def cmd_running(_args):
@@ -850,6 +882,186 @@ def cmd_running(_args):
     out({"running": sorted(running)})
 
 
+# ── a game's landing page ──────────────────────────────────────────────────
+def hltb_search(name):
+    """HowLongToBeat's best match for a name: {id, name, main, plus, full (hours), image}
+    or None. Their site asks for a token first (search/site/init), then takes
+    the search; times come in seconds."""
+    agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
+    headers = {"User-Agent": agent, "Referer": HLTB_SITE + "/", "Origin": HLTB_SITE}
+    init = json.loads(urllib.request.urlopen(urllib.request.Request(
+        f"{HLTB_SITE}/api/search/site/init?t={int(time.time() * 1000)}", headers=headers), timeout=10).read())
+    words = re.sub(r"[™®©:]", " ", name).split()
+    body = {
+        "searchType": "games", "searchTerms": words, "searchPage": 1, "size": 8,
+        "searchOptions": {
+            "games": {"userId": 0, "platform": "", "sortCategory": "popular", "rangeCategory": "main",
+                      "rangeTime": {"min": None, "max": None},
+                      "gameplay": {"perspective": "", "flow": "", "genre": "", "difficulty": ""},
+                      "rangeYear": {"min": "", "max": ""}, "modifier": ""},
+            "users": {"sortCategory": "postcount"}, "lists": {"sortCategory": "follows"},
+            "filter": "", "sort": 0, "randomizer": 0},
+        "useCache": True,
+    }
+    body.update({key: value for key, value in init.items() if key != "token"})
+    request = urllib.request.Request(f"{HLTB_SITE}/api/search/site", data=json.dumps(body).encode(),
+                                     headers={**headers, "Content-Type": "application/json", "x-auth-token": init.get("token", "")})
+    found = json.loads(urllib.request.urlopen(request, timeout=10).read()).get("data") or []
+    best, score = None, 0.0
+    for entry in found:
+        candidate = similarity(name, entry.get("game_name") or "")
+        if candidate > score:
+            best, score = entry, candidate
+    if not best or score < 0.55:
+        return None
+    hours = lambda seconds: round(int(seconds or 0) / 3600, 1)  # noqa: E731
+    return {"id": best.get("game_id"), "name": best.get("game_name"), "main": hours(best.get("comp_main")),
+            "plus": hours(best.get("comp_plus")), "full": hours(best.get("comp_100")),
+            "image": f"{HLTB_SITE}/games/{best['game_image']}" if best.get("game_image") else "",
+            "url": f"{HLTB_SITE}/game/{best.get('game_id')}"}
+
+
+def time_to_beat(name):
+    """The cached answer for a name, asked anew when it is old."""
+    key = normal(name)
+    try:
+        cache = json.loads(HLTB.read_text())
+    except (OSError, ValueError):
+        cache = {}
+    entry = cache.get(key)
+    now = time.time()
+    if entry and now - entry.get("at", 0) < (HLTB_KEEP if entry.get("found") else HLTB_RETRY):
+        return entry.get("found")
+    try:
+        found = hltb_search(name)
+    except Exception:  # noqa: BLE001 – offline or the site changed: keep what there was
+        return entry.get("found") if entry else None
+    cache[key] = {"at": int(now), "found": found}
+    HLTB.parent.mkdir(parents=True, exist_ok=True)
+    HLTB.write_text(json.dumps(cache))
+    return found
+
+
+def achievements(root, account, appid):
+    """Steam's achievements of a game as its client keeps them (appcache/stats):
+    {got, total, recent: [{name, desc, icon, time}]} or None."""
+    import vdf
+    folder = os.path.join(root, "appcache/stats")
+    try:
+        with open(os.path.join(folder, f"UserGameStatsSchema_{appid}.bin"), "rb") as file:
+            schema = vdf.binary_load(file).get(str(appid), {}).get("stats", {})
+    except (OSError, ValueError, SyntaxError):
+        return None
+    try:
+        with open(os.path.join(folder, f"UserGameStats_{account}_{appid}.bin"), "rb") as file:
+            mine = vdf.binary_load(file).get("cache", {})
+    except (OSError, ValueError, SyntaxError):
+        mine = {}
+    got, total, unlocked = 0, 0, []
+    for stat_id, stat in schema.items():
+        if not isinstance(stat, dict) or str(stat.get("type")) not in ("ACHIEVEMENTS", "4"):
+            continue
+        bits = stat.get("bits") or {}
+        own = mine.get(stat_id) or {}
+        data = int(own.get("data") or 0)
+        times = own.get("AchievementTimes") or {}
+        for bit, info in bits.items():
+            total += 1
+            if not data >> int(bit) & 1:
+                continue
+            got += 1
+            display = info.get("display") or {}
+            icon = display.get("icon") or ""
+            unlocked.append({
+                "name": (display.get("name") or {}).get("english") or info.get("name", ""),
+                "desc": (display.get("desc") or {}).get("english", ""),
+                "icon": f"https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/{appid}/{icon}" if icon else "",
+                "time": int(times.get(bit) or 0),
+            })
+    if total == 0:
+        return None
+    unlocked.sort(key=lambda entry: -entry["time"])
+    return {"got": got, "total": total, "recent": unlocked[:6]}
+
+
+def load_sessions():
+    try:
+        return json.loads(SESSIONS.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def keep_session(game_id, start, end):
+    # a moment is no session (a launcher that closed at once)
+    if end - start < 60:
+        return False
+    STATE.mkdir(parents=True, exist_ok=True)
+    with open(STATE / ".games.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        sessions = load_sessions()
+        own = sessions.setdefault(game_id, [])
+        # the same play seen twice (the shell and games.py's watcher): one session
+        for kept in own:
+            if min(end, kept[1]) - max(start, kept[0]) > 0:
+                kept[0], kept[1] = min(start, kept[0]), max(end, kept[1])
+                break
+        else:
+            own.append([start, end])
+        del own[:-400]
+        temporary = SESSIONS.with_suffix(".tmp")
+        temporary.write_text(json.dumps(sessions))
+        os.replace(temporary, SESSIONS)
+    return True
+
+
+def cmd_session(args):
+    out({"kept": keep_session(args[0], int(float(args[1])), int(float(args[2])))})
+
+
+def cmd_goal(args):
+    game_id, goal = args[0], args[1] if len(args) > 1 else ""
+    if goal not in ("", "main", "plus", "full", "done"):
+        fail("main, plus, full or done")
+    with Store() as data:
+        own = data["games"].setdefault(game_id, {})
+        if goal:
+            own["goal"] = goal
+        else:
+            own.pop("goal", None)
+    out({"goal": goal})
+
+
+def cmd_stats(args):
+    game = find(args[0])
+    kept = load()["games"].get(game["id"], {})
+    sessions = load_sessions().get(game["id"], [])
+    # the last four weeks, a day each, in minutes (local days)
+    today = time.localtime()
+    midnight = time.mktime((today.tm_year, today.tm_mon, today.tm_mday, 0, 0, 0, 0, 0, -1))
+    days = [0] * 28
+    for index in range(28):
+        day_start = midnight - (27 - index) * 86400
+        day_end = day_start + 86400
+        for start, end in sessions:
+            days[index] += max(0, min(end, day_end) - max(start, day_start)) / 60
+    beat = time_to_beat(game["name"])
+    trophies = None
+    if game["kind"] == "steam":
+        root = windows.steam_root()
+        account = windows.steam_account(root) if root else ""
+        if root and account:
+            trophies = achievements(root, account, game["appid"])
+    played = [end - start for start, end in sessions]
+    out({
+        "id": game["id"], "name": game["name"], "playtime": game.get("playtime", 0), "lastPlayed": game.get("lastPlayed", 0),
+        "goal": kept.get("goal", ""), "days": [round(minutes) for minutes in days],
+        "sessions": len(sessions), "longest": max(played) // 60 if played else 0,
+        "average": sum(played) // len(played) // 60 if played else 0,
+        "firstSeen": sessions[0][0] if sessions else 0,
+        "hltb": beat, "achievements": trophies,
+    })
+
+
 def cmd_steam_add(args):
     game = find(args[0])
     if game["kind"] != "custom":
@@ -883,6 +1095,15 @@ def cmd_steam_add(args):
     out({"done": True, "gameid": result["gameid"], "restarted": result.get("restarted", False)})
 
 
+def cmd_steam_pads(_args):
+    report = lambda text: out({"progress": text})  # noqa: E731
+    try:
+        result = windows.pads_to_games(report=report)
+    except Exception as error:  # noqa: BLE001
+        fail(error)
+    out({"done": True, **result})
+
+
 def cmd_key(args):
     if not args:
         out({"key": bool(load().get("gridKey"))})
@@ -909,7 +1130,7 @@ def cmd_key(args):
 COMMANDS = {
     "list": cmd_list, "art": cmd_art, "search": cmd_search, "guess": cmd_guess, "add": cmd_add, "update": cmd_update,
     "remove": cmd_remove, "launch": cmd_launch, "_play": cmd_play, "running": cmd_running, "steam-add": cmd_steam_add,
-    "key": cmd_key,
+    "steam-pads": cmd_steam_pads, "key": cmd_key, "stats": cmd_stats, "session": cmd_session, "goal": cmd_goal,
 }
 
 

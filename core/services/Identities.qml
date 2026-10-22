@@ -50,9 +50,16 @@ Singleton {
 	property real awakeUntil: 0
 
 	// a window of its own instead of the panel, and whether that window is up
-	property bool windowed: false
-	property bool windowOpen: false
-	readonly property bool shown: root.windowed ? root.windowOpen : Popups.current === "identity"
+	property alias surface: popout
+	property alias windowed: popout.windowed
+	property alias windowOpen: popout.windowOpen
+	readonly property bool shown: popout.shown
+
+	Popout {
+		id: popout
+
+		popup: "identity"
+	}
 
 	// looked at from the phone (core/phone/IdentitiesTopic.qml), and which one:
 	// that counts like the surface being up, for that identity
@@ -74,13 +81,11 @@ Singleton {
 	function open(view) {
 		if (!root.enabled) return;
 		root.view = view || (root.current ? "card" : "list");
-		if (root.windowed) root.windowOpen = true;
-		else Popups.withFocusedScreen(screen => Popups.open("identity", screen));
+		popout.open();
 	}
 
 	function close() {
-		if (root.windowed) root.windowOpen = false;
-		else if (Popups.current === "identity") Popups.close();
+		popout.close();
 	}
 
 	function toggle() {
@@ -89,15 +94,12 @@ Singleton {
 	}
 
 	function popOut() {
-		if (Popups.current === "identity") Popups.close();
-		root.windowed = true;
-		root.windowOpen = true;
+		popout.popOut();
 		root.save();
 	}
 
 	function dock() {
-		root.windowOpen = false;
-		root.windowed = false;
+		popout.dock();
 		root.save();
 		root.open(root.view);
 	}
@@ -364,15 +366,6 @@ Singleton {
 		if (!/code|kode|pin\b|otp|verif|bestätig|confirm|passw|sicherheit|security/i.test(text)) return "";
 		const match = String(text).match(/(?:^|[^\w.,:\/-])(\d{3}[ -]\d{3}|\d{4,8})(?![\w\/-])/);
 		return match ? match[1].replace(/[ -]/g, "") : "";
-	}
-
-	// "now", "5 min", "3 h", "2 d"
-	function ago(at, now) {
-		const minutes = Math.round((now - at) / 60000);
-		if (minutes < 1) return "now";
-		if (minutes < 60) return `${minutes} min`;
-		if (minutes < 1440) return `${Math.floor(minutes / 60)} h`;
-		return `${Math.floor(minutes / 1440)} d`;
 	}
 
 	function copy(text) {

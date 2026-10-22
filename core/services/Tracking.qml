@@ -6,7 +6,7 @@ import Quickshell.Io
 
 // The qtrack day board: every day with tracked work, and one of them with
 // its entries to edit, queue and send to Teamwork (qtrack-local CLI). The
-// running timer itself is Tmpo's.
+// running timer itself is QtrackTimer's.
 Singleton {
 	id: root
 
@@ -20,7 +20,7 @@ Singleton {
 	property var report: null
 	property string status: ""
 	property bool statusError: false
-	// entries (Tmpo.taskKey) and projects an action is still running for
+	// entries (QtrackTimer.taskKey) and projects an action is still running for
 	property var pending: ({})
 	property var queue: []
 
@@ -77,7 +77,7 @@ Singleton {
 
 	// what the CLI wrote to stderr; it may arrive before or after the exit code
 	function fail(raw) {
-		const detail = Tmpo.stripAnsi(raw).trim();
+		const detail = QtrackTimer.stripAnsi(raw).trim();
 		if (detail !== "") root.say(detail, true);
 	}
 
@@ -103,7 +103,7 @@ Singleton {
 		if (!daysProcess.running) daysProcess.running = true;
 		if (reportProcess.running) return;
 		reportProcess.forDay = root.day;
-		reportProcess.command = ["python3", Tmpo.cliPath, "report", "--json", "--day", root.day];
+		reportProcess.command = ["python3", QtrackTimer.cliPath, "report", "--json", "--day", root.day];
 		reportProcess.running = true;
 	}
 
@@ -150,7 +150,7 @@ Singleton {
 		const job = root.queue[0];
 		root.queue = root.queue.slice(1);
 		actionProcess.job = job;
-		actionProcess.command = ["python3", Tmpo.cliPath].concat(job.args);
+		actionProcess.command = ["python3", QtrackTimer.cliPath].concat(job.args);
 		actionProcess.running = true;
 	}
 
@@ -167,7 +167,7 @@ Singleton {
 			return;
 		}
 		root.reload();
-		Tmpo.refresh();
+		QtrackTimer.refresh();
 	}
 
 	function selector(entry) {
@@ -175,7 +175,7 @@ Singleton {
 	}
 
 	function key(entry) {
-		return Tmpo.taskKey(entry.project, entry.description);
+		return QtrackTimer.taskKey(entry.project, entry.description);
 	}
 
 	function toggle(entry) {
@@ -226,7 +226,7 @@ Singleton {
 	function send() {
 		if (syncProcess.running || root.day === "") return;
 		root.say("sending to Teamwork …");
-		syncProcess.command = ["python3", Tmpo.cliPath, "sync-teamwork", "--json", "--day", root.day];
+		syncProcess.command = ["python3", QtrackTimer.cliPath, "sync-teamwork", "--json", "--day", root.day];
 		syncProcess.running = true;
 	}
 
@@ -239,7 +239,7 @@ Singleton {
 	Process {
 		id: daysProcess
 
-		command: ["python3", Tmpo.cliPath, "days", "--json"]
+		command: ["python3", QtrackTimer.cliPath, "days", "--json"]
 		stdout: StdioCollector { onStreamFinished: root.parseDays(text) }
 	}
 
@@ -269,7 +269,7 @@ Singleton {
 			if (exitCode !== 0 && !root.statusError) root.say("Sending to Teamwork failed.", true);
 			else if (root.status === "sending to Teamwork …") root.say("sent to Teamwork");
 			root.reload();
-			Tmpo.refresh();
+			QtrackTimer.refresh();
 		}
 	}
 }

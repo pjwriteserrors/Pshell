@@ -59,14 +59,6 @@ Singleton {
 	// a download that was seen running is complete (the file manager may check it)
 	signal finished(var item)
 
-	function formatSize(bytes) {
-		const value = Math.max(0, Number(bytes) || 0);
-		if (value >= 1024 * 1024 * 1024) return `${(value / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-		if (value >= 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(1)} MB`;
-		if (value >= 1024) return `${Math.round(value / 1024)} KB`;
-		return `${Math.round(value)} B`;
-	}
-
 	function formatEta(seconds) {
 		if (!(seconds >= 0)) return "";
 		const total = Math.round(seconds);
@@ -153,6 +145,39 @@ Singleton {
 		if (kept !== wasKept || (kept && before.state !== state)) root.save();
 	}
 
+	// downloads of another kind that show here as well (the torrent client):
+	// all of a source's at once, { id, name, path, state, received, total,
+	// speed, eta, started }; what is no longer among them while it ran is gone
+	function mirror(source, items) {
+		if (!root.enabled) return;
+		const stays = {};
+		for (const raw of items) {
+			const key = `${source}/${raw.id}`;
+			stays[key] = true;
+			const before = root.table[key];
+			// one that was complete before the shell came stays dismissed
+			if (!before && raw.state === "done") continue;
+			const item = {
+				key: key, source: source, id: raw.id, name: String(raw.name || "Download"), path: String(raw.path || ""), url: "", mime: "",
+				state: raw.state, received: raw.received, total: raw.total, speed: raw.speed, eta: raw.state === "running" ? raw.eta : -1,
+				error: "", canResume: true, started: raw.started || before?.started || Date.now(),
+				finished: raw.state === "done" ? (before?.finished || Date.now()) : 0
+			};
+			if (before && JSON.stringify(before) === JSON.stringify(item)) continue;
+			const kept = item.state === "done";
+			const wasKept = before && before.state === "done";
+			root.table = Object.assign({}, root.table, { [key]: item });
+			if (!before || kept !== wasKept) root.sort();
+			if (kept && before && !wasKept) {
+				root.unseen += 1;
+				root.finished(item);
+				Sounds.play("download");
+			}
+			if (kept !== wasKept) root.save();
+		}
+		root.active.filter(item => item.source === source && !stays[item.key]).forEach(item => root.drop(item.key));
+	}
+
 	function sort() {
 		const rank = item => item.state === "running" || item.state === "paused" ? 0 : 1;
 		root.order = Object.keys(root.table).sort((a, b) => {
@@ -187,6 +212,12 @@ Singleton {
 	// ── what the panel does ─────────────────────────────────────────────────
 	function send(key, cmd) {
 		const item = root.table[key];
+		if (item?.source === "torrent") {
+			if (cmd === "pause") Torrents.pause(item.id);
+			else if (cmd === "resume") Torrents.resume(item.id);
+			else if (cmd === "cancel") Torrents.remove(item.id, item.state !== "done");
+			return;
+		}
 		const link = item ? root.links[item.source] : null;
 		if (!link) return;
 		link.write(JSON.stringify({ type: "cmd", cmd: cmd, id: item.id }) + "\n");
@@ -227,7 +258,7 @@ Singleton {
 		const folder = item.path.slice(0, item.path.lastIndexOf("/")) || "/";
 		const manager = root.managers.includes(root.fileManager) ? root.fileManager : "auto";
 		if (manager === "auto") {
-			const uri = "file://" + item.path.split("/").map(part => encodeURIComponent(part).replace(/'/g, "%27")).join("/");
+			const uri = Format.fileUri(item.path);
 			Quickshell.execDetached(["sh", "-c", 'gdbus call --session --dest org.freedesktop.FileManager1 --object-path /org/freedesktop/FileManager1 --method org.freedesktop.FileManager1.ShowItems "[\'$1\']" "" >/dev/null 2>&1 || xdg-open "$2"',
 				"reveal", uri, folder]);
 		} else if (manager === "nautilus" || manager === "dolphin") {

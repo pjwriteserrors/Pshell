@@ -2,9 +2,24 @@
 // by install.sh and pulled in with `include "pshell.kdl"`; everything that
 // differs per machine (outputs, input, window rules) stays in config.kdl.
 
-// gtk3 platform theme: without it Qt ignores the GTK icon theme (Papirus-Wal)
-spawn-at-startup "env" "QT_QPA_PLATFORMTHEME=gtk3" "quickshell" "-c" "shell"
-spawn-sh-at-startup "wl-paste --watch cliphist store"
+// the gtk3 platform theme (or Qt ignores the GTK icon theme) and only the
+// EGL of the GPU that draws: scripts/start_shell.sh
+spawn-sh-at-startup "~/.config/quickshell/shell/scripts/start_shell.sh"
+
+// games through Steam and Proton open fullscreen (Proton names their window
+// steam_app_<id>); scripts/games_guard.py also keeps Wine and Linux games
+// fullscreen and those that leave it while they start
+window-rule {
+    match app-id=r#"^steam_app_\d+$"#
+    open-fullscreen true
+}
+
+// the shell's copy of the wallpaper for the overview and the gaps between
+// workspaces (core/views/overlays/WallpaperLayer.qml, backdrop)
+layer-rule {
+    match namespace="^shell-wallpaper-backdrop$"
+    place-within-backdrop true
+}
 
 binds {
     Mod+D { spawn "qs" "-c" "shell" "ipc" "call" "launcher" "toggle"; }

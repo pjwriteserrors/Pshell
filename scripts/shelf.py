@@ -5,9 +5,6 @@
                                        also files saved anywhere that apps report
                                        as recently used (browser downloads, save
                                        dialogs) while they are fresh
-    shelf.py shake                     one line "shake" per shake of the pointer
-                                       while the left button is held; "noaccess"
-                                       when no pointer device can be read
     shelf.py describe <path>...        JSON: [{ path, name, dir, size, mime, width, height }]
     shelf.py clip <stash dir>          JSON: what the clipboard holds, as shelf items
     shelf.py thumb <path> <size> <cache dir>
@@ -33,13 +30,11 @@ that were only opened stay out.
 """
 import ctypes
 import ctypes.util
-import glob
 import hashlib
 import json
 import mimetypes
 import os
 import re
-import selectors
 import struct
 import subprocess
 import sys
@@ -144,112 +139,6 @@ def watch(dirs):
             seen[path] = now
             if os.path.exists(path):
                 print(path, flush=True)
-
-
-# ── shake ──────────────────────────────────────────────────────────────────
-EVENT = struct.Struct("llHHi")
-EV_KEY, EV_REL, EV_ABS = 0x01, 0x02, 0x03
-REL_X, ABS_X, ABS_MT_POSITION_X = 0x00, 0x00, 0x35
-BTN_LEFT = 0x110
-
-
-def abs_resolution(fd, code):
-    """units per millimetre of an absolute axis (touchpads)"""
-    import fcntl
-    buffer = bytearray(24)
-    try:
-        fcntl.ioctl(fd, 0x80184540 + code, buffer)
-    except OSError:
-        return 0
-    return struct.unpack("6i", buffer)[5]
-
-
-class Shaker:
-    """Direction changes of a held pointer: a shake is at least four swings,
-    each long enough, all within a short time."""
-
-    SWINGS = 4
-    WINDOW = 0.8
-
-    def __init__(self, threshold):
-        self.threshold = threshold
-        self.direction = 0
-        self.travel = 0.0
-        self.turns = []
-        self.last_shake = float("-inf")
-
-    def move(self, dx, now):
-        if dx == 0:
-            return False
-        direction = 1 if dx > 0 else -1
-        if direction == self.direction:
-            self.travel += abs(dx)
-            return False
-        if self.travel >= self.threshold:
-            self.turns = [t for t in self.turns if now - t < self.WINDOW] + [now]
-        self.direction = direction
-        self.travel = abs(dx)
-        if len(self.turns) >= self.SWINGS and now - self.last_shake > 1.5:
-            self.turns = []
-            self.last_shake = now
-            return True
-        return False
-
-    def reset(self):
-        self.direction = 0
-        self.travel = 0.0
-        self.turns = []
-
-
-def shake():
-    paths = set()
-    for pattern in ("/dev/input/by-id/*-event-mouse", "/dev/input/by-path/*-event-mouse"):
-        paths.update(os.path.realpath(p) for p in glob.glob(pattern))
-    selector = selectors.DefaultSelector()
-    denied = False
-    for path in sorted(paths):
-        try:
-            fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
-        except PermissionError:
-            denied = True
-            continue
-        except OSError:
-            continue
-        resolution = abs_resolution(fd, ABS_X)
-        # a mouse counts roughly pixels, a touchpad units per mm
-        state = {"held": False, "abs_x": None, "shaker": Shaker(8 * resolution if resolution else 70)}
-        selector.register(fd, selectors.EVENT_READ, state)
-    if not selector.get_map():
-        print("noaccess" if denied else "nodevices", flush=True)
-        return 2
-    while True:
-        for key, _ in selector.select():
-            state = key.data
-            try:
-                data = os.read(key.fd, EVENT.size * 64)
-            except BlockingIOError:
-                continue
-            except OSError:
-                selector.unregister(key.fd)
-                continue
-            for i in range(0, len(data) - EVENT.size + 1, EVENT.size):
-                sec, usec, kind, code, value = EVENT.unpack_from(data, i)
-                now = sec + usec / 1e6
-                if kind == EV_KEY and code == BTN_LEFT:
-                    state["held"] = value != 0
-                    state["abs_x"] = None
-                    state["shaker"].reset()
-                elif not state["held"]:
-                    continue
-                elif kind == EV_REL and code == REL_X:
-                    if state["shaker"].move(value, now):
-                        print("shake", flush=True)
-                elif kind == EV_ABS and code in (ABS_X, ABS_MT_POSITION_X):
-                    if code == ABS_MT_POSITION_X:
-                        continue
-                    if state["abs_x"] is not None and state["shaker"].move(value - state["abs_x"], now):
-                        print("shake", flush=True)
-                    state["abs_x"] = value
 
 
 # ── describe ───────────────────────────────────────────────────────────────
@@ -516,8 +405,6 @@ def main():
     command, args = sys.argv[1], sys.argv[2:]
     if command == "watch":
         return watch(args)
-    if command == "shake":
-        return shake()
     if command == "describe":
         return describe(args)
     if command == "clip":

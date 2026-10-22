@@ -15,9 +15,12 @@ import threading
 from pathlib import Path
 
 import content
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import host  # noqa: E402
 
 CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "pshell" / "messages"
-STATE = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / "pshell"
+STATE = host.state_dir()
 HIDDEN = ("trash", "junk", "drafts")
 
 

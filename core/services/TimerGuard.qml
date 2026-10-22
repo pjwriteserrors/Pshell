@@ -23,7 +23,7 @@ Singleton {
 	readonly property int awaySeconds: 15 * 60
 	readonly property int sampleSeconds: 30
 
-	readonly property bool trackingNow: Tmpo.tracking && !Tmpo.paused
+	readonly property bool trackingNow: QtrackTimer.tracking && !QtrackTimer.paused
 	property real activeUntracked: 0
 	property real snoozeUntil: 0
 	property real awaySince: 0
@@ -80,11 +80,11 @@ Singleton {
 	}
 
 	function learn(words) {
-		if (words.length === 0 || Tmpo.project === "") return;
-		const key = root.taskKey(Tmpo.project, Tmpo.description);
-		const known = Tmpo.findTodayTask(Tmpo.project, Tmpo.description);
+		if (words.length === 0 || QtrackTimer.project === "") return;
+		const key = root.taskKey(QtrackTimer.project, QtrackTimer.description);
+		const known = QtrackTimer.findTodayTask(QtrackTimer.project, QtrackTimer.description);
 		const profiles = Object.assign({}, root.profiles);
-		const profile = Object.assign({ project: Tmpo.project, description: Tmpo.description, task: null, tokens: {} }, profiles[key] || {});
+		const profile = Object.assign({ project: QtrackTimer.project, description: QtrackTimer.description, task: null, tokens: {} }, profiles[key] || {});
 		const tokens = Object.assign({}, profile.tokens);
 		for (const word of words) tokens[word] = (tokens[word] || 0) + 1;
 		// the 150 strongest words are enough to recognise a task
@@ -131,7 +131,7 @@ Singleton {
 		// nothing learned fits: today's tasks by name
 		let byName = null;
 		let hits = 0;
-		for (const task of Tmpo.todayTasks) {
+		for (const task of QtrackTimer.todayTasks) {
 			const words = root.tokens(`${task.project} ${task.description}`);
 			const count = words.filter(word => context[word]).length;
 			if (count > hits) {
@@ -155,7 +155,7 @@ Singleton {
 	function startTask(match) {
 		root.activeUntracked = 0;
 		root.context = {};
-		Tmpo.runAction(Tmpo.buildStartArgs(match.project, match.description, match.task));
+		QtrackTimer.runAction(QtrackTimer.buildStartArgs(match.project, match.description, match.task));
 	}
 
 	function askAway(since) {
@@ -165,7 +165,7 @@ Singleton {
 		if (minutes < Math.round(root.awaySeconds / 60)) return;
 		const at = Math.round(since / 1000);
 		const clock = Qt.formatDateTime(new Date(since), "HH:mm");
-		Notifs.pushInternal("running", `Away since ${clock}`, `${minutes} min on “${root.shorten(Tmpo.description || Tmpo.project)}”`, {
+		Notifs.pushInternal("running", `Away since ${clock}`, `${minutes} min on “${root.shorten(QtrackTimer.description || QtrackTimer.project)}”`, {
 			icon: "timer_outline",
 			duration: 60000,
 			actions: [
@@ -178,7 +178,7 @@ Singleton {
 	// pause at a moment in the past, and go on right away if asked
 	function pauseFrom(at, resume) {
 		const script = resume ? 'python3 "$1" pause --at "$2" && python3 "$1" resume' : 'python3 "$1" pause --at "$2"';
-		qtrackProc.command = ["sh", "-c", script, "sh", Tmpo.cliPath, String(at)];
+		qtrackProc.command = ["sh", "-c", script, "sh", QtrackTimer.cliPath, String(at)];
 		qtrackProc.running = true;
 	}
 
@@ -190,7 +190,7 @@ Singleton {
 	Process {
 		id: qtrackProc
 
-		onExited: Tmpo.refresh()
+		onExited: QtrackTimer.refresh()
 	}
 
 	IdleMonitor {

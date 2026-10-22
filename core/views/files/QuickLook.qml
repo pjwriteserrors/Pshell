@@ -3,7 +3,6 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Pdf
 import QtMultimedia
 import Quickshell.Io
 import qs.style.theme
@@ -357,7 +356,7 @@ Item {
 						const parts = [];
 						if (root.rows.length > 1) parts.push(`${root.index + 1} of ${root.rows.length}`);
 						if (root.info?.kind) parts.push(root.info.kind);
-						if (root.row && !root.row.dir) parts.push(Files.sizeText(root.row.size));
+						if (root.row && !root.row.dir) parts.push(Format.bytes(root.row.size));
 						for (const fact of (root.info?.facts ?? []).slice(0, 2)) parts.push(fact[1]);
 						return parts.join("  ·  ");
 					}
@@ -706,52 +705,9 @@ Item {
 				active: root.shown && root.row?.mime === "application/pdf"
 				visible: pages.active
 
-				sourceComponent: Item {
-					PdfDocument {
-						id: pdf
-
-						source: Files.uri(root.row.path)
-					}
-
-					ListView {
-						id: pageList
-
-						anchors.fill: parent
-						model: pdf.status === PdfDocument.Ready ? pdf.pageCount : 0
-						spacing: 14
-						clip: true
-						cacheBuffer: 1200
-						boundsBehavior: Flickable.StopAtBounds
-
-						ScrollBar.vertical: ThinScrollBar {}
-
-						delegate: Item {
-							id: pageItem
-
-							required property int index
-							readonly property size pageSize: pdf.pagePointSize(pageItem.index)
-
-							width: pageList.width
-							height: pageList.width * 0.8 * (pageItem.pageSize.height / Math.max(1, pageItem.pageSize.width))
-
-							Rectangle {
-								anchors.horizontalCenter: parent.horizontalCenter
-								width: parent.width * 0.8
-								height: parent.height
-								color: "white"
-								radius: 3
-
-								PdfPageImage {
-									anchors.fill: parent
-									document: pdf
-									currentFrame: pageItem.index
-									asynchronous: true
-									sourceSize.width: width * 1.5
-								}
-							}
-						}
-					}
-				}
+				// by URL, so a missing QtQuick.Pdf costs only this preview
+				source: pages.active ? Qt.resolvedUrl("PdfPages.qml") : ""
+				onLoaded: pages.item.path = Qt.binding(() => root.row?.path ?? "")
 			}
 
 			// a link file: where it leads
@@ -873,7 +829,7 @@ Item {
 						model: [
 							{ icon: "file_outline", text: `${root.archive?.files ?? 0} file${root.archive?.files === 1 ? "" : "s"}` },
 							{ icon: "folder_outline", text: `${root.archive?.folders ?? 0} folder${root.archive?.folders === 1 ? "" : "s"}` },
-							{ icon: "arrow_expand_all", text: `${Files.sizeText(root.archive?.size ?? 0)} unpacked` },
+							{ icon: "arrow_expand_all", text: `${Format.bytes(root.archive?.size ?? 0)} unpacked` },
 							{ icon: "package_variant_closed", text: root.archive?.size > 0 ? `packed to ${Math.min(100, Math.round((root.archive?.packed ?? 0) * 100 / root.archive.size))} %` : "" }
 						].filter(item => item.text !== "")
 
@@ -999,7 +955,7 @@ Item {
 							anchors.right: parent.right
 							anchors.rightMargin: 14
 							anchors.verticalCenter: parent.verticalCenter
-							text: archived.modelData.dir ? "" : Files.sizeText(archived.modelData.size)
+							text: archived.modelData.dir ? "" : Format.bytes(archived.modelData.size)
 							tone: Theme.textSubtle
 							font.pixelSize: Theme.size.small
 							font.features: { "tnum": 1 }

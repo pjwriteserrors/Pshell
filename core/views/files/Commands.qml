@@ -86,7 +86,7 @@ QtObject {
 		const own = root.kindMenu(pane, rows);
 		if (own) out.push(own.entries.length === 1 ? own.entries[0] : { label: own.label, icon: own.icon, children: own.entries });
 		if (one && root.isArchive(one)) out.push({ label: "Extract here", icon: "package_variant", run: () => Files.extract(one.path, pane.isFolder ? pane.location.path : Files.parentOf(one.path)) });
-		if (one && /\.ics$/i.test(one.name) && Outlook.enabled && Outlook.signedIn) out.push({ label: "Add to the calendar", icon: "calendar_plus", run: () => Files.importCalendar(one.path) });
+		if (one && /\.ics$/i.test(one.name) && MsCalendar.enabled && MsCalendar.signedIn) out.push({ label: "Add to the calendar", icon: "calendar_plus", run: () => Files.importCalendar(one.path) });
 		if (one && Kinds.isWeblink(one)) out.push({ label: "Copy the link", icon: "link_variant", run: () => Files.request("info", { path: one.path }, data => { if (data?.url) Files.copyText(data.url, "Link copied"); }) });
 		out.push({ label: rows.length === 1 && one.dir ? `Pack “${one.name}” as ZIP` : "Pack as ZIP", icon: "zip_box_outline", run: () => Files.compress(paths) });
 

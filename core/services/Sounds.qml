@@ -449,7 +449,7 @@ Singleton {
 
 	// the focused workspace
 	readonly property string workspace: {
-		const focused = Niri.workspaces.find(ws => ws.focused);
+		const focused = Niri.workspaces.find(ws => ws.is_focused);
 		return focused ? String(focused.id) : "";
 	}
 	onWorkspaceChanged: if (root.settled && root.workspace !== "") root.play("workspace")

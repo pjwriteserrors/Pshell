@@ -27,24 +27,30 @@ Singleton {
 	readonly property var provider: root.providers.find(provider => provider.id === root.current) ?? root.providers[0] ?? null
 
 	// a window of its own instead of the panel, and whether that window is up
-	property bool windowed: false
-	property bool windowOpen: false
+	property alias surface: popout
+	property alias windowed: popout.windowed
+	property alias windowOpen: popout.windowOpen
+
+	Popout {
+		id: popout
+
+		popup: "messages"
+	}
+
 	// what was last asked for: "", "chat" (the one that is open), "new", "new:<address>", "settings", "newsletters", "whatsapp"
 	property string page: ""
 	property int asked: 0
-	readonly property bool shown: root.windowed ? root.windowOpen : Popups.current === "messages"
+	readonly property bool shown: popout.shown
 
 	function open(page) {
 		if (!root.enabled) return;
 		root.page = page ?? "";
 		root.asked += 1;
-		if (root.windowed) root.windowOpen = true;
-		else Popups.withFocusedScreen(screen => Popups.open("messages", screen, root.page));
+		popout.open(root.page);
 	}
 
 	function close() {
-		if (root.windowed) root.windowOpen = false;
-		else if (Popups.current === "messages") Popups.close();
+		popout.close();
 	}
 
 	function toggle() {
@@ -53,15 +59,14 @@ Singleton {
 	}
 
 	function popOut() {
-		if (Popups.current === "messages") Popups.close();
 		root.page = "";
-		root.setWindowed(true);
-		root.windowOpen = true;
+		popout.popOut();
+		root.save();
 	}
 
 	function dock() {
-		root.windowOpen = false;
-		root.setWindowed(false);
+		popout.dock();
+		root.save();
 		root.open("");
 	}
 
@@ -100,11 +105,6 @@ Singleton {
 	readonly property color mine: Qt.tint(Theme.bg, Qt.alpha(root.accent, 0.12 + 0.34 * root.colour))
 	readonly property color mineEnd: root.style.gradient ? Qt.tint(Theme.bg, Qt.alpha(root.accentNext, 0.14 + 0.36 * root.colour)) : root.mine
 	readonly property color theirs: Qt.alpha(Qt.tint(Theme.layer2, Qt.alpha(root.accentNext, 0.2 * root.colour)), 1 - 0.55 * Math.max(0, Math.min(1, Number(root.style.glass) || 0)))
-
-	function setWindowed(on) {
-		root.windowed = on;
-		root.save();
-	}
 
 	function save() {
 		file.setText(JSON.stringify({ windowed: root.windowed, backdrop: root.backdrop, style: root.style }, null, "\t") + "\n");

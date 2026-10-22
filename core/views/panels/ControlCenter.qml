@@ -8,7 +8,7 @@ import Quickshell.Io
 import qs.style.theme
 import qs.core.services
 import qs.style.widgets
-import qs.core.views.panels.network
+import qs.core.views.network
 
 // Quick settings: tiles for network / bluetooth / sound / mic, do not
 // disturb, keep awake, power profile and the phone (KDE Connect); volume,
@@ -35,12 +35,11 @@ Drawer {
 
 	onPanelOpened: {
 		root.page = Popups.page !== "" && root.offers(Popups.page) ? Popups.page : "main";
-		statsProc.running = true;
+		root.userHost = `${Host.user}@${Host.hostname}`;
+		root.uptime = Host.uptime();
 		Audio.refreshSinks();
 		if (Plugins.on("backlight")) Brightness.refresh(false);
 		Ddc.refresh();
-		PowerProfile.refresh();
-		Phone.refresh();
 	}
 
 	Connections {
@@ -48,6 +47,15 @@ Drawer {
 		function onPageChanged() {
 			if (root.shown && Popups.page !== "" && root.offers(Popups.page)) root.page = Popups.page;
 		}
+	}
+
+	// the throughput graphs of the main page
+	Binding {
+		target: Network
+		property: "watchers"
+		value: root.shown && root.page === "main" ? 1 : 0
+		when: root.shown
+		restoreMode: Binding.RestoreValue
 	}
 
 	Binding {
@@ -58,25 +66,6 @@ Drawer {
 		restoreMode: Binding.RestoreValue
 	}
 
-	Binding {
-		target: KdeConnect
-		property: "watchers"
-		value: root.shown && root.page === "phone" ? 1 : 0
-		when: root.shown
-		restoreMode: Binding.RestoreValue
-	}
-
-	Process {
-		id: statsProc
-		command: ["sh", "-lc", `printf '%s|%s' "$USER@$(cat /etc/hostname 2>/dev/null || uname -n)" "$(uptime -p | sed 's/^up //')"`]
-		stdout: StdioCollector {
-			onStreamFinished: {
-				const parts = String(text || "").split("|");
-				root.userHost = parts[0] || "";
-				root.uptime = parts[1] || "";
-			}
-		}
-	}
 
 	PageView {
 		id: pages
@@ -520,7 +509,7 @@ Drawer {
 								}
 
 								StyledText {
-									text: Network.formatSpeed(graph.modelData.speed)
+									text: Format.rate(graph.modelData.speed)
 									tabular: true
 									font.pixelSize: Theme.size.title
 									font.weight: Font.Bold
@@ -1073,11 +1062,6 @@ Drawer {
 					title: Phone.name
 					subtitle: Phone.summary
 					onBack: root.page = "main"
-
-					IconButton {
-						icon: "refresh"
-						onClicked: Phone.refresh()
-					}
 				}
 
 				Rectangle {
@@ -1130,7 +1114,7 @@ Drawer {
 
 				GridLayout {
 					Layout.fillWidth: true
-					columns: Phone.legacy || !Plugins.on("phone-handoff") ? 3 : 4
+					columns: !Plugins.on("phone-handoff") ? 3 : 4
 					columnSpacing: 8
 					rowSpacing: 8
 					enabled: Phone.reachable
@@ -1144,7 +1128,7 @@ Drawer {
 								Popups.open("launcher", root.targetScreen, "", ">file ");
 							} },
 							{ icon: "phone_ring", label: "Ring", run: () => Phone.ring() }
-						].concat(Phone.legacy || !Plugins.on("phone-handoff") ? [] : [{ icon: "cellphone_play", label: "Continue", run: () => Phone.handoffMedia() }])
+						].concat(!Plugins.on("phone-handoff") ? [] : [{ icon: "cellphone_play", label: "Continue", run: () => Phone.handoffMedia() }])
 
 						delegate: Clickable {
 							id: action
@@ -1195,14 +1179,14 @@ Drawer {
 
 				Loader {
 					Layout.fillWidth: true
-					active: !Phone.legacy
+					active: Phone.enabled
 					visible: active
 					sourceComponent: PhonePairing {}
 				}
 
 				Loader {
 					Layout.fillWidth: true
-					active: !Phone.legacy && Pcs.enabled
+					active: Pcs.enabled
 					visible: active
 					sourceComponent: PcPairing {}
 				}

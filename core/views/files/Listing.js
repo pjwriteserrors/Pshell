@@ -35,7 +35,7 @@ function row(entry, group, home) {
 		// a place of its own (the phone) says where in it a file is
 		folder: entry.folder !== undefined ? String(entry.folder) : (home && folder.startsWith(home) ? "~" + folder.slice(home.length) : folder),
 		key: String(entry.key || String(entry.name || "").toLowerCase()),
-		// an entry of the clipboard history (its cliphist id), and what it held
+		// an entry of the clipboard history (its id), and what it held
 		clipId: String(entry.clip || ""),
 		clipKind: String(entry.clipKind || ""),
 		// the place's own order (best matches first) and why it is there

@@ -100,6 +100,26 @@ def runners():
     return {"runners": out, "steam": bool(steam_root()) and bool(shutil.which("steam"))}
 
 
+# what Steam leaves for the games it starts: outside Steam it would hide the
+# real controller (or wait for Steam's virtual one) and load its overlay
+STEAM_ENV = re.compile(r"^(SDL_GAMECONTROLLER_IGNORE_DEVICES.*|SDL_GAMECONTROLLER_ALLOW_STEAM_VIRTUAL_GAMEPAD|"
+                       r"SDL_GAMECONTROLLERCONFIG|SDL_JOYSTICK_.*|SteamVirtualGamepadInfo|STEAM_INPUT_.*|"
+                       r"SteamGameId|SteamAppId|SteamOverlayGameId|SteamClientLaunch|ENABLE_VK_LAYER_VALVE_steam_.*)$")
+
+
+def clean_env(env=None):
+    """The environment for a game started outside Steam."""
+    env = dict(os.environ if env is None else env)
+    for key in [key for key in env if STEAM_ENV.match(key)]:
+        del env[key]
+    preload = [part for part in env.get("LD_PRELOAD", "").split(":") if part and "gameoverlayrenderer" not in part]
+    if preload:
+        env["LD_PRELOAD"] = ":".join(preload)
+    else:
+        env.pop("LD_PRELOAD", None)
+    return env
+
+
 def _command(path, wrapper):
     lower = path.lower()
     if lower.endswith(".msi"):
@@ -127,7 +147,7 @@ def prepare(path, runner="auto", prefix="default"):
         raise RuntimeError("It is not there any more")
     tools = protons()
     wine = shutil.which("wine")
-    env = dict(os.environ)
+    env = clean_env()
     if runner == "auto":
         runner = f"proton:{tools[0]['path']}" if tools else ("wine" if wine else "")
     elif runner == "proton":
@@ -195,6 +215,64 @@ def shortcut_id(exe, name):
     return short, (short << 32) | 0x02000000
 
 
+def _close_steam(wait, report):
+    """Shuts Steam down (it rewrites its files when it quits); whether it ran."""
+    if not steam_running():
+        return False
+    report("Closing Steam")
+    subprocess.Popen(["steam", "-shutdown"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    for _ in range(240):
+        wait()
+        if not steam_running():
+            break
+        time.sleep(0.25)
+    else:
+        raise RuntimeError("Steam did not close")
+    time.sleep(1)
+    return True
+
+
+def _pad_to_game(entries):
+    """No desktop layout for non-Steam games: on Wayland Steam cannot tell
+    the game's window has the focus, keeps its desktop layout and the
+    controller moves the mouse instead of reaching the game. Changed
+    entries are counted."""
+    changed = 0
+    for entry in entries:
+        if int(entry.get("AllowDesktopConfig", 1) or 0) != 0:
+            entry["AllowDesktopConfig"] = 0
+            changed += 1
+    return changed
+
+
+def pads_to_games(wait=lambda: None, report=lambda text: None):
+    """Turns the desktop layout off for every non-Steam game (Steam is closed
+    for it and started again). Returns { changed, restarted }."""
+    import vdf
+    root = steam_root()
+    account = steam_account(root) if root else ""
+    path = os.path.join(root, "userdata", account, "config/shortcuts.vdf") if account else ""
+    if not path or not os.path.isfile(path):
+        return {"changed": 0, "restarted": False}
+    with open(path, "rb") as file:
+        data = vdf.binary_load(file)
+    if not _pad_to_game(list(data.get("shortcuts", {}).values())):
+        return {"changed": 0, "restarted": False}
+    was_running = _close_steam(wait, report)
+    # read again: Steam wrote it when it quit
+    with open(path, "rb") as file:
+        data = vdf.binary_load(file)
+    changed = _pad_to_game(list(data.get("shortcuts", {}).values()))
+    shutil.copy2(path, path + ".pshell-pads-backup")
+    with open(path + ".tmp", "wb") as file:
+        vdf.binary_dump(data, file)
+    os.replace(path + ".tmp", path)
+    if was_running:
+        report("Starting Steam again")
+        subprocess.Popen(["steam", "-silent"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    return {"changed": changed, "restarted": was_running}
+
+
 def add_to_steam(path, name, tool_id, wait=lambda: None, report=lambda text: None):
     """Adds a Windows program to Steam's library, run with `tool_id`
     (a compatibility tool's name). Steam is shut down first and started
@@ -209,18 +287,7 @@ def add_to_steam(path, name, tool_id, wait=lambda: None, report=lambda text: Non
     exe = f'"{path}"'
     start = f'"{os.path.dirname(path)}"'
     appid, gameid = shortcut_id(exe, name)
-    was_running = steam_running()
-    if was_running:
-        report("Closing Steam")
-        subprocess.Popen(["steam", "-shutdown"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-        for _ in range(240):
-            wait()
-            if not steam_running():
-                break
-            time.sleep(0.25)
-        else:
-            raise RuntimeError("Steam did not close")
-        time.sleep(1)
+    was_running = _close_steam(wait, report)
     report("Adding the game")
     shortcuts_path = os.path.join(root, "userdata", account, "config/shortcuts.vdf")
     os.makedirs(os.path.dirname(shortcuts_path), exist_ok=True)
@@ -234,10 +301,11 @@ def add_to_steam(path, name, tool_id, wait=lambda: None, report=lambda text: Non
     for key in [key for key, entry in shortcuts.items() if str(entry.get("Exe", entry.get("exe", ""))) == exe]:
         del shortcuts[key]
     entries = list(shortcuts.values())
+    _pad_to_game(entries)
     signed = appid - (1 << 32) if appid >= (1 << 31) else appid
     entries.append({
         "appid": signed, "AppName": name, "Exe": exe, "StartDir": start, "icon": "", "ShortcutPath": "",
-        "LaunchOptions": "", "IsHidden": 0, "AllowDesktopConfig": 1, "AllowOverlay": 1, "OpenVR": 0, "Devkit": 0,
+        "LaunchOptions": "", "IsHidden": 0, "AllowDesktopConfig": 0, "AllowOverlay": 1, "OpenVR": 0, "Devkit": 0,
         "DevkitGameID": "", "DevkitOverrideAppID": 0, "LastPlayTime": 0, "FlatpakAppID": "", "tags": {},
     })
     data["shortcuts"] = {str(index): entry for index, entry in enumerate(entries)}

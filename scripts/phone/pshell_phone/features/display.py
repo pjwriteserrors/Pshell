@@ -6,10 +6,11 @@ from pathlib import Path
 
 from .. import config
 from ..hub import Refused
+import host  # noqa: E402  (scripts/, on the path through config.py)
 
 SCRIPT = config.ROOT / "scripts" / "display_profile.sh"
 PROFILES = config.ROOT / "scripts" / "display-profiles"
-SAVED = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state") / "pshell" / "display-profiles"
+SAVED = host.state_dir() / "display-profiles"
 
 
 def profiles():

@@ -372,7 +372,8 @@ def slice_model(presets, model, folder, process, filaments, options):
                    f"--arrange={1 if options.get('arrange', True) else 0}",
                    f"--orient={1 if options.get('orient') else 0}",
                    "--slice=0", f"--outputdir={out}", model]
-        run = subprocess.run(command, capture_output=True, text=True, timeout=900, env=dict(os.environ, LC_ALL="C"))
+        # in its own folder: the slicer leaves logs (00000.log) where it runs
+        run = subprocess.run(command, capture_output=True, text=True, timeout=900, cwd=work, env=dict(os.environ, LC_ALL="C"))
         result = _load(os.path.join(out, "result.json")) or {}
         plates = sorted(glob.glob(os.path.join(out, "plate_*.gcode")), key=lambda p: int(re.findall(r"\d+", os.path.basename(p))[0]))
         if not plates:

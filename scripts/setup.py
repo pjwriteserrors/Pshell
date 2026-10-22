@@ -28,7 +28,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 HOME = Path.home()
 CONFIG_DIR = HOME / ".config" / "quickshell" / "shell"
-STATE_DIR = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local" / "state")) / "pshell"
 OLD_SHELL = HOME / ".config" / "quickshell" / "main"
 OLD_STATE_FILES = [
     "notes.json", "dnd.json", "updates.json", "launcher-usage.json", "launcher-ai-state.json",
@@ -38,15 +37,17 @@ OLD_STATE_FILES = [
 sys.path.insert(0, str(ROOT / "scripts"))
 import host  # noqa: E402
 
+STATE_DIR = host.state_dir()
+
 # (program, why) per plugin; "core" is every machine
 PROGRAMS = {
     "core": [
         ("quickshell", "the shell"), ("niri", "compositor"), ("python3", "scripts"),
-        ("cliphist", "clipboard"), ("wl-copy", "clipboard"), ("wl-paste", "clipboard"),
+        ("wl-copy", "clipboard"), ("wl-paste", "clipboard"),
         ("grim", "screenshots"), ("slurp", "recording"), ("wf-recorder", "recording"),
         ("magick", "screenshot editor"), ("tesseract", "OCR"), ("zbarimg", "QR codes"),
-        ("ffmpeg", "wallpaper frames"), ("wallust", "colours"), ("swaybg", "wallpaper"),
-        ("awww", "image wallpapers"), ("awww-daemon", "image wallpapers"), ("mpvpaper", "video wallpapers"),
+        ("ffmpeg", "wallpaper frames"), ("wallust", "colours"),
+        ("mpvpaper", "video wallpapers"),
         ("app2unit", "launching apps"), ("curl", "weather, updates, exchange rates"), ("nmcli", "network"),
         ("wpctl", "audio"), ("pactl", "audio"), ("cava", "media spectrum"),
         ("pacman", "updates"), ("yay", "AUR updates"), ("fakeroot", "update check"),
@@ -57,21 +58,18 @@ PROGRAMS = {
     "song-detection": [("parec", "listening to what plays")],
     "backlight": [("brightnessctl", "screen brightness")],
     "ddc": [("ddcutil", "monitor brightness")],
-    "power-profiles": [("powerprofilesctl", "power profiles")],
-    "kdeconnect": [("kdeconnect-cli", "phone")],
+    "power-profiles": [("powerprofilesctl", "power profiles: power-profiles-daemon")],
     "phone": [("qrencode", "pairing code"), ("ip", "finding this PC's addresses")],
     "phone-keyboard": [("wtype", "typing from the phone")],
-    "phone-presence": [("playerctl", "pausing when the phone leaves")],
     "fingerprint": [("fprintd-list", "fingerprint unlock")],
     "ssh": [("secret-tool", "SSH passwords")],
-    "niri-settings": [("jq", "display setups")],
     "sounds": [("udevadm", "USB sounds"), ("findmnt", "drive sounds"), ("ffmpeg", "installing sound packs")],
     "connections": [("ss", "the sockets of the apps")],
     "printer": [("orca-slicer", "slicing STL and 3MF models (OrcaSlicer)")],
     "filemanager": [("fd", "searching names"), ("rg", "searching contents"), ("pdftoppm", "PDF thumbnails"),
                     ("git", "what changed in a repository"), ("rsync", "syncing two folders, sending to a server"),
                     ("tesseract", "text in pictures: names for screenshots, search"), ("curl", "sharing a link"),
-                    ("mpv", "playing and queueing music"), ("cliphist", "the clipboard history as a place"),
+                    ("mpv", "playing and queueing music"),
                     ("ffmpeg", "video thumbnails, album covers"), ("ffprobe", "video and music details"),
                     ("bsdtar", "packing"), ("7z", "extracting 7z, rar and others"), ("pdfinfo", "PDF details"),
                     ("gs", "compressing PDFs, PDF/A"), ("pdftotext", "PDF text, comparing, blacking out"),
@@ -84,9 +82,10 @@ PROGRAMS = {
                  ("xdg-open", "videos and documents"), ("wl-copy", "copying a message")],
 }
 OPTIONAL_PROGRAMS = [
+    ("swaybg", "the wallpaper while the shell does not draw it"), ("awww", "the same, with a transition"),
     ("chromium", "mails and signatures drawn as they were laid out"),
     ("ollama", "launcher chat and >ollama"), ("pdftotext", "chat attachments"), ("pandoc", "chat attachments"),
-    ("upower", "mouse battery"), ("qsb", "shader animation previews"),
+    ("upower", "battery and mouse battery: the UPower daemon"), ("qsb", "shader animation previews"),
     ("gst-inspect-1.0", "live pins (with gst-plugin-pipewire)"),
 ]
 HOOK_PROGRAMS = {
@@ -244,7 +243,7 @@ def doctor():
                 report.fail(f"no hunspell dictionary for {language} ({package})")
         keyboards = glob.glob("/dev/input/by-path/*-event-kbd") + glob.glob("/dev/input/by-id/*-event-kbd")
         if not any(os.access(path, os.R_OK) for path in keyboards):
-            report.fail("the keyboard is not readable (scripts/setup-rpg-input-access.sh)")
+            report.fail("the keyboard is not readable (scripts/setup-input-access.sh)")
         if not os.access("/dev/uinput", os.W_OK):
             report.fail("/dev/uinput is not writable – typing the corrections (a udev rule or the input group)")
         if not any(autocorrect.usage_file(language).exists() for language in autocorrect.LANGUAGES):
@@ -259,7 +258,7 @@ def doctor():
             report.fail("evdev – taking the keyboard (python-evdev)")
         keyboards = glob.glob("/dev/input/by-path/*-event-kbd") + glob.glob("/dev/input/by-id/*-event-kbd")
         if not any(os.access(path, os.R_OK) for path in keyboards):
-            report.fail("the keyboard is not readable (scripts/setup-rpg-input-access.sh)")
+            report.fail("the keyboard is not readable (scripts/setup-input-access.sh)")
         if not os.access("/dev/uinput", os.W_OK):
             report.fail("/dev/uinput is not writable – handing the keys on (a udev rule or the input group)")
         if report.failures == before:
@@ -271,7 +270,7 @@ def doctor():
         if any(os.access(path, os.R_OK) for path in mice):
             report.ok("the mouse is readable")
         else:
-            report.fail("the mouse is not readable (scripts/setup-rpg-input-access.sh)")
+            report.fail("the mouse is not readable (scripts/setup-input-access.sh)")
 
     report.section("Fonts")
     for family, why in FONTS:

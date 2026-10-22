@@ -6,7 +6,7 @@ import Quickshell.Wayland
 import qs.style.theme
 import qs.style.widgets
 import qs.core.services
-import "mouse/Controls.js" as Controls
+import "../settings/mouse/Controls.js" as Controls
 
 // What the swipes of a held mouse button do, in the middle of the focused
 // screen: it comes after a moment of holding (a quick swipe never sees it),
@@ -18,7 +18,7 @@ PanelWindow {
 	required property var modelData
 	screen: modelData
 
-	readonly property bool here: (Niri.workspaces.find(workspace => workspace.focused)?.output ?? root.modelData.name) === root.modelData.name
+	readonly property bool here: (Niri.workspaces.find(workspace => workspace.is_focused)?.output ?? root.modelData.name) === root.modelData.name
 	property string control: ""
 	property bool wanted: false
 	property string firedWay: ""

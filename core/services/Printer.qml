@@ -28,9 +28,17 @@ Singleton {
 	readonly property bool configured: root.address !== ""
 
 	// ── surface: a panel under the bar, or a window of its own ───────────
-	property bool windowed: false
-	property bool windowOpen: false
-	readonly property bool shown: root.windowed ? root.windowOpen : Popups.current === "printer"
+	property alias surface: popout
+	property alias windowed: popout.windowed
+	property alias windowOpen: popout.windowOpen
+	readonly property bool shown: popout.shown
+
+	Popout {
+		id: popout
+
+		popup: "printer"
+	}
+
 	// "print" | "ace" | "stats"
 	property string tab: "print"
 
@@ -337,9 +345,14 @@ Singleton {
 	// a print that finished, while the shell runs (the panel throws confetti)
 	signal finished(string name)
 
-	// the desktop's file chooser; a preset or a bundle goes into Orca's presets
+	// the shell's file chooser; a preset or a bundle goes into Orca's presets
 	function importProfile() {
-		if (!picker.running) picker.running = true;
+		Files.pick({ title: "Import a slicer profile", multiple: true, filters: ["*.json", "*.orca_printer", "*.orca_filament", "*.bbscfg", "*.bbsflmt", "*.zip"] }, paths => {
+			for (const path of paths) {
+				root.importing = true;
+				root.send({ op: "import", path: path });
+			}
+		});
 	}
 
 	function setOption(key, value) {
@@ -361,13 +374,11 @@ Singleton {
 	// ── surface ───────────────────────────────────────────────────────────
 	function open() {
 		if (!root.enabled) return;
-		if (root.windowed) root.windowOpen = true;
-		else Popups.withFocusedScreen(screen => Popups.open("printer", screen));
+		popout.open();
 	}
 
 	function close() {
-		if (root.windowed) root.windowOpen = false;
-		else if (Popups.current === "printer") Popups.close();
+		popout.close();
 	}
 
 	function toggle() {
@@ -382,15 +393,12 @@ Singleton {
 	}
 
 	function popOut() {
-		if (Popups.current === "printer") Popups.close();
-		root.windowed = true;
-		root.windowOpen = true;
+		popout.popOut();
 		root.save();
 	}
 
 	function dock() {
-		root.windowOpen = false;
-		root.windowed = false;
+		popout.dock();
 		root.save();
 		root.open();
 	}
@@ -482,12 +490,6 @@ Singleton {
 	function rgb(color) {
 		const c = color ?? [128, 128, 128];
 		return Qt.rgba(c[0] / 255, c[1] / 255, c[2] / 255, 1);
-	}
-
-	function duration(seconds) {
-		const total = Math.max(0, Math.round(seconds / 60));
-		const hours = Math.floor(total / 60);
-		return hours > 0 ? `${hours} h ${String(total % 60).padStart(2, "0")} min` : `${total} min`;
 	}
 
 	function grams(value) {
@@ -593,7 +595,7 @@ Singleton {
 			const actions = [{ label: "Show", icon: "printer_3d", run: () => root.open() }];
 			if (data.result === "finished") root.finished(name);
 			if (data.result === "finished")
-				Notifs.pushInternal("done", "Print finished", `${name} · ${root.duration(Number(data.minutes) * 60)}`, { icon: "printer_3d", sound: "taskDone", actions, duration: 15000 });
+				Notifs.pushInternal("done", "Print finished", `${name} · ${Format.duration(Number(data.minutes) * 60)}`, { icon: "printer_3d", sound: "taskDone", actions, duration: 15000 });
 			else
 				Notifs.pushInternal("error", data.result === "failed" ? "Print failed" : "Print stopped", `${name} · at ${data.progress} %`, { icon: "printer_3d", actions, duration: 15000 });
 			break;
@@ -666,18 +668,6 @@ Singleton {
 		onTriggered: root.aceSyncing = false
 	}
 
-	Process {
-		id: picker
-
-		command: ["python3", `${Paths.scripts}/pick_files.py`, "Import a slicer profile"]
-		stdout: SplitParser {
-			onRead: line => {
-				if (line.trim() === "") return;
-				root.importing = true;
-				root.send({ op: "import", path: line.trim() });
-			}
-		}
-	}
 
 	Timer {
 		interval: 5000

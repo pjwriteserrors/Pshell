@@ -124,7 +124,7 @@ Item {
 		text: {
 			const parts = [];
 			if (root.ratio >= 0) parts.push(`${Math.round(root.ratio * 100)} %`);
-			if (root.item.speed > 0) parts.push(`${Files.sizeText(root.item.speed)}/s`);
+			if (root.item.speed > 0) parts.push(`${Format.bytes(root.item.speed)}/s`);
 			if (root.item.state === "paused") parts.push("Paused");
 			return parts.join(" · ");
 		}

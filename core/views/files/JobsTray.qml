@@ -150,9 +150,9 @@ Item {
 									if (job.state === "conflict") return "Waits for an answer";
 									if (job.paused) return `Paused${job.bytesTotal > 0 ? " at " + Math.round(card.ratio * 100) + " %" : ""}`;
 									const parts = [];
-									if (job.bytesTotal > 0) parts.push(`${Files.sizeText(job.bytes)} of ${Files.sizeText(job.bytesTotal)}`);
+									if (job.bytesTotal > 0) parts.push(`${Format.bytes(job.bytes)} of ${Format.bytes(job.bytesTotal)}`);
 									else if (job.filesTotal > 1) parts.push(`${job.files} of ${job.filesTotal}`);
-									if (job.speed > 0 && job.bytesTotal > 0) parts.push(`${Files.sizeText(job.speed)}/s`);
+									if (job.speed > 0 && job.bytesTotal > 0) parts.push(`${Format.bytes(job.speed)}/s`);
 									if (job.eta > 2) parts.push(job.eta > 90 ? `${Math.round(job.eta / 60)} min left` : `${Math.round(job.eta)} s left`);
 									return parts.join(" · ") || String(job.current || "");
 								}

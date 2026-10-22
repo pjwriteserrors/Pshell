@@ -155,7 +155,9 @@ ModalWindow {
 		root.selection = 0;
 		root.lower = false;
 		root.picking = false;
-		info.running = true;
+		root.userName = Host.user;
+		root.kernel = Host.kernel;
+		root.uptime = Host.uptime();
 	}
 
 	Process {
@@ -176,19 +178,6 @@ ModalWindow {
 				const row = chosen ? root.entries.findIndex(entry => entry.what === chosen.what && entry.pid === chosen.pid && entry.window === chosen.window && entry.key === chosen.key) : -1;
 				root.row = Math.max(0, row >= 0 ? row : Math.min(root.row, root.entries.length - 1));
 				if (!root.fresh) list.contentY = Math.max(0, Math.min(at, list.contentHeight - list.height));
-			}
-		}
-	}
-
-	Process {
-		id: info
-		command: ["sh", "-lc", `printf '%s|%s|%s' "$USER" "$(uname -r)" "$(uptime -p | sed 's/^up //')"`]
-		stdout: StdioCollector {
-			onStreamFinished: {
-				const parts = String(text || "").split("|");
-				root.userName = parts[0] || "";
-				root.kernel = parts[1] || "";
-				root.uptime = parts[2] || "";
 			}
 		}
 	}

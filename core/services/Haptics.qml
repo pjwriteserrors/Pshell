@@ -3,8 +3,8 @@ pragma Singleton
 import QtQuick
 import Quickshell
 
-// MX Master 4 haptics: through the mouse daemon while the `mouse` plugin has
-// the mouse, else through mxh (~/.local/bin/mxh → mx4-hapticd FIFO).
+// MX Master 4 haptics, played by the mouse daemon (core/services/Mouse.qml):
+// the mouse page's, or with the `mouse` plugin off one that only plays.
 // Only moments that deserve a physical confirmation play something; plain
 // clicks stay silent. Features name the moment, this table picks the effect.
 // Every moment is handed on to Sounds as well, which plays what it has a
@@ -15,8 +15,6 @@ import Quickshell
 // MAD, KNOCK, JINGLE, RINGING.
 Singleton {
 	id: root
-
-	readonly property string mxhPath: `${Quickshell.env("HOME")}/.local/bin/mxh`
 
 	readonly property var effects: ({
 		// notifications (silent while do-not-disturb is on)
@@ -42,6 +40,8 @@ Singleton {
 		wrongPassword: "ANGRY ALERT",
 		// all items of a todo list are done
 		listDone: "FIREWORK",
+		// a key bind moved to the workspace above or below
+		workspace: "SUBTLE COLLISION",
 		// the mouse goes over to another PC (Kvm.qml), and comes back
 		mouseAway: "SHARP STATE CHANGE",
 		mouseHome: "DAMP STATE CHANGE"
@@ -52,8 +52,6 @@ Singleton {
 		if (!Plugins.on("haptics")) return;
 		const effect = root.effects[event] ?? event;
 		if (!effect) return;
-		// the mouse page's daemon has the mouse open already: straight there
-		if (Mouse.enabled && Mouse.online && Mouse.state.haptic) Mouse.play(String(effect));
-		else Quickshell.execDetached([root.mxhPath, String(effect)]);
+		if (Mouse.online && Mouse.state.haptic) Mouse.play(String(effect));
 	}
 }

@@ -127,17 +127,6 @@ Singleton {
 		root.markRead(item.link);
 	}
 
-	function formatBytes(bytes) {
-		const units = ["B", "KB", "MB", "GB", "TB"];
-		let value = Number(bytes) || 0;
-		let unit = 0;
-		while (value >= 1024 && unit < units.length - 1) {
-			value /= 1024;
-			unit += 1;
-		}
-		return `${value >= 10 || unit === 0 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
-	}
-
 	// pacnew | orphans | cache | paccache, in a terminal like the updates
 	function runTask(name) {
 		if (root.busy || !name) return;
@@ -145,7 +134,7 @@ Singleton {
 		root.task = String(name);
 		const titles = { pacnew: "Config files", orphans: "Orphans", cache: "Package cache", paccache: "Package cache" };
 		terminal.environment = ({ QS_UPDATE_STATUS: root.statusPath });
-		terminal.command = ["kitty", "--title", titles[name] || "Maintenance", "--class", "shell-update", "zsh", "-i", "-c", `'${root.scripts}/maintenance_run.sh' '${root.task}'`];
+		terminal.command = Terminal.shellCommand({ title: titles[name] || "Maintenance", appId: "shell-update" }, `'${root.scripts}/maintenance_run.sh' '${root.task}'`);
 		terminal.running = true;
 	}
 
@@ -183,11 +172,11 @@ Singleton {
 		root.runningNames = names.slice();
 		root.progressLabel = names.length === 1 ? `Updating ${names[0]}…` : (names.length > 1 ? `Updating ${names.length} packages…` : "Starting update…");
 		tail.running = true;
-		// the update runs in an interactive zsh so it looks and behaves like
+		// the update runs in an interactive shell so it looks and behaves like
 		// a normal terminal session
 		const script = `'${root.scripts}/updates_run.sh' ${names.map(n => `'${n}'`).join(" ")}`;
 		terminal.environment = ({ QS_UPDATE_LOG: root.logPath, QS_UPDATE_STATUS: root.statusPath });
-		terminal.command = ["kitty", "--title", "System update", "--class", "shell-update", "zsh", "-i", "-c", script];
+		terminal.command = Terminal.shellCommand({ title: "System update", appId: "shell-update" }, script);
 		terminal.running = true;
 	}
 

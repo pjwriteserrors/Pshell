@@ -100,6 +100,39 @@ Scope {
 		}
 	}
 
+	// the window switcher (Alt+Tab). niri's binds call next/prev with the
+	// scope (all, others, output, workspace; "" = the setting) and the
+	// filter ("app": only windows of the focused app)
+	IpcHandler {
+		target: "switcher"
+
+		function next(scope: string, filter: string): void {
+			if (Plugins.on("window-switcher")) Switcher.step(1, scope, filter);
+		}
+		function prev(scope: string, filter: string): void {
+			if (Plugins.on("window-switcher")) Switcher.step(-1, scope, filter);
+		}
+		// open without a held key: stays until something is picked
+		// (`show` would be taken by `qs ipc` itself)
+		function open(): void {
+			if (Plugins.on("window-switcher")) Switcher.show("", "");
+		}
+		function cancel(): void {
+			Switcher.cancel();
+		}
+		function layout(name: string): void {
+			Switcher.set("layout", name);
+		}
+		// shell | niri: whose switcher Alt+Tab opens (writes niri's binds)
+		function engine(name: string): void {
+			Switcher.useEngine(name, null);
+		}
+		function status(): string {
+			return JSON.stringify({ engine: Switcher.engine, layout: Switcher.layout, open: Switcher.open, shown: Switcher.shown,
+				held: Switcher.held, index: Switcher.index, items: Switcher.items.map(item => `${item.id} ${item.appId}`) });
+		}
+	}
+
 	// the plugin switches (>plugins)
 	IpcHandler {
 		target: "plugins"
@@ -151,6 +184,41 @@ Scope {
 	}
 
 	// the game library: `games add <path>` opens it to add a program
+	IpcHandler {
+		target: "torrents"
+		enabled: Plugins.on("torrents")
+
+		function open(): void {
+			Torrents.open();
+		}
+		function toggle(): void {
+			Torrents.toggle();
+		}
+		function close(): void {
+			Torrents.close();
+		}
+		// under the bar ↔ a window of its own
+		function popOut(): void {
+			Torrents.popOut();
+		}
+		function dock(): void {
+			Torrents.dock();
+		}
+		// a magnet link, a .torrent file (path or file://) or a link to one:
+		// the window asks where it goes
+		function add(uri: string): void {
+			Torrents.add(uri);
+		}
+		// the window on one torrent ("" for all of them)
+		function select(hash: string): void {
+			Torrents.select(hash);
+			Torrents.open();
+		}
+		function list(): string {
+			return JSON.stringify(Torrents.torrents.map(item => ({ hash: item.hash, name: item.name, phase: item.phase, progress: item.progress, eta: item.eta })));
+		}
+	}
+
 	IpcHandler {
 		target: "games"
 		enabled: Plugins.on("games")
@@ -481,6 +549,42 @@ Scope {
 		}
 	}
 
+	// what plays (MPRIS): for key binds and scripts, instead of playerctl
+	IpcHandler {
+		target: "media"
+
+		function playPause(): void {
+			Media.player?.togglePlaying();
+		}
+		function pause(): void {
+			if (Media.player?.canPause) Media.player.pause();
+		}
+		function next(): void {
+			if (Media.player?.canGoNext) Media.player.next();
+		}
+		function previous(): void {
+			if (Media.player?.canGoPrevious) Media.player.previous();
+		}
+		// every player that plays
+		function pauseAll(): void {
+			Media.pauseAll();
+		}
+	}
+
+	// the workspace above or below, with a pulse of the mouse (key binds)
+	IpcHandler {
+		target: "workspace"
+
+		function up(): void {
+			Niri.focusWorkspaceRelative(-1);
+			Haptics.play("workspace");
+		}
+		function down(): void {
+			Niri.focusWorkspaceRelative(1);
+			Haptics.play("workspace");
+		}
+	}
+
 	// the same under its old name, which key binds may still call
 	IpcHandler {
 		target: "niri"
@@ -794,6 +898,18 @@ Scope {
 	}
 
 	IpcHandler {
+		target: "watch"
+		enabled: Plugins.on("watch")
+
+		function toggle(): void {
+			root.drawerOnFocused("watch");
+		}
+		function open(): void {
+			Popups.withFocusedScreen(screen => Popups.open("watch", screen));
+		}
+	}
+
+	IpcHandler {
 		target: "screentime"
 		enabled: Plugins.on("screentime")
 
@@ -973,6 +1089,35 @@ Scope {
 		}
 		function lower(): void {
 			Brightness.adjust(-1);
+		}
+	}
+
+	// game mode: on, off or auto (follows the games)
+	IpcHandler {
+		target: "gamemode"
+
+		function set(value: string): void {
+			GameMode.setForce(value);
+		}
+		function state(): string {
+			return JSON.stringify({ active: GameMode.active, focused: GameMode.focused, force: GameMode.force, windows: Games.windows });
+		}
+	}
+
+	// whether the shell draws the wallpaper (scripts/apply_wallpaper_runtime.sh asks)
+	IpcHandler {
+		target: "wallpaper"
+
+		function owned(): bool {
+			return Wallpaper.enabled;
+		}
+		// bloom, fade or none
+		function transition(name: string): void {
+			Wallpaper.setTransition(name);
+		}
+		// the overview's copy: sharp, blur or dim
+		function backdrop(name: string): void {
+			Wallpaper.setBackdrop(name);
 		}
 	}
 

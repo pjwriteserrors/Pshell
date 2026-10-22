@@ -81,7 +81,7 @@ Singleton {
 
 	readonly property var mathWords: ["sqrt", "cbrt", "sin", "cos", "tan", "asin", "acos", "atan", "log", "ln", "exp", "abs", "round", "floor", "ceil", "pi", "e", "mod"]
 
-	// arithmetic that qalc can work out: numbers, operators, a few functions.
+	// arithmetic that Calc can work out: numbers, operators, a few functions.
 	// Dates, versions, phone numbers and ranges ("10-20") are no sums.
 	function isMath(text) {
 		if (text.length > 160 || text.includes("\n") || !/\d/.test(text)) return false;
@@ -91,7 +91,7 @@ Singleton {
 		if (/^\+[\d\s\-/()]+$/.test(text)) return false;
 		const call = /\b[a-z]+\(\s*[\d.π]/i.test(text);
 		const operation = /[\d).π]\s*(\*\*|[+*^×÷%])\s*[\d(.a-zπ]/i.test(text) || /[\d)]\s*[-/]\s*\(/.test(text) || /\)\s*[-/]\s*\d/.test(text);
-		return call || operation;
+		return (call || operation) && Calc.evaluate(text).ok;
 	}
 
 	function isLatex(text) {

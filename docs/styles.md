@@ -41,12 +41,12 @@ der Shell ändert. Er muss am Ende:
 4. komplexe, theme-abhängige Animationen haben (Abschnitt 5);
 5. mindestens eine eigene niri-Animation für das Öffnen und Schließen von
    Fenstern mitbringen, die zum Theme passt (Abschnitt 6);
-6. `scripts/check_style.py` und `quickshell -p ./Validate.qml` bestehen;
+6. `scripts/dev/check_style.py` und `quickshell -p ./Validate.qml` bestehen;
 7. später automatisch nachgezogen werden können, wenn sich die Logik auf
    `main` ändert (Abschnitt 8).
 
 Lies vor dem Schreiben `docs/architecture.md` und führe
-`python3 scripts/check_style.py --contract` aus. Diese Ausgabe ist der
+`python3 scripts/dev/check_style.py --contract` aus. Diese Ausgabe ist der
 verbindliche, immer aktuelle Vertrag. Wo sie und diese Datei sich
 widersprechen, gilt die Ausgabe.
 
@@ -106,7 +106,7 @@ style/
 
 ## 3. Der Vertrag
 
-`python3 scripts/check_style.py --contract` zeigt:
+`python3 scripts/dev/check_style.py --contract` zeigt:
 
 - **Kit**: jede Datei in `style/theme` und `style/widgets` mit ihrem Grundtyp
   und den öffentlichen Members (Properties, Signale, Funktionen), die dein Style
@@ -277,7 +277,7 @@ Fantasy-Style heißt die Zwischenablage nicht „Clipboard“, sondern etwa
   })
   ```
   Alle Schlüssel mit dem Text von `main` zeigt
-  `python3 scripts/check_style.py --contract` unter „Words“. Ein Schlüssel,
+  `python3 scripts/dev/check_style.py --contract` unter „Words“. Ein Schlüssel,
   den kein Core-Code abfragt, ist ein Fehler (`words`); ein fehlender behält
   den Text von `main`.
 - **Eigene Views und der Frame** schreiben ihre Texte selbst im selben Ton.
@@ -423,7 +423,7 @@ Vorbilder liegen in `~/.config/niri/animations/shaders/*` und
 
 ```
 git switch -c style/<name> main
-python3 scripts/check_style.py --contract      # der Vertrag
+python3 scripts/dev/check_style.py --contract      # der Vertrag
 ```
 
 1. `style/BRIEF.md` schreiben: Theme, Referenzen, Regeln für Farbe, Form,
@@ -441,21 +441,21 @@ python3 scripts/check_style.py --contract      # der Vertrag
 8. Nach jedem Schritt:
    ```
    quickshell -p ./Validate.qml          # muss "VALIDATE: ok" ausgeben
-   python3 scripts/check_style.py         # muss "contract ok" ausgeben
+   python3 scripts/dev/check_style.py         # muss "contract ok" ausgeben
    ```
 9. Committen (nur `style/`, `.quickshell-style.json`), dann live ansehen:
    Studio (Mod+Shift+S) → Style → deinen Style wählen. Zurück über dieselbe
    Seite zu „Default“. Der Wechsel verlangt einen sauberen Arbeitsbaum.
-10. Am Schluss zusätzlich `python3 scripts/test_branch_styles.py`.
+10. Am Schluss zusätzlich `python3 scripts/tests/test_branch_styles.py`.
 
-Nicht gegen den echten Zustand testen: `scripts/review_surfaces.sh` legt
+Nicht gegen den echten Zustand testen: `scripts/dev/review_surfaces.sh` legt
 Dateien in `~/.local/state/pshell` an, `wallust run` färbt alle offenen
 Terminals um, die Wallpaper-Runtime startet Units auf dem echten Desktop.
 
 ## 8. Nachziehen, wenn main sich ändert
 
 ```
-scripts/sync_styles.sh style/<name>
+scripts/dev/sync_styles.sh style/<name>
 ```
 
 Das merged `main` in einem temporären Worktree, committet nur, wenn alles
@@ -497,11 +497,11 @@ keine offene `port`-Zeile mehr hat, die du nicht bewusst geprüft hast, und
 ## 10. Abnahme
 
 - [ ] `quickshell -p ./Validate.qml` → `VALIDATE: ok`
-- [ ] `python3 scripts/check_style.py` → `contract ok`, jede Animation `compiles`,
+- [ ] `python3 scripts/dev/check_style.py` → `contract ok`, jede Animation `compiles`,
       kein `layout`-Fehler
 - [ ] Nebeneinander mit der Default-Shell verglichen: Keine Oberfläche ist
       an derselben Stelle gleich aufgebaut
-- [ ] `python3 scripts/test_branch_styles.py` → OK
+- [ ] `python3 scripts/tests/test_branch_styles.py` → OK
 - [ ] Jede Oberfläche aus dem Vertrag live angesehen: Launcher, alle Panels,
       Studio (alle Seiten), Power-Menü, Sperrbildschirm, Screenshot, OSD,
       Benachrichtigungen, Tray-Menü

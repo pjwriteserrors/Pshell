@@ -25,10 +25,10 @@ Singleton {
 	property bool dndFullscreen: true
 	property bool dndSharing: true
 	property bool dndMeetings: true
-	readonly property bool trackingNow: Tmpo.tracking && !Tmpo.paused
+	readonly property bool trackingNow: QtrackTimer.tracking && !QtrackTimer.paused
 	// a screencast of someone else than the shell's own live pins
 	readonly property bool sharing: Niri.casts.some(cast => cast.is_active && !Screenshot.liveNodes.includes(Number(cast.pw_node_id)))
-	readonly property bool dndAuto: (root.dndWhileTracking && root.trackingNow) || (root.dndFullscreen && Niri.focusedFullscreen) || (root.dndSharing && root.sharing) || (root.dndMeetings && Outlook.inMeeting)
+	readonly property bool dndAuto: (root.dndWhileTracking && root.trackingNow) || (root.dndFullscreen && Niri.focusedFullscreen) || (root.dndSharing && root.sharing) || (root.dndMeetings && MsCalendar.inMeeting) || (GameMode.active && GameMode.quietNotifications)
 	// switched off by hand while a rule applied: stays off until the rule ends
 	property bool dndAutoSuppressed: false
 	readonly property bool dnd: Plugins.on("dnd") && (root.dndManual || (root.dndAuto && !root.dndAutoSuppressed))
@@ -36,7 +36,7 @@ Singleton {
 		if (root.dndManual) return "On";
 		if (!root.dnd) return "Off";
 		if (root.dndSharing && root.sharing) return "Sharing";
-		if (root.dndMeetings && Outlook.inMeeting) return "Meeting";
+		if (root.dndMeetings && MsCalendar.inMeeting) return "Meeting";
 		return root.dndFullscreen && Niri.focusedFullscreen ? "Fullscreen" : "Tracking";
 	}
 
@@ -203,6 +203,44 @@ Singleton {
 			internal: false,
 			duration: root.toastDuration(notification.expireTimeout)
 		}]);
+	}
+
+	// A notification of the shell's own, in the centre and as a toast, like
+	// one that came over D-Bus (and mirrored to the phone like one):
+	//   app, icon (an icon name or path), image, summary, body
+	//   urgency  – NotificationUrgency (Normal)
+	//   actions  – [{ text, invoke: function }]; the one with identifier
+	//              "default" (text "") is the click on the notification
+	// Returns the notification; close() takes it away.
+	property int posted: 0
+
+	function post(options) {
+		const extra = options || {};
+		root.posted += 1;
+		const notification = localNotification.createObject(root, {
+			id: -(2000000 + root.posted),
+			appName: String(extra.app || "Pshell"),
+			summary: String(extra.summary || ""),
+			body: String(extra.body || ""),
+			image: String(extra.image || ""),
+			appIcon: String(extra.icon || ""),
+			urgency: extra.urgency ?? NotificationUrgency.Normal,
+			actions: (extra.actions || []).map((action, i) => ({
+				text: String(action.text ?? ""),
+				identifier: String(action.identifier ?? (action.text ? `action-${i}` : "default")),
+				invoke: action.invoke ?? (() => {})
+			})),
+			local: false
+		});
+		notification.closed.connect(() => root.markClosed(notification.id));
+		root.register(notification);
+		return notification;
+	}
+
+	Component {
+		id: localNotification
+
+		LocalNotification {}
 	}
 
 	// status: "running" | "done" | "error" | anything

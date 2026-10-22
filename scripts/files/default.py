@@ -17,12 +17,14 @@ import os
 import subprocess
 import sys
 import urllib.parse
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import host  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SHELL = os.path.dirname(os.path.dirname(HERE))
 DESKTOP_ID = "pshell-files.desktop"
 APPS = os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "applications")
-STATE = os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "pshell", "files-default.json")
+STATE = str(host.state_dir() / "files-default.json")
 MIME = "inode/directory"
 
 

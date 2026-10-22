@@ -193,7 +193,8 @@ class Hub:
         return [peer for peer in self.peers if peer.kind == "phone"]
 
     def phone(self, device_id=None):
-        phones = self.phones()
+        """A phone to send to or call: never a watch, which answers no calls."""
+        phones = [peer for peer in self.phones() if not getattr(peer, "watch", False)]
         if device_id:
             return next((peer for peer in phones if peer.device_id == device_id), None)
         return phones[0] if phones else None

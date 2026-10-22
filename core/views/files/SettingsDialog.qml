@@ -1033,7 +1033,7 @@ DialogFrame {
 							text: "Install"
 							icon: "download"
 							onClicked: {
-								Quickshell.execDetached(["kitty", "--title", "Install gocryptfs", "sh", "-c", `${Files.vaults.install}; echo; echo 'Done – this window can close.'; read -r _`]);
+								Quickshell.execDetached(Terminal.command({ title: "Install gocryptfs" }, ["sh", "-c", `${Files.vaults.install}; echo; echo 'Done – this window can close.'; read -r _`]));
 								vaultRecheck.restart();
 							}
 						}
@@ -1193,7 +1193,7 @@ DialogFrame {
 					title: "Thumbnails"
 
 					Line {
-						label: root.cache ? `${Files.sizeText(root.cache.size)} in ${root.cache.files} pictures (shared with other apps)` : "Measuring…"
+						label: root.cache ? `${Format.bytes(root.cache.size)} in ${root.cache.files} pictures (shared with other apps)` : "Measuring…"
 						icon: "image_multiple_outline"
 
 						TextButton {

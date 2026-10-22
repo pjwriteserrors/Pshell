@@ -7,8 +7,8 @@ import Quickshell
 import qs.style.theme
 import qs.core.services
 import qs.style.widgets
-import qs.core.views.panels.calendar
-import qs.core.views.panels.asteroids
+import qs.core.views.calendar
+import qs.core.views.asteroids
 
 // Hangs from the clock: notification center on the left, date, calendar,
 // the day's Microsoft events and weather on the right. A picked event opens
@@ -31,27 +31,27 @@ Drawer {
 
 	onPanelOpened: {
 		// opened from a reminder: show that event's day
-		const event = Outlook.selected;
+		const event = MsCalendar.selected;
 		calendar.reset();
 		if (event) {
 			calendar.shown = new Date(event.start);
 			calendar.selected = new Date(event.start);
-			Outlook.selected = event;
+			MsCalendar.selected = event;
 		}
-		Outlook.refresh();
+		MsCalendar.refresh();
 	}
 	onPanelClosed: {
-		Outlook.selected = null;
+		MsCalendar.selected = null;
 		sky.radar = false;
 	}
 
-	belowOpen: Outlook.selected !== null
+	belowOpen: MsCalendar.selected !== null
 	belowContentHeight: details.implicitHeight
 	below: EventDetails {
 		id: details
 
 		anchors.fill: parent
-		event: Outlook.selected
+		event: MsCalendar.selected
 	}
 
 	RowLayout {
@@ -192,8 +192,8 @@ Drawer {
 				Layout.fillWidth: true
 				visible: Plugins.on("calendar")
 				onSelectedChanged: {
-					if (Outlook.selected && !Outlook.selected.days.includes(Outlook.dayKey(calendar.selected)))
-						Outlook.selected = null;
+					if (MsCalendar.selected && !MsCalendar.selected.days.includes(MsCalendar.dayKey(calendar.selected)))
+						MsCalendar.selected = null;
 				}
 			}
 

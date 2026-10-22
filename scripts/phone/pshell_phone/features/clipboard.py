@@ -7,8 +7,14 @@ puts it into its own clipboard. Phone → PC: `set`, through wl-copy.
 
 import asyncio
 import shutil
+import sys
+from pathlib import Path
 
 from ..hub import Refused, now
+
+# the shell's clipboard history (scripts/clipboard/clipstore.py)
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "clipboard"))
+import clipstore as store  # noqa: E402
 
 LIMIT = 256 * 1024
 SECRET = "x-kde-passwordManagerHint"
@@ -74,15 +80,12 @@ def setup(hub, daemon):
 
     @hub.action("clipboard", "history", kinds=("phone",))
     async def history(_peer, args):
-        """The shell's clipboard history (cliphist), newest first."""
+        """The shell's clipboard history (scripts/clipboard), newest first."""
         if not hub.on("clipboard"):
             raise Refused("plugin-off", "clipboard")
-        code, out = await run("cliphist", "list", limit=2 * 1024 * 1024)
-        entries = []
-        for line in out.decode(errors="replace").splitlines()[: int(args.get("limit", 80))]:
-            entry_id, _, preview = line.partition("\t")
-            if entry_id.strip().isdigit():
-                entries.append({"id": entry_id.strip(), "preview": preview[:400], "binary": preview.startswith("[[ binary data")})
+        entries = [{"id": str(entry["id"]), "preview": "" if entry.get("kind") == "image" else entry.get("preview", "")[:400],
+                    "binary": entry.get("kind") == "image"}
+                   for entry in store.entries()[: int(args.get("limit", 80))]]
         return {"entries": entries}
 
     @hub.action("clipboard", "entry", kinds=("phone",))
@@ -93,11 +96,12 @@ def setup(hub, daemon):
         entry_id = str(args.get("id", ""))
         if not entry_id.isdigit():
             raise Refused("bad-id", entry_id)
-        code, out = await run("cliphist", "decode", entry_id)
-        if code != 0:
+        found = store.content(entry_id)
+        if found is None:
             raise Refused("gone", "That entry is gone")
+        mime, out = found
         if args.get("restore"):
-            await run("wl-copy", data=out)
+            await run("wl-copy", "--type", mime, data=out)
         try:
             return {"text": out.decode()}
         except UnicodeDecodeError:

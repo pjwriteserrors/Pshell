@@ -2,7 +2,6 @@ pragma Singleton
 
 import QtQuick
 import Quickshell
-import Quickshell.Io
 
 // Which surface is open, on which screen, and where it hangs from the bar.
 //
@@ -81,6 +80,7 @@ Singleton {
 		messages: "messages",
 		reader: "fast-reader",
 		screentime: "screentime",
+		watch: "watch",
 		printer: "printer",
 		identity: "identities",
 		niri: "niri-settings",
@@ -88,6 +88,7 @@ Singleton {
 		vm: "vm-launcher",
 		games: "games",
 		gamebar: "games-bar",
+		torrents: "torrents-bar",
 		radial: "radial-menu",
 		eyerest: "eye-rest",
 		stretch: "stretch",
@@ -182,9 +183,60 @@ Singleton {
 		root.modal = "";
 	}
 
-	// ── focused output (for keybinds / IPC) ────────────────────────────────
-	property var pendingFocused: []
+	// ── loaded while wanted ────────────────────────────────────────────────
+	// A panel or modal is built when it opens, not when the shell starts, and
+	// stays built `keepMs` after it closed: opened again soon it is there at
+	// once (and keeps its place); one never opened costs nothing.
+	readonly property int keepMs: 300000
+	// id → when it closed
+	property var recent: ({})
+	property string lastCurrent: ""
+	property string lastModal: ""
 
+	function wanted(id) {
+		return root.current === id || root.modal === id || root.recent[id] !== undefined;
+	}
+
+	function closed(id) {
+		if (id === "") return;
+		const next = Object.assign({}, root.recent);
+		next[id] = Date.now();
+		root.recent = next;
+	}
+
+	function opened(id) {
+		if (id === "" || root.recent[id] === undefined) return;
+		const next = Object.assign({}, root.recent);
+		delete next[id];
+		root.recent = next;
+	}
+
+	onCurrentChanged: {
+		root.closed(root.lastCurrent);
+		root.opened(root.current);
+		root.lastCurrent = root.current;
+	}
+
+	onModalChanged: {
+		root.closed(root.lastModal);
+		root.opened(root.modal);
+		root.lastModal = root.modal;
+	}
+
+	Timer {
+		running: Object.keys(root.recent).length > 0
+		repeat: true
+		interval: 30000
+		onTriggered: {
+			const now = Date.now();
+			const next = {};
+			for (const id in root.recent)
+				if (now - root.recent[id] < root.keepMs) next[id] = root.recent[id];
+			if (Object.keys(next).length !== Object.keys(root.recent).length) root.recent = next;
+		}
+	}
+
+	// ── focused output (for keybinds / IPC) ────────────────────────────────
 	function screenByName(name) {
 		for (const screen of Quickshell.screens)
 			if (String(screen.name || "") === String(name || ""))
@@ -192,33 +244,13 @@ Singleton {
 		return null;
 	}
 
+	// the output of the focused workspace, as niri's stream last said
+	function focusedScreen() {
+		const focused = Niri.workspaces.find(workspace => workspace.is_focused);
+		return root.screenByName(focused?.output) || root.primaryScreen;
+	}
+
 	function withFocusedScreen(callback) {
-		root.pendingFocused = root.pendingFocused.concat([callback]);
-		if (!focusedOutput.running)
-			focusedOutput.running = true;
-	}
-
-	function flushFocused(text) {
-		let screen = root.primaryScreen;
-		try {
-			screen = root.screenByName(JSON.parse(String(text || "{}")).name) || root.primaryScreen;
-		} catch (error) {}
-		const callbacks = root.pendingFocused;
-		root.pendingFocused = [];
-		for (const callback of callbacks)
-			callback(screen);
-	}
-
-	Process {
-		id: focusedOutput
-
-		command: ["niri", "msg", "-j", "focused-output"]
-		stdout: StdioCollector {
-			onStreamFinished: root.flushFocused(text)
-		}
-		onExited: exitCode => {
-			if (exitCode !== 0 && root.pendingFocused.length > 0)
-				root.flushFocused("");
-		}
+		callback(root.focusedScreen());
 	}
 }

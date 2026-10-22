@@ -43,7 +43,22 @@ def setup(hub, daemon):
             }
             for device in hub.devices.list
             if device.get("kind", "phone") == "phone"  # other PCs are the topic pcs (features/pcs.py)
+        ] + [
+            {
+                "id": f"watch:{entry['id']}",
+                "name": entry["name"],
+                "model": "Watch",
+                "kind": "watch",
+                "paired": entry.get("paired", 0),
+                "seen": entry.get("seen", 0),
+                "connected": f"watch:{entry['id']}" in connected,
+                "address": "",
+            }
+            for entry in watches().list
         ])
+
+    def watches():
+        return daemon.watch_service.watches
 
     hub.hooks["connect"].append(publish_devices)
     hub.hooks["disconnect"].append(publish_devices)
@@ -52,6 +67,14 @@ def setup(hub, daemon):
     @hub.action("devices", "remove", kinds=("shell", "cli"))
     async def remove(_peer, args):
         device_id = str(args.get("id", ""))
+        if device_id.startswith("watch:"):
+            if not watches().remove(device_id[6:]):
+                raise Refused("unknown-device", device_id)
+            for peer in hub.phones():
+                if peer.device_id == device_id:
+                    await peer.socket.close()
+            await publish_devices()
+            return {}
         if (hub.devices.get(device_id) or {}).get("kind", "phone") != "phone" or not hub.devices.remove(device_id):
             raise Refused("unknown-device", device_id)
         for peer in hub.phones():

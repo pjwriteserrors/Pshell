@@ -16,8 +16,9 @@ Rectangle {
 	// what is typed here is corrected (Autocorrect)
 	property bool autocorrect: false
 	readonly property bool focused: area.activeFocus
-	// the keyboard is here: a field keeps its focus in a panel that is closed
-	readonly property bool typing: root.autocorrect && root.focused && Window.active
+	// the keyboard is here: a field keeps its focus in a panel that is closed,
+	// and a window hidden while it had the keyboard stays active for Qt
+	readonly property bool typing: root.autocorrect && root.focused && Window.active && Window.visibility !== Window.Hidden
 
 	onTypingChanged: {
 		if (root.typing) Autocorrect.enter(root);

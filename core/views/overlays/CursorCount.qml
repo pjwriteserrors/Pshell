@@ -14,7 +14,7 @@ PanelWindow {
 	required property var modelData
 	screen: modelData
 
-	readonly property bool here: Multicursor.cursors > 0 && (Niri.workspaces.find(workspace => workspace.focused)?.output ?? root.modelData.name) === root.modelData.name
+	readonly property bool here: Multicursor.cursors > 0 && (Niri.workspaces.find(workspace => workspace.is_focused)?.output ?? root.modelData.name) === root.modelData.name
 	property real reveal: root.here ? 1 : 0
 
 	Behavior on reveal {

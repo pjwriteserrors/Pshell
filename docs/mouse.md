@@ -20,7 +20,7 @@ not running.
   `dump` prints what the mice say, `solaar` what would be taken over.
 - `core/services/Mouse.qml` – starts the daemon, keeps `mouse.json`, runs
   the shell's own actions (launcher, radial menu, media …) at once.
-- `core/views/overlays/niri/MousePage.qml` and `core/views/overlays/mouse/`
+- `core/views/settings/MousePage.qml` and `core/views/settings/mouse/`
   – the page: `MouseFigure` (the drawn mouse, live), `ButtonStudio` (a
   control's ways of use, laid out as a cross of swipes around the click),
   `ActionPicker`, `KeyRecorder`, `RuleList`, `WaveTile`.
@@ -86,10 +86,12 @@ MouseClick, MouseScroll; others are counted as skipped), stops Solaar and
 switches its line in niri's startup off (it stays in the file). *Give it
 back* turns it on again and starts Solaar; the daemon notices and lets go.
 
-The `haptics` plugin plays through the daemon while it has the mouse
-(otherwise through `mxh` and mx4-hapticd), and the bar's mouse battery
-falls back to the daemon's reading when the kernel reports none (a mouse on
-a Bolt receiver).
+The `haptics` plugin plays through the daemon. With the `mouse` plugin off
+the daemon still runs, but only plays (`PSHELL_MOUSE_MODE=haptics`): no
+settings, rules, diversion or rumble, the mouse stays as it is. The bar's
+mouse battery falls back to the daemon's reading when the kernel reports
+none (a mouse on a Bolt receiver). `scripts/ipc.sh workspace up|down` moves
+a workspace with a pulse, for key binds.
 
 ## Testing
 
@@ -125,11 +127,19 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
 
 ## Haptics beyond clicks
 
-- **Game haptics** (`rumble`: off, games, always): `parec` takes the default
-  output's monitor at 8 kHz, the low end of each 20 ms is weighed against the
-  last second, and a hit that stands out plays a hard bump, a soft bump or a
-  tick by its strength (`rumbleSensitivity`, at most every `rumbleGap` ms).
-  The page shows the bass, the line to cross and each hit.
+- **Game haptics** (`rumble`: off, games, always; `rumbleSource`: input,
+  sound, both). *Presses* (the default): while a game's window has the focus
+  (game mode, `GameMode.focused`) the daemon reads the keys and buttons
+  (`Triggers`: evdev, nothing grabbed, its own virtual devices left out) and
+  plays a waveform for every bound press – `rumbleBinds`: `{key: "BTN_LEFT"
+  | code, label, feel, repeat (ms of automatic fire while held), then:
+  [[ms, feel]]}`; shoot, aim and reload (with its own pattern) come bound.
+  Exact and the same in every game; talk and music are never felt. *Sound*:
+  `parec` takes the default output's monitor at 8 kHz, the low end of each
+  20 ms is weighed against the last second, and a hit that stands out plays
+  a hard bump, a soft bump or a tick by its strength (`rumbleSensitivity`,
+  at most every `rumbleGap` ms). The page records keys and buttons for the
+  presses, and shows the bass, the line to cross and each hit for the sound.
 - **Feel the desktop** (`feel`: moment → waveform): another workspace, the
   focus on another monitor, a window opening or closing, a window wanting
   attention – from niri's event stream.

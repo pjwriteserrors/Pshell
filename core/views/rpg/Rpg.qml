@@ -11,7 +11,6 @@ Scope {
 		id: game
 
 		statePath: Paths.stateFile("rpg-state.json")
-		monitorPath: `${Paths.scripts}/rpg-input-monitor.py`
 	}
 
 	RpgWindow {

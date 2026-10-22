@@ -1,17 +1,20 @@
 {
+	"terminal": "kitty",
+	"browser": "floorp",
 	"primaryOutput": "DP-2",
 	"weather": {
 		"city": "Paderborn"
 	},
 	"wallpapers": "~/Pictures/Wallpapers",
 	"plugins": {
+		"polkit": true,
 		"backlight": true,
 		"ddc": true,
 		"power-profiles": true,
 		"battery": true,
 		"mouse-battery": true,
 		"fingerprint": true,
-		"kdeconnect": true,
+		"phone": true,
 		"haptics": true,
 		"ssh": true,
 		"niri-settings": true,

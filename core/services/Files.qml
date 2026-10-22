@@ -70,6 +70,100 @@ Singleton {
 		root.focusWindow();
 	}
 
+	// ── the shell's file chooser ──────────────────────────────────────────
+	// pick(options, done): the window opens to choose; done(paths) gets what
+	// was chosen, [] when it was given up. options: { title, folder,
+	// multiple, directory, filters: ["*.torrent", …] }. With the file manager
+	// off the portal's chooser asks (scripts/pick_files.py).
+	property var picking: null
+	// the window was opened for the pick: it closes again after
+	property bool pickOpened: false
+	// a panel under the bar would cover the chooser: it steps aside while
+	// one chooses and comes back after
+	property string asidePanel: ""
+	property string asidePage: ""
+
+	function stepAside() {
+		root.asidePanel = Popups.current;
+		root.asidePage = Popups.page;
+		if (root.asidePanel !== "") Popups.close();
+	}
+
+	function stepBack() {
+		const panel = root.asidePanel;
+		root.asidePanel = "";
+		if (panel !== "") Popups.withFocusedScreen(screen => Popups.open(panel, screen, root.asidePage));
+	}
+
+	function pick(options, done) {
+		const o = options ?? {};
+		root.stepAside();
+		if (!root.enabled) {
+			const asker = portalPicker.createObject(root, { done: paths => {
+				root.stepBack();
+				if (done) done(paths);
+			} });
+			asker.command = ["python3", `${Paths.scripts}/pick_files.py`]
+				.concat(o.directory ? ["--folder"] : (o.multiple ? [] : ["--single"]))
+				.concat(o.folder && !o.directory ? ["--start", String(o.folder)] : [])
+				.concat((o.filters ?? []).length > 0 ? ["--filter", `${o.title || "Files"}|${o.filters.join(" ")}`] : [])
+				.concat([String(o.title || (o.directory ? "Choose a folder" : "Choose a file"))])
+				.concat(o.folder && o.directory ? [String(o.folder)] : []);
+			asker.running = true;
+			return;
+		}
+		if (root.picking) root.finishPick([]);
+		root.pickOpened = !root.windowOpen;
+		root.picking = {
+			title: String(o.title || (o.directory ? "Choose a folder" : "Choose a file")),
+			multiple: !!o.multiple,
+			directory: !!o.directory,
+			filters: (o.filters ?? []).map(glob => root.globPattern(glob)),
+			done: done
+		};
+		root.show({ paths: o.folder ? [String(o.folder)] : [], kind: "folders", newTab: false });
+	}
+
+	// *.torrent → a pattern for names
+	function globPattern(glob) {
+		const escaped = String(glob).split("").map(c => c === "*" ? ".*" : (c === "?" ? "." : c.replace(/[.+^$()|{}[\]\\]/, "\\$&"))).join("");
+		return new RegExp(`^${escaped}$`, "i");
+	}
+
+	// a file the pick may take (its filters)
+	function pickable(path) {
+		if (!root.picking || root.picking.filters.length === 0) return true;
+		const name = root.nameOf(path);
+		return root.picking.filters.some(filter => filter.test(name));
+	}
+
+	function finishPick(paths) {
+		const pick = root.picking;
+		if (!pick) return;
+		root.picking = null;
+		if (root.pickOpened) root.windowOpen = false;
+		root.pickOpened = false;
+		root.stepBack();
+		if (pick.done) pick.done(paths);
+	}
+
+	Component {
+		id: portalPicker
+
+		Process {
+			id: asker
+
+			property var done: null
+
+			stdout: StdioCollector {
+				onStreamFinished: {
+					if (asker.done) asker.done(String(text).split("\n").filter(line => line !== ""));
+				}
+			}
+			onExited: asker.destroy()
+		}
+	}
+
 	function toggle() {
 		if (root.windowOpen && root.windowActive) root.windowOpen = false;
 		else root.show({ paths: [], kind: "folders", newTab: false });
@@ -553,7 +647,11 @@ Singleton {
 		});
 	}
 
-	onWindowOpenChanged: if (root.windowOpen) root.checkTagged()
+	onWindowOpenChanged: {
+		if (root.windowOpen) root.checkTagged();
+		// closed while choosing: nothing was chosen
+		else if (root.picking) root.finishPick([]);
+	}
 
 	Connections {
 		target: FileLibrary
@@ -990,7 +1088,7 @@ Singleton {
 			root.say("Install ClamAV with your package manager", "alert_circle_outline");
 			return;
 		}
-		Quickshell.execDetached(["kitty", "--title", "Install ClamAV", "sh", "-c", `${command}; echo; echo 'Done – this window can close.'; read -r _`]);
+		Quickshell.execDetached(Terminal.command({ title: "Install ClamAV" }, ["sh", "-c", `${command}; echo; echo 'Done – this window can close.'; read -r _`]));
 	}
 	// the window opens its settings (on a page)
 	signal settingsAsked(string page)
@@ -1047,7 +1145,7 @@ Singleton {
 			if (job.state === "done" && (job.result?.saved ?? []).length > 0) {
 				const before = job.result.saved.reduce((sum, pair) => sum + pair[0], 0);
 				const after = job.result.saved.reduce((sum, pair) => sum + pair[1], 0);
-				root.say(after < before ? `${Math.round((1 - after / before) * 100)} % smaller · ${root.sizeText(after)}` : "It was as small as it gets already", "zip_box_outline");
+				root.say(after < before ? `${Math.round((1 - after / before) * 100)} % smaller · ${Format.bytes(after)}` : "It was as small as it gets already", "zip_box_outline");
 			}
 			if (followUp) followUp(job);
 		});
@@ -1276,7 +1374,7 @@ Singleton {
 				}
 				Sounds.play("taskDone");
 				root.say(answer.imported === 1 ? "The event is in the calendar" : `${answer.imported} events are in the calendar`, "calendar_check");
-				Outlook.refresh();
+				MsCalendar.refresh();
 			}
 		}
 	}
@@ -1299,7 +1397,7 @@ Singleton {
 			const total = entries.reduce((sum, entry) => sum + Number(entry.size || 0), 0);
 			if (total > 20e6 && !asked) {
 				root.confirmRequested({
-					title: `Attach ${root.sizeText(total)} to a mail?`,
+					title: `Attach ${Format.bytes(total)} to a mail?`,
 					detail: "Many mail servers refuse more than 20–25 MB. A link to share is lighter – or pack them as a ZIP first.",
 					confirm: "Attach anyway",
 					danger: false,
@@ -1615,12 +1713,12 @@ Singleton {
 	}
 
 	function terminal(folder) {
-		root.spawnFor(String(folder), ["kitty", "--directory", String(folder)], true);
+		root.spawnFor(String(folder), Terminal.command({ dir: String(folder) }, []), true);
 	}
 
 	// a coding agent in a terminal, in that folder
 	function agent(folder) {
-		root.spawnFor(String(folder), ["kitty", "--directory", String(folder), "claude"], true);
+		root.spawnFor(String(folder), Terminal.command({ dir: String(folder) }, ["claude"]), true);
 	}
 
 	// ── reading ────────────────────────────────────────────────────────────
@@ -1684,26 +1782,6 @@ Singleton {
 		const value = String(path);
 		if (value === root.home) return "~";
 		return value.startsWith(root.home + "/") ? "~" + value.slice(root.home.length) : value;
-	}
-
-	function sizeText(bytes) {
-		const n = Number(bytes) || 0;
-		if (FileLibrary.setting("sizeUnits") === "iec") {
-			if (n < 1024) return `${n} B`;
-			const units = ["KiB", "MiB", "GiB", "TiB"];
-			let value = n / 1024;
-			let unit = 0;
-			while (value >= 1024 && unit < units.length - 1) {
-				value /= 1024;
-				unit += 1;
-			}
-			return `${value.toFixed(value < 10 ? 1 : 0)} ${units[unit]}`;
-		}
-		if (n < 1000) return `${n} B`;
-		if (n < 1000 * 1000) return `${(n / 1000).toFixed(n < 10000 ? 1 : 0)} KB`;
-		if (n < 1000 * 1000 * 1000) return `${(n / 1000 / 1000).toFixed(n < 1e7 ? 1 : 0)} MB`;
-		if (n < 1e12) return `${(n / 1e9).toFixed(n < 1e10 ? 1 : 0)} GB`;
-		return `${(n / 1e12).toFixed(1)} TB`;
 	}
 
 	// "Just now", "12 min ago", "Today 14:03", "Yesterday", "Mon", "3 Mar", "3 Mar 2024"

@@ -30,8 +30,12 @@ Singleton {
 	property bool gridKey: false
 	// ids of the games that run
 	property var running: []
+	// the windows games_guard.py takes for games: [{id, app, title}]
+	property var windows: []
 	// the surface is up
 	property bool watched: false
+	// scripts/games_guard.py keeps games fullscreen
+	readonly property bool guarding: guard.running
 
 	// ── a launch ───────────────────────────────────────────────────────────
 	property string launching: ""
@@ -58,6 +62,8 @@ Singleton {
 	// the game the library opens on (from the bar's panel), and whether with its menu
 	property string focusId: ""
 	property bool focusMenu: false
+	// … or with its landing page
+	property bool focusStats: false
 
 	// a program to add, asked for from elsewhere (the file manager, IPC)
 	signal addRequested(string path)
@@ -139,6 +145,9 @@ Singleton {
 				return;
 			}
 			root.launchVia = answer.via || "";
+			// the game finds a controller switched on later as well; it only has to be on
+			if (answer.pads === 0)
+				Notifs.post({ app: "Games", icon: "input-gaming", summary: "No controller is on", body: `Switch it on – ${game.name} picks it up once it is.` });
 			root.started = id;
 			startedTimeout.restart();
 			root.launching = "";
@@ -147,6 +156,53 @@ Singleton {
 			root.pollRunning();
 		});
 	}
+
+	// ── a game's landing page ─────────────────────────────────────────────
+	// by id: what games.py stats said (play time, days, time to beat, achievements)
+	property var stats: ({})
+	property string statsLoading: ""
+
+	function loadStats(id) {
+		if (!id) return;
+		root.statsLoading = id;
+		root.call(["stats", id], answer => {
+			if (root.statsLoading === id) root.statsLoading = "";
+			if (answer.error || !answer.id) return;
+			const next = Object.assign({}, root.stats);
+			next[id] = answer;
+			root.stats = next;
+		});
+	}
+
+	// what beaten means: main | plus | full | done | "" (main)
+	function setGoal(id, goal) {
+		const known = root.stats[id];
+		if (known) {
+			const next = Object.assign({}, root.stats);
+			next[id] = Object.assign({}, known, { goal });
+			root.stats = next;
+		}
+		root.call(["goal", id, goal]);
+	}
+
+	// sessions of play: from when a game was first seen running to when it
+	// was gone (games.py merges one its own watcher kept as well)
+	property var sessionStarts: ({})
+
+	function followSessions(now) {
+		const at = Math.floor(Date.now() / 1000);
+		const starts = Object.assign({}, root.sessionStarts);
+		for (const id of now)
+			if (starts[id] === undefined) starts[id] = at;
+		for (const id of Object.keys(starts)) {
+			if (now.indexOf(id) >= 0) continue;
+			root.call(["session", id, String(starts[id]), String(at)]);
+			delete starts[id];
+		}
+		root.sessionStarts = starts;
+	}
+
+	onWindowsChanged: root.pollRunning()
 
 	function pollRunning() {
 		if (!runningPoll.running) runningPoll.running = true;
@@ -247,7 +303,7 @@ Singleton {
 	property bool picking: false
 
 	function pickProgram(done) {
-		if (picker.running) return;
+		if (root.picking) return;
 		root.pickDone = done;
 		root.picking = true;
 		// where the other games are: the folder all of them share
@@ -259,8 +315,12 @@ Singleton {
 			common = common.slice(0, i);
 		}
 		const start = common.length > 1 ? common.join("/") : Paths.home;
-		picker.command = ["zenity", "--file-selection", "--title=Add a game", `--filename=${start}/`, "--file-filter=Games | *.exe *.EXE *.msi *.bat *.sh *.x86_64 *.AppImage *.appimage", "--file-filter=Everything | *"];
-		picker.running = true;
+		Files.pick({ title: "Add a game", folder: start, filters: ["*.exe", "*.msi", "*.bat", "*.sh", "*.x86_64", "*.AppImage"] }, paths => {
+			root.picking = false;
+			const done = root.pickDone;
+			root.pickDone = null;
+			if (done) done(paths[0] ?? "");
+		});
 	}
 
 	function setKey(key, done) {
@@ -333,26 +393,12 @@ Singleton {
 		}
 	}
 
-	Process {
-		id: picker
-
-		stdout: StdioCollector {
-			id: pickedOut
-		}
-		onExited: code => {
-			root.picking = false;
-			const path = code === 0 ? String(pickedOut.text || "").trim() : "";
-			const done = root.pickDone;
-			root.pickDone = null;
-			if (done) done(path);
-		}
-	}
 
 	// what runs: often while someone looks or a game was just started
 	Timer {
 		interval: root.started !== "" ? 1500 : 4000
 		repeat: true
-		running: Plugins.on("games") && (root.watched || root.running.length > 0 || root.started !== "")
+		running: Plugins.on("games") && (root.watched || root.running.length > 0 || root.windows.length > 0 || root.started !== "")
 		triggeredOnStart: true
 		onTriggered: root.pollRunning()
 	}
@@ -374,6 +420,7 @@ Singleton {
 				if (!data.running) return;
 				const ended = root.running.filter(id => data.running.indexOf(id) < 0);
 				if (JSON.stringify(data.running) !== JSON.stringify(root.running)) root.running = data.running;
+				root.followSessions(data.running);
 				if (root.started !== "" && root.running.indexOf(root.started) >= 0) root.started = "";
 				// a game that ended has a new play time
 				if (ended.length > 0 && root.watched) root.refresh();
@@ -403,6 +450,39 @@ Singleton {
 			}
 		}
 		onExited: root.pads = 0
+	}
+
+	// every game's window fullscreen, also one started in Steam itself
+	Process {
+		id: guard
+
+		running: Plugins.on("games")
+		stdinEnabled: true
+		command: ["python3", "-u", `${Paths.scripts}/games_guard.py`]
+		environment: ({ PSHELL_NIRI_EVENTS: "stdin" })
+		stdout: SplitParser {
+			onRead: line => {
+				let data = null;
+				try {
+					data = JSON.parse(line);
+				} catch (error) {
+					return;
+				}
+				if (Array.isArray(data.gaming)) root.windows = data.gaming;
+			}
+		}
+		onExited: root.windows = []
+		// niri's events from the shell's own stream, the whole state first
+		onRunningChanged: if (guard.running && Niri.ready) for (const line of Niri.replay()) guard.write(line + "\n")
+	}
+
+	Connections {
+		target: Niri
+		enabled: guard.running
+
+		function onLine(text, event) {
+			if (/^\{"(Window|Workspace)/.test(text)) guard.write(text + "\n");
+		}
 	}
 
 	Component {

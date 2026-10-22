@@ -125,7 +125,7 @@ DialogFrame {
 			spacing: 6
 
 			StyledText {
-				text: side.entry?.dir ? "Folder" : Files.sizeText(side.entry?.size ?? 0)
+				text: side.entry?.dir ? "Folder" : Format.bytes(side.entry?.size ?? 0)
 				tone: side.bigger ? Theme.text : Theme.textMuted
 				font.pixelSize: Theme.size.label
 				font.weight: side.bigger ? Font.DemiBold : Font.Normal

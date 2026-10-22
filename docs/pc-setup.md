@@ -1,48 +1,49 @@
-# Übergabe: Pshell auf dem PC einrichten
+# Handover: setting Pshell up on a PC
 
-Diese Datei ist für einen neuen AI-Chat auf dem PC. Gib ihr einfach:
-„Lies `~/.config/quickshell/shell/docs/pc-setup.md` (bzw. die Datei auf GitHub) und hilf mir, das umzusetzen.“
+This file is for a new AI chat on the PC. Hand it over with:
+"Read `~/.config/quickshell/shell/docs/pc-setup.md` (or the file on GitHub) and help me do it."
 
-## Kontext
+## Context
 
-- Pshell ist die Quickshell-Shell für niri, ein Repo für Laptop und PC:
-  https://github.com/pjwriteserrors/Pshell. Den Aufbau erklärt `docs/architecture.md`,
-  die bitte zuerst lesen.
-- Am 2026-09-25/26 wurde die Shell neu aufgebaut. Basis ist die Laptop-Shell, dazu kam
-  alles Brauchbare der alten PC-Shell: Studio, Wallpaper-Runtime, Style-Wechsler,
-  Icons & Cursor, Kombinationen, die Theme-Hooks und OpenRGB.
-  `main` ist der neue Stand. Die alten PC-Branches liegen als `archive/arcanum`,
-  `archive/atelier` und `archive/filament` auf GitHub.
-- Der Laptop läuft seit 2026-09-26 damit. Profil: `hosts/laptop.json`.
-- Für den PC ist `hosts/pc.json` vorbereitet:
-  - aktiv sind KDE Connect, Haptik, DDC-Helligkeit und Maus-Akku
-  - Notizen, Todos, qtrack, RPG, SSH-Manager, Power-Profile und `>setup` sind aus
-  - Theme-Hooks: sddm, betterdiscord, obsidian, spicetify, steam, kitty, pywalfox,
-    telegram, oomox und openrgb (jeder ein Plugin `hook-<name>`, im Studio-Reiter
-    von `>plugins` ein- und ausschaltbar)
-  - Wallpaper-Bibliothek: `~/Scripts/themes/color_themes`
-- Auf dem PC gilt vorerst der Default-Style (der Laptop-Look). Arcanum wird später als
-  eigener Branch `style/arcanum` neu aufgebaut. Das ist **nicht** Teil dieser Aufgabe.
+- Pshell is the Quickshell shell for niri, one repository for laptop and PC:
+  https://github.com/pjwriteserrors/Pshell. `docs/architecture.md` explains how it is
+  built; read it first.
+- On 2026-09-25/26 the shell was rebuilt. The base is the laptop's shell, with everything
+  useful of the old PC shell added: Studio, the wallpaper runtime, the style switcher,
+  icons & cursor, combinations, the theme hooks and OpenRGB.
+  `main` is the new state. The old PC branches are `archive/arcanum`,
+  `archive/atelier` and `archive/filament` on GitHub.
+- The laptop runs it since 2026-09-26. Profile: `hosts/laptop.json`.
+- `hosts/pc.json` is the PC's profile:
+  - on: the phone app, haptics, DDC brightness, the mouse battery, the Logitech mouse,
+    the VM launcher, games, the watch, polkit prompts
+  - off: notes, todos, qtrack, RPG, the SSH manager, power profiles
+  - theme hooks: sddm, betterdiscord, obsidian, spicetify, steam, kitty, pywalfox,
+    telegram, oomox and openrgb (each a plugin `hook-<name>`, switched on and off in
+    the Studio tab of `>plugins`)
+  - wallpaper library: `~/Scripts/themes/color_themes`
+  - `lighting`: the OpenRGB devices, their gains and LED counts
+- The PC uses the default style (the laptop's look) for now. Arcanum is rebuilt later as
+  its own branch `style/arcanum`. That is **not** part of this task.
 
-## Was auf dem PC anders ist
+## What is different on the PC
 
-- Der Benutzer heißt `lu`, nicht `philippjung`. Nirgends Home-Pfade hart kodieren.
-- Die alte PC-Shell liegt vermutlich schon in `~/.config/quickshell/shell`: ein Klon
-  desselben GitHub-Repos, meist mit ausgechecktem `style/arcanum`. niri startet sie mit
-  `quickshell -c shell`. Es kann lokale Style-Branches geben, die nie gepusht wurden
-  (die README nennt `style/meridian` und `style/biopunk`). **Die dürfen nicht verloren
-  gehen.**
-- Die alte PC-Shell legt Laufzeitdateien ins Repo-Verzeichnis, z. B.
-  `launcher-usage.json` und `launcher-ai-state.json`. Die neue Shell erwartet sie in
+- The user is `lu`, not `philippjung`. Never hard-code home paths.
+- The old PC shell probably still lives in `~/.config/quickshell/shell`: a clone of the
+  same GitHub repository, mostly with `style/arcanum` checked out. niri starts it with
+  `quickshell -c shell`. There may be local style branches that were never pushed
+  (the README names `style/meridian` and `style/biopunk`). **They must not get lost.**
+- The old PC shell kept runtime files in the repository, e.g.
+  `launcher-usage.json` and `launcher-ai-state.json`. The new shell expects them in
   `~/.local/state/pshell`.
-- Der Theme-Zustand liegt wie am Laptop in `~/.local/state/quickshell-theme`
-  (current-theme-dir, combinations.json, lighting-state.json usw.). Das bleibt so.
+- The theme state lives in `~/.local/state/quickshell-theme` as on the laptop
+  (current-theme-dir, combinations.json, lighting-state.json and so on). That stays.
 
-## Ablauf
+## Steps
 
-Jeden Schritt erst prüfen und dann ausführen. Nichts löschen, was nicht gesichert ist.
+Check every step before doing it. Delete nothing that is not backed up.
 
-### 1. Sichern
+### 1. Back up
 
 ```
 B=~/.local/share/pshell-backup-$(date +%Y%m%d-%H%M%S); mkdir -p "$B"
@@ -55,12 +56,11 @@ dconf dump /org/gnome/desktop/interface/ > "$B/gnome-interface.dconf"
 sudo tar -cpzf "$B/sddm.tar.gz" /usr/share/sddm/themes /etc/sddm.conf /etc/sddm.conf.d 2>/dev/null
 ```
 
-Danach `gzip -t` und `git bundle verify` auf das Backup anwenden. Außerdem eine
-`restore.sh` ins Backup legen, nach dem Vorbild von
-`~/.local/share/pshell-backup-20260926-125200/restore.sh` am Laptop. Sie ist unten
-unter „Zurück“ beschrieben.
+Then run `gzip -t` and `git bundle verify` on the backup, and put a `restore.sh` into
+it, modelled on the laptop's
+`~/.local/share/pshell-backup-20260926-125200/restore.sh` (see "Going back" below).
 
-### 2. Alte Daten aus dem Repo retten
+### 2. Rescue old data from the repository
 
 ```
 cd ~/.config/quickshell/shell
@@ -68,136 +68,134 @@ git status --short --ignored
 mkdir -p ~/.local/state/pshell
 ```
 
-Ignorierte `*.json` im Repo-Stamm, etwa `launcher-usage.json` oder
-`launcher-ai-state.json`, nach `~/.local/state/pshell/` **kopieren**, falls es dort noch
-keine gleichnamige Datei gibt. Das Format kann sich vom Laptop unterscheiden. Beim
-Launcher-Chat-Zustand also prüfen, ob die neue Shell ihn lesen kann; sonst bei Seite
-legen. Nicht committete Änderungen im alten Repo nicht wegwerfen, sondern als Commit auf
-einem eigenen Branch sichern, z. B. `archive/pc-wip`.
+**Copy** ignored `*.json` in the repository's root, such as `launcher-usage.json` or
+`launcher-ai-state.json`, to `~/.local/state/pshell/` unless a file of that name is there
+already. The format may differ from the laptop's: check that the new shell can read the
+launcher's chat state, else put it aside. Do not throw uncommitted changes of the old
+repository away; keep them as a commit on a branch of their own, e.g. `archive/pc-wip`.
 
-### 3. Lokale Branches sichern
+### 3. Keep local branches
 
-`git branch -vv` zeigt alle lokalen Branches. Jeden lokalen `style/*`-Branch und den
-alten lokalen `main` nach `archive/<name>` umbenennen. Dabei **nichts löschen**; nur
-pushen, wenn der Benutzer es will.
+`git branch -vv` shows every local branch. Rename every local `style/*` branch and the
+old local `main` to `archive/<name>`. **Delete nothing**; push only if the user wants to.
 
-### 4. Neuen Stand holen
+### 4. Get the new state
 
 ```
 git fetch origin
 git switch -C main origin/main
-git clean -n     # nur anzeigen; übrig gebliebene Dateien der alten Shell einzeln entscheiden
+git clean -n     # only shows; decide on what is left of the old shell one by one
 ```
 
-`main` hat eine neue Historie ohne gemeinsamen Vorfahren mit den alten Branches. Das ist
-so gewollt.
+`main` has a new history without a common ancestor with the old branches. That is
+intended.
 
-### 5. Maschine eintragen und installieren
+### 5. Register the machine and install
 
 ```
 hostnamectl hostname
-./install.sh --host pc --dry-run --migrate-from ~/.local/share/pshell-backup-…/entpackt/.config/quickshell/shell
+./install.sh --host pc --dry-run --migrate-from ~/.local/share/pshell-backup-…/unpacked/.config/quickshell/shell
 ./install.sh --host pc
 ```
 
-- `--host pc` trägt den Hostnamen in `hosts/machines.json` ein. Diese Änderung
-  committen.
-- `--migrate-from` nur, wenn in Schritt 2 noch nicht alles kopiert wurde.
-- `install.sh` legt Links für die Dotfiles aus `dotfiles/manifest` an und sichert
-  vorhandene Dateien als `*.pre-pshell-<datum>`.
-- Danach `python3 scripts/setup.py doctor` ausführen und jeden Punkt abarbeiten.
+- `--host pc` puts the hostname into `hosts/machines.json`. Commit that.
+- `--migrate-from` only when step 2 did not copy everything yet.
+- `install.sh` links the dotfiles of `dotfiles/manifest` and keeps files that are there
+  as `*.pre-pshell-<date>`.
+- Then run `python3 scripts/setup.py doctor` and work through every point.
 
 ### 6. niri
 
-- In `~/.config/niri/config.kdl` die Zeile `include "pshell.kdl"` eintragen.
-- `dotfiles/niri/pshell.kdl` enthält Autostart und Tastenkürzel der Shell:
-  `quickshell -c shell`, den cliphist-Watcher, Mod+D, Sperre, Clipboard, Mod+Shift+S
-  (Studio), Lautstärke, Helligkeit, Screenshot und Aufnahme.
-- Aus `config.kdl` alles entfernen, was das doppelt macht oder die alte Shell aufruft:
+- Put `include "pshell.kdl"` into `~/.config/niri/config.kdl`.
+- `dotfiles/niri/pshell.kdl` holds the shell's autostart and key binds:
+  `quickshell -c shell`, Mod+D, lock, clipboard, Mod+Shift+S (Studio), volume,
+  brightness, screenshot and recording. The shell keeps the clipboard history and
+  draws the wallpaper itself.
+- Remove from `config.kdl` what does the same or calls the old shell:
   - `dispatch_ipc.sh`
-  - den alten Autostart `restore_theme_wallpaper.sh` und `wallpaper_watch.sh`; den
-    Watcher startet jetzt die Shell selbst
-  - swayosd, das die Shell jetzt selbst übernimmt
-  - Studio-Binds wie Mod+Shift+M
-- Vorher mit `niri validate -c <kopie>` prüfen und auf doppelte Tastenkürzel
-  kontrollieren. Erst dann übernehmen.
+  - the old autostart of `restore_theme_wallpaper.sh` and `wallpaper_watch.sh`, swaybg
+    and awww: the shell restores the theme and draws the wallpaper
+  - a clipboard watcher (`wl-paste --watch cliphist store`) and a polkit agent: the
+    shell has its own
+  - swayosd, which the shell does now
+  - Studio binds such as Mod+Shift+M
+- Check with `niri validate -c <copy>` and look for doubled key binds first. Only then
+  take it over.
 
-### 7. Dateien, die es nur auf dem PC gibt, ins Repo holen
+### 7. Files only the PC has: into the repository
 
-Sie gehören nach `dotfiles/` mit einem Eintrag in `dotfiles/manifest` und `when` =
-`host:pc` bzw. `hook:<name>`:
+They belong into `dotfiles/` with an entry in `dotfiles/manifest` whose `when` is
+`host:pc` or `hook:<name>`:
 
-- `~/Scripts/themes/changer/spicetify_maker.py` und `update_steam_theme.py`. Die
-  Pfade in `hosts/pc.json` unter `hookConfig` danach auf das verlinkte Ziel prüfen.
-- `~/.config/niri/animations/` (Shader und nirimation-Presets) für die Studio-Seite
-  „Motion“. Am Laptop gibt es das nicht; mit `when` = `all` bekommen beide Rechner die
-  Animationen.
-- die systemd-User-Units `openrgb-theme.service` und `quickshell-lighting.service`.
-  `quickshell-lighting.service` muss `scripts/apply_lighting.py --restore` aus dem neuen
-  Repo aufrufen. Die Lighting-Config liegt jetzt in `hosts/pc-lighting.json`.
-  Nötig sind die Units nicht mehr: `apply_lighting.py` startet selbst einen OpenRGB-Server
-  (`quickshell-openrgb.service`, transient), wenn keiner läuft, und die Shell lässt
-  `apply_lighting.py --watch` mitlaufen, das die Farben nach dem Wiedereinstecken der
-  Tastatur (KVM) zurückbringt. Tastatur und LEDs sind zwei Hooks: `openrgb` und
+- `~/Scripts/themes/changer/spicetify_maker.py` and `update_steam_theme.py`. Check the
+  paths under `hookConfig` in `hosts/pc.json` against the linked target afterwards.
+- `~/.config/niri/animations/` (shaders and nirimation presets) for Studio's "Motion"
+  page. The laptop has none; with `when` = `all` both machines get the animations.
+- the systemd user units `openrgb-theme.service` and `quickshell-lighting.service`.
+  `quickshell-lighting.service` has to call `scripts/apply_lighting.py --restore` of the
+  new repository. The lighting config is `lighting` in `hosts/pc.json`.
+  The units are no longer needed: `apply_lighting.py` starts an OpenRGB server itself
+  (`quickshell-openrgb.service`, transient) when none runs, and the shell keeps
+  `apply_lighting.py --watch` running, which brings the colours back after the keyboard
+  is plugged in again (KVM). Keyboard and LEDs are two hooks: `openrgb` and
   `openrgb-leds`.
-- die wallust-Templates des PCs, falls sie von `dotfiles/wallust/templates` abweichen
-  (swayosd-CSS, kitty `colors.conf` usw.). Zusammenführen statt überschreiben.
-- `~/.config/oomox/colors/wal`, falls vorhanden; der oomox-Hook braucht es.
+- the PC's wallust templates where they differ from `dotfiles/wallust/templates`
+  (swayosd CSS, kitty `colors.conf` and so on). Merge, do not overwrite.
+- `~/.config/oomox/colors/wal`, if there is one; the oomox hook needs it.
 
 ### 8. SDDM
 
-Die neue Shell nutzt das Greeter-Theme „silent“ aus `system/sddm`, nicht mehr
-`quickshell-lock`. Installiert wird es mit `system/install-sddm-silent-theme.sh` (braucht
-sudo, also vorher fragen). `install-fingerprint-auth.sh` ist **nur für den Laptop**.
+The new shell uses its own greeter theme "pshell" from `system/sddm`
+(`/usr/share/sddm/themes/pshell`), no longer `quickshell-lock` or the AUR package
+`sddm-silent-theme`; it needs only SDDM with the Qt 6 greeter, qt6-multimedia only for
+video backgrounds. It is installed with `system/install-sddm-theme.sh` (needs sudo, so
+ask first). `install-fingerprint-auth.sh` is **for the laptop only**.
 
-### 9. Umschalten
+### 9. Switch over
 
 ```
-quickshell kill -p ~/.config/quickshell/shell   # oder die PID aus `quickshell list --all`
-niri msg action spawn -- quickshell -c shell
+quickshell kill -p ~/.config/quickshell/shell   # or the PID from `quickshell list --all`
+niri msg action spawn -- ~/.config/quickshell/shell/scripts/start_shell.sh
 ```
 
-Dann prüfen:
-- `quickshell log` auf Warnungen und Fehler durchsehen
+Then check:
+- `quickshell log` for warnings and errors
 - `qs -c shell ipc call styleSession state`
-- `systemctl --user list-units 'quickshell-*'`: swaybg und awww bzw. mpvpaper sollten
-  laufen
-- `fuser ~/.local/state/quickshell-theme/theme-startup.lock` sollte leer sein
-- per Studio einmal ein Theme anwenden und das neueste
-  `~/.local/state/quickshell-theme/apply-*.log` lesen: jede Zeile OK oder SKIP, kein
-  FAIL
+- `qs -c shell ipc call wallpaper owned` says `true`; for a video wallpaper
+  `systemctl --user list-units 'quickshell-*'` shows mpvpaper
+- `fuser ~/.local/state/quickshell-theme/theme-startup.lock` is empty
+- apply a theme once from Studio and read the newest
+  `~/.local/state/quickshell-theme/apply-*.log`: every line OK or SKIP, no FAIL
 
-## Bekannte Fallstricke
+## Known pitfalls
 
-- **Aufrufe der alten Shell von außen.** Befehle wie `qs -c main …` oder Pfade in die alte
-  Shell stehen auch außerhalb der niri-Config, z. B. in den KDE-Connect-Befehlen
-  (`~/.config/kdeconnect/*/kdeconnect_runcommand/config`). Suchen mit
-  `grep -rIl -e '-c main' -e 'quickshell/' ~/.config ~/.local/bin`. Nach dem Ändern
-  `kdeconnectd` neu starten, denn die Befehle hält er im Speicher.
+- **Calls of the old shell from outside.** Commands such as `qs -c main …` or paths into
+  the old shell also live outside niri's config. Look for them with
+  `grep -rIl -e '-c main' -e 'quickshell/' ~/.config ~/.local/bin`.
 
-- **Tests nie gegen den echten Zustand laufen lassen.**
-  - `scripts/review_surfaces.sh` startet die Shell in einem verschachtelten niri, legt
-    aber Dateien in `~/.local/state/pshell` an. Das ist am Laptop einmal passiert, und
-    Testdateien hätten fast den echten RPG-Spielstand verdeckt.
-  - `wallust run` setzt die Farben in allen offenen Terminals.
-  - Die Wallpaper-Runtime startet systemd-User-Units, die auf dem echten Desktop landen,
-    auch aus einem verschachtelten niri heraus.
-- **Alte Wallpaper-Prozesse.** `swaybg` oder `awww-daemon` aus der alten Shell können
-  den Start-Lock geerbt haben. Einmal `bash scripts/restore_theme_wallpaper.sh`
-  ausführen; das startet sie als Units neu.
-- **Sauberer Arbeitsbaum.** Der Style-Wechsler (Studio → Style) verweigert den Wechsel,
-  solange es nicht committete Änderungen gibt.
-- **Checks vor jedem Commit:**
-  - `quickshell -p ./Validate.qml` muss `VALIDATE: ok` ausgeben
-  - `python3 scripts/test_branch_styles.py` für den Style-Wechsler
-- **Keine unnötigen Hilfetexte in der UI.** Der Benutzer will kurze, selbsterklärende
-  Labels.
+- **Never run tests against the real state.**
+  - `scripts/dev/review_surfaces.sh` starts the shell in a nested niri but writes files
+    into `~/.local/state/pshell`. That happened on the laptop once, and test files nearly
+    covered the real RPG save.
+  - `wallust run` recolours every open terminal.
+  - The wallpaper runtime starts systemd user units that land on the real desktop, also
+    from a nested niri.
+- **Old wallpaper processes.** `swaybg` or `awww-daemon` of the old shell may have
+  inherited the start lock. Run `bash scripts/apply_wallpaper_runtime.sh --ensure` once;
+  with the shell drawing the wallpaper it stops them.
+- **A clean working tree.** The style switcher (Studio → Style) refuses to switch while
+  there are uncommitted changes.
+- **Checks before every commit:**
+  - `quickshell -p ./Validate.qml` prints `VALIDATE: ok`
+  - `python3 scripts/tests/test_branch_styles.py` for the style switcher
+- **No needless help texts in the UI.** The user wants short labels that explain
+  themselves.
 
-## Zurück
+## Going back
 
-`restore.sh` im Backup soll Folgendes tun:
-1. `quickshell -c shell` beenden und die Links aus `dotfiles/manifest` entfernen.
-2. `files.tar.gz` zurückspielen und die dconf-Sicherung laden.
-3. Im Repo die alte Arbeitskopie wiederherstellen: den gesicherten Branch auschecken,
-   etwa `archive/arcanum` bzw. das Bundle.
-4. `niri msg action spawn -- quickshell -c shell` ausführen.
+`restore.sh` in the backup should:
+1. stop `quickshell -c shell` and remove the links of `dotfiles/manifest`
+2. restore `files.tar.gz` and load the dconf backup
+3. restore the old working copy in the repository: check out the kept branch, such as
+   `archive/arcanum`, or the bundle
+4. run `niri msg action spawn -- ~/.config/quickshell/shell/scripts/start_shell.sh`

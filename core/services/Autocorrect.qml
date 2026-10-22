@@ -47,9 +47,12 @@ Singleton {
 	readonly property bool own: root.window !== null && String(root.window.app_id || "") === "org.quickshell"
 	// the field of the shell that is being written in (enter, leave)
 	property var field: null
+	// Messages in a window of its own has the keyboard only while niri says so:
+	// Qt's word for it can stay behind after the window went away
+	readonly property bool writing: root.field !== null && (!Messages.windowed || root.own)
 	// no window has the keyboard while it is in the launcher or a panel
 	readonly property bool active: root.enabled && !Session.locked
-		&& (root.field !== null || (root.window !== null && !root.own && !root.skips(root.window.app_id)))
+		&& (root.writing || (root.window !== null && !root.own && !root.skips(root.window.app_id)))
 	// how a correction is typed; of several one is picked each time
 	readonly property var animations: [
 		Plugins.on("autocorrect-scramble") ? "scramble" : "",
@@ -118,6 +121,7 @@ Singleton {
 	onActiveChanged: root.tell()
 	onWindowIdChanged: root.tell()
 	onFieldChanged: root.tell()
+	onWritingChanged: root.tell()
 	onBrowserChanged: root.tell()
 	onAnimationsChanged: root.tell()
 	onEnabledChanged: root.failed = false

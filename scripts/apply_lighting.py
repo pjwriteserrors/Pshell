@@ -37,7 +37,7 @@ The keyboard and the LEDs (GPU, ARGB headers) are two theme hooks, `openrgb`
 and `openrgb-leds`, and two parts of the saved state.
 
 Device roles, gains and the LED count of each ARGB header live in
-hosts/<profile>-lighting.json, because only the person with the case open
+the host profile's `lighting` (hosts/<profile>.json), because only the person with the case open
 knows how many LEDs are on a header.
 
 What each device shows is the user's, set on the Lighting page of the Pshell
@@ -79,7 +79,8 @@ sys.path.insert(0, str(SHELL_DIR / "scripts"))
 import host  # noqa: E402
 import openrgb_sdk  # noqa: E402
 
-CONFIG_PATH = Path(os.environ.get("LIGHTING_CONFIG") or SHELL_DIR / "hosts" / f"{host.profile_name()}-lighting.json")
+# LIGHTING_CONFIG names a file of its own (tests); else the host profile's `lighting`
+CONFIG_PATH = Path(os.environ["LIGHTING_CONFIG"]) if os.environ.get("LIGHTING_CONFIG") else None
 STATE_DIR = Path(os.environ.get("THEME_STATE_DIR", Path.home() / ".local/state/quickshell-theme"))
 STATE_PATH = STATE_DIR / "lighting-state.json"
 FRAME_PATH = STATE_DIR / "current" / "frame.png"
@@ -171,12 +172,15 @@ DEFAULT_CONFIG = {
 
 def load_config() -> dict:
     config = json.loads(json.dumps(DEFAULT_CONFIG))
-    if CONFIG_PATH.is_file():
+    if CONFIG_PATH is not None:
         try:
             stored = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
         except (OSError, ValueError) as error:
             print(f"{CONFIG_PATH}: {error}; using defaults", file=sys.stderr)
             return config
+    else:
+        stored = host.profile().get("lighting") or {}
+    if stored:
         for section, values in stored.items():
             if isinstance(values, dict) and isinstance(config.get(section), dict):
                 config[section].update(values)

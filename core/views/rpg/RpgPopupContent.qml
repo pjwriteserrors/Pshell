@@ -41,6 +41,7 @@ Item {
 	Image {
 		anchors.fill: parent
 		source: `${Paths.assets}/rpg/archive-battle-v2.png`
+		sourceSize: Qt.size(Math.ceil(Math.max(width, height)), Math.ceil(Math.max(width, height)))
 		fillMode: Image.PreserveAspectCrop
 		smooth: true
 		mipmap: true

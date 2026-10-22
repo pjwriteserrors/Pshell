@@ -302,6 +302,6 @@ Item {
 			if (count < 0) return "No access";
 			return count === 0 ? "Empty" : `${count} item${count === 1 ? "" : "s"}`;
 		}
-		return `${Files.sizeText(root.size)} · ${Files.whenText(root.mtime)}`;
+		return `${Format.bytes(root.size)} · ${Files.whenText(root.mtime)}`;
 	}
 }

@@ -94,7 +94,7 @@ DialogFrame {
 
 				StyledText {
 					Layout.fillWidth: true
-					text: root.local ? `${root.summary.files ?? 0} file${root.summary.files === 1 ? "" : "s"} · ${Files.sizeText(root.summary.bytes ?? 0)} · on this PC with ClamAV${root.summary.yara ? " and YARA" : ""}`
+					text: root.local ? `${root.summary.files ?? 0} file${root.summary.files === 1 ? "" : "s"} · ${Format.bytes(root.summary.bytes ?? 0)} · on this PC with ClamAV${root.summary.yara ? " and YARA" : ""}`
 						: (root.results.length === 1 ? root.results[0].name : `${root.results.length} files`)
 					tone: Theme.textSubtle
 					font.pixelSize: Theme.size.small

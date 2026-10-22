@@ -23,6 +23,10 @@ Drawer {
 	property bool dragging: false
 	property bool pending: false
 	property var hoveredWindow: null
+	// the cards' corners (OverviewCards: like the windows unless set); the
+	// windows on a card follow its curve, 4 px inside
+	readonly property real cardRadius: OverviewCards.radius
+	readonly property real tileRadius: Math.max(2, root.cardRadius - 4)
 
 	panelId: "overview"
 	panelWidth: Math.max(360, root.monitors.length * root.cardWidth + Math.max(0, root.monitors.length - 1) * root.columnGap + root.padding * 2)
@@ -236,7 +240,7 @@ Drawer {
 									id: card
 
 									anchors.fill: parent
-									radius: Theme.radius.medium
+									radius: Math.min(root.cardRadius, height / 2)
 									color: drop.containsDrag ? Qt.alpha(Theme.primary, 0.18)
 										: (slot.ws.focused ? Qt.alpha(Theme.primary, 0.08) : Theme.layer1)
 									border.width: slot.ws.focused || drop.containsDrag ? 2 : 1
@@ -264,8 +268,9 @@ Drawer {
 
 									// workspace number
 									Rectangle {
-										x: 6
-										y: slot.compact ? (parent.height - height) / 2 : 6
+										// clear of the card's curve
+										x: Math.max(6, root.cardRadius * 0.35)
+										y: slot.compact ? (parent.height - height) / 2 : Math.max(6, root.cardRadius * 0.35)
 										z: 5
 										width: Math.max(18, number.implicitWidth + 10)
 										height: 18
@@ -327,7 +332,7 @@ Drawer {
 												z: tile.modelData.floating ? 2 : 1
 												width: Math.max(10, tile.modelData.w * canvas.width - 3)
 												height: Math.max(10, tile.modelData.h * canvas.height - 3)
-												radius: Theme.radius.small
+												radius: Math.min(root.tileRadius, width / 2, height / 2)
 												color: tile.modelData.focused ? Theme.primaryContainer : Theme.layer3
 												border.width: tile.hovered || tile.modelData.focused || tile.modelData.urgent ? 1.5 : 0
 												border.color: tile.modelData.urgent ? Theme.danger : (tile.hovered ? Theme.primary : Qt.alpha(Theme.primary, 0.6))
@@ -464,7 +469,7 @@ Drawer {
 
 		z: 100
 		visible: root.dragging
-		radius: Theme.radius.small
+		radius: Math.min(root.tileRadius, height / 2)
 		color: Theme.primaryContainer
 		border.width: 2
 		border.color: Theme.primary

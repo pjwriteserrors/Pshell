@@ -108,7 +108,8 @@ class DaemonTest(unittest.IsolatedAsyncioTestCase):
         port = free_port()
         state = folder / "state" / "pshell"
         state.mkdir(parents=True)
-        (state / "plugins.json").write_text(json.dumps(plugins))
+        # no test daemon goes on Bluetooth next to the running one
+        (state / "plugins.json").write_text(json.dumps({"watch": False, **plugins}))
         (folder / "cache" / "wal").mkdir(parents=True)
         (folder / "cache" / "wal" / "colors.json").write_text(json.dumps({
             "wallpaper": "", "special": {"background": "#101010", "foreground": "#eeeeee"},

@@ -4,19 +4,34 @@
 #
 #   apply_wallpaper_runtime.sh <image-or-video>   select new media and paint it
 #   apply_wallpaper_runtime.sh --ensure           repaint only what is missing
+#   apply_wallpaper_runtime.sh --handoff SIG      the same, waiting its turn,
+#                                                 for the change SIG names
 #
-# The wallpaper stack has three layers, from bottom to top, all on the
-# background layer of the compositor - the shell keeps its widgets on the
-# wallpaper in the bottom layer, and a player there would cover them whenever
-# it maps after the shell. Within one layer the surface mapped last is on top,
-# so a player is always started after swaybg:
+# When the shell draws, a change of media is animated by the shell, and the
+# video player must neither appear nor go while that runs: this script then
+# leaves the player alone (it only keeps the frame it is leaving as
+# current/leaving.jpg for the shell to start from) and the shell calls
+# --handoff once its animation is done.
+#
+# The shell draws the wallpaper itself (core/services/Wallpaper.qml, plugin
+# wallpaper-layer): this script only writes current/ – the shell follows it –
+# and for a video starts mpvpaper on all outputs, above the shell's frame.
+#
+# All players sit on the compositor's background layer: the shell keeps its
+# widgets on the wallpaper in the bottom layer, and a player there would cover
+# them whenever it maps after the shell. Within one layer the surface mapped
+# last is on top, so a player is always started after swaybg.
+#
+# When the shell does not answer (not running yet, the plugin off), the old
+# stack paints instead, from bottom to top:
 #
 #   swaybg     a still frame of the media. swaybg follows output hotplug on its
 #              own, so a monitor that wakes up late is never black.
 #   awww       the image wallpaper, with a transition. awww paints only the
 #              outputs that existed when `awww img` ran, so new outputs have to
 #              be filled in explicitly - that is what --ensure is for.
-#   mpvpaper   one instance per output for video wallpapers, same reason.
+#   mpvpaper   one instance for all outputs (ALL): it decodes the video once and
+#              draws that frame on every screen, and puts new outputs up itself.
 #
 # Every step is idempotent: re-running for the media that is already up only
 # touches outputs that do not show it yet.
@@ -31,6 +46,33 @@ export PATH="/usr/local/bin:/usr/bin:/bin:$HOME/.local/bin:$HOME/.pyenv/shims:$P
 LOG_FILE="${THEME_STATE_DIR}/wallpaper-runtime.log"
 MPVPAPER_LAYER="background"
 MPVPAPER_UNIT_PREFIX="quickshell-mpvpaper-"
+MPVPAPER_UNIT="${MPVPAPER_UNIT_PREFIX}all.service"
+MPVPAPER_SOCKET="$THEME_RUNTIME_DIR/mpvpaper-all.sock"
+# the video the player plays, to tell a player that is up from the right one
+MPVPAPER_VIDEO_FILE="$THEME_RUNTIME_DIR/mpvpaper-all.video"
+THEME_LEAVING_FRAME="$THEME_CURRENT_DIR/leaving.jpg"
+# One player for every screen: the GPU's video decoder (VCN) handles about
+# four 4K/60 streams in all, so a player per output left nothing for a
+# browser's video. The GPU decodes (in software a 4K/60 video is more than
+# a core), a looping file needs no read-ahead cache, and -p pauses it while
+# niri shows none of its surfaces. profile=fast drops what a picture that is
+# shown at its own size does not need (the default chain cost ~30 % of the
+# GPU per 4K screen, now ~6 %); a smaller screen still gets a proper
+# downscaling filter (hermite, mpv's default).
+MPVPAPER_OPTIONS="no-audio loop panscan=1.0 hwdec=auto-safe cache=no demuxer-max-bytes=24MiB demuxer-max-back-bytes=4MiB profile=fast dscale=hermite"
+# libmpv loads every GPU interop when the player starts, CUDA's too: with an
+# NVIDIA card that shows nothing (passed to a VM) cuInit waits ~12 s for a
+# device before the video opens. Where no screen hangs on NVIDIA, VA-API is
+# the only one that can be used anyway.
+nvidia_shows_a_screen() {
+	local connector=""
+	for connector in /sys/class/drm/card*-*; do
+		[[ "$(cat "$connector/status" 2>/dev/null)" == "connected" ]] || continue
+		[[ "$(basename "$(readlink -f "$connector/device/driver" 2>/dev/null)")" == "nvidia" ]] && return 0
+	done
+	return 1
+}
+nvidia_shows_a_screen || MPVPAPER_OPTIONS+=" gpu-hwdec-interop=vaapi"
 AWWW_UNIT="quickshell-awww.service"
 SWAYBG_UNIT="quickshell-swaybg.service"
 
@@ -41,6 +83,8 @@ AWWW_TRANSITION_TYPE="${AWWW_TRANSITION_TYPE:-random}"
 WALLPAPER_FORCE_RESTART="${WALLPAPER_FORCE_RESTART:-0}"
 
 ENSURE_ONLY=0
+HANDOFF=0
+HANDOFF_SIGNATURE=""
 MEDIA_PATH=""
 
 while (($# > 0)); do
@@ -48,6 +92,13 @@ while (($# > 0)); do
 		--ensure)
 			ENSURE_ONLY=1
 			shift
+			;;
+		--handoff)
+			ENSURE_ONLY=1
+			HANDOFF=1
+			HANDOFF_SIGNATURE="${2:-}"
+			shift
+			(($# > 0)) && shift
 			;;
 		--force)
 			WALLPAPER_FORCE_RESTART=1
@@ -72,8 +123,18 @@ theme_ensure_runtime_dirs
 
 # --ensure runs from a watcher and must never fight a real theme change, so it
 # takes the lock without waiting and simply gives up if one is in flight.
+# --handoff comes at the end of the shell's animation and has to happen: the
+# apply that started it may still be finishing.
 exec 9>"$THEME_RUNTIME_DIR/wallpaper-runtime.lock"
-if (( ENSURE_ONLY )); then
+if (( HANDOFF )); then
+	flock -x -w 30 9 || exit 1
+	# a change that came while this one waited hands over itself
+	if [[ -n "$HANDOFF_SIGNATURE" && "$(cat "$THEME_CURRENT_MEDIA_SIGNATURE_FILE" 2>/dev/null)" != "$HANDOFF_SIGNATURE" ]]; then
+		log "handoff for an older change; skipped"
+		exit 0
+	fi
+	log "handoff from the shell"
+elif (( ENSURE_ONLY )); then
 	flock -x -n 9 || exit 0
 else
 	flock -x 9
@@ -322,6 +383,8 @@ awww_outputs_missing() {
 	local image_path="$1"
 	local painted=""
 
+	# without a daemon `awww query` fails, and under pipefail + errexit that
+	# would end this function before it names a single output as missing
 	painted="$(awww query 2>/dev/null | python3 -c '
 import sys
 wanted = sys.argv[1]
@@ -334,7 +397,7 @@ for line in sys.stdin:
     index = rest.find(marker)
     if index >= 0 and rest[index + len(marker):].strip() == wanted:
         print(name.strip())
-' "$image_path")"
+' "$image_path" || true)"
 
 	comm -23 <(list_outputs) <(printf '%s\n' "$painted" | awk 'NF' | sort -u)
 }
@@ -369,34 +432,91 @@ apply_awww() {
 
 # ---------------------------------------------------------------- mpvpaper ---
 
-mpvpaper_unit() {
-	printf '%s%s.service\n' "$MPVPAPER_UNIT_PREFIX" "$(sanitize_output_name "$1")"
+mpvpaper_active() {
+	[[ "$(systemctl --user show --property=ActiveState --value "$MPVPAPER_UNIT" 2>/dev/null)" == "active" ]]
 }
 
-mpvpaper_socket_path() {
-	printf '%s/mpvpaper-%s.sock\n' "$THEME_RUNTIME_DIR" "$(sanitize_output_name "$1")"
-}
-
-mpvpaper_output_active() {
-	[[ "$(systemctl --user show --property=ActiveState --value "$(mpvpaper_unit "$1")" 2>/dev/null)" == "active" ]]
-}
-
+# the outputs without the video: all of them while the player is down or
+# plays another one, none while it runs (it puts up a screen that comes
+# later itself)
 mpvpaper_outputs_missing() {
-	local name=""
-
-	while IFS= read -r name; do
-		[[ -n "$name" ]] || continue
-		mpvpaper_output_active "$name" || printf '%s\n' "$name"
-	done < <(list_outputs)
+	if mpvpaper_active && [[ "$(cat "$MPVPAPER_VIDEO_FILE" 2>/dev/null)" == "$MEDIA_PATH" ]]; then
+		return 0
+	fi
+	list_outputs
 }
 
-stop_mpvpaper_output() {
-	local unit=""
+# mpvpaper_command ARG… : one mpv command over the player's socket; prints
+# what it answers
+mpvpaper_command() {
+	python3 - "$MPVPAPER_SOCKET" "$@" <<'PY'
+import json, socket, sys
+s = socket.socket(socket.AF_UNIX)
+s.settimeout(3)
+s.connect(sys.argv[1])
+s.sendall((json.dumps({"command": sys.argv[2:]}) + "\n").encode())
+for line in s.makefile():
+    reply = json.loads(line)
+    if "request_id" in reply:
+        if reply.get("error") != "success":
+            sys.exit(1)
+        if "data" in reply:
+            print(reply["data"])
+        sys.exit(0)
+PY
+}
 
-	unit="$(mpvpaper_unit "$1")"
+# The frame the player shows, for the shell to animate away from: the player
+# stops on it and that frame is taken from the file (mpv cannot take a
+# screenshot of a picture the GPU decoded). One second between keyframes is
+# ~0.4 s to decode.
+keep_leaving_frame() {
+	local video=""
+	local position=""
+
+	rm -f "$THEME_LEAVING_FRAME"
+	mpvpaper_active && [[ -S "$MPVPAPER_SOCKET" ]] || return 0
+	video="$(cat "$MPVPAPER_VIDEO_FILE" 2>/dev/null || true)"
+	[[ -f "$video" ]] || return 0
+	mpvpaper_command set pause yes >/dev/null 2>&1 || { log "leaving frame: the player does not answer"; return 0; }
+	position="$(mpvpaper_command get_property time-pos 2>/dev/null || true)"
+	[[ "$position" =~ ^[0-9.]+$ ]] || { log "leaving frame: no position ($position)"; return 0; }
+	# frames at or after the time asked: a millisecond before is this one
+	position="$(awk -v p="$position" 'BEGIN { printf "%.3f", (p > 0.001 ? p - 0.001 : 0) }')"
+	if ffmpeg -nostdin -hide_banner -loglevel error -y -ss "$position" -i "$video" -frames:v 1 -q:v 2 \
+		"$THEME_LEAVING_FRAME.tmp.jpg" 2>>"$LOG_FILE"; then
+		mv -f "$THEME_LEAVING_FRAME.tmp.jpg" "$THEME_LEAVING_FRAME"
+		log "leaving frame at ${position}s of $video"
+	else
+		rm -f "$THEME_LEAVING_FRAME.tmp.jpg"
+		log "leaving frame failed at ${position}s of $video"
+	fi
+}
+
+# where the shell's still frame was taken (theme_write_frame: one second in,
+# or the first frame of a shorter video), so the player starts on that image
+video_start() {
+	local duration=""
+	duration="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$1" 2>/dev/null || true)"
+	awk -v d="$duration" 'BEGIN { exit !(d + 0 > 1.5) }' && printf '1\n' || printf '0\n'
+}
+
+# mpvpaper that failed to open its file deadlocks and ignores SIGTERM; a plain
+# `systemctl stop` then waits out the 90 s stop timeout per output while the
+# whole theme apply (and its hooks) queues behind this script's lock. So TERM,
+# a short grace, then KILL.
+stop_mpvpaper_unit() {
+	local unit="$1"
+	local attempt=0
+
+	systemctl --user kill --signal=SIGTERM "$unit" >/dev/null 2>&1 || true
+	for ((attempt = 0; attempt < 10; attempt++)); do
+		[[ "$(systemctl --user show --property=MainPID --value "$unit" 2>/dev/null)" =~ ^[1-9] ]] || break
+		sleep 0.1
+	done
+	systemctl --user kill --signal=SIGKILL "$unit" >/dev/null 2>&1 || true
 	systemctl --user stop "$unit" >/dev/null 2>&1 || true
 	systemctl --user reset-failed "$unit" >/dev/null 2>&1 || true
-	rm -f "$(mpvpaper_socket_path "$1")"
 }
 
 stop_mpvpaper() {
@@ -405,8 +525,7 @@ stop_mpvpaper() {
 
 	while IFS= read -r unit; do
 		[[ -n "$unit" ]] || continue
-		systemctl --user stop "$unit" >/dev/null 2>&1 || true
-		systemctl --user reset-failed "$unit" >/dev/null 2>&1 || true
+		stop_mpvpaper_unit "$unit"
 	done < <(systemctl --user list-units --all --plain --no-legend "${MPVPAPER_UNIT_PREFIX}*" 2>/dev/null | awk '{print $1}')
 
 	pkill -TERM -x mpvpaper >/dev/null 2>&1 || true
@@ -415,51 +534,37 @@ stop_mpvpaper() {
 		sleep 0.1
 	done
 	pgrep -x mpvpaper >/dev/null 2>&1 && pkill -KILL -x mpvpaper >/dev/null 2>&1 || true
-	rm -f "$THEME_RUNTIME_DIR"/mpvpaper-*.sock "$THEME_RUNTIME_DIR"/mpvpaper-*.options
+	rm -f "$THEME_RUNTIME_DIR"/mpvpaper-*.sock "$THEME_RUNTIME_DIR"/mpvpaper-*.options "$MPVPAPER_VIDEO_FILE"
 }
 
-start_mpvpaper_output() {
-	local output="$1"
-	local video_path="$2"
-	local unit=""
-	local socket_path=""
+# the outputs passed are only the ones found missing; the one player covers
+# them all
+apply_mpvpaper() {
+	local video_path="$1"
 	local attempt=0
 
-	unit="$(mpvpaper_unit "$output")"
-	socket_path="$(mpvpaper_socket_path "$output")"
+	command -v mpvpaper >/dev/null 2>&1 || { echo "mpvpaper not found" >&2; return 1; }
 
 	for ((attempt = 0; attempt < 6; attempt++)); do
-		stop_mpvpaper_output "$output"
+		# also the players of one output each that an older version started
+		stop_mpvpaper
 		if systemd-run --user --quiet --collect --service-type=exec \
-			--unit="$unit" \
-			mpvpaper -l "$MPVPAPER_LAYER" \
-			-o "no-audio loop panscan=1.0 input-ipc-server=$socket_path" \
-			"$output" "$video_path"; then
+			--unit="$MPVPAPER_UNIT" --property=TimeoutStopSec=2 \
+			mpvpaper -p -l "$MPVPAPER_LAYER" \
+			-o "$MPVPAPER_OPTIONS start=$(video_start "$video_path") input-ipc-server=$MPVPAPER_SOCKET" \
+			ALL "$video_path"; then
 			sleep 0.3
-			if mpvpaper_output_active "$output"; then
-				log "mpvpaper started output=$output video=$video_path"
+			if mpvpaper_active; then
+				printf '%s\n' "$video_path" >"$MPVPAPER_VIDEO_FILE"
+				log "mpvpaper started outputs=ALL video=$video_path"
 				return 0
 			fi
 		fi
 		sleep 0.4
 	done
 
-	log "mpvpaper failed output=$output video=$video_path"
+	log "mpvpaper failed video=$video_path"
 	return 1
-}
-
-apply_mpvpaper() {
-	local video_path="$1"
-	shift
-	local output=""
-	local failed=0
-
-	command -v mpvpaper >/dev/null 2>&1 || { echo "mpvpaper not found" >&2; return 1; }
-
-	for output in "$@"; do
-		start_mpvpaper_output "$output" "$video_path" || failed=1
-	done
-	return "$failed"
 }
 
 # The player that does not belong to this media type. Left over from a crashed
@@ -472,6 +577,18 @@ stale_player_running() {
 	fi
 }
 
+# ------------------------------------------------------------------ shell ---
+
+# the shell draws the wallpaper: asked a few times, it may just be starting
+shell_paints() {
+	local attempt=0
+	for ((attempt = 0; attempt < 3; attempt++)); do
+		[[ "$("$SCRIPT_DIR/ipc.sh" wallpaper owned 2>/dev/null)" == "true" ]] && return 0
+		sleep 0.5
+	done
+	return 1
+}
+
 # -------------------------------------------------------------------- main ---
 
 readarray -t OUTPUTS < <(wait_for_outputs)
@@ -480,8 +597,16 @@ if (( ${#OUTPUTS[@]} == 0 )); then
 	exit 0
 fi
 
+SHELL_PAINTS=0
+# a handoff comes from the shell, which may just be too busy to answer
+if (( HANDOFF )) || shell_paints; then
+	SHELL_PAINTS=1
+fi
+DEFER_PLAYER=0
+
 if selection_is_unchanged; then
-	media_signature "$MEDIA_PATH" >"$THEME_CURRENT_MEDIA_SIGNATURE_FILE"
+	# only when it was missing: the shell takes a new signature for a change
+	[[ -s "$THEME_CURRENT_MEDIA_SIGNATURE_FILE" ]] || media_signature "$MEDIA_PATH" >"$THEME_CURRENT_MEDIA_SIGNATURE_FILE"
 
 	if (( WALLPAPER_FORCE_RESTART )); then
 		log "wallpaper unchanged; forcing full runtime restart media=$MEDIA_PATH"
@@ -492,18 +617,27 @@ if selection_is_unchanged; then
 		# only the outputs that do not show it, so nothing else flickers.
 		if [[ "$MEDIA_TYPE" == "video" ]]; then
 			readarray -t TARGETS < <(mpvpaper_outputs_missing)
+		elif (( SHELL_PAINTS )); then
+			TARGETS=()
 		else
 			readarray -t TARGETS < <(awww_outputs_missing "$MEDIA_PATH")
 		fi
 		RESTART_BASE_LAYER=0
 
-		if (( ${#TARGETS[@]} == 0 )) && swaybg_running && ! stale_player_running; then
+		if (( SHELL_PAINTS )) && (( ${#TARGETS[@]} == 0 )) && ! pgrep -x swaybg >/dev/null 2>&1 && ! awww_daemon_ready \
+			&& { [[ "$MEDIA_TYPE" == "video" ]] || ! pgrep -x mpvpaper >/dev/null 2>&1; }; then
+			log "wallpaper unchanged, the shell draws it, every player is in place media=$MEDIA_PATH"
+			exit 0
+		fi
+		if (( ! SHELL_PAINTS )) && (( ${#TARGETS[@]} == 0 )) && swaybg_running && ! stale_player_running; then
 			log "wallpaper unchanged and every output is painted media=$MEDIA_PATH"
 			exit 0
 		fi
 		(( ${#TARGETS[@]} )) && log "filling in outputs=${TARGETS[*]} media=$MEDIA_PATH"
 	fi
 else
+	# the shell animates the change and hands over to the player itself
+	(( SHELL_PAINTS )) && keep_leaving_frame
 	extract_frame "$MEDIA_PATH" "$THEME_CURRENT_FRAME_FILE"
 	rm -f "$THEME_CURRENT_MEDIA_LINK" "$THEME_CURRENT_VIDEO_LINK" "$THEME_CURRENT_IMAGE_LINK"
 	ln -s "$MEDIA_PATH" "$THEME_CURRENT_MEDIA_LINK"
@@ -518,9 +652,27 @@ else
 
 	readarray -t TARGETS < <(printf '%s\n' "${OUTPUTS[@]}")
 	RESTART_BASE_LAYER=1
+	(( SHELL_PAINTS )) && DEFER_PLAYER=1
 fi
 
-log "painting type=$MEDIA_TYPE outputs=${TARGETS[*]:-none} media=$MEDIA_PATH"
+log "painting type=$MEDIA_TYPE outputs=${TARGETS[*]:-none} media=$MEDIA_PATH shell=$SHELL_PAINTS"
+
+# the shell has read current/ by now; what it draws needs no swaybg or awww
+if (( SHELL_PAINTS )); then
+	pgrep -x swaybg >/dev/null 2>&1 && stop_swaybg
+	awww_daemon_ready && stop_awww
+	status=0
+	if (( DEFER_PLAYER )); then
+		log "player left to the shell's handoff type=$MEDIA_TYPE"
+	elif [[ "$MEDIA_TYPE" == "video" ]]; then
+		(( ${#TARGETS[@]} )) && { apply_mpvpaper "$MEDIA_PATH" "${TARGETS[@]}" || status=$?; }
+	else
+		pgrep -x mpvpaper >/dev/null 2>&1 && stop_mpvpaper
+	fi
+	log "wallpaper runtime done (shell draws) type=$MEDIA_TYPE media=$MEDIA_PATH status=$status"
+	"$SCRIPT_DIR/ipc.sh" theme painted >/dev/null 2>&1 || true
+	exit "$status"
+fi
 
 if (( RESTART_BASE_LAYER )) || ! swaybg_running; then
 	restart_swaybg "$THEME_CURRENT_FRAME_FILE" || true

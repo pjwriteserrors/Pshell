@@ -4,93 +4,103 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// cliphist history: list, restore, delete, wipe. Image entries are decoded
-// to /tmp on demand for thumbnails.
+// The clipboard history, the shell's own (scripts/clipboard): its daemon
+// keeps every copy as a file and an index, which is read here whenever it
+// changes. Restoring, deleting and wiping go through the daemon.
 Singleton {
 	id: root
 
+	readonly property bool enabled: Plugins.on("clipboard")
+	readonly property string folder: `${Quickshell.env("XDG_CACHE_HOME") || Paths.home + "/.cache"}/pshell/clipboard`
+	// [{ id, kind, mime, preview, isImage, extension, meta, path, previewPath, time }], newest first
 	property var entries: []
-	readonly property bool loading: listProc.running
-	// "image" or "text": put back on the clipboard once the list is in
-	property string pendingLatest: ""
-
-	function shellEscape(value) {
-		return String(value).replace(/'/g, `'"'"'`);
-	}
-
-	function imageExtension(preview) {
-		const text = String(preview || "").toLowerCase();
-		if (text.includes(" png ")) return "png";
-		if (text.includes(" jpeg ") || text.includes(" jpg ")) return "jpg";
-		if (text.includes(" webp ")) return "webp";
-		if (text.includes(" gif ")) return "gif";
-		return "";
-	}
+	readonly property bool loading: false
 
 	function parse(raw) {
-		const next = [];
-		for (const line of String(raw || "").split("\n")) {
-			if (line.trim() === "") continue;
-			const match = line.match(/^(\d+)\s+(.*)$/);
-			if (!match) continue;
-			const preview = match[2];
-			const extension = root.imageExtension(preview);
-			const isImage = preview.startsWith("[[ binary data") && extension !== "";
-			const size = isImage ? (preview.match(/(\d+(?:\.\d+)?\s*[KMG]i?B)/) || [""])[0] : "";
-			const dims = isImage ? (preview.match(/(\d+x\d+)/) || [""])[0] : "";
-			next.push({
-				id: match[1],
-				preview: preview,
-				raw: line,
+		let list = [];
+		try {
+			list = JSON.parse(raw || "[]");
+		} catch (error) {
+			return;
+		}
+		root.entries = (Array.isArray(list) ? list : []).map(entry => {
+			const isImage = entry.kind === "image";
+			const path = `${root.folder}/items/${entry.file ?? entry.id}`;
+			const extension = isImage ? String(entry.file ?? "").split(".").pop() : "";
+			return {
+				id: String(entry.id),
+				kind: entry.kind,
+				mime: entry.mime,
+				// copied files read as their uris, the way they came
+				preview: isImage ? "" : String(entry.preview ?? ""),
 				isImage: isImage,
 				extension: extension,
-				meta: [extension.toUpperCase(), dims, size].filter(v => v !== "").join(" · "),
-				previewPath: isImage ? `/tmp/qs-cliphist-preview-${match[1]}.${extension}` : ""
-			});
-		}
-		root.entries = next;
-		if (root.pendingLatest === "") return;
-		const image = root.pendingLatest === "image";
-		root.pendingLatest = "";
-		const entry = next.find(e => image ? e.isImage : !e.preview.startsWith("[[ binary data"));
-		if (entry) root.restore(entry);
+				meta: isImage ? [extension.toUpperCase(), entry.width ? `${entry.width}x${entry.height}` : "", Format.bytes(entry.size)].filter(v => v !== "").join(" · ") : "",
+				path: path,
+				previewPath: isImage ? path : "",
+				time: Number(entry.time || 0)
+			};
+		});
 	}
 
+	function send(command) {
+		if (daemon.running) daemon.write(JSON.stringify(command) + "\n");
+	}
+
+	// the list is read as it changes; kept for callers of old
 	function refresh() {
-		listProc.running = true;
+		index.reload();
 	}
 
 	// the newest image or text of the history becomes the clipboard again
 	function restoreLatest(kind) {
-		root.pendingLatest = kind;
-		root.refresh();
+		root.send({ op: "latest", kind: kind });
 	}
 
 	function restore(entry) {
-		if (!entry?.raw) return;
-		Quickshell.execDetached(["sh", "-lc", `printf '%s\n' '${root.shellEscape(entry.raw)}' | cliphist decode | wl-copy`]);
+		if (entry?.id !== undefined) root.send({ op: "restore", id: Number(entry.id) });
 	}
 
 	function remove(entry) {
-		if (!entry?.raw) return;
-		Quickshell.execDetached(["sh", "-lc", `printf '%s\n' '${root.shellEscape(entry.raw)}' | cliphist delete`]);
-		root.entries = root.entries.filter(e => e.raw !== entry.raw);
+		if (entry?.id === undefined) return;
+		root.send({ op: "delete", ids: [Number(entry.id)] });
+		root.entries = root.entries.filter(e => e.id !== entry.id);
 	}
 
 	function wipe() {
-		Quickshell.execDetached(["sh", "-lc", "cliphist wipe"]);
+		root.send({ op: "wipe" });
 		root.entries = [];
 	}
 
-	function decodeCommand(entry) {
-		return ["sh", "-lc", `[ -s '${root.shellEscape(entry.previewPath)}' ] || printf '%s\n' '${root.shellEscape(entry.raw)}' | cliphist decode > '${root.shellEscape(entry.previewPath)}'`];
+	Process {
+		id: daemon
+
+		running: root.enabled
+		stdinEnabled: true
+		command: ["python3", "-u", `${Paths.scripts}/clipboard/history.py`]
+		stdout: SplitParser {
+			// the index file is watched; this only makes sure of it
+			onRead: line => {
+				if (line.indexOf('"added"') >= 0) index.reload();
+			}
+		}
+		onExited: if (root.enabled) revive.restart()
 	}
 
-	Process {
-		id: listProc
-		command: ["sh", "-lc", "cliphist list"]
-		stdout: StdioCollector {
-			onStreamFinished: root.parse(text)
-		}
+	Timer {
+		id: revive
+
+		interval: 3000
+		onTriggered: daemon.running = root.enabled
+	}
+
+	FileView {
+		id: index
+
+		path: root.enabled ? `${root.folder}/index.json` : ""
+		watchChanges: true
+		printErrors: false
+		onFileChanged: index.reload()
+		onLoaded: root.parse(index.text())
 	}
 }

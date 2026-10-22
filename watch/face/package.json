@@ -1,0 +1,10 @@
+{
+  "name": "pshell-watch-face",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The shell's watch face (docs/watch.md)",
+  "devDependencies": {
+    "@zeppos/device-types": "^3.0.0"
+  }
+}

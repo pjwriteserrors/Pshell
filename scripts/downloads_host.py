@@ -32,13 +32,14 @@ import threading
 import time
 import zipfile
 from pathlib import Path
+import host  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 EXTENSION = ROOT / "dotfiles" / "floorp" / "downloads"
 NAME = "pshell_downloads"
 ID = "downloads@pshell"
 HOSTS = [Path.home() / ".mozilla" / "native-messaging-hosts", Path.home() / ".config" / "floorp" / "native-messaging-hosts"]
-STATE = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / "pshell"
+STATE = host.state_dir()
 PACKAGE = STATE / "pshell-downloads.xpi"
 RUNTIME = os.environ.get("PSHELL_RUNTIME_DIR") or os.path.join(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}", "pshell")
 SOCKET = Path(RUNTIME) / "downloads.sock"

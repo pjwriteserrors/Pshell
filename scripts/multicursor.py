@@ -61,6 +61,9 @@ import time
 import unicodedata
 from collections import deque
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "clipboard"))
+import clipstore as store  # noqa: E402
+
 NAME = "pshell multicursor"
 
 CTRL, SHIFT, ALT, ALTGR = 29, 42, 56, 100
@@ -431,7 +434,7 @@ class Clipboard:
 
 class Tidy:
     """Takes what was read out of text fields out of the clipboard history
-    (cliphist) again, once nothing has been read for a moment."""
+    (scripts/clipboard) again, once nothing has been read for a moment."""
 
     def __init__(self):
         self.junk: set[bytes] = set()
@@ -455,16 +458,9 @@ class Tidy:
                     junk, self.junk, self.running = self.junk, set(), False
                     break
             time.sleep(left)
-        # a line of the history: its number and how the entry starts, blanks as one space
-        starts = {" ".join(data.decode("utf-8", "replace").split())[:48] for data in junk} - {""}
         try:
-            listing = subprocess.run(["cliphist", "list"], capture_output=True, timeout=5).stdout.splitlines()
-            for line in listing[:min(600, 3 * len(junk) + 20)]:
-                shown = line.partition(b"\t")[2].decode("utf-8", "replace")
-                if any(shown.startswith(start) for start in starts) and subprocess.run(
-                        ["cliphist", "decode"], input=line + b"\n", capture_output=True, timeout=3).stdout in junk:
-                    subprocess.run(["cliphist", "delete"], input=line + b"\n", timeout=3)
-        except (OSError, subprocess.SubprocessError):
+            store.delete_content(junk, newest=min(600, 3 * len(junk) + 20))
+        except OSError:
             pass
 
 

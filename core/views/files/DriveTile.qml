@@ -92,7 +92,7 @@ Item {
 		}
 
 		Text {
-			text: root.place.mounted ? (root.place.total > 0 ? `${Files.sizeText(root.place.free)} free of ${Files.sizeText(root.place.total)}` : "Connected") : "Not mounted – click to mount"
+			text: root.place.mounted ? (root.place.total > 0 ? `${Format.bytes(root.place.free)} free of ${Format.bytes(root.place.total)}` : "Connected") : "Not mounted – click to mount"
 			color: Theme.textSubtle
 			font.family: Theme.fontFamily
 			font.pixelSize: Theme.size.small

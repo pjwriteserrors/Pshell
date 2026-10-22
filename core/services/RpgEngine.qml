@@ -8,7 +8,6 @@ Scope {
 	id: root
 
 	required property string statePath
-	required property string monitorPath
 
 	signal notificationRequested(string title, string body)
 
@@ -214,7 +213,7 @@ Scope {
 		}
 		if (packet.type === "error") {
 			inputStatus = packet.reason === "permission"
-				? "Keine Leserechte – scripts/setup-rpg-input-access.sh ausführen"
+				? "Keine Leserechte – scripts/setup-input-access.sh ausführen"
 				: "Keine Tastatur/Maus unter /dev/input/by-id gefunden";
 			root.notificationRequested("RPG-Eingabe nicht verfügbar", inputStatus);
 			return;
@@ -401,11 +400,20 @@ Scope {
 		onLoaded: root.loadState(text())
 	}
 
-	Process {
-		id: inputMonitor
-		running: root.active
-		command: ["python3", "-u", root.monitorPath, "--interval", "2"]
-		stdout: SplitParser { onRead: data => root.ingestInput(data) }
+	// presses counted by the shell's one input reader
+	Binding {
+		target: Input
+		property: "counting"
+		value: root.active
+	}
+
+	Connections {
+		target: Input
+		enabled: root.active
+
+		function onActivity(counts) {
+			root.ingestInput(JSON.stringify({ type: "activity", keys: counts.keys, clicks: counts.clicks }));
+		}
 	}
 
 	Timer {

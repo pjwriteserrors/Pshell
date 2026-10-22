@@ -22,7 +22,7 @@ Scope {
 
 	property bool locked: false
 
-	readonly property string wallpaperFramePath: `${Quickshell.env("HOME")}/.local/state/quickshell-theme/current/frame.png`
+	readonly property string wallpaperFramePath: `${Paths.themeState}/current/frame.png`
 	readonly property string wallpaperFrameSource: `file://${root.wallpaperFramePath}?v=${root.wallpaperFrameSerial}`
 	readonly property string statusText: {
 		if (root.passwordActive) return "Checking…";
@@ -222,8 +222,12 @@ Scope {
 				id: wallpaper
 
 				anchors.fill: parent
-				source: root.wallpaperFrameSource
+				// only while locked, and at half the screen's size under the blur:
+				// kept all the time it was a 4K picture a screen for nothing
+				source: root.locked ? root.wallpaperFrameSource : ""
+				sourceSize: Qt.size(Math.ceil(width * (lockWindow.devicePixelRatio || 1) / 2), Math.ceil(height * (lockWindow.devicePixelRatio || 1) / 2))
 				fillMode: Image.PreserveAspectCrop
+				asynchronous: true
 				cache: false
 				visible: false
 			}
@@ -647,7 +651,7 @@ Scope {
 
 	Process {
 		id: fingerprintAvailableCheck
-		command: ["sh", "-lc", "fprintd-list \"$USER\""]
+		command: ["fprintd-list", Host.user]
 		onExited: exitCode => {
 			root.fingerprintAvailable = exitCode === 0;
 			if (root.fingerprintAvailable) root.startFingerprintAuth();

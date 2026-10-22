@@ -66,7 +66,7 @@ Singleton {
 		if (into !== undefined && into !== null) args.into = String(into);
 		Phone.call("pcs", "send", args, (data, error) => {
 			if (error) return root.report(error);
-			Notifs.pushInternal("running", `To ${root.nameOf(id)}`, data.count === 1 ? `${root.baseName(clean[0])} · ${root.sizeText(data.size)}` : `${data.count} files · ${root.sizeText(data.size)}`, { icon: "laptop", duration: 4000 });
+			Notifs.pushInternal("running", `To ${root.nameOf(id)}`, data.count === 1 ? `${root.baseName(clean[0])} · ${Format.bytes(data.size)}` : `${data.count} files · ${Format.bytes(data.size)}`, { icon: "laptop", duration: 4000 });
 		}, { timeout: 30 });
 	}
 
@@ -165,19 +165,6 @@ Singleton {
 	}
 
 	// ── what the daemon says ───────────────────────────────────────────────
-	function sizeText(bytes) {
-		const value = Number(bytes) || 0;
-		if (value < 1024) return `${value} B`;
-		const units = ["KB", "MB", "GB", "TB"];
-		let size = value / 1024;
-		let unit = 0;
-		while (size >= 1024 && unit < units.length - 1) {
-			size /= 1024;
-			unit += 1;
-		}
-		return `${size.toFixed(size < 10 ? 1 : 0)} ${units[unit]}`;
-	}
-
 	function baseName(path) {
 		return String(path).replace(/\/$/, "").replace(/^.*\//, "");
 	}
@@ -201,7 +188,7 @@ Singleton {
 				Sounds.play("taskDone");
 				Notifs.pushInternal(data.stopped ? "error" : "done",
 					one !== "" ? root.baseName(one) : `${data.files} files`,
-					`${data.stopped ? "Stopped on its way, from" : "From"} ${data.name} · ${root.sizeText(data.size)}`, {
+					`${data.stopped ? "Stopped on its way, from" : "From"} ${data.name} · ${Format.bytes(data.size)}`, {
 					icon: "laptop",
 					image: image ? one : "",
 					duration: 9000,
@@ -234,7 +221,7 @@ Singleton {
 				break;
 			case "incoming":
 				if (Number(data.size) > 50 * 1024 * 1024)
-					Notifs.pushInternal("running", `From ${data.name}`, `${data.count === 1 ? "A file" : `${data.count} files`} · ${root.sizeText(data.size)} on the way`, { icon: "laptop" });
+					Notifs.pushInternal("running", `From ${data.name}`, `${data.count === 1 ? "A file" : `${data.count} files`} · ${Format.bytes(data.size)} on the way`, { icon: "laptop" });
 				break;
 			}
 		}

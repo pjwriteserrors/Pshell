@@ -275,7 +275,7 @@ Item {
 					id: picked
 
 					anchors.centerIn: parent
-					text: `${root.pane.selectionCount} picked${root.pane.selectedSize > 0 ? " · " + Files.sizeText(root.pane.selectedSize) : ""}`
+					text: `${root.pane.selectionCount} picked${root.pane.selectedSize > 0 ? " · " + Format.bytes(root.pane.selectedSize) : ""}`
 					color: Theme.primary
 					font.family: Theme.fontFamily
 					font.pixelSize: Theme.size.small
@@ -299,7 +299,7 @@ Item {
 			Text {
 				visible: root.pane.total > 0
 				anchors.verticalCenter: parent.verticalCenter
-				text: `${Files.sizeText(root.pane.free)} free`
+				text: `${Format.bytes(root.pane.free)} free`
 				color: Theme.textSubtle
 				font.family: Theme.fontFamily
 				font.pixelSize: Theme.size.small

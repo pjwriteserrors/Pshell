@@ -23,7 +23,7 @@ Fenster weiter. Der Monitor liest deshalb Linux-Inputgeräte direkt, benötigt
 aber eine udev-Freigabe für die aktive lokale Sitzung:
 
 ```bash
-./scripts/setup-rpg-input-access.sh
+./scripts/setup-input-access.sh
 ```
 
 Das Skript installiert eine kleine `uaccess`-Regel für Keyboard- und

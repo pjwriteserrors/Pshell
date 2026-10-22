@@ -1,0 +1,13 @@
+{
+  "name": "pshell-watch",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The shell's watch app (docs/watch.md)",
+  "dependencies": {
+    "@silver-zepp/easy-ble": "1.7.8-e"
+  },
+  "devDependencies": {
+    "@zeppos/device-types": "^3.0.0"
+  },
+  "type": "module"
+}

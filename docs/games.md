@@ -2,7 +2,7 @@
 
 `games` is a library of every game on the machine (`>games`,
 `scripts/ipc.sh games toggle|open|add <path>|launch <id>|list`;
-`core/views/overlays/GameLibrary.qml` and `games/` beside it,
+`core/views/games/GameLibrary.qml` and `games/` beside it,
 `core/services/Games.qml`, `scripts/games.py`).
 
 What is in it:
@@ -61,7 +61,7 @@ favourite, Y or Start the menu, LB/RB the filters, Select the grid.
 `games.py running` finds what runs: Steam's reaper (`SteamLaunch
 AppId=<id>`) and the watchers of games started here.
 
-`games-bar` puts the library under the bar as well (`core/views/panels/GamesPanel.qml`,
+`games-bar` puts the library under the bar as well (`core/views/games/GamesPanel.qml`,
 `scripts/ipc.sh games panel`): the gamepad in the bar opens a panel with the
 picked game as a banner (its hero, logo, what is known, favourite, Play)
 over its covers – Recent (what runs first), Favourites or All, two rows to
@@ -71,3 +71,53 @@ button or Ctrl+Enter opens the full library on the same game, the menu
 button or a right click on a cover opens it there with its menu. A right
 click on the bar's gamepad opens the full library straight away; it turns
 green while a game runs.
+
+Fullscreen and the controller, for every game however it starts:
+
+- `scripts/games_guard.py` runs with the shell while the plugin is on and
+  follows niri's event stream. A window is a game's when its app-id is
+  `steam_app_<n>` (Proton, through Steam or a shortcut) or it belongs to a
+  game that runs – Steam's reaper (also a game started in Steam itself) or a
+  watcher of here: its process, its app-id being one of the game's programs
+  (Wine, X11) or its title the game's name. It is made fullscreen when it
+  opens and again when it leaves fullscreen in its first 30 s (games that
+  size their window while they load); niri only toggles, so a window is
+  asked again only after it was seen fullscreen. After that Mod+Shift+F is
+  the user's. `dotfiles/niri/pshell.kdl` also opens `steam_app_<n>` windows
+  fullscreen right away, with the shell down too.
+- Games started here outside Steam (Proton, Wine, Linux) get an environment
+  without what Steam leaves for its games (`SDL_GAMECONTROLLER_IGNORE_DEVICES`,
+  `SteamVirtualGamepadInfo`, the overlay in `LD_PRELOAD`, …), which would hide
+  the real controller (`windows.clean_env`).
+- Non-Steam games in Steam run without the desktop layout
+  (`AllowDesktopConfig 0`): on Wayland Steam cannot tell the game's window
+  has the focus, keeps its desktop layout, and the controller moves the
+  mouse instead of reaching the game. *Add to Steam* sets it for every
+  shortcut, a shortcut started while Steam is closed fixes them on the way,
+  `games.py steam-pads` does it now (restarting Steam if it runs).
+- A launch with no controller on (no joystick node) says so in a
+  notification; Wine, Proton and SDL pick one up that is switched on later.
+
+## A game's landing page
+
+I (or the chart button; the bar's panel has one too) opens a page over the
+library: how far along the game is – the play time against HowLongToBeat's
+story, story with extras or everything (`games.py stats`; the goal is kept
+per game with `games.py goal`, or the game is marked beaten) –, Steam's
+achievements from the client's own cache (`appcache/stats`, the latest
+unlocked with their icons), and the play of the last four weeks, a bar a
+day, from the sessions the shell keeps (`game-sessions.json`: every game
+seen running, from first to last seen; the watcher of a game started here
+keeps its own, merged). HowLongToBeat answers are cached for 30 days
+(`~/.cache/pshell/games/hltb.json`), a game it does not know is asked again
+after a day.
+
+## Game mode
+
+While a game's window is open (`games_guard.py` decides every window once
+and tells the shell; Steam games started in Steam count too) game mode is
+on (plugin `game-mode`, `ipc.sh gamemode set on|off|auto`): shaking the
+mouse no longer looks for it, notifications go quiet if wanted
+(`gamemode.json`), and the mouse's game haptics play while the game has the
+focus.
+

@@ -3,12 +3,29 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import qs.core.services
-import qs.core.views.panels
-import qs.core.views.panels.printer
-import qs.core.views.overlays
-import qs.core.views.rpg
-import qs.core.views.overlays.studio
+import qs.core.views.breaks
 import qs.core.views.files
+import qs.core.views.games
+import qs.core.views.identity
+import qs.core.views.launcher
+import qs.core.views.media
+import qs.core.views.messages
+import qs.core.views.overlays
+import qs.core.views.panels
+import qs.core.views.printer
+import qs.core.views.rpg
+import qs.core.views.screenshot
+import qs.core.views.screentime
+import qs.core.views.settings
+import qs.core.views.shelf
+import qs.core.views.ssh
+import qs.core.views.switcher
+import qs.core.views.studio
+import qs.core.views.todos
+import qs.core.views.torrents
+import qs.core.views.tracking
+import qs.core.views.vm
+import qs.core.views.watch
 // last, so a view of the same name in style/views wins
 import qs.style.views
 
@@ -17,7 +34,32 @@ import qs.style.views
 // here and by the plugin switches, never by the style.
 Scope {
 	// services that act on their own, without a surface to pull them in
-	readonly property var background: [Agents, TimerGuard, ClipboardHints, Phone, Mail, WhatsApp, Autocorrect, Screentime, Multicursor, Sounds, FindMouse]
+	readonly property var background: [Polkit, Agents, TimerGuard, Clipboard, ClipboardHints, Phone, Mail, WhatsApp, Autocorrect, Screentime, Multicursor, Sounds, FindMouse]
+
+	// the wallpaper, under everything (a video's players cover it)
+	Variants {
+		model: Wallpaper.enabled && !Wallpaper.covered ? Quickshell.screens : []
+
+		WallpaperLayer {}
+	}
+
+	// above a video's player while a change leaves it
+	Variants {
+		model: Wallpaper.enabled && Wallpaper.curtain ? Quickshell.screens : []
+
+		WallpaperLayer {
+			curtain: true
+		}
+	}
+
+	// and its copy in the niri overview, between the workspaces
+	Variants {
+		model: Wallpaper.enabled ? Quickshell.screens : []
+
+		WallpaperLayer {
+			backdrop: true
+		}
+	}
 
 	// notifications and the shell's own messages
 	Variants {
@@ -52,41 +94,84 @@ Scope {
 		KvmEdge {}
 	}
 
+	// the overlays of a screen exist while they are wanted, and a moment
+	// after for their way out: four screens of them cost memory for nothing
+	Hold {
+		id: finding
+		when: FindMouse.active
+	}
+
+	Hold {
+		id: capturing
+		when: Screenshot.phase !== "idle"
+	}
+
+	Hold {
+		id: shelving
+		when: Shelf.shelves.length > 0 || Shelf.locating !== ""
+	}
+
+	Hold {
+		id: dropping
+		when: DropCommands.active
+	}
+
+	Hold {
+		id: pinning
+		when: Screenshot.pins.length > 0
+	}
+
+	// Alt+Tab: kept a minute after it closed, the next Alt+Tab comes soon
+	Hold {
+		id: switching
+		when: Switcher.open
+		keep: 60000
+	}
+
+	LazyLoader {
+		active: Plugins.on("window-switcher") && switching.held
+
+		SwitcherWindow {}
+	}
+
 	// the light on a pointer that is shaken
 	Variants {
-		model: Plugins.on("find-mouse") ? Quickshell.screens : []
+		model: Plugins.on("find-mouse") && finding.held ? Quickshell.screens : []
 
 		MouseFinder {}
 	}
 
 	Variants {
-		model: Plugins.on("screenshot") ? Quickshell.screens : []
+		model: Plugins.on("screenshot") && capturing.held ? Quickshell.screens : []
 
 		ScreenshotOverlay {}
 	}
 
 	// pinned screenshots, always on top
 	Variants {
-		model: Plugins.on("pins") ? Quickshell.screens : []
+		model: Plugins.on("pins") && pinning.held ? Quickshell.screens : []
 
 		ScreenshotPins {}
 	}
 
 	// shelves (Dropover-like stashes), above the windows
 	Variants {
-		model: Plugins.on("shelves") ? Quickshell.screens : []
+		model: Plugins.on("shelves") && shelving.held ? Quickshell.screens : []
 
 		Shelves {}
 	}
 
 	// commands for what is being dragged, around the pointer
 	Variants {
-		model: Plugins.on("drop-commands") ? Quickshell.screens : []
+		model: Plugins.on("drop-commands") && dropping.held ? Quickshell.screens : []
 
 		CommandRing {}
 	}
 
-	// panels (one instance each, they follow the screen they are opened on)
+	// panels (one instance each, they follow the screen they are opened on).
+	// Each is built when it first opens and kept a while after it closed
+	// (Popups.wanted); the launcher, the control centre and today stay
+	// built, they open all the time and have to be there at once.
 	Launcher {}
 
 	LazyLoader {
@@ -102,26 +187,32 @@ Scope {
 	}
 
 	LazyLoader {
-		active: Plugins.on("breaks")
+		active: Plugins.on("breaks") && Popups.wanted("breaks")
 
 		BreaksPanel {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("screentime")
+		active: Plugins.on("screentime") && Popups.wanted("screentime")
 
 		ScreentimePanel {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("printer")
+		active: Plugins.on("watch") && Popups.wanted("watch")
+
+		WatchPanel {}
+	}
+
+	LazyLoader {
+		active: Plugins.on("printer") && Popups.wanted("printer")
 
 		PrinterPanel {}
 	}
 
 	// popped out, and the camera's feed
 	LazyLoader {
-		active: Plugins.on("printer") && Printer.windowed
+		active: Plugins.on("printer") && !Printer.surface.panelled && Printer.windowOpen
 
 		PrinterWindow {}
 	}
@@ -133,121 +224,125 @@ Scope {
 	}
 
 	LazyLoader {
-		active: Plugins.on("media")
+		active: Plugins.on("media") && Popups.wanted("media")
 
 		MediaPanel {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("clipboard")
+		active: Plugins.on("clipboard") && Popups.wanted("clipboard")
 
 		ClipboardPanel {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("tray")
+		active: Plugins.on("tray") && Popups.wanted("tray")
 
 		TrayMenuPanel {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("overview")
+		active: Plugins.on("overview") && Popups.wanted("overview")
 
 		OverviewPanel {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("updates")
+		active: Plugins.on("updates") && Popups.wanted("updates")
 
 		UpdatesPanel {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("qtrack")
+		active: Plugins.on("qtrack") && Popups.wanted("timer")
 
 		TimerPanel {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("qtrack")
+		active: Plugins.on("qtrack") && Popups.wanted("tracking")
 
 		TrackingPanel {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("ssh")
+		active: Plugins.on("ssh") && Popups.wanted("ssh")
 
 		SshPanel {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("notes")
+		active: Plugins.on("notes") && Popups.wanted("notes")
 
 		NotesPanel {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("messages")
+		active: Plugins.on("messages") && Popups.wanted("messages")
 
 		MessagesPanel {}
 	}
 
 	// … and the same as a window of its own
 	LazyLoader {
-		active: Plugins.on("messages")
+		active: Plugins.on("messages") && !Messages.surface.panelled && Messages.windowOpen
 
 		MessagesWindow {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("identities")
+		active: Plugins.on("identities") && Popups.wanted("identity")
 
 		IdentityPanel {}
 	}
 
 	// … and the same as a window of its own
 	LazyLoader {
-		active: Plugins.on("identities")
+		active: Plugins.on("identities") && !Identities.surface.panelled && Identities.windowOpen
 
 		IdentityWindow {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("fast-reader")
+		active: Plugins.on("fast-reader") && Popups.wanted("reader")
 
 		ReaderPanel {}
 	}
 
 	// full-screen overlays
-	PluginsWindow {}
-
 	LazyLoader {
-		active: Plugins.on("niri-settings")
+		active: Popups.wanted("plugins")
 
-		NiriSettingsWindow {}
+		PluginsWindow {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("power-menu")
+		active: Plugins.on("niri-settings") && Popups.wanted("niri")
+
+		SettingsWindow {}
+	}
+
+	LazyLoader {
+		active: Plugins.on("power-menu") && Popups.wanted("power")
 
 		PowerMenu {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("vm-launcher")
+		active: Plugins.on("vm-launcher") && Popups.wanted("vm")
 
 		VmLauncher {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("games")
+		active: Plugins.on("games") && Popups.wanted("games")
 
 		GameLibrary {}
 	}
 
 	// … and as a panel under the bar
 	LazyLoader {
-		active: Plugins.on("games-bar")
+		active: Plugins.on("games-bar") && Popups.wanted("gamebar")
 
 		GamesPanel {}
 	}
@@ -259,6 +354,20 @@ Scope {
 		FilesWindow {}
 	}
 
+	// the torrent client's window; the downloads run in its daemon
+	LazyLoader {
+		active: Plugins.on("torrents") && !Torrents.surface.panelled && Torrents.windowOpen
+
+		TorrentsWindow {}
+	}
+
+	// under the bar, from the magnet in the bar
+	LazyLoader {
+		active: Plugins.on("torrents-bar") && Popups.wanted("torrents")
+
+		TorrentsPanel {}
+	}
+
 	LazyLoader {
 		active: Plugins.on("radial-menu")
 
@@ -266,52 +375,59 @@ Scope {
 	}
 
 	LazyLoader {
-		active: Plugins.on("eye-rest")
+		active: Plugins.on("eye-rest") && Popups.wanted("eyerest")
 
 		EyeRest {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("stretch")
+		active: Plugins.on("stretch") && Popups.wanted("stretch")
 
 		StretchBreak {}
 	}
 
 	// Studio
 	LazyLoader {
-		active: Plugins.on("studio-wallpaper")
+		active: Plugins.on("studio-wallpaper") && Popups.wanted("theme")
 
 		ThemePicker {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("studio-motion")
+		active: Plugins.on("studio-motion") && Popups.wanted("animation")
 
 		AnimationPicker {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("studio-dress")
+		active: Plugins.on("studio-dress") && Popups.wanted("dress")
 
 		DressPage {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("studio-styles")
+		active: Plugins.on("studio-styles") && Popups.wanted("styles")
 
 		StylePage {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("studio-combinations")
+		active: Plugins.on("studio-combinations") && Popups.wanted("combinations")
 
 		CombinationsPage {}
 	}
 
 	LazyLoader {
-		active: Plugins.on("studio-sounds")
+		active: Plugins.on("studio-sounds") && Popups.wanted("sounds")
 
 		SoundPackPage {}
+	}
+
+	// a program asks for an administrator's password
+	LazyLoader {
+		active: Polkit.active
+
+		PolkitDialog {}
 	}
 
 	LazyLoader {

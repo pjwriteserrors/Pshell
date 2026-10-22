@@ -14,8 +14,10 @@ core/            features: services, IPC, every surface, the views styles fall b
   Surfaces.qml   instantiates every surface, gated by its plugin
 style/           the look: Frame.qml (what hangs on the screen edges), theme/, widgets/, bar/
   phone/         what the shell publishes to the phone app, one topic a file
-scripts/         theme pipeline, wallpaper runtime, style switching, setup
+scripts/         what the shell runs: theme pipeline, wallpaper runtime, daemons, setup
   phone/         the daemon between the phone app and the shell (docs/mobile.md)
+  dev/           tools for building: plugin.py, check_style.py, sync_styles.sh, …
+  tests/         the tests that run without a desktop
 mobile/          the Android app and the protocol both ends speak
 hosts/           machines.json (hostname → profile) and one profile per machine
 dotfiles/        files outside the repo, placed by install.sh (see manifest)
@@ -37,6 +39,35 @@ system/          root-level setup: SDDM theme, fingerprint PAM
   `scripts/ipc.sh <target> <function>`; niri binds use `qs -c shell`.
 - **No absolute home paths.** `$HOME`, `Paths`, `Host`.
 
+## Done by the shell itself
+
+The bar's items and their order are `BarLayout` (`bar.json`, Pshell
+settings › Bar & wallpaper); `style/bar/BarZone.qml` maps an item id to
+what the style draws for it. Game mode (`GameMode`, plugin `game-mode`)
+follows the game windows `games_guard.py` reports.
+
+What desktops usually leave to helpers the shell does, so it looks like the
+shell and costs nothing extra: the wallpaper (`Wallpaper`, swaybg and awww are
+only a fallback), the clipboard history (`Clipboard`, `scripts/clipboard`),
+password prompts (`Polkit`, plugin `polkit`), notifications of its own
+(`Notifs.post`), the battery and power profiles (UPower), the network
+(NetworkManager through `Quickshell.Networking`), what plays (MPRIS, `ipc.sh
+media`), arithmetic (`Calc`). niri's events come through one stream
+(`Niri`), handed on to the daemons that follow it; mice and keyboards are read
+by one daemon (`Input`, `scripts/input_watch.py`); one cava serves every
+visualizer (`Cava`). Panels, modals and the overlays of every screen are built
+when they are wanted (`Popups.wanted`, `Hold`), not at start.
+
+Alt+Tab can be the shell's (`Switcher`, plugin `window-switcher`, Overview
+page): it writes spawn binds into `keybinds.kdl` and switches niri's
+`recent-windows` off. Pictures of the windows come from niri's ScreenCast,
+one cast per window (`scripts/window_shots.py`, also windows on hidden
+workspaces); the held modifier is read from evdev while it is open
+(`scripts/held_keys.py`), so a quick Alt+Tab switches before anything is
+mapped. Its window is mapped only once it shows, and the screen behind it is
+taken with grim: an in-process ScreencopyView (and a ShortcutInhibitor)
+taken down with the surface crashed Qt's Wayland client.
+
 ## Plugins
 
 `core/plugins.json` lists every plugin: `id`, `name`, `category`, optionally
@@ -55,21 +86,21 @@ QML asks `Plugins.on("id")`, scripts `scripts/host.py has id`. A plugin that
 is off neither shows up nor polls; its IPC target is disabled.
 `scripts/ipc.sh plugins enable|disable <id>` switches from a script.
 
-A new plugin goes through `scripts/plugin.py`:
+A new plugin goes through `scripts/dev/plugin.py`:
 
 ```
-scripts/plugin.py new pomodoro --name "Pomodoro" --category Panels \
+scripts/dev/plugin.py new pomodoro --name "Pomodoro" --category Panels \
     --on bar,clock --ipc "panels toggle pomodoro"     # registers it
 # gate it: Plugins.on("pomodoro") at its surface (core/Surfaces.qml), bar
 # element, launcher command (`plugin: "pomodoro"`), IPC target, timers
-scripts/plugin.py check                               # complete?
-scripts/plugin.py preview pomodoro                    # its picture
+scripts/dev/plugin.py check                               # complete?
+scripts/dev/plugin.py preview pomodoro                    # its picture
 ```
 
 A `--category` that does not exist yet becomes a new tab of `>plugins`; tabs
 appear in the order of the registry. `--ipc`, `--on` and `--base` are the
 scene its preview picture (`assets/plugins/<id>.png`) is taken with, in a
-nested niri (`scripts/plugin_previews.py` explains the keys); a plugin that
+nested niri (`scripts/dev/plugin_previews.py` explains the keys); a plugin that
 cannot be shown gets `--icon` instead. `check` fails when a plugin is
 registered but nothing asks `Plugins.on()` for it, when the shell asks for one
 that is not registered, when `requires` or a host profile name an unknown one,
@@ -84,6 +115,9 @@ or when a plugin has neither picture, scene nor icon.
 | --- | --- |
 | `plugins` | what a fresh setup of this machine starts with, where it differs from the registry's defaults |
 | `primaryOutput` | output for desktop widgets and the default screen |
+| `terminal` | the terminal things open in (kitty, foot, alacritty, ghostty, wezterm or any that takes `-e`); else `$TERMINAL`, else kitty |
+| `browser` | the browser pages and searches open in; else `$BROWSER`, else the desktop's default (`xdg-open`) |
+| `lighting` | the OpenRGB devices of the machine: roles, gains, the LED count of each ARGB header (`scripts/apply_lighting.py`) |
 | `weather.city` | |
 | `asteroids.magnitude` | the faintest asteroid `asteroid-alerts` speaks of (default 10, binoculars; 6 is the naked eye) |
 | `wallpapers` | the wallpaper library (outside the repo) |
@@ -97,7 +131,7 @@ or when a plugin has neither picture, scene nor icon.
 
 Shaking the pointer to open a shelf reads the mouse and touchpad event
 devices; the session gets read access to them with
-`scripts/setup-rpg-input-access.sh` (once per machine). Codex reports its
+`scripts/setup-input-access.sh` (once per machine). Codex reports its
 turns through `~/.codex/hooks.json` (seeded by install.sh, trusted once in
 Codex with `/hooks`); Claude Code needs nothing, its window title says when
 it works.
@@ -112,7 +146,8 @@ pause at punctuation and the countdown are kept in
 `find-mouse` shows where the pointer is: shaking it with no key or button
 held dims the screens but a circle around it, which closes in on the pointer
 and sends rings off until the shaking ends; a click ends it at once.
-`scripts/find_mouse.py` reads mice, touchpads and keyboards (evdev) for the
+`scripts/input_watch.py` (the shell's one reader of mice, touchpads and
+keyboards, also for the shaken drag of the shelves and the RPG's counts) reads them for the
 shake, the screens take the pointer while the light is on to learn where it
 is. `scripts/ipc.sh findmouse find` asks for it from a key; the light then
 comes with the pointer's next move.
@@ -136,13 +171,14 @@ the clipboard: it reads by selecting and copying, moves by arrow keys, writes
 by pasting or by the keys that were typed, and compares what it selected with
 what it read before anything is pasted over or typed at another cursor – a
 field that answers differently is left as it is. The clipboard gets back what
-it held, in every format, and what was read is taken out of cliphist again.
+it held, in every format, and what was read is taken out of the clipboard
+history again.
 To see a shortcut before the window does the daemon takes the keyboards
 (evdev grab) and hands every key on through one of its own (uinput), only
 while a window has the keyboard that is not left alone; both Shift keys and
 Escape together switch it off. `multicursor.py try "one\ntw|o" move-up`
 shows what steps leave in a text field, without one;
-`scripts/multicursor_test.py` runs it and the daemon's key handling against
+`scripts/tests/test_multicursor.py` runs it and the daemon's key handling against
 such a field. What it cannot do: rich
 text editors that copy something else than they show (the comparison fails,
 nothing happens), dead keys and Enter with several cursors (they end it), and
@@ -334,9 +370,9 @@ asking before the trash, dates and sizes, previews, archives, Windows
 programs, VirusTotal, PDF compression, the caches.
 
 What a place can be goes beyond folders (`Pane.qml` knows the kinds, the
-sidebar and Ctrl+K lead to them): the clipboard history (`clips.py`:
-cliphist's entries written out once into the runtime folder, so nothing of
-the clipboard stays on disk; dragged into a folder an entry is a file), the
+sidebar and Ctrl+K lead to them): the clipboard history (`clips.py`: its
+entries written out once into the runtime folder under names that say what
+they are; dragged into a folder an entry is a file), the
 captures on a timeline (`captures.py`: a screenshot gets a name from what
 it says – Tesseract reads it, a model of Ollama names it –, its text beside
 it as .txt; a recording is cut or becomes a GIF with ffmpeg), the phone
@@ -377,7 +413,7 @@ Google, or Ollama on the machine), notes stuck to files and folders (in
 And the shell around it: `>file` finds files in the launcher itself (the
 folders looked into lately, favourites, results as you type with the one
 under the cursor large beside them; Shift+Enter is quick look,
-`core/views/overlays/launcher/FileFinderView.qml`), the bar shows long jobs
+`core/views/launcher/FileFinderView.qml`), the bar shows long jobs
 (`style/bar/FileJobChip.qml`), the radial menu has a ring of the last
 folders, a finished download says so with what can be done with it, a
 folder can have a workspace of its own for its terminals, agents and apps
@@ -401,7 +437,7 @@ the shelves and the downloads panel calls) and is the default for folders
 that was the default before is again. Without a running shell, those calls
 go to Nautilus or the folder's old app.
 
-The launcher's apps (`core/views/overlays/launcher/AppsView.qml`): with
+The launcher's apps (`core/views/launcher/AppsView.qml`): with
 nothing typed a dock of favourites (what is pinned, filled up with what is
 used most; Alt+1…8 starts one) over every app on shelves by its freedesktop
 category (All, Internet, Develop, Games, Graphics, Media, Office, System,
@@ -418,7 +454,7 @@ kept in `launcher-apps.json`. Tab walks the modes the footer shows (Apps,
 Calculator, Files, Chat, Chats, Ollama, those whose plugin is on).
 
 The launcher's commands (`allCommands` in
-`core/views/overlays/LauncherContent.qml`) are shown by `>` as a palette of
+`core/views/launcher/LauncherContent.qml`) are shown by `>` as a palette of
 tiles: a band a group (`group`: tools, ai, panels, system), on top what is
 pinned (Ctrl+P or a right click, `launcher-commands.json`) filled up with
 what is used most. What is typed leaves the tiles where they are and dims
@@ -536,7 +572,7 @@ where to work (`core/services/Autocorrect.qml`): in windows, and of the shell
 itself only in fields that ask for it with `autocorrect: true` (`Field`,
 `AreaField`) – what is written in Messages. A tile of the quick settings
 and `scripts/ipc.sh autocorrect toggle` switch it off and on. The session reads the
-keyboards with `scripts/setup-rpg-input-access.sh`.
+keyboards with `scripts/setup-input-access.sh`.
 `scripts/autocorrect.py try "text"` shows what typing a text leaves.
 Typing does not wait for a correction: every key pressed since the one that
 called for it is followed, what it typed is put behind the word again, and
@@ -742,9 +778,16 @@ stay on the phone. A file `demo` in the state folder, or
 `scripts/apply_theme_selection.sh <theme>`:
 
 1. a still frame of the media (`theme_write_frame` in `theme_paths.sh`)
-2. the wallpaper runtime in the background (`apply_wallpaper_runtime.sh`:
-   swaybg still frame, awww for images, mpvpaper for videos, as systemd user
-   units), beside
+2. the wallpaper runtime in the background (`apply_wallpaper_runtime.sh`):
+   it writes `current/` of the theme state, which the shell follows and draws
+   (`Wallpaper`, plugin `wallpaper-layer`: one background surface a screen,
+   the new picture blooming out of the bar – `wallpaper_reveal.frag` – or
+   fading in, and a second one niri puts into the overview's backdrop by
+   the layer-rule in `pshell.kdl`); a video plays in mpvpaper above the shell's still
+   frame, one player for all outputs (`mpvpaper ALL`, one systemd user unit:
+   the video is decoded once, which leaves the GPU's decoder room for a
+   browser's video). While the shell does not answer
+   (`ipc.sh wallpaper owned`), swaybg and awww paint instead. Beside it
 3. niri window animation, if given, then wallust (`~/.cache/wal`), GTK
    colours, shell reload: the shell wears the palette about a second after
    the choice, while the wallpaper is still coming up
@@ -770,8 +813,9 @@ waiting. Applying one links it into the library's `Wallpaper of the day` and
 applies that.
 
 At shell start `restore_theme.sh` only restarts the wallpaper, unless colours
-are missing or the wallpaper of the day changed. `wallpaper_watch.sh` repaints
-outputs that appear later.
+are missing or the wallpaper of the day changed. Screens that appear later get
+the shell's wallpaper at once; mpvpaper puts a video on them itself, and
+`--ensure` from the shell starts it again if it is not running.
 
 ## Styles
 
@@ -791,18 +835,18 @@ A style branch changes `style/` only:
 
 The Motion page plays the animation itself, not a clip or a sketch:
 `scripts/build_animation_preview.py` compiles the niri shader with `qsb` and
-writes its timing, `core/views/overlays/studio/AnimationStage.qml` runs it on a
+writes its timing, `core/views/studio/AnimationStage.qml` runs it on a
 mock window. A style that draws its own Motion page keeps that stage.
 
 Everything else comes from `main` by merge, so a new feature reaches every
 style at once, drawn with the style's widgets, until the style gives it a view
-of its own. `scripts/sync_styles.sh` merges `main` into every style branch in a
+of its own. `scripts/dev/sync_styles.sh` merges `main` into every style branch in a
 temporary worktree, commits only what compiles, and lists which surfaces each
 style draws itself. Inside `style/`, a file both sides changed keeps the
 style's version (`.gitattributes`).
 
 How to build one, and how to keep one in step with main: `docs/styles.md`.
-`scripts/check_style.py` checks the contract (`--contract` prints it), derived
+`scripts/dev/check_style.py` checks the contract (`--contract` prints it), derived
 from main each time, so it moves with the logic.
 
 ## Setup
@@ -819,10 +863,10 @@ and hooks need, the dotfile links and the niri include.
 
 ```
 quickshell -p ./Validate.qml      # compiles the whole shell without a window
-scripts/review_surfaces.sh        # screenshots of every surface, in a nested niri
-python3 scripts/plugin.py check   # every plugin registered, gated and pictured
-python3 scripts/test_branch_styles.py
-python3 scripts/check_style.py        # the style contract (on a style branch)
+scripts/dev/review_surfaces.sh        # screenshots of every surface, in a nested niri
+python3 scripts/dev/plugin.py check   # every plugin registered, gated and pictured
+python3 scripts/tests/test_branch_styles.py
+python3 scripts/dev/check_style.py        # the style contract (on a style branch)
 quickshell -p ./ThemeProbe.qml       # the Theme's colours for the current palette
-python3 scripts/test_check_style.py
+python3 scripts/tests/test_check_style.py
 ```

@@ -20,7 +20,6 @@ Topic {
 
 	onWantedChanged: if (topic.wanted) {
 		Ddc.refresh();
-		PowerProfile.refresh();
 		if (Plugins.on("backlight")) Brightness.refresh(false);
 	}
 

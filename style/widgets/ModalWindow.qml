@@ -14,7 +14,7 @@ PanelWindow {
 	property real scrimOpacity: 1
 	property color scrimColor: Theme.scrim
 	readonly property bool shown: Popups.modal === root.modalId
-	property real reveal: root.shown ? 1 : 0
+	property real reveal: 0
 	// out of the way, clicks going to what is below
 	property bool aside: false
 	property real veil: root.aside ? 0 : 1
@@ -24,12 +24,17 @@ PanelWindow {
 
 	signal modalOpened
 
-	onShownChanged: {
+	// built when it opens (Popups.wanted): then it rises just the same
+	onShownChanged: root.followShown()
+	Component.onCompleted: if (root.shown) root.followShown()
+
+	function followShown() {
 		if (root.shown) {
 			root.targetScreen = Popups.modalScreen || Popups.primaryScreen;
 			root.modalOpened();
 			Qt.callLater(() => holder.forceActiveFocus());
 		}
+		root.reveal = root.shown ? 1 : 0;
 	}
 
 	Behavior on reveal {

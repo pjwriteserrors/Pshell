@@ -4,3 +4,4 @@ __pycache__/
 *.part.*
 .wallust-preview-cache/
 dotfiles/spicetify/color.ini
+/result.json

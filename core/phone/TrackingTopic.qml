@@ -62,7 +62,7 @@ Topic {
 			tasks: Number(group.task_count) || 0,
 			duration: String(group.duration_label || "")
 		})),
-		tickets: Tmpo.teamworkTasks.slice(0, 150).map(task => ({
+		tickets: QtrackTimer.teamworkTasks.slice(0, 150).map(task => ({
 			id: String(task.task_id || task.id || ""),
 			name: String(task.task_name || task.name || task.label || ""),
 			project: String(task.project_name || ""),
@@ -72,7 +72,7 @@ Topic {
 
 	onWantedChanged: if (topic.wanted) {
 		Tracking.show(Tracking.day);
-		if (Tmpo.teamworkTasks.length === 0) Tmpo.refreshTeamworkTasks();
+		if (QtrackTimer.teamworkTasks.length === 0) QtrackTimer.refreshTeamworkTasks();
 	}
 
 	function call(action, args, done) {
@@ -99,7 +99,7 @@ Topic {
 			Tracking.shift(topic.entry(args), String(args.edge) === "end" ? "end" : "start", Number(args.minutes) || 0);
 			return {};
 		case "assign": {
-			const task = Tmpo.findTeamworkTaskById(String(args.id || ""));
+			const task = QtrackTimer.findTeamworkTaskById(String(args.id || ""));
 			if (!task) throw new Error("No such ticket");
 			Tracking.assign(topic.entry(args), task);
 			return {};
@@ -114,7 +114,7 @@ Topic {
 			Tracking.send();
 			return {};
 		case "tickets":
-			Tmpo.refreshTeamworkTasks();
+			QtrackTimer.refreshTeamworkTasks();
 			return {};
 		}
 		throw new Error("unknown-action");

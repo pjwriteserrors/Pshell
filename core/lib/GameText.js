@@ -61,14 +61,6 @@ function startOfDay(seconds) {
 	return date.getTime() / 1000;
 }
 
-function size(bytes) {
-	const value = Number(bytes || 0);
-	if (value <= 0) return "";
-	const gb = value / 1e9;
-	if (gb >= 1) return `${gb >= 10 ? Math.round(gb) : gb.toFixed(1)} GB`;
-	return `${Math.round(value / 1e6)} MB`;
-}
-
 // a name for sorting: "The Witcher" with the Ws
 function sortName(name) {
 	return String(name || "").toLowerCase().replace(/^(the|a|an|der|die|das)\s+/, "").replace(/[^a-z0-9]+/g, " ").trim();

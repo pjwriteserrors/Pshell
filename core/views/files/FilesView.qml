@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Layouts
 import Quickshell
 import qs.style.theme
 import qs.style.widgets
@@ -303,6 +304,12 @@ FocusScope {
 	// a double click on an archive takes it apart here, a Windows program
 	// starts with Proton or Wine, everything else opens in its app
 	function openFiles(pane, rows) {
+		// choosing for the shell (Files.pick): a file opened is the one chosen
+		if (Files.picking && !Files.picking.directory) {
+			const paths = rows.map(row => row.path).filter(path => Files.pickable(path));
+			if (paths.length > 0) Files.finishPick(Files.picking.multiple ? paths : [paths[0]]);
+			return;
+		}
 		// on the phone or another PC: each comes over first
 		if (pane.location.kind === "phone" || pane.location.kind === "pc") {
 			for (const row of rows) root.openElsewhere(pane, row);
@@ -315,7 +322,7 @@ FocusScope {
 				Sounds.play("open");
 			} else if (Kinds.isWindows(row)) {
 				Files.runWindows(row.path, "auto");
-			} else if (/\.ics$/i.test(row.name) && Outlook.enabled && Outlook.signedIn) {
+			} else if (/\.ics$/i.test(row.name) && MsCalendar.enabled && MsCalendar.signedIn) {
 				// an invitation or a calendar file: into the calendar, once agreed
 				Files.confirmRequested({ title: `Add ${row.name} to the calendar?`, detail: "Its events go into your Microsoft 365 calendar.", confirm: "Add", danger: false, run: () => Files.importCalendar(row.path) });
 			} else {
@@ -1395,6 +1402,70 @@ FocusScope {
 		width: 340
 	}
 
+	// choosing for the shell: what is asked for, and the way out
+	Rectangle {
+		id: pickBar
+
+		readonly property var chosen: {
+			if (!Files.picking || !root.pane) return [];
+			if (Files.picking.directory) {
+				const dirs = root.pane.selectedRows().filter(row => row.dir).map(row => row.path);
+				return dirs.length > 0 ? dirs.slice(0, 1) : (root.pane.isFolder ? [root.pane.folder] : []);
+			}
+			const files = root.pane.selectedRows().filter(row => !row.dir && Files.pickable(row.path)).map(row => row.path);
+			return Files.picking.multiple ? files : files.slice(0, 1);
+		}
+
+		visible: Files.picking !== null
+		z: 20
+		anchors.horizontalCenter: main.horizontalCenter
+		anchors.bottom: parent.bottom
+		anchors.bottomMargin: 20
+		width: pickRow.implicitWidth + 28
+		height: 56
+		radius: 28
+		color: Theme.layer2
+		border.color: Theme.primary
+		border.width: 1
+
+		RowLayout {
+			id: pickRow
+
+			anchors.centerIn: parent
+			spacing: 12
+
+			Glyph {
+				icon: Files.picking?.directory ? "folder_outline" : "file_outline"
+				color: Theme.primary
+			}
+
+			StyledText {
+				text: Files.picking?.title ?? ""
+				font.weight: Font.DemiBold
+			}
+
+			StyledText {
+				text: pickBar.chosen.length === 0 ? "" : (pickBar.chosen.length === 1 ? Files.nameOf(pickBar.chosen[0]) : `${pickBar.chosen.length} files`)
+				tone: Theme.textMuted
+				elide: Text.ElideMiddle
+				Layout.maximumWidth: 320
+			}
+
+			TextButton {
+				text: "Cancel"
+				variant: "ghost"
+				onActivated: Files.finishPick([])
+			}
+
+			TextButton {
+				text: Files.picking?.directory ? "Choose folder" : "Choose"
+				variant: "filled"
+				enabled: pickBar.chosen.length > 0
+				onActivated: Files.finishPick(pickBar.chosen)
+			}
+		}
+	}
+
 	Snackbar {
 		id: snackbar
 
@@ -1476,11 +1547,41 @@ FocusScope {
 		onClosed: keyTarget.forceActiveFocus()
 	}
 
-	PageOrganizer {
+	// loaded by URL on first use: it needs QtQuick.Pdf (qt6-webengine), and
+	// without it only this tool is missing instead of the whole shell
+	Loader {
 		id: organizer
 
+		property var waiting: null
+
+		function open(row) {
+			if (organizer.item) {
+				organizer.item.open(row);
+				return;
+			}
+			organizer.waiting = row;
+			organizer.source = Qt.resolvedUrl("PageOrganizer.qml");
+		}
+
 		anchors.fill: parent
-		onClosed: keyTarget.forceActiveFocus()
+		onLoaded: {
+			if (organizer.waiting) organizer.item.open(organizer.waiting);
+			organizer.waiting = null;
+		}
+		onStatusChanged: if (organizer.status === Loader.Error) {
+			organizer.waiting = null;
+			organizer.source = "";
+			Files.fail("The PDF tools need QtQuick.Pdf (qt6-webengine)");
+		}
+
+		Connections {
+			target: organizer.item
+			ignoreUnknownSignals: true
+
+			function onClosed() {
+				keyTarget.forceActiveFocus();
+			}
+		}
 	}
 
 	SignDialog {

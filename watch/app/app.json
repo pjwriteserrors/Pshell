@@ -1,0 +1,61 @@
+{
+  "configVersion": "v3",
+  "app": {
+    "appId": 1073744,
+    "appName": "PShell",
+    "appType": "app",
+    "version": {
+      "code": 10,
+      "name": "2.0.0"
+    },
+    "icon": "icon.png",
+    "vender": "pshell",
+    "description": "The PC's mouse on the wrist: a trackpad, a scroll strip and the air mouse"
+  },
+  "permissions": [
+    "device:os.ble",
+    "device:os.gyroscope",
+    "device:os.accelerometer",
+    "device:os.local_storage"
+  ],
+  "runtime": {
+    "apiVersion": {
+      "compatible": "3.0",
+      "target": "4.0",
+      "minVersion": "3.0"
+    }
+  },
+  "targets": {
+    "default": {
+      "module": {
+        "page": {
+          "pages": [
+            "page/mouse",
+            "page/pair"
+          ]
+        }
+      },
+      "platforms": [
+        {
+          "deviceSource": 10223872
+        },
+        {
+          "deviceSource": 10223873
+        },
+        {
+          "deviceSource": 10223875
+        }
+      ]
+    }
+  },
+  "i18n": {
+    "en-US": {
+      "appName": "PShell"
+    },
+    "de-DE": {
+      "appName": "PShell"
+    }
+  },
+  "defaultLanguage": "en-US",
+  "designWidth": 390
+}

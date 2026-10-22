@@ -10,7 +10,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/theme_paths.sh"
 
-SDDM_THEME_DIR="${SDDM_THEME_DIR:-/usr/share/sddm/themes/silent}"
+SDDM_THEME_DIR="${SDDM_THEME_DIR:-/usr/share/sddm/themes/pshell}"
 BACKGROUNDS_DIR="$SDDM_THEME_DIR/backgrounds"
 CONF_FILE="$SDDM_THEME_DIR/theme.conf"
 
@@ -53,7 +53,7 @@ link_into_theme() {
 [[ -d "$BACKGROUNDS_DIR" ]] || exit 0
 
 if [[ ! -w "$BACKGROUNDS_DIR" ]]; then
-	log "$BACKGROUNDS_DIR is not writable, rerun install-sddm-silent-theme.sh"
+	log "$BACKGROUNDS_DIR is not writable, rerun install-sddm-theme.sh"
 	exit 0
 fi
 

@@ -1,0 +1,12 @@
+{
+  "name": "pshell-watch-probe",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Probe for the watch link: BLE central to the PC, gyroscope, trackpad",
+  "dependencies": {
+    "@silver-zepp/easy-ble": "1.7.8-e"
+  },
+  "devDependencies": {
+    "@zeppos/device-types": "^3.0.0"
+  }
+}

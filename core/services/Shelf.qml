@@ -387,19 +387,11 @@ Singleton {
 		return "file";
 	}
 
-	function sizeText(bytes) {
-		const n = Number(bytes) || 0;
-		if (n < 1024) return `${n} B`;
-		if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
-		if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
-		return `${(n / 1024 / 1024 / 1024).toFixed(1)} GB`;
-	}
-
 	function detailOf(item) {
 		if (item.kind === "text") return `${item.text.length} characters`;
 		if (item.kind === "link") return item.url;
 		if (item.dir) return "Folder";
-		const parts = [root.sizeText(item.size)];
+		const parts = [Format.bytes(item.size)];
 		if (item.width > 0) parts.unshift(`${item.width}×${item.height}`);
 		return parts.join(" · ");
 	}
@@ -775,16 +767,16 @@ Singleton {
 		}
 	}
 
-	Process {
-		id: shaker
+	// shaking a drag (Input) brings up the commands
+	Connections {
+		target: Input
+		enabled: Input.dragging
 
-		running: Plugins.on("drop-commands") && root.shake
-		command: ["python3", root.helper, "shake"]
-		stdout: SplitParser {
-			onRead: line => {
-				if (line === "shake") root.shaken();
-				else if (line === "noaccess") root.shakeAccess = false;
-			}
+		function onDragShaken() {
+			root.shaken();
+		}
+		function onErrorChanged() {
+			root.shakeAccess = Input.error !== "permission";
 		}
 	}
 }

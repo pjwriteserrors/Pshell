@@ -184,7 +184,7 @@ Rectangle {
 						}
 						if (!root.entry) return "";
 						if (root.entry.dir) return root.info?.items !== undefined ? `Folder · ${root.info.items} items` : "Folder";
-						return `${root.info?.kind ?? Kinds.kindLabel(root.kind)} · ${Files.sizeText(root.entry.size)}`;
+						return `${root.info?.kind ?? Kinds.kindLabel(root.kind)} · ${Format.bytes(root.entry.size)}`;
 					}
 					wrapMode: Text.WordWrap
 				}
@@ -346,7 +346,7 @@ Rectangle {
 
 				StyledText {
 					Layout.fillWidth: true
-					text: parent.size ? `${Files.sizeText(parent.size.size)} in ${parent.size.files} files` + (parent.size.done ? "" : " (stopped)") : "Size not worked out yet"
+					text: parent.size ? `${Format.bytes(parent.size.size)} in ${parent.size.files} files` + (parent.size.done ? "" : " (stopped)") : "Size not worked out yet"
 					tone: parent.size ? Theme.text : Theme.textSubtle
 					font.pixelSize: Theme.size.label
 				}
@@ -673,7 +673,7 @@ Rectangle {
 
 							StyledText {
 								width: parent.width
-								text: `${version.modelData.title}${version.modelData.size !== undefined ? " · " + Files.sizeText(version.modelData.size) : ""}`
+								text: `${version.modelData.title}${version.modelData.size !== undefined ? " · " + Format.bytes(version.modelData.size) : ""}`
 								tone: Theme.textSubtle
 								font.pixelSize: Theme.size.tiny
 								elide: Text.ElideRight

@@ -41,6 +41,8 @@ Singleton {
 	property var pcs: ({ devices: [], nearby: [], transfers: [] })
 	// mouse and keyboard across PCs (Kvm.qml): { edges, hold, keyboard, mode, pc, name, strips }
 	property var kvm: ({ edges: [], strips: [], mode: "local" })
+	// the watch's health and link (Watch.qml): { link, nights, days, today, synced, battery }
+	property var watch: ({})
 	// device id → the phone's own topics: { "phone.status": { battery, … }, … }
 	property var remote: ({})
 
@@ -48,18 +50,15 @@ Singleton {
 	readonly property bool paired: root.devices.length > 0
 
 	// ── what the views show ────────────────────────────────────────────────
-	// Without the phone app's plugin, a KDE Connect setup still works: the
-	// views ask this service either way.
-	readonly property bool legacy: !root.enabled && Plugins.on("kdeconnect")
-	readonly property bool offered: root.enabled || root.legacy
-	readonly property string plugin: root.enabled ? "phone" : "kdeconnect"
-	readonly property bool available: root.legacy ? KdeConnect.available : root.enabled
-	readonly property bool reachable: root.legacy ? KdeConnect.reachable : !!root.device?.connected
-	readonly property string name: root.legacy ? KdeConnect.name : (root.device?.name ?? "Phone")
+	readonly property bool offered: root.enabled
+	readonly property string plugin: "phone"
+	readonly property bool available: root.enabled
+	readonly property bool reachable: !!root.device?.connected
+	readonly property string name: root.device?.name ?? "Phone"
 	readonly property var status: root.of("phone.status")
-	readonly property int battery: root.legacy ? KdeConnect.battery : (root.reachable ? (root.status?.battery ?? -1) : -1)
-	readonly property bool charging: root.legacy ? KdeConnect.charging : !!root.status?.charging
-	readonly property string network: root.legacy ? String(KdeConnect.device?.network ?? "") : String(root.status?.network ?? "")
+	readonly property int battery: root.reachable ? (root.status?.battery ?? -1) : -1
+	readonly property bool charging: !!root.status?.charging
+	readonly property string network: String(root.status?.network ?? "")
 	readonly property string batteryIcon: {
 		if (root.battery < 0) return "cellphone";
 		if (root.charging) return "battery_charging";
@@ -67,7 +66,6 @@ Singleton {
 		return root.battery >= 95 ? "battery" : `battery_${step}`;
 	}
 	readonly property string summary: {
-		if (root.legacy) return KdeConnect.summary;
 		if (!root.paired) return "Not paired";
 		if (!root.reachable) return "Not reachable";
 		return root.battery >= 0 ? `${root.battery}%${root.charging ? " · charging" : ""}` : "Connected";
@@ -78,16 +76,6 @@ Singleton {
 	// phone panels raise this while they are visible
 	property int watchers: 0
 
-	Binding {
-		target: KdeConnect
-		property: "watchers"
-		value: root.watchers
-		when: root.legacy
-	}
-
-	function refresh() {
-		if (root.legacy) KdeConnect.refresh();
-	}
 
 	// an event of a phone: (topic, name, data, device id)
 	signal event(string topic, string name, var data, string device)
@@ -153,29 +141,28 @@ Singleton {
 	}
 
 	function shareFile(path) {
-		if (root.legacy) KdeConnect.shareFile(path);
-		else root.sendFiles([path]);
+		root.sendFiles([path]);
 	}
 
 	function shareUrl(url) {
-		if (root.legacy) KdeConnect.shareUrl(url);
-		else root.sendUrl(url);
+		root.sendUrl(url);
 	}
 
 	// the PC's clipboard, said out loud: it reaches the phone by itself, this
 	// also tells the phone to show it
 	function sendClipboard() {
-		if (root.legacy) return KdeConnect.sendClipboard();
 		clipboardReader.running = true;
 	}
 
+	// an entry of the clipboard history: a picture as a file, text as text
 	function sendClipboardEntry(entry) {
-		if (root.legacy) return KdeConnect.sendClipboardEntry(entry);
-		if (!entry?.id) return;
-		const sender = entrySender.createObject(root, { image: !!entry.isImage });
-		const id = String(entry.id).replace(/[^0-9]/g, "");
-		const file = `${Quickshell.env("XDG_RUNTIME_DIR") || "/tmp"}/qs-phone-${id}.${entry.extension || "png"}`;
-		sender.command = entry.isImage ? ["sh", "-c", 'cliphist decode "$1" > "$2" && printf %s "$2"', "sh", id, file] : ["cliphist", "decode", id];
+		if (!entry?.path) return;
+		if (entry.isImage) {
+			root.sendFiles([entry.path]);
+			return;
+		}
+		const sender = entrySender.createObject(root);
+		sender.command = ["cat", "--", entry.path];
 		sender.running = true;
 	}
 
@@ -194,13 +181,8 @@ Singleton {
 		Process {
 			id: sender
 
-			property bool image: false
-
 			stdout: StdioCollector {
-				onStreamFinished: {
-					if (sender.image) root.sendFiles([String(text).trim()]);
-					else root.sendText(text);
-				}
+				onStreamFinished: root.sendText(text)
 			}
 			onExited: sender.destroy()
 		}
@@ -224,7 +206,6 @@ Singleton {
 	function sendText(text) {
 		const value = String(text || "").trim();
 		if (value === "") return;
-		if (root.legacy) return KdeConnect.sendText(value);
 		if (/^https?:\/\/\S+$/.test(value)) root.sendUrl(value);
 		else root.call("handoff", "send", { text: value }, (data, error) => root.report(error, "Text sent"), { timeout: 20 });
 	}
@@ -255,7 +236,6 @@ Singleton {
 	}
 
 	function ring() {
-		if (root.legacy) return KdeConnect.ring();
 		root.call("phone.find", "ring", {}, (data, error) => root.report(error, "Ringing"));
 	}
 
@@ -323,6 +303,8 @@ Singleton {
 				root.pcs = message.data || { devices: [], nearby: [], transfers: [] };
 			} else if (message.topic === "kvm") {
 				root.kvm = message.data || { edges: [], strips: [], mode: "local" };
+			} else if (message.topic === "watch") {
+				root.watch = message.data || {};
 			}
 			break;
 		case "event":
