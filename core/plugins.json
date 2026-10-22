@@ -125,6 +125,7 @@
 	{ "id": "haptics", "name": "Mouse haptics", "category": "Hardware", "default": false, "icon": "mouse" },
 	{ "id": "mouse", "name": "Logitech mouse", "category": "Hardware", "default": false, "requires": ["niri-settings"], "icon": "mouse_variant" },
 	{ "id": "keyboard", "name": "Logitech keyboard", "category": "Hardware", "default": false, "requires": ["niri-settings"], "icon": "keyboard" },
+	{ "id": "apex", "name": "SteelSeries keyboard", "category": "Hardware", "default": false, "requires": ["niri-settings"], "icon": "keyboard_variant" },
 	{ "id": "printer", "name": "3D printer", "category": "Hardware", "default": false, "icon": "printer_3d" },
 
 	{ "id": "phone", "name": "Phone app", "category": "Phone", "default": false, "icon": "cellphone" },

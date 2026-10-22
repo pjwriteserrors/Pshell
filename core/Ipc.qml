@@ -330,6 +330,33 @@ Scope {
 		}
 	}
 
+	// the SteelSeries Apex: `apex open`, `apex config 2|next`, `apex light 7|up|down`, `apex oled clock`
+	IpcHandler {
+		target: "apex"
+		enabled: Plugins.on("apex")
+
+		function open(): void {
+			NiriSettings.page = "apex";
+			Popups.withFocusedScreen(screen => Popups.openModal("niri", screen));
+		}
+		function config(which: string): void {
+			if (which === "next" || which === "previous") Apex.test({ kind: "apex", op: `config-${which}` });
+			else Apex.switchSlot(Math.max(1, Math.min(5, Number(which) || 1)) - 1);
+		}
+		function light(level: string): void {
+			if (level === "up" || level === "down") Apex.test({ kind: "apex", op: `brightness-${level}` });
+			else Apex.setBrightness(Math.max(0, Math.min(10, Number(level) || 0)));
+		}
+		// own | clock | media | system | text | picture
+		function oled(mode: string): void {
+			Apex.setOption("oled", mode || "own");
+		}
+		function state(): string {
+			Apex.send({ op: "state" });
+			return JSON.stringify({ online: Apex.online, slot: Apex.slot, firmware: Apex.info.firmware ?? "", rules: Apex.rules.length, daemon: Apex.daemonState });
+		}
+	}
+
 	// every HID device and who looks after it
 	IpcHandler {
 		target: "devices"

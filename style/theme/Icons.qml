@@ -660,6 +660,7 @@ Singleton {
 		"tune_variant": "󱕂",
 		"view_column_outline": "󱒇",
 		"arrow_collapse_down": "󰞒",
+		"arrow_collapse_up": "󰞕",
 		"border_all_variant": "󰢡",
 		"information_outline": "󰋽",
 		"selection_ellipse": "󰴲",

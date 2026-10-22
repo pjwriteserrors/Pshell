@@ -31,4 +31,7 @@ ShellRoot {
 	// games fullscreen from the start, also those started in Steam
 	// (core/services/Games.qml)
 	readonly property bool games: Games.guarding
+	// the SteelSeries keyboard's daemon: its keys for the shell, its OLED
+	// (core/services/Apex.qml)
+	readonly property bool apex: Apex.enabled
 }

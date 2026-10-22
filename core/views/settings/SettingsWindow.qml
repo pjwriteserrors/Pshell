@@ -48,6 +48,7 @@ ModalWindow {
 		{ id: "devices", label: "Devices", icon: "devices", hint: "Mice, keyboards and other HID devices" },
 		{ id: "mouse", label: "Mouse", icon: "mouse_variant", hint: "Buttons, gestures, scrolling, haptics", plugin: "mouse" },
 		{ id: "keyboard", label: "Keyboard", icon: "keyboard_settings", hint: "Special keys, backlight, Fn keys", plugin: "keyboard" },
+		{ id: "apex", label: "Apex Pro", icon: "keyboard_variant", hint: "Actuation, Rapid Trigger, keys, OLED", plugin: "apex" },
 		{ id: "multicursor", label: "Multicursor", icon: "cursor_text", hint: "Lines and cursors in every text field", plugin: "multicursor" },
 		{ id: "rules", label: "Window rules", icon: "application_cog_outline", hint: "Per app: size, place, look" },
 		{ id: "workspaces", label: "Workspaces", icon: "view_grid_outline", hint: "Named workspaces" },
@@ -102,6 +103,14 @@ ModalWindow {
 		{ page: "keyboard", anchor: "keyboard-fn", title: "Fn keys and locked keys", words: "fn lock swap f1 f12 caps lock num lock insert super disable platform os layout", plugin: "keyboard" },
 		{ page: "keyboard", anchor: "keyboard-hosts", title: "Keyboard Easy-Switch", words: "easy switch host channel computer", plugin: "keyboard" },
 		{ page: "keyboard", anchor: "keyboard-battery", title: "Keyboard battery", words: "battery charge firmware", plugin: "keyboard" },
+		{ page: "apex", anchor: "apex-keys", title: "Apex keyboard", words: "steelseries apex pro tkl gen 3 keyboard config profile", plugin: "apex" },
+		{ page: "apex", anchor: "apex-actuation", title: "Actuation and Rapid Trigger", words: "steelseries apex actuation point depth omnipoint hall rapid trigger sensitivity protection mode", plugin: "apex" },
+		{ page: "apex", anchor: "apex-dual", title: "2-in-1 action", words: "steelseries apex dual actuation second point two in one deeper press", plugin: "apex" },
+		{ page: "apex", anchor: "apex-bindings", title: "Apex keys", words: "steelseries apex remap key binding macro media mouse fn layer steelseries key per app double press hold", plugin: "apex" },
+		{ page: "apex", anchor: "apex-rapidtap", title: "Rapid Tap", words: "steelseries apex rapid tap socd snap tap last input priority", plugin: "apex" },
+		{ page: "apex", anchor: "apex-oled", title: "Apex display", words: "steelseries apex oled screen display clock media notification picture text", plugin: "apex" },
+		{ page: "apex", anchor: "apex-light", title: "Apex light", words: "steelseries apex brightness light rgb", plugin: "apex" },
+		{ page: "apex", anchor: "apex-configs", title: "Apex configs", words: "steelseries apex onboard config profile slot rename copy backup restore", plugin: "apex" },
 		{ page: "mouse", anchor: "mouse-buttons", title: "Mouse buttons and gestures", words: "logitech mx master button remap gesture swipe thumb wheel per app solaar rule action ring", plugin: "mouse" },
 		{ page: "mouse", anchor: "mouse-rules", title: "Mouse rules", words: "rule editor condition modifier ctrl shift app hold double click solaar", plugin: "mouse" },
 		{ page: "mouse", anchor: "mouse-pointer", title: "Mouse DPI", words: "dpi speed sensitivity pointer precision sniper shift", plugin: "mouse" },
@@ -627,6 +636,7 @@ ModalWindow {
 							case "devices": return devicesPage;
 							case "mouse": return mousePage;
 							case "keyboard": return keyboardPage;
+							case "apex": return apexPage;
 							case "multicursor": return multicursorPage;
 							case "rules": return rulesPage;
 							case "workspaces": return workspacesPage;
@@ -892,6 +902,14 @@ ModalWindow {
 		id: keyboardPage
 
 		KeyboardPage {}
+	}
+
+	Component {
+		id: apexPage
+
+		ApexPage {
+			onOpen: page => root.go(page, "")
+		}
 	}
 
 	Component {

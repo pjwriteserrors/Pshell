@@ -5,5 +5,6 @@
 	{ "id": "mx-keys-s", "name": "MX Keys S", "match": { "hidpp": { "model": ["B378"] } }, "page": "keyboard", "plugin": "keyboard" },
 	{ "id": "logitech-hidpp-mouse", "name": "Logitech mouse (HID++)", "match": { "hidpp": { "kind": ["mouse", "trackball", "touchpad"] } }, "page": "mouse", "plugin": "mouse", "partial": true },
 	{ "id": "logitech-hidpp-keyboard", "name": "Logitech keyboard (HID++)", "match": { "hidpp": { "kind": ["keyboard", "numpad"] } }, "page": "keyboard", "plugin": "keyboard", "partial": true },
+	{ "id": "apex-pro-tkl-gen3", "name": "Apex Pro TKL Gen 3", "match": { "usb": ["1038:1642"] }, "page": "apex", "plugin": "apex" },
 	{ "id": "elan-touchpad", "name": "ELAN touchpad", "match": { "hid": ["04f3:3169"] }, "page": "input" }
 ]

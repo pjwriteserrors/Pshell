@@ -193,6 +193,7 @@ Singleton {
 		const critical = notification.urgency === NotificationUrgency.Critical;
 		Haptics.play("notification", notification.hints["suppress-sound"] ? "" : (critical ? "notificationCritical" : "notification"));
 		Keyboard.notified(critical);
+		Apex.notified(notification, critical);
 	}
 
 	function addToast(notification) {
