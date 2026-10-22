@@ -49,11 +49,11 @@ Drawer {
 		}
 	}
 
-	// the throughput graphs of the main page
+	// the throughput graphs of the network page
 	Binding {
 		target: Network
 		property: "watchers"
-		value: root.shown && root.page === "main" ? 1 : 0
+		value: root.shown && root.page === "network" ? 1 : 0
 		when: root.shown
 		restoreMode: Binding.RestoreValue
 	}
