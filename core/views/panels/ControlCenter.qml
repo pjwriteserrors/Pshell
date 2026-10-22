@@ -1243,15 +1243,16 @@ Drawer {
 				}
 
 				Repeater {
-					model: [
-						{ label: "Processor", icon: "chip", value: SysStats.cpu, detail: SysStats.cpuText, history: SysStats.cpuHistory, color: Theme.primary },
-						{ label: "Memory", icon: "memory", value: SysStats.memory, detail: SysStats.memoryText, history: SysStats.memoryHistory, color: Theme.secondary }
-					]
+					// the values are bound in the card: a model that changed with them would build both anew every sample
+					model: 2
 
 					delegate: Rectangle {
 						id: usage
 
-						required property var modelData
+						required property int index
+						readonly property var modelData: usage.index === 0
+							? { label: "Processor", icon: "chip", value: SysStats.cpu, detail: SysStats.cpuText, history: SysStats.cpuHistory, color: Theme.primary }
+							: { label: "Memory", icon: "memory", value: SysStats.memory, detail: SysStats.memoryText, history: SysStats.memoryHistory, color: Theme.secondary }
 
 						Layout.fillWidth: true
 						implicitHeight: 96
