@@ -1,0 +1,9 @@
+[
+	{ "id": "logitech-receiver", "name": "Logitech receiver", "match": { "usb": ["046d:c548", "046d:c52b", "046d:c532", "046d:c534", "046d:c539", "046d:c547"] }, "role": "receiver" },
+	{ "id": "mx-master-4", "name": "MX Master 4", "match": { "hidpp": { "model": ["B042"] } }, "page": "mouse", "plugin": "mouse" },
+	{ "id": "mx-master-3s", "name": "MX Master 3S", "match": { "hidpp": { "model": ["B034"] } }, "page": "mouse", "plugin": "mouse" },
+	{ "id": "mx-keys-s", "name": "MX Keys S", "match": { "hidpp": { "model": ["B378"] } }, "page": "keyboard", "plugin": "keyboard" },
+	{ "id": "logitech-hidpp-mouse", "name": "Logitech mouse (HID++)", "match": { "hidpp": { "kind": ["mouse", "trackball", "touchpad"] } }, "page": "mouse", "plugin": "mouse", "partial": true },
+	{ "id": "logitech-hidpp-keyboard", "name": "Logitech keyboard (HID++)", "match": { "hidpp": { "kind": ["keyboard", "numpad"] } }, "page": "keyboard", "plugin": "keyboard", "partial": true },
+	{ "id": "elan-touchpad", "name": "ELAN touchpad", "match": { "hid": ["04f3:3169"] }, "page": "input" }
+]

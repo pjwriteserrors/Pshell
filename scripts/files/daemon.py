@@ -473,7 +473,23 @@ class Daemon:
                 client.reply(request, error=error if code != "password" else "password")
             else:
                 client.reply(request, {"path": path})
-        self.places.mount(request["place"], request.get("password", ""), done)
+        login = str(request.get("login") or "")
+        if request.get("password") or not login:
+            self.places.mount(request["place"], request.get("password", ""), done)
+            return None
+
+        # a host of the SSH plugin logs in with the password saved there
+        def look_up():
+            password = ""
+            try:
+                ssh = remote.manager()
+                entry = ssh.find_entry(login)
+                if str(entry.get("auth_type") or ssh.AUTH_PASSWORD) == ssh.AUTH_PASSWORD:
+                    password = ssh.lookup_secret(str(entry["id"]), str(entry.get("secret_backend") or ""))
+            except Exception:
+                password = ""
+            GLib.idle_add(lambda: self.places.mount(request["place"], password, done) or False)
+        self.pool.submit(look_up)
         return None
 
     @on_main("main")

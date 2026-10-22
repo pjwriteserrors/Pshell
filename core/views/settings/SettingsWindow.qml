@@ -45,7 +45,9 @@ ModalWindow {
 		{ id: "looks", label: "Borders & shadows", icon: "border_style", hint: "Focus ring, border, shadow, tabs" },
 		{ id: "input", label: "Input", icon: "mouse", hint: "Keyboard, mouse, touchpad, tablet" },
 		{ id: "keys", label: "Key binds", icon: "keyboard", hint: "Shortcuts and switches" },
+		{ id: "devices", label: "Devices", icon: "devices", hint: "Mice, keyboards and other HID devices" },
 		{ id: "mouse", label: "Mouse", icon: "mouse_variant", hint: "Buttons, gestures, scrolling, haptics", plugin: "mouse" },
+		{ id: "keyboard", label: "Keyboard", icon: "keyboard_settings", hint: "Special keys, backlight, Fn keys", plugin: "keyboard" },
 		{ id: "multicursor", label: "Multicursor", icon: "cursor_text", hint: "Lines and cursors in every text field", plugin: "multicursor" },
 		{ id: "rules", label: "Window rules", icon: "application_cog_outline", hint: "Per app: size, place, look" },
 		{ id: "workspaces", label: "Workspaces", icon: "view_grid_outline", hint: "Named workspaces" },
@@ -94,6 +96,12 @@ ModalWindow {
 		{ page: "input", anchor: "input-more", title: "Power key, workspace back and forth, cursor", words: "disable-power-key-handling workspace-auto-back-and-forth hide-when-typing hide-after-inactive-ms cursor", take: ["input/disable-power-key-handling", "input/workspace-auto-back-and-forth", "cursor/hide-when-typing", "cursor/hide-after-inactive-ms"] },
 		{ page: "keys", anchor: "binds", title: "Key binds", words: "keys shortcuts binds hotkeys", take: ["@binds"] },
 		{ page: "keys", anchor: "switches", title: "Lid and tablet mode", words: "switch-events lid-close lid-open tablet-mode", take: ["switch-events"] },
+		{ page: "devices", anchor: "devices-list", title: "Connected devices", words: "hid usb bluetooth device mouse keyboard receiver unknown reverse engineer claude" },
+		{ page: "keyboard", anchor: "keyboard-keys", title: "Keyboard keys", words: "logitech mx keys special key emoji screenshot lock calculator dictation media remap per app", plugin: "keyboard" },
+		{ page: "keyboard", anchor: "keyboard-light", title: "Keyboard backlight", words: "backlight lighting illumination brightness flash notification hands proximity", plugin: "keyboard" },
+		{ page: "keyboard", anchor: "keyboard-fn", title: "Fn keys and locked keys", words: "fn lock swap f1 f12 caps lock num lock insert super disable platform os layout", plugin: "keyboard" },
+		{ page: "keyboard", anchor: "keyboard-hosts", title: "Keyboard Easy-Switch", words: "easy switch host channel computer", plugin: "keyboard" },
+		{ page: "keyboard", anchor: "keyboard-battery", title: "Keyboard battery", words: "battery charge firmware", plugin: "keyboard" },
 		{ page: "mouse", anchor: "mouse-buttons", title: "Mouse buttons and gestures", words: "logitech mx master button remap gesture swipe thumb wheel per app solaar rule action ring", plugin: "mouse" },
 		{ page: "mouse", anchor: "mouse-rules", title: "Mouse rules", words: "rule editor condition modifier ctrl shift app hold double click solaar", plugin: "mouse" },
 		{ page: "mouse", anchor: "mouse-pointer", title: "Mouse DPI", words: "dpi speed sensitivity pointer precision sniper shift", plugin: "mouse" },
@@ -616,7 +624,9 @@ ModalWindow {
 							case "looks": return looksPage;
 							case "input": return inputPage;
 							case "keys": return keysPage;
+							case "devices": return devicesPage;
 							case "mouse": return mousePage;
+							case "keyboard": return keyboardPage;
 							case "multicursor": return multicursorPage;
 							case "rules": return rulesPage;
 							case "workspaces": return workspacesPage;
@@ -865,9 +875,23 @@ ModalWindow {
 	}
 
 	Component {
+		id: devicesPage
+
+		DevicesPage {
+			onOpen: page => root.go(page, "")
+		}
+	}
+
+	Component {
 		id: mousePage
 
 		MousePage {}
+	}
+
+	Component {
+		id: keyboardPage
+
+		KeyboardPage {}
 	}
 
 	Component {

@@ -64,6 +64,7 @@ DRY = os.environ.get("PSHELL_MOUSE_DRY") == "1"
 INJECT = os.environ.get("PSHELL_MOUSE_INJECT", "")
 
 WAVEFORMS = {name: code for code, name in hidpp.HAPTIC_WAVEFORMS.items()}
+NOT_MICE = ("keyboard", "numpad", "remote", "presenter", "receiver")
 FEEL_DEFAULT = "SUBTLE COLLISION"
 
 out_lock = threading.Lock()
@@ -154,6 +155,11 @@ class Mouse:
     def serial(self):
         return self.info.get("serial") or self.key
 
+    @property
+    def pointing(self):
+        # keyboards on the same receiver are the keyboard daemon's (scripts/keyboard)
+        return self.info.get("kind", "mouse") not in NOT_MICE
+
     def read(self, on_identity=None):
         d = self.device
         d.features.clear()
@@ -179,6 +185,8 @@ class Mouse:
             pass
         info["id"] = info["serial"] or self.key
         self.info = info
+        if not self.pointing:
+            return info
         # the notifications name features by index: the ones they can come from
         for fid in (hidpp.REPROG_V4, hidpp.UNIFIED_BATTERY, hidpp.THUMB_WHEEL, hidpp.HIRES_WHEEL, hidpp.WIRELESS_STATUS):
             d.feature(fid)
@@ -247,6 +255,8 @@ class Daemon:
         self.loop = Loop()
         self.config = {"devices": {}, "rules": [], "options": {}}
         self.mice = {}
+        # receiver slots that hold something other than a mouse
+        self.others = set()
         self.channels = {}
         self.watching = False
         self.solaar = solaar_running()
@@ -324,6 +334,7 @@ class Daemon:
                 self.channels.pop(path).close()
                 for key in [k for k, m in self.mice.items() if m.node["path"] == path]:
                     self.mice.pop(key)
+                self.others = {k for k in self.others if not k.startswith(f"{path}#")}
         for node in nodes:
             if node["path"] in self.channels:
                 continue
@@ -337,6 +348,8 @@ class Daemon:
                 self.enable_receiver(channel)
             for devnum in (range(1, 7) if node["receiver"] else [0xFF]):
                 mouse = Mouse(channel, node, devnum)
+                if mouse.key in self.others:
+                    continue
                 try:
                     mouse.device.ping(timeout=1.5)
                 except (Offline, TimeoutError, HidppError):
@@ -371,6 +384,8 @@ class Daemon:
     def connect(self, mouse):
         def identity():
             # the name first, the rest of what it says a moment later
+            if not mouse.pointing:
+                return
             mouse.online = True
             self.publish()
 
@@ -379,6 +394,11 @@ class Daemon:
         except (Offline, TimeoutError, HidppError) as error:
             mouse.online = False
             log(f"slot {mouse.devnum}: {error}")
+            return
+        if not mouse.pointing:
+            self.mice.pop(mouse.key, None)
+            self.others.add(mouse.key)
+            self.publish()
             return
         mouse.online = True
         mouse.configured_at = time.monotonic()
@@ -588,6 +608,8 @@ class Daemon:
 
     def on_link(self, node, devnum, linked):
         key = f"{node['path']}#{devnum}"
+        if key in self.others:
+            return
         mouse = self.mice.get(key)
         if not linked:
             if mouse and mouse.online:
@@ -1743,6 +1765,8 @@ def dump():
             try:
                 mouse.device.ping(timeout=1.5)
                 mouse.read()
+                if not mouse.pointing:
+                    continue
                 mouse.read_features()
                 mouse.online = True
             except (Offline, TimeoutError, HidppError):

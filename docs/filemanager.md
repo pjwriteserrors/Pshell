@@ -45,7 +45,7 @@ Organize navigation into distinct sections:
 - Shared
 - Tags
 - Local drives and mounted volumes
-- Network locations
+- Network locations (the SSH plugin's hosts mount with the password saved there)
 - Custom collections
 
 The sidebar must be collapsible and should not dominate the available screen space.

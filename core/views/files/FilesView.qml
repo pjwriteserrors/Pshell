@@ -381,7 +381,7 @@ FocusScope {
 				return;
 			}
 			if (path) pane.openFolder(path);
-		});
+		}, place.login);
 	}
 
 	// ── menus ──────────────────────────────────────────────────────────────

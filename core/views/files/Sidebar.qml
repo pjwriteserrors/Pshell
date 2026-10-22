@@ -26,6 +26,7 @@ Rectangle {
 	Component.onCompleted: {
 		Files.request("describe", { paths: root.standard }, data => root.existing = (data?.entries ?? []).filter(entry => entry.dir).map(entry => entry.path));
 		Files.knowVaults();
+		if (Plugins.on("ssh")) Ssh.refresh(false);
 	}
 
 	function isAt(kind, value) {
@@ -613,7 +614,7 @@ Rectangle {
 						busy: host.mounting
 						onClicked: {
 							host.mounting = true;
-							root.view.openPlace(root.pane, { mounted: false, name: host.label, uri: Files.hostUri(modelData), id: Files.hostUri(modelData) });
+							root.view.openPlace(root.pane, { mounted: false, name: host.label, uri: Files.hostUri(modelData), id: Files.hostUri(modelData), login: String(modelData.id) });
 							resetTimer.restart();
 						}
 

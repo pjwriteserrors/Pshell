@@ -192,6 +192,7 @@ Singleton {
 		// an app that plays its own sound says so (suppress-sound)
 		const critical = notification.urgency === NotificationUrgency.Critical;
 		Haptics.play("notification", notification.hints["suppress-sound"] ? "" : (critical ? "notificationCritical" : "notification"));
+		Keyboard.notified(critical);
 	}
 
 	function addToast(notification) {

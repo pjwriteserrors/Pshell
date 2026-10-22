@@ -115,9 +115,12 @@ class Places:
     # ── acting ─────────────────────────────────────────────────────────────
     def _operation(self, password, needs):
         operation = Gio.MountOperation()
+        given = []
 
         def ask(op, message, user, domain, flags):
-            if password and flags & Gio.AskPasswordFlags.NEED_PASSWORD:
+            # asked again: the password given was wrong
+            if password and flags & Gio.AskPasswordFlags.NEED_PASSWORD and not given:
+                given.append(True)
                 op.set_password(password)
                 op.set_password_save(Gio.PasswordSave.FOR_SESSION)
                 op.reply(Gio.MountOperationResult.HANDLED)

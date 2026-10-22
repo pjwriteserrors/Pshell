@@ -125,7 +125,7 @@ def key_code(name, layout="us"):
 class Output:
     """The virtual keyboard and mouse the actions type and click with."""
 
-    def __init__(self):
+    def __init__(self, name="Pshell mouse"):
         self.keys = None
         self.pointer = None
         self.layout = "us"
@@ -137,11 +137,11 @@ class Output:
         try:
             key_codes = [code for name, code in E.ecodes.items()
                          if name.startswith("KEY_") and isinstance(code, int) and 0 < code < 0x2ff]
-            self.keys = evdev.UInput({E.EV_KEY: sorted(set(key_codes))}, name="Pshell mouse keys")
+            self.keys = evdev.UInput({E.EV_KEY: sorted(set(key_codes))}, name=f"{name} keys")
             self.pointer = evdev.UInput({
                 E.EV_KEY: [E.BTN_LEFT, E.BTN_RIGHT, E.BTN_MIDDLE, E.BTN_SIDE, E.BTN_EXTRA],
                 E.EV_REL: [E.REL_X, E.REL_Y, E.REL_WHEEL, E.REL_HWHEEL, E.REL_WHEEL_HI_RES, E.REL_HWHEEL_HI_RES],
-            }, name="Pshell mouse buttons")
+            }, name=f"{name} buttons")
         except (OSError, evdev.UInputError) as error:
             log(f"no uinput ({error}): keys and buttons cannot be sent")
         self.layout = keyboard_layout()

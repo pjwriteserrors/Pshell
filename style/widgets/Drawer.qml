@@ -50,9 +50,15 @@ PanelWindow {
 	signal panelClosed
 
 	// the panel is built when it opens (Popups.wanted): then it grows out
-	// of the bar just the same
-	onShownChanged: root.followShown()
-	Component.onCompleted: if (root.shown) root.followShown()
+	// of the bar just the same. `shown` already changes while it is being
+	// built, before the Behavior on reveal is live, so that is left to
+	// onCompleted
+	property bool built: false
+	onShownChanged: if (root.built) root.followShown()
+	Component.onCompleted: {
+		root.built = true;
+		if (root.shown) root.followShown();
+	}
 
 	function followShown() {
 		if (root.shown) {
@@ -62,8 +68,13 @@ PanelWindow {
 		} else {
 			root.panelClosed();
 		}
-		root.reveal = root.shown ? 1 : 0;
+		if (!root.shown || root.placed) root.reveal = root.shown ? 1 : 0;
 	}
+
+	// a new window has the screen's width only once the compositor answered;
+	// until then the panel would start its way in at the left edge
+	readonly property bool placed: Math.abs(root.width - (root.screen?.width ?? root.width)) < 2
+	onPlacedChanged: if (root.built && root.shown && root.placed) root.reveal = 1
 
 	readonly property var motion: root.shown ? PopupMotion.opening(PopupMotion.style) : PopupMotion.closing(PopupMotion.style)
 
@@ -146,9 +157,10 @@ PanelWindow {
 		opacity: root.form.opacity
 		transformOrigin: Item.Top
 
-		// when another button re-targets an open panel, it glides over
+		// when another button re-targets an open panel, it glides over; not
+		// while the new window is still taking the screen's width
 		Behavior on x {
-			enabled: root.shown && root.reveal > 0.98
+			enabled: root.shown && root.reveal > 0.98 && root.placed
 			SpatialAnim {
 				duration: Motion.long
 			}

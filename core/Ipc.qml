@@ -307,6 +307,40 @@ Scope {
 		}
 	}
 
+	// the Logitech keyboard: `keyboard open`, `keyboard flash pulse`, `keyboard light up`
+	IpcHandler {
+		target: "keyboard"
+		enabled: Plugins.on("keyboard")
+
+		function open(): void {
+			NiriSettings.page = "keyboard";
+			Popups.withFocusedScreen(screen => Popups.openModal("niri", screen));
+		}
+		// pulse | blink | glow | once
+		function flash(pattern: string): void {
+			Keyboard.flash(pattern || undefined);
+		}
+		// up | down | toggle | auto | max
+		function light(step: string): void {
+			Keyboard.test({ kind: "keyboard", op: `backlight-${step}` });
+		}
+		function state(): string {
+			Keyboard.send({ op: "state" });
+			return JSON.stringify({ device: Keyboard.device?.name ?? "", online: Keyboard.online, rules: Keyboard.rules.length, daemon: Keyboard.daemonState });
+		}
+	}
+
+	// every HID device and who looks after it
+	IpcHandler {
+		target: "devices"
+		enabled: Plugins.on("niri-settings")
+
+		function open(): void {
+			NiriSettings.page = "devices";
+			Popups.withFocusedScreen(screen => Popups.openModal("niri", screen));
+		}
+	}
+
 	IpcHandler {
 		target: "radial"
 		enabled: Plugins.on("radial-menu")

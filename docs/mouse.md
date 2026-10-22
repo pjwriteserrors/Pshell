@@ -1,6 +1,6 @@
 # Mouse
 
-`mouse` is a page of the Pshell settings for Logitech mice (`>settings`,
+`mouse` is a page of the Pshell settings for Logitech mice (keyboards on the same receiver are `keyboard.md`'s) (`>settings`,
 `scripts/ipc.sh settings open mouse`): what every button does, by app and by
 gesture, and how the mouse points, scrolls and feels. It speaks HID++ 2.0 to
 the mouse itself – Solaar is not needed and, once the page has taken over,

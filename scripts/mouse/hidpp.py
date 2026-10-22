@@ -56,6 +56,15 @@ XY_STATS = 0x2250
 WHEEL_STATS = 0x2251
 REPORT_RATE = 0x8060
 EXTENDED_REPORT_RATE = 0x8061
+# keyboards
+BACKLIGHT2 = 0x1982
+FN_INVERSION = 0x40A0
+NEW_FN_INVERSION = 0x40A2
+K375S_FN_INVERSION = 0x40A3
+LOCK_KEY_STATE = 0x4220
+DISABLE_KEYS = 0x4521
+MULTIPLATFORM = 0x4531
+KEYBOARD_LAYOUT_2 = 0x4540
 
 FEATURE_NAMES = {
     ROOT: "Root", FEATURE_SET: "Feature set", FW_VERSION: "Firmware", DEVICE_NAME: "Name",
@@ -69,7 +78,18 @@ FEATURE_NAMES = {
     POINTER_SPEED: "Pointer speed", XY_STATS: "Movement statistics", WHEEL_STATS: "Wheel statistics",
     REPORT_RATE: "Report rate", EXTENDED_REPORT_RATE: "Report rate", 0x1E00: "Hidden features",
     0x00D0: "Firmware update", 0x00D1: "Firmware update", 0x1602: "Password",
+    BACKLIGHT2: "Backlight", FN_INVERSION: "Fn inversion", NEW_FN_INVERSION: "Fn inversion",
+    K375S_FN_INVERSION: "Fn inversion", LOCK_KEY_STATE: "Lock keys", DISABLE_KEYS: "Disable keys",
+    MULTIPLATFORM: "Platform", KEYBOARD_LAYOUT_2: "Layout",
 }
+
+# BACKLIGHT2 modes (bits 3–4 of its options): 2 is refused by the MX Keys S
+BACKLIGHT_AUTO, BACKLIGHT_MANUAL = 1, 3
+# DISABLE_KEYS bits
+DISABLE_BITS = {"capslock": 0x01, "numlock": 0x02, "scrolllock": 0x04, "insert": 0x08, "super": 0x10}
+# MULTIPLATFORM os flags
+PLATFORM_OS = [("linux", 0x0400), ("windows", 0x0100), ("android", 0x1000), ("macos", 0x2000),
+               ("ios", 0x4000), ("chrome", 0x0800), ("webos", 0x8000), ("tizen", 0x0001)]
 
 ERRORS = {
     1: "unknown", 2: "invalid argument", 3: "out of range", 4: "hardware error",
@@ -503,6 +523,102 @@ class Device:
 
     def set_dpi(self, value, sensor=0):
         return self.call(ADJUSTABLE_DPI, 3, struct.pack(">BH", sensor, int(value)))
+
+    # ── keyboard: backlight (BACKLIGHT2) ────────────────────────────────
+    def backlight(self):
+        """The MX Keys S: on, auto or manual, a level of `levels`, and how
+        long it stays on with the hands away, near, and on the cable (the
+        device counts in 5 s, these are seconds)."""
+        reply = self.call(BACKLIGHT2, 0)
+        enabled, options, supported, effects, level, away, near, powered = struct.unpack("<BBBHBHHH", reply[:12])
+        levels = 0
+        try:
+            levels = self.call(BACKLIGHT2, 2)[0]
+        except HidppError:
+            pass
+        mode = (options >> 3) & 0x03
+        return {
+            "on": bool(enabled), "mode": "manual" if mode == BACKLIGHT_MANUAL else "auto",
+            "level": level, "levels": levels, "options": options,
+            "auto": bool(supported & 0x08), "manual": bool(supported & 0x20), "effects": effects,
+            "away": away * 5, "near": near * 5, "powered": powered * 5,
+        }
+
+    def set_backlight(self, current, on=None, mode=None, level=None, away=None, near=None, powered=None):
+        """Writes the whole configuration: what is None stays as `current`
+        (a dict from backlight()). The level only counts in manual mode."""
+        on = current["on"] if on is None else on
+        mode = current["mode"] if mode is None else mode
+        level = current["level"] if level is None else level
+        bits = BACKLIGHT_MANUAL if mode == "manual" else BACKLIGHT_AUTO
+        options = (current["options"] & 0x07) | (bits << 3)
+        if current["levels"]:
+            level = max(0, min(current["levels"] - 1, int(level)))
+
+        def units(seconds, fallback):
+            return max(1, min(0xFFFF, (int(seconds if seconds is not None else fallback) + 4) // 5))
+
+        data = struct.pack("<BBBBHHH", 1 if on else 0, options, 0xFF, level if bits == BACKLIGHT_MANUAL else 0,
+                           units(away, current["away"]), units(near, current["near"]), units(powered, current["powered"]))
+        return self.call(BACKLIGHT2, 1, data)
+
+    # ── keyboard: Fn keys, locks, platform ──────────────────────────────
+    def fn_feature(self):
+        for fid in (K375S_FN_INVERSION, NEW_FN_INVERSION, FN_INVERSION):
+            if self.has(fid):
+                return fid
+        return None
+
+    def fn_swap(self):
+        """True: the keys do what is printed on them (media …), Fn gives F1–F12."""
+        fid = self.fn_feature()
+        if fid == K375S_FN_INVERSION:
+            host = self.call(HOSTS_INFO, 0)[3] if self.has(HOSTS_INFO) else 0xFF
+            return bool(self.call(fid, 0, bytes([host]))[1] & 1)
+        return bool(self.call(fid, 0)[0] & 1)
+
+    def set_fn_swap(self, on):
+        fid = self.fn_feature()
+        if fid == K375S_FN_INVERSION:
+            host = self.call(HOSTS_INFO, 0)[3] if self.has(HOSTS_INFO) else 0xFF
+            return self.call(fid, 1, bytes([host, 1 if on else 0]))
+        return self.call(fid, 1, bytes([1 if on else 0]))
+
+    def disabled_keys(self):
+        """{capable: [names], off: [names]}"""
+        capable = self.call(DISABLE_KEYS, 0)[0]
+        off = self.call(DISABLE_KEYS, 1)[0]
+        return {
+            "capable": [name for name, bit in DISABLE_BITS.items() if capable & bit],
+            "off": [name for name, bit in DISABLE_BITS.items() if off & bit],
+        }
+
+    def set_disabled_keys(self, names):
+        mask = 0
+        for name in names:
+            mask |= DISABLE_BITS.get(name, 0)
+        return self.call(DISABLE_KEYS, 2, bytes([mask]))
+
+    def platform(self):
+        """The layout of the special keys: {current, choices: [{index, os}]}."""
+        info = self.call(MULTIPLATFORM, 0)
+        flags, count = info[0], info[2]
+        choices = []
+        for index in range(count):
+            desc = self.call(MULTIPLATFORM, 1, bytes([index]))
+            platform, os_flags = desc[0], struct.unpack(">H", desc[2:4])[0]
+            names = [name for name, bit in PLATFORM_OS if os_flags & bit]
+            if names and all(c["index"] != platform for c in choices):
+                choices.append({"index": platform, "os": names})
+        current = self.call(MULTIPLATFORM, 2, b"\xff")[2]
+        return {"current": current, "choices": choices, "settable": bool(flags & 0x02)}
+
+    def set_platform(self, index):
+        return self.call(MULTIPLATFORM, 3, bytes([0xFF, index & 0xFF]))
+
+    def locks(self):
+        state = self.call(LOCK_KEY_STATE, 0)[0]
+        return {"numlock": bool(state & 1), "capslock": bool(state & 2), "scrolllock": bool(state & 4)}
 
     # ── hosts ───────────────────────────────────────────────────────────
     def hosts(self):

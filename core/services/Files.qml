@@ -1739,8 +1739,9 @@ Singleton {
 	readonly property var drives: root.places.filter(place => place.kind !== "network")
 	readonly property var network: root.places.filter(place => place.kind === "network")
 
-	function mount(place, password, done) {
-		root.request("mount", { place: String(place), password: password || "" }, (data, error) => {
+	// login: the id of an SSH plugin login whose password the mount takes
+	function mount(place, password, done, login) {
+		root.request("mount", { place: String(place), password: password || "", login: login || "" }, (data, error) => {
 			if (error && error !== "password") root.fail(error);
 			if (done) done(data?.path ?? "", error);
 		});

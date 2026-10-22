@@ -14,6 +14,8 @@ import "Controls.js" as Controls
 Popup {
 	id: root
 
+	// the device whose rules these are: Mouse or Keyboard (the same calls)
+	property var store: Mouse
 	property string control: ""
 	property string trigger: ""
 	property string app: ""
@@ -35,15 +37,17 @@ Popup {
 		root.control = control;
 		root.trigger = trigger;
 		root.app = app;
-		root.rule = Mouse.ruleFor(control, trigger, app);
+		root.rule = root.store.ruleFor(control, trigger, app);
 		const action = root.rule?.action;
-		root.group = action ? ({ keys: "keys", command: "command", button: "buttons", scroll: "buttons", niri: "windows", mouse: "mouse", shell: "shell" })[action.kind] ?? "suggested" : "suggested";
-		if (action?.kind === "shell") {
-			const known = Mouse.shellActions.find(a => a.id === action.id);
+		root.group = action ? ({ keys: "keys", command: "command", button: "buttons", scroll: "buttons", niri: "windows", mouse: "mouse", keyboard: "keyboard", shell: "shell" })[action.kind] ?? "suggested" : "suggested";
+		launcherField.text = action?.kind === "shell" && action.id === "launcher-query" ? String(action.value ?? "") : "";
+		if (action?.kind === "shell" && action.id === "launcher-query") root.group = "launcher";
+		else if (action?.kind === "shell") {
+			const known = root.store.shellActions.find(a => a.id === action.id);
 			if (known) root.group = known.group === "Shell" ? "shell" : known.group.toLowerCase();
 		}
 		if (action?.kind === "niri") {
-			const known = Mouse.niriActions.find(a => a.id === action.action);
+			const known = root.store.niriActions.find(a => a.id === action.action);
 			if (known) root.group = known.group.toLowerCase();
 		}
 		feel.current = root.rule?.feel === undefined || root.rule?.feel === null ? "auto" : (root.rule.feel === "" ? "none" : root.rule.feel);
@@ -73,7 +77,7 @@ Popup {
 		if (!root.live || !root.rule)
 			return;
 		root.rule = Object.assign({}, root.rule, root.extra());
-		Mouse.putRule(root.rule);
+		root.store.putRule(root.rule);
 	}
 
 	function pick(action) {
@@ -94,18 +98,20 @@ Popup {
 			forward: [{ kind: "button", button: "forward" }, { kind: "keys", keys: ["ctrl", "shift", "z"] }, { kind: "niri", action: "focus-column-right" }, { kind: "shell", id: "next" }],
 			thumb: [{ kind: "scroll", dir: root.trigger === "left" ? "left" : "right" }, { kind: "shell", id: root.trigger === "left" ? "volume-down" : "volume-up" }, { kind: "niri", action: root.trigger === "left" ? "focus-column-left" : "focus-column-right" }, { kind: "keys", keys: root.trigger === "left" ? ["ctrl", "shift", "tab"] : ["ctrl", "tab"] }, { kind: "niri", action: root.trigger === "left" ? "focus-workspace-up" : "focus-workspace-down" }]
 		};
-		return (s[root.control] ?? s.gesture).map(action => ({ action, info: Mouse.describe(action, root.control) }));
+		const list = root.store.suggestions ? root.store.suggestions(root.control, root.trigger) : (s[root.control] ?? s.gesture);
+		return list.map(action => ({ action, info: root.store.describe(action, root.control) }));
 	}
 
 	readonly property var groups: [
 		{ id: "suggested", label: "Suggested", icon: "star_outline" },
 		{ id: "shell", label: "Shell", icon: "view_dashboard_outline" },
+		{ id: "launcher", label: "Launcher", icon: "magnify" },
 		{ id: "windows", label: "Windows", icon: "view_column_outline" },
 		{ id: "workspaces", label: "Workspaces", icon: "view_grid_outline" },
 		{ id: "media", label: "Media & volume", icon: "music_note" },
 		{ id: "screenshot", label: "Screenshot", icon: "selection_drag" },
-		{ id: "mouse", label: "The mouse", icon: "mouse" },
-		{ id: "profiles", label: "Profiles", icon: "account_switch_outline" },
+		root.store.ownGroup ?? { id: "mouse", label: "The mouse", icon: "mouse" },
+		...(root.store.profiles.length > 0 ? [{ id: "profiles", label: "Profiles", icon: "account_switch_outline" }] : []),
 		{ id: "keys", label: "Shortcut", icon: "keyboard_outline" },
 		{ id: "buttons", label: "Click & scroll", icon: "cursor_default_click_outline" },
 		{ id: "command", label: "Command", icon: "console" }
@@ -113,22 +119,38 @@ Popup {
 
 	readonly property var all: {
 		const out = [];
-		for (const p of Mouse.profiles)
+		for (const p of root.store.profiles)
 			out.push({ group: "profiles", action: { kind: "shell", id: "profile", value: p.id }, info: { label: `Switch to ${p.name}`, icon: p.icon || "mouse_variant" }, detail: "Kept in every profile" });
-		for (const a of Mouse.shellActions.filter(a => !a.hidden))
+		for (const a of root.store.shellActions.filter(a => !a.hidden))
 			out.push({ group: a.group === "Shell" ? "shell" : a.group.toLowerCase(), action: { kind: "shell", id: a.id }, info: { label: a.label, icon: a.icon }, detail: a.detail ?? "" });
-		for (const a of Mouse.niriActions)
+		for (const a of root.store.niriActions)
 			out.push({ group: a.group.toLowerCase(), action: { kind: "niri", action: a.id }, info: { label: a.label, icon: a.icon }, detail: `niri: ${a.id}` });
-		for (const a of Mouse.mouseActions) {
+		const own = root.store.ownGroup?.id ?? "mouse";
+		for (const a of root.store.ownActions ?? root.store.mouseActions) {
 			if (a.lasting && !root.canSustain) continue;
-			out.push({ group: "mouse", action: { kind: "mouse", op: a.id }, info: { label: a.label, icon: a.icon }, detail: a.detail ?? "" });
+			out.push({ group: own, action: { kind: root.store.ownKind ?? "mouse", op: a.id }, info: { label: a.label, icon: a.icon }, detail: a.detail ?? "" });
 		}
+		for (const q of root.launcherPresets)
+			out.push({ group: "launcher-presets", action: { kind: "shell", id: "launcher-query", value: q.query }, info: { label: q.label, icon: q.icon }, detail: q.query });
 		for (const b of ["left", "right", "middle", "back", "forward"])
-			out.push({ group: "buttons", action: { kind: "button", button: b }, info: Mouse.describe({ kind: "button", button: b }), detail: "" });
+			out.push({ group: "buttons", action: { kind: "button", button: b }, info: root.store.describe({ kind: "button", button: b }), detail: "" });
 		for (const d of ["up", "down", "left", "right"])
-			out.push({ group: "buttons", action: { kind: "scroll", dir: d }, info: Mouse.describe({ kind: "scroll", dir: d }), detail: "" });
+			out.push({ group: "buttons", action: { kind: "scroll", dir: d }, info: root.store.describe({ kind: "scroll", dir: d }), detail: "" });
 		return out;
 	}
+
+	// the launcher opened on a query: a mode of it (>c) or anything typed
+	readonly property var launcherPresets: [
+		{ query: ">c ", label: "Calculator", icon: "calculator" },
+		{ query: ">conv ", label: "Convert", icon: "swap_horizontal" },
+		{ query: ">t ", label: "Translate", icon: "translate" },
+		{ query: ">w ", label: "Web search", icon: "web" },
+		{ query: ">file ", label: "Files", icon: "folder_outline" },
+		{ query: ">todo ", label: "Todo", icon: "format_list_checkbox" },
+		{ query: ">chat ", label: "Chat", icon: "chat" },
+		{ query: ">ai ", label: "AI actions", icon: "robot" },
+		{ query: ">", label: "Commands", icon: "console" }
+	]
 
 	readonly property var shown: {
 		const q = search.text.trim().toLowerCase();
@@ -363,7 +385,7 @@ Popup {
 
 					anchors.fill: parent
 					anchors.margins: 12
-					visible: search.text.trim() !== "" || !["keys", "command"].includes(root.group)
+					visible: search.text.trim() !== "" || !["keys", "command", "launcher"].includes(root.group)
 					cellWidth: Math.floor(width / 2)
 					cellHeight: 64
 					model: root.shown
@@ -465,7 +487,7 @@ Popup {
 									implicitHeight: 28
 									icon: "play_outline"
 									visible: cellButton.hovered
-									onClicked: Mouse.test(cell.modelData.action)
+									onClicked: root.store.test(cell.modelData.action)
 								}
 							}
 						}
@@ -559,7 +581,7 @@ Popup {
 							icon: "play_outline"
 							text: "Try"
 							enabled: recorder.keys.length > 0
-							onActivated: Mouse.test({ kind: "keys", keys: recorder.keys, codes: recorder.codes })
+							onActivated: root.store.test({ kind: "keys", keys: recorder.keys, codes: recorder.codes })
 						}
 
 						TextButton {
@@ -573,6 +595,68 @@ Popup {
 				}
 
 				// a command
+				ColumnLayout {
+					anchors.fill: parent
+					anchors.margins: 20
+					visible: search.text.trim() === "" && root.group === "launcher"
+					spacing: 12
+
+					Field {
+						id: launcherField
+
+						Layout.fillWidth: true
+						icon: "magnify"
+						placeholder: ">c "
+						onAccepted: if (launcherField.text !== "") root.pick({ kind: "shell", id: "launcher-query", value: launcherField.text })
+					}
+
+					Flow {
+						Layout.fillWidth: true
+						spacing: 8
+
+						Repeater {
+							model: root.launcherPresets
+
+							delegate: Chip {
+								required property var modelData
+
+								text: `${modelData.label}  ${modelData.query.trim()}`
+								icon: modelData.icon
+								selected: launcherField.text === modelData.query
+								onClicked: launcherField.text = modelData.query
+							}
+						}
+					}
+
+					Item {
+						Layout.fillHeight: true
+					}
+
+					RowLayout {
+						Layout.fillWidth: true
+
+						Item {
+							Layout.fillWidth: true
+						}
+
+						TextButton {
+							variant: "ghost"
+							icon: "play_outline"
+							text: "Try"
+							enabled: launcherField.text !== ""
+							onActivated: root.store.test({ kind: "shell", id: "launcher-query", value: launcherField.text })
+						}
+
+						TextButton {
+							variant: "filled"
+							icon: "check"
+							text: "Use"
+							enabled: launcherField.text !== ""
+							onActivated: root.pick({ kind: "shell", id: "launcher-query", value: launcherField.text })
+						}
+					}
+				}
+
 				ColumnLayout {
 					anchors.fill: parent
 					anchors.margins: 20
@@ -611,7 +695,7 @@ Popup {
 							icon: "play_outline"
 							text: "Try"
 							enabled: commandField.text.trim() !== ""
-							onActivated: Mouse.test({ kind: "command", command: commandField.text.trim() })
+							onActivated: root.store.test({ kind: "command", command: commandField.text.trim() })
 						}
 
 						TextButton {
@@ -643,14 +727,14 @@ Popup {
 				icon: "vibrate"
 				size: 16
 				color: Theme.textMuted
-				visible: (Mouse.state.haptic ?? null) !== null
+				visible: (root.store.state.haptic ?? null) !== null
 			}
 
 			Segmented {
 				id: feel
 
 				Layout.preferredWidth: 300
-				visible: (Mouse.state.haptic ?? null) !== null
+				visible: (root.store.state.haptic ?? null) !== null
 				options: [
 					{ value: "auto", label: "Auto" },
 					{ value: "none", label: "None" },
@@ -660,7 +744,7 @@ Popup {
 				]
 				onSelected: value => {
 					feel.current = value;
-					if (value !== "auto" && value !== "none") Mouse.play(value);
+					if (value !== "auto" && value !== "none") root.store.play(value);
 					root.keep();
 				}
 			}
@@ -681,7 +765,7 @@ Popup {
 			TextButton {
 				variant: "ghost"
 				icon: "backup_restore"
-				text: root.app === "" ? `Default: ${Mouse.nativeLabel(root.control)}` : "As everywhere"
+				text: root.app === "" ? `Default: ${root.store.nativeLabel(root.control)}` : "As everywhere"
 				visible: root.rule !== null
 				onActivated: {
 					root.cleared();

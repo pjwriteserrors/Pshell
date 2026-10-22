@@ -583,6 +583,7 @@ Singleton {
 	// the shell's own: run here, at once
 	readonly property var shellActions: [
 		{ id: "launcher", label: "Launcher", icon: "apps", group: "Shell", run: () => root.drawer("launcher") },
+		{ id: "launcher-query", label: "Launcher with text", icon: "magnify", group: "Shell", hidden: true, run: value => root.launch(String(value ?? "")) },
 		{ id: "radial", label: "Action ring", icon: "circle_slice_8", group: "Shell", detail: "The radial menu at the pointer", run: () => root.modal("radial") },
 		{ id: "overview", label: "Overview panel", icon: "view_dashboard_outline", group: "Shell", run: () => root.drawer("overview") },
 		{ id: "control", label: "Control center", icon: "tune_variant", group: "Shell", run: () => root.drawer("control", "main") },
@@ -620,6 +621,18 @@ Singleton {
 		}
 		Popups.withFocusedScreen(screen => Popups.open(id, screen, page));
 	}
+
+	// the launcher on a query (">c "): again on the same one closes it
+	function launch(query) {
+		if (Popups.current === "launcher") {
+			Popups.close();
+			if (root.lastQuery === query) return;
+		}
+		root.lastQuery = query;
+		Popups.withFocusedScreen(screen => Popups.open("launcher", screen, "", query));
+	}
+
+	property string lastQuery: ""
 
 	function modal(kind) {
 		if (Popups.modal === kind) {
@@ -682,6 +695,7 @@ Singleton {
 		case "none":
 			return { label: "Nothing", icon: "cancel", plain: false };
 		case "shell": {
+			if (action.id === "launcher-query") return { label: `Launcher: ${String(action.value ?? "").trim() || "…"}`, icon: "magnify" };
 			if (action.id === "profile") {
 				const p = root.profiles.find(x => x.id === action.value);
 				return { label: `Profile: ${p?.name ?? action.value}`, icon: p?.icon ?? "account_switch_outline" };

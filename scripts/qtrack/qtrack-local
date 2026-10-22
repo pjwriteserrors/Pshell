@@ -7,6 +7,7 @@ import base64
 import json
 import math
 import os
+import re
 import shlex
 import shutil
 import sqlite3
@@ -737,33 +738,55 @@ class TeamworkClient:
         )
         return self.normalize_tasks(payload)
 
+    @staticmethod
+    def mentions(user_id: int, handle: str, *bodies: str) -> bool:
+        """Whether Teamwork text mentions the user: a link to their profile, or
+        the plain "@handle" that is left of it in a text body ("@PhilippJ" is
+        not a mention inside "@PhilippJung")."""
+        if any(f"/people/{user_id}\"" in body for body in bodies):
+            return True
+        return bool(handle) and any(re.search(rf"@{re.escape(handle)}(?![A-Za-z0-9_.])", body) for body in bodies)
+
     def mentioned_task_ids(self, user_id: int, handle: str) -> set[int]:
         """Open tasks where the user is @mentioned in a comment or in the description."""
         if not handle:
             return set()
-        profile_link = f"/app/people/{user_id}"
         task_ids: set[int] = set()
         comments = self.paged(
             "/projects/api/v3/comments.json",
             "comments",
-            {"searchTerm": handle, "pageSize": 500, "fields[comments]": "id,objectId,objectType,htmlBody"},
+            {
+                "searchTerm": handle,
+                "pageSize": 250,
+                "orderBy": "date",
+                "orderMode": "desc",
+                "fields[comments]": "id,objectId,objectType,htmlBody,body",
+            },
+            max_pages=8,
         )
         for comment in comments:
-            if str(comment.get("objectType") or "") != "task" or profile_link not in str(comment.get("htmlBody") or ""):
+            if str(comment.get("objectType") or "") != "task":
+                continue
+            if not self.mentions(user_id, handle, str(comment.get("htmlBody") or ""), str(comment.get("body") or "")):
                 continue
             task_id = resolve_relationship_id(comment.get("objectId") or comment.get("object"))
             if task_id is not None:
                 task_ids.add(task_id)
 
+        # the search also finds the name in passing; the check keeps the mentions
         described = self.paged(
             "/projects/api/v3/tasks.json",
             "tasks",
-            {"searchTerm": handle, "pageSize": 250, "fields[tasks]": "id,description"},
-            max_pages=2,
+            {
+                "searchTerm": handle,
+                "projectStatuses": "active,current,late,upcoming",
+                "pageSize": 250,
+                "fields[tasks]": "id,description",
+            },
+            max_pages=4,
         )
         for task in described:
-            description = str(task.get("description") or "")
-            if profile_link in description or f"@{handle}" in description:
+            if self.mentions(user_id, handle, str(task.get("description") or "")):
                 task_id = parse_optional_int(task.get("id"))
                 if task_id is not None:
                     task_ids.add(task_id)
