@@ -234,8 +234,14 @@ Singleton {
 	onGameKeyChanged: if (root.gaming) root.tellGaming()
 
 	// what the daemon learned about the game's sounds (gamefeel.Memory):
-	// {game, sounds, known, yours, muted, minutes, gain}
+	// {game, sounds, known, yours, muted, minutes, gain, clusters: [{id, n, share, lvl, state, keys}]}
 	property var learning: ({})
+	// the inside of the game haptics, while the page watches: every onset
+	// with its verdict and reason (newest first, at most 40), the presses'
+	// open windows, the meter's raw numbers
+	property var onsets: []
+	property var gate: ({ duty: 0, held: [], windows: [] })
+	property var meter: ({})
 	// a sound that should not have been felt: never again (-1: the last one)
 	function muteSound(cluster) {
 		root.send({ op: "mute", cluster: cluster ?? -1 });
@@ -511,6 +517,12 @@ Singleton {
 		case "learning":
 			root.learning = data;
 			break;
+		case "onset":
+			root.onsets = [data].concat(root.onsets.slice(0, 39));
+			break;
+		case "gate":
+			root.gate = data;
+			break;
 		case "pad":
 			root.padOn = data.on === true;
 			root.padBlocked = String(data.blocked ?? "");
@@ -530,6 +542,7 @@ Singleton {
 		case "bass":
 			root.bass = data.level ?? 0;
 			root.bassThreshold = data.threshold ?? 0;
+			root.meter = data;
 			break;
 		case "batteryLog":
 			root.batteryLog = data.log ?? [];

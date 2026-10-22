@@ -198,7 +198,15 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
     `{op: "mute", cluster}`; *Forget this game* (`ipc mouse feel forget`,
     `{op: "forget"}`) starts over. The daemon tells the page what it
     learned (`learning`: sounds, known, yours, muted, minutes, gain).
-    For 3 s after the game rumbled the pad its sound stays quiet (its own
+    *Inside* on the page (`FeelInside.qml`, folded) shows it live while
+    the page watches: the detector's numbers (`bass` event: flux, bar,
+    level, loud moments, threshold, the windows' share of the time), the
+    presses' open windows (`gate`), every onset with its cluster, counts,
+    verdict and the reason it was or was not felt (`onset`), and the game's
+    sounds as learned (`learning.clusters`: state yours/world/new/muted,
+    times, share inside windows, level, the keys and delays) with a mute
+    button each. For 3 s after the game rumbled the pad its sound stays
+    quiet (its own
     haptics are the better ones, nothing plays twice). `rumbleGap` (at
     most every so many ms, 70). `PSHELL_EARS_DUMP=<file>` writes every
     frame's flux, bar, level and onset flag, for tuning.

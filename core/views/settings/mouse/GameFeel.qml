@@ -312,6 +312,12 @@ ColumnLayout {
 		}
 	}
 
+	// the inside, live: numbers, windows, every onset with its reason, the sounds
+	FeelInside {
+		Layout.fillWidth: true
+		visible: root.sound
+	}
+
 	// what it learned about this game, and the way out
 	RowLayout {
 		Layout.fillWidth: true
