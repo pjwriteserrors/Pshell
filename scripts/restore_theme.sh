@@ -16,6 +16,10 @@ theme_ensure_runtime_dirs
 exec 9>"$THEME_STATE_DIR/theme-startup.lock"
 flock -n 9 || exit 0
 
+# the library's palettes and GTK builds, once the session has settled, so
+# the first change finds them ready (theme_prewarm.sh; nothing when done)
+setsid -f bash -c 'sleep 90; exec bash "$1"' _ "$SCRIPT_DIR/theme_prewarm.sh" </dev/null >/dev/null 2>&1 9>&- || true
+
 theme_path=""
 if [[ -f "$THEME_CURRENT_DIR_FILE" ]]; then
 	theme_path="$(<"$THEME_CURRENT_DIR_FILE")"

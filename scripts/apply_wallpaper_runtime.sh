@@ -638,17 +638,27 @@ if selection_is_unchanged; then
 else
 	# the shell animates the change and hands over to the player itself
 	(( SHELL_PAINTS )) && keep_leaving_frame
-	extract_frame "$MEDIA_PATH" "$THEME_CURRENT_FRAME_FILE"
-	rm -f "$THEME_CURRENT_MEDIA_LINK" "$THEME_CURRENT_VIDEO_LINK" "$THEME_CURRENT_IMAGE_LINK"
-	ln -s "$MEDIA_PATH" "$THEME_CURRENT_MEDIA_LINK"
-	if [[ "$MEDIA_TYPE" == "video" ]]; then
-		ln -s "$MEDIA_PATH" "$THEME_CURRENT_VIDEO_LINK"
+	publish_selection() {
+		rm -f "$THEME_CURRENT_MEDIA_LINK" "$THEME_CURRENT_VIDEO_LINK" "$THEME_CURRENT_IMAGE_LINK"
+		ln -s "$MEDIA_PATH" "$THEME_CURRENT_MEDIA_LINK"
+		if [[ "$MEDIA_TYPE" == "video" ]]; then
+			ln -s "$MEDIA_PATH" "$THEME_CURRENT_VIDEO_LINK"
+		else
+			ln -s "$MEDIA_PATH" "$THEME_CURRENT_IMAGE_LINK"
+		fi
+		printf '%s\n' "$MEDIA_TYPE" >"$THEME_CURRENT_MEDIA_TYPE_FILE"
+		printf '%s\n' "$MEDIA_PATH" >"$THEME_CURRENT_MEDIA_SOURCE_FILE"
+		media_signature "$MEDIA_PATH" >"$THEME_CURRENT_MEDIA_SIGNATURE_FILE"
+	}
+	# a picture the shell draws from the file itself: it can start the change
+	# now, while frame.png (only the hooks read it) is still being written
+	if (( SHELL_PAINTS )) && [[ "$MEDIA_TYPE" == "image" ]]; then
+		publish_selection
+		extract_frame "$MEDIA_PATH" "$THEME_CURRENT_FRAME_FILE"
 	else
-		ln -s "$MEDIA_PATH" "$THEME_CURRENT_IMAGE_LINK"
+		extract_frame "$MEDIA_PATH" "$THEME_CURRENT_FRAME_FILE"
+		publish_selection
 	fi
-	printf '%s\n' "$MEDIA_TYPE" >"$THEME_CURRENT_MEDIA_TYPE_FILE"
-	printf '%s\n' "$MEDIA_PATH" >"$THEME_CURRENT_MEDIA_SOURCE_FILE"
-	media_signature "$MEDIA_PATH" >"$THEME_CURRENT_MEDIA_SIGNATURE_FILE"
 
 	readarray -t TARGETS < <(printf '%s\n' "${OUTPUTS[@]}")
 	RESTART_BASE_LAYER=1

@@ -777,23 +777,48 @@ stay on the phone. A file `demo` in the state folder, or
 
 `scripts/apply_theme_selection.sh <theme>`:
 
-1. a still frame of the media (`theme_write_frame` in `theme_paths.sh`)
-2. the wallpaper runtime in the background (`apply_wallpaper_runtime.sh`):
+1. the colours, first and without waiting for anything else: the palette
+   is kept per media (path and signature) and wallust settings in
+   `~/.cache/pshell/palettes` (`theme_palette.sh`) and put on with
+   `wallust cs` – the templates are written beside `~/.cache/wal` and moved
+   in with `colors.json` last, so the shell, which watches that file, never
+   reads one half written. The shell wears the new palette some 50 ms after
+   the choice. A palette that was not made ahead is made from a raw frame
+   (PAM on tmpfs, the same pixels as `frame.png`, so the same palette; a
+   second for a 4K picture)
+2. beside it the still frame (`theme_write_frame` in `theme_paths.sh`, one
+   writer at a time) and the wallpaper runtime (`apply_wallpaper_runtime.sh`):
    it writes `current/` of the theme state, which the shell follows and draws
    (`Wallpaper`, plugin `wallpaper-layer`: one background surface a screen,
    the new picture blooming out of the bar – `wallpaper_reveal.frag` – or
    fading in, and a second one niri puts into the overview's backdrop by
-   the layer-rule in `pshell.kdl`); a video plays in mpvpaper above the shell's still
-   frame, one player for all outputs (`mpvpaper ALL`, one systemd user unit:
-   the video is decoded once, which leaves the GPU's decoder room for a
-   browser's video). While the shell does not answer
-   (`ipc.sh wallpaper owned`), swaybg and awww paint instead. Beside it
-3. niri window animation, if given, then wallust (`~/.cache/wal`), GTK
-   colours, shell reload: the shell wears the palette about a second after
-   the choice, while the wallpaper is still coming up
-4. the theme hooks that are on (`scripts/theme-hooks/<hook>.sh`, plugins
-   `hook-<name>`), in parallel, once the wallpaper is painted
-5. GTK colour scheme follows the palette's dark/light mode
+   the layer-rule in `pshell.kdl`); a picture is handed to the shell at
+   once, a video once its frame is there. A video plays in mpvpaper above the
+   shell's still frame, one player for all outputs (`mpvpaper ALL`, one
+   systemd user unit: the video is decoded once, which leaves the GPU's
+   decoder room for a browser's video). While the shell does not answer
+   (`ipc.sh wallpaper owned`), swaybg and awww paint instead
+3. the theme hooks that are on (`scripts/theme-hooks/<hook>.sh`, plugins
+   `hook-<name>`), in parallel, right after the colours; those that read the
+   frame (`# theme-hook: after-frame`) once it is written, sddm
+   (`after-wallpaper`) once the wallpaper is up. GTK colours, the GTK colour
+   scheme (dark/light), the niri window animation
+4. the GTK theme bounced as soon as the oomox hook is through: the GTK theme
+   and the Papirus icons of a palette are builds of their own
+   (`theme_variants.sh`), and `~/.themes/oomox-wal` and
+   `~/.local/share/icons/Papirus-Wal` are symlinks the hook moves to the
+   palette's build in one rename
+
+At the end `scripts/theme_prewarm.sh` runs in the background, at idle
+priority: for every library entry the palette with the current settings, its
+GTK theme and icons, then the palettes of the picker's other cells. It also
+runs 90 s after the shell started and for each new picture of the day, and
+costs nothing for what is made already, so a change normally only applies
+what is kept. It keeps the newest 16 builds of each kind (a GTK build is
+20 MB, an icon build some 35 MB: hard links to a read-only copy of the
+Papirus template in `.papirus-wal-variants/.template`, only the recoloured
+icons are files of their own). Its log is
+`~/.local/state/quickshell-theme/prewarm.log`.
 
 Each step that is through (frame, colours, wallpaper, every hook, GTK) is
 reported with `ipc.sh theme progress <done> <total>`, and the shell shows the

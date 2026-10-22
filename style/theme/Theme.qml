@@ -17,19 +17,27 @@ Singleton {
 	readonly property string cacheHome: Quickshell.env("XDG_CACHE_HOME") || `${Quickshell.env("HOME")}/.cache`
 	readonly property string walPath: `${root.cacheHome}/wal/colors.json`
 
-	readonly property var wal: {
-		try {
-			return JSON.parse(walFile.text());
-		} catch (error) {
-			return {
-				special: { background: "#141414", foreground: "#e6e6e6" },
-				colors: { color1: "#c75a5a", color2: "#7fb069", color3: "#d8a657", color4: "#6f9fd8", color5: "#b58bd6", color6: "#5fb3b3", color8: "#3a3a3a" }
-			};
-		}
-	}
+	// the palette as last read whole: the file watch and the apply's reload
+	// both read it, and the same text again recolours nothing; a file that
+	// does not parse (gone, or caught half written) keeps the colours worn
+	property var wal: ({
+			special: { background: "#141414", foreground: "#e6e6e6" },
+			colors: { color1: "#c75a5a", color2: "#7fb069", color3: "#d8a657", color4: "#6f9fd8", color5: "#b58bd6", color6: "#5fb3b3", color8: "#3a3a3a" }
+		})
+	property string walText: ""
 
 	function reload() {
 		walFile.reload();
+	}
+
+	function takeWal() {
+		const text = walFile.text();
+		if (text === root.walText) return;
+		try {
+			const parsed = JSON.parse(text);
+			root.walText = text;
+			root.wal = parsed;
+		} catch (error) {}
 	}
 
 	FileView {
@@ -38,7 +46,10 @@ Singleton {
 		blockLoading: true
 		watchChanges: true
 		onFileChanged: reload()
+		onLoaded: root.takeWal()
 	}
+
+	Component.onCompleted: root.takeWal()
 
 	// corner radius of niri windows (window-rule geometry-corner-radius)
 	readonly property string niriConfigPath: `${Quickshell.env("XDG_CONFIG_HOME") || `${Quickshell.env("HOME")}/.config`}/niri/config.kdl`

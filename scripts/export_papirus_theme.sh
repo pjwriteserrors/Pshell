@@ -43,32 +43,72 @@ if [[ -f "$DESTINATION/index.theme" && -f "$DESTINATION/.pshell-stamp" && "$(<"$
 	exit 0
 fi
 
-WORK_DIR="$(mktemp -d)"
+# A copy of the template of our own beside the destination, its files read
+# only: a build is hard links to it (the template is root's, and protected
+# hardlinks refuse links to another user's files), and only the icons that
+# are recoloured become files of their own. Writing those always replaces the
+# link (sed -i, rm before >), so the copy stays as it came; read only, a slip
+# fails instead of recolouring every build at once.
+PARENT_DIR="$(dirname -- "$DESTINATION")"
+PRISTINE_DIR="$PARENT_DIR/.template"
+mkdir -p -- "$PARENT_DIR"
+TEMPLATE_STAMP="$TEMPLATE_DIR $(stat -c %Y -- "$TEMPLATE_DIR/index.theme")"
+(
+	exec 8>"$PARENT_DIR/.template.lock"
+	flock 8
+	[[ -f "$PRISTINE_DIR/.pshell-template" && "$(<"$PRISTINE_DIR/.pshell-template")" == "$TEMPLATE_STAMP" ]] && exit 0
+	rm -rf -- "$PRISTINE_DIR.new"
+	cp -a -- "$TEMPLATE_DIR" "$PRISTINE_DIR.new"
+	find "$PRISTINE_DIR.new" -type f -exec chmod a-w {} +
+	printf '%s\n' "$TEMPLATE_STAMP" >"$PRISTINE_DIR.new/.pshell-template"
+	rm -rf -- "$PRISTINE_DIR"
+	mv -T -- "$PRISTINE_DIR.new" "$PRISTINE_DIR"
+)
+
+# built beside the destination: the move at the end is a rename
+WORK_DIR="$(mktemp -d "$PARENT_DIR/.build.XXXXXX")"
 BACKUP_DIR="${DESTINATION}.old.$$"
 cleanup() {
 	rm -rf -- "$WORK_DIR"
 }
 trap cleanup EXIT HUP INT TERM
 
-cp -a -- "$TEMPLATE_DIR" "$WORK_DIR/Papirus"
+cp -al -- "$PRISTINE_DIR" "$WORK_DIR/Papirus"
+rm -f -- "$WORK_DIR/Papirus/.pshell-template" "$WORK_DIR/Papirus/.pshell-stamp" "$WORK_DIR/Papirus/icon-theme.cache"
 
 for size in 22x22 24x24 32x32 48x48 64x64; do
 	for icon_path in "$WORK_DIR/Papirus/$size/places"/folder-red{-*,}.svg \
 		"$WORK_DIR/Papirus/$size/places"/user-red{-*,}.svg; do
-		[[ -f "$icon_path" && ! -L "$icon_path" ]] || continue
-		new_icon_path="${icon_path/-red/-oomox}"
-		icon_name="${new_icon_path##*/}"
-		symlink_path="${new_icon_path/-oomox/}"
-		sed -e "s/#e25252/#$ICONS_LIGHT_FOLDER/g" \
-			-e "s/#bf4b4b/#$ICONS_MEDIUM/g" \
-			-e "s/#4f1d1d/#$ICONS_DARK/g" \
-			"$icon_path" >"$new_icon_path"
-		ln -sfn -- "$icon_name" "$symlink_path"
+		if [[ -f "$icon_path" && ! -L "$icon_path" ]]; then printf "%s\0" "$icon_path"; fi
 	done
-done
+done | perl -0 -e '
+	# folder-red-x.svg recoloured into folder-oomox-x.svg, and folder-x.svg
+	# pointed at it; one process for the few hundred of them
+	my ($light, $medium, $dark) = @ARGV;
+	while (my $path = <STDIN>) {
+		chomp $path;
+		my ($dir, $name) = $path =~ m{^(.*)/([^/]+)$};
+		(my $new = $name) =~ s/-red/-oomox/;
+		(my $link = $new) =~ s/-oomox//;
+		open(my $in, "<", $path) or die "$path: $!";
+		local $/;
+		my $svg = <$in>;
+		close $in;
+		$svg =~ s/#e25252/#$light/g;
+		$svg =~ s/#bf4b4b/#$medium/g;
+		$svg =~ s/#4f1d1d/#$dark/g;
+		unlink "$dir/$new";
+		open(my $out, ">", "$dir/$new") or die "$dir/$new: $!";
+		print $out $svg;
+		close $out or die "$dir/$new: $!";
+		unlink "$dir/$link";
+		symlink($new, "$dir/$link") or die "$dir/$link: $!";
+	}
+' "$ICONS_LIGHT_FOLDER" "$ICONS_MEDIUM" "$ICONS_DARK"
 
 # one sed per few hundred files, on every core: the seven thousand icons
-# took a sed each before, ten seconds of forking
+# took a sed each before, ten seconds of forking; only the files holding the
+# colour, the others stay links to the template
 replace_in_tree() {
 	local old_color="$1"
 	local new_color="$2"
@@ -80,6 +120,7 @@ replace_in_tree() {
 	done
 	(( ${#trees[@]} )) || return 0
 	find "${trees[@]}" -type f -name '*.svg' -print0 \
+		| xargs -0 -r grep -lZF -- "$old_color" \
 		| xargs -0 -r -P "$(nproc)" -n 200 sed -i "s/$old_color/$new_color/g"
 }
 

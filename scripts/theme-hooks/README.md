@@ -6,7 +6,11 @@ Spotify, Kitty, the keyboard, Discord and the rest are switched on and off
 there; `hosts/<profile>.json` names under `themeHooks` the ones a fresh setup
 of that machine starts with, and settings go under `hookConfig.<hook>`. A new
 hook is a script here plus its plugin entry (`plugin.py check` insists on
-both). The hooks that are on run in parallel, after the shell has its colours.
+both). The hooks that are on run in parallel, right after the shell has its
+colours, while the still frame is still being written: a hook that reads
+`THEME_FRAME` says so with a line `# theme-hook: after-frame` and starts once
+the frame is there; `# theme-hook: after-wallpaper` waits for the wallpaper
+runtime as well (sddm links what it set up).
 
 A hook runs after wallust has written `~/.cache/wal` and gets:
 

@@ -661,6 +661,12 @@ def prepare(directory: Path) -> dict[str, str]:
         ["bash", catalog, "prewarm", str(directory), fields[3], wallust_backend()],
         capture_output=True,
     )
+    # and what applying it needs (its palette, GTK theme and icons), in the
+    # background, so choosing it is as quick as a library entry
+    subprocess.Popen(
+        ["setsid", "-f", "bash", str(SCRIPT_DIR / "theme_prewarm.sh"), str(directory)],
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
     return {"preview_path": fields[3], "media_type": fields[4]}
 
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# theme-hook: after-frame (reads THEME_FRAME)
 # the wal colours and the shell's colour roles (style/theme/Theme.qml) as a
 # marked block in BetterDiscord's custom.css, which dotfiles/betterdiscord/pshell.theme.css draws on
 source "$(dirname -- "${BASH_SOURCE[0]}")/lib.sh"

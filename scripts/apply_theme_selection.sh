@@ -11,12 +11,22 @@
 # path or by name. --resolution paints it scaled down (theme_scaled_media in
 # theme_paths.sh; the picker asks for it only for a live wallpaper of the day)
 # and is kept for the entry; without it the kept one is used.
+#
+# The colours come first and do not wait for anything: the palette is kept
+# per media and settings (theme_palette.sh) and theme_prewarm.sh, started at
+# the end, makes it ahead for the whole library, so the shell wears the new
+# colours some 50 ms after the choice. The still frame (frame.png) and the
+# wallpaper runtime run beside it; the hooks start right after the colours,
+# those that read the frame once it is there, sddm once the wallpaper is up;
+# the GTK theme is bounced as soon as the oomox hook has moved its links.
 
 set -u
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/theme_paths.sh"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/theme_palette.sh"
 
 THEME_ARG=""
 WALLUST_BACKEND=""
@@ -31,6 +41,7 @@ GTK3_CSS_FILE="$HOME/.config/gtk-3.0/gtk.css"
 GTK4_CSS_FILE="$HOME/.config/gtk-4.0/gtk.css"
 declare -a BG_PIDS=()
 declare -a BG_NAMES=()
+declare -A BG_DONE=()
 OK_COUNT=0
 FAIL_COUNT=0
 SKIP_COUNT=0
@@ -88,19 +99,26 @@ fi
 theme_ensure_runtime_dirs
 # keep the last twenty logs
 find "$THEME_STATE_DIR" -maxdepth 1 -name 'apply-*.log' -printf '%T@ %p\n' 2>/dev/null \
-	| sort -rn | tail -n +20 | cut -d' ' -f2- | xargs -r -d '\n' rm -f
+	| sort -rn | tail -n +20 | cut -d' ' -f2- | xargs -r -d '\n' rm -f &
 
+# with milliseconds, and without a date process per line
 log() {
-	printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*" >>"$LOG_FILE"
+	local now="$EPOCHREALTIME" fraction
+	fraction="${now#*[.,]}"
+	printf '[%(%H:%M:%S)T.%s] %s\n' "${now%[.,]*}" "${fraction:0:3}" "$*" >>"$LOG_FILE"
 }
 
+# which hooks are on: host.py answers while the colours are made
+HOOKS_FILE="$(mktemp "$THEME_RUNTIME_DIR/apply-hooks.XXXXXX")"
+python3 "$SCRIPT_DIR/host.py" hooks >"$HOOKS_FILE" 2>/dev/null &
+HOOKS_PID=$!
+
 # How far the change is, for the shell's bar: frame, colours, wallpaper, each
-# hook, GTK colour scheme, GTK reload. The hooks run side by side, so every
-# step that is through adds a line and the lines are counted.
-readarray -t THEME_HOOKS < <(python3 "$SCRIPT_DIR/host.py" hooks | awk 'NF')
-PROGRESS_TOTAL=$((5 + ${#THEME_HOOKS[@]}))
+# hook, GTK colour scheme, GTK reload. Steps run side by side, so every step
+# that is through adds a line and the lines are counted.
+PROGRESS_TOTAL=5
 PROGRESS_FILE="$(mktemp "$THEME_RUNTIME_DIR/apply-progress.XXXXXX")"
-trap 'rm -f "$PROGRESS_FILE"' EXIT
+trap 'rm -f "$PROGRESS_FILE" "$HOOKS_FILE"' EXIT
 
 progress_step() {
 	echo >>"$PROGRESS_FILE"
@@ -139,15 +157,67 @@ run_bg() {
 	BG_NAMES+=("$name")
 }
 
-# the wallpaper runtime runs beside wallust and is awaited once, before the
-# hooks that need the painted desktop and the frame
+# exit 3 from a hook: the program it drives is not installed
+await_job() {
+	local i="$1" code
+	[[ -n "${BG_DONE[$i]:-}" ]] && return 0
+	BG_DONE[$i]=1
+	wait "${BG_PIDS[$i]}"
+	code=$?
+	if (( code == 0 )); then
+		log "OK ${BG_NAMES[$i]}"
+		OK_COUNT=$((OK_COUNT + 1))
+	elif (( code == 3 )); then
+		log "SKIP ${BG_NAMES[$i]}"
+		SKIP_COUNT=$((SKIP_COUNT + 1))
+	else
+		log "FAIL ${BG_NAMES[$i]} exit=$code"
+		FAIL_COUNT=$((FAIL_COUNT + 1))
+	fi
+}
+
+# the job of that name, when one was started
+await_job_named() {
+	local i
+	for i in "${!BG_NAMES[@]}"; do
+		[[ "${BG_NAMES[$i]}" == "$1" ]] && await_job "$i"
+	done
+	return 0
+}
+
+wait_for_jobs() {
+	local i
+	for i in "${!BG_PIDS[@]}"; do
+		await_job "$i"
+	done
+}
+
+# the frame and the wallpaper runtime run beside the colours and are awaited
+# once each, by the hooks that need them
+FRAME_PID=""
+FRAME_CODE=""
+await_frame() {
+	[[ -n "$FRAME_CODE" ]] && return "$FRAME_CODE"
+	wait "$FRAME_PID"
+	FRAME_CODE=$?
+	if (( FRAME_CODE == 0 )); then
+		log "OK wallpaper frame"
+		OK_COUNT=$((OK_COUNT + 1))
+	else
+		log "FAIL wallpaper frame exit=$FRAME_CODE"
+		FAIL_COUNT=$((FAIL_COUNT + 1))
+	fi
+	progress_step &
+	return "$FRAME_CODE"
+}
+
 WALLPAPER_PID=""
 WALLPAPER_CODE=""
 await_wallpaper_runtime() {
 	[[ -n "$WALLPAPER_CODE" ]] && return "$WALLPAPER_CODE"
 	wait "$WALLPAPER_PID"
 	WALLPAPER_CODE=$?
-	progress_step
+	progress_step &
 	if (( WALLPAPER_CODE == 0 )); then
 		log "OK wallpaper runtime"
 		OK_COUNT=$((OK_COUNT + 1))
@@ -156,27 +226,6 @@ await_wallpaper_runtime() {
 		FAIL_COUNT=$((FAIL_COUNT + 1))
 	fi
 	return "$WALLPAPER_CODE"
-}
-
-# exit 3 from a hook: the program it drives is not installed
-wait_for_jobs() {
-	local i pid name code
-	for i in "${!BG_PIDS[@]}"; do
-		pid="${BG_PIDS[$i]}"
-		name="${BG_NAMES[$i]}"
-		wait "$pid"
-		code=$?
-		if (( code == 0 )); then
-			log "OK $name"
-			OK_COUNT=$((OK_COUNT + 1))
-		elif (( code == 3 )); then
-			log "SKIP $name"
-			SKIP_COUNT=$((SKIP_COUNT + 1))
-		else
-			log "FAIL $name exit=$code"
-			FAIL_COUNT=$((FAIL_COUNT + 1))
-		fi
-	done
 }
 
 # only a real failure is worth a notification; the shell shows the new theme
@@ -193,11 +242,10 @@ finish_report() {
 	fi
 }
 
-read_wallust_config_value() {
-	local key="$1"
-
-	[[ -f "$WALLUST_CONFIG_FILE" ]] || return 1
-	sed -n "s/^${key}[[:space:]]*=[[:space:]]*\"\\([^\"]*\\)\"/\\1/p" "$WALLUST_CONFIG_FILE" | head -n 1
+# what is left of the library's palettes and GTK builds is made in the
+# background, so the next change finds them ready
+start_prewarm() {
+	setsid -f bash "$SCRIPT_DIR/theme_prewarm.sh" >/dev/null 2>&1 </dev/null || true
 }
 
 effective_style() {
@@ -206,7 +254,7 @@ effective_style() {
 		return 0
 	fi
 
-	read_wallust_config_value style || true
+	theme_palette_config_value style
 }
 
 effective_palette() {
@@ -215,33 +263,16 @@ effective_palette() {
 		return 0
 	fi
 
-	read_wallust_config_value palette || true
+	theme_palette_config_value palette
 }
 
-run_wallust_generation() {
-	local frame_path="$1"
-	local palette_name threshold code
-
-	palette_name="$(effective_palette)"
-	wallust run "$frame_path"
-	code=$?
-	if (( code == 0 )) || [[ "$palette_name" != "salience" ]]; then
-		return "$code"
+effective_backend() {
+	if [[ -n "$WALLUST_BACKEND" ]]; then
+		printf '%s\n' "$WALLUST_BACKEND"
+		return 0
 	fi
 
-	# wallust 4.0.0-alpha can panic in the salience histogram when the default
-	# threshold leaves fewer than five buckets. Lower thresholds retain more
-	# colors and allow generation to complete for those images.
-	for threshold in 20 10 5 2 1; do
-		log "Retry wallust salience with threshold=$threshold"
-		wallust run --threshold "$threshold" "$frame_path"
-		code=$?
-		if (( code == 0 )); then
-			return 0
-		fi
-	done
-
-	return "$code"
+	theme_palette_config_value backend
 }
 
 palette_mode() {
@@ -347,16 +378,18 @@ for css_path in gtk_css_paths:
 ' "$WAL_CACHE_DIR/colors.json" "$GTK_WAL_COLORS_FILE" "$GTK3_CSS_FILE" "$GTK4_CSS_FILE"
 }
 
+# only what was asked for changes; nothing asked, nothing runs
 update_wallust_config() {
 	if [[ ! -f "$WALLUST_CONFIG_FILE" ]]; then
 		return 0
 	fi
+	[[ -n "$WALLUST_BACKEND$WALLUST_PALETTE$WALLUST_STYLE" ]] || return 0
 
 	log "Wallust backend: ${WALLUST_BACKEND:-unchanged}"
 	log "Wallust palette: ${WALLUST_PALETTE:-unchanged}"
 	log "Wallust style: ${WALLUST_STYLE:-unchanged}"
 
-	run_step "wallust config update" bash -lc '
+	run_step "wallust config update" bash -c '
 		set -e
 		config="$1"
 		backend="$2"
@@ -370,7 +403,9 @@ update_wallust_config() {
 			local key="$1"
 			local value="$2"
 			[[ -n "$value" ]] || return 0
-			if grep -qE "^${key}\s*=" "$config"; then
+			if grep -qE "^${key}\s*=\s*\"${value}\"" "$config"; then
+				return 0
+			elif grep -qE "^${key}\s*=" "$config"; then
 				perl -0pi -e "s/^(${key}\s*=\s*)\"[^\"]*\"/\${1}\"${value}\"/m" "$config"
 			elif grep -qE "^\[" "$config"; then
 				# insert before the first [section] table so it stays top-level
@@ -391,9 +426,9 @@ update_gtk_color_scheme() {
 	gsettings set org.gnome.desktop.interface color-scheme "prefer-$1"
 }
 
-# the theme bounced so running apps repaint; only after the hooks, since oomox
-# rebuilds the theme in place and an app reloading it mid-build is left with
-# no styles (transparent menus and selection in Firefox)
+# the theme bounced so running apps repaint; only after the oomox hook, which
+# moves the GTK theme to the build of this palette (an app reloading it while
+# it was rebuilt in place was left with no styles)
 bounce_gtk_theme() {
 	local gtktheme
 	gtktheme="$(gsettings get org.gnome.desktop.interface gtk-theme 2>/dev/null || true)"
@@ -404,16 +439,31 @@ bounce_gtk_theme() {
 	fi
 }
 
+# when a hook can start: "now", or after the "frame" / the "wallpaper" runtime
+# (a "# theme-hook: after-frame" line in the script, see theme-hooks/README.md)
+hook_stage() {
+	local line
+	line="$(grep -m1 -oE '^# theme-hook: after-(frame|wallpaper)' "$1" 2>/dev/null)"
+	case "$line" in
+		*after-frame) printf 'frame\n' ;;
+		*after-wallpaper) printf 'wallpaper\n' ;;
+		*) printf 'now\n' ;;
+	esac
+}
+
+# the hooks of one stage
 run_theme_hooks() {
-	local hook script
+	local stage="$1" hook script
 	for hook in "${THEME_HOOKS[@]}"; do
 		script="$SCRIPT_DIR/theme-hooks/$hook.sh"
 		if [[ ! -f "$script" ]]; then
+			[[ "$stage" == "now" ]] || continue
 			log "FAIL hook $hook (no $script)"
 			FAIL_COUNT=$((FAIL_COUNT + 1))
-			progress_step
+			progress_step &
 			continue
 		fi
+		[[ "$(hook_stage "$script")" == "$stage" ]] || continue
 		run_bg "hook $hook" bash "$script"
 	done
 }
@@ -435,51 +485,72 @@ fi
 
 theme_name="$(theme_entry_name "$THEME_ENTRY")"
 media_type="$(theme_media_type "$THEME_MEDIA")"
+frame_path="$THEME_CURRENT_FRAME_FILE"
 
 log "Theme: $THEME_ENTRY"
 log "Media: $THEME_MEDIA ($media_type)"
 
-"$SCRIPT_DIR/ipc.sh" theme progress 0 "$PROGRESS_TOTAL" >/dev/null 2>&1 || true
 run_step "niri screen transition" niri msg action do-screen-transition --delay-ms 350 || true
 
-# The frame first: wallust reads it, and so does the wallpaper runtime, which
-# then paints in the background while the colours are generated. The shell
-# wears the new palette about a second after the choice instead of waiting
-# for swaybg, awww and mpvpaper to come up.
-frame_path="$THEME_CURRENT_FRAME_FILE"
-if ! run_step "wallpaper frame" theme_write_frame "$THEME_MEDIA" "$frame_path"; then
-	echo "wallpaper frame was not created: $frame_path" >&2
-	finish_report
-	exit 1
-fi
-progress_step
-
+# frame.png for the hooks and the runtime, and the runtime itself, which
+# waits for the frame only where it paints from it (a video, swaybg)
+log "START wallpaper frame"
+(theme_write_frame "$THEME_MEDIA" "$frame_path") >>"$LOG_FILE" 2>&1 &
+FRAME_PID=$!
 log "START wallpaper runtime"
 (bash "$SCRIPT_DIR/apply_wallpaper_runtime.sh" "$THEME_MEDIA") >>"$LOG_FILE" 2>&1 &
 WALLPAPER_PID=$!
 
-if [[ -n "$NIRI_ANIMATION_ID" ]]; then
-	run_step "niri animation update" bash "$SCRIPT_DIR/apply_niri_animation.sh" --animation "$NIRI_ANIMATION_ID" || true
-fi
-
-printf '%s\n' "$theme_name" >"$THEME_CURRENT_NAME_FILE"
-printf '%s\n' "$THEME_ENTRY" >"$THEME_CURRENT_DIR_FILE"
-
-selected_palette_mode="$(palette_mode "$(effective_style)")"
-log "Palette mode: $selected_palette_mode"
-
 update_wallust_config
-if ! run_step "wallust" run_wallust_generation "$frame_path"; then
-	echo "wallust failed; keeping the previous colours" >&2
+backend="$(effective_backend)"
+palette="$(effective_palette)"
+style="$(effective_style)"
+selected_palette_mode="$(palette_mode "$style")"
+log "Palette: backend=$backend palette=$palette style=$style mode=$selected_palette_mode"
+
+palette_file="$(theme_palette_path "$THEME_MEDIA" "$backend" "$palette" "$style")"
+if [[ -s "$palette_file" ]]; then
+	log "Palette kept: $palette_file"
+else
+	log "START palette (not made ahead)"
+	if ! palette_file="$(theme_palette_ensure "$THEME_MEDIA" "$backend" "$palette" "$style" 2>>"$LOG_FILE")"; then
+		log "FAIL palette"
+		FAIL_COUNT=$((FAIL_COUNT + 1))
+		echo "wallust failed; keeping the previous colours" >&2
+		await_frame || true
+		await_wallpaper_runtime || true
+		finish_report
+		exit 1
+	fi
+	log "OK palette: $palette_file"
+fi
+if ! run_step "colours" theme_palette_apply "$palette_file" "$frame_path"; then
+	echo "wallust could not apply the palette; keeping the previous colours" >&2
+	await_frame || true
 	await_wallpaper_runtime || true
 	finish_report
 	exit 1
 fi
+# the shell watches colors.json; the call is for a shell that missed it
+("$SCRIPT_DIR/ipc.sh" theme reload >/dev/null 2>&1 || true) &
 
+printf '%s\n' "$theme_name" >"$THEME_CURRENT_NAME_FILE"
+printf '%s\n' "$THEME_ENTRY" >"$THEME_CURRENT_DIR_FILE"
+
+wait "$HOOKS_PID" 2>/dev/null
+readarray -t THEME_HOOKS < <(awk 'NF' "$HOOKS_FILE")
+PROGRESS_TOTAL=$((5 + ${#THEME_HOOKS[@]}))
+progress_step &
+
+export THEME_FRAME="$frame_path" THEME_MEDIA THEME_MEDIA_TYPE="$media_type" \
+	THEME_MODE="$selected_palette_mode" WAL_CACHE_DIR THEME_SCRIPTS_DIR="$SCRIPT_DIR" THEME_STATE_DIR
+run_theme_hooks now
+run_bg "gtk colour scheme" update_gtk_color_scheme "$selected_palette_mode"
 update_gtk_wal_theme
-run_step "shell reload" "$SCRIPT_DIR/ipc.sh" theme reload || true
-progress_step
 
+if [[ -n "$NIRI_ANIMATION_ID" ]]; then
+	run_step "niri animation update" bash "$SCRIPT_DIR/apply_niri_animation.sh" --animation "$NIRI_ANIMATION_ID" || true
+fi
 # a style's window animation may be painted in the palette (@color4@ …): write
 # it again with the new colours
 current_animation="$(cat "$NIRI_ANIMATION_STATE_FILE" 2>/dev/null || true)"
@@ -487,19 +558,24 @@ if [[ "$current_animation" == style:* && -d "$SCRIPT_DIR/../style/animations/${c
 	run_step "niri animation colours" bash "$SCRIPT_DIR/apply_niri_animation.sh" --animation "$current_animation" || true
 fi
 
-# the hooks want the painted desktop (sddm links the frame, the GTK bounce
-# repaints over the wallpaper), so the runtime is awaited here
-if ! await_wallpaper_runtime; then
-	echo "wallpaper runtime failed, see $LOG_FILE" >&2
-	finish_report
-	exit 1
+# the GTK theme follows once oomox has moved its links (at once when the
+# builds were made ahead), and the gtk.css colours are written by then
+await_job_named "hook oomox"
+run_step "gtk theme reload" bounce_gtk_theme || true
+progress_step &
+
+if await_frame; then
+	run_theme_hooks frame
+else
+	echo "wallpaper frame was not created: $frame_path" >&2
 fi
 
-export THEME_FRAME="$frame_path" THEME_MEDIA THEME_MEDIA_TYPE="$media_type" \
-	THEME_MODE="$selected_palette_mode" WAL_CACHE_DIR THEME_SCRIPTS_DIR="$SCRIPT_DIR" THEME_STATE_DIR
-run_theme_hooks
-run_bg "gtk colour scheme" update_gtk_color_scheme "$selected_palette_mode"
+if await_wallpaper_runtime; then
+	run_theme_hooks wallpaper
+else
+	echo "wallpaper runtime failed, see $LOG_FILE" >&2
+fi
 
 wait_for_jobs
-run_step "gtk theme reload" bounce_gtk_theme || true
 finish_report
+start_prewarm

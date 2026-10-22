@@ -52,13 +52,25 @@ theme_frame_is_current() {
 	[[ "$(<"$stamp_path")" == "$(realpath -e -- "$media_path")"$'\n'"$(theme_media_signature "$media_path")" ]]
 }
 
+# One writer at a time: the apply writes it beside the palette while the
+# wallpaper runtime may already ask for it, and the second caller waits for
+# the first and finds it current.
 theme_write_frame() {
+	theme_frame_is_current "$1" "$2" && return 0
+	(
+		exec 8>"$2.lock"
+		flock 8
+		theme_frame_is_current "$1" "$2" && exit 0
+		theme_write_frame_now "$1" "$2"
+	)
+}
+
+theme_write_frame_now() {
 	local media_path="$1"
 	local frame_path="$2"
 	local tmp_path="${frame_path}.tmp.png"
 	local media_type
 
-	theme_frame_is_current "$media_path" "$frame_path" && return 0
 	media_type="$(theme_media_type "$media_path" 2>/dev/null || true)"
 
 	rm -f "$tmp_path"
@@ -351,4 +363,17 @@ theme_scale_media() {
 
 theme_scaled_media() {
 	theme_scale_media "$@" | tail -n 1
+}
+
+# the scaled copy theme_scale_media made for a level, when there is one (the
+# prewarm makes palettes only for what an apply would paint, and scales nothing)
+theme_scaled_existing() {
+	local media_path="$1" level="$2" key target
+
+	[[ "$level" == "original" || -z "$level" ]] && { printf '%s\n' "$media_path"; return 0; }
+	key="$(theme_media_signature "$media_path" | sha1sum | awk '{print $1}')"
+	for target in "$THEME_SCALED_DIR/$key-$level".*; do
+		[[ -s "$target" ]] && { printf '%s\n' "$target"; return 0; }
+	done
+	return 1
 }
