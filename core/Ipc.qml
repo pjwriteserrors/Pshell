@@ -347,6 +347,11 @@ Scope {
 			if (level === "up" || level === "down") Apex.test({ kind: "apex", op: `brightness-${level}` });
 			else Apex.setBrightness(Math.max(0, Math.min(10, Number(level) || 0)));
 		}
+		// play | record | stop, a macro by its name
+		function macro(what: string, name: string): void {
+			const id = Object.keys(Apex.macros).find(k => Apex.macros[k].name === name) ?? (Apex.macros[name] ? name : "");
+			if (id || what === "stop") Apex.macro(id, what);
+		}
 		// own | clock | media | system | text | picture
 		function oled(mode: string): void {
 			Apex.setOption("oled", mode || "own");
@@ -603,10 +608,10 @@ Scope {
 			Popups.withFocusedScreen(screen => Popups.openModal("niri", screen));
 		}
 		function close(): void {
-			if (Popups.modal === "niri") Popups.closeModal();
+			Popups.closeSettings();
 		}
 		function toggle(): void {
-			root.modalOnFocused("niri");
+			Popups.toggleModal("niri");
 		}
 	}
 
@@ -656,10 +661,10 @@ Scope {
 			Popups.withFocusedScreen(screen => Popups.openModal("niri", screen));
 		}
 		function close(): void {
-			if (Popups.modal === "niri") Popups.closeModal();
+			Popups.closeSettings();
 		}
 		function toggle(): void {
-			root.modalOnFocused("niri");
+			Popups.toggleModal("niri");
 		}
 	}
 
@@ -694,11 +699,11 @@ Scope {
 			Popups.withFocusedScreen(screen => Popups.openModal("niri", screen));
 		}
 		function close(): void {
-			if (Popups.modal === "niri") Popups.closeModal();
+			Popups.closeSettings();
 		}
 		function toggle(): void {
 			NiriSettings.page = "keys";
-			root.modalOnFocused("niri");
+			Popups.toggleModal("niri");
 		}
 	}
 

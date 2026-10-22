@@ -15,14 +15,36 @@ import qs.core.views.settings
 // (multicursor, sounds). The pages are on the left; typing finds a setting
 // on any page and jumps to it. Every change is live at once (niri reloads
 // the file); Ctrl+Z takes it back. core/services/NiriSettings.qml does the
-// rest.
-ModalWindow {
+// rest. A window of its own (Popups.settingsOpen): niri places it like any
+// other, it stays while other panels come and go.
+FloatingWindow {
 	id: root
 
-	modalId: "niri"
-	aside: NiriSettings.picking
-	exclusiveKeyboard: true
-	onModalOpened: {
+	readonly property bool shown: Popups.settingsOpen
+	title: Popups.settingsTitle
+	visible: false
+	implicitWidth: 1440
+	implicitHeight: 920
+	minimumSize: Qt.size(960, 600)
+	color: Theme.base
+
+	onShownChanged: root.follow()
+	Component.onCompleted: root.follow()
+
+	function follow() {
+		root.visible = root.shown;
+		if (root.shown) root.opened();
+	}
+	// closed with the compositor's own means
+	onVisibleChanged: if (!root.visible && Popups.settingsOpen) Popups.closeSettings()
+
+	Shortcut {
+		sequences: ["Ctrl+W", "Ctrl+Q"]
+		enabled: root.shown
+		onActivated: Popups.closeSettings()
+	}
+
+	function opened() {
 		NiriSettings.prepare();
 		Keybinds.load();
 		Keybinds.loadCatalogs();
@@ -107,6 +129,7 @@ ModalWindow {
 		{ page: "apex", anchor: "apex-actuation", title: "Actuation and Rapid Trigger", words: "steelseries apex actuation point depth omnipoint hall rapid trigger sensitivity protection mode", plugin: "apex" },
 		{ page: "apex", anchor: "apex-dual", title: "2-in-1 action", words: "steelseries apex dual actuation second point two in one deeper press", plugin: "apex" },
 		{ page: "apex", anchor: "apex-bindings", title: "Apex keys", words: "steelseries apex remap key binding macro media mouse fn layer steelseries key per app double press hold", plugin: "apex" },
+		{ page: "apex", anchor: "apex-macros", title: "Ultra macros", words: "steelseries apex macro record play repeat mouse clicks keys sequence automation", plugin: "apex" },
 		{ page: "apex", anchor: "apex-rapidtap", title: "Rapid Tap", words: "steelseries apex rapid tap socd snap tap last input priority", plugin: "apex" },
 		{ page: "apex", anchor: "apex-oled", title: "Apex display", words: "steelseries apex oled screen display clock media notification picture text", plugin: "apex" },
 		{ page: "apex", anchor: "apex-light", title: "Apex light", words: "steelseries apex brightness light rgb", plugin: "apex" },
@@ -239,10 +262,7 @@ ModalWindow {
 	Rectangle {
 		id: frame
 
-		anchors.centerIn: parent
-		width: Math.min(1500, root.width - 80)
-		height: Math.min(960, root.height - 80)
-		radius: Theme.radius.huge + 6
+		anchors.fill: parent
 		color: Theme.base
 		clip: true
 

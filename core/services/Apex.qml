@@ -31,6 +31,12 @@ Singleton {
 	// live, while the page watches: evdev code -> held; what the OLED shows (hex)
 	property var keys: ({})
 	property string screen: ""
+	// ultra macros: id -> { name, options, length, keys, clicks, moves, words }
+	property var macros: ({})
+	property string macroState: "idle"
+	property string macroId: ""
+	// a probe for the pointer is out (its token), 0: none
+	property int probing: 0
 	signal fired(string rule, string control, string trigger)
 	signal saved(int slot)
 
@@ -210,6 +216,14 @@ Singleton {
 		let usage = root.hostOf(layer, hid);
 		const others = usage ? root.rulesOf(usage).filter(r => !(r.trigger === root.triggerOf[trigger] && (r.app ?? "") === app)) : [];
 		if (!action) {
+			const gone = usage ? root.rulesOf(usage).find(r => r.trigger === root.triggerOf[trigger] && (r.app ?? "") === app) : null;
+			if ((gone?.action?.op ?? "").startsWith("ultra:")) {
+				const rest = root.rulesOf(usage).filter(r => r.action?.op !== gone.action.op);
+				root.config = Object.assign({}, root.config, { rules: root.rules.filter(r => r.control !== `h${usage}` || r.action?.op !== gone.action.op) });
+				root.commit();
+				if (rest.length === 0) root.send({ op: "bind", layer, key: hid, action: { kind: "default" } });
+				return;
+			}
 			if (!usage) {
 				if (trigger === "press" && app === "") root.send({ op: "bind", layer, key: hid, action: { kind: "default" } });
 				return;
@@ -235,6 +249,12 @@ Singleton {
 			clearError.restart();
 			return;
 		}
+		// an ultra macro: tap plays, hold records – one rule each, one macro
+		if (action.kind === "apex" && action.op === "ultra") {
+			const same = usage ? root.rulesOf(usage).find(r => (r.action?.op ?? "").startsWith("ultra:") && (r.app ?? "") === app) : null;
+			action = { kind: "apex", op: same?.action.op ?? `ultra:${root.newId()}` };
+			trigger = "press";
+		}
 		// through the shell
 		const rules = root.rules.slice();
 		if (!usage) {
@@ -250,11 +270,14 @@ Singleton {
 				rules.push({ id: root.newId(), control: `h${usage}`, trigger: "click", app: "", mods: [], on: true, action: before });
 			root.send({ op: "bind", layer, key: hid, host: usage });
 		}
-		const old = rules.find(r => r.control === `h${usage}` && r.trigger === root.triggerOf[trigger] && (r.app ?? "") === app);
-		const rule = Object.assign({ id: old?.id ?? root.newId(), control: `h${usage}`, trigger: root.triggerOf[trigger], app, mods: [], on: true }, old ?? {}, extra ?? {}, { action });
-		const at = rules.findIndex(r => r.id === rule.id);
-		if (at >= 0) rules[at] = rule;
-		else rules.push(rule);
+		const ultra = action.kind === "apex" && action.op.startsWith("ultra:");
+		for (const t of ultra ? ["click", "hold"] : [root.triggerOf[trigger]]) {
+			const old = rules.find(r => r.control === `h${usage}` && r.trigger === t && (r.app ?? "") === app);
+			const rule = Object.assign({ id: old?.id ?? root.newId(), control: `h${usage}`, trigger: t, app, mods: [], on: true }, old ?? {}, extra ?? {}, { action });
+			const at = rules.findIndex(r => r.id === rule.id);
+			if (at >= 0) rules[at] = rule;
+			else rules.push(rule);
+		}
 		root.config = Object.assign({}, root.config, { rules });
 		root.commit();
 	}
@@ -293,6 +316,42 @@ Singleton {
 	function test(action) {
 		if (action?.kind === "shell") Mouse.runShell(action.id, action.value);
 		else root.send({ op: "test", action });
+	}
+
+	// ── ultra macros ──────────────────────────────────────────────────────
+	function macro(id, what, values) {
+		root.send({ op: "macro", id, do: what, values: values ?? {} });
+	}
+
+	function setMacro(id, values) {
+		const macros = Object.assign({}, root.macros);
+		if (macros[id]) macros[id] = Object.assign({}, macros[id], values.name !== undefined ? { name: values.name } : {}, { options: Object.assign({}, macros[id].options, values) });
+		root.macros = macros;
+		root.macro(id, "set", values);
+	}
+
+	function deleteMacro(id) {
+		root.config = Object.assign({}, root.config, { rules: root.rules.filter(r => r.action?.op !== `ultra:${id}`) });
+		root.commit();
+		root.macro(id, "delete");
+	}
+
+	// the keys an ultra macro is on
+	function macroKeys(id) {
+		const out = [];
+		for (const layer of [0, 1, 2])
+			for (const hid of Object.keys(root.bindings[layer] ?? {})) {
+				const usage = root.hostOf(layer, Number(hid));
+				if (usage && root.rulesOf(usage).some(r => r.action?.op === `ultra:${id}`)) out.push({ hid: Number(hid), layer, app: root.rulesOf(usage).find(r => r.action?.op === `ultra:${id}`)?.app ?? "" });
+			}
+		return out;
+	}
+
+	function probed(x, y) {
+		if (!root.probing) return;
+		const token = root.probing;
+		root.probing = 0;
+		root.send({ op: "probed", token, x, y });
 	}
 
 	// ── the OLED ──────────────────────────────────────────────────────────
@@ -405,6 +464,18 @@ Singleton {
 			break;
 		case "keyboard":
 			root.onKeyboard(data);
+			break;
+		case "macros":
+			root.macros = data.macros ?? {};
+			break;
+		case "macro":
+			root.macroState = data.state ?? "idle";
+			root.macroId = data.id ?? "";
+			if (data.state === "recording") Osd.show("apex-macro", "Recording", 1, root.macros[data.id]?.name ?? "New macro", "record_rec");
+			else if (data.state === "idle" && data.recorded) Osd.show("apex-macro", "Recorded", 1, root.macros[data.id]?.name ?? "", "check");
+			break;
+		case "probe":
+			root.probing = data.token ?? 0;
 			break;
 		case "saved":
 			root.saved(data.slot ?? 0);
@@ -541,6 +612,7 @@ Singleton {
 		{ id: "fw:02.1", label: "Keyboard function 2", icon: "keyboard" },
 		{ id: "fw:03.1", label: "Keys dimmer", icon: "brightness_5" },
 		{ id: "fw:04.1", label: "Keys brighter", icon: "brightness_7" },
+		{ id: "ultra", label: "Ultra macro", icon: "record_rec", detail: "Hold to record, tap to play" },
 		{ id: "brightness-up", label: "Brighter keys", icon: "brightness_7" },
 		{ id: "brightness-down", label: "Dimmer keys", icon: "brightness_5" },
 		{ id: "config-previous", label: "Previous config", icon: "account_switch_outline" }
@@ -563,6 +635,10 @@ Singleton {
 		if (!action || action.kind === "default") return { label: root.nativeLabel(control), icon: "", plain: true };
 		if (action.kind === "apex") {
 			if (action.op === "macro") return { label: "Macro", icon: "record_rec" };
+			if (action.op.startsWith("ultra:")) {
+				const m = root.macros[action.op.slice(6)];
+				return { label: m ? `${m.name} · ${(m.length / 1000).toFixed(1)} s` : "Ultra macro · hold to record", icon: "record_rec" };
+			}
 			const a = root.ownActions.find(x => x.id === action.op);
 			return { label: a?.label ?? action.op, icon: a?.icon ?? "keyboard" };
 		}

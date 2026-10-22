@@ -46,12 +46,15 @@ import actions  # noqa: E402
 from engine import Engine  # noqa: E402
 import host  # noqa: E402
 from mouse import Loop  # noqa: E402
+import macro as M  # noqa: E402
 import oled  # noqa: E402
 import protocol as P  # noqa: E402
 from protocol import Gone  # noqa: E402
 
 STATE = host.state_dir()
 BACKUPS = STATE / "apex"
+MACROS_FILE = STATE / "apex-macros.json"
+RECORD_LIMIT = 300  # seconds
 DRY = os.environ.get("PSHELL_APEX_DRY") == "1"
 SAVE_AFTER = 3.0  # seconds of quiet before the active config is written
 QUIET_AFTER_KEYBOARD = 3.0  # the keyboard's own OLED messages stay this long
@@ -110,15 +113,33 @@ class Daemon:
         self.cpu = oled.cpu_sampler()
         self.oled_token = 0
         self.picture = None  # a live picture's frame
+        # ultra macros
+        self.macros = {}
+        self.recording = None  # {id, recorder, began}
+        self.player = None
+        self.playing = ""
+        self.probe_token = 0
+        self.probe_cb = None
+        self.warp = M.Warp()
 
     # ── setup ───────────────────────────────────────────────────────────
     def start(self):
         self.output = actions.Output("Pshell apex")
+        try:
+            self.macros = json.loads(MACROS_FILE.read_text())
+        except (OSError, ValueError):
+            self.macros = {}
+        self.publish_macros()
         self.loop.post(self.poll)
         threading.Thread(target=self.read_stdin, daemon=True).start()
         self.loop.run()
 
     def stop(self):
+        if self.player:
+            self.player.stop()
+        if self.recording:
+            self.recording["recorder"].stop()
+        self.warp.close()
         self.engine.release_all()
         self.key_stop.set()
         if self.online and self.dirty:
@@ -679,7 +700,12 @@ class Daemon:
             emit("fired", **data)
 
     def fire(self, rule, control, trigger, phase):
-        self.run(rule.get("action") or {}, owner=f"{control}:{trigger}", phase=phase)
+        action = rule.get("action") or {}
+        if action.get("kind") == "apex" and str(action.get("op", "")).startswith("ultra:"):
+            if phase != "end":
+                self.ultra(action["op"][6:], trigger)
+            return
+        self.run(action, owner=f"{control}:{trigger}", phase=phase)
 
     def native(self, control, phase):
         return False
@@ -762,7 +788,7 @@ class Daemon:
         mode = self.option("oled", "own")
         if not self.online:
             return
-        if mode == "own" and not self.note:
+        if mode == "own" and not self.note and not self.busy():
             if self.screen is not None:
                 self.write(self.link.oled_back, "oled back")
                 self.screen = None
@@ -787,6 +813,8 @@ class Daemon:
 
     def interval(self):
         mode = self.option("oled", "own")
+        if self.busy():
+            return 0.5
         if self.note or (mode == "media" and self.media_state.get("title")):
             return 0.12
         if mode == "clock" and self.option("oledSeconds", False):
@@ -796,6 +824,11 @@ class Daemon:
     def frame(self):
         """What the OLED should show now, None for the keyboard's own screen."""
         now = time.monotonic()
+        if self.recording:
+            name = self.macros.get(self.recording["id"], {}).get("name") or "New macro"
+            return oled.pack(oled.macro(name, now - self.recording["began"], True))
+        if self.playing:
+            return oled.pack(oled.macro(self.macros.get(self.playing, {}).get("name", ""), 0, False))
         if self.note and self.note[3] > now:
             app, summary, body, _until = self.note
             return oled.pack(oled.notification(app, summary, body, self.tick))
@@ -870,6 +903,179 @@ class Daemon:
         self.save()
         self.reload()
         self.publish()
+
+    # ── ultra macros ────────────────────────────────────────────────────
+    def busy(self):
+        return bool(self.recording or self.playing)
+
+    def ultra(self, ident, trigger):
+        """Hold: record. Tap: stop the recording, stop playing, or play."""
+        if trigger == "hold":
+            if self.recording:
+                return
+            if self.player and self.player.playing:
+                self.player.stop()
+            self.begin_record(ident)
+        elif self.recording:
+            if self.recording["id"] == ident:
+                self.end_record()
+        elif self.player and self.player.playing:
+            self.player.stop()
+        else:
+            self.play(ident)
+
+    def probe(self, cb):
+        """Where the pointer is: the shell shows a catcher for a moment, a
+        nudge of one pixel there and back makes it tell; None after 0.8 s."""
+        self.probe_token += 1
+        token = self.probe_token
+        self.probe_cb = cb
+        emit("probe", token=token)
+
+        def nudge():
+            if self.probe_token == token and self.probe_cb and self.output.pointer and not DRY:
+                for d in (1, -1):
+                    self.output.pointer.write(actions.E.EV_REL, actions.E.REL_X, d)
+                    self.output.pointer.syn()
+
+        def give_up():
+            if self.probe_token == token and self.probe_cb:
+                cb, self.probe_cb = self.probe_cb, None
+                emit("probe", token=0)
+                cb(None)
+
+        self.loop.schedule(0.12, nudge)
+        self.loop.schedule(0.35, nudge)
+        self.loop.schedule(0.8, give_up)
+
+    def begin_record(self, ident):
+        if M.evdev is None:
+            emit("error", message="python-evdev is missing: nothing can be recorded")
+            return
+        skip = {(P.VENDOR, P.PRODUCT, P.HID_TO_EVDEV[u]) for u in P.HOST_KEYS}
+        self.recording = {"id": ident, "recorder": None, "began": time.monotonic(), "start": None}
+        emit("macro", state="recording", id=ident)
+
+        def go(position):
+            if not self.recording or self.recording["id"] != ident:
+                return
+            emit("probe", token=0)
+            recorder = M.Recorder(skip)
+            self.recording.update(recorder=recorder, began=time.monotonic(), start=position)
+            recorder.start()
+            self.start_oled()
+            token = self.recording["began"]
+            self.loop.schedule(RECORD_LIMIT, lambda: self.recording and self.recording["began"] == token and self.end_record())
+
+        self.probe(go)
+
+    def end_record(self):
+        rec, self.recording = self.recording, None
+        if not rec or not rec["recorder"]:
+            emit("macro", state="idle", id="")
+            self.start_oled()
+            return
+        steps = M.tidy(rec["recorder"].stop())
+        ident = rec["id"]
+        if not steps:
+            emit("error", message="Nothing was recorded")
+        else:
+            old = self.macros.get(ident) or {}
+            number = len(self.macros) + (0 if old else 1)
+            self.macros[ident] = {
+                "name": old.get("name") or f"Macro {number}",
+                "steps": steps,
+                "start": list(rec["start"]) if rec["start"] else None,
+                "recorded": round(time.time()),
+                "options": old.get("options") or {"anchor": "spot", "back": True, "speed": 1, "pauses": "keep", "repeat": 1},
+            }
+            self.save_macros()
+        emit("macro", state="idle", id=ident, recorded=bool(steps))
+        self.start_oled()
+
+    def play(self, ident):
+        m = self.macros.get(ident)
+        if not m or not m.get("steps"):
+            emit("error", message="Hold the key to record the macro first")
+            return
+        if DRY:
+            log(f"DRY play {ident}")
+            return
+        o = m.get("options") or {}
+        spot = o.get("anchor", "spot") == "spot" and m.get("start")
+
+        def go(here):
+            def before():
+                if spot:
+                    self.warp.to(*m["start"])
+                    time.sleep(0.03)
+
+            def after():
+                if here and o.get("back", True):
+                    time.sleep(0.03)
+                    self.warp.to(*here)
+
+            self.player = M.Player(self.output, m["steps"], speed=float(o.get("speed", 1)),
+                                   max_pause=0.25 if o.get("pauses") == "short" else None,
+                                   times=int(o.get("repeat", 1)), before=before, after=after,
+                                   done=lambda: self.loop.post(self.played))
+            self.playing = ident
+            emit("macro", state="playing", id=ident)
+            self.player.start()
+            self.start_oled()
+
+        if spot and o.get("back", True):
+            self.probe(lambda here: (emit("probe", token=0), go(here)))
+        else:
+            go(None)
+
+    def played(self):
+        ident, self.playing = self.playing, ""
+        self.player = None
+        emit("macro", state="idle", id=ident)
+        self.start_oled()
+
+    def save_macros(self):
+        try:
+            tmp = MACROS_FILE.with_suffix(".tmp")
+            tmp.write_text(json.dumps(self.macros, separators=(",", ":")))
+            tmp.replace(MACROS_FILE)
+        except OSError as error:
+            log(f"macros: {error}")
+        self.publish_macros()
+
+    def publish_macros(self):
+        emit("macros", macros={ident: {"name": m.get("name", ""), "options": m.get("options") or {},
+                                       "anchored": bool(m.get("start")), "recorded": m.get("recorded", 0),
+                                       **M.summary(m.get("steps") or []), "words": M.words(m.get("steps") or [])}
+                               for ident, m in self.macros.items()})
+
+    def macro_command(self, command):
+        ident = str(command.get("id", ""))
+        what = command.get("do")
+        if what == "play":
+            self.ultra(ident, "click")
+        elif what == "record":
+            self.ultra(ident, "hold")
+        elif what == "stop":
+            if self.recording:
+                self.end_record()
+            elif self.player:
+                self.player.stop()
+        elif what == "delete":
+            if self.macros.pop(ident, None) is not None:
+                self.save_macros()
+        elif what == "set" and ident in self.macros:
+            values = command.get("values") or {}
+            m = self.macros[ident]
+            if "name" in values:
+                m["name"] = str(values["name"])[:60]
+            options = dict(m.get("options") or {})
+            for key in ("anchor", "back", "speed", "pauses", "repeat"):
+                if key in values:
+                    options[key] = values[key]
+            m["options"] = options
+            self.save_macros()
 
     # ── the focused window (niri, handed over by the shell) ─────────────
     def on_niri(self, event):
@@ -950,6 +1156,14 @@ class Daemon:
             return
         if op == "test":
             self.run(command.get("action") or {})
+            return
+        if op == "probed":
+            if self.probe_cb and command.get("token") == self.probe_token:
+                cb, self.probe_cb = self.probe_cb, None
+                cb((float(command["x"]), float(command["y"])))
+            return
+        if op == "macro":
+            self.macro_command(command)
             return
         if op == "state":
             emit("state", online=self.online, slot=self.slot, dirty=self.dirty, rules=len(self.engine.rules),

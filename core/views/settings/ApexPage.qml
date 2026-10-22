@@ -521,6 +521,188 @@ SettingsPage {
 		}
 	}
 
+	// ── ultra macros ───────────────────────────────────────────────────────
+	SettingCard {
+		anchor: "apex-macros"
+		visible: Object.keys(Apex.macros).length > 0
+		title: "Macros"
+		icon: "record_rec"
+
+		Repeater {
+			model: Object.keys(Apex.macros)
+
+			delegate: ColumnLayout {
+				id: mac
+
+				required property string modelData
+				readonly property var m: Apex.macros[mac.modelData] ?? ({})
+				readonly property var o: mac.m.options ?? ({})
+				readonly property bool live: Apex.macroId === mac.modelData && Apex.macroState !== "idle"
+
+				Layout.fillWidth: true
+				spacing: 8
+
+				RowLayout {
+					Layout.fillWidth: true
+					spacing: 10
+
+					Glyph {
+						icon: mac.live && Apex.macroState === "recording" ? "record_rec" : (mac.live ? "play" : "record_rec")
+						size: 18
+						color: mac.live ? Theme.danger : Theme.textMuted
+					}
+
+					Field {
+						Layout.preferredWidth: 200
+						text: mac.m.name ?? ""
+						clearable: false
+						onAccepted: if (text.trim()) Apex.setMacro(mac.modelData, { name: text.trim() })
+					}
+
+					StyledText {
+						Layout.fillWidth: true
+						text: [`${((mac.m.length ?? 0) / 1000).toFixed(1)} s`, mac.m.clicks ? `${mac.m.clicks} ${mac.m.clicks === 1 ? "click" : "clicks"}` : "", mac.m.keys ? `${mac.m.keys} ${mac.m.keys === 1 ? "key" : "keys"}` : "", Apex.macroKeys(mac.modelData).map(k => Apex.hidName(k.hid) + (k.app ? ` (${k.app})` : "")).join(", ")].filter(s => s).join(" · ")
+						tone: Theme.textMuted
+						elide: Text.ElideRight
+					}
+
+					TextButton {
+						variant: mac.live ? "filled" : "tonal"
+						icon: mac.live ? "stop" : "play"
+						text: mac.live ? "Stop" : "Play"
+						onActivated: Apex.macro(mac.modelData, mac.live ? "stop" : "play")
+					}
+
+					TextButton {
+						variant: "ghost"
+						icon: "record_rec"
+						text: "Record"
+						enabled: !mac.live
+						onActivated: Apex.macro(mac.modelData, "record")
+					}
+
+					IconButton {
+						icon: "delete_outline"
+						variant: "ghost"
+						onClicked: Apex.deleteMacro(mac.modelData)
+					}
+				}
+
+				// what it does, step by step
+				Flow {
+					Layout.fillWidth: true
+					spacing: 4
+
+					Repeater {
+						model: mac.m.words ?? []
+
+						delegate: Rectangle {
+							id: word
+
+							required property var modelData
+							readonly property string text: {
+								const w = word.modelData;
+								switch (w.kind) {
+								case "wait": return `${(w.ms / 1000).toFixed(1)} s`;
+								case "move": return "Move";
+								case "wheel": return w.dir === "down" ? "Scroll ↓" : "Scroll ↑";
+								case "click": return ({ 272: "Left click", 273: "Right click", 274: "Middle click", 275: "Back", 276: "Forward" })[w.code] ?? "Click";
+								case "keys": return (w.codes ?? []).map(c => Apex.hidName((Apex.device.evdevToHid ?? {})[c] ?? 0)).join(" + ");
+								}
+								return "";
+							}
+
+							width: wordText.implicitWidth + 14
+							height: 24
+							radius: 8
+							color: word.modelData.kind === "wait" ? "transparent" : (word.modelData.kind === "keys" ? Theme.layer3 : Theme.layer2)
+							border.width: word.modelData.kind === "wait" ? 1 : 0
+							border.color: Qt.alpha(Theme.text, 0.1)
+
+							StyledText {
+								id: wordText
+
+								anchors.centerIn: parent
+								text: word.text
+								tone: word.modelData.kind === "wait" ? Theme.textFaint : Theme.text
+								font.pixelSize: Theme.size.small
+							}
+						}
+					}
+				}
+
+				RowLayout {
+					Layout.fillWidth: true
+					spacing: 12
+
+					Segmented {
+						Layout.fillWidth: true
+						visible: mac.m.anchored === true
+						options: [
+							{ value: "spot", label: "Where recorded", icon: "crosshairs_gps" },
+							{ value: "pointer", label: "From the pointer", icon: "cursor_default_outline" }
+						]
+						current: mac.o.anchor ?? "spot"
+						onSelected: value => Apex.setMacro(mac.modelData, { anchor: value })
+					}
+
+					Segmented {
+						Layout.preferredWidth: 220
+						options: [
+							{ value: "0.5", label: "½×" },
+							{ value: "1", label: "1×" },
+							{ value: "2", label: "2×" },
+							{ value: "4", label: "4×" }
+						]
+						current: String(mac.o.speed ?? 1)
+						onSelected: value => Apex.setMacro(mac.modelData, { speed: Number(value) })
+					}
+				}
+
+				RowLayout {
+					Layout.fillWidth: true
+					spacing: 12
+
+					Segmented {
+						Layout.preferredWidth: 260
+						options: [
+							{ value: "keep", label: "Pauses as recorded" },
+							{ value: "short", label: "Short pauses" }
+						]
+						current: mac.o.pauses ?? "keep"
+						onSelected: value => Apex.setMacro(mac.modelData, { pauses: value })
+					}
+
+					Segmented {
+						Layout.fillWidth: true
+						options: [
+							{ value: "1", label: "Once" },
+							{ value: "3", label: "3×" },
+							{ value: "10", label: "10×" },
+							{ value: "0", label: "Until tapped", icon: "repeat" }
+						]
+						current: String(mac.o.repeat ?? 1)
+						onSelected: value => Apex.setMacro(mac.modelData, { repeat: Number(value) })
+					}
+				}
+
+				FlagRow {
+					visible: mac.m.anchored === true && (mac.o.anchor ?? "spot") === "spot"
+					icon: "keyboard_return"
+					title: "Pointer back afterwards"
+					checked: mac.o.back !== false
+					onToggled: on => Apex.setMacro(mac.modelData, { back: on })
+				}
+
+				Rectangle {
+					Layout.fillWidth: true
+					Layout.preferredHeight: 1
+					color: Qt.alpha(Theme.text, 0.06)
+				}
+			}
+		}
+	}
+
 	// ── rapid tap ──────────────────────────────────────────────────────────
 	SettingCard {
 		anchor: "apex-rapidtap"

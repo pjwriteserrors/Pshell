@@ -136,6 +136,10 @@ Singleton {
 	}
 
 	function openModal(kind, screen) {
+		if (kind === "niri") {
+			root.openSettings();
+			return;
+		}
 		if (!root.exists(kind)) return;
 		root.current = "";
 		root.modalScreen = screen || root.primaryScreen;
@@ -143,6 +147,11 @@ Singleton {
 	}
 
 	function toggleModal(kind, screen) {
+		if (kind === "niri") {
+			if (root.settingsOpen) root.closeSettings();
+			else root.openSettings();
+			return;
+		}
 		if (root.modal === kind)
 			root.closeModal();
 		else
@@ -151,6 +160,32 @@ Singleton {
 
 	function closeModal() {
 		root.modal = "";
+	}
+
+	// ── the settings: a window of their own (SettingsWindow.qml) ───────────
+	readonly property string settingsTitle: "Pshell settings"
+	property bool settingsOpen: false
+
+	function openSettings() {
+		root.settingsOpen = true;
+		settingsFocus.restart();
+	}
+
+	function closeSettings() {
+		if (!root.settingsOpen) return;
+		root.settingsOpen = false;
+		root.closed("niri");
+	}
+
+	// already up somewhere: brought here
+	Timer {
+		id: settingsFocus
+
+		interval: 60
+		onTriggered: {
+			const window = Niri.windows.find(window => String(window.title) === root.settingsTitle && /quickshell/i.test(String(window.app_id)));
+			if (window && !window.is_focused) Niri.focusWindow(window.id);
+		}
 	}
 
 	// ── Studio: the look-and-feel pages, each a full-screen modal ─────────
@@ -194,7 +229,7 @@ Singleton {
 	property string lastModal: ""
 
 	function wanted(id) {
-		return root.current === id || root.modal === id || root.recent[id] !== undefined;
+		return root.current === id || root.modal === id || (id === "niri" && root.settingsOpen) || root.recent[id] !== undefined;
 	}
 
 	function closed(id) {

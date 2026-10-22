@@ -242,3 +242,19 @@ def temperature():
     except OSError:
         return None
     return best
+
+
+def macro(name, seconds, recording):
+    """● REC and the time while a macro is recorded, ▶ and its name while it plays."""
+    image, draw = canvas()
+    big, small = font("bold", 14), font("sans", 9)
+    if recording:
+        draw.ellipse([2, 4, 14, 16], fill=1 if int(seconds * 2) % 2 == 0 else 0, outline=1)
+        draw.text((20, 2), "REC", font=big, fill=1)
+        clock_text = f"{int(seconds) // 60}:{int(seconds) % 60:02d}"
+        draw.text((W - draw.textlength(clock_text, font=big), 2), clock_text, font=big, fill=1)
+    else:
+        draw.polygon([(3, 4), (3, 16), (13, 10)], fill=1)
+        draw.text((20, 2), "PLAY", font=big, fill=1)
+    draw.text((0, 26), ellipsize(draw, name, small, W), font=small, fill=1)
+    return image

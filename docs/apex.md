@@ -88,6 +88,28 @@ keyboard, and the daemon answers that key from evdev (nothing grabbed) with
 the mouse's rule engine (`apex.json` rules, control `h<usage>`). Those need
 the shell; at most twelve keys.
 
+## Ultra macros
+
+*Ultra macro* in the action picker puts a macro on a key (through F13–F24,
+so the shell is needed): hold the key to record, tap it to stop; then every
+tap plays, a tap while it plays stops it, so does Esc on any keyboard.
+`scripts/apex/macro.py` records every keyboard and mouse from evdev (not
+the shell's own virtual devices, not the macro key): keys, buttons, the
+wheel and the raw motion, 4 ms frames, in `apex-macros.json`. The motion is
+replayed as the mouse sent it through the virtual mouse, which niri
+accelerates like the real one, so the pointer takes the same way.
+
+Where the pointer was when the recording began: the shell lays an invisible
+catcher over the screens (`core/views/overlays/PointerProbe.qml`) and the
+daemon nudges the pointer a pixel there and back, so it is entered. Per
+macro: start *where recorded* (the pointer is put there first, by an
+absolute pointer of its own over all outputs, and back afterwards) or *from
+the pointer* (the same moves wherever it is); speed ½–4×; pauses as
+recorded or at most 0.25 s; once, 3, 10 times or until tapped again. On the
+OLED: REC and the time, PLAY and the name. niri gives no window positions
+for tiled windows, so clicks cannot be kept relative to a window.
+`scripts/ipc.sh apex macro play|record|stop <name>`.
+
 ## OLED
 
 Its own screen, or the clock, what plays (`Media`), the system (CPU, RAM,

@@ -170,10 +170,7 @@ Item {
 				variant: "ghost"
 				icon: "eye_outline"
 				text: "niri's overlay"
-				onActivated: {
-					Popups.closeModal();
-					Quickshell.execDetached(["sh", "-c", "sleep 0.35; niri msg action show-hotkey-overlay"]);
-				}
+				onActivated: Quickshell.execDetached(["niri", "msg", "action", "show-hotkey-overlay"])
 			}
 		}
 

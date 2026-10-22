@@ -141,6 +141,13 @@ Scope {
 		MouseFinder {}
 	}
 
+	// where the pointer is, for an ultra macro of the Apex keyboard
+	Variants {
+		model: Plugins.on("apex") && Apex.probing !== 0 ? Quickshell.screens : []
+
+		PointerProbe {}
+	}
+
 	Variants {
 		model: Plugins.on("screenshot") && capturing.held ? Quickshell.screens : []
 
