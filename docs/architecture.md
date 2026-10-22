@@ -553,6 +553,15 @@ shell's socket in `$XDG_RUNTIME_DIR/pshell`. Nothing listens on the network.
 extension (once per machine); Floorp installs the unsigned package once
 `xpinstall.signatures.required` is false.
 
+A second extension, `dotfiles/floorp/youtube-resume`, keeps how far every
+YouTube video was watched (every few seconds while it plays, and on pause, a
+seek, a hidden or closed tab) and starts the video there again wherever it is
+opened next; a link with its own `t=` wins, a video watched to its end starts
+over. It remembers the video tabs that were open when the browser closed and
+lists them, with what is half watched, in its toolbar popup. Everything stays
+in the browser's extension storage; `scripts/youtube_resume.py install`
+packs it and hands it to Floorp.
+
 `autocorrect` corrects what is typed in windows the way a phone keyboard
 does, in German and English: typos and spelling, capitals (sentences, German
 nouns), a space that slipped into a word, a full stop for two spaces, the
