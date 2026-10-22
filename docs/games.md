@@ -119,5 +119,6 @@ and tells the shell; Steam games started in Steam count too) game mode is
 on (plugin `game-mode`, `ipc.sh gamemode set on|off|auto`): shaking the
 mouse no longer looks for it, notifications go quiet if wanted
 (`gamemode.json`), and the mouse's game haptics play while the game has the
-focus.
+focus (the game's processes go along, `pids`, so the mouse daemon finds
+the game's sound; `docs/mouse.md`).
 

@@ -764,7 +764,12 @@ def pads():
             text = file.read()
     except OSError:
         return -1
-    return len(re.findall(r"^H: Handlers=.*\bjs\d+", text, re.M))
+    count = 0
+    for block in text.split("\n\n"):
+        # the mouse daemon's virtual pad (game haptics) is not one
+        if re.search(r"^H: Handlers=.*\bjs\d+", block, re.M) and "Pshell" not in block:
+            count += 1
+    return count
 
 
 def cmd_launch(args):

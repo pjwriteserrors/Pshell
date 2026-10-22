@@ -212,11 +212,23 @@ Singleton {
 	readonly property bool gaming: GameMode.playing
 	// game haptics play only while the game has the focus
 	readonly property bool gameFocused: GameMode.focused
+	// the game's processes (games_guard.py): the daemon finds its sound by them
+	readonly property var gamePids: {
+		const pids = new Set();
+		const windows = Array.isArray(Games.windows) ? Games.windows : [];
+		for (const w of windows) for (const pid of (Array.isArray(w.pids) ? w.pids : [])) pids.add(pid);
+		return Array.from(pids);
+	}
+	readonly property string gamePidKey: (root.gamePids ?? []).join(",")
+	function tellGaming() {
+		root.send({ op: "gaming", on: root.gaming, focused: root.gameFocused, pids: root.gamePids, game: GameMode.title });
+	}
 	onGamingChanged: {
-		root.send({ op: "gaming", on: root.gaming, focused: root.gameFocused });
+		root.tellGaming();
 		root.followContext();
 	}
-	onGameFocusedChanged: root.send({ op: "gaming", on: root.gaming, focused: root.gameFocused })
+	onGameFocusedChanged: root.tellGaming()
+	onGamePidKeyChanged: if (root.gaming) root.tellGaming()
 	onFocusAppChanged: root.followContext()
 	// the profile the app or the game last asked for ("" none); a switch by
 	// itself happens only when this changes
@@ -342,13 +354,24 @@ Singleton {
 	}
 
 	// ── live game haptics ─────────────────────────────────────────────────
+	// the game's sound is heard (gamefeel.Ears), and which streams
 	property bool rumbling: false
-	// the presses of a game are felt (Triggers in the daemon)
+	property var hearing: []
+	// the virtual controller is there for the game to rumble (gamefeel.Pad);
+	// `padBlocked` names the real controller that keeps it away
+	property bool padOn: false
+	property string padBlocked: ""
+	property int padPulses: 0
+	// the presses of a game are read (Triggers in the daemon)
 	property bool triggering: false
 	signal triggered(string key, string label)
+	// the sound meter: how far the last 20 ms stand out, 0.5 is the line
 	property real bass: 0
-	property real bassThreshold: 0
+	property real bassThreshold: 0.5
 	signal hit(real strength)
+	// a game event the mouse played: source "pad" | "sound" | "press",
+	// kind "rumble" | "tick" | "thud" | "blast" | "press", the waveform
+	signal felt(string source, string kind, real strength, string wave, string label)
 	property var batteryLog: []
 	// what the daemon last said it goes by (`ipc mouse state`)
 	property var daemonState: ({})
@@ -461,8 +484,19 @@ Singleton {
 		case "state":
 			root.daemonState = data;
 			break;
-		case "rumble":
+		case "ears":
 			root.rumbling = data.on === true;
+			root.hearing = Array.isArray(data.streams) ? data.streams : [];
+			break;
+		case "pad":
+			root.padOn = data.on === true;
+			root.padBlocked = String(data.blocked ?? "");
+			root.padPulses = Number(data.pulses ?? 0);
+			break;
+		case "felt":
+			root.felt(String(data.source ?? ""), String(data.kind ?? ""), Number(data.strength ?? 0), String(data.wave ?? ""), String(data.label ?? ""));
+			if (data.source === "pad") root.padPulses += 1;
+			if (data.source === "sound") root.hit(Number(data.strength ?? 0));
 			break;
 		case "triggers":
 			root.triggering = data.on === true;
@@ -473,9 +507,6 @@ Singleton {
 		case "bass":
 			root.bass = data.level ?? 0;
 			root.bassThreshold = data.threshold ?? 0;
-			break;
-		case "hit":
-			root.hit(data.strength ?? 0);
 			break;
 		case "batteryLog":
 			root.batteryLog = data.log ?? [];
@@ -561,7 +592,7 @@ Singleton {
 		}
 		onRunningChanged: if (daemon.running) {
 			if (!root.hapticsOnly) root.send({ op: "config", config: root.config });
-			root.send({ op: "gaming", on: root.gaming, focused: root.gameFocused });
+			root.tellGaming();
 			// niri's events from the shell's own stream, the whole state first
 			if (Niri.ready) for (const line of Niri.replay()) daemon.write(`{"op":"niri","event":${line}}\n`);
 			if (root.watching) root.send({ op: "watch", on: true });

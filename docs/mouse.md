@@ -88,7 +88,7 @@ back* turns it on again and starts Solaar; the daemon notices and lets go.
 
 The `haptics` plugin plays through the daemon. With the `mouse` plugin off
 the daemon still runs, but only plays (`PSHELL_MOUSE_MODE=haptics`): no
-settings, rules, diversion or rumble, the mouse stays as it is. The bar's
+settings, rules, diversion or game haptics, the mouse stays as it is. The bar's
 mouse battery falls back to the daemon's reading when the kernel reports
 none (a mouse on a Bolt receiver). `scripts/ipc.sh workspace up|down` moves
 a workspace with a pulse, for key binds.
@@ -127,19 +127,56 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
 
 ## Haptics beyond clicks
 
-- **Game haptics** (`rumble`: off, games, always; `rumbleSource`: input,
-  sound, both). *Presses* (the default): while a game's window has the focus
-  (game mode, `GameMode.focused`) the daemon reads the keys and buttons
-  (`Triggers`: evdev, nothing grabbed, its own virtual devices left out) and
-  plays a waveform for every bound press – `rumbleBinds`: `{key: "BTN_LEFT"
-  | code, label, feel, repeat (ms of automatic fire while held), then:
-  [[ms, feel]]}`; shoot, aim and reload (with its own pattern) come bound.
-  Exact and the same in every game; talk and music are never felt. *Sound*:
-  `parec` takes the default output's monitor at 8 kHz, the low end of each
-  20 ms is weighed against the last second, and a hit that stands out plays
-  a hard bump, a soft bump or a tick by its strength (`rumbleSensitivity`,
-  at most every `rumbleGap` ms). The page records keys and buttons for the
-  presses, and shows the bass, the line to cross and each hit for the sound.
+- **Game haptics** (`rumble`: off, games, always; `rumbleSource`: auto,
+  input, sound; `scripts/mouse/gamefeel.py`). *By itself* (the default)
+  needs no setting up and is not the same in every game:
+  - *The game's own haptics* (`rumblePad`): while a game runs the daemon
+    plugs in a virtual controller (uinput, the ids of an Xbox 360 pad with
+    force feedback, "Pshell haptic pad"; it never presses anything). Games
+    that rumble a controller rumble it – most engines do so even while you
+    play with mouse and keyboard – with the haptics their makers designed:
+    this weapon's reload, that one's recoil, a hit taken, an explosion
+    nearby. Every effect the game uploads (`FF_RUMBLE`, `FF_PERIODIC`,
+    `FF_CONSTANT`) and plays becomes a row of pulses by its strength
+    (whisper, subtle, damp, sharp collision) for as long as it runs (denser
+    the harder; at most 3 s on its own – SDL games stop and re-upload
+    theirs). The pad is only there while no real controller (a non-virtual
+    device with `BTN_SOUTH`) is plugged in, since a game would take ours as
+    player one; it gives way within 5 s of a real one appearing and comes
+    back when it is gone. `games.py pads` and `games_pad.py` leave it out.
+  - *The game's sound* (`rumbleSound`): only the game's own PipeWire stream
+    – found by its processes (`games_guard.py` sends the pids with each game
+    window; a stream whose `application.process.id` is one of them or a
+    descendant; with none matching, the streams no desktop app owns; voice
+    chat, music, browsers are never in it) and captured with `pw-record
+    --target <object.serial>` at 16 kHz stereo (`always` with no game: the
+    default output's monitor). Every 20 ms the spectral flux (what is new
+    against the frame before – an onset, not something loud going on) is
+    weighed against the median of the last second; an onset is felt only
+    when a press of yours is fresh (`Gate`: a mouse button opens 450 ms, a
+    key 2 s, whatever is held keeps its window open, every onset taken
+    extends it by 600 ms up to 8 s – so each bullet of a slow reload, the
+    clack of a magazine, the swing and the crack when the block breaks –
+    movement keys, modifiers, Tab, Esc, Enter, F-keys open nothing
+    (`rumbleQuietKeys` overrides)), or when it is a blast: bass-heavy,
+    far above the last second and above the loud moments of the last 10 s,
+    not panned far to one side – an explosion, something hitting you,
+    whoever caused it. Kind by spectrum (a tick for clicks, a bump for
+    thuds, a knock for blasts), strength by how loud it is against the
+    game's own loud moments. Something far to one side is the world, not
+    the hand. For 3 s after the game rumbled the pad its sound stays
+    quiet (its own haptics are the better ones, nothing plays twice).
+    `rumbleSensitivity`, `rumbleGap` (at most every so many ms, 70).
+  - Bound presses (`rumbleBinds`, below) play on top; by itself nothing is
+    bound until the page binds something.
+  *Presses*: only the bound keys and buttons (`Triggers`: evdev, nothing
+  grabbed, its own virtual devices left out), `rumbleBinds`: `{key:
+  "BTN_LEFT" | code, label, feel, repeat (ms of automatic fire while held),
+  then: [[ms, feel]]}`; shoot, aim and reload come bound. *Sound*: the
+  game's stream as above, but every onset that stands out, whoever caused
+  it. The page shows what is live (the pad, which streams are heard), what
+  was felt lately (source, kind, strength) and the sound's meter. The
+  daemon tells it with `pad`, `ears` and `felt` events.
 - **Feel the desktop** (`feel`: moment → waveform): another workspace, the
   focus on another monitor, a window opening or closing, a window wanting
   attention – from niri's event stream.
