@@ -25,6 +25,30 @@ NIRI_ANIMATIONS_ROOT="${NIRI_ANIMATIONS_ROOT:-$HOME/.config/niri/animations}"
 NIRI_ANIMATION_STATE_FILE="${NIRI_ANIMATION_STATE_FILE:-$THEME_STATE_DIR/current-animation}"
 THEME_SCALED_DIR="${THEME_SCALED_DIR:-$THEME_STATE_DIR/scaled}"
 THEME_RESOLUTIONS_FILE="${THEME_RESOLUTIONS_FILE:-$THEME_STATE_DIR/resolutions.json}"
+# What the picker's Online tab finds and wears (scripts/wallpaper_search.py)
+# lives only here, in memory, with everything made from it: previews,
+# palettes, the colours of the picker. Wearing something else forgets it
+# (theme_forget_online), and a reboot does as well.
+THEME_ONLINE_DIR="${THEME_ONLINE_DIR:-${XDG_RUNTIME_DIR:-/tmp}/pshell/wallpaper-online}"
+
+theme_is_online() {
+	[[ "$1" == "$THEME_ONLINE_DIR"/* ]]
+}
+
+# every online wallpaper but the one <keep> is in, with its palettes, and the
+# frame the shell kept of it when it left (once its transition is through)
+theme_forget_online() {
+	local keep="${1:-}" dir key
+	[[ -d "$THEME_ONLINE_DIR/worn" ]] || return 0
+	for dir in "$THEME_ONLINE_DIR"/worn/*/; do
+		dir="${dir%/}"
+		[[ -d "$dir" ]] || continue
+		[[ -n "$keep" && "$keep" == "$dir"/* ]] && continue
+		key="$(printf '%s' "$dir" | sha1sum | awk '{print $1}')"
+		rm -rf -- "$dir" "$THEME_ONLINE_DIR/palettes/$key" "$THEME_ONLINE_DIR/previews/$key.png" "$THEME_ONLINE_DIR/wallust-preview-cache/$key"
+	done
+	theme_is_online "$keep" || rm -rf -- "$THEME_ONLINE_DIR/palettes" "$THEME_ONLINE_DIR/worn"
+}
 
 theme_ensure_runtime_dirs() {
 	mkdir -p "$THEME_STATE_DIR" "$THEME_PREVIEW_DIR" "$THEME_RUNTIME_DIR" "$THEME_CURRENT_DIR"

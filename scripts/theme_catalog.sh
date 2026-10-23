@@ -22,9 +22,10 @@ resolve_theme_dir() {
 
 theme_preview_path() {
 	local theme_path="$1"
-	local hash
+	local hash root="$THEME_PREVIEW_DIR"
 	hash="$(printf '%s' "$theme_path" | sha1sum | awk '{print $1}')"
-	printf '%s/%s.png\n' "$THEME_PREVIEW_DIR" "$hash"
+	theme_is_online "$theme_path" && root="$THEME_ONLINE_DIR/previews" && mkdir -p "$root"
+	printf '%s/%s.png\n' "$root" "$hash"
 }
 
 extract_preview() {
@@ -54,7 +55,9 @@ extract_preview() {
 
 theme_palette_cache_dir() {
 	local cache_dir
-	cache_dir="$THEME_STATE_DIR/wallust-preview-cache/$(printf '%s' "$1" | sha1sum | awk '{print $1}')"
+	local root="$THEME_STATE_DIR"
+	theme_is_online "$1" && root="$THEME_ONLINE_DIR"
+	cache_dir="$root/wallust-preview-cache/$(printf '%s' "$1" | sha1sum | awk '{print $1}')"
 	mkdir -p "$cache_dir"
 	printf '%s\n' "$cache_dir"
 }
@@ -217,7 +220,7 @@ run_wallust_preview() {
 	local preview_path="$5"
 	shift 5
 
-	wallust --config-dir "$tmpdir" --no-hooks run --quiet --skip-sequences \
+	wallust --config-dir "$tmpdir" --no-hooks run --quiet --skip-sequences --no-cache \
 		--backend "$backend" \
 		--palette "$color_space" \
 		--style "$palette" \

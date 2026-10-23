@@ -483,6 +483,9 @@ if [[ "$RESOLUTION" != "original" ]]; then
 	log "OK scale to $RESOLUTION: $THEME_MEDIA"
 fi
 
+# what was worn until now: an online wallpaper is forgotten once it is left
+previous_entry="$(cat "$THEME_CURRENT_DIR_FILE" 2>/dev/null || true)"
+
 theme_name="$(theme_entry_name "$THEME_ENTRY")"
 media_type="$(theme_media_type "$THEME_MEDIA")"
 frame_path="$THEME_CURRENT_FRAME_FILE"
@@ -577,5 +580,10 @@ else
 fi
 
 wait_for_jobs
+theme_forget_online "$THEME_ENTRY"
+# the frame the shell started its transition from is the one left
+if theme_is_online "$previous_entry" && [[ "$previous_entry" != "$THEME_ENTRY" ]]; then
+	setsid -f bash -c 'sleep 20; rm -f -- "$1"' _ "$THEME_CURRENT_DIR/leaving.jpg" >/dev/null 2>&1 </dev/null || true
+fi
 finish_report
 start_prewarm
