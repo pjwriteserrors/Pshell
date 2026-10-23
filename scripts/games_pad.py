@@ -36,6 +36,8 @@ def say(data):
 
 
 def is_pad(device):
+    if device.name.startswith("Pshell"):
+        return False  # the mouse daemon's virtual pad (game haptics) presses nothing
     keys = device.capabilities().get(ecodes.EV_KEY, [])
     return ecodes.BTN_SOUTH in keys or ecodes.BTN_GAMEPAD in keys
 

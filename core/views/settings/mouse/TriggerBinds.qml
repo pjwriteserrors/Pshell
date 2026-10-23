@@ -15,8 +15,11 @@ import "Waves.js" as Waves
 ColumnLayout {
 	id: root
 
+	// by itself (gamefeel.py) nothing is bound until it is bound here: the
+	// game's own haptics and its sound already give what the defaults would
+	property bool automatic: false
 	// the daemon's defaults until something is changed here
-	readonly property var defaults: [
+	readonly property var defaults: root.automatic ? [] : [
 		{ key: "BTN_LEFT", label: "Shoot", feel: "SHARP COLLISION", repeat: 0 },
 		{ key: "BTN_RIGHT", label: "Aim", feel: "WHISPER COLLISION", repeat: 0 },
 		{ key: "KEY_R", label: "Reload", feel: "DAMP COLLISION", then: [[420, "SUBTLE COLLISION"], [760, "SHARP STATE CHANGE"]] }

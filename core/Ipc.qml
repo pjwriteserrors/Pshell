@@ -305,6 +305,19 @@ Scope {
 		function rumble(mode: string): void {
 			Mouse.setOption("rumble", ["off", "games", "always"].includes(mode) ? mode : "off");
 		}
+		// the virtual controller of the game haptics: `mouse pad on|off`
+		function pad(on: string): void {
+			Mouse.setOption("rumblePad", on === "on" || on === "true" || on === "1");
+		}
+		// game haptics: `mouse feel no` – the sound just felt was not an
+		// action, never feel it again; `mouse feel forget` starts the game over
+		// `mouse feel record` keeps 2 minutes of the game's sound and presses for tuning
+		function feel(what: string): void {
+			if (what === "forget") Mouse.forgetGame();
+			else if (what === "record") Mouse.recordEars(120);
+			else Mouse.muteSound(-1);
+		}
+
 	}
 
 	// the Logitech keyboard: `keyboard open`, `keyboard flash pulse`, `keyboard light up`

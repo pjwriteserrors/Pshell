@@ -7,18 +7,71 @@ import qs.style.widgets
 import qs.core.services
 import qs.core.views.settings
 
-// Game haptics: what is pressed in a game (the button that shoots, the key
-// that reloads – TriggerBinds), or the low end of what plays (a shot, an
-// explosion, a kick drum), or both, felt under the thumb. When, from what,
-// and for the sound a meter that shows what it hears and each hit.
+// Game haptics (scripts/mouse/gamefeel.py). By itself: a virtual
+// controller the game rumbles with the haptics its makers designed, and
+// the game's own sound – each new sound right after a press of yours (a
+// bullet going in, a block breaking, a spell), and blasts whoever caused
+// them. Or by hand: bound presses (TriggerBinds), or every onset of the
+// sound. Shows what is live, what was felt, and the sound's meter.
 ColumnLayout {
 	id: root
 
-	readonly property string source: Mouse.option("rumbleSource", "input")
+	readonly property string source: {
+		const value = Mouse.option("rumbleSource", "auto");
+		return value === "both" ? "auto" : value;
+	}
 	readonly property bool on: Mouse.option("rumble", "off") !== "off"
+	readonly property bool automatic: root.on && root.source === "auto"
 	readonly property bool sound: root.on && root.source !== "input"
+	readonly property bool padWanted: Mouse.option("rumblePad", false) === true
+	readonly property bool soundWanted: Mouse.option("rumbleSound", true) !== false
+	// what was felt lately: [{source, kind, strength, label, cluster, muted, at}]
+	property var recent: []
+	readonly property var learning: Mouse.learning ?? ({})
+
+	// a chip clicked: that sound was no action – never again
+	function mute(index) {
+		const item = root.recent[index];
+		if (!item || item.source !== "sound" || item.cluster < 0) return;
+		Mouse.muteSound(item.cluster);
+		const list = root.recent.map(f => f.cluster === item.cluster ? Object.assign({}, f, { muted: true }) : f);
+		root.recent = list;
+	}
 
 	spacing: 12
+
+	function sourceIcon(source) {
+		return source === "pad" ? "gamepad_variant" : (source === "sound" ? "volume_high" : "keyboard");
+	}
+
+	function kindName(kind, label) {
+		return { rumble: "Rumble", tick: "Tick", thud: "Thud", blast: "Blast", press: label || "Press" }[kind] ?? label;
+	}
+
+	Connections {
+		target: Mouse
+
+		function onFelt(source, kind, strength, wave, label, cluster) {
+			const list = root.recent.slice(0, 7);
+			list.unshift({ source, kind, strength, label, wave, cluster, muted: false, at: Date.now() });
+			root.recent = list;
+			prune.restart();
+		}
+	}
+
+	// what was felt fades out again
+	Timer {
+		id: prune
+
+		interval: 1000
+		repeat: true
+		onTriggered: {
+			const now = Date.now();
+			const list = root.recent.filter(f => now - f.at < 9000);
+			if (list.length !== root.recent.length) root.recent = list;
+			if (list.length === 0) prune.stop();
+		}
+	}
 
 	RowLayout {
 		Layout.fillWidth: true
@@ -28,7 +81,7 @@ ColumnLayout {
 			Layout.preferredWidth: 36
 			Layout.preferredHeight: 36
 			radius: Theme.radius.medium
-			color: Mouse.rumbling || Mouse.triggering ? Theme.primary : Theme.primarySoft
+			color: Mouse.rumbling || Mouse.triggering || Mouse.padOn ? Theme.primary : Theme.primarySoft
 
 			Behavior on color {
 				ColorAnim {}
@@ -38,7 +91,7 @@ ColumnLayout {
 				anchors.centerIn: parent
 				icon: "gamepad_variant"
 				size: 18
-				color: Mouse.rumbling || Mouse.triggering ? Theme.onPrimary : Theme.primary
+				color: Mouse.rumbling || Mouse.triggering || Mouse.padOn ? Theme.onPrimary : Theme.primary
 			}
 		}
 
@@ -53,7 +106,19 @@ ColumnLayout {
 
 			StyledText {
 				Layout.fillWidth: true
-				text: Mouse.triggering || Mouse.rumbling ? (Mouse.triggering ? "On – the game's presses are felt" : "Listening – every hit of the bass is felt") : (Mouse.option("rumble", "off") === "games" ? (Plugins.on("games") ? "While a game has the focus, whatever started it" : "Needs the Games plugin to know when you play") : "Shots, reloads and hits, felt under the thumb")
+				text: {
+					if (!root.on) return "Reloads, shots, blasts and hits, felt under the thumb";
+					if (Mouse.padOn || Mouse.rumbling) {
+						const parts = [];
+						if (Mouse.padOn) parts.push("the controller is plugged in");
+						if (Mouse.rumbling) parts.push(Mouse.hearing.length > 0 ? `hearing ${Mouse.hearing.join(", ")}` : "waiting for the game's sound");
+						if (Mouse.triggering && root.source === "input") parts.push("reading your presses");
+						return "Live – " + parts.join(", ");
+					}
+					if (Mouse.triggering) return "On – your bound presses are felt";
+					if (Mouse.option("rumble", "off") === "games") return Plugins.on("games") ? "While a game has the focus, whatever started it" : "Needs the Games plugin to know when you play";
+					return "Always on – also outside games";
+				}
 				tone: Theme.textSubtle
 				font.pixelSize: Theme.size.small
 				wrapMode: Text.WordWrap
@@ -75,7 +140,7 @@ ColumnLayout {
 
 		StyledText {
 			Layout.fillWidth: true
-			text: root.source === "sound" ? "The sound fires on anything loud enough – voices and music too." : (root.source === "both" ? "Presses, and the bass of the sound on top." : "Only what you press – exact, whatever the game, silent when people talk.")
+			text: root.source === "auto" ? "Nothing to set up: the game's sound after your presses – every bullet of a slow reload, one clack of a magazine, the swing and the break – and blasts from anywhere. The game's own controller haptics on top, when you turn them on." : (root.source === "sound" ? "Every new sound of the game that stands out – also what others do. Only the game's own stream, never voices or music." : "Only what you press, as bound below – exact, the same in every game.")
 			tone: Theme.textSubtle
 			font.pixelSize: Theme.size.small
 			wrapMode: Text.WordWrap
@@ -83,18 +148,235 @@ ColumnLayout {
 
 		Segmented {
 			Layout.preferredWidth: 300
-			options: [{ value: "input", label: "Presses", icon: "mouse" }, { value: "sound", label: "Sound", icon: "volume_high" }, { value: "both", label: "Both" }]
+			options: [{ value: "auto", label: "By itself", icon: "auto_fix" }, { value: "input", label: "Presses", icon: "mouse" }, { value: "sound", label: "Sound", icon: "volume_high" }]
 			current: root.source
 			onSelected: value => Mouse.setOption("rumbleSource", value)
 		}
 	}
 
-	TriggerBinds {
-		Layout.fillWidth: true
-		visible: root.on && root.source !== "sound"
+	// the two things that need no setting up, each with what it is doing
+	Repeater {
+		model: root.automatic ? [{
+				id: "pad",
+				icon: "gamepad_variant",
+				label: "The game's own haptics",
+				on: root.padWanted,
+				live: Mouse.padOn,
+				text: !root.padWanted ? "Off. A virtual controller the game can rumble with the haptics its makers designed – but a game that takes the first controller as its only input leaves mouse and keyboard dead; turn it on per game, off again if that happens" : (Mouse.padOn ? (Mouse.padPulses > 0 ? `Plugged in – the game rumbled it ${Mouse.padPulses} times` : "Plugged in, nothing felt yet – not every game rumbles while you play with the mouse") : (Mouse.padBlocked ? `Your ${Mouse.padBlocked} is on: the game rumbles that one` : "A virtual controller, plugged in while a game runs; most games rumble it even when you play with the mouse"))
+			}, {
+				id: "sound",
+				icon: "volume_high",
+				label: "The game's sound",
+				on: root.soundWanted,
+				live: Mouse.rumbling,
+				text: !root.soundWanted ? "What starts in the game's sound – off" : (Mouse.rumbling ? (Mouse.hearing.length > 0 ? `Hearing ${Mouse.hearing.join(", ")} – your actions, and blasts` : "Waiting for the game to make a sound") : "Only the game's stream: a new sound right after your press is yours; a blast counts from anywhere")
+			}] : []
+
+		delegate: RowLayout {
+			id: lane
+
+			required property var modelData
+
+			Layout.fillWidth: true
+			Layout.leftMargin: 10
+			spacing: 10
+
+			Rectangle {
+				Layout.preferredWidth: 28
+				Layout.preferredHeight: 28
+				radius: Theme.radius.small
+				color: lane.modelData.live && lane.modelData.on ? Theme.primary : Theme.layer2
+
+				Behavior on color {
+					ColorAnim {}
+				}
+
+				Glyph {
+					anchors.centerIn: parent
+					icon: lane.modelData.icon
+					size: 15
+					color: lane.modelData.live && lane.modelData.on ? Theme.onPrimary : Theme.textSubtle
+				}
+			}
+
+			ColumnLayout {
+				Layout.fillWidth: true
+				spacing: 0
+
+				StyledText {
+					text: lane.modelData.label
+					font.pixelSize: Theme.size.small
+					font.weight: Font.DemiBold
+				}
+
+				StyledText {
+					Layout.fillWidth: true
+					text: lane.modelData.text
+					tone: Theme.textSubtle
+					font.pixelSize: Theme.size.small
+					wrapMode: Text.WordWrap
+				}
+			}
+
+			Toggle {
+				checked: lane.modelData.on
+				onToggled: on => Mouse.setOption(lane.modelData.id === "pad" ? "rumblePad" : "rumbleSound", on)
+			}
+		}
 	}
 
-	// what it hears: the bass, the line a hit has to cross, the hits
+	// what was felt lately, newest first
+	Flow {
+		Layout.fillWidth: true
+		Layout.leftMargin: 10
+		visible: root.on && root.recent.length > 0
+		spacing: 6
+
+		Repeater {
+			model: root.recent
+
+			delegate: Rectangle {
+				id: chip
+
+				required property var modelData
+				required property int index
+
+				width: chipRow.implicitWidth + 18
+				height: 26
+				radius: 13
+				color: chip.modelData.muted ? Theme.layer1 : (chip.modelData.kind === "blast" ? Theme.primary : Theme.layer2)
+				border.width: chip.modelData.muted ? 1 : 0
+				border.color: Theme.outline
+				opacity: 1 - chip.index * 0.11
+				scale: 1
+				Component.onCompleted: pop.start()
+
+				MouseArea {
+					anchors.fill: parent
+					cursorShape: chip.modelData.source === "sound" && !chip.modelData.muted ? Qt.PointingHandCursor : Qt.ArrowCursor
+					onClicked: root.mute(chip.index)
+				}
+
+				Behavior on opacity {
+					Anim {}
+				}
+
+				SequentialAnimation {
+					id: pop
+
+					NumberAnimation {
+						target: chip
+						property: "scale"
+						from: 0.6
+						to: 1
+						duration: 260
+						easing.type: Easing.OutBack
+					}
+				}
+
+				RowLayout {
+					id: chipRow
+
+					anchors.centerIn: parent
+					spacing: 6
+
+					Glyph {
+						icon: root.sourceIcon(chip.modelData.source)
+						size: 13
+						color: chip.modelData.kind === "blast" ? Theme.onPrimary : Theme.textSubtle
+					}
+
+					StyledText {
+						text: root.kindName(chip.modelData.kind, chip.modelData.label)
+						font.pixelSize: Theme.size.small
+						font.strikeout: chip.modelData.muted
+						color: chip.modelData.muted ? Theme.textFaint : (chip.modelData.kind === "blast" ? Theme.onPrimary : Theme.text)
+					}
+
+					// how hard it was
+					Rectangle {
+						Layout.preferredWidth: 22
+						Layout.preferredHeight: 4
+						radius: 2
+						color: Qt.alpha(chip.modelData.kind === "blast" ? Theme.onPrimary : Theme.primary, 0.25)
+
+						Rectangle {
+							width: parent.width * Math.max(0.1, Math.min(1, chip.modelData.strength))
+							height: parent.height
+							radius: 2
+							color: chip.modelData.kind === "blast" ? Theme.onPrimary : Theme.primary
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// the inside, live: numbers, windows, every onset with its reason, the sounds
+	FeelInside {
+		Layout.fillWidth: true
+		visible: root.sound
+	}
+
+	// what it learned about this game, and the way out
+	RowLayout {
+		Layout.fillWidth: true
+		Layout.leftMargin: 10
+		visible: root.automatic && root.soundWanted && !!root.learning.game && root.learning.game !== "_"
+		spacing: 10
+
+		Glyph {
+			icon: "head_outline"
+			size: 15
+			color: Theme.textSubtle
+		}
+
+		StyledText {
+			Layout.fillWidth: true
+			text: {
+				const l = root.learning;
+				const parts = [`${l.sounds ?? 0} sounds told apart`, `${l.yours ?? 0} are yours`];
+				if ((l.muted ?? 0) > 0) parts.push(`${l.muted} muted`);
+				parts.push(`${l.minutes ?? 0} min listened`);
+				if (l.gain && Math.abs(l.gain - 1) > 0.05) parts.push(`threshold ×${l.gain}`);
+				return `Learning ${l.game} – ` + parts.join(", ") + ". A sound that was wrong: click its chip, it is never felt again.";
+			}
+			tone: Theme.textSubtle
+			font.pixelSize: Theme.size.small
+			wrapMode: Text.WordWrap
+		}
+
+		TextButton {
+			text: "Forget this game"
+			icon: "eraser"
+			variant: "text"
+			confirm: true
+			onActivated: Mouse.forgetGame()
+		}
+	}
+
+	// bound presses: everything in Presses, on top of the rest otherwise
+	ColumnLayout {
+		Layout.fillWidth: true
+		visible: root.on && root.source !== "sound"
+		spacing: 6
+
+		StyledText {
+			visible: root.automatic
+			Layout.leftMargin: 10
+			text: "Presses of your own on top"
+			font.pixelSize: Theme.size.small
+			font.weight: Font.DemiBold
+			tone: Theme.textSubtle
+		}
+
+		TriggerBinds {
+			Layout.fillWidth: true
+			automatic: root.automatic
+		}
+	}
+
+	// what it hears: how far the last moment stands out, the line to cross
 	Rectangle {
 		id: meter
 
@@ -126,7 +408,7 @@ ColumnLayout {
 			function onHit(strength) {
 				meter.flash = 0.3 + strength * 0.7;
 				fade.restart();
-				const dot = spark.createObject(meter, { x: 14 + Mouse.bass * (meter.width - 28), strength });
+				spark.createObject(meter, { x: 14 + Mouse.bass * (meter.width - 28), strength });
 			}
 		}
 
@@ -233,20 +515,20 @@ ColumnLayout {
 
 	ValueSlider {
 		visible: root.sound
-		from: 60
-		to: 400
+		from: 40
+		to: 300
 		step: 10
 		unit: " ms"
 		icon: "timer_outline"
 		label: "At most every"
-		value: Mouse.option("rumbleGap", 110)
+		value: Mouse.option("rumbleGap", 70)
 		onMoved: v => Mouse.setOption("rumbleGap", Math.round(v))
 	}
 
 	StyledText {
 		Layout.fillWidth: true
 		visible: root.sound
-		text: "It listens to the default output (its monitor) at 8 kHz, about 1 % of one core, and only while it is on. Strong hits play a hard bump, weaker ones a soft bump or a tick."
+		text: root.automatic ? "The sound is the game's own stream at 16 kHz (about 2 % of one core while a game runs). It learns the game as you play: every new sound is told apart by its fingerprint, and only sounds that nearly always follow a press of yours – at the delay they were learned with – are felt; footsteps, music and the world fall out, and a key's window grows to its slow reload. Movement keys, modifiers and Tab, Esc, Enter open nothing. A blast is felt whoever caused it. While the game rumbles the controller its sound stays quiet. The threshold regulates itself per game; the sensitivity shifts on top." : "The sound is the game's own stream at 16 kHz, about 2 % of one core. Every new sound that stands out plays – a tick for a click, a bump for a thud, harder for louder."
 		tone: Theme.textFaint
 		font.pixelSize: Theme.size.small
 		wrapMode: Text.WordWrap

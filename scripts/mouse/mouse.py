@@ -11,7 +11,9 @@ Solaar: settings, buttons, gestures, the thumb wheel, haptics, statistics.
 Commands: {op: "config", config} (everything the page keeps: per device
 settings, rules, options), {op: "watch", on} (live presses and movement for
 the page), {op: "play", waveform}, {op: "host", device, index}, {op: "test",
-action}, {op: "refresh"}, {op: "takeover"}, {op: "quit"}.
+action}, {op: "refresh"}, {op: "takeover"}, {op: "gaming", on, focused,
+pids, game}, {op: "mute", cluster} and {op: "forget", game} (game haptics,
+gamefeel.py), {op: "quit"}.
 
 Events: devices, battery, press, move, fired, wheel, focus, stats, solaar,
 imported, action (a shell action for the page to run), error.
@@ -47,6 +49,7 @@ import hidpp  # noqa: E402
 from hidpp import HidppError, Offline  # noqa: E402
 import actions  # noqa: E402
 from engine import CIDS, CONTROLS, Engine  # noqa: E402
+import gamefeel  # noqa: E402
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import host  # noqa: E402
 
@@ -266,10 +269,17 @@ class Daemon:
         self.windows = {}
         self.windows_known = False
         self.gaming = False
-        self.rumble = None
         self.triggers = None
-        # a game's window has the focus (Mouse.qml, game mode)
+        # game haptics that need no setting up (gamefeel.py): the virtual
+        # controller the game rumbles, the game's own sound
+        self.pad = None
+        self.ears = None
+        # a game's window has the focus (Mouse.qml, game mode), the game's
+        # processes (games_guard.py, for its sound) and its name
         self.game_focused = False
+        self.game_pids = []
+        self.game_name = ""
+        self.felt_count = {}
         self.focused = None
         self.dpi_index = {}
         self.shifted = {}
@@ -288,10 +298,10 @@ class Daemon:
             pass
         self.engine.configure(self.config["rules"], self.config["options"])
         self.output = actions.Output()
-        self.rumble = Rumble(self)
-        self.rumble.update()
+        self.pad = gamefeel.Pad(self)
+        self.ears = gamefeel.Ears(self, gamefeel.Memory(STATE / "mouse-gamefeel.json"))
         self.triggers = Triggers(self)
-        self.triggers.update()
+        self.update_gamefeel()
         self.loop.post(self.scan)
         self.loop.schedule(5, self.poll)
         threading.Thread(target=self.read_stdin, daemon=True).start()
@@ -308,8 +318,13 @@ class Daemon:
 
     def stop(self):
         self.engine.release_all()
-        if self.rumble and self.rumble.proc:
-            self.rumble.proc.terminate()
+        if self.pad and self.pad.ui is not None:
+            self.pad.destroy()
+        if self.ears:
+            self.ears.on = False
+            for stream in list(self.ears.streams.values()):
+                stream.close()
+            self.ears.memory.save()
         if self.triggers and self.triggers.stop:
             self.triggers.stop.set()
         for mouse in list(self.mice.values()):
@@ -457,7 +472,10 @@ class Daemon:
         emit("devices", devices=devices, solaar=self.solaar, inCharge=self.in_charge)
 
     def poll(self):
-        """Every few seconds: Solaar came or went, a receiver was plugged in."""
+        """Every few seconds: Solaar came or went, a receiver was plugged in,
+        a real controller came or went (the virtual pad gives way)."""
+        if self.pad:
+            self.pad.update()
         running = solaar_running()
         if running != self.solaar:
             if running and self.in_charge:
@@ -911,6 +929,37 @@ class Daemon:
             proc.wait()
             time.sleep(3)
 
+    # ── game haptics (gamefeel.py) ──────────────────────────────────────
+    def update_gamefeel(self):
+        self.pad.update()
+        self.ears.update()
+        self.triggers.update()
+
+    def emit(self, event, **data):
+        emit(event, **data)
+
+    def log(self, text):
+        log(text)
+
+    def felt(self, source, kind, strength, waveform, label, stream="", cluster=-1):
+        """A game event to feel (the pad, the sound, a bound press): plays
+        it and, while the page watches, says what it was (`cluster`: the
+        learned sound, for the page to mute)."""
+        def go():
+            self.felt_count[source] = self.felt_count.get(source, 0) + 1
+            self.play(waveform)
+            if self.watching:
+                emit("felt", source=source, kind=kind, strength=round(float(strength), 2), wave=waveform,
+                     label=label, stream=stream, cluster=cluster)
+        self.loop.post(go)
+
+    def tell_pad(self):
+        emit("pad", on=self.pad.ui is not None, blocked=self.pad.blocked, pulses=self.felt_count.get("pad", 0))
+
+    def tell_ears(self):
+        emit("ears", on=self.ears.on, streams=self.ears.names())
+        emit("learning", **self.ears.memory.summary())
+
     def feel_desktop(self, moment):
         """A pulse for something on the desktop (options.feel: moment -> waveform)."""
         waveform = (self.config["options"].get("feel") or {}).get(moment)
@@ -1070,8 +1119,7 @@ class Daemon:
             self.config = merge_config(command.get("config") or {})
             self.engine.configure(self.config["rules"], self.config["options"])
             self.ensure_mods()
-            self.rumble.update()
-            self.triggers.update()
+            self.update_gamefeel()
             for mouse in self.mice.values():
                 if mouse.online:
                     self.apply_settings(mouse)
@@ -1089,12 +1137,18 @@ class Daemon:
         elif op == "gaming":
             self.gaming = bool(command.get("on"))
             self.game_focused = bool(command.get("focused", self.gaming))
-            self.rumble.update()
-            self.triggers.update()
+            pids = command.get("pids")
+            self.game_pids = [int(p) for p in pids if isinstance(p, (int, float))] if isinstance(pids, list) else []
+            self.game_name = str(command.get("game") or "")
+            if not self.gaming:
+                self.felt_count = {}
+            self.update_gamefeel()
         elif op == "watch":
             self.watching = bool(command.get("on"))
             if self.watching:
                 emit("focus", app=self.app)
+                self.tell_pad()
+                self.tell_ears()
                 emit("stats", **self.stats.summary())
                 for mouse in self.mice.values():
                     if mouse.info.get("serial"):
@@ -1109,6 +1163,19 @@ class Daemon:
             self.publish()
         elif op == "play":
             self.play(command.get("waveform", FEEL_DEFAULT), self.find(command.get("device")))
+        elif op == "mute":
+            # a sound of the game that should not have been felt (-1: the last)
+            cluster = command.get("cluster", -1)
+            if self.ears.memory.mute(cluster if isinstance(cluster, int) else -1):
+                self.play("WHISPER COLLISION")
+                self.ears.memory.save()
+            emit("learning", **self.ears.memory.summary())
+        elif op == "record":
+            self.ears.record(float(command.get("seconds", 120)))
+        elif op == "forget":
+            self.ears.memory.forget(command.get("game") or None)
+            self.ears.memory.save()
+            emit("learning", **self.ears.memory.summary())
         elif op == "host":
             mouse = self.find(command.get("device"))
             if DRY:
@@ -1144,88 +1211,10 @@ def notify(title, body, icon):
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-class Rumble:
-    """Game haptics: what plays on the speakers, its bass, felt in the
-    thumb. parec takes the default output's monitor at 8 kHz; every 20 ms
-    the low end is weighed against the last second, and a hit that stands
-    out (a shot, a crash, a kick drum) plays a pulse that matches its
-    strength. Runs only while wanted: options.rumble "always", or "games"
-    while a game is running (the page says so)."""
-
-    def __init__(self, daemon):
-        self.daemon = daemon
-        self.proc = None
-        self.thread = None
-
-    def wanted(self):
-        options = self.daemon.config["options"]
-        if options.get("rumbleSource", "input") not in ("sound", "both"):
-            return False
-        mode = options.get("rumble", "off")
-        return mode == "always" or (mode == "games" and self.daemon.gaming)
-
-    def update(self):
-        if self.wanted() and self.proc is None:
-            try:
-                self.proc = subprocess.Popen(
-                    ["parec", "-d", "@DEFAULT_MONITOR@", "--rate=8000", "--channels=1",
-                     "--format=s16le", "--raw", "--latency-msec=20"],
-                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-            except OSError as error:
-                log(f"rumble: {error}")
-                return
-            self.thread = threading.Thread(target=self.listen, args=(self.proc,), daemon=True)
-            self.thread.start()
-            emit("rumble", on=True)
-        elif not self.wanted() and self.proc is not None:
-            self.proc.terminate()
-            self.proc = None
-            emit("rumble", on=False)
-
-    def listen(self, proc):
-        import numpy as np
-        block = 160 * 2  # 20 ms
-        average = 0.0
-        last_hit = 0.0
-        previous = 0.0
-        last_emit = 0.0
-        while proc.poll() is None:
-            data = proc.stdout.read(block)
-            if not data or len(data) < block:
-                break
-            options = self.daemon.config["options"]
-            sensitivity = float(options.get("rumbleSensitivity", 60)) / 100
-            samples = np.frombuffer(data, dtype="<i2").astype(np.float32)
-            # an average of every 20 samples keeps what is below ~200 Hz
-            bass = samples.reshape(-1, 20).mean(axis=1)
-            energy = float(np.sqrt(np.mean(bass * bass)))
-            now = time.monotonic()
-            ratio = energy / max(average, 1.0)
-            floor = 2500 * (1.15 - sensitivity)
-            needed = 3.2 - sensitivity * 1.8
-            if (energy > floor and ratio > needed and energy > previous * 1.2
-                    and now - last_hit > float(options.get("rumbleGap", 110)) / 1000):
-                last_hit = now
-                strength = min(1.0, (ratio - needed) / 3 + energy / 20000)
-                if strength > 0.66:
-                    wave = "SHARP COLLISION"
-                elif strength > 0.33:
-                    wave = "DAMP COLLISION"
-                else:
-                    wave = "SUBTLE COLLISION"
-                self.daemon.loop.post(lambda wave=wave: self.daemon.play(wave))
-                if self.daemon.watching:
-                    emit("hit", strength=round(strength, 2))
-            if self.daemon.watching and now - last_emit > 0.066:
-                last_emit = now
-                emit("bass", level=round(min(1.0, energy / 12000), 3), threshold=round(min(1.0, max(floor, average * needed) / 12000), 3))
-            average = average * 0.96 + energy * 0.04
-            previous = energy
-
-
-# what a press in a game is felt as, until the page says otherwise; `then`
-# plays more after the press ([ms, feel]), `repeat` again every so many ms
-# while it is held (automatic fire)
+# what a press in a game is felt as while only presses are the source
+# (rumbleSource "input"), until the page says otherwise; `then` plays more
+# after the press ([ms, feel]), `repeat` again every so many ms while it is
+# held (automatic fire)
 TRIGGER_BINDS = [
     {"key": "BTN_LEFT", "label": "Shoot", "feel": "SHARP COLLISION", "repeat": 0},
     {"key": "BTN_RIGHT", "label": "Aim", "feel": "WHISPER COLLISION", "repeat": 0},
@@ -1234,28 +1223,37 @@ TRIGGER_BINDS = [
 
 
 class Triggers:
-    """Game haptics from what is pressed: the button that shoots, the key
-    that reloads – whatever the game, and nothing when someone talks or
-    music plays. Reads the mice and keyboards (evdev, nothing grabbed, the
-    daemon's own virtual devices left out) only while wanted: options.rumble
-    "always", or "games" while a game has the focus; options.rumbleSource
-    "input" or "both"."""
+    """Game haptics from what is pressed: the keys and buttons the page
+    bound (rumbleBinds) play their waveform, and every press opens the
+    ears' window (gamefeel.Gate: a sound right after it is the player's).
+    Reads the mice and keyboards (evdev, nothing grabbed, the daemon's own
+    virtual devices left out) only while wanted: options.rumble "always",
+    or "games" while a game has the focus."""
 
     def __init__(self, daemon):
         self.daemon = daemon
         self.stop = None
 
-    def wanted(self):
-        options = self.daemon.config["options"]
-        if actions.evdev is None or options.get("rumbleSource", "input") not in ("input", "both"):
-            return False
-        mode = options.get("rumble", "off")
+    def mode_on(self):
+        mode = self.daemon.config["options"].get("rumble", "off")
         return mode == "always" or (mode == "games" and self.daemon.game_focused)
 
+    def gating(self):
+        """The ears want to know about every press."""
+        ears = self.daemon.ears
+        return ears is not None and ears.on and ears.gated()
+
+    def wanted(self):
+        if actions.evdev is None or not self.mode_on():
+            return False
+        return bool(self.binds()) or self.gating()
+
     def binds(self):
-        binds = self.daemon.config["options"].get("rumbleBinds")
+        options = self.daemon.config["options"]
+        binds = options.get("rumbleBinds")
         if not isinstance(binds, list):
-            binds = TRIGGER_BINDS
+            # by hand only: the defaults; automatic: nothing on top unless bound
+            binds = TRIGGER_BINDS if options.get("rumbleSource", "auto") == "input" else []
         out = {}
         for bind in binds:
             if not isinstance(bind, dict):
@@ -1276,15 +1274,16 @@ class Triggers:
             self.stop = None
             emit("triggers", on=False)
 
-    def devices(self, codes):
+    def devices(self, codes, everything):
         found = []
+        wanted = set(codes) | ({actions.E.KEY_A, actions.E.BTN_LEFT} if everything else set())
         for path in actions.evdev.list_devices():
             try:
                 dev = actions.evdev.InputDevice(path)
             except OSError:
                 continue
             keys = set(dev.capabilities().get(actions.E.EV_KEY, []))
-            if keys & codes and not dev.name.startswith("Pshell"):
+            if keys & wanted and not dev.name.startswith("Pshell"):
                 found.append(dev)
             else:
                 dev.close()
@@ -1292,7 +1291,8 @@ class Triggers:
 
     def press(self, bind):
         loop = self.daemon.loop
-        loop.post(lambda: self.daemon.play(bind["feel"]))
+        label = bind.get("label", "")
+        self.daemon.felt("press", "press", 1.0, bind["feel"], label)
         for step in bind.get("then") or []:
             try:
                 delay, feel = float(step[0]) / 1000, str(step[1])
@@ -1300,11 +1300,12 @@ class Triggers:
                 continue
             loop.schedule(delay, lambda feel=feel: self.daemon.play(feel))
         if self.daemon.watching:
-            emit("trigger", key=bind.get("key"), label=bind.get("label", ""))
+            emit("trigger", key=bind.get("key"), label=label)
 
     def listen(self, stop):
         import select
         binds = self.binds()
+        gating = self.gating()
         devices, scanned = [], 0.0
         # held keys with automatic fire: code -> when it plays next
         held = {}
@@ -1315,7 +1316,8 @@ class Triggers:
                     for dev in devices:
                         dev.close()
                     binds = self.binds()
-                    devices, scanned = self.devices(set(binds)), now
+                    gating = self.gating()
+                    devices, scanned = self.devices(set(binds), gating), now
                 timeout = 0.5
                 if held:
                     timeout = max(0.0, min(min(held.values()) - now, timeout))
@@ -1331,15 +1333,19 @@ class Triggers:
                         scanned = 0.0
                         continue
                     for event in events:
-                        if event.type != actions.E.EV_KEY or event.code not in binds:
-                            continue
-                        bind = binds[event.code]
                         # 2 is the keyboard's own repeat
+                        if event.type != actions.E.EV_KEY or event.value not in (0, 1):
+                            continue
+                        if gating:
+                            self.daemon.ears.press(event.code, event.value == 1)
+                        bind = binds.get(event.code)
+                        if not bind:
+                            continue
                         if event.value == 1:
                             self.press(bind)
                             if int(bind.get("repeat") or 0) > 0:
                                 held[event.code] = time.monotonic() + int(bind["repeat"]) / 1000
-                        elif event.value == 0:
+                        else:
                             held.pop(event.code, None)
                 now = time.monotonic()
                 for code, due in list(held.items()):

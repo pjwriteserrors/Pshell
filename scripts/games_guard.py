@@ -15,7 +15,8 @@ xwayland-satellite's) or its title being the game's name.
 
 Every window is decided once when it opens (again when it changes in its
 first HOLD seconds); whenever the set of game windows changes a line
-{"gaming": [{id, app, title}]} tells the shell (game mode).
+{"gaming": [{id, app, title, pids}]} tells the shell (game mode; the pids
+are the game's processes, for the mouse daemon to find its sound).
 
 A game's window is made fullscreen when it opens and again whenever it
 leaves fullscreen within its first HOLD seconds (games that size their
@@ -136,7 +137,8 @@ class Guard:
             return
         self.told = now
         print(json.dumps({"gaming": [{"id": wid, "app": self.windows[wid].get("app_id") or "",
-                                      "title": self.windows[wid].get("title") or ""} for wid in now]}), flush=True)
+                                      "title": self.windows[wid].get("title") or "",
+                                      "pids": self.pids_of(wid)} for wid in now]}), flush=True)
 
     def load_outputs(self):
         self.outputs_at = time.monotonic()
@@ -161,23 +163,36 @@ class Guard:
             return True  # nothing to compare with: leave it
         return abs(tile[0] - size[0]) <= 1 and abs(tile[1] - size[1]) <= 1
 
-    def is_game(self, window, games):
+    def match(self, window, games):
+        """The game a window belongs to ({pids, names, title}), True for a
+        Steam game's window with no process known, False for no game."""
         app = window.get("app_id") or ""
         if NEVER.match(app):
             return False
+        pid, app_plain, title = window.get("pid"), plain(app), plain(window.get("title") or "")
+        for game in games or []:
+            if pid in game["pids"]:
+                return game
         if STEAM_APP.match(app):
             return True
-        if not games:
-            return False
-        pid, app_plain, title = window.get("pid"), plain(app), plain(window.get("title") or "")
-        for game in games:
-            if pid in game["pids"]:
-                return True
+        for game in games or []:
             if app_plain and app_plain in game["names"]:
-                return True
+                return game
             if game["title"] and title and (title == game["title"] or (len(game["title"]) >= 5 and title.startswith(game["title"]))):
-                return True
+                return game
         return False
+
+    def is_game(self, window, games):
+        return bool(self.match(window, games))
+
+    def pids_of(self, wid):
+        """The processes of a game window: its own and its game's (the
+        mouse daemon finds the game's sound by them)."""
+        window = self.windows.get(wid) or {}
+        pids = set((self.state.get(wid) or {}).get("pids") or [])
+        if isinstance(window.get("pid"), int):
+            pids.add(window["pid"])
+        return sorted(pids)
 
     def consider(self, ids):
         now = time.monotonic()
@@ -196,7 +211,9 @@ class Guard:
                     continue
                 if games is None:
                     games = games_now()
-                state["game"] = self.is_game(window, games)
+                match = self.match(window, games)
+                state["game"] = bool(match)
+                state["pids"] = sorted(match["pids"]) if isinstance(match, dict) else []
                 state["changed"] = False
                 if not state["game"] or not fresh:
                     continue
