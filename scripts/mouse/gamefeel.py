@@ -95,9 +95,19 @@ FFT = 512
 def wave_for(kind, strength):
     """The waveform for an event: `blast` (explosion, a hit taken), `thud`
     (a shot, a block breaking, a door), `tick` (a click, a bullet
-    inserted, a key), `rumble` (a controller motor), by strength 0..1."""
+    inserted, a key), `rumble` (a controller motor), `shake` (the picture
+    jolting), `hit` (a red flash), `flash` (a bright one), `hud` (the HUD
+    changing after a press), by strength 0..1."""
     if kind == "blast":
         return "KNOCK" if strength > 0.75 else "SHARP COLLISION"
+    if kind == "shake":
+        return "KNOCK" if strength > 0.7 else "SHARP COLLISION"
+    if kind == "hit":
+        return "SHARP STATE CHANGE"
+    if kind == "flash":
+        return "DAMP COLLISION"
+    if kind == "hud":
+        return "SUBTLE COLLISION"
     if kind == "tick":
         return "SUBTLE COLLISION" if strength > 0.5 else "WHISPER COLLISION"
     if strength > 0.7:
@@ -143,6 +153,7 @@ class Gate:
         self.lock = threading.Lock()
         self.presses = collections.deque(maxlen=256)   # (time, code)
         self.held = {}                                 # code -> since
+        self.moving = set()                            # movement keys held
         self.quiet = code_names(QUIET_KEYS)
         self.buttons = code_names(("BTN_LEFT", "BTN_RIGHT", "BTN_MIDDLE", "BTN_SIDE", "BTN_EXTRA", "BTN_FORWARD", "BTN_BACK", "BTN_TASK"))
         # how much of the time a window is open lately (0..1)
@@ -159,6 +170,13 @@ class Gate:
 
     def press(self, code, down):
         if code in self.quiet:
+            # movement keys open nothing, but the eyes must know the
+            # picture is moving because of them
+            with self.lock:
+                if down:
+                    self.moving.add(code)
+                else:
+                    self.moving.discard(code)
             return
         now = time.monotonic()
         with self.lock:
@@ -546,6 +564,59 @@ class Memory:
         self.windows[code] = result
         return result
 
+    def pattern(self, index, kind, strength):
+        """The waveform a known sound plays: fixed the first time it is felt
+        as yours, so the same shot feels the same every time."""
+        with self.lock:
+            clusters = self.entry["clusters"] if self.entry else []
+            if not (0 <= index < len(clusters)):
+                return wave_for(kind, strength)
+            cluster = clusters[index]
+            if not cluster.get("wave"):
+                cluster["wave"] = wave_for(kind, strength)
+                self.dirty = True
+            return cluster["wave"]
+
+    # ── the picture: which cells of the HUD change after a press
+    def cell_observe(self, cells, fresh):
+        """The cells that changed in one frame (none while the whole
+        picture moved), and whether a press of yours was fresh."""
+        if not self.entry:
+            return
+        with self.lock:
+            table = self.entry.setdefault("cells", {})
+            for index in cells:
+                entry = table.get(str(index))
+                if entry is None:
+                    entry = table[str(index)] = [0, 0]
+                entry[0] += 1
+                if fresh:
+                    entry[1] += 1
+            self.entry["frames"] = self.entry.get("frames", 0) + 1
+            self.dirty = True
+
+    def cell_state(self, index):
+        """"yours" for a cell that changes (nearly) only after a press and
+        not all the time – the ammo counter, a cast bar –, "world" for the
+        rest, "new" while too little is known."""
+        if not self.entry:
+            return "new"
+        with self.lock:
+            entry = (self.entry.get("cells") or {}).get(str(index))
+            if not entry or entry[0] < 8:
+                return "new"
+            minutes = max(0.5, self.entry.get("seconds", 0) / 60)
+            if entry[0] / minutes > 90:
+                return "world"
+            return "yours" if entry[1] / entry[0] >= 0.7 else "world"
+
+    def cells_summary(self):
+        with self.lock:
+            table = (self.entry.get("cells") or {}) if self.entry else {}
+            minutes = max(0.5, self.entry.get("seconds", 0) / 60) if self.entry else 1
+            yours = [int(i) for i, (n, win) in table.items() if n >= 8 and n / minutes <= 90 and win / n >= 0.7]
+            return {"cells": len(table), "yours": sorted(yours)}
+
     def facts(self, index):
         with self.lock:
             clusters = self.entry["clusters"] if self.entry else []
@@ -578,7 +649,9 @@ class Memory:
                 else:
                     state = "world"
                 out.append({"id": index, "n": c["n"], "share": round(share, 2), "lvl": round(c["lvl"], 1), "state": state, "keys": keys[:3]})
-            # the known ones first, the most heard first
+            # the known ones first, the most heard first; a sound heard once
+            # or twice says nothing yet
+            out = [c for c in out if c["state"] != "new" or c["n"] >= 3]
             out.sort(key=lambda c: (c["state"] == "new", -c["n"]))
             return out[:most]
 
@@ -625,6 +698,7 @@ class Memory:
                    "muted": sum(1 for c in clusters if c.get("muted")), "minutes": round(self.entry["seconds"] / 60, 1),
                    "gain": round(float(self.entry.get("gain", 1.0)), 2)}
         out["clusters"] = self.clusters()
+        out["hud"] = self.cells_summary()
         return out
 
 
@@ -1021,10 +1095,12 @@ class Ears:
         if felt:
             self.last_pulse = now
             self.memory.last_cluster = cluster
-            self.daemon.felt("sound", kind, strength, wave_for(kind, strength), label, stream=stream.name, cluster=cluster)
+            # a known sound keeps its pattern; a new one plays by strength
+            wave = self.memory.pattern(cluster, kind, strength) if verdict == "yes" else wave_for(kind, strength)
+            self.daemon.felt("sound", kind, strength, wave, label, stream=stream.name, cluster=cluster)
         if self.daemon.watching:
             facts = self.memory.facts(cluster)
-            self.daemon.emit("onset", at=round(at, 3), cluster=cluster, n=facts.get("n", 0), win=facts.get("win", 0),
+            self.daemon.emit("onset", source="sound", at=round(at, 3), cluster=cluster, n=facts.get("n", 0), win=facts.get("win", 0),
                              verdict=verdict, key=key_name(key) if key is not None else "",
                              fresh=[[key_name(code), round(age, 2)] for code, age in fresh[:3]],
                              strength=round(strength, 2), kind=kind, felt=felt, reason=reason,
@@ -1087,3 +1163,151 @@ class Ears:
         if not fresh:
             return False, "", kind, strength, "known as yours, but no press of yours is fresh"
         return False, "", kind, strength, "known, but not after " + ", ".join(key_name(code) for code, _ in fresh[:2]) + " at this delay (or a quiet click sound)"
+
+
+class Eyes:
+    """The game's picture (eyes.py casts the game's window and measures
+    every frame): a shake – the picture jolting back and forth while the
+    mouse rests and no movement key is held – is an impact or explosion; a
+    sudden red cast is a hit taken; a sudden brightening a flash; and the
+    cells of the picture that change only after a press of yours (the
+    ammo counter, a cast bar) are the HUD's own word for what you did,
+    learned per game. Runs only while wanted: options.rumbleEyes (on by
+    default) with the automatic source, and a game window has the focus."""
+
+    def __init__(self, daemon, memory, gate):
+        self.daemon = daemon
+        self.memory = memory
+        self.gate = gate
+        self.proc = None
+        self.window = 0
+        self.on = False
+        self.shifts = collections.deque(maxlen=8)
+        self.last = {"shake": 0.0, "hit": 0.0, "flash": 0.0, "hud": 0.0}
+        self.frames = 0
+        self.seen = {"shake": 0, "hit": 0, "flash": 0, "hud": 0}
+        self.latest = {}
+
+    def options(self):
+        return self.daemon.config["options"]
+
+    def wanted(self):
+        options = self.options()
+        if options.get("rumbleEyes", True) is False or options.get("rumbleSource", "auto") not in ("auto", "both"):
+            return False
+        mode = options.get("rumble", "off")
+        return self.daemon.game_window > 0 and (mode == "always" or (mode == "games" and self.daemon.game_focused))
+
+    def update(self):
+        wanted = self.wanted()
+        if wanted and self.proc is None:
+            import sys as _sys
+            try:
+                self.proc = subprocess.Popen([_sys.executable, "-u", os.path.join(os.path.dirname(os.path.abspath(__file__)), "eyes.py")],
+                                             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            except OSError as error:
+                self.daemon.log(f"eyes: {error}")
+                return
+            self.window = 0
+            threading.Thread(target=self.listen, args=(self.proc,), daemon=True).start()
+            threading.Thread(target=self.errors, args=(self.proc,), daemon=True).start()
+        elif not wanted and self.proc is not None:
+            proc, self.proc = self.proc, None
+            try:
+                proc.stdin.write("0\n")
+                proc.stdin.flush()
+            except (OSError, ValueError):
+                pass
+            proc.terminate()
+            self.on = False
+            self.window = 0
+            self.daemon.tell_eyes()
+        if self.proc is not None and self.daemon.game_window != self.window:
+            self.window = self.daemon.game_window
+            try:
+                self.proc.stdin.write(f"{self.window}\n")
+                self.proc.stdin.flush()
+            except (OSError, ValueError):
+                pass
+
+    def errors(self, proc):
+        for line in proc.stderr:
+            self.daemon.log(line.rstrip())
+
+    def listen(self, proc):
+        for line in proc.stdout:
+            try:
+                data = json.loads(line)
+            except ValueError:
+                continue
+            event = data.get("event")
+            if event == "cast":
+                self.on = True
+                self.frames = 0
+                self.daemon.tell_eyes()
+            elif event in ("stopped", "error"):
+                if event == "error":
+                    self.daemon.log(f"eyes: {data.get('message')}")
+                self.on = False
+                self.daemon.tell_eyes()
+            elif "dx" in data:
+                try:
+                    self.frame(data)
+                except (TypeError, ValueError, KeyError) as error:
+                    self.daemon.log(f"eyes: frame: {error}")
+        if self.proc is proc:
+            self.proc = None
+            self.on = False
+            self.daemon.tell_eyes()
+
+    def frame(self, data):
+        now = time.monotonic()
+        at = float(data.get("t", now))
+        self.frames += 1
+        dx, dy = float(data["dx"]), float(data["dy"])
+        moved = math.hypot(dx, dy)
+        self.shifts.append((at, dx, dy))
+        self.latest = {"dx": dx, "dy": dy, "dred": data.get("dred", 0), "dbright": data.get("dbright", 0), "cells": len(data.get("cells") or [])}
+        pad = self.daemon.pad
+        if pad and pad.recent():
+            return
+        fresh = self.gate.fresh(at, self.daemon.ears.window)
+        resting = now - self.daemon.last_motion > 0.15 and not self.gate.moving
+        # a shake: the picture jolts and comes back within a few frames,
+        # while the player does not move it (a camera turn is one way)
+        if moved >= 1.5 and resting and at - self.last["shake"] > 0.4:
+            for t, px, py in list(self.shifts)[-4:-1]:
+                if at - t <= 0.25 and px * dx + py * dy < 0 and math.hypot(px, py) >= 1.0:
+                    self.last["shake"] = at
+                    strength = max(0.3, min(1.0, moved / 6))
+                    self.event("shake", strength, "Shake", f"the picture jolted {moved:.1f} px and back while the mouse rested")
+                    break
+        dred, dbright = float(data.get("dred", 0)), float(data.get("dbright", 0))
+        if dred >= 10 and at - self.last["hit"] > 0.5 and self.options().get("eyesHit", True) is not False:
+            self.last["hit"] = at
+            self.event("hit", max(0.4, min(1.0, dred / 30)), "Hit", f"the picture turned red by {dred:.0f}")
+        elif dbright >= 25 and at - self.last["flash"] > 0.5 and self.options().get("eyesFlash", True) is not False:
+            self.last["flash"] = at
+            self.event("flash", max(0.4, min(1.0, dbright / 60)), "Flash", f"the picture brightened by {dbright:.0f}")
+        cells = data.get("cells") or []
+        if cells and moved < 1.0 and len(cells) < 60:
+            # the HUD, not the world moving: learn which cells are the
+            # game's word for what you did
+            self.memory.cell_observe(cells, bool(fresh))
+            if fresh and at - self.last["hud"] > 0.12:
+                yours = [index for index in cells if self.memory.cell_state(index) == "yours"]
+                if yours:
+                    self.last["hud"] = at
+                    self.event("hud", 0.5, "HUD", f"cell {yours[0]} of the HUD changed after " + ", ".join(key_name(code) for code, _ in fresh[:2]), cells=yours)
+
+    def event(self, kind, strength, label, reason, cells=None):
+        self.seen[kind] = self.seen.get(kind, 0) + 1
+        self.daemon.felt("eyes", kind, strength, wave_for(kind, strength), label)
+        if self.daemon.watching:
+            self.daemon.emit("onset", source="eyes", at=round(time.monotonic(), 3), cluster=(cells or [-1])[0], n=0, win=0,
+                             verdict="yes", key="", fresh=[], strength=round(strength, 2), kind=kind, felt=True,
+                             reason=reason, over=0, ratio=0, lowness=0, panned=0, stream="picture")
+
+    def summary(self):
+        return {"on": self.on, "window": self.window, "frames": self.frames, "seen": self.seen, "latest": self.latest,
+                "hud": self.memory.cells_summary() if self.memory.entry else {}}

@@ -228,9 +228,16 @@ Singleton {
 		const app = String(first?.app ?? "");
 		return /^steam_app_/.test(app) ? app : (GameMode.title || app);
 	}
-	function tellGaming() {
-		root.send({ op: "gaming", on: root.gaming, focused: root.gameFocused, pids: root.gamePids, game: root.gameKey });
+	// the focused game window (niri's id), for the eyes
+	readonly property int gameWindow: {
+		const windows = Array.isArray(Games.windows) ? Games.windows : [];
+		const focused = windows.find(w => Number(w.id) === Niri.focusedId);
+		return Number((focused ?? windows[0])?.id ?? 0);
 	}
+	function tellGaming() {
+		root.send({ op: "gaming", on: root.gaming, focused: root.gameFocused, pids: root.gamePids, game: root.gameKey, window: root.gameWindow });
+	}
+	onGameWindowChanged: if (root.gaming) root.tellGaming()
 	onGameKeyChanged: if (root.gaming) root.tellGaming()
 
 	// what the daemon learned about the game's sounds (gamefeel.Memory):
@@ -242,6 +249,8 @@ Singleton {
 	property var onsets: []
 	property var gate: ({ duty: 0, held: [], windows: [] })
 	property var meter: ({})
+	// the game's picture (gamefeel.Eyes): {on, window, frames, seen: {shake, hit, flash, hud}, latest, hud: {cells, yours}}
+	property var eyes: ({})
 	// a sound that should not have been felt: never again (-1: the last one)
 	function muteSound(cluster) {
 		root.send({ op: "mute", cluster: cluster ?? -1 });
@@ -520,6 +529,9 @@ Singleton {
 			break;
 		case "learning":
 			root.learning = data;
+			break;
+		case "eyes":
+			root.eyes = data;
 			break;
 		case "onset":
 			root.onsets = [data].concat(root.onsets.slice(0, 39));

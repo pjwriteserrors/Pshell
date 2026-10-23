@@ -274,12 +274,18 @@ class Daemon:
         # controller the game rumbles, the game's own sound
         self.pad = None
         self.ears = None
+        self.eyes = None
         # a game's window has the focus (Mouse.qml, game mode), the game's
         # processes (games_guard.py, for its sound) and its name
         self.game_focused = False
         self.game_pids = []
         self.game_name = ""
+        # the focused game window (niri's id), for the eyes
+        self.game_window = 0
         self.felt_count = {}
+        # the mouse moved (its evdev device), for the eyes' shakes
+        self.last_motion = 0.0
+        self.last_felt = 0.0
         self.focused = None
         self.dpi_index = {}
         self.shifted = {}
@@ -300,6 +306,7 @@ class Daemon:
         self.output = actions.Output()
         self.pad = gamefeel.Pad(self)
         self.ears = gamefeel.Ears(self, gamefeel.Memory(STATE / "mouse-gamefeel.json"))
+        self.eyes = gamefeel.Eyes(self, self.ears.memory, self.ears.gate)
         self.triggers = Triggers(self)
         self.update_gamefeel()
         self.loop.post(self.scan)
@@ -325,6 +332,8 @@ class Daemon:
             for stream in list(self.ears.streams.values()):
                 stream.close()
             self.ears.memory.save()
+        if self.eyes and self.eyes.proc is not None:
+            self.eyes.proc.terminate()
         if self.triggers and self.triggers.stop:
             self.triggers.stop.set()
         for mouse in list(self.mice.values()):
@@ -933,6 +942,7 @@ class Daemon:
     def update_gamefeel(self):
         self.pad.update()
         self.ears.update()
+        self.eyes.update()
         self.triggers.update()
 
     def emit(self, event, **data):
@@ -946,6 +956,11 @@ class Daemon:
         it and, while the page watches, says what it was (`cluster`: the
         learned sound, for the page to mute)."""
         def go():
+            now = time.monotonic()
+            # the sound and the picture often say the same thing at once
+            if now - self.last_felt < 0.05:
+                return
+            self.last_felt = now
             self.felt_count[source] = self.felt_count.get(source, 0) + 1
             self.play(waveform)
             if self.watching:
@@ -959,6 +974,9 @@ class Daemon:
     def tell_ears(self):
         emit("ears", on=self.ears.on, streams=self.ears.names())
         emit("learning", **self.ears.memory.summary())
+
+    def tell_eyes(self):
+        emit("eyes", **self.eyes.summary())
 
     def feel_desktop(self, moment):
         """A pulse for something on the desktop (options.feel: moment -> waveform)."""
@@ -1140,6 +1158,10 @@ class Daemon:
             pids = command.get("pids")
             self.game_pids = [int(p) for p in pids if isinstance(p, (int, float))] if isinstance(pids, list) else []
             self.game_name = str(command.get("game") or "")
+            try:
+                self.game_window = int(command.get("window") or 0)
+            except (TypeError, ValueError):
+                self.game_window = 0
             if not self.gaming:
                 self.felt_count = {}
             self.update_gamefeel()
@@ -1149,6 +1171,7 @@ class Daemon:
                 emit("focus", app=self.app)
                 self.tell_pad()
                 self.tell_ears()
+                self.tell_eyes()
                 emit("stats", **self.stats.summary())
                 for mouse in self.mice.values():
                     if mouse.info.get("serial"):
@@ -1528,8 +1551,10 @@ class Stats:
                             if ev.type == E.EV_REL:
                                 if ev.code == E.REL_X:
                                     dx += ev.value
+                                    daemon.last_motion = time.monotonic()
                                 elif ev.code == E.REL_Y:
                                     dy += ev.value
+                                    daemon.last_motion = time.monotonic()
                                 elif ev.code == E.REL_WHEEL:
                                     if daemon.config["options"].get("stats", True) is not False:
                                         self.add(scroll=abs(ev.value))

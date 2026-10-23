@@ -25,6 +25,8 @@ ColumnLayout {
 	readonly property bool sound: root.on && root.source !== "input"
 	readonly property bool padWanted: Mouse.option("rumblePad", false) === true
 	readonly property bool soundWanted: Mouse.option("rumbleSound", true) !== false
+	readonly property bool eyesWanted: Mouse.option("rumbleEyes", true) !== false
+	readonly property var eyes: Mouse.eyes ?? ({})
 	// what was felt lately: [{source, kind, strength, label, cluster, muted, at}]
 	property var recent: []
 	readonly property var learning: Mouse.learning ?? ({})
@@ -41,11 +43,11 @@ ColumnLayout {
 	spacing: 12
 
 	function sourceIcon(source) {
-		return source === "pad" ? "gamepad_variant" : (source === "sound" ? "volume_high" : "keyboard");
+		return { pad: "gamepad_variant", sound: "volume_high", eyes: "eye_outline" }[source] ?? "keyboard";
 	}
 
 	function kindName(kind, label) {
-		return { rumble: "Rumble", tick: "Tick", thud: "Thud", blast: "Blast", press: label || "Press" }[kind] ?? label;
+		return { rumble: "Rumble", tick: "Tick", thud: "Thud", blast: "Blast", shake: "Shake", hit: "Hit", flash: "Flash", hud: "HUD", press: label || "Press" }[kind] ?? label;
 	}
 
 	Connections {
@@ -170,6 +172,13 @@ ColumnLayout {
 				on: root.soundWanted,
 				live: Mouse.rumbling,
 				text: !root.soundWanted ? "What starts in the game's sound – off" : (Mouse.rumbling ? (Mouse.hearing.length > 0 ? `Hearing ${Mouse.hearing.join(", ")} – your actions, and blasts` : "Waiting for the game to make a sound") : "Only the game's stream: a new sound right after your press is yours; a blast counts from anywhere")
+			}, {
+				id: "eyes",
+				icon: "eye_outline",
+				label: "The game's picture",
+				on: root.eyesWanted,
+				live: root.eyes.on === true,
+				text: !root.eyesWanted ? "Shakes, hits, flashes and the HUD – off" : (root.eyes.on ? `Watching the game's window – ${root.eyes.frames ?? 0} frames; shakes ${root.eyes.seen?.shake ?? 0}, hits ${root.eyes.seen?.hit ?? 0}, flashes ${root.eyes.seen?.flash ?? 0}, HUD ${root.eyes.seen?.hud ?? 0}; ${root.eyes.hud?.yours?.length ?? 0} HUD cells learned as yours` : "The window, 192 px wide at 20 fps: a jolt while the mouse rests is an impact, a red cast a hit, a brightening a flash, and the HUD cells that change only after your presses are learned – the ammo counter, a cast bar")
 			}] : []
 
 		delegate: RowLayout {
@@ -220,7 +229,7 @@ ColumnLayout {
 
 			Toggle {
 				checked: lane.modelData.on
-				onToggled: on => Mouse.setOption(lane.modelData.id === "pad" ? "rumblePad" : "rumbleSound", on)
+				onToggled: on => Mouse.setOption({ pad: "rumblePad", sound: "rumbleSound", eyes: "rumbleEyes" }[lane.modelData.id], on)
 			}
 		}
 	}

@@ -17,6 +17,7 @@ ColumnLayout {
 	readonly property var meter: Mouse.meter ?? ({})
 	readonly property var gate: Mouse.gate ?? ({ duty: 0, held: [], windows: [] })
 	readonly property var clusters: Array.isArray(Mouse.learning?.clusters) ? Mouse.learning.clusters : []
+	readonly property var eyes: Mouse.eyes ?? ({})
 
 	spacing: 8
 
@@ -83,7 +84,10 @@ ColumnLayout {
 					{ label: "level", value: `${root.meter.db ?? 0} dB`, hint: "the last 20 ms" },
 					{ label: "loud moments", value: `${root.meter.loud ?? 0} dB`, hint: "the 95th percentile of the last 10 s: strength is measured against it" },
 					{ label: "threshold", value: `×${root.meter.gain ?? 1}`, hint: "learned per game: up on an absurd raw rate, down when nothing comes" },
-					{ label: "windows open", value: `${Math.round((root.gate.duty ?? 0) * 100)} %`, hint: "share of the time a press of yours is fresh – a known sound must be inside more often than this + 30 %" }
+					{ label: "windows open", value: `${Math.round((root.gate.duty ?? 0) * 100)} %`, hint: "share of the time a press of yours is fresh – a known sound must be inside more often than this + 30 %" },
+					{ label: "picture moved", value: `${root.eyes.latest?.dx ?? 0}, ${root.eyes.latest?.dy ?? 0} px`, hint: "how far the whole picture shifted against the frame before (192 px wide); a jolt of 1.5 px and back while the mouse rests is a shake" },
+					{ label: "red / bright", value: `${root.eyes.latest?.dred ?? 0} / ${root.eyes.latest?.dbright ?? 0}`, hint: "the frame's change in redness and brightness (0..255): +10 red is a hit, +25 bright a flash" },
+					{ label: "HUD cells", value: `${root.eyes.hud?.yours?.length ?? 0} of ${root.eyes.hud?.cells ?? 0}`, hint: "cells of the picture seen changing; yours: those that change (nearly) only after a press and not all the time" }
 				]
 
 				delegate: Rectangle {
@@ -286,9 +290,15 @@ ColumnLayout {
 							}
 						}
 
+						Glyph {
+							icon: row.modelData.source === "eyes" ? "eye_outline" : "volume_high"
+							size: 13
+							color: Theme.textFaint
+						}
+
 						StyledText {
 							Layout.preferredWidth: 150
-							text: `${row.modelData.kind} #${row.modelData.cluster} · ${row.modelData.win}/${row.modelData.n} in windows`
+							text: row.modelData.source === "eyes" ? `${row.modelData.kind}${row.modelData.cluster >= 0 ? " · cell " + row.modelData.cluster : ""}` : `${row.modelData.kind} #${row.modelData.cluster} · ${row.modelData.win}/${row.modelData.n} in windows`
 							font.pixelSize: Theme.size.small
 							tone: Theme.textSubtle
 							elide: Text.ElideRight

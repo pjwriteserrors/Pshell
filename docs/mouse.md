@@ -214,6 +214,31 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
     record` (`{op: "record", seconds}`) keeps two minutes of what the ears
     hear (16 kHz stereo float) and every press with its time in
     `~/.cache/pshell/ears-<game>.raw` and `.presses`, to tune on a real game.
+  - *The game's picture* (`rumbleEyes`, on by default; `scripts/mouse/eyes.py`,
+    a process of its own): the focused game window is cast through niri's
+    `org.gnome.Mutter.ScreenCast` (RecordWindow – nothing shown or asked),
+    scaled on the GPU to 192 px wide, at most 20 frames a second and only
+    when the window changed. Each frame against the one before: how far
+    the whole picture shifted (phase correlation), the change in redness
+    (mean of R − (G+B)/2) and brightness, and which 8×8-pixel cells
+    changed. The daemon (`Eyes`) makes of it: a **shake** – the picture
+    jolts ≥ 1.5 px and comes back within 0.25 s while the mouse rests
+    (its evdev motion, 150 ms) and no movement key is held – an impact or
+    explosion (KNOCK / SHARP COLLISION by how far); a **hit** – a sudden
+    red cast of ≥ 10 (`eyesHit`; SHARP STATE CHANGE); a **flash** – a
+    sudden brightening of ≥ 25 (`eyesFlash`; DAMP COLLISION); and the
+    **HUD**: the cells that change (nearly) only after a press of yours
+    and not all the time are learned per game (`cells` in the memory:
+    seen ≥ 8 times, ≥ 70 % of them inside a fresh window, under 90 changes
+    a minute; frames in which the whole picture moved teach nothing) –
+    the ammo counter ticking down per shot and up per bullet of a reload,
+    a cast bar – and a change of such a cell after a press is a tick
+    (SUBTLE COLLISION, at most every 120 ms). Nothing while the pad
+    rumbled just now. The sound and the picture often say the same thing
+    at once: the daemon plays at most one pulse per 50 ms.
+  - A known sound keeps its pattern: the waveform is fixed the first time
+    a cluster is felt as yours (`wave`), so the same shot feels the same
+    every time; only new sounds play by strength.
   - Bound presses (`rumbleBinds`, below) play on top; by itself nothing is
     bound until the page binds something.
   *Presses*: only the bound keys and buttons (`Triggers`: evdev, nothing
