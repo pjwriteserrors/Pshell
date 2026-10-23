@@ -130,7 +130,8 @@ while IFS= read -r entry; do
 done < <(theme_list_entries)
 # the one up now first: re-applied, or its settings changed in the picker
 current="$(cat "$THEME_CURRENT_DIR_FILE" 2>/dev/null)"
-[[ -n "$current" && -e "$current" && -z "$FIRST" ]] && entries=("$current" "${entries[@]}")
+# (an online wallpaper has its palette from the apply and nothing more made)
+[[ -n "$current" && -e "$current" && -z "$FIRST" ]] && ! theme_is_online "$current" && entries=("$current" "${entries[@]}")
 
 declare -A seen=()
 medias=()

@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import QtMultimedia
 import Quickshell
 import Quickshell.Io
 import Quickshell.Widgets
@@ -13,9 +14,11 @@ import qs.core.views.studio
 // Theme picker. One stage shows the wallpaper in front with the shell in
 // miniature on top of it, painted in the palette that is chosen in the dock
 // at its corner. Below it runs the library as a film strip, or, on the
-// second tab, the pictures of the day (Daily) that are already fetched.
+// second tab, the pictures of the day (Daily) that are already fetched, or,
+// on the third, what Wallhaven and MoeWalls find (OnlineSearch), with the
+// categories as chips and the other filters in a sheet (OnlineFilters).
 // ←→ step through the strip, ↑↓ through the palettes, Tab changes the tab,
-// Enter applies.
+// Enter applies (on the third tab, a query not asked yet is asked first).
 //
 // The palettes come from scripts/theme_catalog.sh: one `matrix-all` run per
 // opening brings every theme's matrix (cached on disk, generated in parallel
@@ -30,6 +33,9 @@ ModalWindow {
 	// wallust v4 remap: "colour space" carries the wallust PALETTE (kmeans /
 	// salience / ansi), "palette" carries the wallust STYLE (dark / light).
 	property string view: "library"
+	readonly property var views: ["library", "daily", "online"]
+	readonly property int viewIndex: Math.max(0, root.views.indexOf(root.view))
+	property bool filtersOpen: false
 	property string searchText: ""
 	property var themes: []
 	property string selectedBackend: "fastresize"
@@ -72,6 +78,7 @@ ModalWindow {
 	readonly property var previewPaletteData: root.matrixCell(root.selectedColorSpace, root.selectedPalette) ?? ({})
 	readonly property string previewPaletteStatus: {
 		if (!root.currentTheme) return "idle";
+		if (root.currentTheme.online && online.currentStageError !== "") return "error";
 		if (root.previewMatrix === null) return "loading";
 		return root.matrixCell(root.selectedColorSpace, root.selectedPalette) ? "ready" : "error";
 	}
@@ -90,6 +97,21 @@ ModalWindow {
 	}
 	readonly property var dailyEntry: Daily.entries[root.dailyProvider] ?? null
 	readonly property var currentTheme: {
+		if (root.view === "online") {
+			const item = online.current;
+			if (!item) return null;
+			const stage = online.currentStage;
+			return {
+				name: String(item.title || stage?.title || (item.width ? `${item.width} × ${item.height}` : "")),
+				path: String(stage?.themePath ?? ""),
+				previewPath: String(stage?.previewPath ?? ""),
+				// Wallhaven's full picture once it is here, MoeWalls' still
+				backdropPath: String(item.source === "wallhaven" && stage ? stage.previewPath : item.still),
+				mediaType: String(item.mediaType || "image"),
+				online: item,
+				stage: stage
+			};
+		}
 		if (root.view === "daily") {
 			const entry = root.dailyEntry;
 			if (!entry) return null;
@@ -107,7 +129,12 @@ ModalWindow {
 	}
 	// the theme in front by name: it stays the same while Daily tells news
 	// about the other sources
-	readonly property string currentKey: root.currentTheme ? `${root.currentTheme.path}\u001f${root.currentTheme.previewPath}` : ""
+	readonly property string currentKey: {
+		const theme = root.currentTheme;
+		if (!theme) return "";
+		if (theme.online) return `online\u001f${theme.online.source}\u001f${theme.online.id}`;
+		return `${theme.path}\u001f${theme.previewPath}`;
+	}
 
 	function setThemeEntries(raw) {
 		const entries = [];
@@ -190,7 +217,8 @@ ModalWindow {
 	// the matrix of the theme in front: from the cache, or asked for
 	function reloadPreviewMatrix() {
 		const theme = root.currentTheme;
-		if (!theme) {
+		// an online result has its colours once it is staged
+		if (!theme || (theme.online && !theme.stage)) {
 			root.previewMatrixRequestKey = "";
 			return;
 		}
@@ -293,11 +321,40 @@ ModalWindow {
 
 	function selectView(view) {
 		root.startPending = false;
+		root.filtersOpen = false;
 		root.view = view;
 		if (view === "daily") {
 			if (!root.dailyEntry) root.dailyProvider = root.firstDailyProvider();
 			Daily.refresh(false);
 		}
+		// the search field holds the library's filter or the online query
+		const text = view === "online" ? online.query : root.searchText;
+		if (searchInput.text !== text) searchInput.text = text;
+		if (view === "online") {
+			if (!online.searched) online.search();
+			else online.stageSoon();
+		}
+	}
+
+	function stepView(delta) {
+		root.selectView(root.views[(root.viewIndex + delta + root.views.length) % root.views.length]);
+	}
+
+	// Enter: a query that was not asked yet is asked, else what is in front
+	// is applied
+	function accept() {
+		if (root.view === "online" && (online.query.trim() !== online.askedQuery || online.error !== "")) {
+			online.search();
+			return;
+		}
+		root.applyTheme(root.currentTheme);
+	}
+
+	function dismiss() {
+		if (root.scaling) root.cancelScaling();
+		else if (online.saving) online.cancelSave();
+		else if (root.filtersOpen) root.filtersOpen = false;
+		else Popups.closeModal();
 	}
 
 	function firstDailyProvider() {
@@ -331,6 +388,10 @@ ModalWindow {
 	// a step along the strip
 	function move(delta) {
 		root.startPending = false;
+		if (root.view === "online") {
+			online.move(delta);
+			return;
+		}
 		if (root.view === "daily") {
 			const sources = Daily.sources.filter(source => Daily.entries[source.id]);
 			if (sources.length === 0) return;
@@ -367,6 +428,14 @@ ModalWindow {
 			"--palette", root.selectedColorSpace,
 			"--style", root.selectedPalette
 		];
+		// an online result is worn from memory, and forgotten once left
+		if (theme.online) {
+			online.wear(theme.online, path => {
+				Popups.closeModal();
+				Quickshell.execDetached(["bash", root.applyScriptPath, path].concat(look));
+			});
+			return;
+		}
 		// the picture that is kept becomes the library's theme of the day
 		const apply = theme.daily ? [
 			"sh", "-c", 'python3 "$1" --provider "$2" --cached >/dev/null && shift 2 && exec bash "$@"', "sh",
@@ -404,6 +473,7 @@ ModalWindow {
 
 	function reset() {
 		root.cancelScaling();
+		root.filtersOpen = false;
 		root.resolutionChoice = ({});
 		root.searchText = "";
 		root.currentThemeIndex = 0;
@@ -431,6 +501,19 @@ ModalWindow {
 			root.settleStart();
 		}
 	}
+
+	OnlineSearch {
+		id: online
+
+		// once the bindings that read it have followed
+		onCurrentStageChanged: Qt.callLater(root.reloadPreviewMatrix)
+		onQueryChanged: if (root.view === "online" && searchInput.text !== online.query) searchInput.text = online.query
+	}
+
+	// what was looked at online is not kept
+	onShownChanged: if (!root.shown) online.forget()
+	// the keyboard goes back to the search when the filters fold away
+	onFiltersOpenChanged: if (!root.filtersOpen) searchInput.forceActiveFocus()
 
 	FileView {
 		id: currentDirFile
@@ -673,11 +756,12 @@ ModalWindow {
 				spacing: 12
 
 				Segmented {
-					Layout.preferredWidth: 250
+					Layout.preferredWidth: 372
 					Layout.preferredHeight: 40
 					options: [
 						{ value: "library", label: Words.of("wallpaper.library", "Library"), icon: "image_multiple" },
-						{ value: "daily", label: Words.of("wallpaper.today", "Today"), icon: "calendar_today" }
+						{ value: "daily", label: Words.of("wallpaper.today", "Today"), icon: "calendar_today" },
+						{ value: "online", label: Words.of("wallpaper.online", "Online"), icon: "earth" }
 					]
 					current: root.view
 					onSelected: value => root.selectView(value)
@@ -686,16 +770,22 @@ ModalWindow {
 				Rectangle {
 					id: searchBox
 
-					readonly property bool shown: root.view === "library"
+					readonly property bool shown: root.view !== "daily"
 
-					Layout.preferredWidth: searchBox.shown ? 300 : 0
+					property real span: searchBox.shown ? 300 : 0
+
+					Layout.preferredWidth: searchBox.span
+					Layout.minimumWidth: Math.min(searchBox.span, 140)
+					Layout.maximumWidth: searchBox.span
+					Layout.fillWidth: true
 					Layout.preferredHeight: 40
 					radius: 20
 					color: Theme.layer1
 					opacity: searchBox.shown ? 1 : 0
+					visible: searchBox.span > 0.5
 					clip: true
 
-					Behavior on Layout.preferredWidth {
+					Behavior on span {
 						SpatialAnim {
 							duration: Motion.medium
 						}
@@ -732,21 +822,28 @@ ModalWindow {
 						focus: true
 						onTextChanged: {
 							if (text !== "") root.startPending = false;
-							root.searchText = text;
+							if (root.view === "online") {
+								if (online.query === text) return;
+								online.query = text;
+								online.searchSoon();
+							} else {
+								root.searchText = text;
+							}
 						}
 
 						Keys.onLeftPressed: root.move(-1)
 						Keys.onRightPressed: root.move(1)
 						Keys.onUpPressed: root.movePalette(-1)
 						Keys.onDownPressed: root.movePalette(1)
-						Keys.onTabPressed: root.selectView(root.view === "daily" ? "library" : "daily")
-						Keys.onReturnPressed: root.applyTheme(root.currentTheme)
-						Keys.onEnterPressed: root.applyTheme(root.currentTheme)
-						Keys.onEscapePressed: root.scaling ? root.cancelScaling() : Popups.closeModal()
+						Keys.onTabPressed: root.stepView(1)
+						Keys.onBacktabPressed: root.stepView(-1)
+						Keys.onReturnPressed: root.accept()
+						Keys.onEnterPressed: root.accept()
+						Keys.onEscapePressed: root.dismiss()
 
 						StyledText {
 							anchors.verticalCenter: parent.verticalCenter
-							text: "Search"
+							text: root.view === "online" ? `Search ${online.source === "wallhaven" ? "Wallhaven" : "MoeWalls"}` : "Search"
 							tone: Theme.textSubtle
 							opacity: searchInput.text.length === 0 ? 1 : 0
 
@@ -759,13 +856,96 @@ ModalWindow {
 					}
 				}
 
+				// where the online tab searches
+				Segmented {
+					id: sourceSwitch
+
+					readonly property bool shown: root.view === "online"
+
+					Layout.preferredWidth: sourceSwitch.shown ? 240 : 0
+					Layout.preferredHeight: 40
+					opacity: sourceSwitch.shown ? 1 : 0
+					visible: Layout.preferredWidth > 0.5
+					clip: true
+					options: online.sources
+					current: online.source
+					onSelected: value => online.setSource(value)
+
+					Behavior on Layout.preferredWidth {
+						SpatialAnim {
+							duration: Motion.medium
+						}
+					}
+					Behavior on opacity {
+						Anim {}
+					}
+				}
+
 				Item {
 					Layout.fillWidth: true
+				}
+
+				// the filters online, the asking again today: one place
+				Item {
+					implicitWidth: 34
+					implicitHeight: 34
+
+				IconButton {
+					id: filtersButton
+
+					anchors.centerIn: parent
+					icon: "tune_variant"
+					variant: "tonal"
+					checked: root.filtersOpen
+					opacity: root.view === "online" ? 1 : 0
+					scale: root.view === "online" ? 1 : 0.8
+					visible: opacity > 0
+					onClicked: root.filtersOpen = !root.filtersOpen
+
+					Behavior on opacity {
+						Anim {}
+					}
+					Behavior on scale {
+						SpatialAnim {
+							duration: Motion.medium
+						}
+					}
+
+					// how many filters differ from the defaults
+					Rectangle {
+						x: parent.width - width + 3
+						y: -3
+						width: Math.max(16, badgeText.implicitWidth + 8)
+						height: 16
+						radius: 8
+						color: Theme.primary
+						border.width: 2
+						border.color: Theme.base
+						scale: online.activeFilters > 0 && !root.filtersOpen ? 1 : 0
+
+						Behavior on scale {
+							SpatialAnim {
+								duration: Motion.medium
+							}
+						}
+
+						StyledText {
+							id: badgeText
+
+							anchors.centerIn: parent
+							text: String(online.activeFilters)
+							tone: Theme.onPrimary
+							surface: Theme.primary
+							font.pixelSize: Theme.size.tiny
+							font.weight: Font.Bold
+						}
+					}
 				}
 
 				IconButton {
 					id: refreshButton
 
+					anchors.centerIn: parent
 					icon: "refresh"
 					variant: "tonal"
 					opacity: root.view === "daily" ? 1 : 0
@@ -786,11 +966,137 @@ ModalWindow {
 						onRunningChanged: if (!running) refreshButton.rotation = 0
 					}
 				}
+				}
 
 				IconButton {
 					icon: "close"
 					variant: "tonal"
 					onClicked: Popups.closeModal()
+				}
+			}
+
+			// ── the categories online, as chips ──────────────────────────
+			Item {
+				id: chipRow
+
+				readonly property bool shown: root.view === "online"
+				readonly property bool wallhaven: online.source === "wallhaven"
+				// Wallhaven: its three categories, then topics that fill the
+				// query; MoeWalls: its categories
+				readonly property var chips: chipRow.wallhaven
+					? online.wallhavenCategories.map(category => ({ kind: "category", value: category.value, label: category.label }))
+						.concat([{ kind: "divider" }])
+						.concat(online.wallhavenTopics.map(topic => ({ kind: "topic", value: topic, label: topic })))
+					: online.moewallsCategories.map(category => ({ kind: "moewalls", value: category.value, label: category.label }))
+
+				Layout.fillWidth: true
+				Layout.preferredHeight: chipRow.shown ? 30 : 0
+				Layout.topMargin: chipRow.shown ? 0 : -16
+				opacity: chipRow.shown ? 1 : 0
+				visible: Layout.preferredHeight > 0.5
+				clip: true
+
+				Behavior on Layout.preferredHeight {
+					SpatialAnim {
+						duration: Motion.medium
+					}
+				}
+				Behavior on Layout.topMargin {
+					SpatialAnim {
+						duration: Motion.medium
+					}
+				}
+				Behavior on opacity {
+					Anim {}
+				}
+
+				ListView {
+					id: chipList
+
+					anchors.fill: parent
+					orientation: ListView.Horizontal
+					spacing: 6
+					boundsBehavior: Flickable.StopAtBounds
+					model: chipRow.chips
+					// the chips change with the source: they come in anew
+					onModelChanged: chipsIn.restart()
+
+					delegate: Item {
+						id: chipCell
+
+						required property var modelData
+						required property int index
+
+						width: chipCell.modelData.kind === "divider" ? 13 : chip.implicitWidth
+						height: 30
+
+						Rectangle {
+							anchors.centerIn: parent
+							visible: chipCell.modelData.kind === "divider"
+							width: 1
+							height: 16
+							color: Theme.outline
+						}
+
+						Chip {
+							id: chip
+
+							visible: chipCell.modelData.kind !== "divider"
+							height: 30
+							text: chipCell.modelData.label ?? ""
+							selected: {
+								const data = chipCell.modelData;
+								if (data.kind === "category") return online.wallhaven.categories.indexOf(data.value) >= 0;
+								if (data.kind === "topic") return online.query.trim().toLowerCase() === String(data.value).toLowerCase();
+								return online.moewalls.category === data.value;
+							}
+							onClicked: {
+								const data = chipCell.modelData;
+								if (data.kind === "category") {
+									online.toggle("categories", data.value, true);
+								} else if (data.kind === "topic") {
+									online.query = chip.selected ? "" : data.value;
+									online.search();
+								} else {
+									online.set("category", data.value);
+								}
+							}
+						}
+					}
+
+					MouseArea {
+						anchors.fill: parent
+						acceptedButtons: Qt.NoButton
+						onWheel: wheel => chipList.flick((wheel.angleDelta.y || wheel.angleDelta.x) * 6, 0)
+					}
+				}
+
+				ParallelAnimation {
+					id: chipsIn
+
+					NumberAnimation {
+						target: chipList
+						property: "opacity"
+						from: 0
+						to: 1
+						duration: Motion.long
+						easing.type: Easing.BezierSpline
+						easing.bezierCurve: Motion.standard
+					}
+
+					NumberAnimation {
+						target: chipShift
+						property: "x"
+						from: 24
+						to: 0
+						duration: Motion.long
+						easing.type: Easing.BezierSpline
+						easing.bezierCurve: Motion.decel
+					}
+				}
+
+				transform: Translate {
+					id: chipShift
 				}
 			}
 
@@ -807,12 +1113,17 @@ ModalWindow {
 				Item {
 					id: backdrop
 
-					readonly property string source: root.currentTheme ? root.currentTheme.previewPath : ""
+					readonly property string source: root.currentTheme ? (root.currentTheme.backdropPath ?? root.currentTheme.previewPath) : ""
 					property Image front: backdropA
+					// the same one sharper (an online result's full picture after
+					// its thumbnail) only fades over
+					property string revealedKey: ""
 
 					function reveal(layer) {
 						const last = layer === backdropA ? backdropB : backdropA;
 						rise.stop();
+						rise.zoom = backdrop.revealedKey === root.currentKey ? 1 : 1.06;
+						backdrop.revealedKey = root.currentKey;
 						last.opacity = 1;
 						last.z = 0;
 						layer.z = 1;
@@ -881,6 +1192,7 @@ ModalWindow {
 						id: rise
 
 						property Image target: null
+						property real zoom: 1.06
 
 						NumberAnimation {
 							target: rise.target
@@ -894,11 +1206,37 @@ ModalWindow {
 						NumberAnimation {
 							target: rise.target
 							property: "scale"
-							from: 1.06
+							from: rise.zoom
 							to: 1
 							duration: Motion.extraLong
 							easing.type: Easing.BezierSpline
 							easing.bezierCurve: Motion.decel
+						}
+					}
+				}
+
+				// MoeWalls' preview of a live wallpaper, over its still once it runs
+				Video {
+					id: livePreview
+
+					readonly property string wanted: root.shown && root.view === "online" ? String(root.currentTheme?.stage?.video ?? "") : ""
+
+					anchors.fill: parent
+					source: livePreview.wanted
+					muted: true
+					loops: MediaPlayer.Infinite
+					fillMode: VideoOutput.PreserveAspectCrop
+					opacity: livePreview.wanted !== "" && livePreview.playbackState === MediaPlayer.PlayingState && livePreview.position > 0 ? 1 : 0
+					visible: opacity > 0
+					// once the source has followed
+					onWantedChanged: Qt.callLater(() => {
+						if (livePreview.wanted !== "") livePreview.play();
+						else livePreview.stop();
+					})
+
+					Behavior on opacity {
+						Anim {
+							duration: Motion.long
 						}
 					}
 				}
@@ -1085,6 +1423,8 @@ ModalWindow {
 					id: caption
 
 					readonly property var daily: root.currentTheme?.daily ?? null
+					readonly property var online: root.currentTheme?.online ?? null
+					readonly property string link: caption.daily?.source_url || caption.online?.url || ""
 
 					anchors.left: parent.left
 					anchors.right: dock.left
@@ -1102,7 +1442,7 @@ ModalWindow {
 					RowLayout {
 						Layout.bottomMargin: 4
 						spacing: 8
-						visible: caption.daily !== null || root.currentTheme?.mediaType === "video"
+						visible: caption.daily !== null || caption.online !== null || root.currentTheme?.mediaType === "video"
 
 						Rectangle {
 							implicitHeight: 24
@@ -1116,6 +1456,11 @@ ModalWindow {
 								anchors.centerIn: parent
 								text: {
 									const daily = caption.daily;
+									const found = caption.online;
+									if (found) {
+										const source = online.sources.find(source => source.value === found.source);
+										return [source ? source.label : "", found.category.replace("-", " "), found.width ? `${found.width} × ${found.height}` : "", found.mediaType === "video" ? "Live" : ""].filter(Boolean).join("  ·  ");
+									}
 									if (!daily) return "Live";
 									const source = Daily.sources.find(source => source.id === daily.provider);
 									return [source ? source.label : "", daily.date_label, daily.media_type === "video" ? "Live" : ""].filter(Boolean).join("  ·  ");
@@ -1129,11 +1474,41 @@ ModalWindow {
 							}
 						}
 
+						// pictures like this one (Wallhaven)
 						Rectangle {
 							implicitWidth: 24
 							implicitHeight: 24
 							radius: 12
-							visible: !!caption.daily?.source_url
+							visible: caption.online?.source === "wallhaven"
+							color: Qt.rgba(0, 0, 0, similarMouse.containsMouse ? 0.7 : 0.45)
+
+							Behavior on color {
+								ColorAnim {}
+							}
+
+							Glyph {
+								anchors.centerIn: parent
+								icon: "image_multiple"
+								size: 13
+								color: "white"
+								surface: "transparent"
+							}
+
+							MouseArea {
+								id: similarMouse
+
+								anchors.fill: parent
+								hoverEnabled: true
+								cursorShape: Qt.PointingHandCursor
+								onClicked: online.searchFor(`like:${caption.online.id}`)
+							}
+						}
+
+						Rectangle {
+							implicitWidth: 24
+							implicitHeight: 24
+							radius: 12
+							visible: caption.link !== ""
 							color: Qt.rgba(0, 0, 0, linkMouse.containsMouse ? 0.7 : 0.45)
 
 							Behavior on color {
@@ -1155,7 +1530,7 @@ ModalWindow {
 								hoverEnabled: true
 								cursorShape: Qt.PointingHandCursor
 								onClicked: {
-									Qt.openUrlExternally(caption.daily.source_url);
+									Qt.openUrlExternally(caption.link);
 									Popups.closeModal();
 								}
 							}
@@ -1170,6 +1545,138 @@ ModalWindow {
 						elide: Text.ElideRight
 						font.pixelSize: 30
 						font.weight: Font.Bold
+					}
+
+					// online: how liked it is, and its tags to search by
+					RowLayout {
+						Layout.topMargin: 2
+						spacing: 14
+						visible: caption.online !== null && (caption.online.views > 0 || !!root.currentTheme?.stage?.uploader)
+
+						Repeater {
+							model: caption.online ? [
+								{ icon: "eye_outline", text: caption.online.views > 0 ? caption.online.views.toLocaleString(Qt.locale(), "f", 0) : "" },
+								{ icon: "heart_outline", text: caption.online.favorites > 0 ? caption.online.favorites.toLocaleString(Qt.locale(), "f", 0) : "" },
+								{ icon: "account_outline", text: String(root.currentTheme?.stage?.uploader ?? "") }
+							].filter(stat => stat.text !== "") : []
+
+							delegate: Item {
+								id: stat
+
+								required property var modelData
+								readonly property bool uploader: modelData.icon === "account_outline"
+
+								implicitWidth: statRow.implicitWidth
+								implicitHeight: statRow.implicitHeight
+
+								Row {
+									id: statRow
+
+									spacing: 5
+
+									Glyph {
+										anchors.verticalCenter: parent.verticalCenter
+										icon: stat.modelData.icon
+										size: 14
+										color: Qt.rgba(1, 1, 1, 0.75)
+										surface: "transparent"
+									}
+
+									StyledText {
+										anchors.verticalCenter: parent.verticalCenter
+										text: stat.modelData.text
+										tone: Qt.rgba(1, 1, 1, stat.uploader && uploaderMouse.containsMouse ? 1 : 0.8)
+										surface: "transparent"
+										font.pixelSize: Theme.size.label
+										font.underline: stat.uploader && uploaderMouse.containsMouse
+									}
+								}
+
+								// an uploader's other pictures
+								MouseArea {
+									id: uploaderMouse
+
+									anchors.fill: parent
+									enabled: stat.uploader
+									hoverEnabled: true
+									cursorShape: Qt.PointingHandCursor
+									onClicked: online.searchFor(`@${stat.modelData.text}`)
+								}
+							}
+						}
+					}
+
+					Flow {
+						id: tagFlow
+
+						readonly property var tags: (caption.online?.tags ?? root.currentTheme?.stage?.tags ?? []).slice(0, 10)
+
+						Layout.fillWidth: true
+						Layout.maximumWidth: 760
+						Layout.topMargin: 8
+						// one line: what does not fit is left out
+						Layout.preferredHeight: 26
+						spacing: 6
+						clip: true
+						visible: tagFlow.tags.length > 0
+						opacity: visible ? 1 : 0
+
+						Behavior on opacity {
+							Anim {}
+						}
+
+						Repeater {
+							model: tagFlow.tags
+
+							delegate: Rectangle {
+								id: tag
+
+								required property var modelData
+
+								width: tagText.implicitWidth + 20
+								height: 26
+								radius: 13
+								color: Qt.rgba(0, 0, 0, tagMouse.containsMouse ? 0.62 : 0.4)
+								scale: tagMouse.pressed ? 0.94 : 1
+
+								Behavior on color {
+									ColorAnim {}
+								}
+								Behavior on scale {
+									SpatialAnim {
+										duration: Motion.short
+									}
+								}
+
+								StyledText {
+									id: tagText
+
+									anchors.centerIn: parent
+									text: `#${tag.modelData.name}`
+									tone: Qt.rgba(1, 1, 1, 0.88)
+									surface: "transparent"
+									font.pixelSize: Theme.size.label
+								}
+
+								MouseArea {
+									id: tagMouse
+
+									anchors.fill: parent
+									hoverEnabled: true
+									cursorShape: Qt.PointingHandCursor
+									onClicked: online.searchFor(tag.modelData.name)
+								}
+							}
+						}
+					}
+
+					StyledText {
+						Layout.topMargin: 4
+						visible: online.currentStageError !== "" && caption.online !== null
+						text: online.currentStageError
+						tone: Qt.rgba(1, 0.75, 0.72, 1)
+						surface: "transparent"
+						font.pixelSize: Theme.size.label
 					}
 
 					// the size it is painted at: its own, or scaled down
@@ -1470,25 +1977,37 @@ ModalWindow {
 							text: "Apply"
 							icon: "check"
 							variant: "filled"
-							enabled: root.currentTheme !== null && root.previewPaletteStatus !== "loading" && !root.scaling
-							busy: (root.previewPaletteStatus === "loading" && root.currentTheme !== null) || root.scaling
+							enabled: root.currentTheme !== null && root.previewPaletteStatus !== "loading" && !root.scaling && !(root.currentTheme.online && root.previewPaletteStatus === "error")
+							busy: (root.previewPaletteStatus === "loading" && root.currentTheme !== null) || root.scaling || online.saving
 							onActivated: root.applyTheme(root.currentTheme)
 						}
 					}
 				}
 
-				// the scaled copy being made: a bar that follows ffmpeg
+				// the scaled copy being made, or a live wallpaper found online
+				// being downloaded: a bar that follows it
 				Rectangle {
+					id: progressCard
+
+					readonly property bool downloading: online.saving && root.currentTheme?.mediaType === "video"
+					readonly property real progress: progressCard.downloading ? online.saveProgress : root.scaleProgress
+
 					anchors.centerIn: parent
 					width: 360
 					height: 92
 					radius: 24
 					color: Qt.alpha(Theme.base, 0.94)
-					opacity: root.scaling ? 1 : 0
+					opacity: root.scaling || progressCard.downloading ? 1 : 0
+					scale: root.scaling || progressCard.downloading ? 1 : 0.94
 					visible: opacity > 0
 
 					Behavior on opacity {
 						Anim {}
+					}
+					Behavior on scale {
+						SpatialAnim {
+							duration: Motion.medium
+						}
 					}
 
 					ColumnLayout {
@@ -1501,14 +2020,14 @@ ModalWindow {
 
 							StyledText {
 								Layout.fillWidth: true
-								text: `Scaling to ${root.scalingLabel}`
+								text: progressCard.downloading ? "Downloading" : `Scaling to ${root.scalingLabel}`
 								font.pixelSize: Theme.size.body
 								font.weight: Font.DemiBold
 								elide: Text.ElideRight
 							}
 
 							StyledText {
-								text: `${Math.floor(root.scaleProgress * 100)} %`
+								text: `${Math.floor(progressCard.progress * 100)} %`
 								tone: Theme.textMuted
 								font.pixelSize: Theme.size.label
 							}
@@ -1521,7 +2040,7 @@ ModalWindow {
 							color: Theme.layer1
 
 							Rectangle {
-								width: parent.width * root.scaleProgress
+								width: parent.width * progressCard.progress
 								height: parent.height
 								radius: 4
 								color: Theme.primary
@@ -1563,14 +2082,46 @@ ModalWindow {
 					title: "No picture today"
 				}
 
+				Spinner {
+					anchors.centerIn: parent
+					width: 36
+					height: 36
+					visible: root.view === "online" && online.loading && online.items.length === 0
+				}
+
+				EmptyState {
+					anchors.centerIn: parent
+					visible: root.view === "online" && !online.loading && online.items.length === 0 && online.searched
+					icon: online.error !== "" ? "wifi_off" : "image_off_outline"
+					title: online.error !== "" ? online.error : "Nothing found"
+				}
+
 				MouseArea {
 					anchors.fill: parent
 					acceptedButtons: Qt.NoButton
 					onWheel: wheel => root.move((wheel.angleDelta.y || -wheel.angleDelta.x) < 0 ? 1 : -1)
 				}
+
+				// a click beside the open filters folds them away
+				MouseArea {
+					anchors.fill: parent
+					enabled: root.filtersOpen
+					onClicked: root.filtersOpen = false
+				}
+
+				OnlineFilters {
+					anchors.top: parent.top
+					anchors.right: parent.right
+					anchors.margins: 14
+					search: online
+					open: root.filtersOpen && root.view === "online"
+					maxHeight: stage.height - 28
+					onDismissed: root.filtersOpen = false
+				}
 			}
 
-			// ── strip: the library, or the pictures of the day ────────────
+			// ── strip: the library, the pictures of the day, or what was ──
+			// found online; a strip comes in from the side of its tab
 			Item {
 				id: strips
 
@@ -1644,6 +2195,86 @@ ModalWindow {
 					}
 				}
 
+				ListView {
+					id: onlineStrip
+
+					readonly property real itemWidth: 168
+					readonly property bool shown: root.view === "online"
+
+					anchors.fill: parent
+					orientation: ListView.Horizontal
+					spacing: 10
+					clip: true
+					model: online.items
+					currentIndex: online.index
+					highlightRangeMode: ListView.StrictlyEnforceRange
+					preferredHighlightBegin: width / 2 - itemWidth / 2
+					preferredHighlightEnd: width / 2 + itemWidth / 2
+					highlightMoveDuration: Motion.long
+					boundsBehavior: Flickable.StopAtBounds
+					cacheBuffer: 1200
+					opacity: onlineStrip.shown ? 1 : 0
+					visible: opacity > 0
+					enabled: onlineStrip.shown
+
+					transform: Translate {
+						x: onlineStrip.shown ? 0 : 48
+
+						Behavior on x {
+							SpatialAnim {
+								duration: Motion.long
+							}
+						}
+					}
+
+					Behavior on opacity {
+						Anim {}
+					}
+
+					onCurrentIndexChanged: {
+						if (currentIndex >= 0 && currentIndex !== online.index)
+							online.select(currentIndex);
+					}
+
+					delegate: Thumb {
+						required property var modelData
+						required property int index
+
+						width: onlineStrip.itemWidth
+						height: onlineStrip.height
+						source: modelData.thumb
+						title: modelData.title || (modelData.width ? `${modelData.width} × ${modelData.height}` : "")
+						current: index === online.index
+						busy: current && online.staging(modelData)
+						onClicked: {
+							if (current) {
+								root.applyTheme(root.currentTheme);
+								return;
+							}
+							online.select(index);
+						}
+					}
+
+					// the next page is on its way
+					footer: Item {
+						width: online.loadingMore ? 64 : 0
+						height: onlineStrip.height
+
+						Spinner {
+							anchors.centerIn: parent
+							width: 22
+							height: 22
+							visible: online.loadingMore
+						}
+					}
+
+					MouseArea {
+						anchors.fill: parent
+						acceptedButtons: Qt.NoButton
+						onWheel: wheel => root.move((wheel.angleDelta.y || -wheel.angleDelta.x) < 0 ? 1 : -1)
+					}
+				}
+
 				Row {
 					id: dailyStrip
 
@@ -1656,7 +2287,7 @@ ModalWindow {
 					enabled: dailyStrip.shown
 
 					transform: Translate {
-						x: dailyStrip.shown ? 0 : 48
+						x: dailyStrip.shown ? 0 : (root.viewIndex > 1 ? -48 : 48)
 
 						Behavior on x {
 							SpatialAnim {

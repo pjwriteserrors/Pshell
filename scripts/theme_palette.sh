@@ -59,8 +59,13 @@ theme_palette_media_key() {
 
 # where the palette of a media and settings is kept (made or not)
 theme_palette_path() {
-	local media="$1" backend="$2" palette="$3" style="$4"
-	printf '%s/%s/%s.json\n' "$THEME_PALETTE_DIR" "$(theme_palette_media_key "$media")" \
+	local media="$1" backend="$2" palette="$3" style="$4" root="$THEME_PALETTE_DIR"
+	# an online wallpaper's in memory beside it, under its worn/<stamp>
+	if theme_is_online "$media"; then
+		local stamp="${media#"$THEME_ONLINE_DIR"/worn/}"
+		root="$THEME_ONLINE_DIR/palettes/$(printf '%s' "$THEME_ONLINE_DIR/worn/${stamp%%/*}" | sha1sum | awk '{print $1}')"
+	fi
+	printf '%s/%s/%s.json\n' "$root" "$(theme_palette_media_key "$media")" \
 		"$(theme_palette_settings_key "$backend" "$palette" "$style")"
 }
 
@@ -96,7 +101,8 @@ theme_palette_from_frame() {
 	[[ -d "$WALLUST_CONFIG_DIR/templates" ]] && ln -s "$WALLUST_CONFIG_DIR/templates" "$work/templates"
 
 	_palette_wallust() {
-		wallust run --quiet --skip-sequences --no-hooks --config-dir "$work" \
+		# kept here, not in wallust's own cache
+		wallust run --quiet --skip-sequences --no-hooks --no-cache --config-dir "$work" \
 			--backend "$backend" --palette "$palette" --style "$style" "$@" "$frame" >/dev/null 2>>"$work/err"
 	}
 	_palette_wallust && code=0

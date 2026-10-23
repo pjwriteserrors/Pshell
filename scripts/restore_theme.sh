@@ -24,6 +24,13 @@ theme_path=""
 if [[ -f "$THEME_CURRENT_DIR_FILE" ]]; then
 	theme_path="$(<"$THEME_CURRENT_DIR_FILE")"
 fi
+# an online wallpaper lived in memory and is gone after a reboot: the
+# library's first one is put on in full, so nothing of it is left
+if theme_is_online "$theme_path" && [[ ! -e "$theme_path" ]]; then
+	theme_path="$(theme_list_entries | head -n 1)"
+	[[ -n "$theme_path" ]] && exec bash "$SCRIPT_DIR/apply_theme_selection.sh" "$theme_path" 9>&-
+	exit 0
+fi
 if [[ ! -e "$theme_path" && -f "$THEME_CURRENT_NAME_FILE" ]]; then
 	theme_path="$(theme_resolve_entry "$(<"$THEME_CURRENT_NAME_FILE")" 2>/dev/null || true)"
 fi
