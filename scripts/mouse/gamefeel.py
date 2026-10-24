@@ -1378,9 +1378,10 @@ class Eyes:
         return out
 
     def wants_presses(self):
-        """Whether the presses are needed with the sound off: a press or
-        click trigger, or the HUD cells to learn."""
-        return self.on
+        """Whether the presses are needed with the sound off: press and
+        click zones, the HUD cells to learn – as soon as the picture is
+        wanted (the cast comes later, and Triggers starts on update)."""
+        return self.proc is not None
 
     def send_zones(self, force=False):
         """The zones' places to eyes.py, when they changed."""
@@ -1457,6 +1458,9 @@ class Eyes:
                 self.on = True
                 self.frames = 0
                 self.daemon.tell_eyes()
+                # the presses are read while the picture is watched
+                if getattr(self.daemon, "triggers", None) is not None:
+                    self.daemon.loop.post(self.daemon.triggers.update)
             elif event in ("stopped", "error"):
                 if event == "error":
                     self.daemon.log(f"eyes: {data.get('message')}")
