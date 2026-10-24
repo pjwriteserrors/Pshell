@@ -313,7 +313,17 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
     in the game's pixels, are nudged with the arrows (Shift: ten), Ctrl+D
     duplicates, Ctrl+C / Ctrl+V copy and paste reactions, F2 or a
     double-click renames, Del removes, right-click has all of it; the
-    picture dims around the chosen zone. Reactions copied stay for the
+    picture dims around the chosen zone. Several zones are **chosen
+    together** by Shift/Ctrl+click, by dragging around them with Shift (or
+    the "Pick several" tool), or Ctrl+A; they move, nudge and go together,
+    and while they react alike the inspector edits all of them at once
+    (`Mouse.hudMirror`; every reaction edit goes through `hudEditTriggers`
+    to each mate's own list); when they differ, one zone's reactions are
+    taken for all ("Use for all", `hudSameTriggers`). **Linked** zones
+    (`zone.group`, "Link" – `hudLinkZones` / `hudUnlinkZones`) stay alike
+    for good: the reactions and quiet rule of one are those of all,
+    whichever is edited; a duplicate stays in the group. New zones start
+    with no reaction. Reactions copied stay for the
     session (`Mouse.hudClipboard`); **sequences** (`options.hudPresets`, not
     per game: a zone's reactions with patterns, keys and steps under a
     name – "Button press", "Cast spell", "Shoot"; `Mouse.hudSavePreset`,
