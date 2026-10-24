@@ -7,48 +7,21 @@ import Quickshell.Io
 import qs.style.theme
 import qs.style.widgets
 import qs.core.services
-import qs.core.views.settings.mouse
-import "mouse/Waves.js" as Waves
+import qs.core.views.settings.hud
 
-// HUD haptics: the game's HUD by hand (gamefeel.Eyes; the model lives in
-// Mouse.qml – hudScenes, hudZones). Scenes are pictures of the game as its
-// HUD looks in a fight, a dialog, exploring; the daemon tells which one is
-// up by how alike the frame is to each picture inside its zones, and only
-// that scene's zones fire. Zones are drawn on the picture here (the boxes
-// found on it are offered under the cursor; "Suggest" marks the HUD-like
-// ones), or on the real screen like a screenshot (Screenshot.hud). A zone
-// reacts in several ways at once, each with its own pattern: it changes,
-// it changes after a press, it is clicked, the pointer comes in, it turns
-// red, brightens, darkens.
-SettingsPage {
+// HUD haptics, a workbench over the whole page (gamefeel.Eyes; the model
+// lives in Mouse.qml – hudScenes, hudZones, hudPresets): the game's scenes
+// along the top, the chosen one's picture with its zones in the middle, the
+// chosen zone (or the scene) on the right, the kept sequences underneath.
+// Things are carried between them: a sequence or a reaction onto a zone, a
+// scene or into a zone's list, a reaction onto the shelf to keep it.
+FocusScope {
 	id: root
 
-	title: "HUD haptics"
-	description: Mouse.gameKey !== "" ? `${Mouse.gameKey} – draw where the HUD is, say what each zone reacts to and how it feels. The game's picture is watched at 20 fps; a zone fires exactly when its condition holds.` : "Zones on the game's HUD that the mouse feels. Start a game, then come back: its window is pictured here."
-	asideWidth: Math.min(400, Math.max(320, root.width * 0.3))
-
-	// undo and redo of everything done here – zones, scenes, reactions, sequences
-	headerTrailing: RowLayout {
-		spacing: 6
-
-		TextButton {
-			text: Mouse.hudUndoLabel !== "" ? `Undo ${Mouse.hudUndoLabel}` : "Undo"
-			icon: "undo"
-			variant: Mouse.hudUndoLabel !== "" ? "tonal" : "text"
-			enabled: Mouse.hudUndoLabel !== ""
-			opacity: enabled ? 1 : 0.45
-			onActivated: Mouse.hudUndo()
-		}
-
-		IconButton {
-			Layout.preferredWidth: 34
-			Layout.preferredHeight: 34
-			icon: "redo"
-			enabled: Mouse.hudRedoLabel !== ""
-			opacity: enabled ? 1 : 0.45
-			onClicked: Mouse.hudRedo()
-		}
-	}
+	property string title: "HUD haptics"
+	property bool active: false
+	// a key is being recorded: niri hands over its shortcuts
+	readonly property bool recording: root.recordingKey >= 0
 
 	readonly property string game: Mouse.gameKey
 	readonly property int window: Mouse.gameWindow
@@ -59,18 +32,21 @@ SettingsPage {
 	readonly property var zones: root.allZones.filter(z => (z.scene ?? "") === root.sceneId || (!z.scene && root.scenes.length <= 1))
 	readonly property var live: Mouse.eyes?.latest?.zones ?? ({})
 	readonly property bool watching: Mouse.eyes?.on === true
-	readonly property string liveScene: Mouse.hudLiveScene
+	readonly property var liveScenes: Mouse.hudLiveScenes
 	readonly property var scores: Mouse.hudScores
-	// every pattern the mouse has, named as the haptics card names them
-	readonly property var feels: Mouse.waveforms.map(w => ({ value: w, label: Waves.names[w] ?? w.toLowerCase() }))
+	readonly property var alike: Mouse.hudAlike
 	readonly property string shotDir: `${Paths.runtime}/hud`
 	readonly property string picture: String(root.scene?.picture ?? "")
 	property bool shooting: false
-	// the zone being edited (its id), the key recorder (trigger index, -1 none)
+
+	// the zone chosen (its id), the one pointed at in a list, which fired last
 	property string selected: ""
-	property int recording: -1
-	// which zone fired last, for a flash
+	property string pointed: ""
 	property string fired: ""
+	readonly property var zone: root.allZones.find(z => z.id === root.selected) ?? null
+	// how much the chosen zone changed, the last few seconds
+	property var activity: []
+
 	// the boxes found on the picture (fractions) and the suggested ones
 	property var boxes: []
 	property var suggested: []
@@ -78,178 +54,135 @@ SettingsPage {
 	property bool guessing: false
 	property string guessedFor: ""
 
-	readonly property var zone: root.allZones.find(z => z.id === root.selected) ?? null
-	readonly property var triggers: Mouse.hudTriggers(root.zone)
-	// the name field for keeping the zone's reactions as a sequence is open
-	property bool naming: false
-	// the sequence kept or used last, for a flash on its row; the one being renamed
+	// what is carried under the pointer: {type: preset|kind|reaction, label, icon, …}
+	property var carry: null
+	property bool took: false
+	// a sequence just kept or used, one being renamed
 	property string presetFlash: ""
-	property string renaming: ""
-	// each zone's own likeness to the scene's picture, live
-	readonly property var alike: Mouse.hudAlike
-	readonly property var liveScenes: Mouse.hudLiveScenes
+	property string renamingPreset: ""
+	// the reaction whose key is recorded (its index, -1 none)
+	property int recordingKey: -1
 
-	// the pickers' entries
-	readonly property var clickKeys: [{ value: "", label: "Any button" }, { value: "BTN_LEFT", label: "Left button" }, { value: "BTN_RIGHT", label: "Right button" }, { value: "BTN_MIDDLE", label: "Middle button" }]
-	readonly property var pressKeys: [{ value: "", label: "Any press" }, { value: "BTN_LEFT", label: "Left click" }, { value: "BTN_RIGHT", label: "Right click" }]
-	// times to pick from; a value set otherwise (an older zone's) is offered too
-	function timeEntries(choices, current) {
-		const list = choices.includes(current) ? choices : choices.concat([current]).sort((a, b) => a - b);
-		return list.map(ms => ({ value: String(ms), label: ms >= 1000 ? `${ms / 1000} s` : `${ms} ms` }));
-	}
-	function withinEntries(step) {
-		return root.timeEntries([1000, 2000, 3000, 5000, 8000, 10000, 15000], Number(step?.within ?? 5000));
-	}
-	function delayEntries(step) {
-		return root.timeEntries([100, 200, 300, 500, 800, 1000, 1500, 2000, 3000], Number(step?.delay ?? 500));
-	}
+	// something landed somewhere: (kind, id) – the target bursts
+	signal landed(string kind, string id)
 
-	// a picture reaction may stand back while the pointer is on the zone or right after a click on it
+	// ── words and colours ──────────────────────────────────────────────
+	readonly property var clickKeys: [{ value: "", label: "any button" }, { value: "BTN_LEFT", label: "left button" }, { value: "BTN_RIGHT", label: "right button" }, { value: "BTN_MIDDLE", label: "middle button" }]
+	readonly property var pressKeys: [{ value: "", label: "any press" }, { value: "BTN_LEFT", label: "left click" }, { value: "BTN_RIGHT", label: "right click" }]
 	readonly property var unlessEntries: [
-		{ value: "", label: "whenever" },
-		{ value: "hover", label: "not while the pointer is on it", detail: "a button's highlight is not a change" },
-		{ value: "click", label: "not right after a click on it", detail: "1.5 s" },
-		{ value: "both", label: "neither hovered nor just clicked" }
+		{ value: "", label: "always", icon: "check" },
+		{ value: "hover", label: "unless hovered", icon: "cursor_default_outline", detail: "a highlight is no change" },
+		{ value: "click", label: "unless just clicked", icon: "cursor_default_click_outline", detail: "for 1.5 s" },
+		{ value: "both", label: "unless hovered or clicked", icon: "gesture_tap" }
 	]
-
-	// a press reaction may listen for a key of the keyboard too
-	function keyEntries(trigger) {
-		if (trigger?.kind === "click") return root.clickKeys;
-		const list = root.pressKeys.slice();
-		if (typeof trigger?.key === "number") list.push({ value: String(trigger.key), label: `Key ${root.keyLabel(trigger)}` });
-		list.push({ value: "record", label: root.recording >= 0 ? "Press a key…" : "A key of the keyboard…", detail: "press it next" });
-		return list;
-	}
-
-	// the fine-tuning in a few words, as the picker that unfolds it shows
-	function summaryEntries(trigger) {
-		const parts = [];
-		if (Number(trigger?.level ?? 0) > 0) parts.push(`needs ${trigger.level}`);
-		parts.push(`every ${Number(trigger?.every ?? 150)} ms`);
-		if ((trigger?.kind === "change" || trigger?.kind === "press") && Number(trigger?.calm ?? 250) > 0) parts.push(`calm ${Number(trigger.calm ?? 250)} ms`);
-		return [{ value: "summary", label: parts.join(" · ") }];
-	}
-
-	onSelectedChanged: {
-		root.naming = false;
-		root.renaming = "";
-	}
-
-	// what a sequence does, in a few words: "hovered, clicked → a click anywhere"
-	function presetSummary(preset) {
-		const list = Mouse.hudList(preset?.triggers) ?? [];
-		return list.map(t => {
-			const steps = Mouse.hudStepsOf(t);
-			const head = root.kindOf(t.kind).label.toLowerCase() + (t.key ? ` (${root.keyLabel(t)})` : "");
-			return steps.length > 0 ? `${head} → ${steps.length} step${steps.length === 1 ? "" : "s"}` : head;
-		}).join(", ") || "nothing";
-	}
-
-	onActiveChanged: {
-		Mouse.watching = root.active;
-		if (root.active && root.picture === "" && root.scenes.length === 0 && root.window > 0) root.shoot();
-	}
-	Component.onDestruction: Mouse.watching = false
-
-	function feelLabel(value) {
-		return root.feels.find(f => f.value === value)?.label ?? String(value).toLowerCase();
-	}
 
 	function kindOf(kind) {
 		return Mouse.hudKinds.find(k => k.value === kind) ?? Mouse.hudKinds[0];
 	}
 
+	function kindColor(kind) {
+		switch (kind) {
+		case "press": return Theme.secondary;
+		case "click": return Theme.tertiary;
+		case "hover": return Qt.tint(Theme.secondary, Qt.alpha(Theme.tertiary, 0.5));
+		case "red": return Theme.danger;
+		case "bright": return Theme.warning;
+		case "dark": return Theme.textMuted;
+		default: return Theme.primary;
+		}
+	}
+
 	function keyLabel(trigger) {
 		const key = trigger?.key ?? "";
-		if (key === "" || key === null) return trigger?.kind === "click" ? "Any button" : "Any press";
+		if (key === "" || key === null) return trigger?.kind === "click" ? "any button" : "any press";
 		if (trigger.keyName) return trigger.keyName;
-		const names = { BTN_LEFT: "Left click", BTN_RIGHT: "Right click", BTN_MIDDLE: "Middle click", BTN_SIDE: "Back button", BTN_EXTRA: "Forward button" };
+		const names = { BTN_LEFT: "left click", BTN_RIGHT: "right click", BTN_MIDDLE: "middle click", BTN_SIDE: "back button", BTN_EXTRA: "forward button" };
 		return names[key] ?? String(key).replace(/^KEY_/, "");
 	}
 
-	function describe(zone) {
-		return Mouse.hudTriggers(zone).filter(t => t.on !== false).map(t => root.kindOf(t.kind).label.toLowerCase()).join(", ") || "reacts to nothing";
+	// a press reaction may listen for a key of the keyboard too
+	function keyEntries(trigger, recordingIt) {
+		if (trigger?.kind === "click") return root.clickKeys;
+		const list = root.pressKeys.slice();
+		if (typeof trigger?.key === "number") list.push({ value: String(trigger.key), label: root.keyLabel(trigger), icon: "keyboard_outline" });
+		list.push({ value: "record", label: recordingIt ? "press a key…" : "a key…", icon: "record_rec", detail: "press it next" });
+		return list;
 	}
 
-	// a pill that names the choice and opens a list on click: entries
-	// [{value, label, icon, detail}]; a prefix reads like a sentence
-	// ("feels Knock", "on Left click"); strong is the card's heading
-	component Pick: Clickable {
-		id: pick
+	// times to pick from; a value set otherwise is offered too
+	function timeEntries(choices, current, prefix) {
+		const list = choices.includes(current) ? choices : choices.concat([current]).sort((a, b) => a - b);
+		return list.map(ms => ({ value: String(ms), label: `${prefix}${ms >= 1000 ? `${ms / 1000} s` : `${ms} ms`}` }));
+	}
+	function withinEntries(step) {
+		return root.timeEntries([1000, 2000, 3000, 5000, 8000, 10000, 15000], Number(step?.within ?? 5000), "within ");
+	}
+	function delayEntries(step) {
+		return root.timeEntries([100, 200, 300, 500, 800, 1000, 1500, 2000, 3000], Number(step?.delay ?? 500), "after ");
+	}
 
-		property var entries: []
-		property string current: ""
-		property string icon: ""
-		property string prefix: ""
-		property string fallback: "–"
-		property bool strong: false
-		property bool accent: false
+	function sceneName(id) {
+		return root.scenes.find(s => s.id === id)?.name ?? "Scene";
+	}
 
-		signal picked(var value)
+	// what a sequence does, in a few words
+	function presetSummary(preset) {
+		const list = Mouse.hudList(preset?.triggers) ?? [];
+		return list.map(t => {
+			const steps = Mouse.hudStepsOf(t).length;
+			return root.kindOf(t.kind).label.toLowerCase() + (steps > 0 ? ` → ${steps} more` : "");
+		}).join(", ") || "nothing";
+	}
 
-		readonly property var entry: (pick.entries ?? []).find(e => String(e.value) === String(pick.current)) ?? null
+	// fires now: its scene is shown and nothing shown with it quiets it (gamefeel.live_zones)
+	function zoneAwake(zone) {
+		if (!zone) return false;
+		const up = root.liveScenes;
+		const scene = root.scenes.find(s => s.id === zone.scene);
+		if (scene && scene.picture && !up.includes(scene.id)) return false;
+		if ((Mouse.hudList(scene?.quiet) ?? []).some(id => up.includes(id))) return false;
+		return !(Mouse.hudList(zone.unless) ?? []).some(id => up.includes(id));
+	}
 
-		implicitHeight: 28
-		implicitWidth: pickRow.implicitWidth + 20
-		radius: 14
-		pressedScale: 0.95
-		tint: pick.accent ? Theme.onPrimary : Theme.text
-		color: pick.accent ? Theme.primary : (pick.strong ? Theme.primarySoft : Theme.layer1)
-		opacity: pick.enabled ? 1 : 0.5
-		onClicked: pickList.open()
+	// a size in the game's pixels
+	function pixels(fw, fh) {
+		const rect = root.window > 0 ? Mouse.hudWindowRect() : null;
+		if (!rect || rect.width <= 0) return `${Math.round(fw * 100)} × ${Math.round(fh * 100)} %`;
+		return `${Math.round(fw * rect.width)} × ${Math.round(fh * rect.height)}`;
+	}
 
-		Behavior on color {
-			ColorAnim {}
-		}
+	// ── choosing ───────────────────────────────────────────────────────
+	function select(id) {
+		root.selected = id;
+		root.activity = [];
+		root.recordingKey = -1;
+	}
 
-		RowLayout {
-			id: pickRow
-
-			anchors.centerIn: parent
-			spacing: 5
-
-			Glyph {
-				visible: pick.icon !== ""
-				icon: pick.icon
-				size: 13
-				color: pick.accent ? Theme.onPrimary : (pick.strong ? Theme.primary : Theme.textSubtle)
-			}
-
-			StyledText {
-				visible: pick.prefix !== ""
-				text: pick.prefix
-				font.pixelSize: Theme.size.small
-				tone: pick.accent ? Theme.onPrimary : Theme.textFaint
-			}
-
-			StyledText {
-				text: pick.entry?.label ?? pick.fallback
-				font.pixelSize: Theme.size.small
-				font.weight: pick.strong ? Font.DemiBold : Font.Normal
-				tone: pick.accent ? Theme.onPrimary : Theme.text
-			}
-
-			Glyph {
-				icon: "chevron_down"
-				size: 11
-				color: pick.accent ? Theme.onPrimary : Theme.textFaint
-			}
-		}
-
-		PickList {
-			id: pickList
-
-			y: pick.height + 4
-			margins: 8
-			width: Math.min(320, Math.max(220, root.asideWidth - 48))
-			entries: pick.entries ?? []
-			current: pick.current
-			onPicked: value => pick.picked(value)
+	function chooseScene(id) {
+		if (Mouse.hudSceneId !== id || root.selected !== "") {
+			Mouse.hudSceneId = id;
+			root.select("");
 		}
 	}
 
+	function takeFocus() {
+		root.forceActiveFocus();
+	}
+
+	function renameZone(id) {
+		root.select(id);
+		Qt.callLater(() => inspector.focusName());
+	}
+
+	function recordKey(zoneId, index) {
+		root.recordingKey = index;
+		if (index >= 0) catcher.forceActiveFocus();
+	}
+
+	// ── zones ──────────────────────────────────────────────────────────
 	function add(rect, values) {
-		root.selected = Mouse.hudAddZone(rect, values);
+		root.select(Mouse.hudAddZone(rect, values));
+		root.takeFocus();
 	}
 
 	// the smallest found box under a point of the picture (fractions)
@@ -261,6 +194,110 @@ SettingsPage {
 			}
 		}
 		return best;
+	}
+
+	function takeSuggestion(s) {
+		root.add({ x: s.x, y: s.y, w: s.w, h: s.h }, { name: s.name, when: s.when });
+		root.suggested = root.suggested.filter(x => x !== s);
+		if (root.suggested.length === 0) root.suggesting = false;
+	}
+
+	function takeSuggestions() {
+		const n = root.suggested.length;
+		for (const s of root.suggested) Mouse.hudAddZone({ x: s.x, y: s.y, w: s.w, h: s.h }, { name: s.name, when: s.when });
+		root.suggested = [];
+		root.suggesting = false;
+		root.toast(`${n} zones added`);
+	}
+
+	function zoneAction(id, action) {
+		const zone = root.allZones.find(z => z.id === id);
+		if (!zone) return;
+		switch (action) {
+		case "rename":
+			root.renameZone(id);
+			break;
+		case "duplicate":
+			root.select(Mouse.hudDuplicateZone(id));
+			break;
+		case "copy":
+			Mouse.hudCopyTriggers(id, -1);
+			root.toast(`${Mouse.hudClipboard.length} reaction${Mouse.hudClipboard.length === 1 ? "" : "s"} of ${zone.name} copied`, false);
+			break;
+		case "paste":
+			Mouse.hudPasteTriggers(id, false);
+			root.landed("zone", id);
+			break;
+		case "keep":
+			root.keepZone(id, -1);
+			break;
+		case "delete":
+			if (root.selected === id) root.select("");
+			Mouse.hudRemoveZone(id);
+			root.toast(`${zone.name} deleted`);
+			break;
+		}
+	}
+
+	function reactionAction(zoneId, index, action) {
+		const zone = root.allZones.find(z => z.id === zoneId);
+		const trigger = zone ? Mouse.hudTriggers(zone)[index] : null;
+		if (!trigger) return;
+		switch (action) {
+		case "copy":
+			Mouse.hudCopyTriggers(zoneId, index);
+			root.toast(`${root.kindOf(trigger.kind).label} copied`, false);
+			break;
+		case "duplicate":
+			Mouse.hudInsertTriggers(zoneId, index + 1, [trigger], "a reaction duplicated");
+			break;
+		case "keep":
+			root.keepZone(zoneId, index);
+			break;
+		case "remove":
+			Mouse.hudRemoveTrigger(zoneId, index);
+			root.toast(`${root.kindOf(trigger.kind).label} removed`);
+			break;
+		}
+	}
+
+	// ── scenes ─────────────────────────────────────────────────────────
+	// a new scene is a picture of what the game shows now
+	function newScene() {
+		Mouse.hudAddScene("");
+		root.select("");
+		if (root.window > 0) root.shoot();
+	}
+
+	function sceneAction(id, action) {
+		const name = root.sceneName(id);
+		switch (action) {
+		case "shoot":
+			root.chooseScene(id);
+			root.shoot();
+			break;
+		case "paste":
+			Mouse.hudPasteIntoScene(id, false);
+			root.toast(`Pasted into every zone of ${name}`);
+			break;
+		case "remove":
+			root.select("");
+			Mouse.hudRemoveScene(id);
+			root.toast(`${name} removed`);
+			break;
+		}
+	}
+
+	function tool(id) {
+		if (id === "suggest") {
+			if (root.suggesting) {
+				root.suggesting = false;
+				return;
+			}
+			root.suggesting = true;
+			if (root.guessedFor !== root.picture) root.guess();
+		} else if (id === "shoot") root.shoot();
+		else if (id === "screen") Mouse.hudDraw();
 	}
 
 	// a picture of the game's window into the scene, once
@@ -282,49 +319,161 @@ SettingsPage {
 		guesser.running = true;
 	}
 
-	function reload() {
-		pictureImage.source = "";
-		pictureImage.source = root.picture ? `file://${root.picture}?${Mouse.hudPictureRev}` : "";
+	function pictureReady() {
+		if (root.guessedFor !== root.picture && root.picture !== "") root.guess();
 	}
 
-	function recordKey(event) {
-		if (root.recording < 0 || !root.zone) return;
-		if (event.key === Qt.Key_Escape) {
-			root.recording = -1;
-			return;
+	// ── sequences ──────────────────────────────────────────────────────
+	// a zone's reactions (or one: index ≥ 0) onto the shelf, named at once
+	function keepZone(zoneId, index) {
+		const zone = root.allZones.find(z => z.id === zoneId);
+		if (!zone) return;
+		const trigger = index >= 0 ? Mouse.hudTriggers(zone)[index] : null;
+		const id = Mouse.hudSavePreset(trigger ? `${zone.name} · ${root.kindOf(trigger.kind).label}` : zone.name, zoneId, index);
+		if (id === "") return;
+		root.presetFlash = id;
+		root.renamingPreset = id;
+	}
+
+	function replaceWithPreset(presetId) {
+		if (!root.zone) return;
+		Mouse.hudApplyPreset(root.zone.id, presetId, true);
+		root.presetFlash = presetId;
+		root.landed("zone", root.zone.id);
+		root.toast(`${root.zone.name} now does ${Mouse.hudPreset(presetId)?.name ?? ""}`);
+	}
+
+	function removePreset(presetId) {
+		const name = Mouse.hudPreset(presetId)?.name ?? "";
+		Mouse.hudRemovePreset(presetId);
+		root.toast(`${name} removed`);
+	}
+
+	// ── carrying ───────────────────────────────────────────────────────
+	// the reactions a carried thing stands for
+	function triggersOf(c) {
+		if (c.type === "preset") return Mouse.hudPresetTriggers(Mouse.hudPreset(c.presetId));
+		if (c.type === "kind") return [Mouse.hudTrigger(c.kind)];
+		if (c.type === "reaction") {
+			const zone = root.allZones.find(z => z.id === c.zoneId);
+			const t = zone ? Mouse.hudTriggers(zone)[c.index] : null;
+			return t ? [JSON.parse(JSON.stringify(t))] : [];
 		}
-		const code = event.nativeScanCode - 8;
-		if (code <= 0) return;
-		let name = event.text && event.text.trim().length === 1 ? event.text.toUpperCase() : "";
-		if (!name) name = { [Qt.Key_Space]: "Space", [Qt.Key_Shift]: "Shift", [Qt.Key_Control]: "Ctrl", [Qt.Key_Alt]: "Alt", [Qt.Key_Tab]: "Tab" }[event.key] ?? `Key ${code}`;
-		Mouse.hudChangeTrigger(root.zone.id, root.recording, { key: code, keyName: name });
-		root.recording = -1;
+		return [];
 	}
 
-	Timer {
-		id: giveUp
+	function dropOnZone(zoneId, c) {
+		const zone = root.allZones.find(z => z.id === zoneId);
+		const list = root.triggersOf(c);
+		if (!zone || list.length === 0) return false;
+		Mouse.hudInsertTriggers(zoneId, -1, list, c.type === "preset" ? "a sequence used" : "a reaction added");
+		if (c.type === "preset") root.presetFlash = c.presetId;
+		root.landed("zone", zoneId);
+		if (zoneId !== root.selected) root.toast(`${c.label} → ${zone.name}`);
+		return true;
+	}
 
-		interval: 8000
-		onTriggered: {
-			root.shooting = false;
-			shots.running = false;
+	function dropOnScene(sceneId, c) {
+		const list = root.triggersOf(c);
+		const count = root.allZones.filter(z => z.scene === sceneId).length;
+		if (list.length === 0 || count === 0) return false;
+		Mouse.hudAddTriggersToScene(sceneId, list, c.type === "preset" ? "a sequence given to the scene" : "reactions given to the scene");
+		if (c.type === "preset") root.presetFlash = c.presetId;
+		root.landed("scene", sceneId);
+		root.toast(`${c.label} → ${count} zone${count === 1 ? "" : "s"} of ${root.sceneName(sceneId)}`);
+		return true;
+	}
+
+	// let go over a target: kind zone | scene | list (a zone's, at a place) | shelf | bin
+	function dropOn(kind, id, at) {
+		const c = root.carry;
+		if (!c) return;
+		let took = false;
+		if (kind === "zone") took = root.dropOnZone(id, c);
+		else if (kind === "scene") took = root.dropOnScene(id, c);
+		else if (kind === "list") {
+			if (c.type === "reaction" && c.zoneId === id) {
+				const to = at < 0 ? Mouse.hudTriggers(root.zone).length - 1 : (at > c.index ? at - 1 : at);
+				if (to !== c.index) Mouse.hudMoveTrigger(id, c.index, to);
+				took = true;
+			} else {
+				const list = root.triggersOf(c);
+				if (list.length > 0) {
+					Mouse.hudInsertTriggers(id, at, list, c.type === "preset" ? "a sequence used" : "a reaction added");
+					if (c.type === "preset") root.presetFlash = c.presetId;
+					took = true;
+				}
+			}
+		} else if (kind === "shelf" && c.type === "reaction") {
+			root.keepZone(c.zoneId, c.index);
+			took = true;
+		} else if (kind === "bin") {
+			if (c.type === "preset") root.removePreset(c.presetId);
+			took = c.type === "preset";
 		}
+		root.took = took;
 	}
+
+	function lift(item, mouse, what) {
+		const p = item.mapToItem(root, mouse.x, mouse.y);
+		ghostBack.stop();
+		ghostGone.stop();
+		root.carryFrom = Qt.point(p.x, p.y);
+		ghost.x = p.x;
+		ghost.y = p.y;
+		ghost.opacity = 1;
+		ghost.lift = 0;
+		root.took = false;
+		root.carry = what;
+		ghostUp.restart();
+	}
+
+	function haul(item, mouse) {
+		const p = item.mapToItem(root, mouse.x, mouse.y);
+		ghost.x = p.x;
+		ghost.y = p.y;
+	}
+
+	function land() {
+		if (!root.carry) return;
+		root.took = false;
+		ghost.Drag.drop();
+		const took = root.took;
+		root.carry = null;
+		if (took) ghostGone.restart();
+		else ghostBack.restart();
+	}
+
+	property point carryFrom: Qt.point(0, 0)
+
+	// ── a word after a change, with a way back ─────────────────────────
+	function toast(text, undoable) {
+		toastBox.text = text;
+		toastBox.undoable = undoable !== false;
+		toastBox.up = true;
+		toastOff.restart();
+	}
+
+	function reveal(anchor) {}
+
+	onActiveChanged: {
+		Mouse.watching = root.active;
+		if (root.active && root.picture === "" && root.scenes.length === 0 && root.window > 0) root.shoot();
+		if (root.active) root.takeFocus();
+	}
+	Component.onDestruction: Mouse.watching = false
 
 	onPictureChanged: {
 		root.boxes = [];
 		root.suggested = [];
 		root.suggesting = false;
-		root.reload();
 	}
-	Component.onCompleted: root.reload()
 
 	Connections {
 		target: Mouse
 
 		function onHudPictureRevChanged() {
 			root.guessedFor = "";
-			root.reload();
 		}
 
 		function onFelt(source, kind, strength, wave, label, cluster) {
@@ -341,6 +490,28 @@ SettingsPage {
 
 		interval: 380
 		onTriggered: root.fired = ""
+	}
+
+	// the chosen zone's change over time, for its little chart
+	Timer {
+		interval: 120
+		repeat: true
+		running: root.active && root.watching && !!root.zone
+		onTriggered: {
+			const v = root.live[root.selected];
+			const heat = v ? Math.max(0, Math.min(1, Math.max(v[0], Math.abs(v[1]), Math.abs(v[2])) / 40)) : 0;
+			root.activity = root.activity.concat([heat]).slice(-48);
+		}
+	}
+
+	Timer {
+		id: giveUp
+
+		interval: 8000
+		onTriggered: {
+			root.shooting = false;
+			shots.running = false;
+		}
 	}
 
 	Process {
@@ -400,1940 +571,452 @@ SettingsPage {
 		onExited: root.guessing = false
 	}
 
-	// takes the key while a trigger records one
+	// ── keys ───────────────────────────────────────────────────────────
+	Shortcut {
+		sequences: [StandardKey.Undo]
+		enabled: root.active && !root.recording
+		onActivated: Mouse.hudUndo()
+	}
+
+	Shortcut {
+		sequences: [StandardKey.Redo, "Ctrl+Y"]
+		enabled: root.active && !root.recording
+		onActivated: Mouse.hudRedo()
+	}
+
+	Keys.onPressed: event => {
+		const ctrl = event.modifiers & Qt.ControlModifier;
+		const zone = root.zone;
+		if (event.key === Qt.Key_Escape && (zone || root.suggesting)) {
+			if (root.suggesting) root.suggesting = false;
+			else root.select("");
+			event.accepted = true;
+		} else if (!zone) {
+			return;
+		} else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) {
+			root.zoneAction(zone.id, "delete");
+			event.accepted = true;
+		} else if (ctrl && event.key === Qt.Key_D) {
+			root.zoneAction(zone.id, "duplicate");
+			event.accepted = true;
+		} else if (ctrl && event.key === Qt.Key_C) {
+			root.zoneAction(zone.id, "copy");
+			event.accepted = true;
+		} else if (ctrl && event.key === Qt.Key_V) {
+			root.zoneAction(zone.id, "paste");
+			event.accepted = true;
+		} else if (event.key === Qt.Key_F2) {
+			root.renameZone(zone.id);
+			event.accepted = true;
+		} else if ([Qt.Key_Left, Qt.Key_Right, Qt.Key_Up, Qt.Key_Down].includes(event.key)) {
+			// nudged: a pixel of the picture, ten with Shift
+			const n = event.modifiers & Qt.ShiftModifier ? 10 : 1;
+			const dx = (event.key === Qt.Key_Left ? -n : (event.key === Qt.Key_Right ? n : 0)) / Math.max(100, board.pictureWidth);
+			const dy = (event.key === Qt.Key_Up ? -n : (event.key === Qt.Key_Down ? n : 0)) / Math.max(60, board.pictureHeight);
+			const r = v => Math.round(v * 10000) / 10000;
+			Mouse.hudChangeZone(zone.id, { x: r(Math.max(0, Math.min(1 - zone.w, zone.x + dx))), y: r(Math.max(0, Math.min(1 - zone.h, zone.y + dy))) });
+			event.accepted = true;
+		}
+	}
+
+	// takes the key while a reaction records one
 	Item {
 		id: catcher
 
-		focus: root.recording >= 0
 		Keys.onPressed: event => {
-			root.recordKey(event);
 			event.accepted = true;
+			const zone = root.zone;
+			if (!zone || root.recordingKey < 0) return;
+			if (event.key === Qt.Key_Escape) {
+				root.recordingKey = -1;
+				root.takeFocus();
+				return;
+			}
+			const code = event.nativeScanCode - 8;
+			if (code <= 0) return;
+			let name = event.text && event.text.trim().length === 1 ? event.text.toUpperCase() : "";
+			if (!name) name = { [Qt.Key_Space]: "Space", [Qt.Key_Shift]: "Shift", [Qt.Key_Control]: "Ctrl", [Qt.Key_Alt]: "Alt", [Qt.Key_Tab]: "Tab" }[event.key] ?? `Key ${code}`;
+			Mouse.hudChangeTrigger(zone.id, root.recordingKey, { key: code, keyName: name }, "the reaction's key");
+			root.recordingKey = -1;
+			root.takeFocus();
 		}
-		onFocusChanged: if (root.recording >= 0) catcher.forceActiveFocus()
+		onActiveFocusChanged: if (!activeFocus) root.recordingKey = -1
 	}
 
-	// ── the aside: the zone, or the state of things ──────────────────────
-	aside: Rectangle {
+	// ── the workbench ──────────────────────────────────────────────────
+	ColumnLayout {
 		anchors.fill: parent
-		radius: Theme.radius.huge
-		color: Theme.layer1
-		clip: true
-
-		// the panel slides as the zone changes
-		Item {
-			id: asideBody
-
-			property string shown: root.selected
-
-			anchors.fill: parent
-			anchors.margins: 18
-			opacity: 1
-			transform: Translate {
-				id: asideSlide
-
-				x: 0
-			}
-
-			onShownChanged: slideIn.restart()
-
-			SequentialAnimation {
-				id: slideIn
-
-				NumberAnimation {
-					target: asideSlide
-					property: "x"
-					from: 26
-					to: 0
-					duration: Motion.long
-					easing.type: Easing.BezierSpline
-					easing.bezierCurve: Motion.emphasized
-				}
-			}
-
-			Flickable {
-				anchors.fill: parent
-				contentHeight: asideColumn.implicitHeight
-				contentWidth: width
-				boundsBehavior: Flickable.StopAtBounds
-				clip: true
-
-				ColumnLayout {
-					id: asideColumn
-
-					width: parent.width
-					spacing: 12
-
-					// ── nothing picked: what is live ───────────────────
-					ColumnLayout {
-						Layout.fillWidth: true
-						visible: !root.zone
-						spacing: 12
-
-						RowLayout {
-							spacing: 10
-
-							Rectangle {
-								Layout.preferredWidth: 36
-								Layout.preferredHeight: 36
-								radius: Theme.radius.medium
-								color: root.watching ? Theme.primary : Theme.primarySoft
-
-								Behavior on color {
-									ColorAnim {}
-								}
-
-								Glyph {
-									anchors.centerIn: parent
-									icon: "eye_outline"
-									size: 18
-									color: root.watching ? Theme.onPrimary : Theme.primary
-								}
-							}
-
-							ColumnLayout {
-								Layout.fillWidth: true
-								spacing: 1
-
-								StyledText {
-									text: root.watching ? "Watching the game" : "Not watching"
-									font.weight: Font.DemiBold
-								}
-
-								StyledText {
-									Layout.fillWidth: true
-									text: root.watching ? `${Mouse.eyes?.frames ?? 0} frames · ${Mouse.eyes?.seen?.zone ?? 0} zone pulses${Mouse.eyes?.pointer === false ? " · no pointer (a Wayland game): clicks and hovers stay quiet" : ""}` : (root.game !== "" ? "Give the game the focus and the picture is watched" : "No game runs")
-									tone: Theme.textSubtle
-									font.pixelSize: Theme.size.small
-									wrapMode: Text.WordWrap
-								}
-							}
-						}
-
-						// the scene that is up
-						Rectangle {
-							Layout.fillWidth: true
-							implicitHeight: sceneUp.implicitHeight + 24
-							radius: Theme.radius.large
-							color: root.liveScenes.length > 0 ? Theme.primaryContainer : Theme.layer2
-
-							Behavior on color {
-								ColorAnim {}
-							}
-
-							ColumnLayout {
-								id: sceneUp
-
-								anchors.left: parent.left
-								anchors.right: parent.right
-								anchors.top: parent.top
-								anchors.margins: 12
-								spacing: 6
-
-								StyledText {
-									text: root.liveScenes.length > 0 ? `${root.liveScenes.map(id => `"${root.scenes.find(s => s.id === id)?.name ?? "?"}"`).join(" and ")} ${root.liveScenes.length === 1 ? "is" : "are"} up` : (root.watching && root.scenes.length > 0 ? "No scene recognised – the zones stay quiet" : "Scenes")
-									font.weight: Font.DemiBold
-									font.pixelSize: Theme.size.small
-								}
-
-								Repeater {
-									model: root.scenes
-
-									delegate: RowLayout {
-										id: scoreRow
-
-										required property var modelData
-
-										readonly property real score: Number(root.scores[scoreRow.modelData.id] ?? 0)
-
-										Layout.fillWidth: true
-										spacing: 8
-
-										StyledText {
-											Layout.preferredWidth: 110
-											text: scoreRow.modelData.name
-											font.pixelSize: Theme.size.small
-											tone: root.liveScenes.includes(scoreRow.modelData.id) ? Theme.text : Theme.textSubtle
-											elide: Text.ElideRight
-										}
-
-										Rectangle {
-											Layout.fillWidth: true
-											Layout.preferredHeight: 6
-											radius: 3
-											color: Qt.alpha(Theme.primary, 0.18)
-
-											Rectangle {
-												width: parent.width * Math.max(0, Math.min(1, scoreRow.score))
-												height: parent.height
-												radius: 3
-												color: Theme.primary
-
-												Behavior on width {
-													Anim {
-														duration: Motion.medium
-													}
-												}
-											}
-
-											// the bar it has to cross
-											Rectangle {
-												x: parent.width * Number(scoreRow.modelData.similar ?? 0.55)
-												width: 2
-												height: 10
-												y: -2
-												radius: 1
-												color: Theme.text
-												opacity: 0.5
-											}
-										}
-
-										StyledText {
-											Layout.preferredWidth: 36
-											text: `${Math.round(scoreRow.score * 100)} %`
-											font.pixelSize: Theme.size.small
-											tone: Theme.textFaint
-											horizontalAlignment: Text.AlignRight
-										}
-									}
-								}
-							}
-						}
-
-						StyledText {
-							Layout.fillWidth: true
-							text: root.allZones.length > 0 ? `${root.allZones.length} zone${root.allZones.length === 1 ? "" : "s"} in ${root.scenes.length} scene${root.scenes.length === 1 ? "" : "s"}. Click a zone on the picture to set what it reacts to and how it feels; drag it to move it, pull a corner to resize it. Delete removes it.` : "Nothing drawn yet. Drag a box on the picture, click a box it found, or draw on the real screen."
-							tone: Theme.textSubtle
-							font.pixelSize: Theme.size.small
-							wrapMode: Text.WordWrap
-						}
-
-						StyledText {
-							Layout.fillWidth: true
-							text: "A zone only has to look alike, not the same: a scene is recognised when the picture inside its zones correlates with the scene's picture above its own bar – brighter, noisier, slightly moved is still the same HUD. Each scene is looked for on its own, so several can be up at once: the inventory open over the bar of slots keeps the slots' zones alive. While none is recognised nothing vibrates."
-							tone: Theme.textFaint
-							font.pixelSize: Theme.size.small
-							wrapMode: Text.WordWrap
-						}
-					}
-
-					// ── the zone ───────────────────────────────────────
-					ColumnLayout {
-						Layout.fillWidth: true
-						visible: !!root.zone
-						spacing: 12
-
-						RowLayout {
-							Layout.fillWidth: true
-							spacing: 8
-
-							Field {
-								Layout.fillWidth: true
-								placeholder: "Name"
-								icon: "tag_outline"
-								text: root.zone?.name ?? ""
-								onEdited: text => {
-									if (root.zone && text.trim() !== "") Mouse.hudChangeZone(root.zone.id, { name: text.trim() });
-								}
-							}
-
-							IconButton {
-								Layout.preferredWidth: 34
-								Layout.preferredHeight: 34
-								icon: "delete_outline"
-								onClicked: {
-									const id = root.zone.id;
-									root.selected = "";
-									Mouse.hudRemoveZone(id);
-								}
-							}
-						}
-
-						// where it is and what the picture shows there, in one line
-						RowLayout {
-							Layout.fillWidth: true
-							spacing: 8
-
-							StyledText {
-								Layout.fillWidth: true
-								text: root.zone ? `${Math.round(root.zone.w * 100)} × ${Math.round(root.zone.h * 100)} % at ${Math.round(root.zone.x * 100)}, ${Math.round(root.zone.y * 100)} %` : ""
-								font.pixelSize: Theme.size.small
-								tone: Theme.textFaint
-								elide: Text.ElideRight
-							}
-
-							// alike: how much the zone looks like the scene's picture now
-							Rectangle {
-								visible: root.zone && root.alike[root.zone.id] !== undefined
-								implicitWidth: alikeRow.implicitWidth + 16
-								implicitHeight: 22
-								radius: 11
-								color: Theme.layer2
-
-								RowLayout {
-									id: alikeRow
-
-									anchors.centerIn: parent
-									spacing: 5
-
-									Rectangle {
-										width: 8
-										height: 8
-										radius: 4
-										color: Number(root.alike[root.zone?.id] ?? 0) >= 0.55 ? Theme.primary : Theme.textFaint
-
-										Behavior on color {
-											ColorAnim {}
-										}
-									}
-
-									StyledText {
-										text: `alike ${Math.round(Number(root.alike[root.zone?.id] ?? 0) * 100)} %`
-										font.pixelSize: Theme.size.small
-									}
-								}
-							}
-
-							Rectangle {
-								visible: root.zone && !!root.live[root.zone.id]
-								implicitWidth: liveText.implicitWidth + 16
-								implicitHeight: 22
-								radius: 11
-								color: Theme.layer2
-
-								StyledText {
-									id: liveText
-
-									anchors.centerIn: parent
-									text: root.zone && root.live[root.zone.id] ? `changing ${root.live[root.zone.id][0]}` : ""
-									font.pixelSize: Theme.size.small
-								}
-							}
-						}
-
-						// quiet while another scene is up too
-						ColumnLayout {
-							Layout.fillWidth: true
-							visible: root.scenes.length > 1
-							spacing: 6
-
-							RowLayout {
-								spacing: 6
-
-								Glyph {
-									icon: "volume_off"
-									size: 13
-									color: Theme.textSubtle
-								}
-
-								StyledText {
-									text: "Quiet while this is up too"
-									font.pixelSize: Theme.size.small
-									font.weight: Font.DemiBold
-									tone: Theme.textSubtle
-								}
-							}
-
-							Flow {
-								Layout.fillWidth: true
-								spacing: 5
-
-								Repeater {
-									model: root.scenes.filter(s => s.id !== (root.zone?.scene ?? ""))
-
-									delegate: Chip {
-										required property var modelData
-
-										readonly property bool quiet: (Mouse.hudList(root.zone?.unless) ?? []).includes(modelData.id)
-
-										text: modelData.name
-										icon: quiet ? "volume_off" : "image_outline"
-										selected: quiet
-										onClicked: Mouse.hudToggleUnless(root.zone.id, modelData.id)
-									}
-								}
-							}
-
-							StyledText {
-								Layout.fillWidth: true
-								visible: (Mouse.hudList(root.zone?.unless) ?? []).length > 0
-								text: "The zone keeps quiet as long as one of the marked scenes is recognised as well – the slots under an open inventory, the bar behind a dialog."
-								tone: Theme.textFaint
-								font.pixelSize: Theme.size.small
-								wrapMode: Text.WordWrap
-							}
-						}
-
-						// ── the reactions ──
-						RowLayout {
-							Layout.fillWidth: true
-							spacing: 6
-
-							StyledText {
-								text: root.triggers.length > 0 ? `Reactions · ${root.triggers.length}` : "Reactions"
-								font.pixelSize: Theme.size.small
-								font.weight: Font.DemiBold
-								tone: Theme.textSubtle
-							}
-
-							Item {
-								Layout.fillWidth: true
-							}
-
-							IconButton {
-								visible: root.triggers.length > 0
-								Layout.preferredWidth: 28
-								Layout.preferredHeight: 28
-								icon: "content_copy"
-								onClicked: Mouse.hudCopyTriggers(root.zone.id, -1)
-							}
-
-							TextButton {
-								visible: Mouse.hudClipboard.length > 0
-								text: `Paste ${Mouse.hudClipboard.length}`
-								icon: "content_paste"
-								variant: "tonal"
-								onActivated: Mouse.hudPasteTriggers(root.zone.id, false)
-							}
-						}
-
-						StyledText {
-							Layout.fillWidth: true
-							visible: root.triggers.length === 0
-							text: "Nothing yet. Pick below what the zone reacts to – each reaction has a pattern of its own and may go on with steps."
-							tone: Theme.textFaint
-							font.pixelSize: Theme.size.small
-							wrapMode: Text.WordWrap
-						}
-
-						// every reaction: one card, a sentence of pickers
-						Repeater {
-							model: root.triggers.length
-
-							delegate: Rectangle {
-								id: trow
-
-								required property int index
-
-								readonly property var trigger: root.triggers[trow.index] ?? ({})
-								readonly property var kind: root.kindOf(trow.trigger.kind)
-								readonly property bool on: trow.trigger.on !== false
-								readonly property bool withKey: trow.trigger.kind === "press" || trow.trigger.kind === "click"
-								readonly property bool withLevel: trow.trigger.kind === "change" || trow.trigger.kind === "press" || trow.trigger.kind === "red" || trow.trigger.kind === "bright" || trow.trigger.kind === "dark"
-								readonly property bool withCalm: trow.trigger.kind === "change" || trow.trigger.kind === "press"
-								readonly property var steps: Mouse.hudStepsOf(trow.trigger)
-								// the sliders are folded away until wanted
-								property bool tuning: false
-
-								Layout.fillWidth: true
-								implicitHeight: tcol.implicitHeight + 20
-								radius: Theme.radius.large
-								color: trow.on ? Theme.layer2 : Theme.layer1
-								border.width: 1
-								border.color: trow.on ? "transparent" : Theme.outline
-								opacity: 0
-								scale: 0.96
-								Component.onCompleted: appear.start()
-
-								Behavior on color {
-									ColorAnim {}
-								}
-								Behavior on implicitHeight {
-									Anim {
-										duration: Motion.medium
-									}
-								}
-
-								ParallelAnimation {
-									id: appear
-
-									NumberAnimation {
-										target: trow
-										property: "opacity"
-										to: 1
-										duration: Motion.medium
-									}
-									NumberAnimation {
-										target: trow
-										property: "scale"
-										to: 1
-										duration: Motion.long
-										easing.type: Easing.BezierSpline
-										easing.bezierCurve: Motion.spatial
-									}
-								}
-
-								ColumnLayout {
-									id: tcol
-
-									anchors.left: parent.left
-									anchors.right: parent.right
-									anchors.top: parent.top
-									anchors.margins: 10
-									spacing: 8
-
-									// what · play · on · remove
-									RowLayout {
-										Layout.fillWidth: true
-										spacing: 6
-
-										Pick {
-											entries: Mouse.hudKinds
-											current: String(trow.trigger.kind ?? "change")
-											icon: trow.kind.icon
-											strong: true
-											enabled: trow.on
-											onPicked: value => Mouse.hudChangeTrigger(root.zone.id, trow.index, { kind: String(value), key: "", keyName: "" })
-										}
-
-										Item {
-											Layout.fillWidth: true
-										}
-
-										IconButton {
-											Layout.preferredWidth: 26
-											Layout.preferredHeight: 26
-											icon: "play"
-											onClicked: Mouse.play(trow.trigger.feel)
-										}
-
-										IconButton {
-											Layout.preferredWidth: 26
-											Layout.preferredHeight: 26
-											icon: "content_copy"
-											onClicked: Mouse.hudCopyTriggers(root.zone.id, trow.index)
-										}
-
-										Toggle {
-											checked: trow.on
-											onToggled: on => Mouse.hudChangeTrigger(root.zone.id, trow.index, { on })
-										}
-
-										IconButton {
-											Layout.preferredWidth: 26
-											Layout.preferredHeight: 26
-											icon: "close"
-											onClicked: Mouse.hudRemoveTrigger(root.zone.id, trow.index)
-										}
-									}
-
-									// feels … · on … · fine-tune
-									Flow {
-										Layout.fillWidth: true
-										spacing: 6
-
-										Pick {
-											entries: root.feels
-											current: String(trow.trigger.feel ?? "")
-											icon: "vibrate"
-											prefix: "feels"
-											enabled: trow.on
-											onPicked: value => {
-												Mouse.hudChangeTrigger(root.zone.id, trow.index, { feel: String(value) });
-												Mouse.play(String(value));
-											}
-										}
-
-										Pick {
-											visible: trow.withKey
-											entries: root.keyEntries(trow.trigger)
-											current: root.recording === trow.index ? "record" : String(trow.trigger.key ?? "")
-											icon: trow.trigger.kind === "click" ? "mouse" : "keyboard_outline"
-											prefix: "on"
-											enabled: trow.on
-											onPicked: value => {
-												if (String(value) === "record") {
-													root.recording = trow.index;
-													catcher.forceActiveFocus();
-													return;
-												}
-												root.recording = -1;
-												Mouse.hudChangeTrigger(root.zone.id, trow.index, { key: String(value), keyName: "" });
-											}
-										}
-
-										Pick {
-											visible: trow.withLevel
-											entries: root.unlessEntries
-											current: String(trow.trigger.unless ?? "")
-											icon: "gesture_tap"
-											prefix: "but"
-											enabled: trow.on
-											onPicked: value => Mouse.hudChangeTrigger(root.zone.id, trow.index, { unless: String(value) })
-										}
-
-										Pick {
-											entries: root.summaryEntries(trow.trigger)
-											current: "summary"
-											icon: "tune_variant"
-											accent: trow.tuning
-											enabled: trow.on
-											onPicked: value => trow.tuning = !trow.tuning
-										}
-									}
-
-									// the sliders, when wanted
-									ColumnLayout {
-										Layout.fillWidth: true
-										visible: trow.tuning
-										spacing: 4
-
-										ValueSlider {
-											visible: trow.withLevel
-											from: 0
-											to: 60
-											step: 1
-											icon: "tune_variant"
-											label: "Needs"
-											value: Number(trow.trigger.level ?? 0)
-											format: v => v <= 0 ? "by itself" : `${Math.round(v)}`
-											onMoved: v => Mouse.hudChangeTrigger(root.zone.id, trow.index, { level: Math.round(v) })
-										}
-
-										ValueSlider {
-											from: 30
-											to: 1000
-											step: 10
-											unit: " ms"
-											icon: "timer_outline"
-											label: "Every"
-											value: Number(trow.trigger.every ?? 150)
-											onMoved: v => Mouse.hudChangeTrigger(root.zone.id, trow.index, { every: Math.round(v) })
-										}
-
-										ValueSlider {
-											visible: trow.withCalm
-											from: 0
-											to: 2000
-											step: 50
-											icon: "pause"
-											label: "Calm before"
-											value: Number(trow.trigger.calm ?? 250)
-											format: v => v <= 0 ? "not needed" : `${Math.round(v)} ms`
-											onMoved: v => Mouse.hudChangeTrigger(root.zone.id, trow.index, { calm: Math.round(v) })
-										}
-
-										StyledText {
-											Layout.fillWidth: true
-											text: {
-												switch (trow.trigger.kind) {
-												case "press": return "The zone changes while a press of yours is fresh – the ammo counter after a shot. One pulse per change; it has to have been calm before it counts again.";
-												case "click": return "A mouse button goes down while the pointer is in the zone. X11 games only (Proton is).";
-												case "hover": return "The pointer comes into the zone – once, until it leaves. X11 games only.";
-												case "red": return "The zone suddenly reddens – a hit marker, a health bar dropping.";
-												case "bright": return "The zone suddenly brightens – a muzzle flash, an icon lighting up.";
-												case "dark": return "The zone suddenly darkens – an icon greying out, a charge spent.";
-												default: return "The zone changes, whoever caused it – not while the whole picture moves. One pulse per change; it has to have been calm before it counts again.";
-												}
-											}
-											tone: Theme.textFaint
-											font.pixelSize: Theme.size.small
-											wrapMode: Text.WordWrap
-										}
-									}
-
-									// then … – one line a step
-									Repeater {
-										model: trow.steps.length
-
-										delegate: RowLayout {
-											id: srow
-
-											required property int index
-
-											readonly property var step: trow.steps[srow.index] ?? ({})
-											readonly property bool withKey: srow.step.when === "clickAnywhere" || srow.step.when === "clickOutside" || srow.step.when === "clickHere" || srow.step.when === "press"
-
-											Layout.fillWidth: true
-											spacing: 6
-											opacity: 0
-											Component.onCompleted: stepIn.start()
-
-											NumberAnimation {
-												id: stepIn
-
-												target: srow
-												property: "opacity"
-												to: 1
-												duration: Motion.medium
-											}
-
-											Glyph {
-												icon: "link_variant"
-												size: 13
-												color: Theme.primary
-											}
-
-											Flow {
-												Layout.fillWidth: true
-												spacing: 6
-
-												Pick {
-													entries: Mouse.hudSteps
-													current: String(srow.step.when ?? "clickAnywhere")
-													prefix: `then ${srow.index + 1}`
-													onPicked: value => Mouse.hudChangeStep(root.zone.id, trow.index, srow.index, { when: String(value) })
-												}
-
-												Pick {
-													entries: root.feels
-													current: String(srow.step.feel ?? "")
-													icon: "vibrate"
-													onPicked: value => {
-														Mouse.hudChangeStep(root.zone.id, trow.index, srow.index, { feel: String(value) });
-														Mouse.play(String(value));
-													}
-												}
-
-												Pick {
-													visible: srow.withKey
-													entries: srow.step.when === "press" ? root.pressKeys : root.clickKeys
-													current: String(srow.step.key ?? "")
-													onPicked: value => Mouse.hudChangeStep(root.zone.id, trow.index, srow.index, { key: String(value) })
-												}
-
-												Pick {
-													visible: srow.step.when !== "delay"
-													entries: root.withinEntries(srow.step)
-													current: String(Number(srow.step.within ?? 5000))
-													icon: "timer_outline"
-													prefix: "within"
-													onPicked: value => Mouse.hudChangeStep(root.zone.id, trow.index, srow.index, { within: Number(value) })
-												}
-
-												Pick {
-													visible: srow.step.when === "delay"
-													entries: root.delayEntries(srow.step)
-													current: String(Number(srow.step.delay ?? 500))
-													icon: "timer_outline"
-													prefix: "after"
-													onPicked: value => Mouse.hudChangeStep(root.zone.id, trow.index, srow.index, { delay: Number(value) })
-												}
-											}
-
-											IconButton {
-												Layout.preferredWidth: 24
-												Layout.preferredHeight: 24
-												Layout.alignment: Qt.AlignTop
-												icon: "close"
-												onClicked: Mouse.hudRemoveStep(root.zone.id, trow.index, srow.index)
-											}
-										}
-									}
-
-									TextButton {
-										text: trow.steps.length > 0 ? "Then…" : "Then… – a follow-up with a pattern of its own"
-										icon: "plus"
-										variant: "text"
-										onActivated: Mouse.hudAddStep(root.zone.id, trow.index, "clickAnywhere")
-									}
-								}
-							}
-						}
-
-						// a reaction more
-						Flow {
-							Layout.fillWidth: true
-							spacing: 5
-
-							Repeater {
-								model: Mouse.hudKinds
-
-								delegate: Chip {
-									required property var modelData
-
-									text: modelData.label
-									icon: modelData.icon
-									onClicked: Mouse.hudAddTrigger(root.zone.id, modelData.value)
-								}
-							}
-						}
-
-						// ── sequences: reactions kept by name, for any zone of any game ──
-						Rectangle {
-							Layout.fillWidth: true
-							Layout.topMargin: 4
-							implicitHeight: 1
-							color: Theme.outline
-							opacity: 0.6
-						}
-
-						RowLayout {
-							Layout.fillWidth: true
-							spacing: 6
-
-							Glyph {
-								icon: "playlist_check"
-								size: 14
-								color: Theme.textSubtle
-							}
-
-							StyledText {
-								text: Mouse.hudPresets.length > 0 ? `Sequences · ${Mouse.hudPresets.length}` : "Sequences"
-								font.pixelSize: Theme.size.small
-								font.weight: Font.DemiBold
-								tone: Theme.textSubtle
-							}
-
-							Item {
-								Layout.fillWidth: true
-							}
-
-							TextButton {
-								visible: root.triggers.length > 0
-								text: root.naming ? "Cancel" : "Keep these"
-								icon: root.naming ? "close" : "bookmark_plus_outline"
-								variant: root.naming ? "text" : "tonal"
-								onActivated: root.naming = !root.naming
-							}
-						}
-
-						Field {
-							id: presetName
-
-							Layout.fillWidth: true
-							visible: root.naming
-							placeholder: "Name it – Button press, Cast spell, Shoot"
-							icon: "bookmark_plus_outline"
-							onVisibleChanged: {
-								if (visible) {
-									text = "";
-									input.forceActiveFocus();
-								}
-							}
-							onAccepted: {
-								if (!root.zone) return;
-								const id = Mouse.hudSavePreset(text, root.zone.id, -1);
-								root.naming = false;
-								if (id !== "") root.presetFlash = id;
-							}
-							onEscapePressed: root.naming = false
-						}
-
-						StyledText {
-							Layout.fillWidth: true
-							visible: root.naming
-							text: `The ${root.triggers.length} reaction${root.triggers.length === 1 ? "" : "s"} of this zone, with patterns, keys and steps, under one name – for any zone of any game. Enter keeps it.`
-							tone: Theme.textFaint
-							font.pixelSize: Theme.size.small
-							wrapMode: Text.WordWrap
-						}
-
-						StyledText {
-							Layout.fillWidth: true
-							visible: Mouse.hudPresets.length === 0 && !root.naming
-							text: "Nothing kept yet. Set a zone up the way you like – a button press, a spell cast, a shot – and keep its reactions here to give them to other zones and other games."
-							tone: Theme.textFaint
-							font.pixelSize: Theme.size.small
-							wrapMode: Text.WordWrap
-						}
-
-						Repeater {
-							model: Mouse.hudPresets.length
-
-							delegate: Clickable {
-								id: prow
-
-								required property int index
-
-								readonly property var preset: Mouse.hudPresets[prow.index] ?? ({})
-								readonly property string presetId: String(prow.preset.id ?? "")
-								readonly property bool flashed: root.presetFlash === prow.presetId
-								readonly property bool renaming: root.renaming === prow.presetId
-								readonly property string from: String(prow.preset.from ?? "")
-
-								Layout.fillWidth: true
-								implicitHeight: pcol.implicitHeight + 16
-								radius: Theme.radius.large
-								color: prow.flashed ? Theme.primaryContainer : Theme.layer2
-								pressedScale: 0.98
-								opacity: 0
-								Component.onCompleted: pappear.start()
-								onClicked: {
-									if (prow.renaming) return;
-									Mouse.hudApplyPreset(root.zone.id, prow.presetId, false);
-									root.presetFlash = prow.presetId;
-								}
-
-								Behavior on color {
-									ColorAnim {}
-								}
-
-								Timer {
-									running: prow.flashed
-									interval: 1400
-									onTriggered: root.presetFlash = ""
-								}
-
-								NumberAnimation {
-									id: pappear
-
-									target: prow
-									property: "opacity"
-									to: 1
-									duration: Motion.medium
-								}
-
-								RowLayout {
-									id: pcol
-
-									anchors.left: parent.left
-									anchors.right: parent.right
-									anchors.verticalCenter: parent.verticalCenter
-									anchors.leftMargin: 10
-									anchors.rightMargin: 6
-									spacing: 8
-
-									Glyph {
-										icon: prow.flashed ? "check" : "bookmark_outline"
-										size: 16
-										color: prow.flashed ? Theme.primary : Theme.textSubtle
-									}
-
-									ColumnLayout {
-										Layout.fillWidth: true
-										spacing: 1
-
-										StyledText {
-											Layout.fillWidth: true
-											visible: !prow.renaming
-											text: String(prow.preset.name ?? "")
-											font.pixelSize: Theme.size.small
-											font.weight: Font.DemiBold
-											elide: Text.ElideRight
-										}
-
-										Field {
-											Layout.fillWidth: true
-											visible: prow.renaming
-											placeholder: "Name"
-											text: String(prow.preset.name ?? "")
-											onVisibleChanged: if (visible) input.forceActiveFocus()
-											onAccepted: {
-												Mouse.hudRenamePreset(prow.presetId, text);
-												root.renaming = "";
-											}
-											onEscapePressed: root.renaming = ""
-										}
-
-										StyledText {
-											Layout.fillWidth: true
-											text: root.presetSummary(prow.preset) + (prow.from !== "" && prow.from !== root.game ? ` · from ${prow.from}` : "")
-											font.pixelSize: Theme.size.tiny
-											tone: Theme.textFaint
-											elide: Text.ElideRight
-										}
-									}
-
-									IconButton {
-										Layout.preferredWidth: 26
-										Layout.preferredHeight: 26
-										icon: "swap_horizontal"
-										onClicked: {
-											Mouse.hudApplyPreset(root.zone.id, prow.presetId, true);
-											root.presetFlash = prow.presetId;
-										}
-									}
-
-									IconButton {
-										Layout.preferredWidth: 26
-										Layout.preferredHeight: 26
-										icon: prow.renaming ? "check" : "pencil_outline"
-										onClicked: root.renaming = prow.renaming ? "" : prow.presetId
-									}
-
-									IconButton {
-										Layout.preferredWidth: 26
-										Layout.preferredHeight: 26
-										icon: "close"
-										onClicked: Mouse.hudRemovePreset(prow.presetId)
-									}
-								}
-							}
-						}
-
-						StyledText {
-							Layout.fillWidth: true
-							visible: Mouse.hudPresets.length > 0
-							text: "Click a sequence to add its reactions to this zone; ⇄ puts them in place of the zone's own. The scene's card gives one to every zone at once."
-							tone: Theme.textFaint
-							font.pixelSize: Theme.size.small
-							wrapMode: Text.WordWrap
-						}
-					}
-				}
-			}
-		}
-	}
-
-	// ── scenes ────────────────────────────────────────────────────────────
-	SettingCard {
-		anchor: "hud-scenes"
-		icon: "image_multiple_outline"
-		title: "Scenes"
-		subtitle: root.scenes.length > 0 ? "A picture of the game for each look of its HUD – a fight, a dialog, exploring. The one that looks like the picture now lights up; only its zones fire." : "A picture of the game for each look of its HUD. Take one, or draw on the screen – a scene is made as you go."
-
-		trailing: RowLayout {
-			spacing: 6
-
-			TextButton {
-				visible: root.window > 0 && Plugins.on("screenshot")
-				text: "Draw on the screen"
-				icon: "selection_drag"
-				variant: "tonal"
-				onActivated: Mouse.hudDraw()
-			}
-
-			TextButton {
-				visible: root.window > 0
-				text: root.shooting ? "Taking…" : (root.picture !== "" ? "New picture" : "Take a picture")
-				icon: "camera_outline"
-				variant: "text"
-				busy: root.shooting
-				onActivated: root.shoot()
-			}
-		}
-
-		// the automatic part of the picture, or only what is drawn here
+		anchors.leftMargin: 28
+		anchors.rightMargin: 28
+		anchors.topMargin: 24
+		anchors.bottomMargin: 24
+		spacing: 16
+
+		// title · undo
 		RowLayout {
 			Layout.fillWidth: true
-			spacing: 10
-
-			Glyph {
-				icon: "auto_fix"
-				size: 16
-				color: Mouse.option("eyesAuto", true) !== false ? Theme.primary : Theme.textFaint
-			}
+			spacing: 12
 
 			ColumnLayout {
-				Layout.fillWidth: true
-				spacing: 1
+				spacing: 2
 
 				StyledText {
-					text: Mouse.option("eyesAuto", true) !== false ? "Shakes, hits, flashes and the learned HUD are felt too" : "Only the zones are felt"
-					font.pixelSize: Theme.size.small
-					font.weight: Font.DemiBold
+					text: root.title
+					font.pixelSize: 26
+					font.weight: Font.Bold
 				}
 
-				StyledText {
-					Layout.fillWidth: true
-					text: "Off, nothing but your zones vibrates – no jolt of the picture, no red cast, no brightening, no HUD cell the game taught. A camera turn or a loading screen then stays quiet."
-					tone: Theme.textSubtle
-					font.pixelSize: Theme.size.small
-					wrapMode: Text.WordWrap
-				}
-			}
-
-			Toggle {
-				checked: Mouse.option("eyesAuto", true) !== false
-				onToggled: on => Mouse.setOption("eyesAuto", on)
-			}
-		}
-
-		Flow {
-			Layout.fillWidth: true
-			spacing: 10
-
-			Repeater {
-				model: root.scenes
-
-				delegate: Rectangle {
-					id: card
-
-					required property var modelData
-
-					readonly property bool chosen: root.sceneId === card.modelData.id
-					readonly property bool up: root.liveScenes.includes(card.modelData.id)
-					readonly property real score: Number(root.scores[card.modelData.id] ?? 0)
-					readonly property int count: root.allZones.filter(z => z.scene === card.modelData.id).length
-
-					width: 212
-					height: 150
-					radius: Theme.radius.large
-					color: card.chosen ? Theme.primaryContainer : Theme.layer2
-					border.width: card.up ? 2 : (card.chosen ? 1.5 : 0)
-					border.color: card.up ? Theme.primary : Qt.alpha(Theme.primary, 0.5)
-					clip: true
-					scale: 1
-					Component.onCompleted: cardPop.start()
-
-					Behavior on color {
-						ColorAnim {}
-					}
-					Behavior on border.color {
-						ColorAnim {}
-					}
-
-					NumberAnimation {
-						id: cardPop
-
-						target: card
-						property: "scale"
-						from: 0.85
-						to: 1
-						duration: Motion.long
-						easing.type: Easing.BezierSpline
-						easing.bezierCurve: Motion.spatial
-					}
-
-					// a breath while it is the scene that is up
-					Rectangle {
-						anchors.fill: parent
-						radius: parent.radius
-						color: Theme.primary
-						opacity: 0
-
-						SequentialAnimation on opacity {
-							running: card.up
-							loops: Animation.Infinite
-							alwaysRunToEnd: true
-
-							NumberAnimation {
-								to: 0.16
-								duration: 900
-								easing.type: Easing.InOutSine
-							}
-							NumberAnimation {
-								to: 0.04
-								duration: 900
-								easing.type: Easing.InOutSine
-							}
-						}
-					}
-
-					Clickable {
-						anchors.fill: parent
-						onClicked: {
-							Mouse.hudSceneId = card.modelData.id;
-							root.selected = "";
-						}
-
-						ColumnLayout {
-							anchors.fill: parent
-							anchors.margins: 8
-							spacing: 6
-
-							Rectangle {
-								Layout.fillWidth: true
-								Layout.preferredHeight: 86
-								radius: Theme.radius.medium
-								color: Theme.layer1
-								clip: true
-
-								Image {
-									anchors.fill: parent
-									source: card.modelData.picture ? `file://${card.modelData.picture}?${Mouse.hudPictureRev}` : ""
-									fillMode: Image.PreserveAspectCrop
-									asynchronous: true
-									cache: false
-									sourceSize.width: 424
-								}
-
-								// how alike the game looks right now
-								Rectangle {
-									anchors.left: parent.left
-									anchors.right: parent.right
-									anchors.bottom: parent.bottom
-									height: 4
-									color: Qt.alpha(Theme.base, 0.5)
-									visible: root.watching
-
-									Rectangle {
-										width: parent.width * Math.max(0, Math.min(1, card.score))
-										height: parent.height
-										color: card.up ? Theme.primary : Qt.alpha(Theme.text, 0.6)
-
-										Behavior on width {
-											Anim {
-												duration: Motion.medium
-											}
-										}
-									}
-								}
-
-								Rectangle {
-									anchors.right: parent.right
-									anchors.top: parent.top
-									anchors.margins: 6
-									visible: card.up
-									width: upText.implicitWidth + 12
-									height: 18
-									radius: 9
-									color: Theme.primary
-
-									StyledText {
-										id: upText
-
-										anchors.centerIn: parent
-										text: "Up now"
-										font.pixelSize: Theme.size.small
-										font.weight: Font.DemiBold
-										color: Theme.onPrimary
-									}
-								}
-							}
-
-							RowLayout {
-								Layout.fillWidth: true
-								spacing: 6
-
-								StyledText {
-									Layout.fillWidth: true
-									text: card.modelData.name
-									font.pixelSize: Theme.size.small
-									font.weight: Font.DemiBold
-									elide: Text.ElideRight
-								}
-
-								StyledText {
-									text: `${card.count} zone${card.count === 1 ? "" : "s"}${root.watching ? ` · ${Math.round(card.score * 100)} %` : ""}`
-									font.pixelSize: Theme.size.small
-									tone: Theme.textFaint
-								}
-							}
-						}
-					}
-				}
-			}
-
-			// a new scene
-			Rectangle {
-				width: 212
-				height: 150
-				radius: Theme.radius.large
-				color: newHover.hovered ? Theme.layer2 : "transparent"
-				border.width: 1.5
-				border.color: Theme.outline
-
-				Behavior on color {
-					ColorAnim {}
-				}
-
-				HoverHandler {
-					id: newHover
-				}
-
-				Clickable {
-					anchors.fill: parent
-					onClicked: {
-						Mouse.hudAddScene("");
-						root.selected = "";
-					}
-
-					ColumnLayout {
-						anchors.centerIn: parent
-						spacing: 6
-
-						Glyph {
-							Layout.alignment: Qt.AlignHCenter
-							icon: "plus"
-							size: 22
-							color: Theme.textSubtle
-						}
-
-						StyledText {
-							Layout.alignment: Qt.AlignHCenter
-							text: "New scene"
-							font.pixelSize: Theme.size.small
-							tone: Theme.textSubtle
-						}
-					}
-				}
-			}
-		}
-
-		// the chosen scene
-		RowLayout {
-			Layout.fillWidth: true
-			visible: !!root.scene
-			spacing: 10
-
-			Field {
-				Layout.preferredWidth: 260
-				placeholder: "Scene name – fight, dialog, exploring"
-				icon: "pencil_outline"
-				text: root.scene?.name ?? ""
-				onEdited: text => {
-					if (root.scene && text.trim() !== "") Mouse.hudChangeScene(root.scene.id, { name: text.trim() });
-				}
-			}
-
-			ValueSlider {
-				Layout.fillWidth: true
-				from: 20
-				to: 90
-				step: 5
-				unit: " %"
-				icon: "fit_to_screen_outline"
-				label: "Has to look alike"
-				value: Math.round(Number(root.scene?.similar ?? 0.55) * 100)
-				onMoved: v => Mouse.hudChangeScene(root.scene.id, { similar: Math.round(v) / 100 })
-			}
-
-			TextButton {
-				visible: Mouse.hudClipboard.length > 0
-				text: "Paste into every zone"
-				icon: "content_paste"
-				variant: "text"
-				onActivated: Mouse.hudPasteIntoScene(root.sceneId, false)
-			}
-
-			Pick {
-				visible: root.zones.length > 0 && Mouse.hudPresets.length > 0
-				entries: Mouse.hudPresets.map(p => ({ value: p.id, label: p.name, detail: root.presetSummary(p) }))
-				fallback: "Give every zone a sequence…"
-				icon: "playlist_check"
-				onPicked: value => Mouse.hudApplyPresetToScene(root.sceneId, String(value), false)
-			}
-
-			TextButton {
-				text: "Remove scene"
-				icon: "delete_outline"
-				variant: "text"
-				confirm: true
-				onActivated: {
-					Mouse.hudRemoveScene(root.sceneId);
-					root.selected = "";
-				}
-			}
-		}
-			// the whole scene quiet while another is up too
-			RowLayout {
-				Layout.fillWidth: true
-				visible: !!root.scene && root.scenes.length > 1
-				spacing: 6
-
-				Glyph {
-					icon: "volume_off"
-					size: 13
-					color: Theme.textSubtle
-				}
-
-				StyledText {
-					text: "All its zones quiet while this is up too:"
-					font.pixelSize: Theme.size.small
-					tone: Theme.textSubtle
-				}
-
-				Flow {
-					Layout.fillWidth: true
-					spacing: 5
-
-					Repeater {
-						model: root.scenes.filter(s => s.id !== root.sceneId)
-
-						delegate: Chip {
-							required property var modelData
-
-							readonly property bool quiet: (Mouse.hudList(root.scene?.quiet) ?? []).includes(modelData.id)
-
-							text: modelData.name
-							icon: quiet ? "volume_off" : "image_outline"
-							selected: quiet
-							onClicked: Mouse.hudToggleQuiet(root.sceneId, modelData.id)
-						}
-					}
-				}
-			}
-
-	}
-
-	// ── the picture ───────────────────────────────────────────────────────
-	SettingCard {
-		anchor: "hud-picture"
-		icon: "crosshairs_gps"
-		title: root.scene ? `${root.scene.name} – the zones` : "The zones"
-		subtitle: root.boxes.length > 0 ? `${root.boxes.length} boxes found on the picture: one lights up under the cursor, a click takes it. Or drag your own. Drag a zone to move it, pull a corner to resize it.` : "Drag a box over the ammo counter, the health bar, the cast bar, the hit marker. Drag a zone to move it, pull a corner to resize it."
-
-		trailing: RowLayout {
-			spacing: 6
-
-			TextButton {
-				text: root.guessing ? "Looking…" : (root.suggesting ? "Hide suggestions" : "Suggest zones")
-				icon: "auto_fix"
-				variant: "text"
-				busy: root.guessing
-				enabled: root.picture !== ""
-				onActivated: {
-					if (root.suggesting) {
-						root.suggesting = false;
-						return;
-					}
-					root.suggesting = true;
-					if (root.guessedFor !== root.picture) root.guess();
-				}
-			}
-
-			TextButton {
-				visible: root.suggesting && root.suggested.length > 0
-				text: `Add all ${root.suggested.length}`
-				icon: "plus"
-				variant: "tonal"
-				onActivated: {
-					for (const s of root.suggested) Mouse.hudAddZone({ x: s.x, y: s.y, w: s.w, h: s.h }, { name: s.name, when: s.when });
-					root.suggesting = false;
-				}
-			}
-		}
-
-		FocusScope {
-			id: boardFocus
-
-			Layout.fillWidth: true
-			implicitHeight: board.implicitHeight
-
-			Keys.onPressed: event => {
-				if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) {
-					if (root.zone) {
-						const id = root.zone.id;
-						root.selected = "";
-						Mouse.hudRemoveZone(id);
-					}
-					event.accepted = true;
-				} else if (event.key === Qt.Key_Escape) {
-					root.selected = "";
-					event.accepted = true;
-				} else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_Z) {
-					if (event.modifiers & Qt.ShiftModifier) Mouse.hudRedo();
-					else Mouse.hudUndo();
-					event.accepted = true;
-				} else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_Y) {
-					Mouse.hudRedo();
-					event.accepted = true;
-				}
-			}
-
-			Rectangle {
-				id: board
-
-				anchors.left: parent.left
-				anchors.right: parent.right
-				implicitHeight: Math.round(width * (pictureImage.implicitHeight > 0 && pictureImage.implicitWidth > 0 ? pictureImage.implicitHeight / pictureImage.implicitWidth : 9 / 16))
-				radius: Theme.radius.large
-				color: Theme.layer2
-				clip: true
-
-				Image {
-					id: pictureImage
-
-					anchors.fill: parent
-					fillMode: Image.PreserveAspectFit
-					cache: false
-					asynchronous: true
-					smooth: true
-					onStatusChanged: if (status === Image.Ready && root.guessedFor !== root.picture && root.picture !== "") root.guess()
-				}
-
-				ColumnLayout {
-					anchors.centerIn: parent
-					visible: pictureImage.status !== Image.Ready
-					spacing: 8
+				RowLayout {
+					spacing: 6
 
 					Glyph {
-						Layout.alignment: Qt.AlignHCenter
-						icon: root.shooting ? "camera_outline" : "image_multiple_outline"
-						size: 28
-						color: Theme.textFaint
+						icon: root.game !== "" ? "gamepad_variant" : "sleep"
+						size: 14
+						color: root.game !== "" ? Theme.primary : Theme.textFaint
 					}
 
 					StyledText {
-						Layout.alignment: Qt.AlignHCenter
-						text: root.window > 0 ? (root.shooting ? "Taking a picture of the game's window…" : "No picture yet – zones can be drawn all the same") : "The game's picture appears here while it runs"
-						tone: Theme.textFaint
-						font.pixelSize: Theme.size.small
+						text: root.game !== "" ? root.game : "No game running – start one and its picture comes here"
+						tone: Theme.textMuted
+						font.pixelSize: Theme.size.label
+					}
+				}
+			}
+
+			Item {
+				Layout.fillWidth: true
+			}
+
+			// undo and redo, naming the step
+			Rectangle {
+				Layout.preferredHeight: 38
+				Layout.preferredWidth: undoRow.implicitWidth + 8
+				radius: 19
+				color: Theme.layer1
+				clip: true
+
+				Behavior on Layout.preferredWidth {
+					SpatialAnim {
+						duration: Motion.medium
 					}
 				}
 
-				// live: the picture is watched
-				Rectangle {
-					anchors.left: parent.left
-					anchors.top: parent.top
-					anchors.margins: 10
-					visible: root.watching
-					width: liveRow.implicitWidth + 16
-					height: 24
-					radius: 12
-					color: Qt.alpha(Theme.base, 0.75)
-					z: 5
+				RowLayout {
+					id: undoRow
 
-					RowLayout {
-						id: liveRow
+					anchors.centerIn: parent
+					spacing: 2
 
-						anchors.centerIn: parent
-						spacing: 6
+					Clickable {
+						implicitHeight: 30
+						implicitWidth: undoInner.implicitWidth + 22
+						radius: 15
+						enabled: Mouse.hudUndoLabel !== ""
+						opacity: enabled ? 1 : 0.4
+						onClicked: Mouse.hudUndo()
 
-						Rectangle {
-							width: 8
-							height: 8
-							radius: 4
-							color: Theme.primary
+						RowLayout {
+							id: undoInner
 
-							SequentialAnimation on opacity {
-								loops: Animation.Infinite
-								running: root.watching
+							anchors.centerIn: parent
+							spacing: 6
 
-								NumberAnimation {
-									to: 0.3
-									duration: 700
-								}
-								NumberAnimation {
-									to: 1
-									duration: 700
-								}
+							Glyph {
+								icon: "undo"
+								size: 16
+								color: Theme.text
+							}
+
+							StyledText {
+								text: Mouse.hudUndoLabel !== "" ? `Undo ${Mouse.hudUndoLabel}` : "Undo"
+								font.pixelSize: Theme.size.label
+								font.weight: Font.Medium
 							}
 						}
 
-						StyledText {
-							text: "Live"
-							font.pixelSize: Theme.size.small
-							font.weight: Font.DemiBold
-						}
-					}
-				}
-
-				// where the picture actually is
-				Item {
-					id: canvas
-
-					readonly property real pw: pictureImage.status === Image.Ready ? pictureImage.paintedWidth : board.width
-					readonly property real ph: pictureImage.status === Image.Ready ? pictureImage.paintedHeight : board.height
-
-					x: (board.width - canvas.pw) / 2
-					y: (board.height - canvas.ph) / 2
-					width: canvas.pw
-					height: canvas.ph
-
-					MouseArea {
-						id: drawer
-
-						property real sx: 0
-						property real sy: 0
-						property real ex: 0
-						property real ey: 0
-						readonly property bool drawing: pressed && (Math.abs(ex - sx) >= 4 || Math.abs(ey - sy) >= 4)
-						// smart select: the smallest found box under the cursor
-						readonly property var snap: containsMouse && !pressed ? root.boxAt(mouseX / Math.max(1, width), mouseY / Math.max(1, height)) : null
-
-						anchors.fill: parent
-						cursorShape: Qt.CrossCursor
-						hoverEnabled: true
-						onPressed: mouse => {
-							boardFocus.forceActiveFocus();
-							drawer.sx = drawer.ex = Math.max(0, Math.min(width, mouse.x));
-							drawer.sy = drawer.ey = Math.max(0, Math.min(height, mouse.y));
-						}
-						onPositionChanged: mouse => {
-							if (!drawer.pressed) return;
-							drawer.ex = Math.max(0, Math.min(width, mouse.x));
-							drawer.ey = Math.max(0, Math.min(height, mouse.y));
-						}
-						onReleased: {
-							const x0 = Math.min(drawer.sx, drawer.ex), x1 = Math.max(drawer.sx, drawer.ex);
-							const y0 = Math.min(drawer.sy, drawer.ey), y1 = Math.max(drawer.sy, drawer.ey);
-							if (x1 - x0 < 6 || y1 - y0 < 6) {
-								const best = root.boxAt(x0 / Math.max(1, width), y0 / Math.max(1, height));
-								if (!best) {
-									root.selected = "";
-									return;
-								}
-								root.add({ x: best[0], y: best[1], w: best[2], h: best[3] });
-								return;
-							}
-							root.add({ x: x0 / width, y: y0 / height, w: (x1 - x0) / width, h: (y1 - y0) / height });
+						Tip {
+							below: true
+							text: "Ctrl+Z"
 						}
 					}
 
-					// the found box under the cursor
-					Rectangle {
-						visible: !!drawer.snap && !drawer.drawing
-						x: (drawer.snap?.[0] ?? 0) * canvas.width
-						y: (drawer.snap?.[1] ?? 0) * canvas.height
-						width: (drawer.snap?.[2] ?? 0) * canvas.width
-						height: (drawer.snap?.[3] ?? 0) * canvas.height
-						color: Qt.alpha(Theme.primary, 0.14)
-						border.width: 1.5
-						border.color: Theme.primary
-						radius: 3
+					IconButton {
+						Layout.preferredWidth: 30
+						Layout.preferredHeight: 30
+						icon: "redo"
+						enabled: Mouse.hudRedoLabel !== ""
+						opacity: enabled ? 1 : 0.4
 
-						Behavior on x {
-							Anim {
-								duration: Motion.micro
-							}
-						}
-						Behavior on y {
-							Anim {
-								duration: Motion.micro
-							}
-						}
-						Behavior on width {
-							Anim {
-								duration: Motion.micro
-							}
-						}
-						Behavior on height {
-							Anim {
-								duration: Motion.micro
-							}
-						}
-					}
+						onClicked: Mouse.hudRedo()
 
-					// the box being drawn
-					Rectangle {
-						visible: drawer.drawing
-						x: Math.min(drawer.sx, drawer.ex)
-						y: Math.min(drawer.sy, drawer.ey)
-						width: Math.abs(drawer.ex - drawer.sx)
-						height: Math.abs(drawer.ey - drawer.sy)
-						color: Qt.alpha(Theme.primary, 0.2)
-						border.width: 1.5
-						border.color: Theme.primary
-						radius: 3
-					}
-
-					// suggested zones, a click takes one
-					Repeater {
-						model: root.suggesting ? root.suggested : []
-
-						delegate: Rectangle {
-							id: hint
-
-							required property var modelData
-
-							x: hint.modelData.x * canvas.width
-							y: hint.modelData.y * canvas.height
-							width: Math.max(4, hint.modelData.w * canvas.width)
-							height: Math.max(4, hint.modelData.h * canvas.height)
-							color: Qt.alpha(Theme.tertiary, hintHover.hovered ? 0.25 : 0.1)
-							border.width: 1.5
-							border.color: Theme.tertiary
-							radius: 3
-							opacity: 0
-							Component.onCompleted: hintIn.start()
-
-							Behavior on color {
-								ColorAnim {}
-							}
-
-							NumberAnimation {
-								id: hintIn
-
-								target: hint
-								property: "opacity"
-								to: 1
-								duration: Motion.medium
-							}
-
-							HoverHandler {
-								id: hintHover
-							}
-
-							MouseArea {
-								anchors.fill: parent
-								cursorShape: Qt.PointingHandCursor
-								onClicked: {
-									root.add({ x: hint.modelData.x, y: hint.modelData.y, w: hint.modelData.w, h: hint.modelData.h }, { name: hint.modelData.name, when: hint.modelData.when });
-									root.suggested = root.suggested.filter(s => s !== hint.modelData);
-								}
-							}
-
-							Rectangle {
-								anchors.left: parent.left
-								anchors.top: parent.bottom
-								anchors.topMargin: 2
-								width: hintTag.implicitWidth + 10
-								height: 16
-								radius: 4
-								color: Theme.tertiary
-
-								StyledText {
-									id: hintTag
-
-									anchors.centerIn: parent
-									text: `${hint.modelData.when === "press" ? "after a press" : "changes"} – take?`
-									font.pixelSize: Theme.size.small
-									color: Theme.onPrimary
-								}
-							}
-						}
-					}
-
-					// the zones: movable, resizable, glowing with what is measured
-					Repeater {
-						model: root.zones
-
-						delegate: Item {
-							id: box
-
-							required property var modelData
-
-							readonly property bool chosen: root.selected === box.modelData.id
-							readonly property var values: root.live[box.modelData.id] ?? null
-							// how much it is changing now, 0..1
-							readonly property real heat: box.values ? Math.max(0, Math.min(1, Math.max(box.values[0], Math.abs(box.values[1]), Math.abs(box.values[2])) / 40)) : 0
-							// while moved or resized: the box as it is dragged (fractions)
-							property var drag: null
-							readonly property real fx: box.drag ? box.drag.x : box.modelData.x
-							readonly property real fy: box.drag ? box.drag.y : box.modelData.y
-							readonly property real fw: box.drag ? box.drag.w : box.modelData.w
-							readonly property real fh: box.drag ? box.drag.h : box.modelData.h
-
-							x: box.fx * canvas.width
-							y: box.fy * canvas.height
-							width: Math.max(6, box.fw * canvas.width)
-							height: Math.max(6, box.fh * canvas.height)
-							z: box.chosen ? 3 : 2
-							scale: 1
-							Component.onCompleted: boxPop.start()
-
-							function commit() {
-								if (!box.drag) return;
-								const d = box.drag;
-								box.drag = null;
-								Mouse.hudChangeZone(box.modelData.id, { x: Math.round(d.x * 10000) / 10000, y: Math.round(d.y * 10000) / 10000, w: Math.round(d.w * 10000) / 10000, h: Math.round(d.h * 10000) / 10000 });
-							}
-
-							Behavior on x {
-								enabled: !box.drag
-								SpatialAnim {
-									duration: Motion.medium
-								}
-							}
-							Behavior on y {
-								enabled: !box.drag
-								SpatialAnim {
-									duration: Motion.medium
-								}
-							}
-							Behavior on width {
-								enabled: !box.drag
-								SpatialAnim {
-									duration: Motion.medium
-								}
-							}
-							Behavior on height {
-								enabled: !box.drag
-								SpatialAnim {
-									duration: Motion.medium
-								}
-							}
-
-							NumberAnimation {
-								id: boxPop
-
-								target: box
-								property: "scale"
-								from: 0.7
-								to: 1
-								duration: Motion.long
-								easing.type: Easing.BezierSpline
-								easing.bezierCurve: Motion.spatialFast
-							}
-
-							Rectangle {
-								id: face
-
-								anchors.fill: parent
-								radius: 3
-								color: root.fired === box.modelData.id ? Qt.alpha(Theme.primary, 0.65) : Qt.alpha(box.chosen ? Theme.primary : Theme.text, (boxHover.hovered ? 0.2 : 0.1) + box.heat * 0.5)
-								border.width: box.chosen ? 2 : 1
-								border.color: box.chosen ? Theme.primary : Qt.alpha(Theme.text, boxHover.hovered ? 0.95 : 0.7)
-
-								Behavior on color {
-									ColorAnim {
-										duration: 120
-									}
-								}
-
-								HoverHandler {
-									id: boxHover
-								}
-
-								// a pulse ring when it fires
-								Rectangle {
-									id: ring
-
-									anchors.fill: parent
-									radius: 3
-									color: "transparent"
-									border.width: 2
-									border.color: Theme.primary
-									opacity: 0
-									scale: 1
-
-									Connections {
-										target: root
-
-										function onFiredChanged() {
-											if (root.fired === box.modelData.id) ringAnim.restart();
-										}
-									}
-
-									ParallelAnimation {
-										id: ringAnim
-
-										NumberAnimation {
-											target: ring
-											property: "scale"
-											from: 1
-											to: 1.35
-											duration: Motion.extraLong
-											easing.type: Easing.OutCubic
-										}
-										NumberAnimation {
-											target: ring
-											property: "opacity"
-											from: 0.9
-											to: 0
-											duration: Motion.extraLong
-											easing.type: Easing.OutCubic
-										}
-									}
-								}
-							}
-
-							// move it
-							MouseArea {
-								id: mover
-
-								property real px: 0
-								property real py: 0
-								property bool moved: false
-
-								anchors.fill: parent
-								anchors.margins: 6
-								cursorShape: box.chosen ? Qt.SizeAllCursor : Qt.PointingHandCursor
-								onPressed: mouse => {
-									boardFocus.forceActiveFocus();
-									mover.px = mouse.x;
-									mover.py = mouse.y;
-									mover.moved = false;
-									root.selected = box.modelData.id;
-								}
-								onPositionChanged: mouse => {
-									if (!mover.pressed) return;
-									const dx = (mouse.x - mover.px) / canvas.width, dy = (mouse.y - mover.py) / canvas.height;
-									if (!mover.moved && Math.abs(dx) * canvas.width < 3 && Math.abs(dy) * canvas.height < 3) return;
-									mover.moved = true;
-									const w = box.modelData.w, h = box.modelData.h;
-									box.drag = { x: Math.max(0, Math.min(1 - w, box.modelData.x + dx)), y: Math.max(0, Math.min(1 - h, box.modelData.y + dy)), w, h };
-								}
-								onReleased: box.commit()
-							}
-
-							// resize it by a corner
-							Repeater {
-								model: box.chosen ? [{ h: "l", v: "t" }, { h: "r", v: "t" }, { h: "l", v: "b" }, { h: "r", v: "b" }] : []
-
-								delegate: Rectangle {
-									id: handle
-
-									required property var modelData
-
-									width: 12
-									height: 12
-									radius: 6
-									x: (handle.modelData.h === "l" ? 0 : box.width) - 6
-									y: (handle.modelData.v === "t" ? 0 : box.height) - 6
-									color: Theme.primary
-									border.width: 2
-									border.color: Theme.base
-									scale: handleArea.pressed ? 1.3 : (handleArea.containsMouse ? 1.15 : 1)
-
-									Behavior on scale {
-										Anim {
-											duration: Motion.micro
-										}
-									}
-
-									MouseArea {
-										id: handleArea
-
-										property real ox: 0
-										property real oy: 0
-
-										anchors.fill: parent
-										anchors.margins: -6
-										hoverEnabled: true
-										cursorShape: (handle.modelData.h === "l") === (handle.modelData.v === "t") ? Qt.SizeFDiagCursor : Qt.SizeBDiagCursor
-										onPressed: mouse => {
-											const p = handleArea.mapToItem(canvas, mouse.x, mouse.y);
-											handleArea.ox = p.x;
-											handleArea.oy = p.y;
-										}
-										onPositionChanged: mouse => {
-											if (!handleArea.pressed) return;
-											const p = handleArea.mapToItem(canvas, mouse.x, mouse.y);
-											const dx = (p.x - handleArea.ox) / canvas.width, dy = (p.y - handleArea.oy) / canvas.height;
-											let x0 = box.modelData.x, y0 = box.modelData.y, x1 = x0 + box.modelData.w, y1 = y0 + box.modelData.h;
-											if (handle.modelData.h === "l") x0 = Math.max(0, Math.min(x1 - 0.005, x0 + dx));
-											else x1 = Math.min(1, Math.max(x0 + 0.005, x1 + dx));
-											if (handle.modelData.v === "t") y0 = Math.max(0, Math.min(y1 - 0.005, y0 + dy));
-											else y1 = Math.min(1, Math.max(y0 + 0.005, y1 + dy));
-											box.drag = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
-										}
-										onReleased: box.commit()
-									}
-								}
-							}
-
-							// its name, and what it reacts to while chosen
-							Rectangle {
-								anchors.left: parent.left
-								anchors.bottom: parent.top
-								anchors.bottomMargin: 3
-								width: tagRow.implicitWidth + 12
-								height: 20
-								radius: 5
-								color: box.chosen ? Theme.primary : Qt.alpha(Theme.base, 0.8)
-
-								Behavior on color {
-									ColorAnim {}
-								}
-
-								RowLayout {
-									id: tagRow
-
-									anchors.centerIn: parent
-									spacing: 5
-
-									StyledText {
-										text: box.modelData.name
-										font.pixelSize: Theme.size.small
-										font.weight: Font.DemiBold
-										color: box.chosen ? Theme.onPrimary : Theme.text
-									}
-
-									StyledText {
-										visible: box.chosen || boxHover.hovered
-										text: root.describe(box.modelData)
-										font.pixelSize: Theme.size.small
-										color: box.chosen ? Theme.onPrimary : Theme.textSubtle
-									}
-								}
-							}
+						Tip {
+							below: true
+							text: Mouse.hudRedoLabel !== "" ? `Redo ${Mouse.hudRedoLabel} · Ctrl+Shift+Z` : "Redo"
 						}
 					}
 				}
 			}
 		}
 
-		// the zones of the scene in a line, a click picks one
-		Flow {
+		SceneStrip {
 			Layout.fillWidth: true
-			visible: root.zones.length > 0
-			spacing: 6
+			page: root
+		}
 
-			Repeater {
-				model: root.zones
+		RowLayout {
+			Layout.fillWidth: true
+			Layout.fillHeight: true
+			spacing: 16
 
-				delegate: Chip {
-					id: zoneChip
+			ColumnLayout {
+				Layout.fillWidth: true
+				Layout.fillHeight: true
+				spacing: 12
 
-					required property var modelData
+				Board {
+					id: board
 
-					text: `${zoneChip.modelData.name} · ${root.describe(zoneChip.modelData)}`
-					selected: root.selected === zoneChip.modelData.id
-					accent: root.fired === zoneChip.modelData.id ? Theme.tertiary : Theme.primary
-					onClicked: root.selected = root.selected === zoneChip.modelData.id ? "" : zoneChip.modelData.id
+					Layout.fillWidth: true
+					Layout.fillHeight: true
+					page: root
+				}
+
+				Dock {
+					Layout.fillWidth: true
+					page: root
+				}
+			}
+
+			Inspector {
+				id: inspector
+
+				Layout.fillHeight: true
+				Layout.preferredWidth: Math.round(Math.max(340, Math.min(470, root.width * 0.27)))
+				page: root
+			}
+		}
+	}
+
+	// ── what is carried, under the pointer ─────────────────────────────
+	Item {
+		id: ghost
+
+		property real lift: 0
+
+		width: 1
+		height: 1
+		z: 1000
+		visible: root.carry !== null || ghostBack.running || ghostGone.running
+		Drag.active: root.carry !== null
+		Drag.keys: ["hud"]
+		Drag.hotSpot.x: 0
+		Drag.hotSpot.y: 0
+
+		Rectangle {
+			id: pill
+
+			readonly property bool over: ghost.Drag.target !== null
+
+			x: 12
+			y: -height - 4
+			width: pillRow.implicitWidth + 24
+			height: 36
+			radius: 18
+			color: pill.over ? Theme.primary : Theme.layer3
+			border.width: 1
+			border.color: Qt.alpha(Theme.primary, 0.6)
+			rotation: pill.over ? 0 : -4 * ghost.lift
+			scale: (0.6 + 0.4 * ghost.lift) * (pill.over ? 0.92 : 1.04)
+			transformOrigin: Item.BottomLeft
+
+			Behavior on color {
+				ColorAnim {}
+			}
+			Behavior on rotation {
+				SpatialAnim {
+					duration: Motion.medium
+				}
+			}
+
+			// a soft shadow
+			Rectangle {
+				anchors.fill: parent
+				anchors.topMargin: 6
+				anchors.bottomMargin: -6
+				z: -1
+				radius: 18
+				color: Theme.shadow
+				opacity: 0.5
+			}
+
+			RowLayout {
+				id: pillRow
+
+				anchors.centerIn: parent
+				spacing: 7
+
+				Glyph {
+					icon: pill.over ? "plus" : (ghost.shown?.icon ?? "drag")
+					size: 15
+					color: pill.over ? Theme.onPrimary : Theme.primary
+				}
+
+				StyledText {
+					text: ghost.shown?.label ?? ""
+					font.pixelSize: Theme.size.label
+					font.weight: Font.DemiBold
+					tone: pill.over ? Theme.onPrimary : Theme.text
+				}
+			}
+		}
+
+		// what it was, still shown while it flies back or vanishes
+		property var shown: null
+
+		Connections {
+			target: root
+
+			function onCarryChanged() {
+				if (root.carry) ghost.shown = root.carry;
+			}
+		}
+
+		NumberAnimation {
+			id: ghostUp
+
+			target: ghost
+			property: "lift"
+			to: 1
+			duration: Motion.long
+			easing.type: Easing.BezierSpline
+			easing.bezierCurve: Motion.spatialFast
+		}
+
+		// let go over nothing: back where it came from
+		ParallelAnimation {
+			id: ghostBack
+
+			NumberAnimation {
+				target: ghost
+				property: "x"
+				to: root.carryFrom.x
+				duration: Motion.long
+				easing.type: Easing.BezierSpline
+				easing.bezierCurve: Motion.emphasized
+			}
+			NumberAnimation {
+				target: ghost
+				property: "y"
+				to: root.carryFrom.y
+				duration: Motion.long
+				easing.type: Easing.BezierSpline
+				easing.bezierCurve: Motion.emphasized
+			}
+			NumberAnimation {
+				target: ghost
+				property: "opacity"
+				to: 0
+				duration: Motion.long
+				easing.type: Easing.InQuad
+			}
+		}
+
+		// taken: it sinks in
+		ParallelAnimation {
+			id: ghostGone
+
+			NumberAnimation {
+				target: ghost
+				property: "lift"
+				to: 0
+				duration: Motion.medium
+				easing.type: Easing.InBack
+			}
+			NumberAnimation {
+				target: ghost
+				property: "opacity"
+				to: 0
+				duration: Motion.medium
+			}
+		}
+	}
+
+	// ── the word after a change ────────────────────────────────────────
+	Rectangle {
+		id: toastBox
+
+		property string text: ""
+		property bool undoable: true
+		property bool up: false
+
+		anchors.horizontalCenter: parent.horizontalCenter
+		y: toastBox.up ? root.height - height - 104 : root.height + 10
+		z: 900
+		width: toastRow.implicitWidth + 28
+		height: 44
+		radius: 22
+		color: Theme.layer3
+		border.width: 1
+		border.color: Theme.outline
+		opacity: toastBox.up ? 1 : 0
+		visible: opacity > 0.01
+
+		Behavior on y {
+			SpatialAnim {
+				duration: Motion.long
+			}
+		}
+		Behavior on opacity {
+			Anim {}
+		}
+		Behavior on width {
+			SpatialAnim {
+				duration: Motion.medium
+			}
+		}
+
+		HoverHandler {
+			id: toastHover
+
+			onHoveredChanged: if (!hovered) toastOff.restart()
+		}
+
+		Timer {
+			id: toastOff
+
+			interval: 3800
+			onTriggered: {
+				if (toastHover.hovered) return;
+				toastBox.up = false;
+			}
+		}
+
+		RowLayout {
+			id: toastRow
+
+			anchors.centerIn: parent
+			spacing: 12
+
+			Glyph {
+				icon: "check_circle_outline"
+				size: 17
+				color: Theme.primary
+			}
+
+			StyledText {
+				text: toastBox.text
+				font.weight: Font.Medium
+			}
+
+			TextButton {
+				visible: toastBox.undoable
+				implicitHeight: 30
+				text: "Undo"
+				icon: "undo"
+				variant: "ghost"
+				onActivated: {
+					Mouse.hudUndo();
+					toastBox.up = false;
 				}
 			}
 		}

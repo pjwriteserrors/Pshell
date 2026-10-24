@@ -255,7 +255,7 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
     the scene's zones (zero-mean correlation per zone, so brighter, noisier,
     slightly moved is still alike; a scene with no zones by the whole
     frame), and each zone's own likeness (`alike`, shown on the page as
-    "alike N %" for the zone picked). Every scene is looked for on its own:
+    a ring for the zone picked). Every scene is looked for on its own:
     each above its own bar (`similar`, 0.55 by itself; held while it stays
     within 0.1 under) is up, so several are at once – the inventory open
     over the bar of slots keeps the slots' zones alive (`Eyes.up`, the best
@@ -266,11 +266,11 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
     the click. Every pulse and its reason goes to
     `~/.cache/pshell/mouse-felt.log`. A zone or a whole scene can be **quiet
     while another scene is up too** (`zone.unless: [scene ids]`,
-    `scene.quiet: [scene ids]` – "Quiet while this is up too" on the page:
+    `scene.quiet: [scene ids]` – "Quiet while it shows" on the page:
     the slots under an open inventory are there, but not to be felt), and a
     picture reaction can **stand back** while the pointer is on its zone or
     for 1.5 s after a click on it (`trigger.unless`: "hover", "click",
-    "both" – "but not while the pointer is on it": a hovered button's own
+    "both" – "unless hovered": a hovered button's own
     highlight is then no change, and its hover and click reactions have the
     say). A zone **reacts** in several ways at once, each with
     its own pattern (`feel`, a waveform name), gap (`every` ms, 150) and,
@@ -288,32 +288,48 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
     (the zone changes), `delay` (after `delay` ms) – plays its own pattern
     and arms the next; too late and the chain is dropped, the reaction
     firing again starts it over. Hover, then click, then a click elsewhere
-    with three patterns is three lines on the page. Reactions are **copied**
-    between zones ("Copy all" or one reaction's copy, then "Paste" into a
-    zone or "Paste into every zone" of the scene; `Mouse.hudClipboard`, this
-    session) and **kept as sequences** ("Keep these", a name – "Button
-    press", "Cast spell", "Shoot": the zone's reactions with their patterns,
-    keys and follow-up steps go into `options.hudPresets`, which is not per
-    game; in the "Sequences" list under a zone's reactions a click adds one
-    to the zone, ⇄ replaces the zone's with it, the pencil renames it, and
-    the scene's card gives one to every zone of the scene;
-    `Mouse.hudSavePreset`, `hudApplyPreset`, `hudApplyPresetToScene`). A
-    reaction on the page is one card: what it reacts to, "feels …", "on …"
-    and the fine-tuning (needs, every, calm) as pickers that open a list,
-    the sliders folded away behind the fine-tuning pill; a step is one line
-    ("then 1 · a click elsewhere · Knock · any button · within 5 s").
+    with three patterns is three lines on the page. The page is a
+    **workbench** over the whole window (`settings/hud/`): the scenes as
+    cards along the top (live likeness under each, the ones shown glowing;
+    dragged sideways to reorder – `Mouse.hudOrderScenes` –, double-click
+    renames, right-click for a new picture or removal; "New scene" takes a
+    picture of what the game shows now), the chosen scene's picture with
+    its zones in the middle, the **inspector** on the right (the chosen
+    zone, or with none the scene: its likeness bar with the handle for
+    `similar`, its quiet rule, its zones, "Give all…"), and the
+    **sequences shelf** underneath. A reaction is a card read like a
+    sentence – kind, key, its pattern as a drawn chip (the pattern grid
+    plays one resting the pointer on it a moment), "unless …", the pace
+    folded behind a chip (needs/every/calm as numbers dragged sideways),
+    its steps as a chain. Things are **carried**: a sequence from the shelf
+    or a kind from "Add" onto a zone on the picture, a zone row of the
+    inspector, a scene card (every zone of it) or a place in the zone's
+    list; a reaction by its grip to another place of the list
+    (`hudMoveTrigger`), onto another zone or a scene (copied), or onto the
+    shelf (kept as a sequence and named on the spot); a sequence onto the
+    bin that comes up while one is carried removes it. Each change says so
+    in a toast with Undo. Zones snap to the edges and middles of the others
+    and of the picture while moved or sized (Alt: freely), show their size
+    in the game's pixels, are nudged with the arrows (Shift: ten), Ctrl+D
+    duplicates, Ctrl+C / Ctrl+V copy and paste reactions, F2 or a
+    double-click renames, Del removes, right-click has all of it; the
+    picture dims around the chosen zone. Reactions copied stay for the
+    session (`Mouse.hudClipboard`); **sequences** (`options.hudPresets`, not
+    per game: a zone's reactions with patterns, keys and steps under a
+    name – "Button press", "Cast spell", "Shoot"; `Mouse.hudSavePreset`,
+    `hudApplyPreset`, `hudApplyPresetToScene`) are for any zone of any game.
     **Undo** takes back everything done on the page – zones drawn, moved
     and removed, scenes (the picture of a removed scene is kept as
     `<picture>.gone` and comes back), reactions, steps, sequences – step by
-    step, with the redo beside it and Ctrl+Z / Ctrl+Shift+Z on the picture
-    (`Mouse.hudHistory`: the state before each change, labelled, 80 deep,
-    changes with one label within 1.2 s are one, so a slider's drag is one
+    step, the header naming the step, Ctrl+Z / Ctrl+Shift+Z anywhere on the
+    page (`Mouse.hudHistory`: the state before each change, labelled, 80
+    deep, changes with one label within 1.2 s are one, so a drag is one
     step; `hudUndo`, `hudRedo`, this session). Hover and click know the pointer through X11 (`Pointer`: python-xlib, the active
     X window's geometry and the pointer 30 times a second; Proton games are
     X11, a Wayland-native game has no pointer to ask for and those two stay
     quiet; `eyes.pointer` tells). The presses are read whenever the picture
     is watched (`Triggers.gating`), not only with the sound on. Three ways
-    to draw: *on the real screen* ("Draw on the screen", `ipc mouse hud`
+    to draw: *on the real screen* ("On screen", `ipc mouse hud`
     for a keybind in the game) – the game's window comes to the front and
     is frozen like a screenshot (`Screenshot.hud`, mode `hud` of the
     overlay: the boxes `detect_boxes.py` finds light up under the cursor, a
@@ -325,10 +341,11 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
     resized by its corners, Delete removes it); *suggested* – `hud_guess.py`
     marks the boxes that look like the HUD (small, near an edge or corner,
     not a sliver; over a cell the game taught as yours first and after a
-    press). The zones glow with what is measured in them, ring when they
-    fire; the page's aside shows the chosen zone's reactions or, with none
-    chosen, what is live (`eyes` event: `latest.zones`, `scene`, `scores`,
-    `pointer`, 5 Hz while the page watches).
+    press; "Find zones"). The zones glow with what is measured in them, ring
+    when they fire, sleep while their scene is not shown; the inspector
+    charts the chosen zone's change and likeness (`eyes` event:
+    `latest.zones`, `scene`, `scores`, `pointer`, 5 Hz while the page
+    watches).
   - A known sound keeps its pattern: the waveform is fixed the first time
     a cluster is felt as yours (`wave`), so the same shot feels the same
     every time; only new sounds play by strength.

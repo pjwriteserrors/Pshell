@@ -179,7 +179,7 @@ FloatingWindow {
 	]
 
 	// a page of the shell's own: no niri file behind it, nothing to undo
-	readonly property bool shellPage: ["bar", "multicursor", "sounds", "lighting", "phone", "mouse"].includes(root.current)
+	readonly property bool shellPage: ["bar", "multicursor", "sounds", "lighting", "phone", "mouse", "hud"].includes(root.current)
 
 	readonly property var results: {
 		if (root.query === "") return [];
@@ -603,7 +603,7 @@ FloatingWindow {
 									variant: "ghost"
 									icon: "tray_arrow_down"
 									text: "Export"
-									visible: root.current !== "bar" && root.current !== "sounds" && root.current !== "lighting" && root.current !== "phone" && root.current !== "mouse"
+									visible: root.current !== "bar" && root.current !== "sounds" && root.current !== "lighting" && root.current !== "phone" && root.current !== "mouse" && root.current !== "hud"
 									enabled: NiriSettings.loaded
 									onActivated: exportSheet.show(root.current)
 								}

@@ -612,6 +612,61 @@ Singleton {
 		root.hudSetTriggers(id, root.hudTriggers(zone).filter((t, i) => i !== index), "a reaction removed");
 	}
 
+	// reactions put in at a place of the list (at < 0: the end)
+	function hudInsertTriggers(id, at, triggers, label) {
+		const zone = root.hudZones.find(z => z.id === id);
+		if (!zone) return;
+		const list = root.hudTriggers(zone).slice();
+		const copied = triggers.map(t => JSON.parse(JSON.stringify(t)));
+		list.splice(at < 0 ? list.length : Math.min(at, list.length), 0, ...copied);
+		root.hudSetTriggers(id, list, label || "reactions added");
+	}
+
+	// a reaction to another place of the zone's list
+	function hudMoveTrigger(id, from, to) {
+		const zone = root.hudZones.find(z => z.id === id);
+		if (!zone || from === to) return;
+		const list = root.hudTriggers(zone).slice();
+		const [moved] = list.splice(from, 1);
+		if (!moved) return;
+		list.splice(Math.max(0, Math.min(list.length, to)), 0, moved);
+		root.hudSetTriggers(id, list, "a reaction moved");
+	}
+
+	// reactions added to every zone of a scene
+	function hudAddTriggersToScene(sceneId, triggers, label) {
+		root.hudSaveZones(root.hudZones.map(z => {
+			if ((z.scene ?? "") !== sceneId) return z;
+			const zone = Object.assign({}, z, { triggers: root.hudTriggers(z).concat(triggers.map(t => JSON.parse(JSON.stringify(t)))) });
+			delete zone.when;
+			delete zone.feel;
+			delete zone.level;
+			delete zone.every;
+			delete zone.key;
+			return zone;
+		}), label || "reactions given to the scene");
+	}
+
+	// the scenes in the order given (their ids)
+	function hudOrderScenes(ids) {
+		const list = ids.map(id => root.hudScenes.find(s => s.id === id)).filter(s => !!s);
+		if (list.length !== root.hudScenes.length) return;
+		root.hudSaveScenes(list, "the scenes reordered");
+	}
+
+	// a zone once more, a little beside it, with its reactions
+	function hudDuplicateZone(id) {
+		const zone = root.hudZones.find(z => z.id === id);
+		if (!zone) return "";
+		const copy = JSON.parse(JSON.stringify(zone));
+		copy.id = `z${Date.now().toString(36)}${root.hudZones.length}`;
+		copy.name = `${zone.name} 2`;
+		copy.x = Math.min(1 - copy.w, copy.x + 0.02);
+		copy.y = Math.min(1 - copy.h, copy.y + 0.02);
+		root.hudSaveZones(root.hudZones.concat([copy]), "a zone duplicated");
+		return copy.id;
+	}
+
 	function hudChangeZone(id, values) {
 		const label = values && values.name !== undefined ? "the zone renamed" : "the zone moved";
 		root.hudSaveZones(root.hudZones.map(z => z.id === id ? Object.assign({}, z, values) : z), label);
