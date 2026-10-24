@@ -1324,6 +1324,8 @@ class Eyes:
         # code -> when it last went down (a press is one, however many
         # device nodes report it)
         self.last_press = {}
+        # when a mouse button last went down on each zone
+        self.clicked_at = {}
 
     def options(self):
         return self.daemon.config["options"]
@@ -1348,6 +1350,10 @@ class Eyes:
                 continue
             zone["name"] = str(item.get("name") or "Zone")
             zone["scene"] = str(item.get("scene") or "")
+            # quiet while any of these scenes is up too (the inventory open:
+            # the slots under it are still there, but not to be felt)
+            unless = item.get("unless")
+            zone["unless"] = [str(x) for x in unless] if isinstance(unless, list) else []
             raw = item.get("triggers")
             if not isinstance(raw, list):
                 raw = [{"kind": item.get("when") or "change", "feel": item.get("feel"), "key": item.get("key"),
@@ -1379,8 +1385,13 @@ class Eyes:
                         within, delay = 5.0, 0.5
                     steps.append({"when": when, "feel": str(step.get("feel") or "SUBTLE COLLISION"),
                                   "key": step.get("key") or "", "within": within, "delay": delay})
+                # a picture reaction may stand back while the pointer is on
+                # the zone, or right after a click on it – the button's own
+                # highlight is then not a change to be felt
+                unless = str(t.get("unless") or "")
                 triggers.append({"kind": kind, "feel": str(t.get("feel") or "SUBTLE COLLISION"),
-                                 "key": t.get("key") or "", "level": level, "every": every, "calm": calm, "then": steps})
+                                 "key": t.get("key") or "", "level": level, "every": every, "calm": calm, "then": steps,
+                                 "not_hover": unless in ("hover", "both"), "not_click": unless in ("click", "both")})
             zone["triggers"] = triggers
             out.append(zone)
         return out
@@ -1402,8 +1413,10 @@ class Eyes:
                 similar = float(item.get("similar", 0.55))
             except (TypeError, ValueError):
                 similar = 0.55
+            quiet = item.get("quiet")
+            quiet = [str(x) for x in quiet] if isinstance(quiet, list) else []
             out.append({"id": str(item["id"]), "picture": picture, "similar": max(0.05, min(0.95, similar)),
-                        "zones": [z["id"] for z in zones if z["scene"] == str(item["id"])]})
+                        "zones": [z["id"] for z in zones if z["scene"] == str(item["id"])], "quiet": quiet})
         return out
 
     def wants_presses(self):
@@ -1593,13 +1606,26 @@ class Eyes:
                 self.daemon.emit("eyes", **self.summary())
 
     def live_zones(self):
-        """The zones that may fire now: those of every scene that is up;
-        with none recognised only those of scenes that have no picture to be
-        recognised by (and zones of no scene) – the rest stays quiet."""
+        """The zones that may fire now: those of every scene that is up,
+        unless their scene (or the zone itself) is to be quiet while one of
+        the other scenes up is there too; with none recognised only those of
+        scenes that have no picture to be recognised by (and zones of no
+        scene) – the rest stays quiet."""
         zones = self.zones()
-        pictured = {scene["id"] for scene in self.scenes()}
+        scenes = {scene["id"]: scene for scene in self.scenes()}
         up = set(self.up)
-        return [z for z in zones if z["scene"] in up or z["scene"] not in pictured]
+        out = []
+        for zone in zones:
+            scene = scenes.get(zone["scene"])
+            if scene is not None and zone["scene"] not in up:
+                continue
+            # quiet while another scene is up as well – the whole scene's, or the zone's own
+            if scene is not None and up.intersection(scene["quiet"]):
+                continue
+            if up.intersection(zone["unless"]):
+                continue
+            out.append(zone)
+        return out
 
     def fire(self, at, zone, trigger, reason, strength=0.5):
         key = (zone["id"], trigger["kind"])
@@ -1679,8 +1705,12 @@ class Eyes:
             quiet_since = self.zone_quiet.get(zone["id"], 0.0)
             if change >= 14 and moved < 1.0:
                 self.advance(at, "change", zone_id=zone["id"])
+            hovered = zone["id"] in self.inside
+            clicked = at - self.clicked_at.get(zone["id"], 0.0) < 1.5
             for trigger in zone["triggers"]:
                 kind, level = trigger["kind"], trigger["level"]
+                if (trigger["not_hover"] and hovered) or (trigger["not_click"] and clicked):
+                    continue
                 # a change counts once: the zone has to have been quiet for
                 # the trigger's calm time before (a menu sliding in, a bar
                 # filling is one change, not twenty)
@@ -1756,6 +1786,8 @@ class Eyes:
         for zone in self.live_zones():
             if not (zone["x"] <= fx <= zone["x"] + zone["w"] and zone["y"] <= fy <= zone["y"] + zone["h"]):
                 continue
+            if 272 <= code <= 279:
+                self.clicked_at[zone["id"]] = at
             for trigger in zone["triggers"]:
                 if trigger["kind"] != "click":
                     continue

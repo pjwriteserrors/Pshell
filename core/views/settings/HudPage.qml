@@ -104,6 +104,14 @@ SettingsPage {
 		return root.timeEntries([100, 200, 300, 500, 800, 1000, 1500, 2000, 3000], Number(step?.delay ?? 500));
 	}
 
+	// a picture reaction may stand back while the pointer is on the zone or right after a click on it
+	readonly property var unlessEntries: [
+		{ value: "", label: "whenever" },
+		{ value: "hover", label: "not while the pointer is on it", detail: "a button's highlight is not a change" },
+		{ value: "click", label: "not right after a click on it", detail: "1.5 s" },
+		{ value: "both", label: "neither hovered nor just clicked" }
+	]
+
 	// a press reaction may listen for a key of the keyboard too
 	function keyEntries(trigger) {
 		if (trigger?.kind === "click") return root.clickKeys;
@@ -702,6 +710,59 @@ SettingsPage {
 							}
 						}
 
+						// quiet while another scene is up too
+						ColumnLayout {
+							Layout.fillWidth: true
+							visible: root.scenes.length > 1
+							spacing: 6
+
+							RowLayout {
+								spacing: 6
+
+								Glyph {
+									icon: "volume_off"
+									size: 13
+									color: Theme.textSubtle
+								}
+
+								StyledText {
+									text: "Quiet while this is up too"
+									font.pixelSize: Theme.size.small
+									font.weight: Font.DemiBold
+									tone: Theme.textSubtle
+								}
+							}
+
+							Flow {
+								Layout.fillWidth: true
+								spacing: 5
+
+								Repeater {
+									model: root.scenes.filter(s => s.id !== (root.zone?.scene ?? ""))
+
+									delegate: Chip {
+										required property var modelData
+
+										readonly property bool quiet: (Mouse.hudList(root.zone?.unless) ?? []).includes(modelData.id)
+
+										text: modelData.name
+										icon: quiet ? "volume_off" : "image_outline"
+										selected: quiet
+										onClicked: Mouse.hudToggleUnless(root.zone.id, modelData.id)
+									}
+								}
+							}
+
+							StyledText {
+								Layout.fillWidth: true
+								visible: (Mouse.hudList(root.zone?.unless) ?? []).length > 0
+								text: "The zone keeps quiet as long as one of the marked scenes is recognised as well – the slots under an open inventory, the bar behind a dialog."
+								tone: Theme.textFaint
+								font.pixelSize: Theme.size.small
+								wrapMode: Text.WordWrap
+							}
+						}
+
 						// ── the reactions ──
 						RowLayout {
 							Layout.fillWidth: true
@@ -888,6 +949,16 @@ SettingsPage {
 												root.recording = -1;
 												Mouse.hudChangeTrigger(root.zone.id, trow.index, { key: String(value), keyName: "" });
 											}
+										}
+
+										Pick {
+											visible: trow.withLevel
+											entries: root.unlessEntries
+											current: String(trow.trigger.unless ?? "")
+											icon: "gesture_tap"
+											prefix: "but"
+											enabled: trow.on
+											onPicked: value => Mouse.hudChangeTrigger(root.zone.id, trow.index, { unless: String(value) })
 										}
 
 										Pick {
@@ -1625,6 +1696,45 @@ SettingsPage {
 				}
 			}
 		}
+			// the whole scene quiet while another is up too
+			RowLayout {
+				Layout.fillWidth: true
+				visible: !!root.scene && root.scenes.length > 1
+				spacing: 6
+
+				Glyph {
+					icon: "volume_off"
+					size: 13
+					color: Theme.textSubtle
+				}
+
+				StyledText {
+					text: "All its zones quiet while this is up too:"
+					font.pixelSize: Theme.size.small
+					tone: Theme.textSubtle
+				}
+
+				Flow {
+					Layout.fillWidth: true
+					spacing: 5
+
+					Repeater {
+						model: root.scenes.filter(s => s.id !== root.sceneId)
+
+						delegate: Chip {
+							required property var modelData
+
+							readonly property bool quiet: (Mouse.hudList(root.scene?.quiet) ?? []).includes(modelData.id)
+
+							text: modelData.name
+							icon: quiet ? "volume_off" : "image_outline"
+							selected: quiet
+							onClicked: Mouse.hudToggleQuiet(root.sceneId, modelData.id)
+						}
+					}
+				}
+			}
+
 	}
 
 	// ── the picture ───────────────────────────────────────────────────────

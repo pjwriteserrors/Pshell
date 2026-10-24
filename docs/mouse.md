@@ -264,7 +264,15 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
     picture do, the rest stays quiet. A
     `press` on a zone that also reacts to clicks leaves mouse buttons to
     the click. Every pulse and its reason goes to
-    `~/.cache/pshell/mouse-felt.log`. A zone **reacts** in several ways at once, each with
+    `~/.cache/pshell/mouse-felt.log`. A zone or a whole scene can be **quiet
+    while another scene is up too** (`zone.unless: [scene ids]`,
+    `scene.quiet: [scene ids]` – "Quiet while this is up too" on the page:
+    the slots under an open inventory are there, but not to be felt), and a
+    picture reaction can **stand back** while the pointer is on its zone or
+    for 1.5 s after a click on it (`trigger.unless`: "hover", "click",
+    "both" – "but not while the pointer is on it": a hovered button's own
+    highlight is then no change, and its hover and click reactions have the
+    say). A zone **reacts** in several ways at once, each with
     its own pattern (`feel`, a waveform name), gap (`every` ms, 150) and,
     where it applies, threshold (`level`; 0 = by itself): `change` (changed
     by ≥ 14; not while the whole picture moved), `press` (changed while a

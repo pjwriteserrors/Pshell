@@ -617,6 +617,25 @@ Singleton {
 		root.hudSaveZones(root.hudZones.map(z => z.id === id ? Object.assign({}, z, values) : z), label);
 	}
 
+	// quiet while another scene is up too: the zone's own list (`unless`)
+	// or the whole scene's (`quiet`) – the inventory open over the bar of
+	// slots: the slots are there, but not to be felt
+	function hudToggleUnless(id, sceneId) {
+		const zone = root.hudZones.find(z => z.id === id);
+		if (!zone) return;
+		const list = root.hudList(zone.unless) ?? [];
+		const next = list.includes(sceneId) ? list.filter(x => x !== sceneId) : list.concat([sceneId]);
+		root.hudSaveZones(root.hudZones.map(z => z.id === id ? Object.assign({}, z, { unless: next }) : z), "the zone's quiet rule");
+	}
+
+	function hudToggleQuiet(id, otherId) {
+		const scene = root.hudScenes.find(s => s.id === id);
+		if (!scene) return;
+		const list = root.hudList(scene.quiet) ?? [];
+		const next = list.includes(otherId) ? list.filter(x => x !== otherId) : list.concat([otherId]);
+		root.hudSaveScenes(root.hudScenes.map(s => s.id === id ? Object.assign({}, s, { quiet: next }) : s), "the scene's quiet rule");
+	}
+
 	function hudRemoveZone(id) {
 		root.hudSaveZones(root.hudZones.filter(z => z.id !== id), "the zone removed");
 	}
