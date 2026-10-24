@@ -9,20 +9,27 @@ import qs.style.widgets
 import qs.core.services
 import qs.core.views.settings
 
-// The HUD by hand (gamefeel.Eyes, options.hudZones[game]): zones drawn
-// on a picture of the game's window, each with its own condition – it
-// changes, it changes after a press (any, or one key), it turns red,
-// brightens, darkens – and its own pattern. Nothing is learned here; a
-// zone fires exactly when its condition holds. The picture comes from
-// window_shots.py (niri's cast of the window, nothing shown or asked);
-// the zones glow live with what eyes.py measures in them.
+// The HUD by hand (gamefeel.Eyes; the model lives in Mouse.qml: hudScenes,
+// hudZones). Scenes are pictures of the game as its HUD looks in a fight,
+// a dialog, exploring; zones are drawn on them – here on the picture, or on
+// the real screen like a screenshot (Screenshot.hud: the frozen game, every
+// box clicked or region dragged is a zone, Esc when done). Each zone has
+// its own condition – it changes, it changes after a press (any, or one
+// key), it turns red, brightens, darkens – and its own pattern. Nothing is
+// learned here: a zone fires exactly when its condition holds. The boxes
+// on a picture are found (scripts/mouse/hud_guess.py, the screenshot
+// tool's smart select) and offered under the cursor; "Suggest" marks the
+// ones that look like the HUD, a click takes one.
 ColumnLayout {
 	id: root
 
 	readonly property string game: Mouse.gameKey
 	readonly property int window: Mouse.gameWindow
-	readonly property var table: Mouse.option("hudZones", null) ?? ({})
-	readonly property var zones: Array.isArray(root.table[root.game]) ? root.table[root.game] : []
+	readonly property var scenes: Mouse.hudScenes
+	readonly property var scene: Mouse.hudScene
+	readonly property string sceneId: root.scene?.id ?? ""
+	readonly property var allZones: Mouse.hudZones
+	readonly property var zones: root.allZones.filter(z => (z.scene ?? "") === root.sceneId || (!z.scene && root.scenes.length <= 1))
 	readonly property var live: Mouse.eyes?.latest?.zones ?? ({})
 	readonly property var feels: ["SHARP COLLISION", "DAMP COLLISION", "SUBTLE COLLISION", "WHISPER COLLISION", "SHARP STATE CHANGE", "DAMP STATE CHANGE", "KNOCK"]
 	readonly property var whens: [
@@ -33,43 +40,26 @@ ColumnLayout {
 		{ value: "dark", label: "Darkens", icon: "weather_night" }
 	]
 	readonly property string shotDir: `${Paths.runtime}/hud`
-	property string shotFile: ""
-	property int shotRev: 0
+	readonly property string picture: String(root.scene?.picture ?? "")
 	property bool shooting: false
-	property bool open: root.zones.length > 0
+	property bool open: root.allZones.length > 0 || root.scenes.length > 0
 	// the zone being edited (its id), the one being redrawn, and the key recorder
 	property string selected: ""
 	property bool redrawing: false
 	property bool recording: false
 	// which zone fired last, for a flash
 	property string fired: ""
+	// the boxes found on the picture (fractions) and the suggested ones
+	property var boxes: []
+	property var suggested: []
+	property bool suggesting: false
+	property bool guessing: false
+	property string guessedFor: ""
 
-	readonly property var zone: root.zones.find(z => z.id === root.selected) ?? null
+	readonly property var zone: root.allZones.find(z => z.id === root.selected) ?? null
 
 	spacing: 8
-	visible: root.game !== "" || root.zones.length > 0
-
-	function save(list) {
-		const table = Object.assign({}, root.table);
-		if (list.length > 0) table[root.game] = list;
-		else delete table[root.game];
-		Mouse.setOption("hudZones", table);
-	}
-
-	function change(id, values) {
-		root.save(root.zones.map(z => z.id === id ? Object.assign({}, z, values) : z));
-	}
-
-	function remove(id) {
-		if (root.selected === id) root.selected = "";
-		root.save(root.zones.filter(z => z.id !== id));
-	}
-
-	function add(rect) {
-		const id = `z${Date.now().toString(36)}`;
-		root.save(root.zones.concat([Object.assign({ id, name: `Zone ${root.zones.length + 1}`, when: "change", key: "", feel: "SUBTLE COLLISION", level: 0, every: 150 }, rect)]));
-		root.selected = id;
-	}
+	visible: root.game !== "" || root.allZones.length > 0
 
 	function keyLabel(zone) {
 		const key = zone?.key ?? "";
@@ -83,13 +73,57 @@ ColumnLayout {
 		return root.whens.find(w => w.value === zone.when)?.label ?? zone.when;
 	}
 
-	// a picture of the game's window, once
+	function add(rect, values) {
+		root.selected = Mouse.hudAddZone(rect, values);
+	}
+
+	// the smallest found box under a point of the picture (fractions)
+	function boxAt(fx, fy) {
+		let best = null;
+		for (const b of root.boxes) {
+			if (fx >= b[0] && fx <= b[0] + b[2] && fy >= b[1] && fy <= b[1] + b[3]) {
+				if (!best || b[2] * b[3] < best[2] * best[3]) best = b;
+			}
+		}
+		return best;
+	}
+
+	// a picture of the game's window into the scene, once
 	function shoot() {
 		if (root.window <= 0 || root.shooting) return;
+		Mouse.hudSceneForDrawing();
 		root.shooting = true;
 		shots.running = false;
 		shots.running = true;
 		giveUp.restart();
+	}
+
+	// the boxes on the scene's picture
+	function guess() {
+		if (root.picture === "" || root.guessing) return;
+		root.guessing = true;
+		guesser.running = false;
+		guesser.command = ["python3", `${Paths.scripts}/mouse/hud_guess.py`, root.picture, JSON.stringify({ grid: Mouse.eyes?.grid ?? [], yours: Mouse.eyes?.hud?.yours ?? [] })];
+		guesser.running = true;
+	}
+
+	function reload() {
+		pictureImage.source = "";
+		pictureImage.source = root.picture ? `file://${root.picture}?${Mouse.hudPictureRev}` : "";
+	}
+
+	function recordKey(event) {
+		if (!root.recording || !root.zone) return;
+		if (event.key === Qt.Key_Escape) {
+			root.recording = false;
+			return;
+		}
+		const code = event.nativeScanCode - 8;
+		if (code <= 0) return;
+		let name = event.text && event.text.trim().length === 1 ? event.text.toUpperCase() : "";
+		if (!name) name = { [Qt.Key_Space]: "Space", [Qt.Key_Shift]: "Shift", [Qt.Key_Control]: "Ctrl", [Qt.Key_Alt]: "Alt", [Qt.Key_Tab]: "Tab" }[event.key] ?? `Key ${code}`;
+		Mouse.hudChangeZone(root.zone.id, { key: code, keyName: name });
+		root.recording = false;
 	}
 
 	// no picture in time (no cast to be had): zones can still be drawn
@@ -103,29 +137,26 @@ ColumnLayout {
 		}
 	}
 
-	function recordKey(event) {
-		if (!root.recording || !root.zone) return;
-		if (event.key === Qt.Key_Escape) {
-			root.recording = false;
-			return;
-		}
-		const code = event.nativeScanCode - 8;
-		if (code <= 0) return;
-		let name = event.text && event.text.trim().length === 1 ? event.text.toUpperCase() : "";
-		if (!name) name = { [Qt.Key_Space]: "Space", [Qt.Key_Shift]: "Shift", [Qt.Key_Control]: "Ctrl", [Qt.Key_Alt]: "Alt", [Qt.Key_Tab]: "Tab" }[event.key] ?? `Key ${code}`;
-		root.change(root.zone.id, { key: code, keyName: name });
-		root.recording = false;
+	onOpenChanged: if (root.open && root.picture === "" && root.scenes.length === 0) root.shoot()
+	onPictureChanged: {
+		root.boxes = [];
+		root.suggested = [];
+		root.suggesting = false;
+		root.reload();
 	}
-
-	onOpenChanged: if (root.open && root.shotFile === "") root.shoot()
-	onWindowChanged: if (root.open) root.shoot()
+	Component.onCompleted: root.reload()
 
 	Connections {
 		target: Mouse
 
+		function onHudPictureRevChanged() {
+			root.guessedFor = "";
+			root.reload();
+		}
+
 		function onFelt(source, kind, strength, wave, label, cluster) {
 			if (source !== "eyes" || kind !== "zone") return;
-			const hit = root.zones.find(z => z.name === label);
+			const hit = root.allZones.find(z => z.name === label);
 			if (!hit) return;
 			root.fired = hit.id;
 			firedOff.restart();
@@ -142,7 +173,7 @@ ColumnLayout {
 	Process {
 		id: shots
 
-		command: ["python3", `${Paths.scripts}/window_shots.py`, root.shotDir, "960", "0"]
+		command: ["python3", `${Paths.scripts}/window_shots.py`, root.shotDir, "1280", "0"]
 		stdinEnabled: true
 		onStarted: {
 			const raw = Niri.windowMap?.[String(root.window)] ?? Niri.windowMap?.[root.window];
@@ -159,12 +190,41 @@ ColumnLayout {
 					return;
 				}
 				if (Number(data.id) !== root.window) return;
-				root.shotFile = String(data.file);
-				root.shotRev += 1;
+				const scene = Mouse.hudSceneForDrawing();
+				if (scene?.picture) {
+					copier.command = ["sh", "-c", 'mkdir -p "$(dirname "$2")" && cp -f "$1" "$2"', "sh", String(data.file), String(scene.picture)];
+					copier.running = true;
+				}
 				root.shooting = false;
 				shots.running = false;
 			}
 		}
+	}
+
+	Process {
+		id: copier
+
+		onExited: Mouse.hudPictureRev += 1
+	}
+
+	Process {
+		id: guesser
+
+		stdout: StdioCollector {
+			onStreamFinished: {
+				root.guessing = false;
+				let data = null;
+				try {
+					data = JSON.parse(this.text);
+				} catch (error) {
+					return;
+				}
+				root.guessedFor = root.picture;
+				root.boxes = Array.isArray(data?.boxes) ? data.boxes : [];
+				root.suggested = Array.isArray(data?.suggested) ? data.suggested : [];
+			}
+		}
+		onExited: root.guessing = false
 	}
 
 	// takes the key while a zone records one
@@ -210,7 +270,7 @@ ColumnLayout {
 
 			StyledText {
 				visible: !root.open
-				text: root.zones.length > 0 ? `${root.zones.length} zone${root.zones.length === 1 ? "" : "s"} in ${root.game}` : (root.game ? root.game : "")
+				text: root.allZones.length > 0 ? `${root.allZones.length} zone${root.allZones.length === 1 ? "" : "s"}${root.scenes.length > 1 ? ` in ${root.scenes.length} scenes` : ""} – ${root.game}` : (root.game ? root.game : "")
 				font.pixelSize: Theme.size.small
 				tone: Theme.textFaint
 				elide: Text.ElideRight
@@ -224,21 +284,68 @@ ColumnLayout {
 		visible: root.open
 		spacing: 10
 
+		StyledText {
+			Layout.fillWidth: true
+			text: root.window > 0 ? `${root.game} – the surest way: "Draw on the screen" brings the game up and freezes it like a screenshot; click the boxes it finds (ammo counter, health bar, cast bar, hit marker) or drag over one, each is a zone, Esc when done. Or draw here on the picture. Each zone has its own condition and its own pattern; the learned part keeps running beside it.` : "No game window – start the game, then come back here (the picture is taken from its window)."
+			tone: Theme.textSubtle
+			font.pixelSize: Theme.size.small
+			wrapMode: Text.WordWrap
+		}
+
+		// ── scenes: a picture each ───────────────────────────────────────
 		RowLayout {
 			Layout.fillWidth: true
-			spacing: 10
+			spacing: 6
 
 			StyledText {
-				Layout.fillWidth: true
-				text: root.window > 0 ? `${root.game} – drag a box on the picture over the ammo counter, the health bar, the cast bar, the hit marker. Each zone has its own condition and its own pattern; the learned part keeps running beside it.` : "No game window – start the game, then come back here (the picture is taken from its window)."
-				tone: Theme.textSubtle
+				text: "Scene"
 				font.pixelSize: Theme.size.small
-				wrapMode: Text.WordWrap
+				tone: Theme.textFaint
+			}
+
+			Repeater {
+				model: root.scenes
+
+				delegate: Chip {
+					id: sceneChip
+
+					required property var modelData
+
+					readonly property int count: root.allZones.filter(z => z.scene === sceneChip.modelData.id).length
+
+					text: sceneChip.count > 0 ? `${sceneChip.modelData.name} · ${sceneChip.count}` : sceneChip.modelData.name
+					selected: root.sceneId === sceneChip.modelData.id
+					onClicked: {
+						Mouse.hudSceneId = sceneChip.modelData.id;
+						root.selected = "";
+					}
+				}
+			}
+
+			Chip {
+				text: "New scene"
+				icon: "plus"
+				onClicked: {
+					Mouse.hudAddScene("");
+					root.selected = "";
+				}
+			}
+
+			Item {
+				Layout.fillWidth: true
+			}
+
+			TextButton {
+				visible: root.window > 0 && Plugins.on("screenshot")
+				text: "Draw on the screen"
+				icon: "selection_drag"
+				variant: "tonal"
+				onActivated: Mouse.hudDraw()
 			}
 
 			TextButton {
 				visible: root.window > 0
-				text: root.shooting ? "Taking…" : "New picture"
+				text: root.shooting ? "Taking…" : (root.picture !== "" ? "New picture" : "Take a picture")
 				icon: "camera_outline"
 				variant: "text"
 				busy: root.shooting
@@ -246,30 +353,90 @@ ColumnLayout {
 			}
 		}
 
-		// the picture with the zones on it
+		// the scene's name and what to do with it
+		RowLayout {
+			Layout.fillWidth: true
+			visible: !!root.scene
+			spacing: 8
+
+			Field {
+				Layout.preferredWidth: 240
+				placeholder: "Scene name – fight, dialog, exploring"
+				icon: "image_outline"
+				text: root.scene?.name ?? ""
+				onEdited: text => {
+					if (root.scene && text.trim() !== "") Mouse.hudChangeScene(root.scene.id, { name: text.trim() });
+				}
+			}
+
+			TextButton {
+				text: root.guessing ? "Looking…" : (root.suggesting ? "Hide suggestions" : "Suggest zones")
+				icon: "auto_fix"
+				variant: "text"
+				busy: root.guessing
+				enabled: root.picture !== ""
+				onActivated: {
+					if (root.suggesting) {
+						root.suggesting = false;
+						return;
+					}
+					root.suggesting = true;
+					if (root.guessedFor !== root.picture) root.guess();
+				}
+			}
+
+			TextButton {
+				visible: root.suggesting && root.suggested.length > 0
+				text: `Add all ${root.suggested.length}`
+				icon: "plus"
+				variant: "text"
+				onActivated: {
+					for (const s of root.suggested) Mouse.hudAddZone({ x: s.x, y: s.y, w: s.w, h: s.h }, { name: s.name, when: s.when });
+					root.suggesting = false;
+				}
+			}
+
+			Item {
+				Layout.fillWidth: true
+			}
+
+			TextButton {
+				visible: root.scenes.length > 0
+				text: "Remove scene"
+				icon: "delete_outline"
+				variant: "text"
+				confirm: true
+				onActivated: {
+					Mouse.hudRemoveScene(root.sceneId);
+					root.selected = "";
+				}
+			}
+		}
+
+		// ── the picture with the zones on it ─────────────────────────────
 		Rectangle {
 			id: board
 
 			Layout.fillWidth: true
-			Layout.preferredHeight: Math.round(width * (picture.implicitHeight > 0 && picture.implicitWidth > 0 ? picture.implicitHeight / picture.implicitWidth : 9 / 16))
+			Layout.preferredHeight: Math.round(width * (pictureImage.implicitHeight > 0 && pictureImage.implicitWidth > 0 ? pictureImage.implicitHeight / pictureImage.implicitWidth : 9 / 16))
 			radius: Theme.radius.large
 			color: Theme.layer1
 			clip: true
 
 			Image {
-				id: picture
+				id: pictureImage
 
 				anchors.fill: parent
-				source: root.shotFile ? `file://${root.shotFile}?${root.shotRev}` : ""
 				fillMode: Image.PreserveAspectFit
 				cache: false
 				asynchronous: true
 				smooth: true
+				onStatusChanged: if (status === Image.Ready && root.guessedFor !== root.picture && root.picture !== "") root.guess()
 			}
 
 			StyledText {
 				anchors.centerIn: parent
-				visible: picture.status !== Image.Ready
+				visible: pictureImage.status !== Image.Ready
 				text: root.window > 0 ? (root.shooting ? "Taking a picture of the game's window…" : "No picture yet – zones can be drawn all the same") : "The game's picture appears here while it runs"
 				tone: Theme.textFaint
 				font.pixelSize: Theme.size.small
@@ -279,8 +446,8 @@ ColumnLayout {
 			Item {
 				id: canvas
 
-				readonly property real pw: picture.status === Image.Ready ? picture.paintedWidth : board.width
-				readonly property real ph: picture.status === Image.Ready ? picture.paintedHeight : board.height
+				readonly property real pw: pictureImage.status === Image.Ready ? pictureImage.paintedWidth : board.width
+				readonly property real ph: pictureImage.status === Image.Ready ? pictureImage.paintedHeight : board.height
 
 				x: (board.width - canvas.pw) / 2
 				y: (board.height - canvas.ph) / 2
@@ -294,7 +461,9 @@ ColumnLayout {
 					property real sy: 0
 					property real ex: 0
 					property real ey: 0
-					readonly property bool drawing: pressed
+					readonly property bool drawing: pressed && (Math.abs(ex - sx) >= 4 || Math.abs(ey - sy) >= 4)
+					// smart select: the smallest found box under the cursor
+					readonly property var snap: containsMouse && !pressed ? root.boxAt(mouseX / Math.max(1, width), mouseY / Math.max(1, height)) : null
 
 					anchors.fill: parent
 					cursorShape: Qt.CrossCursor
@@ -311,14 +480,20 @@ ColumnLayout {
 					onReleased: {
 						const x0 = Math.min(drawer.sx, drawer.ex), x1 = Math.max(drawer.sx, drawer.ex);
 						const y0 = Math.min(drawer.sy, drawer.ey), y1 = Math.max(drawer.sy, drawer.ey);
+						let rect = null;
 						if (x1 - x0 < 6 || y1 - y0 < 6) {
-							// a click on the picture: nothing selected
-							if (!root.redrawing) root.selected = "";
-							return;
+							// a click: the found box under it, else nothing selected
+							const best = root.boxAt(x0 / Math.max(1, width), y0 / Math.max(1, height));
+							if (!best) {
+								if (!root.redrawing) root.selected = "";
+								return;
+							}
+							rect = { x: best[0], y: best[1], w: best[2], h: best[3] };
+						} else {
+							rect = { x: x0 / width, y: y0 / height, w: (x1 - x0) / width, h: (y1 - y0) / height };
 						}
-						const rect = { x: x0 / width, y: y0 / height, w: (x1 - x0) / width, h: (y1 - y0) / height };
 						if (root.redrawing && root.zone) {
-							root.change(root.zone.id, rect);
+							Mouse.hudChangeZone(root.zone.id, rect);
 							root.redrawing = false;
 						} else {
 							root.add(rect);
@@ -326,9 +501,22 @@ ColumnLayout {
 					}
 				}
 
+				// the found box under the cursor
+				Rectangle {
+					visible: !!drawer.snap && !drawer.drawing
+					x: (drawer.snap?.[0] ?? 0) * canvas.width
+					y: (drawer.snap?.[1] ?? 0) * canvas.height
+					width: (drawer.snap?.[2] ?? 0) * canvas.width
+					height: (drawer.snap?.[3] ?? 0) * canvas.height
+					color: Qt.alpha(Theme.primary, 0.14)
+					border.width: 1.5
+					border.color: Theme.primary
+					radius: 2
+				}
+
 				// the box being drawn
 				Rectangle {
-					visible: drawer.drawing && Math.abs(drawer.ex - drawer.sx) >= 2
+					visible: drawer.drawing
 					x: Math.min(drawer.sx, drawer.ex)
 					y: Math.min(drawer.sy, drawer.ey)
 					width: Math.abs(drawer.ex - drawer.sx)
@@ -336,6 +524,54 @@ ColumnLayout {
 					color: Qt.alpha(Theme.primary, 0.2)
 					border.width: 1.5
 					border.color: Theme.primary
+				}
+
+				// suggested zones, a click takes one
+				Repeater {
+					model: root.suggesting ? root.suggested : []
+
+					delegate: Rectangle {
+						id: hint
+
+						required property var modelData
+
+						x: hint.modelData.x * canvas.width
+						y: hint.modelData.y * canvas.height
+						width: Math.max(4, hint.modelData.w * canvas.width)
+						height: Math.max(4, hint.modelData.h * canvas.height)
+						color: Qt.alpha(Theme.tertiary, 0.1)
+						border.width: 1.5
+						border.color: Theme.tertiary
+						radius: 2
+
+						MouseArea {
+							anchors.fill: parent
+							cursorShape: Qt.PointingHandCursor
+							onClicked: {
+								root.add({ x: hint.modelData.x, y: hint.modelData.y, w: hint.modelData.w, h: hint.modelData.h }, { name: hint.modelData.name, when: hint.modelData.when });
+								root.suggested = root.suggested.filter(s => s !== hint.modelData);
+							}
+						}
+
+						Rectangle {
+							anchors.left: parent.left
+							anchors.top: parent.bottom
+							anchors.topMargin: 2
+							width: hintTag.implicitWidth + 10
+							height: 16
+							radius: 4
+							color: Theme.tertiary
+
+							StyledText {
+								id: hintTag
+
+								anchors.centerIn: parent
+								text: `${hint.modelData.when === "press" ? "after a press" : "changes"} – take?`
+								font.pixelSize: Theme.size.small
+								color: Theme.onPrimary
+							}
+						}
+					}
 				}
 
 				Repeater {
@@ -405,13 +641,15 @@ ColumnLayout {
 		}
 
 		StyledText {
-			visible: root.zones.length === 0
-			text: "No zones yet. Drag a box on the picture."
+			Layout.fillWidth: true
+			visible: root.zones.length === 0 || (root.boxes.length > 0 && root.zones.length < 3)
+			text: root.boxes.length > 0 ? `${root.boxes.length} boxes found on the picture – one lights up under the cursor, a click takes it; or drag your own.` : "No zones in this scene yet. Drag a box on the picture, or draw on the screen."
 			tone: Theme.textFaint
 			font.pixelSize: Theme.size.small
+			wrapMode: Text.WordWrap
 		}
 
-		// every zone, one line each; the chosen one opens below
+		// every zone of the scene, one line each; the chosen one opens below
 		Repeater {
 			model: root.zones
 
@@ -512,7 +750,7 @@ ColumnLayout {
 						icon: "tag_outline"
 						text: root.zone?.name ?? ""
 						onEdited: text => {
-							if (root.zone && text.trim() !== "") root.change(root.zone.id, { name: text.trim() });
+							if (root.zone && text.trim() !== "") Mouse.hudChangeZone(root.zone.id, { name: text.trim() });
 						}
 					}
 
@@ -531,7 +769,11 @@ ColumnLayout {
 						text: "Remove"
 						icon: "delete_outline"
 						variant: "text"
-						onActivated: root.remove(root.zone.id)
+						onActivated: {
+							const id = root.zone.id;
+							root.selected = "";
+							Mouse.hudRemoveZone(id);
+						}
 					}
 				}
 
@@ -546,7 +788,7 @@ ColumnLayout {
 					Layout.fillWidth: true
 					options: root.whens
 					current: root.zone?.when ?? "change"
-					onSelected: value => root.change(root.zone.id, { when: value })
+					onSelected: value => Mouse.hudChangeZone(root.zone.id, { when: value })
 				}
 
 				RowLayout {
@@ -570,7 +812,7 @@ ColumnLayout {
 							selected: !root.recording && String(root.zone?.key ?? "") === modelData.key
 							onClicked: {
 								root.recording = false;
-								root.change(root.zone.id, { key: modelData.key, keyName: "" });
+								Mouse.hudChangeZone(root.zone.id, { key: modelData.key, keyName: "" });
 							}
 						}
 					}
@@ -633,7 +875,7 @@ ColumnLayout {
 							Layout.fillWidth: true
 							waveform: modelData
 							chosen: root.zone?.feel === modelData
-							onClicked: root.change(root.zone.id, { feel: modelData })
+							onClicked: Mouse.hudChangeZone(root.zone.id, { feel: modelData })
 						}
 					}
 				}
@@ -646,7 +888,7 @@ ColumnLayout {
 					label: "Needs a change of"
 					value: Number(root.zone?.level ?? 0)
 					format: v => v <= 0 ? "by itself" : `${Math.round(v)}`
-					onMoved: v => root.change(root.zone.id, { level: Math.round(v) })
+					onMoved: v => Mouse.hudChangeZone(root.zone.id, { level: Math.round(v) })
 				}
 
 				ValueSlider {
@@ -657,7 +899,7 @@ ColumnLayout {
 					icon: "timer_outline"
 					label: "At most every"
 					value: Number(root.zone?.every ?? 150)
-					onMoved: v => root.change(root.zone.id, { every: Math.round(v) })
+					onMoved: v => Mouse.hudChangeZone(root.zone.id, { every: Math.round(v) })
 				}
 
 				StyledText {

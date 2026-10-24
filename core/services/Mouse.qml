@@ -252,6 +252,155 @@ Singleton {
 	// the game's picture (gamefeel.Eyes): {on, window, frames, seen: {shake, hit, flash, hud, zone}, latest (with
 	// zones: {id: [change, red, bright]} for the zones drawn by hand), hud: {cells, yours}, zones: how many are drawn}
 	property var eyes: ({})
+	// ── the HUD by hand (settings/mouse/HudZones.qml, gamefeel.Eyes) ──────
+	// Per game: scenes – a picture each, of the HUD as it looks in a fight,
+	// a dialog, exploring (options.hudScenes[game]: [{id, name, picture}]) –
+	// and zones drawn on them (options.hudZones[game]: [{id, scene, name, x,
+	// y, w, h, when, key, feel, level, every}], fractions of the window).
+	// Every zone fires whatever scene is up; the scenes are for drawing.
+	readonly property var hudTable: root.option("hudZones", null) ?? ({})
+	readonly property var hudZones: Array.isArray(root.hudTable[root.gameKey]) ? root.hudTable[root.gameKey] : []
+	readonly property var hudSceneTable: root.option("hudScenes", null) ?? ({})
+	readonly property var hudScenes: Array.isArray(root.hudSceneTable[root.gameKey]) ? root.hudSceneTable[root.gameKey] : []
+	// the scene being drawn on (its id; "" → the first)
+	property string hudSceneId: ""
+	readonly property var hudScene: root.hudScenes.find(s => s.id === root.hudSceneId) ?? (root.hudScenes.length > 0 ? root.hudScenes[0] : null)
+	// a scene's picture changed on disk (the Image reloads)
+	property int hudPictureRev: 0
+	readonly property string hudDir: `${Paths.cache}/hud`
+	// zones picked on the frozen screen since the last draw began
+	property int hudDrawn: 0
+
+	function hudSafe(text) {
+		return String(text).replace(/[^A-Za-z0-9_.-]+/g, "_").slice(0, 60) || "game";
+	}
+
+	function hudSaveZones(list) {
+		const table = Object.assign({}, root.hudTable);
+		if (list.length > 0) table[root.gameKey] = list;
+		else delete table[root.gameKey];
+		root.setOption("hudZones", table);
+	}
+
+	function hudSaveScenes(list) {
+		const table = Object.assign({}, root.hudSceneTable);
+		if (list.length > 0) table[root.gameKey] = list;
+		else delete table[root.gameKey];
+		root.setOption("hudScenes", table);
+	}
+
+	// a scene: its picture lives in the cache, named by game and scene
+	function hudAddScene(name) {
+		const id = `s${Date.now().toString(36)}`;
+		const scene = { id, name: name || `Scene ${root.hudScenes.length + 1}`, picture: `${root.hudDir}/${root.hudSafe(root.gameKey)}-${id}.jpg` };
+		root.hudSaveScenes(root.hudScenes.concat([scene]));
+		root.hudSceneId = id;
+		return scene;
+	}
+
+	function hudChangeScene(id, values) {
+		root.hudSaveScenes(root.hudScenes.map(s => s.id === id ? Object.assign({}, s, values) : s));
+	}
+
+	// the scene goes with its zones and its picture
+	function hudRemoveScene(id) {
+		const scene = root.hudScenes.find(s => s.id === id);
+		if (scene?.picture) Quickshell.execDetached(["rm", "-f", String(scene.picture)]);
+		root.hudSaveZones(root.hudZones.filter(z => z.scene !== id));
+		root.hudSaveScenes(root.hudScenes.filter(s => s.id !== id));
+		if (root.hudSceneId === id) root.hudSceneId = "";
+	}
+
+	// the scene to draw on: the current one, made when there is none
+	function hudSceneForDrawing() {
+		return root.hudScene ?? root.hudAddScene("");
+	}
+
+	function hudAddZone(rect, values) {
+		const scene = root.hudSceneForDrawing();
+		const id = `z${Date.now().toString(36)}${root.hudZones.length}`;
+		const zone = Object.assign({ id, scene: scene.id, name: `Zone ${root.hudZones.length + 1}`, when: "change", key: "", feel: "SUBTLE COLLISION", level: 0, every: 150 }, rect, values ?? {});
+		root.hudSaveZones(root.hudZones.concat([zone]));
+		return id;
+	}
+
+	function hudChangeZone(id, values) {
+		root.hudSaveZones(root.hudZones.map(z => z.id === id ? Object.assign({}, z, values) : z));
+	}
+
+	function hudRemoveZone(id) {
+		root.hudSaveZones(root.hudZones.filter(z => z.id !== id));
+	}
+
+	// where the game's window sits on its output, logical px (a fullscreen
+	// game: the whole output)
+	function hudWindowRect() {
+		const raw = Niri.windowMap?.[String(root.gameWindow)] ?? Niri.windowMap?.[root.gameWindow];
+		const layout = raw?.layout ?? {};
+		const size = layout.window_size ?? [0, 0];
+		const tile = layout.tile_pos_in_workspace_view ?? [0, 0];
+		const offset = layout.window_offset_in_tile ?? [0, 0];
+		let width = Number(size[0]) || 0, height = Number(size[1]) || 0;
+		if (width <= 0 || height <= 0) {
+			const ws = Niri.workspaces.find(w => Number(w.id) === Number(raw?.workspace_id));
+			const screen = Quickshell.screens.find(s => String(s.name) === String(ws?.output ?? ""));
+			width = Number(screen?.width ?? 1920);
+			height = Number(screen?.height ?? 1080);
+		}
+		return Qt.rect(Number(tile[0]) + Number(offset[0]), Number(tile[1]) + Number(offset[1]), width, height);
+	}
+
+	// draw zones on the real screen: the game's window comes to the front,
+	// then it is frozen like a screenshot (Screenshot.hud) and every box
+	// clicked or region dragged is a zone of the current scene; the frozen
+	// window becomes the scene's picture
+	function hudDraw() {
+		if (root.gameWindow <= 0 || !Plugins.on("screenshot")) return false;
+		root.hudSceneForDrawing();
+		root.hudDrawn = 0;
+		Niri.focusWindow(root.gameWindow);
+		hudDrawTimer.restart();
+		return true;
+	}
+
+	Timer {
+		id: hudDrawTimer
+
+		interval: 650
+		onTriggered: {
+			const scene = root.hudScene;
+			if (!scene) return;
+			Screenshot.hud(root.gameWindow, root.hudWindowRect(), String(scene.picture ?? ""));
+		}
+	}
+
+	Connections {
+		target: Screenshot
+
+		function onHudPicked(output, logical) {
+			const win = root.hudWindowRect();
+			if (win.width <= 0 || win.height <= 0) return;
+			const clamp = v => Math.max(0, Math.min(1, v));
+			const x0 = clamp((logical.x - win.x) / win.width), y0 = clamp((logical.y - win.y) / win.height);
+			const x1 = clamp((logical.x + logical.width - win.x) / win.width), y1 = clamp((logical.y + logical.height - win.y) / win.height);
+			if (x1 - x0 < 0.003 || y1 - y0 < 0.003) return;
+			root.hudAddZone({ x: Math.round(x0 * 10000) / 10000, y: Math.round(y0 * 10000) / 10000, w: Math.round((x1 - x0) * 10000) / 10000, h: Math.round((y1 - y0) * 10000) / 10000 });
+			root.hudDrawn += 1;
+		}
+
+		function onHudPicture(path) {
+			hudPictureSettle.restart();
+		}
+	}
+
+	// magick needs a moment to write the picture
+	Timer {
+		id: hudPictureSettle
+
+		interval: 900
+		onTriggered: root.hudPictureRev += 1
+	}
+
 	// a sound that should not have been felt: never again (-1: the last one)
 	function muteSound(cluster) {
 		root.send({ op: "mute", cluster: cluster ?? -1 });

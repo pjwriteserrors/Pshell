@@ -236,26 +236,41 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
     (SUBTLE COLLISION, at most every 120 ms). Nothing while the pad
     rumbled just now. The sound and the picture often say the same thing
     at once: the daemon plays at most one pulse per 50 ms.
-  - *The HUD by hand* (`hudZones`: `{<game key>: [{id, name, x, y, w, h,
-    when, key, feel, level, every}]}`, the page's "The HUD by hand"
-    section under the picture lane): zones drawn on a picture of the game's
-    window (one shot through `window_shots.py`, 960 px wide, into
-    `$PSHELL_RUNTIME_DIR/hud/`; "New picture" takes another; zones can be
-    drawn without one), as fractions of the window, so they hold at any
-    size. The daemon sends them to eyes.py (`{"zones": […]}` on its stdin),
-    which measures each one on the small frame – its mean change, its
-    change in redness and in brightness – and the daemon fires the zone's
-    own pattern (`feel`, a waveform name) when its condition holds:
-    `change` (changed by ≥ `level`, 14 by itself; not while the whole
-    picture moved – the world behind a see-through HUD), `press` (changed
-    while a press of yours is fresh – any, or `key`: `BTN_LEFT`-style name
-    or an evdev code), `red` (≥ 8), `bright` (≥ 20), `dark` (≤ −20); at
-    most every `every` ms (150). Nothing is learned here: a zone fires
-    exactly when its condition holds, the learned part keeps running
-    beside it. The zones glow on the page with what is measured in them,
-    light up when they fire, and their numbers show live (`eyes` event,
-    `latest.zones`, 5 Hz while the page watches); a zone's row plays its
-    pattern on the mouse.
+  - *The HUD by hand* (`hudScenes`: `{<game key>: [{id, name, picture}]}`,
+    `hudZones`: `{<game key>: [{id, scene, name, x, y, w, h, when, key,
+    feel, level, every}]}`; the page's "The HUD by hand" section under the
+    picture lane, model in `Mouse.qml`): **scenes** are pictures of the
+    game as its HUD looks in a fight, a dialog, exploring
+    (`$XDG_CACHE_HOME/pshell/hud/<game>-<scene>.jpg`), **zones** are drawn
+    on them as fractions of the window, so they hold at any size; every
+    zone fires whatever scene is up, the scenes are for drawing. Three ways
+    to draw: *on the real screen* ("Draw on the screen", `ipc mouse hud`
+    for a keybind in the game) – the game's window comes to the front and
+    is frozen like a screenshot (`Screenshot.hud`, mode `hud` of the
+    screenshot overlay: the boxes `detect_boxes.py` finds light up under
+    the cursor, a click takes one, a drag takes a region, every pick is a
+    zone of the current scene, Esc when done; the window's part of the
+    frozen frame becomes the scene's picture); *on the picture* in the
+    settings (one shot through `window_shots.py`, same smart select:
+    `scripts/mouse/hud_guess.py` finds the boxes on the picture, the
+    smallest under the cursor is offered, a drag draws your own);
+    *suggested* – `hud_guess.py` marks the boxes that look like the HUD
+    (small, near an edge or corner, not a sliver; a box over a cell the
+    game taught as yours comes first and with `when` "press"), a click
+    takes one, "Add all" the lot. The daemon sends the zones to eyes.py
+    (`{"zones": […]}` on its stdin), which measures each one on the small
+    frame – its mean change, its change in redness and in brightness –
+    and the daemon fires the zone's own pattern (`feel`, a waveform name)
+    when its condition holds: `change` (changed by ≥ `level`, 14 by
+    itself; not while the whole picture moved – the world behind a
+    see-through HUD), `press` (changed while a press of yours is fresh –
+    any, or `key`: `BTN_LEFT`-style name or an evdev code), `red` (≥ 8),
+    `bright` (≥ 20), `dark` (≤ −20); at most every `every` ms (150).
+    Nothing is learned here: a zone fires exactly when its condition
+    holds, the learned part keeps running beside it. The zones glow on the
+    page with what is measured in them, light up when they fire, and their
+    numbers show live (`eyes` event, `latest.zones`, 5 Hz while the page
+    watches); a zone's row plays its pattern on the mouse.
   - A known sound keeps its pattern: the waveform is fixed the first time
     a cluster is felt as yours (`wave`), so the same shot feels the same
     every time; only new sounds play by strength.

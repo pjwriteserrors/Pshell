@@ -1197,6 +1197,8 @@ class Eyes:
         self.zone_last = {}
         self.zone_values = {}
         self.told = 0.0
+        # the cells' grid [cols, rows] of the small frame
+        self.grid = []
 
     def options(self):
         return self.daemon.config["options"]
@@ -1320,6 +1322,8 @@ class Eyes:
         moved = math.hypot(dx, dy)
         self.shifts.append((at, dx, dy))
         self.latest = {"dx": dx, "dy": dy, "dred": data.get("dred", 0), "dbright": data.get("dbright", 0), "cells": len(data.get("cells") or [])}
+        if isinstance(data.get("grid"), list):
+            self.grid = data["grid"]
         measured = data.get("zones")
         if isinstance(measured, dict):
             self.zone_values = measured
@@ -1424,4 +1428,4 @@ class Eyes:
 
     def summary(self):
         return {"on": self.on, "window": self.window, "frames": self.frames, "seen": self.seen, "latest": self.latest,
-                "hud": self.memory.cells_summary() if self.memory.entry else {}, "zones": len(self.zones())}
+                "hud": self.memory.cells_summary() if self.memory.entry else {}, "zones": len(self.zones()), "grid": self.grid}

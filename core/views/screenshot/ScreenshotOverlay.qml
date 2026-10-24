@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Effects
+import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
@@ -171,6 +172,12 @@ PanelWindow {
 			const key = event.key;
 			if (key === Qt.Key_Escape || key === Qt.Key_Q) {
 				Screenshot.cancel();
+			} else if (root.mode === "hud") {
+				// zones only: Enter is done, Space moves, the arrows walk the boxes
+				if (key === Qt.Key_Return || key === Qt.Key_Enter) Screenshot.cancel();
+				else if (key === Qt.Key_Space) selector.moving = true;
+				else if ((key === Qt.Key_Up || key === Qt.Key_Down) && selector.snapping) selector.stepSnap(key === Qt.Key_Up ? 1 : -1);
+				else return;
 			} else if (key === Qt.Key_Tab || key === Qt.Key_Backtab) {
 				const step = key === Qt.Key_Backtab || (event.modifiers & Qt.ShiftModifier) ? -1 : 1;
 				Screenshot.mode = order[(order.indexOf(root.mode) + step + order.length) % order.length];
@@ -215,7 +222,7 @@ PanelWindow {
 		Item {
 			id: selector
 
-			readonly property bool regionMode: root.mode === "region" || root.mode === "ocr" || root.mode === "pin" || root.mode === "live" || root.mode === "qr" || root.mode === "scroll"
+			readonly property bool regionMode: root.mode === "region" || root.mode === "ocr" || root.mode === "pin" || root.mode === "live" || root.mode === "qr" || root.mode === "scroll" || root.mode === "hud"
 			// picker mode: a drag takes a palette instead of a single colour
 			readonly property bool paletteDrag: root.mode === "picker" && selector.hasSelection
 			property bool dragging: false
@@ -314,6 +321,8 @@ PanelWindow {
 				if (!target || output !== root.name) return;
 				if (root.mode === "window") {
 					Screenshot.selectWindow(root.name);
+				} else if (root.mode === "hud") {
+					return;
 				} else if (root.mode !== "picker") {
 					Screenshot.selectRegion(root.name, Qt.rect(0, 0, frozen.implicitWidth, frozen.implicitHeight), Qt.rect(0, 0, root.width, root.height));
 				}
@@ -889,9 +898,28 @@ PanelWindow {
 					anchors.centerIn: parent
 					spacing: 8
 
+					// HUD zones for the mouse: no modes, a word on what to do
+					RowLayout {
+						visible: root.mode === "hud"
+						height: 36
+						spacing: 8
+
+						Glyph {
+							icon: "gamepad_variant"
+							size: 16
+							color: Theme.primary
+						}
+
+						StyledText {
+							text: "HUD zones – click a box or drag over one; every pick is a zone, Esc when done"
+							font.pixelSize: Theme.size.small
+						}
+					}
+
 					Segmented {
 						id: modes
 
+						visible: root.mode !== "hud"
 						implicitWidth: options.length * 92
 						height: 36
 						current: root.mode
@@ -912,7 +940,7 @@ PanelWindow {
 					// delayed capture: picking a delay drops this frame and
 					// freezes again once the countdown is over
 					Segmented {
-						visible: Plugins.on("delayed-screenshot")
+						visible: Plugins.on("delayed-screenshot") && root.mode !== "hud"
 						implicitWidth: 4 * 46
 						height: 36
 						current: String(Screenshot.delaySeconds)

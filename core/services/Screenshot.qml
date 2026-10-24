@@ -76,8 +76,30 @@ Singleton {
 	property bool editFromFrozen: false
 
 	// the plugin behind a mode; region, screen and window are the screenshot itself
-	readonly property var modePlugins: ({ pin: "pins", live: "live-pins", picker: "color-picker", ocr: "ocr", qr: "qr", scroll: "scroll-screenshot" })
+	readonly property var modePlugins: ({ pin: "pins", live: "live-pins", picker: "color-picker", ocr: "ocr", qr: "qr", scroll: "scroll-screenshot", hud: "mouse" })
+	// hud is not among them: it is entered from the mouse's game haptics only
 	readonly property var modes: ["region", "screen", "window", "pin", "live", "picker", "ocr", "qr", "scroll"].filter(mode => root.offers(mode))
+
+	// ── HUD zones for the mouse's game haptics (core/services/Mouse.qml) ──
+	// The game's window is frozen like any screenshot; every box clicked or
+	// region dragged on it is a zone (hudPicked, logical px of the output),
+	// the frame stays up for the next one until Esc. The window's part of
+	// the frozen frame goes out once as the scene's picture (hudPicture).
+	property int hudWindow: 0
+	property string hudPictureOut: ""
+	property rect hudWindowRect: Qt.rect(0, 0, 0, 0)
+	signal hudPicked(string output, rect logical)
+	signal hudPicture(string path)
+
+	// windowRect: where the window sits on its output, logical px
+	function hud(windowId, windowRect, pictureOut) {
+		if (root.phase !== "idle" || !root.offers("hud")) return;
+		root.hudWindow = Number(windowId);
+		root.hudWindowRect = windowRect;
+		root.hudPictureOut = String(pictureOut || "");
+		root.delaySeconds = 0;
+		root.begin("hud");
+	}
 
 	function offers(mode) {
 		const plugin = root.modePlugins[mode];
@@ -316,6 +338,16 @@ Singleton {
 			for (const output of freezeProc.outputs)
 				map[output] = `${root.tmpDir}/frozen-${root.session}-${output}.ppm`;
 			root.frozen = map;
+			if (root.mode === "hud" && root.hudPictureOut !== "") {
+				const output = root.outputOfWindow(root.hudWindow);
+				const screen = Quickshell.screens.find(s => String(s.name) === output);
+				const scale = Number(screen?.devicePixelRatio || 1);
+				const r = root.hudWindowRect;
+				if (map[output] && r.width > 0 && r.height > 0)
+					Quickshell.execDetached(["sh", "-c", 'mkdir -p "$(dirname "$6")" && magick "$1" -crop "${4}x${5}+${2}+${3}" +repage -resize "1280x>" "$6"', "sh", map[output],
+						String(Math.round(r.x * scale)), String(Math.round(r.y * scale)), String(Math.round(r.width * scale)), String(Math.round(r.height * scale)), root.hudPictureOut]);
+				root.hudPicture(root.hudPictureOut);
+			}
 			if (root.mode === "screen") {
 				root.openEditor(root.activeScreen, map[root.activeScreen], null, true);
 				Haptics.play("captured");
@@ -473,6 +505,13 @@ Singleton {
 		}
 		if (root.mode === "scroll") {
 			root.startScroll(output, logical);
+			return;
+		}
+		if (root.mode === "hud") {
+			// the whole screen is no zone; the frame stays for the next one
+			if (logical.width >= root.hudWindowRect.width - 2 && logical.height >= root.hudWindowRect.height - 2) return;
+			Haptics.play("captured");
+			root.hudPicked(output, logical);
 			return;
 		}
 		Haptics.play("captured");

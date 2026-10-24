@@ -312,6 +312,10 @@ Scope {
 		// game haptics: `mouse feel no` – the sound just felt was not an
 		// action, never feel it again; `mouse feel forget` starts the game over
 		// `mouse feel record` keeps 2 minutes of the game's sound and presses for tuning
+		// draw HUD zones for the game haptics on the real screen (a keybind in the game)
+		function hud(): void {
+			Mouse.hudDraw();
+		}
 		function feel(what: string): void {
 			if (what === "forget") Mouse.forgetGame();
 			else if (what === "record") Mouse.recordEars(120);
