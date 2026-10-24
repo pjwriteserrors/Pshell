@@ -1307,6 +1307,10 @@ class Eyes:
         self.scores = {}
         self.scene = ""
         self.scene_since = 0.0
+        # the scenes recognised now – several at once (an inventory open
+        # over the bar of slots) – and each zone's own likeness
+        self.up = []
+        self.alike = {}
         # the pointer (hover and click zones) and which zones it is in
         self.pointer = Pointer(daemon)
         self.inside = set()
@@ -1457,7 +1461,7 @@ class Eyes:
             self.pointer.stop()
             self.on = False
             self.window = 0
-            self.scene, self.scores = "", {}
+            self.scene, self.scores, self.up, self.alike = "", {}, [], {}
             self.daemon.tell_eyes()
         if self.proc is not None and self.daemon.game_window != self.window:
             self.window = self.daemon.game_window
@@ -1512,7 +1516,7 @@ class Eyes:
         if isinstance(data.get("grid"), list):
             self.grid = data["grid"]
         if isinstance(data.get("scenes"), dict):
-            self.recognise(data["scenes"], at)
+            self.recognise(data["scenes"], at, data.get("alike"))
         measured = data.get("zones")
         if isinstance(measured, dict):
             self.zone_values = measured
@@ -1559,36 +1563,43 @@ class Eyes:
                     self.last["hud"] = at
                     self.event("hud", 0.5, "HUD", f"cell {yours[0]} of the HUD changed after " + ", ".join(key_name(code) for code, _ in fresh[:2]), cells=yours)
 
-    def recognise(self, scores, at):
-        """The scene that is up: the best likeness above its own bar, kept
-        until another beats it clearly or it falls well under."""
+    def recognise(self, scores, at, alike=None):
+        """The scenes that are up: every scene whose likeness is above its
+        own bar, each on its own – the HUD of the inventory and the bar of
+        slots under it are both there – kept while it stays within 0.1
+        under the bar. `scene` is the best of them, for the log."""
         self.scores = scores
+        if isinstance(alike, dict):
+            self.alike = alike
         scenes = {scene["id"]: scene for scene in self.scenes()}
-        best, best_score = "", 0.0
-        for scene_id, score in scores.items():
-            scene = scenes.get(scene_id)
-            if scene and score >= scene["similar"] and score > best_score:
-                best, best_score = scene_id, float(score)
-        current = self.scene
-        if current and current in scenes and current in scores:
-            held = float(scores[current])
-            if held >= scenes[current]["similar"] - 0.1 and best_score < held + 0.1:
-                best = current
-        if best != current:
+        was = set(self.up)
+        up = []
+        for scene_id, scene in scenes.items():
+            if scene_id not in scores:
+                continue
+            score = float(scores[scene_id])
+            bar = scene["similar"] - (0.1 if scene_id in was else 0.0)
+            if score >= bar:
+                up.append(scene_id)
+        up.sort(key=lambda scene_id: -float(scores[scene_id]))
+        best = up[0] if up else ""
+        if up != self.up or best != self.scene:
+            changed = set(up) != was
+            self.up = up
             self.scene = best
-            self.scene_since = at
+            if changed:
+                self.scene_since = at
             if self.daemon.watching:
                 self.daemon.emit("eyes", **self.summary())
 
     def live_zones(self):
-        """The zones that may fire now: the scene's that is up; with none
-        recognised only those of scenes that have no picture to be
+        """The zones that may fire now: those of every scene that is up;
+        with none recognised only those of scenes that have no picture to be
         recognised by (and zones of no scene) – the rest stays quiet."""
         zones = self.zones()
         pictured = {scene["id"] for scene in self.scenes()}
-        if self.scene:
-            return [z for z in zones if z["scene"] == self.scene or z["scene"] not in pictured]
-        return [z for z in zones if z["scene"] not in pictured]
+        up = set(self.up)
+        return [z for z in zones if z["scene"] in up or z["scene"] not in pictured]
 
     def fire(self, at, zone, trigger, reason, strength=0.5):
         key = (zone["id"], trigger["kind"])
@@ -1770,7 +1781,7 @@ class Eyes:
     def event(self, kind, strength, label, reason, cells=None, zone=None, trigger=None):
         self.seen[kind] = self.seen.get(kind, 0) + 1
         waveform = trigger["feel"] if trigger else wave_for(kind, strength)
-        felt_log(f"eyes {kind} {waveform} | {reason} | scene={self.scene or '-'}")
+        felt_log(f"eyes {kind} {waveform} | {reason} | up={','.join(self.up) or '-'}")
         self.daemon.felt("eyes", kind, strength, waveform, label, stream=zone["id"] if zone else "")
         if self.daemon.watching:
             self.daemon.emit("onset", source="eyes", at=round(time.monotonic(), 3), cluster=(cells or [-1])[0], n=0, win=0,
@@ -1780,4 +1791,5 @@ class Eyes:
     def summary(self):
         return {"on": self.on, "window": self.window, "frames": self.frames, "seen": self.seen, "latest": self.latest,
                 "hud": self.memory.cells_summary() if self.memory.entry else {}, "zones": len(self.zones()), "grid": self.grid,
-                "scene": self.scene, "scores": self.scores, "pointer": self.pointer.ok}
+                "scene": self.scene, "up": list(self.up), "scores": self.scores, "alike": self.alike,
+                "pointer": self.pointer.ok}

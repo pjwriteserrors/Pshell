@@ -27,6 +27,29 @@ SettingsPage {
 	description: Mouse.gameKey !== "" ? `${Mouse.gameKey} – draw where the HUD is, say what each zone reacts to and how it feels. The game's picture is watched at 20 fps; a zone fires exactly when its condition holds.` : "Zones on the game's HUD that the mouse feels. Start a game, then come back: its window is pictured here."
 	asideWidth: Math.min(400, Math.max(320, root.width * 0.3))
 
+	// undo and redo of everything done here – zones, scenes, reactions, sequences
+	headerTrailing: RowLayout {
+		spacing: 6
+
+		TextButton {
+			text: Mouse.hudUndoLabel !== "" ? `Undo ${Mouse.hudUndoLabel}` : "Undo"
+			icon: "undo"
+			variant: Mouse.hudUndoLabel !== "" ? "tonal" : "text"
+			enabled: Mouse.hudUndoLabel !== ""
+			opacity: enabled ? 1 : 0.45
+			onActivated: Mouse.hudUndo()
+		}
+
+		IconButton {
+			Layout.preferredWidth: 34
+			Layout.preferredHeight: 34
+			icon: "redo"
+			enabled: Mouse.hudRedoLabel !== ""
+			opacity: enabled ? 1 : 0.45
+			onClicked: Mouse.hudRedo()
+		}
+	}
+
 	readonly property string game: Mouse.gameKey
 	readonly property int window: Mouse.gameWindow
 	readonly property var scenes: Mouse.hudScenes
@@ -59,12 +82,50 @@ SettingsPage {
 	readonly property var triggers: Mouse.hudTriggers(root.zone)
 	// the name field for keeping the zone's reactions as a sequence is open
 	property bool naming: false
-	// the sequence library is unfolded
-	property bool library: false
-	// the sequence kept or used last, for a flash on its row
+	// the sequence kept or used last, for a flash on its row; the one being renamed
 	property string presetFlash: ""
+	property string renaming: ""
+	// each zone's own likeness to the scene's picture, live
+	readonly property var alike: Mouse.hudAlike
+	readonly property var liveScenes: Mouse.hudLiveScenes
 
-	onSelectedChanged: root.naming = false
+	// the pickers' entries
+	readonly property var clickKeys: [{ value: "", label: "Any button" }, { value: "BTN_LEFT", label: "Left button" }, { value: "BTN_RIGHT", label: "Right button" }, { value: "BTN_MIDDLE", label: "Middle button" }]
+	readonly property var pressKeys: [{ value: "", label: "Any press" }, { value: "BTN_LEFT", label: "Left click" }, { value: "BTN_RIGHT", label: "Right click" }]
+	// times to pick from; a value set otherwise (an older zone's) is offered too
+	function timeEntries(choices, current) {
+		const list = choices.includes(current) ? choices : choices.concat([current]).sort((a, b) => a - b);
+		return list.map(ms => ({ value: String(ms), label: ms >= 1000 ? `${ms / 1000} s` : `${ms} ms` }));
+	}
+	function withinEntries(step) {
+		return root.timeEntries([1000, 2000, 3000, 5000, 8000, 10000, 15000], Number(step?.within ?? 5000));
+	}
+	function delayEntries(step) {
+		return root.timeEntries([100, 200, 300, 500, 800, 1000, 1500, 2000, 3000], Number(step?.delay ?? 500));
+	}
+
+	// a press reaction may listen for a key of the keyboard too
+	function keyEntries(trigger) {
+		if (trigger?.kind === "click") return root.clickKeys;
+		const list = root.pressKeys.slice();
+		if (typeof trigger?.key === "number") list.push({ value: String(trigger.key), label: `Key ${root.keyLabel(trigger)}` });
+		list.push({ value: "record", label: root.recording >= 0 ? "Press a key…" : "A key of the keyboard…", detail: "press it next" });
+		return list;
+	}
+
+	// the fine-tuning in a few words, as the picker that unfolds it shows
+	function summaryEntries(trigger) {
+		const parts = [];
+		if (Number(trigger?.level ?? 0) > 0) parts.push(`needs ${trigger.level}`);
+		parts.push(`every ${Number(trigger?.every ?? 150)} ms`);
+		if ((trigger?.kind === "change" || trigger?.kind === "press") && Number(trigger?.calm ?? 250) > 0) parts.push(`calm ${Number(trigger.calm ?? 250)} ms`);
+		return [{ value: "summary", label: parts.join(" · ") }];
+	}
+
+	onSelectedChanged: {
+		root.naming = false;
+		root.renaming = "";
+	}
 
 	// what a sequence does, in a few words: "hovered, clicked → a click anywhere"
 	function presetSummary(preset) {
@@ -100,6 +161,83 @@ SettingsPage {
 
 	function describe(zone) {
 		return Mouse.hudTriggers(zone).filter(t => t.on !== false).map(t => root.kindOf(t.kind).label.toLowerCase()).join(", ") || "reacts to nothing";
+	}
+
+	// a pill that names the choice and opens a list on click: entries
+	// [{value, label, icon, detail}]; a prefix reads like a sentence
+	// ("feels Knock", "on Left click"); strong is the card's heading
+	component Pick: Clickable {
+		id: pick
+
+		property var entries: []
+		property string current: ""
+		property string icon: ""
+		property string prefix: ""
+		property string fallback: "–"
+		property bool strong: false
+		property bool accent: false
+
+		signal picked(var value)
+
+		readonly property var entry: (pick.entries ?? []).find(e => String(e.value) === String(pick.current)) ?? null
+
+		implicitHeight: 28
+		implicitWidth: pickRow.implicitWidth + 20
+		radius: 14
+		pressedScale: 0.95
+		tint: pick.accent ? Theme.onPrimary : Theme.text
+		color: pick.accent ? Theme.primary : (pick.strong ? Theme.primarySoft : Theme.layer1)
+		opacity: pick.enabled ? 1 : 0.5
+		onClicked: pickList.open()
+
+		Behavior on color {
+			ColorAnim {}
+		}
+
+		RowLayout {
+			id: pickRow
+
+			anchors.centerIn: parent
+			spacing: 5
+
+			Glyph {
+				visible: pick.icon !== ""
+				icon: pick.icon
+				size: 13
+				color: pick.accent ? Theme.onPrimary : (pick.strong ? Theme.primary : Theme.textSubtle)
+			}
+
+			StyledText {
+				visible: pick.prefix !== ""
+				text: pick.prefix
+				font.pixelSize: Theme.size.small
+				tone: pick.accent ? Theme.onPrimary : Theme.textFaint
+			}
+
+			StyledText {
+				text: pick.entry?.label ?? pick.fallback
+				font.pixelSize: Theme.size.small
+				font.weight: pick.strong ? Font.DemiBold : Font.Normal
+				tone: pick.accent ? Theme.onPrimary : Theme.text
+			}
+
+			Glyph {
+				icon: "chevron_down"
+				size: 11
+				color: pick.accent ? Theme.onPrimary : Theme.textFaint
+			}
+		}
+
+		PickList {
+			id: pickList
+
+			y: pick.height + 4
+			margins: 8
+			width: Math.min(320, Math.max(220, root.asideWidth - 48))
+			entries: pick.entries ?? []
+			current: pick.current
+			onPicked: value => pick.picked(value)
+		}
 	}
 
 	function add(rect, values) {
@@ -368,7 +506,7 @@ SettingsPage {
 							Layout.fillWidth: true
 							implicitHeight: sceneUp.implicitHeight + 24
 							radius: Theme.radius.large
-							color: root.liveScene !== "" ? Theme.primaryContainer : Theme.layer2
+							color: root.liveScenes.length > 0 ? Theme.primaryContainer : Theme.layer2
 
 							Behavior on color {
 								ColorAnim {}
@@ -384,7 +522,7 @@ SettingsPage {
 								spacing: 6
 
 								StyledText {
-									text: root.liveScene !== "" ? `"${root.scenes.find(s => s.id === root.liveScene)?.name ?? "?"}" is up` : (root.watching && root.scenes.length > 0 ? "No scene recognised – the zones stay quiet" : "Scene")
+									text: root.liveScenes.length > 0 ? `${root.liveScenes.map(id => `"${root.scenes.find(s => s.id === id)?.name ?? "?"}"`).join(" and ")} ${root.liveScenes.length === 1 ? "is" : "are"} up` : (root.watching && root.scenes.length > 0 ? "No scene recognised – the zones stay quiet" : "Scenes")
 									font.weight: Font.DemiBold
 									font.pixelSize: Theme.size.small
 								}
@@ -406,7 +544,7 @@ SettingsPage {
 											Layout.preferredWidth: 110
 											text: scoreRow.modelData.name
 											font.pixelSize: Theme.size.small
-											tone: root.liveScene === scoreRow.modelData.id ? Theme.text : Theme.textSubtle
+											tone: root.liveScenes.includes(scoreRow.modelData.id) ? Theme.text : Theme.textSubtle
 											elide: Text.ElideRight
 										}
 
@@ -463,7 +601,7 @@ SettingsPage {
 
 						StyledText {
 							Layout.fillWidth: true
-							text: "A zone only has to look alike, not the same: a scene is recognised when the picture inside its zones correlates with the scene's picture above its own bar – brighter, noisier, slightly moved is still the same HUD. While no scene is recognised nothing vibrates."
+							text: "A zone only has to look alike, not the same: a scene is recognised when the picture inside its zones correlates with the scene's picture above its own bar – brighter, noisier, slightly moved is still the same HUD. Each scene is looked for on its own, so several can be up at once: the inventory open over the bar of slots keeps the slots' zones alive. While none is recognised nothing vibrates."
 							tone: Theme.textFaint
 							font.pixelSize: Theme.size.small
 							wrapMode: Text.WordWrap
@@ -502,60 +640,75 @@ SettingsPage {
 							}
 						}
 
-						// where it is, live
-						Flow {
+						// where it is and what the picture shows there, in one line
+						RowLayout {
 							Layout.fillWidth: true
-							spacing: 6
+							spacing: 8
 
-							Repeater {
-								model: root.zone ? [
-									{ label: "x", value: `${Math.round(root.zone.x * 1000) / 10} %` },
-									{ label: "y", value: `${Math.round(root.zone.y * 1000) / 10} %` },
-									{ label: "w", value: `${Math.round(root.zone.w * 1000) / 10} %` },
-									{ label: "h", value: `${Math.round(root.zone.h * 1000) / 10} %` },
-									{ label: "change", value: root.live[root.zone.id] ? String(root.live[root.zone.id][0]) : "–" },
-									{ label: "red", value: root.live[root.zone.id] ? `${root.live[root.zone.id][1] > 0 ? "+" : ""}${root.live[root.zone.id][1]}` : "–" },
-									{ label: "bright", value: root.live[root.zone.id] ? `${root.live[root.zone.id][2] > 0 ? "+" : ""}${root.live[root.zone.id][2]}` : "–" }
-								] : []
+							StyledText {
+								Layout.fillWidth: true
+								text: root.zone ? `${Math.round(root.zone.w * 100)} × ${Math.round(root.zone.h * 100)} % at ${Math.round(root.zone.x * 100)}, ${Math.round(root.zone.y * 100)} %` : ""
+								font.pixelSize: Theme.size.small
+								tone: Theme.textFaint
+								elide: Text.ElideRight
+							}
 
-								delegate: Rectangle {
-									id: fact
+							// alike: how much the zone looks like the scene's picture now
+							Rectangle {
+								visible: root.zone && root.alike[root.zone.id] !== undefined
+								implicitWidth: alikeRow.implicitWidth + 16
+								implicitHeight: 22
+								radius: 11
+								color: Theme.layer2
 
-									required property var modelData
+								RowLayout {
+									id: alikeRow
 
-									width: factRow.implicitWidth + 16
-									height: 24
-									radius: 12
-									color: Theme.layer2
+									anchors.centerIn: parent
+									spacing: 5
 
-									RowLayout {
-										id: factRow
+									Rectangle {
+										width: 8
+										height: 8
+										radius: 4
+										color: Number(root.alike[root.zone?.id] ?? 0) >= 0.55 ? Theme.primary : Theme.textFaint
 
-										anchors.centerIn: parent
-										spacing: 5
-
-										StyledText {
-											text: fact.modelData.label
-											font.pixelSize: Theme.size.small
-											tone: Theme.textFaint
-										}
-
-										StyledText {
-											text: fact.modelData.value
-											font.pixelSize: Theme.size.small
-											font.weight: Font.DemiBold
+										Behavior on color {
+											ColorAnim {}
 										}
 									}
+
+									StyledText {
+										text: `alike ${Math.round(Number(root.alike[root.zone?.id] ?? 0) * 100)} %`
+										font.pixelSize: Theme.size.small
+									}
+								}
+							}
+
+							Rectangle {
+								visible: root.zone && !!root.live[root.zone.id]
+								implicitWidth: liveText.implicitWidth + 16
+								implicitHeight: 22
+								radius: 11
+								color: Theme.layer2
+
+								StyledText {
+									id: liveText
+
+									anchors.centerIn: parent
+									text: root.zone && root.live[root.zone.id] ? `changing ${root.live[root.zone.id][0]}` : ""
+									font.pixelSize: Theme.size.small
 								}
 							}
 						}
 
+						// ── the reactions ──
 						RowLayout {
 							Layout.fillWidth: true
 							spacing: 6
 
 							StyledText {
-								text: "Reacts to"
+								text: root.triggers.length > 0 ? `Reactions · ${root.triggers.length}` : "Reactions"
 								font.pixelSize: Theme.size.small
 								font.weight: Font.DemiBold
 								tone: Theme.textSubtle
@@ -565,12 +718,12 @@ SettingsPage {
 								Layout.fillWidth: true
 							}
 
-							TextButton {
+							IconButton {
 								visible: root.triggers.length > 0
-								text: "Copy all"
+								Layout.preferredWidth: 28
+								Layout.preferredHeight: 28
 								icon: "content_copy"
-								variant: "text"
-								onActivated: Mouse.hudCopyTriggers(root.zone.id, -1)
+								onClicked: Mouse.hudCopyTriggers(root.zone.id, -1)
 							}
 
 							TextButton {
@@ -584,14 +737,14 @@ SettingsPage {
 
 						StyledText {
 							Layout.fillWidth: true
-							visible: Mouse.hudClipboard.length > 0
-							text: `${Mouse.hudClipboard.length} reaction${Mouse.hudClipboard.length === 1 ? "" : "s"} copied from "${Mouse.hudClipboardFrom}" – paste adds them here; the scene's card pastes them into every zone of the scene.`
+							visible: root.triggers.length === 0
+							text: "Nothing yet. Pick below what the zone reacts to – each reaction has a pattern of its own and may go on with steps."
 							tone: Theme.textFaint
 							font.pixelSize: Theme.size.small
 							wrapMode: Text.WordWrap
 						}
 
-						// every reaction, with its own pattern
+						// every reaction: one card, a sentence of pickers
 						Repeater {
 							model: root.triggers.length
 
@@ -605,6 +758,10 @@ SettingsPage {
 								readonly property bool on: trow.trigger.on !== false
 								readonly property bool withKey: trow.trigger.kind === "press" || trow.trigger.kind === "click"
 								readonly property bool withLevel: trow.trigger.kind === "change" || trow.trigger.kind === "press" || trow.trigger.kind === "red" || trow.trigger.kind === "bright" || trow.trigger.kind === "dark"
+								readonly property bool withCalm: trow.trigger.kind === "change" || trow.trigger.kind === "press"
+								readonly property var steps: Mouse.hudStepsOf(trow.trigger)
+								// the sliders are folded away until wanted
+								property bool tuning: false
 
 								Layout.fillWidth: true
 								implicitHeight: tcol.implicitHeight + 20
@@ -618,6 +775,11 @@ SettingsPage {
 
 								Behavior on color {
 									ColorAnim {}
+								}
+								Behavior on implicitHeight {
+									Anim {
+										duration: Motion.medium
+									}
 								}
 
 								ParallelAnimation {
@@ -648,22 +810,22 @@ SettingsPage {
 									anchors.margins: 10
 									spacing: 8
 
+									// what · play · on · remove
 									RowLayout {
 										Layout.fillWidth: true
-										spacing: 8
+										spacing: 6
 
-										Glyph {
+										Pick {
+											entries: Mouse.hudKinds
+											current: String(trow.trigger.kind ?? "change")
 											icon: trow.kind.icon
-											size: 16
-											color: trow.on ? Theme.primary : Theme.textFaint
+											strong: true
+											enabled: trow.on
+											onPicked: value => Mouse.hudChangeTrigger(root.zone.id, trow.index, { kind: String(value), key: "", keyName: "" })
 										}
 
-										StyledText {
+										Item {
 											Layout.fillWidth: true
-											text: trow.kind.label
-											font.weight: Font.DemiBold
-											font.pixelSize: Theme.size.small
-											tone: trow.on ? Theme.text : Theme.textFaint
 										}
 
 										IconButton {
@@ -693,115 +855,125 @@ SettingsPage {
 										}
 									}
 
-									// the pattern
+									// feels … · on … · fine-tune
 									Flow {
 										Layout.fillWidth: true
-										spacing: 5
+										spacing: 6
 
-										Repeater {
-											model: root.feels
-
-											delegate: Chip {
-												required property var modelData
-
-												text: modelData.label
-												selected: trow.trigger.feel === modelData.value
-												onClicked: {
-													Mouse.hudChangeTrigger(root.zone.id, trow.index, { feel: modelData.value });
-													Mouse.play(modelData.value);
-												}
+										Pick {
+											entries: root.feels
+											current: String(trow.trigger.feel ?? "")
+											icon: "vibrate"
+											prefix: "feels"
+											enabled: trow.on
+											onPicked: value => {
+												Mouse.hudChangeTrigger(root.zone.id, trow.index, { feel: String(value) });
+												Mouse.play(String(value));
 											}
+										}
+
+										Pick {
+											visible: trow.withKey
+											entries: root.keyEntries(trow.trigger)
+											current: root.recording === trow.index ? "record" : String(trow.trigger.key ?? "")
+											icon: trow.trigger.kind === "click" ? "mouse" : "keyboard_outline"
+											prefix: "on"
+											enabled: trow.on
+											onPicked: value => {
+												if (String(value) === "record") {
+													root.recording = trow.index;
+													catcher.forceActiveFocus();
+													return;
+												}
+												root.recording = -1;
+												Mouse.hudChangeTrigger(root.zone.id, trow.index, { key: String(value), keyName: "" });
+											}
+										}
+
+										Pick {
+											entries: root.summaryEntries(trow.trigger)
+											current: "summary"
+											icon: "tune_variant"
+											accent: trow.tuning
+											enabled: trow.on
+											onPicked: value => trow.tuning = !trow.tuning
 										}
 									}
 
-									// which press or button
-									Flow {
+									// the sliders, when wanted
+									ColumnLayout {
 										Layout.fillWidth: true
-										visible: trow.withKey
-										spacing: 5
+										visible: trow.tuning
+										spacing: 4
 
-										Repeater {
-											model: trow.trigger.kind === "click" ? [{ key: "", label: "Any button" }, { key: "BTN_LEFT", label: "Left" }, { key: "BTN_RIGHT", label: "Right" }, { key: "BTN_MIDDLE", label: "Middle" }] : [{ key: "", label: "Any press" }, { key: "BTN_LEFT", label: "Left click" }, { key: "BTN_RIGHT", label: "Right click" }]
+										ValueSlider {
+											visible: trow.withLevel
+											from: 0
+											to: 60
+											step: 1
+											icon: "tune_variant"
+											label: "Needs"
+											value: Number(trow.trigger.level ?? 0)
+											format: v => v <= 0 ? "by itself" : `${Math.round(v)}`
+											onMoved: v => Mouse.hudChangeTrigger(root.zone.id, trow.index, { level: Math.round(v) })
+										}
 
-											delegate: Chip {
-												required property var modelData
+										ValueSlider {
+											from: 30
+											to: 1000
+											step: 10
+											unit: " ms"
+											icon: "timer_outline"
+											label: "Every"
+											value: Number(trow.trigger.every ?? 150)
+											onMoved: v => Mouse.hudChangeTrigger(root.zone.id, trow.index, { every: Math.round(v) })
+										}
 
-												text: modelData.label
-												selected: root.recording !== trow.index && String(trow.trigger.key ?? "") === modelData.key
-												onClicked: {
-													root.recording = -1;
-													Mouse.hudChangeTrigger(root.zone.id, trow.index, { key: modelData.key, keyName: "" });
+										ValueSlider {
+											visible: trow.withCalm
+											from: 0
+											to: 2000
+											step: 50
+											icon: "pause"
+											label: "Calm before"
+											value: Number(trow.trigger.calm ?? 250)
+											format: v => v <= 0 ? "not needed" : `${Math.round(v)} ms`
+											onMoved: v => Mouse.hudChangeTrigger(root.zone.id, trow.index, { calm: Math.round(v) })
+										}
+
+										StyledText {
+											Layout.fillWidth: true
+											text: {
+												switch (trow.trigger.kind) {
+												case "press": return "The zone changes while a press of yours is fresh – the ammo counter after a shot. One pulse per change; it has to have been calm before it counts again.";
+												case "click": return "A mouse button goes down while the pointer is in the zone. X11 games only (Proton is).";
+												case "hover": return "The pointer comes into the zone – once, until it leaves. X11 games only.";
+												case "red": return "The zone suddenly reddens – a hit marker, a health bar dropping.";
+												case "bright": return "The zone suddenly brightens – a muzzle flash, an icon lighting up.";
+												case "dark": return "The zone suddenly darkens – an icon greying out, a charge spent.";
+												default: return "The zone changes, whoever caused it – not while the whole picture moves. One pulse per change; it has to have been calm before it counts again.";
 												}
 											}
-										}
-
-										Chip {
-											visible: trow.trigger.kind === "press"
-											text: root.recording === trow.index ? "Press a key…" : (typeof trow.trigger.key === "number" ? `Key ${root.keyLabel(trow.trigger)}` : "A key…")
-											icon: "keyboard_outline"
-											selected: root.recording === trow.index || typeof trow.trigger.key === "number"
-											onClicked: {
-												root.recording = root.recording === trow.index ? -1 : trow.index;
-												if (root.recording >= 0) catcher.forceActiveFocus();
-											}
+											tone: Theme.textFaint
+											font.pixelSize: Theme.size.small
+											wrapMode: Text.WordWrap
 										}
 									}
 
-									ValueSlider {
-										visible: trow.withLevel
-										from: 0
-										to: 60
-										step: 1
-										icon: "tune_variant"
-										label: "Needs"
-										value: Number(trow.trigger.level ?? 0)
-										format: v => v <= 0 ? "by itself" : `${Math.round(v)}`
-										onMoved: v => Mouse.hudChangeTrigger(root.zone.id, trow.index, { level: Math.round(v) })
-									}
-
-									ValueSlider {
-										from: 30
-										to: 1000
-										step: 10
-										unit: " ms"
-										icon: "timer_outline"
-										label: "Every"
-										value: Number(trow.trigger.every ?? 150)
-										onMoved: v => Mouse.hudChangeTrigger(root.zone.id, trow.index, { every: Math.round(v) })
-									}
-
-									ValueSlider {
-										visible: trow.trigger.kind === "change" || trow.trigger.kind === "press"
-										from: 0
-										to: 2000
-										step: 50
-										icon: "pause"
-										label: "Calm before"
-										value: Number(trow.trigger.calm ?? 250)
-										format: v => v <= 0 ? "not needed" : `${Math.round(v)} ms`
-										onMoved: v => Mouse.hudChangeTrigger(root.zone.id, trow.index, { calm: Math.round(v) })
-									}
-
-									// what follows: step by step, each waited for within its time
+									// then … – one line a step
 									Repeater {
-										model: Mouse.hudStepsOf(trow.trigger).length
+										model: trow.steps.length
 
-										delegate: Rectangle {
+										delegate: RowLayout {
 											id: srow
 
 											required property int index
 
-											readonly property var step: Mouse.hudStepsOf(trow.trigger)[srow.index] ?? ({})
-											readonly property var when: Mouse.hudSteps.find(k => k.value === srow.step.when) ?? Mouse.hudSteps[0]
+											readonly property var step: trow.steps[srow.index] ?? ({})
 											readonly property bool withKey: srow.step.when === "clickAnywhere" || srow.step.when === "clickOutside" || srow.step.when === "clickHere" || srow.step.when === "press"
 
 											Layout.fillWidth: true
-											Layout.leftMargin: 10
-											implicitHeight: scol.implicitHeight + 16
-											radius: Theme.radius.medium
-											color: Theme.layer1
-											border.width: 1
-											border.color: Theme.outline
+											spacing: 6
 											opacity: 0
 											Component.onCompleted: stepIn.start()
 
@@ -814,181 +986,80 @@ SettingsPage {
 												duration: Motion.medium
 											}
 
-											ColumnLayout {
-												id: scol
+											Glyph {
+												icon: "link_variant"
+												size: 13
+												color: Theme.primary
+											}
 
-												anchors.left: parent.left
-												anchors.right: parent.right
-												anchors.top: parent.top
-												anchors.margins: 8
+											Flow {
+												Layout.fillWidth: true
 												spacing: 6
 
-												RowLayout {
-													Layout.fillWidth: true
-													spacing: 6
+												Pick {
+													entries: Mouse.hudSteps
+													current: String(srow.step.when ?? "clickAnywhere")
+													prefix: `then ${srow.index + 1}`
+													onPicked: value => Mouse.hudChangeStep(root.zone.id, trow.index, srow.index, { when: String(value) })
+												}
 
-													StyledText {
-														text: `then ${srow.index + 1}`
-														font.pixelSize: Theme.size.small
-														font.weight: Font.DemiBold
-														tone: Theme.primary
-													}
-
-													Item {
-														Layout.fillWidth: true
-													}
-
-													IconButton {
-														Layout.preferredWidth: 24
-														Layout.preferredHeight: 24
-														icon: "play"
-														onClicked: Mouse.play(srow.step.feel)
-													}
-
-													IconButton {
-														Layout.preferredWidth: 24
-														Layout.preferredHeight: 24
-														icon: "close"
-														onClicked: Mouse.hudRemoveStep(root.zone.id, trow.index, srow.index)
+												Pick {
+													entries: root.feels
+													current: String(srow.step.feel ?? "")
+													icon: "vibrate"
+													onPicked: value => {
+														Mouse.hudChangeStep(root.zone.id, trow.index, srow.index, { feel: String(value) });
+														Mouse.play(String(value));
 													}
 												}
 
-												Flow {
-													Layout.fillWidth: true
-													spacing: 4
-
-													Repeater {
-														model: Mouse.hudSteps
-
-														delegate: Chip {
-															required property var modelData
-
-															text: modelData.label
-															selected: srow.step.when === modelData.value
-															onClicked: Mouse.hudChangeStep(root.zone.id, trow.index, srow.index, { when: modelData.value })
-														}
-													}
-												}
-
-												Flow {
-													Layout.fillWidth: true
-													spacing: 4
-
-													Repeater {
-														model: root.feels
-
-														delegate: Chip {
-															required property var modelData
-
-															text: modelData.label
-															selected: srow.step.feel === modelData.value
-															onClicked: {
-																Mouse.hudChangeStep(root.zone.id, trow.index, srow.index, { feel: modelData.value });
-																Mouse.play(modelData.value);
-															}
-														}
-													}
-												}
-
-												Flow {
-													Layout.fillWidth: true
+												Pick {
 													visible: srow.withKey
-													spacing: 4
-
-													Repeater {
-														model: srow.step.when === "press" ? [{ key: "", label: "Any press" }, { key: "BTN_LEFT", label: "Left click" }, { key: "BTN_RIGHT", label: "Right click" }] : [{ key: "", label: "Any button" }, { key: "BTN_LEFT", label: "Left" }, { key: "BTN_RIGHT", label: "Right" }, { key: "BTN_MIDDLE", label: "Middle" }]
-
-														delegate: Chip {
-															required property var modelData
-
-															text: modelData.label
-															selected: String(srow.step.key ?? "") === modelData.key
-															onClicked: Mouse.hudChangeStep(root.zone.id, trow.index, srow.index, { key: modelData.key })
-														}
-													}
+													entries: srow.step.when === "press" ? root.pressKeys : root.clickKeys
+													current: String(srow.step.key ?? "")
+													onPicked: value => Mouse.hudChangeStep(root.zone.id, trow.index, srow.index, { key: String(value) })
 												}
 
-												ValueSlider {
+												Pick {
 													visible: srow.step.when !== "delay"
-													from: 500
-													to: 15000
-													step: 500
+													entries: root.withinEntries(srow.step)
+													current: String(Number(srow.step.within ?? 5000))
 													icon: "timer_outline"
-													label: "Within"
-													value: Number(srow.step.within ?? 5000)
-													format: v => `${(v / 1000).toFixed(1)} s`
-													onMoved: v => Mouse.hudChangeStep(root.zone.id, trow.index, srow.index, { within: Math.round(v) })
+													prefix: "within"
+													onPicked: value => Mouse.hudChangeStep(root.zone.id, trow.index, srow.index, { within: Number(value) })
 												}
 
-												ValueSlider {
+												Pick {
 													visible: srow.step.when === "delay"
-													from: 50
-													to: 5000
-													step: 50
-													unit: " ms"
+													entries: root.delayEntries(srow.step)
+													current: String(Number(srow.step.delay ?? 500))
 													icon: "timer_outline"
-													label: "After"
-													value: Number(srow.step.delay ?? 500)
-													onMoved: v => Mouse.hudChangeStep(root.zone.id, trow.index, srow.index, { delay: Math.round(v) })
+													prefix: "after"
+													onPicked: value => Mouse.hudChangeStep(root.zone.id, trow.index, srow.index, { delay: Number(value) })
 												}
 											}
-										}
-									}
 
-									RowLayout {
-										Layout.fillWidth: true
-										Layout.leftMargin: 10
-										spacing: 6
-
-										Glyph {
-											icon: "link_variant"
-											size: 13
-											color: Theme.textFaint
-										}
-
-										StyledText {
-											Layout.fillWidth: true
-											text: Mouse.hudStepsOf(trow.trigger).length > 0 ? "Then…" : "Then… – a follow-up with a pattern of its own: a click elsewhere, the pointer leaving, a moment later"
-											font.pixelSize: Theme.size.small
-											tone: Theme.textFaint
-											elide: Text.ElideRight
-										}
-
-										TextButton {
-											text: "Add a step"
-											icon: "plus"
-											variant: "text"
-											onActivated: Mouse.hudAddStep(root.zone.id, trow.index, "clickAnywhere")
-										}
-									}
-
-									StyledText {
-										Layout.fillWidth: true
-										text: {
-											switch (trow.trigger.kind) {
-											case "press": return "The zone changes while a press of yours is fresh – the ammo counter after a shot, the cast bar after a spell. One pulse per change: it has to have been calm for the time above before it counts again.";
-											case "click": return "A mouse button goes down while the pointer is in the zone – a spell slot, a button of the HUD. X11 games only (Proton is).";
-											case "hover": return "The pointer comes into the zone – once, until it leaves. X11 games only.";
-											case "red": return "The zone suddenly reddens – a hit marker, blood, a health bar dropping.";
-											case "bright": return "The zone suddenly brightens – a muzzle flash, an icon lighting up.";
-											case "dark": return "The zone suddenly darkens – an icon greying out, a charge spent.";
-											default: return "The zone changes, whoever caused it – not while the whole picture moves. One pulse per change: a menu sliding in or a bar filling is one, not one every frame; it has to have been calm for the time above before it counts again.";
+											IconButton {
+												Layout.preferredWidth: 24
+												Layout.preferredHeight: 24
+												Layout.alignment: Qt.AlignTop
+												icon: "close"
+												onClicked: Mouse.hudRemoveStep(root.zone.id, trow.index, srow.index)
 											}
 										}
-										tone: Theme.textFaint
-										font.pixelSize: Theme.size.small
-										wrapMode: Text.WordWrap
+									}
+
+									TextButton {
+										text: trow.steps.length > 0 ? "Then…" : "Then… – a follow-up with a pattern of its own"
+										icon: "plus"
+										variant: "text"
+										onActivated: Mouse.hudAddStep(root.zone.id, trow.index, "clickAnywhere")
 									}
 								}
 							}
 						}
 
-						StyledText {
-							text: "Add a reaction"
-							font.pixelSize: Theme.size.small
-							tone: Theme.textFaint
-						}
-
+						// a reaction more
 						Flow {
 							Layout.fillWidth: true
 							spacing: 5
@@ -1006,7 +1077,15 @@ SettingsPage {
 							}
 						}
 
-						// ── sequences: the zone's reactions kept by name ──
+						// ── sequences: reactions kept by name, for any zone of any game ──
+						Rectangle {
+							Layout.fillWidth: true
+							Layout.topMargin: 4
+							implicitHeight: 1
+							color: Theme.outline
+							opacity: 0.6
+						}
+
 						RowLayout {
 							Layout.fillWidth: true
 							spacing: 6
@@ -1018,7 +1097,7 @@ SettingsPage {
 							}
 
 							StyledText {
-								text: `Sequences · ${Mouse.hudPresets.length}`
+								text: Mouse.hudPresets.length > 0 ? `Sequences · ${Mouse.hudPresets.length}` : "Sequences"
 								font.pixelSize: Theme.size.small
 								font.weight: Font.DemiBold
 								tone: Theme.textSubtle
@@ -1028,15 +1107,9 @@ SettingsPage {
 								Layout.fillWidth: true
 							}
 
-							IconButton {
-								Layout.preferredWidth: 26
-								Layout.preferredHeight: 26
-								icon: root.library ? "chevron_up" : "chevron_down"
-								onClicked: root.library = !root.library
-							}
-
 							TextButton {
-								text: root.naming ? "Cancel" : "Keep as a sequence"
+								visible: root.triggers.length > 0
+								text: root.naming ? "Cancel" : "Keep these"
 								icon: root.naming ? "close" : "bookmark_plus_outline"
 								variant: root.naming ? "text" : "tonal"
 								onActivated: root.naming = !root.naming
@@ -1060,10 +1133,7 @@ SettingsPage {
 								if (!root.zone) return;
 								const id = Mouse.hudSavePreset(text, root.zone.id, -1);
 								root.naming = false;
-								if (id !== "") {
-									root.presetFlash = id;
-									root.library = true;
-								}
+								if (id !== "") root.presetFlash = id;
 							}
 							onEscapePressed: root.naming = false
 						}
@@ -1071,39 +1141,49 @@ SettingsPage {
 						StyledText {
 							Layout.fillWidth: true
 							visible: root.naming
-							text: "Every reaction of this zone, with its patterns, keys and follow-up steps, under one name – for any zone of any game. Enter keeps it."
+							text: `The ${root.triggers.length} reaction${root.triggers.length === 1 ? "" : "s"} of this zone, with patterns, keys and steps, under one name – for any zone of any game. Enter keeps it.`
+							tone: Theme.textFaint
+							font.pixelSize: Theme.size.small
+							wrapMode: Text.WordWrap
+						}
+
+						StyledText {
+							Layout.fillWidth: true
+							visible: Mouse.hudPresets.length === 0 && !root.naming
+							text: "Nothing kept yet. Set a zone up the way you like – a button press, a spell cast, a shot – and keep its reactions here to give them to other zones and other games."
 							tone: Theme.textFaint
 							font.pixelSize: Theme.size.small
 							wrapMode: Text.WordWrap
 						}
 
 						Repeater {
-							model: root.library ? Mouse.hudPresets.length : 0
+							model: Mouse.hudPresets.length
 
-							delegate: Rectangle {
+							delegate: Clickable {
 								id: prow
 
 								required property int index
 
 								readonly property var preset: Mouse.hudPresets[prow.index] ?? ({})
-								readonly property bool starter: prow.preset.starter === true
-								readonly property bool flashed: root.presetFlash === String(prow.preset.id)
-								readonly property int count: (Mouse.hudList(prow.preset.triggers) ?? []).length
+								readonly property string presetId: String(prow.preset.id ?? "")
+								readonly property bool flashed: root.presetFlash === prow.presetId
+								readonly property bool renaming: root.renaming === prow.presetId
+								readonly property string from: String(prow.preset.from ?? "")
 
 								Layout.fillWidth: true
 								implicitHeight: pcol.implicitHeight + 16
 								radius: Theme.radius.large
-								color: prow.flashed ? Theme.primaryContainer : Theme.layer1
-								border.width: 1
-								border.color: prow.flashed ? Theme.primary : "transparent"
+								color: prow.flashed ? Theme.primaryContainer : Theme.layer2
+								pressedScale: 0.98
 								opacity: 0
-								scale: 0.96
 								Component.onCompleted: pappear.start()
+								onClicked: {
+									if (prow.renaming) return;
+									Mouse.hudApplyPreset(root.zone.id, prow.presetId, false);
+									root.presetFlash = prow.presetId;
+								}
 
 								Behavior on color {
-									ColorAnim {}
-								}
-								Behavior on border.color {
 									ColorAnim {}
 								}
 
@@ -1113,103 +1193,88 @@ SettingsPage {
 									onTriggered: root.presetFlash = ""
 								}
 
-								ParallelAnimation {
+								NumberAnimation {
 									id: pappear
 
-									NumberAnimation {
-										target: prow
-										property: "opacity"
-										to: 1
-										duration: Motion.medium
-									}
-									NumberAnimation {
-										target: prow
-										property: "scale"
-										to: 1
-										duration: Motion.long
-										easing.type: Easing.BezierSpline
-										easing.bezierCurve: Motion.spatial
-									}
+									target: prow
+									property: "opacity"
+									to: 1
+									duration: Motion.medium
 								}
 
-								ColumnLayout {
+								RowLayout {
 									id: pcol
 
 									anchors.left: parent.left
 									anchors.right: parent.right
-									anchors.top: parent.top
-									anchors.margins: 8
-									spacing: 4
+									anchors.verticalCenter: parent.verticalCenter
+									anchors.leftMargin: 10
+									anchors.rightMargin: 6
+									spacing: 8
 
-									RowLayout {
+									Glyph {
+										icon: prow.flashed ? "check" : "bookmark_outline"
+										size: 16
+										color: prow.flashed ? Theme.primary : Theme.textSubtle
+									}
+
+									ColumnLayout {
 										Layout.fillWidth: true
-										spacing: 6
-
-										Glyph {
-											icon: prow.starter ? "shimmer" : "bookmark_outline"
-											size: 14
-											color: prow.flashed ? Theme.primary : Theme.textSubtle
-										}
+										spacing: 1
 
 										StyledText {
 											Layout.fillWidth: true
+											visible: !prow.renaming
 											text: String(prow.preset.name ?? "")
 											font.pixelSize: Theme.size.small
 											font.weight: Font.DemiBold
 											elide: Text.ElideRight
 										}
 
+										Field {
+											Layout.fillWidth: true
+											visible: prow.renaming
+											placeholder: "Name"
+											text: String(prow.preset.name ?? "")
+											onVisibleChanged: if (visible) input.forceActiveFocus()
+											onAccepted: {
+												Mouse.hudRenamePreset(prow.presetId, text);
+												root.renaming = "";
+											}
+											onEscapePressed: root.renaming = ""
+										}
+
 										StyledText {
-											visible: prow.starter
-											text: "starter"
+											Layout.fillWidth: true
+											text: root.presetSummary(prow.preset) + (prow.from !== "" && prow.from !== root.game ? ` · from ${prow.from}` : "")
 											font.pixelSize: Theme.size.tiny
 											tone: Theme.textFaint
-										}
-
-										StyledText {
-											visible: !prow.starter && String(prow.preset.from ?? "") !== "" && String(prow.preset.from) !== root.game
-											text: String(prow.preset.from)
-											font.pixelSize: Theme.size.tiny
-											tone: Theme.textFaint
-											elide: Text.ElideMiddle
-											Layout.maximumWidth: 90
-										}
-
-										IconButton {
-											Layout.preferredWidth: 26
-											Layout.preferredHeight: 26
-											icon: "plus"
-											onClicked: {
-												Mouse.hudApplyPreset(root.zone.id, prow.preset.id, false);
-												root.presetFlash = String(prow.preset.id);
-											}
-										}
-
-										IconButton {
-											Layout.preferredWidth: 26
-											Layout.preferredHeight: 26
-											icon: "swap_horizontal"
-											onClicked: {
-												Mouse.hudApplyPreset(root.zone.id, prow.preset.id, true);
-												root.presetFlash = String(prow.preset.id);
-											}
-										}
-
-										IconButton {
-											visible: !prow.starter
-											Layout.preferredWidth: 26
-											Layout.preferredHeight: 26
-											icon: "close"
-											onClicked: Mouse.hudRemovePreset(prow.preset.id)
+											elide: Text.ElideRight
 										}
 									}
 
-									StyledText {
-										Layout.fillWidth: true
-										text: root.presetSummary(prow.preset)
-										font.pixelSize: Theme.size.tiny
-										tone: Theme.textFaint
-										wrapMode: Text.WordWrap
+									IconButton {
+										Layout.preferredWidth: 26
+										Layout.preferredHeight: 26
+										icon: "swap_horizontal"
+										onClicked: {
+											Mouse.hudApplyPreset(root.zone.id, prow.presetId, true);
+											root.presetFlash = prow.presetId;
+										}
+									}
+
+									IconButton {
+										Layout.preferredWidth: 26
+										Layout.preferredHeight: 26
+										icon: prow.renaming ? "check" : "pencil_outline"
+										onClicked: root.renaming = prow.renaming ? "" : prow.presetId
+									}
+
+									IconButton {
+										Layout.preferredWidth: 26
+										Layout.preferredHeight: 26
+										icon: "close"
+										onClicked: Mouse.hudRemovePreset(prow.presetId)
 									}
 								}
 							}
@@ -1217,8 +1282,8 @@ SettingsPage {
 
 						StyledText {
 							Layout.fillWidth: true
-							visible: root.library
-							text: "+ adds a sequence's reactions to this zone, ⇄ replaces the zone's with them. Sequences are kept for every game; the scene's card gives one to every zone at once."
+							visible: Mouse.hudPresets.length > 0
+							text: "Click a sequence to add its reactions to this zone; ⇄ puts them in place of the zone's own. The scene's card gives one to every zone at once."
 							tone: Theme.textFaint
 							font.pixelSize: Theme.size.small
 							wrapMode: Text.WordWrap
@@ -1306,7 +1371,7 @@ SettingsPage {
 					required property var modelData
 
 					readonly property bool chosen: root.sceneId === card.modelData.id
-					readonly property bool up: root.liveScene === card.modelData.id
+					readonly property bool up: root.liveScenes.includes(card.modelData.id)
 					readonly property real score: Number(root.scores[card.modelData.id] ?? 0)
 					readonly property int count: root.allZones.filter(z => z.scene === card.modelData.id).length
 
@@ -1541,29 +1606,12 @@ SettingsPage {
 				onActivated: Mouse.hudPasteIntoScene(root.sceneId, false)
 			}
 
-			StyledText {
-				visible: root.zones.length > 0
-				text: "Give every zone a sequence"
-				font.pixelSize: Theme.size.small
-				tone: Theme.textFaint
-			}
-
-			Flow {
-				Layout.fillWidth: true
-				visible: root.zones.length > 0
-				spacing: 5
-
-				Repeater {
-					model: Mouse.hudPresets
-
-					delegate: Chip {
-						required property var modelData
-
-						text: String(modelData.name ?? "")
-						icon: modelData.starter === true ? "shimmer" : "bookmark_outline"
-						onClicked: Mouse.hudApplyPresetToScene(root.sceneId, modelData.id, false)
-					}
-				}
+			Pick {
+				visible: root.zones.length > 0 && Mouse.hudPresets.length > 0
+				entries: Mouse.hudPresets.map(p => ({ value: p.id, label: p.name, detail: root.presetSummary(p) }))
+				fallback: "Give every zone a sequence…"
+				icon: "playlist_check"
+				onPicked: value => Mouse.hudApplyPresetToScene(root.sceneId, String(value), false)
 			}
 
 			TextButton {
@@ -1633,6 +1681,13 @@ SettingsPage {
 					event.accepted = true;
 				} else if (event.key === Qt.Key_Escape) {
 					root.selected = "";
+					event.accepted = true;
+				} else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_Z) {
+					if (event.modifiers & Qt.ShiftModifier) Mouse.hudRedo();
+					else Mouse.hudUndo();
+					event.accepted = true;
+				} else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_Y) {
+					Mouse.hudRedo();
 					event.accepted = true;
 				}
 			}

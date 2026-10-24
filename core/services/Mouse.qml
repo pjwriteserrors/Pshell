@@ -70,6 +70,11 @@ Singleton {
 		root.commit();
 	}
 
+	function setOptions(values) {
+		root.config = Object.assign({}, root.config, { options: Object.assign({}, root.options, values) });
+		root.commit();
+	}
+
 	// a device setting: to the mouse at once, written when it rests
 	function set(key, value) {
 		if (!root.device) return;
@@ -276,14 +281,79 @@ Singleton {
 		return String(text).replace(/[^A-Za-z0-9_.-]+/g, "_").slice(0, 60) || "game";
 	}
 
-	function hudSaveZones(list) {
+	// ── undo: every change to zones, scenes and sequences is kept ───────
+	// hudHistory: [{zones, scenes, presets, label, at}] – the state before
+	// each change, up to 80; changes with the same label within 1.2 s are
+	// one (a slider dragged, a scene removed with its zones). Undo restores
+	// the last and moves the present to hudFuture for redo.
+	property var hudHistory: []
+	property var hudFuture: []
+	readonly property string hudUndoLabel: root.hudHistory.length > 0 ? String(root.hudHistory[root.hudHistory.length - 1].label) : ""
+	readonly property string hudRedoLabel: root.hudFuture.length > 0 ? String(root.hudFuture[root.hudFuture.length - 1].label) : ""
+
+	function hudSnapshot(label) {
+		return { zones: root.option("hudZones", null) ?? ({}), scenes: root.option("hudScenes", null) ?? ({}), presets: root.hudSavedPresets, label: label || "a change", at: Date.now() };
+	}
+
+	function hudRecord(label) {
+		const last = root.hudHistory.length > 0 ? root.hudHistory[root.hudHistory.length - 1] : null;
+		const now = Date.now();
+		if (last && last.label === label && now - last.at < 1200) {
+			last.at = now;
+			return;
+		}
+		root.hudHistory = root.hudHistory.concat([root.hudSnapshot(label)]).slice(-80);
+		root.hudFuture = [];
+	}
+
+	function hudRestore(snapshot) {
+		root.setOptions({ hudZones: snapshot.zones, hudScenes: snapshot.scenes, hudPresets: snapshot.presets });
+		// a removed scene's picture was kept aside; back it comes
+		const pictures = [];
+		for (const game of Object.keys(snapshot.scenes ?? {})) {
+			for (const scene of (Array.isArray(snapshot.scenes[game]) ? snapshot.scenes[game] : [])) {
+				if (scene.picture) pictures.push(String(scene.picture));
+			}
+		}
+		if (pictures.length > 0) {
+			Quickshell.execDetached(["sh", "-c", 'for f in "$@"; do [ -e "$f" ] || { [ -e "$f.gone" ] && mv -f "$f.gone" "$f"; }; done', "sh"].concat(pictures));
+			pictureBack.restart();
+		}
+	}
+
+	Timer {
+		id: pictureBack
+
+		interval: 400
+		onTriggered: root.hudPictureRev++
+	}
+
+	function hudUndo() {
+		if (root.hudHistory.length === 0) return;
+		const last = root.hudHistory[root.hudHistory.length - 1];
+		root.hudFuture = root.hudFuture.concat([root.hudSnapshot(last.label)]);
+		root.hudHistory = root.hudHistory.slice(0, -1);
+		root.hudRestore(last);
+	}
+
+	function hudRedo() {
+		if (root.hudFuture.length === 0) return;
+		const next = root.hudFuture[root.hudFuture.length - 1];
+		root.hudHistory = root.hudHistory.concat([root.hudSnapshot(next.label)]);
+		root.hudFuture = root.hudFuture.slice(0, -1);
+		root.hudRestore(next);
+	}
+
+	function hudSaveZones(list, label) {
+		root.hudRecord(label || "the zones");
 		const table = Object.assign({}, root.hudTable);
 		if (list.length > 0) table[root.gameKey] = list;
 		else delete table[root.gameKey];
 		root.setOption("hudZones", table);
 	}
 
-	function hudSaveScenes(list) {
+	function hudSaveScenes(list, label) {
+		root.hudRecord(label || "the scenes");
 		const table = Object.assign({}, root.hudSceneTable);
 		if (list.length > 0) table[root.gameKey] = list;
 		else delete table[root.gameKey];
@@ -294,21 +364,22 @@ Singleton {
 	function hudAddScene(name) {
 		const id = `s${Date.now().toString(36)}`;
 		const scene = { id, name: name || `Scene ${root.hudScenes.length + 1}`, picture: `${root.hudDir}/${root.hudSafe(root.gameKey)}-${id}.jpg` };
-		root.hudSaveScenes(root.hudScenes.concat([scene]));
+		root.hudSaveScenes(root.hudScenes.concat([scene]), "a scene added");
 		root.hudSceneId = id;
 		return scene;
 	}
 
 	function hudChangeScene(id, values) {
-		root.hudSaveScenes(root.hudScenes.map(s => s.id === id ? Object.assign({}, s, values) : s));
+		root.hudSaveScenes(root.hudScenes.map(s => s.id === id ? Object.assign({}, s, values) : s), values && values.name !== undefined ? "the scene renamed" : "the scene changed");
 	}
 
 	// the scene goes with its zones and its picture
 	function hudRemoveScene(id) {
 		const scene = root.hudScenes.find(s => s.id === id);
-		if (scene?.picture) Quickshell.execDetached(["rm", "-f", String(scene.picture)]);
-		root.hudSaveZones(root.hudZones.filter(z => z.scene !== id));
-		root.hudSaveScenes(root.hudScenes.filter(s => s.id !== id));
+		// the picture is kept aside for undo
+		if (scene?.picture) Quickshell.execDetached(["sh", "-c", 'mv -f "$1" "$1.gone" 2>/dev/null', "sh", String(scene.picture)]);
+		root.hudSaveZones(root.hudZones.filter(z => z.scene !== id), "the scene removed");
+		root.hudSaveScenes(root.hudScenes.filter(s => s.id !== id), "the scene removed");
 		if (root.hudSceneId === id) root.hudSceneId = "";
 	}
 
@@ -329,8 +400,12 @@ Singleton {
 		{ value: "bright", label: "Brightens", icon: "white_balance_sunny", feel: "DAMP COLLISION" },
 		{ value: "dark", label: "Darkens", icon: "weather_night", feel: "DAMP STATE CHANGE" }
 	]
+	// the scenes recognised now (several at once: the inventory open over
+	// the bar of slots), the best of them, their likeness, each zone's own
+	readonly property var hudLiveScenes: root.hudList(root.eyes?.up) ?? []
 	readonly property string hudLiveScene: String(root.eyes?.scene ?? "")
 	readonly property var hudScores: root.eyes?.scores ?? ({})
+	readonly property var hudAlike: root.eyes?.alike ?? ({})
 
 	// a list that came through a Repeater's modelData is a QVariantList, not an Array
 	function hudList(value) {
@@ -359,11 +434,11 @@ Singleton {
 		delete given.when;
 		delete given.feel;
 		const zone = Object.assign({ id, scene: scene.id, name: `Zone ${root.hudZones.length + 1}`, triggers }, rect, given);
-		root.hudSaveZones(root.hudZones.concat([zone]));
+		root.hudSaveZones(root.hudZones.concat([zone]), "a zone drawn");
 		return id;
 	}
 
-	function hudSetTriggers(id, list) {
+	function hudSetTriggers(id, list, label) {
 		root.hudSaveZones(root.hudZones.map(z => {
 			if (z.id !== id) return z;
 			const zone = Object.assign({}, z, { triggers: list });
@@ -373,19 +448,19 @@ Singleton {
 			delete zone.every;
 			delete zone.key;
 			return zone;
-		}));
+		}), label || "the reactions changed");
 	}
 
 	function hudAddTrigger(id, kind) {
 		const zone = root.hudZones.find(z => z.id === id);
 		if (!zone) return;
-		root.hudSetTriggers(id, root.hudTriggers(zone).concat([root.hudTrigger(kind)]));
+		root.hudSetTriggers(id, root.hudTriggers(zone).concat([root.hudTrigger(kind)]), "a reaction added");
 	}
 
-	function hudChangeTrigger(id, index, values) {
+	function hudChangeTrigger(id, index, values, label) {
 		const zone = root.hudZones.find(z => z.id === id);
 		if (!zone) return;
-		root.hudSetTriggers(id, root.hudTriggers(zone).map((t, i) => i === index ? Object.assign({}, t, values) : t));
+		root.hudSetTriggers(id, root.hudTriggers(zone).map((t, i) => i === index ? Object.assign({}, t, values) : t), label || "a reaction changed");
 	}
 
 	// a reaction's follow-up steps: [{when, feel, key, within (ms), delay (ms)}]
@@ -411,21 +486,21 @@ Singleton {
 		const trigger = root.hudTriggers(zone)[index];
 		if (!trigger) return;
 		const step = { when: when || "clickAnywhere", feel: "DAMP COLLISION", key: "", keyName: "", within: 5000, delay: 500 };
-		root.hudChangeTrigger(id, index, { then: root.hudStepsOf(trigger).concat([step]) });
+		root.hudChangeTrigger(id, index, { then: root.hudStepsOf(trigger).concat([step]) }, "a step added");
 	}
 
 	function hudChangeStep(id, index, stepIndex, values) {
 		const zone = root.hudZones.find(z => z.id === id);
 		const trigger = zone ? root.hudTriggers(zone)[index] : null;
 		if (!trigger) return;
-		root.hudChangeTrigger(id, index, { then: root.hudStepsOf(trigger).map((s, i) => i === stepIndex ? Object.assign({}, s, values) : s) });
+		root.hudChangeTrigger(id, index, { then: root.hudStepsOf(trigger).map((s, i) => i === stepIndex ? Object.assign({}, s, values) : s) }, "a step changed");
 	}
 
 	function hudRemoveStep(id, index, stepIndex) {
 		const zone = root.hudZones.find(z => z.id === id);
 		const trigger = zone ? root.hudTriggers(zone)[index] : null;
 		if (!trigger) return;
-		root.hudChangeTrigger(id, index, { then: root.hudStepsOf(trigger).filter((s, i) => i !== stepIndex) });
+		root.hudChangeTrigger(id, index, { then: root.hudStepsOf(trigger).filter((s, i) => i !== stepIndex) }, "a step removed");
 	}
 
 	// reactions copied from a zone, to paste into others (this session)
@@ -445,7 +520,7 @@ Singleton {
 		const zone = root.hudZones.find(z => z.id === id);
 		if (!zone || root.hudClipboard.length === 0) return;
 		const copied = root.hudClipboard.map(t => JSON.parse(JSON.stringify(t)));
-		root.hudSetTriggers(id, replace ? copied : root.hudTriggers(zone).concat(copied));
+		root.hudSetTriggers(id, replace ? copied : root.hudTriggers(zone).concat(copied), "reactions pasted");
 	}
 
 	function hudPasteIntoScene(sceneId, replace) {
@@ -460,49 +535,18 @@ Singleton {
 			delete zone.every;
 			delete zone.key;
 			return zone;
-		}));
+		}), "reactions pasted into the scene");
 	}
 
 	// ── sequences: reactions kept by name, for later and for other games ──
 	// options.hudPresets: [{id, name, triggers, from, made}] – one zone's
 	// reactions (with their patterns, keys and follow-up steps) under a name
-	// – "Button press", "Cast spell", "Shoot". Some come along as starters.
-	readonly property var hudStarterPresets: [
-		{ id: "starter-button", name: "Button press", starter: true, triggers: [
-			root.hudTrigger("hover", { feel: "WHISPER COLLISION" }),
-			root.hudTrigger("click", { feel: "SHARP COLLISION" })
-		] },
-		{ id: "starter-spell", name: "Cast spell", starter: true, triggers: [
-			root.hudTrigger("click", { feel: "DAMP STATE CHANGE", then: [
-				{ when: "clickAnywhere", feel: "SHARP STATE CHANGE", key: "", keyName: "", within: 6000, delay: 500 }
-			] })
-		] },
-		{ id: "starter-shoot", name: "Shoot", starter: true, triggers: [
-			root.hudTrigger("press", { feel: "SHARP COLLISION", key: "BTN_LEFT", keyName: "Left click", every: 60, calm: 40 })
-		] },
-		{ id: "starter-reload", name: "Reload", starter: true, triggers: [
-			root.hudTrigger("press", { feel: "DAMP COLLISION", every: 300, calm: 250, then: [
-				{ when: "change", feel: "SHARP STATE CHANGE", key: "", keyName: "", within: 4000, delay: 300 }
-			] })
-		] },
-		{ id: "starter-hit", name: "Hit taken", starter: true, triggers: [
-			root.hudTrigger("red", { feel: "SHARP STATE CHANGE", level: 0 })
-		] },
-		{ id: "starter-ready", name: "Ability ready", starter: true, triggers: [
-			root.hudTrigger("bright", { feel: "WHISPER STATE CHANGE" })
-		] },
-		{ id: "starter-spent", name: "Charge spent", starter: true, triggers: [
-			root.hudTrigger("dark", { feel: "DAMP STATE CHANGE" })
-		] },
-		{ id: "starter-menu", name: "Menu hover", starter: true, triggers: [
-			root.hudTrigger("hover", { feel: "WHISPER COLLISION" })
-		] }
-	]
+	// – "Button press", "Cast spell", "Shoot" – for any zone of any game.
 	readonly property var hudSavedPresets: {
 		const list = root.option("hudPresets", null);
 		return Array.isArray(list) ? list : [];
 	}
-	readonly property var hudPresets: root.hudSavedPresets.concat(root.hudStarterPresets)
+	readonly property var hudPresets: root.hudSavedPresets
 
 	function hudPreset(id) {
 		return root.hudPresets.find(p => p.id === id) ?? null;
@@ -521,16 +565,19 @@ Singleton {
 		if (triggers.length === 0) return "";
 		const presetId = `p${Date.now().toString(36)}${root.hudSavedPresets.length}`;
 		const preset = { id: presetId, name: (name ?? "").trim() || zone.name, triggers, from: root.gameKey, made: Date.now() };
+		root.hudRecord("a sequence kept");
 		root.setOption("hudPresets", root.hudSavedPresets.concat([preset]));
 		return presetId;
 	}
 
 	function hudRenamePreset(id, name) {
 		if ((name ?? "").trim() === "") return;
+		root.hudRecord("the sequence renamed");
 		root.setOption("hudPresets", root.hudSavedPresets.map(p => p.id === id ? Object.assign({}, p, { name: name.trim() }) : p));
 	}
 
 	function hudRemovePreset(id) {
+		root.hudRecord("the sequence removed");
 		root.setOption("hudPresets", root.hudSavedPresets.filter(p => p.id !== id));
 	}
 
@@ -540,7 +587,7 @@ Singleton {
 		const preset = root.hudPreset(presetId);
 		if (!zone || !preset) return;
 		const triggers = root.hudPresetTriggers(preset);
-		root.hudSetTriggers(id, replace ? triggers : root.hudTriggers(zone).concat(triggers));
+		root.hudSetTriggers(id, replace ? triggers : root.hudTriggers(zone).concat(triggers), "a sequence used");
 	}
 
 	// … into every zone of a scene
@@ -556,21 +603,22 @@ Singleton {
 			delete zone.every;
 			delete zone.key;
 			return zone;
-		}));
+		}), "a sequence given to the scene");
 	}
 
 	function hudRemoveTrigger(id, index) {
 		const zone = root.hudZones.find(z => z.id === id);
 		if (!zone) return;
-		root.hudSetTriggers(id, root.hudTriggers(zone).filter((t, i) => i !== index));
+		root.hudSetTriggers(id, root.hudTriggers(zone).filter((t, i) => i !== index), "a reaction removed");
 	}
 
 	function hudChangeZone(id, values) {
-		root.hudSaveZones(root.hudZones.map(z => z.id === id ? Object.assign({}, z, values) : z));
+		const label = values && values.name !== undefined ? "the zone renamed" : "the zone moved";
+		root.hudSaveZones(root.hudZones.map(z => z.id === id ? Object.assign({}, z, values) : z), label);
 	}
 
 	function hudRemoveZone(id) {
-		root.hudSaveZones(root.hudZones.filter(z => z.id !== id));
+		root.hudSaveZones(root.hudZones.filter(z => z.id !== id), "the zone removed");
 	}
 
 	// where the game's window sits on its output, logical px (a fullscreen

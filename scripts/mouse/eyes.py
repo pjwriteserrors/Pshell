@@ -148,9 +148,11 @@ class Measure:
 
     def scene_scores(self, gray, width, height):
         """Per scene: the mean likeness of its zones to the picture's (the
-        HUD of a fight is there, the dialog's is not); a scene with no
-        zones by the whole frame, coarsely."""
-        out = {}
+        HUD of a fight is there, the dialog's is not) – each scene on its
+        own, so several can be there at once (the inventory open over the
+        bar of slots); a scene with no zones by the whole frame, coarsely.
+        Also each zone's own likeness ({"alike": {zone id: 0..1}})."""
+        out, alike = {}, {}
         by_id = {zone[0]: zone for zone in self.zones}
         for scene_id, picture, zone_ids in self.scenes:
             ref = self.reference(picture, width, height)
@@ -161,12 +163,14 @@ class Measure:
                 scores = []
                 for zone in zones:
                     x0, y0, x1, y1 = self.rect(zone, width, height)
-                    scores.append(self.alike(ref[y0:y1, x0:x1], gray[y0:y1, x0:x1]))
+                    score = self.alike(ref[y0:y1, x0:x1], gray[y0:y1, x0:x1])
+                    alike[zone[0]] = round(score, 3)
+                    scores.append(score)
                 out[scene_id] = round(sum(scores) / len(scores), 3)
             else:
                 small = gray[::4, ::4]
                 out[scene_id] = round(self.alike(ref[::4, ::4], small), 3)
-        return out
+        return out, alike
 
     def zone_values(self, gray, red_map, before_gray, before_red, width, height):
         """Per zone: the mean change, the change in redness and in
@@ -204,7 +208,7 @@ class Measure:
                 out["zones"] = self.zone_values(gray, red_map, self.gray, self.red_map, width, height)
         self.count += 1
         if self.scenes and self.count % 4 == 0:
-            out["scenes"] = self.scene_scores(gray, width, height)
+            out["scenes"], out["alike"] = self.scene_scores(gray, width, height)
         self.gray, self.red, self.bright, self.red_map = gray, red, bright, red_map
         return out
 

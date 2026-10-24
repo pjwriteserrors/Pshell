@@ -254,11 +254,14 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
     every 4th frame, how alike the frame is to each scene's picture inside
     the scene's zones (zero-mean correlation per zone, so brighter, noisier,
     slightly moved is still alike; a scene with no zones by the whole
-    frame). The daemon keeps the best scene above its own bar (`similar`,
-    0.55 by itself; held until another beats it by 0.1 or it falls 0.1
-    under) as the one that is up – the page shows it live, with every
-    scene's likeness – and only its zones fire; with no scene recognised
-    only zones of scenes without a picture do, the rest stays quiet. A
+    frame), and each zone's own likeness (`alike`, shown on the page as
+    "alike N %" for the zone picked). Every scene is looked for on its own:
+    each above its own bar (`similar`, 0.55 by itself; held while it stays
+    within 0.1 under) is up, so several are at once – the inventory open
+    over the bar of slots keeps the slots' zones alive (`Eyes.up`, the best
+    of them `Eyes.scene` for the log) – and the zones of every scene that
+    is up fire; with no scene recognised only zones of scenes without a
+    picture do, the rest stays quiet. A
     `press` on a zone that also reacts to clicks leaves mouse buttons to
     the click. Every pulse and its reason goes to
     `~/.cache/pshell/mouse-felt.log`. A zone **reacts** in several ways at once, each with
@@ -280,15 +283,24 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
     with three patterns is three lines on the page. Reactions are **copied**
     between zones ("Copy all" or one reaction's copy, then "Paste" into a
     zone or "Paste into every zone" of the scene; `Mouse.hudClipboard`, this
-    session) and **kept as sequences** ("Keep as a sequence", a name –
-    "Button press", "Cast spell", "Shoot": the zone's reactions with their
-    patterns, keys and follow-up steps go into `options.hudPresets`, which
-    is not per game; the "Sequences" list under a zone's reactions adds one
-    (+) or replaces the zone's with it (⇄), the scene's card gives one to
-    every zone of the scene; eight starters – button press, cast spell,
-    shoot, reload, hit taken, ability ready, charge spent, menu hover – come
-    along and cannot be removed; `Mouse.hudSavePreset`, `hudApplyPreset`,
-    `hudApplyPresetToScene`). Hover and click know the pointer through X11 (`Pointer`: python-xlib, the active
+    session) and **kept as sequences** ("Keep these", a name – "Button
+    press", "Cast spell", "Shoot": the zone's reactions with their patterns,
+    keys and follow-up steps go into `options.hudPresets`, which is not per
+    game; in the "Sequences" list under a zone's reactions a click adds one
+    to the zone, ⇄ replaces the zone's with it, the pencil renames it, and
+    the scene's card gives one to every zone of the scene;
+    `Mouse.hudSavePreset`, `hudApplyPreset`, `hudApplyPresetToScene`). A
+    reaction on the page is one card: what it reacts to, "feels …", "on …"
+    and the fine-tuning (needs, every, calm) as pickers that open a list,
+    the sliders folded away behind the fine-tuning pill; a step is one line
+    ("then 1 · a click elsewhere · Knock · any button · within 5 s").
+    **Undo** takes back everything done on the page – zones drawn, moved
+    and removed, scenes (the picture of a removed scene is kept as
+    `<picture>.gone` and comes back), reactions, steps, sequences – step by
+    step, with the redo beside it and Ctrl+Z / Ctrl+Shift+Z on the picture
+    (`Mouse.hudHistory`: the state before each change, labelled, 80 deep,
+    changes with one label within 1.2 s are one, so a slider's drag is one
+    step; `hudUndo`, `hudRedo`, this session). Hover and click know the pointer through X11 (`Pointer`: python-xlib, the active
     X window's geometry and the pointer 30 times a second; Proton games are
     X11, a Wayland-native game has no pointer to ask for and those two stay
     quiet; `eyes.pointer` tells). The presses are read whenever the picture
