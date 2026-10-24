@@ -354,6 +354,14 @@ SettingsPage {
 			checked: Mouse.option("hud", true)
 			onToggled: on => Mouse.setOption("hud", on)
 		}
+
+		FlagRow {
+			icon: "gamepad_variant"
+			title: "In games the buttons are the game's"
+			subtitle: "While a game has the focus, only rules made for that game take a button; the wheel click, the gesture button and the rest reach the game as they are – holding the wheel to pan works"
+			checked: Mouse.option("gameButtons", true)
+			onToggled: on => Mouse.setOption("gameButtons", on)
+		}
 	}
 
 	// ── rules ──────────────────────────────────────────────────────────────

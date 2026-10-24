@@ -98,11 +98,15 @@ class Engine:
     def thumb_step(self):
         return float(self.options.get("thumbStep", 18))
 
-    def wants(self):
-        """What the device must report: {control: {divert, rawxy}}, thumb, chord wheel."""
+    def wants(self, only_app=None):
+        """What the device must report: {control: {divert, rawxy}}, thumb, chord wheel.
+        With `only_app` (a game has the focus) only the rules made for that
+        very app count: the rest of the buttons stay the game's."""
         out = {}
         thumb = False
         for rule in self.rules:
+            if only_app is not None and str(rule.get("app") or "").lower() != only_app:
+                continue
             control, trigger = rule["control"], rule["trigger"]
             if control == "thumb":
                 thumb = True

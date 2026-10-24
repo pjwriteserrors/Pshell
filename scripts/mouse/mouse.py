@@ -575,7 +575,11 @@ class Daemon:
     def apply_diversion(self, mouse):
         if not self.in_charge or not mouse.online:
             return
-        wants, thumb = self.engine.wants()
+        # in a game the buttons are the game's: only rules made for it divert
+        only = None
+        if self.gaming and self.game_focused and self.config["options"].get("gameButtons", True) is not False:
+            only = (self.app or "").lower()
+        wants, thumb = self.engine.wants(only)
         controls = {c["control"]: c for c in mouse.state.get("controls") or []}
         d = DryDevice(mouse) if DRY else mouse.device
         for name, control in controls.items():
@@ -596,6 +600,15 @@ class Daemon:
                 mouse.thumb_diverted = thumb
             except HidppError as error:
                 log(f"thumb wheel: {error}")
+
+    def rediv(self):
+        """The diversion again for every mouse (a game came or went)."""
+        for mouse in self.mice.values():
+            if mouse.online:
+                try:
+                    self.apply_diversion(mouse)
+                except (Offline, TimeoutError, OSError) as error:
+                    log(f"divert: {error}")
 
     def undivert(self, mouse):
         if DRY:
@@ -1031,6 +1044,8 @@ class Daemon:
         if app != self.app:
             self.app = app
             self.loop.post(lambda: setattr(self.engine, "app", app))
+            if self.gaming:
+                self.loop.post(self.rediv)
             # the page switches profiles by app, so always
             emit("focus", app=app)
 
@@ -1165,6 +1180,7 @@ class Daemon:
             if not self.gaming:
                 self.felt_count = {}
             self.update_gamefeel()
+            self.rediv()
         elif op == "watch":
             self.watching = bool(command.get("on"))
             if self.watching:

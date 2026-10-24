@@ -40,7 +40,11 @@ for the thumb wheel, switches the ratchet for SmartShift).
 
 Only controls with a rule are diverted, raw movement only for those with a
 swipe, the main wheel only while a button with a wheel rule is held, so
-everything else stays as fast as the mouse is. The focused app comes from
+everything else stays as fast as the mouse is. While a game has the focus
+(`gameButtons`, on by itself) only the rules made for that very app divert
+a button – the wheel click, the gesture button and the rest reach the game
+as they are, holding the wheel to pan works; the diversion is set again as
+games come and go and as the focus changes between them. The focused app comes from
 `niri msg -j event-stream`; held modifiers from the keyboards' evdev
 devices (read only while a rule asks for them – what Solaar cannot do on
 Wayland). A rule can also make the mouse pulse (`feel`), and swipes can go
