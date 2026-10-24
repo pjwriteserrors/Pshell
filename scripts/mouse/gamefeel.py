@@ -1165,6 +1165,87 @@ class Ears:
         return False, "", kind, strength, "known, but not after " + ", ".join(key_name(code) for code, _ in fresh[:2]) + " at this delay (or a quiet click sound)"
 
 
+class Pointer:
+    """Where the pointer is inside the game's window, as fractions – for the
+    zones' hover and click. X11 only (Proton and most games run through
+    XWayland): the active X window's geometry and the pointer, asked of
+    the X server 30 times a second while wanted; a Wayland-native game
+    has no pointer to ask for (niri does not tell), hover and click stay
+    quiet there."""
+
+    def __init__(self, daemon):
+        self.daemon = daemon
+        self.thread = None
+        self.wanted = False
+        self.lock = threading.Lock()
+        # (fx, fy) inside the active window, or None
+        self.at = None
+        self.ok = None
+
+    def start(self):
+        self.wanted = True
+        if self.thread is None or not self.thread.is_alive():
+            self.thread = threading.Thread(target=self.run, daemon=True)
+            self.thread.start()
+
+    def stop(self):
+        self.wanted = False
+        with self.lock:
+            self.at = None
+
+    def where(self):
+        with self.lock:
+            return self.at
+
+    def run(self):
+        try:
+            from Xlib import X, display  # noqa: WPS433
+        except ImportError:
+            self.ok = False
+            self.daemon.log("pointer: python-xlib missing – hover and click zones are quiet")
+            return
+        try:
+            disp = display.Display()
+        except Exception as error:  # noqa: BLE001 – Xlib raises its own kinds
+            self.ok = False
+            self.daemon.log(f"pointer: no X display ({error}) – hover and click zones are quiet")
+            return
+        self.ok = True
+        root = disp.screen().root
+        active_atom = disp.intern_atom("_NET_ACTIVE_WINDOW")
+        window, geometry, checked = None, None, 0.0
+        while self.wanted:
+            now = time.monotonic()
+            try:
+                if window is None or now - checked > 1.0:
+                    checked = now
+                    prop = root.get_full_property(active_atom, X.AnyPropertyType)
+                    wid = int(prop.value[0]) if prop and prop.value else 0
+                    if wid:
+                        window = disp.create_resource_object("window", wid)
+                        geo = window.get_geometry()
+                        at = root.translate_coords(window, 0, 0)
+                        geometry = (at.x, at.y, geo.width, geo.height)
+                    else:
+                        window, geometry = None, None
+                if geometry is not None and geometry[2] > 0 and geometry[3] > 0:
+                    pointer = root.query_pointer()
+                    fx = (pointer.root_x - geometry[0]) / geometry[2]
+                    fy = (pointer.root_y - geometry[1]) / geometry[3]
+                    with self.lock:
+                        self.at = (fx, fy) if 0 <= fx <= 1 and 0 <= fy <= 1 else None
+                else:
+                    with self.lock:
+                        self.at = None
+            except Exception:  # noqa: BLE001 – the window went, X hiccuped: try again
+                window, geometry = None, None
+                with self.lock:
+                    self.at = None
+            time.sleep(1 / 30)
+        with self.lock:
+            self.at = None
+
+
 class Eyes:
     """The game's picture (eyes.py casts the game's window and measures
     every frame): a shake – the picture jolting back and forth while the
@@ -1173,10 +1254,16 @@ class Eyes:
     cells of the picture that change only after a press of yours (the
     ammo counter, a cast bar) are the HUD's own word for what you did,
     learned per game. On top, the HUD zones the player drew
-    (options.hudZones[game]: [{id, name, x, y, w, h, when, key, feel,
-    level, every}]): each fires its own pattern when it changes, changes
-    after a press (any, or one key), turns red, brightens or darkens.
-    Runs only while wanted: options.rumbleEyes (on by default) with the
+    (options.hudZones[game]: [{id, scene, name, x, y, w, h, triggers:
+    [{kind, feel, key, level, every, on}]}] – kinds: change, press (after
+    any press, or `key`), red, bright, dark, hover (the pointer comes
+    in), click (a button goes down with the pointer in it); an older zone
+    with when/feel/level/every is one trigger). Zones belong to scenes
+    (options.hudScenes[game]: [{id, name, picture, similar}]): eyes.py
+    tells how alike the frame is to each scene's picture inside its
+    zones, the best one above its `similar` (0.45 by itself) is the scene
+    that is up and only its zones fire; with none recognised every zone
+    does. Runs only while wanted: options.rumbleEyes (on by default) with the
     automatic source, and a game window has the focus."""
 
     def __init__(self, daemon, memory, gate):
@@ -1199,12 +1286,22 @@ class Eyes:
         self.told = 0.0
         # the cells' grid [cols, rows] of the small frame
         self.grid = []
+        # the scenes' likeness and the one that is up
+        self.scores = {}
+        self.scene = ""
+        self.scene_since = 0.0
+        # the pointer (hover and click zones) and which zones it is in
+        self.pointer = Pointer(daemon)
+        self.inside = set()
 
     def options(self):
         return self.daemon.config["options"]
 
+    KINDS = ("change", "press", "red", "bright", "dark", "hover", "click")
+
     def zones(self):
-        """The drawn zones of the game that runs, well-formed only."""
+        """The drawn zones of the game that runs, well-formed only, each
+        with its list of triggers."""
         table = self.options().get("hudZones")
         items = table.get(self.daemon.game_name) if isinstance(table, dict) and self.daemon.game_name else None
         out = []
@@ -1217,22 +1314,61 @@ class Eyes:
             if zone["w"] <= 0 or zone["h"] <= 0:
                 continue
             zone["name"] = str(item.get("name") or "Zone")
-            zone["when"] = str(item.get("when") or "change")
-            zone["key"] = item.get("key") or ""
-            zone["feel"] = str(item.get("feel") or "SUBTLE COLLISION")
-            try:
-                zone["level"] = float(item.get("level", 0)) or 0.0
-                zone["every"] = max(0.03, float(item.get("every", 150)) / 1000)
-            except (TypeError, ValueError):
-                zone["level"], zone["every"] = 0.0, 0.15
+            zone["scene"] = str(item.get("scene") or "")
+            raw = item.get("triggers")
+            if not isinstance(raw, list):
+                raw = [{"kind": item.get("when") or "change", "feel": item.get("feel"), "key": item.get("key"),
+                        "level": item.get("level"), "every": item.get("every")}]
+            triggers = []
+            for t in raw:
+                if not isinstance(t, dict) or t.get("on") is False:
+                    continue
+                kind = str(t.get("kind") or "change")
+                if kind not in self.KINDS:
+                    continue
+                try:
+                    level = float(t.get("level") or 0) or 0.0
+                    every = max(0.03, float(t.get("every") or 150) / 1000)
+                except (TypeError, ValueError):
+                    level, every = 0.0, 0.15
+                triggers.append({"kind": kind, "feel": str(t.get("feel") or "SUBTLE COLLISION"),
+                                 "key": t.get("key") or "", "level": level, "every": every})
+            zone["triggers"] = triggers
             out.append(zone)
         return out
+
+    def scenes(self):
+        """The scenes of the game that runs: id, picture, how alike the
+        frame has to be, and their zones."""
+        table = self.options().get("hudScenes")
+        items = table.get(self.daemon.game_name) if isinstance(table, dict) and self.daemon.game_name else None
+        zones = self.zones()
+        out = []
+        for item in items if isinstance(items, list) else []:
+            if not isinstance(item, dict) or not item.get("id"):
+                continue
+            picture = str(item.get("picture") or "")
+            if not picture or not os.path.exists(picture):
+                continue
+            try:
+                similar = float(item.get("similar", 0.45))
+            except (TypeError, ValueError):
+                similar = 0.45
+            out.append({"id": str(item["id"]), "picture": picture, "similar": max(0.05, min(0.95, similar)),
+                        "zones": [z["id"] for z in zones if z["scene"] == str(item["id"])]})
+        return out
+
+    def wants_presses(self):
+        """Whether the presses are needed with the sound off: a press or
+        click trigger, or the HUD cells to learn."""
+        return self.on
 
     def send_zones(self, force=False):
         """The zones' places to eyes.py, when they changed."""
         if self.proc is None:
             return
-        line = json.dumps({"zones": [{k: zone[k] for k in ("id", "x", "y", "w", "h")} for zone in self.zones()]},
+        line = json.dumps({"zones": [{k: zone[k] for k in ("id", "x", "y", "w", "h")} for zone in self.zones()],
+                           "scenes": [{k: scene[k] for k in ("id", "picture", "zones")} for scene in self.scenes()]},
                           separators=(",", ":"))
         if line == self.zones_sent and not force:
             return
@@ -1262,6 +1398,7 @@ class Eyes:
                 return
             self.window = 0
             self.zones_sent = ""
+            self.pointer.start()
             threading.Thread(target=self.listen, args=(self.proc,), daemon=True).start()
             threading.Thread(target=self.errors, args=(self.proc,), daemon=True).start()
         elif not wanted and self.proc is not None:
@@ -1272,8 +1409,10 @@ class Eyes:
             except (OSError, ValueError):
                 pass
             proc.terminate()
+            self.pointer.stop()
             self.on = False
             self.window = 0
+            self.scene, self.scores = "", {}
             self.daemon.tell_eyes()
         if self.proc is not None and self.daemon.game_window != self.window:
             self.window = self.daemon.game_window
@@ -1324,6 +1463,8 @@ class Eyes:
         self.latest = {"dx": dx, "dy": dy, "dred": data.get("dred", 0), "dbright": data.get("dbright", 0), "cells": len(data.get("cells") or [])}
         if isinstance(data.get("grid"), list):
             self.grid = data["grid"]
+        if isinstance(data.get("scenes"), dict):
+            self.recognise(data["scenes"], at)
         measured = data.get("zones")
         if isinstance(measured, dict):
             self.zone_values = measured
@@ -1337,6 +1478,7 @@ class Eyes:
         fresh = self.gate.fresh(at, self.daemon.ears.window)
         if isinstance(measured, dict) and measured:
             self.drawn(at, measured, fresh, moved)
+        self.hover(at)
         resting = now - self.daemon.last_motion > 0.15 and not self.gate.moving
         # a shake: the picture jolts and comes back within a few frames,
         # while the player does not move it (a camera turn is one way)
@@ -1365,45 +1507,120 @@ class Eyes:
                     self.last["hud"] = at
                     self.event("hud", 0.5, "HUD", f"cell {yours[0]} of the HUD changed after " + ", ".join(key_name(code) for code, _ in fresh[:2]), cells=yours)
 
+    def recognise(self, scores, at):
+        """The scene that is up: the best likeness above its own bar, kept
+        until another beats it clearly or it falls well under."""
+        self.scores = scores
+        scenes = {scene["id"]: scene for scene in self.scenes()}
+        best, best_score = "", 0.0
+        for scene_id, score in scores.items():
+            scene = scenes.get(scene_id)
+            if scene and score >= scene["similar"] and score > best_score:
+                best, best_score = scene_id, float(score)
+        current = self.scene
+        if current and current in scenes and current in scores:
+            held = float(scores[current])
+            if held >= scenes[current]["similar"] - 0.1 and best_score < held + 0.1:
+                best = current
+        if best != current:
+            self.scene = best
+            self.scene_since = at
+            if self.daemon.watching:
+                self.daemon.emit("eyes", **self.summary())
+
+    def live_zones(self):
+        """The zones that may fire now: the scene's that is up, or, none
+        recognised, all of them."""
+        zones = self.zones()
+        if self.scene:
+            mine = [z for z in zones if z["scene"] == self.scene]
+            if mine:
+                return mine
+        return zones
+
+    def fire(self, at, zone, trigger, reason, strength=0.5):
+        key = (zone["id"], trigger["kind"])
+        if at - self.zone_last.get(key, 0.0) < trigger["every"]:
+            return False
+        self.zone_last[key] = at
+        self.event("zone", strength, zone["name"], f"{zone['name']}: {reason}", zone=zone, trigger=trigger)
+        return True
+
     def drawn(self, at, measured, fresh, moved):
-        """The player's zones: each fires its own pattern on its condition
-        – `change` (it changed; not while the whole picture moves, a
-        window behind a transparent HUD), `press` (changed with a press of
-        yours fresh – any, or `key`), `red`, `bright`, `dark`."""
-        for zone in self.zones():
+        """The player's zones, by the picture: each trigger fires its own
+        pattern on its condition – `change` (it changed; not while the
+        whole picture moves, a window behind a transparent HUD), `press`
+        (changed with a press of yours fresh – any, or `key`), `red`,
+        `bright`, `dark`."""
+        for zone in self.live_zones():
             values = measured.get(zone["id"])
             if not isinstance(values, list) or len(values) < 3:
                 continue
             change, dred, dbright = (float(v) for v in values[:3])
-            if at - self.zone_last.get(zone["id"], 0.0) < zone["every"]:
+            for trigger in zone["triggers"]:
+                kind, level = trigger["kind"], trigger["level"]
+                if kind == "change":
+                    fired = change >= (level or 14) and moved < 1.0
+                    reason = f"changed by {change:.0f}"
+                elif kind == "press":
+                    wanted = self.key_code(trigger["key"])
+                    hits = [code for code, _ in fresh if wanted is None or code == wanted]
+                    fired = change >= (level or 14) and bool(hits)
+                    reason = f"changed by {change:.0f} after {key_name(hits[0])}" if hits else ""
+                elif kind == "red":
+                    fired = dred >= (level or 8)
+                    reason = f"turned red by {dred:.0f}"
+                elif kind == "bright":
+                    fired = dbright >= (level or 20)
+                    reason = f"brightened by {dbright:.0f}"
+                elif kind == "dark":
+                    fired = dbright <= -(level or 20)
+                    reason = f"darkened by {-dbright:.0f}"
+                else:
+                    continue
+                if fired:
+                    strength = max(0.2, min(1.0, max(change, abs(dred), abs(dbright)) / 40))
+                    self.fire(at, zone, trigger, reason, strength)
+
+    def hover(self, at):
+        """The pointer coming into a zone with a hover trigger."""
+        where = self.pointer.where()
+        if where is None:
+            self.inside = set()
+            return
+        fx, fy = where
+        now_inside = set()
+        for zone in self.live_zones():
+            if zone["x"] <= fx <= zone["x"] + zone["w"] and zone["y"] <= fy <= zone["y"] + zone["h"]:
+                now_inside.add(zone["id"])
+                if zone["id"] not in self.inside:
+                    for trigger in zone["triggers"]:
+                        if trigger["kind"] == "hover":
+                            self.fire(at, zone, trigger, "the pointer came in")
+        self.inside = now_inside
+
+    def press(self, code, down):
+        """A button going down with the pointer in a zone with a click
+        trigger (`key` "" is any mouse button)."""
+        if not down or not self.on:
+            return
+        where = self.pointer.where()
+        if where is None:
+            return
+        fx, fy = where
+        at = time.monotonic()
+        for zone in self.live_zones():
+            if not (zone["x"] <= fx <= zone["x"] + zone["w"] and zone["y"] <= fy <= zone["y"] + zone["h"]):
                 continue
-            when, level = zone["when"], zone["level"]
-            after = ""
-            if when == "change":
-                fired = change >= (level or 14) and moved < 1.0
-                reason = f"changed by {change:.0f}"
-            elif when == "press":
-                wanted = self.key_code(zone["key"])
-                hits = [code for code, _ in fresh if wanted is None or code == wanted]
-                fired = change >= (level or 14) and bool(hits)
-                after = key_name(hits[0]) if hits else ""
-                reason = f"changed by {change:.0f} after {after}" if hits else f"changed by {change:.0f}, no press"
-            elif when == "red":
-                fired = dred >= (level or 8)
-                reason = f"turned red by {dred:.0f}"
-            elif when == "bright":
-                fired = dbright >= (level or 20)
-                reason = f"brightened by {dbright:.0f}"
-            elif when == "dark":
-                fired = dbright <= -(level or 20)
-                reason = f"darkened by {-dbright:.0f}"
-            else:
-                continue
-            if not fired:
-                continue
-            self.zone_last[zone["id"]] = at
-            strength = max(0.2, min(1.0, max(change, abs(dred), abs(dbright)) / 40))
-            self.event("zone", strength, zone["name"], f"{zone['name']}: {reason}", zone=zone)
+            for trigger in zone["triggers"]:
+                if trigger["kind"] != "click":
+                    continue
+                wanted = self.key_code(trigger["key"])
+                if wanted is None and not (272 <= code <= 279):
+                    continue
+                if wanted is not None and code != wanted:
+                    continue
+                self.fire(at, zone, trigger, f"{key_name(code)} on it")
 
     @staticmethod
     def key_code(key):
@@ -1417,9 +1634,9 @@ class Eyes:
         code = E.ecodes.get(str(key))
         return code if isinstance(code, int) else None
 
-    def event(self, kind, strength, label, reason, cells=None, zone=None):
+    def event(self, kind, strength, label, reason, cells=None, zone=None, trigger=None):
         self.seen[kind] = self.seen.get(kind, 0) + 1
-        waveform = zone["feel"] if zone else wave_for(kind, strength)
+        waveform = trigger["feel"] if trigger else wave_for(kind, strength)
         self.daemon.felt("eyes", kind, strength, waveform, label, stream=zone["id"] if zone else "")
         if self.daemon.watching:
             self.daemon.emit("onset", source="eyes", at=round(time.monotonic(), 3), cluster=(cells or [-1])[0], n=0, win=0,
@@ -1428,4 +1645,5 @@ class Eyes:
 
     def summary(self):
         return {"on": self.on, "window": self.window, "frames": self.frames, "seen": self.seen, "latest": self.latest,
-                "hud": self.memory.cells_summary() if self.memory.entry else {}, "zones": len(self.zones()), "grid": self.grid}
+                "hud": self.memory.cells_summary() if self.memory.entry else {}, "zones": len(self.zones()), "grid": self.grid,
+                "scene": self.scene, "scores": self.scores, "pointer": self.pointer.ok}

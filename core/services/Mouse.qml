@@ -250,7 +250,8 @@ Singleton {
 	property var gate: ({ duty: 0, held: [], windows: [] })
 	property var meter: ({})
 	// the game's picture (gamefeel.Eyes): {on, window, frames, seen: {shake, hit, flash, hud, zone}, latest (with
-	// zones: {id: [change, red, bright]} for the zones drawn by hand), hud: {cells, yours}, zones: how many are drawn}
+	// zones: {id: [change, red, bright]} for the zones drawn by hand), hud: {cells, yours}, zones: how many are drawn,
+	// grid, scene: the scene recognised (its id, "" none), scores: {scene: likeness 0..1}, pointer: X pointer found}
 	property var eyes: ({})
 	// ── the HUD by hand (settings/mouse/HudZones.qml, gamefeel.Eyes) ──────
 	// Per game: scenes – a picture each, of the HUD as it looks in a fight,
@@ -316,12 +317,81 @@ Singleton {
 		return root.hudScene ?? root.hudAddScene("");
 	}
 
+	// what a zone reacts to: [{kind, feel, key, level, every, on}]; kinds
+	// change, press, click, hover, red, bright, dark (an older zone's
+	// when/feel/level/every is one trigger)
+	readonly property var hudKinds: [
+		{ value: "change", label: "Changes", icon: "swap_horizontal", feel: "SUBTLE COLLISION" },
+		{ value: "press", label: "After a press", icon: "keyboard_outline", feel: "SUBTLE COLLISION" },
+		{ value: "click", label: "Clicked", icon: "cursor_default_click_outline", feel: "SHARP COLLISION" },
+		{ value: "hover", label: "Hovered", icon: "gesture_tap", feel: "WHISPER COLLISION" },
+		{ value: "red", label: "Turns red", icon: "heart_pulse", feel: "SHARP STATE CHANGE" },
+		{ value: "bright", label: "Brightens", icon: "white_balance_sunny", feel: "DAMP COLLISION" },
+		{ value: "dark", label: "Darkens", icon: "weather_night", feel: "DAMP STATE CHANGE" }
+	]
+	readonly property string hudLiveScene: String(root.eyes?.scene ?? "")
+	readonly property var hudScores: root.eyes?.scores ?? ({})
+
+	// a list that came through a Repeater's modelData is a QVariantList, not an Array
+	function hudList(value) {
+		if (Array.isArray(value)) return value;
+		if (value && typeof value === "object" && typeof value.length === "number") return Array.from({ length: value.length }, (_, i) => value[i]);
+		return null;
+	}
+
+	function hudTriggers(zone) {
+		if (!zone) return [];
+		const list = root.hudList(zone.triggers);
+		if (list) return list;
+		return [{ kind: zone.when ?? "change", feel: zone.feel ?? "SUBTLE COLLISION", key: zone.key ?? "", keyName: zone.keyName ?? "", level: zone.level ?? 0, every: zone.every ?? 150, on: true }];
+	}
+
+	function hudTrigger(kind, values) {
+		const base = root.hudKinds.find(k => k.value === kind) ?? root.hudKinds[0];
+		return Object.assign({ kind: base.value, feel: base.feel, key: "", keyName: "", level: 0, every: 150, on: true }, values ?? {});
+	}
+
 	function hudAddZone(rect, values) {
 		const scene = root.hudSceneForDrawing();
 		const id = `z${Date.now().toString(36)}${root.hudZones.length}`;
-		const zone = Object.assign({ id, scene: scene.id, name: `Zone ${root.hudZones.length + 1}`, when: "change", key: "", feel: "SUBTLE COLLISION", level: 0, every: 150 }, rect, values ?? {});
+		const given = Object.assign({}, values ?? {});
+		const triggers = Array.isArray(given.triggers) ? given.triggers : [root.hudTrigger(given.when ?? "change", { feel: given.feel })];
+		delete given.when;
+		delete given.feel;
+		const zone = Object.assign({ id, scene: scene.id, name: `Zone ${root.hudZones.length + 1}`, triggers }, rect, given);
 		root.hudSaveZones(root.hudZones.concat([zone]));
 		return id;
+	}
+
+	function hudSetTriggers(id, list) {
+		root.hudSaveZones(root.hudZones.map(z => {
+			if (z.id !== id) return z;
+			const zone = Object.assign({}, z, { triggers: list });
+			delete zone.when;
+			delete zone.feel;
+			delete zone.level;
+			delete zone.every;
+			delete zone.key;
+			return zone;
+		}));
+	}
+
+	function hudAddTrigger(id, kind) {
+		const zone = root.hudZones.find(z => z.id === id);
+		if (!zone) return;
+		root.hudSetTriggers(id, root.hudTriggers(zone).concat([root.hudTrigger(kind)]));
+	}
+
+	function hudChangeTrigger(id, index, values) {
+		const zone = root.hudZones.find(z => z.id === id);
+		if (!zone) return;
+		root.hudSetTriggers(id, root.hudTriggers(zone).map((t, i) => i === index ? Object.assign({}, t, values) : t));
+	}
+
+	function hudRemoveTrigger(id, index) {
+		const zone = root.hudZones.find(z => z.id === id);
+		if (!zone) return;
+		root.hudSetTriggers(id, root.hudTriggers(zone).filter((t, i) => i !== index));
 	}
 
 	function hudChangeZone(id, values) {

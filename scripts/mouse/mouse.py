@@ -1262,9 +1262,10 @@ class Triggers:
         return mode == "always" or (mode == "games" and self.daemon.game_focused)
 
     def gating(self):
-        """The ears want to know about every press."""
-        ears = self.daemon.ears
-        return ears is not None and ears.on and ears.gated()
+        """The ears want to know about every press – or the eyes (press
+        and click zones, the HUD cells to learn)."""
+        ears, eyes = self.daemon.ears, self.daemon.eyes
+        return (ears is not None and ears.on and ears.gated()) or (eyes is not None and eyes.wants_presses())
 
     def wanted(self):
         if actions.evdev is None or not self.mode_on():
@@ -1361,6 +1362,7 @@ class Triggers:
                             continue
                         if gating:
                             self.daemon.ears.press(event.code, event.value == 1)
+                            self.daemon.eyes.press(event.code, event.value == 1)
                         bind = binds.get(event.code)
                         if not bind:
                             continue

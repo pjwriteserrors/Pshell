@@ -69,6 +69,7 @@ FloatingWindow {
 		{ id: "keys", label: "Key binds", icon: "keyboard", hint: "Shortcuts and switches" },
 		{ id: "devices", label: "Devices", icon: "devices", hint: "Mice, keyboards and other HID devices" },
 		{ id: "mouse", label: "Mouse", icon: "mouse_variant", hint: "Buttons, gestures, scrolling, haptics", plugin: "mouse" },
+		{ id: "hud", label: "HUD haptics", icon: "crosshairs_gps", hint: "Zones on the game's HUD the mouse feels", plugin: "mouse" },
 		{ id: "keyboard", label: "Keyboard", icon: "keyboard_settings", hint: "Special keys, backlight, Fn keys", plugin: "keyboard" },
 		{ id: "apex", label: "Apex Pro", icon: "keyboard_variant", hint: "Actuation, Rapid Trigger, keys, OLED", plugin: "apex" },
 		{ id: "multicursor", label: "Multicursor", icon: "cursor_text", hint: "Lines and cursors in every text field", plugin: "multicursor" },
@@ -140,6 +141,8 @@ FloatingWindow {
 		{ page: "mouse", anchor: "mouse-scroll", title: "Mouse wheel", words: "smartshift ratchet free spin torque wheel natural scrolling hires thumb wheel", plugin: "mouse" },
 		{ page: "mouse", anchor: "mouse-haptics", title: "Mouse haptics", words: "haptic vibration feedback strength waveform pulse", plugin: "mouse" },
 		{ page: "mouse", anchor: "mouse-force", title: "Haptic sense panel", words: "force sensing button pressure panel thumb", plugin: "mouse" },
+		{ page: "hud", anchor: "hud-scenes", title: "HUD zones – scenes of the game", words: "hud zone game haptics rumble feel picture scene fight dialog draw screen", plugin: "mouse" },
+		{ page: "hud", anchor: "hud-picture", title: "HUD zones – the picture, drawing and reactions", words: "hud zone draw box click hover change red bright dark pattern vibration", plugin: "mouse" },
 		{ page: "mouse", anchor: "mouse-hosts", title: "Easy-Switch", words: "easy switch host channel computer bluetooth pair", plugin: "mouse" },
 		{ page: "mouse", anchor: "mouse-stats", title: "Mouse statistics", words: "distance clicks scroll odometer statistics", plugin: "mouse" },
 		{ page: "mouse", anchor: "mouse-device", title: "Mouse battery and firmware", words: "battery firmware serial receiver bolt unifying hid++ features", plugin: "mouse" },
@@ -655,6 +658,7 @@ FloatingWindow {
 							case "keys": return keysPage;
 							case "devices": return devicesPage;
 							case "mouse": return mousePage;
+							case "hud": return hudPage;
 							case "keyboard": return keyboardPage;
 							case "apex": return apexPage;
 							case "multicursor": return multicursorPage;
@@ -916,6 +920,12 @@ FloatingWindow {
 		id: mousePage
 
 		MousePage {}
+	}
+
+	Component {
+		id: hudPage
+
+		HudPage {}
 	}
 
 	Component {

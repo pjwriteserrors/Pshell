@@ -321,11 +321,38 @@ ColumnLayout {
 		}
 	}
 
-	// the HUD by hand: zones drawn on the game's picture, each with its
-	// condition and its pattern
-	HudZones {
+	// the HUD by hand lives on its own page
+	RowLayout {
 		Layout.fillWidth: true
+		Layout.leftMargin: 10
 		visible: root.automatic && root.eyesWanted
+		spacing: 10
+
+		Glyph {
+			icon: "crosshairs_gps"
+			size: 15
+			color: Mouse.hudZones.length > 0 ? Theme.primary : Theme.textSubtle
+		}
+
+		StyledText {
+			Layout.fillWidth: true
+			text: {
+				if (Mouse.gameKey === "") return "The HUD by hand – zones on the game's HUD with their own reactions and patterns – once a game runs";
+				const n = Mouse.hudZones.length;
+				const live = Mouse.hudScenes.find(s => s.id === Mouse.hudLiveScene);
+				return n > 0 ? `The HUD by hand – ${n} zone${n === 1 ? "" : "s"} in ${Mouse.hudScenes.length} scene${Mouse.hudScenes.length === 1 ? "" : "s"} for ${Mouse.gameKey}${live ? `, "${live.name}" is up now` : ""}` : `The HUD by hand – nothing drawn for ${Mouse.gameKey} yet`;
+			}
+			tone: Theme.textSubtle
+			font.pixelSize: Theme.size.small
+			wrapMode: Text.WordWrap
+		}
+
+		TextButton {
+			text: "Open the HUD page"
+			icon: "arrow_right"
+			variant: "text"
+			onActivated: NiriSettings.page = "hud"
+		}
 	}
 
 	// the inside, live: numbers, windows, every onset with its reason, the sounds

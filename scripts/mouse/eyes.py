@@ -6,9 +6,12 @@
 Reads lines on stdin: `<window id>` casts that window (niri's
 org.gnome.Mutter.ScreenCast, RecordWindow: niri serves it itself, nothing
 is shown or asked), scaled on the GPU to 192 pixels wide; `0` stops;
-`{"zones": [{"id", "x", "y", "w", "h"}]}` (fractions of the window) names
-the regions of the HUD the player drew, measured on their own. Every
-frame (at most 20 a second, only when the window changed) one JSON line:
+`{"zones": [{"id", "x", "y", "w", "h"}], "scenes": [{"id", "picture",
+"zones": [ids]}]}` (fractions of the window) names the regions of the HUD
+the player drew, measured on their own, and the scenes – a picture of the
+game each (a fight, a dialog) – told apart by how alike the frame is to
+the picture inside the scene's zones. Every frame (at most 20 a second,
+only when the window changed) one JSON line:
 
     {"t": monotonic s, "dx", "dy": how far the whole picture moved against
      the frame before (pixels of the small frame; phase correlation),
@@ -16,7 +19,9 @@ frame (at most 20 a second, only when the window changed) one JSON line:
      change, "bright": mean luminance and its change,
      "cells": [indices of the 8×8-pixel cells that changed],
      "zones": {id: [mean change of the zone (0..255), its change in
-     redness, its change in brightness]}}
+     redness, its change in brightness]},
+     "scenes": {id: how alike the frame is to the scene's picture, 0..1 –
+     every 4th frame}}
 
 The daemon turns that into shakes (the picture jolting back and forth
 while the mouse rests), hits (a sudden red cast), flashes (a sudden
@@ -25,6 +30,7 @@ press – the ammo counter, a cast bar – learned per game), and the drawn
 zones' own conditions with the pattern chosen for each.
 """
 import json
+import os
 import subprocess
 import sys
 import threading
@@ -32,7 +38,7 @@ import time
 
 import numpy as np
 
-sys.path.insert(0, __import__("os").path.dirname(__import__("os").path.dirname(__import__("os").path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from niri_cast import CAST, plain_modifiers  # noqa: E402
 
 import dbus  # noqa: E402
@@ -93,16 +99,82 @@ class Measure:
         self.window = None
         # the player's HUD zones: [(id, x, y, w, h)] as fractions
         self.zones = []
+        # the scenes: [(id, picture path, [zone ids])], their pictures as
+        # gray frames of the cast's size, and a frame counter
+        self.scenes = []
+        self.references = {}
+        self.reference_size = None
+        self.count = 0
+
+    def rect(self, zone, width, height):
+        _, fx, fy, fw, fh = zone
+        x0 = max(0, min(width - 1, int(fx * width)))
+        y0 = max(0, min(height - 1, int(fy * height)))
+        x1 = max(x0 + 1, min(width, int(round((fx + fw) * width))))
+        y1 = max(y0 + 1, min(height, int(round((fy + fh) * height))))
+        return x0, y0, x1, y1
+
+    def reference(self, picture, width, height):
+        """A scene's picture as a gray frame of the cast's size (loaded
+        once per size; a missing picture is None)."""
+        if self.reference_size != (width, height):
+            self.references = {}
+            self.reference_size = (width, height)
+        if picture in self.references:
+            return self.references[picture]
+        gray = None
+        try:
+            from PIL import Image
+            image = Image.open(picture).convert("L").resize((width, height), Image.BILINEAR)
+            gray = np.asarray(image, dtype=np.float32)
+        except (OSError, ValueError, ImportError) as error:
+            log(f"scene picture {picture}: {error}")
+        self.references[picture] = gray
+        return gray
+
+    @staticmethod
+    def alike(a, b):
+        """How alike two gray patches are, 0..1: their zero-mean correlation
+        (the same shapes, whatever the brightness), or, flat patches, their
+        closeness in level."""
+        if a.shape != b.shape or a.size < 4:
+            return 0.0
+        da, db = a - a.mean(), b - b.mean()
+        sa, sb = float(np.sqrt((da * da).mean())), float(np.sqrt((db * db).mean()))
+        if sa < 4 or sb < 4:
+            return max(0.0, 1.0 - abs(float(a.mean()) - float(b.mean())) / 64)
+        corr = float((da * db).mean() / (sa * sb))
+        return max(0.0, min(1.0, corr))
+
+    def scene_scores(self, gray, width, height):
+        """Per scene: the mean likeness of its zones to the picture's (the
+        HUD of a fight is there, the dialog's is not); a scene with no
+        zones by the whole frame, coarsely."""
+        out = {}
+        by_id = {zone[0]: zone for zone in self.zones}
+        for scene_id, picture, zone_ids in self.scenes:
+            ref = self.reference(picture, width, height)
+            if ref is None:
+                continue
+            zones = [by_id[z] for z in zone_ids if z in by_id]
+            if zones:
+                scores = []
+                for zone in zones:
+                    x0, y0, x1, y1 = self.rect(zone, width, height)
+                    scores.append(self.alike(ref[y0:y1, x0:x1], gray[y0:y1, x0:x1]))
+                out[scene_id] = round(sum(scores) / len(scores), 3)
+            else:
+                small = gray[::4, ::4]
+                out[scene_id] = round(self.alike(ref[::4, ::4], small), 3)
+        return out
 
     def zone_values(self, gray, red_map, before_gray, before_red, width, height):
         """Per zone: the mean change, the change in redness and in
         brightness – on the small frame, so a zone is a pixel at least."""
         out = {}
-        for zone_id, fx, fy, fw, fh in self.zones:
-            x0 = max(0, min(width - 1, int(fx * width)))
-            y0 = max(0, min(height - 1, int(fy * height)))
-            x1 = max(x0 + 1, min(width, int(round((fx + fw) * width))))
-            y1 = max(y0 + 1, min(height, int(round((fy + fh) * height))))
+        for zone in self.zones:
+            zone_id = zone[0]
+            x0, y0, x1, y1 = self.rect(zone, width, height)
             now_gray, old_gray = gray[y0:y1, x0:x1], before_gray[y0:y1, x0:x1]
             now_red, old_red = red_map[y0:y1, x0:x1], before_red[y0:y1, x0:x1]
             out[zone_id] = [round(float(np.mean(np.abs(now_gray - old_gray))), 1),
@@ -130,6 +202,9 @@ class Measure:
             out["grid"] = [cols, rows]
             if self.zones:
                 out["zones"] = self.zone_values(gray, red_map, self.gray, self.red_map, width, height)
+        self.count += 1
+        if self.scenes and self.count % 4 == 0:
+            out["scenes"] = self.scene_scores(gray, width, height)
         self.gray, self.red, self.bright, self.red_map = gray, red, bright, red_map
         return out
 
@@ -182,6 +257,7 @@ class Cast:
         if self.stopped:
             return
         node = int(node)
+        log(f"{self.window}: stream {node}")
         formats = plain_modifiers(node)
         caps = "video/x-raw(memory:DMABuf),format=DMA_DRM"
         if formats:
@@ -253,19 +329,27 @@ def main():
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     bus = dbus.SessionBus()
     loop = GLib.MainLoop()
-    state = {"cast": None, "zones": []}
+    state = {"cast": None, "zones": [], "scenes": []}
 
-    def zones(items):
+    def zones(data):
         out = []
-        for item in items if isinstance(items, list) else []:
+        for item in data.get("zones") if isinstance(data.get("zones"), list) else []:
             try:
                 out.append((str(item["id"]), float(item["x"]), float(item["y"]), max(0.002, float(item["w"])), max(0.002, float(item["h"]))))
             except (KeyError, TypeError, ValueError):
                 continue
-        state["zones"] = out
+        scenes = []
+        for item in data.get("scenes") if isinstance(data.get("scenes"), list) else []:
+            try:
+                scenes.append((str(item["id"]), str(item["picture"]), [str(z) for z in (item.get("zones") or [])]))
+            except (KeyError, TypeError, ValueError):
+                continue
+        state["zones"], state["scenes"] = out, scenes
         if state["cast"] is not None:
             with state["cast"].lock:
                 state["cast"].measure.zones = out
+                state["cast"].measure.scenes = scenes
+                state["cast"].measure.references = {}
 
     def switch(window):
         if state["cast"] is not None and state["cast"].window == window:
@@ -274,33 +358,53 @@ def main():
             state["cast"].stop()
             state["cast"] = None
         if window > 0:
+            log(f"casting window {window}")
             try:
                 state["cast"] = Cast(bus, window)
                 state["cast"].measure.zones = state["zones"]
+                state["cast"].measure.scenes = state["scenes"]
             except dbus.DBusException as error:
                 log(f"cast: {error}")
                 emit(event="error", message=str(error))
 
-    def read(source, _condition):
-        line = source.readline()
-        if not line:
-            loop.quit()
-            return False
+    # every line that is there is taken at once: two lines written in one
+    # go would otherwise leave the second in Python's buffer, unseen until
+    # the next write
+    pending = {"text": ""}
+    os.set_blocking(0, False)
+
+    def line_in(line):
         line = line.strip()
+        if not line:
+            return
         if line.startswith("{"):
             try:
-                zones(json.loads(line).get("zones"))
+                zones(json.loads(line))
             except ValueError:
                 pass
-            return True
+            return
         try:
-            window = int(line or 0)
+            switch(int(line))
         except ValueError:
+            pass
+
+    def read(_source, _condition):
+        try:
+            chunk = os.read(0, 65536)
+        except BlockingIOError:
             return True
-        switch(window)
+        except OSError:
+            chunk = b""
+        if not chunk:
+            loop.quit()
+            return False
+        pending["text"] += chunk.decode("utf-8", "replace")
+        while "\n" in pending["text"]:
+            line, pending["text"] = pending["text"].split("\n", 1)
+            line_in(line)
         return True
 
-    GLib.io_add_watch(sys.stdin, GLib.IO_IN | GLib.IO_HUP, read)
+    GLib.io_add_watch(0, GLib.IO_IN | GLib.IO_HUP, read)
     try:
         loop.run()
     finally:

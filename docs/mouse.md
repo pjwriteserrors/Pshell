@@ -236,41 +236,53 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
     (SUBTLE COLLISION, at most every 120 ms). Nothing while the pad
     rumbled just now. The sound and the picture often say the same thing
     at once: the daemon plays at most one pulse per 50 ms.
-  - *The HUD by hand* (`hudScenes`: `{<game key>: [{id, name, picture}]}`,
-    `hudZones`: `{<game key>: [{id, scene, name, x, y, w, h, when, key,
-    feel, level, every}]}`; the page's "The HUD by hand" section under the
-    picture lane, model in `Mouse.qml`): **scenes** are pictures of the
-    game as its HUD looks in a fight, a dialog, exploring
-    (`$XDG_CACHE_HOME/pshell/hud/<game>-<scene>.jpg`), **zones** are drawn
-    on them as fractions of the window, so they hold at any size; every
-    zone fires whatever scene is up, the scenes are for drawing. Three ways
+  - *The HUD by hand* – its own settings page, **HUD haptics**
+    (`core/views/settings/HudPage.qml`; model in `Mouse.qml`; `hudScenes`:
+    `{<game key>: [{id, name, picture, similar}]}`, `hudZones`: `{<game
+    key>: [{id, scene, name, x, y, w, h, triggers: [{kind, feel, key,
+    level, every, on}]}]}`). **Scenes** are pictures of the game as its HUD
+    looks in a fight, a dialog, exploring
+    (`$XDG_CACHE_HOME/pshell/hud/<game>-<scene>.jpg`); **zones** are drawn
+    on them as fractions of the window, so they hold at any size. eyes.py
+    is sent the zones and the scenes (`{"zones": […], "scenes": [{id,
+    picture, zones}]}` on its stdin; every line is drained at once – two
+    written together used to leave the second in the buffer) and says,
+    every 4th frame, how alike the frame is to each scene's picture inside
+    the scene's zones (zero-mean correlation per zone, so brighter, noisier,
+    slightly moved is still alike; a scene with no zones by the whole
+    frame). The daemon keeps the best scene above its own bar (`similar`,
+    0.45 by itself; held until another beats it by 0.1 or it falls 0.1
+    under) as the one that is up – the page shows it live, with every
+    scene's likeness – and only its zones fire; with no scene recognised
+    every zone does. A zone **reacts** in several ways at once, each with
+    its own pattern (`feel`, a waveform name), gap (`every` ms, 150) and,
+    where it applies, threshold (`level`; 0 = by itself): `change` (changed
+    by ≥ 14; not while the whole picture moved), `press` (changed while a
+    press of yours is fresh – any, or `key`: a `BTN_LEFT`-style name or an
+    evdev code), `red` (≥ 8), `bright` (≥ 20), `dark` (≤ −20), `hover` (the
+    pointer comes into the zone, once until it leaves) and `click` (a mouse
+    button goes down with the pointer in it – any, or `key`). Hover and
+    click know the pointer through X11 (`Pointer`: python-xlib, the active
+    X window's geometry and the pointer 30 times a second; Proton games are
+    X11, a Wayland-native game has no pointer to ask for and those two stay
+    quiet; `eyes.pointer` tells). The presses are read whenever the picture
+    is watched (`Triggers.gating`), not only with the sound on. Three ways
     to draw: *on the real screen* ("Draw on the screen", `ipc mouse hud`
     for a keybind in the game) – the game's window comes to the front and
     is frozen like a screenshot (`Screenshot.hud`, mode `hud` of the
-    screenshot overlay: the boxes `detect_boxes.py` finds light up under
-    the cursor, a click takes one, a drag takes a region, every pick is a
-    zone of the current scene, Esc when done; the window's part of the
-    frozen frame becomes the scene's picture); *on the picture* in the
-    settings (one shot through `window_shots.py`, same smart select:
-    `scripts/mouse/hud_guess.py` finds the boxes on the picture, the
-    smallest under the cursor is offered, a drag draws your own);
-    *suggested* – `hud_guess.py` marks the boxes that look like the HUD
-    (small, near an edge or corner, not a sliver; a box over a cell the
-    game taught as yours comes first and with `when` "press"), a click
-    takes one, "Add all" the lot. The daemon sends the zones to eyes.py
-    (`{"zones": […]}` on its stdin), which measures each one on the small
-    frame – its mean change, its change in redness and in brightness –
-    and the daemon fires the zone's own pattern (`feel`, a waveform name)
-    when its condition holds: `change` (changed by ≥ `level`, 14 by
-    itself; not while the whole picture moved – the world behind a
-    see-through HUD), `press` (changed while a press of yours is fresh –
-    any, or `key`: `BTN_LEFT`-style name or an evdev code), `red` (≥ 8),
-    `bright` (≥ 20), `dark` (≤ −20); at most every `every` ms (150).
-    Nothing is learned here: a zone fires exactly when its condition
-    holds, the learned part keeps running beside it. The zones glow on the
-    page with what is measured in them, light up when they fire, and their
-    numbers show live (`eyes` event, `latest.zones`, 5 Hz while the page
-    watches); a zone's row plays its pattern on the mouse.
+    overlay: the boxes `detect_boxes.py` finds light up under the cursor, a
+    click takes one, a drag a region, every pick is a zone of the current
+    scene, Esc when done; the window's part of the frame becomes the
+    scene's picture); *on the picture* (one shot through `window_shots.py`;
+    `scripts/mouse/hud_guess.py` finds the boxes, the smallest under the
+    cursor is offered, a drag draws, a zone is moved by dragging it and
+    resized by its corners, Delete removes it); *suggested* – `hud_guess.py`
+    marks the boxes that look like the HUD (small, near an edge or corner,
+    not a sliver; over a cell the game taught as yours first and after a
+    press). The zones glow with what is measured in them, ring when they
+    fire; the page's aside shows the chosen zone's reactions or, with none
+    chosen, what is live (`eyes` event: `latest.zones`, `scene`, `scores`,
+    `pointer`, 5 Hz while the page watches).
   - A known sound keeps its pattern: the waveform is fixed the first time
     a cluster is felt as yours (`wave`), so the same shot feels the same
     every time; only new sounds play by strength.
