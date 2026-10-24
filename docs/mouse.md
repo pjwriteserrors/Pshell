@@ -280,7 +280,15 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
     with three patterns is three lines on the page. Reactions are **copied**
     between zones ("Copy all" or one reaction's copy, then "Paste" into a
     zone or "Paste into every zone" of the scene; `Mouse.hudClipboard`, this
-    session). Hover and click know the pointer through X11 (`Pointer`: python-xlib, the active
+    session) and **kept as sequences** ("Keep as a sequence", a name –
+    "Button press", "Cast spell", "Shoot": the zone's reactions with their
+    patterns, keys and follow-up steps go into `options.hudPresets`, which
+    is not per game; the "Sequences" list under a zone's reactions adds one
+    (+) or replaces the zone's with it (⇄), the scene's card gives one to
+    every zone of the scene; eight starters – button press, cast spell,
+    shoot, reload, hit taken, ability ready, charge spent, menu hover – come
+    along and cannot be removed; `Mouse.hudSavePreset`, `hudApplyPreset`,
+    `hudApplyPresetToScene`). Hover and click know the pointer through X11 (`Pointer`: python-xlib, the active
     X window's geometry and the pointer 30 times a second; Proton games are
     X11, a Wayland-native game has no pointer to ask for and those two stay
     quiet; `eyes.pointer` tells). The presses are read whenever the picture

@@ -463,6 +463,102 @@ Singleton {
 		}));
 	}
 
+	// ── sequences: reactions kept by name, for later and for other games ──
+	// options.hudPresets: [{id, name, triggers, from, made}] – one zone's
+	// reactions (with their patterns, keys and follow-up steps) under a name
+	// – "Button press", "Cast spell", "Shoot". Some come along as starters.
+	readonly property var hudStarterPresets: [
+		{ id: "starter-button", name: "Button press", starter: true, triggers: [
+			root.hudTrigger("hover", { feel: "WHISPER COLLISION" }),
+			root.hudTrigger("click", { feel: "SHARP COLLISION" })
+		] },
+		{ id: "starter-spell", name: "Cast spell", starter: true, triggers: [
+			root.hudTrigger("click", { feel: "DAMP STATE CHANGE", then: [
+				{ when: "clickAnywhere", feel: "SHARP STATE CHANGE", key: "", keyName: "", within: 6000, delay: 500 }
+			] })
+		] },
+		{ id: "starter-shoot", name: "Shoot", starter: true, triggers: [
+			root.hudTrigger("press", { feel: "SHARP COLLISION", key: "BTN_LEFT", keyName: "Left click", every: 60, calm: 40 })
+		] },
+		{ id: "starter-reload", name: "Reload", starter: true, triggers: [
+			root.hudTrigger("press", { feel: "DAMP COLLISION", every: 300, calm: 250, then: [
+				{ when: "change", feel: "SHARP STATE CHANGE", key: "", keyName: "", within: 4000, delay: 300 }
+			] })
+		] },
+		{ id: "starter-hit", name: "Hit taken", starter: true, triggers: [
+			root.hudTrigger("red", { feel: "SHARP STATE CHANGE", level: 0 })
+		] },
+		{ id: "starter-ready", name: "Ability ready", starter: true, triggers: [
+			root.hudTrigger("bright", { feel: "WHISPER STATE CHANGE" })
+		] },
+		{ id: "starter-spent", name: "Charge spent", starter: true, triggers: [
+			root.hudTrigger("dark", { feel: "DAMP STATE CHANGE" })
+		] },
+		{ id: "starter-menu", name: "Menu hover", starter: true, triggers: [
+			root.hudTrigger("hover", { feel: "WHISPER COLLISION" })
+		] }
+	]
+	readonly property var hudSavedPresets: {
+		const list = root.option("hudPresets", null);
+		return Array.isArray(list) ? list : [];
+	}
+	readonly property var hudPresets: root.hudSavedPresets.concat(root.hudStarterPresets)
+
+	function hudPreset(id) {
+		return root.hudPresets.find(p => p.id === id) ?? null;
+	}
+
+	function hudPresetTriggers(preset) {
+		return (root.hudList(preset?.triggers) ?? []).map(t => JSON.parse(JSON.stringify(t)));
+	}
+
+	// a zone's reactions (one of them: index ≥ 0) kept under a name
+	function hudSavePreset(name, id, index) {
+		const zone = root.hudZones.find(z => z.id === id);
+		if (!zone) return "";
+		const all = root.hudTriggers(zone).map(t => JSON.parse(JSON.stringify(t)));
+		const triggers = index === undefined || index === null || index < 0 ? all : all.filter((t, i) => i === index);
+		if (triggers.length === 0) return "";
+		const presetId = `p${Date.now().toString(36)}${root.hudSavedPresets.length}`;
+		const preset = { id: presetId, name: (name ?? "").trim() || zone.name, triggers, from: root.gameKey, made: Date.now() };
+		root.setOption("hudPresets", root.hudSavedPresets.concat([preset]));
+		return presetId;
+	}
+
+	function hudRenamePreset(id, name) {
+		if ((name ?? "").trim() === "") return;
+		root.setOption("hudPresets", root.hudSavedPresets.map(p => p.id === id ? Object.assign({}, p, { name: name.trim() }) : p));
+	}
+
+	function hudRemovePreset(id) {
+		root.setOption("hudPresets", root.hudSavedPresets.filter(p => p.id !== id));
+	}
+
+	// the preset's reactions into a zone (replace: instead of its own)
+	function hudApplyPreset(id, presetId, replace) {
+		const zone = root.hudZones.find(z => z.id === id);
+		const preset = root.hudPreset(presetId);
+		if (!zone || !preset) return;
+		const triggers = root.hudPresetTriggers(preset);
+		root.hudSetTriggers(id, replace ? triggers : root.hudTriggers(zone).concat(triggers));
+	}
+
+	// … into every zone of a scene
+	function hudApplyPresetToScene(sceneId, presetId, replace) {
+		const preset = root.hudPreset(presetId);
+		if (!preset) return;
+		root.hudSaveZones(root.hudZones.map(z => {
+			if ((z.scene ?? "") !== sceneId) return z;
+			const zone = Object.assign({}, z, { triggers: replace ? root.hudPresetTriggers(preset) : root.hudTriggers(z).concat(root.hudPresetTriggers(preset)) });
+			delete zone.when;
+			delete zone.feel;
+			delete zone.level;
+			delete zone.every;
+			delete zone.key;
+			return zone;
+		}));
+	}
+
 	function hudRemoveTrigger(id, index) {
 		const zone = root.hudZones.find(z => z.id === id);
 		if (!zone) return;

@@ -57,6 +57,24 @@ SettingsPage {
 
 	readonly property var zone: root.allZones.find(z => z.id === root.selected) ?? null
 	readonly property var triggers: Mouse.hudTriggers(root.zone)
+	// the name field for keeping the zone's reactions as a sequence is open
+	property bool naming: false
+	// the sequence library is unfolded
+	property bool library: false
+	// the sequence kept or used last, for a flash on its row
+	property string presetFlash: ""
+
+	onSelectedChanged: root.naming = false
+
+	// what a sequence does, in a few words: "hovered, clicked → a click anywhere"
+	function presetSummary(preset) {
+		const list = Mouse.hudList(preset?.triggers) ?? [];
+		return list.map(t => {
+			const steps = Mouse.hudStepsOf(t);
+			const head = root.kindOf(t.kind).label.toLowerCase() + (t.key ? ` (${root.keyLabel(t)})` : "");
+			return steps.length > 0 ? `${head} → ${steps.length} step${steps.length === 1 ? "" : "s"}` : head;
+		}).join(", ") || "nothing";
+	}
 
 	onActiveChanged: {
 		Mouse.watching = root.active;
@@ -987,6 +1005,224 @@ SettingsPage {
 								}
 							}
 						}
+
+						// ── sequences: the zone's reactions kept by name ──
+						RowLayout {
+							Layout.fillWidth: true
+							spacing: 6
+
+							Glyph {
+								icon: "playlist_check"
+								size: 14
+								color: Theme.textSubtle
+							}
+
+							StyledText {
+								text: `Sequences · ${Mouse.hudPresets.length}`
+								font.pixelSize: Theme.size.small
+								font.weight: Font.DemiBold
+								tone: Theme.textSubtle
+							}
+
+							Item {
+								Layout.fillWidth: true
+							}
+
+							IconButton {
+								Layout.preferredWidth: 26
+								Layout.preferredHeight: 26
+								icon: root.library ? "chevron_up" : "chevron_down"
+								onClicked: root.library = !root.library
+							}
+
+							TextButton {
+								text: root.naming ? "Cancel" : "Keep as a sequence"
+								icon: root.naming ? "close" : "bookmark_plus_outline"
+								variant: root.naming ? "text" : "tonal"
+								onActivated: root.naming = !root.naming
+							}
+						}
+
+						Field {
+							id: presetName
+
+							Layout.fillWidth: true
+							visible: root.naming
+							placeholder: "Name it – Button press, Cast spell, Shoot"
+							icon: "bookmark_plus_outline"
+							onVisibleChanged: {
+								if (visible) {
+									text = "";
+									input.forceActiveFocus();
+								}
+							}
+							onAccepted: {
+								if (!root.zone) return;
+								const id = Mouse.hudSavePreset(text, root.zone.id, -1);
+								root.naming = false;
+								if (id !== "") {
+									root.presetFlash = id;
+									root.library = true;
+								}
+							}
+							onEscapePressed: root.naming = false
+						}
+
+						StyledText {
+							Layout.fillWidth: true
+							visible: root.naming
+							text: "Every reaction of this zone, with its patterns, keys and follow-up steps, under one name – for any zone of any game. Enter keeps it."
+							tone: Theme.textFaint
+							font.pixelSize: Theme.size.small
+							wrapMode: Text.WordWrap
+						}
+
+						Repeater {
+							model: root.library ? Mouse.hudPresets.length : 0
+
+							delegate: Rectangle {
+								id: prow
+
+								required property int index
+
+								readonly property var preset: Mouse.hudPresets[prow.index] ?? ({})
+								readonly property bool starter: prow.preset.starter === true
+								readonly property bool flashed: root.presetFlash === String(prow.preset.id)
+								readonly property int count: (Mouse.hudList(prow.preset.triggers) ?? []).length
+
+								Layout.fillWidth: true
+								implicitHeight: pcol.implicitHeight + 16
+								radius: Theme.radius.large
+								color: prow.flashed ? Theme.primaryContainer : Theme.layer1
+								border.width: 1
+								border.color: prow.flashed ? Theme.primary : "transparent"
+								opacity: 0
+								scale: 0.96
+								Component.onCompleted: pappear.start()
+
+								Behavior on color {
+									ColorAnim {}
+								}
+								Behavior on border.color {
+									ColorAnim {}
+								}
+
+								Timer {
+									running: prow.flashed
+									interval: 1400
+									onTriggered: root.presetFlash = ""
+								}
+
+								ParallelAnimation {
+									id: pappear
+
+									NumberAnimation {
+										target: prow
+										property: "opacity"
+										to: 1
+										duration: Motion.medium
+									}
+									NumberAnimation {
+										target: prow
+										property: "scale"
+										to: 1
+										duration: Motion.long
+										easing.type: Easing.BezierSpline
+										easing.bezierCurve: Motion.spatial
+									}
+								}
+
+								ColumnLayout {
+									id: pcol
+
+									anchors.left: parent.left
+									anchors.right: parent.right
+									anchors.top: parent.top
+									anchors.margins: 8
+									spacing: 4
+
+									RowLayout {
+										Layout.fillWidth: true
+										spacing: 6
+
+										Glyph {
+											icon: prow.starter ? "shimmer" : "bookmark_outline"
+											size: 14
+											color: prow.flashed ? Theme.primary : Theme.textSubtle
+										}
+
+										StyledText {
+											Layout.fillWidth: true
+											text: String(prow.preset.name ?? "")
+											font.pixelSize: Theme.size.small
+											font.weight: Font.DemiBold
+											elide: Text.ElideRight
+										}
+
+										StyledText {
+											visible: prow.starter
+											text: "starter"
+											font.pixelSize: Theme.size.tiny
+											tone: Theme.textFaint
+										}
+
+										StyledText {
+											visible: !prow.starter && String(prow.preset.from ?? "") !== "" && String(prow.preset.from) !== root.game
+											text: String(prow.preset.from)
+											font.pixelSize: Theme.size.tiny
+											tone: Theme.textFaint
+											elide: Text.ElideMiddle
+											Layout.maximumWidth: 90
+										}
+
+										IconButton {
+											Layout.preferredWidth: 26
+											Layout.preferredHeight: 26
+											icon: "plus"
+											onClicked: {
+												Mouse.hudApplyPreset(root.zone.id, prow.preset.id, false);
+												root.presetFlash = String(prow.preset.id);
+											}
+										}
+
+										IconButton {
+											Layout.preferredWidth: 26
+											Layout.preferredHeight: 26
+											icon: "swap_horizontal"
+											onClicked: {
+												Mouse.hudApplyPreset(root.zone.id, prow.preset.id, true);
+												root.presetFlash = String(prow.preset.id);
+											}
+										}
+
+										IconButton {
+											visible: !prow.starter
+											Layout.preferredWidth: 26
+											Layout.preferredHeight: 26
+											icon: "close"
+											onClicked: Mouse.hudRemovePreset(prow.preset.id)
+										}
+									}
+
+									StyledText {
+										Layout.fillWidth: true
+										text: root.presetSummary(prow.preset)
+										font.pixelSize: Theme.size.tiny
+										tone: Theme.textFaint
+										wrapMode: Text.WordWrap
+									}
+								}
+							}
+						}
+
+						StyledText {
+							Layout.fillWidth: true
+							visible: root.library
+							text: "+ adds a sequence's reactions to this zone, ⇄ replaces the zone's with them. Sequences are kept for every game; the scene's card gives one to every zone at once."
+							tone: Theme.textFaint
+							font.pixelSize: Theme.size.small
+							wrapMode: Text.WordWrap
+						}
 					}
 				}
 			}
@@ -1303,6 +1539,31 @@ SettingsPage {
 				icon: "content_paste"
 				variant: "text"
 				onActivated: Mouse.hudPasteIntoScene(root.sceneId, false)
+			}
+
+			StyledText {
+				visible: root.zones.length > 0
+				text: "Give every zone a sequence"
+				font.pixelSize: Theme.size.small
+				tone: Theme.textFaint
+			}
+
+			Flow {
+				Layout.fillWidth: true
+				visible: root.zones.length > 0
+				spacing: 5
+
+				Repeater {
+					model: Mouse.hudPresets
+
+					delegate: Chip {
+						required property var modelData
+
+						text: String(modelData.name ?? "")
+						icon: modelData.starter === true ? "shimmer" : "bookmark_outline"
+						onClicked: Mouse.hudApplyPresetToScene(root.sceneId, modelData.id, false)
+					}
+				}
 			}
 
 			TextButton {
