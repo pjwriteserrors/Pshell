@@ -1300,6 +1300,9 @@ class Eyes:
         # None while it is changing – a menu sliding in is one change,
         # not one every frame
         self.zone_quiet = {}
+        # code -> when it last went down (a press is one, however many
+        # device nodes report it)
+        self.last_press = {}
 
     def options(self):
         return self.daemon.config["options"]
@@ -1708,6 +1711,10 @@ class Eyes:
         if not down or not self.on:
             return
         at = time.monotonic()
+        # the same button from two device nodes, or a bounce: one press
+        if at - self.last_press.get(code, 0.0) < 0.06:
+            return
+        self.last_press[code] = at
         if 272 <= code <= 279:
             self.advance(at, "click", code=code)
         else:
