@@ -261,8 +261,19 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
     press of yours is fresh – any, or `key`: a `BTN_LEFT`-style name or an
     evdev code), `red` (≥ 8), `bright` (≥ 20), `dark` (≤ −20), `hover` (the
     pointer comes into the zone, once until it leaves) and `click` (a mouse
-    button goes down with the pointer in it – any, or `key`). Hover and
-    click know the pointer through X11 (`Pointer`: python-xlib, the active
+    button goes down with the pointer in it – any, or `key`); every one of
+    the mouse's 16 patterns is on offer. A reaction can go on in **steps**
+    (`then: [{when, feel, key, within, delay}]`): once it fired, each step
+    waits for its event within `within` ms (5000) – `clickAnywhere`,
+    `clickOutside` (not in the zone), `clickHere` (in it again), `leave`
+    (the pointer leaves), `press` (any key or button, or `key`), `change`
+    (the zone changes), `delay` (after `delay` ms) – plays its own pattern
+    and arms the next; too late and the chain is dropped, the reaction
+    firing again starts it over. Hover, then click, then a click elsewhere
+    with three patterns is three lines on the page. Reactions are **copied**
+    between zones ("Copy all" or one reaction's copy, then "Paste" into a
+    zone or "Paste into every zone" of the scene; `Mouse.hudClipboard`, this
+    session). Hover and click know the pointer through X11 (`Pointer`: python-xlib, the active
     X window's geometry and the pointer 30 times a second; Proton games are
     X11, a Wayland-native game has no pointer to ask for and those two stay
     quiet; `eyes.pointer` tells). The presses are read whenever the picture

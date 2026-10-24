@@ -1293,11 +1293,16 @@ class Eyes:
         # the pointer (hover and click zones) and which zones it is in
         self.pointer = Pointer(daemon)
         self.inside = set()
+        # reactions that fired and wait for their next step:
+        # [{zone, name, steps, step, since}]
+        self.chains = []
 
     def options(self):
         return self.daemon.config["options"]
 
     KINDS = ("change", "press", "red", "bright", "dark", "hover", "click")
+    # what a follow-up step of a reaction waits for
+    STEPS = ("clickAnywhere", "clickOutside", "clickHere", "leave", "press", "change", "delay")
 
     def zones(self):
         """The drawn zones of the game that runs, well-formed only, each
@@ -1331,8 +1336,22 @@ class Eyes:
                     every = max(0.03, float(t.get("every") or 150) / 1000)
                 except (TypeError, ValueError):
                     level, every = 0.0, 0.15
+                steps = []
+                for step in t.get("then") if isinstance(t.get("then"), list) else []:
+                    if not isinstance(step, dict):
+                        continue
+                    when = str(step.get("when") or "clickAnywhere")
+                    if when not in self.STEPS:
+                        continue
+                    try:
+                        within = max(0.2, float(step.get("within") or 5000) / 1000)
+                        delay = max(0.05, float(step.get("delay") or 500) / 1000)
+                    except (TypeError, ValueError):
+                        within, delay = 5.0, 0.5
+                    steps.append({"when": when, "feel": str(step.get("feel") or "SUBTLE COLLISION"),
+                                  "key": step.get("key") or "", "within": within, "delay": delay})
                 triggers.append({"kind": kind, "feel": str(t.get("feel") or "SUBTLE COLLISION"),
-                                 "key": t.get("key") or "", "level": level, "every": every})
+                                 "key": t.get("key") or "", "level": level, "every": every, "then": steps})
             zone["triggers"] = triggers
             out.append(zone)
         return out
@@ -1479,6 +1498,7 @@ class Eyes:
         if isinstance(measured, dict) and measured:
             self.drawn(at, measured, fresh, moved)
         self.hover(at)
+        self.advance(at, "tick")
         resting = now - self.daemon.last_motion > 0.15 and not self.gate.moving
         # a shake: the picture jolts and comes back within a few frames,
         # while the player does not move it (a camera turn is one way)
@@ -1544,7 +1564,63 @@ class Eyes:
             return False
         self.zone_last[key] = at
         self.event("zone", strength, zone["name"], f"{zone['name']}: {reason}", zone=zone, trigger=trigger)
+        if trigger.get("then"):
+            # a reaction fired again starts its chain over
+            self.chains = [c for c in self.chains if not (c["zone"] == zone["id"] and c["kind"] == trigger["kind"])]
+            self.chains.append({"zone": zone["id"], "kind": trigger["kind"], "name": zone["name"],
+                                "steps": trigger["then"], "step": 0, "since": at})
         return True
+
+    def in_zone(self, zone_id):
+        """Whether the pointer is in that zone now (None: no pointer)."""
+        where = self.pointer.where()
+        if where is None:
+            return None
+        zone = next((z for z in self.zones() if z["id"] == zone_id), None)
+        if zone is None:
+            return None
+        fx, fy = where
+        return zone["x"] <= fx <= zone["x"] + zone["w"] and zone["y"] <= fy <= zone["y"] + zone["h"]
+
+    def advance(self, at, event, zone_id=None, code=None):
+        """An event for the chains: `click` (a mouse button, `code`),
+        `press` (any key or button), `leave` / `change` (of `zone_id`),
+        `tick` (time passing). A step that is waited for too long drops
+        its chain; a step met plays its pattern and arms the next."""
+        if not self.chains:
+            return
+        kept = []
+        for chain in self.chains:
+            step = chain["steps"][chain["step"]]
+            when = step["when"]
+            if when != "delay" and at - chain["since"] > step["within"]:
+                continue
+            met = False
+            wanted = self.key_code(step["key"])
+            if when == "delay":
+                met = event == "tick" and at - chain["since"] >= step["delay"]
+            elif when in ("clickAnywhere", "clickOutside", "clickHere"):
+                if event == "click" and (wanted is None or code == wanted):
+                    here = self.in_zone(chain["zone"])
+                    met = when == "clickAnywhere" or (when == "clickHere" and here is True) or (when == "clickOutside" and here is False)
+            elif when == "press":
+                met = event in ("press", "click") and (wanted is None or code == wanted)
+            elif when == "leave":
+                met = event == "leave" and zone_id == chain["zone"]
+            elif when == "change":
+                met = event == "change" and zone_id == chain["zone"]
+            if not met:
+                kept.append(chain)
+                continue
+            names = {"clickAnywhere": "a click anywhere", "clickOutside": "a click elsewhere", "clickHere": "a click on it again",
+                     "leave": "the pointer left", "press": "a press", "change": "it changed", "delay": f"{step['delay'] * 1000:.0f} ms later"}
+            self.event("zone", 0.5, chain["name"], f"{chain['name']}: then {names[when]}", zone={"id": chain["zone"], "name": chain["name"]},
+                       trigger={"kind": "then", "feel": step["feel"]})
+            chain["step"] += 1
+            chain["since"] = at
+            if chain["step"] < len(chain["steps"]):
+                kept.append(chain)
+        self.chains = kept
 
     def drawn(self, at, measured, fresh, moved):
         """The player's zones, by the picture: each trigger fires its own
@@ -1557,6 +1633,8 @@ class Eyes:
             if not isinstance(values, list) or len(values) < 3:
                 continue
             change, dred, dbright = (float(v) for v in values[:3])
+            if change >= 14 and moved < 1.0:
+                self.advance(at, "change", zone_id=zone["id"])
             for trigger in zone["triggers"]:
                 kind, level = trigger["kind"], trigger["level"]
                 if kind == "change":
@@ -1597,6 +1675,8 @@ class Eyes:
                     for trigger in zone["triggers"]:
                         if trigger["kind"] == "hover":
                             self.fire(at, zone, trigger, "the pointer came in")
+        for left in self.inside - now_inside:
+            self.advance(at, "leave", zone_id=left)
         self.inside = now_inside
 
     def press(self, code, down):
@@ -1604,11 +1684,15 @@ class Eyes:
         trigger (`key` "" is any mouse button)."""
         if not down or not self.on:
             return
+        at = time.monotonic()
+        if 272 <= code <= 279:
+            self.advance(at, "click", code=code)
+        else:
+            self.advance(at, "press", code=code)
         where = self.pointer.where()
         if where is None:
             return
         fx, fy = where
-        at = time.monotonic()
         for zone in self.live_zones():
             if not (zone["x"] <= fx <= zone["x"] + zone["w"] and zone["y"] <= fy <= zone["y"] + zone["h"]):
                 continue

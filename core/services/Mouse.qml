@@ -388,6 +388,81 @@ Singleton {
 		root.hudSetTriggers(id, root.hudTriggers(zone).map((t, i) => i === index ? Object.assign({}, t, values) : t));
 	}
 
+	// a reaction's follow-up steps: [{when, feel, key, within (ms), delay (ms)}]
+	// – after it fired, each step waits for its event within its time, plays
+	// its pattern and arms the next
+	readonly property var hudSteps: [
+		{ value: "clickAnywhere", label: "A click anywhere", icon: "cursor_default_click_outline" },
+		{ value: "clickOutside", label: "A click elsewhere", icon: "cursor_default_click_outline" },
+		{ value: "clickHere", label: "A click on it again", icon: "cursor_default_click" },
+		{ value: "leave", label: "The pointer leaves", icon: "gesture_tap" },
+		{ value: "press", label: "Any press", icon: "keyboard_outline" },
+		{ value: "change", label: "It changes", icon: "swap_horizontal" },
+		{ value: "delay", label: "After a moment", icon: "timer_outline" }
+	]
+
+	function hudStepsOf(trigger) {
+		return root.hudList(trigger?.then) ?? [];
+	}
+
+	function hudAddStep(id, index, when) {
+		const zone = root.hudZones.find(z => z.id === id);
+		if (!zone) return;
+		const trigger = root.hudTriggers(zone)[index];
+		if (!trigger) return;
+		const step = { when: when || "clickAnywhere", feel: "DAMP COLLISION", key: "", keyName: "", within: 5000, delay: 500 };
+		root.hudChangeTrigger(id, index, { then: root.hudStepsOf(trigger).concat([step]) });
+	}
+
+	function hudChangeStep(id, index, stepIndex, values) {
+		const zone = root.hudZones.find(z => z.id === id);
+		const trigger = zone ? root.hudTriggers(zone)[index] : null;
+		if (!trigger) return;
+		root.hudChangeTrigger(id, index, { then: root.hudStepsOf(trigger).map((s, i) => i === stepIndex ? Object.assign({}, s, values) : s) });
+	}
+
+	function hudRemoveStep(id, index, stepIndex) {
+		const zone = root.hudZones.find(z => z.id === id);
+		const trigger = zone ? root.hudTriggers(zone)[index] : null;
+		if (!trigger) return;
+		root.hudChangeTrigger(id, index, { then: root.hudStepsOf(trigger).filter((s, i) => i !== stepIndex) });
+	}
+
+	// reactions copied from a zone, to paste into others (this session)
+	property var hudClipboard: []
+	property string hudClipboardFrom: ""
+
+	function hudCopyTriggers(id, index) {
+		const zone = root.hudZones.find(z => z.id === id);
+		if (!zone) return;
+		const all = root.hudTriggers(zone).map(t => JSON.parse(JSON.stringify(t)));
+		root.hudClipboard = index === undefined || index === null || index < 0 ? all : all.filter((t, i) => i === index);
+		root.hudClipboardFrom = zone.name;
+	}
+
+	// replace: the zone's reactions become the copied ones; else they are added
+	function hudPasteTriggers(id, replace) {
+		const zone = root.hudZones.find(z => z.id === id);
+		if (!zone || root.hudClipboard.length === 0) return;
+		const copied = root.hudClipboard.map(t => JSON.parse(JSON.stringify(t)));
+		root.hudSetTriggers(id, replace ? copied : root.hudTriggers(zone).concat(copied));
+	}
+
+	function hudPasteIntoScene(sceneId, replace) {
+		if (root.hudClipboard.length === 0) return;
+		const copied = () => root.hudClipboard.map(t => JSON.parse(JSON.stringify(t)));
+		root.hudSaveZones(root.hudZones.map(z => {
+			if ((z.scene ?? "") !== sceneId) return z;
+			const zone = Object.assign({}, z, { triggers: replace ? copied() : root.hudTriggers(z).concat(copied()) });
+			delete zone.when;
+			delete zone.feel;
+			delete zone.level;
+			delete zone.every;
+			delete zone.key;
+			return zone;
+		}));
+	}
+
 	function hudRemoveTrigger(id, index) {
 		const zone = root.hudZones.find(z => z.id === id);
 		if (!zone) return;

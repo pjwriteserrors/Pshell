@@ -8,6 +8,7 @@ import qs.style.theme
 import qs.style.widgets
 import qs.core.services
 import qs.core.views.settings.mouse
+import "mouse/Waves.js" as Waves
 
 // HUD haptics: the game's HUD by hand (gamefeel.Eyes; the model lives in
 // Mouse.qml – hudScenes, hudZones). Scenes are pictures of the game as its
@@ -37,15 +38,8 @@ SettingsPage {
 	readonly property bool watching: Mouse.eyes?.on === true
 	readonly property string liveScene: Mouse.hudLiveScene
 	readonly property var scores: Mouse.hudScores
-	readonly property var feels: [
-		{ value: "SHARP COLLISION", label: "Hard bump" },
-		{ value: "DAMP COLLISION", label: "Soft bump" },
-		{ value: "SUBTLE COLLISION", label: "Tick" },
-		{ value: "WHISPER COLLISION", label: "Whisper" },
-		{ value: "SHARP STATE CHANGE", label: "Sharp step" },
-		{ value: "DAMP STATE CHANGE", label: "Soft step" },
-		{ value: "KNOCK", label: "Knock" }
-	]
+	// every pattern the mouse has, named as the haptics card names them
+	readonly property var feels: Mouse.waveforms.map(w => ({ value: w, label: Waves.names[w] ?? w.toLowerCase() }))
 	readonly property string shotDir: `${Paths.runtime}/hud`
 	readonly property string picture: String(root.scene?.picture ?? "")
 	property bool shooting: false
@@ -538,11 +532,45 @@ SettingsPage {
 							}
 						}
 
+						RowLayout {
+							Layout.fillWidth: true
+							spacing: 6
+
+							StyledText {
+								text: "Reacts to"
+								font.pixelSize: Theme.size.small
+								font.weight: Font.DemiBold
+								tone: Theme.textSubtle
+							}
+
+							Item {
+								Layout.fillWidth: true
+							}
+
+							TextButton {
+								visible: root.triggers.length > 0
+								text: "Copy all"
+								icon: "content_copy"
+								variant: "text"
+								onActivated: Mouse.hudCopyTriggers(root.zone.id, -1)
+							}
+
+							TextButton {
+								visible: Mouse.hudClipboard.length > 0
+								text: `Paste ${Mouse.hudClipboard.length}`
+								icon: "content_paste"
+								variant: "tonal"
+								onActivated: Mouse.hudPasteTriggers(root.zone.id, false)
+							}
+						}
+
 						StyledText {
-							text: "Reacts to"
+							Layout.fillWidth: true
+							visible: Mouse.hudClipboard.length > 0
+							text: `${Mouse.hudClipboard.length} reaction${Mouse.hudClipboard.length === 1 ? "" : "s"} copied from "${Mouse.hudClipboardFrom}" – paste adds them here; the scene's card pastes them into every zone of the scene.`
+							tone: Theme.textFaint
 							font.pixelSize: Theme.size.small
-							font.weight: Font.DemiBold
-							tone: Theme.textSubtle
+							wrapMode: Text.WordWrap
 						}
 
 						// every reaction, with its own pattern
@@ -625,6 +653,13 @@ SettingsPage {
 											Layout.preferredHeight: 26
 											icon: "play"
 											onClicked: Mouse.play(trow.trigger.feel)
+										}
+
+										IconButton {
+											Layout.preferredWidth: 26
+											Layout.preferredHeight: 26
+											icon: "content_copy"
+											onClicked: Mouse.hudCopyTriggers(root.zone.id, trow.index)
 										}
 
 										Toggle {
@@ -715,6 +750,186 @@ SettingsPage {
 										label: "Every"
 										value: Number(trow.trigger.every ?? 150)
 										onMoved: v => Mouse.hudChangeTrigger(root.zone.id, trow.index, { every: Math.round(v) })
+									}
+
+									// what follows: step by step, each waited for within its time
+									Repeater {
+										model: Mouse.hudStepsOf(trow.trigger).length
+
+										delegate: Rectangle {
+											id: srow
+
+											required property int index
+
+											readonly property var step: Mouse.hudStepsOf(trow.trigger)[srow.index] ?? ({})
+											readonly property var when: Mouse.hudSteps.find(k => k.value === srow.step.when) ?? Mouse.hudSteps[0]
+											readonly property bool withKey: srow.step.when === "clickAnywhere" || srow.step.when === "clickOutside" || srow.step.when === "clickHere" || srow.step.when === "press"
+
+											Layout.fillWidth: true
+											Layout.leftMargin: 10
+											implicitHeight: scol.implicitHeight + 16
+											radius: Theme.radius.medium
+											color: Theme.layer1
+											border.width: 1
+											border.color: Theme.outline
+											opacity: 0
+											Component.onCompleted: stepIn.start()
+
+											NumberAnimation {
+												id: stepIn
+
+												target: srow
+												property: "opacity"
+												to: 1
+												duration: Motion.medium
+											}
+
+											ColumnLayout {
+												id: scol
+
+												anchors.left: parent.left
+												anchors.right: parent.right
+												anchors.top: parent.top
+												anchors.margins: 8
+												spacing: 6
+
+												RowLayout {
+													Layout.fillWidth: true
+													spacing: 6
+
+													StyledText {
+														text: `then ${srow.index + 1}`
+														font.pixelSize: Theme.size.small
+														font.weight: Font.DemiBold
+														tone: Theme.primary
+													}
+
+													Item {
+														Layout.fillWidth: true
+													}
+
+													IconButton {
+														Layout.preferredWidth: 24
+														Layout.preferredHeight: 24
+														icon: "play"
+														onClicked: Mouse.play(srow.step.feel)
+													}
+
+													IconButton {
+														Layout.preferredWidth: 24
+														Layout.preferredHeight: 24
+														icon: "close"
+														onClicked: Mouse.hudRemoveStep(root.zone.id, trow.index, srow.index)
+													}
+												}
+
+												Flow {
+													Layout.fillWidth: true
+													spacing: 4
+
+													Repeater {
+														model: Mouse.hudSteps
+
+														delegate: Chip {
+															required property var modelData
+
+															text: modelData.label
+															selected: srow.step.when === modelData.value
+															onClicked: Mouse.hudChangeStep(root.zone.id, trow.index, srow.index, { when: modelData.value })
+														}
+													}
+												}
+
+												Flow {
+													Layout.fillWidth: true
+													spacing: 4
+
+													Repeater {
+														model: root.feels
+
+														delegate: Chip {
+															required property var modelData
+
+															text: modelData.label
+															selected: srow.step.feel === modelData.value
+															onClicked: {
+																Mouse.hudChangeStep(root.zone.id, trow.index, srow.index, { feel: modelData.value });
+																Mouse.play(modelData.value);
+															}
+														}
+													}
+												}
+
+												Flow {
+													Layout.fillWidth: true
+													visible: srow.withKey
+													spacing: 4
+
+													Repeater {
+														model: srow.step.when === "press" ? [{ key: "", label: "Any press" }, { key: "BTN_LEFT", label: "Left click" }, { key: "BTN_RIGHT", label: "Right click" }] : [{ key: "", label: "Any button" }, { key: "BTN_LEFT", label: "Left" }, { key: "BTN_RIGHT", label: "Right" }, { key: "BTN_MIDDLE", label: "Middle" }]
+
+														delegate: Chip {
+															required property var modelData
+
+															text: modelData.label
+															selected: String(srow.step.key ?? "") === modelData.key
+															onClicked: Mouse.hudChangeStep(root.zone.id, trow.index, srow.index, { key: modelData.key })
+														}
+													}
+												}
+
+												ValueSlider {
+													visible: srow.step.when !== "delay"
+													from: 500
+													to: 15000
+													step: 500
+													icon: "timer_outline"
+													label: "Within"
+													value: Number(srow.step.within ?? 5000)
+													format: v => `${(v / 1000).toFixed(1)} s`
+													onMoved: v => Mouse.hudChangeStep(root.zone.id, trow.index, srow.index, { within: Math.round(v) })
+												}
+
+												ValueSlider {
+													visible: srow.step.when === "delay"
+													from: 50
+													to: 5000
+													step: 50
+													unit: " ms"
+													icon: "timer_outline"
+													label: "After"
+													value: Number(srow.step.delay ?? 500)
+													onMoved: v => Mouse.hudChangeStep(root.zone.id, trow.index, srow.index, { delay: Math.round(v) })
+												}
+											}
+										}
+									}
+
+									RowLayout {
+										Layout.fillWidth: true
+										Layout.leftMargin: 10
+										spacing: 6
+
+										Glyph {
+											icon: "link_variant"
+											size: 13
+											color: Theme.textFaint
+										}
+
+										StyledText {
+											Layout.fillWidth: true
+											text: Mouse.hudStepsOf(trow.trigger).length > 0 ? "Then…" : "Then… – a follow-up with a pattern of its own: a click elsewhere, the pointer leaving, a moment later"
+											font.pixelSize: Theme.size.small
+											tone: Theme.textFaint
+											elide: Text.ElideRight
+										}
+
+										TextButton {
+											text: "Add a step"
+											icon: "plus"
+											variant: "text"
+											onActivated: Mouse.hudAddStep(root.zone.id, trow.index, "clickAnywhere")
+										}
 									}
 
 									StyledText {
@@ -1032,6 +1247,14 @@ SettingsPage {
 				label: "Has to look alike"
 				value: Math.round(Number(root.scene?.similar ?? 0.45) * 100)
 				onMoved: v => Mouse.hudChangeScene(root.scene.id, { similar: Math.round(v) / 100 })
+			}
+
+			TextButton {
+				visible: Mouse.hudClipboard.length > 0
+				text: "Paste into every zone"
+				icon: "content_paste"
+				variant: "text"
+				onActivated: Mouse.hudPasteIntoScene(root.sceneId, false)
 			}
 
 			TextButton {
