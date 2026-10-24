@@ -366,7 +366,7 @@ SettingsPage {
 								spacing: 6
 
 								StyledText {
-									text: root.liveScene !== "" ? `"${root.scenes.find(s => s.id === root.liveScene)?.name ?? "?"}" is up` : (root.watching && root.scenes.length > 1 ? "No scene recognised – every zone is live" : "Scene")
+									text: root.liveScene !== "" ? `"${root.scenes.find(s => s.id === root.liveScene)?.name ?? "?"}" is up` : (root.watching && root.scenes.length > 0 ? "No scene recognised – the zones stay quiet" : "Scene")
 									font.weight: Font.DemiBold
 									font.pixelSize: Theme.size.small
 								}
@@ -413,7 +413,7 @@ SettingsPage {
 
 											// the bar it has to cross
 											Rectangle {
-												x: parent.width * Number(scoreRow.modelData.similar ?? 0.45)
+												x: parent.width * Number(scoreRow.modelData.similar ?? 0.55)
 												width: 2
 												height: 10
 												y: -2
@@ -445,7 +445,7 @@ SettingsPage {
 
 						StyledText {
 							Layout.fillWidth: true
-							text: "A zone only has to look alike, not the same: a scene is recognised when the picture inside its zones correlates with the scene's picture above its own bar – brighter, noisier, slightly moved is still the same HUD."
+							text: "A zone only has to look alike, not the same: a scene is recognised when the picture inside its zones correlates with the scene's picture above its own bar – brighter, noisier, slightly moved is still the same HUD. While no scene is recognised nothing vibrates."
 							tone: Theme.textFaint
 							font.pixelSize: Theme.size.small
 							wrapMode: Text.WordWrap
@@ -1293,7 +1293,7 @@ SettingsPage {
 				unit: " %"
 				icon: "fit_to_screen_outline"
 				label: "Has to look alike"
-				value: Math.round(Number(root.scene?.similar ?? 0.45) * 100)
+				value: Math.round(Number(root.scene?.similar ?? 0.55) * 100)
 				onMoved: v => Mouse.hudChangeScene(root.scene.id, { similar: Math.round(v) / 100 })
 			}
 

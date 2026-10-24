@@ -51,6 +51,7 @@ top in every mode.
 """
 
 import collections
+from pathlib import Path
 import json
 import math
 import os
@@ -90,6 +91,22 @@ NOT_GAMES = ("discord", "vesktop", "webcord", "armcord", "teams", "zoom", "mumbl
 RATE = 16000
 HOP = 320            # 20 ms
 FFT = 512
+
+
+FELT_LOG = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "pshell" / "mouse-felt.log"
+
+
+def felt_log(text):
+    """One line per pulse with its reason (~/.cache/pshell/mouse-felt.log,
+    for finding out what vibrated); kept short."""
+    try:
+        FELT_LOG.parent.mkdir(parents=True, exist_ok=True)
+        if FELT_LOG.exists() and FELT_LOG.stat().st_size > 400_000:
+            FELT_LOG.write_text("")
+        with FELT_LOG.open("a") as handle:
+            handle.write(f"{time.strftime('%H:%M:%S')} {text}\n")
+    except OSError:
+        pass
 
 
 def wave_for(kind, strength):
@@ -1261,7 +1278,7 @@ class Eyes:
     with when/feel/level/every is one trigger). Zones belong to scenes
     (options.hudScenes[game]: [{id, name, picture, similar}]): eyes.py
     tells how alike the frame is to each scene's picture inside its
-    zones, the best one above its `similar` (0.45 by itself) is the scene
+    zones, the best one above its `similar` (0.55 by itself) is the scene
     that is up and only its zones fire; with none recognised every zone
     does. Runs only while wanted: options.rumbleEyes (on by default) with the
     automatic source, and a game window has the focus."""
@@ -1378,9 +1395,9 @@ class Eyes:
             if not picture or not os.path.exists(picture):
                 continue
             try:
-                similar = float(item.get("similar", 0.45))
+                similar = float(item.get("similar", 0.55))
             except (TypeError, ValueError):
-                similar = 0.45
+                similar = 0.55
             out.append({"id": str(item["id"]), "picture": picture, "similar": max(0.05, min(0.95, similar)),
                         "zones": [z["id"] for z in zones if z["scene"] == str(item["id"])]})
         return out
@@ -1564,14 +1581,14 @@ class Eyes:
                 self.daemon.emit("eyes", **self.summary())
 
     def live_zones(self):
-        """The zones that may fire now: the scene's that is up, or, none
-        recognised, all of them."""
+        """The zones that may fire now: the scene's that is up; with none
+        recognised only those of scenes that have no picture to be
+        recognised by (and zones of no scene) – the rest stays quiet."""
         zones = self.zones()
+        pictured = {scene["id"] for scene in self.scenes()}
         if self.scene:
-            mine = [z for z in zones if z["scene"] == self.scene]
-            if mine:
-                return mine
-        return zones
+            return [z for z in zones if z["scene"] == self.scene or z["scene"] not in pictured]
+        return [z for z in zones if z["scene"] not in pictured]
 
     def fire(self, at, zone, trigger, reason, strength=0.5):
         key = (zone["id"], trigger["kind"])
@@ -1662,7 +1679,9 @@ class Eyes:
                     reason = f"changed by {change:.0f}"
                 elif kind == "press":
                     wanted = self.key_code(trigger["key"])
-                    hits = [code for code, _ in fresh if wanted is None or code == wanted]
+                    # a click on a zone that reacts to clicks is the click's, not a press
+                    clicks_too = any(t["kind"] == "click" for t in zone["triggers"])
+                    hits = [code for code, _ in fresh if (wanted is None or code == wanted) and not (clicks_too and wanted is None and 272 <= code <= 279)]
                     fired = change >= (level or 14) and bool(hits) and calm
                     reason = f"changed by {change:.0f} after {key_name(hits[0])}" if hits else ""
                 elif kind == "red":
@@ -1751,6 +1770,7 @@ class Eyes:
     def event(self, kind, strength, label, reason, cells=None, zone=None, trigger=None):
         self.seen[kind] = self.seen.get(kind, 0) + 1
         waveform = trigger["feel"] if trigger else wave_for(kind, strength)
+        felt_log(f"eyes {kind} {waveform} | {reason} | scene={self.scene or '-'}")
         self.daemon.felt("eyes", kind, strength, waveform, label, stream=zone["id"] if zone else "")
         if self.daemon.watching:
             self.daemon.emit("onset", source="eyes", at=round(time.monotonic(), 3), cluster=(cells or [-1])[0], n=0, win=0,

@@ -255,10 +255,13 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
     the scene's zones (zero-mean correlation per zone, so brighter, noisier,
     slightly moved is still alike; a scene with no zones by the whole
     frame). The daemon keeps the best scene above its own bar (`similar`,
-    0.45 by itself; held until another beats it by 0.1 or it falls 0.1
+    0.55 by itself; held until another beats it by 0.1 or it falls 0.1
     under) as the one that is up – the page shows it live, with every
     scene's likeness – and only its zones fire; with no scene recognised
-    every zone does. A zone **reacts** in several ways at once, each with
+    only zones of scenes without a picture do, the rest stays quiet. A
+    `press` on a zone that also reacts to clicks leaves mouse buttons to
+    the click. Every pulse and its reason goes to
+    `~/.cache/pshell/mouse-felt.log`. A zone **reacts** in several ways at once, each with
     its own pattern (`feel`, a waveform name), gap (`every` ms, 150) and,
     where it applies, threshold (`level`; 0 = by itself): `change` (changed
     by ≥ 14; not while the whole picture moved), `press` (changed while a

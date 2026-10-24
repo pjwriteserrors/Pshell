@@ -975,6 +975,7 @@ class Daemon:
                 return
             self.last_felt = now
             self.felt_count[source] = self.felt_count.get(source, 0) + 1
+            gamefeel.felt_log(f"felt {source} {kind} {waveform} {label}")
             self.play(waveform)
             if self.watching:
                 emit("felt", source=source, kind=kind, strength=round(float(strength), 2), wave=waveform,
