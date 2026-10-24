@@ -1296,6 +1296,10 @@ class Eyes:
         # reactions that fired and wait for their next step:
         # [{zone, name, steps, step, since}]
         self.chains = []
+        # zone id -> since when it has been quiet (0.0: from the start),
+        # None while it is changing – a menu sliding in is one change,
+        # not one every frame
+        self.zone_quiet = {}
 
     def options(self):
         return self.daemon.config["options"]
@@ -1334,8 +1338,9 @@ class Eyes:
                 try:
                     level = float(t.get("level") or 0) or 0.0
                     every = max(0.03, float(t.get("every") or 150) / 1000)
+                    calm = max(0.0, float(t.get("calm", 250) or 0) / 1000)
                 except (TypeError, ValueError):
-                    level, every = 0.0, 0.15
+                    level, every, calm = 0.0, 0.15, 0.25
                 steps = []
                 for step in t.get("then") if isinstance(t.get("then"), list) else []:
                     if not isinstance(step, dict):
@@ -1351,7 +1356,7 @@ class Eyes:
                     steps.append({"when": when, "feel": str(step.get("feel") or "SUBTLE COLLISION"),
                                   "key": step.get("key") or "", "within": within, "delay": delay})
                 triggers.append({"kind": kind, "feel": str(t.get("feel") or "SUBTLE COLLISION"),
-                                 "key": t.get("key") or "", "level": level, "every": every, "then": steps})
+                                 "key": t.get("key") or "", "level": level, "every": every, "calm": calm, "then": steps})
             zone["triggers"] = triggers
             out.append(zone)
         return out
@@ -1503,6 +1508,9 @@ class Eyes:
             self.drawn(at, measured, fresh, moved)
         self.hover(at)
         self.advance(at, "tick")
+        if self.options().get("eyesAuto", True) is False:
+            # only the zones drawn by hand: no shakes, hits, flashes, learned HUD
+            return
         resting = now - self.daemon.last_motion > 0.15 and not self.gate.moving
         # a shake: the picture jolts and comes back within a few frames,
         # while the player does not move it (a camera turn is one way)
@@ -1637,17 +1645,22 @@ class Eyes:
             if not isinstance(values, list) or len(values) < 3:
                 continue
             change, dred, dbright = (float(v) for v in values[:3])
+            quiet_since = self.zone_quiet.get(zone["id"], 0.0)
             if change >= 14 and moved < 1.0:
                 self.advance(at, "change", zone_id=zone["id"])
             for trigger in zone["triggers"]:
                 kind, level = trigger["kind"], trigger["level"]
+                # a change counts once: the zone has to have been quiet for
+                # the trigger's calm time before (a menu sliding in, a bar
+                # filling is one change, not twenty)
+                calm = quiet_since is not None and at - quiet_since >= trigger["calm"]
                 if kind == "change":
-                    fired = change >= (level or 14) and moved < 1.0
+                    fired = change >= (level or 14) and moved < 1.0 and calm
                     reason = f"changed by {change:.0f}"
                 elif kind == "press":
                     wanted = self.key_code(trigger["key"])
                     hits = [code for code, _ in fresh if wanted is None or code == wanted]
-                    fired = change >= (level or 14) and bool(hits)
+                    fired = change >= (level or 14) and bool(hits) and calm
                     reason = f"changed by {change:.0f} after {key_name(hits[0])}" if hits else ""
                 elif kind == "red":
                     fired = dred >= (level or 8)
@@ -1663,6 +1676,12 @@ class Eyes:
                 if fired:
                     strength = max(0.2, min(1.0, max(change, abs(dred), abs(dbright)) / 40))
                     self.fire(at, zone, trigger, reason, strength)
+            # quiet: below half the change bar
+            if change < 6.0:
+                if quiet_since is None:
+                    self.zone_quiet[zone["id"]] = at
+            else:
+                self.zone_quiet[zone["id"]] = None
 
     def hover(self, at):
         """The pointer coming into a zone with a hover trigger."""

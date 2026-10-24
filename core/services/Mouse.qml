@@ -348,7 +348,7 @@ Singleton {
 
 	function hudTrigger(kind, values) {
 		const base = root.hudKinds.find(k => k.value === kind) ?? root.hudKinds[0];
-		return Object.assign({ kind: base.value, feel: base.feel, key: "", keyName: "", level: 0, every: 150, on: true }, values ?? {});
+		return Object.assign({ kind: base.value, feel: base.feel, key: "", keyName: "", level: 0, every: 150, calm: 250, on: true }, values ?? {});
 	}
 
 	function hudAddZone(rect, values) {

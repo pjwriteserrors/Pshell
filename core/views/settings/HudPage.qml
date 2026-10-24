@@ -752,6 +752,18 @@ SettingsPage {
 										onMoved: v => Mouse.hudChangeTrigger(root.zone.id, trow.index, { every: Math.round(v) })
 									}
 
+									ValueSlider {
+										visible: trow.trigger.kind === "change" || trow.trigger.kind === "press"
+										from: 0
+										to: 2000
+										step: 50
+										icon: "pause"
+										label: "Calm before"
+										value: Number(trow.trigger.calm ?? 250)
+										format: v => v <= 0 ? "not needed" : `${Math.round(v)} ms`
+										onMoved: v => Mouse.hudChangeTrigger(root.zone.id, trow.index, { calm: Math.round(v) })
+									}
+
 									// what follows: step by step, each waited for within its time
 									Repeater {
 										model: Mouse.hudStepsOf(trow.trigger).length
@@ -936,13 +948,13 @@ SettingsPage {
 										Layout.fillWidth: true
 										text: {
 											switch (trow.trigger.kind) {
-											case "press": return "The zone changes while a press of yours is fresh – the ammo counter after a shot, the cast bar after a spell.";
+											case "press": return "The zone changes while a press of yours is fresh – the ammo counter after a shot, the cast bar after a spell. One pulse per change: it has to have been calm for the time above before it counts again.";
 											case "click": return "A mouse button goes down while the pointer is in the zone – a spell slot, a button of the HUD. X11 games only (Proton is).";
 											case "hover": return "The pointer comes into the zone – once, until it leaves. X11 games only.";
 											case "red": return "The zone suddenly reddens – a hit marker, blood, a health bar dropping.";
 											case "bright": return "The zone suddenly brightens – a muzzle flash, an icon lighting up.";
 											case "dark": return "The zone suddenly darkens – an icon greying out, a charge spent.";
-											default: return "The zone changes, whoever caused it – not while the whole picture moves.";
+											default: return "The zone changes, whoever caused it – not while the whole picture moves. One pulse per change: a menu sliding in or a bar filling is one, not one every frame; it has to have been calm for the time above before it counts again.";
 											}
 										}
 										tone: Theme.textFaint
@@ -1006,6 +1018,42 @@ SettingsPage {
 				variant: "text"
 				busy: root.shooting
 				onActivated: root.shoot()
+			}
+		}
+
+		// the automatic part of the picture, or only what is drawn here
+		RowLayout {
+			Layout.fillWidth: true
+			spacing: 10
+
+			Glyph {
+				icon: "auto_fix"
+				size: 16
+				color: Mouse.option("eyesAuto", true) !== false ? Theme.primary : Theme.textFaint
+			}
+
+			ColumnLayout {
+				Layout.fillWidth: true
+				spacing: 1
+
+				StyledText {
+					text: Mouse.option("eyesAuto", true) !== false ? "Shakes, hits, flashes and the learned HUD are felt too" : "Only the zones are felt"
+					font.pixelSize: Theme.size.small
+					font.weight: Font.DemiBold
+				}
+
+				StyledText {
+					Layout.fillWidth: true
+					text: "Off, nothing but your zones vibrates – no jolt of the picture, no red cast, no brightening, no HUD cell the game taught. A camera turn or a loading screen then stays quiet."
+					tone: Theme.textSubtle
+					font.pixelSize: Theme.size.small
+					wrapMode: Text.WordWrap
+				}
+			}
+
+			Toggle {
+				checked: Mouse.option("eyesAuto", true) !== false
+				onToggled: on => Mouse.setOption("eyesAuto", on)
 			}
 		}
 
