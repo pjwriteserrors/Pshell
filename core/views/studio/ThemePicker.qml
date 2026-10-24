@@ -33,7 +33,9 @@ ModalWindow {
 	// wallust v4 remap: "colour space" carries the wallust PALETTE (kmeans /
 	// salience / ansi), "palette" carries the wallust STYLE (dark / light).
 	property string view: "library"
-	readonly property var views: ["library", "daily", "online"]
+	// the Online tab is a plugin of its own (studio-wallpaper-online)
+	readonly property bool onlineOn: Plugins.on("studio-wallpaper-online")
+	readonly property var views: root.onlineOn ? ["library", "daily", "online"] : ["library", "daily"]
 	readonly property int viewIndex: Math.max(0, root.views.indexOf(root.view))
 	property bool filtersOpen: false
 	property string searchText: ""
@@ -323,6 +325,7 @@ ModalWindow {
 	}
 
 	function selectView(view) {
+		if (root.views.indexOf(view) < 0) view = "library";
 		root.startPending = false;
 		root.filtersOpen = false;
 		root.view = view;
@@ -542,6 +545,11 @@ ModalWindow {
 
 	// what was looked at online is not kept
 	onShownChanged: if (!root.shown) online.forget()
+	// switched off while it is open: back to the library, and forgotten
+	onOnlineOnChanged: if (!root.onlineOn && root.view === "online") {
+		online.forget();
+		root.selectView("library");
+	}
 	// the keyboard goes back to the search when the filters fold away
 	onFiltersOpenChanged: if (!root.filtersOpen) searchInput.forceActiveFocus()
 
@@ -786,13 +794,12 @@ ModalWindow {
 				spacing: 12
 
 				Segmented {
-					Layout.preferredWidth: 372
+					Layout.preferredWidth: root.onlineOn ? 372 : 248
 					Layout.preferredHeight: 40
 					options: [
 						{ value: "library", label: Words.of("wallpaper.library", "Library"), icon: "image_multiple" },
-						{ value: "daily", label: Words.of("wallpaper.today", "Today"), icon: "calendar_today" },
-						{ value: "online", label: Words.of("wallpaper.online", "Online"), icon: "earth" }
-					]
+						{ value: "daily", label: Words.of("wallpaper.today", "Today"), icon: "calendar_today" }
+					].concat(root.onlineOn ? [{ value: "online", label: Words.of("wallpaper.online", "Online"), icon: "earth" }] : [])
 					current: root.view
 					onSelected: value => root.selectView(value)
 				}

@@ -99,6 +99,7 @@
 	{ "id": "multicursor", "name": "Multicursor", "category": "Automation", "default": false, "icon": "cursor_text" },
 
 	{ "id": "studio-wallpaper", "name": "Wallpaper", "category": "Studio" },
+	{ "id": "studio-wallpaper-online", "name": "Online wallpapers", "category": "Studio", "requires": ["studio-wallpaper"], "icon": "earth" },
 	{ "id": "studio-motion", "name": "Motion", "category": "Studio" },
 	{ "id": "studio-dress", "name": "Icons & pointer", "category": "Studio" },
 	{ "id": "studio-styles", "name": "Style", "category": "Studio" },

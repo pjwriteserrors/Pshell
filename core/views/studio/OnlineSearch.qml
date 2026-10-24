@@ -512,7 +512,7 @@ Item {
 	Process {
 		id: keyReader
 
-		running: true
+		running: Plugins.on("studio-wallpaper-online")
 		command: ["python3", root.script, "key"]
 		stdout: StdioCollector {
 			onStreamFinished: {
