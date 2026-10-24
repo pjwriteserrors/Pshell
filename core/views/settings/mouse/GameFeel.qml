@@ -47,7 +47,7 @@ ColumnLayout {
 	}
 
 	function kindName(kind, label) {
-		return { rumble: "Rumble", tick: "Tick", thud: "Thud", blast: "Blast", shake: "Shake", hit: "Hit", flash: "Flash", hud: "HUD", press: label || "Press" }[kind] ?? label;
+		return { rumble: "Rumble", tick: "Tick", thud: "Thud", blast: "Blast", shake: "Shake", hit: "Hit", flash: "Flash", hud: "HUD", zone: label || "Zone", press: label || "Press" }[kind] ?? label;
 	}
 
 	Connections {
@@ -178,7 +178,7 @@ ColumnLayout {
 				label: "The game's picture",
 				on: root.eyesWanted,
 				live: root.eyes.on === true,
-				text: !root.eyesWanted ? "Shakes, hits, flashes and the HUD – off" : (root.eyes.on ? `Watching the game's window – ${root.eyes.frames ?? 0} frames; shakes ${root.eyes.seen?.shake ?? 0}, hits ${root.eyes.seen?.hit ?? 0}, flashes ${root.eyes.seen?.flash ?? 0}, HUD ${root.eyes.seen?.hud ?? 0}; ${root.eyes.hud?.yours?.length ?? 0} HUD cells learned as yours` : "The window, 192 px wide at 20 fps: a jolt while the mouse rests is an impact, a red cast a hit, a brightening a flash, and the HUD cells that change only after your presses are learned – the ammo counter, a cast bar")
+				text: !root.eyesWanted ? "Shakes, hits, flashes and the HUD – off" : (root.eyes.on ? `Watching the game's window – ${root.eyes.frames ?? 0} frames; shakes ${root.eyes.seen?.shake ?? 0}, hits ${root.eyes.seen?.hit ?? 0}, flashes ${root.eyes.seen?.flash ?? 0}, HUD ${root.eyes.seen?.hud ?? 0}, your zones ${root.eyes.seen?.zone ?? 0}; ${root.eyes.hud?.yours?.length ?? 0} HUD cells learned as yours${(root.eyes.zones ?? 0) > 0 ? `, ${root.eyes.zones} drawn by you` : ""}` : "The window, 192 px wide at 20 fps: a jolt while the mouse rests is an impact, a red cast a hit, a brightening a flash, and the HUD cells that change only after your presses are learned – the ammo counter, a cast bar. Or draw the HUD yourself below")
 			}] : []
 
 		delegate: RowLayout {
@@ -319,6 +319,13 @@ ColumnLayout {
 				}
 			}
 		}
+	}
+
+	// the HUD by hand: zones drawn on the game's picture, each with its
+	// condition and its pattern
+	HudZones {
+		Layout.fillWidth: true
+		visible: root.automatic && root.eyesWanted
 	}
 
 	// the inside, live: numbers, windows, every onset with its reason, the sounds

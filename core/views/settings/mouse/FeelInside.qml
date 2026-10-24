@@ -34,6 +34,8 @@ ColumnLayout {
 		Layout.fillWidth: true
 		Layout.leftMargin: 10
 		implicitHeight: 28
+		radius: Theme.radius.small
+		color: Theme.layer1
 		onClicked: root.open = !root.open
 
 		RowLayout {

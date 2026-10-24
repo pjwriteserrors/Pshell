@@ -5,19 +5,24 @@
 
 Reads lines on stdin: `<window id>` casts that window (niri's
 org.gnome.Mutter.ScreenCast, RecordWindow: niri serves it itself, nothing
-is shown or asked), scaled on the GPU to 192 pixels wide; `0` stops. Every
+is shown or asked), scaled on the GPU to 192 pixels wide; `0` stops;
+`{"zones": [{"id", "x", "y", "w", "h"}]}` (fractions of the window) names
+the regions of the HUD the player drew, measured on their own. Every
 frame (at most 20 a second, only when the window changed) one JSON line:
 
     {"t": monotonic s, "dx", "dy": how far the whole picture moved against
      the frame before (pixels of the small frame; phase correlation),
      "red": the frame's redness (mean of R − (G+B)/2, 0..255) and its
      change, "bright": mean luminance and its change,
-     "cells": [indices of the 8×8-pixel cells that changed]}
+     "cells": [indices of the 8×8-pixel cells that changed],
+     "zones": {id: [mean change of the zone (0..255), its change in
+     redness, its change in brightness]}}
 
 The daemon turns that into shakes (the picture jolting back and forth
 while the mouse rests), hits (a sudden red cast), flashes (a sudden
 brightening) and the HUD's own changes (cells that change only after a
-press – the ammo counter, a cast bar – learned per game).
+press – the ammo counter, a cast bar – learned per game), and the drawn
+zones' own conditions with the pattern chosen for each.
 """
 import json
 import subprocess
@@ -84,13 +89,33 @@ class Measure:
         self.gray = None
         self.red = None
         self.bright = None
+        self.red_map = None
         self.window = None
+        # the player's HUD zones: [(id, x, y, w, h)] as fractions
+        self.zones = []
+
+    def zone_values(self, gray, red_map, before_gray, before_red, width, height):
+        """Per zone: the mean change, the change in redness and in
+        brightness – on the small frame, so a zone is a pixel at least."""
+        out = {}
+        for zone_id, fx, fy, fw, fh in self.zones:
+            x0 = max(0, min(width - 1, int(fx * width)))
+            y0 = max(0, min(height - 1, int(fy * height)))
+            x1 = max(x0 + 1, min(width, int(round((fx + fw) * width))))
+            y1 = max(y0 + 1, min(height, int(round((fy + fh) * height))))
+            now_gray, old_gray = gray[y0:y1, x0:x1], before_gray[y0:y1, x0:x1]
+            now_red, old_red = red_map[y0:y1, x0:x1], before_red[y0:y1, x0:x1]
+            out[zone_id] = [round(float(np.mean(np.abs(now_gray - old_gray))), 1),
+                            round(float(np.mean(now_red) - np.mean(old_red)), 1),
+                            round(float(np.mean(now_gray) - np.mean(old_gray)), 1)]
+        return out
 
     def frame(self, rgba, width, height):
         pixels = np.frombuffer(rgba, dtype=np.uint8)[:width * height * 4].reshape(height, width, 4)[:, :, :3].astype(np.float32)
         r, g, b = pixels[:, :, 0], pixels[:, :, 1], pixels[:, :, 2]
         gray = 0.299 * r + 0.587 * g + 0.114 * b
-        red = float(np.mean(r - (g + b) * 0.5))
+        red_map = r - (g + b) * 0.5
+        red = float(np.mean(red_map))
         bright = float(np.mean(gray))
         out = {"t": round(time.monotonic(), 3), "dx": 0.0, "dy": 0.0, "red": round(red, 1), "dred": 0.0,
                "bright": round(bright, 1), "dbright": 0.0, "cells": []}
@@ -103,7 +128,9 @@ class Measure:
             cells = diff[:rows * CELL, :cols * CELL].reshape(rows, CELL, cols, CELL).mean(axis=(1, 3))
             out["cells"] = [int(i) for i in np.flatnonzero(cells > CELL_CHANGE)]
             out["grid"] = [cols, rows]
-        self.gray, self.red, self.bright = gray, red, bright
+            if self.zones:
+                out["zones"] = self.zone_values(gray, red_map, self.gray, self.red_map, width, height)
+        self.gray, self.red, self.bright, self.red_map = gray, red, bright, red_map
         return out
 
     def shift(self, before, after):
@@ -226,7 +253,19 @@ def main():
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     bus = dbus.SessionBus()
     loop = GLib.MainLoop()
-    state = {"cast": None}
+    state = {"cast": None, "zones": []}
+
+    def zones(items):
+        out = []
+        for item in items if isinstance(items, list) else []:
+            try:
+                out.append((str(item["id"]), float(item["x"]), float(item["y"]), max(0.002, float(item["w"])), max(0.002, float(item["h"]))))
+            except (KeyError, TypeError, ValueError):
+                continue
+        state["zones"] = out
+        if state["cast"] is not None:
+            with state["cast"].lock:
+                state["cast"].measure.zones = out
 
     def switch(window):
         if state["cast"] is not None and state["cast"].window == window:
@@ -237,6 +276,7 @@ def main():
         if window > 0:
             try:
                 state["cast"] = Cast(bus, window)
+                state["cast"].measure.zones = state["zones"]
             except dbus.DBusException as error:
                 log(f"cast: {error}")
                 emit(event="error", message=str(error))
@@ -246,8 +286,15 @@ def main():
         if not line:
             loop.quit()
             return False
+        line = line.strip()
+        if line.startswith("{"):
+            try:
+                zones(json.loads(line).get("zones"))
+            except ValueError:
+                pass
+            return True
         try:
-            window = int(line.strip() or 0)
+            window = int(line or 0)
         except ValueError:
             return True
         switch(window)

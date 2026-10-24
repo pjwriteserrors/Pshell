@@ -249,7 +249,8 @@ Singleton {
 	property var onsets: []
 	property var gate: ({ duty: 0, held: [], windows: [] })
 	property var meter: ({})
-	// the game's picture (gamefeel.Eyes): {on, window, frames, seen: {shake, hit, flash, hud}, latest, hud: {cells, yours}}
+	// the game's picture (gamefeel.Eyes): {on, window, frames, seen: {shake, hit, flash, hud, zone}, latest (with
+	// zones: {id: [change, red, bright]} for the zones drawn by hand), hud: {cells, yours}, zones: how many are drawn}
 	property var eyes: ({})
 	// a sound that should not have been felt: never again (-1: the last one)
 	function muteSound(cluster) {
@@ -409,7 +410,7 @@ Singleton {
 	property real bassThreshold: 0.5
 	signal hit(real strength)
 	// a game event the mouse played: source "pad" | "sound" | "press",
-	// kind "rumble" | "tick" | "thud" | "blast" | "press", the waveform
+	// kind "rumble" | "tick" | "thud" | "blast" | "shake" | "hit" | "flash" | "hud" | "zone" | "press", the waveform
 	signal felt(string source, string kind, real strength, string wave, string label, int cluster)
 	property var batteryLog: []
 	// what the daemon last said it goes by (`ipc mouse state`)

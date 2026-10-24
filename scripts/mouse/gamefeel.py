@@ -1172,8 +1172,12 @@ class Eyes:
     sudden red cast is a hit taken; a sudden brightening a flash; and the
     cells of the picture that change only after a press of yours (the
     ammo counter, a cast bar) are the HUD's own word for what you did,
-    learned per game. Runs only while wanted: options.rumbleEyes (on by
-    default) with the automatic source, and a game window has the focus."""
+    learned per game. On top, the HUD zones the player drew
+    (options.hudZones[game]: [{id, name, x, y, w, h, when, key, feel,
+    level, every}]): each fires its own pattern when it changes, changes
+    after a press (any, or one key), turns red, brightens or darkens.
+    Runs only while wanted: options.rumbleEyes (on by default) with the
+    automatic source, and a game window has the focus."""
 
     def __init__(self, daemon, memory, gate):
         self.daemon = daemon
@@ -1185,11 +1189,57 @@ class Eyes:
         self.shifts = collections.deque(maxlen=8)
         self.last = {"shake": 0.0, "hit": 0.0, "flash": 0.0, "hud": 0.0}
         self.frames = 0
-        self.seen = {"shake": 0, "hit": 0, "flash": 0, "hud": 0}
+        self.seen = {"shake": 0, "hit": 0, "flash": 0, "hud": 0, "zone": 0}
         self.latest = {}
+        # the player's zones as sent to eyes.py, their last firing, their
+        # last measured values, and when the page was told
+        self.zones_sent = ""
+        self.zone_last = {}
+        self.zone_values = {}
+        self.told = 0.0
 
     def options(self):
         return self.daemon.config["options"]
+
+    def zones(self):
+        """The drawn zones of the game that runs, well-formed only."""
+        table = self.options().get("hudZones")
+        items = table.get(self.daemon.game_name) if isinstance(table, dict) and self.daemon.game_name else None
+        out = []
+        for item in items if isinstance(items, list) else []:
+            try:
+                zone = {"id": str(item["id"]), "x": float(item["x"]), "y": float(item["y"]),
+                        "w": float(item["w"]), "h": float(item["h"])}
+            except (KeyError, TypeError, ValueError):
+                continue
+            if zone["w"] <= 0 or zone["h"] <= 0:
+                continue
+            zone["name"] = str(item.get("name") or "Zone")
+            zone["when"] = str(item.get("when") or "change")
+            zone["key"] = item.get("key") or ""
+            zone["feel"] = str(item.get("feel") or "SUBTLE COLLISION")
+            try:
+                zone["level"] = float(item.get("level", 0)) or 0.0
+                zone["every"] = max(0.03, float(item.get("every", 150)) / 1000)
+            except (TypeError, ValueError):
+                zone["level"], zone["every"] = 0.0, 0.15
+            out.append(zone)
+        return out
+
+    def send_zones(self, force=False):
+        """The zones' places to eyes.py, when they changed."""
+        if self.proc is None:
+            return
+        line = json.dumps({"zones": [{k: zone[k] for k in ("id", "x", "y", "w", "h")} for zone in self.zones()]},
+                          separators=(",", ":"))
+        if line == self.zones_sent and not force:
+            return
+        self.zones_sent = line
+        try:
+            self.proc.stdin.write(line + "\n")
+            self.proc.stdin.flush()
+        except (OSError, ValueError):
+            pass
 
     def wanted(self):
         options = self.options()
@@ -1209,6 +1259,7 @@ class Eyes:
                 self.daemon.log(f"eyes: {error}")
                 return
             self.window = 0
+            self.zones_sent = ""
             threading.Thread(target=self.listen, args=(self.proc,), daemon=True).start()
             threading.Thread(target=self.errors, args=(self.proc,), daemon=True).start()
         elif not wanted and self.proc is not None:
@@ -1229,6 +1280,7 @@ class Eyes:
                 self.proc.stdin.flush()
             except (OSError, ValueError):
                 pass
+        self.send_zones()
 
     def errors(self, proc):
         for line in proc.stderr:
@@ -1268,10 +1320,19 @@ class Eyes:
         moved = math.hypot(dx, dy)
         self.shifts.append((at, dx, dy))
         self.latest = {"dx": dx, "dy": dy, "dred": data.get("dred", 0), "dbright": data.get("dbright", 0), "cells": len(data.get("cells") or [])}
+        measured = data.get("zones")
+        if isinstance(measured, dict):
+            self.zone_values = measured
+            self.latest["zones"] = measured
+        if self.daemon.watching and now - self.told > 0.2:
+            self.told = now
+            self.daemon.emit("eyes", **self.summary())
         pad = self.daemon.pad
         if pad and pad.recent():
             return
         fresh = self.gate.fresh(at, self.daemon.ears.window)
+        if isinstance(measured, dict) and measured:
+            self.drawn(at, measured, fresh, moved)
         resting = now - self.daemon.last_motion > 0.15 and not self.gate.moving
         # a shake: the picture jolts and comes back within a few frames,
         # while the player does not move it (a camera turn is one way)
@@ -1300,14 +1361,67 @@ class Eyes:
                     self.last["hud"] = at
                     self.event("hud", 0.5, "HUD", f"cell {yours[0]} of the HUD changed after " + ", ".join(key_name(code) for code, _ in fresh[:2]), cells=yours)
 
-    def event(self, kind, strength, label, reason, cells=None):
+    def drawn(self, at, measured, fresh, moved):
+        """The player's zones: each fires its own pattern on its condition
+        – `change` (it changed; not while the whole picture moves, a
+        window behind a transparent HUD), `press` (changed with a press of
+        yours fresh – any, or `key`), `red`, `bright`, `dark`."""
+        for zone in self.zones():
+            values = measured.get(zone["id"])
+            if not isinstance(values, list) or len(values) < 3:
+                continue
+            change, dred, dbright = (float(v) for v in values[:3])
+            if at - self.zone_last.get(zone["id"], 0.0) < zone["every"]:
+                continue
+            when, level = zone["when"], zone["level"]
+            after = ""
+            if when == "change":
+                fired = change >= (level or 14) and moved < 1.0
+                reason = f"changed by {change:.0f}"
+            elif when == "press":
+                wanted = self.key_code(zone["key"])
+                hits = [code for code, _ in fresh if wanted is None or code == wanted]
+                fired = change >= (level or 14) and bool(hits)
+                after = key_name(hits[0]) if hits else ""
+                reason = f"changed by {change:.0f} after {after}" if hits else f"changed by {change:.0f}, no press"
+            elif when == "red":
+                fired = dred >= (level or 8)
+                reason = f"turned red by {dred:.0f}"
+            elif when == "bright":
+                fired = dbright >= (level or 20)
+                reason = f"brightened by {dbright:.0f}"
+            elif when == "dark":
+                fired = dbright <= -(level or 20)
+                reason = f"darkened by {-dbright:.0f}"
+            else:
+                continue
+            if not fired:
+                continue
+            self.zone_last[zone["id"]] = at
+            strength = max(0.2, min(1.0, max(change, abs(dred), abs(dbright)) / 40))
+            self.event("zone", strength, zone["name"], f"{zone['name']}: {reason}", zone=zone)
+
+    @staticmethod
+    def key_code(key):
+        """A zone's key: "" any, "BTN_LEFT" / "KEY_R" or an evdev code."""
+        if key in ("", None):
+            return None
+        if isinstance(key, (int, float)):
+            return int(key)
+        if E is None:
+            return None
+        code = E.ecodes.get(str(key))
+        return code if isinstance(code, int) else None
+
+    def event(self, kind, strength, label, reason, cells=None, zone=None):
         self.seen[kind] = self.seen.get(kind, 0) + 1
-        self.daemon.felt("eyes", kind, strength, wave_for(kind, strength), label)
+        waveform = zone["feel"] if zone else wave_for(kind, strength)
+        self.daemon.felt("eyes", kind, strength, waveform, label, stream=zone["id"] if zone else "")
         if self.daemon.watching:
             self.daemon.emit("onset", source="eyes", at=round(time.monotonic(), 3), cluster=(cells or [-1])[0], n=0, win=0,
                              verdict="yes", key="", fresh=[], strength=round(strength, 2), kind=kind, felt=True,
-                             reason=reason, over=0, ratio=0, lowness=0, panned=0, stream="picture")
+                             reason=reason, over=0, ratio=0, lowness=0, panned=0, stream=zone["id"] if zone else "picture")
 
     def summary(self):
         return {"on": self.on, "window": self.window, "frames": self.frames, "seen": self.seen, "latest": self.latest,
-                "hud": self.memory.cells_summary() if self.memory.entry else {}}
+                "hud": self.memory.cells_summary() if self.memory.entry else {}, "zones": len(self.zones())}
