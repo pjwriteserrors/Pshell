@@ -64,6 +64,9 @@ ModalWindow {
 	property var scalingCommand: []
 	// until the first touch, the picker stands on what the desktop wears
 	property bool startPending: false
+	// an apply asked for while the theme in front was still loading (its
+	// download, its colours): done once it is ready, unless it is left
+	property bool applyPending: false
 	// Every theme's palette matrix (the wallust colours per palette x style)
 	// by matrixKey, filled by one `matrix-all` run after the list and by a
 	// `matrix-json` run for the theme in front when it is not there yet.
@@ -351,7 +354,8 @@ ModalWindow {
 	}
 
 	function dismiss() {
-		if (root.scaling) root.cancelScaling();
+		if (root.applyPending) root.applyPending = false;
+		else if (root.scaling) root.cancelScaling();
 		else if (online.saving) online.cancelSave();
 		else if (root.filtersOpen) root.filtersOpen = false;
 		else Popups.closeModal();
@@ -417,7 +421,11 @@ ModalWindow {
 
 	function applyTheme(theme) {
 		if (!theme) return;
-		if (root.previewPaletteStatus === "loading") return;
+		if (root.previewPaletteStatus === "loading") {
+			root.applyPending = theme === root.currentTheme;
+			return;
+		}
+		root.applyPending = false;
 		if (root.previewPaletteStatus === "error") {
 			const preferred = root.findPreferredVariant(root.previewMatrixItems);
 			if (preferred) root.selectVariant(preferred.colorSpace, preferred.palette);
@@ -473,6 +481,7 @@ ModalWindow {
 
 	function reset() {
 		root.cancelScaling();
+		root.applyPending = false;
 		root.filtersOpen = false;
 		root.resolutionChoice = ({});
 		root.searchText = "";
@@ -489,7 +498,28 @@ ModalWindow {
 	}
 
 	onFilteredThemesChanged: syncCurrentThemeIndex()
-	onCurrentKeyChanged: root.reloadPreviewMatrix()
+	onCurrentKeyChanged: {
+		root.applyPending = false;
+		root.reloadPreviewMatrix();
+	}
+	onPreviewPaletteStatusChanged: {
+		if (root.previewPaletteStatus === "loading" || !root.applyPending) return;
+		root.applyPending = false;
+		if (root.previewPaletteStatus === "ready") Qt.callLater(() => root.applyTheme(root.currentTheme));
+	}
+
+	// "4.2 / 6.7 MB · 3 s left" of a download that started at `started`
+	function downloadText(bytes, total, started) {
+		if (total <= 0) return "";
+		const mb = value => (value / 1048576).toFixed(value < 10485760 ? 1 : 0);
+		let text = `${mb(bytes)} / ${mb(total)} MB`;
+		const elapsed = (Date.now() - started) / 1000;
+		if (bytes > 0 && bytes < total && elapsed > 0.5) {
+			const left = Math.ceil((total - bytes) / (bytes / elapsed));
+			text += left >= 60 ? ` · ${Math.floor(left / 60)} min ${left % 60} s left` : ` · ${left} s left`;
+		}
+		return text;
+	}
 	onSelectedBackendChanged: {
 		root.reloadPreviewMatrix();
 		root.prewarmMatrices();
@@ -1977,28 +2007,37 @@ ModalWindow {
 							text: "Apply"
 							icon: "check"
 							variant: "filled"
-							enabled: root.currentTheme !== null && root.previewPaletteStatus !== "loading" && !root.scaling && !(root.currentTheme.online && root.previewPaletteStatus === "error")
+							enabled: root.currentTheme !== null && !root.scaling && !(root.currentTheme.online && root.previewPaletteStatus === "error")
 							busy: (root.previewPaletteStatus === "loading" && root.currentTheme !== null) || root.scaling || online.saving
 							onActivated: root.applyTheme(root.currentTheme)
 						}
 					}
 				}
 
-				// the scaled copy being made, or a live wallpaper found online
-				// being downloaded: a bar that follows it
+				// the scaled copy being made, or a picture found online being
+				// downloaded (to be looked at, or a live one to be worn), or its
+				// colours read for an apply that waits: a bar that follows it
 				Rectangle {
 					id: progressCard
 
-					readonly property bool downloading: online.saving && root.currentTheme?.mediaType === "video"
-					readonly property real progress: progressCard.downloading ? online.saveProgress : root.scaleProgress
+					readonly property bool saving: online.saving && root.currentTheme?.mediaType === "video"
+					// a small one (MoeWalls' still) would only flash
+					readonly property bool staging: root.view === "online" && online.currentStaging && (online.stageTotal > 2097152 || root.applyPending)
+					readonly property bool reading: root.applyPending && !progressCard.staging
+					readonly property bool shown: root.scaling || progressCard.saving || progressCard.staging || progressCard.reading
+					readonly property real progress: progressCard.saving ? online.saveProgress
+						: progressCard.staging ? online.stageProgress
+						: progressCard.reading ? 1 : root.scaleProgress
+					readonly property string detail: progressCard.saving ? root.downloadText(online.saveBytes, online.saveTotal, online.saveStarted)
+						: progressCard.staging ? root.downloadText(online.stageBytes, online.stageTotal, online.stageStarted) : ""
 
 					anchors.centerIn: parent
 					width: 360
 					height: 92
 					radius: 24
 					color: Qt.alpha(Theme.base, 0.94)
-					opacity: root.scaling || progressCard.downloading ? 1 : 0
-					scale: root.scaling || progressCard.downloading ? 1 : 0.94
+					opacity: progressCard.shown ? 1 : 0
+					scale: progressCard.shown ? 1 : 0.94
 					visible: opacity > 0
 
 					Behavior on opacity {
@@ -2020,13 +2059,15 @@ ModalWindow {
 
 							StyledText {
 								Layout.fillWidth: true
-								text: progressCard.downloading ? "Downloading" : `Scaling to ${root.scalingLabel}`
+								text: progressCard.saving || progressCard.staging ? "Downloading"
+									: progressCard.reading ? "Reading the colours" : `Scaling to ${root.scalingLabel}`
 								font.pixelSize: Theme.size.body
 								font.weight: Font.DemiBold
 								elide: Text.ElideRight
 							}
 
 							StyledText {
+								visible: !progressCard.reading
 								text: `${Math.floor(progressCard.progress * 100)} %`
 								tone: Theme.textMuted
 								font.pixelSize: Theme.size.label
@@ -2054,9 +2095,12 @@ ModalWindow {
 						}
 
 						StyledText {
-							text: "Esc cancels"
+							Layout.fillWidth: true
+							// a picture being looked at is not stopped, only left
+							text: [progressCard.detail, progressCard.staging && !root.applyPending ? "" : "Esc cancels"].filter(part => part !== "").join("  ·  ")
 							tone: Theme.textMuted
 							font.pixelSize: Theme.size.tiny
+							elide: Text.ElideRight
 						}
 					}
 				}

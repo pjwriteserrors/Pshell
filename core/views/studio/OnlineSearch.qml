@@ -153,6 +153,13 @@ Item {
 	property var stageErrors: ({})
 	readonly property var currentStage: root.current ? (root.staged[root.keyOf(root.current)] ?? null) : null
 	readonly property string currentStageError: root.current ? (root.stageErrors[root.keyOf(root.current)] ?? "") : ""
+	// the download of the result in front, while it is staged: how far (0 to
+	// 1), how many bytes of how many, and since when (for the time left)
+	readonly property bool currentStaging: root.current !== null && root.staging(root.current)
+	property real stageProgress: 0
+	property real stageBytes: 0
+	property real stageTotal: 0
+	property real stageStarted: 0
 
 	property bool keySet: false
 	property bool keyBusy: false
@@ -161,6 +168,9 @@ Item {
 	// the download of what is put on, and what follows it
 	property bool saving: false
 	property real saveProgress: 0
+	property real saveBytes: 0
+	property real saveTotal: 0
+	property real saveStarted: 0
 	property var afterSave: null
 
 	function keyOf(item) {
@@ -315,6 +325,11 @@ Item {
 		if (root.staged[key] || (stager.running && stager.key === key)) return;
 		stager.running = false;
 		stager.key = key;
+		stager.last = "";
+		root.stageProgress = 0;
+		root.stageBytes = 0;
+		root.stageTotal = 0;
+		root.stageStarted = Date.now();
 		stager.command = ["python3", root.script, "stage", JSON.stringify(item)];
 		stager.running = true;
 	}
@@ -350,6 +365,9 @@ Item {
 		if (!stage || root.saving) return;
 		root.afterSave = then ?? null;
 		root.saveProgress = 0;
+		root.saveBytes = 0;
+		root.saveTotal = 0;
+		root.saveStarted = Date.now();
 		root.saving = true;
 		saver.command = ["python3", root.script, "wear", JSON.stringify({ item: item, stage: stage })];
 		saver.running = true;
@@ -386,6 +404,17 @@ Item {
 		const then = root.afterSave;
 		root.afterSave = null;
 		if (then) then(data.themePath);
+	}
+
+	// `progress <0..1> <bytes> <total>` of the script, or null
+	function progressOf(line) {
+		const match = String(line).match(/^progress ([0-9.]+)(?: ([0-9]+) ([0-9]+))?$/);
+		if (!match) return null;
+		return {
+			fraction: Math.max(0, Math.min(1, Number(match[1]))),
+			bytes: Number(match[2] ?? 0),
+			total: Number(match[3] ?? 0)
+		};
 	}
 
 	function setKey(key) {
@@ -428,13 +457,29 @@ Item {
 		id: stager
 
 		property string key: ""
+		// its answer, the line after the progress
+		property string last: ""
 
 		command: ["true"]
+		// its last line is read before this is looked at
 		onExited: (exitCode, exitStatus) => {
-			if (exitStatus === 0) root.stageArrived(stager.key, stageText.text);
+			if (exitStatus !== 0) return;
+			const key = stager.key;
+			Qt.callLater(() => {
+				if (stager.key === key) root.stageArrived(key, stager.last);
+			});
 		}
-		stdout: StdioCollector {
-			id: stageText
+		stdout: SplitParser {
+			onRead: line => {
+				const progress = root.progressOf(line);
+				if (!progress) {
+					stager.last = String(line);
+					return;
+				}
+				root.stageProgress = progress.fraction;
+				root.stageBytes = progress.bytes;
+				root.stageTotal = progress.total;
+			}
 		}
 	}
 
@@ -444,9 +489,16 @@ Item {
 		command: ["true"]
 		stdout: SplitParser {
 			onRead: line => {
-				const match = String(line).match(/^progress ([0-9.]+)$/);
-				if (match) root.saveProgress = Math.max(0, Math.min(1, Number(match[1])));
-				else root.saveFinished(line);
+				const progress = root.progressOf(line);
+				if (!progress) {
+					root.saveFinished(line);
+					return;
+				}
+				root.saveProgress = progress.fraction;
+				if (progress.total > 0) {
+					root.saveBytes = progress.bytes;
+					root.saveTotal = progress.total;
+				}
 			}
 		}
 		// its last line is read before this is looked at

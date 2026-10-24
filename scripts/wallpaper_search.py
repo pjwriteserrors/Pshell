@@ -5,8 +5,9 @@
 Nothing of it is kept: what is looked at and what is worn lives only in
 memory ($XDG_RUNTIME_DIR, THEME_ONLINE_DIR in theme_paths.sh), and so does
 everything the theme scripts make from it; no query, filter or tag is
-written anywhere. Every command prints one JSON object (wear prints
-`progress <0..1>` lines before it):
+written anywhere. Every command prints one JSON object (stage and wear
+print `progress <0..1> <bytes> <total bytes>` lines of their download
+before it):
 
   search JSON   a page of results; JSON carries the source and its filters
   stage JSON    the result in front made ready to be looked at: Wallhaven's
@@ -29,6 +30,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -335,7 +337,7 @@ def download(url: str, target: Path, limit_mb: int, progress: bool = False) -> P
                     output.write(chunk)
                     if progress and total and size / total - shown >= 0.01:
                         shown = size / total
-                        print(f"progress {shown:.3f}", flush=True)
+                        print(f"progress {shown:.3f} {size} {total}", flush=True)
             if size == 0:
                 raise RuntimeError("the download is empty")
             os.replace(temporary, target)
@@ -366,16 +368,11 @@ def forget_all() -> dict[str, object]:
         for directory in STAGE_DIR.iterdir():
             forget(directory)
         shutil.rmtree(STAGE_DIR, ignore_errors=True)
-    # a download that was stopped, or one that was never put on
-    state = Path(os.environ.get("THEME_STATE_DIR") or HOME / ".local" / "state" / "quickshell-theme")
-    try:
-        worn = (state / "current-theme-dir").read_text().strip()
-    except OSError:
-        worn = ""
-    if WORN_DIR.is_dir():
-        for directory in WORN_DIR.iterdir():
-            if not worn.startswith(f"{directory}/"):
-                shutil.rmtree(directory, ignore_errors=True)
+    # What is worn stays: the picker closes (and forgets) the moment an apply
+    # starts, before the apply has written what it wears, so the folder it is
+    # putting on would go with the rest. A stopped download takes its own
+    # folder away (main turns SIGTERM into SystemExit), and the apply forgets
+    # every other worn folder (theme_forget_online).
     return {"forgotten": True}
 
 
@@ -401,14 +398,14 @@ def stage(item: dict[str, object]) -> dict[str, object]:
                 details = {"tags": [], "uploader": "", "origin": ""}
             url = str(item.get("download") or "")
             suffix = Path(urllib.parse.urlparse(url).path).suffix or ".jpg"
-            download(url, directory / f"media{suffix}", 120)
+            download(url, directory / f"media{suffix}", 120, progress=True)
             words = [tag["name"] for tag in details["tags"][:2]]
             details["title"] = " · ".join(word[:1].upper() + word[1:] for word in words)
         else:
             details = moewalls_details(str(item.get("url") or ""))
-            download(str(item.get("still") or ""), directory / "still.jpg", 30)
+            download(str(item.get("still") or ""), directory / "still.jpg", 30, progress=True)
         result = {**details, **preview_of(directory)}
-    except Exception:
+    except BaseException:
         forget(directory)
         raise
     prune()
@@ -441,6 +438,8 @@ def wear(item: dict[str, object], staged: dict[str, object]) -> dict[str, object
 
 
 def main() -> int:
+    # a stopped stage or wear cleans up after itself
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
     command = sys.argv[1] if len(sys.argv) > 1 else ""
     payload: dict[str, object] = {}
     if len(sys.argv) > 2:
