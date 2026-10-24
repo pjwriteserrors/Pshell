@@ -41,6 +41,22 @@ FocusScope {
 
 	// the zone chosen (its id), the one pointed at in a list, which fired last
 	property string selected: ""
+	// several chosen together (ids, the last one is `selected`); [] for one
+	property var multi: []
+	readonly property var chosenIds: root.multi.length > 1 ? root.multi : (root.selected !== "" ? [root.selected] : [])
+	// do the chosen ones react the same, and are they linked for good
+	readonly property bool sameReactions: {
+		if (root.multi.length < 2) return true;
+		const first = JSON.stringify(Mouse.hudTriggers(root.allZones.find(z => z.id === root.multi[0])));
+		return root.multi.every(id => JSON.stringify(Mouse.hudTriggers(root.allZones.find(z => z.id === id))) === first);
+	}
+	readonly property bool linkedAll: {
+		if (root.multi.length < 2) return false;
+		const group = root.allZones.find(z => z.id === root.multi[0])?.group ?? "";
+		return group !== "" && root.multi.every(id => (root.allZones.find(z => z.id === id)?.group ?? "") === group);
+	}
+	// drag on the picture picks zones instead of drawing one
+	property bool picking: false
 	property string pointed: ""
 	property string fired: ""
 	readonly property var zone: root.allZones.find(z => z.id === root.selected) ?? null
@@ -152,7 +168,46 @@ FocusScope {
 	}
 
 	// ── choosing ───────────────────────────────────────────────────────
+	function isChosen(id) {
+		return root.chosenIds.includes(id);
+	}
+
+	// the zones linked with this one (itself too)
+	function groupOf(zone) {
+		if (!zone?.group) return zone ? [zone.id] : [];
+		return root.allZones.filter(z => z.group === zone.group).map(z => z.id);
+	}
+
+	// one more chosen, or one less (Ctrl/Shift+click)
+	function toggle(id) {
+		let list = root.chosenIds.slice();
+		if (list.includes(id)) list = list.filter(x => x !== id);
+		else list.push(id);
+		root.selectMany(list);
+	}
+
+	function selectMany(ids) {
+		const list = ids.filter((id, i) => ids.indexOf(id) === i);
+		if (list.length <= 1) {
+			root.select(list[0] ?? "");
+			return;
+		}
+		root.multi = list;
+		root.selected = list[list.length - 1];
+		root.activity = [];
+		root.recordingKey = -1;
+	}
+
+	function link() {
+		if (root.linkedAll) Mouse.hudUnlinkZones(root.multi);
+		else {
+			Mouse.hudLinkZones(root.multi, root.selected);
+			root.toast(`${root.multi.length} zones linked`);
+		}
+	}
+
 	function select(id) {
+		root.multi = [];
 		root.selected = id;
 		root.activity = [];
 		root.recordingKey = -1;
@@ -232,6 +287,13 @@ FocusScope {
 			root.keepZone(id, -1);
 			break;
 		case "delete":
+			if (root.multi.length > 1 && root.multi.includes(id)) {
+				const ids = root.multi;
+				root.select("");
+				Mouse.hudRemoveZones(ids);
+				root.toast(`${ids.length} zones deleted`);
+				break;
+			}
 			if (root.selected === id) root.select("");
 			Mouse.hudRemoveZone(id);
 			root.toast(`${zone.name} deleted`);
@@ -456,6 +518,14 @@ FocusScope {
 
 	function reveal(anchor) {}
 
+	// an edit of the chosen one is an edit of all chosen
+	Binding {
+		target: Mouse
+		property: "hudMirror"
+		value: root.multi
+		when: root.active
+	}
+
 	onActiveChanged: {
 		Mouse.watching = root.active;
 		if (root.active && root.picture === "" && root.scenes.length === 0 && root.window > 0) root.shoot();
@@ -587,9 +657,13 @@ FocusScope {
 	Keys.onPressed: event => {
 		const ctrl = event.modifiers & Qt.ControlModifier;
 		const zone = root.zone;
-		if (event.key === Qt.Key_Escape && (zone || root.suggesting)) {
+		if (event.key === Qt.Key_Escape && (zone || root.suggesting || root.picking)) {
 			if (root.suggesting) root.suggesting = false;
+			else if (root.picking) root.picking = false;
 			else root.select("");
+			event.accepted = true;
+		} else if (ctrl && event.key === Qt.Key_A) {
+			root.selectMany(root.zones.map(z => z.id));
 			event.accepted = true;
 		} else if (!zone) {
 			return;
@@ -613,8 +687,7 @@ FocusScope {
 			const n = event.modifiers & Qt.ShiftModifier ? 10 : 1;
 			const dx = (event.key === Qt.Key_Left ? -n : (event.key === Qt.Key_Right ? n : 0)) / Math.max(100, board.pictureWidth);
 			const dy = (event.key === Qt.Key_Up ? -n : (event.key === Qt.Key_Down ? n : 0)) / Math.max(60, board.pictureHeight);
-			const r = v => Math.round(v * 10000) / 10000;
-			Mouse.hudChangeZone(zone.id, { x: r(Math.max(0, Math.min(1 - zone.w, zone.x + dx))), y: r(Math.max(0, Math.min(1 - zone.h, zone.y + dy))) });
+			Mouse.hudMoveZones(root.chosenIds, dx, dy);
 			event.accepted = true;
 		}
 	}

@@ -439,10 +439,24 @@ Singleton {
 		return id;
 	}
 
-	function hudSetTriggers(id, list, label) {
+	// the zones an edit of one goes to as well: those linked with it (one
+	// `group`) and, while several are chosen together, all of them
+	property var hudMirror: []
+
+	function hudMates(id) {
+		const zone = root.hudZones.find(z => z.id === id);
+		const out = [id];
+		if (zone?.group) for (const z of root.hudZones) if (z.group === zone.group && !out.includes(z.id)) out.push(z.id);
+		if (root.hudMirror.includes(id)) for (const m of root.hudMirror) if (!out.includes(m)) out.push(m);
+		return out;
+	}
+
+	// every mate's own list through fn – the same edit for each, in one step
+	function hudEditTriggers(id, fn, label) {
+		const mates = root.hudMates(id);
 		root.hudSaveZones(root.hudZones.map(z => {
-			if (z.id !== id) return z;
-			const zone = Object.assign({}, z, { triggers: list });
+			if (!mates.includes(z.id)) return z;
+			const zone = Object.assign({}, z, { triggers: JSON.parse(JSON.stringify(fn(root.hudTriggers(z).slice()))) });
 			delete zone.when;
 			delete zone.feel;
 			delete zone.level;
@@ -452,16 +466,16 @@ Singleton {
 		}), label || "the reactions changed");
 	}
 
+	function hudSetTriggers(id, list, label) {
+		root.hudEditTriggers(id, () => list, label);
+	}
+
 	function hudAddTrigger(id, kind) {
-		const zone = root.hudZones.find(z => z.id === id);
-		if (!zone) return;
-		root.hudSetTriggers(id, root.hudTriggers(zone).concat([root.hudTrigger(kind)]), "a reaction added");
+		root.hudEditTriggers(id, list => list.concat([root.hudTrigger(kind)]), "a reaction added");
 	}
 
 	function hudChangeTrigger(id, index, values, label) {
-		const zone = root.hudZones.find(z => z.id === id);
-		if (!zone) return;
-		root.hudSetTriggers(id, root.hudTriggers(zone).map((t, i) => i === index ? Object.assign({}, t, values) : t), label || "a reaction changed");
+		root.hudEditTriggers(id, list => list.map((t, i) => i === index ? Object.assign({}, t, values) : t), label || "a reaction changed");
 	}
 
 	// a reaction's follow-up steps: [{when, feel, key, within (ms), delay (ms)}]
@@ -518,10 +532,9 @@ Singleton {
 
 	// replace: the zone's reactions become the copied ones; else they are added
 	function hudPasteTriggers(id, replace) {
-		const zone = root.hudZones.find(z => z.id === id);
-		if (!zone || root.hudClipboard.length === 0) return;
-		const copied = root.hudClipboard.map(t => JSON.parse(JSON.stringify(t)));
-		root.hudSetTriggers(id, replace ? copied : root.hudTriggers(zone).concat(copied), "reactions pasted");
+		if (root.hudClipboard.length === 0) return;
+		const copied = root.hudClipboard;
+		root.hudEditTriggers(id, list => replace ? copied : list.concat(copied), "reactions pasted");
 	}
 
 	function hudPasteIntoScene(sceneId, replace) {
@@ -584,11 +597,10 @@ Singleton {
 
 	// the preset's reactions into a zone (replace: instead of its own)
 	function hudApplyPreset(id, presetId, replace) {
-		const zone = root.hudZones.find(z => z.id === id);
 		const preset = root.hudPreset(presetId);
-		if (!zone || !preset) return;
+		if (!preset) return;
 		const triggers = root.hudPresetTriggers(preset);
-		root.hudSetTriggers(id, replace ? triggers : root.hudTriggers(zone).concat(triggers), "a sequence used");
+		root.hudEditTriggers(id, list => replace ? triggers : list.concat(triggers), "a sequence used");
 	}
 
 	// … into every zone of a scene
@@ -608,30 +620,25 @@ Singleton {
 	}
 
 	function hudRemoveTrigger(id, index) {
-		const zone = root.hudZones.find(z => z.id === id);
-		if (!zone) return;
-		root.hudSetTriggers(id, root.hudTriggers(zone).filter((t, i) => i !== index), "a reaction removed");
+		root.hudEditTriggers(id, list => list.filter((t, i) => i !== index), "a reaction removed");
 	}
 
 	// reactions put in at a place of the list (at < 0: the end)
 	function hudInsertTriggers(id, at, triggers, label) {
-		const zone = root.hudZones.find(z => z.id === id);
-		if (!zone) return;
-		const list = root.hudTriggers(zone).slice();
-		const copied = triggers.map(t => JSON.parse(JSON.stringify(t)));
-		list.splice(at < 0 ? list.length : Math.min(at, list.length), 0, ...copied);
-		root.hudSetTriggers(id, list, label || "reactions added");
+		root.hudEditTriggers(id, list => {
+			list.splice(at < 0 ? list.length : Math.min(at, list.length), 0, ...triggers);
+			return list;
+		}, label || "reactions added");
 	}
 
 	// a reaction to another place of the zone's list
 	function hudMoveTrigger(id, from, to) {
-		const zone = root.hudZones.find(z => z.id === id);
-		if (!zone || from === to) return;
-		const list = root.hudTriggers(zone).slice();
-		const [moved] = list.splice(from, 1);
-		if (!moved) return;
-		list.splice(Math.max(0, Math.min(list.length, to)), 0, moved);
-		root.hudSetTriggers(id, list, "a reaction moved");
+		if (from === to) return;
+		root.hudEditTriggers(id, list => {
+			const [moved] = list.splice(from, 1);
+			if (moved) list.splice(Math.max(0, Math.min(list.length, to)), 0, moved);
+			return list;
+		}, "a reaction moved");
 	}
 
 	// reactions added to every zone of a scene
@@ -681,7 +688,8 @@ Singleton {
 		if (!zone) return;
 		const list = root.hudList(zone.unless) ?? [];
 		const next = list.includes(sceneId) ? list.filter(x => x !== sceneId) : list.concat([sceneId]);
-		root.hudSaveZones(root.hudZones.map(z => z.id === id ? Object.assign({}, z, { unless: next }) : z), "the zone's quiet rule");
+		const mates = root.hudMates(id);
+		root.hudSaveZones(root.hudZones.map(z => mates.includes(z.id) ? Object.assign({}, z, { unless: next }) : z), "the zone's quiet rule");
 	}
 
 	function hudToggleQuiet(id, otherId) {
@@ -693,7 +701,73 @@ Singleton {
 	}
 
 	function hudRemoveZone(id) {
-		root.hudSaveZones(root.hudZones.filter(z => z.id !== id), "the zone removed");
+		root.hudRemoveZones([id]);
+	}
+
+	function hudRemoveZones(ids) {
+		root.hudSaveZones(root.hudZones.filter(z => !ids.includes(z.id)), ids.length === 1 ? "the zone removed" : "zones removed");
+	}
+
+	// several zones moved by the same step (fractions), each kept inside
+	function hudMoveZones(ids, dx, dy) {
+		const r = v => Math.round(v * 10000) / 10000;
+		root.hudSaveZones(root.hudZones.map(z => ids.includes(z.id) ? Object.assign({}, z, { x: r(Math.max(0, Math.min(1 - z.w, z.x + dx))), y: r(Math.max(0, Math.min(1 - z.h, z.y + dy))) }) : z), "the zone moved");
+	}
+
+	// zones that are alike and stay alike: one group, the reactions and the
+	// quiet rule of `source` for all, an edit of one is an edit of all
+	function hudLinkZones(ids, source) {
+		const model = root.hudZones.find(z => z.id === source);
+		if (!model || ids.length < 2) return;
+		const group = `g${Date.now().toString(36)}`;
+		const triggers = root.hudTriggers(model);
+		const unless = root.hudList(model.unless) ?? [];
+		root.hudSaveZones(root.hudZones.map(z => {
+			if (!ids.includes(z.id)) return z;
+			const zone = Object.assign({}, z, { group, triggers: JSON.parse(JSON.stringify(triggers)), unless: unless.slice() });
+			delete zone.when;
+			delete zone.feel;
+			delete zone.level;
+			delete zone.every;
+			delete zone.key;
+			return zone;
+		}), "zones linked");
+	}
+
+	// out of their group; a group left with one zone is none
+	function hudUnlinkZones(ids) {
+		let list = root.hudZones.map(z => {
+			if (!ids.includes(z.id) || !z.group) return z;
+			const zone = Object.assign({}, z);
+			delete zone.group;
+			return zone;
+		});
+		const count = {};
+		for (const z of list) if (z.group) count[z.group] = (count[z.group] ?? 0) + 1;
+		list = list.map(z => {
+			if (!z.group || count[z.group] > 1) return z;
+			const zone = Object.assign({}, z);
+			delete zone.group;
+			return zone;
+		});
+		root.hudSaveZones(list, "zones unlinked");
+	}
+
+	// the reactions of `source` for every one of ids (not linked)
+	function hudSameTriggers(ids, source) {
+		const model = root.hudZones.find(z => z.id === source);
+		if (!model) return;
+		const triggers = root.hudTriggers(model);
+		root.hudSaveZones(root.hudZones.map(z => {
+			if (!ids.includes(z.id) || z.id === source) return z;
+			const zone = Object.assign({}, z, { triggers: JSON.parse(JSON.stringify(triggers)) });
+			delete zone.when;
+			delete zone.feel;
+			delete zone.level;
+			delete zone.every;
+			delete zone.key;
+			return zone;
+		}), "the same reactions for all");
 	}
 
 	// where the game's window sits on its output, logical px (a fullscreen

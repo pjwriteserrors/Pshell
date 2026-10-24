@@ -25,6 +25,10 @@ Rectangle {
 	property real guideY: -1
 	readonly property real pictureWidth: canvas.width
 	readonly property real pictureHeight: canvas.height
+	// the zones already shown, they come in only once
+	property var seen: ({})
+	// several chosen zones moved together: the step so far (fractions), or null
+	property var shift: null
 	// the zone the menu is for
 	property string menuFor: ""
 
@@ -39,8 +43,9 @@ Rectangle {
 		const size = axis === "x" ? canvas.width : canvas.height;
 		const reach = 7 / Math.max(1, size);
 		const lines = [0, 0.5, 1];
+		const skips = Array.isArray(skip) ? skip : [skip];
 		for (const z of root.page.zones) {
-			if (z.id === skip) continue;
+			if (skips.includes(z.id)) continue;
 			if (axis === "x") lines.push(z.x, z.x + z.w, z.x + z.w / 2);
 			else lines.push(z.y, z.y + z.h, z.y + z.h / 2);
 		}
@@ -255,6 +260,15 @@ Rectangle {
 				}
 
 				Tool {
+					shown: root.page.zones.length > 1
+					icon: "select_drag"
+					label: root.page.multi.length > 1 ? `${root.page.multi.length} chosen` : "Pick several"
+					tip: "Drag around zones to choose them together · Shift+click adds one · Ctrl+A all"
+					on: root.page.picking
+					onClicked: root.page.picking = !root.page.picking
+				}
+
+				Tool {
 					shown: root.page.window > 0
 					icon: "camera_outline"
 					label: root.page.shooting ? "Taking…" : (root.page.picture !== "" ? "Retake" : "Take picture")
@@ -364,15 +378,18 @@ Rectangle {
 			property real sy: 0
 			property real ex: 0
 			property real ey: 0
-			readonly property bool drawing: pressed && (Math.abs(ex - sx) >= 4 || Math.abs(ey - sy) >= 4)
+			readonly property bool drawing: pressed && !drawer.lasso && (Math.abs(ex - sx) >= 4 || Math.abs(ey - sy) >= 4)
+			// picking zones by a box around them instead of drawing one
+			property bool lasso: false
 			readonly property var found: containsMouse && !pressed && !root.page.carry ? root.page.boxAt(mouseX / Math.max(1, width), mouseY / Math.max(1, height)) : null
 
 			anchors.fill: parent
-			cursorShape: Qt.CrossCursor
+			cursorShape: root.page.picking ? Qt.ArrowCursor : Qt.CrossCursor
 			hoverEnabled: true
 			acceptedButtons: Qt.LeftButton
 			onPressed: mouse => {
 				root.page.takeFocus();
+				drawer.lasso = root.page.picking || !!(mouse.modifiers & (Qt.ShiftModifier | Qt.ControlModifier));
 				drawer.sx = drawer.ex = Math.max(0, Math.min(width, mouse.x));
 				drawer.sy = drawer.ey = Math.max(0, Math.min(height, mouse.y));
 			}
@@ -384,6 +401,14 @@ Rectangle {
 			onReleased: {
 				const x0 = Math.min(drawer.sx, drawer.ex), x1 = Math.max(drawer.sx, drawer.ex);
 				const y0 = Math.min(drawer.sy, drawer.ey), y1 = Math.max(drawer.sy, drawer.ey);
+				if (drawer.lasso) {
+					drawer.lasso = false;
+					const fx0 = x0 / width, fx1 = x1 / width, fy0 = y0 / height, fy1 = y1 / height;
+					const hit = root.page.zones.filter(z => z.x < fx1 && z.x + z.w > fx0 && z.y < fy1 && z.y + z.h > fy0).map(z => z.id);
+					if (x1 - x0 < 4 && y1 - y0 < 4) return;
+					root.page.selectMany(root.page.chosenIds.concat(hit));
+					return;
+				}
 				if (x1 - x0 < 6 || y1 - y0 < 6) {
 					const best = root.page.boxAt(x0 / Math.max(1, width), y0 / Math.max(1, height));
 					if (best) root.page.add({ x: best[0], y: best[1], w: best[2], h: best[3] });
@@ -467,6 +492,20 @@ Rectangle {
 					font.weight: Font.DemiBold
 				}
 			}
+		}
+
+		// the box zones are picked by
+		Rectangle {
+			visible: drawer.pressed && drawer.lasso
+			x: Math.min(drawer.sx, drawer.ex)
+			y: Math.min(drawer.sy, drawer.ey)
+			width: Math.abs(drawer.ex - drawer.sx)
+			height: Math.abs(drawer.ey - drawer.sy)
+			color: Qt.alpha(Theme.secondary, 0.14)
+			border.width: 1.5
+			border.color: Theme.secondary
+			radius: 4
+			z: 8
 		}
 
 		// the box being drawn, with its size
@@ -571,7 +610,7 @@ Rectangle {
 		Item {
 			id: spotlight
 
-			readonly property var zone: root.page.zone && root.page.zones.some(z => z.id === root.page.selected) ? root.page.zone : null
+			readonly property var zone: root.page.zone && root.page.multi.length < 2 && root.page.zones.some(z => z.id === root.page.selected) ? root.page.zone : null
 			readonly property real zx: (spotlight.zone?.x ?? 0) * canvas.width
 			readonly property real zy: (spotlight.zone?.y ?? 0) * canvas.height
 			readonly property real zw: (spotlight.zone?.w ?? 0) * canvas.width
@@ -623,16 +662,22 @@ Rectangle {
 
 		// ── the zones ──
 		Repeater {
-			model: root.page.zones
+			// by count, so a change to one zone does not make them all anew
+			model: root.page.zones.length
 
 			delegate: Item {
 				id: box
 
-				required property var modelData
 				required property int index
+				readonly property var modelData: root.page.zones[box.index] ?? ({ id: "", x: 0, y: 0, w: 0, h: 0 })
 
 				readonly property string zoneId: box.modelData.id
-				readonly property bool chosen: root.page.selected === box.zoneId
+				readonly property bool chosen: root.page.isChosen(box.zoneId)
+				// chosen alone: it has handles
+				readonly property bool single: box.chosen && root.page.multi.length < 2
+				// linked with the chosen one, or in a group at all
+				readonly property bool mate: !box.chosen && !!box.modelData.group && box.modelData.group === (root.page.zone?.group ?? "")
+				readonly property bool shifted: box.chosen && root.shift !== null
 				readonly property bool pointed: root.page.pointed === box.zoneId || boxHover.hovered
 				readonly property var values: root.page.live[box.zoneId] ?? null
 				// how much it is changing now, 0..1
@@ -642,8 +687,8 @@ Rectangle {
 				readonly property var triggers: Mouse.hudTriggers(box.modelData).filter(t => t.on !== false)
 				// while moved or sized: the box as it is dragged (fractions)
 				property var drag: null
-				readonly property real fx: box.drag ? box.drag.x : box.modelData.x
-				readonly property real fy: box.drag ? box.drag.y : box.modelData.y
+				readonly property real fx: box.drag ? box.drag.x : box.modelData.x + (box.shifted ? root.shift.dx : 0)
+				readonly property real fy: box.drag ? box.drag.y : box.modelData.y + (box.shifted ? root.shift.dy : 0)
 				readonly property real fw: box.drag ? box.drag.w : box.modelData.w
 				readonly property real fh: box.drag ? box.drag.h : box.modelData.h
 
@@ -662,30 +707,34 @@ Rectangle {
 				width: Math.max(6, box.fw * canvas.width)
 				height: Math.max(6, box.fh * canvas.height)
 				z: box.chosen ? 5 : (box.pointed ? 4 : 3)
-				opacity: 0
-				scale: 0.6
-				Component.onCompleted: boxIn.start()
+				opacity: root.seen[box.zoneId] ? 1 : 0
+				scale: root.seen[box.zoneId] ? 1 : 0.6
+				Component.onCompleted: {
+					if (root.seen[box.zoneId]) return;
+					boxIn.start();
+					root.seen[box.zoneId] = true;
+				}
 
 				Behavior on x {
-					enabled: !box.drag
+					enabled: !box.drag && !box.shifted
 					SpatialAnim {
 						duration: Motion.medium
 					}
 				}
 				Behavior on y {
-					enabled: !box.drag
+					enabled: !box.drag && !box.shifted
 					SpatialAnim {
 						duration: Motion.medium
 					}
 				}
 				Behavior on width {
-					enabled: !box.drag
+					enabled: !box.drag && !box.shifted
 					SpatialAnim {
 						duration: Motion.medium
 					}
 				}
 				Behavior on height {
-					enabled: !box.drag
+					enabled: !box.drag && !box.shifted
 					SpatialAnim {
 						duration: Motion.medium
 					}
@@ -747,7 +796,7 @@ Rectangle {
 						return Qt.alpha(base, (box.chosen ? 0.14 : (box.pointed ? 0.14 : 0.06)) + box.heat * 0.45);
 					}
 					border.width: box.chosen || box.target ? 2 : 1.5
-					border.color: box.chosen || box.target ? Theme.primary : Qt.alpha(Theme.text, box.pointed ? 0.95 : (box.asleep ? 0.3 : 0.65))
+					border.color: box.chosen || box.target ? Theme.primary : (box.mate ? Theme.secondary : Qt.alpha(Theme.text, box.pointed ? 0.95 : (box.asleep ? 0.3 : 0.65)))
 
 					Behavior on color {
 						ColorAnim {
@@ -864,12 +913,21 @@ Rectangle {
 					anchors.margins: Math.min(6, Math.min(parent.width, parent.height) / 4)
 					acceptedButtons: Qt.LeftButton | Qt.RightButton
 					cursorShape: mover.moved ? Qt.ClosedHandCursor : (box.chosen ? Qt.OpenHandCursor : Qt.PointingHandCursor)
+					property bool toggled: false
+
 					onPressed: mouse => {
 						root.page.takeFocus();
 						mover.px = mouse.x;
 						mover.py = mouse.y;
 						mover.moved = false;
-						root.page.select(box.zoneId);
+						mover.toggled = false;
+						// Ctrl/Shift: one more (or one less) of the chosen
+						if (mouse.button === Qt.LeftButton && (mouse.modifiers & (Qt.ShiftModifier | Qt.ControlModifier))) {
+							mover.toggled = true;
+							root.page.toggle(box.zoneId);
+							return;
+						}
+						if (!box.chosen) root.page.select(box.zoneId);
 						if (mouse.button === Qt.RightButton) {
 							const p = mover.mapToItem(canvas, mouse.x, mouse.y);
 							root.menuFor = box.zoneId;
@@ -879,10 +937,27 @@ Rectangle {
 						}
 					}
 					onPositionChanged: mouse => {
-						if (!mover.pressed || !(mover.pressedButtons & Qt.LeftButton)) return;
-						const dx = (mouse.x - mover.px) / canvas.width, dy = (mouse.y - mover.py) / canvas.height;
+						if (!mover.pressed || mover.toggled || !(mover.pressedButtons & Qt.LeftButton)) return;
+						let dx = (mouse.x - mover.px) / canvas.width, dy = (mouse.y - mover.py) / canvas.height;
 						if (!mover.moved && Math.abs(dx) * canvas.width < 3 && Math.abs(dy) * canvas.height < 3) return;
 						mover.moved = true;
+						// the chosen ones together, all kept inside, the pressed one snapping
+						if (root.page.multi.length > 1 && box.chosen) {
+							const ids = root.page.multi;
+							const all = root.page.allZones.filter(z => ids.includes(z.id));
+							const lox = Math.max(...all.map(z => -z.x)), hix = Math.min(...all.map(z => 1 - z.x - z.w));
+							const loy = Math.max(...all.map(z => -z.y)), hiy = Math.min(...all.map(z => 1 - z.y - z.h));
+							const m = box.modelData;
+							const free = mouse.modifiers & Qt.AltModifier;
+							const sx = free ? null : root.snap([m.x + dx, m.x + m.w + dx, m.x + m.w / 2 + dx], "x", ids);
+							const sy = free ? null : root.snap([m.y + dy, m.y + m.h + dy, m.y + m.h / 2 + dy], "y", ids);
+							if (sx) dx += sx[0];
+							if (sy) dy += sy[0];
+							root.guideX = sx ? sx[1] : -1;
+							root.guideY = sy ? sy[1] : -1;
+							root.shift = { dx: Math.max(lox, Math.min(hix, dx)), dy: Math.max(loy, Math.min(hiy, dy)) };
+							return;
+						}
 						const w = box.modelData.w, h = box.modelData.h;
 						let x = Math.max(0, Math.min(1 - w, box.modelData.x + dx));
 						let y = Math.max(0, Math.min(1 - h, box.modelData.y + dy));
@@ -895,6 +970,13 @@ Rectangle {
 						box.drag = { x, y, w, h };
 					}
 					onReleased: {
+						if (root.shift) {
+							const step = root.shift;
+							Mouse.hudMoveZones(root.page.multi, step.dx, step.dy);
+							root.shift = null;
+							root.guideX = -1;
+							root.guideY = -1;
+						}
 						box.commit();
 						mover.moved = false;
 					}
@@ -905,7 +987,7 @@ Rectangle {
 
 				// size it by an edge or a corner
 				Repeater {
-					model: box.chosen ? [{ h: "l", v: "t" }, { h: "c", v: "t" }, { h: "r", v: "t" }, { h: "r", v: "c" }, { h: "r", v: "b" }, { h: "c", v: "b" }, { h: "l", v: "b" }, { h: "l", v: "c" }] : []
+					model: box.single ? [{ h: "l", v: "t" }, { h: "c", v: "t" }, { h: "r", v: "t" }, { h: "r", v: "c" }, { h: "r", v: "b" }, { h: "c", v: "b" }, { h: "l", v: "b" }, { h: "l", v: "c" }] : []
 
 					delegate: Rectangle {
 						id: handle
@@ -1063,6 +1145,13 @@ Rectangle {
 								size: 11
 								color: box.chosen ? Theme.onPrimary : root.page.kindColor(modelData.kind)
 							}
+						}
+
+						Glyph {
+							visible: !!box.modelData.group && !box.target
+							icon: "link_variant"
+							size: 11
+							color: box.chosen ? Theme.onPrimary : Theme.secondary
 						}
 
 						Glyph {

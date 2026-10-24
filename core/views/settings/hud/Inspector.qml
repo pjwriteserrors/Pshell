@@ -15,6 +15,9 @@ Rectangle {
 	readonly property var zone: root.page.zone
 	readonly property var scene: root.page.scene
 	readonly property var triggers: Mouse.hudTriggers(root.zone)
+	readonly property bool several: root.page.multi.length > 1
+	readonly property var mates: root.page.groupOf(root.zone)
+	readonly property var chosenZones: root.page.multi.map(id => root.page.allZones.find(z => z.id === id)).filter(z => !!z)
 	readonly property var others: root.page.scenes.filter(s => s.id !== (root.zone ? (root.zone.scene ?? "") : root.page.sceneId))
 
 	function focusName() {
@@ -30,7 +33,7 @@ Rectangle {
 	Item {
 		id: holder
 
-		property string shown: root.zone ? root.zone.id : `scene:${root.page.sceneId}`
+		property string shown: root.page.multi.length > 1 ? "several" : (root.zone ? root.zone.id : `scene:${root.page.sceneId}`)
 
 		anchors.fill: parent
 		onShownChanged: swap.restart()
@@ -77,15 +80,264 @@ Rectangle {
 				width: flick.width - 6
 				spacing: 14
 
+				// ══ several zones chosen together ═══════════════════════
+				ColumnLayout {
+					Layout.fillWidth: true
+					visible: root.several
+					spacing: 12
+
+					ColumnLayout {
+						Layout.fillWidth: true
+						spacing: 2
+
+						Clickable {
+							implicitHeight: 22
+							implicitWidth: backRow.implicitWidth + 10
+							radius: 6
+							onClicked: root.page.select("")
+
+							RowLayout {
+								id: backRow
+
+								anchors.verticalCenter: parent.verticalCenter
+								x: 2
+								spacing: 4
+
+								Glyph {
+									icon: "chevron_left"
+									size: 14
+									color: Theme.textSubtle
+								}
+
+								StyledText {
+									text: root.page.sceneName(root.zone?.scene ?? root.page.sceneId)
+									font.pixelSize: Theme.size.small
+									font.weight: Font.Medium
+									tone: Theme.textSubtle
+								}
+							}
+						}
+
+						RowLayout {
+							Layout.fillWidth: true
+							spacing: 6
+
+							StyledText {
+								Layout.fillWidth: true
+								text: `${root.page.multi.length} zones`
+								font.pixelSize: 22
+								font.weight: Font.Bold
+							}
+
+							// linked for good, or not
+							Clickable {
+								implicitHeight: 32
+								implicitWidth: linkRow.implicitWidth + 22
+								radius: 16
+								color: root.page.linkedAll ? Theme.secondary : (hovered ? Theme.layer3 : Theme.layer2)
+								tint: root.page.linkedAll ? Theme.onPrimary : Theme.text
+								onClicked: root.page.link()
+
+								Behavior on color {
+									ColorAnim {}
+								}
+
+								RowLayout {
+									id: linkRow
+
+									anchors.centerIn: parent
+									spacing: 6
+
+									Glyph {
+										icon: root.page.linkedAll ? "link_variant" : "link_variant_off"
+										size: 15
+										color: root.page.linkedAll ? Theme.onPrimary : Theme.textMuted
+									}
+
+									StyledText {
+										text: root.page.linkedAll ? "Linked" : "Link"
+										font.pixelSize: Theme.size.label
+										font.weight: Font.DemiBold
+										tone: root.page.linkedAll ? Theme.onPrimary : Theme.text
+									}
+								}
+
+								Tip {
+									text: root.page.linkedAll ? "A change to one is a change to all – click to unlink" : `Keep them alike for good${root.page.sameReactions ? "" : ` – all take ${root.zone?.name ?? ""}'s reactions`}`
+								}
+							}
+
+							IconButton {
+								Layout.preferredWidth: 32
+								Layout.preferredHeight: 32
+								icon: "delete_outline"
+								onClicked: root.page.zoneAction(root.zone.id, "delete")
+
+								Tip {
+									text: "Delete all · Del"
+								}
+							}
+						}
+					}
+
+					// the chosen ones: a click picks one alone, × lets one go
+					Flow {
+						Layout.fillWidth: true
+						spacing: 6
+
+						Repeater {
+							model: root.chosenZones
+
+							delegate: Rectangle {
+								id: pickChip
+
+								required property var modelData
+
+								width: pickRow.implicitWidth + 12
+								height: 30
+								radius: 15
+								color: pickArea.containsMouse ? Theme.layer3 : Theme.layer2
+
+								Behavior on color {
+									ColorAnim {}
+								}
+
+								RowLayout {
+									id: pickRow
+
+									anchors.verticalCenter: parent.verticalCenter
+									x: 12
+									spacing: 4
+
+									StyledText {
+										text: pickChip.modelData.name
+										font.pixelSize: Theme.size.label
+										font.weight: Font.Medium
+									}
+
+									IconButton {
+										Layout.preferredWidth: 22
+										Layout.preferredHeight: 22
+										icon: "close"
+										onClicked: root.page.toggle(pickChip.modelData.id)
+									}
+								}
+
+								MouseArea {
+									id: pickArea
+
+									anchors.fill: parent
+									anchors.rightMargin: 28
+									hoverEnabled: true
+									cursorShape: Qt.PointingHandCursor
+									onEntered: root.page.pointed = pickChip.modelData.id
+									onExited: if (root.page.pointed === pickChip.modelData.id) root.page.pointed = ""
+									onClicked: root.page.select(pickChip.modelData.id)
+								}
+							}
+						}
+					}
+
+					// they differ: whose reactions all take
+					ColumnLayout {
+						Layout.fillWidth: true
+						visible: !root.page.sameReactions
+						spacing: 6
+
+						StyledText {
+							Layout.topMargin: 6
+							text: "They react differently"
+							font.pixelSize: Theme.size.title
+							font.weight: Font.Bold
+						}
+
+						Repeater {
+							model: root.chosenZones
+
+							delegate: Rectangle {
+								id: diffRow
+
+								required property var modelData
+								readonly property var triggers: Mouse.hudTriggers(diffRow.modelData)
+
+								Layout.fillWidth: true
+								Layout.preferredHeight: 46
+								radius: Theme.radius.medium
+								color: diffHover.hovered ? Theme.layer3 : Theme.layer2
+
+								Behavior on color {
+									ColorAnim {}
+								}
+
+								HoverHandler {
+									id: diffHover
+
+									onHoveredChanged: root.page.pointed = hovered ? diffRow.modelData.id : (root.page.pointed === diffRow.modelData.id ? "" : root.page.pointed)
+								}
+
+								RowLayout {
+									anchors.fill: parent
+									anchors.leftMargin: 12
+									anchors.rightMargin: 6
+									spacing: 8
+
+									StyledText {
+										text: diffRow.modelData.name
+										font.weight: Font.DemiBold
+										elide: Text.ElideRight
+										Layout.maximumWidth: 120
+									}
+
+									Repeater {
+										model: diffRow.triggers
+
+										delegate: Glyph {
+											required property var modelData
+
+											icon: root.page.kindOf(modelData.kind).icon
+											size: 14
+											color: root.page.kindColor(modelData.kind)
+											opacity: modelData.on === false ? 0.35 : 1
+										}
+									}
+
+									StyledText {
+										visible: diffRow.triggers.length === 0
+										text: "nothing"
+										tone: Theme.textFaint
+										font.pixelSize: Theme.size.label
+									}
+
+									Item {
+										Layout.fillWidth: true
+									}
+
+									TextButton {
+										implicitHeight: 30
+										text: "Use for all"
+										variant: "ghost"
+										opacity: diffHover.hovered ? 1 : 0.5
+										onActivated: {
+											Mouse.hudSameTriggers(root.page.multi, diffRow.modelData.id);
+											root.page.selected = diffRow.modelData.id;
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+
 				// ══ a zone ══════════════════════════════════════════════
 				ColumnLayout {
 					Layout.fillWidth: true
-					visible: !!root.zone
+					visible: !!root.zone && (!root.several || root.page.sameReactions)
 					spacing: 16
 
 					// scene › zone
 					ColumnLayout {
 						Layout.fillWidth: true
+						visible: !root.several
 						spacing: 2
 
 						Clickable {
@@ -185,12 +437,47 @@ Rectangle {
 								}
 							}
 						}
+
+						// linked with others: a click chooses them all
+						Clickable {
+							Layout.topMargin: 4
+							visible: root.mates.length > 1
+							implicitHeight: 26
+							implicitWidth: matesRow.implicitWidth + 18
+							radius: 13
+							color: hovered ? Qt.alpha(Theme.secondary, 0.28) : Qt.alpha(Theme.secondary, 0.16)
+							onClicked: root.page.selectMany(root.mates)
+
+							RowLayout {
+								id: matesRow
+
+								anchors.centerIn: parent
+								spacing: 5
+
+								Glyph {
+									icon: "link_variant"
+									size: 13
+									color: Theme.secondary
+								}
+
+								StyledText {
+									text: `Linked with ${root.mates.length - 1} more`
+									font.pixelSize: Theme.size.small
+									font.weight: Font.DemiBold
+									tone: Theme.secondary
+								}
+							}
+
+							Tip {
+								text: "Changes here go to all of them · click to choose them"
+							}
+						}
 					}
 
 					// how it looks now: alike to the picture, changing
 					RowLayout {
 						Layout.fillWidth: true
-						visible: root.page.watching
+						visible: root.page.watching && !root.several
 						spacing: 12
 
 						Item {
@@ -663,13 +950,13 @@ Rectangle {
 						}
 
 						Repeater {
-							model: root.page.zones
+							model: root.page.zones.length
 
 							delegate: Rectangle {
 								id: zrow
 
-								required property var modelData
 								required property int index
+								readonly property var modelData: root.page.zones[zrow.index] ?? ({ id: "", name: "" })
 								readonly property bool target: zdrop.containsDrag && root.page.carry !== null
 								readonly property bool awake: root.page.zoneAwake(zrow.modelData)
 
@@ -725,6 +1012,13 @@ Rectangle {
 										elide: Text.ElideRight
 									}
 
+									Glyph {
+										visible: !!zrow.modelData.group
+										icon: "link_variant"
+										size: 14
+										color: Theme.secondary
+									}
+
 									Repeater {
 										model: Mouse.hudTriggers(zrow.modelData).filter(t => t.on !== false)
 
@@ -751,7 +1045,10 @@ Rectangle {
 									hoverEnabled: true
 									cursorShape: Qt.PointingHandCursor
 									onContainsMouseChanged: root.page.pointed = zrowArea.containsMouse ? zrow.modelData.id : (root.page.pointed === zrow.modelData.id ? "" : root.page.pointed)
-									onClicked: root.page.select(zrow.modelData.id)
+									onClicked: mouse => {
+										if (mouse.modifiers & (Qt.ShiftModifier | Qt.ControlModifier)) root.page.toggle(zrow.modelData.id);
+										else root.page.select(zrow.modelData.id);
+									}
 								}
 
 								DropArea {
