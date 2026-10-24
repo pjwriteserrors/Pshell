@@ -430,7 +430,8 @@ Singleton {
 		const scene = root.hudSceneForDrawing();
 		const id = `z${Date.now().toString(36)}${root.hudZones.length}`;
 		const given = Object.assign({}, values ?? {});
-		const triggers = Array.isArray(given.triggers) ? given.triggers : [root.hudTrigger(given.when ?? "change", { feel: given.feel })];
+		// a new zone reacts to nothing until told to
+		const triggers = Array.isArray(given.triggers) ? given.triggers : [];
 		delete given.when;
 		delete given.feel;
 		const zone = Object.assign({ id, scene: scene.id, name: `Zone ${root.hudZones.length + 1}`, triggers }, rect, given);
