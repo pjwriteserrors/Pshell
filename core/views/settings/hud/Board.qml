@@ -384,7 +384,7 @@ Rectangle {
 			readonly property var found: containsMouse && !pressed && !root.page.carry ? root.page.boxAt(mouseX / Math.max(1, width), mouseY / Math.max(1, height)) : null
 
 			anchors.fill: parent
-			cursorShape: root.page.picking ? Qt.ArrowCursor : Qt.CrossCursor
+			cursorShape: drawCursor.visible ? Qt.BlankCursor : (root.page.picking ? Qt.ArrowCursor : Qt.CrossCursor)
 			hoverEnabled: true
 			acceptedButtons: Qt.LeftButton
 			onPressed: mouse => {
@@ -397,6 +397,27 @@ Rectangle {
 				if (!drawer.pressed) return;
 				drawer.ex = Math.max(0, Math.min(width, mouse.x));
 				drawer.ey = Math.max(0, Math.min(height, mouse.y));
+			}
+
+			// zones are drawn with the cursor theme's crosshair: the size of
+			// the box beside it, a selection mark while boxing zones in, a
+			// plus over a box the picture offers
+			PshellCursor {
+				id: drawCursor
+
+				visible: drawer.containsMouse && !root.page.carry && !(root.page.picking && !drawer.pressed) && CursorStyle.ready
+				x: drawer.mouseX
+				y: drawer.mouseY
+				shape: "cross"
+
+				CursorBadge {
+					readonly property bool sizing: drawer.drawing
+					visible: sizing || (drawer.pressed && drawer.lasso) || drawer.found !== null
+					x: 9 * CursorStyle.unit
+					y: 9 * CursorStyle.unit
+					icon: sizing ? "" : (drawer.lasso ? "selection_drag" : "plus")
+					text: sizing ? root.page.pixels(band.width / Math.max(1, canvas.width), band.height / Math.max(1, canvas.height)) : ""
+				}
 			}
 			onReleased: {
 				const x0 = Math.min(drawer.sx, drawer.ex), x1 = Math.max(drawer.sx, drawer.ex);
@@ -523,6 +544,8 @@ Rectangle {
 			radius: 4
 
 			SizeTag {
+				// the size rides on the cursor while it is drawn
+				visible: !drawCursor.visible
 				anchors.top: parent.bottom
 				anchors.right: parent.right
 				anchors.topMargin: 6
@@ -982,6 +1005,19 @@ Rectangle {
 					}
 					onDoubleClicked: mouse => {
 						if (mouse.button === Qt.LeftButton) root.page.renameZone(box.zoneId);
+					}
+
+					// a magnet beside the hand while the zone snaps to another
+					PshellCursor {
+						visible: mover.moved && (root.guideX >= 0 || root.guideY >= 0) && CursorStyle.ready
+						x: mover.mouseX
+						y: mover.mouseY
+						z: 20
+						shape: ""
+
+						CursorBadge {
+							icon: "magnet"
+						}
 					}
 				}
 

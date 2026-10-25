@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import qs.style.theme
+import qs.style.widgets
 import qs.core.services
 
 // A strip one pixel wide on an edge that leads to another PC (Kvm.qml). It
@@ -28,8 +29,10 @@ PanelWindow {
 	// wider than what takes the pointer, for the light; only the outermost
 	// pixel is the strip (the mask), the rest lets clicks through
 	readonly property int glow: 18
-	implicitWidth: root.glow
-	implicitHeight: root.glow
+	// room for the pointer's badge while it is on the edge
+	readonly property int room: root.hovered ? 200 : root.glow
+	implicitWidth: root.room
+	implicitHeight: root.room
 	exclusiveZone: 0
 	color: "transparent"
 	mask: Region {
@@ -48,7 +51,10 @@ PanelWindow {
 
 	// the light of the edge: faint while it waits, bright while the pointer pushes on it
 	Rectangle {
-		anchors.fill: parent
+		x: root.side === "right" ? root.width - width : 0
+		y: root.side === "bottom" ? root.height - height : 0
+		width: root.vertical ? root.glow : root.width
+		height: root.vertical ? root.height : root.glow
 		opacity: root.hovered ? 0.9 : 0
 		gradient: Gradient {
 			orientation: root.vertical ? Gradient.Horizontal : Gradient.Vertical
@@ -97,6 +103,45 @@ PanelWindow {
 		onEntered: root.report(true)
 		onExited: root.report(false)
 		onPositionChanged: if (Date.now() - root.lastSent > 80) root.report(true)
+	}
+
+	// the pointer says where it leads: the other PC's name beside it, on the
+	// side that is still this screen
+	PshellCursor {
+		visible: root.hovered && CursorStyle.ready
+		x: line.x + area.mouseX
+		y: line.y + area.mouseY
+		shape: ""
+
+		CursorBadge {
+			id: leads
+
+			x: root.side === "right" ? -width - 6 * CursorStyle.unit : CursorStyle.badgeAt.x - height / 2
+			y: root.side === "bottom" ? -height - 6 * CursorStyle.unit : CursorStyle.badgeAt.y - height / 2
+			icon: "monitor_share"
+			text: Pcs.nameOf(Kvm.edgeAt(root.output, root.side)?.pc ?? "")
+			transformOrigin: root.side === "right" ? Item.Right : Item.Left
+		}
+	}
+
+	SequentialAnimation {
+		running: root.hovered
+
+		NumberAnimation {
+			target: leads
+			property: "pop"
+			from: 0
+			to: 1
+			duration: Motion.short
+			easing.type: Easing.OutCubic
+		}
+		NumberAnimation {
+			target: leads
+			property: "pop"
+			to: 0
+			duration: Motion.medium
+			easing.type: Easing.InOutCubic
+		}
 	}
 
 	Component.onDestruction: if (root.hovered) Kvm.edge(root.output, root.side, 0.5, false)

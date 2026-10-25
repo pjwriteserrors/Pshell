@@ -564,6 +564,8 @@ PanelWindow {
 				Rectangle {
 					id: sizeLabel
 
+					// the size rides on the cursor while it is drawn
+					visible: !regionCursor.visible
 					readonly property bool below: frame.y + frame.height + height + 12 < root.height
 					x: selector.clamp(frame.width / 2 - width / 2, -frame.x + 8, root.width - frame.x - width - 8)
 					y: below ? frame.height + 10 : frame.height - height - 10
@@ -677,14 +679,15 @@ PanelWindow {
 						y: modelData[1]
 						width: modelData[2]
 						height: modelData[3]
-						color: "white"
+						color: CursorStyle.core
 						border.width: 0
 
+						// outlined like the cursor theme
 						Rectangle {
 							anchors.fill: parent
 							anchors.margins: -1
 							z: -1
-							color: Qt.rgba(0, 0, 0, 0.55)
+							color: CursorStyle.outline
 						}
 					}
 				}
@@ -786,13 +789,31 @@ PanelWindow {
 				}
 			}
 
+			// the region is taken with the cursor theme's crosshair, the size
+			// it spans riding beside it
+			PshellCursor {
+				id: regionCursor
+
+				visible: root.selecting && selector.regionMode && selector.hovered && CursorStyle.ready
+				x: selector.cursor.x
+				y: selector.cursor.y
+				shape: "cross"
+
+				CursorBadge {
+					visible: selector.hasSelection
+					x: 9 * CursorStyle.unit
+					y: 9 * CursorStyle.unit
+					text: `${Math.round(selector.selW * root.density)} × ${Math.round(selector.selH * root.density)}`
+				}
+			}
+
 			MouseArea {
 				anchors.fill: parent
 				enabled: root.selecting
 				acceptedButtons: Qt.LeftButton | Qt.RightButton
 				cursorShape: {
 					if (root.mode === "picker") return selector.paletteDrag ? Qt.CrossCursor : Qt.BlankCursor;
-					if (selector.regionMode) return Qt.CrossCursor;
+					if (selector.regionMode) return regionCursor.visible ? Qt.BlankCursor : Qt.CrossCursor;
 					return Qt.PointingHandCursor;
 				}
 

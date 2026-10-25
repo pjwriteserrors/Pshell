@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import qs.style.theme
+import qs.style.widgets
 import qs.core.services
 
 // The light of FindMouse on one screen: everything dims but a circle around
@@ -72,6 +73,7 @@ PanelWindow {
 		anchors.fill: parent
 		hoverEnabled: true
 		acceptedButtons: Qt.AllButtons
+		cursorShape: grown.visible ? Qt.BlankCursor : Qt.ArrowCursor
 		onPositionChanged: mouse => FindMouse.at(root.name, mouse.x, mouse.y)
 		onEntered: FindMouse.at(root.name, catcher.mouseX, catcher.mouseY)
 		onPressed: FindMouse.hide()
@@ -154,6 +156,27 @@ PanelWindow {
 						duration: (2 - ring.index) * 300
 					}
 				}
+			}
+		}
+	}
+
+	// the pointer itself grows while it is sought, the cursor theme's own
+	// arrow, and shrinks back into the real one as the light goes
+	PshellCursor {
+		id: grown
+
+		visible: root.here && root.reveal > 0.01 && CursorStyle.ready
+		x: FindMouse.x
+		y: FindMouse.y
+		shape: "arrow"
+		scale: FindMouse.active ? 2.6 : 1
+		transformOrigin: Item.TopLeft
+
+		Behavior on scale {
+			NumberAnimation {
+				duration: FindMouse.active ? Motion.long : Motion.medium
+				easing.type: Easing.BezierSpline
+				easing.bezierCurve: FindMouse.active ? Motion.spatial : Motion.standard
 			}
 		}
 	}

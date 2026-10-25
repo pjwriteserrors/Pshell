@@ -140,5 +140,15 @@ Item {
 			filling.stop();
 			draining.restart();
 		}
+
+		// the fill runs round the pointer too, where the eyes are
+		CursorRing {
+			visible: mouse.pressed || root.hold > 0
+			x: mouse.mouseX
+			y: mouse.mouseY
+			value: root.hold
+			color: root.accent
+			opacity: Math.min(1, root.hold * 6)
+		}
 	}
 }

@@ -60,16 +60,17 @@ Item {
 		width: Math.max(24, countText.implicitWidth + 12)
 		height: 24
 		radius: 12
-		color: Theme.primary
+		// it rides with the pointer: a badge of the cursor theme
+		color: CursorStyle.core
 		border.width: 2
-		border.color: Theme.base
+		border.color: CursorStyle.outline
 
 		Text {
 			id: countText
 
 			anchors.centerIn: parent
 			text: String(root.count)
-			color: Theme.onPrimary
+			color: CursorStyle.accent
 			font.family: Theme.fontFamily
 			font.pixelSize: Theme.size.label
 			font.weight: Font.Bold

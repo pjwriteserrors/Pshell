@@ -475,6 +475,15 @@ ModalWindow {
 										releaseAnim.restart();
 									}
 								}
+
+								// the hold fills round the pointer too
+								CursorRing {
+									visible: action.hold > 0
+									x: actionMouse.mouseX
+									y: actionMouse.mouseY
+									value: action.hold
+									opacity: Math.min(1, action.hold * 6)
+								}
 							}
 						}
 

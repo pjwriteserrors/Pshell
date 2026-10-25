@@ -466,4 +466,54 @@ PanelWindow {
 			trackColor: "transparent"
 		}
 	}
+
+	// beside the dragging pointer: the command it is aimed at, and while the
+	// drag rests on one that opens (or in the middle, to go back) the wait
+	// filling round the pointer
+	PshellCursor {
+		visible: root.shown && root.reveal > 0.5 && CursorStyle.ready
+		x: root.pointerX
+		y: root.pointerY
+		shape: ""
+
+		CursorRing {
+			visible: root.dwellOn !== "" && root.dwell > 0
+			value: root.dwell
+		}
+
+		CursorBadge {
+			id: aimed
+
+			visible: root.command !== null
+			icon: root.command?.icon ?? "arrow_left"
+			color: root.command?.danger ? CursorStyle.danger : CursorStyle.accent
+
+			Connections {
+				target: root
+
+				function onIndexChanged() {
+					if (root.command) popAnim.restart();
+				}
+			}
+
+			SequentialAnimation {
+				id: popAnim
+
+				NumberAnimation {
+					target: aimed
+					property: "pop"
+					from: 0
+					to: 1
+					duration: Motion.micro
+				}
+				NumberAnimation {
+					target: aimed
+					property: "pop"
+					to: 0
+					duration: Motion.medium
+					easing.type: Easing.OutBack
+				}
+			}
+		}
+	}
 }

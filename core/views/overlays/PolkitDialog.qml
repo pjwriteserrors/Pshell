@@ -63,7 +63,11 @@ PanelWindow {
 	}
 
 	MouseArea {
+		id: scrim
+
 		anchors.fill: parent
+		hoverEnabled: true
+		cursorShape: locked.visible ? Qt.BlankCursor : Qt.ArrowCursor
 	}
 
 	Rectangle {
@@ -78,6 +82,10 @@ PanelWindow {
 		border.width: 1
 		opacity: root.reveal
 		scale: 0.94 + 0.06 * root.reveal
+
+		HoverHandler {
+			id: cardHover
+		}
 
 		transform: Translate {
 			id: offset
@@ -177,6 +185,22 @@ PanelWindow {
 					onActivated: Polkit.submit(password.text)
 				}
 			}
+		}
+	}
+
+	// beside the card the pointer carries a lock: nothing else is reachable
+	// until this is answered
+	PshellCursor {
+		id: locked
+
+		visible: scrim.containsMouse && !cardHover.hovered && CursorStyle.ready
+		x: scrim.mouseX
+		y: scrim.mouseY
+		shape: "arrow"
+
+		CursorBadge {
+			icon: "lock"
+			color: CursorStyle.danger
 		}
 	}
 }

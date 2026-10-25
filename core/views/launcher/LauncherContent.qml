@@ -4076,4 +4076,41 @@ Item {
 			}
 		}
 	}
+
+	// while the AI answers, the pointer carries a sparkle that breathes:
+	// thinking, not a hang
+	HoverHandler {
+		id: thinkingHover
+	}
+
+	PshellCursor {
+		visible: AiChat.aiStreaming && thinkingHover.hovered && CursorStyle.ready
+		x: thinkingHover.point.position.x
+		y: thinkingHover.point.position.y
+		z: 1000
+		shape: ""
+
+		CursorBadge {
+			id: sparkle
+
+			icon: "creation"
+
+			SequentialAnimation on pop {
+				running: sparkle.visible
+				loops: Animation.Infinite
+
+				NumberAnimation {
+					from: 0
+					to: 1
+					duration: 520
+					easing.type: Easing.InOutSine
+				}
+				NumberAnimation {
+					to: 0
+					duration: 520
+					easing.type: Easing.InOutSine
+				}
+			}
+		}
+	}
 }

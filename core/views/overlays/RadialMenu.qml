@@ -501,6 +501,7 @@ PanelWindow {
 		anchors.fill: parent
 		hoverEnabled: true
 		acceptedButtons: Qt.LeftButton | Qt.RightButton
+		cursorShape: aim.visible ? Qt.BlankCursor : Qt.ArrowCursor
 		onEntered: root.pointer(area.mouseX, area.mouseY)
 		onPositionChanged: mouse => root.pointer(mouse.x, mouse.y)
 		onPressed: mouse => {
@@ -724,6 +725,57 @@ PanelWindow {
 				color: Theme.danger
 				trackColor: "transparent"
 			}
+		}
+	}
+
+	// the pointer becomes a sight: a ring in the cursor theme's look with a
+	// mark on the side the menu is aimed at, the held fill running round it,
+	// and the picked entry's icon beside it
+	PshellCursor {
+		id: aim
+
+		visible: root.shown && root.placed && area.containsMouse && CursorStyle.ready
+		x: root.pointerX
+		y: root.pointerY
+		shape: ""
+		opacity: root.reveal
+
+		CursorRing {
+			radius: 5.6 * CursorStyle.unit
+			thickness: 2.2 * CursorStyle.unit
+			value: root.hold
+			color: root.entry?.danger ? CursorStyle.danger : CursorStyle.accent
+		}
+
+		// the mark: where the hub lies from here, turned round
+		Rectangle {
+			readonly property real out: 5.6 * CursorStyle.unit
+			visible: !root.hubHovered
+			x: Math.cos(root.pointerAngle * Math.PI / 180) * out - width / 2
+			y: Math.sin(root.pointerAngle * Math.PI / 180) * out - height / 2
+			width: 2.6 * CursorStyle.unit
+			height: width
+			radius: width / 2
+			color: root.entry?.danger ? CursorStyle.danger : CursorStyle.accent
+			border.width: CursorStyle.outlineWidth * 0.6
+			border.color: CursorStyle.core
+		}
+
+		Rectangle {
+			x: -width / 2
+			y: -height / 2
+			width: 1.6 * CursorStyle.unit
+			height: width
+			radius: width / 2
+			color: CursorStyle.outline
+		}
+
+		CursorBadge {
+			visible: root.entry !== null
+			x: 7 * CursorStyle.unit
+			y: 5 * CursorStyle.unit
+			icon: root.entry?.icon ?? ""
+			color: root.entry?.danger ? CursorStyle.danger : CursorStyle.accent
 		}
 	}
 }
