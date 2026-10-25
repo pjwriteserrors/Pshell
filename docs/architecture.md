@@ -851,6 +851,30 @@ are missing or the wallpaper of the day changed. Screens that appear later get
 the shell's wallpaper at once; mpvpaper puts a video on them itself, and
 `--ensure` from the shell starts it again if it is not running.
 
+### Cursor theme
+
+`scripts/cursor_theme.py` draws the Pshell xcursor theme (pycairo) into
+`~/.local/share/icons/Pshell`: flat bodies in the theme's background colour,
+outlined in its text colour, details in the accent, corners as round as
+niri's `geometry-corner-radius`, every cursor scaled to look as big as the
+arrow. `core/services/CursorTheme.qml` runs `apply` when the colours or the
+radius change – only while the theme is worn. niri reloads a cursor theme
+only when its name changes, so a rebuilt one is worn alternately as `Pshell`
+and `Pshell-Live` (a link to it). niri plays animated cursors on one clock
+from its own start, so every animation is a loop, never an entrance.
+
+While the screen is recorded (`Recorder.active`) niri wears `Pshell-Rec`
+(`cursor_theme.py wear rec|normal`): the everyday cursors with a red dot.
+
+A Wayland pointer only takes the standard shapes, so the shell's own
+cursors are drawn by the shell: `style/theme/CursorStyle.qml` reads
+`palette.json` and the stills the generator writes beside the theme, and
+`style/widgets/PshellCursor.qml`, `CursorBadge.qml`, `CursorRing.qml` draw in
+its look – the crosshair with the size in screenshots and the HUD board, the
+sight of the radial menu, the ring of a held button, the lock beside Polkit,
+the grown arrow of FindMouse, the other PC's name at a KVM edge, the aimed
+command of the drop ring, the sparkle while the AI answers.
+
 ## Styles
 
 A style is a branch `style/<name>` carrying `.quickshell-style.json`

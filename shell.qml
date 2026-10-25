@@ -34,4 +34,7 @@ ShellRoot {
 	// the SteelSeries keyboard's daemon: its keys for the shell, its OLED
 	// (core/services/Apex.qml)
 	readonly property bool apex: Apex.enabled
+	// the cursor theme in the theme's colours and niri's corner radius
+	// (core/services/CursorTheme.qml)
+	readonly property bool cursorTheme: CursorTheme.enabled
 }
