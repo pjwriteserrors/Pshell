@@ -3,13 +3,13 @@ pragma Singleton
 import QtQuick
 import Quickshell
 
-// The terminal the shell opens things in: the host profile's `terminal`,
-// else $TERMINAL, else kitty. command() builds its command line, whichever
+// The terminal the shell opens things in: the one picked in Pshell settings
+// (Default apps), else the host profile's `terminal`, else $TERMINAL, else kitty. command() builds its command line, whichever
 // of the known ones it is, so callers only say what they want.
 Singleton {
 	id: root
 
-	readonly property string program: String(Host.profile.terminal || Quickshell.env("TERMINAL") || "kitty")
+	readonly property string program: String(DefaultApps.terminal || Host.profile.terminal || Quickshell.env("TERMINAL") || "kitty")
 	readonly property string kind: root.program.split("/").pop()
 	// the user's shell, for what runs as if typed into one
 	readonly property string shell: Quickshell.env("SHELL") || "sh"

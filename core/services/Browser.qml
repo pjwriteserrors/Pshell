@@ -3,15 +3,16 @@ pragma Singleton
 import QtQuick
 import Quickshell
 
-// Pages and searches open in the browser of the host profile (`browser`) or
-// $BROWSER, else in the desktop's default (xdg-open). A Firefox kind opens a
+// Pages and searches open in the browser picked in Pshell settings (Default
+// apps), else the host profile's (`browser`) or $BROWSER, else in the
+// desktop's default (xdg-open). A Firefox kind opens a
 // new tab of the one that runs; its own `--search` always opens a new
 // window, so searches go by URL.
 Singleton {
 	id: root
 
 	readonly property string searchUrl: "https://duckduckgo.com/?q="
-	readonly property string program: String(Host.profile.browser || Quickshell.env("BROWSER") || "")
+	readonly property string program: String(DefaultApps.browser || Host.profile.browser || Quickshell.env("BROWSER") || "")
 	readonly property bool firefoxKind: /(firefox|floorp|librewolf|waterfox|zen)/.test(root.program)
 
 	function open(url) {

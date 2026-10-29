@@ -77,6 +77,7 @@ FloatingWindow {
 		{ id: "workspaces", label: "Workspaces", icon: "view_grid_outline", hint: "Named workspaces" },
 		{ id: "overview", label: "Overview & gestures", icon: "gesture_swipe", hint: "Overview, hot corners, Alt-Tab" },
 		{ id: "system", label: "System", icon: "cog_outline", hint: "Startup, environment, screenshots, blur" },
+		{ id: "apps", label: "Default apps", icon: "apps", hint: "Which program opens what, the terminal" },
 		{ id: "bar", label: "Desktop", icon: "dock_window", hint: "Bar, wallpaper, game mode", plugin: "bar" },
 		{ id: "sounds", label: "Sounds", icon: "volume_high", hint: "Clicks, notifications, devices", plugin: "sounds" },
 		{ id: "lighting", label: "Lighting", icon: "led_strip_variant", hint: "Keyboard and LEDs: wallpaper or screen", shown: Lighting.enabled },
@@ -162,6 +163,12 @@ FloatingWindow {
 		{ page: "system", anchor: "decorations", title: "Title bars (CSD)", words: "prefer-no-csd decorations title bar", take: ["prefer-no-csd"] },
 		{ page: "system", anchor: "blur", title: "Blur", words: "blur passes offset noise saturation", take: ["blur"] },
 		{ page: "system", anchor: "system-more", title: "Clipboard, hotkey overlay, notifications, Xwayland", words: "clipboard disable-primary hotkey-overlay config-notification xwayland-satellite", take: ["clipboard", "hotkey-overlay", "config-notification", "xwayland-satellite"] },
+		{ page: "apps", anchor: "apps-web", title: "Default browser and mail", words: "default apps browser web links mail mailto standard programm firefox floorp chromium thunderbird", },
+		{ page: "apps", anchor: "apps-files", title: "Default file manager and archives", words: "default apps file manager folder directory archive zip rar 7z unpack standard programm" },
+		{ page: "apps", anchor: "apps-media", title: "Default image viewer, video and music player", words: "default apps image picture photo viewer video player music audio mpv vlc standard programm" },
+		{ page: "apps", anchor: "apps-documents", title: "Default text editor, PDF viewer, office", words: "default apps text editor pdf office document word excel ebook epub calendar standard programm" },
+		{ page: "apps", anchor: "apps-more", title: "Default torrent client, 3D models", words: "default apps torrent magnet 3d model stl 3mf slicer standard programm" },
+		{ page: "apps", anchor: "apps-terminal", title: "Terminal", words: "default terminal kitty alacritty foot console shell standard" },
 		{ page: "bar", anchor: "bar-items", title: "Bar items", words: "bar panel widgets order drag customize customise plugins buttons tray clock" },
 		{ page: "bar", anchor: "popup-motion", title: "Popup animation", words: "popup panel animation motion open liquid glass pop curtain speed" },
 		{ page: "bar", anchor: "wallpaper-change", title: "Wallpaper transition", words: "wallpaper animation transition fade bloom change" },
@@ -179,7 +186,7 @@ FloatingWindow {
 	]
 
 	// a page of the shell's own: no niri file behind it, nothing to undo
-	readonly property bool shellPage: ["bar", "multicursor", "sounds", "lighting", "phone", "mouse", "hud"].includes(root.current)
+	readonly property bool shellPage: ["bar", "multicursor", "sounds", "lighting", "phone", "mouse", "hud", "apps"].includes(root.current)
 
 	readonly property var results: {
 		if (root.query === "") return [];
@@ -603,7 +610,7 @@ FloatingWindow {
 									variant: "ghost"
 									icon: "tray_arrow_down"
 									text: "Export"
-									visible: root.current !== "bar" && root.current !== "sounds" && root.current !== "lighting" && root.current !== "phone" && root.current !== "mouse" && root.current !== "hud"
+									visible: root.current !== "bar" && root.current !== "sounds" && root.current !== "lighting" && root.current !== "phone" && root.current !== "mouse" && root.current !== "hud" && root.current !== "apps"
 									enabled: NiriSettings.loaded
 									onActivated: exportSheet.show(root.current)
 								}
@@ -666,6 +673,7 @@ FloatingWindow {
 							case "workspaces": return workspacesPage;
 							case "overview": return overviewPage;
 							case "system": return systemPage;
+							case "apps": return defaultAppsPage;
 							case "bar": return barPage;
 							case "sounds": return soundsPage;
 							case "lighting": return lightingPage;
@@ -970,6 +978,12 @@ FloatingWindow {
 		id: systemPage
 
 		SystemPage {}
+	}
+
+	Component {
+		id: defaultAppsPage
+
+		DefaultAppsPage {}
 	}
 
 	Component {
