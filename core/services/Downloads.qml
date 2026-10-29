@@ -23,7 +23,8 @@ Singleton {
 
 	readonly property bool enabled: Plugins.on("downloads")
 	// the socket is there for either of the two
-	readonly property bool listening: root.enabled || Screentime.enabled
+	// the file chooser asks which page saves (per site it remembers where)
+	readonly property bool listening: root.enabled || Screentime.enabled || (Plugins.on("filemanager") && Plugins.on("files-chooser"))
 
 	// keys in the order they are shown: what runs first, then the newest
 	property var order: []

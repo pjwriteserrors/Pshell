@@ -83,7 +83,9 @@ Singleton {
 	//     choices: [{ id, label, options, default }], currentName,
 	//     currentFolder, currentFile, files, app, appName, appIcon, done }
 	property var chooseQueue: []
-	readonly property var choosing: root.chooseQueue.length > 0 ? root.chooseQueue[0] : null
+	readonly property var choosing: root.chooseQueue.find(each => each.method !== "ChooseApplication") ?? null
+	// "Open with" (the portal's AppChooser): OpenWithWindow.qml
+	readonly property var appChoosing: root.chooseQueue.find(each => each.method === "ChooseApplication") ?? null
 	readonly property string chooserTitle: "Pshell chooser"
 	property int chooseSerial: 0
 
@@ -165,10 +167,15 @@ Singleton {
 		const fromWindow = focused && !/quickshell/i.test(String(focused.app_id)) ? String(focused.app_id) : "";
 		const app = String(q.app || "") || fromWindow;
 		const entry = app !== "" && app !== "pshell" ? DesktopEntries.heuristicLookup(app) : null;
-		return {
+		// a browser asks for the page in front: the extension tells which
+		// (scripts/downloads_host.py, the screen time's tabs)
+		const tab = focused && root.isBrowser(fromWindow || app) ? Screentime.tabFor(String(focused.title)) : null;
+		const site = String(q.site || tab?.host || "").replace(/^www\./, "");
+		const method = ["OpenFile", "SaveFile", "SaveFiles", "ChooseApplication"].includes(q.method) ? q.method : "OpenFile";
+		const result = {
 			token: String(q.token || ""),
 			origin: origin,
-			method: ["OpenFile", "SaveFile", "SaveFiles"].includes(q.method) ? q.method : "OpenFile",
+			method: method,
 			title: String(q.title || ""),
 			acceptLabel: String(q.acceptLabel || ""),
 			multiple: !!q.multiple,
@@ -176,7 +183,7 @@ Singleton {
 			filters: filters,
 			// no filter named: the first one, as GTK does
 			filter: Number(q.filter ?? -1) >= 0 && Number(q.filter) < filters.length ? Number(q.filter) : (filters.length > 0 ? 0 : -1),
-			choices: (q.choices ?? []).map(choice => ({ id: String(choice.id), label: String(choice.label), options: choice.options ?? [], default: String(choice.default ?? "") })),
+			choices: (q.choices ?? []).map(choice => method === "ChooseApplication" ? String(choice) : ({ id: String(choice.id), label: String(choice.label), options: choice.options ?? [], default: String(choice.default ?? "") })),
 			currentName: String(q.currentName || ""),
 			currentFolder: String(q.currentFolder || ""),
 			currentFile: String(q.currentFile || ""),
@@ -184,30 +191,80 @@ Singleton {
 			app: app,
 			appName: String(q.appName || entry?.name || (app !== "" ? app.split(".").pop() : "")),
 			appIcon: String(entry?.icon || ""),
+			site: site,
+			// "Open with"
+			lastChoice: String(q.lastChoice || ""),
+			contentType: String(q.contentType || ""),
+			uri: String(q.uri || ""),
+			filename: String(q.filename || ""),
 			done: done ?? null,
 			at: Date.now()
 		};
+		result.kind = root.choiceKind(result);
+		return result;
+	}
+
+	function isBrowser(app) {
+		return /floorp|firefox|librewolf|zen|waterfox|chrom|brave|vivaldi|edge|opera|epiphany|qutebrowser/i.test(String(app));
+	}
+
+	// what kind of file a question is about: image, video, audio, document, archive, text ("" when it cannot be told)
+	function choiceKind(entry) {
+		const name = entry.currentName || root.nameOf(entry.currentFile || "") || (entry.files ?? [])[0] || "";
+		const filter = entry.filter >= 0 ? entry.filters[entry.filter] : null;
+		const glob = String(filter?.rules?.find(rule => Number(rule[0]) === 0)?.[1] ?? "").replace(/\[(.)[^\]]*\]/g, "$1");
+		return root.kindOfName(name) || root.kindOfMime(filter?.mimes?.[0] ?? "") || root.kindOfName(glob.replace(/^\*/, "a"));
+	}
+
+	function kindOfName(name) {
+		const n = String(name).toLowerCase();
+		if (/\.(png|jpe?g|webp|gif|avif|heic|heif|jxl|bmp|tiff?|svg|ico)$/.test(n)) return "image";
+		if (/\.(mp4|mkv|webm|mov|avi|m4v)$/.test(n)) return "video";
+		if (/\.(mp3|flac|ogg|opus|wav|m4a|aac)$/.test(n)) return "audio";
+		if (/\.(pdf|docx?|odt|xlsx?|ods|pptx?|odp|epub|rtf|csv)$/.test(n)) return "document";
+		if (/\.(zip|tar|tgz|gz|xz|zst|bz2|7z|rar)$/.test(n)) return "archive";
+		if (/\.(txt|md|json|log)$/.test(n)) return "text";
+		return "";
+	}
+
+	function kindOfMime(mime) {
+		const m = String(mime);
+		if (m.startsWith("image/")) return "image";
+		if (m.startsWith("video/")) return "video";
+		if (m.startsWith("audio/")) return "audio";
+		if (m === "application/pdf" || /officedocument|opendocument|msword/.test(m)) return "document";
+		if (/zip|tar|compressed|archive/.test(m)) return "archive";
+		if (m.startsWith("text/")) return "text";
+		return "";
 	}
 
 	function enqueue(entry) {
 		if (root.chooseQueue.some(each => each.token === entry.token)) return;
 		if (root.chooseQueue.length === 0 && entry.origin === "shell") root.stepAside();
 		root.chooseQueue = root.chooseQueue.concat([entry]);
-		root.focusChooser();
+		root.focusChooser(entry);
 	}
 
-	// the answer: { response: 0 chosen | 1 given up, paths, choices: [[id, value]], filter }
+	// the answer: { response: 0 chosen | 1 given up, paths, choices: [[id, value]], filter, choice, mode }
 	function finishChoose(entry, answer) {
 		if (!entry) return;
 		const a = answer ?? { response: 1 };
 		const paths = a.response === 0 ? (a.paths ?? []).map(String) : [];
+		const choice = a.response === 0 ? String(a.choice || "") : "";
+		const answered = paths.length > 0 || choice !== "";
 		root.chooseQueue = root.chooseQueue.filter(each => each.token !== entry.token);
 		if (paths.length > 0) root.rememberChooserFolder(entry, paths);
+		if (answered && a.mode) FileLibrary.chooserSet("sessions", entry.app || "any", { mode: String(a.mode) });
 		if (entry.origin === "portal") {
-			root.request("chosen", { token: entry.token, response: paths.length > 0 ? 0 : 1, paths: paths, choices: a.choices ?? [], filter: a.filter ?? -1 });
+			root.request("chosen", { token: entry.token, response: answered ? 0 : 1, paths: paths, choices: a.choices ?? [], filter: a.filter ?? -1, choice: choice });
 		} else {
 			if (root.chooseQueue.every(each => each.origin !== "shell")) root.stepBack();
-			if (entry.done) entry.done(paths);
+			if (entry.done) entry.done(choice !== "" ? choice : paths);
+		}
+		// what comes after a save, once the app wrote the file
+		if (paths.length > 0 && (a.after ?? []).length > 0 && entry.method !== "OpenFile") {
+			root.afterWrites = Object.assign({}, root.afterWrites, { [entry.token]: { actions: a.after, paths: paths } });
+			root.request("afterwrite", { token: entry.token, paths: paths });
 		}
 		if (root.chooseQueue.length > 0) root.focusChooser();
 	}
@@ -219,18 +276,102 @@ Singleton {
 		root.chooseQueue = root.chooseQueue.filter(each => each.token !== token);
 	}
 
-	// where each app last chose: the next question starts there
+	// "Open with": the app found more programs
+	function updateChoices(token, choices) {
+		root.chooseQueue = root.chooseQueue.map(each => each.token === token ? Object.assign({}, each, { choices: choices.map(String) }) : each);
+	}
+
+	// ── what the chooser remembers ────────────────────────────────────────
+	// the keys a question is remembered under, the most particular first:
+	// the site and kind of file, the site, the app and kind, the app
+	function memoryKeys(entry) {
+		const keys = [];
+		const kind = entry?.kind || "";
+		if (entry?.site) {
+			if (kind) keys.push(`site:${entry.site}:${kind}`);
+			keys.push(`site:${entry.site}`);
+		}
+		const app = entry?.app || "any";
+		if (kind) keys.push(`app:${app}:${kind}`);
+		keys.push(`app:${app}`);
+		return keys;
+	}
+
+	// what a routine is kept under: the site, else the app
+	function routineKey(entry) {
+		return entry?.site ? `site:${entry.site}` : `app:${entry?.app || "any"}`;
+	}
+
 	function chooserFolderOf(entry) {
-		const folders = FileLibrary.setting("chooserFolders") ?? {};
+		const folders = FileLibrary.chooser.folders ?? {};
+		for (const key of root.memoryKeys(entry)) if (folders[key]) return String(folders[key]);
+		// the first chooser kept them by the app's id alone
 		return String(folders[entry?.app || "any"] || "");
 	}
 
 	function rememberChooserFolder(entry, paths) {
 		const first = String(paths[0]);
+		// a file made ready in the cache says nothing about where one keeps things
+		if (first.startsWith(`${Paths.cache}/`)) return;
 		const folder = entry.directory || entry.method === "SaveFiles" ? first : root.parentOf(first);
-		const folders = Object.assign({}, FileLibrary.setting("chooserFolders") ?? {});
-		folders[entry.app || "any"] = folder;
-		FileLibrary.set("chooserFolders", folders);
+		const next = Object.assign({}, FileLibrary.chooser.folders ?? {});
+		for (const key of root.memoryKeys(entry)) next[key] = folder;
+		FileLibrary.chooserSet("folders", null, next);
+	}
+
+	// ── after a save: the app wrote it, now it goes on ────────────────────
+	// token → { actions: [{ kind: "phone" | "link" | "vault" | "pc", id, path }], paths }
+	property var afterWrites: ({})
+
+	function written(token, path, ok) {
+		const pending = root.afterWrites[token];
+		if (!pending) return;
+		const next = Object.assign({}, root.afterWrites);
+		delete next[token];
+		root.afterWrites = next;
+		if (!ok) {
+			root.say(`${root.nameOf(path)} was not written: nothing more was done`, "alert_circle_outline");
+			return;
+		}
+		for (const action of pending.actions) {
+			if (action.kind === "phone") Phone.sendFiles([path]);
+			else if (action.kind === "link") root.share([path], { host: FileLibrary.setting("shareHost") || "0x0", hours: 24 });
+			else if (action.kind === "pc") Pcs.sendFiles(action.id, [path]);
+			else if (action.kind === "vault" && action.path) root.transfer([path], action.path, "move");
+		}
+		Notifs.pushInternal("done", `${root.nameOf(path)} is saved`, pending.actions.map(action => action.label).join(" · "), {
+			icon: "content_save_check_outline",
+			actions: [{ label: "Show", icon: "folder_open_outline", run: () => root.reveal([path]) }]
+		});
+	}
+
+	// files of the phone or another PC are fetched first; a chooser answers with paths here
+	function fetchForChooser(rows, done) {
+		const local = rows.filter(row => !String(row.path).startsWith("phone:") && !Pcs.split(row.path));
+		const phone = rows.filter(row => String(row.path).startsWith("phone:"));
+		const pcs = {};
+		for (const row of rows) {
+			const pc = Pcs.split(row.path);
+			if (pc) (pcs[pc.id] = pcs[pc.id] || []).push(pc.path);
+		}
+		if (phone.length === 0 && Object.keys(pcs).length === 0) {
+			done(local.map(row => row.path));
+			return;
+		}
+		root.chooseSerial += 1;
+		const folder = `${Paths.cache}/chooser/fetched-${Date.now()}-${root.chooseSerial}`;
+		let waiting = (phone.length > 0 ? 1 : 0) + Object.keys(pcs).length;
+		let got = local.map(row => row.path);
+		const one = paths => {
+			got = got.concat(paths ?? []);
+			waiting -= 1;
+			if (waiting === 0) done(got);
+		};
+		root.say(`Getting ${rows.length - local.length === 1 ? "the file" : `${rows.length - local.length} files`}…`, "download");
+		root.request("routinemake", { make: [folder] }, () => {
+			if (phone.length > 0) PhoneDrive.fetch(phone.map(row => Object.assign({ phoneId: String(row.path).slice(6) }, row)), folder, one);
+			for (const id of Object.keys(pcs)) Pcs.fetch(id, pcs[id], folder, one);
+		});
 	}
 
 	// a glob of the portal (*.png, *.[jJ][pP][gG], file-??.txt) → a pattern for names
@@ -282,7 +423,11 @@ Singleton {
 		if (panel !== "") Popups.withFocusedScreen(screen => Popups.open(panel, screen, root.asidePage));
 	}
 
-	function focusChooser() {
+	// the window of that question (or the first one waiting) gets the keys
+	property bool focusOpenWith: false
+
+	function focusChooser(entry) {
+		root.focusOpenWith = (entry ?? root.chooseQueue[0])?.method === "ChooseApplication";
 		chooserFocus.restart();
 	}
 
@@ -291,7 +436,7 @@ Singleton {
 
 		interval: 80
 		onTriggered: {
-			const window = Niri.windows.find(window => String(window.title).startsWith(root.chooserTitle) && /quickshell/i.test(String(window.app_id)));
+			const window = Niri.windows.find(window => String(window.title).startsWith(root.chooserTitle) && String(window.title).endsWith("Open with") === root.focusOpenWith && /quickshell/i.test(String(window.app_id)));
 			if (window && !window.is_focused) Niri.focusWindow(window.id);
 		}
 	}
@@ -418,6 +563,12 @@ Singleton {
 			break;
 		case "unchoose":
 			root.dropChoose(String(message.token || ""));
+			break;
+		case "updatechoices":
+			root.updateChoices(String(message.token || ""), message.choices ?? []);
+			break;
+		case "written":
+			root.written(message.token, String(message.path || ""), !!message.ok);
 			break;
 		case "reveal":
 			root.showRequested({ paths: message.paths || [], kind: String(message.kind || "folders"), newTab: false });
@@ -1981,8 +2132,20 @@ Singleton {
 
 	function applyChooser() {
 		if (chooserProc.running) return;
-		chooserProc.command = ["python3", `${Paths.scripts}/files/portal_setup.py`, root.chooserForAll ? "on" : "off"];
+		const flags = root.chooserForAll ? [FileLibrary.setting("chooserApps") === false ? "--no-apps" : "", FileLibrary.setting("chooserQt") === true ? "--qt" : ""].filter(flag => flag !== "") : [];
+		chooserProc.command = ["python3", `${Paths.scripts}/files/portal_setup.py`, root.chooserForAll ? "on" : "off"].concat(flags);
 		chooserProc.running = true;
+	}
+
+	// "Open with" and Qt apps follow their settings
+	property string chooserFlags: `${FileLibrary.setting("chooserApps")}|${FileLibrary.setting("chooserQt")}`
+	onChooserFlagsChanged: if (FileLibrary.loaded) chooserFlagTimer.restart()
+
+	Timer {
+		id: chooserFlagTimer
+
+		interval: 600
+		onTriggered: root.applyChooser()
 	}
 
 	Process {

@@ -9,7 +9,7 @@ asks. The file manager's own window and session are left alone.
 
 ## What is answered
 
-Everything `org.freedesktop.impl.portal.FileChooser` (version 4) can ask:
+Everything `org.freedesktop.impl.portal.FileChooser` (version 4) and `AppChooser` can ask:
 
 | Call | Options honoured |
 | --- | --- |
@@ -25,6 +25,51 @@ files.json). Questions from several apps wait in turn.
 Keys: Enter opens a folder or takes a file, Ctrl+Enter takes what is picked
 (or the folder shown), Esc gives up; in a save the name field has the keys,
 a folder's name or `..` steps there, `~/…` and `/…` are paths of their own.
+
+## More than a chooser
+
+- **Remembered per site, app and kind.** Each answer is kept under
+  `site:<host>:<kind>`, `site:<host>`, `app:<id>:<kind>` and `app:<id>`;
+  the next question starts at the most particular one. The site is the page
+  in front of the browser that asks: the Pshell Downloads extension already
+  tells the shell (`{type: "tab"}` for the screen time), and the window title
+  picks the tab (`Screentime.tabFor`). Kinds: image, video, audio, document,
+  archive, text – from the suggested name or the filter.
+- **Routines** (`scripts/files/routines.py`). On a save the folders on the
+  way that were born after the chooser opened (`stat %W`, so made any way:
+  the button, a rename, a terminal) and an existing folder named after the
+  file are the routine's folders; their names and the file's name are
+  explained by the suggested name as templates
+  (`{name|words|sentence}`, `{name|words(1:2)|title}{ext}`,
+  `{date:%Y-%m}`, literals). Up to six examples per site/app are kept and a
+  template must make every one of them, so what is fixed and what comes
+  from the name sorts itself out. The next save from there shows “Like last
+  time: make the folder …, then save as …” (Ctrl+Shift+Enter); with
+  *Always* it runs after 2.4 s unless a key stops it. Settings → File
+  chooser lists and forgets them.
+- **Lately**: the newest screenshots, downloads and clipboard pictures above
+  an open, one click takes one.
+- **Name patterns**: a name with `{…}` is a pattern (`{date}`, `{date:%d.%m.%Y}`,
+  `{n}` for the first free number, `{name|normal}`, `{app}`, `{site}`);
+  *Pattern* offers some, keeps your own, and “Like the newest file here”
+  (its number one up, its date today).
+- **After the save**: to the phone, to another PC, a share link, into an
+  open vault – done once the app wrote the file (`afterwrite`, the file
+  stays the same for two seconds).
+- **From elsewhere**: files of the phone and of another PC are fetched into
+  the cache first; files inside archives are chosen from quick look
+  (Space on the archive, Enter on a file in it).
+- **Made ready**: Smaller (1920 px), Lighter (quality 72), another format
+  (offered by itself when the app's filter does not take the file), without
+  metadata – on copies in `~/.cache/pshell/chooser`. A picture that knows
+  where it was taken goes out without that unless switched back.
+- **Drop** files on the chooser's bar to choose them, or a folder to save there.
+- **Sessions**: each app's chooser shows files the way it did last time (grid/list).
+- **Open with** (AppChooser portal): `OpenWithWindow.qml` – the programs the
+  type names, the last one first, a search over all programs, “Always open
+  this type with it” (`xdg-mime default`).
+
+All of it is kept in files.json under `chooser`.
 
 ## How it gets there
 
@@ -53,7 +98,8 @@ should be). Everything stays in the home folder:
   `XDG_DESKTOP_PORTAL_DIR` here; with it set, the portals.conf is also read
   from here only, hence the link.
 - `~/.local/share/dbus-1/services/org.freedesktop.impl.portal.desktop.pshell.service`
-- `~/.config/xdg-desktop-portal/<desktop>-portals.conf`: `FileChooser=pshell;gtk;`
+- `~/.config/xdg-desktop-portal/<desktop>-portals.conf`: `FileChooser=pshell;gtk;` and
+  `AppChooser=pshell;gtk;` (unless “Open with” is switched off)
   (backup `.bak-before-pshell`; "off" puts the earlier line back).
 - Apps that only ask the portal when told to: GTK (`GTK_USE_PORTAL=1`,
   `GDK_DEBUG=portals` in `~/.config/environment.d/pshell-file-chooser.conf`,
@@ -61,7 +107,8 @@ should be). Everything stays in the home folder:
   (`widget.use-xdg-desktop-portal.file-picker` = 1 in each profile's
   user.js, after their next start). Chromium and Electron apps ask the
   portal already. Qt apps only with `QT_QPA_PLATFORMTHEME=xdgdesktopportal`,
-  which is left alone (it changes their look too).
+  set only when switched on in Settings → File chooser (it changes their
+  look too).
 
 niri floats the window by its title (`dotfiles/niri/pshell.kdl`).
 

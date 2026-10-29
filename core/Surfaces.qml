@@ -369,6 +369,13 @@ Scope {
 		ChooserWindow {}
 	}
 
+	// "Open with" for every app
+	LazyLoader {
+		active: Plugins.on("filemanager") && Files.appChoosing !== null
+
+		OpenWithWindow {}
+	}
+
 	// the downloads under the bar, with their statistics
 	LazyLoader {
 		active: Plugins.on("downloads") && Popups.wanted("downloads")

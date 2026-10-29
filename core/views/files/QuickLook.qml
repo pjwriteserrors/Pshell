@@ -378,8 +378,9 @@ Item {
 				TextButton {
 					height: 32
 					variant: "filled"
-					text: root.row?.dir ? "Open" : "Open"
-					icon: "open_in_app"
+					// in the chooser a file looked at (one out of an archive too) is the one chosen
+					text: root.view?.chooser && !root.row?.dir ? "Choose" : "Open"
+					icon: root.view?.chooser && !root.row?.dir ? "check" : "open_in_app"
 					onClicked: {
 						const row = root.row;
 						root.close();

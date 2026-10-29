@@ -33,6 +33,7 @@ from gi.repository import Gio, GLib  # noqa: E402
 import ai  # noqa: E402
 import archives  # noqa: E402
 import captures  # noqa: E402
+import chooser  # noqa: E402
 import clips  # noqa: E402
 import compare  # noqa: E402
 import convert  # noqa: E402
@@ -48,6 +49,7 @@ import pdftools  # noqa: E402
 import places  # noqa: E402
 import player  # noqa: E402
 import remote  # noqa: E402
+import routines  # noqa: E402
 import rules  # noqa: E402
 import share  # noqa: E402
 import storage  # noqa: E402
@@ -354,10 +356,21 @@ class Daemon:
             "paths": [str(path) for path in request.get("paths", [])],
             "choices": request.get("choices", []),
             "filter": int(request.get("filter", -1)),
+            "choice": str(request.get("choice", "")),
         })
         # another shell that showed it too lets it go
         self.broadcast({"event": "unchoose", "token": token})
         return {"known": True}
+
+    @on_main("main")
+    def op_updatechoices(self, client, request):
+        """"Open with": the app found more programs meanwhile."""
+        token = str(request.get("token") or "")
+        entry = self.choosing.get(token)
+        if entry is not None:
+            entry[2]["choices"] = [str(c) for c in request.get("choices", [])]
+        self.broadcast({"event": "updatechoices", "token": token, "choices": request.get("choices", [])})
+        return {}
 
     @on_main("main")
     def op_unchoose(self, client, request):
@@ -367,6 +380,51 @@ class Daemon:
             asker, asked, _question = entry
             asker.reply(asked, {"response": 2, "paths": [], "choices": [], "filter": -1})
         self.broadcast({"event": "unchoose", "token": token})
+        return {}
+
+    # ── the chooser's helpers (chooser.py, routines.py) ───────────────────
+    @on_main("slow")
+    def op_chooserrecent(self, client, request):
+        return chooser.recent(int(request.get("limit", 4)))
+
+    @on_main("slow")
+    def op_chooserprep(self, client, request):
+        return chooser.prepare([str(p) for p in request.get("paths", [])], request.get("steps") or {})
+
+    def op_photoinfo(self, client, request):
+        return {"info": chooser.photo_info([str(p) for p in request.get("paths", [])])}
+
+    def op_routinelearn(self, client, request):
+        """{ routine, path, source, since } → { routine } (null: nothing to keep)."""
+        return {"routine": routines.learn(request.get("routine"), str(request["path"]), str(request.get("source", "")), float(request.get("since", 0)))}
+
+    def op_routineplan(self, client, request):
+        return routines.plan(request["routine"], str(request.get("source", "")), request.get("context") or {})
+
+    def op_routinemake(self, client, request):
+        """The folders a routine makes, then the file's path."""
+        for folder in request.get("make", []):
+            os.makedirs(str(folder), exist_ok=True)
+        return {}
+
+    def op_namefor(self, client, request):
+        """A name from a template ({date}, {n}, …) or "like the last file here"."""
+        folder = str(request.get("folder", ""))
+        source = str(request.get("source", ""))
+        context = dict(request.get("context") or {}, source=source)
+        if request.get("like"):
+            return {"name": routines.like_last(folder, source) or ""}
+        return {"name": routines.render_free(str(request.get("template", "")), context, folder).replace("/", "-")}
+
+    def op_afterwrite(self, client, request):
+        """Tells "written" once the app wrote the saved file (for what comes after a save)."""
+        token = request.get("token")
+
+        def done(path):
+            GLib.idle_add(lambda: self.broadcast({"event": "written", "token": token, "path": path or "", "ok": path is not None}) or False)
+
+        for path in request.get("paths", []):
+            chooser.wait_written(str(path), done)
         return {}
 
     def op_list(self, client, request):

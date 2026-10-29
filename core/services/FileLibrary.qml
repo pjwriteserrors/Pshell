@@ -35,6 +35,12 @@ Singleton {
 	// what the settings page sets (see defaults)
 	property var settings: ({})
 	readonly property var defaults: ({
+		// the file chooser (docs/file-chooser.md)
+		chooserApps: true,
+		chooserQt: false,
+		chooserRecent: true,
+		chooserPrivacy: true,
+		chooserRoutines: "ask",
 		startPage: "restore",
 		startFolder: "",
 		singleClick: false,
@@ -83,6 +89,27 @@ Singleton {
 	property var session: []
 	// how often files went to a WhatsApp chat: { chatId: count }
 	property var sentTo: ({})
+	// what the file chooser keeps (Files.qml, ChooserBar.qml):
+	//   folders   { key: path }      where each site / app (and kind of file) chose last
+	//   sessions  { app: { mode } }  how each app's chooser showed the files
+	//   routines  { key: routine }   what was done before saving (scripts/files/routines.py)
+	//   auto      { key: true }      routines done without asking
+	//   templates [ "…{date}…" ]     name patterns kept
+	property var chooser: ({ folders: {}, sessions: {}, routines: {}, auto: {}, templates: [] })
+
+	function chooserSet(part, key, value) {
+		const next = Object.assign({}, root.chooser);
+		if (key === null) {
+			next[part] = value;
+		} else {
+			const table = Object.assign({}, next[part] ?? {});
+			if (value === undefined) delete table[key];
+			else table[key] = value;
+			next[part] = table;
+		}
+		root.chooser = next;
+		root.save();
+	}
 	property bool loaded: false
 
 	readonly property var tagColors: ["danger", "warning", "success", "primary", "secondary", "tertiary", "text"]
@@ -448,7 +475,8 @@ Singleton {
 			opened: root.opened,
 			visited: root.visited,
 			session: root.session,
-			sentTo: root.sentTo
+			sentTo: root.sentTo,
+			chooser: root.chooser
 		}, null, "\t") + "\n")
 	}
 
@@ -489,6 +517,15 @@ Singleton {
 		root.visited = Array.isArray(data.visited) ? data.visited : [];
 		root.session = Array.isArray(data.session) ? data.session : [];
 		root.sentTo = data.sentTo && typeof data.sentTo === "object" ? data.sentTo : {};
+		const kept = data.chooser && typeof data.chooser === "object" ? data.chooser : {};
+		root.chooser = {
+			// the first chooser kept one folder per app among the settings
+			folders: Object.assign({}, root.settings.chooserFolders ?? {}, kept.folders ?? {}),
+			sessions: kept.sessions ?? {},
+			routines: kept.routines ?? {},
+			auto: kept.auto ?? {},
+			templates: Array.isArray(kept.templates) ? kept.templates : []
+		};
 		root.loaded = true;
 	}
 

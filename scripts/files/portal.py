@@ -36,6 +36,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 NAME = "org.freedesktop.impl.portal.desktop.pshell"
 PATH = "/org/freedesktop/portal/desktop"
 CHOOSER = "org.freedesktop.impl.portal.FileChooser"
+APPS = "org.freedesktop.impl.portal.AppChooser"
 REQUEST = "org.freedesktop.impl.portal.Request"
 GTK = "org.freedesktop.impl.portal.desktop.gtk"
 RUNTIME = os.environ.get("PSHELL_RUNTIME_DIR") or os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "pshell")
@@ -100,7 +101,10 @@ def answer_of(reply, filters):
     """The shell's answer as the portal's response and results."""
     response = int(reply.get("response", OTHER))
     results = {}
-    if response == SUCCESS:
+    if response == SUCCESS and reply.get("choice"):
+        # "Open with": the app's desktop id without .desktop
+        results["choice"] = str(reply["choice"]).removesuffix(".desktop")
+    elif response == SUCCESS:
         uris = []
         for path in reply.get("paths", []):
             path = str(path)
@@ -245,20 +249,48 @@ class Chooser(dbus.service.Object):
     def SaveFiles(self, handle, app_id, parent_window, title, options, reply, error):
         self.ask("SaveFiles", handle, app_id, parent_window, title, options, reply, error)
 
+    # ── "Open with" ──────────────────────────────────────────────────────
+    @dbus.service.method(APPS, in_signature="ossasa{sv}", out_signature="ua{sv}", async_callbacks=("reply", "error"))
+    def ChooseApplication(self, handle, app_id, parent_window, choices, options, reply, error):
+        extra = {
+            "choices": [str(choice) for choice in choices],
+            "lastChoice": str(options.get("last_choice", "")),
+            "contentType": str(options.get("content_type", "")),
+            "uri": str(options.get("uri", "")),
+            "filename": str(options.get("filename", "")),
+        }
+        self.ask("ChooseApplication", handle, app_id, parent_window, "", options, reply, error, extra=extra, fallback_args=(handle, app_id, parent_window, choices, options), interface=APPS)
+
+    @dbus.service.method(APPS, in_signature="oas", out_signature="")
+    def UpdateChoices(self, handle, choices):
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+                sock.settimeout(2)
+                sock.connect(SOCKET)
+                sock.sendall((json.dumps({"op": "updatechoices", "token": str(handle), "choices": [str(c) for c in choices]}) + "\n").encode())
+        except OSError:
+            pass
+
     @dbus.service.method(dbus.PROPERTIES_IFACE, in_signature="ss", out_signature="v")
     def Get(self, interface, prop):
-        if interface == CHOOSER and prop == "version":
-            return dbus.UInt32(4, variant_level=1)
+        if interface in (CHOOSER, APPS) and prop == "version":
+            return dbus.UInt32(4 if interface == CHOOSER else 2, variant_level=1)
         raise dbus.exceptions.DBusException("No such property", name="org.freedesktop.DBus.Error.UnknownProperty")
 
     @dbus.service.method(dbus.PROPERTIES_IFACE, in_signature="s", out_signature="a{sv}")
     def GetAll(self, interface):
-        return {"version": dbus.UInt32(4)} if interface == CHOOSER else {}
+        if interface == CHOOSER:
+            return {"version": dbus.UInt32(4)}
+        return {"version": dbus.UInt32(2)} if interface == APPS else {}
 
-    def ask(self, method, handle, app_id, parent_window, title, options, reply, error):
+    def ask(self, method, handle, app_id, parent_window, title, options, reply, error, extra=None, fallback_args=None, interface=CHOOSER):
         self.last_call = time.monotonic()
         self.open_requests += 1
-        plain, filters = plain_options(method, options)
+        if method == "ChooseApplication":
+            plain, filters = {"method": method}, []
+        else:
+            plain, filters = plain_options(method, options)
+        plain.update(extra or {})
         plain.update({"app": str(app_id), "parent": str(parent_window), "title": str(title)})
         state = {"answered": False, "fallback": None}
 
@@ -284,13 +316,14 @@ class Chooser(dbus.service.Object):
                 answer(response, results)
             else:
                 # no shell to ask: the GTK backend does
-                state["fallback"] = self.fallback(method, handle, app_id, parent_window, title, options, answer)
+                state["fallback"] = self.fallback(method, fallback_args or (handle, app_id, parent_window, title, options), answer, interface)
 
         request = Request(self.bus, handle, closed)
         asking = Asking(str(handle), plain, done)
         asking.start()
 
-    def fallback(self, method, handle, app_id, parent_window, title, options, answer):
+    def fallback(self, method, args, answer, interface=CHOOSER):
+        handle = args[0]
         try:
             gtk = self.bus.get_object(GTK, PATH)
         except dbus.exceptions.DBusException:
@@ -303,8 +336,7 @@ class Chooser(dbus.service.Object):
         def failed(_error):
             answer(dbus.UInt32(OTHER), dbus.Dictionary({}, signature="sv"))
 
-        gtk.get_dbus_method(method, CHOOSER)(handle, app_id, parent_window, title, options,
-                                             reply_handler=replied, error_handler=failed, timeout=FOREVER)
+        gtk.get_dbus_method(method, interface)(*args, reply_handler=replied, error_handler=failed, timeout=FOREVER)
 
         def close():
             try:
@@ -367,19 +399,25 @@ def test(kind):
         options["directory"] = kind.startswith("folder")
         if not options["directory"]:
             options["filters"] = dbus.Array([images, texts], signature="(sa(us))")
-            options["current_filter"] = texts
+            options["current_filter"] = images if os.environ.get("PSHELL_TEST_FILTER") == "pictures" else texts
             options["choices"] = choice
         iface.OpenFile("", "Test " + kind, options)
     elif kind == "save":
-        options["current_name"] = "Notes.txt"
+        options["current_name"] = os.environ.get("PSHELL_TEST_NAME") or "Notes.txt"
         options["filters"] = dbus.Array([texts, images], signature="(sa(us))")
         options["choices"] = choice
         iface.SaveFile("", "Save the notes", options)
+    elif kind == "apps":
+        apps = dbus.Interface(portal, "org.freedesktop.portal.OpenURI")
+        path = os.environ.get("PSHELL_TEST_FILE") or __file__
+        fd = os.open(path, os.O_RDONLY)
+        options["ask"] = True
+        apps.OpenFile("", dbus.types.UnixFd(fd), options)
     elif kind == "save-files":
         options["files"] = dbus.Array([dbus.ByteArray(b"one.txt\0"), dbus.ByteArray(b"two.png\0")], signature="ay")
         iface.SaveFiles("", "Save two files", options)
     else:
-        print("kinds: open open-multiple folder folders save save-files")
+        print("kinds: open open-multiple folder folders save save-files apps")
         return 2
     main.run()
     return 0

@@ -206,7 +206,9 @@ FocusScope {
 			}
 		}
 		root.currentIndex = 0;
-		root.newTab({ kind: "dir", path: start }, true, file !== "" ? [file] : []);
+		const tab = root.newTab({ kind: "dir", path: start }, true, file !== "" ? [file] : []);
+		// each app's chooser shows the files the way it did last time
+		tab.first.modeOverride = String(FileLibrary.chooser.sessions?.[entry.app || "any"]?.mode ?? "");
 		Qt.callLater(() => chooserBar.takeFocus());
 	}
 
@@ -979,6 +981,12 @@ FocusScope {
 	function key(event) {
 		const pane = root.pane;
 		if (!pane) return;
+		// a routine about to run by itself stops at any key
+		if (root.chooser && chooserBar.countdown > 0 && !(event.key === Qt.Key_Return && (event.modifiers & Qt.ControlModifier))) {
+			chooserBar.stopCountdown();
+			event.accepted = true;
+			return;
+		}
 		const ctrl = (event.modifiers & Qt.ControlModifier) !== 0;
 		const shift = (event.modifiers & Qt.ShiftModifier) !== 0;
 		const alt = (event.modifiers & Qt.AltModifier) !== 0;
@@ -1473,6 +1481,40 @@ FocusScope {
 		entry: root.chooser
 		pane: root.pane
 		view: root
+	}
+
+	// a file dropped on the chooser's bar (from the desktop, the shelf, another
+	// window) answers it; the files above keep their own drops
+	DropArea {
+		id: chooserDrop
+
+		anchors.fill: chooserBar
+		enabled: root.chooser !== null
+		keys: ["text/uri-list"]
+		z: 30
+		onDropped: drop => {
+			const paths = (drop.urls ?? []).map(url => String(url)).filter(url => url.startsWith("file://")).map(url => decodeURIComponent(url.slice(7)));
+			if (paths.length === 0) return;
+			drop.acceptProposedAction();
+			chooserBar.dropped(paths);
+		}
+
+		Rectangle {
+			anchors.fill: parent
+			visible: chooserDrop.containsDrag
+			radius: Theme.radius.large
+			color: Qt.alpha(Theme.primary, 0.12)
+			border.width: 2
+			border.color: Theme.primary
+
+			StyledText {
+				anchors.centerIn: parent
+				text: chooserBar.saving || chooserBar.savingMany ? "Drop a folder to save there" : "Drop to choose"
+				font.pixelSize: Theme.size.body
+				font.weight: Font.DemiBold
+				tone: Theme.primary
+			}
+		}
 	}
 
 	Snackbar {

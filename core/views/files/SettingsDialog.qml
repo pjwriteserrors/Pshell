@@ -25,6 +25,7 @@ DialogFrame {
 	readonly property var pages: [
 		{ id: "general", label: "General", icon: "tune_variant" },
 		{ id: "browsing", label: "Browsing", icon: "folder_outline" },
+		{ id: "chooser", label: "File chooser", icon: "file_find_outline" },
 		{ id: "previews", label: "Previews", icon: "image_outline" },
 		{ id: "archives", label: "Archives", icon: "package_variant" },
 		{ id: "windows", label: "Windows programs", icon: "microsoft_windows" },
@@ -287,6 +288,142 @@ DialogFrame {
 						hint: "Folders other apps open, and their “Show in folder”, come here."
 						checked: Plugins.on("files-default")
 						onToggled: on => Plugins.set("files-default", on)
+					}
+				}
+
+				// ── the file chooser ───────────────────────────────────────
+				Group {
+					shown: root.page === "chooser"
+					title: "Every app's file chooser"
+
+					Switch {
+						label: "Apps open and save through Files"
+						hint: "Browsers, chats and every app that asks the desktop for a file get this window instead of the GTK one. Floorp and Firefox after their next start, GTK apps after the next login."
+						checked: Plugins.on("files-chooser")
+						onToggled: on => Plugins.set("files-chooser", on)
+					}
+
+					Switch {
+						visible: Plugins.on("files-chooser")
+						label: "“Open with” too"
+						hint: "When an app asks which program should open a file"
+						checked: FileLibrary.setting("chooserApps") !== false
+						onToggled: on => FileLibrary.set("chooserApps", on)
+					}
+
+					Switch {
+						visible: Plugins.on("files-chooser")
+						label: "Qt apps too"
+						hint: "Sets QT_QPA_PLATFORMTHEME=xdgdesktopportal after the next login – their colours and fonts then follow the desktop's portal as well"
+						checked: FileLibrary.setting("chooserQt") === true
+						onToggled: on => FileLibrary.set("chooserQt", on)
+					}
+				}
+
+				Group {
+					shown: root.page === "chooser"
+					title: "While choosing"
+
+					Switch {
+						label: "Lately made, to take at once"
+						hint: "The newest screenshots, downloads and pictures of the clipboard above the files"
+						checked: FileLibrary.setting("chooserRecent") !== false
+						onToggled: on => FileLibrary.set("chooserRecent", on)
+					}
+
+					Switch {
+						label: "Say what pictures tell"
+						hint: "A picture that knows where it was taken goes out without that, unless you say otherwise"
+						checked: FileLibrary.setting("chooserPrivacy") !== false
+						onToggled: on => FileLibrary.set("chooserPrivacy", on)
+					}
+				}
+
+				Group {
+					shown: root.page === "chooser"
+					title: "Routines"
+
+					Choice {
+						options: [{ value: "ask", label: "Learn and offer" }, { value: "off", label: "Off" }]
+						value: FileLibrary.setting("chooserRoutines")
+						onPicked: value => FileLibrary.set("chooserRoutines", value)
+					}
+
+					StyledText {
+						Layout.fillWidth: true
+						text: "What you do before saving – folders made on the way, a name changed – is learned per site or app and offered the next time. With “Always” it runs by itself after a moment."
+						tone: Theme.textMuted
+						font.pixelSize: Theme.size.small
+						wrapMode: Text.WordWrap
+					}
+
+					Repeater {
+						model: Object.keys(FileLibrary.chooser.routines ?? {})
+
+						delegate: Line {
+							id: routineLine
+
+							required property string modelData
+							readonly property var routine: FileLibrary.chooser.routines[routineLine.modelData]
+
+							label: `${routineLine.modelData.replace(/^(site|app):/, "")} – ${Files.pretty(String(routineLine.routine?.base ?? ""))}/${(routineLine.routine?.folders ?? []).concat([routineLine.routine?.name ?? ""]).join("/")}`
+							icon: routineLine.modelData.startsWith("site:") ? "web" : "application_outline"
+
+							Toggle {
+								checked: !!FileLibrary.chooser.auto?.[routineLine.modelData]
+								onToggled: on => FileLibrary.chooserSet("auto", routineLine.modelData, on ? true : undefined)
+							}
+
+							TextButton {
+								height: 30
+								variant: "tonal"
+								text: "Forget"
+								onClicked: {
+									FileLibrary.chooserSet("routines", routineLine.modelData, undefined);
+									FileLibrary.chooserSet("auto", routineLine.modelData, undefined);
+								}
+							}
+						}
+					}
+				}
+
+				Group {
+					shown: root.page === "chooser"
+					title: "Remembered"
+
+					Line {
+						label: `${Object.keys(FileLibrary.chooser.folders ?? {}).length} places where sites and apps chose last`
+						icon: "folder_clock_outline"
+
+						TextButton {
+							height: 30
+							variant: "tonal"
+							text: "Forget"
+							onClicked: {
+								FileLibrary.chooserSet("folders", null, {});
+								FileLibrary.chooserSet("sessions", null, {});
+							}
+						}
+					}
+
+					Repeater {
+						model: FileLibrary.chooser.templates ?? []
+
+						delegate: Line {
+							id: patternLine
+
+							required property string modelData
+
+							label: patternLine.modelData
+							icon: "bookmark_outline"
+
+							TextButton {
+								height: 30
+								variant: "tonal"
+								text: "Remove"
+								onClicked: FileLibrary.chooserSet("templates", null, (FileLibrary.chooser.templates ?? []).filter(each => each !== patternLine.modelData))
+							}
+						}
 					}
 				}
 

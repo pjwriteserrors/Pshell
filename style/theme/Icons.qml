@@ -10,6 +10,12 @@ Singleton {
 	readonly property string family: "Symbols Nerd Font"
 
 	readonly property var glyphs: ({
+		"folder_clock_outline": "󰪻",
+		"safe": "󰩪",
+		"content_save_check_outline": "󱣫",
+		"format_letter_case": "󰬴",
+		"image_size_select_small": "󰲏",
+		"shield_outline": "󰒙",
 		"file_find_outline": "󰮗",
 		"filter_variant": "󰈶",
 		"file_multiple_outline": "󱀲",

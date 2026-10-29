@@ -43,6 +43,7 @@ STATE = host.state_dir() / "file-chooser.json"
 FIREFOX_DIRS = [CONFIG / "floorp", HOME / ".floorp", HOME / ".mozilla" / "firefox", HOME / ".librewolf"]
 PREF = 'user_pref("widget.use-xdg-desktop-portal.file-picker", 1); // pshell file chooser'
 KEY = "org.freedesktop.impl.portal.FileChooser"
+APPS_KEY = "org.freedesktop.impl.portal.AppChooser"
 
 
 def desktop():
@@ -80,7 +81,7 @@ def write_if_changed(path, text):
 def portal_file():
     return ("[portal]\n"
             "DBusName=org.freedesktop.impl.portal.desktop.pshell\n"
-            f"Interfaces={KEY};\n"
+            f"Interfaces={KEY};{APPS_KEY};\n"
             "UseIn=niri\n")
 
 
@@ -136,15 +137,15 @@ def read_conf(path):
             return ["[preferred]", "default=gtk;"]
 
 
-def current_choice(lines):
+def current_choice(lines, key=KEY):
     for line in lines:
-        if line.strip().startswith(KEY + "="):
+        if line.strip().startswith(key + "="):
             return line.strip().split("=", 1)[1]
     return None
 
 
-def set_choice(lines, value):
-    """The FileChooser line under [preferred]; None takes it out."""
+def set_choice(lines, value, KEY=KEY):
+    """The FileChooser (or another) line under [preferred]; None takes it out."""
     out, section, done = [], "", False
     for line in lines:
         stripped = line.strip()
@@ -219,10 +220,11 @@ def told(profile):
         return False
 
 
-def environment_file():
+def environment_file(qt=False):
     return ("# Pshell: GTK apps ask the file chooser portal (scripts/files/portal_setup.py)\n"
             "GTK_USE_PORTAL=1\n"
-            "GDK_DEBUG=portals\n")
+            "GDK_DEBUG=portals\n"
+            + ("# and Qt apps (their look follows the portal too)\nQT_QPA_PLATFORMTHEME=xdgdesktopportal\n" if qt else ""))
 
 
 def run(*command):
@@ -241,7 +243,7 @@ def restart_portal():
 
 
 # ── on, off, status ───────────────────────────────────────────────────────
-def on():
+def on(apps=True, qt=False):
     state = load_state()
     changed = sync_portals()
     changed |= write_if_changed(SERVICE, service_file())
@@ -256,10 +258,23 @@ def on():
         if path.exists() and not path.with_name(path.name + ".bak-before-pshell").exists():
             shutil.copy2(path, path.with_name(path.name + ".bak-before-pshell"))
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("\n".join(set_choice(lines, wanted)) + "\n")
+        lines = set_choice(lines, wanted)
+        path.write_text("\n".join(lines) + "\n")
         changed = True
-    if write_if_changed(ENVIRONMENT, environment_file()):
+    # "Open with" asks here too, when wanted
+    apps_now = current_choice(lines, APPS_KEY)
+    if "beforeApps" not in state:
+        state["beforeApps"] = apps_now
+    apps_wanted = pshell_choice(state.get("beforeApps")) if apps else state.get("beforeApps")
+    if apps_now != apps_wanted:
+        path.write_text("\n".join(set_choice(lines, apps_wanted, APPS_KEY)) + "\n")
+        changed = True
+    if write_if_changed(ENVIRONMENT, environment_file(qt)):
         run("systemctl", "--user", "set-environment", "GTK_USE_PORTAL=1", "GDK_DEBUG=portals")
+        if qt:
+            run("systemctl", "--user", "set-environment", "QT_QPA_PLATFORMTHEME=xdgdesktopportal")
+        else:
+            run("systemctl", "--user", "unset-environment", "QT_QPA_PLATFORMTHEME")
     state["firefox"] = sorted(set(state.get("firefox", [])) | set(set_firefox(True)))
     state["on"] = True
     save_state(state)
@@ -276,14 +291,17 @@ def off():
     path = conf_path()
     lines = read_conf(path)
     if path.exists():
-        path.write_text("\n".join(set_choice(lines, state.get("before"))) + "\n")
+        lines = set_choice(lines, state.get("before"))
+        if "beforeApps" in state:
+            lines = set_choice(lines, state.get("beforeApps"), APPS_KEY)
+        path.write_text("\n".join(lines) + "\n")
     for each in (DROPIN, SERVICE, ENVIRONMENT):
         try:
             each.unlink()
         except OSError:
             pass
     shutil.rmtree(PORTALS, ignore_errors=True)
-    run("systemctl", "--user", "unset-environment", "GTK_USE_PORTAL", "GDK_DEBUG")
+    run("systemctl", "--user", "unset-environment", "GTK_USE_PORTAL", "GDK_DEBUG", "QT_QPA_PLATFORMTHEME")
     set_firefox(False)
     save_state({"on": False, "before": state.get("before")})
     restart_portal()
@@ -300,6 +318,8 @@ def status():
     print(json.dumps({
         "on": bool(load_state().get("on")),
         "choice": current_choice(lines),
+        "apps": current_choice(lines, APPS_KEY),
+        "qt": "QT_QPA_PLATFORMTHEME" in (ENVIRONMENT.read_text() if ENVIRONMENT.exists() else ""),
         "conf": str(conf_path()),
         "backendDir": str(PORTALS) in active,
         "service": SERVICE.exists(),
@@ -310,4 +330,7 @@ def status():
 
 if __name__ == "__main__":
     what = sys.argv[1] if len(sys.argv) > 1 else "status"
-    {"on": on, "off": off, "status": status}.get(what, status)()
+    if what == "on":
+        on(apps="--no-apps" not in sys.argv, qt="--qt" in sys.argv)
+    else:
+        {"off": off, "status": status}.get(what, status)()
