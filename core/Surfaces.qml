@@ -362,6 +362,13 @@ Scope {
 		FilesWindow {}
 	}
 
+	// every app's file chooser (and the shell's own), a window beside it
+	LazyLoader {
+		active: Plugins.on("filemanager")
+
+		ChooserWindow {}
+	}
+
 	// the downloads under the bar, with their statistics
 	LazyLoader {
 		active: Plugins.on("downloads") && Popups.wanted("downloads")

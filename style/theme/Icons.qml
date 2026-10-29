@@ -10,6 +10,9 @@ Singleton {
 	readonly property string family: "Symbols Nerd Font"
 
 	readonly property var glyphs: ({
+		"file_find_outline": "󰮗",
+		"filter_variant": "󰈶",
+		"file_multiple_outline": "󱀲",
 		"hand_back_left_off_outline": "󱠲",
 		"hand_back_left_outline": "󱠬",
 		"keyboard_close": "󰌏",

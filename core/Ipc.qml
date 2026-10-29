@@ -874,6 +874,11 @@ Scope {
 		function close(): void {
 			Files.close();
 		}
+		// the chooser, asked the way apps ask it: open, open-multiple,
+		// folder, folders, save, save-files; the answer goes to the log
+		function choose(kind: string): void {
+			Files.tryChooser(kind);
+		}
 	}
 
 	IpcHandler {

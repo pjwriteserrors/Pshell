@@ -31,6 +31,8 @@ Singleton {
 	property bool windowOpen: false
 	// the window is up and has the keyboard
 	property bool windowActive: false
+	// the chooser window (another app's or the shell's file chooser) has the keyboard
+	property bool chooserActive: false
 	// asks the window to show places: { paths, kind: "folders" | "items" | "properties" | "search", newTab, query }
 	signal showRequested(var request)
 
@@ -70,14 +72,199 @@ Singleton {
 		root.focusWindow();
 	}
 
-	// ── the shell's file chooser ──────────────────────────────────────────
-	// pick(options, done): the window opens to choose; done(paths) gets what
+	// ── choosing files ────────────────────────────────────────────────────
+	// Every file chooser goes through the chooser window (ChooserWindow.qml):
+	// other apps' through the portal (scripts/files/portal.py → daemon →
+	// event "choose"), the shell's own through pick(). One is shown at a time,
+	// the others wait in turn. An entry:
+	//   { token, origin: "portal" | "shell", method: "OpenFile" | "SaveFile" |
+	//     "SaveFiles", title, acceptLabel, multiple, directory,
+	//     filters: [{ name, rules, mimes, globs }], filter (index, -1 = none),
+	//     choices: [{ id, label, options, default }], currentName,
+	//     currentFolder, currentFile, files, app, appName, appIcon, done }
+	property var chooseQueue: []
+	readonly property var choosing: root.chooseQueue.length > 0 ? root.chooseQueue[0] : null
+	readonly property string chooserTitle: "Pshell chooser"
+	property int chooseSerial: 0
+
+	// pick(options, done): the shell asks for files; done(paths) gets what
 	// was chosen, [] when it was given up. options: { title, folder,
-	// multiple, directory, filters: ["*.torrent", …] }. With the file manager
-	// off the portal's chooser asks (scripts/pick_files.py).
-	property var picking: null
-	// the window was opened for the pick: it closes again after
-	property bool pickOpened: false
+	// multiple, directory, filters: ["*.torrent", …], save: "name" (asks
+	// where to save instead), acceptLabel }. With the file manager off the
+	// portal's chooser asks (scripts/pick_files.py).
+	function pick(options, done) {
+		const o = options ?? {};
+		if (!root.enabled) {
+			root.stepAside();
+			const asker = portalPicker.createObject(root, { done: paths => {
+				root.stepBack();
+				if (done) done(paths);
+			} });
+			asker.command = ["python3", `${Paths.scripts}/pick_files.py`]
+				.concat(o.directory ? ["--folder"] : (o.multiple ? [] : ["--single"]))
+				.concat(o.folder && !o.directory ? ["--start", String(o.folder)] : [])
+				.concat((o.filters ?? []).length > 0 ? ["--filter", `${o.title || "Files"}|${o.filters.join(" ")}`] : [])
+				.concat([String(o.title || (o.directory ? "Choose a folder" : "Choose a file"))])
+				.concat(o.folder && o.directory ? [String(o.folder)] : []);
+			asker.running = true;
+			return;
+		}
+		root.chooseSerial += 1;
+		const globs = (o.filters ?? []).map(String);
+		root.enqueue(root.normalChoice({
+			token: `shell${root.chooseSerial}`,
+			method: o.save !== undefined ? "SaveFile" : "OpenFile",
+			title: String(o.title || (o.directory ? "Choose a folder" : "Choose a file")),
+			acceptLabel: String(o.acceptLabel || ""),
+			multiple: !!o.multiple,
+			directory: !!o.directory,
+			filters: globs.length > 0 ? [{ name: globs.join(", "), rules: globs.map(glob => [0, glob]) }] : [],
+			filter: globs.length > 0 ? 0 : -1,
+			currentName: String(o.save ?? ""),
+			currentFolder: String(o.folder || ""),
+			app: "pshell",
+			appName: "Pshell"
+		}, "shell", done));
+	}
+
+	// the chooser tried by hand (ipc files choose KIND): the answer goes to the log
+	function tryChooser(kind) {
+		root.chooseSerial += 1;
+		const text = { name: "Text", rules: [[1, "text/plain"]], mimes: ["text/plain", "text/markdown", "text/x-python"] };
+		const pictures = { name: "Pictures", rules: [[0, "*.png"], [0, "*.[jJ][pP][gG]"], [1, "image/webp"]], mimes: ["image/webp"] };
+		const choices = [{ id: "encoding", label: "Encoding", options: [["utf8", "UTF-8"], ["latin1", "Latin-1"]], default: "utf8" }, { id: "bom", label: "Byte order mark", options: [], default: "false" }];
+		const question = {
+			token: `try${root.chooseSerial}`,
+			method: kind === "save" ? "SaveFile" : (kind === "save-files" ? "SaveFiles" : "OpenFile"),
+			title: `Try: ${kind}`,
+			multiple: kind === "open-multiple" || kind === "folders",
+			directory: kind === "folder" || kind === "folders",
+			filters: kind.startsWith("open") || kind === "save" ? [text, pictures] : [],
+			filter: kind.startsWith("open") || kind === "save" ? 0 : -1,
+			choices: kind === "save" || kind.startsWith("open") ? choices : [],
+			currentName: kind === "save" ? "Notes.txt" : "",
+			files: kind === "save-files" ? ["one.txt", "two.png"] : [],
+			app: "",
+			appName: "Pshell test"
+		};
+		root.enqueue(root.normalChoice(question, "shell", paths => console.log(`[chooser] ${kind}: ${JSON.stringify(paths)}`)));
+	}
+
+	// a question as the chooser takes it: missing keys filled, globs made patterns
+	function normalChoice(question, origin, done) {
+		const q = question ?? {};
+		const filters = (q.filters ?? []).map(filter => ({
+			name: String(filter.name || "Files"),
+			rules: filter.rules ?? [],
+			mimes: (filter.mimes ?? []).map(String),
+			globs: (filter.rules ?? []).filter(rule => Number(rule[0]) === 0).map(rule => root.globPattern(rule[1]))
+		}));
+		// the app that asks: the portal often does not know it (apps outside a
+		// sandbox), the window that had the keys does
+		const focused = Niri.windows.find(window => window.is_focused) ?? null;
+		const fromWindow = focused && !/quickshell/i.test(String(focused.app_id)) ? String(focused.app_id) : "";
+		const app = String(q.app || "") || fromWindow;
+		const entry = app !== "" && app !== "pshell" ? DesktopEntries.heuristicLookup(app) : null;
+		return {
+			token: String(q.token || ""),
+			origin: origin,
+			method: ["OpenFile", "SaveFile", "SaveFiles"].includes(q.method) ? q.method : "OpenFile",
+			title: String(q.title || ""),
+			acceptLabel: String(q.acceptLabel || ""),
+			multiple: !!q.multiple,
+			directory: !!q.directory,
+			filters: filters,
+			// no filter named: the first one, as GTK does
+			filter: Number(q.filter ?? -1) >= 0 && Number(q.filter) < filters.length ? Number(q.filter) : (filters.length > 0 ? 0 : -1),
+			choices: (q.choices ?? []).map(choice => ({ id: String(choice.id), label: String(choice.label), options: choice.options ?? [], default: String(choice.default ?? "") })),
+			currentName: String(q.currentName || ""),
+			currentFolder: String(q.currentFolder || ""),
+			currentFile: String(q.currentFile || ""),
+			files: (q.files ?? []).map(String),
+			app: app,
+			appName: String(q.appName || entry?.name || (app !== "" ? app.split(".").pop() : "")),
+			appIcon: String(entry?.icon || ""),
+			done: done ?? null,
+			at: Date.now()
+		};
+	}
+
+	function enqueue(entry) {
+		if (root.chooseQueue.some(each => each.token === entry.token)) return;
+		if (root.chooseQueue.length === 0 && entry.origin === "shell") root.stepAside();
+		root.chooseQueue = root.chooseQueue.concat([entry]);
+		root.focusChooser();
+	}
+
+	// the answer: { response: 0 chosen | 1 given up, paths, choices: [[id, value]], filter }
+	function finishChoose(entry, answer) {
+		if (!entry) return;
+		const a = answer ?? { response: 1 };
+		const paths = a.response === 0 ? (a.paths ?? []).map(String) : [];
+		root.chooseQueue = root.chooseQueue.filter(each => each.token !== entry.token);
+		if (paths.length > 0) root.rememberChooserFolder(entry, paths);
+		if (entry.origin === "portal") {
+			root.request("chosen", { token: entry.token, response: paths.length > 0 ? 0 : 1, paths: paths, choices: a.choices ?? [], filter: a.filter ?? -1 });
+		} else {
+			if (root.chooseQueue.every(each => each.origin !== "shell")) root.stepBack();
+			if (entry.done) entry.done(paths);
+		}
+		if (root.chooseQueue.length > 0) root.focusChooser();
+	}
+
+	// the app gave up asking (or another shell answered)
+	function dropChoose(token) {
+		const entry = root.chooseQueue.find(each => each.token === token);
+		if (!entry) return;
+		root.chooseQueue = root.chooseQueue.filter(each => each.token !== token);
+	}
+
+	// where each app last chose: the next question starts there
+	function chooserFolderOf(entry) {
+		const folders = FileLibrary.setting("chooserFolders") ?? {};
+		return String(folders[entry?.app || "any"] || "");
+	}
+
+	function rememberChooserFolder(entry, paths) {
+		const first = String(paths[0]);
+		const folder = entry.directory || entry.method === "SaveFiles" ? first : root.parentOf(first);
+		const folders = Object.assign({}, FileLibrary.setting("chooserFolders") ?? {});
+		folders[entry.app || "any"] = folder;
+		FileLibrary.set("chooserFolders", folders);
+	}
+
+	// a glob of the portal (*.png, *.[jJ][pP][gG], file-??.txt) → a pattern for names
+	function globPattern(glob) {
+		let out = "";
+		const text = String(glob);
+		for (let i = 0; i < text.length; i += 1) {
+			const c = text[i];
+			if (c === "*") out += ".*";
+			else if (c === "?") out += ".";
+			else if (c === "[") {
+				const close = text.indexOf("]", i + 1);
+				if (close > i) {
+					out += `[${text.slice(i + 1, close).replace(/^!/, "^").replace(/\\/g, "\\\\")}]`;
+					i = close;
+				} else {
+					out += "\\[";
+				}
+			} else {
+				out += c.replace(/[.+^$()|{}[\]\\]/, "\\$&");
+			}
+		}
+		return new RegExp(`^${out}$`, "i");
+	}
+
+	// a file the filter takes (no filter takes all)
+	function filterTakes(filter, row) {
+		if (!filter) return true;
+		if (row.dir) return true;
+		const name = String(row.name || root.nameOf(row.path || ""));
+		if (filter.globs.some(glob => glob.test(name))) return true;
+		return filter.mimes.length > 0 && filter.mimes.includes(String(row.mime || ""));
+	}
+
 	// a panel under the bar would cover the chooser: it steps aside while
 	// one chooses and comes back after
 	property string asidePanel: ""
@@ -95,56 +282,18 @@ Singleton {
 		if (panel !== "") Popups.withFocusedScreen(screen => Popups.open(panel, screen, root.asidePage));
 	}
 
-	function pick(options, done) {
-		const o = options ?? {};
-		root.stepAside();
-		if (!root.enabled) {
-			const asker = portalPicker.createObject(root, { done: paths => {
-				root.stepBack();
-				if (done) done(paths);
-			} });
-			asker.command = ["python3", `${Paths.scripts}/pick_files.py`]
-				.concat(o.directory ? ["--folder"] : (o.multiple ? [] : ["--single"]))
-				.concat(o.folder && !o.directory ? ["--start", String(o.folder)] : [])
-				.concat((o.filters ?? []).length > 0 ? ["--filter", `${o.title || "Files"}|${o.filters.join(" ")}`] : [])
-				.concat([String(o.title || (o.directory ? "Choose a folder" : "Choose a file"))])
-				.concat(o.folder && o.directory ? [String(o.folder)] : []);
-			asker.running = true;
-			return;
+	function focusChooser() {
+		chooserFocus.restart();
+	}
+
+	Timer {
+		id: chooserFocus
+
+		interval: 80
+		onTriggered: {
+			const window = Niri.windows.find(window => String(window.title).startsWith(root.chooserTitle) && /quickshell/i.test(String(window.app_id)));
+			if (window && !window.is_focused) Niri.focusWindow(window.id);
 		}
-		if (root.picking) root.finishPick([]);
-		root.pickOpened = !root.windowOpen;
-		root.picking = {
-			title: String(o.title || (o.directory ? "Choose a folder" : "Choose a file")),
-			multiple: !!o.multiple,
-			directory: !!o.directory,
-			filters: (o.filters ?? []).map(glob => root.globPattern(glob)),
-			done: done
-		};
-		root.show({ paths: o.folder ? [String(o.folder)] : [], kind: "folders", newTab: false });
-	}
-
-	// *.torrent → a pattern for names
-	function globPattern(glob) {
-		const escaped = String(glob).split("").map(c => c === "*" ? ".*" : (c === "?" ? "." : c.replace(/[.+^$()|{}[\]\\]/, "\\$&"))).join("");
-		return new RegExp(`^${escaped}$`, "i");
-	}
-
-	// a file the pick may take (its filters)
-	function pickable(path) {
-		if (!root.picking || root.picking.filters.length === 0) return true;
-		const name = root.nameOf(path);
-		return root.picking.filters.some(filter => filter.test(name));
-	}
-
-	function finishPick(paths) {
-		const pick = root.picking;
-		if (!pick) return;
-		root.picking = null;
-		if (root.pickOpened) root.windowOpen = false;
-		root.pickOpened = false;
-		root.stepBack();
-		if (pick.done) pick.done(paths);
 	}
 
 	Component {
@@ -263,6 +412,12 @@ Singleton {
 			break;
 		case "du":
 			root.sizes = Object.assign({}, root.sizes, { [message.path]: { size: message.size, files: message.files, folders: message.folders, done: !!message.done } });
+			break;
+		case "choose":
+			root.enqueue(root.normalChoice(message, "portal", null));
+			break;
+		case "unchoose":
+			root.dropChoose(String(message.token || ""));
 			break;
 		case "reveal":
 			root.showRequested({ paths: message.paths || [], kind: String(message.kind || "folders"), newTab: false });
@@ -649,8 +804,6 @@ Singleton {
 
 	onWindowOpenChanged: {
 		if (root.windowOpen) root.checkTagged();
-		// closed while choosing: nothing was chosen
-		else if (root.picking) root.finishPick([]);
 	}
 
 	Connections {
@@ -1814,10 +1967,26 @@ Singleton {
 	property bool entryInstalled: false
 
 	function applyDefault() {
+		root.applyChooser();
 		if (!root.enabled && !root.entryInstalled) return;
 		defaultProc.command = ["python3", `${Paths.scripts}/files/default.py`, !root.enabled ? "remove" : (root.isDefault ? "on" : "off")];
 		defaultProc.running = true;
 		root.entryInstalled = root.enabled;
+	}
+
+	// every app's file chooser is this one (scripts/files/portal_setup.py;
+	// it changes nothing when all is as it should be)
+	readonly property bool chooserForAll: root.enabled && Plugins.on("files-chooser")
+	onChooserForAllChanged: root.applyChooser()
+
+	function applyChooser() {
+		if (chooserProc.running) return;
+		chooserProc.command = ["python3", `${Paths.scripts}/files/portal_setup.py`, root.chooserForAll ? "on" : "off"];
+		chooserProc.running = true;
+	}
+
+	Process {
+		id: chooserProc
 	}
 
 	Process {

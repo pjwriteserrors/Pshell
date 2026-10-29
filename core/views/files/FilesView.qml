@@ -16,11 +16,15 @@ FocusScope {
 
 	// the window is up: what was asked for is shown
 	property bool shown: false
+	// the chooser window's view (ChooserWindow.qml): it asks what Files.choosing
+	// asks, keeps no session and leaves the window to the file manager
+	property bool chooserMode: false
+	readonly property var chooser: root.chooserMode ? Files.choosing : null
 
 	// the window is up and has the keyboard: finished jobs need no word
 	Binding {
 		target: Files
-		property: "windowActive"
+		property: root.chooserMode ? "chooserActive" : "windowActive"
 		value: root.shown && root.Window.active
 	}
 
@@ -32,7 +36,8 @@ FocusScope {
 	property var tabMap: ({})
 	property int tabTick: 0
 	property int currentIndex: 0
-	property int tabSerial: 0
+	// the chooser's panes are numbered apart: the daemon's watches go by pane
+	property int tabSerial: root.chooserMode ? 5000 : 0
 	readonly property var tab: {
 		root.tabTick;
 		const entry = root.currentIndex < tabModel.count ? tabModel.get(root.currentIndex) : null;
@@ -55,6 +60,8 @@ FocusScope {
 		const at = Math.min(tabModel.count, root.currentIndex + 1);
 		tabModel.insert(tabModel.count === 0 ? 0 : at, { tabId: id });
 		root.tabTick += 1;
+		tab.first.accept = Qt.binding(() => root.paneAccept);
+		tab.second.accept = Qt.binding(() => root.paneAccept);
 		tab.first.go(location || { kind: "home" }, { history: false, force: true, select: select || [] });
 		if (focus !== false) root.currentIndex = tabModel.count === 1 ? 0 : at;
 		root.saveSession();
@@ -63,7 +70,8 @@ FocusScope {
 
 	function closeTab(index) {
 		if (tabModel.count <= 1) {
-			Files.close();
+			if (root.chooserMode) chooserBar.cancel();
+			else Files.close();
 			return;
 		}
 		const id = tabModel.get(index).tabId;
@@ -92,7 +100,7 @@ FocusScope {
 	}
 
 	function saveSession() {
-		sessionTimer.restart();
+		if (!root.chooserMode) sessionTimer.restart();
 	}
 
 	Timer {
@@ -111,6 +119,10 @@ FocusScope {
 
 	// the tabs of the last session come back (or the page the settings say)
 	function restore() {
+		if (root.chooserMode) {
+			root.startChoosing();
+			return;
+		}
 		const start = FileLibrary.setting("startPage");
 		if (start === "home" || (start === "folder" && FileLibrary.setting("startFolder") === "")) {
 			root.newTab({ kind: "home" }, true);
@@ -164,14 +176,56 @@ FocusScope {
 		}
 	}
 
+	// ── choosing (the chooser window) ─────────────────────────────────────
+	// what the panes show: files the chosen filter does not take stay away
+	readonly property var paneAccept: {
+		const entry = root.chooser;
+		if (!entry || entry.method === "SaveFiles" || entry.directory) return entry && entry.directory ? (row => !!row.dir) : null;
+		const filter = chooserBar.filterIndex >= 0 ? entry.filters[chooserBar.filterIndex] : null;
+		return filter ? (row => Files.filterTakes(filter, row)) : null;
+	}
+
+	onChooserChanged: if (root.chooser && FileLibrary.loaded) root.startChoosing()
+
+	// a new question: one tab, where the app asked to start (or where it chose last)
+	function startChoosing() {
+		const entry = root.chooser;
+		if (!entry) return;
+		chooserBar.reset(entry);
+		const file = entry.method === "SaveFile" ? entry.currentFile : "";
+		const start = file !== "" ? Files.parentOf(file) : (entry.currentFolder || Files.chooserFolderOf(entry) || Files.home);
+		while (tabModel.count > 0) {
+			const id = tabModel.get(0).tabId;
+			const old = root.tabMap[id];
+			tabModel.remove(0, 1);
+			delete root.tabMap[id];
+			if (old) {
+				Files.watch(old.first.paneId, "");
+				Files.watch(old.second.paneId, "");
+				old.destroy(500);
+			}
+		}
+		root.currentIndex = 0;
+		root.newTab({ kind: "dir", path: start }, true, file !== "" ? [file] : []);
+		Qt.callLater(() => chooserBar.takeFocus());
+	}
+
 	// ── what other parts of the shell ask for ──────────────────────────────
 	Connections {
 		target: Files
+		enabled: !root.chooserMode
 
 		function onShowRequested(request) {
 			root.handle(request);
 			if (request.kind !== "search") keyTarget.forceActiveFocus();
 		}
+	}
+
+	// questions and words go to the window that has the keys
+	Connections {
+		target: Files
+		enabled: root.chooserMode ? Files.chooserActive : !Files.chooserActive
+
 		function onSaid(text, icon, undo) {
 			snackbar.show(text, icon, undo);
 		}
@@ -304,10 +358,9 @@ FocusScope {
 	// a double click on an archive takes it apart here, a Windows program
 	// starts with Proton or Wine, everything else opens in its app
 	function openFiles(pane, rows) {
-		// choosing for the shell (Files.pick): a file opened is the one chosen
-		if (Files.picking && !Files.picking.directory) {
-			const paths = rows.map(row => row.path).filter(path => Files.pickable(path));
-			if (paths.length > 0) Files.finishPick(Files.picking.multiple ? paths : [paths[0]]);
+		// choosing: a file opened is the one chosen
+		if (root.chooser) {
+			chooserBar.openedFiles(rows);
 			return;
 		}
 		// on the phone or another PC: each comes over first
@@ -966,7 +1019,8 @@ FocusScope {
 		case Qt.Key_Return:
 		case Qt.Key_Enter:
 			if (alt) root.showDetails(true);
-			else if (targets.length > 0) root.openRows(pane, targets, ctrl);
+			else if (root.chooser && (ctrl || targets.length === 0)) chooserBar.accept();
+			else if (targets.length > 0) root.openRows(pane, targets, ctrl && !root.chooser);
 			break;
 		case Qt.Key_Backspace:
 			if (pane.filter !== "") pane.filter = pane.filter.slice(0, -1);
@@ -980,6 +1034,7 @@ FocusScope {
 			if (pane.renaming !== "") pane.renaming = "";
 			else if (pane.filter !== "") pane.filter = "";
 			else if (!pane.clearSelection() && pane.location.kind === "search") pane.goBack();
+			else if (root.chooser && pane.selectionCount === 0) chooserBar.cancel();
 			break;
 		case Qt.Key_F2:
 			root.rename(pane, targets);
@@ -1186,6 +1241,7 @@ FocusScope {
 		anchors.rightMargin: details.width > 1 ? 10 : 0
 		anchors.top: parent.top
 		anchors.bottom: parent.bottom
+		anchors.bottomMargin: chooserBar.visible ? chooserBar.height + 10 : 0
 
 		TopBar {
 			id: topBar
@@ -1402,68 +1458,21 @@ FocusScope {
 		width: 340
 	}
 
-	// choosing for the shell: what is asked for, and the way out
-	Rectangle {
-		id: pickBar
+	// choosing: what is asked for, the name to save as, and the way out
+	ChooserBar {
+		id: chooserBar
 
-		readonly property var chosen: {
-			if (!Files.picking || !root.pane) return [];
-			if (Files.picking.directory) {
-				const dirs = root.pane.selectedRows().filter(row => row.dir).map(row => row.path);
-				return dirs.length > 0 ? dirs.slice(0, 1) : (root.pane.isFolder ? [root.pane.folder] : []);
-			}
-			const files = root.pane.selectedRows().filter(row => !row.dir && Files.pickable(row.path)).map(row => row.path);
-			return Files.picking.multiple ? files : files.slice(0, 1);
-		}
-
-		visible: Files.picking !== null
+		visible: root.chooser !== null
 		z: 20
-		anchors.horizontalCenter: main.horizontalCenter
+		anchors.left: sidebar.right
+		anchors.leftMargin: 10
+		anchors.right: parent.right
+		anchors.rightMargin: 10
 		anchors.bottom: parent.bottom
-		anchors.bottomMargin: 20
-		width: pickRow.implicitWidth + 28
-		height: 56
-		radius: 28
-		color: Theme.layer2
-		border.color: Theme.primary
-		border.width: 1
-
-		RowLayout {
-			id: pickRow
-
-			anchors.centerIn: parent
-			spacing: 12
-
-			Glyph {
-				icon: Files.picking?.directory ? "folder_outline" : "file_outline"
-				color: Theme.primary
-			}
-
-			StyledText {
-				text: Files.picking?.title ?? ""
-				font.weight: Font.DemiBold
-			}
-
-			StyledText {
-				text: pickBar.chosen.length === 0 ? "" : (pickBar.chosen.length === 1 ? Files.nameOf(pickBar.chosen[0]) : `${pickBar.chosen.length} files`)
-				tone: Theme.textMuted
-				elide: Text.ElideMiddle
-				Layout.maximumWidth: 320
-			}
-
-			TextButton {
-				text: "Cancel"
-				variant: "ghost"
-				onActivated: Files.finishPick([])
-			}
-
-			TextButton {
-				text: Files.picking?.directory ? "Choose folder" : "Choose"
-				variant: "filled"
-				enabled: pickBar.chosen.length > 0
-				onActivated: Files.finishPick(pickBar.chosen)
-			}
-		}
+		anchors.bottomMargin: 10
+		entry: root.chooser
+		pane: root.pane
+		view: root
 	}
 
 	Snackbar {
@@ -1471,7 +1480,7 @@ FocusScope {
 
 		anchors.horizontalCenter: main.horizontalCenter
 		anchors.bottom: parent.bottom
-		anchors.bottomMargin: 44
+		anchors.bottomMargin: chooserBar.visible ? chooserBar.height + 34 : 44
 	}
 
 	QuickLook {
@@ -1673,6 +1682,16 @@ FocusScope {
 	}
 
 	function takeFocus() {
+		if (root.chooser) chooserBar.takeFocus();
+		else keyTarget.forceActiveFocus();
+	}
+
+	// the keys back to the files (from the chooser's name field)
+	function focusFiles() {
 		keyTarget.forceActiveFocus();
+	}
+
+	function askConfirm(question) {
+		confirm.ask(question);
 	}
 }

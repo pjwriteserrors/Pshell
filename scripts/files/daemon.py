@@ -164,6 +164,8 @@ class Daemon:
         self.fm1 = fm1.FileManager1(self.reveal)
         self.claim_wanted = False
         self.waiting_reveals = []
+        # other apps' file choosers (portal.py): token → (client, request, question)
+        self.choosing = {}
         self.last_client = time.monotonic()
 
     # ── plumbing ───────────────────────────────────────────────────────────
@@ -179,6 +181,11 @@ class Daemon:
             self.clients.remove(client)
         for folder in list(client.watched):
             self.unwatch(client, folder)
+        # an app that gave up asking: its chooser goes away
+        for token, (asker, _request, _question) in list(self.choosing.items()):
+            if asker is client:
+                del self.choosing[token]
+                self.broadcast({"event": "unchoose", "token": token})
         self.last_client = time.monotonic()
         return False
 
@@ -277,6 +284,9 @@ class Daemon:
             for kind, paths in self.waiting_reveals:
                 client.send({"event": "reveal", "kind": kind, "paths": paths})
             self.waiting_reveals = []
+        if client.shell:
+            for _asker, _request, question in self.choosing.values():
+                client.send(question)
         client.send({"event": "places", "places": self.places.snapshot()})
         for job in self.jobs.jobs.values():
             client.send({"event": "job", "job": job.snapshot()})
@@ -290,6 +300,74 @@ class Daemon:
         else:
             self.fm1.release()
         return {"fm1": self.fm1.owned}
+
+    # ── other apps' file choosers (portal.py) ─────────────────────────────
+    @on_main("main")
+    def op_choose(self, client, request):
+        """An app asks for files: the newest shell shows the chooser. The
+        answer comes with "chosen"; with no shell (a reload gets a moment)
+        the error sends the portal to the GTK chooser."""
+        token = str(request.get("token") or "")
+        if not token:
+            return {"response": 2}
+        question = {key: value for key, value in request.items() if key not in ("id", "op")}
+        question["event"] = "choose"
+        # a type filter takes the types that are of it too (text/plain takes
+        # text/x-python): the shell only compares names
+        registered = None
+        for each in question.get("filters", []):
+            mimes = []
+            for kind, pattern in each.get("rules", []):
+                if kind != 1:
+                    continue
+                if registered is None:
+                    registered = Gio.content_types_get_registered()
+                if pattern.endswith("/*"):
+                    mimes += [t for t in registered if t.startswith(pattern[:-1])]
+                else:
+                    mimes += [pattern] + [t for t in registered if t != pattern and Gio.content_type_is_a(t, pattern)]
+            each["mimes"] = sorted(set(mimes))
+        self.choosing[token] = (client, request, question)
+        shells = self.shells()
+        if shells:
+            shells[-1].send(question)
+            return None
+
+        def late():
+            if token in self.choosing and not self.shells():
+                del self.choosing[token]
+                client.reply(request, error="noshell")
+            return False
+
+        GLib.timeout_add(3000, late)
+        return None
+
+    @on_main("main")
+    def op_chosen(self, client, request):
+        token = str(request.get("token") or "")
+        entry = self.choosing.pop(token, None)
+        if entry is None:
+            return {"known": False}
+        asker, asked, _question = entry
+        asker.reply(asked, {
+            "response": int(request.get("response", 1)),
+            "paths": [str(path) for path in request.get("paths", [])],
+            "choices": request.get("choices", []),
+            "filter": int(request.get("filter", -1)),
+        })
+        # another shell that showed it too lets it go
+        self.broadcast({"event": "unchoose", "token": token})
+        return {"known": True}
+
+    @on_main("main")
+    def op_unchoose(self, client, request):
+        token = str(request.get("token") or "")
+        entry = self.choosing.pop(token, None)
+        if entry is not None:
+            asker, asked, _question = entry
+            asker.reply(asked, {"response": 2, "paths": [], "choices": [], "filter": -1})
+        self.broadcast({"event": "unchoose", "token": token})
+        return {}
 
     def op_list(self, client, request):
         path = request.get("path", "")

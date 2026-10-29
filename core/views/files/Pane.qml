@@ -70,6 +70,8 @@ Item {
 		: (root.location.kind === "captures" && !FileLibrary.folderViews[":captures"]?.group ? "date" : root.view.group)
 	readonly property bool showHidden: !!FileLibrary.view.hidden
 	property string filter: ""
+	// what may be shown at all (the chooser's filter): a function of an entry, or null
+	property var accept: null
 
 	// ── selection ──────────────────────────────────────────────────────────
 	property var selected: ({})
@@ -521,6 +523,7 @@ Item {
 	onDescChanged: root.arrange(false)
 	onGroupChanged: root.arrange(false)
 	onFilterChanged: root.arrange(false)
+	onAcceptChanged: root.arrange(false)
 
 	function arrange(reset) {
 		const next = Listing.arrange(root.raw, {
@@ -529,6 +532,7 @@ Item {
 			group: root.group,
 			hidden: root.showHidden,
 			filter: root.filter,
+			accept: root.accept,
 			foldersFirst: root.location.kind !== "duplicates" && FileLibrary.view.foldersFirst !== false,
 			home: Files.home
 		});

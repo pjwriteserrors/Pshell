@@ -89,6 +89,7 @@ function arrange(entries, opts) {
 	const givenRank = {};
 	for (const entry of entries) {
 		if (!opts.hidden && entry.hidden) continue;
+		if (opts.accept && !opts.accept(entry)) continue;
 		if (words.length > 0) {
 			const name = String(entry.name || "").toLowerCase();
 			if (!words.every(word => name.includes(word))) continue;

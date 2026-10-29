@@ -99,6 +99,8 @@ Item {
 			scrollAnim.stop();
 			const y = root.pane.restoreY;
 			Qt.callLater(() => {
+				// the view went meanwhile (the chooser starts over with fresh tabs)
+				if (!root.flick || !root.pane) return;
 				root.flick.contentY = y >= 0 ? y : root.minY();
 				root.pane.restoreY = -1;
 				if (root.pane.current >= 0) root.ensureVisible(root.pane.current, true);
