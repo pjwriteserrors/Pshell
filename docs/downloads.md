@@ -33,8 +33,9 @@ Last-Modified); a changed file fails with "start it again".
 
 The extension (version 1.2: `downloads`, `cookies` and all hosts) offers
 every new download of a normal window to the shell with what the server
-needs to answer the same way – referrer, cookies of that host, user agent,
-languages. The daemon looks; when it takes it, the shell tells the extension
+needs to let it in like the browser – referrer, cookies of that host,
+languages. The daemon asks as itself (User-Agent `Pshell-Downloads/1.0`);
+a server that will not answer it is declined like any other. The daemon looks; when it takes it, the shell tells the extension
 `takeover` and the browser cancels and erases its own download (the file
 it had begun goes with it). The accelerated download then shows as one of
 the shell's. A download that was complete in the browser before it could

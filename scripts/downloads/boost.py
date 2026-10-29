@@ -12,6 +12,10 @@ connection only so fast; together they fill the line. A connection that is
 through takes over half of what is left of the slowest one, so all of them
 work until the end.
 
+It asks as itself (User-Agent Pshell-Downloads), with the referrer and the
+cookies the browser would send for the link, so a download that needs the
+user's login works; a server that will not answer it is simply declined.
+
 Only what can gain is taken: the first request asks for the file from its
 start as a range. A server that answers with a part (206) and the file's
 size has the rest asked of it in parallel; one that sends the file whole
@@ -63,7 +67,8 @@ TRIES = 8
 # removes what it had begun (a placeholder under the same name) on cancel
 SETTLE = 3.0
 HISTORY = 600
-USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0"
+# the daemon says what it is; a server that will not have it is declined
+USER_AGENT = "Pshell-Downloads/1.0"
 
 DEFAULTS = {
     # connections per download
@@ -690,8 +695,7 @@ class Daemon:
             return {"taken": False, "reason": "The browser has not said where it goes"}
         if path in self.paths_in_use():
             return {"taken": False, "reason": "Another download goes to the same file"}
-        headers = {"User-Agent": request.get("userAgent") or USER_AGENT, "Referer": request.get("referrer") or "", "Cookie": request.get("cookies") or "",
-                   "Accept-Language": request.get("language") or ""}
+        headers = {"Referer": request.get("referrer") or "", "Cookie": request.get("cookies") or "", "Accept-Language": request.get("language") or ""}
         cookie_host = urllib.parse.urlsplit(url).hostname
         try:
             response, conn, final, ranges, total = self.probe(url, headers, cookie_host)
@@ -1020,7 +1024,7 @@ def get_now(url, folder):
         print(f"\r{info['received'] / max(1, info['total']) * 100:5.1f} %  {info['speed'] / 1e6:7.2f} MB/s  {info['connections']:2d} connections  {info['segments']} parts", end="", flush=True)
     time.sleep(0.2)
     info = job.summary()
-    print(f"\n{info['state']} {info['path']} {info['received']} bytes in {info['activeTime']} s, avg {info['average'] / 1e6:.2f} MB/s, peak {info['peak'] / 1e6:.2f} MB/s, best single {info['bestSingle'] / 1e6:.2f} MB/s, most {info['most']} connections {info['error']}")
+    print(f"\n{info['state']} {info['path']} {info['received']} bytes in {info['activeTime']} s, avg {info['average'] / 1e6:.2f} MB/s, peak {info['peak'] / 1e6:.2f} MB/s, best single {info['bestSingle'] / 1e6:.2f} MB/s, most {info['most']} connections {info['error']} {info['note']}")
     return 0 if job.state == "done" else 1
 
 

@@ -3,8 +3,8 @@
 // scripts/downloads_host.py and talks to it through its stdin and stdout.
 //
 // Every new download is offered to the shell's download accelerator
-// (scripts/downloads/boost.py) with what it needs to ask the server the
-// same way (referrer, cookies, user agent). Where the server lets it go
+// (scripts/downloads/boost.py) with what it needs to be let in like the
+// browser (referrer, cookies of the link's host). Where the server lets it go
 // faster, the shell says "takeover" and the browser lets go of it; where
 // not, the browser goes on as always and nothing changes.
 //
@@ -13,7 +13,7 @@
 //                 { type: "gone", id }                   it left the browser's list
 //                 { type: "tab", host, path, title }     the page in front, for the
 //                                                        shell's screen time
-//                 { type: "offer", item, referrer, cookies, userAgent, language }
+//                 { type: "offer", item, referrer, cookies, language }
 //                                                        a new download, for the accelerator
 //                 { type: "kept", id }                   too late to take over: it is complete
 // from the shell: { type: "sync" }                       → snapshot
@@ -115,7 +115,6 @@ async function offer(download) {
 		item: plain(download),
 		referrer: download.referrer || "",
 		cookies: await cookiesFor(download.url),
-		userAgent: navigator.userAgent,
 		language: (navigator.languages || []).join(",")
 	});
 }

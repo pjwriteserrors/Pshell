@@ -51,7 +51,7 @@ Singleton {
 		root.checking = Object.assign({}, root.checking, { [key]: true });
 		root.request("offer", {
 			url: String(item.url || ""), path: String(item.file || ""), total: Number(item.total) || -1, mime: String(item.mime || ""),
-			referrer: String(message.referrer || ""), cookies: String(message.cookies || ""), userAgent: String(message.userAgent || ""),
+			referrer: String(message.referrer || ""), cookies: String(message.cookies || ""),
 			language: String(message.language || ""), source: source, browserId: item.id
 		}, (data, error) => {
 			const next = Object.assign({}, root.checking);
