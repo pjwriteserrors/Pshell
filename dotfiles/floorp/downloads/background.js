@@ -2,13 +2,23 @@
 // (pause, resume, cancel), over native messaging: the browser starts
 // scripts/downloads_host.py and talks to it through its stdin and stdout.
 //
+// Every new download is offered to the shell's download accelerator
+// (scripts/downloads/boost.py) with what it needs to ask the server the
+// same way (referrer, cookies, user agent). Where the server lets it go
+// faster, the shell says "takeover" and the browser lets go of it; where
+// not, the browser goes on as always and nothing changes.
+//
 // to the shell:   { type: "snapshot", browser, items }   everything under way
 //                 { type: "item", item }                 one download changed
 //                 { type: "gone", id }                   it left the browser's list
 //                 { type: "tab", host, path, title }     the page in front, for the
 //                                                        shell's screen time
+//                 { type: "offer", item, referrer, cookies, userAgent, language }
+//                                                        a new download, for the accelerator
+//                 { type: "kept", id }                   too late to take over: it is complete
 // from the shell: { type: "sync" }                       → snapshot
-//                 { type: "cmd", cmd: "pause" | "resume" | "cancel", id }
+//                 { type: "cmd", cmd: "pause" | "resume" | "cancel" | "takeover", id }
+//                 { type: "cmd", cmd: "fetch", url }     download it here after all
 
 const HOST = "pshell_downloads";
 let port = null;
@@ -82,7 +92,57 @@ async function report(id) {
 	watch();
 }
 
+// what the server needs to answer the accelerator like it answers the browser
+async function cookiesFor(url) {
+	let all = [];
+	try {
+		all = await browser.cookies.getAll({ url, firstPartyDomain: null, partitionKey: {} });
+	} catch (error) {
+		try {
+			all = await browser.cookies.getAll({ url });
+		} catch (again) {}
+	}
+	const seen = {};
+	return all.filter(cookie => !seen[cookie.name] && (seen[cookie.name] = true)).map(cookie => `${cookie.name}=${cookie.value}`).join("; ");
+}
+
+async function offer(download) {
+	// what this extension fetched itself (the shell gave it back), private windows and anything not on the web stay
+	if (!port || download.incognito || download.byExtensionId === browser.runtime.id || !/^https?:/.test(download.url || "")) return;
+	if (download.state !== "in_progress") return;
+	send({
+		type: "offer",
+		item: plain(download),
+		referrer: download.referrer || "",
+		cookies: await cookiesFor(download.url),
+		userAgent: navigator.userAgent,
+		language: (navigator.languages || []).join(",")
+	});
+}
+
+// the accelerator has it: the browser lets go (what it began is removed with the cancel)
+async function takeover(id) {
+	const [download] = await browser.downloads.search({ id });
+	if (!download || download.state === "complete") {
+		send({ type: "kept", id });
+		return;
+	}
+	try {
+		await browser.downloads.cancel(id);
+	} catch (error) {}
+	try {
+		await browser.downloads.erase({ id });
+	} catch (error) {}
+}
+
 async function command(message) {
+	if (message.cmd === "takeover") return takeover(message.id);
+	if (message.cmd === "fetch") {
+		try {
+			await browser.downloads.download({ url: message.url });
+		} catch (error) {}
+		return;
+	}
 	try {
 		if (message.cmd === "pause") await browser.downloads.pause(message.id);
 		else if (message.cmd === "resume") await browser.downloads.resume(message.id);
@@ -111,7 +171,10 @@ function connect() {
 	snapshot();
 }
 
-browser.downloads.onCreated.addListener(download => report(download.id));
+browser.downloads.onCreated.addListener(download => {
+	report(download.id);
+	offer(download);
+});
 browser.downloads.onChanged.addListener(delta => report(delta.id));
 browser.downloads.onErased.addListener(id => send({ type: "gone", id }));
 

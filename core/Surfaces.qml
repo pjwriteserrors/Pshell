@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import qs.core.services
 import qs.core.views.breaks
+import qs.core.views.downloads
 import qs.core.views.files
 import qs.core.views.games
 import qs.core.views.identity
@@ -359,6 +360,13 @@ Scope {
 		active: Plugins.on("filemanager")
 
 		FilesWindow {}
+	}
+
+	// the downloads under the bar, with their statistics
+	LazyLoader {
+		active: Plugins.on("downloads") && Popups.wanted("downloads")
+
+		DownloadsPanel {}
 	}
 
 	// the torrent client's window; the downloads run in its daemon

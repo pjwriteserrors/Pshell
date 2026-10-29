@@ -1,11 +1,11 @@
 {
 	"manifest_version": 2,
 	"name": "Pshell Downloads",
-	"version": "1.1",
-	"description": "Shows this browser's downloads in the shell and takes pause, resume and cancel from there; tells it which page is in front, for its screen time.",
+	"version": "1.2",
+	"description": "Shows this browser's downloads in the shell and takes pause, resume and cancel from there; hands downloads to the shell's accelerator where the server lets them go faster; tells it which page is in front, for its screen time.",
 	"browser_specific_settings": {
 		"gecko": { "id": "downloads@pshell", "strict_min_version": "115.0" }
 	},
-	"permissions": ["downloads", "tabs", "nativeMessaging"],
+	"permissions": ["downloads", "tabs", "nativeMessaging", "cookies", "<all_urls>"],
 	"background": { "scripts": ["background.js"], "persistent": true }
 }

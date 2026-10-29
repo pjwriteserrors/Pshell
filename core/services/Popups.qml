@@ -89,6 +89,7 @@ Singleton {
 		games: "games",
 		gamebar: "games-bar",
 		torrents: "torrents-bar",
+		downloads: "downloads",
 		radial: "radial-menu",
 		eyerest: "eye-rest",
 		stretch: "stretch",

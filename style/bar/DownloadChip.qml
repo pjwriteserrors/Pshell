@@ -5,8 +5,8 @@ import qs.style.widgets
 
 // The browsers' downloads as a live activity: a ring that fills, with
 // percentage, speed and the time left; a green check once everything is
-// through, until the panel was looked at. Clicking opens the downloads in
-// the network panel.
+// through, until the panel was looked at. A bolt beside it while the
+// accelerator brings something in. Clicking opens the downloads panel.
 BarButton {
 	id: root
 
@@ -23,14 +23,15 @@ BarButton {
 		return parts.join("  ·  ");
 	}
 
-	panelId: "control"
-	primaryAnchor: false
+	readonly property bool boosting: Downloads.running.some(item => item.source === "boost" && item.mode === "boost")
+
+	panelId: "downloads"
 	tooltip: "Downloads"
 	padding: 8
 	visible: width > 0.5
 	implicitWidth: root.wanted ? content.implicitWidth + root.padding * 2 : 0
 	clip: true
-	onClicked: toggle("network")
+	onClicked: toggle()
 
 	Behavior on implicitWidth {
 		SpatialAnim {
@@ -92,6 +93,14 @@ BarButton {
 					}
 				}
 			}
+		}
+
+		Glyph {
+			anchors.verticalCenter: parent.verticalCenter
+			visible: root.boosting
+			icon: "lightning_bolt"
+			size: 13
+			color: Theme.primary
 		}
 
 		StyledText {

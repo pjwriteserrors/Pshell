@@ -183,6 +183,33 @@ Scope {
 		}
 	}
 
+	// the downloads panel; `downloads add <url>` downloads a link through the
+	// accelerator (several connections where the server allows them)
+	IpcHandler {
+		target: "downloads"
+		enabled: Plugins.on("downloads")
+
+		function open(): void {
+			Downloads.openPanel();
+		}
+		function toggle(): void {
+			Downloads.togglePanel();
+		}
+		function close(): void {
+			Downloads.closePanel();
+		}
+		function add(url: string): void {
+			Boost.add(url);
+			Downloads.openPanel();
+		}
+		function list(): string {
+			return JSON.stringify(Downloads.order.map(key => Downloads.table[key]).map(item => ({ key: item.key, name: item.name, state: item.state, mode: item.source === "boost" ? item.mode : (item.source === "torrent" ? "torrent" : "browser"), received: item.received, total: item.total, speed: item.speed, connections: item.connections ?? 1, note: item.note ?? "" })));
+		}
+		function stats(): string {
+			return JSON.stringify(Downloads.stats);
+		}
+	}
+
 	// the game library: `games add <path>` opens it to add a program
 	IpcHandler {
 		target: "torrents"
