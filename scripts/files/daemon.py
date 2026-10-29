@@ -220,6 +220,8 @@ class Daemon:
         # and the thumbnail index are loaded ahead
         self.pool.submit(lambda: (Gio.content_type_guess("a.txt", None), thumbs.INDEX.fresh()))
         GLib.timeout_add_seconds(5, self.idle_check)
+        # "Show in folder" stays with the shell even when another file manager took the name
+        GLib.timeout_add_seconds(30, self.fm1.keep)
         try:
             self.loop.run()
         finally:

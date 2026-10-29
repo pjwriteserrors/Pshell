@@ -48,35 +48,56 @@ if dbus is not None:
 
 
 class FileManager1:
+    """The name on the bus, asked for and given back directly: dbus-python's
+    BusName hands out its cached object again after a release without
+    asking the bus, which left the name ownerless (and "Show in folder"
+    started Nemo or Nautilus) after the shell let go and claimed it again."""
+
     def __init__(self, show):
         self.show = show
         self.service = None
-        self.name = None
         self.bus = None
+        self.wanted = False
 
     @property
     def owned(self):
-        return self.name is not None
+        """What the bus says, not what was last asked."""
+        if dbus is None or self.bus is None:
+            return False
+        try:
+            return self.bus.get_name_owner(NAME) == self.bus.get_unique_name()
+        except Exception:
+            return False
 
     def claim(self):
-        if dbus is None or self.name is not None:
-            return self.owned
+        if dbus is None:
+            return False
+        self.wanted = True
+        if self.owned:
+            return True
         try:
             DBusGMainLoop(set_as_default=True)
             self.bus = self.bus or dbus.SessionBus()
-            self.name = dbus.service.BusName(NAME, self.bus, allow_replacement=True, replace_existing=True, do_not_queue=True)
             self.service = self.service or Service(self.bus, self.show)
+            flags = dbus.bus.NAME_FLAG_ALLOW_REPLACEMENT | dbus.bus.NAME_FLAG_REPLACE_EXISTING | dbus.bus.NAME_FLAG_DO_NOT_QUEUE
+            self.bus.request_name(NAME, flags)
         except Exception:
-            self.name = None
+            pass
         return self.owned
 
     def release(self):
-        if self.name is not None:
+        self.wanted = False
+        if self.bus is not None and self.owned:
             try:
                 self.bus.release_name(NAME)
             except Exception:
                 pass
-            self.name = None
+
+    def keep(self):
+        """Now and then: taken back when another file manager took it meanwhile."""
+        if self.wanted and not self.owned:
+            self.claim()
+        return True
 
 
 def fallback(kind, paths):
