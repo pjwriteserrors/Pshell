@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Effects
+import Qt.labs.folderlistmodel
 import qs.style.theme
 import qs.style.widgets
 import qs.core.services
@@ -13,8 +14,14 @@ Item {
 	property var item: null
 	property bool lifted: false
 	property bool shadow: true
-	readonly property string source: AppTray.iconOf(root.item)
-	readonly property bool tile: root.source === "" || picture.status === Image.Error
+	readonly property string kind: String(root.item?.kind ?? "")
+	// a group shows its first items, a stacked folder its newest files
+	readonly property bool grouped: root.kind === "group"
+	readonly property bool stacked: root.kind === "file" && !!root.item?.folder && !!root.item?.stack
+	// a picture that is cut to a rounded square (photos, covers)
+	readonly property bool photo: (root.kind === "file" && AppTray.isImage(root.item?.path)) || root.kind === "game"
+	readonly property string source: root.grouped || root.stacked ? "" : AppTray.iconOf(root.item)
+	readonly property bool tile: !root.grouped && !root.stacked && (root.source === "" || picture.status === Image.Error)
 	readonly property real hue: AppTray.hueOf(root.item)
 	readonly property color tint: Qt.tint(Qt.hsla(root.hue, 0.55, Theme.dark ? 0.46 : 0.52, 1), Qt.alpha(Theme.primary, 0.28))
 
@@ -26,7 +33,7 @@ Item {
 		source: root.source
 		// one size for every scale: a growing icon must not decode again
 		sourceSize: Qt.size(128, 128)
-		fillMode: root.item?.kind === "file" && AppTray.isImage(root.item.path) ? Image.PreserveAspectCrop : Image.PreserveAspectFit
+		fillMode: root.photo ? Image.PreserveAspectCrop : Image.PreserveAspectFit
 		smooth: true
 		mipmap: true
 		asynchronous: true
@@ -44,9 +51,9 @@ Item {
 
 	MultiEffect {
 		anchors.fill: parent
-		visible: !root.tile
+		visible: !root.tile && !root.grouped && !root.stacked
 		source: picture
-		maskEnabled: root.item?.kind === "file" && AppTray.isImage(root.item.path)
+		maskEnabled: root.photo
 		maskSource: photoMask
 		shadowEnabled: root.shadow
 		shadowColor: Theme.shadow
@@ -139,6 +146,102 @@ Item {
 				font.pixelSize: Math.max(7, parent.height * 0.15)
 				font.weight: Font.DemiBold
 			}
+		}
+	}
+
+	// a group: its first four items on a tile
+	Rectangle {
+		visible: root.grouped
+		anchors.fill: parent
+		anchors.margins: parent.width * 0.04
+		radius: width * 0.27
+		color: Qt.alpha(Theme.text, root.lifted ? 0.16 : 0.1)
+		border.width: 1
+		border.color: Theme.outline
+
+		Grid {
+			anchors.centerIn: parent
+			columns: 2
+			spacing: parent.width * 0.06
+
+			Repeater {
+				model: root.grouped ? (root.item.items ?? []).slice(0, 4) : []
+
+				delegate: Loader {
+					required property var modelData
+
+					width: root.width * 0.36
+					height: width
+					// one level only: a group in a group is drawn as its tile
+					source: "TrayIcon.qml"
+					onLoaded: {
+						item.item = modelData;
+						item.shadow = false;
+					}
+				}
+			}
+		}
+	}
+
+	// a folder as a stack: its three newest files, fanned
+	FolderListModel {
+		id: newest
+
+		folder: root.stacked ? `file://${root.item.path}` : ""
+		showDirs: true
+		showDotAndDotDot: false
+		showHidden: false
+		sortField: FolderListModel.Time
+	}
+
+	Item {
+		visible: root.stacked
+		anchors.fill: parent
+
+		Repeater {
+			model: root.stacked ? Math.min(3, newest.count) : 0
+
+			delegate: Rectangle {
+				id: sheet
+
+				required property int index
+				readonly property string path: String(newest.get(sheet.index, "filePath") ?? "")
+				readonly property bool image: AppTray.isImage(sheet.path)
+
+				z: 3 - sheet.index
+				width: root.width * 0.74
+				height: width
+				anchors.centerIn: parent
+				anchors.verticalCenterOffset: -sheet.index * root.height * 0.05
+				rotation: (sheet.index - 1) * (root.lifted ? 12 : 7)
+				radius: width * 0.18
+				color: Theme.layer2
+				border.width: 1
+				border.color: Theme.outline
+
+				Behavior on rotation {
+					SpatialAnim {
+						duration: Motion.medium
+					}
+				}
+
+				Image {
+					anchors.fill: parent
+					anchors.margins: sheet.image ? 2 : parent.width * 0.15
+					source: sheet.image ? `file://${sheet.path}` : AppIcons.app(AppTray.themeIconOf({ path: sheet.path, folder: newest.get(sheet.index, "fileIsDir") }), ["text-x-generic"])
+					sourceSize: Qt.size(96, 96)
+					fillMode: sheet.image ? Image.PreserveAspectCrop : Image.PreserveAspectFit
+					asynchronous: true
+				}
+			}
+		}
+
+		// an empty folder is a folder
+		Image {
+			visible: newest.count === 0
+			anchors.fill: parent
+			source: AppIcons.app("folder", ["inode-directory"])
+			sourceSize: Qt.size(128, 128)
 		}
 	}
 

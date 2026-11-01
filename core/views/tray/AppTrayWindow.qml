@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Effects
+import Qt.labs.folderlistmodel
 import Quickshell
 import Quickshell.Wayland
 import qs.style.theme
@@ -11,9 +12,9 @@ import qs.core.views.tray
 
 // One app tray (see AppTray) on the edge of its screen. A transparent layer
 // along the whole edge that takes input only where the tray is (or the thin
-// strip or the handle it waits behind), so it never covers the windows.
-// Everything is laid out along the edge ("along") and away from it
-// ("cross"), then turned to the edge it is on.
+// strip or the handle it waits behind, a menu, a group or a preview that is
+// open), so it never covers the windows. Everything is laid out along the
+// edge ("along") and away from it ("cross"), then turned to its edge.
 PanelWindow {
 	id: root
 
@@ -23,35 +24,58 @@ PanelWindow {
 	readonly property string edge: root.edges.includes(root.tray.edge) ? root.tray.edge : "bottom"
 	readonly property var edges: ["left", "right", "top", "bottom"]
 	readonly property bool vertical: root.edge === "left" || root.edge === "right"
-	readonly property var items: root.tray.items ?? []
+	readonly property bool active: AppTray.active(root.tray)
+	readonly property var items: AppTray.shownItems(root.tray)
 	readonly property var itemsById: {
 		const out = {};
 		for (const item of root.items) out[item.id] = item;
 		return out;
 	}
+	readonly property bool lively: root.tray.motion !== "calm"
+	readonly property color accent: {
+		switch (root.tray.accent) {
+		case "secondary": return Theme.secondary;
+		case "tertiary": return Theme.tertiary;
+		case "custom": return String(root.tray.accentColor || "") !== "" ? root.tray.accentColor : Theme.primary;
+		}
+		return Theme.primary;
+	}
 
 	// ── sizes ───────────────────────────────────────────────────────────
-	readonly property real size: Math.max(24, Math.min(96, Number(root.tray.iconSize) || 48))
+	readonly property real fullSize: Math.max(24, Math.min(96, Number(root.tray.iconSize) || 48))
+	// a compact tray is a strip of small icons until it is reached
+	readonly property bool engaged: root.inside || root.dropping || root.keyboard || root.menuOpen || root.dragId !== "" || root.groupOpen || root.editingHere
+	property real collapse: root.tray.compact && !root.engaged ? 1 : 0
+	readonly property real size: root.fullSize * (1 - 0.66 * root.collapse)
 	readonly property real pad: Math.round(root.size * 0.2)
 	readonly property real spacing: Math.round(root.size * 0.16)
 	readonly property real thick: root.size + root.pad * 2
 	readonly property real gap: Math.max(0, Math.min(64, Number(root.tray.gap) || 0))
 	readonly property real magnify: Math.max(0, Math.min(1.2, Number(root.tray.magnify) || 0))
-	// room inside for the grown icons, their names and the menu
-	readonly property real depth: Math.ceil(root.gap + root.thick + Math.max(250, root.size * root.magnify + 70))
+	// room inside for the grown icons, names, menus, groups and previews
+	readonly property real depth: Math.ceil(root.gap + root.fullSize * 1.4 + Math.max(340, root.fullSize * root.magnify + 70))
 	readonly property real len: root.vertical ? root.height : root.width
+
+	Behavior on collapse {
+		SpatialAnim {
+			duration: Motion.medium
+		}
+	}
 
 	// ── showing ─────────────────────────────────────────────────────────
 	readonly property bool gaming: root.tray.gameHide && GameMode.active
-	readonly property string reveal: root.tray.reveal === "always" && root.gaming ? "hover" : String(root.tray.reveal)
+	readonly property string reveal: (root.tray.reveal === "always" || root.tray.reveal === "smart") && root.gaming ? "hover" : String(root.tray.reveal)
 	readonly property bool editingHere: AppTray.previewing && AppTray.editing === root.trayId
+	readonly property bool keyboard: AppTray.keyboardTray === root.trayId
 	property bool peek: false
 	property bool dropping: false
 	property bool wasInside: false
 	readonly property bool inside: hover.hovered
 	readonly property bool menuOpen: root.menuItem !== null
-	readonly property bool shown: root.reveal === "always" || root.peek || AppTray.isOpen(root.trayId) || root.menuOpen
-		|| root.dropping || AppTray.carrying || root.dragId !== "" || root.editingHere
+	readonly property bool groupOpen: root.groupId !== ""
+	readonly property bool shown: root.active && (root.reveal === "always" || (root.reveal === "smart" && !root.covered) || root.peek
+		|| AppTray.isOpen(root.trayId) || root.menuOpen || root.groupOpen || root.dropping || AppTray.carrying || root.dragId !== ""
+		|| root.editingHere || root.keyboard)
 	property real revealed: root.shown ? 1 : 0
 
 	Behavior on revealed {
@@ -64,7 +88,7 @@ PanelWindow {
 		if (root.inside) {
 			root.wasInside = true;
 			leaveTimer.stop();
-			if (!root.shown && root.reveal === "hover") peekTimer.restart();
+			if (!root.shown && (root.reveal === "hover" || root.reveal === "smart")) peekTimer.restart();
 		} else {
 			peekTimer.stop();
 			leaveTimer.restart();
@@ -82,25 +106,31 @@ PanelWindow {
 	Timer {
 		id: leaveTimer
 
-		interval: root.menuOpen ? 900 : 420
+		interval: root.menuOpen || root.groupOpen ? 900 : 420
 		onTriggered: {
-			if (root.inside || root.dragId !== "") return;
+			if (root.inside || root.dragId !== "" || root.dropping) return;
 			root.peek = false;
 			root.menuItem = null;
+			root.groupId = "";
+			root.previewId = "";
 			if (root.wasInside && AppTray.isOpen(root.trayId)) AppTray.setOpen(root.trayId, false);
 			root.wasInside = false;
 		}
 	}
 
-	// opened by a key and never reached: it goes again by itself
 	Connections {
 		target: AppTray
 
+		// opened by a key and never reached: it goes again by itself
 		function onOpenedChanged() {
 			if (AppTray.isOpen(root.trayId)) {
 				root.wasInside = root.inside;
 				forgotTimer.restart();
 			}
+		}
+		// something started from here: the tray opened for it closes
+		function onLaunched(itemId) {
+			if (root.itemsById[itemId] && root.keyboard) AppTray.keyboardTray = "";
 		}
 	}
 
@@ -109,6 +139,25 @@ PanelWindow {
 
 		interval: 6000
 		onTriggered: if (!root.wasInside && !root.inside && root.dragId === "") AppTray.setOpen(root.trayId, false)
+	}
+
+	// ── windows over it ("smart": it makes way while one covers it) ────
+	readonly property bool covered: {
+		if (root.tray.reveal !== "smart" || !root.screen) return false;
+		const output = String(root.screen.name);
+		const space = Niri.workspaces.find(each => each.is_active && String(each.output) === output);
+		if (!space) return false;
+		const top = Plugins.on("bar") ? Theme.barHeight : 0;
+		const box = root.outputRectOf(root.rect(root.baseStart - root.pad, root.gap, root.baseLength + root.pad * 2, root.thick));
+		return Niri.windows.some(window => {
+			if (window.workspace_id !== space.id) return false;
+			const pos = window.layout?.tile_pos_in_workspace_view;
+			const size = window.layout?.tile_size;
+			if (!pos || !size) return false;
+			const x = pos[0];
+			const y = pos[1] + top;
+			return x < box.x + box.width && x + size[0] > box.x && y < box.y + box.height && y + size[1] > box.y;
+		});
 	}
 
 	// ── the layer ───────────────────────────────────────────────────────
@@ -123,13 +172,35 @@ PanelWindow {
 	implicitWidth: root.vertical ? root.depth : 0
 	implicitHeight: root.vertical ? 0 : root.depth
 	exclusionMode: ExclusionMode.Normal
-	exclusiveZone: root.tray.reserve && root.reveal === "always" ? Math.round(root.gap + root.thick) : 0
+	exclusiveZone: root.active && root.tray.reserve && root.reveal === "always" ? Math.round(root.gap + root.thick) : 0
 	WlrLayershell.namespace: "shell-app-tray"
 	WlrLayershell.layer: WlrLayer.Top
-	WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+	WlrLayershell.keyboardFocus: root.keyboard ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+
+	// the glass blurs what is behind it
+	BackgroundEffect.blurRegion: root.tray.look === "glass" && root.tray.blur && root.revealed > 0.98 && root.active ? blurRegion : null
+
+	Region {
+		id: blurRegion
+
+		item: plate
+		radius: plate.radius
+	}
 
 	mask: Region {
-		regions: root.revealed > 0.02 || root.shown ? (root.menuOpen ? [boxRegion, menuRegion] : [boxRegion]) : (root.reveal === "hover" ? [stripRegion] : (root.reveal === "click" ? [handleRegion] : []))
+		regions: {
+			if (!root.active) return [];
+			if (root.revealed > 0.02 || root.shown) {
+				const out = [boxRegion];
+				if (root.menuOpen) out.push(menuRegion);
+				if (root.groupOpen) out.push(groupRegion);
+				if (root.previewId !== "") out.push(previewRegion);
+				return out;
+			}
+			if (root.reveal === "hover" || root.reveal === "smart") return [stripRegion];
+			if (root.reveal === "click") return [handleRegion];
+			return [];
+		}
 	}
 
 	Region {
@@ -156,6 +227,18 @@ PanelWindow {
 		item: menu
 	}
 
+	Region {
+		id: groupRegion
+
+		item: groupPanel
+	}
+
+	Region {
+		id: previewRegion
+
+		item: previews
+	}
+
 	// a rectangle given along and away from the edge, in the layer's coordinates
 	function rect(a, c, la, lc) {
 		switch (root.edge) {
@@ -176,17 +259,60 @@ PanelWindow {
 		}
 	}
 
+	// where the layer's corner is on its screen (a side layer starts below the bar)
+	readonly property point origin: {
+		const sw = root.screen?.width ?? root.width;
+		const sh = root.screen?.height ?? root.height;
+		return Qt.point(root.edge === "right" ? sw - root.width : 0, root.edge === "bottom" || root.vertical ? sh - root.height : 0);
+	}
+
+	function outputRectOf(r) {
+		return Qt.rect(r.x + root.origin.x, r.y + root.origin.y, r.width, r.height);
+	}
+
+	// ── between trays: where a point of all screens falls in this one ──
+	function indexAtGlobal(gx, gy) {
+		if (!root.screen || !root.active) return -1;
+		const lx = gx - root.screen.x - root.origin.x;
+		const ly = gy - root.screen.y - root.origin.y;
+		if (lx < 0 || ly < 0 || lx > root.width || ly > root.height) return -1;
+		const at = root.local(lx, ly);
+		if (at.c > root.gap + root.thick + root.size * 0.6) return -1;
+		if (at.a < root.layout.start - root.pad - root.size || at.a > root.layout.end + root.pad + root.size) return -1;
+		return root.insertIndex(at.a, root.items.map(item => item.id));
+	}
+
+	function globalOf(x, y) {
+		return Qt.point((root.screen?.x ?? 0) + root.origin.x + x, (root.screen?.y ?? 0) + root.origin.y + y);
+	}
+
+	Component.onCompleted: {
+		root.sync();
+		const next = Object.assign({}, AppTray.windows);
+		next[root.trayId] = root;
+		AppTray.windows = next;
+	}
+	Component.onDestruction: {
+		if (AppTray.windows[root.trayId] !== root) return;
+		const next = Object.assign({}, AppTray.windows);
+		delete next[root.trayId];
+		AppTray.windows = next;
+	}
+
 	// ── where everything goes ───────────────────────────────────────────
 	// dragging an item of the tray around
 	property string dragId: ""
 	property real dragA: 0
 	property real dragC: 0
 	readonly property bool removing: root.dragId !== "" && root.dragC > root.gap + root.thick + root.size * 0.75
+	// what is under something dragged: a group to go into, an app to open it
+	property string targetId: ""
 	// where something dragged in from outside would land
 	property int dropAt: -1
 	// the pointer, for growing the icons under it
 	property real pointerA: -1
-	property real grow: root.inside && root.dragId === "" && !root.dropping && !root.menuOpen && root.shown && root.pointerA >= 0 ? 1 : 0
+	property real grow: root.inside && root.dragId === "" && !root.dropping && !root.menuOpen && !root.groupOpen && root.shown && root.pointerA >= 0 && root.collapse < 0.01 ? 1 : 0
+	property string hoveredId: ""
 
 	Behavior on grow {
 		Anim {
@@ -194,16 +320,29 @@ PanelWindow {
 		}
 	}
 
+	function factorOf(id) {
+		if (id === "") return root.dragId !== "" ? AppTray.slotFactor(root.itemsById[root.dragId], root.tray) : 1;
+		return AppTray.slotFactor(root.itemsById[id], root.tray);
+	}
+
+	function grows(id) {
+		const kind = root.itemsById[id]?.kind;
+		return kind !== "separator" && kind !== "spacer" && kind !== "widget";
+	}
+
 	// the items in order; an empty slot where something would go
 	readonly property var order: {
 		const ids = root.items.map(item => item.id).filter(id => id !== root.dragId);
 		let at = -1;
-		if (root.dragId !== "" && !root.removing) at = root.insertIndex(root.dragA, ids.length);
-		else if (root.dropping && root.dropAt >= 0) at = Math.min(root.dropAt, ids.length);
+		if (root.dragId !== "" && !root.removing && root.targetId === "") at = root.insertIndex(root.dragA, ids);
+		else if (root.dropping && root.dropAt >= 0 && root.targetId === "") at = Math.min(root.dropAt, ids.length);
 		if (at >= 0) ids.splice(at, 0, "");
 		return ids;
 	}
-	readonly property real baseLength: Math.max(1, root.order.length) * root.size + Math.max(0, root.order.length - 1) * root.spacing
+	readonly property real baseLength: {
+		if (root.order.length === 0) return root.size;
+		return root.order.reduce((sum, id) => sum + root.factorOf(id) * root.size, 0) + (root.order.length - 1) * root.spacing;
+	}
 	// where it stands along the edge: its own place, or next to the tray it is snapped to
 	readonly property real center: {
 		const half = root.baseLength / 2 + root.pad + 8;
@@ -211,38 +350,47 @@ PanelWindow {
 	}
 	readonly property real baseStart: root.center - root.baseLength / 2
 
-	// which slot a point along the edge is in (for `count` slots)
-	function insertIndex(a, count) {
-		const length = (count + 1) * root.size + count * root.spacing;
-		const start = root.center - length / 2;
-		return Math.max(0, Math.min(count, Math.floor((a - start + root.spacing / 2) / (root.size + root.spacing))));
+	// the place among `ids` a point along the edge falls in: how many of them it is past
+	function insertIndex(a, ids) {
+		const length = ids.reduce((sum, id) => sum + root.factorOf(id) * root.size, 0) + Math.max(0, ids.length - 1) * root.spacing;
+		let at = root.center - length / 2;
+		let index = 0;
+		for (const id of ids) {
+			const width = root.factorOf(id) * root.size;
+			if (a > at + width / 2) index += 1;
+			at += width + root.spacing;
+		}
+		return index;
 	}
 
-	// every slot: { id, a (start along the edge), s (scale) }, the point
-	// under the pointer staying where it is while the icons grow
+	// every slot: { id, a (start along the edge), la (length), s (scale) },
+	// the point under the pointer staying where it is while the icons grow
 	readonly property var layout: {
 		const n = root.order.length;
-		const slot = root.size + root.spacing;
 		const p = root.pointerA;
 		const reach = root.size * 2.6;
 		const scales = [];
 		let before = 0;
 		let extra = 0;
+		let start = root.baseStart;
 		for (let i = 0; i < n; i += 1) {
-			const start = root.baseStart + i * slot;
-			const middle = start + root.size / 2;
+			const id = root.order[i];
+			const width = root.factorOf(id) * root.size;
+			const middle = start + width / 2;
 			const d = Math.abs(p - middle) / reach;
-			const s = 1 + root.magnify * root.grow * (d < 1 ? (Math.cos(d * Math.PI) + 1) / 2 : 0);
+			const s = root.grows(id) ? 1 + root.magnify * root.grow * (d < 1 ? (Math.cos(d * Math.PI) + 1) / 2 : 0) : 1;
 			scales.push(s);
-			const more = root.size * (s - 1);
+			const more = width * (s - 1);
 			extra += more;
-			before += more * Math.max(0, Math.min(1, (p - start) / slot));
+			before += more * Math.max(0, Math.min(1, (p - start) / (width + root.spacing)));
+			start += width + root.spacing;
 		}
 		const out = [];
 		let a = root.baseStart - before;
 		for (let i = 0; i < n; i += 1) {
-			out.push({ id: root.order[i], a: a, s: scales[i] });
-			a += root.size * scales[i] + root.spacing;
+			const width = root.factorOf(root.order[i]) * root.size * scales[i];
+			out.push({ id: root.order[i], a: a, la: width, s: scales[i] });
+			a += width + root.spacing;
 		}
 		return { slots: out, start: root.baseStart - before, end: root.baseStart - before + root.baseLength + extra };
 	}
@@ -251,7 +399,17 @@ PanelWindow {
 		for (const slot of root.layout.slots) out[slot.id] = slot;
 		return out;
 	}
-	readonly property real tallest: root.layout.slots.reduce((most, slot) => Math.max(most, slot.s), 1)
+
+	// the item a point along the edge is over, near its middle (or "")
+	function itemAt(a, c) {
+		if (c > root.gap + root.thick + root.size * 0.4) return "";
+		for (const slot of root.layout.slots) {
+			if (slot.id === "") continue;
+			const margin = slot.la * 0.18;
+			if (a >= slot.a + margin && a <= slot.a + slot.la - margin) return slot.id;
+		}
+		return "";
+	}
 
 	// ── items as a model: delegates live on while the list changes ─────
 	ListModel {
@@ -271,11 +429,19 @@ PanelWindow {
 	}
 
 	onItemsChanged: root.sync()
-	Component.onCompleted: root.sync()
+
+	// ── the keyboard (Mod+Alt+0, `apptray focus`) ──────────────────────
+	property int keyIndex: 0
+	readonly property var keyItems: root.items.filter(item => item.kind !== "separator" && item.kind !== "spacer")
+	onKeyboardChanged: if (root.keyboard) {
+		root.keyIndex = 0;
+		keys.forceActiveFocus();
+	}
 
 	// ── the menu of an item ─────────────────────────────────────────────
 	property var menuItem: null
 	property real menuA: 0
+	readonly property var groups: (root.tray.items ?? []).filter(item => item.kind === "group")
 
 	function menuEntries(item) {
 		if (!item) return [];
@@ -288,11 +454,13 @@ PanelWindow {
 			const entry = AppTray.entryOf(item);
 			for (const action of Array.from(entry?.actions ?? []).slice(0, 6))
 				out.push({ id: "action", action: action, label: String(action.name ?? ""), glyph: "lightning_bolt" });
+			if (AppTray.badgeOf(item).count > 0) out.push({ id: "clear", label: "Clear its notifications", glyph: "bell_off_outline" });
 			if (windows.length > 0) out.push({ id: "close", label: windows.length > 1 ? "Close all windows" : "Close window", glyph: "close" });
 			break;
 		}
 		case "command":
-			out.push({ id: "open", label: "Run", glyph: "play" });
+		case "game":
+			out.push({ id: "open", label: item.kind === "game" ? "Play" : "Run", glyph: "play" });
 			break;
 		case "shell":
 			out.push({ id: "open", label: "Run", glyph: "play" });
@@ -300,16 +468,38 @@ PanelWindow {
 			break;
 		case "file":
 			out.push({ id: "open", label: "Open", glyph: "open_in_new" });
-			out.push({ id: "reveal", label: "Show in folder", glyph: "folder_outline" });
+			if (item.folder) {
+				out.push({ id: "stack", label: item.stack ? "Show as a folder" : "Show as a stack", glyph: item.stack ? "folder" : "file_multiple_outline" });
+				if (item.stack) out.push({ id: "view", label: item.view === "grid" ? "Open as a fan" : "Open as a grid", glyph: "view_grid_outline" });
+			} else {
+				out.push({ id: "reveal", label: "Show in folder", glyph: "folder_outline" });
+			}
 			break;
 		case "link":
 			out.push({ id: "open", label: "Open", glyph: "open_in_new" });
 			out.push({ id: "copy", label: "Copy link", glyph: "content_copy" });
 			break;
+		case "group":
+			out.push({ id: "group", label: "Open", glyph: "apps" });
+			out.push({ id: "ungroup", label: "Take the group apart", glyph: "arrow_expand_horizontal" });
+			break;
 		}
+		if (item.transient) {
+			out.push({ id: "keep", label: "Keep in the tray", glyph: "pin_outline" });
+			return out;
+		}
+		if (item.kind !== "group" && item.kind !== "separator" && item.kind !== "spacer")
+			for (const group of root.groups)
+				out.push({ id: "into", group: group.id, label: `Into ${AppTray.nameOf(group)}`, glyph: "apps" });
+		out.push({ id: "line", label: "A line after it", glyph: "minus" });
+		out.push({ id: "newgroup", label: "A new group after it", glyph: "plus" });
 		out.push({ id: "remove", label: "Remove from the tray", glyph: "delete_outline", danger: true });
 		out.push({ id: "settings", label: "Tray settings…", glyph: "tune_variant" });
 		return out;
+	}
+
+	function indexOf(itemId) {
+		return (root.tray.items ?? []).findIndex(item => item.id === itemId);
 	}
 
 	function pick(entry) {
@@ -328,6 +518,9 @@ PanelWindow {
 		case "action":
 			AppTray.runAction(item, entry.action);
 			break;
+		case "clear":
+			AppTray.dismissNotifs(item);
+			break;
 		case "close":
 			AppTray.closeWindows(item);
 			break;
@@ -340,6 +533,34 @@ PanelWindow {
 		case "copy":
 			Quickshell.execDetached(["wl-copy", String(item.url)]);
 			break;
+		case "stack":
+			AppTray.updateItem(root.trayId, item.id, { stack: !item.stack });
+			break;
+		case "view":
+			AppTray.updateItem(root.trayId, item.id, { view: item.view === "grid" ? "fan" : "grid" });
+			break;
+		case "group":
+			root.groupId = item.id;
+			break;
+		case "ungroup": {
+			const list = (root.tray.items ?? []).slice();
+			const at = list.findIndex(each => each.id === item.id);
+			list.splice(at, 1, ...(item.items ?? []));
+			AppTray.update(root.trayId, { items: list });
+			break;
+		}
+		case "keep":
+			AppTray.addItems(root.trayId, [{ kind: "app", app: item.app }], -1);
+			break;
+		case "into":
+			AppTray.addToGroup(root.trayId, entry.group, [item]);
+			break;
+		case "line":
+			AppTray.addItems(root.trayId, [{ kind: "separator" }], root.indexOf(item.id) + 1);
+			break;
+		case "newgroup":
+			AppTray.addGroup(root.trayId, root.indexOf(item.id) + 1);
+			break;
 		case "remove":
 			AppTray.removeItem(root.trayId, item.id);
 			break;
@@ -348,6 +569,62 @@ PanelWindow {
 			Quickshell.execDetached(["qs", "ipc", "-p", Quickshell.shellDir, "call", "settings", "open", "tray"]);
 			break;
 		}
+	}
+
+	// ── a group or a stacked folder, open ───────────────────────────────
+	property string groupId: ""
+	property real groupA: 0
+	readonly property var groupItem: root.itemsById[root.groupId] ?? null
+
+	function openGroup(id) {
+		const slot = root.slotById[id];
+		root.groupA = slot ? slot.a + slot.la / 2 : root.center;
+		root.menuItem = null;
+		root.previewId = "";
+		root.groupId = root.groupId === id ? "" : id;
+	}
+
+	// a drag that rests on a group or a folder opens it
+	Timer {
+		id: springTimer
+
+		property string target: ""
+
+		interval: 700
+		onTriggered: {
+			const item = root.itemsById[springTimer.target];
+			if (item && (item.kind === "group" || (item.kind === "file" && item.folder))) {
+				if (item.kind === "file" && !item.stack) return;
+				root.openGroup(springTimer.target);
+			}
+		}
+	}
+
+	// ── the windows of an app, as pictures ──────────────────────────────
+	property string previewId: ""
+	property real previewA: 0
+	readonly property var previewWindows: root.previewId !== "" ? AppTray.windowsOf(root.itemsById[root.previewId]) : []
+
+	Timer {
+		id: previewTimer
+
+		interval: 650
+		onTriggered: {
+			const item = root.itemsById[root.hoveredId];
+			if (!root.tray.previews || !item || item.kind !== "app" || root.menuOpen || root.groupOpen || root.dragId !== "") return;
+			const windows = AppTray.windowsOf(item);
+			if (windows.length === 0) return;
+			const slot = root.slotById[root.hoveredId];
+			root.previewA = slot ? slot.a + slot.la / 2 : root.center;
+			root.previewId = root.hoveredId;
+			AppTray.shoot(windows);
+		}
+	}
+
+	onHoveredIdChanged: {
+		if (root.hoveredId !== "") previewTimer.restart();
+		else previewTimer.stop();
+		if (root.hoveredId !== "" && root.hoveredId !== root.previewId) root.previewId = "";
 	}
 
 	// ── drawing ─────────────────────────────────────────────────────────
@@ -366,6 +643,38 @@ PanelWindow {
 				root.pointerA = at.c <= root.gap + root.thick + root.size * root.magnify + 6 ? at.a : -1;
 			}
 			onHoveredChanged: if (!hover.hovered) root.pointerA = -1
+		}
+
+		// the keyboard, while the tray has it
+		Item {
+			id: keys
+
+			focus: root.keyboard
+			Keys.onPressed: event => {
+				const count = root.keyItems.length;
+				const back = root.edge === "right" || root.edge === "left" ? Qt.Key_Up : Qt.Key_Left;
+				const on = root.edge === "right" || root.edge === "left" ? Qt.Key_Down : Qt.Key_Right;
+				if (event.key === back || event.key === Qt.Key_Left || event.key === Qt.Key_Up || event.key === Qt.Key_Backtab) root.keyIndex = (root.keyIndex - 1 + count) % Math.max(1, count);
+				else if (event.key === on || event.key === Qt.Key_Right || event.key === Qt.Key_Down || event.key === Qt.Key_Tab) root.keyIndex = (root.keyIndex + 1) % Math.max(1, count);
+				else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+					const item = root.keyItems[root.keyIndex];
+					if (item?.kind === "group" || (item?.kind === "file" && item.stack)) root.openGroup(item.id);
+					else if (item) AppTray.run(root.trayId, item, (event.modifiers & Qt.ShiftModifier) !== 0);
+				} else if (event.key >= Qt.Key_1 && event.key <= Qt.Key_9) {
+					const item = root.keyItems[event.key - Qt.Key_1];
+					if (item) AppTray.run(root.trayId, item, false);
+				} else if (event.key === Qt.Key_Menu) {
+					const item = root.keyItems[root.keyIndex];
+					const slot = root.slotById[item?.id ?? ""];
+					root.menuA = slot ? slot.a + slot.la / 2 : root.center;
+					root.menuItem = item ?? null;
+				} else if (event.key === Qt.Key_Escape) {
+					if (root.menuOpen) root.menuItem = null;
+					else if (root.groupOpen) root.groupId = "";
+					else AppTray.keyboardTray = "";
+				} else return;
+				event.accepted = true;
+			}
 		}
 
 		// the strip at the edge a hiding tray waits behind
@@ -408,13 +717,13 @@ PanelWindow {
 			readonly property real t: handleMouse.containsMouse ? 6 : 4
 			readonly property rect r: root.rect(root.center - l / 2, 3, l, t)
 
-			visible: root.reveal === "click"
+			visible: root.reveal === "click" && root.active
 			x: r.x
 			y: r.y
 			width: r.width
 			height: r.height
 			radius: Math.min(width, height) / 2
-			color: handleMouse.containsMouse ? Theme.primary : Qt.alpha(Theme.text, 0.45)
+			color: handleMouse.containsMouse ? root.accent : Qt.alpha(Theme.text, 0.45)
 			opacity: 1 - root.revealed
 
 			Behavior on color {
@@ -447,29 +756,36 @@ PanelWindow {
 					return;
 				}
 				root.dropping = true;
-				const at = root.local(drag.x, drag.y);
-				root.dropAt = root.insertIndex(at.a, root.items.length);
+				root.aim(drag);
 			}
-			onPositionChanged: drag => {
-				const at = root.local(drag.x, drag.y);
-				root.dropAt = root.insertIndex(at.a, root.items.length);
-			}
+			onPositionChanged: drag => root.aim(drag)
 			onExited: {
 				root.dropping = false;
 				root.dropAt = -1;
+				root.targetId = "";
+				springTimer.stop();
 			}
 			onDropped: drop => {
-				const items = AppTray.itemsOfDrop(drop);
+				const target = root.itemsById[root.targetId];
 				const at = root.dropAt;
 				root.dropping = false;
 				root.dropAt = -1;
-				if (items.length === 0) return;
-				AppTray.addItems(root.trayId, items, at);
+				root.targetId = "";
+				springTimer.stop();
+				if (target?.kind === "group") {
+					AppTray.addToGroup(root.trayId, target.id, AppTray.itemsOfDrop(drop).filter(item => item.kind !== "trayfile"));
+				} else if (target) {
+					AppTray.openWith(root.trayId, target, AppTray.pathsOfDrop(drop));
+				} else {
+					const items = AppTray.itemsOfDrop(drop);
+					if (items.length === 0) return;
+					AppTray.addItems(root.trayId, items, at);
+				}
 				drop.accept(Qt.CopyAction);
 			}
 		}
 
-		// everything that slides in and out
+		// slides out of the edge
 		Item {
 			id: slider
 
@@ -535,11 +851,13 @@ PanelWindow {
 				Rectangle {
 					id: plate
 
+					readonly property color fill: root.tray.look === "solid" ? Theme.layer1 : (root.tray.look === "bare" ? "transparent" : Theme.glass)
+
 					anchors.fill: parent
 					radius: Math.min(width, height) * 0.36
-					color: root.tray.look === "solid" ? Theme.layer1 : (root.tray.look === "bare" ? "transparent" : Theme.glass)
-					border.width: 1
-					border.color: root.dropping ? Qt.alpha(Theme.primary, 0.7) : (root.tray.look === "bare" ? Qt.alpha(Theme.text, 0.25) : Theme.outline)
+					color: root.tray.accent !== "theme" && root.tray.look !== "bare" ? Qt.tint(plate.fill, Qt.alpha(root.accent, 0.16)) : plate.fill
+					border.width: root.keyboard ? 1.5 : 1
+					border.color: root.dropping || root.keyboard ? Qt.alpha(root.accent, 0.75) : (root.tray.look === "bare" ? Qt.alpha(Theme.text, 0.25) : (root.tray.accent !== "theme" ? Qt.alpha(root.accent, 0.35) : Theme.outline))
 
 					Behavior on border.color {
 						ColorAnim {}
@@ -597,17 +915,17 @@ PanelWindow {
 			// where a drop would land
 			Rectangle {
 				readonly property var slot: root.slotById[""]
-				readonly property rect r: slot ? root.rect(slot.a + root.size * 0.08, root.gap + root.pad + root.size * 0.08, root.size * 0.84, root.size * 0.84) : Qt.rect(0, 0, 0, 0)
+				readonly property rect r: slot ? root.rect(slot.a + root.size * 0.08, root.gap + root.pad + root.size * 0.08, slot.la - root.size * 0.16, root.size * 0.84) : Qt.rect(0, 0, 0, 0)
 
 				visible: !!slot && !root.removing
 				x: r.x
 				y: r.y
-				width: r.width
-				height: r.height
-				radius: width * 0.27
-				color: Qt.alpha(Theme.primary, 0.16)
+				width: Math.max(0, r.width)
+				height: Math.max(0, r.height)
+				radius: Math.min(width, height) * 0.27
+				color: Qt.alpha(root.accent, 0.16)
 				border.width: 1.5
-				border.color: Qt.alpha(Theme.primary, 0.6)
+				border.color: Qt.alpha(root.accent, 0.6)
 			}
 
 			// the items
@@ -619,25 +937,33 @@ PanelWindow {
 
 					required property string itemId
 					readonly property var item: root.itemsById[cell.itemId] ?? null
+					readonly property string kind: String(cell.item?.kind ?? "")
 					readonly property bool dragged: root.dragId === cell.itemId
-					readonly property var slot: root.slotById[cell.itemId] ?? { a: root.baseStart, s: 1 }
+					readonly property var slot: root.slotById[cell.itemId] ?? { a: root.baseStart, la: root.size, s: 1 }
 					readonly property real s: cell.dragged ? 1.08 : cell.slot.s
-					readonly property real side: root.size * cell.s
+					readonly property real la: cell.dragged ? root.factorOf(cell.itemId) * root.size * 1.08 : cell.slot.la
+					readonly property real lc: cell.kind === "separator" ? root.thick * 0.56 : root.size * cell.s
+					readonly property real cOffset: cell.kind === "separator" ? (root.thick - cell.lc) / 2 - root.pad : 0
 					property real bounce: 0
 					property real enter: 0
+					property real wobble: 0
 					readonly property int windows: root.tray.dots ? AppTray.windowsOf(cell.item).length : 0
 					readonly property bool hovered: mouse.containsMouse && root.dragId === ""
-					readonly property real at: cell.dragged ? root.dragA - cell.side / 2 : cell.slot.a
+					readonly property bool keyed: root.keyboard && root.keyItems[root.keyIndex]?.id === cell.itemId
+					readonly property bool targeted: root.targetId === cell.itemId
+					readonly property var badge: root.tray.badges ? AppTray.badgeOf(cell.item) : ({ count: 0, text: "", progress: -1, dot: false, urgent: false })
+					readonly property real at: cell.dragged ? root.dragA - cell.la / 2 : cell.slot.a
 					readonly property real lift: cell.dragged ? Math.max(0, root.dragC - root.gap - root.pad - root.size / 2) : 0
-					readonly property rect r: root.rect(cell.at, root.gap + root.pad + cell.lift + cell.bounce, cell.side, cell.side)
+					readonly property rect r: root.rect(cell.at, root.gap + root.pad + cell.cOffset + cell.lift + cell.bounce, cell.la, cell.lc)
 
 					x: cell.r.x
 					y: cell.r.y
 					width: cell.r.width
 					height: cell.r.height
 					z: cell.dragged ? 10 : (cell.hovered ? 2 : 1)
-					opacity: cell.enter * (cell.dragged && root.removing ? 0.45 : 1)
-					scale: 0.4 + 0.6 * cell.enter
+					opacity: cell.enter * (cell.dragged && root.removing ? 0.45 : 1) * (cell.item?.transient ? 0.85 : 1)
+					scale: (0.4 + 0.6 * cell.enter) * (cell.targeted ? 1.18 : 1)
+					rotation: cell.wobble
 
 					Behavior on x {
 						enabled: root.grow < 0.01 && !cell.dragged
@@ -650,6 +976,16 @@ PanelWindow {
 						SpatialAnim {
 							duration: Motion.medium
 						}
+					}
+					Behavior on scale {
+						SpatialAnim {
+							duration: Motion.medium
+						}
+					}
+
+					onHoveredChanged: {
+						if (cell.hovered) root.hoveredId = cell.itemId;
+						else if (root.hoveredId === cell.itemId) root.hoveredId = "";
 					}
 
 					Component.onCompleted: enterAnim.start()
@@ -688,18 +1024,64 @@ PanelWindow {
 						}
 					}
 
+					// something new to say: it shakes its head
+					SequentialAnimation {
+						id: wobbleAnim
+
+						NumberAnimation { target: cell; property: "wobble"; to: 9; duration: 70 }
+						NumberAnimation { target: cell; property: "wobble"; to: -8; duration: 90 }
+						NumberAnimation { target: cell; property: "wobble"; to: 6; duration: 90 }
+						NumberAnimation { target: cell; property: "wobble"; to: -3; duration: 80 }
+						NumberAnimation { target: cell; property: "wobble"; to: 0; duration: 90 }
+					}
+
+					property int lastCount: 0
+					onBadgeChanged: {
+						if (cell.badge.count > cell.lastCount && root.lively && cell.enter > 0.99) wobbleAnim.restart();
+						cell.lastCount = cell.badge.count;
+					}
+
 					Connections {
 						target: AppTray
 
 						function onLaunched(itemId) {
-							if (itemId === cell.itemId) hopAnim.restart();
+							if (itemId === cell.itemId && root.lively) hopAnim.restart();
 						}
 					}
 
-					TrayIcon {
+					// a line between groups of items
+					Rectangle {
+						visible: cell.kind === "separator"
+						anchors.centerIn: parent
+						width: root.vertical ? parent.width : 2
+						height: root.vertical ? 2 : parent.height
+						radius: 1
+						color: Qt.alpha(Theme.text, 0.22)
+					}
+
+					// a gap shows itself only while the tray is arranged
+					Rectangle {
+						visible: cell.kind === "spacer" && (root.editingHere || root.dragId !== "" || cell.hovered)
 						anchors.fill: parent
-						item: cell.item
-						lifted: cell.hovered || cell.dragged
+						anchors.margins: 4
+						radius: 6
+						color: "transparent"
+						border.width: 1
+						border.color: Qt.alpha(Theme.text, 0.2)
+					}
+
+					TrayWidget {
+						visible: cell.kind === "widget"
+						anchors.fill: parent
+						item: cell.kind === "widget" ? cell.item : null
+						lifted: cell.hovered || cell.keyed
+					}
+
+					TrayIcon {
+						visible: cell.kind !== "widget" && cell.kind !== "separator" && cell.kind !== "spacer"
+						anchors.fill: parent
+						item: visible ? cell.item : null
+						lifted: cell.hovered || cell.dragged || cell.keyed || cell.targeted
 						scale: mouse.pressed && !cell.dragged ? 0.9 : 1
 
 						Behavior on scale {
@@ -709,11 +1091,30 @@ PanelWindow {
 						}
 					}
 
+					TrayBadge {
+						anchors.fill: parent
+						visible: cell.kind !== "separator" && cell.kind !== "spacer" && !cell.dragged && root.collapse < 0.5
+						badge: cell.badge
+						accent: root.accent
+						lively: root.lively
+					}
+
+					// picked with the keyboard, or about to take what is dropped
+					Rectangle {
+						visible: cell.keyed || cell.targeted
+						anchors.fill: parent
+						anchors.margins: -4
+						radius: Math.min(width, height) * 0.3
+						color: "transparent"
+						border.width: 2
+						border.color: root.accent
+					}
+
 					// taken out when let go here
 					Rectangle {
 						visible: cell.dragged && root.removing
 						anchors.centerIn: parent
-						width: parent.width * 0.5
+						width: Math.min(parent.width, parent.height) * 0.5
 						height: width
 						radius: width / 2
 						color: Theme.danger
@@ -730,7 +1131,7 @@ PanelWindow {
 
 					// its windows: a dot each, up to three, between it and the edge
 					Row {
-						readonly property rect r: root.rect(cell.at + cell.side / 2 - 12, root.gap + 2, 24, 4)
+						readonly property rect r: root.rect(cell.at + cell.la / 2 - 12, root.gap + 2, 24, 4)
 
 						parent: slider
 						visible: cell.windows > 0 && !cell.dragged
@@ -746,7 +1147,7 @@ PanelWindow {
 								width: cell.windows > 1 ? 4 : 10
 								height: 4
 								radius: 2
-								color: Theme.primary
+								color: root.accent
 							}
 						}
 					}
@@ -772,55 +1173,65 @@ PanelWindow {
 							if (!mouse.moved && Math.hypot(p.x - mouse.press.x, p.y - mouse.press.y) < 8) return;
 							mouse.moved = true;
 							root.menuItem = null;
+							root.previewId = "";
 							const at = root.local(p.x, p.y);
 							root.dragA = at.a;
 							root.dragC = at.c;
 							root.dragId = cell.itemId;
+							// over a group: it goes in
+							const under = root.itemAt(at.a, at.c);
+							root.targetId = under !== "" && under !== cell.itemId && root.itemsById[under]?.kind === "group" && cell.kind !== "group" ? under : "";
 						}
 						onReleased: event => {
 							if (!cell.dragged) return;
-							const removing = root.removing;
-							const count = root.items.length - 1;
-							const index = root.insertIndex(root.dragA, count);
-							root.dragId = "";
-							if (removing) AppTray.removeItem(root.trayId, cell.itemId);
-							else AppTray.moveItem(root.trayId, cell.itemId, index);
+							const p = mapToItem(stage, event.x, event.y);
+							root.finishDrag(cell.item, p);
 						}
-						onCanceled: root.dragId = ""
+						onCanceled: {
+							root.dragId = "";
+							root.targetId = "";
+						}
 						onClicked: event => {
 							if (mouse.moved) return;
 							if (event.button === Qt.RightButton) {
-								root.menuA = cell.at + cell.side / 2;
+								root.menuA = cell.at + cell.la / 2;
+								root.groupId = "";
+								root.previewId = "";
 								root.menuItem = root.menuItem?.id === cell.itemId ? null : cell.item;
-							} else {
+							} else if (cell.kind === "group" || (cell.kind === "file" && cell.item.folder && cell.item.stack)) {
+								root.openGroup(cell.itemId);
+							} else if (cell.kind !== "separator" && cell.kind !== "spacer") {
 								root.menuItem = null;
+								root.groupId = "";
+								root.previewId = "";
 								AppTray.run(root.trayId, cell.item, event.button === Qt.MiddleButton);
 							}
+						}
+						onWheel: wheel => {
+							AppTray.scrolled(cell.item, wheel.angleDelta.y > 0);
+							wheel.accepted = true;
 						}
 					}
 
 					// its name, inside of it
-					Rectangle {
+					Item {
 						readonly property real w: Math.min(260, label.implicitWidth + 20)
 						readonly property real h: label.implicitHeight + 10
+						readonly property bool turned: root.vertical && root.tray.labelStyle === "vertical"
 						readonly property real c: root.gap + root.thick + root.size * (cell.s - 1) + 10
 						readonly property rect r: root.vertical
-							? root.rect(cell.at + cell.side / 2 - h / 2, c, h, w)
-							: root.rect(cell.at + cell.side / 2 - w / 2, c, w, h)
-						readonly property bool up: root.tray.labels && cell.hovered && !root.menuOpen
+							? (turned ? root.rect(cell.at + cell.la / 2 - w / 2, c, w, h) : root.rect(cell.at + cell.la / 2 - h / 2, c, h, w))
+							: root.rect(cell.at + cell.la / 2 - w / 2, c, w, h)
+						readonly property bool up: root.tray.labels && cell.hovered && !root.menuOpen && !root.groupOpen && root.previewId === "" && cell.kind !== "separator" && cell.kind !== "spacer"
 
 						parent: slider
 						x: r.x
 						y: r.y
 						width: r.width
 						height: r.height
-						radius: Math.min(width, height) / 2
-						color: Theme.layer3
-						border.width: 1
-						border.color: Theme.outline
+						z: 20
 						opacity: up ? 1 : 0
 						scale: up ? 1 : 0.85
-						z: 20
 
 						Behavior on opacity {
 							Anim {
@@ -833,14 +1244,25 @@ PanelWindow {
 							}
 						}
 
-						StyledText {
-							id: label
-
+						Rectangle {
 							anchors.centerIn: parent
-							width: Math.min(implicitWidth, 240)
-							text: AppTray.nameOf(cell.item) + (cell.windows > 1 ? `  ·  ${cell.windows}` : "")
-							font.pixelSize: Theme.size.small
-							font.weight: Font.Medium
+							width: parent.turned ? parent.height : parent.width
+							height: parent.turned ? parent.width : parent.height
+							rotation: parent.turned ? (root.edge === "left" ? -90 : 90) : 0
+							radius: Math.min(width, height) / 2
+							color: Theme.layer3
+							border.width: 1
+							border.color: Theme.outline
+
+							StyledText {
+								id: label
+
+								anchors.centerIn: parent
+								width: Math.min(implicitWidth, 240)
+								text: AppTray.nameOf(cell.item) + (cell.windows > 1 ? `  ·  ${cell.windows}` : "") + (cell.item?.transient ? "  ·  open" : "")
+								font.pixelSize: Theme.size.small
+								font.weight: Font.Medium
+							}
 						}
 					}
 				}
@@ -852,7 +1274,7 @@ PanelWindow {
 			id: menu
 
 			readonly property var entries: root.menuEntries(root.menuItem)
-			readonly property real w: 230
+			readonly property real w: 240
 			readonly property real h: entries.length * 34 + 12
 			readonly property real la: root.vertical ? h : w
 			readonly property real lc: root.vertical ? w : h
@@ -933,6 +1355,411 @@ PanelWindow {
 					}
 				}
 			}
+		}
+
+		// a group or a stacked folder, open: a fan of its newest or a grid
+		Rectangle {
+			id: groupPanel
+
+			readonly property var item: root.groupItem
+			readonly property bool folder: item?.kind === "file"
+			readonly property bool fan: folder && item?.view !== "grid" && !root.vertical
+			readonly property int count: folder ? Math.min(groupPanel.fan ? 9 : 30, files.count) : (item?.items ?? []).length
+			readonly property int columns: groupPanel.fan ? 1 : Math.max(1, Math.min(5, Math.ceil(Math.sqrt(Math.max(1, groupPanel.count)))))
+			readonly property real cellW: groupPanel.fan ? 250 : 86
+			readonly property real cellH: groupPanel.fan ? 46 : 88
+			readonly property real w: groupPanel.columns * groupPanel.cellW + 20
+			readonly property real h: Math.min(root.depth - root.gap - root.thick - 24, Math.ceil(Math.max(1, groupPanel.count) / groupPanel.columns) * groupPanel.cellH + 58)
+			readonly property real la: root.vertical ? h : w
+			readonly property real lc: root.vertical ? w : h
+			readonly property real a: Math.max(8, Math.min(root.len - la - 8, root.groupA - la / 2))
+			readonly property rect r: root.rect(groupPanel.a, root.gap + root.thick + 10, groupPanel.la, groupPanel.lc)
+
+			x: groupPanel.r.x
+			y: groupPanel.r.y
+			width: groupPanel.w
+			height: groupPanel.h
+			radius: Theme.radius.huge
+			color: groupPanel.fan ? "transparent" : Theme.layer2
+			border.width: groupPanel.fan ? 0 : 1
+			border.color: groupDrop.containsDrag ? root.accent : Theme.outline
+			visible: groupPanel.opacity > 0.01
+			opacity: root.groupOpen ? 1 : 0
+			scale: root.groupOpen ? 1 : 0.85
+			transformOrigin: root.edge === "left" ? Item.Left : (root.edge === "right" ? Item.Right : (root.edge === "top" ? Item.Top : Item.Bottom))
+
+			Behavior on opacity {
+				Anim {
+					duration: Motion.short
+				}
+			}
+			Behavior on scale {
+				SpatialAnim {
+					duration: Motion.medium
+				}
+			}
+
+			FolderListModel {
+				id: files
+
+				folder: groupPanel.folder ? `file://${groupPanel.item.path}` : ""
+				showDirs: true
+				showDotAndDotDot: false
+				sortField: FolderListModel.Time
+			}
+
+			// into the group, or into the folder
+			DropArea {
+				id: groupDrop
+
+				anchors.fill: parent
+				onEntered: drag => drag.accepted = AppTray.accepts(drag)
+				onDropped: drop => {
+					if (groupPanel.folder) AppTray.openWith(root.trayId, groupPanel.item, AppTray.pathsOfDrop(drop));
+					else AppTray.addToGroup(root.trayId, root.groupId, AppTray.itemsOfDrop(drop).filter(item => item.kind !== "trayfile"));
+					drop.accept(Qt.CopyAction);
+				}
+			}
+
+			StyledText {
+				id: groupTitle
+
+				anchors.left: parent.left
+				anchors.right: openButton.left
+				anchors.top: parent.top
+				anchors.margins: 12
+				text: AppTray.nameOf(groupPanel.item)
+				font.weight: Font.DemiBold
+				visible: !groupPanel.fan
+			}
+
+			TextButton {
+				id: openButton
+
+				anchors.right: parent.right
+				anchors.top: parent.top
+				anchors.margins: 6
+				implicitHeight: 28
+				visible: groupPanel.folder && !groupPanel.fan
+				variant: "ghost"
+				icon: "folder_open"
+				text: "Open"
+				onActivated: {
+					Quickshell.execDetached(["xdg-open", String(groupPanel.item.path)]);
+					root.groupId = "";
+				}
+			}
+
+			Flickable {
+				anchors.fill: parent
+				anchors.topMargin: groupPanel.fan ? 0 : 44
+				anchors.margins: 10
+				contentHeight: grid.height
+				clip: !groupPanel.fan
+				interactive: contentHeight > height
+				boundsBehavior: Flickable.StopAtBounds
+
+				Grid {
+					id: grid
+
+					columns: groupPanel.columns
+					spacing: 0
+					// a fan grows away from the edge: the newest nearest to it
+					layoutDirection: Qt.LeftToRight
+					rotation: groupPanel.fan && root.edge === "bottom" ? 180 : 0
+
+					Repeater {
+						model: root.groupOpen ? groupPanel.count : 0
+
+						delegate: Item {
+							id: entry
+
+							required property int index
+							readonly property var child: groupPanel.folder ? null : (groupPanel.item?.items ?? [])[entry.index]
+							readonly property string path: groupPanel.folder ? String(files.get(entry.index, "filePath") ?? "") : ""
+							readonly property bool dir: groupPanel.folder && !!files.get(entry.index, "fileIsDir")
+							readonly property var asItem: groupPanel.folder ? { kind: "file", path: entry.path, name: entry.path.split("/").pop(), folder: entry.dir } : entry.child
+
+							width: groupPanel.cellW
+							height: groupPanel.cellH
+							rotation: grid.rotation
+							opacity: 0
+							Component.onCompleted: fanIn.start()
+
+							NumberAnimation {
+								id: fanIn
+
+								target: entry
+								property: "opacity"
+								to: 1
+								duration: Motion.medium
+								easing.type: Easing.OutCubic
+							}
+
+							Rectangle {
+								anchors.fill: parent
+								anchors.margins: 3
+								radius: Theme.radius.medium
+								color: entryMouse.containsMouse || entryDrop.containsDrag ? Theme.layer3 : (groupPanel.fan ? Theme.layer2 : "transparent")
+								border.width: groupPanel.fan || entryDrop.containsDrag ? 1 : 0
+								border.color: entryDrop.containsDrag ? root.accent : Theme.outline
+								// a fan leans a little more the further it goes
+								transform: Rotation {
+									origin.x: 0
+									origin.y: groupPanel.cellH / 2
+									angle: groupPanel.fan ? (root.edge === "top" ? -1 : 1) * entry.index * 1.6 : 0
+								}
+							}
+
+							TrayIcon {
+								id: entryIcon
+
+								x: groupPanel.fan ? 10 : (parent.width - width) / 2
+								y: groupPanel.fan ? (parent.height - height) / 2 : 8
+								width: groupPanel.fan ? 30 : 44
+								height: width
+								item: entry.asItem
+								shadow: !groupPanel.fan
+								lifted: entryMouse.containsMouse
+							}
+
+							StyledText {
+								anchors.left: groupPanel.fan ? entryIcon.right : parent.left
+								anchors.leftMargin: groupPanel.fan ? 10 : 4
+								anchors.right: parent.right
+								anchors.rightMargin: 6
+								y: groupPanel.fan ? (parent.height - height) / 2 : 58
+								horizontalAlignment: groupPanel.fan ? Text.AlignLeft : Text.AlignHCenter
+								text: AppTray.nameOf(entry.asItem)
+								tone: Theme.textMuted
+								font.pixelSize: Theme.size.small
+							}
+
+							// a folder in it takes what is dropped
+							DropArea {
+								id: entryDrop
+
+								anchors.fill: parent
+								enabled: entry.dir
+								onDropped: drop => {
+									AppTray.openWith(root.trayId, entry.asItem, AppTray.pathsOfDrop(drop));
+									drop.accept(Qt.CopyAction);
+								}
+							}
+
+							// files go out to other apps
+							Item {
+								id: fileGhost
+
+								width: 1
+								height: 1
+								Drag.dragType: Drag.Automatic
+								Drag.active: groupPanel.folder && entryMouse.drag.active
+								Drag.supportedActions: Qt.CopyAction | Qt.MoveAction | Qt.LinkAction
+								Drag.proposedAction: Qt.CopyAction
+								Drag.mimeData: groupPanel.folder ? { "text/uri-list": `file://${encodeURI(entry.path)}\r\n` } : AppTray.mimeFor(entry.child ?? {})
+							}
+
+							MouseArea {
+								id: entryMouse
+
+								anchors.fill: parent
+								hoverEnabled: true
+								acceptedButtons: Qt.LeftButton | Qt.RightButton
+								cursorShape: Qt.PointingHandCursor
+								drag.target: fileGhost
+								drag.threshold: 8
+								onPressed: event => {
+									fileGhost.x = event.x;
+									fileGhost.y = event.y;
+								}
+								onClicked: event => {
+									if (event.button === Qt.RightButton && !groupPanel.folder) {
+										AppTray.takeOutOfGroup(root.trayId, root.groupId, entry.child.id);
+										return;
+									}
+									if (groupPanel.folder) Quickshell.execDetached(["xdg-open", entry.path]);
+									else AppTray.run(root.trayId, entry.child, false);
+									root.groupId = "";
+								}
+							}
+						}
+					}
+				}
+			}
+
+			StyledText {
+				anchors.centerIn: parent
+				visible: groupPanel.count === 0
+				text: groupPanel.folder ? "Empty" : "Drop something here"
+				tone: Theme.textSubtle
+			}
+		}
+
+		// pictures of an app's windows
+		Rectangle {
+			id: previews
+
+			readonly property int count: Math.min(5, root.previewWindows.length)
+			readonly property real cardW: 220
+			readonly property real cardH: 160
+			readonly property real w: root.vertical ? previews.cardW + 20 : previews.count * (previews.cardW + 8) + 12
+			readonly property real h: root.vertical ? previews.count * (previews.cardH + 8) + 12 : previews.cardH + 20
+			readonly property real la: root.vertical ? h : w
+			readonly property real lc: root.vertical ? w : h
+			readonly property real a: Math.max(8, Math.min(root.len - la - 8, root.previewA - la / 2))
+			readonly property rect r: root.rect(previews.a, root.gap + root.thick + root.size * root.magnify + 12, previews.la, previews.lc)
+
+			x: previews.r.x
+			y: previews.r.y
+			width: Math.max(1, previews.w)
+			height: Math.max(1, previews.h)
+			radius: Theme.radius.large
+			color: Theme.layer2
+			border.width: 1
+			border.color: Theme.outline
+			visible: previews.opacity > 0.01
+			opacity: root.previewId !== "" && previews.count > 0 ? 1 : 0
+
+			Behavior on opacity {
+				Anim {
+					duration: Motion.short
+				}
+			}
+
+			Grid {
+				anchors.centerIn: parent
+				columns: root.vertical ? 1 : previews.count
+				spacing: 8
+
+				Repeater {
+					model: root.previewId !== "" ? root.previewWindows.slice(0, 5) : []
+
+					delegate: Rectangle {
+						id: card
+
+						required property var modelData
+						readonly property string shot: AppTray.shotsRev >= 0 ? (AppTray.shotFiles[card.modelData.id] ?? "") : ""
+
+						width: previews.cardW
+						height: previews.cardH
+						radius: Theme.radius.medium
+						color: cardMouse.containsMouse ? Theme.layer3 : Theme.layer1
+						border.width: card.modelData.is_focused ? 1.5 : 0
+						border.color: root.accent
+
+						Image {
+							anchors.fill: parent
+							anchors.margins: 6
+							anchors.bottomMargin: 28
+							source: card.shot !== "" ? `file://${card.shot}?${AppTray.shotsRev}` : ""
+							fillMode: Image.PreserveAspectFit
+							cache: false
+							asynchronous: true
+						}
+
+						StyledText {
+							anchors.left: parent.left
+							anchors.right: closeWindow.left
+							anchors.bottom: parent.bottom
+							anchors.margins: 8
+							text: String(card.modelData.title ?? "")
+							font.pixelSize: Theme.size.small
+						}
+
+						MouseArea {
+							id: cardMouse
+
+							anchors.fill: parent
+							hoverEnabled: true
+							cursorShape: Qt.PointingHandCursor
+							onClicked: {
+								Niri.focusWindow(card.modelData.id);
+								root.previewId = "";
+							}
+						}
+
+						IconButton {
+							id: closeWindow
+
+							anchors.right: parent.right
+							anchors.bottom: parent.bottom
+							anchors.margins: 4
+							width: 22
+							height: 22
+							icon: "close"
+							variant: "ghost"
+							onClicked: Niri.closeWindow(card.modelData.id)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// the other trays come out while an item of this one is carried
+	Binding {
+		target: AppTray
+		property: "carrying"
+		value: true
+		when: root.dragId !== ""
+	}
+
+	// ── how a drag inside the tray ends ─────────────────────────────────
+	function finishDrag(item, p) {
+		const removing = root.removing;
+		const target = root.targetId;
+		const ids = root.items.map(each => each.id).filter(id => id !== item.id);
+		const index = root.insertIndex(root.dragA, ids);
+		root.dragId = "";
+		root.targetId = "";
+		if (!item) return;
+		const fresh = item.transient ? { kind: "app", app: item.app } : null;
+		// into a group of this tray
+		if (target !== "") {
+			AppTray.addToGroup(root.trayId, target, [fresh ?? item]);
+			return;
+		}
+		// onto another tray
+		const g = root.globalOf(p.x, p.y);
+		const other = AppTray.trayAt(g.x, g.y, root.trayId);
+		if (other) {
+			if (fresh) AppTray.addItems(other.trayId, [fresh], other.index);
+			else AppTray.moveToTray(root.trayId, item.id, other.trayId, other.index);
+			return;
+		}
+		if (fresh) {
+			if (!removing) AppTray.addItems(root.trayId, [fresh], Math.min(index, (root.tray.items ?? []).length));
+			return;
+		}
+		if (removing) AppTray.removeItem(root.trayId, item.id);
+		else AppTray.moveItem(root.trayId, item.id, Math.min(index, (root.tray.items ?? []).length - 1));
+	}
+
+	// ── what something dragged in is over ──────────────────────────────
+	function aim(drag) {
+		const at = root.local(drag.x, drag.y);
+		const under = root.itemAt(at.a, at.c);
+		const item = root.itemsById[under];
+		const files = drag.hasUrls && Array.from(drag.urls ?? []).some(url => String(url).startsWith("file://"));
+		const formats = Array.from(drag.formats ?? []).map(String);
+		const ours = formats.includes(AppTray.mime);
+		// onto an item that does something with files, or into a group
+		if (item && ((files && !ours && AppTray.takesFiles(item)) || (item.kind === "group" && (ours || files)))) {
+			root.targetId = under;
+			root.dropAt = -1;
+		} else {
+			root.targetId = "";
+			root.dropAt = root.insertIndex(at.a, root.items.map(each => each.id));
+		}
+		// resting on a group or a stack opens it
+		if (item && (item.kind === "group" || (item.kind === "file" && item.folder && item.stack))) {
+			if (springTimer.target !== under || !springTimer.running) {
+				springTimer.target = under;
+				springTimer.restart();
+			}
+		} else {
+			springTimer.stop();
 		}
 	}
 }
