@@ -499,7 +499,14 @@ Singleton {
 		id: seedTimer
 
 		interval: 1500
-		onTriggered: if (root.trays.length === 0) root.seed()
+		onTriggered: if (root.enabled && !root.existed && root.trays.length === 0) root.seed()
+	}
+
+	// a missing app-tray.json says neither loaded nor failed
+	Component.onCompleted: {
+		if (root.loaded) return;
+		root.loaded = true;
+		if (root.enabled && !root.existed) seedTimer.start();
 	}
 
 	// switched on for the first time on this setup
