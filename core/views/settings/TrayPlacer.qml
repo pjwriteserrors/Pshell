@@ -44,7 +44,8 @@ Item {
 		return root.screens.find(s => s.name === name) ?? root.screens[0] ?? { name: "", x: 0, y: 0, w: 1, h: 1 };
 	}
 
-	// the edge of a screen closest to a point of the picture
+	// the edge of a screen closest to a point of the picture; near the end
+	// of another tray on that edge it snaps to it
 	function nearest(x, y) {
 		const gx = (x - root.offsetX) / root.factor + root.box.x;
 		const gy = (y - root.offsetY) / root.factor + root.box.y;
@@ -63,21 +64,55 @@ Item {
 		}
 		if (!best) return null;
 		let t = Math.max(0, Math.min(1, best.position));
-		if (Math.abs(t - 0.5) < 0.04) t = 0.5;
-		return { name: best.name, edge: best.edge, position: Math.round(t * 1000) / 1000 };
+		const snap = root.snapAt(best.name, best.edge, t);
+		if (!snap && Math.abs(t - 0.5) < 0.04) t = 0.5;
+		return { name: best.name, edge: best.edge, position: Math.round(t * 1000) / 1000, snap: snap };
+	}
+
+	// another tray on that edge whose end the carried one is close to (or over)
+	function snapAt(name, edge, t) {
+		const carried = AppTray.trayById(AppTray.editing);
+		if (!carried) return null;
+		const along = root.alongOf(name, edge);
+		const p = t * along;
+		const half = AppTray.lengthOf(carried) * root.factor / 2;
+		const reach = 16;
+		let found = null;
+		for (const other of AppTray.trays) {
+			if (other.id === carried.id || AppTray.outputOf(other) !== name || (other.edge ?? "bottom") !== edge) continue;
+			if (AppTray.hangsFrom(other, carried.id)) continue;
+			const c = AppTray.centerOf(other.id, along, root.factor);
+			const l = AppTray.lengthOf(other) * root.factor / 2;
+			const gap = Number(AppTray.full(carried).snapGap) * root.factor;
+			const after = Math.abs(p - half - gap - (c + l));
+			const before = Math.abs(p + half + gap - (c - l));
+			const over = p + half > c - l && p - half < c + l;
+			const d = Math.min(after, before);
+			if ((d < reach || over) && (!found || d < found.d))
+				found = { to: other.id, side: (over ? p >= c : after <= before) ? "after" : "before", d: d };
+		}
+		return found ? { to: found.to, side: found.side } : null;
+	}
+
+	// how long an edge is in the picture
+	function alongOf(name, edge) {
+		const s = root.screenOf(name);
+		return edge === "left" || edge === "right" ? s.h * root.factor : s.w * root.factor;
 	}
 
 	// a tray as a bar on its edge, in the picture: { x, y, w, h }
-	function barOf(name, edge, position, tray) {
+	function barOf(tray, override) {
+		const t = override ? Object.assign({}, tray, override) : tray;
+		const name = AppTray.outputOf(t);
+		const edge = t.edge ?? "bottom";
 		const s = root.screenOf(name);
-		const full = AppTray.full(tray);
-		const count = Math.max(1, (full.items ?? []).length);
+		const full = AppTray.full(t);
 		const size = Number(full.iconSize) || 48;
-		const length = Math.max(28, (count * size * 1.16 + size * 0.4) * root.factor);
+		const length = Math.max(10, AppTray.lengthOf(t) * root.factor);
 		const thick = Math.max(6, (size * 1.4) * root.factor);
-		const vertical = edge === "left" || edge === "right";
-		const along = vertical ? s.h * root.factor : s.w * root.factor;
-		const center = Math.max(length / 2, Math.min(along - length / 2, position * along));
+		const along = root.alongOf(name, edge);
+		const raw = AppTray.centerOf(t.id, along, root.factor, override ? Object.assign({ id: t.id }, override) : null);
+		const center = Math.max(length / 2, Math.min(along - length / 2, raw));
 		const inset = 3 + Number(full.gap || 0) * root.factor;
 		const sx = root.px(s.x);
 		const sy = root.py(s.y);
@@ -148,8 +183,10 @@ Item {
 			readonly property bool picked: bar.modelData.id === AppTray.editing
 			readonly property bool moving: bar.picked && root.carrying
 			readonly property var spot: bar.moving
-				? root.barOf(root.target.name, root.target.edge, root.target.position, bar.modelData)
-				: root.barOf(AppTray.outputOf(bar.modelData), bar.modelData.edge ?? "bottom", Number(bar.modelData.position ?? 0.5), bar.modelData)
+				? root.barOf(bar.modelData, { output: root.target.name, edge: root.target.edge, position: root.target.position, snap: root.target.snap })
+				: root.barOf(bar.modelData, null)
+			// the tray the carried one would snap to
+			readonly property bool snapTarget: root.carrying && root.target?.snap?.to === bar.modelData.id
 
 			x: bar.spot.x
 			y: bar.spot.y
@@ -157,7 +194,9 @@ Item {
 			height: bar.spot.h
 			z: bar.picked ? 2 : 1
 			radius: Math.min(width, height) / 2
-			color: bar.picked ? Theme.primary : Qt.alpha(Theme.text, barMouse.containsMouse ? 0.45 : 0.3)
+			color: bar.picked ? Theme.primary : Qt.alpha(Theme.text, barMouse.containsMouse || bar.snapTarget ? 0.5 : 0.3)
+			border.width: bar.snapTarget ? 2 : 0
+			border.color: Theme.primary
 			scale: bar.moving ? 1.08 : 1
 
 			Behavior on x {
@@ -253,16 +292,20 @@ Item {
 	// the tray on the desktop goes along while it is carried; kept once let go
 	onTargetChanged: {
 		const target = root.target;
-		if (!target || !AppTray.trayById(AppTray.editing)) return;
 		const tray = AppTray.trayById(AppTray.editing);
-		if (tray.output === target.name && tray.edge === target.edge && tray.position === target.position) return;
-		AppTray.update(AppTray.editing, { output: target.name, edge: target.edge, position: target.position }, true);
+		if (!target || !tray) return;
+		const snap = target.snap ?? null;
+		if (tray.output === target.name && tray.edge === target.edge && tray.position === target.position && JSON.stringify(tray.snap ?? null) === JSON.stringify(snap)) return;
+		AppTray.update(AppTray.editing, { output: target.name, edge: target.edge, position: target.position, snap: snap }, true);
 	}
 
 	function drop() {
 		const target = root.target;
 		root.target = null;
-		if (target && AppTray.trayById(AppTray.editing)) AppTray.save();
+		if (!target || !AppTray.trayById(AppTray.editing)) return;
+		// snapped: put into the row properly (a tray already there moves over)
+		if (target.snap) AppTray.snapTo(AppTray.editing, target.snap.to, target.snap.side);
+		else AppTray.save();
 	}
 
 	StyledText {

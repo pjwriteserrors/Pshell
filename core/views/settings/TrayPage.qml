@@ -26,6 +26,19 @@ SettingsPage {
 	property string adding: "apps"
 	property string query: ""
 
+	// the tray it is snapped to, and the others on its edge it could go next to
+	readonly property var anchor: root.tray ? AppTray.anchorOf(root.tray) : null
+	readonly property bool vertical: root.full.edge === "left" || root.full.edge === "right"
+	readonly property var neighbours: !root.tray ? [] : AppTray.trays.filter(other => other.id !== root.tray.id
+		&& AppTray.outputOf(other) === AppTray.outputOf(root.tray) && (other.edge ?? "bottom") === root.full.edge
+		&& !AppTray.hangsFrom(other, root.tray.id))
+
+	function sideName(edge, side) {
+		const vertical = edge === "left" || edge === "right";
+		if (side === "before") return vertical ? "Above" : "Left of";
+		return vertical ? "Below" : "Right of";
+	}
+
 	onActiveChanged: AppTray.previewing = root.active
 	Component.onDestruction: AppTray.previewing = false
 	Component.onCompleted: if (!root.tray && AppTray.trays.length > 0) AppTray.editing = AppTray.trays[0].id
@@ -189,6 +202,17 @@ SettingsPage {
 					root.selectedItem = "";
 				}
 			}
+
+			TextButton {
+				visible: !!root.tray
+				text: "New tray beside it"
+				icon: "plus"
+				variant: "tonal"
+				onActivated: {
+					AppTray.addBeside(root.tray.id);
+					root.selectedItem = "";
+				}
+			}
 		}
 
 		RowLayout {
@@ -221,13 +245,82 @@ SettingsPage {
 	SettingCard {
 		anchor: "tray-place"
 		title: "Where it sits"
-		subtitle: root.tray ? `${({ left: "Left", right: "Right", top: "Top", bottom: "Bottom" })[root.full.edge]} edge of ${AppTray.outputOf(root.tray)}, ${Math.round(Number(root.full.position) * 100)}% along. Drag it to any edge of any screen.` : "Make a tray first"
+		subtitle: !root.tray ? "Make a tray first" : (root.anchor
+			? `${({ left: "Left", right: "Right", top: "Top", bottom: "Bottom" })[root.full.edge]} edge of ${AppTray.outputOf(root.tray)}, snapped to ${String(root.anchor.name ?? "").trim() || "Tray"}. Drag it away to free it.`
+			: `${({ left: "Left", right: "Right", top: "Top", bottom: "Bottom" })[root.full.edge]} edge of ${AppTray.outputOf(root.tray)}, ${Math.round(Number(root.full.position) * 100)}% along. Drag it to any edge of any screen; it snaps to the end of another tray.`)
 		icon: "monitor_multiple"
 		visible: !!root.tray
 
 		TrayPlacer {
 			Layout.fillWidth: true
 			Layout.preferredHeight: 280
+		}
+
+		// side by side with another tray
+		RowLayout {
+			Layout.fillWidth: true
+			visible: !!root.anchor
+			spacing: 10
+
+			Glyph {
+				icon: "link_variant"
+				size: 18
+				color: Theme.primary
+			}
+
+			StyledText {
+				Layout.fillWidth: true
+				text: root.anchor ? `${root.sideName(root.full.edge, root.full.snap?.side)} ${String(root.anchor.name ?? "").trim() || "Tray"}: it follows it wherever it goes and however long it gets` : ""
+				wrapMode: Text.WordWrap
+			}
+
+			TextButton {
+				text: "Detach"
+				icon: "link_variant_off"
+				variant: "ghost"
+				onActivated: AppTray.detach(root.tray.id)
+			}
+		}
+
+		ValueSlider {
+			Layout.fillWidth: true
+			visible: !!root.anchor
+			from: 0
+			to: 64
+			step: 1
+			label: `Distance to ${String(root.anchor?.name ?? "").trim() || "the other tray"}`
+			value: Number(root.full.snapGap)
+			format: v => v < 1 ? "Touching" : `${Math.round(v)} px`
+			onMoved: v => root.set("snapGap", Math.round(v))
+		}
+
+		// the trays on the same edge it can go next to
+		Flow {
+			Layout.fillWidth: true
+			visible: root.neighbours.length > 0
+			spacing: 6
+
+			StyledText {
+				height: 30
+				text: root.anchor ? "Or next to:" : "Snap next to:"
+				tone: Theme.textSubtle
+				font.pixelSize: Theme.size.small
+			}
+
+			Repeater {
+				model: root.neighbours.reduce((all, other) => all.concat([{ tray: other, side: "before" }, { tray: other, side: "after" }]), [])
+					.filter(each => !(root.anchor?.id === each.tray.id && root.full.snap?.side === each.side))
+
+				delegate: TextButton {
+					required property var modelData
+
+					implicitHeight: 30
+					variant: "tonal"
+					icon: modelData.side === "before" ? (root.vertical ? "arrow_up" : "arrow_left") : (root.vertical ? "arrow_down" : "arrow_right")
+					text: `${root.sideName(root.full.edge, modelData.side)} ${String(modelData.tray.name ?? "").trim() || "Tray"}`
+					onActivated: AppTray.snapTo(root.tray.id, modelData.tray.id, modelData.side)
+				}
+			}
 		}
 
 		ValueSlider {

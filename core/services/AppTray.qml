@@ -34,6 +34,8 @@ Singleton {
 		reserve: false,
 		gameHide: true,
 		delay: 180,
+		snap: null,
+		snapGap: 8,
 		items: []
 	})
 	// the mime type items travel in between the launcher, the editor and the trays
@@ -108,10 +110,120 @@ Singleton {
 		return id;
 	}
 
+	// a tray snapped to the one that goes takes its place in the row
 	function removeTray(id) {
-		root.trays = root.trays.filter(tray => tray.id !== id);
+		const gone = root.trayById(id);
+		root.trays = root.trays.filter(tray => tray.id !== id).map(tray => {
+			if (tray.snap?.to !== id) return tray;
+			return Object.assign({}, tray, { snap: gone?.snap ?? null, position: gone?.position ?? tray.position });
+		});
 		if (root.editing === id) root.editing = root.trays[0]?.id ?? "";
 		root.save();
+	}
+
+	// ── trays side by side ──────────────────────────────────────────────
+	// A tray can be snapped to another on the same edge: `snap: { to, side }`
+	// ("before" or "after" it along the edge) with `snapGap` px between
+	// them. It then goes where that one ends, whatever that one holds.
+
+	// how long a tray is along its edge, in px (as its window draws it)
+	function lengthOf(tray) {
+		const t = root.full(tray);
+		const size = Math.max(24, Math.min(96, Number(t.iconSize) || 48));
+		const n = Math.max(1, (t.items ?? []).length);
+		return n * size + (n - 1) * Math.round(size * 0.16) + 2 * Math.round(size * 0.2);
+	}
+
+	// the tray a tray is snapped to, while both are on the same edge
+	function anchorOf(tray, all) {
+		const to = tray?.snap?.to;
+		if (!to) return null;
+		const other = (all ?? root.trays).find(each => each.id === to);
+		if (!other || root.outputOf(other) !== root.outputOf(tray) || (other.edge ?? "bottom") !== (tray.edge ?? "bottom")) return null;
+		return other;
+	}
+
+	// whether `id` is in the chain `tray` hangs from (snapping to it would go round)
+	function hangsFrom(tray, id, all) {
+		let at = tray;
+		for (let depth = 0; at && depth < 16; depth += 1) {
+			if (at.id === id) return true;
+			at = root.anchorOf(at, all);
+		}
+		return false;
+	}
+
+	// the middle of a tray along an edge `len` long; `k` turns px into the
+	// unit of `len`; `override` stands in for one tray (the one being carried)
+	function centerOf(id, len, k, override) {
+		const scale = k ?? 1;
+		const all = override ? root.trays.map(tray => tray.id === override.id ? Object.assign({}, tray, override) : tray) : root.trays;
+		const walk = (tray, depth) => {
+			const half = root.lengthOf(tray) * scale / 2;
+			const anchor = depth < 16 ? root.anchorOf(tray, all) : null;
+			if (anchor) {
+				const at = walk(anchor, depth + 1);
+				const gap = Math.max(0, Number(tray.snapGap ?? 8)) * scale;
+				const other = root.lengthOf(anchor) * scale / 2;
+				return tray.snap.side === "before" ? at - other - gap - half : at + other + gap + half;
+			}
+			return Math.max(half + 8 * scale, Math.min(len - half - 8 * scale, (Number(tray.position ?? 0.5) || 0) * len));
+		};
+		const tray = all.find(each => each.id === id);
+		return tray ? walk(tray, 0) : len / 2;
+	}
+
+	// the length of a screen's edge in px
+	function edgeLength(output, edge) {
+		const screen = Quickshell.screens.find(each => String(each.name) === output) ?? Quickshell.screens[0];
+		if (!screen) return 1;
+		return edge === "left" || edge === "right" ? screen.height : screen.width;
+	}
+
+	// snapped to `to` on that side. A tray already there moves out one
+	// place: `id` goes in between. Trays snapped to `id` come along.
+	function snapTo(id, to, side) {
+		const tray = root.trayById(id);
+		const other = root.trayById(to);
+		if (!tray || !other || id === to || root.hangsFrom(other, id)) return;
+		const opposite = side === "after" ? "before" : "after";
+		// the last of the trays that follow `id` on that side
+		let end = id;
+		for (let depth = 0; depth < 16; depth += 1) {
+			const next = root.trays.find(each => each.id !== id && each.snap?.to === end && each.snap?.side === side);
+			if (!next) break;
+			end = next.id;
+		}
+		const changes = {};
+		changes[id] = { output: root.outputOf(other), edge: other.edge ?? "bottom", snap: { to: to, side: side } };
+		// one snapped to `to` on that side follows the row of `id` now
+		const follower = root.trays.find(each => each.id !== id && each.snap?.to === to && each.snap?.side === side);
+		if (follower) changes[follower.id] = { snap: { to: end, side: side } };
+		// `to` hangs from the tray on that side of it: `id` goes in between
+		else if (other.snap?.side === opposite && other.snap?.to !== id && root.anchorOf(other)) {
+			changes[id].snap = { to: other.snap.to, side: opposite };
+			changes[to] = { snap: { to: id, side: opposite } };
+		}
+		root.trays = root.trays.map(each => changes[each.id] ? Object.assign({}, each, changes[each.id]) : each);
+		root.save();
+	}
+
+	// on its own again, where it is now
+	function detach(id) {
+		const tray = root.trayById(id);
+		if (!tray?.snap) return;
+		const len = root.edgeLength(root.outputOf(tray), tray.edge ?? "bottom");
+		const at = root.centerOf(id, len, 1);
+		root.update(id, { snap: null, position: Math.round(Math.max(0, Math.min(1, at / len)) * 1000) / 1000 });
+	}
+
+	// a new tray right after `id`, on its edge
+	function addBeside(id) {
+		const tray = root.trayById(id);
+		if (!tray) return root.addTray("", "");
+		const fresh = root.addTray(root.outputOf(tray), tray.edge ?? "bottom");
+		root.update(fresh, { snap: { to: id, side: "after" }, iconSize: root.full(tray).iconSize, reveal: root.full(tray).reveal, look: root.full(tray).look, gap: root.full(tray).gap });
+		return fresh;
 	}
 
 	// ── its items ───────────────────────────────────────────────────────

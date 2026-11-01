@@ -204,9 +204,10 @@ PanelWindow {
 		return ids;
 	}
 	readonly property real baseLength: Math.max(1, root.order.length) * root.size + Math.max(0, root.order.length - 1) * root.spacing
+	// where it stands along the edge: its own place, or next to the tray it is snapped to
 	readonly property real center: {
 		const half = root.baseLength / 2 + root.pad + 8;
-		return Math.max(half, Math.min(root.len - half, (Number(root.tray.position) || 0.5) * root.len));
+		return Math.max(half, Math.min(root.len - half, AppTray.centerOf(root.trayId, root.len, 1)));
 	}
 	readonly property real baseStart: root.center - root.baseLength / 2
 
