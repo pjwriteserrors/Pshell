@@ -80,6 +80,19 @@ by the page); a tray goes to another PC as a `.pshell-tray.json` file that is
 dropped on a tray or the page there. Items move between trays by dragging;
 the taskbar and the Alt+Tab cards drag apps in too.
 
+Live status (`Live`, `core/services/Live.qml`) gathers what the shell knows
+right now – load, throughput, volume, notifications, updates, downloads,
+torrents, file jobs, recording, screen sharing, the timer, water, meetings,
+the phone, the watch, the printer, the VM, what plays … – as sources with a
+value, a level, a history, a tone and whether something happens. The bar
+shows them as `live-<id>` items (`LiveChip`, a card with more on rest:
+`LiveCard`), trays as widget `live:<id>` (`LiveTile`); both draw through
+`LiveFace`/`RollText`, whose digits roll. How each looks (value, ring,
+curve, bar, icon; hidden while idle; name in front) is kept in live.json
+and set in Pshell settings › Desktop › Live status (`LiveEditor`); `live
+list|bar <id>|style <id> <style>` over IPC. Services sample only while a
+source is shown (`Live.hold`; `Network.liveWatched`, `SysStats.liveWatched`).
+
 What desktops usually leave to helpers the shell does, so it looks like the
 shell and costs nothing extra: the wallpaper (`Wallpaper`, swaybg and awww are
 only a fallback), the clipboard history (`Clipboard`, `scripts/clipboard`),

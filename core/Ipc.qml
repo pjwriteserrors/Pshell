@@ -688,6 +688,26 @@ Scope {
 		}
 	}
 
+	// the live status of the shell (Live): what each source says right now,
+	// and putting one on the bar or taking it off
+	IpcHandler {
+		target: "live"
+
+		function list(): string {
+			return JSON.stringify(Live.sources.filter(src => src.available).map(src => ({ id: src.key, name: src.name, busy: src.busy, text: src.text, detail: src.detail, level: src.level, tone: src.tone })));
+		}
+		function bar(id: string): void {
+			if (!Live.source(id)) return;
+			const key = `live-${Live.source(id).key}`;
+			if (BarLayout.left.includes(key) || BarLayout.center.includes(key) || BarLayout.right.includes(key)) BarLayout.remove(key);
+			else BarLayout.place(key, "right", 0);
+		}
+		// style: auto, chip, ring, spark, bar, icon
+		function style(id: string, style: string): void {
+			if (Live.source(id) && Live.styles.some(each => each.value === style)) Live.setOption(id, { style: style });
+		}
+	}
+
 	IpcHandler {
 		target: "settings"
 		enabled: Plugins.on("niri-settings")
