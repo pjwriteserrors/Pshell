@@ -32,6 +32,8 @@ Singleton {
 	property var downloadHistory: root.zeros()
 	// views that show the throughput raise this while they are up
 	property int watchers: 0
+	// a live status of the bar or a tray shows the throughput (Live)
+	property bool liveWatched: false
 
 	readonly property bool online: root.type !== "offline"
 	readonly property string icon: {
@@ -120,7 +122,7 @@ Singleton {
 	}
 
 	Timer {
-		running: root.enabled && root.watchers > 0
+		running: root.enabled && (root.watchers > 0 || root.liveWatched)
 		repeat: true
 		interval: 2000
 		triggeredOnStart: true

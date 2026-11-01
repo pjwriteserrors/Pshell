@@ -28,6 +28,8 @@ Item {
 	property string landed: ""
 
 	readonly property var zoneRows: ({ left: leftRow, center: centerRow, right: rightRow })
+	// the live status waits in its own card (LiveEditor), not on this shelf
+	readonly property var shelfIds: BarLayout.shelf.filter(id => !BarLayout.byId[id]?.live)
 	readonly property real chipSize: 40
 
 	implicitHeight: column.implicitHeight
@@ -454,7 +456,7 @@ Item {
 				}
 
 				Repeater {
-					model: BarLayout.shelf
+					model: root.shelfIds
 
 					delegate: Chip {
 						required property string modelData
@@ -468,7 +470,7 @@ Item {
 
 			StyledText {
 				anchors.centerIn: parent
-				visible: BarLayout.shelf.length === 0 || shelfBox.on
+				visible: root.shelfIds.length === 0 || shelfBox.on
 				text: shelfBox.on ? "Let go to take it off the bar" : "Everything is on the bar"
 				tone: shelfBox.on ? Theme.danger : Theme.textFaint
 				font.pixelSize: Theme.size.small

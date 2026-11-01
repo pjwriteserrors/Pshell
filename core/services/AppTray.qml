@@ -266,7 +266,10 @@ Singleton {
 	// timer, battery, volume; action: what is dropped on it goes somewhere
 	// (a shelf, the phone, the AI, another PC, the trash, the clipboard);
 	// game: a game of the library with its cover; phone: the phone.
-	readonly property var widgets: [
+	// and every live status of the shell (Live) as `live:<id>`; a curve
+	// wants a wider tile
+	readonly property var widgets: root.ownWidgets.concat(Live.catalog.map(each => ({ id: `live:${each.id}`, name: each.name, glyph: each.glyph, wide: Live.styleOf(each.id) === "spark" ? 1.5 : 1, live: true, plugin: each.plugin })))
+	readonly property var ownWidgets: [
 		{ id: "clock", name: "Clock", glyph: "clock_outline", wide: 1.6 },
 		{ id: "weather", name: "Weather", glyph: "weather_partly_cloudy", wide: 1 },
 		{ id: "cpu", name: "CPU", glyph: "chip", wide: 1.4 },
@@ -294,9 +297,12 @@ Singleton {
 		return root.widgets.find(each => each.id === id) ?? null;
 	}
 	function widgetName(id) {
+		const src = String(id).startsWith("live:") ? Live.source(id) : null;
+		if (src) return src.text !== "" ? `${src.name} · ${src.text}` : src.name;
 		return root.widgetOf(id)?.name ?? "Widget";
 	}
 	function widgetGlyph(id) {
+		if (String(id).startsWith("live:")) return Live.source(id)?.glyph ?? "heart_pulse";
 		if (id === "weather") return Weather.icon || "weather_partly_cloudy";
 		if (id === "battery") return SysStats.batteryAvailable ? SysStats.batteryIcon : "battery";
 		if (id === "volume") return Audio.muted ? "volume_off" : (Audio.volume > 0.5 ? "volume_high" : "volume_medium");
@@ -525,6 +531,10 @@ Singleton {
 
 	// ── widgets ─────────────────────────────────────────────────────────
 	function widgetClicked(item) {
+		if (String(item.widget).startsWith("live:")) {
+			Live.activate(item.widget, null, null);
+			return;
+		}
 		switch (item.widget) {
 		case "clock":
 		case "weather":
@@ -554,6 +564,8 @@ Singleton {
 			const at = windows.findIndex(window => window.is_focused);
 			const next = at < 0 ? 0 : (at + (up ? -1 : 1) + windows.length) % windows.length;
 			Niri.focusWindow(windows[next].id);
+		} else if (item?.kind === "widget" && String(item.widget).startsWith("live:")) {
+			Live.scroll(item.widget, up);
 		} else if (item?.kind === "widget" && item.widget === "volume") {
 			Audio.setVolume(Math.max(0, Math.min(1.5, Audio.volume + (up ? 0.05 : -0.05))));
 		} else if (item?.kind === "widget" && item.widget === "media" && Media.player) {

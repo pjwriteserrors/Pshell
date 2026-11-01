@@ -171,6 +171,7 @@ FloatingWindow {
 		{ page: "apps", anchor: "apps-more", title: "Default torrent client, 3D models", words: "default apps torrent magnet 3d model stl 3mf slicer standard programm" },
 		{ page: "apps", anchor: "apps-terminal", title: "Terminal", words: "default terminal kitty alacritty foot console shell standard" },
 		{ page: "bar", anchor: "bar-items", title: "Bar items", words: "bar panel widgets order drag customize customise plugins buttons tray clock" },
+		{ page: "bar", anchor: "live-status", title: "Live status", words: "live status bar tray cpu memory network download upload battery volume timer meeting phone watch printer recording sharing notifications updates ring curve sparkline values" },
 		{ page: "bar", anchor: "popup-motion", title: "Popup animation", words: "popup panel animation motion open liquid glass pop curtain speed" },
 		{ page: "bar", anchor: "wallpaper-change", title: "Wallpaper transition", words: "wallpaper animation transition fade bloom change" },
 		{ page: "bar", anchor: "wallpaper-backdrop", title: "Overview backdrop", words: "wallpaper overview backdrop blur dim workspaces" },

@@ -414,6 +414,16 @@ Row {
 					onClicked: Session.lock()
 				}
 			}
+
+			// ── live status (live-<id>), last: it takes what no choice above took
+			DelegateChoice {
+				LiveChip {
+					required property string modelData
+
+					bar: zone.bar
+					key: modelData.replace(/^live-/, "")
+				}
+			}
 		}
 	}
 }

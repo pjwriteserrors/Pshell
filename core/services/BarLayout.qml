@@ -15,8 +15,10 @@ Singleton {
 	readonly property var zones: ["left", "center", "right"]
 
 	// every item the bar can show: its plugin(s) (all must be on, "" none),
-	// where it goes when nothing else is said ("" = on the shelf), what it is
-	readonly property var catalog: [
+	// where it goes when nothing else is said ("" = on the shelf), what it is;
+	// the live status of the shell (Live) comes as `live-<id>`, on the shelf
+	readonly property var catalog: root.ownItems.concat(Live.catalog.map(each => ({ id: `live-${each.id}`, name: each.name, icon: each.glyph, plugin: each.plugin, zone: "", about: each.about, live: true })))
+	readonly property var ownItems: [
 		{ id: "launcher", name: "Launcher", icon: "apps", plugin: "launcher-button", zone: "left", about: "Opens the launcher" },
 		{ id: "workspaces", name: "Workspaces", icon: "view_grid_outline", plugin: "workspaces", zone: "left", about: "The workspaces of this screen" },
 		{ id: "tray", name: "Tray", icon: "tray_full", plugin: "tray", zone: "left", about: "The apps' tray icons" },

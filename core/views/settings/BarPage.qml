@@ -6,7 +6,8 @@ import qs.style.theme
 import qs.style.widgets
 import qs.core.services
 
-// What the bar shows and where (BarLayout, BarEditor), how a new
+// What the bar shows and where (BarLayout, BarEditor), the live status
+// for the bar and the trays (Live, LiveEditor), how a new
 // wallpaper comes in (Wallpaper): out of the bar, a fade or at once, and
 // what the overview shows behind the workspaces; what game mode does.
 SettingsPage {
@@ -53,10 +54,22 @@ SettingsPage {
 	SettingCard {
 		anchor: "bar-items"
 		title: "Bar"
-		subtitle: `${BarLayout.left.length + BarLayout.center.length + BarLayout.right.length} items on the bar, ${BarLayout.shelf.length} more to place`
+		subtitle: `${BarLayout.left.length + BarLayout.center.length + BarLayout.right.length} items on the bar, ${BarLayout.shelf.filter(id => !BarLayout.byId[id]?.live).length} more to place`
 		icon: "dock_window"
 
 		BarEditor {
+			Layout.fillWidth: true
+		}
+	}
+
+	// the live status of the shell, for the bar and the trays
+	SettingCard {
+		anchor: "live-status"
+		title: "Live status"
+		subtitle: `What the shell does right now, in the bar and the trays · ${Live.sources.filter(src => src.available).length} sources ready`
+		icon: "heart_pulse"
+
+		LiveEditor {
 			Layout.fillWidth: true
 		}
 	}

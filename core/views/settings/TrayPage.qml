@@ -1194,7 +1194,7 @@ SettingsPage {
 				spacing: 2
 
 				Repeater {
-					model: AppTray.widgets
+					model: AppTray.ownWidgets
 
 					delegate: Pick {
 						required property var modelData
@@ -1203,6 +1203,34 @@ SettingsPage {
 						title: modelData.name
 					}
 				}
+			}
+
+			SectionLabel {
+				text: "Live from the shell"
+			}
+
+			Flow {
+				Layout.fillWidth: true
+				spacing: 2
+
+				Repeater {
+					model: root.adding === "more" ? Live.sources.filter(src => src.available) : []
+
+					delegate: Pick {
+						required property var modelData
+
+						item: ({ kind: "widget", widget: `live:${modelData.key}` })
+						title: modelData.name
+					}
+				}
+			}
+
+			StyledText {
+				Layout.fillWidth: true
+				text: "How each looks (ring, curve, value …) is set in Pshell settings › Desktop › Live status"
+				tone: Theme.textSubtle
+				font.pixelSize: Theme.size.small
+				wrapMode: Text.WordWrap
 			}
 
 			StyledText {

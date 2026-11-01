@@ -5,8 +5,9 @@ import qs.style.widgets
 import qs.core.services
 
 // A live item of a tray: the clock, the weather, the load of the CPU or the
-// memory, what plays, the running timer, the battery, the volume. As tall
-// as an icon, as wide as the widget needs (AppTray.widgets).
+// memory, what plays, the running timer, the battery, the volume – or any
+// live status of the shell (`live:<id>`, LiveTile). As tall as an icon, as
+// wide as the widget needs (AppTray.widgets).
 Rectangle {
 	id: root
 
@@ -204,6 +205,16 @@ Rectangle {
 					color: Theme.primary
 				}
 			}
+		}
+	}
+
+	// a live status of the shell
+	Loader {
+		anchors.fill: parent
+		active: root.kind.startsWith("live:")
+
+		sourceComponent: LiveTile {
+			key: root.kind.slice(5)
 		}
 	}
 }

@@ -15,6 +15,8 @@ Singleton {
 	property real memoryUsedKiB: 0
 	property real memoryTotalKiB: 0
 	property int cpuCores: 0
+	// a live status of the bar or a tray shows the load (Live)
+	property bool liveWatched: false
 	property var cpuHistory: root.zeros()
 	property var memoryHistory: root.zeros()
 	property var disks: []
@@ -159,7 +161,7 @@ Singleton {
 	}
 
 	Timer {
-		running: Plugins.on("system-monitor")
+		running: Plugins.on("system-monitor") || root.liveWatched
 		repeat: true
 		interval: 2000
 		triggeredOnStart: true
