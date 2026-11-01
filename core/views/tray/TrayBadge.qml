@@ -75,6 +75,39 @@ Item {
 		}
 	}
 
+	// a higher count makes the bubble jump
+	QtObject {
+		id: bump
+
+		property real value: 1
+	}
+
+	property int lastCount: 0
+	onBadgeChanged: {
+		const count = Number(root.badge.count) || 0;
+		if (count > root.lastCount && root.lively) bumpAnim.restart();
+		root.lastCount = count;
+	}
+
+	SequentialAnimation {
+		id: bumpAnim
+
+		NumberAnimation {
+			target: bump
+			property: "value"
+			to: 1.45
+			duration: 120
+			easing.type: Easing.OutQuad
+		}
+		NumberAnimation {
+			target: bump
+			property: "value"
+			to: 1
+			duration: 420
+			easing.type: Easing.OutElastic
+		}
+	}
+
 	// a count, or just a dot
 	Rectangle {
 		readonly property bool counting: root.badge.count > 0
@@ -90,12 +123,20 @@ Item {
 		color: root.tone
 		border.width: 1.5
 		border.color: Theme.base
-		scale: visible ? 1 : 0.3
+		scale: (visible ? 1 : 0.3) * bump.value
 
 		Behavior on scale {
 			SpatialAnim {
 				duration: Motion.medium
 			}
+		}
+		Behavior on width {
+			SpatialAnim {
+				duration: Motion.medium
+			}
+		}
+		Behavior on color {
+			ColorAnim {}
 		}
 
 		StyledText {

@@ -76,7 +76,8 @@ PanelWindow {
 	readonly property bool shown: root.active && (root.reveal === "always" || (root.reveal === "smart" && !root.covered) || root.peek
 		|| AppTray.isOpen(root.trayId) || root.menuOpen || root.groupOpen || root.dropping || AppTray.carrying || root.dragId !== ""
 		|| root.editingHere || root.keyboard)
-	property real revealed: root.shown ? 1 : 0
+	// starts out of sight, so a tray that is made (or comes with a profile) glides in
+	property real revealed: 0
 
 	Behavior on revealed {
 		SpatialAnim {
@@ -292,6 +293,7 @@ PanelWindow {
 	}
 
 	Component.onCompleted: {
+		root.revealed = Qt.binding(() => root.shown ? 1 : 0);
 		root.sync();
 		const next = Object.assign({}, AppTray.windows);
 		next[root.trayId] = root;
@@ -421,16 +423,39 @@ PanelWindow {
 		id: itemModel
 	}
 
+	// an item that goes plays its way out first: it is marked, shrinks
+	// where it stood while the others close up, and then leaves the model
+	property var leaving: ({})
+	// one that went in a puff of smoke needs no way out of its own
+	property string poofed: ""
+
 	function sync() {
 		const ids = root.items.map(item => item.id);
-		for (let i = itemModel.count - 1; i >= 0; i -= 1)
-			if (!ids.includes(itemModel.get(i).itemId)) itemModel.remove(i);
+		const gone = Object.assign({}, root.leaving);
+		for (let i = itemModel.count - 1; i >= 0; i -= 1) {
+			const id = itemModel.get(i).itemId;
+			if (!ids.includes(id) && id === root.poofed) {
+				itemModel.remove(i);
+				root.poofed = "";
+			} else if (!ids.includes(id) && !gone[id]) gone[id] = true;
+			// back before it was out
+			else if (ids.includes(id) && gone[id]) delete gone[id];
+		}
+		root.leaving = gone;
 		for (const id of ids) {
 			let known = false;
 			for (let i = 0; i < itemModel.count; i += 1)
 				if (itemModel.get(i).itemId === id) known = true;
 			if (!known) itemModel.append({ itemId: id });
 		}
+	}
+
+	function forget(id) {
+		for (let i = itemModel.count - 1; i >= 0; i -= 1)
+			if (itemModel.get(i).itemId === id) itemModel.remove(i);
+		const gone = Object.assign({}, root.leaving);
+		delete gone[id];
+		root.leaving = gone;
 	}
 
 	onItemsChanged: root.sync()
@@ -917,16 +942,87 @@ PanelWindow {
 				}
 			}
 
-			// where a drop would land
+			// the ring of the keyboard glides from item to item
 			Rectangle {
-				readonly property var slot: root.slotById[""]
-				readonly property rect r: slot ? root.rect(slot.a + root.size * 0.08, root.gap + root.pad + root.size * 0.08, slot.la - root.size * 0.16, root.size * 0.84) : Qt.rect(0, 0, 0, 0)
+				readonly property var slot: root.slotById[root.keyItems[root.keyIndex]?.id ?? "-"] ?? null
+				readonly property rect r: slot ? root.rect(slot.a - 4, root.gap + root.pad - 4, slot.la + 8, root.size * slot.s + 8) : Qt.rect(0, 0, 0, 0)
 
-				visible: !!slot && !root.removing
+				z: 5
+				x: r.x
+				y: r.y
+				width: r.width
+				height: r.height
+				radius: Math.min(width, height) * 0.3
+				color: Qt.alpha(root.accent, 0.12)
+				border.width: 2
+				border.color: root.accent
+				opacity: root.keyboard && !!slot ? 1 : 0
+				scale: root.keyboard ? 1 : 1.3
+
+				Behavior on x {
+					SpatialAnim {
+						duration: Motion.medium
+					}
+				}
+				Behavior on y {
+					SpatialAnim {
+						duration: Motion.medium
+					}
+				}
+				Behavior on width {
+					SpatialAnim {
+						duration: Motion.medium
+					}
+				}
+				Behavior on opacity {
+					Anim {
+						duration: Motion.short
+					}
+				}
+				Behavior on scale {
+					SpatialAnim {
+						duration: Motion.long
+					}
+				}
+			}
+
+			// where a drop would land: it opens and glides along with the pointer
+			Rectangle {
+				id: gapMark
+
+				readonly property var slot: root.slotById[""]
+				property rect last: Qt.rect(0, 0, 0, 0)
+				readonly property rect r: slot ? root.rect(slot.a + root.size * 0.08, root.gap + root.pad + root.size * 0.08, slot.la - root.size * 0.16, root.size * 0.84) : gapMark.last
+
+				onRChanged: if (gapMark.slot) gapMark.last = gapMark.r
+				visible: opacity > 0.01
+				opacity: !!slot && !root.removing ? 1 : 0
+				scale: !!slot && !root.removing ? 1 : 0.6
 				x: r.x
 				y: r.y
 				width: Math.max(0, r.width)
 				height: Math.max(0, r.height)
+
+				Behavior on x {
+					SpatialAnim {
+						duration: Motion.short
+					}
+				}
+				Behavior on y {
+					SpatialAnim {
+						duration: Motion.short
+					}
+				}
+				Behavior on opacity {
+					Anim {
+						duration: Motion.short
+					}
+				}
+				Behavior on scale {
+					SpatialAnim {
+						duration: Motion.medium
+					}
+				}
 				radius: Math.min(width, height) * 0.27
 				color: Qt.alpha(root.accent, 0.16)
 				border.width: 1.5
@@ -941,10 +1037,17 @@ PanelWindow {
 					id: cell
 
 					required property string itemId
-					readonly property var item: root.itemsById[cell.itemId] ?? null
+					readonly property bool going: !!root.leaving[cell.itemId]
+					// what it was and where it stood, kept for its way out
+					property var kept: null
+					property var keptSlot: null
+					readonly property var item: root.itemsById[cell.itemId] ?? cell.kept
 					readonly property string kind: String(cell.item?.kind ?? "")
 					readonly property bool dragged: root.dragId === cell.itemId
-					readonly property var slot: root.slotById[cell.itemId] ?? { a: root.baseStart, la: root.size, s: 1 }
+					readonly property var slot: root.slotById[cell.itemId] ?? cell.keptSlot ?? { a: root.baseStart, la: root.size, s: 1 }
+					onItemChanged: if (root.itemsById[cell.itemId]) cell.kept = root.itemsById[cell.itemId]
+					onSlotChanged: if (root.slotById[cell.itemId]) cell.keptSlot = root.slotById[cell.itemId]
+					onGoingChanged: if (cell.going) leaveAnim.restart()
 					readonly property real s: cell.dragged ? 1.08 : cell.slot.s
 					readonly property real la: cell.dragged ? root.factorOf(cell.itemId) * root.size * 1.08 : cell.slot.la
 					readonly property real lc: cell.kind === "separator" ? root.thick * 0.56 : root.size * cell.s
@@ -993,7 +1096,36 @@ PanelWindow {
 						else if (root.hoveredId === cell.itemId) root.hoveredId = "";
 					}
 
-					Component.onCompleted: enterAnim.start()
+					Component.onCompleted: {
+						cell.kept = cell.item;
+						cell.keptSlot = root.slotById[cell.itemId] ?? null;
+						enterAnim.start();
+					}
+
+					// out: it sinks into the edge and shrinks, then it is gone
+					SequentialAnimation {
+						id: leaveAnim
+
+						ParallelAnimation {
+							NumberAnimation {
+								target: cell
+								property: "enter"
+								to: 0
+								duration: Motion.medium
+								easing.type: Easing.InBack
+							}
+							NumberAnimation {
+								target: cell
+								property: "bounce"
+								to: -root.size * 0.3
+								duration: Motion.medium
+								easing.type: Easing.InCubic
+							}
+						}
+						ScriptAction {
+							script: root.forget(cell.itemId)
+						}
+					}
 
 					NumberAnimation {
 						id: enterAnim
@@ -1104,9 +1236,9 @@ PanelWindow {
 						lively: root.lively
 					}
 
-					// picked with the keyboard, or about to take what is dropped
+					// about to take what is dropped
 					Rectangle {
-						visible: cell.keyed || cell.targeted
+						visible: cell.targeted
 						anchors.fill: parent
 						anchors.margins: -4
 						radius: Math.min(width, height) * 0.3
@@ -1321,9 +1453,38 @@ PanelWindow {
 						id: row
 
 						required property var modelData
+						required property int index
+						property real shown: 0
 
 						width: parent.width
 						height: 34
+						opacity: row.shown
+						transform: Translate {
+							x: (1 - row.shown) * (root.edge === "right" ? 12 : (root.edge === "left" ? -12 : 0))
+							y: (1 - row.shown) * (root.edge === "bottom" ? 10 : (root.edge === "top" ? -10 : 0))
+						}
+
+						// one after the other, from the edge outwards
+						SequentialAnimation {
+							running: root.menuOpen
+							PauseAnimation {
+								duration: row.index * 22
+							}
+							NumberAnimation {
+								target: row
+								property: "shown"
+								to: 1
+								duration: Motion.medium
+								easing.type: Easing.OutCubic
+							}
+						}
+						Connections {
+							target: root
+
+							function onMenuOpenChanged() {
+								if (!root.menuOpen) row.shown = 0;
+							}
+						}
 						radius: Theme.radius.small
 						color: rowMouse.containsMouse ? (row.modelData.danger ? Theme.dangerContainer : Theme.layer3) : "transparent"
 
@@ -1490,21 +1651,35 @@ PanelWindow {
 							readonly property bool dir: groupPanel.folder && !!files.get(entry.index, "fileIsDir")
 							readonly property var asItem: groupPanel.folder ? { kind: "file", path: entry.path, name: entry.path.split("/").pop(), folder: entry.dir } : entry.child
 
+							property real out: 0
+
 							visible: entry.index < groupPanel.max
 							width: groupPanel.cellW
 							height: groupPanel.cellH
 							rotation: grid.rotation
-							opacity: 0
+							opacity: Math.min(1, entry.out * 1.4)
+							scale: 0.6 + 0.4 * entry.out
+							// from the icon in the tray outwards, one after the other
+							transform: Translate {
+								x: (1 - entry.out) * (groupPanel.fan ? 0 : (root.groupA - groupPanel.a - entry.x - groupPanel.cellW / 2) * (root.vertical ? 0 : 0.6))
+								y: (1 - entry.out) * (groupPanel.fan ? groupPanel.cellH * (entry.index + 1) * 0.6 : groupPanel.cellH * 0.6)
+							}
 							Component.onCompleted: fanIn.start()
 
-							NumberAnimation {
+							SequentialAnimation {
 								id: fanIn
 
-								target: entry
-								property: "opacity"
-								to: 1
-								duration: Motion.medium
-								easing.type: Easing.OutCubic
+								PauseAnimation {
+									duration: Math.min(entry.index, 12) * (groupPanel.fan ? 35 : 22)
+								}
+								NumberAnimation {
+									target: entry
+									property: "out"
+									to: 1
+									duration: Motion.long
+									easing.type: Easing.BezierSpline
+									easing.bezierCurve: Motion.spatial
+								}
 							}
 
 							Rectangle {
@@ -1631,10 +1806,17 @@ PanelWindow {
 			border.color: Theme.outline
 			visible: previews.opacity > 0.01
 			opacity: root.previewId !== "" && previews.count > 0 ? 1 : 0
+			scale: root.previewId !== "" && previews.count > 0 ? 1 : 0.9
+			transformOrigin: root.edge === "left" ? Item.Left : (root.edge === "right" ? Item.Right : (root.edge === "top" ? Item.Top : Item.Bottom))
 
 			Behavior on opacity {
 				Anim {
 					duration: Motion.short
+				}
+			}
+			Behavior on scale {
+				SpatialAnim {
+					duration: Motion.medium
 				}
 			}
 
@@ -1650,6 +1832,28 @@ PanelWindow {
 						id: card
 
 						required property var modelData
+						required property int index
+						property real shown: 0
+
+						opacity: card.shown
+						scale: 0.85 + 0.15 * card.shown
+						Component.onCompleted: cardIn.start()
+
+						SequentialAnimation {
+							id: cardIn
+
+							PauseAnimation {
+								duration: card.index * 45
+							}
+							NumberAnimation {
+								target: card
+								property: "shown"
+								to: 1
+								duration: Motion.long
+								easing.type: Easing.BezierSpline
+								easing.bezierCurve: Motion.spatial
+							}
+						}
 						readonly property string shot: AppTray.shotsRev >= 0 ? (AppTray.shotFiles[card.modelData.id] ?? "") : ""
 
 						width: previews.cardW
@@ -1667,6 +1871,13 @@ PanelWindow {
 							fillMode: Image.PreserveAspectFit
 							cache: false
 							asynchronous: true
+							opacity: status === Image.Ready ? 1 : 0
+
+							Behavior on opacity {
+								Anim {
+									duration: Motion.medium
+								}
+							}
 						}
 
 						StyledText {
@@ -1716,6 +1927,51 @@ PanelWindow {
 		when: root.dragId !== ""
 	}
 
+	// a little cloud where an item was let go out of the tray
+	Item {
+		id: puff
+
+		property point at: Qt.point(0, 0)
+		property real grow: 0
+
+		parent: stage
+		x: puff.at.x - 40
+		y: puff.at.y - 40
+		width: 80
+		height: 80
+		z: 50
+		visible: puffAnim.running
+
+		Repeater {
+			model: 7
+
+			delegate: Rectangle {
+				required property int index
+				readonly property real angle: index / 7 * Math.PI * 2
+
+				width: 14 + (index % 3) * 4
+				height: width
+				radius: width / 2
+				color: Qt.alpha(Theme.text, 0.5)
+				x: 40 - width / 2 + Math.cos(angle) * 30 * puff.grow
+				y: 40 - height / 2 + Math.sin(angle) * 30 * puff.grow
+				scale: 0.4 + puff.grow * 0.8
+				opacity: 1 - puff.grow
+			}
+		}
+
+		NumberAnimation {
+			id: puffAnim
+
+			target: puff
+			property: "grow"
+			from: 0
+			to: 1
+			duration: 420
+			easing.type: Easing.OutCubic
+		}
+	}
+
 	// ── how a drag inside the tray ends ─────────────────────────────────
 	function finishDrag(item, p) {
 		const removing = root.removing;
@@ -1743,7 +1999,12 @@ PanelWindow {
 			if (!removing) AppTray.addItems(root.trayId, [fresh], Math.min(index, (root.tray.items ?? []).length));
 			return;
 		}
-		if (removing) AppTray.removeItem(root.trayId, item.id);
+		if (removing) {
+			puff.at = p;
+			puffAnim.restart();
+			root.poofed = item.id;
+			AppTray.removeItem(root.trayId, item.id);
+		}
 		else AppTray.moveItem(root.trayId, item.id, Math.min(index, (root.tray.items ?? []).length - 1));
 	}
 
