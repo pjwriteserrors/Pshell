@@ -154,6 +154,8 @@ ColumnLayout {
 
 						anchors.centerIn: parent
 						key: tile.key
+						// nothing to show: the glyph alone
+						style: tile.there ? "" : "icon"
 					}
 
 					Component.onCompleted: Live.hold(tile.key, 1)

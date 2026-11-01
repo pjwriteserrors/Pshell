@@ -102,7 +102,7 @@ Item {
 			return root.unit * 0.13;
 		}
 
-		Behavior on size {
+		Behavior on width {
 			SpatialAnim {
 				duration: Motion.long
 			}

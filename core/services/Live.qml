@@ -189,7 +189,7 @@ Singleton {
 		prefers: "spark"
 		widest: "100%"
 		name: "Processor"
-		glyph: "chip"
+		glyph: "cpu_64_bit"
 		group: "system"
 		about: "Load of all cores, with its last minute"
 		text: root.percent(SysStats.cpu)
@@ -211,7 +211,7 @@ Singleton {
 		prefers: "spark"
 		widest: "100%"
 		name: "Memory"
-		glyph: "memory"
+		glyph: "expansion_card"
 		group: "system"
 		about: "How full the memory is"
 		text: root.percent(SysStats.memory)

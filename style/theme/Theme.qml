@@ -111,8 +111,6 @@ Singleton {
 		return out;
 	}
 
-	// what an item is drawn on: the rectangles behind it composited over the
-	// shell base, up to the first opaque one
 	// the colour of a live status' tone (Live): accent, good, warn, bad, muted, normal
 	function toneColor(tone) {
 		switch (tone) {
@@ -125,6 +123,8 @@ Singleton {
 		return root.text;
 	}
 
+	// what an item is drawn on: the rectangles behind it composited over the
+	// shell base, up to the first opaque one
 	function surfaceBehind(item) {
 		const layers = [];
 		for (let it = item?.parent; it; it = it.parent) {
