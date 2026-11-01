@@ -46,6 +46,19 @@ settings › Bar & wallpaper); `style/bar/BarZone.qml` maps an item id to
 what the style draws for it. Game mode (`GameMode`, plugin `game-mode`)
 follows the game windows `games_guard.py` reports.
 
+App trays (`AppTray`, plugin `app-tray`, `core/views/tray/`) are strips on
+a screen's edge holding apps, launcher commands (and through them the
+plugins), shell lines, files, folders and links (`app-tray.json`). Each is
+a layer along its whole edge whose input region is only the tray, its
+waiting strip (shows on hover) or its handle (shows on a click); `scripts/ipc.sh
+apptray toggle` opens the hiding ones, `apptray add <app id|>command|path|url|line>`
+puts something in. Things come in by drag and drop: app and command tiles of
+the launcher carry `application/x-pshell-tray-item`, other apps bring URIs or
+text. A tray runs a launcher command through `LauncherContent.runForTray`,
+which opens the launcher only when the command would show something there.
+Pshell settings › App tray places a tray on a picture of the screens
+(`TrayPlacer`) and edits how it shows, looks and what it holds.
+
 What desktops usually leave to helpers the shell does, so it looks like the
 shell and costs nothing extra: the wallpaper (`Wallpaper`, swaybg and awww are
 only a fallback), the clipboard history (`Clipboard`, `scripts/clipboard`),
