@@ -180,11 +180,16 @@ PanelWindow {
 	// the glass blurs what is behind it
 	BackgroundEffect.blurRegion: root.tray.look === "glass" && root.tray.blur && root.revealed > 0.98 && root.active ? blurRegion : null
 
+	// the plate's rectangle as numbers: one given by its item lagged behind
+	// while the tray grew and shrank
 	Region {
 		id: blurRegion
 
-		item: plate
-		radius: plate.radius
+		x: Math.round(body.r.x)
+		y: Math.round(body.r.y)
+		width: Math.round(body.r.width)
+		height: Math.round(body.r.height)
+		radius: Math.round(Math.min(body.r.width, body.r.height) * 0.36)
 	}
 
 	mask: Region {
@@ -1364,7 +1369,8 @@ PanelWindow {
 			readonly property var item: root.groupItem
 			readonly property bool folder: item?.kind === "file"
 			readonly property bool fan: folder && item?.view !== "grid" && !root.vertical
-			readonly property int count: folder ? Math.min(groupPanel.fan ? 9 : 30, files.count) : (item?.items ?? []).length
+			readonly property int max: groupPanel.fan ? 9 : 30
+			readonly property int count: Math.min(groupPanel.max, entries.count)
 			readonly property int columns: groupPanel.fan ? 1 : Math.max(1, Math.min(5, Math.ceil(Math.sqrt(Math.max(1, groupPanel.count)))))
 			readonly property real cellW: groupPanel.fan ? 250 : 86
 			readonly property real cellH: groupPanel.fan ? 46 : 88
@@ -1468,8 +1474,12 @@ PanelWindow {
 					layoutDirection: Qt.LeftToRight
 					rotation: groupPanel.fan && root.edge === "bottom" ? 180 : 0
 
+					// a folder's files straight from the model (its count does not
+					// tell bindings), a group's items from the tray
 					Repeater {
-						model: root.groupOpen ? groupPanel.count : 0
+						id: entries
+
+						model: !root.groupOpen ? 0 : (groupPanel.folder ? files : (groupPanel.item?.items ?? []))
 
 						delegate: Item {
 							id: entry
@@ -1480,6 +1490,7 @@ PanelWindow {
 							readonly property bool dir: groupPanel.folder && !!files.get(entry.index, "fileIsDir")
 							readonly property var asItem: groupPanel.folder ? { kind: "file", path: entry.path, name: entry.path.split("/").pop(), folder: entry.dir } : entry.child
 
+							visible: entry.index < groupPanel.max
 							width: groupPanel.cellW
 							height: groupPanel.cellH
 							rotation: grid.rotation

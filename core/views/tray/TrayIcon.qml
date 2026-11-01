@@ -198,16 +198,22 @@ Item {
 		visible: root.stacked
 		anchors.fill: parent
 
+		// the model itself: its count does not tell bindings when it changes
 		Repeater {
-			model: root.stacked ? Math.min(3, newest.count) : 0
+			id: sheets
+
+			model: root.stacked ? newest : 0
 
 			delegate: Rectangle {
 				id: sheet
 
 				required property int index
-				readonly property string path: String(newest.get(sheet.index, "filePath") ?? "")
+				required property string filePath
+				required property bool fileIsDir
+				readonly property string path: sheet.filePath
 				readonly property bool image: AppTray.isImage(sheet.path)
 
+				visible: sheet.index < 3
 				z: 3 - sheet.index
 				width: root.width * 0.74
 				height: width
@@ -228,7 +234,7 @@ Item {
 				Image {
 					anchors.fill: parent
 					anchors.margins: sheet.image ? 2 : parent.width * 0.15
-					source: sheet.image ? `file://${sheet.path}` : AppIcons.app(AppTray.themeIconOf({ path: sheet.path, folder: newest.get(sheet.index, "fileIsDir") }), ["text-x-generic"])
+					source: sheet.image ? `file://${sheet.path}` : AppIcons.app(AppTray.themeIconOf({ path: sheet.path, folder: sheet.fileIsDir }), ["text-x-generic"])
 					sourceSize: Qt.size(96, 96)
 					fillMode: sheet.image ? Image.PreserveAspectCrop : Image.PreserveAspectFit
 					asynchronous: true
@@ -238,7 +244,7 @@ Item {
 
 		// an empty folder is a folder
 		Image {
-			visible: newest.count === 0
+			visible: sheets.count === 0
 			anchors.fill: parent
 			source: AppIcons.app("folder", ["inode-directory"])
 			sourceSize: Qt.size(128, 128)
