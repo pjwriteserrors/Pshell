@@ -123,13 +123,8 @@ Item {
 		color: root.tone
 		border.width: 1.5
 		border.color: Theme.base
-		scale: (visible ? 1 : 0.3) * bump.value
+		scale: bump.value
 
-		Behavior on scale {
-			SpatialAnim {
-				duration: Motion.medium
-			}
-		}
 		Behavior on width {
 			SpatialAnim {
 				duration: Motion.medium

@@ -59,6 +59,27 @@ which opens the launcher only when the command would show something there.
 Pshell settings › App tray places a tray on a picture of the screens
 (`TrayPlacer`) and edits how it shows, looks and what it holds.
 
+Trays snap to each other along an edge (`snap`, `snapGap`; `AppTray.snapTo`
+puts one into a row). Besides apps, commands, shell lines, files and links a
+tray holds lines and gaps, groups (items under one icon), folders shown as a
+stack of their newest files (fan or grid, files drag out), live widgets
+(clock, weather, CPU, memory, media, qtrack timer, battery, volume), drop
+actions (shelf, AI, phone, another PC, trash, copy paths, open), the phone
+and games with their covers. Files dropped on an app open in it
+(`gtk-launch`), on a shell line become its arguments, on a folder are copied
+in; resting on a group or stack opens it. Icons carry badges
+(`AppTray.badgeOf`: notifications, unread messages, updates, download and
+print progress, playtime, the phone's battery). Resting on an app shows its
+windows (`window_shots.py` into `$PSHELL_RUNTIME_DIR/tray-shots`); the wheel
+goes through them. A tray can show open apps it lacks, make way for windows
+("smart"), come only on certain workspaces, apps, hours or in games
+(`when`), be compact, blur behind its glass (ext-background-effect), take an
+accent. Profiles are saved sets of trays (`>tray <name>`, `apptray profile`);
+`apptray launch <n>` and `apptray focus` are the keys (Mod+Alt+1…9, 0, written
+by the page); a tray goes to another PC as a `.pshell-tray.json` file that is
+dropped on a tray or the page there. Items move between trays by dragging;
+the taskbar and the Alt+Tab cards drag apps in too.
+
 What desktops usually leave to helpers the shell does, so it looks like the
 shell and costs nothing extra: the wallpaper (`Wallpaper`, swaybg and awww are
 only a fallback), the clipboard history (`Clipboard`, `scripts/clipboard`),
