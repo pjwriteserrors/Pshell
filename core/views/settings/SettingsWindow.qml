@@ -363,9 +363,19 @@ FloatingWindow {
 						Layout.fillWidth: true
 						Layout.fillHeight: true
 
-						// the pages
-						Item {
+						// the pages: closer together when the window is short, and
+						// scrolled when even that is not enough – never under the box below
+						Flickable {
+							id: navFlick
+
+							readonly property real tabHeight: Math.max(34, Math.min(44, (navFlick.height - (root.pages.length - 1) * 2) / Math.max(1, root.pages.length)))
+
 							anchors.fill: parent
+							contentHeight: nav.height
+							clip: true
+							boundsBehavior: Flickable.StopAtBounds
+							interactive: navFlick.contentHeight > navFlick.height + 1
+							ScrollBar.vertical: ThinScrollBar {}
 							opacity: root.query === "" ? 1 : 0
 							visible: opacity > 0.01
 							scale: root.query === "" ? 1 : 0.97
@@ -384,11 +394,19 @@ FloatingWindow {
 							Rectangle {
 								id: marker
 
-								readonly property Item target: navRepeater.itemAt(root.pages.findIndex(page => page.id === root.current))
+								// asked again once the tabs are made (opened straight on a page)
+								readonly property Item target: navRepeater.count >= 0 ? navRepeater.itemAt(root.pages.findIndex(page => page.id === root.current)) : null
 
-								width: parent.width
-								height: 44
+								width: nav.width
+								height: navFlick.tabHeight
 								y: marker.target ? marker.target.y : 0
+
+								// the picked page stays in sight
+								onYChanged: {
+									if (marker.y < navFlick.contentY) navFlick.contentY = marker.y;
+									else if (marker.y + marker.height > navFlick.contentY + navFlick.height)
+										navFlick.contentY = marker.y + marker.height - navFlick.height;
+								}
 								radius: Theme.radius.large
 								color: Theme.primaryContainer
 
@@ -411,7 +429,7 @@ FloatingWindow {
 							Column {
 								id: nav
 
-								width: parent.width
+								width: navFlick.width - (navFlick.interactive ? 8 : 0)
 								spacing: 2
 
 								Repeater {
@@ -427,7 +445,7 @@ FloatingWindow {
 										readonly property bool picked: root.current === tab.modelData.id
 
 										width: nav.width
-										height: 44
+										height: navFlick.tabHeight
 										radius: Theme.radius.large
 										pressedScale: 0.97
 										onClicked: root.go(tab.modelData.id, "")
