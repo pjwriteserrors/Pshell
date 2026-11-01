@@ -16,7 +16,7 @@ Singleton {
 
 	readonly property bool enabled: Plugins.on("app-tray")
 	readonly property var edges: ["left", "right", "top", "bottom"]
-	readonly property var reveals: ["always", "hover", "click", "key"]
+	readonly property var reveals: ["always", "smart", "hover", "click", "key"]
 	// what a new tray starts with
 	readonly property var defaults: ({
 		name: "Tray",
@@ -36,6 +36,18 @@ Singleton {
 		delay: 180,
 		snap: null,
 		snapGap: 8,
+		// open apps that are not in it come in behind a line
+		running: false,
+		accent: "theme",
+		accentColor: "#7aa2f7",
+		blur: true,
+		compact: false,
+		labelStyle: "bubble",
+		badges: true,
+		previews: true,
+		motion: "lively",
+		// when it is there at all: { workspaces, apps, from, to, game }
+		when: null,
 		items: []
 	})
 	// the mime type items travel in between the launcher, the editor and the trays
@@ -56,6 +68,24 @@ Singleton {
 	// stays out on the desktop while it is placed
 	property string editing: ""
 	property bool previewing: false
+
+	// saved sets of trays: { name: trays }, and the one in use
+	property var profiles: ({})
+	property string profile: ""
+	readonly property var profileNames: Object.keys(root.profiles).sort()
+	// the tray that has the keyboard (opened by `apptray focus`)
+	property string keyboardTray: ""
+	// the windows of the trays by id (they answer where a point falls)
+	property var windows: ({})
+	// the clock, for trays that come at certain hours (a tick a minute)
+	property real now: Date.now()
+
+	Timer {
+		running: root.enabled && root.trays.some(tray => !!tray.when)
+		interval: 30000
+		repeat: true
+		onTriggered: root.now = Date.now()
+	}
 
 	// a tray asks the launcher to run one of its commands
 	signal commandRequested(string token)
@@ -128,10 +158,13 @@ Singleton {
 
 	// how long a tray is along its edge, in px (as its window draws it)
 	function lengthOf(tray) {
+		if (!root.active(tray)) return 0;
 		const t = root.full(tray);
 		const size = Math.max(24, Math.min(96, Number(t.iconSize) || 48));
-		const n = Math.max(1, (t.items ?? []).length);
-		return n * size + (n - 1) * Math.round(size * 0.16) + 2 * Math.round(size * 0.2);
+		const items = root.shownItems(t);
+		const n = Math.max(1, items.length);
+		const units = items.length === 0 ? 1 : items.reduce((sum, item) => sum + root.slotFactor(item, t), 0);
+		return units * size + (n - 1) * Math.round(size * 0.16) + 2 * Math.round(size * 0.2);
 	}
 
 	// the tray a tray is snapped to, while both are on the same edge
@@ -163,7 +196,7 @@ Singleton {
 			const anchor = depth < 16 ? root.anchorOf(tray, all) : null;
 			if (anchor) {
 				const at = walk(anchor, depth + 1);
-				const gap = Math.max(0, Number(tray.snapGap ?? 8)) * scale;
+				const gap = root.active(tray) && root.active(anchor) ? Math.max(0, Number(tray.snapGap ?? 8)) * scale : 0;
 				const other = root.lengthOf(anchor) * scale / 2;
 				return tray.snap.side === "before" ? at - other - gap - half : at + other + gap + half;
 			}
@@ -226,6 +259,539 @@ Singleton {
 		return fresh;
 	}
 
+	// ── more kinds of items ─────────────────────────────────────────────
+	// separator: a line between groups; spacer: room; group: items of its
+	// own that open from one icon; file with `stack`: a folder shown as a
+	// stack of its newest files; widget: a live clock, weather, cpu, media,
+	// timer, battery, volume; action: what is dropped on it goes somewhere
+	// (a shelf, the phone, the AI, another PC, the trash, the clipboard);
+	// game: a game of the library with its cover; phone: the phone.
+	readonly property var widgets: [
+		{ id: "clock", name: "Clock", glyph: "clock_outline", wide: 1.6 },
+		{ id: "weather", name: "Weather", glyph: "weather_partly_cloudy", wide: 1 },
+		{ id: "cpu", name: "CPU", glyph: "chip", wide: 1.4 },
+		{ id: "memory", name: "Memory", glyph: "memory", wide: 1.4 },
+		{ id: "media", name: "Now playing", glyph: "music_note", wide: 3 },
+		{ id: "timer", name: "Time tracking", glyph: "timer_outline", wide: 1.6 },
+		{ id: "battery", name: "Battery", glyph: "battery", wide: 1 },
+		{ id: "volume", name: "Volume", glyph: "volume_high", wide: 1 }
+	]
+	readonly property var actions: {
+		const out = [
+			{ id: "shelf", name: "Put on a shelf", glyph: "tray_full", plugin: "shelves" },
+			{ id: "ai", name: "Ask the AI", glyph: "creation", plugin: "chat" },
+			{ id: "phone", name: "Send to the phone", glyph: "cellphone_arrow_down", plugin: "phone" },
+			{ id: "copy", name: "Copy the paths", glyph: "content_copy", plugin: "" },
+			{ id: "trash", name: "Move to the trash", glyph: "delete_outline", plugin: "" },
+			{ id: "open", name: "Open together", glyph: "open_in_new", plugin: "" }
+		];
+		for (const pc of Pcs.devices)
+			out.push({ id: "pc", pc: String(pc.id), name: `Send to ${pc.name ?? "PC"}`, glyph: "monitor_multiple", plugin: "pc-link" });
+		return out.filter(action => action.plugin === "" || Plugins.on(action.plugin));
+	}
+
+	function widgetOf(id) {
+		return root.widgets.find(each => each.id === id) ?? null;
+	}
+	function widgetName(id) {
+		return root.widgetOf(id)?.name ?? "Widget";
+	}
+	function widgetGlyph(id) {
+		if (id === "weather") return Weather.icon || "weather_partly_cloudy";
+		if (id === "battery") return SysStats.batteryAvailable ? SysStats.batteryIcon : "battery";
+		if (id === "volume") return Audio.muted ? "volume_off" : (Audio.volume > 0.5 ? "volume_high" : "volume_medium");
+		return root.widgetOf(id)?.glyph ?? "apps";
+	}
+
+	function actionOf(item) {
+		return root.actions.find(each => each.id === item?.action && (each.pc ?? "") === (item?.pc ?? "")) ?? null;
+	}
+
+	// how wide an item is, in icons
+	function slotFactor(item, tray) {
+		const compact = !!tray?.compact;
+		switch (item?.kind) {
+		case "separator": return 0.3;
+		case "spacer": return 0.6;
+		case "widget": return compact ? 1 : (root.widgetOf(item.widget)?.wide ?? 1);
+		}
+		return 1;
+	}
+
+	// what a tray shows: its items, and with `running` the open apps it
+	// does not have, behind a line
+	function shownItems(tray) {
+		const items = tray?.items ?? [];
+		if (!tray?.running) return items;
+		const have = new Set();
+		const add = list => list.forEach(item => {
+			if (item.kind === "app") have.add(String(root.entryOf(item)?.id ?? item.app));
+			if (item.kind === "group") add(item.items ?? []);
+		});
+		add(items);
+		const extra = Object.keys(root.windowsByApp).filter(key => !have.has(key)).sort()
+			.map(key => ({ id: `run:${key}`, kind: "app", app: key, transient: true }));
+		return extra.length === 0 ? items : items.concat([{ id: "run-line", kind: "separator", transient: true }], extra);
+	}
+
+	// a group of items under one icon
+	function addGroup(trayId, index) {
+		const id = root.uid("group-");
+		root.addItems(trayId, [{ id: id, kind: "group", name: "Group", items: [] }], index ?? -1);
+		return id;
+	}
+
+	// into a group (from the tray itself or from a drop)
+	function addToGroup(trayId, groupId, items) {
+		const tray = root.trayById(trayId);
+		if (!tray) return;
+		const fresh = items.map(item => Object.assign({}, item, { id: item.id && !String(item.id).startsWith("run:") ? item.id : root.uid("item-") }));
+		const ids = fresh.map(item => item.id);
+		const list = (tray.items ?? []).filter(item => !ids.includes(item.id)).map(item => item.id !== groupId ? item
+			: Object.assign({}, item, { items: (item.items ?? []).filter(child => !fresh.some(other => root.sameThing(other, child))).concat(fresh) }));
+		root.update(trayId, { items: list });
+	}
+
+	// out of a group, back into the tray after it
+	function takeOutOfGroup(trayId, groupId, itemId) {
+		const tray = root.trayById(trayId);
+		const group = (tray?.items ?? []).find(item => item.id === groupId);
+		const child = (group?.items ?? []).find(item => item.id === itemId);
+		if (!child) return;
+		const list = root.withoutItem(tray.items, itemId);
+		list.splice(list.findIndex(item => item.id === groupId) + 1, 0, child);
+		root.update(trayId, { items: list });
+	}
+
+	// the item moves to another tray (dragged from one to the other)
+	function moveToTray(fromId, itemId, toId, index) {
+		if (fromId === toId) return;
+		const from = root.trayById(fromId);
+		const item = (from?.items ?? []).find(each => each.id === itemId) ?? root.findInGroups(from?.items ?? [], itemId);
+		if (!item) return;
+		root.update(fromId, { items: root.withoutItem(from.items, itemId) }, true);
+		root.addItems(toId, [item], index);
+	}
+
+	// where in which tray a point of the screens falls: { trayId, index } or null
+	function trayAt(gx, gy, except) {
+		for (const id in root.windows) {
+			if (id === except) continue;
+			const index = root.windows[id]?.indexAtGlobal(gx, gy) ?? -1;
+			if (index >= 0) return { trayId: id, index: index };
+		}
+		return null;
+	}
+
+	// ── badges ──────────────────────────────────────────────────────────
+	// what an icon has to say: { count, text, progress (0…1, -1 none), dot, urgent }
+	function badgeOf(item) {
+		const out = { count: 0, text: "", progress: -1, dot: false, urgent: false };
+		if (!item) return out;
+		switch (item.kind) {
+		case "app": {
+			const groups = root.notifsOf(item);
+			out.count = groups.reduce((sum, group) => sum + (group.notifications?.length ?? 1), 0);
+			out.urgent = groups.some(group => Number(group.urgency) >= 2);
+			out.dot = out.count > 0;
+			if (root.isBrowser(item) && Downloads.enabled && Downloads.running.length > 0) out.progress = Downloads.ratio;
+			break;
+		}
+		case "command":
+			switch (String(item.command)) {
+			case "messages": out.count = Messages.enabled ? Messages.unread : 0; break;
+			case "updates": out.count = Updates.packages.length; break;
+			case "downloads": out.count = Downloads.active?.length ?? 0; out.progress = Downloads.running.length > 0 ? Downloads.ratio : -1; break;
+			case "torrents": out.count = Torrents.running.length; out.progress = Torrents.running.length > 0 ? Torrents.ratio : -1; break;
+			case "printer": out.progress = Printer.printing ? Printer.progress : -1; break;
+			case "games": out.count = Games.running.length; break;
+			case "shelf": out.count = Shelf.shelves.length; break;
+			}
+			break;
+		case "game": {
+			const minutes = Number(Games.game(item.game)?.playtime ?? 0);
+			if (minutes > 0) out.text = minutes >= 60 ? `${Math.round(minutes / 60)} h` : `${minutes} m`;
+			out.dot = Games.isRunning(String(item.game));
+			break;
+		}
+		case "phone":
+			if (Phone.reachable && Phone.battery >= 0) out.text = `${Phone.battery}%`;
+			out.urgent = Phone.reachable && Phone.battery >= 0 && Phone.battery <= 15 && !Phone.charging;
+			break;
+		case "group":
+			out.count = (item.items ?? []).reduce((sum, child) => sum + root.badgeOf(child).count, 0);
+			break;
+		}
+		return out;
+	}
+
+	// the notification groups of an app
+	function notifsOf(item) {
+		const entry = root.entryOf(item);
+		if (!entry) return [];
+		const name = String(entry.name ?? "").toLowerCase();
+		const id = String(entry.id ?? "").toLowerCase();
+		const icon = String(entry.icon ?? "").toLowerCase();
+		return Notifs.groups.filter(group => {
+			const app = String(group.appName ?? "").toLowerCase();
+			const key = String(group.key ?? "").toLowerCase();
+			const gIcon = String(group.appIcon ?? "").toLowerCase();
+			return app !== "" && (app === name || app === id || key.includes(id) || (icon !== "" && gIcon === icon));
+		});
+	}
+
+	function dismissNotifs(item) {
+		for (const group of root.notifsOf(item)) Notifs.dismissGroup(group.key);
+	}
+
+	function isBrowser(item) {
+		const id = String(root.entryOf(item)?.id ?? item?.app ?? "").toLowerCase();
+		return /floorp|firefox|chrom|brave|vivaldi|librewolf|zen|epiphany|qutebrowser/.test(id);
+	}
+
+	// ── dropped on an item ──────────────────────────────────────────────
+	// whether files dropped on it do something with them
+	function takesFiles(item) {
+		if (!item) return false;
+		if (item.kind === "app" || item.kind === "shell" || item.kind === "action" || item.kind === "phone") return true;
+		return item.kind === "file" && !!item.folder;
+	}
+
+	function pathsOfDrop(drop) {
+		return Array.from(drop.urls ?? []).map(String).filter(url => url.startsWith("file://")).map(url => decodeURIComponent(url.slice(7)));
+	}
+
+	// opens the files with the app, hands them to the line, copies them into the folder …
+	function openWith(trayId, item, paths) {
+		if (!item || paths.length === 0) return;
+		switch (item.kind) {
+		case "app": {
+			const entry = root.entryOf(item);
+			if (!entry) return;
+			AppUsage.recordLaunch(entry);
+			Quickshell.execDetached(["gtk-launch", String(entry.id).replace(/\.desktop$/, "")].concat(paths));
+			break;
+		}
+		case "shell":
+			Quickshell.execDetached(["sh", "-c", `${item.exec} "$@"`, "sh"].concat(paths));
+			break;
+		case "file":
+			Quickshell.execDetached(["gio", "copy", "--"].concat(paths, [String(item.path) + "/"]));
+			Notifs.post({ summary: `Copied into ${root.nameOf(item)}`, body: paths.map(path => path.split("/").pop()).join(", ") });
+			break;
+		case "phone":
+			for (const path of paths) Phone.shareFile(path);
+			break;
+		case "action":
+			root.runActionItem(item, paths);
+			return;
+		}
+		root.launched(item.id);
+	}
+
+	function runActionItem(item, paths) {
+		const action = root.actionOf(item);
+		if (!action) return;
+		if (paths.length === 0) {
+			Notifs.post({ summary: action.name, body: "Drop files on it" });
+			return;
+		}
+		switch (action.id) {
+		case "shelf":
+			Shelf.create(paths.map(path => ({ kind: "file", path: path, name: path.split("/").pop(), mime: Shelf.guessMime(path) })), "");
+			break;
+		case "ai":
+			Popups.withFocusedScreen(screen => Popups.open("launcher", screen, "", { aiFiles: paths, aiAsk: "" }));
+			break;
+		case "phone":
+			for (const path of paths) Phone.shareFile(path);
+			break;
+		case "pc":
+			Pcs.sendFiles(String(item.pc), paths, "");
+			break;
+		case "copy":
+			Quickshell.execDetached(["wl-copy", paths.join("\n")]);
+			break;
+		case "trash":
+			Quickshell.execDetached(["gio", "trash", "--"].concat(paths));
+			Notifs.post({ summary: `${paths.length} in the trash`, body: paths.map(path => path.split("/").pop()).join(", ") });
+			break;
+		case "open":
+			for (const path of paths) Quickshell.execDetached(["xdg-open", path]);
+			break;
+		}
+		root.launched(item.id);
+	}
+
+	// ── widgets ─────────────────────────────────────────────────────────
+	function widgetClicked(item) {
+		switch (item.widget) {
+		case "clock":
+		case "weather":
+			Popups.withFocusedScreen(screen => Popups.open("today", screen));
+			break;
+		case "media":
+			Media.player?.togglePlaying();
+			break;
+		case "timer":
+			Popups.withFocusedScreen(screen => Popups.open("timer", screen));
+			break;
+		case "volume":
+			if (Audio.sink?.audio) Audio.sink.audio.muted = !Audio.sink.audio.muted;
+			break;
+		case "cpu":
+		case "memory":
+			Quickshell.execDetached(Terminal.command({ title: "btop" }, ["btop"]));
+			break;
+		}
+	}
+
+	// the wheel on an item: through an app's windows, the volume, a player's volume
+	function scrolled(item, up) {
+		if (item?.kind === "app") {
+			const windows = root.windowsOf(item).slice().sort((a, b) => a.id - b.id);
+			if (windows.length === 0) return;
+			const at = windows.findIndex(window => window.is_focused);
+			const next = at < 0 ? 0 : (at + (up ? -1 : 1) + windows.length) % windows.length;
+			Niri.focusWindow(windows[next].id);
+		} else if (item?.kind === "widget" && item.widget === "volume") {
+			Audio.setVolume(Math.max(0, Math.min(1.5, Audio.volume + (up ? 0.05 : -0.05))));
+		} else if (item?.kind === "widget" && item.widget === "media" && Media.player) {
+			Media.player.volume = Math.max(0, Math.min(1, Number(Media.player.volume ?? 1) + (up ? 0.05 : -0.05)));
+		}
+	}
+
+	// ── when a tray is there ────────────────────────────────────────────
+	// `when`: { workspaces: "1, web", apps: "code, firefox", from: "08:00",
+	// to: "18:00", game: "on" | "off" }; all that is set must hold
+	function active(tray) {
+		const rule = tray?.when;
+		if (!rule) return true;
+		const list = text => String(text ?? "").split(",").map(each => each.trim().toLowerCase()).filter(each => each !== "");
+		const spaces = list(rule.workspaces);
+		if (spaces.length > 0) {
+			const output = root.outputOf(tray);
+			const ws = Niri.workspaces.find(each => each.is_active && String(each.output) === output) ?? Niri.workspaces.find(each => each.is_focused);
+			const names = [String(ws?.name ?? "").toLowerCase(), String(ws?.idx ?? "")];
+			if (!spaces.some(each => names.includes(each))) return false;
+		}
+		const apps = list(rule.apps);
+		if (apps.length > 0) {
+			const focused = String(Niri.windows.find(window => window.is_focused)?.app_id ?? "").toLowerCase();
+			if (!apps.some(each => focused.includes(each))) return false;
+		}
+		if (rule.from || rule.to) {
+			const time = new Date(root.now);
+			const minutes = time.getHours() * 60 + time.getMinutes();
+			const parse = text => {
+				const match = String(text ?? "").match(/^(\d{1,2}):?(\d{2})?$/);
+				return match ? Number(match[1]) * 60 + Number(match[2] ?? 0) : -1;
+			};
+			const from = parse(rule.from);
+			const to = parse(rule.to);
+			if (from >= 0 && to >= 0) {
+				const inside = from <= to ? minutes >= from && minutes < to : minutes >= from || minutes < to;
+				if (!inside) return false;
+			}
+		}
+		if (rule.game === "on" && !GameMode.active) return false;
+		if (rule.game === "off" && GameMode.active) return false;
+		return true;
+	}
+
+	// ── profiles ────────────────────────────────────────────────────────
+	function saveProfile(name) {
+		const key = String(name ?? "").trim();
+		if (key === "") return;
+		const next = Object.assign({}, root.profiles);
+		next[key] = JSON.parse(JSON.stringify(root.trays));
+		root.profiles = next;
+		root.profile = key;
+		root.save();
+	}
+
+	function useProfile(name) {
+		const saved = root.profiles[name];
+		if (!saved) return;
+		// what is set up now is kept under the profile in use
+		if (root.profile !== "" && root.profile !== name && root.profiles[root.profile]) {
+			const next = Object.assign({}, root.profiles);
+			next[root.profile] = JSON.parse(JSON.stringify(root.trays));
+			root.profiles = next;
+		}
+		root.trays = JSON.parse(JSON.stringify(saved));
+		root.profile = name;
+		root.editing = root.trays[0]?.id ?? "";
+		root.save();
+		Notifs.post({ summary: `Tray profile: ${name}` });
+	}
+
+	function deleteProfile(name) {
+		const next = Object.assign({}, root.profiles);
+		delete next[name];
+		root.profiles = next;
+		if (root.profile === name) root.profile = "";
+		root.save();
+	}
+
+	// ── keys ────────────────────────────────────────────────────────────
+	// the n-th item (1…) of the tray with the keyboard, the edited one or the first
+	function launchIndex(n, trayId) {
+		const tray = root.trayById(trayId) ?? root.trayById(root.keyboardTray) ?? root.trays.find(each => root.active(each));
+		if (!tray) return;
+		const items = root.shownItems(root.full(tray)).filter(item => item.kind !== "separator" && item.kind !== "spacer");
+		const item = items[n - 1];
+		if (item) root.run(tray.id, item, false);
+	}
+
+	// opens a tray with the keyboard on it: arrows, Enter, 1…9, Escape
+	function focusTray(id) {
+		const tray = root.trayById(id) ?? root.trays.find(each => root.active(each));
+		if (!tray) return;
+		root.keyboardTray = root.keyboardTray === tray.id ? "" : tray.id;
+	}
+
+	readonly property string bindMods: "Mod+Alt"
+	function isOurBind(bind) {
+		return (bind.args ?? []).join(" ").includes("ipc call apptray");
+	}
+	readonly property bool keysBound: Keybinds.binds.some(bind => root.isOurBind(bind))
+
+	// Mod+Alt+1…9 start the items, Mod+Alt+0 gives a tray the keyboard;
+	// keys that do something else are left alone
+	function bindKeys(on) {
+		if (!Keybinds.loaded) {
+			Keybinds.load();
+			bindRetry.on = on;
+			bindRetry.restart();
+			return;
+		}
+		const others = Keybinds.binds.filter(bind => !root.isOurBind(bind));
+		const added = [];
+		const skipped = [];
+		if (on) {
+			for (let n = 0; n <= 9; n += 1) {
+				const key = `${root.bindMods}+${n}`;
+				if (others.some(other => !other.disabled && Keybinds.norm(other.key) === Keybinds.norm(key))) {
+					skipped.push(key);
+					continue;
+				}
+				added.push({ key: key, props: {}, action: "spawn", args: ["qs", "-c", "shell", "ipc", "call", "apptray", n === 0 ? "focus" : "launch", n === 0 ? "" : String(n)], aprops: {}, disabled: false });
+			}
+		}
+		Keybinds.commit(others.concat(added), on ? "Tray keys added" : "Tray keys removed");
+		if (skipped.length > 0) Notifs.post({ summary: "Some tray keys are taken", body: skipped.join(", ") });
+	}
+
+	Timer {
+		id: bindRetry
+
+		property bool on: true
+
+		interval: 400
+		onTriggered: {
+			if (Keybinds.loaded) root.bindKeys(bindRetry.on);
+			else bindRetry.restart();
+		}
+	}
+
+	// ── sharing a tray ──────────────────────────────────────────────────
+	// a tray as a file (`.pshell-tray.json`): sent to another PC, dropped on
+	// a tray or the editor there, it comes in as a tray of its own
+	function exportTray(id) {
+		const tray = root.trayById(id);
+		if (!tray) return "";
+		const name = String(tray.name ?? "Tray").replace(/[^A-Za-z0-9_-]+/g, "-");
+		const path = `${Paths.cache}/trays/${name}.pshell-tray.json`;
+		Quickshell.execDetached(["sh", "-c", 'mkdir -p "$(dirname "$1")" && printf "%s" "$2" > "$1"', "sh", path, JSON.stringify({ pshellTray: 1, tray: tray })]);
+		return path;
+	}
+
+	function sendTray(id, pc) {
+		const path = root.exportTray(id);
+		if (path === "") return;
+		sendLater.pc = pc;
+		sendLater.path = path;
+		sendLater.restart();
+	}
+
+	Timer {
+		id: sendLater
+
+		property string pc: ""
+		property string path: ""
+
+		interval: 400
+		onTriggered: {
+			Pcs.sendFiles(sendLater.pc, [sendLater.path], "");
+			Notifs.post({ summary: `Tray sent to ${Pcs.nameOf(sendLater.pc)}`, body: "Drop the file on a tray or on Pshell settings › App tray there" });
+		}
+	}
+
+	function isTrayFile(path) {
+		return /\.pshell-tray\.json$/.test(String(path));
+	}
+
+	function importTray(path) {
+		importer.command = ["cat", String(path)];
+		importer.running = true;
+	}
+
+	Process {
+		id: importer
+
+		stdout: StdioCollector {
+			onStreamFinished: {
+				try {
+					const data = JSON.parse(this.text);
+					const tray = data?.tray;
+					if (!tray || !Array.isArray(tray.items)) throw new Error("no tray");
+					const copy = Object.assign({}, tray, { id: root.uid("tray-"), snap: null, output: root.outputOf(tray) });
+					root.trays = root.trays.concat([copy]);
+					root.editing = copy.id;
+					root.save();
+					Notifs.post({ summary: `Tray ${copy.name ?? ""} came in`, body: `${copy.items.length} items` });
+				} catch (error) {
+					Notifs.post({ summary: "Not a tray", body: String(error) });
+				}
+			}
+		}
+	}
+
+	// ── pictures of windows (the previews over an app) ──────────────────
+	property var shotFiles: ({})
+	property int shotsRev: 0
+	readonly property string shotDir: `${Paths.runtime}/tray-shots`
+
+	function shoot(windows) {
+		const line = windows.filter(window => window.layout?.window_size).map(window => `${window.id}:${window.layout.window_size[0]}:${window.layout.window_size[1]}`).join(" ");
+		if (line === "") return;
+		shots.pending = line;
+		if (shots.running) shots.write(line + "\n");
+		else shots.running = true;
+	}
+
+	Process {
+		id: shots
+
+		property string pending: ""
+
+		command: ["python3", `${Paths.scripts}/window_shots.py`, root.shotDir, "480", "0"]
+		stdinEnabled: true
+		onStarted: shots.write(shots.pending + "\n")
+		stdout: SplitParser {
+			onRead: line => {
+				try {
+					const data = JSON.parse(line);
+					const files = Object.assign({}, root.shotFiles);
+					files[data.id] = String(data.file);
+					root.shotFiles = files;
+					root.shotsRev++;
+				} catch (error) {}
+			}
+		}
+	}
+
 	// ── its items ───────────────────────────────────────────────────────
 	// an item is the same as one already there when it starts the same thing
 	function sameThing(a, b) {
@@ -236,12 +802,20 @@ Singleton {
 		case "shell": return a.exec === b.exec;
 		case "file": return a.path === b.path;
 		case "link": return a.url === b.url;
+		case "widget": return a.widget === b.widget;
+		case "action": return a.action === b.action && (a.pc ?? "") === (b.pc ?? "");
+		case "game": return a.game === b.game;
+		case "phone": return true;
 		}
+		// lines, gaps and groups are each their own
 		return false;
 	}
 
 	// puts items in before `index` (or at the end); one that is there already moves
-	function addItems(trayId, items, index) {
+	function addItems(trayId, raws, index) {
+		// a tray file comes in as a tray of its own
+		for (const each of raws.filter(item => item.kind === "trayfile")) root.importTray(each.path);
+		const items = raws.filter(item => item.kind !== "trayfile");
 		const tray = root.trayById(trayId);
 		if (!tray || items.length === 0) return;
 		let list = (tray.items ?? []).slice();
@@ -260,10 +834,36 @@ Singleton {
 		root.update(trayId, { items: list });
 	}
 
-	function removeItem(trayId, itemId) {
+	// taken out, with a way back for a while
+	function removeItem(trayId, itemId, quiet) {
 		const tray = root.trayById(trayId);
 		if (!tray) return;
-		root.update(trayId, { items: (tray.items ?? []).filter(item => item.id !== itemId) });
+		const before = (tray.items ?? []).slice();
+		const gone = before.find(item => item.id === itemId) ?? root.findInGroups(before, itemId);
+		root.update(trayId, { items: root.withoutItem(before, itemId) });
+		if (quiet || !gone || gone.kind === "separator" || gone.kind === "spacer") return;
+		Notifs.post({
+			summary: `${root.nameOf(gone)} is out of the tray`,
+			body: String(tray.name ?? "Tray"),
+			actions: [{ text: "Undo", identifier: "undo", invoke: () => {
+				if (root.trayById(trayId)) root.update(trayId, { items: before });
+			} }]
+		});
+	}
+
+	// a list without an item, also taken out of a group
+	function withoutItem(list, itemId) {
+		return list.filter(item => item.id !== itemId).map(item => item.kind === "group"
+			? Object.assign({}, item, { items: (item.items ?? []).filter(child => child.id !== itemId) }) : item);
+	}
+
+	function findInGroups(list, itemId) {
+		for (const item of list)
+			if (item.kind === "group") {
+				const found = (item.items ?? []).find(child => child.id === itemId);
+				if (found) return found;
+			}
+		return null;
 	}
 
 	function updateItem(trayId, itemId, patch) {
@@ -342,6 +942,7 @@ Singleton {
 	// a desktop file is its app; anything else opens with its program
 	function itemOfPath(path) {
 		const clean = String(path).replace(/\/+$/, "") || "/";
+		if (root.isTrayFile(clean)) return { kind: "trayfile", path: clean };
 		const base = clean.split("/").pop();
 		if (base.endsWith(".desktop")) {
 			const entry = DesktopEntries.byId(base.slice(0, -8)) ?? DesktopEntries.byId(base);
@@ -382,6 +983,13 @@ Singleton {
 		case "shell": return String(item.name || item.exec);
 		case "file": return String(item.name || item.path.split("/").pop());
 		case "link": return String(item.name || root.hostOf(item.url));
+		case "group": return String(item.name || `${(item.items ?? []).length} items`);
+		case "separator": return "Line";
+		case "spacer": return "Gap";
+		case "widget": return root.widgetName(item.widget);
+		case "action": return root.actionOf(item)?.name ?? "Action";
+		case "game": return String(Games.game(item.game)?.name ?? item.name ?? "Game");
+		case "phone": return Phone.reachable ? `${Phone.name} · ${Phone.battery >= 0 ? `${Phone.battery}%` : ""}` : (Phone.paired ? `${Phone.name} (away)` : "Phone");
 		}
 		return "";
 	}
@@ -398,6 +1006,10 @@ Singleton {
 		case "file":
 			if (root.isImage(item.path)) return `file://${item.path}`;
 			return AppIcons.app(root.themeIconOf(item), ["text-x-generic"]);
+		case "game": {
+			const cover = Games.game(item.game)?.art?.cover ?? "";
+			return cover !== "" ? (cover.startsWith("/") ? `file://${cover}` : cover) : "";
+		}
 		}
 		return "";
 	}
@@ -410,6 +1022,11 @@ Singleton {
 		case "shell": return "console";
 		case "link": return "web";
 		case "file": return item.folder ? "folder" : "file_outline";
+		case "group": return "apps";
+		case "widget": return root.widgetGlyph(item.widget);
+		case "action": return root.actionOf(item)?.glyph ?? "lightning_bolt";
+		case "game": return "gamepad_variant";
+		case "phone": return "cellphone";
 		}
 		return "apps";
 	}
@@ -511,6 +1128,24 @@ Singleton {
 			Browser.open(String(item.url));
 			root.launched(item.id);
 			break;
+		case "game":
+			Games.launch(String(item.game));
+			root.launched(item.id);
+			break;
+		case "widget":
+			root.widgetClicked(item);
+			return;
+		case "action":
+			root.runActionItem(item, []);
+			return;
+		case "phone":
+			Popups.withFocusedScreen(screen => Popups.open("launcher", screen, "", ">phone "));
+			return;
+		// a group or a stack opens in its tray; nothing to start
+		case "group":
+		case "separator":
+		case "spacer":
+			return;
 		}
 		// a tray opened for this closes again
 		if (tray.reveal === "click" || tray.reveal === "key") root.setOpen(trayId, false);
@@ -560,7 +1195,7 @@ Singleton {
 	// ── kept ────────────────────────────────────────────────────────────
 	function save() {
 		root.existed = true;
-		file.setText(JSON.stringify({ trays: root.trays }, null, 2) + "\n");
+		file.setText(JSON.stringify({ trays: root.trays, profiles: root.profiles, profile: root.profile }, null, 2) + "\n");
 	}
 
 	// the first tray: at the bottom of the primary screen, with the
@@ -585,6 +1220,8 @@ Singleton {
 			try {
 				const data = JSON.parse(String(file.text() || "{}"));
 				root.trays = Array.isArray(data?.trays) ? data.trays.filter(tray => tray && tray.id) : [];
+				root.profiles = data?.profiles && typeof data.profiles === "object" ? data.profiles : {};
+				root.profile = String(data?.profile ?? "");
 			} catch (error) {
 				root.trays = [];
 			}
