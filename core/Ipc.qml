@@ -688,13 +688,14 @@ Scope {
 		}
 	}
 
-	// the live status of the shell (Live): what each source says right now,
-	// and putting one on the bar or taking it off
+	// the live status of the shell (Live): what each shown source says right
+	// now (a source reads its service only while shown), and putting one on
+	// the bar or taking it off
 	IpcHandler {
 		target: "live"
 
 		function list(): string {
-			return JSON.stringify(Live.sources.filter(src => src.available).map(src => ({ id: src.key, name: src.name, busy: src.busy, text: src.text, detail: src.detail, level: src.level, tone: src.tone })));
+			return JSON.stringify(Live.sources.filter(src => src.on && src.available).map(src => ({ id: src.key, name: src.name, busy: src.busy, text: src.text, detail: src.detail, level: src.level, tone: src.tone })));
 		}
 		function bar(id: string): void {
 			if (!Live.source(id)) return;

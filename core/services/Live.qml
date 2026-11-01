@@ -23,7 +23,10 @@ Singleton {
 		property string group: "shell"
 		property string plugin: ""
 		property string about: ""
-		// the plugin is on and there is something to show at all
+		// shown somewhere (Live.hold): only then it reads its service, so a
+		// source nobody shows neither wakes a service nor costs anything
+		readonly property bool on: root.held(key) && root.pluginOn(plugin)
+		// the plugin is on and there is something to show at all (known while on)
 		property bool ready: true
 		readonly property bool available: root.pluginOn(plugin) && ready
 		property bool busy: true
@@ -192,13 +195,13 @@ Singleton {
 		glyph: "cpu_64_bit"
 		group: "system"
 		about: "Load of all cores, with its last minute"
-		text: root.percent(SysStats.cpu)
-		detail: SysStats.cpuText !== "" ? `${SysStats.cpuText} · ${Math.round(SysStats.cpu)}% busy` : `${Math.round(SysStats.cpu)}% busy`
-		level: SysStats.cpu / 100
-		history: SysStats.cpuHistory
+		text: cpu.on ? (root.percent(SysStats.cpu)) : ""
+		detail: cpu.on ? (SysStats.cpuText !== "" ? `${SysStats.cpuText} · ${Math.round(SysStats.cpu)}% busy` : `${Math.round(SysStats.cpu)}% busy`) : ""
+		level: cpu.on ? (SysStats.cpu / 100) : -1
+		history: cpu.on ? (SysStats.cpuHistory) : null
 		maximum: 100
-		tone: SysStats.cpu > 90 ? "bad" : (SysStats.cpu > 70 ? "warn" : "normal")
-		busy: SysStats.cpu > 25
+		tone: cpu.on ? (SysStats.cpu > 90 ? "bad" : (SysStats.cpu > 70 ? "warn" : "normal")) : "normal"
+		busy: cpu.on ? (SysStats.cpu > 25) : false
 		panel: "control"
 		page: "system"
 		hint: "Opens the system page"
@@ -214,13 +217,13 @@ Singleton {
 		glyph: "expansion_card"
 		group: "system"
 		about: "How full the memory is"
-		text: root.percent(SysStats.memory)
-		detail: SysStats.memoryText
-		level: SysStats.memory / 100
-		history: SysStats.memoryHistory
+		text: memory.on ? (root.percent(SysStats.memory)) : ""
+		detail: memory.on ? (SysStats.memoryText) : ""
+		level: memory.on ? (SysStats.memory / 100) : -1
+		history: memory.on ? (SysStats.memoryHistory) : null
 		maximum: 100
-		tone: SysStats.memory > 90 ? "bad" : (SysStats.memory > 75 ? "warn" : "normal")
-		busy: SysStats.memory > 60
+		tone: memory.on ? (SysStats.memory > 90 ? "bad" : (SysStats.memory > 75 ? "warn" : "normal")) : "normal"
+		busy: memory.on ? (SysStats.memory > 60) : false
 		panel: "control"
 		page: "system"
 		hint: "Opens the system page"
@@ -233,15 +236,15 @@ Singleton {
 		prefers: "spark"
 		widest: "88.8 MB/s"
 		name: "Network"
-		glyph: Network.icon || "wifi"
+		glyph: network.on ? (Network.icon || "wifi") : "wifi"
 		group: "system"
 		plugin: "network"
 		about: "What comes in right now, and what goes out"
-		text: Network.online ? Format.rate(Network.download) : "Offline"
-		detail: Network.online ? `${Network.label}${Network.ssid !== "" ? ` · ${Network.ssid}` : ""} · ↓ ${Format.rate(Network.download)} · ↑ ${Format.rate(Network.upload)}` : "No connection"
-		history: Network.online ? Network.downloadHistory : null
-		tone: Network.online ? (Network.download > 1048576 ? "accent" : "normal") : "bad"
-		busy: !Network.online || Network.download > 262144 || Network.upload > 262144
+		text: network.on ? (Network.online ? Format.rate(Network.download) : "Offline") : ""
+		detail: network.on ? (Network.online ? `${Network.label}${Network.ssid !== "" ? ` · ${Network.ssid}` : ""} · ↓ ${Format.rate(Network.download)} · ↑ ${Format.rate(Network.upload)}` : "No connection") : ""
+		history: network.on ? (Network.online ? Network.downloadHistory : null) : null
+		tone: network.on ? (Network.online ? (Network.download > 1048576 ? "accent" : "normal") : "bad") : "normal"
+		busy: network.on ? (!Network.online || Network.download > 262144 || Network.upload > 262144) : false
 		panel: "control"
 		page: "network"
 		hint: "Opens the network page"
@@ -254,17 +257,17 @@ Singleton {
 		prefers: "ring"
 		widest: "100%"
 		name: "Battery"
-		glyph: SysStats.batteryIcon
+		glyph: battery.on ? (SysStats.batteryIcon) : "battery"
 		group: "system"
 		plugin: "battery"
 		about: "The laptop's charge"
-		ready: SysStats.batteryAvailable
-		text: `${SysStats.batteryPercent}%`
-		detail: SysStats.charging ? "Charging" : (SysStats.charged ? "Full" : `${SysStats.batteryPercent}% left`)
-		level: SysStats.batteryPercent / 100
-		tone: SysStats.charging ? "good" : (SysStats.batteryPercent <= 10 ? "bad" : (SysStats.batteryPercent <= 25 ? "warn" : "normal"))
-		pulse: !SysStats.charging && SysStats.batteryPercent <= 10
-		busy: SysStats.charging || SysStats.batteryPercent <= 30
+		ready: battery.on ? (SysStats.batteryAvailable) : false
+		text: battery.on ? (`${SysStats.batteryPercent}%`) : ""
+		detail: battery.on ? (SysStats.charging ? "Charging" : (SysStats.charged ? "Full" : `${SysStats.batteryPercent}% left`)) : ""
+		level: battery.on ? (SysStats.batteryPercent / 100) : -1
+		tone: battery.on ? (SysStats.charging ? "good" : (SysStats.batteryPercent <= 10 ? "bad" : (SysStats.batteryPercent <= 25 ? "warn" : "normal"))) : "normal"
+		pulse: battery.on ? (!SysStats.charging && SysStats.batteryPercent <= 10) : false
+		busy: battery.on ? (SysStats.charging || SysStats.batteryPercent <= 30) : false
 		panel: "control"
 		page: "power"
 	}
@@ -276,13 +279,13 @@ Singleton {
 		prefers: "ring"
 		widest: "100%"
 		name: "Volume"
-		glyph: Audio.icon
+		glyph: volume.on ? (Audio.icon) : "volume_high"
 		group: "system"
 		about: "Loudness of the output; the wheel turns it"
-		text: Audio.muted ? "Muted" : root.percent(Audio.volume * 100)
-		detail: Audio.sinkName
-		level: Audio.muted ? 0 : Math.min(1, Audio.volume)
-		tone: Audio.muted ? "muted" : (Audio.volume > 1 ? "warn" : "normal")
+		text: volume.on ? (Audio.muted ? "Muted" : root.percent(Audio.volume * 100)) : ""
+		detail: volume.on ? (Audio.sinkName) : ""
+		level: volume.on ? (Audio.muted ? 0 : Math.min(1, Audio.volume)) : -1
+		tone: volume.on ? (Audio.muted ? "muted" : (Audio.volume > 1 ? "warn" : "normal")) : "normal"
 		panel: "control"
 		page: "audio"
 		hint: "Click: sound page · wheel: louder or quieter"
@@ -296,14 +299,14 @@ Singleton {
 		prefers: "ring"
 		widest: "100%"
 		name: "Microphone"
-		glyph: Audio.micIcon
+		glyph: mic.on ? (Audio.micIcon) : "microphone"
 		group: "system"
 		about: "Whether the microphone hears you; a click mutes it"
-		text: Audio.micMuted ? "Muted" : root.percent(Audio.micVolume * 100)
-		detail: Audio.micMuted ? "Nobody hears you" : "The microphone is open"
-		level: Audio.micMuted ? 0 : Math.min(1, Audio.micVolume)
-		tone: Audio.micMuted ? "muted" : "accent"
-		busy: !Audio.micMuted
+		text: mic.on ? (Audio.micMuted ? "Muted" : root.percent(Audio.micVolume * 100)) : ""
+		detail: mic.on ? (Audio.micMuted ? "Nobody hears you" : "The microphone is open") : ""
+		level: mic.on ? (Audio.micMuted ? 0 : Math.min(1, Audio.micVolume)) : -1
+		tone: mic.on ? (Audio.micMuted ? "muted" : "accent") : "normal"
+		busy: mic.on ? (!Audio.micMuted) : false
 		hint: "Click: mute or unmute · wheel: level"
 		act: screen => {
 			if (Audio.source?.audio) Audio.source.audio.muted = !Audio.source.audio.muted;
@@ -322,9 +325,9 @@ Singleton {
 		group: "system"
 		plugin: "backlight"
 		about: "The screen's brightness; the wheel changes it"
-		ready: Brightness.available
-		text: root.percent(Brightness.value * 100)
-		level: Brightness.value
+		ready: brightness.on ? (Brightness.available) : false
+		text: brightness.on ? (root.percent(Brightness.value * 100)) : ""
+		level: brightness.on ? (Brightness.value) : -1
 		busy: false
 		hint: "Wheel: brighter or darker"
 		wheel: up => Brightness.set(Math.max(0.01, Math.min(1, Brightness.value + (up ? 0.05 : -0.05))))
@@ -335,14 +338,14 @@ Singleton {
 
 		key: "power"
 		name: "Power profile"
-		glyph: PowerProfile.icons[PowerProfile.current] ?? "scale_balance"
+		glyph: power.on ? (PowerProfile.icons[PowerProfile.current] ?? "scale_balance") : "scale_balance"
 		group: "system"
 		plugin: "power-profiles"
 		about: "Saver, balanced or performance; a click goes to the next"
-		ready: PowerProfile.available
-		text: PowerProfile.labels[PowerProfile.current] ?? ""
-		tone: PowerProfile.current === "performance" ? "warn" : (PowerProfile.current === "power-saver" ? "good" : "normal")
-		busy: PowerProfile.current !== "balanced"
+		ready: power.on ? (PowerProfile.available) : false
+		text: power.on ? (PowerProfile.labels[PowerProfile.current] ?? "") : ""
+		tone: power.on ? (PowerProfile.current === "performance" ? "warn" : (PowerProfile.current === "power-saver" ? "good" : "normal")) : "normal"
+		busy: power.on ? (PowerProfile.current !== "balanced") : false
 		hint: "Click: the next profile"
 		act: screen => {
 			const list = PowerProfile.profiles;
@@ -355,15 +358,15 @@ Singleton {
 
 		key: "bluetooth"
 		name: "Bluetooth"
-		glyph: Bluetooth.icon
+		glyph: bluetooth.on ? (Bluetooth.icon) : "bluetooth"
 		group: "system"
 		plugin: "bluetooth"
 		about: "What is connected"
-		ready: Bluetooth.available
-		text: Bluetooth.connected.length > 0 ? (Bluetooth.connected.length === 1 ? String(Bluetooth.connected[0].name ?? "1") : `${Bluetooth.connected.length}`) : (Bluetooth.powered ? "On" : "Off")
-		detail: Bluetooth.summary
-		tone: Bluetooth.connected.length > 0 ? "accent" : (Bluetooth.powered ? "normal" : "muted")
-		busy: Bluetooth.connected.length > 0
+		ready: bluetooth.on ? (Bluetooth.available) : false
+		text: bluetooth.on ? (Bluetooth.connected.length > 0 ? (Bluetooth.connected.length === 1 ? String(Bluetooth.connected[0].name ?? "1") : `${Bluetooth.connected.length}`) : (Bluetooth.powered ? "On" : "Off")) : ""
+		detail: bluetooth.on ? (Bluetooth.summary) : ""
+		tone: bluetooth.on ? (Bluetooth.connected.length > 0 ? "accent" : (Bluetooth.powered ? "normal" : "muted")) : "normal"
+		busy: bluetooth.on ? (Bluetooth.connected.length > 0) : false
 		panel: "control"
 		page: "bluetooth"
 	}
@@ -372,19 +375,19 @@ Singleton {
 	Source {
 		id: notifications
 
-		readonly property bool urgent: Notifs.groups.some(group => Number(group.urgency ?? 0) === 2)
+		readonly property bool urgent: notifications.on ? (Notifs.groups.some(group => Number(group.urgency ?? 0) === 2)) : false
 
 		key: "notifications"
 		name: "Notifications"
-		glyph: Notifs.dnd ? "bell_off_outline" : (Notifs.count > 0 ? "bell_badge_outline" : "bell_outline")
+		glyph: notifications.on ? (Notifs.dnd ? "bell_off_outline" : (Notifs.count > 0 ? "bell_badge_outline" : "bell_outline")) : "bell_outline"
 		group: "shell"
 		plugin: "notifications"
 		about: "How many wait; quiet while do not disturb is on"
-		text: Notifs.count > 0 ? `${Notifs.count}` : (Notifs.dnd ? "Quiet" : "0")
-		detail: Notifs.dnd ? `Do not disturb${Notifs.dndReason ? ` · ${Notifs.dndReason}` : ""}` : (Notifs.count > 0 ? `${Notifs.count} waiting` : "Nothing new")
-		tone: notifications.urgent ? "bad" : (Notifs.dnd ? "muted" : (Notifs.count > 0 ? "accent" : "normal"))
-		pulse: notifications.urgent
-		busy: Notifs.count > 0 || Notifs.dnd
+		text: notifications.on ? (Notifs.count > 0 ? `${Notifs.count}` : (Notifs.dnd ? "Quiet" : "0")) : ""
+		detail: notifications.on ? (Notifs.dnd ? `Do not disturb${Notifs.dndReason ? ` · ${Notifs.dndReason}` : ""}` : (Notifs.count > 0 ? `${Notifs.count} waiting` : "Nothing new")) : ""
+		tone: notifications.on ? (notifications.urgent ? "bad" : (Notifs.dnd ? "muted" : (Notifs.count > 0 ? "accent" : "normal"))) : "normal"
+		pulse: notifications.on ? (notifications.urgent) : false
+		busy: notifications.on ? (Notifs.count > 0 || Notifs.dnd) : false
 		panel: "today"
 	}
 
@@ -397,10 +400,10 @@ Singleton {
 		group: "shell"
 		plugin: "messages"
 		about: "Unread mail and chats"
-		text: `${Messages.unread}`
-		detail: Messages.unread > 0 ? `${Messages.unread} unread` : "All read"
-		tone: Messages.unread > 0 ? "accent" : "muted"
-		busy: Messages.unread > 0
+		text: messages.on ? (`${Messages.unread}`) : ""
+		detail: messages.on ? (Messages.unread > 0 ? `${Messages.unread} unread` : "All read") : ""
+		tone: messages.on ? (Messages.unread > 0 ? "accent" : "muted") : "normal"
+		busy: messages.on ? (Messages.unread > 0) : false
 		quiet: true
 		act: screen => Messages.toggle()
 	}
@@ -410,16 +413,16 @@ Singleton {
 
 		key: "updates"
 		name: "Updates"
-		glyph: Updates.running ? "progress_download" : "package_up"
+		glyph: updates.on ? (Updates.running ? "progress_download" : "package_up") : "package_up"
 		group: "shell"
 		plugin: "updates"
 		about: "Pending packages, and the upgrade while it runs"
-		text: Updates.running ? root.percent(Updates.progress * 100) : `${Updates.packages.length}`
-		detail: Updates.running ? (Updates.progressLabel || "Upgrading") : (Updates.packages.length > 0 ? `${Updates.packages.length} packages to update${Updates.rebootNeeded ? " · restart pending" : ""}` : (Updates.rebootNeeded ? "Restart to use the new kernel" : "Up to date"))
-		level: Updates.running ? Updates.progress : -1
-		tone: Updates.rebootNeeded ? "warn" : (Updates.packages.length >= Updates.remindAt ? "warn" : (Updates.packages.length > 0 ? "accent" : "good"))
-		pulse: Updates.running
-		busy: Updates.running || Updates.packages.length > 0 || Updates.rebootNeeded
+		text: updates.on ? (Updates.running ? root.percent(Updates.progress * 100) : `${Updates.packages.length}`) : ""
+		detail: updates.on ? (Updates.running ? (Updates.progressLabel || "Upgrading") : (Updates.packages.length > 0 ? `${Updates.packages.length} packages to update${Updates.rebootNeeded ? " · restart pending" : ""}` : (Updates.rebootNeeded ? "Restart to use the new kernel" : "Up to date"))) : ""
+		level: updates.on ? (Updates.running ? Updates.progress : -1) : -1
+		tone: updates.on ? (Updates.rebootNeeded ? "warn" : (Updates.packages.length >= Updates.remindAt ? "warn" : (Updates.packages.length > 0 ? "accent" : "good"))) : "normal"
+		pulse: updates.on ? (Updates.running) : false
+		busy: updates.on ? (Updates.running || Updates.packages.length > 0 || Updates.rebootNeeded) : false
 		quiet: true
 		panel: "updates"
 	}
@@ -431,16 +434,16 @@ Singleton {
 		prefers: "ring"
 		widest: "88.8 MB/s"
 		name: "Downloads"
-		glyph: Downloads.phase === "done" ? "check_circle" : "download"
+		glyph: downloads.on ? (Downloads.phase === "done" ? "check_circle" : "download") : "download"
 		group: "shell"
 		plugin: "downloads"
 		about: "The browsers' downloads: how far, how fast"
-		text: Downloads.phase === "running" ? Format.rate(Downloads.speed) : (Downloads.phase === "paused" ? "Paused" : (Downloads.phase === "done" ? "Done" : "–"))
-		detail: Downloads.active.length > 0 ? `${Downloads.active.length} ${Downloads.active.length === 1 ? "file" : "files"}${Downloads.ratio >= 0 ? ` · ${Math.floor(Downloads.ratio * 100)}%` : ""}${Downloads.eta >= 0 ? ` · ${Downloads.formatEta(Downloads.eta)} left` : ""}` : "Nothing comes in"
-		level: Downloads.phase === "done" ? 1 : Math.max(-1, Downloads.ratio)
-		tone: Downloads.phase === "done" ? "good" : (Downloads.phase === "paused" ? "muted" : "accent")
-		pulse: Downloads.phase === "running"
-		busy: Downloads.phase !== "idle"
+		text: downloads.on ? (Downloads.phase === "running" ? Format.rate(Downloads.speed) : (Downloads.phase === "paused" ? "Paused" : (Downloads.phase === "done" ? "Done" : "–"))) : ""
+		detail: downloads.on ? (Downloads.active.length > 0 ? `${Downloads.active.length} ${Downloads.active.length === 1 ? "file" : "files"}${Downloads.ratio >= 0 ? ` · ${Math.floor(Downloads.ratio * 100)}%` : ""}${Downloads.eta >= 0 ? ` · ${Downloads.formatEta(Downloads.eta)} left` : ""}` : "Nothing comes in") : ""
+		level: downloads.on ? (Downloads.phase === "done" ? 1 : Math.max(-1, Downloads.ratio)) : -1
+		tone: downloads.on ? (Downloads.phase === "done" ? "good" : (Downloads.phase === "paused" ? "muted" : "accent")) : "normal"
+		pulse: downloads.on ? (Downloads.phase === "running") : false
+		busy: downloads.on ? (Downloads.phase !== "idle") : false
 		quiet: true
 		panel: "downloads"
 	}
@@ -456,13 +459,13 @@ Singleton {
 		group: "shell"
 		plugin: "torrents"
 		about: "Speed and progress of the torrents that run"
-		text: Torrents.running.length > 0 ? Format.rate(Torrents.down) : "Idle"
-		detail: Torrents.running.length > 0 ? `${Torrents.running.length} running · ↓ ${Format.rate(Torrents.down)} · ↑ ${Format.rate(Torrents.up)}` : `${Torrents.torrents.length} torrents`
-		level: Torrents.running.length > 0 ? Math.max(0, Torrents.ratio) : -1
-		history: Torrents.running.length > 0 && Torrents.live.length > 1 ? Torrents.live.slice(-30).map(pair => Number(pair[0]) || 0) : null
-		tone: Torrents.running.length > 0 ? "accent" : "muted"
-		pulse: Torrents.running.length > 0 && Torrents.down > 0
-		busy: Torrents.running.length > 0
+		text: torrents.on ? (Torrents.running.length > 0 ? Format.rate(Torrents.down) : "Idle") : ""
+		detail: torrents.on ? (Torrents.running.length > 0 ? `${Torrents.running.length} running · ↓ ${Format.rate(Torrents.down)} · ↑ ${Format.rate(Torrents.up)}` : `${Torrents.torrents.length} torrents`) : ""
+		level: torrents.on ? (Torrents.running.length > 0 ? Math.max(0, Torrents.ratio) : -1) : -1
+		history: torrents.on ? (Torrents.running.length > 0 && Torrents.live.length > 1 ? Torrents.live.slice(-30).map(pair => Number(pair[0]) || 0) : null) : null
+		tone: torrents.on ? (Torrents.running.length > 0 ? "accent" : "muted") : "normal"
+		pulse: torrents.on ? (Torrents.running.length > 0 && Torrents.down > 0) : false
+		busy: torrents.on ? (Torrents.running.length > 0) : false
 		quiet: true
 		act: screen => Torrents.toggle()
 	}
@@ -470,8 +473,9 @@ Singleton {
 	Source {
 		id: filejobs
 
-		readonly property var jobs: Files.activeJobs.filter(job => Number(job.elapsed) > 1.2 && !["rename", "mkdir", "newfile", "batchrename", "link"].includes(job.kind))
+		readonly property var jobs: filejobs.on ? (Files.activeJobs.filter(job => Number(job.elapsed) > 1.2 && !["rename", "mkdir", "newfile", "batchrename", "link"].includes(job.kind))) : []
 		readonly property real ratio: {
+			if (!filejobs.on) return -1;
 			let done = 0;
 			let total = 0;
 			for (const job of filejobs.jobs)
@@ -491,12 +495,12 @@ Singleton {
 		group: "shell"
 		plugin: "filemanager"
 		about: "Copies, unpacking, uploads while they run"
-		text: filejobs.jobs.some(job => job.state === "conflict") ? "Asks" : (filejobs.ratio >= 0 ? root.percent(filejobs.ratio * 100) : `${filejobs.jobs.length}`)
-		detail: filejobs.jobs.length > 0 ? `${filejobs.jobs.length} ${filejobs.jobs.length === 1 ? "job" : "jobs"} running` : "Nothing runs"
-		level: filejobs.jobs.length > 0 ? filejobs.ratio : -1
-		tone: filejobs.jobs.some(job => job.state === "conflict") ? "warn" : "accent"
-		pulse: filejobs.jobs.some(job => job.state === "conflict")
-		busy: filejobs.jobs.length > 0
+		text: filejobs.on ? (filejobs.jobs.some(job => job.state === "conflict") ? "Asks" : (filejobs.ratio >= 0 ? root.percent(filejobs.ratio * 100) : `${filejobs.jobs.length}`)) : ""
+		detail: filejobs.on ? (filejobs.jobs.length > 0 ? `${filejobs.jobs.length} ${filejobs.jobs.length === 1 ? "job" : "jobs"} running` : "Nothing runs") : ""
+		level: filejobs.on ? (filejobs.jobs.length > 0 ? filejobs.ratio : -1) : -1
+		tone: filejobs.on ? (filejobs.jobs.some(job => job.state === "conflict") ? "warn" : "accent") : "normal"
+		pulse: filejobs.on ? (filejobs.jobs.some(job => job.state === "conflict")) : false
+		busy: filejobs.on ? (filejobs.jobs.length > 0) : false
 		quiet: true
 		act: screen => Files.show({ paths: [], kind: "folders", newTab: false })
 	}
@@ -510,11 +514,11 @@ Singleton {
 		group: "shell"
 		plugin: "recording"
 		about: "The screen recording and its time; a click stops it"
-		text: Recorder.active ? Recorder.elapsed : "Off"
-		detail: Recorder.active ? `Recording for ${Recorder.elapsed}` : "Not recording"
-		tone: Recorder.active ? "bad" : "muted"
-		pulse: Recorder.active
-		busy: Recorder.active
+		text: recording.on ? (Recorder.active ? Recorder.elapsed : "Off") : ""
+		detail: recording.on ? (Recorder.active ? `Recording for ${Recorder.elapsed}` : "Not recording") : ""
+		tone: recording.on ? (Recorder.active ? "bad" : "muted") : "normal"
+		pulse: recording.on ? (Recorder.active) : false
+		busy: recording.on ? (Recorder.active) : false
 		quiet: true
 		hint: "Click: stop"
 		act: screen => {
@@ -530,11 +534,11 @@ Singleton {
 		glyph: "monitor_share"
 		group: "shell"
 		about: "Lights up while an app watches the screen"
-		text: Notifs.sharing ? "Shared" : "Private"
-		detail: Notifs.sharing ? "An app sees your screen" : "Nobody sees your screen"
-		tone: Notifs.sharing ? "bad" : "muted"
-		pulse: Notifs.sharing
-		busy: Notifs.sharing
+		text: sharing.on ? (Notifs.sharing ? "Shared" : "Private") : ""
+		detail: sharing.on ? (Notifs.sharing ? "An app sees your screen" : "Nobody sees your screen") : ""
+		tone: sharing.on ? (Notifs.sharing ? "bad" : "muted") : "normal"
+		pulse: sharing.on ? (Notifs.sharing) : false
+		busy: sharing.on ? (Notifs.sharing) : false
 		quiet: true
 	}
 
@@ -547,10 +551,10 @@ Singleton {
 		group: "shell"
 		plugin: "game-mode"
 		about: "On while a game plays; a click forces it"
-		text: GameMode.active ? (GameMode.title !== "" ? GameMode.title : "On") : "Off"
-		detail: GameMode.active ? `Game mode${GameMode.force === "on" ? " (forced)" : ""}` : (GameMode.force === "off" ? "Kept off" : "Follows the games")
-		tone: GameMode.active ? "good" : "muted"
-		busy: GameMode.active
+		text: gamemode.on ? (GameMode.active ? (GameMode.title !== "" ? GameMode.title : "On") : "Off") : ""
+		detail: gamemode.on ? (GameMode.active ? `Game mode${GameMode.force === "on" ? " (forced)" : ""}` : (GameMode.force === "off" ? "Kept off" : "Follows the games")) : ""
+		tone: gamemode.on ? (GameMode.active ? "good" : "muted") : "normal"
+		busy: gamemode.on ? (GameMode.active) : false
 		quiet: true
 		hint: "Click: force on or off"
 		act: screen => GameMode.setForce(GameMode.active ? (GameMode.force === "on" ? "auto" : "off") : (GameMode.force === "off" ? "auto" : "on"))
@@ -559,7 +563,7 @@ Singleton {
 	Source {
 		id: agents
 
-		readonly property int count: Object.keys(Agents.busy ?? {}).length
+		readonly property int count: agents.on ? (Object.keys(Agents.busy ?? {}).length) : 0
 
 		key: "agents"
 		name: "AI agents"
@@ -567,11 +571,11 @@ Singleton {
 		group: "shell"
 		plugin: "agents"
 		about: "Coding agents that are working"
-		text: agents.count > 0 ? `${agents.count} working` : "Idle"
-		detail: agents.count > 0 ? `${agents.count} ${agents.count === 1 ? "agent works" : "agents work"} in a terminal` : "No agent works"
-		tone: agents.count > 0 ? "accent" : "muted"
-		pulse: agents.count > 0
-		busy: agents.count > 0
+		text: agents.on ? (agents.count > 0 ? `${agents.count} working` : "Idle") : ""
+		detail: agents.on ? (agents.count > 0 ? `${agents.count} ${agents.count === 1 ? "agent works" : "agents work"} in a terminal` : "No agent works") : ""
+		tone: agents.on ? (agents.count > 0 ? "accent" : "muted") : "normal"
+		pulse: agents.on ? (agents.count > 0) : false
+		busy: agents.on ? (agents.count > 0) : false
 		quiet: true
 	}
 
@@ -584,9 +588,9 @@ Singleton {
 		group: "shell"
 		plugin: "keep-awake"
 		about: "Whether the screen stays on; a click switches it"
-		text: KeepAwake.active ? "Awake" : "Off"
-		tone: KeepAwake.active ? "warn" : "muted"
-		busy: KeepAwake.active
+		text: keepawake.on ? (KeepAwake.active ? "Awake" : "Off") : ""
+		tone: keepawake.on ? (KeepAwake.active ? "warn" : "muted") : "normal"
+		busy: keepawake.on ? (KeepAwake.active) : false
 		quiet: true
 		act: screen => KeepAwake.toggle()
 	}
@@ -600,8 +604,8 @@ Singleton {
 		group: "shell"
 		plugin: "clipboard"
 		about: "Entries in the clipboard history"
-		text: `${Clipboard.entries.length}`
-		detail: `${Clipboard.entries.length} entries`
+		text: clipboard.on ? (`${Clipboard.entries.length}`) : ""
+		detail: clipboard.on ? (`${Clipboard.entries.length} entries`) : ""
 		busy: false
 		panel: "clipboard"
 	}
@@ -609,7 +613,7 @@ Singleton {
 	Source {
 		id: shelf
 
-		readonly property int count: Shelf.shelves.reduce((sum, each) => sum + (each.items?.length ?? 0), 0)
+		readonly property int count: shelf.on ? (Shelf.shelves.reduce((sum, each) => sum + (each.items?.length ?? 0), 0)) : 0
 
 		key: "shelf"
 		name: "Shelves"
@@ -617,10 +621,10 @@ Singleton {
 		group: "shell"
 		plugin: "shelves"
 		about: "Files waiting on the shelves"
-		text: `${shelf.count}`
-		detail: `${shelf.count} ${shelf.count === 1 ? "file" : "files"} on ${Shelf.shelves.length} ${Shelf.shelves.length === 1 ? "shelf" : "shelves"}`
-		tone: shelf.count > 0 ? "accent" : "muted"
-		busy: shelf.count > 0
+		text: shelf.on ? (`${shelf.count}`) : ""
+		detail: shelf.on ? (`${shelf.count} ${shelf.count === 1 ? "file" : "files"} on ${Shelf.shelves.length} ${Shelf.shelves.length === 1 ? "shelf" : "shelves"}`) : ""
+		tone: shelf.on ? (shelf.count > 0 ? "accent" : "muted") : "normal"
+		busy: shelf.on ? (shelf.count > 0) : false
 		quiet: true
 	}
 
@@ -631,15 +635,15 @@ Singleton {
 		key: "timer"
 		widest: "0:00:00"
 		name: "Timer"
-		glyph: QtrackTimer.paused ? "timer_sand" : "timer_outline"
+		glyph: timer.on ? (QtrackTimer.paused ? "timer_sand" : "timer_outline") : "timer_outline"
 		group: "day"
 		plugin: "qtrack"
 		about: "The running qtrack timer"
-		text: QtrackTimer.tracking ? QtrackTimer.duration : "Idle"
-		detail: QtrackTimer.tracking ? [QtrackTimer.project, QtrackTimer.description].filter(each => each !== "").join(" · ") || "Tracking" : "No timer runs"
-		tone: QtrackTimer.tracking ? (QtrackTimer.paused ? "warn" : "accent") : "muted"
-		pulse: QtrackTimer.paused
-		busy: QtrackTimer.tracking
+		text: timer.on ? (QtrackTimer.tracking ? QtrackTimer.duration : "Idle") : ""
+		detail: timer.on ? (QtrackTimer.tracking ? [QtrackTimer.project, QtrackTimer.description].filter(each => each !== "").join(" · ") || "Tracking" : "No timer runs") : ""
+		tone: timer.on ? (QtrackTimer.tracking ? (QtrackTimer.paused ? "warn" : "accent") : "muted") : "normal"
+		pulse: timer.on ? (QtrackTimer.paused) : false
+		busy: timer.on ? (QtrackTimer.tracking) : false
 		panel: "timer"
 	}
 
@@ -653,11 +657,11 @@ Singleton {
 		group: "day"
 		plugin: "qtrack"
 		about: "Tracked time today against eight hours"
-		text: root.minutes(QtrackTimer.todayLive)
-		detail: `${root.minutes(QtrackTimer.todayLive)} of 8 h`
-		level: Math.min(1, QtrackTimer.todayLive / (8 * 3600))
-		tone: QtrackTimer.todayLive >= 8 * 3600 ? "good" : "normal"
-		busy: QtrackTimer.tracking
+		text: worked.on ? (root.minutes(QtrackTimer.todayLive)) : ""
+		detail: worked.on ? (`${root.minutes(QtrackTimer.todayLive)} of 8 h`) : ""
+		level: worked.on ? (Math.min(1, QtrackTimer.todayLive / (8 * 3600))) : -1
+		tone: worked.on ? (QtrackTimer.todayLive >= 8 * 3600 ? "good" : "normal") : "normal"
+		busy: worked.on ? (QtrackTimer.tracking) : false
 		panel: "tracking"
 	}
 
@@ -665,6 +669,7 @@ Singleton {
 		id: screentime
 
 		readonly property real seconds: {
+			if (!screentime.on) return 0;
 			Screentime.stamp;
 			return Screentime.total(Screentime.today);
 		}
@@ -676,10 +681,10 @@ Singleton {
 		group: "day"
 		plugin: "screentime"
 		about: "Time in front of the screen today"
-		text: root.minutes(screentime.seconds)
-		detail: `${root.minutes(screentime.seconds)} today`
-		level: Math.min(1, screentime.seconds / (10 * 3600))
-		tone: screentime.seconds > 10 * 3600 ? "warn" : "normal"
+		text: screentime.on ? (root.minutes(screentime.seconds)) : ""
+		detail: screentime.on ? (`${root.minutes(screentime.seconds)} today`) : ""
+		level: screentime.on ? (Math.min(1, screentime.seconds / (10 * 3600))) : -1
+		tone: screentime.on ? (screentime.seconds > 10 * 3600 ? "warn" : "normal") : "normal"
 		busy: false
 		panel: "screentime"
 	}
@@ -694,18 +699,18 @@ Singleton {
 		group: "day"
 		plugin: "water"
 		about: "What you drank today against the goal"
-		text: Breaks.formatLitres(Breaks.waterMl)
-		detail: `${Breaks.formatLitres(Breaks.waterMl)} of ${Breaks.formatLitres(Breaks.goalMl)}`
-		level: Math.min(1, Breaks.waterMl / Breaks.goalMl)
-		tone: Breaks.waterMl >= Breaks.goalMl ? "good" : (Breaks.waterMl < Breaks.paceMl * 0.6 ? "warn" : "accent")
-		busy: Breaks.waterMl < Breaks.goalMl
+		text: water.on ? (Breaks.formatLitres(Breaks.waterMl)) : ""
+		detail: water.on ? (`${Breaks.formatLitres(Breaks.waterMl)} of ${Breaks.formatLitres(Breaks.goalMl)}`) : ""
+		level: water.on ? (Math.min(1, Breaks.waterMl / Breaks.goalMl)) : -1
+		tone: water.on ? (Breaks.waterMl >= Breaks.goalMl ? "good" : (Breaks.waterMl < Breaks.paceMl * 0.6 ? "warn" : "accent")) : "normal"
+		busy: water.on ? (Breaks.waterMl < Breaks.goalMl) : false
 		panel: "breaks"
 	}
 
 	Source {
 		id: eyes
 
-		readonly property int left: Math.max(0, Breaks.eyesSeconds - Breaks.sinceEyes)
+		readonly property int left: eyes.on ? (Math.max(0, Breaks.eyesSeconds - Breaks.sinceEyes)) : 0
 
 		key: "eyes"
 		prefers: "ring"
@@ -714,12 +719,12 @@ Singleton {
 		group: "day"
 		plugin: "eye-rest"
 		about: "How long until the next look into the distance"
-		text: eyes.left > 0 ? root.minutes(eyes.left) : "Now"
-		detail: eyes.left > 0 ? `Next eye rest in ${root.minutes(eyes.left)}` : "Time to look away for 20 seconds"
-		level: 1 - eyes.left / Breaks.eyesSeconds
-		tone: eyes.left <= 0 ? "warn" : (eyes.left < 120 ? "accent" : "normal")
-		pulse: eyes.left <= 0
-		busy: eyes.left < 300
+		text: eyes.on ? (eyes.left > 0 ? root.minutes(eyes.left) : "Now") : ""
+		detail: eyes.on ? (eyes.left > 0 ? `Next eye rest in ${root.minutes(eyes.left)}` : "Time to look away for 20 seconds") : ""
+		level: eyes.on ? (1 - eyes.left / Breaks.eyesSeconds) : -1
+		tone: eyes.on ? (eyes.left <= 0 ? "warn" : (eyes.left < 120 ? "accent" : "normal")) : "normal"
+		pulse: eyes.on ? (eyes.left <= 0) : false
+		busy: eyes.on ? (eyes.left < 300) : false
 		panel: "breaks"
 	}
 
@@ -727,26 +732,27 @@ Singleton {
 		id: meeting
 
 		readonly property var today: {
+			if (!meeting.on) return [];
 			const key = MsCalendar.dayKey(new Date(root.now));
 			return (MsCalendar.byDay[key] ?? []).filter(event => !event.allDay && MsCalendar.active(event) && event.showAs !== "free");
 		}
-		readonly property var current: meeting.today.find(event => Date.parse(event.start) <= root.now && root.now < Date.parse(event.end)) ?? null
-		readonly property var next: meeting.today.filter(event => Date.parse(event.start) > root.now).sort((a, b) => Date.parse(a.start) - Date.parse(b.start))[0] ?? null
-		readonly property real until: meeting.next ? (Date.parse(meeting.next.start) - root.now) / 1000 : -1
+		readonly property var current: meeting.on ? (meeting.today.find(event => Date.parse(event.start) <= root.now && root.now < Date.parse(event.end)) ?? null) : null
+		readonly property var next: meeting.on ? (meeting.today.filter(event => Date.parse(event.start) > root.now).sort((a, b) => Date.parse(a.start) - Date.parse(b.start))[0] ?? null) : null
+		readonly property real until: meeting.on ? (meeting.next ? (Date.parse(meeting.next.start) - root.now) / 1000 : -1) : 0
 
 		key: "meeting"
 		name: "Meetings"
-		glyph: meeting.current ? "account_group" : "calendar_clock"
+		glyph: meeting.on ? (meeting.current ? "account_group" : "calendar_clock") : "calendar_clock"
 		group: "day"
 		plugin: "microsoft-calendar"
 		about: "The meeting now, or how long until the next"
-		ready: MsCalendar.signedIn
-		text: meeting.current ? "Now" : (meeting.next ? `in ${root.minutes(meeting.until)}` : "Free")
-		detail: meeting.current ? `${meeting.current.subject} · until ${Qt.formatTime(new Date(meeting.current.end), "HH:mm")}` : (meeting.next ? `${meeting.next.subject} · ${Qt.formatTime(new Date(meeting.next.start), "HH:mm")}` : "Nothing more today")
-		level: meeting.current ? (root.now - Date.parse(meeting.current.start)) / Math.max(1, Date.parse(meeting.current.end) - Date.parse(meeting.current.start)) : -1
-		tone: meeting.current ? "accent" : (meeting.next && meeting.until < 600 ? "warn" : "normal")
-		pulse: !!meeting.next && meeting.until < 300 && !meeting.current
-		busy: !!meeting.current || (!!meeting.next && meeting.until < 3600)
+		ready: meeting.on ? (MsCalendar.signedIn) : false
+		text: meeting.on ? (meeting.current ? "Now" : (meeting.next ? `in ${root.minutes(meeting.until)}` : "Free")) : ""
+		detail: meeting.on ? (meeting.current ? `${meeting.current.subject} · until ${Qt.formatTime(new Date(meeting.current.end), "HH:mm")}` : (meeting.next ? `${meeting.next.subject} · ${Qt.formatTime(new Date(meeting.next.start), "HH:mm")}` : "Nothing more today")) : ""
+		level: meeting.on ? (meeting.current ? (root.now - Date.parse(meeting.current.start)) / Math.max(1, Date.parse(meeting.current.end) - Date.parse(meeting.current.start)) : -1) : -1
+		tone: meeting.on ? (meeting.current ? "accent" : (meeting.next && meeting.until < 600 ? "warn" : "normal")) : "normal"
+		pulse: meeting.on ? (!!meeting.next && meeting.until < 300 && !meeting.current) : false
+		busy: meeting.on ? (!!meeting.current || (!!meeting.next && meeting.until < 3600)) : false
 		panel: "today"
 	}
 
@@ -759,11 +765,11 @@ Singleton {
 		group: "day"
 		plugin: "todos"
 		about: "Open tasks"
-		text: `${Todos.openTasks.length}`
-		detail: `${Todos.openTasks.length} open of ${Todos.tasks.length}`
-		level: Todos.tasks.length > 0 ? 1 - Todos.openTasks.length / Todos.tasks.length : -1
-		tone: Todos.openTasks.length > 0 ? "normal" : "good"
-		busy: Todos.openTasks.length > 0
+		text: todos.on ? (`${Todos.openTasks.length}`) : ""
+		detail: todos.on ? (`${Todos.openTasks.length} open of ${Todos.tasks.length}`) : ""
+		level: todos.on ? (Todos.tasks.length > 0 ? 1 - Todos.openTasks.length / Todos.tasks.length : -1) : -1
+		tone: todos.on ? (Todos.openTasks.length > 0 ? "normal" : "good") : "normal"
+		busy: todos.on ? (Todos.openTasks.length > 0) : false
 		act: screen => Popups.open("launcher", screen ?? Popups.focusedScreen(), "", ">todo ")
 	}
 
@@ -772,13 +778,13 @@ Singleton {
 
 		key: "weather"
 		name: "Weather"
-		glyph: Weather.icon || "weather_partly_cloudy"
+		glyph: weather.on ? (Weather.icon || "weather_partly_cloudy") : "weather_partly_cloudy"
 		group: "day"
 		plugin: "weather"
 		about: "The temperature outside"
-		ready: Weather.available
-		text: Weather.temperature
-		detail: `${Weather.description}${Weather.location !== "" ? ` · ${Weather.location}` : ""} · feels ${Weather.feelsLike}`
+		ready: weather.on ? (Weather.available) : false
+		text: weather.on ? (Weather.temperature) : ""
+		detail: weather.on ? (`${Weather.description}${Weather.location !== "" ? ` · ${Weather.location}` : ""} · feels ${Weather.feelsLike}`) : ""
 		busy: false
 		panel: "today"
 	}
@@ -790,16 +796,16 @@ Singleton {
 		key: "phone"
 		prefers: "ring"
 		name: "Phone"
-		glyph: Phone.reachable ? Phone.batteryIcon : "cellphone_off"
+		glyph: phone.on ? (Phone.reachable ? Phone.batteryIcon : "cellphone_off") : "cellphone"
 		group: "devices"
 		plugin: "phone"
 		about: "The phone's battery and whether it is near"
-		ready: Phone.paired
-		text: Phone.reachable && Phone.battery >= 0 ? `${Phone.battery}%` : "Away"
-		detail: Phone.reachable ? `${Phone.name}${Phone.charging ? " · charging" : ""}${Phone.network !== "" ? ` · ${Phone.network}` : ""}` : `${Phone.name} is not reachable`
-		level: Phone.reachable && Phone.battery >= 0 ? Phone.battery / 100 : -1
-		tone: !Phone.reachable ? "muted" : (Phone.charging ? "good" : (Phone.battery <= 15 ? "bad" : "normal"))
-		busy: Phone.reachable
+		ready: phone.on ? (Phone.paired) : false
+		text: phone.on ? (Phone.reachable && Phone.battery >= 0 ? `${Phone.battery}%` : "Away") : ""
+		detail: phone.on ? (Phone.reachable ? `${Phone.name}${Phone.charging ? " · charging" : ""}${Phone.network !== "" ? ` · ${Phone.network}` : ""}` : `${Phone.name} is not reachable`) : ""
+		level: phone.on ? (Phone.reachable && Phone.battery >= 0 ? Phone.battery / 100 : -1) : -1
+		tone: phone.on ? (!Phone.reachable ? "muted" : (Phone.charging ? "good" : (Phone.battery <= 15 ? "bad" : "normal"))) : "normal"
+		busy: phone.on ? (Phone.reachable) : false
 		panel: "control"
 		page: "phone"
 	}
@@ -807,7 +813,7 @@ Singleton {
 	Source {
 		id: watch
 
-		readonly property var day: Watch.days.length > 0 ? Watch.days[Watch.days.length - 1] : null
+		readonly property var day: watch.on ? (Watch.days.length > 0 ? Watch.days[Watch.days.length - 1] : null) : null
 
 		key: "watch"
 		prefers: "ring"
@@ -816,12 +822,12 @@ Singleton {
 		group: "devices"
 		plugin: "watch"
 		about: "Steps today and the watch's battery"
-		ready: Watch.paired || Watch.known
-		text: watch.day ? `${Number(watch.day.steps ?? 0).toLocaleString(Qt.locale(), "f", 0)}` : (Watch.battery >= 0 ? `${Watch.battery}%` : "–")
-		detail: `${Watch.name}${Watch.battery >= 0 ? ` · ${Watch.battery}%` : ""}${watch.day ? ` · ${watch.day.steps ?? 0} of ${watch.day.stepsGoal ?? 8000} steps` : ""}`
-		level: watch.day ? Math.min(1, Number(watch.day.steps ?? 0) / Math.max(1, Number(watch.day.stepsGoal ?? 8000))) : -1
-		tone: watch.day && Number(watch.day.steps ?? 0) >= Number(watch.day.stepsGoal ?? 8000) ? "good" : (Watch.connected ? "normal" : "muted")
-		busy: Watch.connected
+		ready: watch.on ? (Watch.paired || Watch.known) : false
+		text: watch.on ? (watch.day ? `${Number(watch.day.steps ?? 0).toLocaleString(Qt.locale(), "f", 0)}` : (Watch.battery >= 0 ? `${Watch.battery}%` : "–")) : ""
+		detail: watch.on ? (`${Watch.name}${Watch.battery >= 0 ? ` · ${Watch.battery}%` : ""}${watch.day ? ` · ${watch.day.steps ?? 0} of ${watch.day.stepsGoal ?? 8000} steps` : ""}`) : ""
+		level: watch.on ? (watch.day ? Math.min(1, Number(watch.day.steps ?? 0) / Math.max(1, Number(watch.day.stepsGoal ?? 8000))) : -1) : -1
+		tone: watch.on ? (watch.day && Number(watch.day.steps ?? 0) >= Number(watch.day.stepsGoal ?? 8000) ? "good" : (Watch.connected ? "normal" : "muted")) : "normal"
+		busy: watch.on ? (Watch.connected) : false
 		panel: "watch"
 	}
 
@@ -835,13 +841,13 @@ Singleton {
 		group: "devices"
 		plugin: "mouse-battery"
 		about: "The mouse's charge"
-		ready: SysStats.mouseFound
-		text: SysStats.mouseText
-		detail: `${SysStats.mouseName}${SysStats.mouseStatus !== "" ? ` · ${SysStats.mouseStatus}` : ""}`
-		level: SysStats.mouseLevel
-		tone: SysStats.mouseLevel <= 0.1 ? "bad" : (SysStats.mouseLevel <= 0.2 ? "warn" : "normal")
-		pulse: SysStats.mouseLevel <= 0.1
-		busy: SysStats.mouseLevel <= 0.3
+		ready: mouse.on ? (SysStats.mouseFound) : false
+		text: mouse.on ? (SysStats.mouseText) : ""
+		detail: mouse.on ? (`${SysStats.mouseName}${SysStats.mouseStatus !== "" ? ` · ${SysStats.mouseStatus}` : ""}`) : ""
+		level: mouse.on ? (SysStats.mouseLevel) : -1
+		tone: mouse.on ? (SysStats.mouseLevel <= 0.1 ? "bad" : (SysStats.mouseLevel <= 0.2 ? "warn" : "normal")) : "normal"
+		pulse: mouse.on ? (SysStats.mouseLevel <= 0.1) : false
+		busy: mouse.on ? (SysStats.mouseLevel <= 0.3) : false
 	}
 
 	Source {
@@ -855,12 +861,12 @@ Singleton {
 		group: "devices"
 		plugin: "printer"
 		about: "How far the print is, and how long it still takes"
-		text: Printer.printing ? (Printer.paused ? "Paused" : root.percent(Printer.progress * 100)) : (Printer.online ? "Ready" : "Off")
-		detail: Printer.printing ? `Layer ${Printer.layer} of ${Printer.layers} · ${root.minutes(Printer.secondsLeft)} left` : (Printer.online ? "Waits for a print" : "Not reachable")
-		level: Printer.printing ? Printer.progress : -1
-		tone: Printer.printing ? (Printer.paused ? "warn" : "accent") : (Printer.online ? "normal" : "muted")
-		pulse: Printer.paused
-		busy: Printer.printing
+		text: printer.on ? (Printer.printing ? (Printer.paused ? "Paused" : root.percent(Printer.progress * 100)) : (Printer.online ? "Ready" : "Off")) : ""
+		detail: printer.on ? (Printer.printing ? `Layer ${Printer.layer} of ${Printer.layers} · ${root.minutes(Printer.secondsLeft)} left` : (Printer.online ? "Waits for a print" : "Not reachable")) : ""
+		level: printer.on ? (Printer.printing ? Printer.progress : -1) : -1
+		tone: printer.on ? (Printer.printing ? (Printer.paused ? "warn" : "accent") : (Printer.online ? "normal" : "muted")) : "normal"
+		pulse: printer.on ? (Printer.paused) : false
+		busy: printer.on ? (Printer.printing) : false
 		quiet: true
 		panel: "printer"
 	}
@@ -874,12 +880,12 @@ Singleton {
 		group: "devices"
 		plugin: "vm-launcher"
 		about: "Whether the VM starts or runs"
-		text: Machines.launching ? "Starting" : (Machines.lgOpen ? "Running" : "Off")
-		detail: Machines.launching ? `Starting · ${Machines.step}` : (Machines.lgOpen ? "Looking Glass is open" : "Not running")
-		level: Machines.launching ? (Machines.steps.indexOf(Machines.step) + 1) / (Machines.steps.length + 1) : -1
-		tone: Machines.launching ? "accent" : (Machines.lgOpen ? "good" : "muted")
-		pulse: Machines.launching
-		busy: Machines.launching || Machines.lgOpen
+		text: vm.on ? (Machines.launching ? "Starting" : (Machines.lgOpen ? "Running" : "Off")) : ""
+		detail: vm.on ? (Machines.launching ? `Starting · ${Machines.step}` : (Machines.lgOpen ? "Looking Glass is open" : "Not running")) : ""
+		level: vm.on ? (Machines.launching ? (Machines.steps.indexOf(Machines.step) + 1) / (Machines.steps.length + 1) : -1) : -1
+		tone: vm.on ? (Machines.launching ? "accent" : (Machines.lgOpen ? "good" : "muted")) : "normal"
+		pulse: vm.on ? (Machines.launching) : false
+		busy: vm.on ? (Machines.launching || Machines.lgOpen) : false
 		quiet: true
 		act: screen => Popups.toggleModal("vm", screen ?? Popups.focusedScreen())
 	}
@@ -893,12 +899,12 @@ Singleton {
 		group: "devices"
 		plugin: "pc-link"
 		about: "Linked PCs that are reachable, and files on the way"
-		ready: Pcs.devices.length > 0
-		text: Pcs.transfers.length > 0 ? `${Pcs.transfers.length} on the way` : `${Pcs.reachable.length}`
-		detail: Pcs.reachable.length > 0 ? Pcs.reachable.map(each => each.name ?? "PC").join(", ") : "None reachable"
-		tone: Pcs.transfers.length > 0 ? "accent" : (Pcs.reachable.length > 0 ? "good" : "muted")
-		pulse: Pcs.transfers.length > 0
-		busy: Pcs.reachable.length > 0
+		ready: pcs.on ? (Pcs.devices.length > 0) : false
+		text: pcs.on ? (Pcs.transfers.length > 0 ? `${Pcs.transfers.length} on the way` : `${Pcs.reachable.length}`) : ""
+		detail: pcs.on ? (Pcs.reachable.length > 0 ? Pcs.reachable.map(each => each.name ?? "PC").join(", ") : "None reachable") : ""
+		tone: pcs.on ? (Pcs.transfers.length > 0 ? "accent" : (Pcs.reachable.length > 0 ? "good" : "muted")) : "normal"
+		pulse: pcs.on ? (Pcs.transfers.length > 0) : false
+		busy: pcs.on ? (Pcs.reachable.length > 0) : false
 		panel: "control"
 		page: "phone"
 	}
@@ -912,10 +918,10 @@ Singleton {
 		group: "devices"
 		plugin: "games"
 		about: "The game that runs"
-		text: GameMode.playing ? (GameMode.title !== "" ? GameMode.title : "Playing") : "–"
-		detail: GameMode.playing ? `Playing ${GameMode.title}` : "No game runs"
-		tone: GameMode.playing ? "good" : "muted"
-		busy: GameMode.playing
+		text: game.on ? (GameMode.playing ? (GameMode.title !== "" ? GameMode.title : "Playing") : "–") : ""
+		detail: game.on ? (GameMode.playing ? `Playing ${GameMode.title}` : "No game runs") : ""
+		tone: game.on ? (GameMode.playing ? "good" : "muted") : "normal"
+		busy: game.on ? (GameMode.playing) : false
 		quiet: true
 		act: screen => Popups.toggleModal("games", screen ?? Popups.focusedScreen())
 	}
@@ -926,15 +932,15 @@ Singleton {
 
 		key: "media"
 		name: "Now playing"
-		glyph: Media.playing ? "music_note" : "pause"
+		glyph: media.on ? (Media.playing ? "music_note" : "pause") : "music_note"
 		group: "media"
 		plugin: "media"
 		about: "Title and progress; a click plays or pauses, the wheel turns it"
-		text: Media.hasPlayer ? Media.title : "Silence"
-		detail: Media.hasPlayer ? [Media.artist, Media.hasProgress ? `${Format.clock(Media.position)} / ${Format.clock(Media.length)}` : ""].filter(each => each !== "").join(" · ") : "Nothing plays"
-		level: Media.hasProgress ? Media.position / Media.length : -1
-		tone: Media.playing ? "accent" : "muted"
-		busy: Media.playing
+		text: media.on ? (Media.hasPlayer ? Media.title : "Silence") : ""
+		detail: media.on ? (Media.hasPlayer ? [Media.artist, Media.hasProgress ? `${Format.clock(Media.position)} / ${Format.clock(Media.length)}` : ""].filter(each => each !== "").join(" · ") : "Nothing plays") : ""
+		level: media.on ? (Media.hasProgress ? Media.position / Media.length : -1) : -1
+		tone: media.on ? (Media.playing ? "accent" : "muted") : "normal"
+		busy: media.on ? (Media.playing) : false
 		quiet: true
 		hint: "Click: play or pause · wheel: player volume"
 		act: screen => Media.player?.togglePlaying()

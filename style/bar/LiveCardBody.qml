@@ -26,11 +26,13 @@ Rectangle {
 		id: line
 
 		property int order: 0
+		// whether the line has anything to show
+		property bool shows: true
 		default property alias content: holder.data
 
 		width: body.width
 		height: holder.childrenRect.height
-		visible: holder.visibleChildren.length > 0
+		visible: line.shows
 		opacity: 0
 		transform: Translate {
 			id: shift
@@ -208,9 +210,9 @@ Rectangle {
 
 		Line {
 			order: 1
+			shows: (card.src?.detail ?? "") !== ""
 
 			StyledText {
-				visible: (card.src?.detail ?? "") !== ""
 				width: parent.width
 				text: card.src?.detail ?? ""
 				tone: Theme.textMuted
@@ -221,9 +223,9 @@ Rectangle {
 
 		Line {
 			order: 2
+			shows: !!card.src?.history
 
 			Rectangle {
-				visible: !!card.src?.history
 				width: parent.width
 				height: 62
 				radius: 10
@@ -242,9 +244,9 @@ Rectangle {
 
 		Line {
 			order: 2
+			shows: !card.src?.history && (card.src?.level ?? -1) >= 0
 
 			Item {
-				visible: !card.src?.history && (card.src?.level ?? -1) >= 0
 				width: parent.width
 				height: 8
 
@@ -319,9 +321,9 @@ Rectangle {
 
 		Line {
 			order: 3
+			shows: card.hint !== ""
 
 			Row {
-				visible: card.hint !== ""
 				spacing: 6
 
 				Glyph {

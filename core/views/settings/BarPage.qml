@@ -66,7 +66,7 @@ SettingsPage {
 	SettingCard {
 		anchor: "live-status"
 		title: "Live status"
-		subtitle: `What the shell does right now, in the bar and the trays · ${Live.sources.filter(src => src.available).length} sources ready`
+		subtitle: `What the shell does right now, in the bar and the trays · ${Live.sources.filter(src => Live.pluginOn(src.plugin)).length} sources from the plugins that are on`
 		icon: "heart_pulse"
 
 		LiveEditor {

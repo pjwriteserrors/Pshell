@@ -1214,7 +1214,7 @@ SettingsPage {
 				spacing: 2
 
 				Repeater {
-					model: root.adding === "more" ? Live.sources.filter(src => src.available) : []
+					model: root.adding === "more" ? Live.sources.filter(src => Live.pluginOn(src.plugin)) : []
 
 					delegate: Pick {
 						required property var modelData
