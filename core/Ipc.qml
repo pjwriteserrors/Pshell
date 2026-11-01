@@ -643,6 +643,33 @@ Scope {
 	// the Pshell settings (>settings); a page: displays, layout, looks, input,
 	// keys, multicursor, rules, workspaces, overview, system, sounds,
 	// lighting, debug
+	// the app trays: open the ones that hide (a key for the "key" ones),
+	// put something in
+	IpcHandler {
+		target: "apptray"
+		enabled: Plugins.on("app-tray")
+
+		// every tray that hides, or the one of that name or id
+		function toggle(name: string): void {
+			const tray = AppTray.trays.find(each => each.id === name || each.name === name);
+			if (tray) AppTray.toggle(tray.id);
+			else AppTray.toggleAll();
+		}
+		// an app (its desktop id), a file or folder, a link or a shell line
+		function add(what: string): void {
+			const value = String(what).trim();
+			if (value === "") return;
+			if (/^https?:/.test(value)) AppTray.addToTray({ kind: "link", url: value, name: AppTray.hostOf(value) });
+			else if (value.startsWith(">")) AppTray.addToTray({ kind: "command", command: value.slice(1).trim() });
+			else if (value.startsWith("/")) AppTray.addToTray(AppTray.itemOfPath(value));
+			else if (DesktopEntries.byId(value.replace(/\.desktop$/, ""))) AppTray.addToTray({ kind: "app", app: String(DesktopEntries.byId(value.replace(/\.desktop$/, "")).id) });
+			else AppTray.addToTray({ kind: "shell", exec: value, name: value.split(/\s+/)[0] });
+		}
+		function list(): string {
+			return JSON.stringify(AppTray.trays.map(tray => ({ id: tray.id, name: tray.name, output: AppTray.outputOf(tray), edge: tray.edge, reveal: tray.reveal, items: (tray.items ?? []).map(item => AppTray.nameOf(item)) })));
+		}
+	}
+
 	IpcHandler {
 		target: "settings"
 		enabled: Plugins.on("niri-settings")

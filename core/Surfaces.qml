@@ -24,6 +24,7 @@ import qs.core.views.switcher
 import qs.core.views.studio
 import qs.core.views.todos
 import qs.core.views.torrents
+import qs.core.views.tray
 import qs.core.views.tracking
 import qs.core.views.vm
 import qs.core.views.watch
@@ -167,6 +168,13 @@ Scope {
 		model: Plugins.on("shelves") && shelving.held ? Quickshell.screens : []
 
 		Shelves {}
+	}
+
+	// the app trays on the edges of the screens (by id: a changed tray is not built again)
+	Variants {
+		model: AppTray.enabled && AppTray.loaded ? AppTray.trays.map(tray => tray.id) : []
+
+		AppTrayWindow {}
 	}
 
 	// commands for what is being dragged, around the pointer

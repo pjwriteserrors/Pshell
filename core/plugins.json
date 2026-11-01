@@ -90,6 +90,7 @@
 	{ "id": "useless-fact", "name": "Useless fact", "category": "Desktop", "icon": "lightbulb", "preview": {"on": ["bar"], "base": "off", "wait": 5} },
 	{ "id": "torrents", "name": "Torrents", "category": "Desktop", "default": false, "icon": "magnet", "preview": {"on": ["bar"], "ipc": ["torrents open"]} },
 	{ "id": "torrents-bar", "name": "Torrents under the bar", "category": "Desktop", "requires": ["torrents"], "icon": "magnet", "preview": {"on": ["bar", "clock"], "ipc": ["torrents open"]} },
+	{ "id": "app-tray", "name": "App tray", "category": "Desktop", "default": false, "icon": "dock_window" },
 
 	{ "id": "clipboard-hints", "name": "Clipboard hints", "category": "Automation" },
 	{ "id": "agents", "name": "Agent status", "category": "Automation", "icon": "robot" },

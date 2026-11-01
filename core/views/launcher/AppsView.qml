@@ -190,7 +190,7 @@ Item {
 			return [
 				{ id: "run", label: result.command.children ? "Open" : "Run", glyph: "keyboard_return", hint: "↵" },
 				{ id: "pin-command", label: pinned ? "Unpin from commands" : "Pin to commands", glyph: pinned ? "pin_off_outline" : "pin_outline", hint: "^P" }
-			];
+			].concat(Plugins.on("app-tray") ? [{ id: "tray", label: "Add to the tray", glyph: "dock_window", hint: "" }] : []);
 		}
 		const item = result.item;
 		const windows = root.running[item.key] || [];
@@ -201,6 +201,8 @@ Item {
 			list.push({ id: "desktop", action: action, label: String(action.name || ""), glyph: "lightning_bolt", hint: "" });
 		const pinned = root.pins.includes(item.key);
 		list.push({ id: "pin", label: pinned ? "Take off the dock" : "Pin to the dock", glyph: pinned ? "pin_off_outline" : "pin_outline", hint: "^P" });
+		if (Plugins.on("app-tray"))
+			list.push({ id: "tray", label: "Add to the tray", glyph: "dock_window", hint: "" });
 		const hidden = root.hidden.includes(item.key);
 		list.push({ id: "hide", label: hidden ? "Show again" : "Hide", glyph: hidden ? "eye_outline" : "eye_off_outline", hint: "^H" });
 		return list;
@@ -239,8 +241,19 @@ Item {
 		case "pin-command":
 			root.commandPinRequested(result.command);
 			break;
+		case "tray":
+			AppTray.addToTray(root.trayItem(result));
+			break;
 		}
 		root.menuTarget = null;
+	}
+
+	// what a result is in an app tray
+	function trayItem(result) {
+		if (!result) return null;
+		if (result.kind === "command")
+			return { kind: "command", command: String(result.command.command), name: String(result.command.name), glyph: root.glyphFor(result.command) };
+		return { kind: "app", app: String(result.item.entry?.id ?? result.item.key) };
 	}
 
 	function open(result, from) {
@@ -839,6 +852,27 @@ Item {
 			font.weight: tile.selected ? Font.DemiBold : Font.Medium
 		}
 
+		// dragged onto an app tray, it goes in
+		Item {
+			id: ghost
+
+			width: 1
+			height: 1
+			Drag.dragType: Drag.Automatic
+			Drag.active: tileMouse.drag.active
+			Drag.supportedActions: Qt.CopyAction
+			Drag.proposedAction: Qt.CopyAction
+			Drag.hotSpot: Qt.point(28, 28)
+			Drag.mimeData: tile.item ? AppTray.mimeFor(root.trayItem(root.appResult(tile.item))) : ({})
+		}
+
+		Binding {
+			target: AppTray
+			property: "carrying"
+			value: true
+			when: tileMouse.drag.active
+		}
+
 		MouseArea {
 			id: tileMouse
 
@@ -846,7 +880,14 @@ Item {
 			anchors.margins: 4
 			hoverEnabled: true
 			acceptedButtons: Qt.LeftButton | Qt.RightButton
-			cursorShape: Qt.PointingHandCursor
+			cursorShape: tileMouse.drag.active ? Qt.ClosedHandCursor : Qt.PointingHandCursor
+			drag.target: AppTray.enabled ? ghost : null
+			drag.threshold: 10
+			onPressed: event => {
+				ghost.x = event.x;
+				ghost.y = event.y;
+				if (AppTray.enabled) icon.grabToImage(result => ghost.Drag.imageSource = result.url, Qt.size(56, 56));
+			}
 			onEntered: if (Pointer.moved(tileMouse, mouseX, mouseY)) tile.pointed()
 			onPositionChanged: if (Pointer.moved(tileMouse, mouseX, mouseY)) tile.pointed()
 			onClicked: event => {

@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Layouts
 import qs.style.theme
 import qs.style.widgets
+import qs.core.services
 
 // A launcher command as a tile: what it is, what is typed for it, and on
 // the right what there is to know right now (3 updates, on) or where it
@@ -32,6 +33,37 @@ Clickable {
 
 	Behavior on opacity {
 		Anim {}
+	}
+
+	// dragged onto an app tray, it goes in
+	DragHandler {
+		id: carry
+
+		target: null
+		enabled: AppTray.enabled && !!root.command
+		dragThreshold: 10
+		onActiveChanged: if (carry.active) root.grabToImage(result => ghost.Drag.imageSource = result.url, Qt.size(Math.min(220, root.width), root.height))
+	}
+
+	Item {
+		id: ghost
+
+		x: carry.centroid.pressPosition.x
+		y: carry.centroid.pressPosition.y
+		width: 1
+		height: 1
+		Drag.dragType: Drag.Automatic
+		Drag.active: carry.active
+		Drag.supportedActions: Qt.CopyAction
+		Drag.proposedAction: Qt.CopyAction
+		Drag.mimeData: root.command ? AppTray.mimeFor({ kind: "command", command: String(root.command.command), name: String(root.command.name), glyph: root.glyph }) : ({})
+	}
+
+	Binding {
+		target: AppTray
+		property: "carrying"
+		value: true
+		when: carry.active
 	}
 
 	RowLayout {

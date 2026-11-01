@@ -804,6 +804,11 @@ Item {
 
 	function setLauncherSearch(text) {
 		const value = String(text || "");
+		// a command of a tray that needs the launcher: it opens on that
+		if (root.trayRunning) {
+			root.trayAsked = value;
+			return;
+		}
 		if (value.startsWith(">")) root.enterCommandInput(value, /\s/.test(value));
 		else root.leaveCommandInput(value);
 	}
@@ -1363,6 +1368,52 @@ Item {
 		}
 		function onPickerClosed() {
 			root.aiAttachmentPickerOpen = false;
+		}
+	}
+
+	// ── the app trays ───────────────────────────────────────────────────
+	// every command once, those of a group too: what a tray can hold
+	readonly property var trayCommands: root.commands.reduce((all, command) => all.concat(command.children ? [command].concat(command.children) : [command]), [])
+	property bool trayRunning: false
+	property string trayAsked: ""
+
+	Binding {
+		target: AppTray
+		property: "commandCatalog"
+		when: AppTray.enabled
+		value: root.trayCommands.map(command => ({ command: String(command.command), name: String(command.name), glyph: root.commandGlyph(command), group: String(command.group ?? command.parent ?? "") }))
+	}
+
+	// a tray runs a command without the launcher; one that would show
+	// something in it (a group, >t, a chat) opens it on that
+	function runForTray(token) {
+		const command = root.trayCommands.find(each => String(each.command) === token);
+		if (!command) {
+			Notifs.post({ summary: `>${token} is not there`, body: "Its plugin may be off" });
+			return;
+		}
+		root.trayRunning = true;
+		root.trayAsked = "";
+		try {
+			root.launchCommand(command);
+		} finally {
+			root.trayRunning = false;
+		}
+		if (root.trayAsked === "" && command.id === "chat") root.trayAsked = ">chat ";
+		if (root.trayAsked !== "") {
+			const query = root.trayAsked;
+			Popups.withFocusedScreen(screen => {
+				if (Popups.current === "launcher") root.setLauncherSearch(query);
+				else Popups.open("launcher", screen, "", query);
+			});
+		}
+	}
+
+	Connections {
+		target: AppTray
+
+		function onCommandRequested(token) {
+			root.runForTray(token);
 		}
 	}
 
