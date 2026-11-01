@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import Quickshell
 import qs.style.theme
 import qs.core.services
 import qs.style.widgets
@@ -44,6 +45,34 @@ Row {
 					tooltip: task.hovered ? `${Niri.titleOf(task.modelData.id)}  ·  ${task.modelData.output}` : ""
 					onClicked: Niri.focusWindow(task.modelData.id)
 					onMiddleClicked: Niri.closeWindow(task.modelData.id)
+
+					// dragged onto an app tray, the app goes in
+					DragHandler {
+						id: carry
+
+						target: null
+						enabled: AppTray.enabled
+						dragThreshold: 10
+					}
+
+					Item {
+						x: carry.centroid.pressPosition.x
+						y: carry.centroid.pressPosition.y
+						width: 1
+						height: 1
+						Drag.dragType: Drag.Automatic
+						Drag.active: carry.active
+						Drag.supportedActions: Qt.CopyAction
+						Drag.proposedAction: Qt.CopyAction
+						Drag.mimeData: AppTray.mimeFor({ kind: "app", app: String(DesktopEntries.heuristicLookup(String(task.modelData.appId))?.id ?? task.modelData.appId) })
+					}
+
+					Binding {
+						target: AppTray
+						property: "carrying"
+						value: true
+						when: carry.active
+					}
 
 					Item {
 						anchors.verticalCenter: parent.verticalCenter

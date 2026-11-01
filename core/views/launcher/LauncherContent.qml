@@ -129,7 +129,12 @@ Item {
 		{ id: "games", plugin: "games", group: "tools", command: "games", name: "Games", aliases: ["game", "play", "steam", "library"], keywords: "steam proton wine library play launch covers", status: Games.running.length > 0 ? "Playing" : "" },
 		{ id: "vm", plugin: "vm-launcher", group: "system", command: "vm", name: "Virtual Machines", aliases: ["vms", "windows", "win", "virt"], keywords: "looking glass qemu libvirt start boot", status: Machines.vms.some(vm => vm.running) ? "On" : "" },
 		{ id: "dnd", plugin: "dnd", group: "system", command: "dnd", name: "Do Not Disturb", aliases: ["quiet", "silent"], keywords: "notifications", status: Notifs.dnd ? "On" : "" },
-		{ id: "rpg", plugin: "rpg", group: "system", command: "rpg", prefix: "/", name: "Productivity RPG", keywords: "game" }
+		{ id: "rpg", plugin: "rpg", group: "system", command: "rpg", prefix: "/", name: "Productivity RPG", keywords: "game" },
+		{
+			id: "tray-profiles", plugin: "app-tray", shown: AppTray.profileNames.length > 0, group: "system", command: "tray", name: "Tray Profiles", aliases: ["trays", "dock"], keywords: "app tray profile switch",
+			status: AppTray.profile,
+			children: AppTray.profileNames.map(name => ({ id: "tray-profile", profile: name, command: `tray ${name.toLowerCase()}`, name: name, glyph: "dock_window", status: name === AppTray.profile ? "In use" : "", keywords: "tray profile" }))
+		}
 	]
 
 	// ── the palette ─────────────────────────────────────────────────────────
@@ -977,6 +982,10 @@ Item {
 			root.closeRequested();
 			root.openStudioRequested(command.page);
 			break;
+		case "tray-profile":
+			root.closeRequested();
+			AppTray.useProfile(command.profile);
+			break;
 		case "mouse-profile":
 			root.closeRequested();
 			Mouse.useProfile(command.profile);
@@ -1465,6 +1474,8 @@ Item {
 		case "rpg": return "gamepad_variant";
 		case "studio": return "palette";
 		case "studio-page": return command.glyph;
+		case "tray-profiles":
+		case "tray-profile": return "dock_window";
 		case "mouse":
 		case "mouse-profile":
 		case "mouse-new":

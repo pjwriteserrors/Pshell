@@ -47,6 +47,14 @@ SettingsPage {
 		if (root.tray) AppTray.update(root.tray.id, { [key]: value });
 	}
 
+	// one rule of when the tray is there; none left: always
+	function setWhen(key, value) {
+		const next = Object.assign({}, root.full.when ?? {});
+		if (String(value ?? "").trim() === "") delete next[key];
+		else next[key] = value;
+		root.set("when", Object.keys(next).length > 0 ? next : null);
+	}
+
 	component Switch: RowLayout {
 		id: line
 
@@ -239,6 +247,112 @@ SettingsPage {
 				onActivated: AppTray.removeTray(root.tray.id)
 			}
 		}
+
+		// sets of trays to switch between (also >tray in the launcher)
+		Flow {
+			Layout.fillWidth: true
+			spacing: 6
+
+			StyledText {
+				height: 32
+				text: "Profiles"
+				tone: Theme.textSubtle
+				font.pixelSize: Theme.size.small
+			}
+
+			Repeater {
+				model: AppTray.profileNames
+
+				delegate: Clickable {
+					id: profileChip
+
+					required property string modelData
+					readonly property bool current: AppTray.profile === profileChip.modelData
+
+					implicitWidth: profileRow.implicitWidth + 20
+					implicitHeight: 32
+					radius: 16
+					color: profileChip.current ? Theme.primaryContainer : (profileChip.hovered ? Theme.layer3 : Theme.layer2)
+					acceptedButtons: Qt.LeftButton | Qt.RightButton
+					onClicked: AppTray.useProfile(profileChip.modelData)
+					onRightClicked: AppTray.deleteProfile(profileChip.modelData)
+
+					Row {
+						id: profileRow
+
+						anchors.centerIn: parent
+						spacing: 6
+
+						Glyph {
+							anchors.verticalCenter: parent.verticalCenter
+							icon: profileChip.current ? "check" : "dock_window"
+							size: 14
+							color: Theme.textMuted
+							animated: false
+						}
+
+						StyledText {
+							anchors.verticalCenter: parent.verticalCenter
+							text: profileChip.modelData
+							font.weight: profileChip.current ? Font.DemiBold : Font.Medium
+						}
+					}
+				}
+			}
+
+			Field {
+				id: profileName
+
+				width: 170
+				placeholder: AppTray.profile !== "" ? `Save as… (now ${AppTray.profile})` : "Save as…"
+				icon: "content_save_outline"
+				onAccepted: {
+					AppTray.saveProfile(profileName.text.trim() || AppTray.profile || "Default");
+					profileName.text = "";
+				}
+			}
+		}
+
+		StyledText {
+			Layout.fillWidth: true
+			visible: AppTray.profileNames.length > 0
+			text: "A click switches (what is set up now stays in the profile in use), a right click deletes one, Enter in the field saves."
+			tone: Theme.textSubtle
+			font.pixelSize: Theme.size.small
+			wrapMode: Text.WordWrap
+		}
+
+		// to another PC
+		Flow {
+			Layout.fillWidth: true
+			visible: !!root.tray
+			spacing: 6
+
+			TextButton {
+				implicitHeight: 30
+				variant: "ghost"
+				icon: "content_save_outline"
+				text: "Save as a file"
+				onActivated: {
+					const path = AppTray.exportTray(root.tray.id);
+					Notifs.post({ summary: "Tray saved", body: path });
+				}
+			}
+
+			Repeater {
+				model: Pcs.reachable
+
+				delegate: TextButton {
+					required property var modelData
+
+					implicitHeight: 30
+					variant: "tonal"
+					icon: "monitor_multiple"
+					text: `Send to ${modelData.name ?? "PC"}`
+					onActivated: AppTray.sendTray(root.tray.id, String(modelData.id))
+				}
+			}
+		}
 	}
 
 	// ── where it sits ───────────────────────────────────────────────────
@@ -341,6 +455,7 @@ SettingsPage {
 		title: "When it shows"
 		subtitle: ({
 			always: "Always there",
+			smart: "There, but it makes way while a window covers it",
 			hover: "Slides out when the pointer reaches the edge",
 			click: "A handle on the edge opens it",
 			key: "Only from a key: bind  scripts/ipc.sh apptray toggle"
@@ -352,6 +467,7 @@ SettingsPage {
 			Layout.fillWidth: true
 			options: [
 				{ value: "always", label: "Always", icon: "pin_outline" },
+				{ value: "smart", label: "Makes way", icon: "arrow_collapse" },
 				{ value: "hover", label: "On hover", icon: "cursor_default_outline" },
 				{ value: "click", label: "On click", icon: "cursor_default_click_outline" },
 				{ value: "key", label: "From a key", icon: "keyboard_outline" }
@@ -362,7 +478,7 @@ SettingsPage {
 
 		ValueSlider {
 			Layout.fillWidth: true
-			visible: root.full.reveal === "hover"
+			visible: root.full.reveal === "hover" || root.full.reveal === "smart"
 			from: 0
 			to: 800
 			step: 20
@@ -386,6 +502,80 @@ SettingsPage {
 			detail: "While game mode is on, an always-there tray waits at the edge"
 			checked: root.full.gameHide
 			onToggled: on => root.set("gameHide", on)
+		}
+	}
+
+	// ── when it is there at all ─────────────────────────────────────────
+	SettingCard {
+		anchor: "tray-when"
+		title: "Only when"
+		subtitle: !root.full.when ? "Always there; set what has to hold for it to come (two trays in one place with other rules swap)" : (AppTray.active(root.tray) ? "It is there now" : "Not there right now")
+		icon: "clock_outline"
+		visible: !!root.tray
+		modified: !!root.full.when
+		onReset: root.set("when", null)
+
+		GridLayout {
+			Layout.fillWidth: true
+			columns: 2
+			columnSpacing: 10
+			rowSpacing: 10
+
+			Field {
+				Layout.fillWidth: true
+				placeholder: "On workspaces (names or numbers: 1, web)"
+				icon: "view_grid_outline"
+				text: root.full.when?.workspaces ?? ""
+				onEdited: text => root.setWhen("workspaces", text)
+			}
+
+			Field {
+				Layout.fillWidth: true
+				placeholder: "While an app has the focus (code, floorp)"
+				icon: "application_outline"
+				text: root.full.when?.apps ?? ""
+				onEdited: text => root.setWhen("apps", text)
+			}
+
+			Field {
+				Layout.fillWidth: true
+				placeholder: "From (08:00)"
+				icon: "clock_outline"
+				text: root.full.when?.from ?? ""
+				onEdited: text => root.setWhen("from", text)
+			}
+
+			Field {
+				Layout.fillWidth: true
+				placeholder: "Until (18:00)"
+				icon: "clock_outline"
+				text: root.full.when?.to ?? ""
+				onEdited: text => root.setWhen("to", text)
+			}
+		}
+
+		Segmented {
+			Layout.fillWidth: true
+			visible: GameMode.enabled
+			options: [{ value: "", label: "Games or not" }, { value: "on", label: "Only in games" }, { value: "off", label: "Not in games" }]
+			current: root.full.when?.game ?? ""
+			onSelected: value => root.setWhen("game", value)
+		}
+	}
+
+	// ── keys ────────────────────────────────────────────────────────────
+	SettingCard {
+		anchor: "tray-keys"
+		title: "Keys"
+		subtitle: AppTray.keysBound ? "Mod+Alt+1…9 start the items of the tray shown first, Mod+Alt+0 gives a tray the keyboard (arrows, Enter, 1…9, Menu, Escape)" : "Start the items from the keyboard"
+		icon: "keyboard_outline"
+		visible: !!root.tray
+
+		Switch {
+			text: "Mod+Alt+1…9 and Mod+Alt+0"
+			detail: "Written to your key binds; keys that already do something are left alone"
+			checked: AppTray.keysBound
+			onToggled: on => AppTray.bindKeys(on)
 		}
 	}
 
@@ -449,6 +639,88 @@ SettingsPage {
 			detail: "A click on a running app brings its window (again: the next one); a middle click starts another"
 			checked: root.full.focusRunning
 			onToggled: on => root.set("focusRunning", on)
+		}
+
+		Switch {
+			text: "Open apps too"
+			detail: "Apps with a window that are not in it come in behind a line; drag one in or Keep it to pin it"
+			checked: root.full.running
+			onToggled: on => root.set("running", on)
+		}
+
+		Switch {
+			text: "Badges"
+			detail: "Unread messages, notifications, updates, downloads and prints in progress, playtime, the phone's battery"
+			checked: root.full.badges
+			onToggled: on => root.set("badges", on)
+		}
+
+		Switch {
+			text: "Pictures of the windows"
+			detail: "Resting on an app shows its windows; a click goes there"
+			checked: root.full.previews
+			onToggled: on => root.set("previews", on)
+		}
+
+		Switch {
+			text: "Compact"
+			detail: "Small icons until the pointer comes"
+			checked: root.full.compact
+			onToggled: on => root.set("compact", on)
+		}
+
+		Switch {
+			visible: root.full.look === "glass"
+			text: "Blur behind the glass"
+			checked: root.full.blur
+			onToggled: on => root.set("blur", on)
+		}
+
+		Switch {
+			visible: root.vertical
+			text: "Names along the edge"
+			detail: "Turned, so a name runs beside its icon"
+			checked: root.full.labelStyle === "vertical"
+			onToggled: on => root.set("labelStyle", on ? "vertical" : "bubble")
+		}
+
+		Segmented {
+			Layout.fillWidth: true
+			options: [{ value: "lively", label: "Lively", icon: "animation" }, { value: "calm", label: "Calm", icon: "minus" }]
+			current: root.full.motion
+			onSelected: value => root.set("motion", value)
+		}
+
+		RowLayout {
+			Layout.fillWidth: true
+			spacing: 10
+
+			Segmented {
+				Layout.fillWidth: true
+				options: [{ value: "theme", label: "Wallpaper" }, { value: "primary", label: "Accent" }, { value: "secondary", label: "Second" }, { value: "tertiary", label: "Third" }, { value: "custom", label: "Own" }]
+				current: root.full.accent
+				onSelected: value => root.set("accent", value)
+			}
+
+			Rectangle {
+				visible: root.full.accent === "custom"
+				Layout.preferredWidth: 28
+				Layout.preferredHeight: 28
+				radius: 14
+				color: root.full.accentColor
+				border.width: 1
+				border.color: Theme.outline
+			}
+
+			Field {
+				visible: root.full.accent === "custom"
+				Layout.preferredWidth: 120
+				placeholder: "#7aa2f7"
+				text: root.full.accentColor
+				onEdited: text => {
+					if (/^#[0-9a-fA-F]{6}$/.test(text.trim())) root.set("accentColor", text.trim());
+				}
+			}
 		}
 	}
 
@@ -665,11 +937,41 @@ SettingsPage {
 				onToggled: on => AppTray.updateItem(root.tray.id, root.selectedItem, { terminal: on })
 			}
 
+			// a picture of its own: an icon of the theme or a file
+			Field {
+				Layout.columnSpan: 2
+				Layout.fillWidth: true
+				visible: !!root.selected && root.selected.kind !== "separator" && root.selected.kind !== "spacer" && root.selected.kind !== "widget"
+				placeholder: "Own icon: a name of the icon theme (org.gnome.Nautilus) or a file (/path/icon.png)"
+				icon: "image_outline"
+				text: root.selected?.icon ?? ""
+				onEdited: text => AppTray.updateItem(root.tray.id, root.selectedItem, { icon: text.trim() })
+			}
+
+			Switch {
+				Layout.columnSpan: 2
+				visible: root.selected?.kind === "file" && root.selected?.folder === true
+				text: "As a stack"
+				detail: "Its newest files, fanned out from the tray"
+				checked: root.selected?.stack === true
+				onToggled: on => AppTray.updateItem(root.tray.id, root.selectedItem, { stack: on })
+			}
+
+			Field {
+				Layout.columnSpan: 2
+				Layout.fillWidth: true
+				visible: root.selected?.kind === "group"
+				placeholder: "Group name"
+				icon: "apps"
+				text: root.selected?.name ?? ""
+				onEdited: text => AppTray.updateItem(root.tray.id, root.selectedItem, { name: text })
+			}
+
 			// a glyph for what has no picture of its own
 			Flow {
 				Layout.columnSpan: 2
 				Layout.fillWidth: true
-				visible: !!root.selected && root.selected.kind !== "app" && !(root.selected.kind === "file" && !root.selected.glyph && AppTray.iconOf(root.selected) !== "")
+				visible: !!root.selected && ["command", "shell", "link", "action"].includes(root.selected.kind)
 				spacing: 4
 
 				Repeater {
@@ -697,7 +999,8 @@ SettingsPage {
 				{ value: "apps", label: "Apps", icon: "apps" },
 				{ value: "commands", label: "Commands", icon: "console" },
 				{ value: "shell", label: "Shell line", icon: "console_line" },
-				{ value: "place", label: "Folder or link", icon: "folder_outline" }
+				{ value: "place", label: "Folder or link", icon: "folder_outline" },
+				{ value: "more", label: "More", icon: "plus" }
 			]
 			current: root.adding
 			onSelected: value => {
@@ -848,6 +1151,113 @@ SettingsPage {
 					const item = /^https?:\/\//.test(value) ? { kind: "link", url: value, name: AppTray.hostOf(value) } : AppTray.itemOfPath(value);
 					AppTray.addItems(root.tray.id, [item], -1);
 					placeField.text = "";
+				}
+			}
+		}
+
+		// lines, gaps, groups, widgets, actions, the phone, games
+		ColumnLayout {
+			Layout.fillWidth: true
+			visible: root.adding === "more"
+			spacing: 6
+
+			SectionLabel {
+				text: "Arrange"
+			}
+
+			Flow {
+				Layout.fillWidth: true
+				spacing: 2
+
+				Repeater {
+					model: [
+						{ item: { kind: "separator" }, title: "Line" },
+						{ item: { kind: "spacer" }, title: "Gap" },
+						{ item: { kind: "group", name: "Group", items: [] }, title: "Group" }
+					]
+
+					delegate: Pick {
+						required property var modelData
+
+						item: modelData.item
+						title: modelData.title
+					}
+				}
+			}
+
+			SectionLabel {
+				text: "Live"
+			}
+
+			Flow {
+				Layout.fillWidth: true
+				spacing: 2
+
+				Repeater {
+					model: AppTray.widgets
+
+					delegate: Pick {
+						required property var modelData
+
+						item: ({ kind: "widget", widget: modelData.id })
+						title: modelData.name
+					}
+				}
+			}
+
+			StyledText {
+				Layout.fillWidth: true
+				visible: !Plugins.on("system-monitor")
+				text: "CPU and memory move only while the System monitor plugin is on"
+				tone: Theme.textSubtle
+				font.pixelSize: Theme.size.small
+			}
+
+			SectionLabel {
+				text: "Drop files on it"
+			}
+
+			Flow {
+				Layout.fillWidth: true
+				spacing: 2
+
+				Repeater {
+					model: AppTray.actions
+
+					delegate: Pick {
+						required property var modelData
+
+						item: modelData.pc ? ({ kind: "action", action: modelData.id, pc: modelData.pc }) : ({ kind: "action", action: modelData.id })
+						title: modelData.name
+					}
+				}
+
+				Pick {
+					visible: Phone.enabled
+					item: ({ kind: "phone" })
+					title: "Phone"
+				}
+			}
+
+			SectionLabel {
+				visible: Plugins.on("games")
+				text: "Games"
+			}
+
+			Flow {
+				Layout.fillWidth: true
+				visible: Plugins.on("games")
+				spacing: 2
+
+				Repeater {
+					model: root.adding === "more" && Plugins.on("games") ? Games.shown.slice(0, 40) : []
+
+					delegate: Pick {
+						required property var modelData
+
+						item: ({ kind: "game", game: String(modelData.id), name: String(modelData.name) })
+						title: String(modelData.name)
+					}
 				}
 			}
 		}

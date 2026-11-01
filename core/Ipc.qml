@@ -665,6 +665,24 @@ Scope {
 			else if (DesktopEntries.byId(value.replace(/\.desktop$/, ""))) AppTray.addToTray({ kind: "app", app: String(DesktopEntries.byId(value.replace(/\.desktop$/, "")).id) });
 			else AppTray.addToTray({ kind: "shell", exec: value, name: value.split(/\s+/)[0] });
 		}
+		// the n-th item (1…9) of the tray with the keyboard, else the first one shown
+		function launch(n: string): void {
+			AppTray.launchIndex(Number(n) || 1, "");
+		}
+		// a tray takes the keyboard: arrows, Enter, 1…9, Escape
+		function focus(name: string): void {
+			const tray = AppTray.trays.find(each => each.id === name || each.name === name);
+			AppTray.focusTray(tray?.id ?? "");
+		}
+		function profile(name: string): void {
+			if (name === "") AppTray.saveProfile(AppTray.profile || "Default");
+			else if (AppTray.profiles[name]) AppTray.useProfile(name);
+			else AppTray.saveProfile(name);
+		}
+		// a .pshell-tray.json file comes in as a tray
+		function load(path: string): void {
+			AppTray.importTray(path);
+		}
 		function list(): string {
 			return JSON.stringify(AppTray.trays.map(tray => ({ id: tray.id, name: tray.name, output: AppTray.outputOf(tray), edge: tray.edge, reveal: tray.reveal, items: (tray.items ?? []).map(item => AppTray.nameOf(item)) })));
 		}

@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import Quickshell
 import QtQuick.Effects
 import Quickshell.Widgets
 import qs.style.theme
@@ -357,6 +358,34 @@ Item {
 	}
 
 	// ── the pointer ────────────────────────────────────────────────────────
+	// dragged onto an app tray, its app goes in
+	DragHandler {
+		id: carry
+
+		target: null
+		enabled: AppTray.enabled
+		dragThreshold: 12
+	}
+
+	Item {
+		x: carry.centroid.pressPosition.x
+		y: carry.centroid.pressPosition.y
+		width: 1
+		height: 1
+		Drag.dragType: Drag.Automatic
+		Drag.active: carry.active
+		Drag.supportedActions: Qt.CopyAction
+		Drag.proposedAction: Qt.CopyAction
+		Drag.mimeData: AppTray.mimeFor({ kind: "app", app: String(DesktopEntries.heuristicLookup(String(root.item.appId ?? ""))?.id ?? root.item.appId ?? "") })
+	}
+
+	Binding {
+		target: AppTray
+		property: "carrying"
+		value: true
+		when: carry.active
+	}
+
 	MouseArea {
 		id: mouse
 
