@@ -12,6 +12,8 @@ Item {
 
 	required property var bar
 	property string panelId: ""
+	// a page of that panel: the underline shows only while it is on that page
+	property string panelPage: ""
 	property string tooltip: ""
 	property bool wheelEnabled: false
 	property real padding: 10
@@ -45,7 +47,7 @@ Item {
 	}
 	readonly property bool hovered: mouse.containsMouse
 	readonly property bool pressed: mouse.pressed
-	readonly property bool active: root.panelId !== "" && Popups.current === root.panelId && Popups.screen === root.bar.screen
+	readonly property bool active: root.panelId !== "" && Popups.current === root.panelId && Popups.screen === root.bar.screen && (root.panelPage === "" || Popups.page === root.panelPage)
 	default property alias content: holder.data
 
 	signal clicked(var mouse)

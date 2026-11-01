@@ -16,6 +16,7 @@ BarButton {
 	readonly property bool wanted: Live.shows(root.key)
 
 	panelId: root.src && !root.src.act ? root.src.panel : ""
+	panelPage: root.src?.page ?? ""
 	primaryAnchor: false
 	padding: 8
 	visible: width > 0.5
