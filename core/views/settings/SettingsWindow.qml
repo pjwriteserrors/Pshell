@@ -79,6 +79,7 @@ FloatingWindow {
 		{ id: "system", label: "System", icon: "cog_outline", hint: "Startup, environment, screenshots, blur" },
 		{ id: "apps", label: "Default apps", icon: "apps", hint: "Which program opens what, the terminal" },
 		{ id: "bar", label: "Desktop", icon: "dock_window", hint: "Bar, wallpaper, game mode", plugin: "bar" },
+		{ id: "tray", label: "App tray", icon: "dock_left", hint: "Apps and commands on a screen edge", plugin: "app-tray" },
 		{ id: "sounds", label: "Sounds", icon: "volume_high", hint: "Clicks, notifications, devices", plugin: "sounds" },
 		{ id: "lighting", label: "Lighting", icon: "led_strip_variant", hint: "Keyboard and LEDs: wallpaper or screen", shown: Lighting.enabled },
 		{ id: "phone", label: "Notifications", icon: "bell_outline", hint: "Which programs notify, here and on the phone", plugin: "notifications" },
@@ -174,6 +175,11 @@ FloatingWindow {
 		{ page: "bar", anchor: "wallpaper-change", title: "Wallpaper transition", words: "wallpaper animation transition fade bloom change" },
 		{ page: "bar", anchor: "wallpaper-backdrop", title: "Overview backdrop", words: "wallpaper overview backdrop blur dim workspaces" },
 		{ page: "bar", anchor: "game-mode", title: "Game mode", words: "game mode gaming find mouse shake notifications quiet" },
+		{ page: "tray", anchor: "trays", title: "App trays", words: "tray dock apps launcher edge new remove" },
+		{ page: "tray", anchor: "tray-place", title: "Where the tray sits", words: "tray dock edge screen monitor position place left right top bottom" },
+		{ page: "tray", anchor: "tray-reveal", title: "When the tray shows", words: "tray dock hide autohide hover click key always reserve" },
+		{ page: "tray", anchor: "tray-look", title: "Tray look", words: "tray dock icons size magnify grow glass labels dots" },
+		{ page: "tray", anchor: "tray-items", title: "What is in the tray", words: "tray dock apps commands plugins shell folder link add drag drop" },
 		{ page: "sounds", anchor: "sound-pack", title: "Sound pack", words: "sound pack theme cosy cozy install zip" },
 		{ page: "sounds", anchor: "sounds", title: "Sounds", words: "sound audio click volume mute quiet feedback do not disturb" },
 		{ page: "sounds", anchor: "sounds-list", title: "Every sound", words: "sound notification usb drive display monitor bluetooth error battery charger lock workspace screenshot" },
@@ -186,7 +192,7 @@ FloatingWindow {
 	]
 
 	// a page of the shell's own: no niri file behind it, nothing to undo
-	readonly property bool shellPage: ["bar", "multicursor", "sounds", "lighting", "phone", "mouse", "hud", "apps"].includes(root.current)
+	readonly property bool shellPage: ["bar", "tray", "multicursor", "sounds", "lighting", "phone", "mouse", "hud", "apps"].includes(root.current)
 
 	readonly property var results: {
 		if (root.query === "") return [];
@@ -610,7 +616,7 @@ FloatingWindow {
 									variant: "ghost"
 									icon: "tray_arrow_down"
 									text: "Export"
-									visible: root.current !== "bar" && root.current !== "sounds" && root.current !== "lighting" && root.current !== "phone" && root.current !== "mouse" && root.current !== "hud" && root.current !== "apps"
+									visible: root.current !== "bar" && root.current !== "tray" && root.current !== "sounds" && root.current !== "lighting" && root.current !== "phone" && root.current !== "mouse" && root.current !== "hud" && root.current !== "apps"
 									enabled: NiriSettings.loaded
 									onActivated: exportSheet.show(root.current)
 								}
@@ -675,6 +681,7 @@ FloatingWindow {
 							case "system": return systemPage;
 							case "apps": return defaultAppsPage;
 							case "bar": return barPage;
+						case "tray": return trayPage;
 							case "sounds": return soundsPage;
 							case "lighting": return lightingPage;
 							case "phone": return phonePage;
@@ -990,6 +997,12 @@ FloatingWindow {
 		id: barPage
 
 		BarPage {}
+	}
+
+	Component {
+		id: trayPage
+
+		TrayPage {}
 	}
 
 	Component {

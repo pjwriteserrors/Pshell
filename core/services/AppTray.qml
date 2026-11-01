@@ -263,7 +263,7 @@ Singleton {
 
 	function nameOf(item) {
 		if (!item) return "";
-		if (item.label) return String(item.label);
+		if (String(item.label ?? "").trim() !== "") return String(item.label).trim();
 		switch (item.kind) {
 		case "app": return String(root.entryOf(item)?.name ?? item.name ?? item.app);
 		case "command": return String(root.commandOf(item)?.name ?? item.name ?? `>${item.command}`);
