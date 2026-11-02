@@ -133,7 +133,7 @@ class Store:
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=NORMAL")
         self.db.executescript(SCHEMA)
-        for table, column, kind in (("source", "backfilled", "REAL NOT NULL DEFAULT 0"), ("video", "guessed", "INTEGER NOT NULL DEFAULT 0"), ("video_source", "position", "INTEGER NOT NULL DEFAULT -1"), ("video", "tags", "TEXT NOT NULL DEFAULT ''"), ("source", "grp", "TEXT NOT NULL DEFAULT ''")):
+        for table, column, kind in (("source", "backfilled", "REAL NOT NULL DEFAULT 0"), ("video", "guessed", "INTEGER NOT NULL DEFAULT 0"), ("video_source", "position", "INTEGER NOT NULL DEFAULT -1"), ("video", "tags", "TEXT NOT NULL DEFAULT ''"), ("source", "grp", "TEXT NOT NULL DEFAULT ''"), ("live_log", "found", "TEXT NOT NULL DEFAULT 'live'")):
             if column not in {row[1] for row in self.db.execute(f"PRAGMA table_info({table})")}:
                 self.db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
         self.db.commit()
@@ -176,8 +176,32 @@ class Store:
     def set_meta(self, key, value):
         self.run("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", key, json.dumps(value))
 
+    def log_stream(self, source, started, ended, title="", category="", found="later"):
+        """A stream that ran, learned afterwards (`found` later) or seen live. One
+        within half an hour of a known start is that one: its end is filled in."""
+        with self.lock:
+            near = self.one("SELECT * FROM live_log WHERE source = ? AND ABS(started - ?) < 1800", source, started)
+            # started again a little after it ended, under the same title: one stream
+            if not near and title:
+                near = self.one("SELECT * FROM live_log WHERE source = ? AND ended > 0 AND ? - ended BETWEEN -60 AND 900 AND title = ?", source, started, title)
+                if near:
+                    if ended > near["ended"]:
+                        self.run("UPDATE live_log SET ended = ? WHERE source = ? AND started = ?", ended, source, near["started"])
+                    return False
+            if near:
+                if ended and not near["ended"]:
+                    self.run("UPDATE live_log SET ended = ? WHERE source = ? AND started = ?", ended, source, near["started"])
+                if category and not near["category"]:
+                    self.run("UPDATE live_log SET category = ? WHERE source = ? AND started = ?", category, source, near["started"])
+                return False
+            self.run("INSERT OR IGNORE INTO live_log (source, started, ended, title, category, found) VALUES (?,?,?,?,?,?)", source, started, ended or 0, title, category, found)
+            return True
+
     def upsert_video(self, source, video):
         """Keeps what is known of a video. True when it was not known before."""
+        if video.get("wasLive") and video.get("liveStart"):
+            start = video["liveStart"]
+            self.log_stream(source, start, video.get("liveEnd") or (start + video["duration"] if video.get("duration") else 0), video.get("title") or "")
         with self.lock:
             known = self.one("SELECT * FROM video WHERE id = ?", video["id"])
             if known:

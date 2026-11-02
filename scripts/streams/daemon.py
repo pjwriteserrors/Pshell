@@ -110,6 +110,9 @@ SOUND_AHEAD = 3
 # a progress report sends the whole state at most this often; in between only
 # what plays (the shell redraws every list it is sent)
 PROGRESS_STATE = 60
+# past Twitch broadcasts are looked at this often, so a week is complete even
+# for the days the PC was off
+HISTORY_EVERY = 1800
 SECRETS = ("twitch-id", "twitch-secret", "twitch-token", "twitch-refresh", "youtube-key")
 
 
@@ -194,6 +197,7 @@ class Daemon(extras.Extras):
         self.sound_wait = {}
         self.sound_lock = threading.Lock()
         self.progress_told = 0
+        self.history_at = 0
         self.sink_seen = (0, "")
         self.enrich_queued = set()
         self.enrich_waiting = collections.OrderedDict()
@@ -467,18 +471,30 @@ class Daemon(extras.Extras):
         return f"Usually {names[slot['weekday']]} around {slot['minute'] // 60:02d}:{slot['minute'] % 60:02d}"
 
     def plan(self):
-        """The coming seven days: what is announced and what the past promises."""
+        """This week: what streamed since Monday (seen live or learned later, with
+        or without a schedule), and the coming days: what is announced and what
+        the past promises."""
         now = time.time()
         out = []
         sources = {row["id"]: row for row in self.store.all("SELECT * FROM source")}
+        moment = time.localtime(now)
+        monday = time.mktime((moment.tm_year, moment.tm_mon, moment.tm_mday - moment.tm_wday, 0, 0, 0, 0, 0, -1))
+        for row in self.store.all("SELECT * FROM live_log WHERE started >= ? ORDER BY started", monday):
+            source = sources.get(row["source"])
+            if not source or source["hidden"]:
+                continue
+            live = row["source"] in self.live and self.live[row["source"]].get("logged") == row["started"]
+            out.append({"source": row["source"], "name": source["name"], "avatar": source["avatar"], "colors": loads(source["colors"], None), "starts": row["started"], "ends": 0 if live else row["ended"],
+                        "title": row["title"], "category": row["category"], "sure": True, "past": not live, "live": live, "missed": row["found"] == "later", "url": source["url"]})
         for row in self.store.all("SELECT * FROM scheduled WHERE starts > ? AND starts < ?", now - 3600, now + 8 * 86400):
             source = sources.get(row["source"])
-            if source:
-                out.append({"source": row["source"], "name": source["name"], "avatar": source["avatar"], "colors": loads(source["colors"], None), "starts": row["starts"], "title": row["title"], "category": row["category"], "sure": True, "url": source["url"]})
+            # announced and already running or over: the log has it
+            if source and not any(entry["source"] == row["source"] and abs(entry["starts"] - row["starts"]) < 3 * 3600 for entry in out):
+                out.append({"source": row["source"], "name": source["name"], "avatar": source["avatar"], "colors": loads(source["colors"], None), "starts": row["starts"], "title": row["title"], "category": row["category"], "sure": True, "url": source["url"], "past": False, "live": False, "missed": False})
         for row in self.store.all("SELECT v.id, v.title, v.scheduled, v.url, s.source FROM video v JOIN video_source s ON s.video = v.id WHERE v.kind = 'upcoming' AND v.scheduled > ?", now - 3600):
             source = sources.get(row["source"])
-            if source and not source["hidden"]:
-                out.append({"source": row["source"], "name": source["name"], "avatar": source["avatar"], "colors": loads(source["colors"], None), "starts": row["scheduled"], "title": row["title"], "category": "", "sure": True, "url": row["url"]})
+            if source and not source["hidden"] and not any(entry["source"] == row["source"] and abs(entry["starts"] - row["scheduled"]) < 3 * 3600 for entry in out):
+                out.append({"source": row["source"], "name": source["name"], "avatar": source["avatar"], "colors": loads(source["colors"], None), "starts": row["scheduled"], "title": row["title"], "category": "", "sure": True, "url": row["url"], "past": False, "live": False, "missed": False})
         for source_id, source in sources.items():
             if source["hidden"] or source["kind"] == "rss":
                 continue
@@ -491,7 +507,7 @@ class Daemon(extras.Extras):
                     at += 7 * 86400
                 if any(entry["source"] == source_id and abs(entry["starts"] - at) < 3 * 3600 for entry in out):
                     continue
-                out.append({"source": source_id, "name": source["name"], "avatar": source["avatar"], "colors": loads(source["colors"], None), "starts": at, "title": f"Seen {slot['count']} times at this hour", "category": "", "sure": False, "url": source["url"]})
+                out.append({"source": source_id, "name": source["name"], "avatar": source["avatar"], "colors": loads(source["colors"], None), "starts": at, "title": f"Seen {slot['count']} times at this hour", "category": "", "sure": False, "past": False, "live": False, "missed": False, "url": source["url"]})
         out.sort(key=lambda item: item["starts"])
         for entry in out:
             entry["behind"] = self.behind_of(entry["source"])
@@ -781,6 +797,29 @@ class Daemon(extras.Extras):
         if now - self.twitch_schedule_at >= SCHEDULE_EVERY / FAST:
             self.twitch_schedule_at = now
             self.check_schedules()
+        if now - self.history_at >= HISTORY_EVERY / FAST:
+            self.history_at = now
+            threading.Thread(target=self.twitch_history, daemon=True).start()
+
+    def twitch_history(self):
+        """What streamed while this PC was off: Twitch keeps its broadcasts, and
+        those not seen live go into the log as found later (missed)."""
+        sources = self.store.all("SELECT * FROM source WHERE kind = 'twitch'")
+        if not sources:
+            return
+        try:
+            found = net.twitch_history([source["ref"] for source in sources])
+        except net.Failure as error:
+            print("history:", error, file=sys.stderr, flush=True)
+            return
+        added = 0
+        for source in sources:
+            for stream in found.get(source["ref"], []):
+                if source["id"] in self.live and abs(self.live[source["id"]].get("logged", 0) - stream["started"]) < 1800:
+                    continue
+                added += int(self.store.log_stream(source["id"], stream["started"], stream["ended"], stream["title"], stream["category"]))
+        if added:
+            self.changed()
 
     def check_source(self, source):
         try:
@@ -2149,8 +2188,13 @@ class Daemon(extras.Extras):
             if known.get("category") and stream["category"] and known["category"] != stream["category"]:
                 self.tell_live(source, stream, "category", known["category"])
             return
-        stream["logged"] = stream["started"]
-        self.store.run("INSERT OR IGNORE INTO live_log (source, started, title, category, peak) VALUES (?,?,?,?,?)", source_id, stream["started"], stream["title"], stream["category"], stream["viewers"])
+        # learned from the history before it was seen: the same broadcast, seen now
+        near = self.store.one("SELECT started FROM live_log WHERE source = ? AND ABS(started - ?) < 1800", source_id, stream["started"])
+        stream["logged"] = near["started"] if near else stream["started"]
+        if near:
+            self.store.run("UPDATE live_log SET found = 'live', ended = 0 WHERE source = ? AND started = ?", source_id, near["started"])
+        else:
+            self.store.run("INSERT OR IGNORE INTO live_log (source, started, title, category, peak) VALUES (?,?,?,?,?)", source_id, stream["started"], stream["title"], stream["category"], stream["viewers"])
         came_back = self.gone.pop(source_id, None)
         self.raids.pop(source_id, None)
         if came_back and time.time() - came_back[0] < REJOIN / FAST:

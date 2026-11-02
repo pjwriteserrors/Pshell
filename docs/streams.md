@@ -21,6 +21,7 @@ State: `~/.local/state/pshell/streams/streams.db`. Pictures and offline copies:
 | Older videos | Data API with a key, else `yt-dlp` (no dates or descriptions at first) | key optional | when a channel is added, or more than a feed holds came at once |
 | Lengths, descriptions, chapters | Data API, else `yt-dlp` one video at a time | key optional | for what is in a series, and anything under a day old |
 | Twitch live, schedule | Helix `streams`, `schedule` | an app of one's own | 60 s, 6 h |
+| Twitch past streams | Twitch's web GraphQL (`net.twitch_history`): kept broadcasts and the last one | nothing | 30 min |
 | Twitch follows, raids | device sign-in; raids over EventSub (10 channels) | the sign-in | live |
 | YouTube live | a feed entry that turns out to be a stream; the `/live` page for favourites | nothing | 5 min |
 | Other feeds | RSS or Atom | nothing | 30 min |
@@ -79,6 +80,19 @@ HORROR MOD"). A followed part keeps its videos and takes new ones by its name.
 A thread reads in the background: a channel's playlists once a day, then one
 video every ten seconds (with a YouTube key, fifty at a time). It waits while a
 game runs, and for half an hour when YouTube refuses.
+
+## This week
+
+The Plan page shows Monday to Sunday. The days gone show what streamed, from
+`live_log`: seen live by the daemon, or learned afterwards (`found` = later,
+shown as "Missed") from Twitch's kept broadcasts and its last broadcast, and from
+YouTube videos that turn out to have been live (`wasLive`, start and end).
+That works for days the PC was off and for channels without any schedule or
+regular hours. A broadcast within half an hour of a known start, or started
+again within 15 minutes of an end under the same title, is the same one. The
+days to come show what is announced and, fainter, regular hours (three starts
+within 45 minutes on one weekday in eight weeks), which the history fills in
+too.
 
 ## Subscriptions
 

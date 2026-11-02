@@ -22,6 +22,9 @@ API = TEST + "/ytapi" if TEST else "https://www.googleapis.com/youtube/v3"
 HELIX = TEST + "/helix" if TEST else "https://api.twitch.tv/helix"
 YOUTUBE_REAL = "https://www.youtube.com"
 TWITCH_AUTH = TEST + "/auth" if TEST else "https://id.twitch.tv/oauth2"
+# Twitch's own web page asks here, without an app or a sign-in (as yt-dlp does)
+TWITCH_GQL = TEST + "/gql" if TEST else "https://gql.twitch.tv/gql"
+TWITCH_WEB_CLIENT = "kimne78kx3ncx6brgo4mv6wki5h1ko"
 SPONSOR = TEST + "/sb" if TEST else "https://sponsor.ajay.app/api"
 EVENTSUB = os.environ.get("STREAMS_TEST_EVENTSUB", "wss://eventsub.wss.twitch.tv/ws")
 YTDLP = os.environ.get("STREAMS_TEST_YTDLP", "yt-dlp")
@@ -180,6 +183,7 @@ def api_item(item):
         "published": stamp(snippet.get("publishedAt")), "duration": iso_duration(item.get("contentDetails", {}).get("duration")),
         "kind": {"live": "live", "upcoming": "upcoming"}.get(live, "video"), "scheduled": stamp(details.get("scheduledStartTime")),
         "enriched": 1, "url": f"https://www.youtube.com/watch?v={item['id']}", "tags": json.dumps(snippet.get("tags") or []),
+        "wasLive": bool(details.get("actualEndTime")), "liveStart": stamp(details.get("actualStartTime")), "liveEnd": stamp(details.get("actualEndTime")),
     }
 
 
@@ -462,7 +466,39 @@ def ytdlp_video(video_id):
         "kind": "live" if status == "is_live" else ("upcoming" if status == "is_upcoming" else ("short" if "/shorts/" in (data.get("webpage_url") or "") else "video")),
         "chapters": json.dumps([{"at": c.get("start_time", 0), "title": c.get("title", "")} for c in (data.get("chapters") or [])]) if data.get("chapters") else "",
         "enriched": 1, "url": f"https://www.youtube.com/watch?v={video_id}", "tags": json.dumps(data.get("tags") or []),
+        # a stream that is over: when it ran, for the week
+        "wasLive": status in ("was_live", "post_live"), "liveStart": data.get("release_timestamp") or data.get("timestamp") or 0,
     }
+
+
+def twitch_history(logins):
+    """The past streams of Twitch channels, without an app: the broadcasts kept
+    as videos (start, length, title, game), and the last broadcast even when
+    none is kept. {login: [{started, ended, title, category}]}; ended 0 = not known."""
+    out = {}
+    for start in range(0, len(logins), 10):
+        chunk = logins[start:start + 10]
+        fields = "lastBroadcast { startedAt title game { name } } stream { createdAt } videos(first: 30, type: ARCHIVE, sort: TIME) { edges { node { createdAt lengthSeconds title game { name } } } }"
+        query = "{ " + " ".join(f"u{index}: user(login: {json.dumps(login)}) {{ {fields} }}" for index, login in enumerate(chunk)) + " }"
+        answer = fetch_json(TWITCH_GQL, headers={"Client-ID": TWITCH_WEB_CLIENT, "Content-Type": "application/json"}, data=json.dumps({"query": query}).encode(), timeout=20)
+        for index, login in enumerate(chunk):
+            user = (answer.get("data") or {}).get(f"u{index}")
+            if not user:
+                continue
+            streams = []
+            for edge in ((user.get("videos") or {}).get("edges") or []):
+                node = edge.get("node") or {}
+                started = stamp(node.get("createdAt"))
+                if started:
+                    streams.append({"started": started, "ended": started + (node.get("lengthSeconds") or 0), "title": node.get("title") or "", "category": (node.get("game") or {}).get("name") or ""})
+            last = user.get("lastBroadcast") or {}
+            started = stamp(last.get("startedAt"))
+            # a broadcast that runs now is the live check's
+            running = stamp((user.get("stream") or {}).get("createdAt"))
+            if started and not (running and abs(running - started) < 1800):
+                streams.append({"started": started, "ended": 0, "title": last.get("title") or "", "category": (last.get("game") or {}).get("name") or ""})
+            out[login] = streams
+    return out
 
 
 def subtitles(video_id, directory):
