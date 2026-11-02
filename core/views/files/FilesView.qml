@@ -582,20 +582,41 @@ FocusScope {
 	}
 
 	// ── pictures, tags, links ──────────────────────────────────────────────
+	// the size asked for last is asked for again
+	property string resizeWidth: "3000"
+	property string resizeHeight: "3000"
+
 	function resizeDialog(rows) {
+		const bothSides = v => v.mode === "exact" && String(v.width ?? "").trim() !== "" && String(v.height ?? "").trim() !== "";
 		root.form({
 			title: rows.length === 1 ? "Resize the picture" : `Resize ${rows.length} pictures`,
 			subtitle: rows.length === 1 ? rows[0].name : "",
 			icon: "resize",
 			accent: Theme.tertiary,
 			action: "Resize",
+			check: v => {
+				if (v.mode !== "exact") return "";
+				const sides = [String(v.width ?? "").trim(), String(v.height ?? "").trim()];
+				if (sides.every(side => side === "")) return "Give a width or a height";
+				return sides.every(side => side === "" || (/^[0-9]+$/.test(side) && Number(side) >= 1 && Number(side) <= 20000)) ? "" : "A side is 1 to 20000 px";
+			},
 			fields: [
-				{ key: "mode", type: "choice", label: "By", value: "longest", options: [{ value: "longest", label: "Longest side" }, { value: "percent", label: "Percent" }] },
+				{ key: "mode", type: "choice", label: "By", value: "exact", options: [{ value: "exact", label: "Exact size" }, { value: "longest", label: "Longest side" }, { value: "percent", label: "Percent" }] },
+				{ key: "width", type: "text", label: "Width in px", value: root.resizeWidth, placeholder: "Follows the height", when: v => v.mode === "exact" },
+				{ key: "height", type: "text", label: "Height in px", value: root.resizeHeight, placeholder: "Follows the width", when: v => v.mode === "exact" },
+				{ key: "fit", type: "choice", label: "If the shape differs", value: "cut", when: bothSides, options: [{ value: "cut", label: "Cut to fit" }, { value: "pad", label: "Keep all" }, { value: "stretch", label: "Stretch" }] },
+				{ key: "fitNote", type: "info", when: bothSides, text: v => v.fit === "pad" ? "The whole picture stays; the space around it is transparent, or white in a JPEG." : (v.fit === "stretch" ? "The whole picture is pulled to the size, which bends it." : "The picture fills the size; what sticks out at the edges is cut off.") },
 				{ key: "longest", type: "menu", label: "Longest side", value: 1920, when: v => v.mode === "longest", options: [640, 1080, 1280, 1920, 2560, 3840].map(n => ({ value: n, label: `${n} px` })) },
 				{ key: "percent", type: "slider", label: "Size", value: 50, min: 10, max: 100, step: 5, unit: "%", when: v => v.mode === "percent" },
 				{ key: "replace", type: "switch", label: "Replace the original", hint: "It goes to the trash, so this can be undone", value: false }
 			]
-		}, values => Files.imageTool("resize", rows.map(row => row.path), { mode: values.mode, longest: Number(values.longest), percent: Number(values.percent), replace: values.replace }));
+		}, values => {
+			if (values.mode === "exact") {
+				root.resizeWidth = String(values.width ?? "").trim();
+				root.resizeHeight = String(values.height ?? "").trim();
+			}
+			Files.imageTool("resize", rows.map(row => row.path), { mode: values.mode, width: Number(values.width || 0), height: Number(values.height || 0), fit: values.fit, longest: Number(values.longest), percent: Number(values.percent), replace: values.replace });
+		});
 	}
 
 	function watermarkDialog(rows) {

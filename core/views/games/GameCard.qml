@@ -19,10 +19,33 @@ Item {
 	// the entrance: waits this long, -1 for none
 	property int appearDelay: -1
 	property bool showName: false
+	// the one picked floats a little, as if held up (the shelf)
+	property bool floats: false
+	property real hover: 0
+
+	SequentialAnimation on hover {
+		running: root.floats && root.current && root.visible
+		loops: Animation.Infinite
+		onRunningChanged: if (!running) root.hover = 0
+
+		NumberAnimation {
+			to: 1
+			duration: 2400
+			easing.type: Easing.InOutSine
+		}
+		NumberAnimation {
+			to: 0
+			duration: 2400
+			easing.type: Easing.InOutSine
+		}
+	}
 
 	readonly property bool running: !!root.game && Games.isRunning(root.game.id)
 	readonly property bool missing: !!root.game?.missing
 	readonly property bool hovered: mouse.containsMouse
+	readonly property color accent: GameText.accent(root.game, Theme.primary)
+	// how far along, when its stats were asked already
+	readonly property var progress: root.game ? GameText.progress(Games.statsOf(root.game.id), root.game.playtime) : null
 
 	property real tiltX: 0
 	property real tiltY: 0
@@ -75,7 +98,7 @@ Item {
 		transformOrigin: Item.Bottom
 		transform: [
 			Translate {
-				y: 40 * (1 - root.appear)
+				y: 40 * (1 - root.appear) - 6 * root.hover
 			},
 			Rotation {
 				origin.x: body.width / 2
@@ -112,7 +135,7 @@ Item {
 			offset.y: root.current ? 18 : 10
 			blur: root.current ? 46 : 22
 			spread: root.current ? 2 : -4
-			color: root.current ? Qt.alpha(Theme.primary, 0.55) : Qt.rgba(0, 0, 0, 0.55)
+			color: root.current ? Qt.alpha(root.accent, 0.6) : Qt.rgba(0, 0, 0, 0.55)
 
 			Behavior on color {
 				ColorAnim {
@@ -154,8 +177,8 @@ Item {
 			radius: root.radius + 5
 			color: "transparent"
 			border.width: 2.5
-			border.color: Theme.primary
-			opacity: root.current ? 0.9 : 0
+			border.color: root.accent
+			opacity: root.current ? 0.95 : 0
 			scale: root.current ? 1 : 1.04
 
 			Behavior on opacity {
@@ -252,11 +275,83 @@ Item {
 			}
 		}
 
+		// played an hour or more this week: a flame
+		Rectangle {
+			id: flame
+
+			anchors.top: parent.top
+			anchors.left: parent.left
+			anchors.margins: 10
+			visible: !root.running && (root.game?.week ?? 0) >= 60
+			width: 26
+			height: 26
+			radius: 13
+			color: Qt.rgba(0, 0, 0, 0.6)
+
+			Glyph {
+				anchors.centerIn: parent
+				icon: "fire"
+				size: 15
+				color: "#ff9a3c"
+				surface: "transparent"
+
+				SequentialAnimation on scale {
+					running: flame.visible && (root.current || root.hovered)
+					loops: Animation.Infinite
+
+					NumberAnimation {
+						to: 1.18
+						duration: 520
+						easing.type: Easing.InOutSine
+					}
+					NumberAnimation {
+						to: 0.95
+						duration: 620
+						easing.type: Easing.InOutSine
+					}
+				}
+			}
+		}
+
+		// how far along, a line along the foot of the cover
+		Item {
+			anchors.left: art.left
+			anchors.right: art.right
+			anchors.bottom: art.bottom
+			anchors.margins: 10
+			height: 4
+			visible: root.progress !== null && root.progress.share > 0
+			opacity: root.current || root.hovered ? 1 : 0.75
+
+			Rectangle {
+				anchors.fill: parent
+				radius: 2
+				color: Qt.rgba(0, 0, 0, 0.55)
+			}
+
+			Rectangle {
+				property real share: root.progress?.share ?? 0
+
+				height: parent.height
+				width: Math.max(4, parent.width * share)
+				radius: 2
+				color: share >= 1 ? Theme.success : Qt.lighter(root.accent, 1.15)
+
+				Behavior on share {
+					NumberAnimation {
+						duration: 700
+						easing.type: Easing.OutCubic
+					}
+				}
+			}
+		}
+
 		// how it starts, while pointed at
 		Rectangle {
 			anchors.bottom: parent.bottom
 			anchors.left: parent.left
 			anchors.margins: 10
+			anchors.bottomMargin: root.progress !== null && root.progress.share > 0 ? 22 : 10
 			width: 28
 			height: 28
 			radius: 14
@@ -282,7 +377,7 @@ Item {
 			width: 58
 			height: 58
 			radius: 29
-			color: Theme.primary
+			color: root.accent
 			visible: root.showName
 			opacity: root.hovered ? 1 : 0
 			scale: root.hovered ? 1 : 0.6
@@ -301,8 +396,8 @@ Item {
 				anchors.horizontalCenterOffset: 2
 				icon: root.running ? "open_in_new" : "play"
 				size: 30
-				color: Theme.onPrimary
-				surface: Theme.primary
+				color: GameText.onColor(root.accent)
+				surface: root.accent
 			}
 
 			MouseArea {

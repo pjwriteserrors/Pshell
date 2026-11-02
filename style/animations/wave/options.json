@@ -1,0 +1,12 @@
+[
+  {
+    "key": "dir",
+    "label": "Direction",
+    "default": "diagonal",
+    "choices": [
+      { "value": "diagonal", "label": "Diagonal", "glsl": "vec2(0.7071, 0.7071)" },
+      { "value": "across", "label": "Across", "glsl": "vec2(1.0, 0.0)" },
+      { "value": "down", "label": "Down", "glsl": "vec2(0.0, 1.0)" }
+    ]
+  }
+]

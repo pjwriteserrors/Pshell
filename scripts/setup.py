@@ -66,6 +66,7 @@ PROGRAMS = {
     "sounds": [("udevadm", "USB sounds"), ("findmnt", "drive sounds"), ("ffmpeg", "installing sound packs")],
     "connections": [("ss", "the sockets of the apps")],
     "printer": [("orca-slicer", "slicing STL and 3MF models (OrcaSlicer)")],
+    "streams": [("yt-dlp", "older videos, lengths, subtitles, offline copies"), ("mpv", "playing in a window, picture in picture"), ("secret-tool", "Twitch and YouTube keys"), ("ffmpeg", "listening to episodes: silence, loudness"), ("fpcalc", "finding intros and outros")],
     "filemanager": [("fd", "searching names"), ("rg", "searching contents"), ("pdftoppm", "PDF thumbnails"),
                     ("git", "what changed in a repository"), ("rsync", "syncing two folders, sending to a server"),
                     ("tesseract", "text in pictures: names for screenshots, search"), ("curl", "sharing a link"),

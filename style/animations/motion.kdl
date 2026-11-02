@@ -1,0 +1,56 @@
+// Everything else niri animates, all on one clock, so a workspace, a window
+// and the overview move alike:
+//
+//   coming in or moving   260 ms, "land": cubic-bezier 0.3 0.8 0.5 1
+//   going away            200 ms on Motion.accel
+//
+// "land" gets there and stops: 90 % of the way in about 140 ms, and the rest
+// is a short settle, not a slow creep (Motion.decel spends 230 ms on its last
+// tenth, which reads as having to wait for the workspace). Nothing bounces.
+// Tempo in Studio stretches all of them together; Springs & curves can still
+// set any one by hand.
+
+workspace-switch {
+    duration-ms 260
+    curve "cubic-bezier" 0.3 0.8 0.5 1.0
+}
+
+horizontal-view-movement {
+    duration-ms 260
+    curve "cubic-bezier" 0.3 0.8 0.5 1.0
+}
+
+window-movement {
+    duration-ms 260
+    curve "cubic-bezier" 0.3 0.8 0.5 1.0
+}
+
+window-resize {
+    duration-ms 260
+    curve "cubic-bezier" 0.3 0.8 0.5 1.0
+}
+
+overview-open-close {
+    duration-ms 260
+    curve "cubic-bezier" 0.3 0.8 0.5 1.0
+}
+
+config-notification-open-close {
+    duration-ms 260
+    curve "cubic-bezier" 0.3 0.8 0.5 1.0
+}
+
+exit-confirmation-open-close {
+    duration-ms 260
+    curve "cubic-bezier" 0.3 0.8 0.5 1.0
+}
+
+screenshot-ui-open {
+    duration-ms 260
+    curve "cubic-bezier" 0.3 0.8 0.5 1.0
+}
+
+recent-windows-close {
+    duration-ms 200
+    curve "cubic-bezier" 0.3 0.0 0.8 0.15
+}

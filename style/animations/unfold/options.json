@@ -1,0 +1,12 @@
+[
+  {
+    "key": "from",
+    "label": "Direction",
+    "default": "top",
+    "choices": [
+      { "value": "top", "label": "From top", "glsl": "0.0" },
+      { "value": "bottom", "label": "From bottom", "glsl": "1.0" },
+      { "value": "center", "label": "From middle", "glsl": "0.5" }
+    ]
+  }
+]

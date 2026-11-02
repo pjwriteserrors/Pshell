@@ -179,11 +179,16 @@ ModalWindow {
 	function finishApply(exitCode) {
 		root.applying = false;
 		if (exitCode === 0) {
-			if (root.currentIcon)
+			if (root.currentIcon) {
 				root.liveIcon = String(root.currentIcon.id);
+				// the Pshell icons are drawn anew if the colours moved on
+				IconTheme.refresh();
+			}
 			if (root.currentCursor) {
 				root.liveCursor = String(root.currentCursor.id);
 				root.liveSize = root.selectedSize;
+				// the Pshell theme is drawn for the size it is worn at
+				CursorTheme.refresh();
 			}
 			root.statusKind = "ok";
 			root.statusText = "Applied";
@@ -642,6 +647,33 @@ ModalWindow {
 							}
 						}
 					}
+
+					// the Pshell icons' own setting: it takes effect at once
+					Rectangle {
+						Layout.fillWidth: true
+						Layout.preferredHeight: pshellIconOptions.implicitHeight + 28
+						visible: root.currentIcon !== null && String(root.currentIcon.id) === "Pshell-Icons"
+						radius: Theme.radius.huge
+						color: Theme.layer1
+
+						ColumnLayout {
+							id: pshellIconOptions
+
+							anchors.fill: parent
+							anchors.margins: 14
+							spacing: 10
+
+							SectionLabel {
+								text: IconTheme.building ? "Pshell icons · drawing…" : "Pshell icons"
+							}
+
+							SwitchRow {
+								label: "Brand colours"
+								checked: IconTheme.brands
+								onToggled: on => IconTheme.set("brands", on)
+							}
+						}
+					}
 				}
 
 				// pointer
@@ -836,6 +868,104 @@ ModalWindow {
 										root.selectedSize = Number(value);
 										root.clearStatus();
 									}
+								}
+							}
+						}
+					}
+
+					// the Pshell theme's own settings: they take effect at once
+					Rectangle {
+						Layout.fillWidth: true
+						Layout.preferredHeight: pshellOptions.implicitHeight + 28
+						visible: root.currentCursor !== null && String(root.currentCursor.id) === "Pshell"
+						radius: Theme.radius.huge
+						color: Theme.layer1
+
+						ColumnLayout {
+							id: pshellOptions
+
+							anchors.fill: parent
+							anchors.margins: 14
+							spacing: 10
+
+							SectionLabel {
+								text: "Pshell pointer"
+							}
+
+							OptionRow {
+								label: "Animations"
+
+								Segmented {
+									Layout.fillWidth: true
+									options: [{ value: "full", label: "Full" }, { value: "subtle", label: "Subtle" }, { value: "off", label: "Off" }]
+									current: CursorTheme.animations
+									onSelected: value => CursorTheme.set("animations", value)
+								}
+							}
+
+							OptionRow {
+								label: "Corners"
+
+								Segmented {
+									Layout.fillWidth: true
+									options: [{ value: "niri", label: "Like windows" }, { value: "0", label: "Sharp" }, { value: "8", label: "Soft" }, { value: "20", label: "Round" }]
+									current: String(CursorTheme.round)
+									onSelected: value => CursorTheme.set("round", value === "niri" ? "niri" : Number(value))
+								}
+							}
+
+							GridLayout {
+								Layout.fillWidth: true
+								columns: 2
+								columnSpacing: 18
+								rowSpacing: 8
+
+								SwitchRow {
+									label: "Accent details"
+									checked: CursorTheme.accent
+									onToggled: on => CursorTheme.set("accent", on)
+								}
+								SwitchRow {
+									label: "Seasons"
+									checked: CursorTheme.seasons !== "off"
+									onToggled: on => CursorTheme.set("seasons", on ? "auto" : "off")
+								}
+								SwitchRow {
+									label: "Recording dot"
+									checked: CursorTheme.marks.rec
+									onToggled: on => CursorTheme.setMark("rec", on)
+								}
+								SwitchRow {
+									label: "Microphone & camera"
+									checked: CursorTheme.marks.privacy
+									onToggled: on => CursorTheme.setMark("privacy", on)
+								}
+								SwitchRow {
+									label: "Screen shared"
+									checked: CursorTheme.marks.share
+									onToggled: on => CursorTheme.setMark("share", on)
+								}
+								SwitchRow {
+									label: "Caps Lock"
+									checked: CursorTheme.marks.caps
+									onToggled: on => CursorTheme.setMark("caps", on)
+								}
+								SwitchRow {
+									label: "Hide while typing"
+									checked: NiriSettings.flag(["cursor", "hide-when-typing"])
+									onToggled: on => NiriSettings.setFlag(["cursor", "hide-when-typing"], on, `Hide pointer while typing ${on ? "on" : "off"}`)
+								}
+							}
+
+							OptionRow {
+								label: "Hide when idle"
+
+								Segmented {
+									readonly property int ms: Number(NiriSettings.arg(["cursor", "hide-after-inactive-ms"], 0))
+									Layout.fillWidth: true
+									options: [{ value: "0", label: "Never" }, { value: "3000", label: "3 s" }, { value: "10000", label: "10 s" }, { value: "30000", label: "30 s" }]
+									current: String(ms)
+									onSelected: value => Number(value) === 0 ? NiriSettings.reset(["cursor", "hide-after-inactive-ms"], "Idle pointer stays") : NiriSettings.set(["cursor", "hide-after-inactive-ms"], Number(value), `Pointer hides after ${Number(value) / 1000} s`, "hide-after")
 								}
 							}
 						}

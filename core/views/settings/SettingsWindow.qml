@@ -72,6 +72,7 @@ FloatingWindow {
 		{ id: "hud", label: "HUD haptics", icon: "crosshairs_gps", hint: "Zones on the game's HUD the mouse feels", plugin: "mouse" },
 		{ id: "keyboard", label: "Keyboard", icon: "keyboard_settings", hint: "Special keys, backlight, Fn keys", plugin: "keyboard" },
 		{ id: "apex", label: "Apex Pro", icon: "keyboard_variant", hint: "Actuation, Rapid Trigger, keys, OLED", plugin: "apex" },
+		{ id: "ultimate", label: "Controller", icon: "gamepad_variant", hint: "8BitDo: buttons, sticks, light, macros", plugin: "ultimate" },
 		{ id: "multicursor", label: "Multicursor", icon: "cursor_text", hint: "Lines and cursors in every text field", plugin: "multicursor" },
 		{ id: "rules", label: "Window rules", icon: "application_cog_outline", hint: "Per app: size, place, look" },
 		{ id: "workspaces", label: "Workspaces", icon: "view_grid_outline", hint: "Named workspaces" },
@@ -137,6 +138,15 @@ FloatingWindow {
 		{ page: "apex", anchor: "apex-oled", title: "Apex display", words: "steelseries apex oled screen display clock media notification picture text", plugin: "apex" },
 		{ page: "apex", anchor: "apex-light", title: "Apex light", words: "steelseries apex brightness light rgb", plugin: "apex" },
 		{ page: "apex", anchor: "apex-configs", title: "Apex configs", words: "steelseries apex onboard config profile slot rename copy backup restore", plugin: "apex" },
+		{ page: "ultimate", anchor: "ultimate-pad", title: "8BitDo controller", words: "8bitdo ultimate 2 wireless controller gamepad pad profile battery", plugin: "ultimate" },
+		{ page: "ultimate", anchor: "ultimate-buttons", title: "Controller buttons", words: "8bitdo gamepad remap buttons paddles pl pr l4 r4 back buttons turbo", plugin: "ultimate" },
+		{ page: "ultimate", anchor: "ultimate-sticks", title: "Controller sticks", words: "8bitdo gamepad stick dead zone invert swap d-pad", plugin: "ultimate" },
+		{ page: "ultimate", anchor: "ultimate-triggers", title: "Controller triggers", words: "8bitdo gamepad trigger hall range swap", plugin: "ultimate" },
+		{ page: "ultimate", anchor: "ultimate-rumble", title: "Controller vibration", words: "8bitdo gamepad rumble vibration motors trigger vibration", plugin: "ultimate" },
+		{ page: "ultimate", anchor: "ultimate-motion", title: "Controller motion", words: "8bitdo gamepad gyro motion six axis tilt aim", plugin: "ultimate" },
+		{ page: "ultimate", anchor: "ultimate-light", title: "Controller light", words: "8bitdo gamepad led ring light colour rgb hotwheel", plugin: "ultimate" },
+		{ page: "ultimate", anchor: "ultimate-macros", title: "Controller macros", words: "8bitdo gamepad macro record sequence", plugin: "ultimate" },
+		{ page: "ultimate", anchor: "ultimate-profiles", title: "Controller profiles", words: "8bitdo gamepad profile star button copy", plugin: "ultimate" },
 		{ page: "mouse", anchor: "mouse-buttons", title: "Mouse buttons and gestures", words: "logitech mx master button remap gesture swipe thumb wheel per app solaar rule action ring", plugin: "mouse" },
 		{ page: "mouse", anchor: "mouse-rules", title: "Mouse rules", words: "rule editor condition modifier ctrl shift app hold double click solaar", plugin: "mouse" },
 		{ page: "mouse", anchor: "mouse-pointer", title: "Mouse DPI", words: "dpi speed sensitivity pointer precision sniper shift", plugin: "mouse" },
@@ -693,6 +703,7 @@ FloatingWindow {
 							case "hud": return hudPage;
 							case "keyboard": return keyboardPage;
 							case "apex": return apexPage;
+							case "ultimate": return ultimatePage;
 							case "multicursor": return multicursorPage;
 							case "rules": return rulesPage;
 							case "workspaces": return workspacesPage;
@@ -972,6 +983,14 @@ FloatingWindow {
 		id: apexPage
 
 		ApexPage {
+			onOpen: page => root.go(page, "")
+		}
+	}
+
+	Component {
+		id: ultimatePage
+
+		UltimatePage {
 			onOpen: page => root.go(page, "")
 		}
 	}

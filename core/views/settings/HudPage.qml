@@ -150,13 +150,12 @@ FocusScope {
 		}).join(", ") || "nothing";
 	}
 
-	// fires now: its scene is shown and nothing shown with it quiets it (gamefeel.live_zones)
+	// fires now: its scene is shown and no other scene shown quiets it (gamefeel.live_zones)
 	function zoneAwake(zone) {
 		if (!zone) return false;
 		const up = root.liveScenes;
 		const scene = root.scenes.find(s => s.id === zone.scene);
-		if (scene && scene.picture && !up.includes(scene.id)) return false;
-		if ((Mouse.hudList(scene?.quiet) ?? []).some(id => up.includes(id))) return false;
+		if (scene && scene.picture && !Mouse.hudAwakeScenes.includes(scene.id)) return false;
 		return !(Mouse.hudList(zone.unless) ?? []).some(id => up.includes(id));
 	}
 

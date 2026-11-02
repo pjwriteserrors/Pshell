@@ -21,7 +21,9 @@ only when the window changed) one JSON line:
      "zones": {id: [mean change of the zone (0..255), its change in
      redness, its change in brightness]},
      "scenes": {id: how alike the frame is to the scene's picture, 0..1 –
-     every 4th frame}}
+     every 4th frame}, "offsets": {scene id: [dx, dy] – a window-like
+     scene (an inventory) found moved from its picture's place, as
+     fractions; its zones are measured there}}
 
 The daemon turns that into shakes (the picture jolting back and forth
 while the mouse rests), hits (a sudden red cast), flashes (a sudden
@@ -38,6 +40,11 @@ import time
 
 import numpy as np
 
+try:
+    import cv2
+except ImportError:
+    cv2 = None
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from niri_cast import CAST, plain_modifiers  # noqa: E402
 
@@ -53,6 +60,12 @@ FPS = 20
 CELL = 8
 # a cell changed when its mean absolute difference crosses this (0..255)
 CELL_CHANGE = 14.0
+# a scene whose zones lie within this share of the frame is a window, looked
+# for nearby (this far, as a share of the frame) and taken where it matches
+# at least this well
+SEARCH_AREA = 0.35
+SEARCH_REACH = 0.15
+SEARCH_MATCH = 0.5
 
 
 def log(message):
@@ -105,9 +118,17 @@ class Measure:
         self.references = {}
         self.reference_size = None
         self.count = 0
+        # scene id -> where its window was found, moved from its picture's
+        # place (fractions of the frame): a game puts its inventory here or
+        # there, its zones go along
+        self.offsets = {}
 
-    def rect(self, zone, width, height):
+    def rect(self, zone, width, height, offset=None):
         _, fx, fy, fw, fh = zone
+        if offset is None:
+            offset = self.offsets.get(self.scene_of(zone[0]))
+        if offset:
+            fx, fy = fx + offset[0], fy + offset[1]
         x0 = max(0, min(width - 1, int(fx * width)))
         y0 = max(0, min(height - 1, int(fy * height)))
         x1 = max(x0 + 1, min(width, int(round((fx + fw) * width))))
@@ -146,6 +167,41 @@ class Measure:
         corr = float((da * db).mean() / (sa * sb))
         return max(0.0, min(1.0, corr))
 
+    def scene_of(self, zone_id):
+        for scene_id, _, zone_ids in self.scenes:
+            if zone_id in zone_ids:
+                return scene_id
+        return None
+
+    def find(self, ref, gray, zones, width, height):
+        """Where a window-like scene (its zones close together, not spread
+        over the screen like a HUD) is now: its picture's patch around the
+        zones looked for nearby in the frame. The offset as fractions, or
+        None (no OpenCV, a HUD, nothing better than where it was drawn)."""
+        if cv2 is None:
+            return None
+        x0 = min(z[1] for z in zones); y0 = min(z[2] for z in zones)
+        x1 = max(z[1] + z[3] for z in zones); y1 = max(z[2] + z[4] for z in zones)
+        if (x1 - x0) * (y1 - y0) > SEARCH_AREA:
+            return None
+        px0, py0 = max(0, int(x0 * width) - 2), max(0, int(y0 * height) - 2)
+        px1, py1 = min(width, int(round(x1 * width)) + 2), min(height, int(round(y1 * height)) + 2)
+        if px1 - px0 < 8 or py1 - py0 < 8:
+            return None
+        mx, my = int(SEARCH_REACH * width), int(SEARCH_REACH * height)
+        sx0, sy0 = max(0, px0 - mx), max(0, py0 - my)
+        sx1, sy1 = min(width, px1 + mx), min(height, py1 + my)
+        template = ref[py0:py1, px0:px1]
+        field = gray[sy0:sy1, sx0:sx1]
+        if float(template.std()) < 4:
+            return None
+        result = cv2.matchTemplate(field, template, cv2.TM_CCOEFF_NORMED)
+        _, best, _, (bx, by) = cv2.minMaxLoc(result)
+        if best < SEARCH_MATCH:
+            return None
+        dx, dy = sx0 + bx - px0, sy0 + by - py0
+        return (dx / width, dy / height) if (dx or dy) else None
+
     def scene_scores(self, gray, width, height):
         """Per scene: the mean likeness of its zones to the picture's (the
         HUD of a fight is there, the dialog's is not) – each scene on its
@@ -160,13 +216,30 @@ class Measure:
                 continue
             zones = [by_id[z] for z in zone_ids if z in by_id]
             if zones:
-                scores = []
-                for zone in zones:
-                    x0, y0, x1, y1 = self.rect(zone, width, height)
-                    score = self.alike(ref[y0:y1, x0:x1], gray[y0:y1, x0:x1])
-                    alike[zone[0]] = round(score, 3)
-                    scores.append(score)
-                out[scene_id] = round(sum(scores) / len(scores), 3)
+                # where it was drawn, or where its window has gone (the
+                # better of the two)
+                best = None
+                for offset in [None, self.find(ref, gray, zones, width, height)]:
+                    if offset is None and best is not None:
+                        continue
+                    scores = {}
+                    for zone in zones:
+                        rx0, ry0, rx1, ry1 = self.rect(zone, width, height, (0, 0))
+                        x0, y0, x1, y1 = self.rect(zone, width, height, offset or (0, 0))
+                        if (x1 - x0, y1 - y0) != (rx1 - rx0, ry1 - ry0):
+                            scores[zone[0]] = 0.0
+                            continue
+                        scores[zone[0]] = self.alike(ref[ry0:ry1, rx0:rx1], gray[y0:y1, x0:x1])
+                    mean = sum(scores.values()) / len(scores)
+                    if best is None or mean > best[0]:
+                        best = (mean, offset, scores)
+                mean, offset, scores = best
+                if offset:
+                    self.offsets[scene_id] = offset
+                else:
+                    self.offsets.pop(scene_id, None)
+                alike.update({zone_id: round(score, 3) for zone_id, score in scores.items()})
+                out[scene_id] = round(mean, 3)
             else:
                 small = gray[::4, ::4]
                 out[scene_id] = round(self.alike(ref[::4, ::4], small), 3)
@@ -209,6 +282,7 @@ class Measure:
         self.count += 1
         if self.scenes and self.count % 4 == 0:
             out["scenes"], out["alike"] = self.scene_scores(gray, width, height)
+            out["offsets"] = {scene_id: [round(fx, 4), round(fy, 4)] for scene_id, (fx, fy) in self.offsets.items()}
         self.gray, self.red, self.bright, self.red_map = gray, red, bright, red_map
         return out
 
@@ -354,6 +428,7 @@ def main():
                 state["cast"].measure.zones = out
                 state["cast"].measure.scenes = scenes
                 state["cast"].measure.references = {}
+                state["cast"].measure.offsets = {}
 
     def switch(window):
         if state["cast"] is not None and state["cast"].window == window:

@@ -35,6 +35,7 @@ Scope {
 	DownloadsTopic { link: root.link }
 	LibraryTopic { link: root.link }
 	LyricsTopic { link: root.link }
+	StreamsTopic { link: root.link }
 	ReaderTopic { link: root.link }
 	ConvertTopic { link: root.link }
 	ScreentimeTopic { link: root.link }

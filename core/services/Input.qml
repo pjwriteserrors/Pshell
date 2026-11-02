@@ -6,8 +6,9 @@ import Quickshell.Io
 
 // One reader of the mice, touchpads and keyboards for everything that needs
 // them (scripts/input_watch.py): a shaken pointer for FindMouse, a shaken
-// drag for Shelf, presses counted for the RPG. It runs with just the parts
-// that are wanted and starts anew when that changes.
+// drag for Shelf, presses counted for the RPG, Escape for the laser
+// pointer, Caps Lock for the cursor. It runs with just the parts that are wanted and starts anew when
+// that changes.
 Singleton {
 	id: root
 
@@ -15,7 +16,12 @@ Singleton {
 	readonly property bool dragging: Plugins.on("drop-commands") && Shelf.shake
 	// set by the RPG while it plays
 	property bool counting: false
-	readonly property var args: (root.shaking ? ["--shake"] : []).concat(root.dragging ? ["--drag"] : [], root.counting ? ["--count", "2"] : [])
+	// the laser pointer ends with Escape, the keyboard left to the slides
+	readonly property bool escaping: Laser.active
+	// Caps Lock's light, for the text cursor's mark (CursorTheme)
+	readonly property bool capsWatched: !!(CursorTheme.marking && CursorTheme.marks?.caps)
+	property bool capsLock: false
+	readonly property var args: (root.shaking ? ["--shake"] : []).concat(root.dragging ? ["--drag"] : [], root.counting ? ["--count", "2"] : [], root.escaping ? ["--escape"] : [], root.capsWatched ? ["--caps"] : [])
 	readonly property bool wanted: root.args.length > 0
 	// "" or why the devices cannot be read: "permission" | "devices"
 	property string error: ""
@@ -23,6 +29,7 @@ Singleton {
 	signal shaken
 	signal pressed
 	signal dragShaken
+	signal escaped
 	// { keys, clicks } of the last two seconds
 	signal activity(var counts)
 
@@ -42,6 +49,12 @@ Singleton {
 			break;
 		case "dragshake":
 			root.dragShaken();
+			break;
+		case "caps":
+			root.capsLock = data.on === true;
+			break;
+		case "escape":
+			root.escaped();
 			break;
 		case "activity":
 			root.activity({ keys: Number(data.keys) || 0, clicks: Number(data.clicks) || 0 });

@@ -87,8 +87,11 @@
 	{ "id": "files-default", "name": "Default file manager", "category": "Desktop", "requires": ["filemanager"], "icon": "folder_star_outline" },
 	{ "id": "files-chooser", "name": "File chooser for all apps", "category": "Desktop", "requires": ["filemanager"], "icon": "file_find_outline" },
 	{ "id": "find-mouse", "name": "Find my mouse", "category": "Desktop", "icon": "mouse_variant" },
+	{ "id": "laser-pointer", "name": "Laser pointer", "category": "Desktop", "icon": "target" },
 	{ "id": "useless-fact", "name": "Useless fact", "category": "Desktop", "icon": "lightbulb", "preview": {"on": ["bar"], "base": "off", "wait": 5} },
 	{ "id": "torrents", "name": "Torrents", "category": "Desktop", "default": false, "icon": "magnet", "preview": {"on": ["bar"], "ipc": ["torrents open"]} },
+	{ "id": "streams", "name": "Streams", "category": "Desktop", "default": false, "icon": "play_circle", "preview": {"on": ["bar"], "ipc": ["streams open"]} },
+	{ "id": "streams-bar", "name": "Streams in the bar", "category": "Desktop", "requires": ["streams"], "icon": "play_circle", "preview": {"on": ["bar", "clock"], "ipc": ["streams open"]} },
 	{ "id": "torrents-bar", "name": "Torrents under the bar", "category": "Desktop", "requires": ["torrents"], "icon": "magnet", "preview": {"on": ["bar", "clock"], "ipc": ["torrents open"]} },
 	{ "id": "app-tray", "name": "App tray", "category": "Desktop", "default": false, "icon": "dock_window" },
 
@@ -130,6 +133,7 @@
 	{ "id": "mouse", "name": "Logitech mouse", "category": "Hardware", "default": false, "requires": ["niri-settings"], "icon": "mouse_variant" },
 	{ "id": "keyboard", "name": "Logitech keyboard", "category": "Hardware", "default": false, "requires": ["niri-settings"], "icon": "keyboard" },
 	{ "id": "apex", "name": "SteelSeries keyboard", "category": "Hardware", "default": false, "requires": ["niri-settings"], "icon": "keyboard_variant" },
+	{ "id": "ultimate", "name": "8BitDo controller", "category": "Hardware", "default": false, "requires": ["niri-settings"], "icon": "gamepad_variant" },
 	{ "id": "printer", "name": "3D printer", "category": "Hardware", "default": false, "icon": "printer_3d" },
 
 	{ "id": "phone", "name": "Phone app", "category": "Phone", "default": false, "icon": "cellphone" },

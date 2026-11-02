@@ -10,7 +10,9 @@ What is in it:
 - **Steam's installed games**, from every library folder
   (`libraryfolders.vdf`, the `appmanifest_*.acf`), without Proton, the
   runtimes and the redistributables. Play time and when one was played last
-  come from the account's `localconfig.vdf`. They start through Steam
+  come from the account's `localconfig.vdf` (a non-Steam game's under its
+  signed 32-bit appid); the sessions the shell saw count as well, so a game
+  Steam keeps no time for still has its hours. They start through Steam
   (`steam steam://rungameid/<id>`).
 - **Steam's non-Steam games** (`shortcuts.vdf` of the account that signed in
   last), started through Steam. A name that is only the program
@@ -36,10 +38,22 @@ keyring, entered in the add sheet) its covers are offered as well.
 Without a cover a card shows the wide header on a blur of itself, or the
 name on colours of its own.
 
-The surface: the picked game's hero fills the screen and drifts closer;
-over it its logo (or name), what is known (how it starts, play time, when it
-was played last, size, *Playing now*), Play, favourite, Add to Steam and
-the menu. Along the bottom the covers on a shelf – the one picked grows at
+The surface: the picked game's hero fills the screen, comes in from a
+little closer and drifts nearer; a light passes over it as it changes. The
+game's own colours (`games.py` takes an accent and a dark one from its
+cover with PIL, cached in `~/.cache/pshell/games/colors.json`) set the
+mood: the dark under it all and behind the words instead of black, lights
+of the accent drifting through, embers of it rising, and the play button,
+rings, lines and glow of the picked cover in it – all fading over when
+another game is picked. Over it its logo (or name), how it starts, size,
+*Playing now*, the hours of this week; a strip of glass with the play time,
+when it was played last, how far along (a ring against HowLongToBeat or the
+achievements), the achievements and the last four weeks (numbers roll, the
+bars rise; a click opens the landing page); Play, favourite, Add to Steam
+and the menu. A cover shows how far along its game is as a line along its
+foot (`games.py brief`: goals, cached HowLongToBeat answers and Steam's
+achievement counts for every game, nothing asked of the net) and a flame
+when it was played an hour or more this week. Along the bottom the covers on a shelf – the one picked grows at
 the front, those passed slide out to the left; G turns it into a grid.
 Typing searches everything, Tab walks the filters (All, Recent, Favourites,
 Steam, Non-Steam, Hidden), the sort button orders by last played, name or

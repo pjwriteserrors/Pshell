@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Effects
 import Qt.labs.qmlmodels
 import qs.style.theme
 import qs.core.services
@@ -346,6 +347,72 @@ Row {
 
 				Quick {
 					onClicked: Popups.open("launcher", zone.bar.screen, "", ">t ")
+				}
+			}
+
+			DelegateChoice {
+				roleValue: "streams"
+
+				Row {
+					id: streamsRow
+
+					required property string modelData
+
+					spacing: 2
+
+					// the faces of who is live; a click goes there
+					Repeater {
+						model: Streams.liveStreams.slice(0, 3)
+
+						Image {
+							required property var modelData
+
+							anchors.verticalCenter: parent.verticalCenter
+							width: 20
+							height: 20
+							sourceSize: Qt.size(40, 40)
+							fillMode: Image.PreserveAspectCrop
+							asynchronous: true
+							source: Streams.picture(modelData.avatar)
+							layer.enabled: true
+							layer.effect: MultiEffect {
+								maskEnabled: true
+								maskSource: streamsFaceMask
+								maskThresholdMin: 0.5
+								maskSpreadAtMin: 0.5
+							}
+
+							MouseArea {
+								anchors.fill: parent
+								cursorShape: Qt.PointingHandCursor
+								onClicked: Streams.playLive(parent.modelData.source)
+							}
+						}
+					}
+					Rectangle {
+						id: streamsFaceMask
+
+						width: 20
+						height: 20
+						radius: 10
+						visible: false
+						layer.enabled: true
+					}
+					Quick {
+						modelData: streamsRow.modelData
+						tooltip: Streams.liveCount > 0 ? `Streams · ${Streams.liveCount} live` : "Streams"
+						onClicked: Streams.toggle()
+
+						// who is live, in the corner of the icon
+						Badge {
+							anchors.top: parent.top
+							anchors.right: parent.right
+							anchors.topMargin: 3
+							anchors.rightMargin: 1
+							count: Streams.liveCount
+							accent: Theme.danger
+						}
+					}
 				}
 			}
 

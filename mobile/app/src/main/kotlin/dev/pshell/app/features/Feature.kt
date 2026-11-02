@@ -59,6 +59,7 @@ val Features: List<Feature> = listOf(
 	SoundFeature,
 	SoundsFeature,
 	LyricsFeature,
+	StreamsFeature,
 	SongFeature,
 	HandoffFeature,
 	// work

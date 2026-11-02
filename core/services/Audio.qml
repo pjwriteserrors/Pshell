@@ -33,9 +33,11 @@ Singleton {
 		objects: [root.sink, root.source]
 	}
 
-	// app playback streams (media.class Stream/Output/Audio)
-	readonly property var streams: (Pipewire.nodes?.values ?? []).filter(node => node.isStream && node.audio
-		&& String(node.properties?.["media.class"] ?? "") === "Stream/Output/Audio")
+	// app playback streams (media.class Stream/Output/Audio). Picked by type,
+	// which is known unbound: reading properties (only there once bound by the
+	// tracker below) made a binding loop that bound and unbound the streams
+	// over and over, and crashed Quickshell when one went away meanwhile.
+	readonly property var streams: (Pipewire.nodes?.values ?? []).filter(node => node.type === PwNodeType.AudioOutStream)
 
 	PwObjectTracker {
 		objects: root.streams

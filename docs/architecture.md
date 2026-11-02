@@ -199,6 +199,16 @@ shake, the screens take the pointer while the light is on to learn where it
 is. `scripts/ipc.sh findmouse find` asks for it from a key; the light then
 comes with the pointer's next move.
 
+`laser-pointer` turns the pointer into a laser dot for presentations
+(Mod+Alt+L in `dotfiles/niri/pshell.kdl`, `scripts/ipc.sh laser toggle`):
+`Laser` holds whether it is on and where the pointer is, `LaserPointer` (an
+Overlay layer on every screen, made like MouseFinder) takes the pointer to
+learn that, hides the real one and draws a dot in the cursor theme's accent
+(`CursorStyle`) with a short streak that fades when the pointer rests. It
+shows only from the pointer's first move. A click, the wheel, Escape or the
+key again ends it; the keyboard stays with the presentation (to turn its
+slides), Escape is read by `input_watch.py --escape`.
+
 `multicursor` brings the line and cursor keys of a code editor to every text
 field: move a line up or down (Alt+↑/↓), copy it (Ctrl+Alt+Shift+↑/↓), a
 cursor above or below (Alt+Shift+↑/↓), a cursor where a click lands
@@ -339,7 +349,12 @@ The drive of a disk image is remembered by the mount point it was seen under
 user mounts it through an fstab entry with `user`; the first time, a terminal
 asks for the password and `vm.py allow` writes that entry (`/etc/fstab` is
 backed up as `fstab.bak-pshell-vm`). A drive the machine gets whole must not
-be mounted on the host: the launch stops and the same terminal unmounts it.
+be mounted on the host: the launch pauses the torrents on it (`hold` of the
+torrent daemon) and unmounts it, and mounts it and lets them go on once the
+machine is off (`vm.py restore`, noted in `vms.json`). The same terminal asks
+once for the password to write `/etc/sudoers.d/pshell-vm`, which allows exactly
+that mount and umount. A program of the user that has files open on the drive
+stops the launch and is named; it is never killed, nor the drive lazily unmounted.
 There is no polkit agent in the session, which is why root goes through
 sudo in a terminal. Looking Glass is started with `lookingGlass.args` of
 `vms.json` (default `-F`).
@@ -910,8 +925,22 @@ only when its name changes, so a rebuilt one is worn alternately as `Pshell`
 and `Pshell-Live` (a link to it). niri plays animated cursors on one clock
 from its own start, so every animation is a loop, never an entrance.
 
-While the screen is recorded (`Recorder.active`) niri wears `Pshell-Rec`
-(`cursor_theme.py wear rec|normal`): the everyday cursors with a red dot.
+Studio › Icons & Pointer sets it (`~/.local/state/pshell/cursor.json`):
+animations full, subtle (only waiting and the arrow's light) or off, accent
+details, corners like niri's windows or a radius of their own, the seasons
+(by the date: winter, spring, summer, autumn, Halloween, Christmas, New
+Year – the arrow's rare light becomes the season passing by, the wait
+spinner carries its sign), which marks it carries, and niri's hiding of the
+pointer while typing or idle. The theme is drawn for niri's `xcursor-size`
+and twice that.
+
+Marks the pointer carries over every window are worn as variants
+`Pshell-M-<marks>` (`cursor_theme.py wear --marks …`, holding only the
+cursors that change): a red dot while recording, orange and green while a
+microphone or camera is in use and a ring while the screen is shared
+(`core/services/Privacy.qml`, from PipeWire's links; the shell's own readers
+of the screen don't count), ⇪ on the text cursor while Caps Lock is on
+(`input_watch.py --caps`).
 
 A Wayland pointer only takes the standard shapes, so the shell's own
 cursors are drawn by the shell: `style/theme/CursorStyle.qml` reads
@@ -921,6 +950,29 @@ its look – the crosshair with the size in screenshots and the HUD board, the
 sight of the radial menu, the ring of a held button, the lock beside Polkit,
 the grown arrow of FindMouse, the other PC's name at a KVM edge, the aimed
 command of the drop ring, the sparkle while the AI answers.
+
+### Icon theme
+
+`scripts/icon_theme.py` draws the Pshell icon theme in the cursors' look
+(PNGs, 16–128 px): every installed app on a tile in the background colour,
+outlined in the text colour, its sign in the accent – its symbolic icon where
+it has one, else its own icon mapped onto the palette, so a game from Steam
+fits as well as Firefox; folders with the kind's sign, files as a page with
+the kind's sign and the extension, devices on a tile. Corners follow niri's
+`geometry-corner-radius`. Actions, status and the symbolic icons GTK
+colours itself are inherited from Papirus-Wal / Papirus. Studio › Icons &
+Pointer has the one setting (`~/.local/state/pshell/icons.json`): brand
+colours, the apps' own icons in their own colours on the tiles.
+
+Each look is a directory of its own (`~/.local/share/icons/.pshell-icons/
+<key>`, the key from the colours, the radius, the setting, the installed
+apps and the script), linked as `Pshell-Icons`; GTK reloads an icon theme
+only when its name changes, so a new look is worn alternately as
+`Pshell-Icons` and `Pshell-Icons-Live`. `core/services/IconTheme.qml` runs
+`apply` when the colours, the radius or the number of apps change – only
+while it is worn – and hands the look's directory to `AppIcons`, whose
+index then takes the Pshell icons first (a new directory per look, so no
+stale picture is kept).
 
 ## Styles
 

@@ -54,6 +54,7 @@ Singleton {
 		{ id: "todos", name: "Todo lists", icon: "checkbox_marked_circle_outline", plugin: "todos", zone: "", about: "The todo lists in the launcher" },
 		{ id: "translate", name: "Translate", icon: "translate", plugin: "translate", zone: "", about: "Translation in the launcher" },
 		{ id: "torrents", name: "Torrents", icon: "magnet", plugin: "torrents", zone: "", about: "The torrent client" },
+		{ id: "streams", name: "Streams", icon: "play_circle", plugin: "streams-bar", zone: "right", about: "Who is live, what to watch next" },
 		{ id: "printer", name: "3D printer", icon: "printer_3d", plugin: "printer", zone: "", about: "The printer panel" },
 		{ id: "watch", name: "Watch", icon: "watch", plugin: "watch", zone: "", about: "The watch panel" },
 		{ id: "identities", name: "Fake identities", icon: "account_circle", plugin: "identities", zone: "", about: "Identities" },

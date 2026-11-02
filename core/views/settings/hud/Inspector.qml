@@ -874,7 +874,7 @@ Rectangle {
 							}
 
 							StyledText {
-								text: "All quiet while it shows"
+								text: "Keeps these quiet while it shows"
 								font.pixelSize: Theme.size.label
 								font.weight: Font.Bold
 								tone: Theme.textSubtle

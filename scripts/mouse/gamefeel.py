@@ -1311,6 +1311,11 @@ class Eyes:
         # over the bar of slots) – and each zone's own likeness
         self.up = []
         self.alike = {}
+        # scene id -> (dx, dy): its window found moved (eyes.py)
+        self.offsets = {}
+        # scene id -> when it came up (the newest of scenes that quiet each
+        # other has the say: the inventory opened over the bar of slots)
+        self.up_since = {}
         # the pointer (hover and click zones) and which zones it is in
         self.pointer = Pointer(daemon)
         self.inside = set()
@@ -1474,7 +1479,7 @@ class Eyes:
             self.pointer.stop()
             self.on = False
             self.window = 0
-            self.scene, self.scores, self.up, self.alike = "", {}, [], {}
+            self.scene, self.scores, self.up, self.alike, self.up_since, self.offsets = "", {}, [], {}, {}, {}
             self.daemon.tell_eyes()
         if self.proc is not None and self.daemon.game_window != self.window:
             self.window = self.daemon.game_window
@@ -1529,6 +1534,8 @@ class Eyes:
         if isinstance(data.get("grid"), list):
             self.grid = data["grid"]
         if isinstance(data.get("scenes"), dict):
+            offsets = data.get("offsets")
+            self.offsets = {str(k): (float(v[0]), float(v[1])) for k, v in offsets.items()} if isinstance(offsets, dict) else {}
             self.recognise(data["scenes"], at, data.get("alike"))
         measured = data.get("zones")
         if isinstance(measured, dict):
@@ -1595,6 +1602,7 @@ class Eyes:
             if score >= bar:
                 up.append(scene_id)
         up.sort(key=lambda scene_id: -float(scores[scene_id]))
+        self.up_since = {scene_id: self.up_since.get(scene_id, at) for scene_id in up}
         best = up[0] if up else ""
         if up != self.up or best != self.scene:
             changed = set(up) != was
@@ -1605,22 +1613,38 @@ class Eyes:
             if self.daemon.watching:
                 self.daemon.emit("eyes", **self.summary())
 
+    def awake(self, scenes=None):
+        """The scenes up that are not quieted: a scene's `quiet` lists the
+        scenes that keep quiet while it shows. Of two that quiet each other
+        the one up last has the say (the inventory opened over the bar of
+        slots), then the more alike."""
+        scenes = scenes if scenes is not None else {scene["id"]: scene for scene in self.scenes()}
+        up = [scene_id for scene_id in self.up if scene_id in scenes]
+
+        def rank(scene_id):
+            return (self.up_since.get(scene_id, 0.0), float(self.scores.get(scene_id, 0.0)))
+
+        def quiets(by, scene_id):
+            if scene_id not in scenes[by]["quiet"]:
+                return False
+            return by not in scenes[scene_id]["quiet"] or rank(by) > rank(scene_id)
+
+        return [scene_id for scene_id in up if not any(by != scene_id and quiets(by, scene_id) for by in up)]
+
     def live_zones(self):
-        """The zones that may fire now: those of every scene that is up,
-        unless their scene (or the zone itself) is to be quiet while one of
-        the other scenes up is there too; with none recognised only those of
-        scenes that have no picture to be recognised by (and zones of no
-        scene) – the rest stays quiet."""
+        """The zones that may fire now: those of every scene that is up and
+        not quieted by another scene up (`awake`), unless the zone itself is
+        to be quiet while one of the scenes up is there; with none
+        recognised only those of scenes that have no picture to be
+        recognised by (and zones of no scene) – the rest stays quiet."""
         zones = self.zones()
         scenes = {scene["id"]: scene for scene in self.scenes()}
         up = set(self.up)
+        awake = set(self.awake(scenes))
         out = []
         for zone in zones:
             scene = scenes.get(zone["scene"])
-            if scene is not None and zone["scene"] not in up:
-                continue
-            # quiet while another scene is up as well – the whole scene's, or the zone's own
-            if scene is not None and up.intersection(scene["quiet"]):
+            if scene is not None and zone["scene"] not in awake:
                 continue
             if up.intersection(zone["unless"]):
                 continue
@@ -1648,8 +1672,14 @@ class Eyes:
         zone = next((z for z in self.zones() if z["id"] == zone_id), None)
         if zone is None:
             return None
-        fx, fy = where
-        return zone["x"] <= fx <= zone["x"] + zone["w"] and zone["y"] <= fy <= zone["y"] + zone["h"]
+        return self.contains(zone, *where)
+
+    def contains(self, zone, fx, fy):
+        """Whether a point (fractions of the window) is in a zone – where
+        its scene's window is now (eyes.py finds an inventory moved)."""
+        dx, dy = self.offsets.get(zone["scene"], (0.0, 0.0))
+        x, y = zone["x"] + dx, zone["y"] + dy
+        return x <= fx <= x + zone["w"] and y <= fy <= y + zone["h"]
 
     def advance(self, at, event, zone_id=None, code=None):
         """An event for the chains: `click` (a mouse button, `code`),
@@ -1755,7 +1785,7 @@ class Eyes:
         fx, fy = where
         now_inside = set()
         for zone in self.live_zones():
-            if zone["x"] <= fx <= zone["x"] + zone["w"] and zone["y"] <= fy <= zone["y"] + zone["h"]:
+            if self.contains(zone, fx, fy):
                 now_inside.add(zone["id"])
                 if zone["id"] not in self.inside:
                     for trigger in zone["triggers"]:
@@ -1784,7 +1814,7 @@ class Eyes:
             return
         fx, fy = where
         for zone in self.live_zones():
-            if not (zone["x"] <= fx <= zone["x"] + zone["w"] and zone["y"] <= fy <= zone["y"] + zone["h"]):
+            if not self.contains(zone, fx, fy):
                 continue
             if 272 <= code <= 279:
                 self.clicked_at[zone["id"]] = at
@@ -1813,7 +1843,7 @@ class Eyes:
     def event(self, kind, strength, label, reason, cells=None, zone=None, trigger=None):
         self.seen[kind] = self.seen.get(kind, 0) + 1
         waveform = trigger["feel"] if trigger else wave_for(kind, strength)
-        felt_log(f"eyes {kind} {waveform} | {reason} | up={','.join(self.up) or '-'}")
+        felt_log(f"eyes {kind} {waveform} | {reason} | up={','.join(self.up) or '-'} awake={','.join(self.awake()) or '-'}")
         self.daemon.felt("eyes", kind, strength, waveform, label, stream=zone["id"] if zone else "")
         if self.daemon.watching:
             self.daemon.emit("onset", source="eyes", at=round(time.monotonic(), 3), cluster=(cells or [-1])[0], n=0, win=0,
@@ -1823,5 +1853,5 @@ class Eyes:
     def summary(self):
         return {"on": self.on, "window": self.window, "frames": self.frames, "seen": self.seen, "latest": self.latest,
                 "hud": self.memory.cells_summary() if self.memory.entry else {}, "zones": len(self.zones()), "grid": self.grid,
-                "scene": self.scene, "up": list(self.up), "scores": self.scores, "alike": self.alike,
+                "scene": self.scene, "up": list(self.up), "awake": self.awake(), "offsets": self.offsets, "scores": self.scores, "alike": self.alike,
                 "pointer": self.pointer.ok}

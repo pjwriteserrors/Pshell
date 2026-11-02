@@ -4,19 +4,24 @@
     scripts/vm.py status              every machine as JSON: what it is, how it runs, what it needs
     scripts/vm.py mount <vm>          mount the drives its disk images live on
     scripts/vm.py unmount <vm>        unmount them again (the machine must be off)
+    scripts/vm.py restore <vm>        give back what `mount` freed (the machine must be off)
     scripts/vm.py start|shutdown|kill <vm>
     scripts/vm.py lg                  start Looking Glass in the background, its log in the runtime dir
     sudo scripts/vm.py allow <vm> <vms.json>   once: let the user mount those drives without a password,
-                                      and free the drives passed through to the machine
+                                      and unmount the drives passed through to the machine
 
 A disk image on a drive that is not mounted is found by the mount point it
 was seen under before: whenever an image exists, the drive under it is noted
 in ~/.local/state/pshell/vms.json (by UUID). A drive the machine gets whole
-(a block device) must not be mounted on the host while it runs; such a drive
-is reported as busy.
+(a block device) must not be mounted on the host while it runs: `mount` frees
+it (torrents seeding from it are paused, the drive unmounted) and notes that in
+vms.json, `restore` mounts it again and lets the torrents go on. A program of
+the user that has files open on it is never touched: the drive is reported as
+busy, with who holds it.
 
 Mounting is done as the user, through an fstab entry with `user`; `allow`
-writes that entry (once, /etc/fstab is backed up first). There is no polkit
+writes that entry (once, /etc/fstab is backed up first) and a sudoers rule for
+exactly the mount and umount of a passed-through drive. There is no polkit
 agent in the session, so whatever needs root runs in a terminal with sudo.
 """
 
@@ -24,8 +29,11 @@ import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
+import tempfile
+import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 import host  # noqa: E402
@@ -35,6 +43,10 @@ STATE = host.state_dir() / "vms.json"
 RUNTIME = Path(os.environ.get("PSHELL_RUNTIME_DIR") or Path(os.environ.get("XDG_RUNTIME_DIR") or "/tmp") / "pshell")
 LG_LOG = RUNTIME / "looking-glass.log"
 FSTAB = Path("/etc/fstab")
+SUDOERS = Path("/etc/sudoers.d/pshell-vm")
+TORRENTS = RUNTIME / "torrents.sock"
+# how long a paused torrent gets to close its files
+FREE_SECONDS = 10
 OSINFO = "{http://libosinfo.org/xmlns/libvirt/domain/1.0}"
 
 OS_NAMES = {
@@ -212,6 +224,7 @@ def describe(name, state, mounts, fstab, live):
         "storage": storage,
         "drives": drives,
         "autostart": "Autostart:      enable" in virsh("dominfo", name).stdout,
+        "freed": name in (state.get("freed") or {}),
     }
 
 
@@ -245,11 +258,119 @@ def answer(data, code=0):
     return code
 
 
+def torrents(op, **args):
+    """A request to the torrent daemon; None when it does not run or refuses."""
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+            sock.settimeout(5)
+            sock.connect(str(TORRENTS))
+            sock.sendall((json.dumps(dict(args, id="vm", op=op)) + "\n").encode())
+            with sock.makefile("r") as lines:
+                for line in lines:
+                    message = json.loads(line)
+                    if message.get("id") == "vm":
+                        return message.get("data") if message.get("ok") else None
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def holders(point):
+    """The programs with files open under a mount point, by name."""
+    result = run("fuser", "-m", point)
+    names = set()
+    for pid in result.stdout.split():
+        try:
+            names.add(Path(f"/proc/{pid}/comm").read_text().strip())
+        except OSError:
+            names.add(pid)
+    return sorted(names)
+
+
+def may_sudo(*command):
+    return run("sudo", "-n", "-l", *command).returncode == 0
+
+
+def tool(name):
+    return shutil.which(name) or f"/usr/bin/{name}"
+
+
+def note_freed(name, change):
+    state = load_state()
+    freed = state.setdefault("freed", {})
+    entry = freed.setdefault(name, {"mounts": [], "held": []})
+    change(entry)
+    save_state(state)
+
+
+def free_drive(name, drive):
+    """Unmounts a drive the machine gets whole; the answer when it could not."""
+    points = [busy["mountpoint"] for busy in drive["busy"]]
+    label = drive["label"] or drive["device"]
+    for point in points:
+        if not may_sudo(tool("umount"), point):
+            return answer({"ok": False, "needsRoot": True, "mount": point, "error": f"Unmounting {label} needs your password once"}, 4)
+    for point in points:
+        held = (torrents("hold", path=point) or {}).get("held") or []
+        if held:
+            note_freed(name, lambda entry: entry["held"].extend(item for item in held if item not in entry["held"]))
+        deadline = time.monotonic() + (FREE_SECONDS if held else 0)
+        while True:
+            result = run("sudo", "-n", tool("umount"), point)
+            if result.returncode == 0:
+                note_freed(name, lambda entry: entry["mounts"].append(point) if point not in entry["mounts"] else None)
+                break
+            if time.monotonic() >= deadline:
+                who = holders(point)
+                busy = [{"device": drive["device"], "mountpoint": point, "holders": who}]
+                error = f"{', '.join(who)} still has files open on {label}" if who else f"{label} could not be unmounted: {(result.stderr or result.stdout).strip()}"
+                return answer({"ok": False, "busy": busy, "error": error}, 5)
+            time.sleep(0.5)
+    return None
+
+
+def restore(name):
+    """Gives back what `mount` freed, as far as it can; the rest stays noted."""
+    vm = machine(name)
+    if vm["running"]:
+        return answer({"ok": False, "error": "the machine is still running"}, 1)
+    entry = (load_state().get("freed") or {}).get(name)
+    if not entry:
+        return answer({"ok": True})
+    live = mounted_targets()
+    left = [point for point in entry.get("mounts", []) if point not in live]
+    errors = []
+    for point in list(left):
+        result = run("sudo", "-n", tool("mount"), point)
+        if result.returncode == 0:
+            left.remove(point)
+        else:
+            errors.append((result.stderr or result.stdout).strip())
+    held = entry.get("held", [])
+    # torrents wait for their drive, and for the daemon the shell starts
+    if held and not left:
+        if torrents("release", held=held) is None:
+            errors.append("the torrent daemon does not answer")
+        else:
+            held = []
+    state = load_state()
+    if left or held:
+        state["freed"][name] = {"mounts": left, "held": held}
+    else:
+        state.get("freed", {}).pop(name, None)
+    save_state(state)
+    if errors:
+        return answer({"ok": False, "error": "; ".join(errors)}, 1)
+    return answer({"ok": True})
+
+
 def mount(name):
     vm = machine(name)
     for drive in vm.get("drives", []):
         if drive["busy"]:
-            return answer({"ok": False, "busy": drive["busy"], "error": f"{drive['label'] or drive['device']} is mounted on the host"}, 5)
+            failed = free_drive(name, drive)
+            if failed is not None:
+                return failed
     missing = [s for s in vm["storage"] if s.get("missing")]
     if missing:
         return answer({"ok": False, "error": f"{missing[0]['path']} does not exist"}, 3)
@@ -297,9 +418,45 @@ def looking_glass():
     return answer({"ok": True, "log": str(LG_LOG)})
 
 
+def allow_drives(vm):
+    """As root: a sudoers rule for exactly the mount and umount of the drives the
+    machine gets whole, so that a launch frees them on its own from now on."""
+    points = [busy["mountpoint"] for drive in vm.get("drives", []) for busy in drive["busy"]]
+    user = os.environ.get("SUDO_USER") or ""
+    if not user and os.environ.get("PKEXEC_UID"):
+        import pwd
+        user = pwd.getpwuid(int(os.environ["PKEXEC_UID"])).pw_name
+    if not points:
+        return 0
+    if not user:
+        print("Who is it for? Run this through sudo or pkexec.")
+        return 1
+    known = SUDOERS.read_text().splitlines() if SUDOERS.exists() else []
+    lines = list(known) or ["# the drives virtual machines get whole, freed by the shell (scripts/vm.py)"]
+    for point in points:
+        escaped = re.sub(r"([\\:,= ])", r"\\\1", point)
+        for command in ("umount", "mount"):
+            line = f"{user} ALL=(root) NOPASSWD: {tool(command)} {escaped}"
+            if line not in lines:
+                lines.append(line)
+    if lines == known:
+        return 0
+    with tempfile.NamedTemporaryFile("w", dir=SUDOERS.parent, prefix=".pshell-vm-", delete=False) as file:
+        file.write("\n".join(lines) + "\n")
+    os.chmod(file.name, 0o440)
+    checked = run("visudo", "-cf", file.name)
+    if checked.returncode != 0:
+        os.unlink(file.name)
+        print(checked.stderr.strip() or checked.stdout.strip())
+        return 1
+    os.replace(file.name, SUDOERS)
+    print(f"sudoers: {SUDOERS}")
+    return 0
+
+
 def allow(name, state_path):
     """As root: an fstab entry with `user` for every drive the disk images are on,
-    and the drives the machine gets whole unmounted. The user's vms.json is
+    and the rule for the drives the machine gets whole. The user's vms.json is
     passed in, sudo's HOME is root's."""
     if os.geteuid() != 0:
         print(f"allow must run as root: sudo {sys.argv[0]} allow {name} {STATE}")
@@ -331,14 +488,7 @@ def allow(name, state_path):
         run("systemctl", "daemon-reload")
         for line in added:
             print("fstab: " + line.replace("\t", " "))
-    for drive in vm.get("drives", []):
-        for busy in drive["busy"]:
-            result = run("umount", busy["mountpoint"])
-            print(("freed " if result.returncode == 0 else "could not free ") + f"{busy['device']} ({busy['mountpoint']})")
-            if result.returncode != 0:
-                print(result.stderr.strip())
-                return 1
-    return 0
+    return allow_drives(vm)
 
 
 def main(argv):
@@ -357,6 +507,8 @@ def main(argv):
         return mount(rest[0])
     if command == "unmount":
         return unmount(rest[0])
+    if command == "restore":
+        return restore(rest[0])
     if command in ("start", "shutdown", "kill"):
         return lifecycle(command, rest[0])
     if command == "allow":

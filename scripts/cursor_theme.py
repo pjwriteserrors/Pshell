@@ -4,13 +4,14 @@
     cursor_theme.py build   [--out DIR] [colours]   write the theme
     cursor_theme.py apply   [colours]               build, then make niri and
                                                     the session wear it
-    cursor_theme.py wear    rec|normal              the recording cursors
-                                                    (Pshell-Rec) or the
-                                                    everyday ones
+    cursor_theme.py wear    --marks rec,mic,…       the cursors with these
+                                                    marks (Pshell-M-…), none:
+                                                    the everyday ones
     cursor_theme.py sheet   [--out PNG] [colours]   every cursor's frames, on
                                                     dark, light and accent
 
-colours: --bg --fg --primary --danger (#rrggbb) and --radius (niri's
+colours: --bg --fg --primary --danger --warning --success (#rrggbb) and
+--radius (niri's
 geometry-corner-radius). Whatever is not given comes from the shell's own
 Theme (ThemeProbe.qml) and niri's config.
 
@@ -50,9 +51,9 @@ NAME = "Pshell"
 # niri reloads its cursor only when the configured name changes, so a rebuilt
 # theme is worn under its other name: both lead to the same files
 TWIN = "Pshell-Live"
-# worn while the screen is recorded: the everyday cursors with a red dot
-REC = "Pshell-Rec"
-SIZES = (24, 48)
+# what the shell's settings say (Studio › Icons & Pointer); see options()
+OPTIONS = HOME / ".local/state/pshell/cursor.json"
+DEFAULTS = {"animations": "full", "accent": True, "round": "niri", "seasons": "auto"}
 # the canvas is larger than the nominal size, so badges and rings have room;
 # 24 design units are the nominal size, the canvas holds 30
 CANVAS = 1.25
@@ -89,8 +90,13 @@ def hls(h, l, s):
 
 
 class Palette:
-    def __init__(self, bg, fg, primary, danger, radius):
+    def __init__(self, bg, fg, primary, danger, radius, warning="#e89e27", success="#4ba056",
+                 accent=True, motion="full", season="", size=24):
         bg, fg, primary, danger = (hex_rgb(v) for v in (bg, fg, primary, danger))
+        self.motion = motion
+        self.season = season
+        # the nominal size niri asks for, and twice that for scaled screens
+        self.sizes = (size, size * 2)
         self.dark = luminance(bg) < 0.18
         h, l, s = colorsys.rgb_to_hls(*primary)
         # how round: niri's window radius, brought down to cursor size
@@ -102,6 +108,12 @@ class Palette:
         self.outline = fg
         self.accent = self._legible(primary, bg, 4.8, max(s, 0.8))
         self.danger = self._legible(danger, bg, 4.2, 0.74)
+        # the privacy marks: microphone and camera as everywhere else
+        self.warning = self._legible(hex_rgb(warning), bg, 4.2, 0.8)
+        self.success = self._legible(hex_rgb(success), bg, 4.2, 0.6)
+        if not accent:
+            # details in the outline's colour: two colours, no third
+            self.accent = self.outline
         self.glyph = self.accent
 
     def _legible(self, color, against, target, sat):
@@ -337,7 +349,8 @@ class Pen:
             cr.fill()
         cr.new_path()
         cr.arc(x, y, r, 0, 2 * math.pi)
-        cr.set_source_rgb(*(self.pal.accent if kind == "accent" else self.pal.danger))
+        color = {"accent": self.pal.accent, "danger": self.pal.danger}.get(kind, kind)
+        cr.set_source_rgb(*color)
         cr.fill()
 
     def trail(self, pts, head, length, width, alpha=1.0):
@@ -451,9 +464,15 @@ def arrow_build(pal, at=AT, mirror=False, angle=0.0):
 
 
 def arrow_with_light(pen, t, at=AT, mirror=False, angle=0.0, run=(0.0, 0.26)):
-    """The arrow; now and then light runs once round its edge."""
+    """The arrow; now and then light runs once round its edge – or, in a
+    season, the season passes by it."""
     build = arrow_build(pen.pal, at, mirror, angle)
     body = pen.body(build)
+    if pen.pal.season and run[1] > run[0] and not mirror and angle == 0.0:
+        p = phase(t, run[0], run[0] + (run[1] - run[0]) * 1.5)
+        if p is not None:
+            season_event(pen, pen.pal.season, p, build, body)
+        return body
     p = phase(t, *run)
     if p is not None:
         pts = pen.flat(build)
@@ -506,7 +525,7 @@ def spun(pen, angle, x=C, y=C):
 def c_default(mirror=False, angle=0.0, at=AT):
     def draw(pen, t):
         arrow_with_light(pen, t, at=at, mirror=mirror, angle=angle)
-    return at, 5600, 22, [(0.0, 0.27)], draw
+    return at, 5600, 22, [(0.0, 0.4)], draw
 
 
 def c_right_ptr():
@@ -623,6 +642,8 @@ def comet_ring(pen, cx, cy, r, t, width, track=True):
 def c_wait():
     def draw(pen, t):
         comet_ring(pen, C, C, 7.2, t, 2.6)
+        if pen.pal.season:
+            season_glyph(pen, pen.pal.season, C, C, 2.3, t)
     return (C, C), 1500, 25, None, draw
 
 
@@ -998,6 +1019,228 @@ def c_move():
     return (C, C), 1600, 40, None, draw
 
 
+# ================================================================ seasons
+#
+# Small, in the theme's own colours, and only now and then: the arrow's
+# occasional light becomes the season passing by it, and the wait spinner
+# carries the season's sign at its centre. Nothing else changes.
+
+def season_of(day) -> str:
+    md = (day.month, day.day)
+    if md >= (12, 31) or md <= (1, 1):
+        return "newyear"
+    if (12, 20) <= md <= (12, 26):
+        return "christmas"
+    if (10, 24) <= md <= (10, 31):
+        return "halloween"
+    return {12: "winter", 1: "winter", 2: "winter", 3: "spring", 4: "spring", 5: "spring",
+            6: "summer", 7: "summer", 8: "summer"}.get(day.month, "autumn")
+
+
+SEASONS = ("winter", "spring", "summer", "autumn", "halloween", "christmas", "newyear")
+
+
+def edged(pen, fill, alpha=1.0, edge=0.55):
+    """Fill the current path, edged thinly in the body colour."""
+    cr = pen.cr
+    cr.set_line_join(cairo.LINE_JOIN_ROUND)
+    cr.set_source_rgba(*pen.pal.core, alpha)
+    cr.set_line_width(edge * 2)
+    cr.stroke_preserve()
+    cr.set_source_rgba(*fill, alpha)
+    cr.fill()
+
+
+def flake(pen, x, y, r, turn, alpha=1.0):
+    cr = pen.cr
+    cr.set_line_cap(cairo.LINE_CAP_ROUND)
+    for w, color in ((r * 0.62, pen.pal.core), (r * 0.26, pen.pal.outline)):
+        cr.new_path()
+        for k in range(3):
+            a = turn + k * math.pi / 3
+            cr.move_to(x - r * math.cos(a), y - r * math.sin(a))
+            cr.line_to(x + r * math.cos(a), y + r * math.sin(a))
+        cr.set_line_width(w)
+        cr.set_source_rgba(*color, alpha)
+        cr.stroke()
+
+
+def petal(pen, x, y, r, turn, alpha=1.0):
+    cr = pen.cr
+    cr.save()
+    cr.translate(x, y)
+    cr.rotate(turn)
+    cr.scale(r, r * 0.55)
+    cr.new_path()
+    cr.arc(0, 0, 1, 0, 2 * math.pi)
+    cr.restore()
+    edged(pen, pen.pal.accent, alpha)
+
+
+def leaf(pen, x, y, r, turn, alpha=1.0):
+    cr = pen.cr
+    cr.save()
+    cr.translate(x, y)
+    cr.rotate(turn)
+    cr.new_path()
+    cr.move_to(-r, 0)
+    cr.curve_to(-r * 0.4, -r * 0.75, r * 0.5, -r * 0.6, r, 0)
+    cr.curve_to(r * 0.5, r * 0.6, -r * 0.4, r * 0.75, -r, 0)
+    cr.close_path()
+    m = cr.get_matrix()
+    cr.restore()
+    edged(pen, pen.pal.accent, alpha)
+    cr.save()
+    cr.set_matrix(m)
+    cr.new_path()
+    cr.move_to(-r * 1.25, 0)
+    cr.line_to(r * 0.7, 0)
+    cr.set_line_width(r * 0.16)
+    cr.set_source_rgba(*pen.pal.core, alpha)
+    cr.stroke()
+    cr.restore()
+
+
+def sparkle(pen, x, y, r, alpha=1.0, color=None):
+    """A four-pointed glint."""
+    cr = pen.cr
+    k = r * 0.22
+    cr.new_path()
+    cr.move_to(x, y - r)
+    cr.curve_to(x + k, y - k, x + k, y - k, x + r, y)
+    cr.curve_to(x + k, y + k, x + k, y + k, x, y + r)
+    cr.curve_to(x - k, y + k, x - k, y + k, x - r, y)
+    cr.curve_to(x - k, y - k, x - k, y - k, x, y - r)
+    cr.close_path()
+    edged(pen, color or pen.pal.accent, alpha, edge=0.45)
+
+
+def star(pen, x, y, r, alpha=1.0):
+    cr = pen.cr
+    cr.new_path()
+    for i in range(10):
+        a = -math.pi / 2 + i * math.pi / 5
+        rr = r if i % 2 == 0 else r * 0.45
+        (cr.move_to if i == 0 else cr.line_to)(x + rr * math.cos(a), y + rr * math.sin(a))
+    cr.close_path()
+    edged(pen, pen.pal.accent, alpha)
+
+
+def bat(pen, x, y, r, flap, alpha=1.0, glyph=False):
+    """A little bat in the body colour, outlined like the cursor: pointed
+    ears, wide wings with scalloped trailing edges; `flap` (−1..1) lifts and
+    lowers the wingtips. As a `glyph` it is filled in the accent like the
+    other seasons' signs."""
+    cr = pen.cr
+    lift = 0.35 * flap
+    # the right half from the top of the head round to the bottom, in r
+    tip = (1.45, -0.55 - lift)
+    trail = [(1.12, 0.12 - lift * 0.4), (0.78, 0.0 - lift * 0.15), (0.46, 0.2)]
+    half = [(0.0, -0.18), (0.1, -0.2), (0.19, -0.5), (0.25, -0.12)]
+
+    def side(s):
+        return lambda px, py: (x + s * px * r, y + py * r)
+
+    cr.new_path()
+    for s in (1, -1):
+        at = side(s)
+        cr.move_to(*at(0.0, -0.18))
+        for p in half[1:]:
+            cr.line_to(*at(*p))
+        # the leading edge, bowed up to the wingtip
+        cr.curve_to(*at(0.55, -0.3), *at(0.95, -0.6 - lift), *at(*tip))
+        # the trailing edge: arcs bitten out between the fingers
+        prev = tip
+        for p in trail + [(0.16, 0.42)]:
+            mx, my = (prev[0] + p[0]) / 2, (prev[1] + p[1]) / 2 - 0.22
+            cr.curve_to(*at(mx, my), *at(mx, my), *at(*p))
+            prev = p
+        cr.line_to(*at(0.0, 0.5))
+        cr.close_path()
+    cr.set_fill_rule(cairo.FILL_RULE_WINDING)
+    if glyph:
+        edged(pen, pen.pal.accent, alpha, edge=0.4)
+        return
+    cr.set_line_join(cairo.LINE_JOIN_ROUND)
+    cr.set_source_rgba(*pen.pal.outline, alpha)
+    cr.set_line_width(0.9)
+    cr.stroke_preserve()
+    cr.set_source_rgba(*pen.pal.core, alpha)
+    cr.fill()
+
+
+def season_glyph(pen, season, x, y, r, t):
+    """The season's sign, still or slowly turning with the loop."""
+    turn = 2 * math.pi * t
+    if season in ("winter",):
+        flake(pen, x, y, r, turn / 3)
+    elif season == "spring":
+        for k in range(3):
+            a = turn / 3 + k * 2 * math.pi / 3
+            petal(pen, x + r * 0.5 * math.cos(a), y + r * 0.5 * math.sin(a), r * 0.55, a)
+    elif season == "summer":
+        sparkle(pen, x, y, r * (0.9 + 0.12 * wave(t)))
+    elif season == "autumn":
+        leaf(pen, x, y, r * 0.9, -0.6 + 0.25 * math.sin(turn))
+    elif season == "halloween":
+        bat(pen, x, y + 0.15 * math.sin(turn), r * 0.9, math.sin(turn * 2), glyph=True)
+    elif season == "christmas":
+        star(pen, x, y, r * (0.95 + 0.1 * wave(t)))
+    elif season == "newyear":
+        sparkle(pen, x, y, r * (0.75 + 0.3 * wave(t, 2)), color=pen.pal.outline)
+
+
+def season_event(pen, season, p, build, body):
+    """What passes by the arrow once in a while, p from 0 to 1."""
+    fade = lambda q: smooth(q / 0.15) * (1 - smooth((q - 0.8) / 0.2))
+    if season in ("winter", "christmas"):
+        for k, (x0, delay) in enumerate(((20.5, 0.0), (24.5, 0.18), (27.0, 0.34))):
+            q = (p - delay) / 0.66
+            if 0 <= q <= 1:
+                flake(pen, x0 + 0.9 * math.sin(q * 5 + k), 7.5 + 19 * q, 1.5 - 0.15 * k, q * 2 + k, fade(q))
+        if season == "christmas":
+            star(pen, 21.5, 6.5, 1.8 + 0.6 * bump(p), bump(clamp01(p * 1.4)))
+    elif season == "spring":
+        for k, delay in enumerate((0.0, 0.3)):
+            q = (p - delay) / 0.7
+            if 0 <= q <= 1:
+                petal(pen, 19.5 + 7.5 * q + 0.8 * math.sin(q * 7), 8.5 + 15 * q, 1.6, q * 6 + k, fade(q))
+    elif season == "summer":
+        pts = pen.flat(build)
+        total = path_length(pts)
+        pen.inside()
+        pen.trail(pts, total * (0.02 + 1.18 * ease_in_out(p / 0.75)), total * 0.42, 1.9,
+                  alpha=bump(clamp01(p / 0.75)) ** 0.6)
+        pen.done_inside(body)
+        q = (p - 0.62) / 0.38
+        if 0 <= q <= 1:
+            sparkle(pen, AT[0] + 13.4, AT[1] + 12.2, 0.8 + 2.0 * bump(q), bump(q))
+    elif season == "autumn":
+        q = p
+        leaf(pen, 22.5 + 2.2 * math.sin(q * 6.5), 7.0 + 19.5 * ease_in_out(q), 2.0, -0.8 + 0.7 * math.sin(q * 6.5), fade(q))
+    elif season == "halloween":
+        x = 28.0 - 10.5 * ease_in_out(p)
+        y = 23.0 - 15.0 * ease_out(p) + 1.2 * math.sin(p * 9)
+        bat(pen, x, y, 2.4, math.sin(p * 40), fade(p))
+    elif season == "newyear":
+        rise = clamp01(p / 0.4)
+        if p < 0.4:
+            pen.orb(24.0, 26.0 - 15.0 * ease_out(rise), 0.6, outline=False)
+        q = (p - 0.4) / 0.6
+        if 0 <= q <= 1:
+            cr = pen.cr
+            for k in range(8):
+                a = k * math.pi / 4 + 0.2
+                r0, r1 = 1.2 + 5.0 * ease_out(q) * 0.6, 1.2 + 5.0 * ease_out(q)
+                cr.new_path()
+                cr.move_to(24.0 + r0 * math.cos(a), 11.0 + r0 * math.sin(a))
+                cr.line_to(24.0 + r1 * math.cos(a), 11.0 + r1 * math.sin(a) + 1.2 * q * q)
+                cr.set_line_cap(cairo.LINE_CAP_ROUND)
+                cr.set_line_width(1.0)
+                cr.set_source_rgba(*(pen.pal.accent if k % 2 else pen.pal.outline), 1 - q)
+                cr.stroke()
+
+
 # ---------------------------------------------------------------- the set
 
 def deg(a):
@@ -1081,6 +1324,9 @@ def frame_plan(period, step, active):
 
 
 # cursors that are the arrow with something beside it: drawn as they are
+# what still moves with quieter animations: the waiting, and the arrow's
+# rare light
+CALM_MOVES = {"wait", "left_ptr_watch", "left_ptr", "right_ptr", "center_ptr"}
 ARROW_BASED = {"left_ptr", "right_ptr", "center_ptr", "left_ptr_watch", "question_arrow", "context-menu",
                "copy", "link", "dnd_no_drop"}
 _fits = {}
@@ -1124,8 +1370,12 @@ def render(spec, size, pal, name=None):
     # 30 frames a second are smooth for a cursor and keep the files half as big
     step = max(step, 33)
     fit = fit_of(name, pal)
+    plan = frame_plan(period, step, active)
+    # quieter: only what says something is going on keeps moving
+    if pal.motion == "off" or (pal.motion == "subtle" and name not in CALM_MOVES):
+        plan = [(rest_t(period, step, active), 1000)]
     images = []
-    for t, delay in frame_plan(period, step, active):
+    for t, delay in plan:
         pen = Pen(size, pal, fit, hotspot)
         draw(pen, t)
         images.append((pen.finish(), round(delay)))
@@ -1185,18 +1435,50 @@ def niri_radius() -> float:
     return 7.0
 
 
+def options() -> dict:
+    """The settings (Studio › Icons & Pointer); defaults where none."""
+    out = dict(DEFAULTS)
+    try:
+        out.update({k: v for k, v in json.loads(OPTIONS.read_text()).items() if k in DEFAULTS})
+    except (OSError, ValueError):
+        pass
+    return out
+
+
+def niri_size() -> int:
+    sys.path.insert(0, str(SHELL_DIR / "scripts"))
+    os.environ["HOME"] = str(HOME)
+    import appearance_themes as themes
+    return themes.niri_cursor()[1] or 24
+
+
 def inputs(args) -> dict:
-    given = {k: getattr(args, k) for k in ("bg", "fg", "primary", "danger")}
-    if not all(given.values()):
+    import datetime
+    keys = ("bg", "fg", "primary", "danger", "warning", "success")
+    given = {k: getattr(args, k, None) for k in keys}
+    if not all(given[k] for k in ("bg", "fg", "primary", "danger")):
         theme = probe_theme()
-        for k in given:
-            given[k] = given[k] or theme[k]
-    given["radius"] = args.radius if args.radius is not None else niri_radius()
+        for k in keys:
+            given[k] = given[k] or theme.get(k)
+    opts = options()
+    if opts["round"] != "niri":
+        given["radius"] = float(opts["round"])
+    else:
+        given["radius"] = args.radius if args.radius is not None else niri_radius()
+    season = opts["seasons"]
+    if season == "auto" or season is True:
+        season = season_of(datetime.date.today())
+    given["season"] = season if season in SEASONS else ""
+    given["accent"] = bool(opts["accent"])
+    given["motion"] = opts["animations"] if opts["animations"] in ("full", "subtle", "off") else "full"
+    given["size"] = niri_size()
     return given
 
 
 def palette(spec) -> Palette:
-    return Palette(spec["bg"], spec["fg"], spec["primary"], spec["danger"], spec["radius"])
+    return Palette(spec["bg"], spec["fg"], spec["primary"], spec["danger"], spec["radius"],
+                   warning=spec.get("warning") or "#e89e27", success=spec.get("success") or "#4ba056",
+                   accent=spec["accent"], motion=spec["motion"], season=spec["season"], size=spec["size"])
 
 
 def build(args, quiet=False) -> bool:
@@ -1216,7 +1498,7 @@ def build(args, quiet=False) -> bool:
     for name, (fn, aliases) in CURSORS.items():
         if only and name not in only:
             continue
-        write_xcursor(cursors / name, [(s, *render(fn, s, pal, name)) for s in SIZES])
+        write_xcursor(cursors / name, [(s, *render(fn, s, pal, name)) for s in pal.sizes])
         for alias in aliases:
             link = cursors / alias
             if link.is_symlink() or link.exists():
@@ -1224,7 +1506,7 @@ def build(args, quiet=False) -> bool:
             link.symlink_to(name)
     write_for_shell(root, pal)
     if not only:
-        build_rec(root, pal)
+        drop_variants()
     (root / "index.theme").write_text(
         f"[Icon Theme]\nName={NAME}\nComment=Pshell cursors in the shell's colours\nInherits=Adwaita\n")
     twin = root.parent / TWIN
@@ -1269,78 +1551,163 @@ def write_for_shell(root: Path, pal: Palette):
     (root / "palette.json").write_text(json.dumps(data, indent=1) + "\n")
 
 
-# the cursors that carry the recording dot; the rest come from the theme
-REC_CURSORS = ["left_ptr", "hand2", "xterm", "left_ptr_watch"]
+# ---------------------------------------------------------------- marks
+#
+# States the pointer carries over every window, worn as a variant of the
+# theme (Pshell-M-<marks>) that holds only the cursors that change: a red dot
+# that beats while recording, the microphone and camera in use (their usual
+# orange and green), the screen being shared (a ring in the accent), and
+# Caps Lock on the text cursor.
+
+MARKS = ("rec", "mic", "cam", "share", "caps")
+DOTS = ("rec", "mic", "cam", "share")
+# the cursors a mark goes on, and where its row of dots starts
+MARKED = {"left_ptr": (23.4, 24.6), "hand2": (23.4, 24.6), "xterm": (C + 5.6, C + 8.6),
+          "vertical-text": (C + 8.6, C + 5.6), "left_ptr_watch": (23.0, 8.4)}
+TEXT = {"xterm", "vertical-text"}
 
 
-def rec_cursor(name):
-    """A cursor of the theme at rest, with a red dot that beats."""
+def variant_name(marks) -> str:
+    return NAME + "-M-" + "-".join(m for m in MARKS if m in marks)
+
+
+def mark_cursor(name, marks):
+    """A cursor of the theme at rest, carrying its marks."""
     def spec():
         hotspot, period, step, active, draw = CURSORS[name][0]()
         rest = rest_t(period, step, active)
 
         def drawn(pen, t):
             draw(pen, rest)
-            beat = wave(t)
-            # beside the progress spinner, not on it
-            x, y = (23.0, 8.4) if name == "left_ptr_watch" else (23.4, 24.6)
-            pen.orb(x, y, 2.3 + 0.5 * beat, kind="danger")
-        return hotspot, 1400, 50, None, drawn
+            x, y = MARKED[name]
+            dots = [m for m in DOTS if m in marks]
+            for i, mark in enumerate(dots):
+                dx = x - i * 4.4
+                beat = wave(t)
+                if mark == "rec":
+                    pen.orb(dx, y, 2.1 + 0.45 * beat, kind="danger")
+                elif mark == "mic":
+                    pen.orb(dx, y, 2.1, kind=pen.pal.warning)
+                elif mark == "cam":
+                    pen.orb(dx, y, 2.1, kind=pen.pal.success)
+                elif mark == "share":
+                    cr = pen.cr
+                    for w, color in ((1.4 + 2 * pen.OUTLINE * 0.6, pen.pal.core), (1.4, pen.pal.accent)):
+                        cr.new_path()
+                        cr.arc(dx, y, 1.8 + 0.5 * beat, 0, 2 * math.pi)
+                        cr.set_line_width(w)
+                        cr.set_source_rgb(*color)
+                        cr.stroke()
+            if "caps" in marks and name in TEXT:
+                caps_glyph(pen, name)
+        moving = any(m in marks for m in ("rec", "share"))
+        return hotspot, 1400, 50 if moving else 1400, None, drawn
     return spec
 
 
-def build_rec(root: Path, pal: Palette):
-    rec = root.parent / REC
-    cursors = rec / "cursors"
+def caps_glyph(pen, name):
+    """⇪ beside the text cursor: Caps Lock is on."""
+    cr = pen.cr
+    x, y = (C + 6.2, C - 5.6) if name == "xterm" else (C + 5.6, C - 6.2)
+    pts = [(x, y - 3.0), (x + 2.6, y - 0.2), (x + 1.2, y - 0.2), (x + 1.2, y + 1.6),
+           (x - 1.2, y + 1.6), (x - 1.2, y - 0.2), (x - 2.6, y - 0.2)]
+    cr.new_path()
+    rounded_poly(cr, pts, 0.4)
+    cr.rectangle(x - 1.2, y + 2.4, 2.4, 0.9)
+    cr.set_line_join(cairo.LINE_JOIN_ROUND)
+    cr.set_source_rgb(*pen.pal.core)
+    cr.set_line_width(1.2)
+    cr.stroke_preserve()
+    cr.set_source_rgb(*pen.pal.accent)
+    cr.fill()
+
+
+def build_variant(marks, pal: Palette) -> str:
+    """The theme with these marks; built once per look."""
+    name = variant_name(marks)
+    root = ICONS / name
+    cursors = root / "cursors"
+    if (root / "index.theme").exists():
+        return name
     cursors.mkdir(parents=True, exist_ok=True)
-    for name in REC_CURSORS:
-        write_xcursor(cursors / name, [(s, *render(rec_cursor(name), s, pal, name)) for s in SIZES])
-        for alias in CURSORS[name][1]:
+    dotted = any(m in marks for m in DOTS)
+    for cursor in MARKED:
+        if not dotted and cursor not in TEXT:
+            continue
+        write_xcursor(cursors / cursor, [(s, *render(mark_cursor(cursor, marks), s, pal, cursor)) for s in pal.sizes])
+        for alias in CURSORS[cursor][1]:
             link = cursors / alias
             if link.is_symlink() or link.exists():
                 link.unlink()
-            link.symlink_to(name)
-    (rec / "index.theme").write_text(
-        f"[Icon Theme]\nName={REC}\nComment=Pshell cursors while recording\nInherits={NAME}\n")
+            link.symlink_to(cursor)
+    (root / "index.theme").write_text(
+        f"[Icon Theme]\nName={name}\nComment=Pshell cursors with marks: {', '.join(marks)}\nInherits={NAME}\n")
+    return name
+
+
+def drop_variants():
+    """Variants of an older look go; they are made again when worn."""
+    import shutil
+    for path in ICONS.glob(f"{NAME}-M-*"):
+        shutil.rmtree(path, ignore_errors=True)
+    shutil.rmtree(ICONS / "Pshell-Rec", ignore_errors=True)
+
+
+def ours(worn) -> bool:
+    return worn in (NAME, TWIN) or worn.startswith(NAME + "-M-") or worn == "Pshell-Rec"
+
+
+def niri_wear(themes, name, size):
+    if themes.write_niri_cursor(name, size or 24):
+        subprocess.run(["niri", "msg", "action", "load-config-file"], capture_output=True, timeout=5)
+        return True
+    return False
 
 
 def wear(args):
-    """Wear the recording cursors (rec) or the everyday ones (normal) – only
-    while the Pshell theme is worn at all. niri only: a recording is short."""
+    """Wear the theme with these marks (none: the everyday one) – only while
+    the Pshell theme is worn at all. niri only: marks come and go often."""
     sys.path.insert(0, str(SHELL_DIR / "scripts"))
     os.environ["HOME"] = str(HOME)
     import appearance_themes as themes
     worn, size = themes.niri_cursor()
-    if worn not in (NAME, TWIN, REC):
+    if not ours(worn):
         print(json.dumps({"worn": worn}))
         return
-    target = REC if args.which == "rec" else NAME
-    if target == REC and not (ICONS / REC / "cursors").is_dir():
-        build_rec(ICONS / NAME, palette(inputs(args)))
-    if worn != target and themes.write_niri_cursor(target, size or 24):
-        subprocess.run(["niri", "msg", "action", "load-config-file"], capture_output=True, timeout=5)
+    marks = [m for m in MARKS if m in (args.marks or "").split(",")]
+    target = build_variant(marks, palette(inputs(args))) if marks else NAME
+    if target == NAME and worn in (NAME, TWIN):
+        target = worn
+    if worn != target and niri_wear(themes, target, size):
         worn = target
     print(json.dumps({"worn": worn}))
 
 
 def apply(args):
-    """Build; then, if the session wears this theme (or --wear), wear it
-    under the other of its two names so niri loads the new files."""
+    """Build; then, if the session wears this theme (or --wear), have niri
+    load the new files: under the other of the theme's two names, or the
+    variant with its marks made anew."""
     sys.path.insert(0, str(SHELL_DIR / "scripts"))
     os.environ["HOME"] = str(HOME)
     import appearance_themes as themes
     worn, size = themes.niri_cursor()
-    # while recording the new cursors wait until it ends
-    wearing = worn in (NAME, TWIN, REC)
-    # nobody would see it: drawn when it is worn again
-    if not (wearing or args.wear):
+    if not (ours(worn) or args.wear):
+        # nobody would see it: drawn when it is worn again
         print(json.dumps({"built": False, "worn": worn}))
         return
     changed = build(args, quiet=True)
-    if worn == REC:
+    if worn.startswith(NAME + "-M-") or worn == "Pshell-Rec":
+        if changed:
+            marks = [m for m in MARKS if m in worn[len(NAME) + 3:].split("-")]
+            niri_wear(themes, NAME, size)
+            if marks:
+                worn = build_variant(marks, palette(inputs(args)))
+                niri_wear(themes, worn, size)
+            else:
+                worn = NAME
         print(json.dumps({"built": changed, "worn": worn}))
         return
-    if changed or not wearing:
+    if changed or worn not in (NAME, TWIN):
         worn = TWIN if worn == NAME else NAME
         themes.apply("", worn, size or 24)
     print(json.dumps({"built": changed, "worn": worn}))
@@ -1378,7 +1745,7 @@ def main():
     sub = p.add_subparsers(dest="cmd", required=True)
     for name in ("build", "apply", "sheet", "wear"):
         s = sub.add_parser(name)
-        for c in ("bg", "fg", "primary", "danger"):
+        for c in ("bg", "fg", "primary", "danger", "warning", "success"):
             s.add_argument(f"--{c}")
         s.add_argument("--radius", type=float)
         s.add_argument("--only", help="comma-separated cursor files")
@@ -1387,7 +1754,7 @@ def main():
         sub.choices[name].add_argument("--force", action="store_true")
     sub.choices["apply"].add_argument("--wear", action="store_true",
                                       help="wear it even while another cursor theme is worn")
-    sub.choices["wear"].add_argument("which", choices=["rec", "normal"])
+    sub.choices["wear"].add_argument("--marks", default="", help="comma-separated: " + ",".join(MARKS))
     sub.choices["sheet"].add_argument("--out", default="cursor-sheet.png")
     sub.choices["sheet"].add_argument("--cols", type=int, default=4)
     args = p.parse_args()

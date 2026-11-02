@@ -123,6 +123,7 @@ the phone alone have plugins of their own in the tab **Phone**, all requiring
 | Messages | `messages`, `mail` | mail as chats: who, subject, preview, unread; a chat's mails as bubbles with attachments; the outbox | open (marks it read on the PC too), reply to all or write a new mail (plain text, sent after the PC's grace period, with undo), snippets, flag, mark unread, snooze, archive, delete, search, older mails; an attachment opens on the PC or comes to the phone; the mail assistant (`mail-ai`) drafts and summarises |
 | Newsletters | `messages`, `mail`, `mail-unsubscribe` | who sends newsletters to the private mailboxes, how many and when last; who was left | scan the mailboxes, unsubscribe from the senders that are ticked, take one back |
 | Downloads | `downloads` | what the browser on the PC downloads, with progress and speed | pause, resume, cancel; a finished file opens on the PC, shows in its folder, or comes to the phone |
+| Streams | `streams` | what could go on and who is live | tap plays on the PC, the phone icon opens it here at the place it was left |
 | Lyrics | `lyrics`, `media` | the words of the song that plays, the sung line following the player | tap a line to seek there |
 | Reader | `fast-reader` | a text one word at a time, on the phone (pasted, or marked in another app → *Read fast*) | speed; the same text on the PC's reader, with play, pause and steps while it runs |
 | Converter | `converter` | | `5 kg in lb`, `72 f c`, `100 usd eur`, `0xff`: the launcher's converter, also from the home screen's search |

@@ -20,7 +20,9 @@ FocusScope {
 	property bool open: false
 	readonly property var stats: root.game ? (Games.stats[root.game.id] ?? null) : null
 	readonly property bool loading: root.game !== null && Games.statsLoading === root.game?.id && root.stats === null
-	readonly property real hours: (root.stats?.playtime ?? root.game?.playtime ?? 0) / 60
+	readonly property real hours: Math.max(root.stats?.playtime ?? 0, root.game?.playtime ?? 0) / 60
+	readonly property color accent: GameText.accent(root.game, Theme.primary)
+	readonly property color deep: GameText.deep(root.game, "#15161c")
 	readonly property var hltb: root.stats?.hltb ?? null
 	readonly property string goal: root.stats?.goal || "main"
 	readonly property real target: root.goal === "done" ? 0 : (root.hltb ? (root.hltb[root.goal] || root.hltb.main || 0) : 0)
@@ -102,9 +104,10 @@ FocusScope {
 		width: Math.min(parent.width * 0.46, 760)
 		height: Math.min(parent.height - 56, column.implicitHeight + 56)
 		radius: 28
-		color: Qt.rgba(0.06, 0.06, 0.08, 0.86)
+		color: Qt.tint(Qt.darker(root.deep, 1.5), Qt.rgba(0, 0, 0, 0.2))
 		border.width: 1
-		border.color: Qt.rgba(1, 1, 1, 0.08)
+		border.color: Qt.alpha(root.accent, 0.25)
+		clip: true
 		opacity: root.open ? 1 : 0
 		transform: Translate {
 			x: root.open ? 0 : 80
@@ -123,6 +126,36 @@ FocusScope {
 
 		MouseArea {
 			anchors.fill: parent
+		}
+
+		// the game's hero along the top, fading into the card
+		Image {
+			id: banner
+
+			anchors.left: parent.left
+			anchors.right: parent.right
+			anchors.top: parent.top
+			height: 210
+			source: root.game?.art?.hero ? `file://${root.game.art.hero}` : (root.game?.art?.header ? `file://${root.game.art.header}` : "")
+			fillMode: Image.PreserveAspectCrop
+			asynchronous: true
+			sourceSize.width: 1200
+			opacity: 0.55
+			scale: 1.06 - 0.06 * root.rise
+		}
+
+		Rectangle {
+			anchors.fill: banner
+			gradient: Gradient {
+				GradientStop {
+					position: 0
+					color: Qt.alpha(card.color, 0.15)
+				}
+				GradientStop {
+					position: 1
+					color: card.color
+				}
+			}
 		}
 
 		Flickable {
@@ -167,8 +200,8 @@ FocusScope {
 								ctx.stroke();
 								if (ring.shown <= 0) return;
 								const gradient = ctx.createLinearGradient(0, 0, width, height);
-								gradient.addColorStop(0, Theme.primary);
-								gradient.addColorStop(1, Theme.tertiary);
+								gradient.addColorStop(0, Qt.lighter(root.accent, 1.3));
+								gradient.addColorStop(1, root.accent);
 								ctx.strokeStyle = gradient;
 								ctx.beginPath();
 								ctx.arc(c, c, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * ring.shown);
@@ -221,9 +254,10 @@ FocusScope {
 							text: {
 								if (root.loading) return "Looking it up…";
 								if (root.goal === "done") return "Marked as beaten.";
-								if (root.target <= 0) return "How long it takes is not known.";
+								const last = GameText.ago(root.stats?.lastPlayed ?? root.game?.lastPlayed ?? 0) || "Not played yet";
+								if (root.target <= 0) return `${last}.`;
 								const left = root.target - root.hours;
-								return left > 0 ? `About ${root.hoursText(left)} to go.` : `Past it by ${root.hoursText(-left)} – still going.`;
+								return `${last} · ` + (left > 0 ? `about ${root.hoursText(left)} to go.` : `past it by ${root.hoursText(-left)} – still going.`);
 							}
 							tone: Qt.rgba(1, 1, 1, 0.7)
 							surface: "transparent"
@@ -248,7 +282,7 @@ FocusScope {
 									width: goalLabel.implicitWidth + 24
 									height: 30
 									radius: 15
-									color: goalChip.chosen ? Theme.primary : Qt.rgba(1, 1, 1, goalChip.hovered ? 0.14 : 0.08)
+									color: goalChip.chosen ? root.accent : Qt.rgba(1, 1, 1, goalChip.hovered ? 0.14 : 0.08)
 									onClicked: if (root.game) Games.setGoal(root.game.id, goalChip.modelData.id === "main" ? "" : goalChip.modelData.id)
 
 									Behavior on color {
@@ -260,7 +294,7 @@ FocusScope {
 
 										anchors.centerIn: parent
 										text: goalChip.modelData.label
-										tone: goalChip.chosen ? Theme.onPrimary : "white"
+										tone: goalChip.chosen ? GameText.onColor(root.accent) : "white"
 										surface: "transparent"
 										font.pixelSize: Theme.size.small
 										font.weight: Font.DemiBold
@@ -281,7 +315,7 @@ FocusScope {
 					Repeater {
 						model: [
 							{ icon: "clock_outline", label: "Played", value: root.hoursText(root.hours * root.rise) },
-							{ icon: "history", label: "Last played", value: GameText.ago(root.stats?.lastPlayed ?? root.game?.lastPlayed ?? 0) || "Never" },
+							{ icon: "fire", label: "This week", value: root.hoursText((root.stats?.week ?? root.game?.week ?? 0) / 60 * root.rise) },
 							{ icon: "play_circle", label: "Sessions", value: root.stats?.sessions ? String(Math.round(root.stats.sessions * root.rise)) : "–" },
 							{ icon: "timer_outline", label: "Longest", value: root.stats?.longest ? root.hoursText(root.stats.longest / 60) : "–" }
 						]
@@ -296,6 +330,8 @@ FocusScope {
 							Layout.preferredHeight: 84
 							radius: Theme.radius.large
 							color: Qt.rgba(1, 1, 1, 0.06)
+							border.width: 1
+							border.color: Qt.rgba(1, 1, 1, 0.05)
 							opacity: Math.max(0, Math.min(1, root.rise * 3 - tile.index * 0.3))
 							transform: Translate {
 								y: 14 * (1 - tile.opacity)
@@ -309,7 +345,7 @@ FocusScope {
 								Glyph {
 									icon: tile.modelData.icon
 									size: 18
-									color: Theme.primary
+									color: root.accent
 									surface: "transparent"
 								}
 
@@ -318,7 +354,9 @@ FocusScope {
 								}
 
 								StyledText {
+									Layout.fillWidth: true
 									text: tile.modelData.value
+									elide: Text.ElideRight
 									tone: "white"
 									surface: "transparent"
 									tabular: true
@@ -419,11 +457,11 @@ FocusScope {
 										orientation: Gradient.Horizontal
 										GradientStop {
 											position: 0
-											color: Theme.primary
+											color: root.accent
 										}
 										GradientStop {
 											position: 1
-											color: bar.filled >= 1 ? Theme.success : Theme.tertiary
+											color: bar.filled >= 1 ? Theme.success : Qt.lighter(root.accent, 1.3)
 										}
 									}
 								}
@@ -499,7 +537,7 @@ FocusScope {
 									width: parent.width
 									radius: Math.min(4, width / 2)
 									height: Math.max(3, (parent.height - 4) * day.share * Math.max(0, Math.min(1, root.rise * 2 - day.index / 40)))
-									color: day.modelData > 0 ? Qt.alpha(day.index === 27 ? Theme.tertiary : Theme.primary, 0.5 + 0.5 * day.share) : Qt.rgba(1, 1, 1, 0.07)
+									color: day.modelData > 0 ? Qt.alpha(day.index === 27 ? Qt.lighter(root.accent, 1.3) : root.accent, 0.5 + 0.5 * day.share) : Qt.rgba(1, 1, 1, 0.07)
 
 									HoverHandler {
 										id: dayHover
@@ -581,7 +619,7 @@ FocusScope {
 							width: parent.width * (root.trophies ? root.trophies.got / root.trophies.total : 0) * root.rise
 							height: parent.height
 							radius: 5
-							color: Theme.warning
+							color: "#f4c25b"
 						}
 					}
 
@@ -638,7 +676,7 @@ FocusScope {
 							}
 
 							StyledText {
-								text: GameText.ago(trophy.modelData.time)
+								text: GameText.when(trophy.modelData.time)
 								tone: Qt.rgba(1, 1, 1, 0.4)
 								surface: "transparent"
 								font.pixelSize: Theme.size.tiny

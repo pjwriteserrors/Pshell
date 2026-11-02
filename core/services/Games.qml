@@ -171,7 +171,47 @@ Singleton {
 			const next = Object.assign({}, root.stats);
 			next[id] = answer;
 			root.stats = next;
+			const at = Object.assign({}, root.statsAt);
+			at[id] = Date.now();
+			root.statsAt = at;
 		});
+	}
+
+	// by id: how far along every game is from what is cached (games.py
+	// brief: goal, hltb, achievements got/total) – the covers show it
+	property var briefs: ({})
+
+	function loadBriefs() {
+		root.call(["brief"], answer => {
+			if (answer.brief) root.briefs = answer.brief;
+		});
+	}
+
+	// the full stats when they were asked, else the brief
+	function statsOf(id) {
+		return root.stats[id] ?? root.briefs[id] ?? null;
+	}
+
+	// the stats of a game that is picked, asked a moment after it stays
+	// picked; asked again when they are older than a few minutes
+	property string peekId: ""
+	property var statsAt: ({})
+
+	function peekStats(id) {
+		if (!id) return;
+		root.peekId = id;
+		peekDelay.restart();
+	}
+
+	Timer {
+		id: peekDelay
+
+		interval: 260
+		onTriggered: {
+			const id = root.peekId;
+			if (Date.now() - (root.statsAt[id] ?? 0) < 300000 || root.statsLoading === id) return;
+			root.loadStats(id);
+		}
 	}
 
 	// what beaten means: main | plus | full | done | "" (main)
@@ -181,6 +221,12 @@ Singleton {
 			const next = Object.assign({}, root.stats);
 			next[id] = Object.assign({}, known, { goal });
 			root.stats = next;
+		}
+		const brief = root.briefs[id];
+		if (brief) {
+			const next = Object.assign({}, root.briefs);
+			next[id] = Object.assign({}, brief, { goal });
+			root.briefs = next;
 		}
 		root.call(["goal", id, goal]);
 	}
@@ -192,8 +238,11 @@ Singleton {
 	function followSessions(now) {
 		const at = Math.floor(Date.now() / 1000);
 		const starts = Object.assign({}, root.sessionStarts);
+		// a game of the library only: Steam's reaper names an AppId as
+		// steam:<n> and shortcut:<n>, one of them is no game (before the
+		// library was read every id is kept; games.py finds its game later)
 		for (const id of now)
-			if (starts[id] === undefined) starts[id] = at;
+			if (starts[id] === undefined && (!root.loaded || root.game(id))) starts[id] = at;
 		for (const id of Object.keys(starts)) {
 			if (now.indexOf(id) >= 0) continue;
 			root.call(["session", id, String(starts[id]), String(at)]);
@@ -351,6 +400,7 @@ Singleton {
 				root.gridKey = !!data.gridKey;
 				if (JSON.stringify(data.games) !== JSON.stringify(root.games)) root.games = data.games;
 				root.loaded = true;
+				root.loadBriefs();
 				if (data.games.some(game => game.needsArt || !game.art?.hero)) root.fetchArt();
 			}
 		}
@@ -422,8 +472,13 @@ Singleton {
 				if (JSON.stringify(data.running) !== JSON.stringify(root.running)) root.running = data.running;
 				root.followSessions(data.running);
 				if (root.started !== "" && root.running.indexOf(root.started) >= 0) root.started = "";
-				// a game that ended has a new play time
-				if (ended.length > 0 && root.watched) root.refresh();
+				// a game that ended has a new play time and new stats
+				if (ended.length > 0) {
+					const at = Object.assign({}, root.statsAt);
+					for (const id of ended) delete at[id];
+					root.statsAt = at;
+					if (root.watched) root.refresh();
+				}
 			}
 		}
 	}

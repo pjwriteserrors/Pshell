@@ -29,6 +29,11 @@ ModalWindow {
 	property int selectedAnimationIndex: 0
 
 	readonly property string applyScriptPath: `${Quickshell.shellDir}/scripts/apply_niri_animation.sh`
+	readonly property string optionsScriptPath: `${Quickshell.shellDir}/scripts/animation_options.py`
+	// the knobs of the selected style animation (scripts/animation_options.py)
+	property var styleOptions: []
+	// "windows": the window animation; "motion": every other niri animation (MotionEditor)
+	property string mode: "windows"
 	readonly property string shaderAnimationsDir: `${Quickshell.env("HOME")}/.config/niri/animations/shaders`
 	readonly property string animationStatePath: `${Quickshell.env("HOME")}/.local/state/quickshell-theme/current-animation`
 	readonly property string shaderCurrentPath: `${root.shaderAnimationsDir}/.current`
@@ -99,6 +104,51 @@ ModalWindow {
 	function reloadAnimations() {
 		listAnimationOptionsProcess.running = true;
 		readAnimationStateProcess.running = true;
+	}
+
+	function loadStyleOptions() {
+		root.styleOptions = [];
+		if (!root.selectedAnimationId.startsWith("style:")) return;
+		describeOptionsProcess.command = ["python3", root.optionsScriptPath, "describe", root.selectedAnimationId];
+		describeOptionsProcess.running = true;
+	}
+
+	// a pick is remembered, played on the stage, and worn at once when the
+	// animation is the active one
+	function setStyleOption(key, value) {
+		root.styleOptions = root.styleOptions.map(option => option.key === key ? Object.assign({}, option, { current: value }) : option);
+		setOptionProcess.command = ["python3", root.optionsScriptPath, "set", root.selectedAnimationId, key, value];
+		setOptionProcess.target = root.selectedAnimationId;
+		setOptionProcess.running = true;
+	}
+
+	onSelectedAnimationIdChanged: root.loadStyleOptions()
+
+	Process {
+		id: describeOptionsProcess
+		stdout: StdioCollector {
+			onStreamFinished: {
+				try {
+					const described = JSON.parse(text);
+					if (described.id === root.selectedAnimationId) root.styleOptions = described.options || [];
+				} catch (error) {
+					root.styleOptions = [];
+				}
+			}
+		}
+	}
+
+	Process {
+		id: setOptionProcess
+
+		property string target: ""
+
+		onExited: {
+			if (setOptionProcess.target !== root.selectedAnimationId) return;
+			motionStage.rebuild();
+			if (setOptionProcess.target === root.appliedAnimationId)
+				Quickshell.execDetached(["bash", root.applyScriptPath, "--animation", setOptionProcess.target]);
+		}
 	}
 
 	function applyAnimation() {
@@ -191,12 +241,13 @@ fi
 			focus: true
 
 			Keys.onEscapePressed: Popups.closeModal()
-			Keys.onReturnPressed: root.applyAnimation()
-			Keys.onEnterPressed: root.applyAnimation()
-			Keys.onLeftPressed: root.moveSelection(-1)
-			Keys.onRightPressed: root.moveSelection(1)
-			Keys.onUpPressed: root.moveSelection(-root.gridColumns)
-			Keys.onDownPressed: root.moveSelection(root.gridColumns)
+			Keys.onTabPressed: root.mode = root.mode === "windows" ? "motion" : "windows"
+			Keys.onReturnPressed: if (root.mode === "windows") root.applyAnimation()
+			Keys.onEnterPressed: if (root.mode === "windows") root.applyAnimation()
+			Keys.onLeftPressed: if (root.mode === "windows") root.moveSelection(-1)
+			Keys.onRightPressed: if (root.mode === "windows") root.moveSelection(1)
+			Keys.onUpPressed: if (root.mode === "windows") root.moveSelection(-root.gridColumns)
+			Keys.onDownPressed: if (root.mode === "windows") root.moveSelection(root.gridColumns)
 		}
 
 		ColumnLayout {
@@ -232,19 +283,31 @@ fi
 
 					StyledText {
 						Layout.fillWidth: true
-						text: root.currentAnimationOption ? root.currentAnimationOption.label : (listAnimationOptionsProcess.running ? "Loading animations…" : "No animations installed")
+						text: root.mode === "motion" ? "Springs & curves" : root.currentAnimationOption ? root.currentAnimationOption.label : (listAnimationOptionsProcess.running ? "Loading animations…" : "No animations installed")
 						font.pixelSize: Theme.size.heading
 						font.weight: Font.Bold
 					}
 				}
 
+				Segmented {
+					implicitWidth: 300
+					options: [{ value: "windows", label: "Windows" }, { value: "motion", label: "Springs & curves" }]
+					current: root.mode
+					onSelected: value => {
+						root.mode = value;
+						keyTarget.forceActiveFocus();
+					}
+				}
+
 				StyledText {
+					visible: root.mode === "windows"
 					text: `${root.animationOptions.length} presets`
 					tone: Theme.textSubtle
 					font.pixelSize: Theme.size.small
 				}
 
 				TextButton {
+					visible: root.mode === "windows"
 					implicitHeight: 42
 					text: root.selectedAnimationId !== "" && root.selectedAnimationId === root.appliedAnimationId ? "Active" : "Apply"
 					icon: "check"
@@ -260,9 +323,16 @@ fi
 				}
 			}
 
+			MotionEditor {
+				Layout.fillWidth: true
+				Layout.fillHeight: true
+				visible: root.mode === "motion"
+			}
+
 			RowLayout {
 				Layout.fillWidth: true
 				Layout.fillHeight: true
+				visible: root.mode === "windows"
 				spacing: 16
 
 				// The selected animation, played for real (see AnimationStage).
@@ -346,165 +416,213 @@ fi
 					}
 				}
 
-				Item {
-					id: gridViewport
-
+				ColumnLayout {
 					Layout.fillWidth: true
 					Layout.preferredWidth: 1
 					Layout.fillHeight: true
-					clip: true
+					spacing: 12
 
-					EmptyState {
-						anchors.centerIn: parent
-						visible: root.animationOptions.length === 0
-						icon: "animation"
-						title: Words.of("motion.empty", "No animations found")
-						subtitle: "Add shaders to style/animations, ~/.config/niri/animations/shaders or nirimation presets."
-					}
+					// the knobs of a style animation; a pick plays on the stage at once
+					Rectangle {
+						Layout.fillWidth: true
+						Layout.preferredHeight: optionsColumn.implicitHeight + 28
+						visible: root.styleOptions.length > 0
+						radius: Theme.radius.huge
+						color: Theme.layer1
 
-					Flickable {
-						id: gridFlickable
+						ColumnLayout {
+							id: optionsColumn
 
-						anchors.fill: parent
-						contentWidth: width
-						contentHeight: animationGrid.height + 16
-						boundsBehavior: Flickable.StopAtBounds
-						clip: true
-						ScrollBar.vertical: ThinScrollBar {}
+							anchors.left: parent.left
+							anchors.right: parent.right
+							anchors.top: parent.top
+							anchors.margins: 14
+							spacing: 10
 
-						Behavior on contentY {
-							enabled: !gridFlickable.moving
-							SpatialAnim {
-								duration: Motion.medium
+							SectionLabel {
+								text: Words.of("motion.options", "Fine-tune")
 							}
-						}
-
-						Grid {
-							id: animationGrid
-
-							y: 8
-							width: gridFlickable.width
-							columns: root.gridColumns
-							columnSpacing: root.gridGap
-							rowSpacing: root.gridGap
 
 							Repeater {
-								model: root.animationOptions
+								model: root.styleOptions
 
-								delegate: Item {
-									id: card
+								delegate: OptionRow {
+									id: optionRow
 
-									required property int index
 									required property var modelData
 
-									readonly property bool selected: card.index === root.selectedAnimationIndex
-									readonly property bool applied: String(card.modelData.id || "") === root.appliedAnimationId
-									readonly property color accent: modelData.kind === "style" ? Theme.tertiary : modelData.kind === "shader" ? Theme.primary : Theme.secondary
+									label: optionRow.modelData.label
 
-									width: root.cardWidth
-									height: root.cardHeight
-
-									RectangularShadow {
-										anchors.fill: surface
-										radius: surface.radius
-										blur: 26
-										spread: -2
-										offset.y: 10
-										color: Theme.shadow
-										opacity: card.selected ? 0.9 : 0
-										transform: Translate {
-											y: card.selected ? -6 : 0
-										}
-
-										Behavior on opacity {
-											Anim {}
-										}
+									Segmented {
+										Layout.fillWidth: true
+										options: optionRow.modelData.choices
+										current: optionRow.modelData.current
+										onSelected: value => root.setStyleOption(optionRow.modelData.key, value)
 									}
+								}
+							}
+						}
+					}
 
-									Rectangle {
-										id: surface
+					Item {
+						id: gridViewport
 
-										width: parent.width
-										height: parent.height
-										radius: Theme.radius.huge
-										color: card.selected ? Theme.layer2 : Theme.layer1
-										border.width: card.selected ? 2 : 0
-										border.color: Theme.primary
-										scale: cardMouse.pressed ? 0.97 : (cardMouse.containsMouse && !card.selected ? 1.015 : 1)
-										transform: Translate {
-											y: card.selected ? -6 : 0
+						Layout.fillWidth: true
+						Layout.fillHeight: true
+						clip: true
 
-											Behavior on y {
-												SpatialAnim {
-													duration: Motion.medium
+						EmptyState {
+							anchors.centerIn: parent
+							visible: root.animationOptions.length === 0
+							icon: "animation"
+							title: Words.of("motion.empty", "No animations found")
+							subtitle: "Add shaders to style/animations, ~/.config/niri/animations/shaders or nirimation presets."
+						}
+
+						Flickable {
+							id: gridFlickable
+
+							anchors.fill: parent
+							contentWidth: width
+							contentHeight: animationGrid.height + 16
+							boundsBehavior: Flickable.StopAtBounds
+							clip: true
+							ScrollBar.vertical: ThinScrollBar {}
+
+							Behavior on contentY {
+								enabled: !gridFlickable.moving
+								SpatialAnim {
+									duration: Motion.medium
+								}
+							}
+
+							Grid {
+								id: animationGrid
+
+								y: 8
+								width: gridFlickable.width
+								columns: root.gridColumns
+								columnSpacing: root.gridGap
+								rowSpacing: root.gridGap
+
+								Repeater {
+									model: root.animationOptions
+
+									delegate: Item {
+										id: card
+
+										required property int index
+										required property var modelData
+
+										readonly property bool selected: card.index === root.selectedAnimationIndex
+										readonly property bool applied: String(card.modelData.id || "") === root.appliedAnimationId
+										readonly property color accent: modelData.kind === "style" ? Theme.tertiary : modelData.kind === "shader" ? Theme.primary : Theme.secondary
+
+										width: root.cardWidth
+										height: root.cardHeight
+
+										RectangularShadow {
+											anchors.fill: surface
+											radius: surface.radius
+											blur: 26
+											spread: -2
+											offset.y: 10
+											color: Theme.shadow
+											opacity: card.selected ? 0.9 : 0
+											transform: Translate {
+												y: card.selected ? -6 : 0
+											}
+
+											Behavior on opacity {
+												Anim {}
+											}
+										}
+
+										Rectangle {
+											id: surface
+
+											width: parent.width
+											height: parent.height
+											radius: Theme.radius.huge
+											color: card.selected ? Theme.layer2 : Theme.layer1
+											border.width: card.selected ? 2 : 0
+											border.color: Theme.primary
+											scale: cardMouse.pressed ? 0.97 : (cardMouse.containsMouse && !card.selected ? 1.015 : 1)
+											transform: Translate {
+												y: card.selected ? -6 : 0
+
+												Behavior on y {
+													SpatialAnim {
+														duration: Motion.medium
+													}
 												}
 											}
-										}
 
-										Behavior on color {
-											ColorAnim {}
-										}
-										Behavior on scale {
-											SpatialAnim {
-												duration: Motion.short
+											Behavior on color {
+												ColorAnim {}
 											}
-										}
-
-
-										RowLayout {
-											anchors.left: parent.left
-											anchors.right: parent.right
-											anchors.verticalCenter: parent.verticalCenter
-											anchors.leftMargin: 14
-											anchors.rightMargin: 12
-											spacing: 8
-
-											Rectangle {
-												visible: card.applied
-												Layout.preferredWidth: 8
-												Layout.preferredHeight: 8
-												radius: 4
-												color: Theme.success
+											Behavior on scale {
+												SpatialAnim {
+													duration: Motion.short
+												}
 											}
 
-											StyledText {
-												Layout.fillWidth: true
-												text: String(card.modelData.name || "")
-												font.pixelSize: Theme.size.label
-												font.weight: card.selected ? Font.Bold : Font.DemiBold
-											}
 
-											Rectangle {
-												Layout.preferredHeight: 20
-												Layout.preferredWidth: kindLabel.implicitWidth + 14
-												radius: 10
-												color: Qt.alpha(card.accent, 0.18)
+											RowLayout {
+												anchors.left: parent.left
+												anchors.right: parent.right
+												anchors.verticalCenter: parent.verticalCenter
+												anchors.leftMargin: 14
+												anchors.rightMargin: 12
+												spacing: 8
+
+												Rectangle {
+													visible: card.applied
+													Layout.preferredWidth: 8
+													Layout.preferredHeight: 8
+													radius: 4
+													color: Theme.success
+												}
 
 												StyledText {
-													id: kindLabel
+													Layout.fillWidth: true
+													text: String(card.modelData.name || "")
+													font.pixelSize: Theme.size.label
+													font.weight: card.selected ? Font.Bold : Font.DemiBold
+												}
 
-													anchors.centerIn: parent
-													text: String(card.modelData.kind || "")
-													tone: card.accent
-													font.pixelSize: Theme.size.tiny
-													font.weight: Font.Bold
+												Rectangle {
+													Layout.preferredHeight: 20
+													Layout.preferredWidth: kindLabel.implicitWidth + 14
+													radius: 10
+													color: Qt.alpha(card.accent, 0.18)
+
+													StyledText {
+														id: kindLabel
+
+														anchors.centerIn: parent
+														text: String(card.modelData.kind || "")
+														tone: card.accent
+														font.pixelSize: Theme.size.tiny
+														font.weight: Font.Bold
+													}
 												}
 											}
 										}
-									}
 
-									MouseArea {
-										id: cardMouse
+										MouseArea {
+											id: cardMouse
 
-										anchors.fill: parent
-										hoverEnabled: true
-										cursorShape: Qt.PointingHandCursor
-										onClicked: {
-											if (card.selected) {
-												root.applyAnimation();
-												return;
+											anchors.fill: parent
+											hoverEnabled: true
+											cursorShape: Qt.PointingHandCursor
+											onClicked: {
+												if (card.selected) {
+													root.applyAnimation();
+													return;
+												}
+												root.selectAnimationIndex(card.index);
 											}
-											root.selectAnimationIndex(card.index);
 										}
 									}
 								}
@@ -516,11 +634,13 @@ fi
 
 			RowLayout {
 				Layout.fillWidth: true
+				visible: root.mode === "windows"
 				spacing: 14
 
 				KeyHint { keys: "←→↑↓"; label: "choose" }
 				KeyHint { keys: "↵"; label: "apply" }
 				KeyHint { keys: "click ×2"; label: "apply" }
+				KeyHint { keys: "Tab"; label: "springs & curves" }
 				KeyHint { keys: "Esc"; label: "close" }
 
 				Item {

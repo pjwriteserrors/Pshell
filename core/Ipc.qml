@@ -210,6 +210,67 @@ Scope {
 		}
 	}
 
+	// what is followed: `streams open`, `streams follow <link>`, `streams next <series name>`
+	IpcHandler {
+		target: "streams"
+		enabled: Plugins.on("streams")
+
+		function open(): void {
+			Streams.open();
+		}
+		function toggle(): void {
+			Streams.toggle();
+		}
+		function close(): void {
+			Streams.close();
+		}
+		function popOut(): void {
+			Streams.popOut();
+		}
+		function dock(): void {
+			Streams.dock();
+		}
+		function page(name: string): void {
+			Streams.open({ page: name });
+		}
+		function tonight(): void {
+			Streams.open({ tonight: true });
+		}
+		function follow(link: string): void {
+			Streams.follow(link);
+		}
+		function series(name: string): void {
+			const item = Streams.series.find(entry => entry.name.toLowerCase() === name.toLowerCase());
+			if (item) Streams.open({ page: "series", series: item.id });
+		}
+		// the rule workshop, filled in: {"name", "sources": [ids], "rule": {…}}
+		function newSeries(preset: string): void {
+			Streams.open({ newSeries: JSON.parse(preset || "{}") });
+		}
+		function panel(name: string): void {
+			Streams.playerPanelWanted = name;
+		}
+		function book(tab: string): void {
+			Streams.bookTabWanted = "";
+			Streams.bookTabWanted = tab;
+		}
+		function mini(): void {
+			Streams.playerMini = !Streams.playerMini;
+		}
+		// the series inside a suggestion
+		function parts(name: string): void {
+			const item = Streams.discoveries.find(entry => entry.name.toLowerCase() === name.toLowerCase());
+			if (item?.parts.length > 0) Streams.open({ parts: { name: item.name, parts: item.parts, whole: item } });
+		}
+		function next(name: string): void {
+			const item = Streams.series.find(entry => entry.name.toLowerCase() === name.toLowerCase());
+			if (item) Streams.playNext(item.id);
+		}
+		function list(): string {
+			return JSON.stringify({ live: Streams.liveStreams.map(item => item.name), series: Streams.series.map(item => ({ name: item.name, watched: item.watched, total: item.total, left: item.left })) });
+		}
+	}
+
 	// the game library: `games add <path>` opens it to add a program
 	IpcHandler {
 		target: "torrents"
@@ -403,6 +464,23 @@ Scope {
 		function state(): string {
 			Apex.send({ op: "state" });
 			return JSON.stringify({ online: Apex.online, slot: Apex.slot, firmware: Apex.info.firmware ?? "", rules: Apex.rules.length, daemon: Apex.daemonState });
+		}
+	}
+
+	// the 8BitDo Ultimate 2 Wireless: `ultimate open`, `ultimate light dynamic|hotwheel|custom|off`, `ultimate state`
+	IpcHandler {
+		target: "ultimate"
+		enabled: Plugins.on("ultimate")
+
+		function open(): void {
+			NiriSettings.page = "ultimate";
+			Popups.withFocusedScreen(screen => Popups.openModal("niri", screen));
+		}
+		function light(theme: string): void {
+			Ultimate.setTheme(theme || "dynamic");
+		}
+		function state(): string {
+			return JSON.stringify({ online: Ultimate.online, linked: Ultimate.linked, slot: Ultimate.slot, battery: Ultimate.pad?.battery ?? -1, theme: Ultimate.device.theme ?? "" });
 		}
 	}
 
@@ -1046,6 +1124,16 @@ Scope {
 
 		function find(): void {
 			FindMouse.show();
+		}
+	}
+
+	// the pointer as a laser dot, for presentations
+	IpcHandler {
+		target: "laser"
+		enabled: Laser.available
+
+		function toggle(): void {
+			Laser.toggle();
 		}
 	}
 

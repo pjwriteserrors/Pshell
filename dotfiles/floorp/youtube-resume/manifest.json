@@ -1,12 +1,12 @@
 {
 	"manifest_version": 2,
 	"name": "Pshell YouTube Resume",
-	"version": "1.0",
+	"version": "1.1",
 	"description": "Remembers how far every YouTube video was watched and starts it there again, in any tab; keeps the video tabs that were open when the browser closed.",
 	"browser_specific_settings": {
 		"gecko": { "id": "youtube-resume@pshell", "strict_min_version": "115.0" }
 	},
-	"permissions": ["storage", "tabs"],
+	"permissions": ["storage", "tabs", "nativeMessaging"],
 	"background": { "scripts": ["background.js"], "persistent": true },
 	"content_scripts": [{
 		"matches": ["*://*.youtube.com/*", "*://*.youtube-nocookie.com/*"],

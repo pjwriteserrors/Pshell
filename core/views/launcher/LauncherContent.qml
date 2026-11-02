@@ -126,6 +126,13 @@ Item {
 		},
 		{ id: "downloads", plugin: "downloads", group: "tools", command: "downloads", name: "Downloads", aliases: ["download", "accelerator", "dl"], keywords: "download manager speed up accelerate statistics link", status: Downloads.running.length > 0 ? Format.rate(Downloads.speed) : "" },
 		{ id: "torrents", plugin: "torrents", group: "tools", command: "torrents", name: "Torrents", aliases: ["torrent", "magnet", "bittorrent", "p2p"], keywords: "download magnet link seed peers mirror", status: Torrents.running.length > 0 && Torrents.ratio >= 0 ? `${Math.floor(Torrents.ratio * 100)} %` : "" },
+		{ id: "streams", plugin: "streams", group: "tools", command: "streams", name: "Streams", aliases: ["stream", "youtube", "twitch", "series", "rss"], keywords: "channels subscribe follow episodes watch", status: Streams.liveCount > 0 ? `${Streams.liveCount} live` : "",
+			children: [{ id: "streams-open", command: "streams open", name: "Streams", glyph: "play_circle", keywords: "window", status: "" },
+				{ id: "streams-live", command: "live", name: "Who is live", glyph: "cast", keywords: "stream twitch", status: Streams.liveCount > 0 ? `${Streams.liveCount} live` : "Nobody" },
+				{ id: "streams-tonight", command: "tonight", name: "Tonight", glyph: "weather_night", keywords: "evening watch time", status: "" },
+				{ id: "streams-said", command: "said", name: "What was said", glyph: "magnify", keywords: "search subtitles words spoken transcript", status: "" }]
+				.concat(Streams.series.filter(item => item.status === "active" && item.left > 0).map(item => ({ id: "streams-series", series: item.id, command: item.name.toLowerCase(), name: item.name, glyph: "play", keywords: "next episode watch", status: `${item.left} left` })))
+		},
 		{ id: "games", plugin: "games", group: "tools", command: "games", name: "Games", aliases: ["game", "play", "steam", "library"], keywords: "steam proton wine library play launch covers", status: Games.running.length > 0 ? "Playing" : "" },
 		{ id: "vm", plugin: "vm-launcher", group: "system", command: "vm", name: "Virtual Machines", aliases: ["vms", "windows", "win", "virt"], keywords: "looking glass qemu libvirt start boot", status: Machines.vms.some(vm => vm.running) ? "On" : "" },
 		{ id: "dnd", plugin: "dnd", group: "system", command: "dnd", name: "Do Not Disturb", aliases: ["quiet", "silent"], keywords: "notifications", status: Notifs.dnd ? "On" : "" },
@@ -1130,6 +1137,26 @@ Item {
 			root.closeRequested();
 			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "torrents", "open"]);
 			break;
+		case "streams-open":
+			root.closeRequested();
+			Streams.open();
+			break;
+		case "streams-live":
+			root.closeRequested();
+			Streams.open({ page: "now" });
+			break;
+		case "streams-tonight":
+			root.closeRequested();
+			Streams.open({ tonight: true });
+			break;
+		case "streams-said":
+			root.closeRequested();
+			Streams.open({ page: "said", said: root.modeArgument });
+			break;
+		case "streams-series":
+			root.closeRequested();
+			Streams.playNext(command.series);
+			break;
 		case "games":
 			root.closeRequested();
 			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "games", "open"]);
@@ -1517,6 +1544,12 @@ Item {
 		case "games": return "gamepad_variant";
 		case "downloads": return "download";
 		case "torrents": return "magnet";
+		case "streams": return "play_circle";
+		case "streams-open":
+		case "streams-live":
+		case "streams-tonight":
+		case "streams-said":
+		case "streams-series": return command.glyph ?? "play_circle";
 		case "printer": return "printer_3d";
 		case "watch": return "watch";
 		}

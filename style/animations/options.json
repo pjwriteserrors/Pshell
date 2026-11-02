@@ -1,0 +1,73 @@
+[
+  {
+    "key": "tempo",
+    "label": "Tempo",
+    "default": "normal",
+    "choices": [
+      {
+        "value": "relaxed",
+        "label": "Relaxed",
+        "glsl": "1.35"
+      },
+      {
+        "value": "normal",
+        "label": "Normal",
+        "glsl": "1.0"
+      },
+      {
+        "value": "brisk",
+        "label": "Brisk",
+        "glsl": "0.75"
+      },
+      {
+        "value": "quick",
+        "label": "Quick",
+        "glsl": "0.55"
+      }
+    ]
+  },
+  {
+    "key": "swing",
+    "label": "Swing",
+    "default": "none",
+    "choices": [
+      {
+        "value": "none",
+        "label": "None",
+        "glsl": "0.0"
+      },
+      {
+        "value": "gentle",
+        "label": "Gentle",
+        "glsl": "1.0"
+      },
+      {
+        "value": "lively",
+        "label": "Lively",
+        "glsl": "1.8"
+      }
+    ]
+  },
+  {
+    "key": "accent",
+    "label": "Accent",
+    "default": "subtle",
+    "choices": [
+      {
+        "value": "off",
+        "label": "Off",
+        "glsl": "0.0"
+      },
+      {
+        "value": "subtle",
+        "label": "Subtle",
+        "glsl": "0.55"
+      },
+      {
+        "value": "full",
+        "label": "Full",
+        "glsl": "1.0"
+      }
+    ]
+  }
+]

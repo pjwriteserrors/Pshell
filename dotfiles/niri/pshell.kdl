@@ -9,6 +9,16 @@ spawn-sh-at-startup "~/.config/quickshell/shell/scripts/start_shell.sh"
 // games through Steam and Proton open fullscreen (Proton names their window
 // steam_app_<id>); scripts/games_guard.py also keeps Wine and Linux games
 // fullscreen and those that leave it while they start
+// a stream or an episode in a small window (Streams, picture in picture)
+window-rule {
+    match app-id="pshell-streams-pip"
+    open-floating true
+    open-focused false
+    default-column-width { fixed 480; }
+    default-window-height { fixed 270; }
+    default-floating-position x=24 y=24 relative-to="bottom-right"
+}
+
 window-rule {
     match app-id=r#"^steam_app_\d+$"#
     open-fullscreen true
@@ -37,6 +47,7 @@ binds {
     Mod+A { spawn "qs" "-c" "shell" "ipc" "call" "shelf" "toggle"; }
     Mod+Shift+A { spawn "qs" "-c" "shell" "ipc" "call" "shelf" "clipboard"; }
     Mod+Shift+S { spawn "qs" "-c" "shell" "ipc" "call" "studio" "toggle" ""; }
+    Mod+Alt+L { spawn "qs" "-c" "shell" "ipc" "call" "laser" "toggle"; }
     Ctrl+Alt+Delete { spawn "qs" "-c" "shell" "ipc" "call" "power" "open"; }
 
     XF86AudioRaiseVolume allow-when-locked=true { spawn "qs" "-c" "shell" "ipc" "call" "volume" "raise"; }

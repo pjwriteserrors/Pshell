@@ -21,7 +21,7 @@ import zlib
 
 import pikepdf
 
-IMAGE = re.compile(r"\.(png|jpe?g|webp|tiff?|bmp|gif|heic|avif)$", re.I)
+IMAGE = re.compile(r"\.(png|jpe?g|jpe|jfif?|jif|webp|tiff?|bmp|gif|heic|avif)$", re.I)
 OFFICE = re.compile(r"\.(docx?|odt|rtf|xlsx?|ods|pptx?|odp|txt|html?)$", re.I)
 
 
@@ -371,7 +371,7 @@ def flatten(ctx, paths, options):
 def images_to_pdf(images, target):
     """Pictures as pages, each the size it is."""
     from PIL import Image
-    if shutil.which("img2pdf") and all(re.search(r"\.(png|jpe?g|tiff?)$", path, re.I) for path in images):
+    if shutil.which("img2pdf") and all(re.search(r"\.(png|jpe?g|jpe|jfif?|jif|tiff?)$", path, re.I) for path in images):
         try:
             run(["img2pdf", "--output", target, *images])
             return target

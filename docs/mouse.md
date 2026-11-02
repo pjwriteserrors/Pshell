@@ -266,8 +266,10 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
     the click. Every pulse and its reason goes to
     `~/.cache/pshell/mouse-felt.log`. A zone or a whole scene can be **quiet
     while another scene is up too** (`zone.unless: [scene ids]`,
-    `scene.quiet: [scene ids]` – "Quiet while it shows" on the page:
-    the slots under an open inventory are there, but not to be felt), and a
+    `scene.quiet: [scene ids]` – the other way round: the scenes listed
+    keep quiet while this one shows, "Keeps these quiet while it shows";
+    of scenes that quiet each other the one up last has the say: the
+    slots under an open inventory are there, but not to be felt), and a
     picture reaction can **stand back** while the pointer is on its zone or
     for 1.5 s after a click on it (`trigger.unless`: "hover", "click",
     "both" – "unless hovered": a hovered button's own

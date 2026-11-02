@@ -24,6 +24,7 @@ import qs.core.views.switcher
 import qs.core.views.studio
 import qs.core.views.todos
 import qs.core.views.torrents
+import qs.core.views.streams
 import qs.core.views.tray
 import qs.core.views.tracking
 import qs.core.views.vm
@@ -104,6 +105,11 @@ Scope {
 	}
 
 	Hold {
+		id: lasering
+		when: Laser.active
+	}
+
+	Hold {
 		id: capturing
 		when: Screenshot.phase !== "idle"
 	}
@@ -141,6 +147,13 @@ Scope {
 		model: Plugins.on("find-mouse") && finding.held ? Quickshell.screens : []
 
 		MouseFinder {}
+	}
+
+	// the laser pointer, for presentations
+	Variants {
+		model: Plugins.on("laser-pointer") && lasering.held ? Quickshell.screens : []
+
+		LaserPointer {}
 	}
 
 	// where the pointer is, for an ultra macro of the Apex keyboard
@@ -396,6 +409,33 @@ Scope {
 		active: Plugins.on("torrents") && !Torrents.surface.panelled && Torrents.windowOpen
 
 		TorrentsWindow {}
+	}
+
+	// what is followed: its window, or under the bar …
+	LazyLoader {
+		active: Plugins.on("streams") && !Streams.surface.panelled && Streams.windowOpen
+
+		StreamsWindow {}
+	}
+
+	LazyLoader {
+		active: Plugins.on("streams-bar") && Popups.wanted("streams")
+
+		StreamsPanel {}
+	}
+
+	// the player, in a window of its own unless the streams window is open
+	LazyLoader {
+		active: Plugins.on("streams") && !!Streams.player && !Streams.playerInside
+
+		PlayerWindow {}
+	}
+
+	// … and the next episode coming up, in a corner of the screen
+	LazyLoader {
+		active: Plugins.on("streams") && !!Streams.upNext
+
+		NextUpOverlay {}
 	}
 
 	// under the bar, from the magnet in the bar

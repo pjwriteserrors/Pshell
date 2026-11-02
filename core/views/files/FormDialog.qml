@@ -56,6 +56,12 @@ DialogFrame {
 		root.values = Object.assign({}, root.values, { [key]: value });
 	}
 
+	// a choice can hide the field that was being typed in: the keys stay with the dialog
+	function keepFocus() {
+		if (root.firstField && root.firstField.visible) root.firstField.focusInput();
+		else keys.forceActiveFocus();
+	}
+
 	function run() {
 		if (root.problem !== "") {
 			Sounds.play("error");
@@ -227,6 +233,7 @@ DialogFrame {
 							onSelected: value => {
 								Sounds.play("select");
 								root.setValue(fieldItem.modelData.key, value);
+								Qt.callLater(root.keepFocus);
 							}
 						}
 

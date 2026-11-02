@@ -218,7 +218,7 @@ Singleton {
 
 	function kindOfName(name) {
 		const n = String(name).toLowerCase();
-		if (/\.(png|jpe?g|webp|gif|avif|heic|heif|jxl|bmp|tiff?|svg|ico)$/.test(n)) return "image";
+		if (/\.(png|jpe?g|jpe|jfif?|jif|webp|gif|avif|heic|heif|jxl|bmp|tiff?|svg|ico)$/.test(n)) return "image";
 		if (/\.(mp4|mkv|webm|mov|avi|m4v)$/.test(n)) return "video";
 		if (/\.(mp3|flac|ogg|opus|wav|m4a|aac)$/.test(n)) return "audio";
 		if (/\.(pdf|docx?|odt|xlsx?|ods|pptx?|odp|epub|rtf|csv)$/.test(n)) return "document";
@@ -1421,7 +1421,7 @@ Singleton {
 		if (!FileLibrary.setting("avDownloads") && (root.av.clamav || root.vtKeySet)) actions.push({ label: "Scan", icon: "shield_search", run: () => root.av.clamav ? root.avScan([path]) : root.vtScan([path]) });
 		Notifs.pushInternal("done", name, `Downloaded to ${root.pretty(root.parentOf(path))}`, {
 			icon: archive ? "package_variant_closed" : "download",
-			image: /\.(png|jpe?g|webp|gif)$/i.test(name) ? path : "",
+			image: /\.(png|jpe?g|jpe|jfif?|jif|webp|gif)$/i.test(name) ? path : "",
 			duration: 9000,
 			actions: actions
 		});

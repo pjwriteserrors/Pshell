@@ -32,6 +32,8 @@ def pack():
 
 def install():
     pack()
+    # how far things were watched also reaches the shell's series
+    subprocess.run([sys.executable, str(ROOT / "scripts" / "streams" / "native_host.py"), "install"], check=False)
     subprocess.Popen(["floorp", str(PACKAGE)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     print("Floorp asks to add it")
     return 0

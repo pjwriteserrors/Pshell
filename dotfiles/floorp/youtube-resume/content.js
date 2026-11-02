@@ -127,6 +127,9 @@ function tick() {
 setInterval(tick, 1000);
 // media events do not bubble: caught on the way down
 for (const type of ["pause", "seeked", "ended"]) document.addEventListener(type, () => save(), true);
+document.addEventListener("ended", () => {
+	if (window === window.top && current && !adShowing()) api.runtime.sendMessage({ type: "ended", id: current.id });
+}, true);
 document.addEventListener("visibilitychange", () => document.hidden && save());
 window.addEventListener("pagehide", save);
 window.addEventListener("beforeunload", save);

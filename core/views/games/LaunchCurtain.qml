@@ -6,6 +6,7 @@ import QtQuick.Layouts
 import qs.style.theme
 import qs.style.widgets
 import qs.core.services
+import "../../lib/GameText.js" as GameText
 
 // A game being started: its cover flies from the shelf to the middle, rings
 // of the accent go out from it while it starts, a burst when it did. A
@@ -22,6 +23,8 @@ Item {
 	property rect from: Qt.rect(0, 0, 0, 0)
 
 	readonly property bool up: root.phase !== ""
+	// the game's own colour for the rings and the burst
+	readonly property color accent: GameText.accent(root.game, Theme.primary)
 	property real fly: 0
 	property real burst: 0
 	property real shake: 0
@@ -170,7 +173,7 @@ Item {
 			radius: width / 2
 			color: "transparent"
 			border.width: 3
-			border.color: root.phase === "failed" ? Theme.danger : Theme.primary
+			border.color: root.phase === "failed" ? Theme.danger : root.accent
 			opacity: (1 - ring.grow) * 0.7 * root.fly * (root.phase === "starting" ? 1 : 0)
 			visible: root.up
 
@@ -200,7 +203,7 @@ Item {
 		radius: width / 2
 		color: "transparent"
 		border.width: 40 * (1 - root.burst) + 2
-		border.color: Theme.primary
+		border.color: root.accent
 		opacity: (1 - root.burst) * (root.phase === "started" ? 0.8 : 0)
 	}
 
@@ -223,7 +226,7 @@ Item {
 			blur: 70
 			spread: 4
 			offset.y: 20
-			color: Qt.alpha(root.phase === "failed" ? Theme.danger : Theme.primary, 0.6)
+			color: Qt.alpha(root.phase === "failed" ? Theme.danger : root.accent, 0.6)
 		}
 
 		CoverArt {
@@ -267,7 +270,7 @@ Item {
 		StyledText {
 			Layout.alignment: Qt.AlignHCenter
 			text: root.phase === "failed" ? "Did not start" : (root.phase === "started" ? "Have fun" : "Starting")
-			tone: root.phase === "failed" ? Theme.danger : Theme.primary
+			tone: root.phase === "failed" ? Theme.danger : root.accent
 			surface: "transparent"
 			font.pixelSize: Theme.size.small
 			font.weight: Font.Black

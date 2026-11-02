@@ -1,0 +1,22 @@
+[
+  {
+    "key": "origin",
+    "label": "Origin",
+    "default": "center",
+    "choices": [
+      { "value": "center", "label": "Middle", "glsl": "vec2(0.5, 0.5)" },
+      { "value": "top", "label": "Top", "glsl": "vec2(0.5, 0.0)" },
+      { "value": "corner", "label": "Corner", "glsl": "vec2(0.0, 0.0)" }
+    ]
+  },
+  {
+    "key": "ink",
+    "label": "Ink",
+    "default": "accent",
+    "choices": [
+      { "value": "accent", "label": "Accent", "glsl": "@primary@" },
+      { "value": "palette", "label": "Palette", "glsl": "@color4@" },
+      { "value": "warm", "label": "Second", "glsl": "@color5@" }
+    ]
+  }
+]

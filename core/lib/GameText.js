@@ -55,6 +55,62 @@ function ago(seconds) {
 	return `Played ${new Date(value * 1000).getFullYear()}`;
 }
 
+// when, without "Played": "2 days ago", "today", "2024"
+function when(seconds) {
+	const said = ago(seconds);
+	if (said === "") return "";
+	const rest = said.replace(/^Played /, "");
+	return rest.charAt(0).toUpperCase() + rest.slice(1);
+}
+
+// a game's own colours (games.py palette_of): the accent reads on dark, the
+// deep one is its mood; the fallback where the picture has none
+function accent(game, fallback) {
+	return game && game.colors && game.colors.accent ? game.colors.accent : fallback;
+}
+
+function deep(game, fallback) {
+	return game && game.colors && game.colors.deep ? game.colors.deep : fallback;
+}
+
+// black or white on a colour
+function onColor(color) {
+	let c = color;
+	if (typeof color === "string") {
+		const hex = color.replace("#", "").slice(-6);
+		c = { r: parseInt(hex.slice(0, 2), 16) / 255, g: parseInt(hex.slice(2, 4), 16) / 255, b: parseInt(hex.slice(4, 6), 16) / 255 };
+	}
+	const lum = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+	return lum > 0.55 ? "#101114" : "#ffffff";
+}
+
+// hours as a short number with its unit: "45 min", "8.2 h", "131 h"
+function short(minutes) {
+	const value = Number(minutes || 0);
+	if (value <= 0) return "–";
+	if (value < 60) return `${Math.round(value)} min`;
+	const hours = value / 60;
+	return hours < 10 ? `${hours.toFixed(1).replace(/\.0$/, "")} h` : `${Math.round(hours).toLocaleString()} h`;
+}
+
+// how far along a game is, from its stats (games.py stats) and its play
+// time: { share 0…1, label, left (hours to go, -1 unknown), goal } or null
+function progress(stats, minutes) {
+	if (!stats) return null;
+	const goal = stats.goal || "main";
+	if (goal === "done") return { share: 1, label: "beaten", left: 0, goal: goal };
+	const hltb = stats.hltb;
+	const target = hltb ? (hltb[goal] || hltb.main || 0) : 0;
+	if (target > 0) {
+		const hours = Number(minutes || 0) / 60;
+		const labels = { main: "of the story", plus: "with extras", full: "of everything" };
+		return { share: Math.min(1, hours / target), label: labels[goal] || labels.main, left: target - hours, goal: goal };
+	}
+	const trophies = stats.achievements;
+	if (trophies && trophies.total > 0) return { share: trophies.got / trophies.total, label: "achievements", left: -1, goal: goal };
+	return null;
+}
+
 function startOfDay(seconds) {
 	const date = new Date(seconds * 1000);
 	date.setHours(0, 0, 0, 0);

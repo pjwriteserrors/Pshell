@@ -47,6 +47,19 @@ Drawer {
 	readonly property int index: Math.max(0, root.list.findIndex(game => game.id === root.selectedId))
 	readonly property var selected: root.list.length > 0 ? root.list[root.index] : null
 	readonly property bool running: !!root.selected && Games.isRunning(root.selected.id)
+	// the picked game's own colour
+	property color accent: GameText.accent(root.selected, Theme.primary)
+	readonly property color onAccent: GameText.onColor(root.accent)
+
+	Behavior on accent {
+		ColorAnim {
+			duration: 700
+		}
+	}
+
+	function stagger(row) {
+		return Math.max(0, Math.min(1, root.swapIn * 1.6 - row * 0.2));
+	}
 
 	panelId: "gamebar"
 	panelWidth: 760
@@ -161,7 +174,7 @@ Drawer {
 		property: "swapIn"
 		from: 0
 		to: 1
-		duration: Motion.long
+		duration: 560
 		easing.type: Easing.OutCubic
 	}
 
@@ -237,7 +250,7 @@ Drawer {
 			Glyph {
 				icon: "gamepad_variant"
 				size: 20
-				color: Theme.primary
+				color: root.accent
 			}
 
 			StyledText {
@@ -293,7 +306,7 @@ Drawer {
 			id: banner
 
 			Layout.fillWidth: true
-			Layout.preferredHeight: 250
+			Layout.preferredHeight: 270
 			visible: root.selected !== null
 
 			RectangularShadow {
@@ -301,7 +314,7 @@ Drawer {
 				radius: Theme.radius.huge
 				blur: 30
 				offset.y: 10
-				color: Qt.rgba(0, 0, 0, 0.45)
+				color: Qt.alpha(Qt.darker(root.accent, 3), 0.6)
 			}
 
 			Rounded {
@@ -314,6 +327,7 @@ Drawer {
 					anchors.fill: parent
 					game: root.selected
 					active: root.shown
+					compact: true
 				}
 			}
 
@@ -323,7 +337,7 @@ Drawer {
 				radius: Theme.radius.huge
 				color: "transparent"
 				border.width: 3
-				border.color: root.startError !== "" ? Theme.danger : Theme.primary
+				border.color: root.startError !== "" ? Theme.danger : root.accent
 				opacity: root.starting !== "" || root.startError !== "" ? 1 : 0
 
 				Behavior on opacity {
@@ -347,35 +361,93 @@ Drawer {
 				}
 			}
 
+			// favourite, the landing page, the menu: glass in the top corner
+			Row {
+				anchors.top: parent.top
+				anchors.right: parent.right
+				anchors.margins: 14
+				spacing: 6
+				opacity: root.stagger(0)
+
+				Repeater {
+					model: [
+						{ id: "stats", icon: "chart_bar" },
+						{ id: "favorite", icon: root.selected?.favorite ? "heart" : "heart_outline" },
+						{ id: "menu", icon: "dots_horizontal" }
+					]
+
+					delegate: IconButton {
+						id: corner
+
+						required property var modelData
+
+						implicitWidth: 36
+						implicitHeight: 36
+						radius: 18
+						variant: "tonal"
+						color: Qt.rgba(0, 0, 0, 0.35)
+						icon: corner.modelData.icon
+						iconColor: corner.modelData.id === "favorite" && root.selected?.favorite ? "#ff5d7a" : "white"
+						sound: corner.modelData.id === "favorite" ? "" : "click"
+						onClicked: {
+							if (corner.modelData.id === "stats") root.expand(false, true);
+							else if (corner.modelData.id === "menu") root.expand(true);
+							else if (root.selected) {
+								Games.toggleFavorite(root.selected.id);
+								pop.restart();
+							}
+						}
+
+						SequentialAnimation {
+							id: pop
+
+							NumberAnimation {
+								target: corner
+								property: "scale"
+								to: 1.3
+								duration: 110
+								easing.type: Easing.OutQuad
+							}
+							NumberAnimation {
+								target: corner
+								property: "scale"
+								to: 1
+								duration: 380
+								easing.type: Easing.OutBack
+							}
+						}
+					}
+				}
+			}
+
 			ColumnLayout {
 				anchors.left: parent.left
 				anchors.right: parent.right
 				anchors.bottom: parent.bottom
-				anchors.margins: 22
+				anchors.margins: 18
 				spacing: 12
-				opacity: 0.3 + 0.7 * root.swapIn
-				transform: Translate {
-					x: 14 * (1 - root.swapIn)
-				}
 
 				// logo or name
 				Item {
 					Layout.fillWidth: true
-					Layout.preferredHeight: logo.status === Image.Ready && logo.source != "" ? Math.min(90, logo.paintedHeight) : bannerName.implicitHeight
+					Layout.preferredHeight: logo.status === Image.Ready && logo.source != "" ? Math.min(84, logo.paintedHeight) : bannerName.implicitHeight
+					opacity: root.stagger(0)
+					scale: 0.94 + 0.06 * root.stagger(0)
+					transformOrigin: Item.BottomLeft
 
 					Image {
 						id: logo
 
 						anchors.left: parent.left
 						anchors.bottom: parent.bottom
-						width: Math.min(parent.width * 0.6, 380)
-						height: 90
+						width: Math.min(parent.width * 0.55, 340)
+						height: 84
 						source: root.selected?.art?.logo ? `file://${root.selected.art.logo}` : ""
 						fillMode: Image.PreserveAspectFit
 						horizontalAlignment: Image.AlignLeft
 						verticalAlignment: Image.AlignBottom
 						asynchronous: true
-						sourceSize.width: 760
+						sourceSize.width: 680
 						visible: false
 					}
 
@@ -400,104 +472,87 @@ Drawer {
 						tone: "white"
 						surface: "transparent"
 						elide: Text.ElideRight
-						font.pixelSize: 32
+						font.pixelSize: 30
 						font.weight: Font.Black
 					}
 				}
 
 				RowLayout {
 					Layout.fillWidth: true
-					spacing: 8
+					spacing: 10
 
-					// what is known, on one line
-					StyledText {
+					// what is known: play time, when, how far along, the last weeks
+					Item {
 						Layout.fillWidth: true
-						text: {
-							const game = root.selected;
-							if (!game) return "";
-							if (root.startError !== "") return root.startError;
-							if (root.starting !== "") return "Starting …";
-							const parts = [];
-							if (root.running) parts.push("Playing now");
-							parts.push(Games.steamAdding === game.id ? Games.steamProgress : GameText.runnerLabel(game, Games.runners));
-							const time = GameText.playtime(game.playtime);
-							if (time) parts.push(time);
-							parts.push(GameText.ago(game.lastPlayed) || "Not played yet");
-							return parts.join("  ·  ");
+						Layout.preferredHeight: strip.implicitHeight
+						opacity: root.stagger(1)
+						transform: Translate {
+							x: 20 * (1 - root.stagger(1))
 						}
-						tone: root.startError !== "" ? Theme.danger : (root.running ? Theme.success : Qt.rgba(1, 1, 1, 0.85))
-						surface: "transparent"
-						elide: Text.ElideRight
-						font.pixelSize: Theme.size.body
-						font.weight: Font.Medium
-					}
 
-					// its landing page, in the library
-					IconButton {
-						implicitWidth: 40
-						implicitHeight: 40
-						radius: 20
-						variant: "tonal"
-						color: Qt.rgba(1, 1, 1, 0.14)
-						icon: "chart_bar"
-						iconColor: "white"
-						visible: root.selected !== null
-						onClicked: root.expand(false, true)
-					}
+						StatStrip {
+							id: strip
 
-					IconButton {
-						implicitWidth: 40
-						implicitHeight: 40
-						radius: 20
-						variant: "tonal"
-						color: Qt.rgba(1, 1, 1, 0.14)
-						icon: root.selected?.favorite ? "heart" : "heart_outline"
-						iconColor: root.selected?.favorite ? "#ff5d7a" : "white"
-						sound: ""
-						onClicked: Games.toggleFavorite(root.selected.id)
-					}
+							visible: root.starting === "" && root.startError === ""
+							compact: true
+							game: root.selected
+							accent: root.accent
+							onStatsAsked: root.expand(false, true)
+						}
 
-					IconButton {
-						implicitWidth: 40
-						implicitHeight: 40
-						radius: 20
-						variant: "tonal"
-						color: Qt.rgba(1, 1, 1, 0.14)
-						icon: "dots_horizontal"
-						iconColor: "white"
-						onClicked: root.expand(true)
+						// starting, or why it did not
+						StyledText {
+							anchors.verticalCenter: parent.verticalCenter
+							width: parent.width
+							visible: !strip.visible
+							text: root.startError !== "" ? root.startError : "Starting …"
+							tone: root.startError !== "" ? Theme.danger : "white"
+							surface: "transparent"
+							elide: Text.ElideRight
+							font.pixelSize: Theme.size.title
+							font.weight: Font.Bold
+						}
 					}
 
 					// Play
 					Item {
-						Layout.preferredWidth: Math.max(130, playRow.implicitWidth + 40)
-						Layout.preferredHeight: 44
+						Layout.preferredWidth: Math.max(128, playRow.implicitWidth + 40)
+						Layout.preferredHeight: 48
+						opacity: root.stagger(2)
+						transform: Translate {
+							x: 24 * (1 - root.stagger(2))
+						}
+
+						RectangularShadow {
+							anchors.fill: playFace
+							radius: playFace.radius
+							blur: playMouse.containsMouse ? 30 : 18
+							offset.y: 6
+							color: Qt.alpha(root.running ? Theme.success : root.accent, 0.55)
+							scale: playFace.scale
+						}
 
 						Rectangle {
 							id: playFace
 
 							anchors.fill: parent
 							radius: height / 2
-							color: root.running ? Theme.success : Theme.primary
+							color: root.running ? Theme.success : root.accent
 							scale: playMouse.pressed ? 0.95 : (playMouse.containsMouse ? 1.05 : 1)
 							clip: true
 
-							Behavior on color {
-								ColorAnim {}
-							}
 							Behavior on scale {
 								SpatialAnim {
 									duration: Motion.medium
 								}
 							}
 
-							// light runs over it while it starts
+							// light runs over it now and then, all the time while it starts
 							Rectangle {
 								id: glint
 
 								property real travel: 0
 
-								visible: root.starting !== ""
 								width: 60
 								height: parent.height * 2
 								y: -parent.height / 2
@@ -519,12 +574,19 @@ Drawer {
 									}
 								}
 
-								NumberAnimation on travel {
-									running: glint.visible
+								SequentialAnimation on travel {
+									running: root.shown
 									loops: Animation.Infinite
-									from: 0
-									to: 1
-									duration: 900
+
+									NumberAnimation {
+										from: 0
+										to: 1
+										duration: 900
+										easing.type: Easing.InOutQuad
+									}
+									PauseAnimation {
+										duration: root.starting !== "" ? 0 : (playMouse.containsMouse ? 500 : 3800)
+									}
 								}
 							}
 
@@ -538,20 +600,20 @@ Drawer {
 									visible: root.starting !== ""
 									Layout.preferredWidth: 16
 									Layout.preferredHeight: 16
-									color: Theme.onPrimary
+									color: root.running ? Theme.onPrimary : root.onAccent
 								}
 
 								Glyph {
 									visible: root.starting === ""
 									icon: root.running ? "open_in_new" : "play"
 									size: 20
-									color: Theme.onPrimary
+									color: root.running ? Theme.onPrimary : root.onAccent
 									surface: playFace.color
 								}
 
 								StyledText {
 									text: root.starting !== "" ? "Starting" : (root.running ? "Playing" : "Play")
-									tone: Theme.onPrimary
+									tone: root.running ? Theme.onPrimary : root.onAccent
 									surface: playFace.color
 									font.pixelSize: Theme.size.title
 									font.weight: Font.Black

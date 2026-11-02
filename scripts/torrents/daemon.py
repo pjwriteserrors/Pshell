@@ -514,6 +514,31 @@ class Daemon:
             handle.set_flags(lt.torrent_flags.auto_managed)
             handle.resume()
             return {}
+        if op == "hold":
+            # a drive leaves the host (scripts/vm.py): what runs on it lets go of
+            # its files, until `release` puts it back as it was
+            under = str(request.get("path", "")).rstrip("/") + "/"
+            held = []
+            for key, handle in list(self.handles.items()):
+                status = handle.status()
+                paused = bool(status.flags & lt.torrent_flags.paused)
+                managed = bool(status.flags & lt.torrent_flags.auto_managed)
+                if not (status.save_path.rstrip("/") + "/").startswith(under) or (paused and not managed):
+                    continue
+                handle.unset_flags(lt.torrent_flags.auto_managed)
+                handle.pause()
+                self.ask_resume(handle)
+                held.append({"hash": key, "managed": managed})
+            return {"held": held}
+        if op == "release":
+            for item in request.get("held") or []:
+                handle = self.handles.get(str(item.get("hash", "")))
+                if handle is None:
+                    continue
+                if item.get("managed"):
+                    handle.set_flags(lt.torrent_flags.auto_managed)
+                handle.resume()
+            return {}
         if op == "remove":
             key, handle = self.handle_of(request)
             with self.lock:

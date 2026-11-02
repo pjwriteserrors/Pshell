@@ -282,6 +282,7 @@ def extract_timing(block: str) -> dict:
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "scripts"))
 import shader_palette  # noqa: E402
+import animation_options  # noqa: E402
 
 
 def source_path(kind: str, animations_root: Path, name: str) -> Path:
@@ -305,22 +306,25 @@ def built_from(source_root: Path) -> float:
             newest = max(newest, shader_palette.colors_path().stat().st_mtime)
         except OSError:
             pass
+    # a style animation also reads the shared helpers and options, and the picks
+    if source_root.parent == REPO / "style" / "animations":
+        shared = [p for p in source_root.parent.iterdir() if p.is_file()] + [animation_options.state_path()]
+        newest = max([newest, *(p.stat().st_mtime for p in shared if p.is_file())])
     return newest
 
 
-def shader_sources(root: Path) -> dict:
-    config = (root / "config").read_text() if (root / "config").is_file() else ""
-    timing = extract_timing(config)
-
+def shader_sources(root: Path, animation_id: str = "") -> dict:
     phases = {}
     for phase, entry in (("open", "open_color"), ("close", "close_color")):
         path = root / f"{phase}.glsl"
         if not path.is_file():
             continue
+        # <phase>.config, when there is one, times that phase alone
+        config = next((p.read_text() for p in (root / f"{phase}.config", root / "config") if p.is_file()), "")
         phases[phase] = {
-            "glsl": shader_palette.fill(path.read_text()),
+            "glsl": shader_palette.fill(animation_options.fill(path.read_text(), root, animation_id)),
             "entry": entry,
-            "timing": dict(timing),
+            "timing": extract_timing(animation_options.scale_timing(config, animation_id)),
         }
 
     return phases
@@ -419,7 +423,7 @@ def main() -> int:
     if kind == "nirimation":
         phases = nirimation_sources(animations_root, name)
     else:
-        phases = shader_sources(source_root)
+        phases = shader_sources(source_root, raw)
 
     out_dir.mkdir(parents=True, exist_ok=True)
     qsb = find_qsb()

@@ -13,7 +13,7 @@ import subprocess
 
 VIDEO_IN = re.compile(r"\.(mp4|m4v|mkv|webm|mov|avi|wmv|flv|mpe?g|ts|mts|m2ts|3gp|ogv|gif)$", re.I)
 AUDIO_IN = re.compile(r"\.(mp3|m4a|aac|ogg|oga|opus|flac|wav|wma|aiff?|alac|ape|wv|mka)$", re.I)
-IMAGE_IN = re.compile(r"\.(png|jpe?g|webp|avif|heic|heif|jxl|bmp|tiff?|gif|ico|svg|tga|psd|xcf|ppm|qoi)$", re.I)
+IMAGE_IN = re.compile(r"\.(png|jpe?g|jpe|jfif?|jif|webp|avif|heic|heif|jxl|bmp|tiff?|gif|ico|svg|tga|psd|xcf|ppm|qoi)$", re.I)
 
 # format → (label, the arguments ffmpeg needs)
 VIDEO = {
@@ -149,8 +149,18 @@ def media(job, source, fmt, report):
     return target
 
 
+def is_jpeg(path):
+    with open(path, "rb") as file:
+        return file.read(3) == b"\xff\xd8\xff"
+
+
 def picture(job, source, fmt, report):
     target = target_path(source, fmt)
+    # a .jfif or .jpe is a JPEG by another name: nothing to decode, nothing lost
+    if fmt == "jpg" and ext_of(source) in ("jfif", "jfi", "jif", "jpe") and is_jpeg(source):
+        shutil.copyfile(source, target)
+        report(1.0)
+        return target
     first = "[0]" if fmt not in ("gif", "pdf", "tiff") else ""
     if shutil.which("magick"):
         command = ["magick", source + first]

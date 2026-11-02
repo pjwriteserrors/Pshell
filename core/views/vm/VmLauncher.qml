@@ -738,7 +738,7 @@ ModalWindow {
 								visible: text !== ""
 								text: {
 									if (Machines.remedy === "root") return "A terminal asks for it; after that Pshell mounts it on its own.";
-									if (Machines.remedy === "busy") return Machines.busy.map(entry => `${entry.mountpoint} has to be unmounted first`).join("\n");
+									if (Machines.remedy === "busy") return "Close it, then try again. Nothing is forced off the drive.";
 									return "";
 								}
 								tone: Qt.rgba(1, 1, 1, 0.6)
@@ -751,11 +751,11 @@ ModalWindow {
 						TextButton {
 							visible: Machines.remedy !== ""
 							variant: "danger"
-							text: Machines.authorizing ? "In the terminal" : (Machines.remedy === "root" ? "Enter password" : "Unmount")
-							icon: Machines.authorizing ? "" : "key_variant"
+							text: Machines.authorizing ? "In the terminal" : (Machines.remedy === "root" ? "Enter password" : "Try again")
+							icon: Machines.authorizing ? "" : (Machines.remedy === "root" ? "key_variant" : "refresh")
 							busy: Machines.authorizing
 							enabled: !Machines.authorizing
-							onClicked: Machines.authorize()
+							onClicked: Machines.remedy === "root" ? Machines.authorize() : Machines.retry()
 						}
 					}
 				}

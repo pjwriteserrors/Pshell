@@ -245,8 +245,10 @@ def build_listing() -> dict:
         samples = find_sample_icons(path, index)
 
         # hicolor is the fallback every theme inherits from, not something a
-        # person picks; without samples there is nothing to show either.
-        if samples and path.name != "hicolor":
+        # person picks; without samples there is nothing to show either. The
+        # Pshell icons' other name (icon_theme.py) is worn by the shell, not
+        # picked.
+        if samples and path.name not in ("hicolor", "Pshell-Icons-Live"):
             icons.append({
                 "id": path.name,
                 "name": name,
@@ -256,7 +258,9 @@ def build_listing() -> dict:
                 "samples": samples,
             })
 
-        if has_cursors:
+        # the Pshell theme's other names and its variants with marks are
+        # worn by the shell itself, not picked
+        if has_cursors and not path.name.startswith("Pshell-"):
             cursors.append({
                 "id": path.name,
                 "name": name,
@@ -297,8 +301,15 @@ def niri_cursor() -> tuple[str, int]:
 
 def current_state() -> dict:
     cursor_theme, cursor_size = niri_cursor()
+    # worn under another of its names (cursor_theme.py): still the Pshell theme
+    if cursor_theme.startswith("Pshell-"):
+        cursor_theme = "Pshell"
+    icon_theme = gsettings_get("icon-theme")
+    # the Pshell icons worn under their other name are still the Pshell icons
+    if icon_theme == "Pshell-Icons-Live":
+        icon_theme = "Pshell-Icons"
     return {
-        "icon": gsettings_get("icon-theme"),
+        "icon": icon_theme,
         "cursor": cursor_theme or gsettings_get("cursor-theme"),
         "cursorSize": cursor_size or int(gsettings_get("cursor-size") or 24),
     }

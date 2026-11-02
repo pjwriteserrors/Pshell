@@ -361,7 +361,69 @@ style/animations/<name>/
   config       Timing, niri-Syntax
   open.glsl    vec4 open_color(vec3 coords_geo, vec3 size_geo)
   close.glsl   vec4 close_color(vec3 coords_geo, vec3 size_geo)
+  open.config  optional: Timing nur fürs Öffnen (statt config)
+  close.config optional: Timing nur fürs Schließen (statt config)
+  motion.kdl   optional: alle übrigen niri-Animationen (sonst ../motion.kdl)
+  options.json optional: eigene Regler (siehe unten)
+  *.glsl       weitere Teile, mit #include "datei.glsl" eingebunden
+
+style/animations/
+  common.glsl  gemeinsame Helfer (ps_enter, ps_exit, ps_box, ps_window …)
+  options.json Regler, die jede Style-Animation hat (tempo, swing, accent)
+  motion.kdl   die übrigen niri-Animationen aller Style-Animationen
 ```
+
+`open.config`/`close.config` erlauben, was die Shell überall tut: länger
+auf, kürzer zu. Gibt es beide, darf `config` fehlen.
+
+**motion.kdl** enthält weitere Blöcke aus niris `animations { }`
+(`workspace-switch`, `horizontal-view-movement`, `window-movement`,
+`window-resize`, `overview-open-close`, `config-notification-open-close`,
+`exit-confirmation-open-close`, `screenshot-ui-open`, `recent-windows-close`).
+Beim Anwenden ersetzt jeder Block den gleichnamigen in der niri-Config,
+Kommentare direkt darüber wandern mit.
+
+Die mitgelieferte `style/animations/motion.kdl` hält sich an die Uhr der
+Shell: Hereinkommen und Bewegen dauern 260 ms auf „land“
+(`cubic-bezier 0.3 0.8 0.5 1`), Weggehen 200 ms auf Motion.accel, nichts
+federt nach. „land“ statt Motion.decel, weil decel für das letzte Zehntel des
+Wegs 230 ms braucht: Ein Workspace sieht dann aus, als müsste man auf ihn
+warten. Die sechs Fensteranimationen öffnen ebenso in 260 ms (`ps_enter`) und
+schließen in 200 ms; Swing steht von Haus aus auf „None“.
+
+Von Hand gesetzte Werte gewinnen: Studio → Motion → **Springs & curves**
+(Tab schaltet um) stellt jede dieser Animationen als Feder (Bounce,
+Stiffness), Kurve (Dauer, Form) oder aus ein, dazu niris `slowdown` für
+alles. Das speichert `scripts/niri_motion.py` in
+`$THEME_STATE_DIR/motion-overrides.json` und schreibt es nach jedem
+`apply_niri_animation.sh` wieder über die `motion.kdl` des Styles.
+
+Wer die eigenen Kurven der Shell (`Motion.qml`) treffen will, setzt
+`curve "linear"` und nimmt `ps_enter(p)` (Motion.decel, mit Schwung
+Motion.spatial) bzw. `ps_exit(p)` (Motion.accel) aus `common.glsl`.
+
+**Regler** (`scripts/animation_options.py`): Studio → Motion zeigt für eine
+Style-Animation unter „Fine-tune“ jede Option als Segmented-Leiste. Eine
+Änderung spielt sofort auf der Bühne und wird bei der aktiven Animation
+gleich in niri übernommen. Gespeichert wird pro Animation in
+`$THEME_STATE_DIR/animation-options.json`.
+
+```json
+[{ "key": "from", "label": "Direction", "default": "top",
+   "choices": [{ "value": "top", "label": "From top", "glsl": "0.0" }, …] }]
+```
+
+Im Shader wird `@opt.<key>@` zum `glsl` der gewählten Möglichkeit (auch ein
+Ausdruck mit Paletten-Platzhaltern, z. B. `mix(@background@, @primary@, 0.2)`).
+Die gemeinsamen Regler wirken zusätzlich aufs Timing: `tempo` streckt
+`duration-ms` und macht Federn weicher (Steifigkeit / tempo²), `swing` legt
+fest, wie weit Federn überschwingen (0 = kritisch gedämpft). Ein
+`{ "key": "accent", "hidden": true }` in der eigenen `options.json` blendet
+einen gemeinsamen Regler aus.
+
+Mitgeliefert: `bloom` (wächst auf, Akzentrand), `calm` (nur Kurve), `surface`
+(erst Fläche, dann Inhalt), `unfold` (klappt aus einer Kante auf), `drop`
+(Tintentropfen), `wave` (Farbwelle der Palette).
 
 **config**, eins von beiden:
 
@@ -389,7 +451,8 @@ Rückgabe ist premultiplied RGBA: Wer ausblendet, multipliziert die ganze
 Farbe, nicht nur Alpha.
 
 **Farben aus dem Wallpaper:** `@background@`, `@foreground@`, `@cursor@`,
-`@color0@` … `@color15@` werden beim Anwenden zu `vec3(...)` der aktuellen
+`@color0@` … `@color15@` und `@primary@` (der Akzent der Shell, gewählt wie
+`Theme.primary`) werden beim Anwenden zu `vec3(...)` der aktuellen
 wallust-Palette und bei jedem Theme-Wechsel neu geschrieben
 (`scripts/shader_palette.py`). So kann ein Rand im Akzentton glühen oder eine
 Tinte in der Hintergrundfarbe zerlaufen. Braucht der Effekt einen bestimmten
@@ -397,6 +460,9 @@ Ton, gilt dieselbe Regel wie im Theme: den Signaturton als Konstante
 anlegen und mit der Palette mischen, z. B.
 `vec3 ember = mix(@color1@, vec3(1.0, 0.45, 0.1), 0.3);`. Auch hier trägt
 die Palette den größeren Teil.
+
+`@radius@` ist keine Farbe, sondern der Eckenradius der Fenster in Pixeln
+(`geometry-corner-radius`), für Effekte, die die Fensterkontur nachzeichnen.
 
 ```glsl
 vec4 open_color(vec3 coords_geo, vec3 size_geo) {

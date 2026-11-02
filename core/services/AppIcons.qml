@@ -4,8 +4,9 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Resolves app / tray / notification icons. Prefers Papirus (indexed once
-// at start-up, including .desktop aliases) and falls back to the icon theme.
+// Resolves app / tray / notification icons. Prefers the Pshell icons while
+// they are worn, then Papirus (indexed at start-up and when the Pshell icons
+// change, including .desktop aliases), and falls back to the icon theme.
 Singleton {
 	id: root
 
@@ -44,10 +45,11 @@ Singleton {
 		if (!entry) return "";
 		const iconName = String(entry.icon || "");
 		const entryId = String(entry.id || "");
-		// two terminal apps whose own icons do not read at launcher size
-		if (iconName.toLowerCase() === "alacritty" || entryId.toLowerCase().includes("alacritty"))
+		// two terminal apps whose own icons do not read at launcher size (the
+		// Pshell icons draw them as they draw every app)
+		if (root.pshellDir === "" && (iconName.toLowerCase() === "alacritty" || entryId.toLowerCase().includes("alacritty")))
 			return "/usr/share/icons/Adwaita/symbolic/actions/system-run-symbolic.svg";
-		if (iconName.toLowerCase() === "btop" || entryId.toLowerCase().includes("btop"))
+		if (root.pshellDir === "" && (iconName.toLowerCase() === "btop" || entryId.toLowerCase().includes("btop")))
 			return "/usr/share/icons/hicolor/48x48/apps/btop.png";
 		const hit = root.papirus(iconName) || root.papirus(entryId);
 		if (hit !== "") return hit;
@@ -225,9 +227,32 @@ Singleton {
 		return icon;
 	}
 
+	// the Pshell icons, while they are worn, come first (IconTheme.qml); a
+	// new look is a new directory, so the index is made anew
+	readonly property string pshellDir: IconTheme.dir
+	property bool stale: false
+
+	// a tick later: the process takes its environment when it starts, and
+	// that binding is only updated after this handler
+	onPshellDirChanged: Qt.callLater(root.remap)
+
+	function remap() {
+		if (mapProcess.running)
+			root.stale = true;
+		else
+			mapProcess.running = true;
+	}
+
 	Process {
 		id: mapProcess
 		running: true
+		environment: ({ PSHELL_ICON_ROOT: root.pshellDir })
+		onExited: {
+			if (root.stale) {
+				root.stale = false;
+				mapProcess.running = true;
+			}
+		}
 		command: ["sh", "-c", `
 python3 - <<'PY'
 import json
@@ -236,24 +261,30 @@ import shlex
 from pathlib import Path
 
 roots = [Path("/usr/share/icons/Papirus"), Path.home() / ".local/share/icons/Papirus"]
+# the Pshell icons are PNGs: their largest, so nothing is scaled up
+pshell = os.environ.get("PSHELL_ICON_ROOT", "")
+if pshell:
+    roots.insert(0, Path(pshell))
 sizes = ["48x48", "64x64", "32x32", "24x24", "22x22", "16x16", "scalable"]
 contexts = ["apps", "devices", "status", "panel", "symbolic/status", "symbolic/devices"]
 icons = {}
 
-def add_alias(name, path):
+def add_alias(name, path, mine=False):
     if not name or not path:
         return
     key = name.strip().lower()
     if not key:
         return
-    icons.setdefault(key, str(path))
+    # an app's names lead to its Pshell icon, over a Papirus icon of that name
+    put = icons.__setitem__ if mine else icons.setdefault
+    put(key, str(path))
     if key.endswith((".png", ".svg", ".xpm")):
         key = Path(key).stem.lower()
-        icons.setdefault(key, str(path))
-    icons.setdefault(f"{key}.desktop", str(path))
+        put(key, str(path))
+    put(f"{key}.desktop", str(path))
 
 for root in roots:
-    for size in sizes:
+    for size in (["128x128", "96x96", "64x64"] if pshell and str(root) == pshell else sizes):
         for context in contexts:
             icon_dir = root / size / context
             if not icon_dir.is_dir():
@@ -294,15 +325,16 @@ for app_root in (Path("/usr/share/applications"), Path.home() / ".local/share/ap
                     break
         if not resolved:
             continue
-        add_alias(desktop.name, resolved)
-        add_alias(desktop.stem, resolved)
-        add_alias(data.get("StartupWMClass", ""), resolved)
+        mine = bool(pshell) and resolved.startswith(pshell)
+        add_alias(desktop.name, resolved, mine)
+        add_alias(desktop.stem, resolved, mine)
+        add_alias(data.get("StartupWMClass", ""), resolved, mine)
         if data.get("Name"):
-            add_alias(data["Name"], resolved)
+            add_alias(data["Name"], resolved, mine)
         if data.get("Exec"):
             try:
                 command = shlex.split(data["Exec"])[0]
-                add_alias(Path(command).name, resolved)
+                add_alias(Path(command).name, resolved, mine)
             except (ValueError, IndexError):
                 pass
 

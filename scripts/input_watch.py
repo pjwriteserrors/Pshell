@@ -11,12 +11,15 @@ one JSON line per event, only for what it was started with:
                                   held: something is dragged (Shelf)
   --count S    {"type": "activity", "keys": n, "clicks": n} every S seconds
                                   with something pressed (the RPG)
+  --escape     {"type": "escape"} Escape went down (the laser pointer)
+  --caps       {"type": "caps", "on": bool} Caps Lock's light, at start and
+               whenever it changes (the text cursor's mark)
 
 and {"type": "ready"} or {"type": "error", "reason": "permission"|"devices"}.
-Nothing else leaves it: no positions, no key codes.
+Nothing else leaves it: no positions, no other key codes.
 
-  input_watch.py --shake --drag --count 2   the daemon
-  input_watch.py --test                     the detector against made-up movements
+  input_watch.py --shake --drag --count 2 --escape   the daemon
+  input_watch.py --test                              the detector against made-up movements
 """
 
 from __future__ import annotations
@@ -32,6 +35,7 @@ from pathlib import Path
 
 EVENT = struct.Struct("llHHI")
 EV_SYN, EV_KEY, EV_REL, EV_ABS = 0x00, 0x01, 0x02, 0x03
+EV_LED, LED_CAPSL = 0x11, 0x01
 REL_X, REL_Y = 0x00, 0x01
 ABS_X, ABS_Y = 0x00, 0x01
 ABS_MT_SLOT = 0x2F
@@ -52,6 +56,7 @@ RESCAN = 5.0
 # a drag shaken twice within this is one shake
 DRAG_COOLDOWN = 1.5
 BTN_LEFT = 0x110
+KEY_ESC = 1
 BTN_MISC = 0x100
 
 
@@ -163,7 +168,7 @@ def emit(**payload: object) -> None:
 
 
 class Daemon:
-    def __init__(self, shake: bool, drag: bool, count: float) -> None:
+    def __init__(self, shake: bool, drag: bool, count: float, escape: bool = False, caps: bool = False) -> None:
         self.selector = selectors.DefaultSelector()
         self.devices: dict[str, Device] = {}
         self.denied = 0
@@ -171,6 +176,9 @@ class Daemon:
         self.shake = shake
         self.drag = drag
         self.count = count
+        self.escape = escape
+        self.caps = caps
+        self.caps_on: bool | None = None
         self.keys = self.clicks = 0
         self.last_drag = float("-inf")
 
@@ -214,7 +222,27 @@ class Daemon:
     def held(self) -> bool:
         return any(device.held for device in self.devices.values())
 
+    def caps_now(self) -> bool:
+        """Caps Lock's light as the kernel keeps it, on any keyboard."""
+        for path in Path("/sys/class/leds").glob("*::capslock/brightness"):
+            try:
+                if int(path.read_text().strip() or 0):
+                    return True
+            except (OSError, ValueError):
+                continue
+        return False
+
+    def tell_caps(self, on: bool) -> None:
+        if on != self.caps_on:
+            self.caps_on = on
+            emit(type="caps", on=on)
+
     def handle(self, device: Device, kind: int, code: int, value: int, now: float) -> None:
+        if kind == EV_LED:
+            # every keyboard hears the light change: told once
+            if self.caps and code == LED_CAPSL:
+                self.tell_caps(value != 0)
+            return
         if kind == EV_KEY:
             if device.touchpad and code in TOUCH_KEYS:
                 if code == BTN_TOUCH:
@@ -239,6 +267,8 @@ class Daemon:
                 if self.shake and now < self.armed:
                     self.armed = 0.0
                     emit(type="press")
+                if self.escape and code == KEY_ESC:
+                    emit(type="escape")
         elif kind == EV_REL:
             if code == REL_X:
                 device.dx += struct.unpack("i", struct.pack("I", value))[0]
@@ -279,6 +309,8 @@ class Daemon:
             emit(type="error", reason="permission" if self.denied else "devices")
             return 2
         emit(type="ready")
+        if self.caps:
+            self.tell_caps(self.caps_now())
         rescan = time.monotonic() + RESCAN
         tally = time.monotonic() + self.count if self.count else float("inf")
         while True:
@@ -342,6 +374,6 @@ if __name__ == "__main__":
     args = sys.argv[1:]
     count = float(args[args.index("--count") + 1]) if "--count" in args else 0.0
     try:
-        sys.exit(Daemon("--shake" in args, "--drag" in args, max(0.5, min(10.0, count)) if count else 0.0).run())
+        sys.exit(Daemon("--shake" in args, "--drag" in args, max(0.5, min(10.0, count)) if count else 0.0, "--escape" in args, "--caps" in args).run())
     except (KeyboardInterrupt, BrokenPipeError):
         sys.exit(0)

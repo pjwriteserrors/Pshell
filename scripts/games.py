@@ -23,6 +23,7 @@
     scripts/games.py stats <id>           the landing page of a game: play time, the sessions
                                           of the last weeks, how long it takes to beat
                                           (HowLongToBeat, cached), Steam's achievements
+    scripts/games.py brief                how far along every game is, from what is cached
     scripts/games.py session <id> <from> <to>  keeps one session of play (seconds since epoch)
     scripts/games.py goal <id> <main|plus|full|done|''>  what "beaten" means for this game
 
@@ -191,6 +192,16 @@ def playtimes(root, account):
             entry = lower_keys(entry)
             result[str(appid)] = (int(entry.get("playtime") or 0), int(entry.get("lastplayed") or 0))
     return result
+
+
+def shortcut_time(times, appid):
+    """A non-Steam game's (minutes, last played): Steam keeps them under the
+    signed 32-bit appid (-1322682421), sometimes the unsigned one."""
+    unsigned = int(appid) & 0xFFFFFFFF
+    signed = unsigned - (1 << 32) if unsigned >= 1 << 31 else unsigned
+    found = [times.get(str(key)) for key in (signed, unsigned)]
+    found = [entry for entry in found if entry]
+    return (max(entry[0] for entry in found), max(entry[1] for entry in found)) if found else (0, 0)
 
 
 def shortcuts(root, account):
@@ -504,6 +515,78 @@ def auto_art(name):
     return f"steam:{best['appid']}" if best and score >= 0.72 else ""
 
 
+# ── a game's colours ───────────────────────────────────────────────────────
+COLORS = CACHE / "colors.json"
+
+
+def palette_of(path):
+    """The colours of a picture: {accent, deep} as #rrggbb – accent a vivid
+    one that reads on dark (the game's own light), deep a dark one of its
+    mood – or None (no PIL, no picture, nothing but greys)."""
+    import colorsys
+    try:
+        from PIL import Image
+        image = Image.open(path).convert("RGB")
+    except Exception:  # noqa: BLE001 – no PIL or a broken picture
+        return None
+    image.thumbnail((64, 64))
+    quantized = image.quantize(colors=8, method=Image.Quantize.MEDIANCUT)
+    raw = quantized.getpalette()[:24]
+    counts = sorted(quantized.getcolors() or [], reverse=True)
+    total = sum(count for count, _ in counts) or 1
+    swatches = []
+    for count, index in counts:
+        r, g, b = (value / 255 for value in raw[index * 3:index * 3 + 3])
+        h, s, v = colorsys.rgb_to_hsv(r, g, b)
+        swatches.append((count / total, h, s, v))
+    if not swatches:
+        return None
+
+    def hex_of(h, s, v):
+        r, g, b = colorsys.hsv_to_rgb(h, s, v)
+        return "#%02x%02x%02x" % (round(r * 255), round(g * 255), round(b * 255))
+
+    # the accent: colourful and bright enough, weighed by how much of it there is
+    lively = [(share * (s ** 1.3) * (0.35 + v), h, s, v) for share, h, s, v in swatches if s > 0.22 and v > 0.25]
+    if not lively:
+        return None
+    _, h, s, v = max(lively)
+    accent = hex_of(h, min(0.85, max(0.5, s)), min(0.95, max(0.78, v)))
+    # the mood: the most of the picture that has a colour, kept dark
+    moody = [entry for entry in swatches if entry[2] > 0.12] or swatches
+    _, dh, ds, _ = max(moody)
+    deep = hex_of(dh, min(0.75, max(0.35, ds)), 0.2)
+    return {"accent": accent, "deep": deep}
+
+
+def colors_for(games):
+    """Each game's colours, from its cover (else hero, header), kept by picture."""
+    try:
+        cache = json.loads(COLORS.read_text())
+    except (OSError, ValueError):
+        cache = {}
+    changed = False
+    for game in games:
+        art = game.get("art") or {}
+        path = art.get("cover") or art.get("hero") or art.get("header") or ""
+        if not path or not os.path.exists(path):
+            continue
+        stamp = f"{os.path.getmtime(path):.0f}"
+        entry = cache.get(path)
+        if not entry or entry.get("at") != stamp:
+            entry = {"at": stamp, "colors": palette_of(path)}
+            cache[path] = entry
+            changed = True
+        if entry.get("colors"):
+            game["colors"] = entry["colors"]
+    if changed:
+        try:
+            COLORS.parent.mkdir(parents=True, exist_ok=True)
+            COLORS.write_text(json.dumps(cache))
+        except OSError:
+            pass
+
+
 # ── the library ────────────────────────────────────────────────────────────
 def collect():
     data = load()
@@ -512,6 +595,7 @@ def collect():
     account = windows.steam_account(root) if root else ""
     games = []
     times = playtimes(root, account) if root else {}
+    sessions = load_sessions()
 
     def merged(game):
         own = kept.get(game["id"], {})
@@ -521,6 +605,15 @@ def collect():
         game["hidden"] = bool(own.get("hidden"))
         game["lastPlayed"] = max(int(game.get("lastPlayed") or 0), int(own.get("lastPlayed") or 0))
         game["playtime"] = int(game.get("playtime") or 0) + int(own.get("playtime") or 0)
+        # what the shell saw running counts too (a game Steam keeps no time
+        # for, a non-Steam game started in Steam, a watcher that was killed)
+        played = sessions_of(game, sessions)
+        seen = sum(end - start for start, end in played) // 60
+        game["playtime"] = max(game["playtime"], seen)
+        week_ago = time.time() - 7 * 86400
+        game["week"] = round(sum(max(0, end - max(start, week_ago)) for start, end in played) / 60)
+        if played:
+            game["lastPlayed"] = max(game["lastPlayed"], played[-1][1])
         game["artChoice"] = own.get("art", "")
         # what the user picked wins over Steam's pictures
         if own.get("art"):
@@ -554,10 +647,11 @@ def collect():
             if WINDOWS.search(name) or name.lower() == Path(shortcut["exe"]).name.lower():
                 name = guess_name(shortcut["exe"]) or pretty(name)
             game_id = f"shortcut:{shortcut['appid']}"
+            minutes, last = shortcut_time(times, shortcut["appid"])
             art = {**cached_art(game_id), **grid_art(root, account, shortcut["appid"])}
             games.append(merged({
                 "id": game_id, "kind": "shortcut", "name": name, "appid": shortcut["appid"], "gameid": shortcut["gameid"],
-                "exe": shortcut["exe"], "dir": shortcut["dir"], "lastPlayed": shortcut["lastPlayed"], "art": art,
+                "exe": shortcut["exe"], "dir": shortcut["dir"], "lastPlayed": max(shortcut["lastPlayed"], last), "playtime": minutes, "art": art,
                 "runner": "steam", "windows": bool(WINDOWS.search(shortcut["exe"])),
             }))
 
@@ -565,6 +659,7 @@ def collect():
         steam = entry.pop("_steam", None)
         game_id = entry["id"]
         art = cached_art(game_id)
+        steam_minutes, steam_last = shortcut_time(times, steam["appid"]) if steam else (0, 0)
         if steam and root:
             art = {**art, **grid_art(root, account, steam["appid"])}
         games.append(merged({
@@ -572,10 +667,12 @@ def collect():
             "exe": entry.get("exe", ""), "dir": os.path.dirname(entry.get("exe", "")), "args": entry.get("args", ""),
             "runner": entry.get("runner") or guess_runner(entry.get("exe", "")), "added": entry.get("added", 0),
             "gameid": steam["gameid"] if steam else entry.get("gameid", ""), "inSteam": bool(steam),
-            "lastPlayed": max(int(entry.get("lastPlayed") or 0), int(steam["lastPlayed"]) if steam else 0),
+            "steamAppid": steam["appid"] if steam else "", "playtime": steam_minutes,
+            "lastPlayed": max(int(entry.get("lastPlayed") or 0), int(steam["lastPlayed"]) if steam else 0, steam_last),
             "art": art, "missing": not os.path.exists(entry.get("exe", "")), "windows": bool(WINDOWS.search(entry.get("exe", ""))),
         }))
 
+    colors_for(games)
     for game in games:
         game.setdefault("art", {})
         game["needsArt"] = not game["art"].get("cover") and game.get("artChoice") != "none"
@@ -926,8 +1023,9 @@ def hltb_search(name):
             "url": f"{HLTB_SITE}/game/{best.get('game_id')}"}
 
 
-def time_to_beat(name):
-    """The cached answer for a name, asked anew when it is old."""
+def time_to_beat(name, ask=True):
+    """The cached answer for a name, asked anew when it is old (only what is
+    cached without `ask`)."""
     key = normal(name)
     try:
         cache = json.loads(HLTB.read_text())
@@ -935,8 +1033,10 @@ def time_to_beat(name):
         cache = {}
     entry = cache.get(key)
     now = time.time()
-    if entry and now - entry.get("at", 0) < (HLTB_KEEP if entry.get("found") else HLTB_RETRY):
+    if entry and (not ask or now - entry.get("at", 0) < (HLTB_KEEP if entry.get("found") else HLTB_RETRY)):
         return entry.get("found")
+    if not ask:
+        return None
     try:
         found = hltb_search(name)
     except Exception:  # noqa: BLE001 – offline or the site changed: keep what there was
@@ -996,6 +1096,28 @@ def load_sessions():
         return {}
 
 
+def session_ids(game):
+    """The ids a game's play was kept under: its own, and the shortcut it
+    runs as when a game of here was added to Steam."""
+    ids = [game["id"]]
+    if game.get("steamAppid"):
+        ids.append(f"shortcut:{game['steamAppid']}")
+    return ids
+
+
+def sessions_of(game, sessions):
+    """A game's sessions [[from, to]] in order, the same play kept under two
+    ids counted once."""
+    spans = sorted(span for key in session_ids(game) for span in sessions.get(key, []))
+    merged = []
+    for start, end in spans:
+        if merged and start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    return merged
+
+
 def keep_session(game_id, start, end):
     # a moment is no session (a launcher that closed at once)
     if end - start < 60:
@@ -1039,14 +1161,14 @@ def cmd_goal(args):
 def cmd_stats(args):
     game = find(args[0])
     kept = load()["games"].get(game["id"], {})
-    sessions = load_sessions().get(game["id"], [])
-    # the last four weeks, a day each, in minutes (local days)
+    sessions = sessions_of(game, load_sessions())
+    # the last four weeks, a day each, in minutes (local days, a day of a
+    # clock change is 23 or 25 hours long)
     today = time.localtime()
-    midnight = time.mktime((today.tm_year, today.tm_mon, today.tm_mday, 0, 0, 0, 0, 0, -1))
     days = [0] * 28
     for index in range(28):
-        day_start = midnight - (27 - index) * 86400
-        day_end = day_start + 86400
+        day_start = time.mktime((today.tm_year, today.tm_mon, today.tm_mday - (27 - index), 0, 0, 0, 0, 0, -1))
+        day_end = time.mktime((today.tm_year, today.tm_mon, today.tm_mday - (26 - index), 0, 0, 0, 0, 0, -1))
         for start, end in sessions:
             days[index] += max(0, min(end, day_end) - max(start, day_start)) / 60
     beat = time_to_beat(game["name"])
@@ -1062,9 +1184,26 @@ def cmd_stats(args):
         "goal": kept.get("goal", ""), "days": [round(minutes) for minutes in days],
         "sessions": len(sessions), "longest": max(played) // 60 if played else 0,
         "average": sum(played) // len(played) // 60 if played else 0,
-        "firstSeen": sessions[0][0] if sessions else 0,
+        "firstSeen": sessions[0][0] if sessions else 0, "week": game.get("week", 0),
         "hltb": beat, "achievements": trophies,
     })
+
+
+def cmd_brief(_args):
+    """How far along every game is, from what is at hand (no asking the
+    net): {id: {goal, hltb, achievements: {got, total}}} for the covers."""
+    library = collect()["games"]
+    kept = load()["games"]
+    root = windows.steam_root()
+    account = windows.steam_account(root) if root else ""
+    result = {}
+    for game in library:
+        trophies = achievements(root, account, game["appid"]) if game["kind"] == "steam" and root and account else None
+        result[game["id"]] = {
+            "goal": kept.get(game["id"], {}).get("goal", ""), "hltb": time_to_beat(game["name"], ask=False),
+            "achievements": {"got": trophies["got"], "total": trophies["total"]} if trophies else None,
+        }
+    out({"brief": result})
 
 
 def cmd_steam_add(args):
@@ -1135,7 +1274,7 @@ def cmd_key(args):
 COMMANDS = {
     "list": cmd_list, "art": cmd_art, "search": cmd_search, "guess": cmd_guess, "add": cmd_add, "update": cmd_update,
     "remove": cmd_remove, "launch": cmd_launch, "_play": cmd_play, "running": cmd_running, "steam-add": cmd_steam_add,
-    "steam-pads": cmd_steam_pads, "key": cmd_key, "stats": cmd_stats, "session": cmd_session, "goal": cmd_goal,
+    "steam-pads": cmd_steam_pads, "key": cmd_key, "stats": cmd_stats, "brief": cmd_brief, "session": cmd_session, "goal": cmd_goal,
 }
 
 

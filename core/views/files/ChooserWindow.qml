@@ -23,9 +23,24 @@ FloatingWindow {
 	minimumSize: Qt.size(640, 440)
 	color: Theme.base
 
+	// set while the window closes or comes back: it does not follow meanwhile
+	property bool closing: false
+	property bool showingAgain: false
+
 	function follow() {
+		if (root.closing) return;
 		if (root.entry) content.active = true;
-		root.visible = root.entry !== null;
+		if (!root.entry) root.visible = false;
+		else if (!root.visible) root.showAgain();
+	}
+
+	// a window closed by the compositor still counts as wanted: asked to show
+	// again it does nothing, unless it is told to hide first
+	function showAgain() {
+		root.showingAgain = true;
+		root.visible = false;
+		root.showingAgain = false;
+		root.visible = true;
 	}
 
 	Component.onCompleted: root.follow()
@@ -33,7 +48,14 @@ FloatingWindow {
 
 	// closed with the compositor's own means: nothing was chosen
 	onVisibleChanged: {
-		if (!root.visible && root.entry) Files.finishChoose(root.entry, { response: 1 });
+		// the next question opens the window once this close is through
+		if (!root.visible && root.entry && !root.showingAgain) {
+			root.closing = true;
+			Files.finishChoose(root.entry, { response: 1 });
+			root.closing = false;
+			if (root.entry) nextQuestion.restart();
+			else root.visible = false;
+		}
 		if (root.visible) {
 			Sounds.play("open");
 			if (content.item) {
@@ -42,6 +64,24 @@ FloatingWindow {
 			}
 		} else if (content.item) {
 			content.item.shown = false;
+		}
+	}
+
+	Timer {
+		id: nextQuestion
+
+		interval: 150
+		onTriggered: root.follow()
+	}
+
+	// not on the screen with a question open: nobody could answer it, and
+	// every other app's would wait behind it
+	Timer {
+		running: root.entry !== null
+		interval: 2000
+		repeat: true
+		onTriggered: {
+			if (!root.visible || (Niri.ready && !Niri.windows.some(window => String(window.title).startsWith(Files.chooserTitle) && !String(window.title).endsWith("Open with") && /quickshell/i.test(String(window.app_id))))) root.showAgain();
 		}
 	}
 

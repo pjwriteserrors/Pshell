@@ -79,6 +79,20 @@ ModalWindow {
 	readonly property bool running: !!root.selected && Games.isRunning(root.selected.id)
 	readonly property int totalMinutes: Games.games.filter(game => !game.hidden).reduce((sum, game) => sum + (game.playtime || 0), 0)
 	readonly property bool busy: curtain.up || sheet.open || menu.open
+	// the picked game's own colour: the play button, the rings, the lines take it
+	property color accent: GameText.accent(root.selected, Theme.primary)
+	readonly property color onAccent: GameText.onColor(root.accent)
+
+	Behavior on accent {
+		ColorAnim {
+			duration: 700
+		}
+	}
+
+	// a row of the details, coming in after the one before it
+	function stagger(row) {
+		return Math.max(0, Math.min(1, root.infoIn * 1.7 - row * 0.22));
+	}
 
 	// card sizes follow the screen
 	readonly property real cardH: Math.max(210, Math.min(330, root.height * 0.24))
@@ -334,7 +348,7 @@ ModalWindow {
 		property: "infoIn"
 		from: 0
 		to: 1
-		duration: Motion.long
+		duration: 620
 		easing.type: Easing.OutCubic
 	}
 
@@ -437,6 +451,7 @@ ModalWindow {
 		anchors.fill: parent
 		game: root.selected
 		recede: root.gridness
+		active: root.shown
 	}
 
 	// a click on nothing is not one beside the library
@@ -655,7 +670,7 @@ ModalWindow {
 
 							StyledText {
 								text: tab.modelData.count
-								tone: tab.on ? Theme.primary : Qt.rgba(1, 1, 1, 0.3)
+								tone: tab.on ? root.accent : Qt.rgba(1, 1, 1, 0.3)
 								surface: "transparent"
 								font.pixelSize: Theme.size.small
 								font.weight: Font.Bold
@@ -673,7 +688,7 @@ ModalWindow {
 				width: item ? item.width - 24 : 0
 				height: 3
 				radius: 1.5
-				color: Theme.primary
+				color: root.accent
 
 				Behavior on x {
 					SpatialAnim {
@@ -816,10 +831,10 @@ ModalWindow {
 		anchors.leftMargin: root.side
 		anchors.bottom: shelf.top
 		anchors.bottomMargin: 34
-		width: Math.min(parent.width * 0.5, 760)
+		width: Math.min(parent.width * 0.56, 900)
 		spacing: 16
 		visible: root.selected !== null && root.gridness < 0.99
-		opacity: root.riseInfo * (1 - root.gridness) * (0.3 + 0.7 * root.infoIn)
+		opacity: root.riseInfo * (1 - root.gridness)
 		transform: Translate {
 			x: -40 * (1 - root.riseInfo) + 18 * (1 - root.infoIn)
 			y: 60 * root.gridness
@@ -827,6 +842,9 @@ ModalWindow {
 
 		// the logo, or the name where there is none
 		Item {
+			opacity: root.stagger(0)
+			scale: 0.94 + 0.06 * root.stagger(0)
+			transformOrigin: Item.BottomLeft
 			Layout.preferredWidth: Math.min(info.width, 560)
 			Layout.preferredHeight: logo.status === Image.Ready && logo.source != "" ? Math.min(160, logo.paintedHeight) : title.implicitHeight
 
@@ -880,6 +898,10 @@ ModalWindow {
 		Flow {
 			Layout.fillWidth: true
 			spacing: 8
+			opacity: root.stagger(1)
+			transform: Translate {
+				x: 22 * (1 - root.stagger(1))
+			}
 
 			Repeater {
 				model: {
@@ -890,10 +912,7 @@ ModalWindow {
 					if (game.missing) out.push({ icon: "alert", text: "The program is gone", tone: Theme.danger });
 					if (game.updating) out.push({ icon: "download", text: "Update pending", tone: Theme.warning });
 					out.push({ icon: GameText.kindIcon(game), text: Games.steamAdding === game.id ? Games.steamProgress : GameText.runnerLabel(game, Games.runners) });
-					const time = GameText.playtime(game.playtime);
-					if (time) out.push({ icon: "clock_outline", text: time });
-					const last = GameText.ago(game.lastPlayed);
-					out.push({ icon: "history", text: last || "Not played yet" });
+					if ((game.week || 0) >= 30) out.push({ icon: "fire", text: `${GameText.short(game.week)} this week`, tone: "#ff9a3c" });
 					const size = Format.bytes(game.size, "");
 					if (size) out.push({ icon: "harddisk", text: size });
 					return out;
@@ -961,10 +980,26 @@ ModalWindow {
 			}
 		}
 
+		// play time, when, how far along, the last weeks
+		StatStrip {
+			Layout.topMargin: 2
+			game: root.selected
+			accent: root.accent
+			opacity: root.stagger(2)
+			transform: Translate {
+				x: 30 * (1 - root.stagger(2))
+			}
+			onStatsAsked: if (root.selected) stats.show(root.selected)
+		}
+
 		// ── what to do ─────────────────────────────────────────────────────
 		RowLayout {
 			Layout.topMargin: 6
 			spacing: 12
+			opacity: root.stagger(3)
+			transform: Translate {
+				x: 36 * (1 - root.stagger(3))
+			}
 
 			Item {
 				id: playButton
@@ -985,7 +1020,7 @@ ModalWindow {
 					radius: playFace.radius
 					blur: playMouse.containsMouse ? 40 : 24
 					offset.y: 8
-					color: Qt.alpha(root.running ? Theme.success : Theme.primary, 0.5)
+					color: Qt.alpha(root.running ? Theme.success : root.accent, 0.55)
 					scale: playFace.scale
 
 					Behavior on blur {
@@ -1030,7 +1065,7 @@ ModalWindow {
 					width: parent.width
 					height: parent.height
 					radius: height / 2
-					color: root.running ? Theme.success : Theme.primary
+					color: root.running ? Theme.success : root.accent
 					scale: playMouse.pressed ? 0.95 : (playMouse.containsMouse ? 1.04 : 1)
 					clip: true
 
@@ -1095,13 +1130,13 @@ ModalWindow {
 						Glyph {
 							icon: root.running ? "open_in_new" : "play"
 							size: 26
-							color: Theme.onPrimary
+							color: root.running ? Theme.onPrimary : root.onAccent
 							surface: playFace.color
 						}
 
 						StyledText {
 							text: root.running ? "Playing" : "Play"
-							tone: Theme.onPrimary
+							tone: root.running ? Theme.onPrimary : root.onAccent
 							surface: playFace.color
 							font.pixelSize: 20
 							font.weight: Font.Black
@@ -1290,6 +1325,7 @@ ModalWindow {
 				height: parent.width * 1.5
 				game: slot.modelData
 				current: slot.current
+				floats: true
 				appearDelay: root.intro ? Math.min(slot.index, 10) * 55 + 120 : -1
 				onPicked: root.select(slot.index)
 				onActivated: root.play(slot.modelData)

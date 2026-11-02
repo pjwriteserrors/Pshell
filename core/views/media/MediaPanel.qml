@@ -7,6 +7,7 @@ import Quickshell.Widgets
 import Quickshell.Services.Mpris
 import qs.style.theme
 import qs.core.services
+import qs.core.views.streams
 import qs.style.widgets
 import qs.core.views.media
 
@@ -151,6 +152,12 @@ Drawer {
 			y: Theme.panelPadding
 			width: parent.width - Theme.panelPadding * 2
 			spacing: 16
+
+			// the episode that plays, when it is one of a series
+			StreamsNow {
+				Layout.fillWidth: true
+				visible: Plugins.on("streams") && !!Streams.playing?.series
+			}
 
 			RowLayout {
 				Layout.fillWidth: true

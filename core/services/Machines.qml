@@ -35,13 +35,16 @@ Singleton {
 	// the step that failed, and why
 	property string failedStep: ""
 	property string failure: ""
-	// what would help: "root" (a password once), "busy" (a drive to free)
+	// what would help: "root" (a password once), "busy" (a program to close)
 	property string remedy: ""
 	property var busy: []
 	// a terminal with sudo is open for `allow`
 	property bool authorizing: false
 	// a shutdown, kill or unmount under way, by machine
 	property var pending: ({})
+	// a machine is off, what its launch freed goes back; once a session when that fails
+	property var restoreFailed: ({})
+	readonly property bool holdsDrive: root.vms.some(vm => vm.freed)
 
 	readonly property var steps: ["storage", "start", "display"]
 	readonly property bool launching: root.target !== "" && root.step !== "done" && root.step !== "failed"
@@ -75,9 +78,18 @@ Singleton {
 		if (!lister.running) lister.running = true;
 	}
 
+	function restoreFreed() {
+		if (root.launching || restorer.running) return;
+		const machine = root.vms.find(vm => vm.freed && !vm.running && !root.restoreFailed[vm.name]);
+		if (!machine) return;
+		restorer.name = machine.name;
+		root.run(restorer, ["restore", machine.name]);
+	}
+
 	function launch(name) {
 		const machine = root.vm(name);
 		if (!machine || root.launching) return;
+		root.restoreFailed = ({});
 		root.target = name;
 		root.failure = "";
 		root.failedStep = "";
@@ -199,8 +211,8 @@ Singleton {
 		process.running = true;
 	}
 
-	// what needs root: the fstab entry with `user` once, freeing a
-	// passed-through drive every time it is mounted. Through pkexec when the
+	// what needs root, once: the fstab entry with `user`, the sudoers rule for
+	// the mount of a passed-through drive. Through pkexec when the
 	// shell is the polkit agent (it asks for the password), else in a
 	// terminal with sudo
 	function authorize() {
@@ -229,7 +241,7 @@ Singleton {
 	Timer {
 		interval: root.launching ? 1000 : 2500
 		repeat: true
-		running: Plugins.on("vm-launcher") && (root.watched || root.remote || root.launching || Object.keys(root.pending).length > 0)
+		running: Plugins.on("vm-launcher") && (root.watched || root.remote || root.launching || root.holdsDrive || Object.keys(root.pending).length > 0)
 		triggeredOnStart: true
 		onTriggered: root.refresh()
 	}
@@ -246,6 +258,7 @@ Singleton {
 				// the same machines as before keep their objects
 				if (JSON.stringify(data.vms) !== JSON.stringify(root.vms)) root.vms = data.vms;
 				root.loaded = true;
+				root.restoreFreed();
 			}
 		}
 	}
@@ -263,13 +276,30 @@ Singleton {
 				root.refresh();
 				root.goTo("start");
 			} else if (code === 4) {
-				root.fail("storage", "Mounting the VM drive needs your password once", "root");
+				root.fail("storage", data.error || "Mounting the VM drive needs your password once", "root");
 			} else if (code === 5) {
 				root.busy = data.busy || [];
 				root.fail("storage", data.error || "A drive of the VM is in use on this computer", "busy");
 			} else {
 				root.fail("storage", data.error);
 			}
+		}
+	}
+
+	Process {
+		id: restorer
+
+		property string name
+
+		stdout: StdioCollector {
+			id: restoreOut
+		}
+		onExited: code => {
+			if (code !== 0) {
+				root.restoreFailed = Object.assign({}, root.restoreFailed, { [restorer.name]: true });
+				console.warn(`Machines: restore ${restorer.name}: ${root.answerOf(restoreOut.text).error}`);
+			}
+			root.refresh();
 		}
 	}
 

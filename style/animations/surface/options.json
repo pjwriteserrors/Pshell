@@ -1,0 +1,13 @@
+[
+  { "key": "accent", "hidden": true },
+  {
+    "key": "tone",
+    "label": "Surface",
+    "default": "accent",
+    "choices": [
+      { "value": "accent", "label": "Accent", "glsl": "mix(@background@, @primary@, 0.2)" },
+      { "value": "base", "label": "Base", "glsl": "mix(@background@, @foreground@, 0.07)" },
+      { "value": "palette", "label": "Palette", "glsl": "mix(@background@, @color4@, 0.35)" }
+    ]
+  }
+]

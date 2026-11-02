@@ -403,6 +403,8 @@ Singleton {
 	// the scenes recognised now (several at once: the inventory open over
 	// the bar of slots), the best of them, their likeness, each zone's own
 	readonly property var hudLiveScenes: root.hudList(root.eyes?.up) ?? []
+	// the scenes up that no other scene up quiets (gamefeel.Eyes.awake)
+	readonly property var hudAwakeScenes: root.hudList(root.eyes?.awake) ?? root.hudLiveScenes
 	readonly property string hudLiveScene: String(root.eyes?.scene ?? "")
 	readonly property var hudScores: root.eyes?.scores ?? ({})
 	readonly property var hudAlike: root.eyes?.alike ?? ({})
@@ -680,9 +682,10 @@ Singleton {
 		root.hudSaveZones(root.hudZones.map(z => z.id === id ? Object.assign({}, z, values) : z), label);
 	}
 
-	// quiet while another scene is up too: the zone's own list (`unless`)
-	// or the whole scene's (`quiet`) – the inventory open over the bar of
-	// slots: the slots are there, but not to be felt
+	// quiet while another scene is up too: the zone's own list (`unless`:
+	// the zone keeps quiet while one of these shows) or the scene's
+	// (`quiet`: these scenes keep quiet while it shows) – the inventory open
+	// over the bar of slots: the slots are there, but not to be felt
 	function hudToggleUnless(id, sceneId) {
 		const zone = root.hudZones.find(z => z.id === id);
 		if (!zone) return;
@@ -1266,6 +1269,7 @@ Singleton {
 		{ id: "lock", label: "Lock", icon: "lock", group: "Shell", run: () => Session.lock() },
 		{ id: "dnd", label: "Do not disturb", icon: "bell_off_outline", group: "Shell", run: () => Notifs.toggleDnd() },
 		{ id: "findmouse", label: "Find the pointer", icon: "crosshairs_gps", group: "Shell", run: () => FindMouse.show() },
+		{ id: "laser", label: "Laser pointer", icon: "target", group: "Shell", run: () => Laser.toggle() },
 		{ id: "settings", label: "Pshell settings", icon: "cog_outline", group: "Shell", run: () => root.modal("niri") },
 		{ id: "shot-region", label: "Screenshot of a region", icon: "selection_drag", group: "Screenshot", run: () => Screenshot.region() },
 		{ id: "shot-screen", label: "Screenshot of the screen", icon: "monitor", group: "Screenshot", run: () => Screenshot.screen() },

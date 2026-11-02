@@ -22,10 +22,52 @@ function persist() {
 	api.storage.local.set({ open });
 }
 
+// The shell's series (scripts/streams/native_host.py): how far a video is and
+// that it ended; the shell can have the next one open in the tab that played
+// this one. Without the host everything else works the same.
+let shell = null;
+let shellRetry = 0;
+let lastTab = null;
+
+function connectShell() {
+	if (shell || Date.now() < shellRetry) return;
+	try {
+		shell = api.runtime.connectNative("pshell_streams");
+		shell.onMessage.addListener(message => {
+			if (message.type !== "open") return;
+			if (lastTab !== null) api.tabs.update(lastTab, { url: message.url, active: true }).catch(() => api.tabs.create({ url: message.url }));
+			else api.tabs.create({ url: message.url });
+		});
+		shell.onDisconnect.addListener(() => {
+			shell = null;
+			shellRetry = Date.now() + 60000;
+		});
+	} catch (error) {
+		shell = null;
+		shellRetry = Date.now() + 60000;
+	}
+}
+
+function tellShell(message) {
+	connectShell();
+	try {
+		if (shell) shell.postMessage(message);
+	} catch (error) {
+		shell = null;
+	}
+}
+
 api.runtime.onMessage.addListener(async (message, sender) => {
+	if (message.type === "ended" && sender.tab) {
+		lastTab = sender.tab.id;
+		tellShell({ what: "ended", video: message.id });
+		return;
+	}
 	if (message.type !== "watching" || !sender.tab) return;
 	await started;
 	const tab = sender.tab;
+	lastTab = tab.id;
+	tellShell({ what: "position", video: message.id, t: message.t, d: message.d });
 	const known = open[tab.id];
 	open[tab.id] = { id: message.id, title: message.title, url: `https://www.youtube.com/watch?v=${message.id}` };
 	if (!known || known.id !== message.id || known.title !== message.title) persist();

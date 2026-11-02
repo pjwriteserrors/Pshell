@@ -77,6 +77,18 @@ Item {
 
 	readonly property var selectedItems: root.items.filter(item => root.selection.includes(item.id))
 	readonly property bool dragOver: drop.containsDrag || tabDrop.containsDrag
+	// where a drag hovers the shelf, in the layer's coordinates, and how many
+	// things it carries (0 when that is not known)
+	property point dropAt
+	property int dropCount: 0
+
+	function hover(area, drag, counted) {
+		root.dropAt = area.mapToItem(root, drag.x, drag.y);
+		if (counted) return;
+		root.dropCount = Shelf.itemsOfDrop(drag).length;
+		badgePop.restart();
+	}
+
 	// cards unless the list was picked for this shelf
 	readonly property bool grid: root.shelf.grid !== false
 	readonly property real cardWidth: root.grid ? 340 : 310
@@ -340,6 +352,8 @@ Item {
 				id: drop
 
 				anchors.fill: parent
+				onEntered: drag => root.hover(drop, drag, false)
+				onPositionChanged: drag => root.hover(drop, drag, true)
 				onDropped: event => {
 					Shelf.addDrop(root.shelfId, event);
 					event.accept(Qt.CopyAction);
@@ -696,6 +710,8 @@ Item {
 			id: tabDrop
 
 			anchors.fill: parent
+			onEntered: drag => root.hover(tabDrop, drag, false)
+			onPositionChanged: drag => root.hover(tabDrop, drag, true)
 			onDropped: event => {
 				Shelf.addDrop(root.shelfId, event);
 				event.accept(Qt.CopyAction);
@@ -761,6 +777,41 @@ Item {
 				tone: tab.hot ? Theme.onPrimary : Theme.textMuted
 				font.pixelSize: Theme.size.small
 				font.weight: Font.DemiBold
+			}
+		}
+	}
+
+	// beside the dragging pointer while it hovers the shelf: what it would
+	// add; the pointer itself stays, the drag owns it
+	PshellCursor {
+		visible: root.dragOver && CursorStyle.ready
+		x: root.dropAt.x
+		y: root.dropAt.y
+		shape: ""
+
+		CursorBadge {
+			id: dropBadge
+
+			icon: "tray_arrow_down"
+			text: root.dropCount > 0 ? `+${root.dropCount}` : "Shelf"
+
+			SequentialAnimation {
+				id: badgePop
+
+				NumberAnimation {
+					target: dropBadge
+					property: "pop"
+					from: 0
+					to: 1
+					duration: Motion.micro
+				}
+				NumberAnimation {
+					target: dropBadge
+					property: "pop"
+					to: 0
+					duration: Motion.medium
+					easing.type: Easing.OutBack
+				}
 			}
 		}
 	}

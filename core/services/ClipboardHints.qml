@@ -128,6 +128,8 @@ Singleton {
 		}
 
 		const link = text.match(/^https?:\/\/\S+$/);
+		// a channel, not one video: every copied video link would be too much
+		if (link && Plugins.on("streams") && Streams.isFollowable(text) && !/(watch\?|youtu\.be|\/shorts\/|\/videos\/|\/clip\/)/.test(text)) out.push({ label: "Follow in Streams", value: text, run: () => Streams.follow(text) });
 		if (link) {
 			const query = text.indexOf("?");
 			if (query > 0) {
@@ -184,7 +186,7 @@ Singleton {
 		Notifs.pushInternal("done", options[0].label, root.preview(options[0].value), {
 			icon: "clipboard_text",
 			duration: 7000,
-			actions: options.slice(0, 3).map(option => ({ label: option.label, icon: "content_copy", run: () => root.copy(option.value) }))
+			actions: options.slice(0, 3).map(option => ({ label: option.label, icon: option.run ? "play_circle" : "content_copy", run: option.run ?? (() => root.copy(option.value)) }))
 		});
 	}
 

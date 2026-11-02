@@ -13,6 +13,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 SAVE = {"JPEG": {"quality": 93, "optimize": True}, "WEBP": {"quality": 92, "method": 5}, "PNG": {"optimize": True}}
 TITLES = {"resize": "Resizing", "crop": "Cropping", "rotate": "Turning", "strip": "Cleaning", "watermark": "Marking", "flip": "Flipping"}
+MAX_SIDE = 20000
 
 
 class ImageError(Exception):
@@ -50,6 +51,27 @@ def font(size):
     return ImageFont.load_default(size)
 
 
+def exact_size(image, fmt, wanted_width, wanted_height, fit):
+    """The picture at this many pixels. With one side not given the other
+    follows; with both, fit says what happens if the shape differs: cut what
+    sticks out, leave the rest empty, or pull it to the shape."""
+    if image.mode in ("1", "P"):  # palettes do not scale smoothly
+        image = image.convert("RGB" if fmt == "JPEG" else "RGBA")
+    width, height = image.size
+    if not wanted_width:
+        wanted_width = max(1, round(width * wanted_height / height))
+    elif not wanted_height:
+        wanted_height = max(1, round(height * wanted_width / width))
+    elif fit == "cut":
+        return ImageOps.fit(image, (wanted_width, wanted_height), Image.Resampling.LANCZOS)
+    elif fit == "pad":
+        # empty is transparent, or white in a format that has no transparency
+        solid = fmt not in ("PNG", "WEBP", "TIFF", "GIF")
+        image = image.convert("RGB" if solid else "RGBA")
+        return ImageOps.pad(image, (wanted_width, wanted_height), Image.Resampling.LANCZOS, color=(255, 255, 255) if solid else (0, 0, 0, 0))
+    return image.resize((wanted_width, wanted_height), Image.Resampling.LANCZOS)
+
+
 def edit(tool, path, options, unique):
     """The path of the picture made."""
     if tool == "strip":
@@ -64,6 +86,15 @@ def edit(tool, path, options, unique):
     if tool == "resize":
         mode = options.get("mode", "longest")
         width, height = image.size
+        if mode == "exact":
+            wanted_width = int(options.get("width") or 0)
+            wanted_height = int(options.get("height") or 0)
+            if not (wanted_width or wanted_height) or not (0 <= wanted_width <= MAX_SIDE and 0 <= wanted_height <= MAX_SIDE):
+                raise ImageError(f"Give a size of 1 to {MAX_SIDE} px")
+            image = exact_size(image, fmt, wanted_width, wanted_height, options.get("fit", "cut"))
+            target = suffix_path(path, f"{image.width}×{image.height}", unique)
+            save_like(image, source, target, fmt)
+            return target
         if mode == "percent":
             factor = max(1, min(400, float(options.get("percent", 50)))) / 100
             size = (max(1, round(width * factor)), max(1, round(height * factor)))
