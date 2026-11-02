@@ -53,7 +53,7 @@ Item {
 			root.stack = root.stack.concat([entry]);
 			root.at = 0;
 			slide.restart();
-			Sounds.play("select");
+			Sounds.play("navigate");
 			return;
 		}
 		if (entry.confirm && root.armed !== entry.label) {

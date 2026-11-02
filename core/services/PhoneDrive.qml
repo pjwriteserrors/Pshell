@@ -181,7 +181,7 @@ Singleton {
 		if (entries.length === 0) return;
 		Files.say(entries.length === 1 ? `Importing ${entries[0].name}…` : `Importing ${entries.length} files…`, "cellphone_arrow_down");
 		root.fetch(entries, target, paths => {
-			Sounds.play("taskDone");
+			Sounds.play("received");
 			FileLibrary.set("phoneImportedAt", Math.floor(Date.now() / 1000));
 			Notifs.pushInternal("done", paths.length === 1 ? "Imported from the phone" : `${paths.length} files imported from the phone`, Files.pretty(target), {
 				icon: "cellphone_arrow_down",

@@ -84,6 +84,7 @@ Item {
 		// with the file manager on, >file opens it (and searches for what follows)
 		{ id: "file-browser", plugin: "files", shown: !Plugins.on("filemanager"), group: "tools", command: "file", name: "Files", aliases: ["files"], keywords: "browse open folder" },
 		{ id: "file-manager", plugin: "filemanager", group: "tools", command: "file", name: "Files", aliases: ["files", "fm", "explorer", "manager"], keywords: "file manager folders window tabs browse open" },
+		{ id: "edit", plugin: "editor", group: "tools", command: "edit", name: "Editor", aliases: ["editor", "write"], keywords: "text markdown notes" },
 		{ id: "todo", plugin: "todos", group: "tools", command: "todo", name: "Todo", aliases: ["todos"], keywords: "lists tasks notes" },
 		{ id: "shelf", plugin: "shelves", group: "tools", command: "shelf", name: "Shelf", keywords: "stash files text", status: Shelf.shelves.length > 0 ? String(Shelf.shelves.length) : "" },
 		{ id: "shelf-clipboard", plugin: "shelves", group: "tools", command: "shelfclip", name: "Shelf from Clipboard", aliases: ["clipshelf"], keywords: "stash copied" },
@@ -137,6 +138,7 @@ Item {
 		{ id: "vm", plugin: "vm-launcher", group: "system", command: "vm", name: "Virtual Machines", aliases: ["vms", "windows", "win", "virt"], keywords: "looking glass qemu libvirt start boot", status: Machines.vms.some(vm => vm.running) ? "On" : "" },
 		{ id: "dnd", plugin: "dnd", group: "system", command: "dnd", name: "Do Not Disturb", aliases: ["quiet", "silent"], keywords: "notifications", status: Notifs.dnd ? "On" : "" },
 		{ id: "rpg", plugin: "rpg", group: "system", command: "rpg", prefix: "/", name: "Productivity RPG", keywords: "game" },
+		{ id: "world", plugin: "world", group: "tools", command: "world", name: "World", aliases: ["welt", "realm", "map", "karte"], keywords: "tracking time fantasy kingdom houses trees water teamwork" },
 		{
 			id: "tray-profiles", plugin: "app-tray", shown: AppTray.profileNames.length > 0, group: "system", command: "tray", name: "Tray Profiles", aliases: ["trays", "dock"], keywords: "app tray profile switch",
 			status: AppTray.profile,
@@ -317,7 +319,8 @@ Item {
 	readonly property bool inAiActionsMode: Plugins.on("ai-actions") && (root.commandQuery === "ai" || root.commandQuery.startsWith("ai "))
 	readonly property bool inPhoneMode: Phone.offered && (root.commandQuery === "phone" || root.commandQuery.startsWith("phone "))
 	readonly property bool inShotsMode: Plugins.on("screenshot-history") && (root.commandQuery === "shots" || root.commandQuery.startsWith("shots "))
-	readonly property bool inViewMode: root.inTranslateMode || root.inConvertMode || root.inTodoMode || root.inWebMode || root.inAiActionsMode || root.inPhoneMode || root.inShotsMode || root.inFinderMode
+	readonly property bool inEditMode: Plugins.on("editor") && (root.commandQuery === "edit" || root.commandQuery.startsWith("edit "))
+	readonly property bool inViewMode: root.inEditMode || root.inTranslateMode || root.inConvertMode || root.inTodoMode || root.inWebMode || root.inAiActionsMode || root.inPhoneMode || root.inShotsMode || root.inFinderMode
 	// what follows the command token, as typed (">t fr hello" → "fr hello")
 	readonly property string modeArgument: {
 		const match = /^>\S+\s([\s\S]*)$/.exec(root.searchText);
@@ -985,6 +988,10 @@ Item {
 			root.closeRequested();
 			root.openRpgRequested();
 			break;
+		case "world":
+			root.closeRequested();
+			World.show();
+			break;
 		case "studio-page":
 			root.closeRequested();
 			root.openStudioRequested(command.page);
@@ -1456,6 +1463,7 @@ Item {
 	// ══ presentation ═══════════════════════════════════════════════════════
 
 	readonly property string mode: {
+		if (root.inEditMode) return "edit";
 		if (root.inTranslateMode) return "translate";
 		if (root.inConvertMode) return "convert";
 		if (root.inTodoMode) return "todo";
@@ -1477,6 +1485,7 @@ Item {
 		switch (root.mode) {
 		case "calc": return "calculator";
 		case "files": return Phone.pickingFile ? "cellphone" : "folder";
+		case "edit": return "file_document_outline";
 		case "translate": return "translate";
 		case "convert": return "swap_horizontal";
 		case "todo": return "format_list_checks";
@@ -1499,6 +1508,7 @@ Item {
 		case "capture": return "monitor_screenshot";
 		case "plugins": return "puzzle";
 		case "rpg": return "gamepad_variant";
+		case "world": return "earth";
 		case "studio": return "palette";
 		case "studio-page": return command.glyph;
 		case "tray-profiles":
@@ -1514,6 +1524,7 @@ Item {
 		case "chat": return "chat";
 		case "chats": return "forum";
 		case "ollama": return "robot";
+		case "edit": return "file_document_outline";
 		case "translate": return "translate";
 		case "converter": return "swap_horizontal";
 		case "todo": return "format_list_checks";
@@ -1562,6 +1573,7 @@ Item {
 
 	readonly property var activeModeView: {
 		switch (root.mode) {
+		case "edit": return editView;
 		case "translate": return translateView;
 		case "convert": return convertView;
 		case "todo": return todoView;
@@ -1576,6 +1588,7 @@ Item {
 	}
 	readonly property string modePlaceholder: {
 		switch (root.mode) {
+		case "edit": return "File or words";
 		case "translate": return "Text";
 		case "convert": return "5 kg in lb";
 		case "todo": return todoView.placeholder;
@@ -1591,6 +1604,7 @@ Item {
 	readonly property string modeLabel: {
 		switch (root.mode) {
 		case "commands": return root.openGroup ? root.openGroup.name : "Commands";
+		case "edit": return "Editor";
 		case "translate": return "Translate";
 		case "convert": return "Convert";
 		case "todo": return "Todo";
@@ -1606,6 +1620,7 @@ Item {
 		switch (root.mode) {
 		case "chat": return AiChat.editingMessageId !== "" ? "resend" : "send";
 		case "calc":
+		case "edit": return "open";
 		case "convert":
 		case "translate": return "copy";
 		case "todo": return todoView.enterHint;
@@ -2234,6 +2249,22 @@ Item {
 			}
 
 			// translator
+			ModeLayer {
+				current: root.mode === "edit"
+
+				EditView {
+					id: editView
+
+					anchors.fill: parent
+					active: root.mode === "edit"
+					argument: root.modeArgument
+					onCloseRequested: {
+						root.closeRequested();
+						root.launchRequested();
+					}
+				}
+			}
+
 			ModeLayer {
 				current: root.mode === "translate"
 

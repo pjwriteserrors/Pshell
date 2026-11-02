@@ -67,7 +67,7 @@ Singleton {
 	]
 
 	readonly property var sources: [cpu, memory, network, battery, volume, mic, brightness, power, bluetooth,
-		notifications, messages, updates, downloads, torrents, filejobs, recording, sharing, gamemode, agents, keepawake, clipboard, shelf,
+		notifications, messages, updates, downloads, torrents, filejobs, editorSource, recording, sharing, gamemode, agents, keepawake, clipboard, shelf,
 		timer, worked, screentime, water, eyes, meeting, todos, weather,
 		phone, watch, mouse, printer, vm, pcs, game, media]
 	readonly property var byId: {
@@ -848,6 +848,24 @@ Singleton {
 		tone: mouse.on ? (SysStats.mouseLevel <= 0.1 ? "bad" : (SysStats.mouseLevel <= 0.2 ? "warn" : "normal")) : "normal"
 		pulse: mouse.on ? (SysStats.mouseLevel <= 0.1) : false
 		busy: mouse.on ? (SysStats.mouseLevel <= 0.3) : false
+	}
+
+	Source {
+		id: editorSource
+
+		key: "editor"
+		name: "Editor"
+		glyph: "pencil"
+		plugin: "editor"
+		about: "Unsaved tabs of the text editor"
+		readonly property bool shown: editorSource.on && Editor.running
+		text: editorSource.shown && Editor.unsaved > 0 ? String(Editor.unsaved) : ""
+		detail: editorSource.shown ? `${Editor.title}${Editor.title ? " · " : ""}${Editor.words} words · ${Editor.tabs} tabs` : ""
+		tone: editorSource.shown && Editor.unsaved > 0 ? "accent" : "muted"
+		busy: editorSource.shown && Editor.unsaved > 0
+		quiet: true
+		widest: "99"
+		act: () => Editor.open("", 0)
 	}
 
 	Source {

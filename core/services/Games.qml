@@ -151,7 +151,7 @@ Singleton {
 			root.started = id;
 			startedTimeout.restart();
 			root.launching = "";
-			Sounds.play("taskDone");
+			Sounds.play("gameStart");
 			root.launched(id);
 			root.pollRunning();
 		});

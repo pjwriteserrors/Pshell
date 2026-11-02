@@ -975,12 +975,13 @@ Singleton {
 		if (job.state !== "done") return;
 		const long = Number(job.elapsed) > 1.5;
 		if (job.kind === "trash") {
-			Sounds.play("close");
+			Sounds.play("trashed");
 			const count = Number(job.filesTotal) || 0;
 			root.say(count === 1 ? "Moved to the trash" : `${count} items moved to the trash`, "trash_can_outline", true);
 		}
+		else if (["delete", "emptytrash"].includes(job.kind)) Sounds.play("trashed");
 		else if (long) Sounds.play("taskDone");
-		else if (["copy", "move", "auto", "paste", "download"].includes(job.kind)) Sounds.play("copied");
+		else if (["copy", "move", "auto", "paste", "download"].includes(job.kind)) Sounds.play("filed");
 		if (Number(job.elapsed) > 20 && !root.windowActive) root.pulse(true);
 		// away from the window, a longer job says it is through
 		if (long && !root.windowActive && ["copy", "move", "auto", "paste", "download", "extract", "compress", "emptytrash", "delete", "convert", "pdf", "upload"].includes(job.kind)) {
@@ -1461,7 +1462,7 @@ Singleton {
 	function sendToServer(paths, server, name, dest) {
 		root.startJob("upload", { paths: paths, server: server, name: name, dest: dest }, job => {
 			if (job.state === "done") {
-				Sounds.play("taskDone");
+				Sounds.play("sent");
 				root.say(`On ${name} in ${dest}`, "server_network");
 			}
 		});
@@ -1722,7 +1723,7 @@ Singleton {
 	function sendToChat(chat, paths) {
 		WhatsApp.send(chat.id, "", "", paths.map(path => ({ path: path, as: /\.(jpe?g|png|webp|gif|mp4|mov|webm)$/i.test(path) ? "" : "document" })), []);
 		FileLibrary.noteSent(chat.id);
-		Sounds.play("copied");
+		Sounds.play("sent");
 		root.say(paths.length === 1 ? `Sent to ${chat.name}` : `${paths.length} files sent to ${chat.name}`, "whatsapp");
 	}
 
@@ -1884,7 +1885,7 @@ Singleton {
 			const made = job.result?.share;
 			if (!made?.url) return;
 			Quickshell.execDetached(["wl-copy", "--", made.url]);
-			Sounds.play("taskDone");
+			Sounds.play("sent");
 			root.knowShares();
 			Notifs.pushInternal("done", "The link is on the clipboard", `${made.url}${made.expires ? " · until " + Qt.formatDateTime(new Date(made.expires * 1000), "ddd HH:mm") : ""}`, {
 				icon: "link_variant",
@@ -1999,7 +2000,7 @@ Singleton {
 		for (const id of Object.keys(pcs)) {
 			root.say(`Getting ${pcs[id].length === 1 ? Files.nameOf(pcs[id][0]) : `${pcs[id].length} items`} from ${Pcs.nameOf(id)}…`, "laptop");
 			Pcs.fetch(id, pcs[id], target, paths => {
-				Sounds.play("taskDone");
+				Sounds.play("received");
 				root.say(paths.length === 1 ? `${root.nameOf(paths[0])} is here` : `${paths.length} items are here`, "laptop");
 			});
 		}

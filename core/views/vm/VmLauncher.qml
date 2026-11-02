@@ -125,7 +125,7 @@ ModalWindow {
 		if (target === root.index) return;
 		root.direction = next > root.index ? 1 : -1;
 		root.index = target;
-		Sounds.play("select");
+		Sounds.play("navigate");
 		slide.restart();
 		root.intro(true);
 	}

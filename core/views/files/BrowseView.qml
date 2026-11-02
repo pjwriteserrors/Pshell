@@ -765,7 +765,7 @@ Item {
 			onTriggered: {
 				const row = root.pane.rows[root.dropIndex];
 				if (!row?.dir) return;
-				Sounds.play("select");
+				Sounds.play("navigate");
 				root.dropIndex = -1;
 				root.pane.openFolder(row.path);
 			}

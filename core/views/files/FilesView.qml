@@ -404,7 +404,7 @@ FocusScope {
 		const id = String(pane.location.id);
 		Files.say(rows.length === 1 ? `Getting ${rows[0].name} from ${Pcs.nameOf(id)}…` : `Getting ${rows.length} items from ${Pcs.nameOf(id)}…`, "laptop");
 		Pcs.fetch(id, rows.map(row => row.pcPath), folder, paths => {
-			Sounds.play("taskDone");
+			Sounds.play("received");
 			Files.say(paths.length === 1 ? `${Files.nameOf(paths[0])} is here` : `${paths.length} items are here`, "laptop");
 		});
 	}

@@ -53,6 +53,9 @@
 	{ "id": "todo-ai", "name": "Task categories by AI", "category": "Launcher", "requires": ["todos"], "icon": "robot" },
 	{ "id": "converter", "name": "Converter", "category": "Launcher", "preview": {"on": ["bar", "launcher-button"], "ipc": ["launcher search '>conv 5 kg in lb'"]} },
 	{ "id": "identities", "name": "Fake identities", "category": "Launcher", "icon": "account_circle" },
+	{ "id": "editor", "name": "Text editor", "category": "Launcher", "default": false, "icon": "file_document_outline" },
+	{ "id": "editor-default", "name": "Default text editor", "category": "Launcher", "default": false, "requires": ["editor"], "icon": "file_document_outline" },
+	{ "id": "editor-notes", "name": "Notes in the editor", "category": "Launcher", "default": false, "requires": ["editor", "todos"], "icon": "note_outline" },
 
 	{ "id": "screenshot", "name": "Screenshot", "category": "Capture" },
 	{ "id": "pins", "name": "Pinned screenshots", "category": "Capture", "requires": ["screenshot"] },
@@ -74,6 +77,8 @@
 	{ "id": "daily-caption", "name": "Wallpaper caption", "category": "Desktop", "icon": "text_box" },
 	{ "id": "keep-awake", "name": "Keep awake", "category": "Desktop" },
 	{ "id": "rpg", "name": "Productivity RPG", "category": "Desktop", "default": false, "icon": "gamepad_variant" },
+	{ "id": "world", "name": "Tracked world", "category": "Desktop", "default": false, "icon": "earth" },
+	{ "id": "world-wallpaper", "name": "World as wallpaper", "category": "Desktop", "default": false, "requires": ["world"], "icon": "wallpaper" },
 	{ "id": "fast-reader", "name": "Fast reader", "category": "Desktop", "requires": ["drop-commands"], "preview": {"on": ["bar", "clock"], "ipc": ["reader read 'Vielen Dank für die Aufmerksamkeit. Ein Wort nach dem anderen, immer an derselben Stelle.'"], "wait": 4.3} },
 	{ "id": "niri-settings", "name": "Pshell settings", "category": "Desktop", "default": false, "icon": "tune_variant" },
 	{ "id": "wallpaper-layer", "name": "Wallpaper", "category": "Desktop", "icon": "wallpaper" },

@@ -17,6 +17,8 @@ Clickable {
 	property bool busy: false
 	signal activated
 
+	sound: root.variant === "filled" ? "confirm" : (root.variant === "danger" ? "danger" : "click")
+
 	readonly property color contentColor: {
 		if (root.armed)
 			return Theme.bg;

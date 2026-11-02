@@ -704,6 +704,40 @@ Scope {
 	}
 
 	IpcHandler {
+		target: "world"
+		enabled: Plugins.on("world")
+
+		function open(): void {
+			World.show();
+		}
+		function close(): void {
+			World.hide();
+		}
+		function toggle(): void {
+			if (World.windowOpen) World.hide();
+			else World.show();
+		}
+		function day(day: string): void {
+			World.show();
+			World.pick(day);
+		}
+		function play(): void {
+			World.show();
+			World.playRequested();
+		}
+		function wallpaper(): void {
+			Plugins.toggle("world-wallpaper");
+		}
+		function refresh(): void {
+			World.refresh();
+		}
+		function go(place: string): void {
+			World.show();
+			World.announce(place, place);
+		}
+	}
+
+	IpcHandler {
 		target: "ssh"
 		enabled: Plugins.on("ssh")
 
@@ -892,6 +926,23 @@ Scope {
 		function toggle(): void {
 			NiriSettings.page = "keys";
 			Popups.toggleModal("niri");
+		}
+	}
+
+	// the text editor (scripts/editor/)
+	IpcHandler {
+		target: "editor"
+		enabled: Plugins.on("editor")
+
+		function open(path: string): void {
+			Editor.open(path, 0);
+		}
+		function scratch(): void {
+			Editor.scratch();
+		}
+		// a code block of the editor runs in the terminal
+		function terminal(script: string): void {
+			Editor.terminal(script);
 		}
 	}
 

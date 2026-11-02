@@ -223,7 +223,8 @@ SettingsPage {
 				Layout.fillWidth: true
 				Layout.topMargin: 10
 				Layout.leftMargin: 12
-				text: Sounds.current ? `Sounds of ${Sounds.current.name} by ${Sounds.current.author} (${Sounds.current.url.replace(/^https?:\/\//, "")}), ${Sounds.current.license} – cut and softened for the shell.` : ""
+				visible: !!Sounds.current?.url
+				text: Sounds.current?.url ? `Sounds of ${Sounds.current.name} by ${Sounds.current.author} (${Sounds.current.url.replace(/^https?:\/\//, "")}), ${Sounds.current.license} – cut and softened for the shell.` : ""
 				tone: Theme.textFaint
 				font.pixelSize: Theme.size.small
 				wrapMode: Text.WordWrap

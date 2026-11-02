@@ -183,6 +183,24 @@ turns through `~/.codex/hooks.json` (seeded by install.sh, trusted once in
 Codex with `/hooks`); Claude Code needs nothing, its window title says when
 it works.
 
+`editor` is the text editor (`scripts/editor/`, `Editor`, `pe file[:line]`).
+Quickshell cannot host a web view (QtWebEngine crashes it), so it is a process
+of its own: `app.py` is a Gtk.Application with WebKitGTK, one window per
+session, `tools.py` what the page may ask of the machine and the shell, `web/`
+CodeMirror 6 with the page (`bun build.mjs` in `web/`; `dist/` is committed).
+Markdown is edited live (`live.js`: what the cursor is not in shows rendered),
+tabs sit in panes that split, drag and show one document several times; `:::
+columns … ||| … :::` and the reader set text in columns. Neighbouring html, css
+and js blocks render on a click, sandboxed at `pe://preview/` with a CSP of
+their own: no network, no files, and only the top frame knows the bridge's
+token. The shell writes its tokens to `editor-theme.json`, the editor its state
+to `$PSHELL_RUNTIME_DIR/editor-status.json` (Live source `editor`). `/` commands
+and the context menu reach the AI, translation, clipboard history, screenshots,
+tasks, shelf and phone; `>edit` finds files and lines; Mod+Alt+N is the
+scratchpad (kept in `~/.local/state/pshell/editor`, with what is unsaved in the
+tabs). `editor-default` makes it the default for texts and remembers the apps
+before it, `editor-notes` opens the notes of `todos` in it.
+
 `fast-reader` reads a text one word at a time, each on the same spot with
 the letter the eye rests on marked: dragging a selection, shaking and
 dropping it on *Read* opens the reader from the top
@@ -312,7 +330,10 @@ what is installed and which known packs have their zip in `~/Downloads`. The
 pack is picked in Studio's *Sounds* tab (`studio-sounds`, with what plays and
 how loud) and on the Sounds page of the settings; a tile installs a pack
 whose zip is in `~/Downloads`. What a pack lacks comes from the one in the
-repository. A Studio combination keeps the pack with the rest of the look;
+repository. A pack may say in its `pack.json` which file plays which moment
+(`moments`), so it can have more files than the table in `Sounds.qml` has
+names: *Pshell* (`assets/sounds/pshell`) has 58 for 61 moments, all synthesised
+by `scripts/sound_pshell.py`; run `sound_pshell.py check` after adding a moment. A Studio combination keeps the pack with the rest of the look;
 `scripts/ipc.sh sounds pack <id>` and `sounds install <id>` do it from a
 script.
 
@@ -669,6 +690,34 @@ opens the day board: every tracked day on the left, the chosen one with its
 numbers and its entries by project. An entry opens to change its
 description, ticket, start and end and whether it is billable; the checkbox
 queues it and "Send to Teamwork" writes what is queued.
+
+`world` (`>world`, `scripts/ipc.sh world toggle`) grows a fantasy world out of
+what is done in the shell. `scripts/world/world.py` lays it out day after day, so
+that old days stay where they are, and writes everything to
+`~/.cache/pshell/world/<fingerprint>/`. The world is painted once in isometric
+view: `scripts/world/iso.py` and the older small things in `sprites.py` draw the
+sprites (kept per palette), `paint.py` bakes the land and the things into layers
+(`ground.jpg`, `objects.png`, `water.png`, `birth.png`, `sway.png`), a sharp plate
+per city, and a small land per day and ticket in `mini/`. Towns from 8 houses on
+are planned by `plan_city`, each after one of the `ARCHETYPES`, which also decide
+what its people build. `scripts/world/mapping.json` says which source fills which
+role, first enabled plugin with data wins (`sources.py`), so the world does not
+need the timer. `core/views/world/` only moves over these pictures: `WorldMap` draws
+them in one shader pass (`world.frag`: sea, wind in the trees, cloud shadows, night)
+and one clock at a fixed rate moves everything else, so that nothing asks for
+frames at the display's rate. Plates fade in above the map once loaded, so zooming
+never shows anything but land. Colours come from `WorldPalette` and go to the
+painter as `--palette`; new colours paint the world anew.
+
+People in the world walk only on `paths` in `world.json` (town streets per
+terrace, flights of steps, roads). `depth.png` holds what stands where: RG the
+foot line of everything standing, B the height of terraces; `person.frag` cuts a
+walker away where something nearer stands or a higher terrace lies under its
+feet. Rivers are found in `carve_rivers`: one per 20 water entries (at most 9),
+cheapest path from a lake or spring to the sea or another river, round towns;
+their day goes into the birth layer so they appear as they were drunk. Bridges
+come from where roads cross water. `labels` names tickets and notable buildings
+when zoomed in. Mills' sails are overlays from `mills`. Mail builds nothing.
 
 `microsoft-calendar` signs in to Microsoft 365 with a device code (Today
 panel) and keeps the refresh token in `~/.local/state/pshell/microsoft.json`.

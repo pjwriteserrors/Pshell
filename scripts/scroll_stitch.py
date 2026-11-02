@@ -11,6 +11,7 @@ stay put in every pair (sticky headers and footers) are kept once. Prints the
 output path; exits 1 when there is nothing to stitch.
 """
 import os
+import re
 import subprocess
 import sys
 import zlib
@@ -25,10 +26,10 @@ TOLERANCE = 4.0  # mean abs difference per channel that still counts as a match
 
 def read_frame(path):
     data = subprocess.run(["magick", path, "-depth", "8", "ppm:-"], check=True, capture_output=True).stdout
-    # binary PPM: P6 <w> <h> <max> then the pixels
-    parts = data.split(maxsplit=4)
-    width, height = int(parts[1]), int(parts[2])
-    pixels = np.frombuffer(parts[4][: width * height * 3], dtype=np.uint8)
+    # binary PPM: P6 <w> <h> <max>, one whitespace byte, then the pixels (which may start with bytes that look like more)
+    head = re.match(rb"P6\s+(\d+)\s+(\d+)\s+\d+\s", data)
+    width, height = int(head[1]), int(head[2])
+    pixels = np.frombuffer(data, dtype=np.uint8, count=width * height * 3, offset=head.end())
     return pixels.reshape(height, width, 3)
 
 

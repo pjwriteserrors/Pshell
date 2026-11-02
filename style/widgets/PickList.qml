@@ -104,6 +104,8 @@ Popup {
 			delegate: Clickable {
 				id: entry
 
+				sound: "row"
+
 				required property var modelData
 				required property int index
 				readonly property bool isCurrent: String(entry.modelData.value) === String(root.current)

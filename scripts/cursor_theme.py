@@ -45,7 +45,7 @@ import cairo
 from PIL import Image, ImageFilter
 
 SHELL_DIR = Path(__file__).resolve().parent.parent
-HOME = Path(os.environ.get("PSHELL_HOME") or "/home/lu")
+HOME = Path(os.environ.get("PSHELL_HOME") or Path.home())
 ICONS = HOME / ".local/share/icons"
 NAME = "Pshell"
 # niri reloads its cursor only when the configured name changes, so a rebuilt

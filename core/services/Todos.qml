@@ -1066,6 +1066,10 @@ Singleton {
 
 	// ── editor window ─────────────────────────────────────────────────────
 	function openEditor(path, line) {
+		if (path && Plugins.on("editor-notes")) {
+			Editor.open(path, line >= 0 ? line + 1 : 0);
+			return;
+		}
 		root.editorPath = path || "";
 		root.editorLine = line === undefined ? -1 : line;
 		if (root.editorOpen) root.editorRequested();

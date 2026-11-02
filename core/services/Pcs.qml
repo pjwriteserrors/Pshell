@@ -185,7 +185,7 @@ Singleton {
 				if (paths.length === 0) break;
 				const one = paths.length === 1 ? paths[0] : "";
 				const image = /\.(png|jpe?g|webp|gif)$/i.test(one);
-				Sounds.play("taskDone");
+				Sounds.play("received");
 				Notifs.pushInternal(data.stopped ? "error" : "done",
 					one !== "" ? root.baseName(one) : `${data.files} files`,
 					`${data.stopped ? "Stopped on its way, from" : "From"} ${data.name} · ${Format.bytes(data.size)}`, {

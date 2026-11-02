@@ -325,7 +325,7 @@ Item {
 							return;
 						}
 						if (tile.modelData.dir) {
-							Sounds.play("select");
+							Sounds.play("navigate");
 							root.go(tile.modelData.path);
 						}
 					}

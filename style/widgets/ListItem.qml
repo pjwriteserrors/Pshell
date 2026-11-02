@@ -7,6 +7,8 @@ import qs.style.theme
 Clickable {
 	id: root
 
+	sound: "row"
+
 	property string icon: ""
 	property string title: ""
 	property string subtitle: ""

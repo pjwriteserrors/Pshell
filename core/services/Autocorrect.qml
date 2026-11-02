@@ -24,7 +24,7 @@ Singleton {
 		"foot(client)?", "st", "rio", "warp", "org\\.gnome\\.console",
 		// code
 		"code(-oss|-insiders|-url-handler)?", "(vs)?codium", "cursor", "(dev\\.zed\\.)?zed.*", "jetbrains-.*",
-		"sublime_text", "neovide", "emacs.*", "lapce",
+		"sublime_text", "neovide", "emacs.*", "lapce", "de\\.pshell\\.Editor",
 		// file managers
 		"org\\.gnome\\.nautilus", "thunar", "org\\.kde\\.dolphin", "nemo", "pcmanfm.*", "org\\.gnome\\.files", "spacefm", "doublecmd", "krusader",
 		// passwords

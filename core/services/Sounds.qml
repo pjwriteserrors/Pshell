@@ -15,7 +15,7 @@ import Quickshell.Io
 // (scripts/sound_packs.py builds it from the pack's zip): those that may be
 // passed on live in assets/sounds, the others are installed on each machine
 // into ~/.local/share/pshell/sounds. What a pack lacks comes from the one in
-// the shell (gibson).
+// the shell (gibson). A pack may map moments to its own files (`moments`).
 //
 // What plays is set on the Sounds page of the settings: everything, only one
 // of the two kinds, or nothing, how loud, and each moment on its own
@@ -29,16 +29,29 @@ Singleton {
 	// 4 something went wrong, 5 a notification
 	readonly property var moments: [
 		{ id: "click", kind: "buttons", file: "tick", rank: 0, icon: "cursor_default_click", title: "Buttons", subtitle: "A button, a tile or a row is pressed" },
+		{ id: "iconTap", kind: "buttons", file: "tick", rank: 0, icon: "circle_small", title: "Icon buttons", subtitle: "A small round button" },
+		{ id: "row", kind: "buttons", file: "tick", rank: 0, icon: "format_list_bulleted", title: "Rows", subtitle: "A row of a list or menu" },
+		{ id: "confirm", kind: "buttons", file: "tick-up", rank: 0, icon: "check", title: "Confirm", subtitle: "The main button of a dialog" },
+		{ id: "danger", kind: "buttons", file: "tick-down", rank: 0, icon: "alert_outline", title: "Danger", subtitle: "A button that removes something" },
 		{ id: "toggleOn", kind: "buttons", file: "tick-up", rank: 0, icon: "toggle_switch", title: "Switch on", subtitle: "A switch or a quick setting goes on" },
 		{ id: "toggleOff", kind: "buttons", file: "tick-down", rank: 0, icon: "toggle_switch_off", title: "Switch off", subtitle: "A switch or a quick setting goes off" },
 		{ id: "select", kind: "buttons", file: "tap", rank: 0, icon: "gesture_tap", title: "Choice", subtitle: "One of a few options is picked" },
+		{ id: "navigate", kind: "buttons", file: "tap", rank: 0, icon: "arrow_right", title: "Going deeper", subtitle: "Into a folder, a submenu, the next page" },
 		{ id: "open", kind: "buttons", file: "pop-up", rank: 1, icon: "arrow_expand", title: "Panel opens", subtitle: "Launcher, the panels under the bar and the shell's windows" },
 		{ id: "close", kind: "buttons", file: "pop-down", rank: 1, icon: "arrow_collapse", title: "Panel closes", subtitle: "One of them goes away again" },
+		{ id: "launcherOpen", kind: "buttons", file: "pop-up", rank: 1, icon: "magnify", title: "Launcher opens", subtitle: "The launcher comes up" },
+		{ id: "launcherClose", kind: "buttons", file: "pop-down", rank: 1, icon: "magnify", title: "Launcher closes", subtitle: "The launcher goes away" },
+		{ id: "dialogOpen", kind: "buttons", file: "pop-up", rank: 1, icon: "dock_window", title: "Dialog opens", subtitle: "A window in front of everything" },
+		{ id: "dialogClose", kind: "buttons", file: "pop-down", rank: 1, icon: "window_close", title: "Dialog closes", subtitle: "It goes away again" },
 		{ id: "volume", kind: "buttons", file: "pop", rank: 1, icon: "volume_high", title: "Volume keys", subtitle: "Plays at the new volume, so it can be heard how loud it is", repeat: 150 },
 		{ id: "workspace", kind: "buttons", file: "tap", rank: 1, icon: "view_grid_outline", title: "Workspaces", subtitle: "The focus moves to another workspace", fallback: false },
 		{ id: "captured", kind: "buttons", file: "pluck-low", rank: 2, icon: "camera", title: "Screenshot", subtitle: "A shot is taken" },
-		{ id: "copied", kind: "buttons", file: "pluck", rank: 2, icon: "content_copy", title: "Copied", subtitle: "A shot, a colour, a translation is copied or saved" },
+		{ id: "copied", kind: "buttons", file: "pluck", rank: 2, icon: "content_copy", title: "Copied", subtitle: "Something is on the clipboard" },
+		{ id: "saved", kind: "buttons", file: "pluck", rank: 2, icon: "content_save", title: "Saved", subtitle: "A shot lands in a file" },
+		{ id: "colorPicked", kind: "buttons", file: "pluck", rank: 2, icon: "eyedropper", title: "Colour picked", subtitle: "The picker took a colour" },
 		{ id: "pinned", kind: "buttons", file: "pluck", rank: 2, icon: "pin", title: "Pinned", subtitle: "A shot is pinned or something lands on a shelf" },
+		{ id: "filed", kind: "buttons", file: "pluck", rank: 2, icon: "folder_move_outline", title: "Files in place", subtitle: "Copied or moved, a short job" },
+		{ id: "trashed", kind: "buttons", file: "pop-down", rank: 2, icon: "trash_can_outline", title: "Thrown away", subtitle: "To the trash, or deleted" },
 		{ id: "recordingStarted", kind: "buttons", file: "chime-up", rank: 2, icon: "record_rec", title: "Recording starts", subtitle: "The screen recording begins" },
 		{ id: "recordingStopped", kind: "buttons", file: "chime-down", rank: 2, icon: "stop_circle_outline", title: "Recording stops", subtitle: "The recording is saved" },
 		{ id: "dndOn", kind: "buttons", file: "chime-down", rank: 2, icon: "bell_off", title: "Do not disturb on", subtitle: "Notifications go quiet" },
@@ -57,15 +70,21 @@ Singleton {
 		{ id: "bluetoothOut", kind: "system", file: "disconnect", rank: 3, icon: "bluetooth_off", title: "Bluetooth disconnected", subtitle: "A device drops off" },
 		{ id: "phoneIn", kind: "system", file: "connect", rank: 3, icon: "cellphone", title: "Phone connected", subtitle: "The phone app is there", plugin: "phone" },
 		{ id: "phoneOut", kind: "system", file: "disconnect", rank: 3, icon: "cellphone", title: "Phone gone", subtitle: "The phone app lost the shell", plugin: "phone" },
+		{ id: "mouseAway", kind: "system", file: "pop-up", rank: 3, icon: "mouse", title: "Mouse goes away", subtitle: "Over to the other PC", plugin: "pc-mouse" },
+		{ id: "mouseHome", kind: "system", file: "pop-down", rank: 3, icon: "mouse", title: "Mouse comes back", subtitle: "Back from the other PC", plugin: "pc-mouse" },
 		{ id: "chargerIn", kind: "system", file: "ready", rank: 3, icon: "power_plug", title: "Charger plugged in", subtitle: "The battery charges", plugin: "battery" },
 		{ id: "chargerOut", kind: "system", file: "pop-down", rank: 3, icon: "power_plug_off", title: "Charger pulled", subtitle: "Back on battery", plugin: "battery" },
 		{ id: "batteryLow", kind: "system", file: "warn", rank: 4, icon: "battery_alert", title: "Battery low", subtitle: "At 15 % and again at 5 %", plugin: "battery" },
 		{ id: "networkUp", kind: "system", file: "tick-up", rank: 3, icon: "wifi", title: "Online", subtitle: "The network is back", fallback: false },
 		{ id: "networkDown", kind: "system", file: "tick-down", rank: 3, icon: "wifi_off", title: "Offline", subtitle: "The network is gone", fallback: false },
 		{ id: "error", kind: "system", file: "error", rank: 4, icon: "alert_circle_outline", title: "Error", subtitle: "Something failed, a wrong password, niri said no" },
+		{ id: "denied", kind: "system", file: "error", rank: 4, icon: "lock_outline", title: "Wrong password", subtitle: "The lock screen or a password dialog" },
 		{ id: "attention", kind: "system", file: "warn", rank: 4, icon: "alert", title: "Question", subtitle: "Something waits for an answer (a Bluetooth pairing …)" },
-		{ id: "taskDone", kind: "system", file: "ready", rank: 3, icon: "check_all", title: "Done", subtitle: "Updates, a sent mail, a longer job that finished" },
+		{ id: "taskDone", kind: "system", file: "ready", rank: 3, icon: "check_all", title: "Done", subtitle: "Updates, a longer job that finished" },
+		{ id: "sent", kind: "system", file: "ready", rank: 3, icon: "send", title: "Sent", subtitle: "Files went to a server or a chat" },
+		{ id: "received", kind: "system", file: "ready", rank: 3, icon: "tray_arrow_down", title: "Received", subtitle: "Files came from another PC or the phone" },
 		{ id: "download", kind: "system", file: "ready", rank: 3, icon: "download", title: "Download finished", subtitle: "The browser has the file", plugin: "downloads" },
+		{ id: "gameStart", kind: "system", file: "ready", rank: 3, icon: "gamepad_variant", title: "Game started", subtitle: "Its window is there", plugin: "games" },
 		{ id: "reminder", kind: "system", file: "reminder", rank: 3, icon: "cup_water", title: "Reminder", subtitle: "Time to stretch, drink or rest the eyes", plugin: "breaks" },
 		{ id: "locked", kind: "system", file: "lock", rank: 3, icon: "lock", title: "Locked", subtitle: "The screen locks", plugin: "lock-screen" },
 		{ id: "unlocked", kind: "system", file: "unlock", rank: 3, icon: "lock_open_variant", title: "Unlocked", subtitle: "Welcome back", plugin: "lock-screen" },
@@ -81,11 +100,8 @@ Singleton {
 
 	// other names features use for one of the moments (those of Haptics)
 	readonly property var aliases: ({
-		saved: "copied",
-		colorPicked: "copied",
-		sent: "taskDone",
 		taskFailed: "error",
-		wrongPassword: "error"
+		wrongPassword: "denied"
 	})
 
 	// ── settings (sounds.json) ─────────────────────────────────────────────
@@ -219,7 +235,7 @@ Singleton {
 	}
 
 	function sound(moment, forced) {
-		const effect = root.effects[moment.file];
+		const effect = root.effects[root.fileFor(moment)];
 		if (!effect) return;
 		const now = Date.now();
 		if (!forced) {
@@ -268,6 +284,11 @@ Singleton {
 	// the pack being installed, and what went wrong last time
 	property string installing: ""
 	property string installError: ""
+
+	// a pack may say for itself which file plays what (`moments` in pack.json)
+	function fileFor(moment) {
+		return root.current?.moments?.[moment.id] ?? moment.file;
+	}
 
 	function fileOf(name) {
 		const dir = root.current && (root.current.sounds ?? []).includes(name) ? root.current.dir : `${Paths.assets}/sounds/gibson`;
@@ -355,8 +376,10 @@ Singleton {
 	Instantiator {
 		model: {
 			const files = [];
-			for (const moment of root.moments)
-				if (!files.includes(moment.file)) files.push(moment.file);
+			for (const moment of root.moments) {
+				const name = root.fileFor(moment);
+				if (!files.includes(name)) files.push(name);
+			}
 			return files;
 		}
 
@@ -380,7 +403,7 @@ Singleton {
 		}
 		onObjectRemoved: (index, object) => {
 			const effects = Object.assign({}, root.effects);
-			delete effects[object.modelData];
+			if (effects[object.modelData] === object) delete effects[object.modelData];
 			root.effects = effects;
 		}
 	}
@@ -463,8 +486,9 @@ Singleton {
 		if (!root.settled) return;
 		const quiet = ["modal:eyerest", "modal:stretch"];
 		if (quiet.includes(before) || quiet.includes(root.surface)) return;
-		if (before === "" && root.surface !== "") root.play("open");
-		else if (before !== "" && root.surface === "") root.play("close");
+		const kind = surface => surface.startsWith("modal:") ? "dialog" : (surface === "launcher" ? "launcher" : "");
+		if (before === "" && root.surface !== "") root.play(kind(root.surface) ? `${kind(root.surface)}Open` : "open");
+		else if (before !== "" && root.surface === "") root.play(kind(before) ? `${kind(before)}Close` : "close");
 	}
 
 	// USB devices: udev tells about every one that comes or goes, a line

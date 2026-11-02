@@ -6,6 +6,8 @@ import qs.style.theme
 Clickable {
 	id: root
 
+	sound: "select"
+
 	property string text: ""
 	property string icon: ""
 	property bool selected: false

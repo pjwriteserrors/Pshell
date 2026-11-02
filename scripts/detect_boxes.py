@@ -23,6 +23,7 @@ edge (rounded corners allowed) are cards, fields, buttons and panels, and
 each of them is split with XY-cut again for what lies inside.
 """
 import json
+import re
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
@@ -58,13 +59,14 @@ RECT_CORNER = 14  # rounded corners: this much of each end of a side is not aske
 def read_ppm(path):
     with open(path, "rb") as f:
         data = f.read()
-    parts = data.split(maxsplit=4)
-    if parts[0] != b"P6":
+    # one whitespace byte ends the header: the pixels may start with bytes that look like more
+    head = re.match(rb"P6\s+(\d+)\s+(\d+)\s+(\d+)\s", data)
+    if not head:
         raise ValueError("not a binary PPM")
-    width, height, maxval = int(parts[1]), int(parts[2]), int(parts[3])
+    width, height, maxval = map(int, head.groups())
     if maxval != 255:
         raise ValueError("16 bit PPM")
-    pixels = np.frombuffer(parts[4][: width * height * 3], dtype=np.uint8)
+    pixels = np.frombuffer(data, dtype=np.uint8, count=width * height * 3, offset=head.end())
     return pixels.reshape(height, width, 3)
 
 

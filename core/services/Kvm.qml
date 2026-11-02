@@ -69,13 +69,13 @@ Singleton {
 			if (topic !== "kvm") return;
 			if (name === "away") {
 				// in the hand: the mouse is on this PC, so the jump is felt here
-				Haptics.play("mouseAway", "open");
+				Haptics.play("mouseAway");
 				if (!root.told) {
 					root.told = true;
 					Notifs.pushInternal("done", `Mouse on ${data.name}`, data.keyboard ? "The keyboard types there too · Ctrl+Alt+Esc brings both back" : "Ctrl+Alt+Esc brings it back", { icon: "mouse", duration: 3000 });
 				}
 			} else if (name === "home") {
-				Haptics.play("mouseHome", "close");
+				Haptics.play("mouseHome");
 				if (data.reason === "lost") Notifs.pushInternal("error", "Mouse back", `The link to ${data.name} is gone`, { icon: "mouse" });
 			} else if (name === "failed") {
 				Notifs.pushInternal("error", `The mouse stays here`, `${data.name}: ${data.message}`, { icon: "mouse" });

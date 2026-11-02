@@ -1,0 +1,3 @@
+#!/bin/sh
+# Pshell Editor: pe [file[:line[:col]]...], pe --scratch
+exec python3 "$(dirname "$(readlink -f "$0")")/../../scripts/editor/app.py" "$@"

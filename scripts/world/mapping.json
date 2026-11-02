@@ -1,0 +1,17 @@
+{
+	"realms": ["tickets", "git", "screentime", "todos", "boots"],
+	"forest": ["screentime", "mail", "boots"],
+	"water": ["water", "activity"],
+	"rest": ["breaks", "screentime-gaps", "hours"],
+	"storms": ["headaches", "pressure"],
+	"mist": ["sleep", "long-days"],
+	"meetings": ["calendar"],
+	"letters": ["mail"],
+	"monuments": ["git"],
+	"games": ["games"],
+	"theatre": ["streams"],
+	"forge": ["printer"],
+	"ships": ["downloads"],
+	"wilderness": ["screentime-untracked"],
+	"gitRoots": ["~/Projects", "~/.config/quickshell/shell"]
+}

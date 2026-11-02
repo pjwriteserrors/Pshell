@@ -9,6 +9,7 @@ Clickable {
 	property string icon: ""
 	property real iconSize: Math.round(root.height * 0.5)
 	property string variant: "ghost" // ghost | tonal | filled | danger
+	sound: root.variant === "danger" ? "danger" : "iconTap"
 	property bool checked: false
 	property color iconColor: {
 		if (root.variant === "filled" || root.checked)

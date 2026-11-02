@@ -27,6 +27,7 @@ import qs.core.views.torrents
 import qs.core.views.streams
 import qs.core.views.tray
 import qs.core.views.tracking
+import qs.core.views.world
 import qs.core.views.vm
 import qs.core.views.watch
 // last, so a view of the same name in style/views wins
@@ -545,5 +546,17 @@ Scope {
 		active: Plugins.on("rpg")
 
 		Rpg {}
+	}
+
+	LazyLoader {
+		active: Plugins.on("world") && World.windowLoaded
+
+		WorldWindow {}
+	}
+
+	Variants {
+		model: Plugins.on("world") && World.wallpaperLoaded ? Quickshell.screens : []
+
+		WorldWallpaper {}
 	}
 }
