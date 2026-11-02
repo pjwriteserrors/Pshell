@@ -3,7 +3,7 @@
 A role of the world (mapping.json) lists providers in order of preference; the
 first whose plugins are on and which has data takes the role. So without the
 timer, towns grow from focus blocks (screentime: time on one workspace without
-a pause, leisure left out), then from finished todos, and at the very least
+a pause), a town per hobby (`hobbies` in the mapping), then from finished todos, and at the very least
 from the hours the machine was up; the forest grows from pauses away from it.
 
 A world starts on a day (world-start.json, today when it is missing, again
@@ -192,14 +192,19 @@ def realms_screentime(_mapping):
 	return out
 
 
-def leisure_of(mapping):
-	pattern = "|".join(mapping.get("leisure", []))
-	return re.compile(pattern, re.I) if pattern else None
+def hobby_of(mapping):
+	"""(app, place, title) → the town of the first hobby that matches, else the place."""
+	hobbies = [(name, re.compile(pattern, re.I)) for name, pattern in mapping.get("hobbies", [])]
+
+	def hobby(app, place, title):
+		text = f"{app}\n{place}\n{title}"
+		return next((name for name, pattern in hobbies if pattern.search(text)), None)
+	return hobby
 
 
 def realms_focus(mapping):
-	"""A house per focus block, the town what had most of it; leisure builds nothing."""
-	leisure = leisure_of(mapping)
+	"""A house per focus block, in the town of its hobby; the plot is what it was spent on."""
+	hobby = hobby_of(mapping)
 	out = defaultdict(list)
 	for day, data in screentime().items():
 		for block in data.get("blocks") or []:
@@ -207,10 +212,10 @@ def realms_focus(mapping):
 				start, minutes, app, place, title = block[:5]
 			except (TypeError, ValueError):
 				continue
-			if leisure and leisure.search(f"{app}\n{place}\n{title}"):
-				continue
 			place = str(place or app or "Desktop")
-			out[day].append({"realm": place, "realmKey": f"f{norm(place)}", "plot": str(title or place)[:80], "key": f"f{norm(place)}/{norm(title)[:40]}",
+			town = hobby(app, place, title) or place
+			plot = re.sub(r"\s+[-—–·|]\s+(YouTube|Twitch|Discord|Ablaze Floorp|Mozilla Firefox|Floorp)$", "", str(title or place)).strip() or place
+			out[day].append({"realm": town, "realmKey": f"f{norm(town)}", "plot": plot[:80], "key": f"f{norm(town)}/{norm(plot)[:40]}",
 			                 "bill": int(minutes), "other": 0, "at": int(start) // 1000})
 	return out
 
@@ -481,7 +486,7 @@ def gather(mapping_path=HERE / "mapping.json", restart=False):
 		ledger = {"_since": first}
 	result = {}
 	for role, names in mapping.items():
-		if role in ("realms", "forest", "gitRoots", "leisure"):
+		if role in ("realms", "forest", "gitRoots", "hobbies"):
 			continue
 		chosen = {}
 		for name, data in available(names, plugins, table):

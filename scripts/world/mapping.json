@@ -14,5 +14,14 @@
 	"ships": ["downloads"],
 	"wilderness": ["screentime-untracked"],
 	"gitRoots": ["~/Projects", "~/.config/quickshell/shell"],
-	"leisure": ["youtube", "twitch", "netflix", "disney", "primevideo", "crunchyroll", "reddit", "instagram", "tiktok", "discord", "whatsapp", "telegram", "spotify", "steam", "lutris", "heroic", "Streams$", "mpv", "vlc", "celluloid", "jellyfin", "plex", "9gag"]
+	"hobbies": [
+		["Games", "steam_app_|gamescope|\\.exe\\b|^bg3|looking-glass|lutris|heroic|retroarch|minecraft|prism|\\bGames\\b"],
+		["Watching", "youtube|twitch|netflix|disney|primevideo|crunchyroll|Streams$|\\bmpv\\b|\\bvlc\\b|celluloid|jellyfin|plex"],
+		["Chatting", "discord|whatsapp|telegram|signal|element|\\bMessages\\b"],
+		["Music", "spotify|soundcloud|bandcamp|\\bLyrics\\b"],
+		["Printing", "orca|slicer|bambu|kobra|anycubic|printables|thingiverse"],
+		["Making", "pinta|gimp|krita|blender|inkscape|darktable|kdenlive|audacity|wordcraft|artcraft|storyteller"],
+		["Tinkering", "kitty|alacritty|foot|\\bzed\\b|code|nvim|vim|obsidian|virt-manager|github|gitlab|archlinux|Pshell|org.quickshell"],
+		["Wandering", "floorp|firefox|chromium|tor browser|librewolf|brave"]
+	]
 }

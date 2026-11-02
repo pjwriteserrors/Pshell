@@ -704,7 +704,8 @@ what its people build. `scripts/world/mapping.json` says which source fills whic
 role, first enabled plugin with data wins (`sources.py`), so the world does not
 need the timer. Without it towns grow from focus blocks (`Screentime.blocks`: 25
 minutes and more on one workspace without a pause, a look elsewhere under two
-minutes does not break one; what `leisure` in the mapping matches builds nothing)
+minutes does not break one; each builds in the town of its hobby, `hobbies` in
+the mapping, first pattern that matches app, place or title)
 and the forest from pauses away from the screen (`Screentime.pauses`, 5 minutes
 and more within a day). A world begins on the day in
 `~/.local/state/pshell/world-start.json`; nothing from before counts, and

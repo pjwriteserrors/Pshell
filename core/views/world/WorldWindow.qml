@@ -353,8 +353,11 @@ FloatingWindow {
 			Row {
 				spacing: Theme.gap.lg
 
-				StyledText { text: `Billable ${root.hours((root.plot ?? root.day)?.bill ?? 0)}` }
-				StyledText { text: `Other ${root.hours((root.plot ?? root.day)?.other ?? 0)}`; color: Theme.textMuted }
+				// tickets are billed; otherwise it is time in focus and time away
+				readonly property bool billed: root.world?.used?.realms === "tickets"
+
+				StyledText { text: `${parent.billed ? "Billable" : "Focused"} ${root.hours((root.plot ?? root.day)?.bill ?? 0)}` }
+				StyledText { text: `${parent.billed ? "Other" : "Away"} ${root.hours((root.plot ?? root.day)?.other ?? 0)}`; color: Theme.textMuted }
 			}
 
 			Row {
