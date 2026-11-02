@@ -137,12 +137,26 @@ Item {
 					variant: "tonal"
 					onActivated: Streams.updateSeries(root.item.id, { status: "active", keepGoing: true })
 				}
+				// not followed any more: back among the suggestions in Explore,
+				// what was watched stays
 				TextButton {
-					text: "Delete series"
+					text: "Unfollow"
+					icon: "bell_off_outline"
+					variant: "ghost"
+					confirm: true
+					confirmText: "Back to Explore?"
+					onActivated: {
+						Streams.call("unfollowSeries", { id: root.item.id });
+						root.deleted();
+					}
+				}
+				// gone, and not suggested again
+				TextButton {
+					text: "Delete for good"
 					icon: "delete_outline"
 					variant: "ghost"
 					confirm: true
-					confirmText: "Delete it?"
+					confirmText: "Never suggest it again?"
 					onActivated: {
 						Streams.call("deleteSeries", { id: root.item.id });
 						root.deleted();

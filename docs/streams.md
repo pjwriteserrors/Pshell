@@ -119,6 +119,17 @@ series made from a suggestion takes all of them. Each series keeps its own list
 of channels: the channel chips in the workshop leave one out, and merging does
 not change a series that exists.
 
+On the Channels page merged channels are one card (`ChannelGroup`), named like the
+shortest of their names, with each channel in a line that can be split off or
+removed; notifications and the star are set for all of them. Channels with the
+same name, or one name the start of the other ("Yumi", "YumiLive"), are offered
+for merging above the wall; "Not the same" keeps a pair from coming back
+(`settings.notSameMaker`).
+
+A followed series can be unfollowed (`unfollowSeries`): it is no series any more
+and Explore offers it again at once; what was watched stays. "Delete for good"
+(`deleteSeries`) also dismisses the suggestions holding most of its videos.
+
 A Bluetooth headset plays sound late (the Avantree reports 189 ms) and QtMultimedia
 does not make up for it. So the sound goes through the same local server
 (`Daemon.sound_piece`), which moves each piece's ID3 timestamp earlier

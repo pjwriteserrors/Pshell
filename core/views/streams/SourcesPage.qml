@@ -40,10 +40,51 @@ Flickable {
 	Component.onCompleted: sync()
 
 	function sync() {
-		// merged channels stand next to each other
-		const place = item => (item.group ? Streams.groupOf(item.id)[0].name : item.name).toLowerCase();
-		const sorted = Streams.ownSources.slice().sort((a, b) => (b.favorite - a.favorite) || place(a).localeCompare(place(b)) || a.name.localeCompare(b.name));
-		rows.sync(sorted.map(item => ({ key: item.id })));
+		// merged channels are one card, named like their maker
+		const cards = [];
+		const seen = {};
+		for (const item of Streams.ownSources) {
+			if (!item.group) {
+				cards.push({ key: item.id, name: item.name, favorite: !!item.favorite });
+				continue;
+			}
+			if (seen[item.group]) continue;
+			const members = Streams.ownSources.filter(other => other.group === item.group);
+			seen[item.group] = true;
+			if (members.length < 2) cards.push({ key: item.id, name: item.name, favorite: !!item.favorite });
+			else cards.push({ key: `group:${item.group}`, name: Streams.makerName(members), favorite: members.some(other => other.favorite) });
+		}
+		cards.sort((a, b) => (b.favorite - a.favorite) || a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+		rows.sync(cards.map(card => ({ key: card.key })));
+	}
+
+	function mergeInto(id) {
+		Streams.call("mergeSources", { ids: [root.mergingFrom, id] });
+		root.mergingFrom = "";
+	}
+
+	// channels that look like one maker: the same name written together, or one
+	// name the start of the other ("Yumi", "YumiLive"), on different cards
+	readonly property var sameMaker: {
+		const said = Streams.settings.notSameMaker ?? [];
+		const plain = item => String(item.name ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+		const card = item => item.group || item.id;
+		const own = Streams.ownSources.filter(item => item.kind === "youtube" || item.kind === "twitch");
+		const out = [];
+		const offered = {};
+		for (let i = 0; i < own.length; i += 1) {
+			for (let j = i + 1; j < own.length; j += 1) {
+				const a = own[i], b = own[j];
+				const x = plain(a), y = plain(b);
+				if (card(a) === card(b) || x.length < 4 || y.length < 4 || !(x === y || x.startsWith(y) || y.startsWith(x))) continue;
+				const key = [a.id, b.id].sort().join("|");
+				const pair = [card(a), card(b)].sort().join("|");
+				if (said.includes(key) || offered[pair]) continue;
+				offered[pair] = true;
+				out.push({ key, a, b });
+			}
+		}
+		return out;
 	}
 
 	Connections {
@@ -142,180 +183,107 @@ Flickable {
 			}
 		}
 
-		GridView {
+		// ── channels that look like one maker ───────────────────────────
+		Repeater {
+			model: root.mergingFrom === "" ? root.sameMaker : []
+
+			delegate: Rectangle {
+				id: hint
+
+				required property var modelData
+
+				Layout.fillWidth: true
+				Layout.preferredHeight: 52
+				radius: Theme.radius.large
+				color: Theme.layer1
+
+				RowLayout {
+					anchors.fill: parent
+					anchors.leftMargin: 12
+					anchors.rightMargin: 8
+					spacing: 12
+
+					Item {
+						Layout.preferredWidth: 50
+						Layout.preferredHeight: 30
+
+						Avatar {
+							width: 30
+							height: 30
+							source: hint.modelData.a.avatar ?? ""
+							name: hint.modelData.a.name ?? ""
+							colors: hint.modelData.a.colors ?? null
+						}
+						Avatar {
+							x: 20
+							width: 30
+							height: 30
+							source: hint.modelData.b.avatar ?? ""
+							name: hint.modelData.b.name ?? ""
+							colors: hint.modelData.b.colors ?? null
+						}
+					}
+					StyledText {
+						Layout.fillWidth: true
+						text: `${hint.modelData.a.name} (${Streams.sourceKind(hint.modelData.a).split(" · ")[0]}) and ${hint.modelData.b.name} (${Streams.sourceKind(hint.modelData.b).split(" · ")[0]}) look like one maker`
+						elide: Text.ElideRight
+					}
+					TextButton {
+						text: "Not the same"
+						variant: "ghost"
+						onActivated: Streams.setSetting("notSameMaker", [...(Streams.settings.notSameMaker ?? []), hint.modelData.key])
+					}
+					TextButton {
+						text: "Merge"
+						icon: "call_merge"
+						onActivated: Streams.call("mergeSources", { ids: [hint.modelData.a.id, hint.modelData.b.id] })
+					}
+				}
+			}
+		}
+
+		Flow {
 			id: wall
 
-			readonly property int columns: Math.max(2, Math.min(Math.floor(width / 230), Math.max(4, rows.count)))
+			readonly property int columns: Math.max(2, Math.floor(width / 230))
+			readonly property real cellWidth: Math.floor(width / wall.columns)
 
 			Layout.fillWidth: true
-			Layout.preferredHeight: Math.ceil(rows.count / wall.columns) * wall.cellHeight
-			interactive: false
-			cellWidth: Math.floor(width / wall.columns)
-			cellHeight: 244
-			model: rows
 
-			add: Transition {
-				ParallelAnimation {
-					SpatialAnim {
-						property: "scale"
-						from: 0.7
-						to: 1
-						duration: Motion.extraLong
-					}
-					Anim {
-						property: "opacity"
-						from: 0
-						to: 1
-					}
-				}
-			}
-			remove: Transition {
-				Anim {
-					property: "opacity"
-					to: 0
-					duration: Motion.short
-				}
-			}
-			displaced: Transition {
+			move: Transition {
 				SpatialAnim {
 					properties: "x,y"
 					duration: Motion.long
 				}
 			}
 
-			delegate: Item {
-				id: cell
+			Repeater {
+				model: rows
 
-				required property string key
-				readonly property var item: Streams.sourceById[cell.key] ?? null
-				readonly property var together: Streams.groupOf(cell.key).filter(other => other.id !== cell.key)
-				readonly property bool canTake: root.mergingFrom !== "" && root.mergingFrom !== cell.key && !cell.together.some(other => other.id === root.mergingFrom)
+				delegate: Loader {
+					id: slot
 
-				width: wall.cellWidth
-				height: wall.cellHeight
+					required property string key
+					readonly property bool merged: slot.key.startsWith("group:")
 
-				HoverHandler {
-					id: cellHover
-				}
+					width: slot.merged ? Math.min(2, wall.columns) * wall.cellWidth : wall.cellWidth
+					height: 244
+					sourceComponent: slot.merged ? groupCard : channelCard
 
-				Rectangle {
-					anchors.fill: parent
-					anchors.margins: 6
-					radius: Theme.radius.huge
-					color: root.mergingFrom === cell.key ? Theme.primaryContainer : (cellHover.hovered ? Theme.layer2 : Theme.layer1)
-					opacity: root.mergingFrom !== "" && root.mergingFrom !== cell.key && !cell.canTake ? 0.4 : 1
-					border.width: cell.canTake && cellHover.hovered ? 2 : 0
-					border.color: Theme.primary
+					Component {
+						id: channelCard
 
-					Behavior on color {
-						ColorAnim {}
-					}
-					Behavior on opacity {
-						Anim {}
-					}
-
-					ColumnLayout {
-						anchors.fill: parent
-						anchors.margins: 14
-						spacing: 6
-
-						Avatar {
-							Layout.alignment: Qt.AlignHCenter
-							Layout.preferredWidth: 84
-							Layout.preferredHeight: 84
-							source: cell.item?.avatar ?? ""
-							name: cell.item?.name ?? ""
-							colors: cell.item?.colors ?? null
-							live: cell.item?.live ?? false
-							scale: cellHover.hovered ? 1.08 : 1
-
-							Behavior on scale {
-								SpatialAnim {
-									duration: Motion.long
-								}
-							}
-						}
-						StyledText {
-							Layout.fillWidth: true
-							Layout.topMargin: 4
-							horizontalAlignment: Text.AlignHCenter
-							text: cell.item?.name ?? ""
-							font.pixelSize: Theme.size.title
-							font.weight: Font.Bold
-							elide: Text.ElideRight
-						}
-						StyledText {
-							Layout.fillWidth: true
-							horizontalAlignment: Text.AlignHCenter
-							text: {
-								const item = cell.item;
-								if (!item) return "";
-								if (item.error) return item.error;
-								if (item.loading) return item.loading;
-								if (cell.together.length > 0) return `Merged with ${cell.together.map(other => other.name).join(", ")}`;
-								const kind = ({ youtube: "YouTube", playlist: "Playlist", twitch: "Twitch", rss: "Feed" })[item.kind] ?? "";
-								return item.pattern || (item.kind === "twitch" ? kind : `${kind} · ${item.videos} videos`);
-							}
-							font.pixelSize: Theme.size.small
-							color: cell.item?.error ? Theme.warning : Theme.textMuted
-							elide: Text.ElideRight
-						}
-						Item {
-							Layout.fillHeight: true
-						}
-						Segmented {
-							Layout.fillWidth: true
-							Layout.preferredHeight: 28
-							options: [{ value: "all", label: "All" }, { value: "live", label: "Live" }, { value: "silent", label: "Silent" }]
-							current: cell.item?.notify ?? "live"
-							onSelected: value => Streams.updateSource(cell.key, { notify: value })
+						ChannelCard {
+							key: slot.key
+							page: root
 						}
 					}
+					Component {
+						id: groupCard
 
-					IconButton {
-						anchors.left: parent.left
-						anchors.top: parent.top
-						anchors.margins: 8
-						width: 30
-						height: 30
-						icon: cell.item?.favorite ? "star" : "star_outline"
-						checked: cell.item?.favorite ?? false
-						visible: cell.item?.kind !== "rss" && (cellHover.hovered || (cell.item?.favorite ?? false))
-						onClicked: Streams.updateSource(cell.key, { favorite: !cell.item.favorite })
-					}
-					TextButton {
-						anchors.right: parent.right
-						anchors.top: parent.top
-						anchors.margins: 8
-						visible: cellHover.hovered && root.mergingFrom === ""
-						text: ""
-						icon: "delete_outline"
-						variant: "ghost"
-						confirm: true
-						confirmText: "Remove?"
-						onActivated: Streams.call("removeSource", { id: cell.key })
-					}
-					IconButton {
-						anchors.left: parent.left
-						anchors.bottom: parent.bottom
-						anchors.margins: 8
-						anchors.bottomMargin: 44
-						width: 30
-						height: 30
-						visible: cellHover.hovered && root.mergingFrom === ""
-						icon: cell.together.length > 0 ? "call_split" : "call_merge"
-						onClicked: {
-							if (cell.together.length > 0) Streams.call("unmergeSource", { id: cell.key });
-							else root.mergingFrom = cell.key;
-						}
-					}
-					MouseArea {
-						anchors.fill: parent
-						visible: cell.canTake
-						cursorShape: Qt.PointingHandCursor
-						onClicked: {
-							Streams.call("mergeSources", { ids: [root.mergingFrom, cell.key] });
-							root.mergingFrom = "";
+						ChannelGroup {
+							key: slot.key
+							page: root
 						}
 					}
 				}

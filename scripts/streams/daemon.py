@@ -86,6 +86,8 @@ DEFAULTS = {
     "player": "app",         # app | mpv | browser
     "quality": 1080,
     "volume": 0.8,
+    # pairs of channels said not to be one maker ("id|id"), so they are not offered again
+    "notSameMaker": [],
     "sponsorBlock": True,
     "aiProvider": "ollama",  # ollama | claude | codex
     "aiModel": "",
@@ -174,6 +176,7 @@ class Daemon(extras.Extras):
         self.lists = queue.Queue() # whole lists: one request each, never behind the above
         self.listed = set()
         self.discovered = []
+        self.discovered_ids = {}
         self.discover_soon = False
         self.twitch_wake = threading.Event()
         self.listen_urls = {}
@@ -500,6 +503,7 @@ class Daemon(extras.Extras):
         dismissed = set(self.store.get_meta("dismissed-suggestions", []) or [])
         all_series = self.store.all("SELECT * FROM series")
         out = []
+        ids_of = {}
         groups = {}
         for source in self.store.all("SELECT * FROM source WHERE kind = 'youtube' AND hidden = 0 ORDER BY name COLLATE NOCASE"):
             groups.setdefault(source["grp"] or source["id"], []).append(source)
@@ -527,6 +531,7 @@ class Daemon(extras.Extras):
                 # followed for the most part: it stays only for the parts still open
                 if any(len(ids & members_) > 0.5 * len(ids) for members_ in taken) and all(part["followed"] for part in parts):
                     continue
+                ids_of[key] = ids
                 out.append({
                     "key": key, "source": source["id"], "sources": ids_, "sourceName": shown_name, "avatar": source["avatar"], "colors": colors, "name": found["name"], "kind": found["kind"], "rule": found["rule"],
                     "playlist": found.get("playlist", ""), "numbered": bool(found.get("numbered")), "detected": bool(found.get("detected")), "why": found["why"], "count": len(members), "seconds": sum(video["duration"] or 0 for video in members),
@@ -535,6 +540,8 @@ class Daemon(extras.Extras):
                 })
         out.sort(key=lambda item: -(item["newest"] or 0))
         self.discovered = out
+        # what each suggestion holds, for forgetting it with a deleted series
+        self.discovered_ids = ids_of
         self.note_new_series(out)
         self.changed()
 
@@ -2390,9 +2397,29 @@ class Daemon(extras.Extras):
         self.changed()
         return {}
 
+    def drop_series(self, series_id):
+        """The series goes; what was watched of its videos stays (`watch`).
+        {the videos it held}"""
+        held = {row["video"] for row in self.store.all("SELECT video FROM member WHERE series = ? AND state = 'sure'", series_id)}
+        self.store.run("DELETE FROM series WHERE id = ?", series_id)
+        self.store.run("DELETE FROM member WHERE series = ?", series_id)
+        return held
+
+    def unfollow_series(self, args):
+        """Not followed any more, but not forgotten: explore offers it again at once."""
+        self.drop_series(args["id"])
+        self.discover()
+        return {}
+
     def delete_series(self, args):
-        self.store.run("DELETE FROM series WHERE id = ?", args["id"])
-        self.store.run("DELETE FROM member WHERE series = ?", args["id"])
+        """Gone for good: the suggestion it came from does not come back either."""
+        held = self.drop_series(args["id"])
+        self.discover()
+        gone = [key for key, ids in self.discovered_ids.items() if held and len(ids & held) > 0.5 * min(len(ids), len(held))]
+        if gone:
+            dismissed = self.store.get_meta("dismissed-suggestions", []) or []
+            self.store.set_meta("dismissed-suggestions", [*dismissed, *gone])
+            self.discovered = [item for item in self.discovered if item["key"] not in gone]
         self.changed()
         return {}
 
@@ -2635,7 +2662,7 @@ class Daemon(extras.Extras):
         args = message
         table = {
             "add": self.add_source, "removeSource": self.remove_source, "updateSource": self.update_source, "createSeries": self.create_series, "updateSeries": self.update_series,
-            "deleteSeries": self.delete_series, "teach": self.teach, "series": self.series_detail, "preview": self.preview, "play": self.play, "playLive": self.play_live, "tonight": self.tonight,
+            "deleteSeries": self.delete_series, "unfollowSeries": self.unfollow_series, "teach": self.teach, "series": self.series_detail, "preview": self.preview, "play": self.play, "playLive": self.play_live, "tonight": self.tonight,
             "mark": self.mark, "recap": self.recap, "review": self.review, "secrets": self.secrets, "signin": self.twitch_signin, "importFollows": self.import_follows, "settings": self.set_settings, "playlists": self.source_playlists, "followDiscovery": self.follow_discovery, "followPart": self.follow_part, "resolve": self.resolve, "sheets": self.sheets_view, "sheet": self.sheet_op, "aiStatus": self.ai_status, "aiTest": self.ai_test, "editNote": self.edit_note, "addNote": self.add_note, "notes": self.notes, "removeNote": self.remove_note, "subtitles": self.subtitles, "searchSeries": self.search_series, "indexSeries": self.index_series, "together": self.together_op, "pipFrom": self.pip_from, "playerPosition": self.player_position, "playerClosed": self.player_closed, "feed": self.feed, "seriesParts": self.series_parts, "soundLead": self.sound_lead, "recapVideo": self.recap_video, "mergeSources": self.merge_sources, "unmergeSource": self.unmerge_source,
             **self.extra_ops(),
         }

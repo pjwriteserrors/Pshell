@@ -382,6 +382,19 @@ Singleton {
 		return group ? root.ownSources.filter(item => item.group === group) : (root.sourceById[id] ? [root.sourceById[id]] : []);
 	}
 
+	// "YouTube · 145 videos", "Twitch"
+	function sourceKind(item) {
+		const kind = ({ youtube: "YouTube", playlist: "Playlist", twitch: "Twitch", rss: "Feed" })[item?.kind] ?? "";
+		return item?.kind === "twitch" ? kind : `${kind} · ${item?.videos ?? 0} videos`;
+	}
+
+	// what a maker of several channels is called: the shortest of their names
+	// ("DougDoug" of DougDoug, DougDoug Clips, DougDougDoug)
+	function makerName(members) {
+		const names = (members ?? []).map(item => item.name).filter(name => !!name);
+		return names.sort((a, b) => a.length - b.length || a.localeCompare(b))[0] ?? "";
+	}
+
 	function updateSource(id, changes) {
 		root.call("updateSource", Object.assign({}, changes, { id: id }), root.report());
 	}
