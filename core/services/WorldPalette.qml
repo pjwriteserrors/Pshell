@@ -32,14 +32,14 @@ Singleton {
 			}
 		}
 		if (best !== null && bestScore >= root.threshold) {
-			const saturation = Math.max(target.hslSaturation * 0.75, Math.min(best.hslSaturation, target.hslSaturation * 1.15));
-			return Qt.hsla(best.hslHue, saturation, target.hslLightness, 1);
+			const delta = ((best.hslHue - target.hslHue + 1.5) % 1) - 0.5;
+			return Qt.hsla((target.hslHue + delta * 0.18 + 1) % 1, target.hslSaturation * 0.94, target.hslLightness, 1);
 		}
-		return Qt.tint(target, Qt.alpha(Theme.primary, mix === undefined ? 0.26 : mix));
+		return Qt.tint(target, Qt.alpha(Theme.primary, mix === undefined ? 0.045 : mix));
 	}
 
-	readonly property color deep: Qt.darker(root.natural("#135a78"), 1.08)
-	readonly property color shallow: root.natural("#2f8f9f")
-	readonly property color grass: root.natural("#6fa84a")
+	readonly property color deep: root.natural("#244e60")
+	readonly property color shallow: root.natural("#69a79e")
+	readonly property color grass: root.natural("#81966a")
 	readonly property color roof: root.natural("#a5553f")
 }

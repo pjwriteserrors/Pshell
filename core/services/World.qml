@@ -186,9 +186,9 @@ Singleton {
 		const a = before.totals, b = fresh.totals;
 		const houses = b.houses - a.houses, trees = b.trees - a.trees, water = b.water - a.water;
 		const parts = [];
-		if (houses > 0) parts.push(`${houses} ${houses === 1 ? "Haus" : "Häuser"}`);
-		if (trees > 0) parts.push(`${trees} ${trees === 1 ? "Baum" : "Bäume"}`);
-		if (water > 0) parts.push(`${water * 250} ml Wasser`);
+		if (houses > 0) parts.push(`${houses} ${houses === 1 ? "house" : "houses"}`);
+		if (trees > 0) parts.push(`${trees} ${trees === 1 ? "tree" : "trees"}`);
+		if (water > 0) parts.push(`${water * 250} ml water`);
 		const last = fresh.days[fresh.days.length - 1];
 		if (parts.length > 0 && last) root.announce("capital", parts.join(" · "), last.focus);
 	}
@@ -220,7 +220,7 @@ Singleton {
 	Connections {
 		target: Plugins.on("breaks") ? Breaks : null
 		function onWaterMlChanged() {
-			root.announce("water", `${(Breaks.waterMl / 1000).toFixed(2).replace(".", ",")} l Wasser`);
+			root.announce("water", `${(Breaks.waterMl / 1000).toFixed(2)} l water`);
 			root.grow();
 		}
 		function onTodayEntryChanged() {

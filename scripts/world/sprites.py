@@ -12,7 +12,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter
 
-VERSION = 27
+VERSION = 34
 OVER = 3        # drawn this much too big
 FINAL = 6       # kept at this many pixels per world unit, for looking into a city
 K = OVER * FINAL
@@ -21,7 +21,7 @@ ROOFS = ["#b4553a", "#4f6d8f", "#5f7d45", "#7d4f7f", "#c08a35", "#3f8580", "#944
 WALLS = ["#ead9b8", "#dcc7a2", "#e6d6c6"]
 SEASONS = {
 	"spring": [("#6fae4d", "#8fce5f", "#4c8a3b"), ("#79b555", "#a3d86c", "#578f3f")],
-	"summer": [("#4c8f3f", "#68ad4b", "#34702f"), ("#3f8440", "#5ba24b", "#2c6731")],
+	"summer": [("#658754", "#94ac6a", "#3f6547"), ("#476f59", "#78977a", "#315246")],
 	"autumn": [("#c9832e", "#e8ab42", "#9c5f26"), ("#b9552c", "#dd7b38", "#8c3f26"), ("#a9a03a", "#cdc14c", "#7f7a2d")],
 	"winter": [("#6f8f7b", "#a9c0b0", "#4f6f62"), ("#7c9a86", "#c0d2c4", "#587868")],
 }
@@ -63,10 +63,12 @@ def natural(value):
 		if sat < .12:
 			mix = .05
 		elif best and score >= .5:
-			out = tuple(round(c * 255) for c in colorsys.hls_to_rgb(best[0], light, max(sat * .75, min(best[1], sat * 1.15))))
+			# A restrained tint preserves material identity across shell themes.
+			delta = (best[0] - hue + .5) % 1 - .5
+			out = tuple(round(c * 255) for c in colorsys.hls_to_rgb((hue + delta * .18) % 1, light, sat * .94))
 			mix = 0
 		else:
-			mix = .16
+			mix = .045
 		if mix and PRIMARY:
 			out = tuple(round(a + (p - a) * mix) for a, p in zip(value, PRIMARY))
 	_seen[value] = out
@@ -133,8 +135,8 @@ class Sheet:
 		self.shadow_draw.polygon(self.pts(points), fill=strength)
 
 	def finish(self):
-		soft = self.shadows.filter(ImageFilter.GaussianBlur(self.k * 1.1))
-		out = Image.new("RGBA", self.image.size, (22, 30, 28, 0))
+		soft = self.shadows.filter(ImageFilter.GaussianBlur(self.k * .75))
+		out = Image.new("RGBA", self.image.size, (33, 43, 40, 0))
 		out.putalpha(soft)
 		out.alpha_composite(self.image)
 		out = out.resize((self.width * FINAL, (self.up + self.down) * FINAL), Image.LANCZOS)
@@ -189,6 +191,15 @@ def draw(art):
 
 
 def key_of(art):
+	# These builders intentionally expose a bounded, deterministic variant set.
+	# Share their disk renders across plots with different historical IDs.
+	art = list(art)
+	name = art[0]
+	if name == "house": art[3] = int(art[3]) % 8
+	elif name in ("oak", "birch", "pine"): art[2] = int(art[2]) % 12
+	elif name in ("palm", "great_tree"): art[1] = int(art[1]) % 6
+	elif name in ("rock", "mountain", "ruin") and len(art)>1: art[1] = int(art[1]) % 12
+	elif name in ("ferns", "reeds", "fallen_log", "dead_tree", "shrine", "lantern_post"): art[1] = int(art[1]) % 8
 	parts = []
 	for value in art:
 		parts.append(value["name"] if isinstance(value, dict) else str(value))

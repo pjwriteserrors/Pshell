@@ -40,7 +40,7 @@ import prefabs as kit
 import sources
 import sprites
 
-VERSION = 24
+VERSION = 31
 PITCH = 16                 # world units between two lots
 FLAT = .52                 # a circle on the ground, on screen
 STEP = 9                   # how much higher each level of a town stands
@@ -121,6 +121,7 @@ class World:
 		self.credit = defaultdict(float)
 		self.ships = []
 		self.city_walls = []
+		self.city_roads, self.city_lanes = [], []
 
 	plans = None
 
@@ -431,7 +432,7 @@ class World:
 			self.water.append({"lot": lot, "day": day, "river": True})
 			plan["drawn"].append(lot)
 			if not plan["path"]:
-				self.thing(lambda: kit.spring_head(0), plan["head"], day, kind="deco", amount=.1)
+				# Actual springs are placed by terrain routing, not at arbitrary sea endpoints.
 				self.water_plan = None
 
 	def plan_water(self, near):
@@ -615,6 +616,10 @@ def dress_towns(world):
 	for realm in sorted(world.realm_list, key=lambda r: -r["own"]):
 		if realm["own"] >= CITY_HOUSES:
 			plan_city(world, realm, [item for item in houses if item["realm"] == realm["index"]])
+	from settlements import diversify, enclose
+	for realm in world.realm_list:
+		diversify(world, realm)
+		enclose(world, realm)
 	for realm in world.realm_list:
 		own = [item for item in houses if item["realm"] == realm["index"]]
 		if len(own) < 3 or realm.get("plan"):
@@ -669,10 +674,10 @@ def house_style(realm, key):
 
 
 def house_art(realm, tier, key):
-	style = house_style(realm, key)
+	style, seed = realm.get("house_choices", {}).get(key, (house_style(realm, key), stable("h", *key) % 8))
 	if style == "house":
-		return kit.house(realm["culture"], tier, stable("h", *key) % 6)
-	return kit.fhouse(style, realm["culture"], tier, stable("h", *key) % 6)
+		return kit.house(realm["culture"], tier, seed)
+	return kit.fhouse(style, realm["culture"], tier, seed)
 
 
 def plan_city(world, realm, houses):
@@ -680,6 +685,9 @@ def plan_city(world, realm, houses):
 	count = len(houses)
 	level = seat_level(realm)
 	kind = choose_archetype(world, realm)
+	if kind != "isles":
+		from settlements import plan
+		return plan(world, realm, houses, kind)
 	shape = ARCHETYPES[kind]
 	step = shape["step"]
 	realm["styles"] = shape["houses"]
@@ -764,6 +772,12 @@ def plan_city(world, realm, houses):
 	ground = shape["ground"]
 	slots, gaps, spots, route, glows = [], [], [], [], []
 
+	def island_position(i, j, n, rx):
+		a = -math.pi / 2 + (j + (i % 2) * .5) * math.tau / n
+		a += (chance(realm["key"], "isle-angle", i, j) - .5) * .38
+		r = rx + (chance(realm["key"], "isle-radius", i, j) - .5) * 20
+		return hx + math.cos(a) * r, hz + math.sin(a) * r * FLAT
+
 	# the keep, on the highest ground
 	style = shape["keep"]
 	for item in world.things:
@@ -826,7 +840,7 @@ def plan_city(world, realm, houses):
 			n = max(4, int(math.tau * rx * .76 / 66))
 			for j in range(n):
 				a = -math.pi / 2 + (j + (i % 2) * .5) * math.tau / n
-				ix, iz = hx + math.cos(a) * rx, hz + math.sin(a) * rx * FLAT
+				ix, iz = island_position(i, j, n, rx)
 				lift = lift_of(i) + (stable(i, j) % 3) * 4
 				ir = 30
 				south = iz > hz
@@ -949,7 +963,7 @@ def plan_city(world, realm, houses):
 			count_ = max(4, int(math.tau * rx * .76 / 66))
 			for j in range(count_):
 				a = -math.pi / 2 + (j + (i % 2) * .5) * math.tau / count_
-				ix, iz = hx + math.cos(a) * rx, hz + math.sin(a) * rx * FLAT
+				ix, iz = island_position(i, j, count_, rx)
 				round_way(ix, iz - lift_of(i) - (stable(i, j) % 3) * 4, 24, 12, 7, 255)
 		streets_low = round_way(hx, hz + wall_rx * FLAT - 8, 12, 5, 5)
 		tie(gate_node, streets_low)
@@ -1080,6 +1094,50 @@ def add_walkers(world, people):
 			world.groups.append({"plot": plot["index"], "count": count, "first": plot["first"], "at": (own[0]["x"], own[0]["z"])})
 
 
+def dress_wilderness(world, ground):
+	"""Ecological detail around existing trees, kept clear of occupied plots."""
+	buildings = [(i["x"], i["z"]) for i in world.things if i["kind"] in ("house", "seat")]
+	trees = [i for i in world.things if i["kind"] == "tree"]
+	added = 0
+	for tree in trees:
+		seed = stable("understory", tree["lot"], tree["day"])
+		for j in range(2 if seed % 3 else 3):
+			a = chance(seed, j) * math.tau
+			x, z = tree["x"] + math.cos(a) * (5 + seed % 5), tree["z"] + math.sin(a) * 4
+			if any(math.hypot(x - bx, (z - bz) / FLAT) < 19 for bx, bz in buildings):
+				continue
+			wet = paint.sample_wet(ground, x, z)
+			if wet > .3:
+				continue
+			name = "reeds" if wet > .06 else "dead_tree" if (seed + j) % 37 == 0 else "fallen_log" if (seed + j) % 9 == 0 else "ferns"
+			world.things.append({"make": lambda n=name, s=seed % 8: (n, s), "x": x, "z": z, "day": tree["day"], "plot": None, "realm": tree["realm"], "kind": "ground", "lot": tree["lot"], "yaw": 0, "scale": 1.0})
+			added += 1
+			if added >= 450:
+				return
+
+
+def fit_boundaries_to_shore(world, ground):
+	"""Water is a natural rampart; do not build masonry through lakes or rivers."""
+	kept = []
+	for item in world.things:
+		if item["kind"] != "wall":
+			kept.append(item)
+			continue
+		art = item["make"]()
+		if art[0] not in ("kingdom_wall", "kingdom_post"):
+			kept.append(item)
+			continue
+		x, z = item["x"], item["z"]
+		if art[0] == "kingdom_wall":
+			dx, dz = float(art[1]), float(art[2])
+			points = ((x + dx * t / 8, z + dz * t / 8) for t in range(9))
+		else:
+			points = ((x, z),)
+		if all(paint.sample_wet(ground, px, pz) < .08 for px, pz in points):
+			kept.append(item)
+	world.things = kept
+
+
 def add_sea_life(world, ground):
 	extra = lambda art, x, z, day=0, kind="boat": world.things.append({"make": lambda: art, "x": x, "z": z, "day": day, "plot": None, "realm": None, "kind": kind, "lot": (0, 0), "yaw": 0, "scale": 1.0})
 	cx, cz = ground["width"] / 2 + ground["x0"], ground["height"] / 2 + ground["z0"]
@@ -1137,7 +1195,7 @@ def sample(field, x, z, x0, z0, scale):
 RIVER_ITEMS = 20  # every so much water drunk another river
 
 
-def carve_rivers(world, land, water, town, broad, shape, pos, scale, x0, z0, lw, lh):
+def carve_rivers(world, land, water, town, broad, shape, pos, scale, x0, z0, lw, lh, elevation):
 	"""Water runs: from the lakes, later from springs in the hills, down to the sea or into another
 	river, round the towns; the more is drunk the more rivers there are, and they widen on the way."""
 	count = min(9, (len(world.water) + RIVER_ITEMS - 1) // RIVER_ITEMS)
@@ -1147,6 +1205,7 @@ def carve_rivers(world, land, water, town, broad, shape, pos, scale, x0, z0, lw,
 	gh, gw = lh // cell + 1, lw // cell + 1
 	coarse = lambda field: np.asarray(Image.fromarray(np.asarray(field, dtype=np.float32), mode="F").resize((gw, gh), Image.BILINEAR), dtype=np.float32)
 	sea = coarse(land) < .5
+	relief = coarse(elevation)
 	lakes = coarse(water) > .5
 	price = 1 + (coarse(noise(shape, 24 * scale, 61, 4)) * .5 + .5) * 5 + coarse(town) * 7 + np.maximum(0, coarse(broad)) * 1.5
 	blocked = np.zeros((gh, gw), dtype=bool)
@@ -1154,7 +1213,14 @@ def carve_rivers(world, land, water, town, broad, shape, pos, scale, x0, z0, lw,
 	for plan in world.plans:
 		cx, cy = pos((plan["x"], plan["z"]))
 		rx = (plan["wall"] + 22) * scale / cell
-		blocked |= ((xs - cx / cell) / rx) ** 2 + ((ys - cy / cell) / (rx * FLAT)) ** 2 < 1
+		if plan.get("organic"):
+			for item in world.things:
+				if item.get("realm") == plan["realm"]["index"] and item.get("kind") in ("house", "seat"):
+					px, py = pos((item["x"], item["z"]))
+					br = (30 if item["kind"] == "seat" else 18) * scale / cell
+					blocked |= ((xs - px / cell) / br) ** 2 + ((ys - py / cell) / (br * FLAT)) ** 2 < 1
+		else:
+			blocked |= ((xs - cx / cell) / rx) ** 2 + ((ys - cy / cell) / (rx * FLAT)) ** 2 < 1
 	for lot, kind in world.lots.items():
 		if kind in ("house", "seat", "plaza"):
 			x, y = pos(to_xz(lot))
@@ -1203,7 +1269,9 @@ def carve_rivers(world, land, water, town, broad, shape, pos, scale, x0, z0, lw,
 				v, u = here[0] + dv, here[1] + du
 				if not (0 <= v < gh and 0 <= u < gw) or blocked[v, u]:
 					continue
-				step = price[v, u] * (1.41 if dv and du else 1) * (.3 if lakes[v, u] else 1)
+				# Prefer valleys and penalize climbs; the carved channel lowers the bed.
+				climb = max(0., float(relief[v, u] - relief[here]))
+				step = (price[v, u] + climb * 18) * (1.41 if dv and du else 1) * (.3 if lakes[v, u] else 1)
 				if cost + step < spent.get((v, u), 1e18):
 					spent[(v, u)] = cost + step
 					seen[(v, u)] = here
@@ -1235,7 +1303,9 @@ def carve_rivers(world, land, water, town, broad, shape, pos, scale, x0, z0, lw,
 
 
 def make_ground(world):
-	lots = [lot for lot, kind in world.lots.items() if kind != "planned"] or [(0, 0)]
+	# A river cuts existing land; it must not grow a thin peninsula along its route.
+	river_lots = {item["lot"] for item in world.water if item["river"]}
+	lots = [lot for lot, kind in world.lots.items() if kind != "planned" and lot not in river_lots] or [(0, 0)]
 	spots = [to_xz(lot) for lot in lots]
 	xs, zs = [p[0] for p in spots], [p[1] for p in spots]
 	pad = MARGIN * PITCH
@@ -1254,7 +1324,7 @@ def make_ground(world):
 		r = radius * PITCH * scale
 		for lot in items:
 			x, y = pos(to_xz(lot))
-			draw.ellipse((x - r, y - r, x + r, y + r), fill=1)
+			draw.ellipse((x - r, y - r * FLAT, x + r, y + r * FLAT), fill=1)
 		return np.asarray(image, dtype=np.float32)
 
 	land_mask = paint(lots, 1.85)
@@ -1274,7 +1344,7 @@ def make_ground(world):
 		if not item["river"]:
 			x, y = pos(to_xz(item["lot"]))
 			r = PITCH * 1.05 * scale
-			wet_draw.ellipse((x - r, y - r, x + r, y + r), fill=1)
+			wet_draw.ellipse((x - r, y - r * FLAT, x + r, y + r * FLAT), fill=1)
 	for path in world.rivers:
 		points = spline([pos(wobble(lot, .22)) for lot in path], 6)
 		if len(points) > 1:
@@ -1288,21 +1358,33 @@ def make_ground(world):
 		rx, ry = (plan["wall"] + 30) * scale, (plan["wall"] + 30) * FLAT * scale
 		ImageDraw.Draw(mask).ellipse((cx - rx, cy - ry, cx + rx, cy + ry), fill=1)
 		mask = blur(np.asarray(mask, dtype=np.float32), 2 * scale * 5)
-		water = water * (1 - np.clip(mask * 1.4, 0, 1))
 		land = np.maximum(land, np.clip(mask * 1.4, 0, 1))
+		if plan.get("organic"):
+			occupied = Image.new("F", (lw, lh), 0)
+			draw = ImageDraw.Draw(occupied)
+			for item in world.things:
+				if item.get("realm") == plan["realm"]["index"] and item.get("kind") in ("house", "seat"):
+					px, py = pos((item["x"], item["z"]))
+					r = (32 if item["kind"] == "seat" else 20) * scale
+					draw.ellipse((px-r, py-r*FLAT, px+r, py+r*FLAT), fill=1)
+			mask = np.clip(blur(np.asarray(occupied), max(.5, scale*3)) * 1.4, 0, 1)
+		water *= 1 - np.clip(mask * 1.4, 0, 1)
 		town = np.maximum(town, np.clip(mask * 1.4, 0, 1))
 
-	rivers = carve_rivers(world, land, water, town, broad, shape, pos, scale, x0, z0, lw, lh)
+	hills = (broad * .5 + .5) ** 1.5 * 26 * (1 - np.clip(town * 1.25, 0, 1)) + 5 + coast * 2.5
+	rim = np.clip(field - .5, 0, 1)
+	elevation = land * (hills * smooth(0, .7, rim + .22) + 1.5) - (1 - land) * 12
+	rivers = carve_rivers(world, land, water, town, broad, shape, pos, scale, x0, z0, lw, lh, elevation)
 	river_land = (rivers * (land > .5) * (water < .5)).astype(np.float32)
 	water = np.maximum(water, rivers)
 
 	# heights: flats where people live, rolling land elsewhere, under water below 0
-	hills = (broad * .5 + .5) ** 1.5 * 26 * (1 - np.clip(town * 1.25, 0, 1)) + 5 + coast * 2.5
-	rim = np.clip(field - .5, 0, 1)
-	height_field = land * (hills * smooth(0, .7, rim + .22) + 1.5) - (1 - land) * 12 - water * 11
+	height_field = elevation * (1 - water) - water * 4
 	height_field = blur(height_field.astype(np.float64), 1.1).astype(np.float32)
 
 	wet = np.clip((1 - land) + water, 0, 1)
+	# Smoothing a narrow channel must not lift its bed back above the water.
+	height_field = np.minimum(height_field, (1 - wet) * 80 - wet * 4).astype(np.float32)
 	return {"x0": x0, "z0": z0, "width": width, "height": height, "scale": scale, "field": height_field,
 	        "forest": forest, "town": town, "broad": broad, "wet": wet, "river": river_land, "height_at": lambda x, z: sample(height_field, x, z, x0, z0, scale)}
 
@@ -1392,7 +1474,7 @@ def road_scene(world, ground):
 	"""The ways of the land and of the towns, for the painter."""
 	roads = [spline(road["points"]) for road in world.roads]
 	points = [p for road in world.roads for p in road["points"]]
-	lanes = []
+	lanes = list(world.city_lanes)
 	for item in world.things:
 		if item["kind"] == "house" and item.get("density", 0) >= 2 and not item.get("city"):
 			realm = world.realm_list[item["realm"]]
@@ -1425,7 +1507,7 @@ def road_scene(world, ground):
 		if id(plan) not in linked and outside:
 			near = min(outside, key=lambda p: (p[0] - plan["gate"][0]) ** 2 + (p[1] - plan["gate"][1]) ** 2)
 			clipped.append([plan["gate"], near])
-	roads = clipped
+	roads = clipped + world.city_roads
 	return roads, lanes, plazas
 
 
@@ -1484,6 +1566,15 @@ def ways_on_roads(world, roads, ground):
 					run = []
 
 
+def asset_attachments(items, name):
+    points = []
+    for item in items:
+        art = item.get("art") or item["make"]()
+        for x, z in iso.attachments(art).get(name, ()):
+            points.append((item["x"] + x, item["z"] - item.get("lift", 0) + z))
+    return points
+
+
 def plan_cities(world, ground, lanes):
 	"""The towns worth a close look: the sharp picture's frame and how life moves there."""
 	x0, z0 = ground["x0"], ground["z0"]
@@ -1498,11 +1589,11 @@ def plan_cities(world, ground, lanes):
 		own = [item for item in world.things if item["realm"] == realm["index"] and item.get("city")]
 		spokes = [list(p) for p in realm.get("stalls", [])]
 		spokes += plan["spots"]
-		smoke = [(item["x"] + 2, item["z"] - item.get("lift", 0) - 16 - item.get("tier", 1) * 3) for item in own if item["kind"] == "house"][:26]
+		smoke = asset_attachments(own, "smoke")[:26]
 		info = {"name": title(realm["name"]), "realm": realm["index"], "first": realm["first"], "x": round(gx - x0, 1), "z": round(gz - z0, 1), "r": round(radius, 1), "people": min(80, 26 + realm["own"]),
 		        "spokes": [off(p) for p in spokes[:70]], "stairs": [off(p) for p in plan["route"]], "smoke": [off(p) for p in smoke], "mills": [],
-		        "centre": off((hx, hz - plan["top"] - 10)), "flag": off((hx, hz - plan["top"] - 62)) if plan["kind"] in ("hill", "canals", "bastide") else None, "planned": True,
-		        "nodes": realm.get("nodes"), "kind": plan["kind"], "glows": [off(p) for p in plan["glows"]], "keep": off((hx, hz - plan["top"]))}
+		        "centre": off((plan.get("keep", (hx, hz))[0], plan.get("keep", (hx, hz))[1] - plan["top"] - 10)), "flags": [off(p) for p in asset_attachments(own, "flags")], "planned": True,
+		        "nodes": realm.get("nodes"), "kind": plan["kind"], "glows": [off(p) for p in plan["glows"]], "keep": off(plan.get("keep", (hx, hz - plan["top"])))}
 		cities.append({"rect": (left, top, right - left, bottom - top), "info": info, "hash": ""})
 	for realm in sorted(world.realm_list, key=lambda r: -r["bill"])[:12]:
 		if not realm.get("square") or realm.get("plan"):
@@ -1519,23 +1610,19 @@ def plan_cities(world, ground, lanes):
 		for lane in lanes:
 			if abs(lane[1][0] - gx) < 2 and abs(lane[1][1] - gz) < 2:
 				spokes.append([lane[0][0], lane[0][1]])
-		smoke = [(item["x"] + 3, item["z"] - 14 - item.get("tier", 1) * 2.5) for item in own if item["kind"] == "house" and item.get("tier", 1) >= 1][:26]
+		smoke = asset_attachments(own, "smoke")[:26]
 		mills = [(item["x"], item["z"] - 19) for item in world.things if item["realm"] == realm["index"] and item["make"] and item["kind"] == "deco" and item["make"]()[0] == "windmill"][:6]
 		info = {"name": title(realm["name"]), "realm": realm["index"], "first": realm["first"], "x": round(gx - x0, 1), "z": round(gz - z0, 1), "r": round(radius, 1), "people": min(50, 14 + realm.get("own", 0)),
 		        "spokes": [[round(p[0] - x0, 1), round(p[1] - z0, 1)] for p in spokes[:40]],
 		        "stairs": [[round(gx - x0, 1), round(gz - radius * .6 - z0, 1)], [round(cx - x0, 1), round(cz + stairs * .9 - z0, 1)], [round(cx - x0, 1), round(cz - 12 - level * 6 - z0, 1)]] if level >= 2 else [],
 		        "smoke": [[round(p[0] - x0, 1), round(p[1] - z0, 1)] for p in smoke], "mills": [[round(p[0] - x0, 1), round(p[1] - z0, 1)] for p in mills],
-		        "nodes": realm.get("nodes"), "centre": [round(cx - x0, 1), round(cz - 16 - z0, 1)], "flag": [round(cx - x0, 1), round(cz - 56 - z0, 1)]}
+		        "nodes": realm.get("nodes"), "centre": [round(cx - x0, 1), round(cz - 16 - z0, 1)], "flags": [off(p) for p in asset_attachments(own, "flags")]}
 		cities.append({"rect": (left, top, right - left, bottom - top), "info": info, "hash": len(lanes) and str(sorted(map(str, lanes))[:0])})
 	return cities
 
 
-NAMED = {"tavern": "Taverne", "forge": "Schmiede", "arena": "Arena", "theatre": "Theater", "lighthouse": "Leuchtturm", "windmill": "Mühle", "ruin": "Ruine",
-         "elf_tower": "Elfenturm", "world_tree": "Weltenbaum", "tourney": "Turnier", "market": "Markt", "temple": "Tempel", "spring_head": "Quelle"}
-
-
 def labels_of(world, x0, z0):
-	"""A name for everything one can look at closely: the tickets, and what stands for itself."""
+	"""Only ticket-owned homes and trees receive map labels."""
 	out = []
 	seen = set()
 	for item in world.things:
@@ -1544,9 +1631,6 @@ def labels_of(world, x0, z0):
 			seen.add(item["plot"])
 			plot = world.plots[item["plot"]]
 			out.append([round(item["x"] - x0, 1), round(y + 4 - z0, 1), title(plot["name"]), plot["houses"] * 3 + plot["trees"] * .3, item["day"]])
-		name = NAMED.get(item["art"][0])
-		if name:
-			out.append([round(item["x"] - x0, 1), round(y + 5 - z0, 1), name, 3, item["day"]])
 	return out
 
 
@@ -1589,7 +1673,7 @@ def describe(world, records, ground, stamp, used, painted, cache):
 	        "groups": [{"plot": g["plot"], "count": g["count"], "first": g["first"], "node": g["node"], "x": round(g["at"][0] - x0, 1), "z": round(g["at"][1] - z0, 1)} for g in world.groups if g.get("node", -1) >= 0],
 	        "paths": {"nodes": [[round(p[0] - x0, 1), round(p[1] - z0, 1)] for p in world.path_nodes], "links": [sorted(links) for links in world.path_links], "lifts": world.path_lifts},
 	        "labels": labels_of(world, x0, z0),
-	        "mills": [[round(t["x"] - x0 - 1.6, 1), round(t["z"] - t.get("lift", 0) - 20 - z0, 1)] for t in world.things if t["art"][0] == "windmill"][:30],
+	        "mills": [[round(x - x0, 1), round(z - z0, 1)] for x, z in asset_attachments(world.things, "mills")][:30],
 	        "sprites": str(cache.dir), "boats": sea_lanes(ground),
 	        "totals": {"bill": sum(r["bill"] for r in records), "other": sum(r["other"] for r in records), "ml": sum(r["ml"] for r in records),
 	                   "houses": sum(1 for t in world.things if t["kind"] == "house"), "trees": sum(1 for t in world.things if t["kind"] == "tree"),
@@ -1645,6 +1729,8 @@ def main(argv):
 		world.spots["tavern"] = (tavern["x"], tavern["z"])
 	add_walkers(world, people)
 	ground = make_ground(world)
+	fit_boundaries_to_shore(world, ground)
+	dress_wilderness(world, ground)
 	add_sea_life(world, ground)
 	roads, lanes, plazas = road_scene(world, ground)
 	ways_on_roads(world, roads, ground)
@@ -1676,13 +1762,17 @@ def main(argv):
 	shutil.rmtree(current, ignore_errors=True)
 	building.rename(current)
 	(root / "current").write_text(str(current))
-	keep = {current.name, cache.dir.name, plates.name}
+	# QML swaps scenes asynchronously; retain the previous generation's textures.
+	previous = sources.read_json(root / "previous-assets.json", {})
+	keep = {current.name, cache.dir.name, plates.name, *previous.get("directories", [])}
+	previous_plates = set(previous.get("plates", []))
+	(root / "previous-assets.json").write_text(json.dumps({"directories": [current.name, cache.dir.name, plates.name], "plates": [city["plate"]["file"] for city in data["cities"]]}))
 	for old in root.iterdir():
 		if old.is_dir() and old.name not in keep and not old.name.startswith("."):
 			shutil.rmtree(old, ignore_errors=True)
 	wanted = {city["plate"]["file"] for city in data["cities"]}
 	for old in plates.iterdir():
-		if str(old) not in wanted:
+		if str(old) not in wanted and str(old) not in previous_plates:
 			old.unlink(missing_ok=True)
 	print(current)
 	return 0

@@ -30,7 +30,7 @@ FloatingWindow {
 	implicitWidth: 1500
 	implicitHeight: 940
 	minimumSize: Qt.size(900, 600)
-	color: "#0f4560"
+	color: WorldPalette.deep
 	visible: World.windowVisible
 	onClosed: World.hide()
 
@@ -41,7 +41,7 @@ FloatingWindow {
 
 	function dayLabel(day, withYear) {
 		const date = new Date(`${day}T00:00:00`);
-		return date.toLocaleDateString(Qt.locale("de_DE"), withYear ? "dddd, d. MMMM yyyy" : "ddd d. MMM");
+		return date.toLocaleDateString(Qt.locale("en_GB"), withYear ? "dddd, d MMMM yyyy" : "ddd d MMM");
 	}
 
 	function pickDay(index) {
@@ -170,13 +170,34 @@ FloatingWindow {
 
 	// ── the buttons ───────────────────────────────────────────────────────
 	Rectangle {
+		anchors.left: parent.left
+		anchors.top: parent.top
+		anchors.margins: Theme.gap.lg
+		width: atlasTitle.implicitWidth + 36
+		height: 66
+		radius: 14
+		color: Qt.alpha(Theme.bg, 0.9)
+		border.color: Qt.alpha(WorldPalette.shallow, 0.3)
+		visible: root.world !== null && !card.shown
+
+		Column {
+			id: atlasTitle
+			anchors.centerIn: parent
+			spacing: 4
+			StyledText { text: "YOUR ATLAS"; font.pixelSize: Theme.size.small; font.letterSpacing: 2; color: WorldPalette.shallow }
+			StyledText { text: `${root.days.length} days · ${root.plots.length} places`; color: Theme.text }
+		}
+	}
+
+	Rectangle {
 		anchors.top: parent.top
 		anchors.right: parent.right
 		anchors.margins: Theme.gap.lg
 		width: bar.implicitWidth + Theme.gap.md * 2
 		height: 46
 		radius: Theme.radius.large
-		color: Qt.alpha(Theme.bg, 0.82)
+		color: Qt.alpha(Theme.bg, 0.92)
+		border.color: Qt.alpha(WorldPalette.shallow, 0.3)
 		visible: root.world !== null
 
 		Row {
@@ -216,6 +237,16 @@ FloatingWindow {
 				icon: "wallpaper"
 				checked: World.wallpaper
 				onClicked: Plugins.toggle("world-wallpaper")
+			}
+			IconButton {
+				anchors.verticalCenter: parent.verticalCenter
+				icon: "minus"
+				onClicked: scene.zoomAt(scene.width / 2, scene.height / 2, 1 / 1.4)
+			}
+			IconButton {
+				anchors.verticalCenter: parent.verticalCenter
+				icon: "plus"
+				onClicked: scene.zoomAt(scene.width / 2, scene.height / 2, 1.4)
 			}
 		}
 	}
@@ -258,7 +289,8 @@ FloatingWindow {
 		width: 360
 		height: Math.min(cardColumn.implicitHeight + Theme.gap.lg * 2, parent.height - strip.height - Theme.gap.lg * 3)
 		radius: Theme.radius.large
-		color: Qt.alpha(Theme.bg, 0.88)
+		color: Qt.alpha(Theme.bg, 0.94)
+		border.color: Qt.alpha(WorldPalette.shallow, 0.3)
 		clip: true
 		opacity: card.shown ? 1 : 0
 		visible: opacity > 0
@@ -321,16 +353,16 @@ FloatingWindow {
 			Row {
 				spacing: Theme.gap.lg
 
-				StyledText { text: `Abrechenbar ${root.hours((root.plot ?? root.day)?.bill ?? 0)}` }
-				StyledText { text: `Sonstig ${root.hours((root.plot ?? root.day)?.other ?? 0)}`; color: Theme.textMuted }
+				StyledText { text: `Billable ${root.hours((root.plot ?? root.day)?.bill ?? 0)}` }
+				StyledText { text: `Other ${root.hours((root.plot ?? root.day)?.other ?? 0)}`; color: Theme.textMuted }
 			}
 
 			Row {
 				spacing: Theme.gap.lg
 				visible: root.day !== null && (root.day.ml > 0 || root.day.breaks > 0)
 
-				StyledText { text: root.day ? `${(root.day.ml / 1000).toFixed(2).replace(".", ",")} l Wasser` : "" }
-				StyledText { text: root.day ? `${root.day.breaks} Pausen` : ""; color: Theme.textMuted }
+				StyledText { text: root.day ? `${(root.day.ml / 1000).toFixed(2)} l water` : "" }
+				StyledText { text: root.day ? `${root.day.breaks} breaks` : ""; color: Theme.textMuted }
 			}
 
 			StyledText {
@@ -375,8 +407,8 @@ FloatingWindow {
 							elide: Text.ElideRight
 							text: {
 								const parts = [root.world?.realms?.[row.ticket?.realm ?? 0]?.name ?? ""];
-								if (row.modelData.houses > 0) parts.push(`${row.modelData.houses} Häuser`);
-								if (row.modelData.trees > 0) parts.push(`${row.modelData.trees} Bäume`);
+								if (row.modelData.houses > 0) parts.push(`${row.modelData.houses} houses`);
+								if (row.modelData.trees > 0) parts.push(`${row.modelData.trees} trees`);
 								return parts.join("  ·  ");
 							}
 						}

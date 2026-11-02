@@ -1,1983 +1,1148 @@
-"""The world's buildings and trees in true isometric view: tiled roofs tile by
-tile, half-timbering, gardens round the houses, crowns made of hundreds of leaves.
-Everything is painted once and kept on disk; a sprite costs nothing afterwards."""
+"""Atelier: a wholly new isometric asset library.
 
+Geometry is constructed in three dimensions, with surface-bound ornament and
+stable seeded variations. Only the sprite names and ground anchors are shared
+with the previous library. One warm north-west light unifies the miniatures.
+"""
+import hashlib
 import math
 import random
 
 import numpy as np
-
+from PIL import Image, ImageDraw, ImageFilter
 import sprites as sp
-from sprites import Sheet, shade, rgb
+from sprites import Sheet, rgb, shade
 
-LIGHT, DARK = .10, -.24   # left faces take the sun, right faces lie in shade
-
-
+TAU = math.tau
 CULTURES = {
-	"nordic": {"roof": "#7d6a4e", "wall": "log", "base": "#8a5f3c", "trim": "#4a3222"},
-	"alpine": {"roof": "#c9713a", "wall": "timber", "base": "#efe6d2", "trim": "#5a3a24"},
-	"southern": {"roof": "#c4623c", "wall": "plaster", "base": "#ead9b8", "trim": "#8a6a48"},
-	"hanse": {"roof": "#a5443a", "wall": "brick", "base": "#a8543f", "trim": "#e8dfc9"},
-	"eastern": {"roof": "#2f8a84", "wall": "plaster", "base": "#e8dfc9", "trim": "#7a4a30"},
-	"arcane": {"roof": "#5b4f93", "wall": "stone", "base": "#a9a59b", "trim": "#3f3a5a"},
+    'nordic': ('#a88661', '#3f625f', '#dac9a0', '#493e36'),
+    'alpine': ('#e8d6b4', '#aa5140', '#e9b85d', '#574338'),
+    'southern': ('#ecd7ae', '#c67e52', '#4d9290', '#715343'),
+    'hanse': ('#b27659', '#40556a', '#d6ad59', '#483b35'),
+    'eastern': ('#e1d6be', '#427d79', '#c75d45', '#4c4543'),
+    'arcane': ('#bdc1be', '#585a82', '#a7d8cd', '#44495d'),
 }
 
 
-def culture_of(name):
-	return CULTURES.get(name, CULTURES["alpine"])
-
-
-ALT_WALL = {"log": ("timber", "stone"), "timber": ("plaster", "brick"), "plaster": ("timber", "stone"), "brick": ("timber", "stone"), "stone": ("plaster", "timber")}
-
-
-class Iso(Sheet):
-	"""A sheet addressed in ground coordinates and height."""
-
-	@staticmethod
-	def p(x, y, h=0):
-		return (x - y, (x + y) * .5 - h)
-
-	def quad(self, points, fill):
-		self.poly([self.p(*point) for point in points], fill)
-
-	def ground_shadow(self, x0, y0, dx, dy, height, strength=110):
-		fall = height * .55
-		pts = [(x0, y0 + dy), (x0 + dx, y0 + dy), (x0 + dx, y0), (x0 + dx + fall, y0 + fall * .1), (x0 + dx + fall, y0 + dy + fall * .1), (x0 + fall, y0 + dy + fall * .1)]
-		self.shadow_poly([self.p(*point) for point in pts], strength)
-
-
-class Wide(Sheet):
-	"""For what is as large as a town: no finer than it will be kept."""
-
-	k = sp.FINAL
-
-
-class Face:
-	"""A quad on the sheet, addressed from 0 to 1 across and down."""
-
-	def __init__(self, sheet, a, b, c, d):
-		self.s, self.a, self.b, self.c, self.d = sheet, a, b, c, d
-
-	def at(self, u, v):
-		top = (self.a[0] + (self.b[0] - self.a[0]) * u, self.a[1] + (self.b[1] - self.a[1]) * u)
-		bottom = (self.d[0] + (self.c[0] - self.d[0]) * u, self.d[1] + (self.c[1] - self.d[1]) * u)
-		return (top[0] + (bottom[0] - top[0]) * v, top[1] + (bottom[1] - top[1]) * v)
-
-	def fill(self, color):
-		self.s.poly([self.a, self.b, self.c, self.d], color)
-
-	def poly(self, points, color):
-		self.s.poly([self.at(*point) for point in points], color)
-
-	def rect(self, u0, v0, u1, v1, color):
-		self.poly([(u0, v0), (u1, v0), (u1, v1), (u0, v1)], color)
-
-	def line(self, a, b, color, width=.3):
-		self.s.line([self.at(*a), self.at(*b)], color, width)
-
-
-def stone_face(face, base, rows, cols, rnd):
-	face.fill(shade(base, -.14))
-	for r in range(rows):
-		offset = .5 if r % 2 else 0
-		for c in range(-1, cols + 1):
-			u0, u1 = max(0, (c + offset) / cols + .006), min(1, (c + offset + 1) / cols - .006)
-			if u1 <= u0:
-				continue
-			face.rect(u0, r / rows + .012, u1, (r + 1) / rows - .012, shade(base, rnd.uniform(-.12, .1)))
-
-
-def wood_face(face, base, boards, rnd):
-	for i in range(boards):
-		tone = shade(base, rnd.uniform(-.16, .1))
-		face.rect(i / boards, 0, (i + 1) / boards, 1, tone)
-		face.line((i / boards, 0), (i / boards, 1), shade(base, -.34), .14)
-
-
-def log_face(face, base, rows, rnd):
-	for r in range(rows):
-		tone = shade(base, rnd.uniform(-.12, .08))
-		face.rect(0, r / rows, 1, (r + 1) / rows, tone)
-		face.rect(0, r / rows, 1, (r + .3) / rows, shade(tone, .14))
-		face.line((0, (r + 1) / rows), (1, (r + 1) / rows), shade(base, -.42), .16)
-
-
-def plaster_face(face, base, rnd):
-	face.fill(base)
-	for _ in range(40):
-		u, v = rnd.random(), rnd.random()
-		face.rect(u, v, min(1, u + rnd.uniform(.02, .07)), min(1, v + rnd.uniform(.01, .05)), (*shade(base, rnd.choice((-.06, .05)))[:3], 150))
-	face.rect(0, .9, 1, 1, shade(base, -.16))
-
-
-def timber_face(face, base, trim, rnd, length):
-	plaster_face(face, base, rnd)
-	bays = max(2, round(length / 3.4))
-	for i in range(bays + 1):
-		face.line((i / bays, 0), (i / bays, 1), trim, .5)
-	face.line((0, 0), (1, 0), trim, .55)
-	face.line((0, .5), (1, .5), trim, .42)
-	face.line((0, 1), (1, 1), trim, .6)
-	for i in range(bays):
-		if rnd.random() < .6:
-			if rnd.random() < .5:
-				face.line((i / bays, .5), ((i + 1) / bays, 1), trim, .34)
-			else:
-				face.line(((i + 1) / bays, 0), (i / bays, .5), trim, .34)
-
-
-def dress_wall(face, culture, rnd, length, height, tone=0):
-	base = shade(culture["base"], tone)
-	trim = shade(culture["trim"], tone)
-	kind = culture["wall"]
-	if kind == "log":
-		log_face(face, base, max(4, round(height / .9)), rnd)
-	elif kind == "timber":
-		timber_face(face, base, trim, rnd, length)
-	elif kind == "brick":
-		stone_face(face, base, max(5, round(height / .55)), max(4, round(length / 1.1)), rnd)
-	elif kind == "stone":
-		stone_face(face, base, max(4, round(height / 1)), max(3, round(length / 1.8)), rnd)
-	else:
-		plaster_face(face, base, rnd)
-		face.line((0, 0), (1, 0), trim, .4)
-
-
-def window(face, u, v, w, h, trim, shutters=True):
-	face.rect(u - w * .62, v - h * .58, u + w * .62, v + h * .62, trim)
-	face.rect(u - w * .5, v - h * .5, u + w * .5, v + h * .5, "#f3cf7a")
-	face.line((u, v - h * .5), (u, v + h * .5), trim, .14)
-	face.line((u - w * .5, v), (u + w * .5, v), trim, .14)
-	if shutters:
-		face.rect(u - w * 1.15, v - h * .5, u - w * .62, v + h * .5, shade(trim, .12))
-		face.rect(u + w * .62, v - h * .5, u + w * 1.15, v + h * .5, shade(trim, .12))
-
-
-def door(face, u, w, h, trim):
-	face.poly([(u - w * .62, 1), (u - w * .62, 1 - h), (u, 1 - h * 1.18), (u + w * .62, 1 - h), (u + w * .62, 1)], trim)
-	face.poly([(u - w * .46, 1), (u - w * .46, 1 - h * .92), (u, 1 - h * 1.08), (u + w * .46, 1 - h * .92), (u + w * .46, 1)], "#6a4128")
-	face.line((u, 1 - h * 1.05), (u, 1), "#3f2616", .14)
-
-
-def tiled(s, a, b, c, d, base, rows, cols, rnd):
-	"""A roof slope, a is the ridge's left end and d below it; each tile laid on its own."""
-	face = Face(s, a, b, c, d)
-	face.fill(shade(base, -.3))
-	for r in range(rows):
-		offset = .5 if r % 2 else 0
-		for i in range(-1, cols + 1):
-			u0, u1 = max(0, (i + offset) / cols), min(1, (i + offset + 1) / cols)
-			if u1 <= u0:
-				continue
-			v0, v1 = r / rows, (r + 1.12) / rows
-			tone = shade(base, rnd.uniform(-.13, .12))
-			face.poly([(u0 + .004, v0), (u1 - .004, v0), (u1 - .004, min(1, v1 - .02)), ((u0 + u1) / 2, min(1, v1)), (u0 + .004, min(1, v1 - .02))], tone)
-			face.line((u0, min(1, v1 - .02)), (u1, min(1, v1 - .02)), shade(tone, -.28), .1)
-	face.line((0, 0), (1, 0), shade(base, -.34), .34)
-	face.line((0, 0), (0, 1), shade(base, -.3), .28)
-	face.line((1, 0), (1, 1), shade(base, -.3), .28)
-	face.line((0, 1), (1, 1), shade(base, -.42), .3)
-
-
-def box(s, x, y, h, dx, dy, dz, color, top=None):
-	s.quad([(x, y + dy, h + dz), (x + dx, y + dy, h + dz), (x + dx, y + dy, h), (x, y + dy, h)], shade(color, LIGHT))
-	s.quad([(x + dx, y + dy, h + dz), (x + dx, y, h + dz), (x + dx, y, h), (x + dx, y + dy, h)], shade(color, DARK))
-	s.quad([(x, y, h + dz), (x + dx, y, h + dz), (x + dx, y + dy, h + dz), (x, y + dy, h + dz)], top or shade(color, .18))
-
-
-def wall_faces(s, x, y, h, dx, dy, dz):
-	p = s.p
-	left = Face(s, p(x, y + dy, h + dz), p(x + dx, y + dy, h + dz), p(x + dx, y + dy, h), p(x, y + dy, h))
-	right = Face(s, p(x + dx, y + dy, h + dz), p(x + dx, y, h + dz), p(x + dx, y, h), p(x + dx, y + dy, h))
-	return left, right
-
-
-def volume(s, culture, x, y, dx, dy, dz, rnd, axis="x", h=0, pitch=.62, over=.8, roof=None, windows=True, ground_door=None, cols=None):
-	"""Walls and a saddle roof along an axis, the end gable towards the viewer."""
-	roof = roof or culture["roof"]
-	p = s.p
-	left, right = wall_faces(s, x, y, h, dx, dy, dz)
-	dress_wall(left, culture, rnd, dx, dz, .03)
-	dress_wall(right, culture, rnd, dy, dz, -.2)
-	trim = culture["trim"]
-	span = dy if axis == "x" else dx
-	top = h + dz
-	rise = span * pitch
-	if axis == "x":
-		ym = y + dy / 2
-		tri = [p(x + dx, y + dy, top), p(x + dx, ym, top + rise), p(x + dx, y, top)]
-		s.poly(tri, shade(culture["base"], -.18))
-		tiled(s, p(x - over, ym, top + rise), p(x + dx + over, ym, top + rise), p(x + dx + over, y + dy + over, top - over * pitch), p(x - over, y + dy + over, top - over * pitch), shade(roof, .04), max(5, round(span * .75)), max(6, round(dx * 1.1)), rnd)
-		s.line([p(x + dx + over, y + dy + over, top - over * pitch), p(x + dx + over, ym, top + rise), p(x + dx + over, y - over, top - over * pitch)], shade(trim, -.05), .55)
-		gable = Face(s, p(x + dx, ym + .2, top + rise * .55), p(x + dx, ym - .2, top + rise * .55), p(x + dx, ym - .2, top + rise * .15), p(x + dx, ym + .2, top + rise * .15))
-	else:
-		xm = x + dx / 2
-		tri = [p(x, y + dy, top), p(xm, y + dy, top + rise), p(x + dx, y + dy, top)]
-		s.poly(tri, shade(culture["base"], .02))
-		tiled(s, p(xm, y + dy + over, top + rise), p(xm, y - over, top + rise), p(x + dx + over, y - over, top - over * pitch), p(x + dx + over, y + dy + over, top - over * pitch), shade(roof, -.14), max(5, round(span * .75)), max(6, round(dy * 1.1)), rnd)
-		s.line([p(x - over, y + dy + over, top - over * pitch), p(xm, y + dy + over, top + rise), p(x + dx + over, y + dy + over, top - over * pitch)], shade(trim, .05), .55)
-		gable = Face(s, p(xm - .5, y + dy, top + rise * .55), p(xm + .5, y + dy, top + rise * .55), p(xm + .5, y + dy, top + rise * .15), p(xm - .5, y + dy, top + rise * .15))
-	gable.rect(.1, .05, .9, .95, trim)
-	gable.rect(.22, .15, .78, .85, "#f3cf7a")
-	if windows:
-		storeys = max(1, round(dz / 3.6))
-		for n in range(storeys):
-			v = (n + .46) / storeys
-			count = max(1, round(dx / 3.8))
-			for i in range(count):
-				if ground_door is None or abs((i + .5) / count - ground_door) > .17 or n < storeys - 1:
-					window(left, (i + .5) / count, v, 1.05 / dx, 1.5 / dz, trim)
-			count = max(1, round(dy / 4))
-			for i in range(count):
-				window(right, (i + .5) / count, v, 1.0 / dy, 1.5 / dz, trim, shutters=False)
-	if ground_door is not None:
-		door(left, ground_door, 2 / dx, min(.8, 2.8 / dz), trim)
-	return left, right, top + rise
-
-
-def chimney(s, x, y, h, rnd, height=3.6):
-	box(s, x, y, h, 1.5, 1.5, height, "#9b6a52")
-	left, right = wall_faces(s, x, y, h, 1.5, 1.5, height)
-	stone_face(left, shade("#a4705a", .06), 6, 3, rnd)
-	stone_face(right, shade("#a4705a", -.22), 6, 3, rnd)
-	box(s, x - .2, y - .2, h + height, 1.9, 1.9, .5, "#857062", "#2f2a26")
-
-
-def dormer(s, culture, x, y, h, rnd, axis):
-	if axis == "x":
-		volume(s, culture, x, y, 2.3, 1.7, 1.5, rnd, axis="y", h=h, pitch=.7, over=.25, windows=False)
-		left, _ = wall_faces(s, x, y, h, 2.3, 1.7, 1.5)
-		window(left, .5, .46, .34, .5, culture["trim"], shutters=False)
-	else:
-		volume(s, culture, x, y, 1.7, 2.3, 1.5, rnd, axis="x", h=h, pitch=.7, over=.25, windows=False)
-		_, right = wall_faces(s, x, y, h, 1.7, 2.3, 1.5)
-		window(right, .5, .46, .34, .5, culture["trim"], shutters=False)
-
-
-# ── plants ──────────────────────────────────────────────────────────────────
-
-def leaves(s, rnd, cx, cy, rx, ry, colors, count, size=1.0):
-	"""A crown out of many small clumps, lit from the upper left."""
-	base, light, dark = colors
-	blobs = []
-	for _ in range(count):
-		a, d = rnd.uniform(0, math.tau), math.sqrt(rnd.random())
-		nx, ny = math.cos(a) * d, math.sin(a) * d
-		blobs.append((nx, ny))
-	blobs.sort(key=lambda b: (b[1] + b[0] * .2))
-	for pass_, grow in ((0, 1.25), (1, 1)):
-		for nx, ny in blobs:
-			lum = -nx * .45 - ny * .75 + rnd.uniform(-.28, .28)
-			x, y = cx + nx * rx, cy + ny * ry
-			r = rnd.uniform(.85, 1.5) * size * grow
-			if pass_ == 0:
-				s.oval(x, y + .35, r, r * .92, shade(dark, -.14))
-				continue
-			tone = light if lum > .28 else base if lum > -.25 else dark
-			tone = shade(tone, rnd.uniform(-.07, .07))
-			s.oval(x, y, r, r * .9, tone)
-			s.oval(x - r * .25, y - r * .28, r * .42, r * .34, shade(tone, .16))
-
-
-def bark(s, x, top, bottom, width, color, rnd):
-	s.poly([(x - width * .55, top), (x + width * .55, top), (x + width, bottom), (x + width * 1.6, bottom + .7), (x, bottom + .3), (x - width * 1.6, bottom + .7), (x - width, bottom)], color)
-	s.poly([(x + width * .1, top), (x + width * .55, top), (x + width, bottom), (x + width * .25, bottom + .4)], shade(color, -.26))
-	for _ in range(5):
-		u = rnd.uniform(-.4, .3) * width
-		y = rnd.uniform(top, bottom - 1)
-		s.line([(x + u, y), (x + u, y + rnd.uniform(.8, 1.8))], shade(color, -.34), .16)
-
-
-def oak(colors, seed):
-	rnd = random.Random(seed + 11)
-	size = 1 + seed % 3 * .12
-	s = Iso(36, 32, 7)
-	s.shadow(3, 1, 9 * size, 4.2 * size, 95)
-	bark(s, 0, -9, 0, 1.3 * size, "#5f4530", rnd)
-	for sign in (-1, 1):
-		s.line([(0, -7 * size), (sign * 4 * size, -11 * size)], "#553d2a", .8)
-	crown = -15.5 * size
-	for ox, oy, rx, ry, count in ((-3.6, 1.6, 6, 5, 62), (3.8, 1.8, 6, 5, 62), (0, -2.8, 7.4, 6.4, 110), (0, 2.2, 7.8, 4.8, 90)):
-		leaves(s, rnd, ox * size, crown + oy * size, rx * size, ry * size, colors, count)
-	return s.finish()
-
-
-def birch(colors, seed):
-	rnd = random.Random(seed + 41)
-	s = Iso(26, 34, 6)
-	s.shadow(2.5, 1, 6.5, 3.2, 100)
-	s.poly([(-.55, -14), (.55, -14), (.8, 0), (-.8, 0)], "#ebe7dc")
-	s.poly([(.05, -14), (.55, -14), (.8, 0), (.1, 0)], "#c5c1b6")
-	for _ in range(9):
-		y = rnd.uniform(-13, -1)
-		s.line([(-.7, y), (rnd.uniform(-.1, .5), y + .2)], "#3b3832", .2)
-	leaves(s, rnd, 0, -18, 5.2, 7.6, colors, 150, .78)
-	return s.finish()
-
-
-def pine(colors, seed):
-	rnd = random.Random(seed + 71)
-	base, light, dark = colors
-	s = Iso(26, 40, 5)
-	s.shadow(3, 1, 7, 3, 110)
-	s.rect(-.8, -4, 1.6, 4, "#533c2a")
-	tiers = 6 + seed % 2
-	for tier in range(tiers):
-		t = tier / (tiers - 1)
-		y, width, tall = -3 - t * 24, 8 - t * 6.2, 8 - t * 3
-		for _ in range(int(70 - t * 42)):
-			u = rnd.uniform(-1, 1)
-			top = y - tall * (1 - abs(u)) * rnd.uniform(.55, 1)
-			x = u * width * rnd.uniform(.7, 1)
-			end = y + rnd.uniform(-.4, 1)
-			tone = light if u < -.25 and rnd.random() < .5 else dark if u > .2 else base
-			s.poly([(x - .7, end), (x + .7, end), (x * .85, top)], shade(tone, rnd.uniform(-.1, .08)))
-	return s.finish()
-
-
-def bush(s, rnd, x, y, r=1.6, colors=("#4c8041", "#6fa453", "#34603a"), flowers=None):
-	leaves(s, rnd, x, y - r * .7, r, r * .85, colors, int(r * 11), .42)
-	if flowers:
-		for _ in range(int(r * 5)):
-			a, d = rnd.uniform(0, 6.28), rnd.random() ** .5
-			s.oval(x + math.cos(a) * d * r, y - r * .7 + math.sin(a) * d * r * .8, .26, .24, flowers)
-
-
-FLOWERS = ["#d9503f", "#e8a13a", "#c56fb0", "#f0e6d2", "#8f6fd0", "#e87f6a"]
-
-
-def yard(s, rnd, x, y, dx, dy, fenced=False):
-	"""The plot: a raised lawn with an edge, beds and a little path."""
-	p = s.p
-	s.quad([(x, y + dy, 0), (x + dx, y + dy, 0), (x + dx, y + dy, -.9), (x, y + dy, -.9)], "#4d6d36")
-	s.quad([(x + dx, y + dy, 0), (x + dx, y, 0), (x + dx, y, -.9), (x + dx, y + dy, -.9)], "#3f5c30")
-	s.quad([(x, y, 0), (x + dx, y, 0), (x + dx, y + dy, 0), (x, y + dy, 0)], "#6f9a4e")
-	for _ in range(int(dx * dy * .8)):
-		u, v = x + rnd.random() * dx, y + rnd.random() * dy
-		a = p(u, v)
-		s.line([a, (a[0] + rnd.uniform(-.3, .3), a[1] - .5)], rnd.choice(("#5f8a44", "#83ad5c", "#74a052")), .15)
-	if fenced:
-		for i in range(int(dx / 1.6) + 1):
-			a = p(x + i * 1.6, y + dy)
-			s.line([a, (a[0], a[1] - 1.3)], "#7b5c3e", .24)
-		s.line([p(x, y + dy, 1), p(x + dx, y + dy, 1)], "#8d6c4a", .2)
-
-
-# ── buildings ───────────────────────────────────────────────────────────────
-
-def house(culture_name, tier, seed):
-	rnd = random.Random(hash((culture_name, tier, seed)) & 0xffff)
-	culture = dict(culture_of(culture_name))
-	# no two alike: another wall here, a weathered roof there
-	culture["wall"] = (culture["wall"], ALT_WALL[culture["wall"]][0], culture["wall"], ALT_WALL[culture["wall"]][1], culture["wall"], culture["wall"])[seed % 6]
-	culture["base"] = {"log": "#8a5f3c", "timber": "#efe6d2", "plaster": culture["base"] if culture["wall"] == culture_of(culture_name)["wall"] else "#ead9b8", "brick": "#a8543f", "stone": "#a9a59b"}[culture["wall"]]
-	culture["roof"] = shade(culture["roof"], (-.14, .1, 0, -.06, .14, -.1)[(seed + tier) % 6])
-	tier = max(0, min(4, tier))
-	s = Iso(58, 38, 18)
-	dx, dy = 8 + tier * 1.2 + seed % 2 * 1.5, 6 + tier * .7
-	dz = 3.4 + tier * 1.25
-	pad = 3.4
-	x, y = -dx / 2, -dy / 2
-	s.shadow(2, 1.5, (dx + dy) * .85, (dx + dy) * .4, 60)
-	yard(s, rnd, x - pad, y - pad, dx + pad * 2, dy + pad * 2 + 1, fenced=seed % 3 == 0)
-	axis = "x" if seed % 2 == 0 else "y"
-	# what stands behind the house
-	for _ in range(2 + tier):
-		bush(s, rnd, *s.p(x - pad + rnd.random() * (dx + pad), y - pad + .6), rnd.uniform(1.1, 1.8))
-	s.ground_shadow(x, y, dx, dy, dz + 2, 120)
-	wing = tier >= 2 and seed % 3 != 1
-	if wing and axis == "x":
-		volume(s, culture, x + 1, y - 3, 4, 4, dz * .8, rnd, axis="y")
-	if wing and axis == "y":
-		volume(s, culture, x - 3, y + 1, 4, 4, dz * .8, rnd, axis="x")
-	ground = (.5 + (seed % 3 - 1) * .2)
-	if tier >= 3:
-		stone = dict(culture, wall="stone", base="#a59f92")
-		box(s, x, y, 0, dx, dy, 2.6, "#a59f92")
-		left, right = wall_faces(s, x, y, 0, dx, dy, 2.6)
-		stone_face(left, "#b0aa9c", 3, 6, rnd)
-		stone_face(right, "#8c8678", 3, 5, rnd)
-		door(left, ground, 2 / dx, .86, culture["trim"])
-		_, _, ridge = volume(s, culture, x, y, dx, dy, dz - 2.6, rnd, axis=axis, h=2.6, pitch=.72)
-		top = dz
-	else:
-		_, _, ridge = volume(s, culture, x, y, dx, dy, dz, rnd, axis=axis, pitch=.68, ground_door=ground)
-		top = dz
-	span = dy if axis == "x" else dx
-	rise = span * .68
-	# dormers sit on the slope that faces the viewer, then the chimney on the ridge
-	for i in range(0 if tier == 0 else 1 + (seed + tier) % 2 + (tier >= 3)):
-		along = .28 + i * .36
-		if axis == "x":
-			dormer(s, culture, x + dx * along - 1, y + dy * .68, top + rise * .32, rnd, "x")
-		else:
-			dormer(s, culture, x + dx * .68, y + dy * along - 1, top + rise * .32, rnd, "y")
-	if axis == "x":
-		chimney(s, x + dx * (.25 + seed % 3 * .22), y + dy / 2 - .5, top + rise * .74, rnd)
-	else:
-		chimney(s, x + dx / 2 - .5, y + dy * (.25 + seed % 3 * .22), top + rise * .74, rnd)
-	# the path from the door, the beds, the bushes in front
-	dist = (x + dx * ground, y + dy)
-	s.quad([(dist[0] - 1, dist[1], 0), (dist[0] + 1, dist[1], 0), (dist[0] + 1, y + dy + pad + 1, 0), (dist[0] - 1, y + dy + pad + 1, 0)], "#c6b48e")
-	for i in range(4):
-		v = dist[1] + i * .9 + .3
-		s.quad([(dist[0] - .9, v, 0), (dist[0] + .9, v, 0), (dist[0] + .9, v + .55, 0), (dist[0] - .9, v + .55, 0)], shade("#ab9a78", rnd.uniform(-.1, .1)))
-	for i in range(int(dx * .9)):
-		u = x + rnd.random() * dx
-		if abs(u - dist[0]) > 1.6:
-			bush(s, rnd, *s.p(u, y + dy + rnd.uniform(.5, 1.6)), rnd.uniform(.55, 1), flowers=rnd.choice(FLOWERS))
-	for i in range(int(dy * .7)):
-		bush(s, rnd, *s.p(x + dx + rnd.uniform(.6, 1.8), y + rnd.random() * dy), rnd.uniform(.55, .95), flowers=rnd.choice(FLOWERS))
-	for _ in range(1 + tier // 2):
-		bush(s, rnd, *s.p(x + dx + pad - 1, y + dy + pad - rnd.uniform(.5, 3)), rnd.uniform(1.2, 2))
-	return s.finish()
-
-
-def round_tower(s, x, y, h, r, tall, culture, rnd, roof=True, cone=None):
-	cx, cy = s.p(x, y, h)
-	stone = "#a9a397"
-	s.poly([(cx - r, cy), (cx - r, cy - tall), (cx + r, cy - tall), (cx + r, cy)], stone)
-	s.oval(cx, cy, r, r * .5, stone)
-	rows = max(3, int(tall / 1.15))
-	for row in range(rows):
-		v = cy - row * tall / rows
-		count = max(5, int(r * 2.2))
-		for i in range(count):
-			a0, a1 = (i + (row % 2) * .5) / count * math.pi, (i + (row % 2) * .5 + 1) / count * math.pi
-			u0, u1 = -math.cos(min(a0, math.pi)), -math.cos(min(a1, math.pi))
-			tone = shade(stone, (-(u0 + u1) / 2) * -.0 + (u0 + u1) / 2 * -.28 + rnd.uniform(-.08, .08))
-			y0 = v + math.sin(a0) * r * .5
-			y1 = v + math.sin(min(a1, math.pi)) * r * .5
-			s.poly([(cx + u0 * r, y0 - tall / rows + .1), (cx + u1 * r, y1 - tall / rows + .1), (cx + u1 * r, y1), (cx + u0 * r, y0)], tone)
-	top = cy - tall
-	s.oval(cx, top, r + .35, (r + .35) * .5, shade(stone, .1))
-	s.oval(cx, top, r - .3, (r - .3) * .5, shade(stone, -.25))
-	for i in range(7):
-		a = i / 7 * math.pi
-		px = cx - math.cos(a) * (r + .1)
-		s.rect(px - .4, top + math.sin(a) * r * .5 - 1.1, .8, 1.3, shade(stone, -(math.cos(a)) * -.2 + .04))
-	if rnd.random() < 2:
-		for i in range(max(1, int(tall / 7))):
-			wy = top + 3 + i * 6
-			s.rect(cx - r * .3 - .35, wy, .7, 1.4, "#2f2a26")
-			s.rect(cx - r * .3 - .22, wy + .1, .44, 1.2, "#f3cf7a")
-	if roof:
-		base = cone or culture["roof"]
-		height = r * 2.3
-		rows = max(4, int(height / 1.1))
-		for row in range(rows):
-			t0, t1 = row / rows, (row + 1) / rows
-			r0, r1 = (r + .9) * (1 - t0), (r + .9) * (1 - t1)
-			y0, y1 = top - height * t0, top - height * t1
-			count = max(3, int(r0 * 2))
-			for i in range(count):
-				u0, u1 = -1 + i * 2 / count, -1 + (i + 1) * 2 / count
-				tone = shade(base, (u0 + u1) / 2 * -.3 + rnd.uniform(-.1, .1))
-				bow = lambda u, rad: math.sqrt(max(0, 1 - u * u)) * rad * .5
-				s.poly([(cx + u0 * r1, y1 + bow(u0, r1)), (cx + u1 * r1, y1 + bow(u1, r1)), (cx + u1 * r0, y0 + bow(u1, r0)), (cx + u0 * r0, y0 + bow(u0, r0))], tone)
-		s.line([(cx, top - height), (cx, top - height - 3)], "#3f352b", .28)
-		s.poly([(cx, top - height - 3), (cx + 2.4, top - height - 2.4), (cx, top - height - 1.6)], "#c84b34")
-
-
-def keep_door(level):
-	big = 1 + max(0, level - 1) * .17
-	return (int(0), 22 * big * .5 + 4)
-
-
-def keep(culture_name, level, seed):
-	"""The stronghold: a great hall on a stone plinth with its towers behind and beside it."""
-	rnd = random.Random(seed * 13 + level)
-	culture = dict(culture_of(culture_name), wall="stone", base="#b3ad9f", trim="#4a3a2c")
-	big = 1 + max(0, level - 1) * .17
-	dx, dy = 18 * big, 30 * big
-	wall = 11 * big
-	s = Iso(int(110 * big) + 16, int(92 * big) + 8, int(32 * big))
-	x, y = -dx / 2, -dy / 2
-	pad = 5
-	s.shadow(6, 3, dx + 8, dy * .55, 80)
-	# the plinth
-	box(s, x - pad, y - pad, 0, dx + pad * 2, dy + pad * 2, 3.4, "#a39d90", "#8fae68")
-	left, right = wall_faces(s, x - pad, y - pad, 0, dx + pad * 2, dy + pad * 2, 3.4)
-	stone_face(left, "#b5afa1", 3, int((dx + pad * 2) / 2.2), rnd)
-	stone_face(right, "#8e8879", 3, int((dy + pad * 2) / 2.2), rnd)
-	if level >= 2:
-		round_tower(s, x - 1, y - 2, 3.4, 4.6 * big, 34 * big, culture, rnd)
-	if level >= 3:
-		round_tower(s, x + dx + 1, y - 3, 3.4, 3.6 * big, 25 * big, culture, rnd)
-		round_tower(s, x - 4, y + dy * .55, 3.4, 3.4 * big, 21 * big, culture, rnd)
-	_, _, _ = volume(s, culture, x, y, dx, dy, wall, rnd, axis="y", h=3.4, pitch=.85, over=1.4, windows=False)
-	left, right = wall_faces(s, x, y, 3.4, dx, dy, wall)
-	# tall windows along the hall, buttresses between them
-	bays = max(4, int(dy / 5))
-	for i in range(bays):
-		u = (i + .5) / bays
-		window(right, u, .42, .5 / bays, .46, "#3f352b", shutters=False)
-		if i:
-			at = y + dy - i * dy / bays
-			box(s, x + dx, at - .6, 3.4, 1.3, 1.2, wall * .78, "#a39d90")
-	portal = .5
-	left.poly([(.5 - .22, 1), (.5 - .22, .42), (.5, .16), (.5 + .22, .42), (.5 + .22, 1)], "#7d7568")
-	left.poly([(.5 - .15, 1), (.5 - .15, .48), (.5, .28), (.5 + .15, .48), (.5 + .15, 1)], "#3b2a1c")
-	left.line((.5, .3), (.5, 1), "#1f160e", .18)
-	for sign in (-1, 1):
-		left.rect(.5 + sign * .3 - .05, .18, .5 + sign * .3 + .05, .62, "#a63c2e")
-		left.poly([(.5 + sign * .3 - .05, .62), (.5 + sign * .3 + .05, .62), (.5 + sign * .3, .7)], "#a63c2e")
-	window(left, .5, .08, .1, .1, "#3f352b", shutters=False)
-	# a small spire on the ridge
-	if level >= 2:
-		xm = x + dx / 2
-		round_tower(s, xm, y + dy * .3, wall + 3.4 + dx * .85 * .55, 1.8 * big, 5, culture, rnd, cone=shade(culture["roof"], -.08))
-	for _ in range(int(14 * big)):
-		bush(s, rnd, *s.p(x - pad + rnd.random() * (dx + pad * 2), y + dy + pad - rnd.uniform(.3, 2), 3.4), rnd.uniform(.8, 1.3), flowers=rnd.choice(FLOWERS) if rnd.random() < .4 else None)
-	return s.finish()
-
-
-def temple(culture_name, seed):
-	rnd = random.Random(seed + 91)
-	culture = dict(culture_of(culture_name), wall="plaster", base="#e6dcc6", trim="#6a4a30")
-	s = Iso(70, 62, 14)
-	s.shadow(3, 2, 22, 10, 100)
-	x, y, dx, dy = -6, -11, 12, 22
-	box(s, x - 2, y - 2, 0, dx + 4, dy + 4, 1.1, "#b0aa9c", "#c7c0af")
-	round_tower(s, x + 1, y - 1.5, 1.1, 3.4, 26, culture, rnd)
-	volume(s, culture, x, y, dx, dy, 8, rnd, axis="y", h=1.1, pitch=.72)
-	left, _ = wall_faces(s, x, y, 1.1, dx, dy, 8)
-	door(left, .5, .3, .62, culture["trim"])
-	window(left, .5, .16, .16, .2, culture["trim"], shutters=False)
-	return s.finish()
-
-
-def tavern(culture_name, seed):
-	rnd = random.Random(seed + 7)
-	culture = culture_of(culture_name)
-	s = Iso(60, 40, 16)
-	yard(s, rnd, -12, -9, 24, 21)
-	s.shadow(3, 2, 16, 8, 100)
-	volume(s, culture, -9, -6, 18, 11, 7.5, rnd, axis="x", pitch=.68, ground_door=.42)
-	chimney(s, -3, -1, 7.5 + 3.5, rnd)
-	dormer(s, culture, -6, 2, 7.5 + 1.6, rnd, "x")
-	dormer(s, culture, 2, 2, 7.5 + 1.6, rnd, "x")
-	sx, sy = s.p(4, 6.2, 5)
-	s.line([(sx, sy), (sx + 2.2, sy)], "#3f2a1a", .3)
-	s.rect(sx + 1, sy, 1.8, 2, "#c9973a")
-	box(s, -7, 7.5, 0, 2.5, 1.2, 1.2, "#80593a")
-	box(s, 4, 7, 0, 2.5, 1.2, 1.2, "#80593a")
-	return s.finish()
-
-
-def stall(seed):
-	rnd = random.Random(seed + 200)
-	s = Iso(24, 15, 6)
-	s.shadow(1, .6, 7, 3.4, 90)
-	color = ("#a63c2e", "#2f6f8f", "#c9973a", "#5b7f46", "#7a4f9a", "#c0653a")[seed % 6]
-	box(s, -4.5, -2.2, 0, 9, 4.4, 2.2, "#8d6a48", "#a58259")
-	for _ in range(16):
-		a = s.p(rnd.uniform(-4, 4), rnd.uniform(-1.7, 1.7), 2.4)
-		s.oval(a[0], a[1], .5, .42, rnd.choice(("#d9503f", "#e8a13a", "#7fae4a", "#c0955f", "#f0e0a0", "#8f5fa8")))
-	for px, py in ((-4.6, 2.2), (4.6, 2.2), (4.6, -2.2)):
-		s.line([s.p(px, py, 0), s.p(px, py, 6.4)], "#5a3d28", .3)
-	stripes = 7
-	p = s.p
-	for i in range(stripes):
-		u0, u1 = -5 + i * 10 / stripes, -5 + (i + 1) * 10 / stripes
-		tone = color if i % 2 == 0 else "#f0e8d8"
-		s.poly([p(u0, -2.8, 7.6), p(u1, -2.8, 7.6), p(u1, 3, 5.4), p(u0, 3, 5.4)], shade(tone, .03))
-		s.poly([p(u0, 3, 5.4), p(u1, 3, 5.4), p(u1, 3, 4.5), ((p(u0, 3, 4.5)[0] + p(u1, 3, 4.5)[0]) / 2, (p(u0, 3, 4.5)[1] + p(u1, 3, 4.5)[1]) / 2 + .35), p(u0, 3, 4.5)], shade(tone, -.14))
-	return s.finish()
-
-
-def fountain(_seed):
-	rnd = random.Random(5)
-	s = Iso(38, 26, 12)
-	s.shadow(2, 1, 12, 6, 90)
-	stone = "#b8b2a4"
-	for y, r, c in ((.8, 11, shade(stone, -.2)), (0, 11, stone)):
-		s.oval(0, y, r, r * .5, c)
-	s.oval(0, -.3, 9.6, 4.8, "#3f89a8")
-	for _ in range(30):
-		a, d = rnd.uniform(0, 6.28), rnd.random() ** .5
-		s.oval(math.cos(a) * d * 9, -.3 + math.sin(a) * d * 4.4, rnd.uniform(.3, .9), .16, "#9fd8e8")
-	s.poly([(-1.1, -.5), (1.1, -.5), (.7, -7), (-.7, -7)], stone)
-	s.poly([(.1, -.5), (1.1, -.5), (.7, -7), (.1, -7)], shade(stone, -.2))
-	s.oval(0, -7, 4.2, 2.1, shade(stone, -.1))
-	s.oval(0, -7.3, 3.4, 1.7, "#4c9dbc")
-	s.poly([(-.5, -7), (.5, -7), (.3, -11), (-.3, -11)], stone)
-	s.oval(0, -11.4, 1, .9, shade(stone, .12))
-	return s.finish()
-
-
-def well(_seed):
-	rnd = random.Random(9)
-	culture = culture_of("alpine")
-	s = Iso(18, 14, 5)
-	s.shadow(1, .6, 5, 2.4, 80)
-	round_tower(s, 0, 0, 0, 2.6, 2.4, culture, rnd, roof=False)
-	for x in (-2.6, 2.6):
-		s.line([(x, -1), (x, -8)], "#5a3d28", .4)
-	tiled(s, (-3.6, -9.6), (3.6, -9.6), (3.6, -6.8), (-3.6, -6.8), culture["roof"], 3, 6, rnd)
-	return s.finish()
-
-
-def field(seed):
-	"""A vegetable patch or a little orchard row, in a raised bed."""
-	rnd = random.Random(seed + 301)
-	s = Iso(46, 8, 14)
-	dx, dy = 15, 11
-	x, y = -dx / 2, -dy / 2
-	s.quad([(x, y + dy, 0), (x + dx, y + dy, 0), (x + dx, y + dy, -.7), (x, y + dy, -.7)], "#5d4632")
-	s.quad([(x + dx, y + dy, 0), (x + dx, y, 0), (x + dx, y, -.7), (x + dx, y + dy, -.7)], "#4b3827")
-	s.quad([(x, y, 0), (x + dx, y, 0), (x + dx, y + dy, 0), (x, y + dy, 0)], "#7a5c40")
-	crop = (("#4c8041", "#6fa453", "#34603a"), ("#a89a3c", "#d0c052", "#7a7030"), ("#4c8041", "#7db05a", "#34603a"))[seed % 3]
-	fruit = ("#e8802c", None, "#d9503f")[seed % 3]
-	rows = 5
-	for r in range(rows):
-		yy = y + (r + .5) * dy / rows
-		s.line([s.p(x + .4, yy), s.p(x + dx - .4, yy)], "#5e4531", .3)
-		for i in range(int(dx / 1.5)):
-			bush(s, rnd, *s.p(x + .7 + i * 1.5, yy + .4), rnd.uniform(.55, .9), crop, fruit)
-	return s.finish()
-
-
-def hedge(seed):
-	rnd = random.Random(seed + 330)
-	s = Iso(16, 8, 4)
-	s.shadow(.6, .4, 5, 1.6, 70)
-	for i in range(5):
-		bush(s, rnd, -4 + i * 2, .4 - i * .1, rnd.uniform(1, 1.5))
-	return s.finish()
-
-
-def windmill(culture_name, seed):
-	"""A mill that is one: a tapered tower, a wooden cap, a gallery; the shell turns its sails."""
-	rnd = random.Random(seed + 77)
-	culture = culture_of(culture_name)
-	s = Iso(44, 34, 10)
-	s.shadow(2.5, 1.4, 11, 5, 80)
-	yard(s, rnd, -9, -9, 18, 18)
-	tall, bottom, top = 17, 6, 3.8
-	stone = "#cfc7b4"
-	rows = 12
-	for row in range(rows):
-		t0, t1 = row / rows, (row + 1) / rows
-		r0, r1 = bottom + (top - bottom) * t0, bottom + (top - bottom) * t1
-		y0, y1 = -t0 * tall, -t1 * tall
-		for i in range(8):
-			u0, u1 = -1 + i / 4, -1 + (i + 1) / 4
-			s.poly([(u0 * r0, y0 + math.sqrt(max(0, 1 - u0 * u0)) * r0 * .5), (u1 * r0, y0 + math.sqrt(max(0, 1 - u1 * u1)) * r0 * .5), (u1 * r1, y1 + math.sqrt(max(0, 1 - u1 * u1)) * r1 * .5), (u0 * r1, y1 + math.sqrt(max(0, 1 - u0 * u0)) * r1 * .5)], shade(stone, (u0 + u1) / 2 * -.28 + rnd.uniform(-.05, .05)))
-	s.oval(0, -8, 6.8, 3.2, "#6a4a30")
-	s.oval(0, -8.5, 6.6, 3, "#8d6a48")
-	s.poly([(-1, 2.8), (-1, -.4), (0, -1.4), (1, -.4), (1, 2.8)], "#5a3d28")
-	s.rect(-2.8, -13, 1.1, 1.6, "#f3cf7a")
-	roof = shade(culture["roof"], -.05)
-	for i in range(10):
-		u0, u1 = -1 + i / 5, -1 + (i + 1) / 5
-		s.poly([(0, -tall - 7), (u0 * (top + 1), -tall + math.sqrt(max(0, 1 - u0 * u0)) * (top + 1) * .5), (u1 * (top + 1), -tall + math.sqrt(max(0, 1 - u1 * u1)) * (top + 1) * .5)], shade(roof, (u0 + u1) / 2 * -.3 + rnd.uniform(-.06, .06)))
-	return s.finish()
-
-
-def forge(_seed):
-	rnd = random.Random(44)
-	culture = dict(culture_of("hanse"), wall="stone", base="#8e8a7e", roof="#5a4a42")
-	s = Iso(46, 32, 13)
-	yard(s, rnd, -11, -9, 22, 19)
-	s.shadow(3, 2, 13, 6, 100)
-	volume(s, culture, -7, -5, 14, 10, 5, rnd, axis="x", pitch=.6, ground_door=.34)
-	chimney(s, 3, -3, 8, rnd, 7)
-	box(s, -8, 6, 0, 3, 1.6, 1.4, "#4a4641")
-	s.oval(*s.p(2, 7, .5), 1.6, .9, "#f08a32")
-	return s.finish()
-
-
-def round_hall(kind, _seed=0):
-	rnd = random.Random(6 + len(kind))
-	culture = culture_of("southern")
-	s = Iso(64, 28, 20)
-	s.shadow(3, 2, 25, 12, 100)
-	r = 22
-	stone = "#b7b1a4"
-	s.oval(0, 0, r, r * .5, shade(stone, -.2))
-	s.poly([(-r, -8), (r, -8), (r, 0), (-r, 0)], stone)
-	s.oval(0, 0, r, r * .5, stone)
-	s.oval(0, -8, r, r * .5, shade(stone, .1))
-	s.oval(0, -8, r - 4, (r - 4) * .5, "#d7bf8e" if kind == "arena" else "#a33f3a")
-	for i in range(18):
-		a = i / 18 * math.pi
-		x, y = -math.cos(a) * r, math.sin(a) * r * .5
-		s.rect(x - .75, y - 5.6, 1.5, 4, "#3f352b")
-		s.oval(x, y - 5.6, .75, .7, "#3f352b")
-	for i in (0, 5, 9, 13):
-		a = i / 18 * math.tau
-		x, y = math.cos(a) * r, -8 + math.sin(a) * r * .5
-		s.line([(x, y), (x, y - 5)], "#3f352b", .25)
-		s.poly([(x, y - 5), (x + 2.4, y - 4.4), (x, y - 3.7)], rnd.choice(("#c84b34", "#c9973a", "#2f6f8f")))
-	return s.finish()
-
-
-# ── what a city is built of ─────────────────────────────────────────────────
-
-GROUNDS = {
-	"stone": ("#a8a295", "#8f9360", ("#6f9a4e", "#8ab263", "#a39a70", "#b0a57e", "#87905c", "#769f52"), "#c0b39b"),
-	"moss": ("#6f7a62", "#5f8a4c", ("#4f7f42", "#6fa053", "#5f8f4a", "#7fae58", "#3d6b3a", "#6f9a4e"), "#a89a6e"),
-	"sand": ("#d2b98c", "#d8c08f", ("#e2cc9c", "#cfb684", "#d9c28f", "#c8ab7a", "#e8d6a8", "#bfa373"), "#efe0bb"),
-	"dark": ("#5f5f5c", "#7c7a72", ("#6d6b64", "#85827a", "#74726a", "#8d8a80", "#66645e", "#7a786f"), "#9b978c"),
-	"water": ("#9a9484", "#9aa06c", ("#7f9f58", "#8fae66", "#a39a70", "#a8a07c", "#87905c", "#769f52"), "#c9c0a8"),
-}
-
-
-def terrace(rx, ry, height, seed, marks, kind="stone"):
-	"""A level of the town: a retaining wall in a ring, its top of the land's own ground."""
-	rnd = random.Random(seed)
-	rx, ry = int(rx), int(ry)
-	moat = 11 if kind == "water" else 0
-	s = Wide(rx * 2 + 20 + moat * 2, ry + int(height) + 8 + moat, ry + 16 + moat)
-	stone, top_color, specks, street = GROUNDS[kind]
-	if moat:
-		s.oval(0, 1, rx + moat, ry + moat * .52, "#7f7a6a")
-		s.oval(0, 0, rx + moat - 1, ry + moat * .52 - .6, "#3f89a8")
-		for _ in range(rx * 3):
-			a = rnd.uniform(0, 6.28)
-			d = rnd.uniform(1.01, 1 + moat / rx * .9)
-			s.oval(math.cos(a) * rx * d, math.sin(a) * ry * d, rnd.uniform(.6, 1.8), .22, "#9fd8e8")
-	top = -height
-	if height > 1:
-		s.shadow(2.5, 5, rx + 3, ry + 3, 165)
-	s.oval(0, 0, rx, ry, shade(stone, -.2))
-	s.poly([(-rx, top), (rx, top), (rx, 0), (-rx, 0)], stone)
-	# blocks along the visible front of the wall
-	if height > 0:
-		count = int(rx * 2.4 / 3.2)
-		rows = max(2, int(height / 1.5))
-		for row in range(rows):
-			for i in range(count):
-				a0, a1 = (i + (row % 2) * .5) / count * math.pi, (i + (row % 2) * .5 + .94) / count * math.pi
-				if a1 > math.pi:
-					continue
-				x0, x1 = -math.cos(a0) * rx, -math.cos(a1) * rx
-				y0, y1 = math.sin(a0) * ry, math.sin(a1) * ry
-				off0, off1 = -height * row / rows, -height * (row + .92) / rows
-				tone = shade(stone, (x0 + x1) / (2 * rx) * -.3 + (row / rows - .55) * .34 + rnd.uniform(-.08, .06))
-				s.poly([(x0, y0 + off1), (x1, y1 + off1), (x1, y1 + off0), (x0, y0 + off0)], tone)
-		for i in range(int(rx / 9)):
-			a = rnd.uniform(.05, math.pi - .05)
-			x, y = -math.cos(a) * rx, math.sin(a) * ry
-			for _ in range(14):
-				s.oval(x + rnd.uniform(-1.8, 1.8), y - rnd.uniform(0, height), rnd.uniform(.4, .9), rnd.uniform(.3, .7), rnd.choice(("#4f7f42", "#6fa053", "#3d6b3a")))
-	s.oval(0, top, rx, ry, top_color)
-	area = rx * ry
-	for _ in range(int(area / 7)):
-		a, d = rnd.uniform(0, 6.28), rnd.random() ** .5
-		x, y = math.cos(a) * d * rx, top + math.sin(a) * d * ry
-		s.oval(x, y, rnd.uniform(.5, 2.4), rnd.uniform(.3, 1.2), rnd.choice(specks))
-	# the street along the ring
-	band = marks
-	if band:
-		for i in range(int(rx * 7)):
-			a = i / (rx * 7) * math.tau
-			for f in band:
-				for width in (-3.4, -1.1, 1.1, 3.4):
-					x = math.cos(a) * (rx * f + width) * rnd.uniform(.995, 1.005)
-					y = top + math.sin(a) * (ry * f + width * .52) * rnd.uniform(.995, 1.005)
-					s.oval(x + rnd.uniform(-1, 1), y + rnd.uniform(-.5, .5), rnd.uniform(.9, 1.4), rnd.uniform(.5, .75), shade(street, rnd.uniform(-.14, .1)))
-	# the kerb: a bright edge against the dark wall below it, a little parapet at the front
-	for i in range(int(rx * 2.6)):
-		a = i / (rx * 2.6) * math.tau
-		x, y = math.cos(a) * (rx - .4), top + math.sin(a) * (ry - .4)
-		s.oval(x, y, 1.2, .72, shade(stone, .22 + rnd.uniform(-.08, .1)))
-		if height > 1 and math.sin(a) > 0 and i % 3 == 0:
-			s.rect(x - .9, y - 1.3, 1.8, 1.5, shade(stone, .14 + rnd.uniform(-.08, .08)))
-	return s.finish()
-
-
-def ground_square(half, seed):
-	"""A planned town's floor: a paved diamond, streets on a grid."""
-	rnd = random.Random(seed)
-	half = int(half)
-	w = int(half * 1.92)
-	h = int(half * .96)
-	s = Wide(w * 2 + 8, h + 6, h + 6)
-	s.poly([(0, -h), (w, 0), (0, h), (-w, 0)], "#8f9360")
-	for _ in range(w * h // 5):
-		u, v = rnd.uniform(-1, 1), rnd.uniform(-1, 1)
-		s.oval((u - v) * w / 2, (u + v) * h / 2, rnd.uniform(.6, 2.2), rnd.uniform(.3, 1.1), rnd.choice(("#6f9a4e", "#a39a70", "#b0a57e", "#87905c")))
-	pitch = 24
-	for line in range(-int(half / pitch), int(half / pitch) + 1):
-		if line % 3:
-			continue
-		for along in range(-half, half, 2):
-			x, y = (line * pitch - along) * .96, (line * pitch + along) * .48
-			s.oval(x + rnd.uniform(-1, 1), y + rnd.uniform(-.6, .6), rnd.uniform(1, 1.7), rnd.uniform(.5, .8), shade("#c0b39b", rnd.uniform(-.14, .1)))
-			x, y = (along - line * pitch) * .96, (along + line * pitch) * .48
-			s.oval(x + rnd.uniform(-1, 1), y + rnd.uniform(-.6, .6), rnd.uniform(1, 1.7), rnd.uniform(.5, .8), shade("#c0b39b", rnd.uniform(-.14, .1)))
-	return s.finish()
-
-
-def plaza(radius):
-	"""The market's paving, stone by stone."""
-	rnd = random.Random(radius)
-	rx, ry = radius + 6, round((radius + 6) * .52)
-	s = Wide(rx * 2 + 6, ry + 4, ry + 4)
-	s.oval(0, .6, rx, ry, "#7d7566")
-	s.oval(0, 0, rx, ry, "#a69d8a")
-	for _ in range(rx * ry // 2):
-		a, d = rnd.uniform(0, 6.28), rnd.random() ** .5
-		s.oval(math.cos(a) * d * (rx - 1), math.sin(a) * d * (ry - .6), rnd.uniform(.8, 1.3), rnd.uniform(.45, .7), shade("#c4baa2", rnd.uniform(-.14, .1)))
-	return s.finish()
-
-
-def steps(dx, dy, width):
-	"""A flight of steps, tread and riser each to be seen, between thick side walls."""
-	dx, dy, width = int(dx), int(dy), int(width)
-	reach = abs(dx) + width + 8
-	s = Sheet(reach * 2, abs(dy) + 8, 7)
-	stone = "#bdb6a5"
-	length = math.hypot(dx, dy) or 1
-	nx, ny = -dy / length, dx / length
-	half = width / 2
-	across = lambda x, y, sign, extra=0: (x + sign * nx * (half + extra), y + sign * ny * (half + extra) * .55)
-	s.shadow(dx / 2 + 2.5, dy / 2 + 1.5, width * .8 + abs(dx) / 2, abs(dy) / 2 + 2, 130)
-	count = max(4, int(length / 1.5))
-	for i in range(count):
-		t0, t_mid, t1 = i / count, (i + .42) / count, (i + 1) / count
-		a, b, c = (dx * t0, dy * t0), (dx * t_mid, dy * t_mid), (dx * t1, dy * t1)
-		s.poly([across(*a, -1), across(*a, 1), across(*b, 1), across(*b, -1)], shade(stone, -.42))
-		s.poly([across(*b, -1), across(*b, 1), across(*c, 1), across(*c, -1)], shade(stone, .16))
-	for sign, tone in ((-1, shade(stone, .02)), (1, shade(stone, -.34))):
-		out = 1.6
-		s.poly([across(0, 0, sign), across(dx, dy, sign), across(dx, dy, sign, out), across(dx, dy + 2.4, sign, out), across(0, 2.4, sign, out), across(0, 2.4, sign)], tone)
-		s.line([across(0, 0, sign, out * .5), across(dx, dy, sign, out * .5)], shade(stone, .3), .5)
-		for t in (0, 1):
-			x, y = across(dx * t, dy * t, sign, out * .5)
-			s.rect(x - .7, y - 3.8, 1.4, 4, shade(stone, -.3))
-			s.oval(x, y - 4.2, .8, .75, "#f3cf7a")
-	return s.finish()
-
-
-def wall(dx, dy):
-	"""A stretch of town wall between two points, seen from outside or within."""
-	dx, dy = int(dx), int(dy)
-	rnd = random.Random(dx * 31 + dy)
-	tall, thick = 8.5, 3
-	s = Sheet(abs(dx) * 2 + 10, abs(dy) + int(tall) + 8, abs(dy) + 6)
-	stone = "#a8a295"
-	s.shadow(dx / 2, dy / 2 + 1.5, abs(dx) / 2 + 2, abs(dy) / 2 + 2, 90)
-	face = Face(s, (0, -tall), (dx, dy - tall), (dx, dy), (0, 0))
-	tone = shade(stone, -.2 * dx / (abs(dx) + abs(dy) + 1))
-	stone_face(face, tone, 5, max(3, int((abs(dx) + abs(dy)) / 3)), rnd)
-	s.poly([(0, -tall), (dx, dy - tall), (dx, dy - tall - thick * .5), (0, -tall - thick * .5)], shade(stone, .16))
-	count = max(2, int((abs(dx) + abs(dy)) / 3.4))
-	for i in range(count + 1):
-		t = i / count
-		x, y = dx * t, dy * t - tall
-		s.rect(x - .9, y - 2.2, 1.8, 2.2, shade(stone, rnd.uniform(-.06, .1)))
-	return s.finish()
-
-
-def wall_tower(culture_name):
-	rnd = random.Random(12)
-	s = Iso(18, 30, 6)
-	s.shadow(1.2, .8, 6, 3, 90)
-	round_tower(s, 0, 0, 0, 4, 13, culture_of(culture_name), rnd)
-	return s.finish()
-
-
-def gatehouse(culture_name):
-	rnd = random.Random(13)
-	culture = culture_of(culture_name)
-	s = Sheet(40, 42, 8)
-	s.__class__ = Iso
-	s.shadow(1, 1, 18, 5, 100)
-	stone = "#a8a295"
-	face = Face(s, (-10, -16), (10, -16), (10, 0), (-10, 0))
-	stone_face(face, stone, 7, 8, rnd)
-	s.poly([(-5, 0), (-5, -9), (0, -13), (5, -9), (5, 0)], "#6d6658")
-	s.poly([(-3.8, 0), (-3.8, -8.6), (0, -11.6), (3.8, -8.6), (3.8, 0)], "#32261b")
-	for x in (-2.4, -.8, .8, 2.4):
-		s.line([(x, -10.5), (x, -3.6)], "#57473a", .3)
-	for i in range(7):
-		s.rect(-10 + i * 3.1, -18, 1.8, 2.2, shade(stone, .08))
-	round_tower(s, -11, 0, 0, 4.4, 19, culture, rnd) if False else None
-	for x in (-12, 12):
-		ax = (x + 0) / 2
-		round_tower(s, ax, -ax, 0, 4.4, 19, culture, rnd)
-	s.rect(-6, -15, 3, 5, "#a63c2e")
-	s.rect(3, -15, 3, 5, "#a63c2e")
-	return s.finish()
-
-
-def great_tree(seed):
-	"""The tree in the middle of a town, on its stone ring."""
-	rnd = random.Random(seed + 500)
-	colors = ("#8d6fb0", "#d9a8d8", "#5f4a86") if seed % 2 else ("#d97d9a", "#f4bdc9", "#a85775")
-	s = Iso(60, 50, 12)
-	s.shadow(2, 1, 19, 9, 90)
-	s.oval(0, 1, 14, 7, "#8e8879")
-	s.oval(0, 0, 14, 7, "#b5af9f")
-	s.oval(0, 0, 11.5, 5.8, "#6f9a4e")
-	bark(s, 0, -16, 0, 2, "#6a5040", rnd)
-	for ox, oy, rx, ry, count in ((-8, -22, 9, 7, 150), (8, -22, 9, 7, 150), (0, -30, 13, 9, 260), (0, -22, 13, 7, 170)):
-		leaves(s, rnd, ox, oy, rx, ry, colors, count)
-	return s.finish()
-
-
-def mountain(seed):
-	"""A real peak: ridges falling away, rock in facets, snow in the gullies."""
-	rnd = random.Random(seed + 900)
-	s = Sheet(96, 66, 12)
-	s.shadow(6, 2, 42, 11, 100)
-	peaks = [(0, -56, 34), (-20, -34, 24), (22, -38, 26), (-34, -20, 15), (36, -18, 14)]
-	for px, py, half in sorted(peaks, key=lambda p: p[1]):
-		base = 4 + rnd.uniform(-1, 2)
-		for i in range(26):
-			u0, u1 = i / 26, (i + 1) / 26
-			x0, x1 = px - half + u0 * half * 2, px - half + u1 * half * 2
-			lit = (u0 < .5)
-			tone = shade("#8d8a84", (.1 if lit else -.26) + rnd.uniform(-.09, .09))
-			s.poly([(px + rnd.uniform(-.6, .6), py), (x0, base + rnd.uniform(-2, 2)), (x1, base + rnd.uniform(-2, 2))], tone)
-		for _ in range(9):
-			a = rnd.uniform(-1, 1)
-			t = rnd.uniform(.2, .9)
-			x = px + a * half * t
-			y = py + (base - py) * t
-			s.line([(x, y), (x + a * 3, y + rnd.uniform(3, 7))], shade("#6d6a64", rnd.uniform(-.1, .1)), .5)
-		snow = .34 if py < -30 else .16
-		s.poly([(px, py), (px - half * snow, py + (base - py) * snow), (px - half * snow * .4, py + (base - py) * snow * .78), (px - half * snow * .1, py + (base - py) * snow * 1.15), (px + half * snow * .3, py + (base - py) * snow * .8), (px + half * snow, py + (base - py) * snow)], "#f2f4f6")
-		s.poly([(px, py), (px + half * snow, py + (base - py) * snow), (px + half * snow * .3, py + (base - py) * snow * .8), (px, py + (base - py) * snow * .5)], "#c9d2db")
-	for _ in range(40):
-		x = rnd.uniform(-46, 46)
-		s.oval(x, rnd.uniform(1, 6), rnd.uniform(1, 2.2), rnd.uniform(.8, 1.4), rnd.choice(("#4f7f42", "#3d6b3a", "#5f8f4a")))
-	return s.finish()
-
-
-# ── fantasy ─────────────────────────────────────────────────────────────────
-
-def dome(s, cx, cy, r, color, rnd, onion=False):
-	"""A dome from ribs of tile, with a finial on top."""
-	height = r * (1.5 if onion else 1.05)
-	for i in range(14):
-		u0, u1 = -1 + i / 7, -1 + (i + 1) / 7
-		tone = shade(color, (u0 + u1) / 2 * -.3 + .05 + rnd.uniform(-.05, .05))
-		pts = []
-		for t in range(9):
-			v = t / 8
-			w = (math.sin(v * math.pi * .8 + .5) * 1.2 if onion else math.cos(v * math.pi / 2)) * r
-			pts.append((cx + u0 * w, cy - height * v + math.sqrt(max(0, 1 - u0 * u0)) * w * .4))
-		for t in range(8, -1, -1):
-			v = t / 8
-			w = (math.sin(v * math.pi * .8 + .5) * 1.2 if onion else math.cos(v * math.pi / 2)) * r
-			pts.append((cx + u1 * w, cy - height * v + math.sqrt(max(0, 1 - u1 * u1)) * w * .4))
-		s.poly(pts, tone)
-	s.line([(cx, cy - height), (cx, cy - height - r * .55)], "#d9b24c", .3)
-	s.oval(cx, cy - height - r * .55, .5, .5, "#f0d060")
-
-
-def crystal(s, cx, cy, tall, width, color, rnd):
-	"""A shard of crystal: facets, bright edge, glow at its foot."""
-	s.oval(cx, cy, width * 1.5, width * .7, (*rgb(color), 70))
-	s.poly([(cx - width, cy - tall * .18), (cx, cy - tall), (cx, cy + width * .3)], shade(color, .22))
-	s.poly([(cx + width, cy - tall * .2), (cx, cy - tall), (cx, cy + width * .3)], shade(color, -.18))
-	s.poly([(cx - width * .35, cy - tall * .5), (cx, cy - tall), (cx + width * .25, cy - tall * .55), (cx, cy - tall * .3)], shade(color, .5))
-	s.line([(cx, cy - tall), (cx, cy + width * .3)], shade(color, .6), .16)
-
-
-def wizard_body(s, x, y, h, r, tall, rnd, roof, base="#9f9aa8"):
-	"""A thin tower with a jutting top room and a bent pointed hat."""
-	culture = {"roof": roof, "wall": "stone", "base": base, "trim": "#3f3a5a"}
-	round_tower(s, x, y, h, r, tall, culture, rnd, roof=False)
-	cx, cy = s.p(x, y, h + tall)
-	room = r * 1.5
-	s.poly([(cx - r, cy + r * .9), (cx + r, cy + r * .9), (cx + room, cy), (cx - room, cy)], shade(base, -.25))
-	s.poly([(cx - room, cy), (cx - room, cy - 4.4), (cx + room, cy - 4.4), (cx + room, cy)], base)
-	s.poly([(cx, cy), (cx, cy - 4.4), (cx + room, cy - 4.4), (cx + room, cy)], shade(base, -.24))
-	s.oval(cx, cy, room, room * .5, base)
-	for wx in (-room * .55, 0, room * .55):
-		s.rect(cx + wx - .55, cy - 3.6, 1.1, 2.4, "#f3cf7a")
-	tip = rnd.choice((-1, 1)) * r * 1.1
-	steps_ = 8
-	last = None
-	for i in range(steps_):
-		t0, t1 = i / steps_, (i + 1) / steps_
-		bend = lambda t: tip * t * t
-		wide = lambda t: (room + 1) * (1 - t) ** 1.1
-		y0, y1 = cy - 4.4 - t0 * r * 5, cy - 4.4 - t1 * r * 5
-		s.poly([(cx + bend(t0) - wide(t0), y0), (cx + bend(t0) + wide(t0), y0), (cx + bend(t1) + wide(t1), y1), (cx + bend(t1) - wide(t1), y1)], shade(roof, .1 - i * .01 + rnd.uniform(-.06, .06)))
-		s.poly([(cx + bend(t0) + wide(t0) * .2, y0), (cx + bend(t0) + wide(t0), y0), (cx + bend(t1) + wide(t1), y1), (cx + bend(t1) + wide(t1) * .2, y1)], shade(roof, -.24))
-	for _ in range(5):
-		t = rnd.uniform(.1, .8)
-		s.oval(cx + tip * t * t + rnd.uniform(-1, 1) * (room * (1 - t)) * .7, cy - 4.4 - t * r * 5, .28, .28, "#ffe9a0")
-	return cx + tip, cy - 4.4 - r * 5
-
-
-def fhouse(style, culture_name, tier, seed):
-	"""The houses of the stranger peoples."""
-	rnd = random.Random(hash((style, culture_name, tier, seed)) & 0xffff)
-	tier = max(0, min(4, tier))
-	if style == "turret":
-		image_s = Iso(58, 48, 18)
-		culture = culture_of(culture_name)
-		s = image_s
-		yard(s, rnd, -9, -8, 18, 17)
-		s.shadow(2, 1.5, 15, 7, 60)
-		round_tower(s, -6.5, -5.5, 0, 2.6, 11 + tier * 2, culture, rnd, cone=shade(culture["roof"], .08))
-		volume(s, culture, -6, -4, 11, 8, 4 + tier, rnd, axis="x" if seed % 2 else "y", pitch=.72, ground_door=.5 if seed % 2 else None)
-		for _ in range(6):
-			bush(s, rnd, *s.p(rnd.uniform(-8, 8), 6.5), rnd.uniform(.6, 1), flowers=rnd.choice(FLOWERS))
-		return s.finish()
-	if style == "crooked":
-		s = Iso(44, 58, 16)
-		culture = culture_of(culture_name)
-		yard(s, rnd, -7, -7, 14, 14)
-		s.shadow(2, 1.5, 10, 5, 60)
-		w = 7.5
-		h = 0
-		for i in range(2 + tier // 2 + 1):
-			shift = (seed % 3 - 1) * i * .7
-			step = 3.6
-			left, right = wall_faces(s, -w / 2 + shift, -w / 2 - shift, h, w, w, step)
-			dress_wall(left, culture, rnd, w, step)
-			dress_wall(right, culture, rnd, w, step, -.2)
-			window(left, .5, .5, .24, .4, culture["trim"])
-			window(right, .5, .5, .24, .4, culture["trim"], shutters=False)
-			if i == 0:
-				door(left, .3, .26, .78, culture["trim"])
-			h += step
-			w += .7
-		shift = (seed % 3 - 1) * (2 + tier // 2 + 1) * .7
-		volume(s, culture, -w / 2 + shift, -w / 2 - shift, w, w, .2, rnd, axis="x" if seed % 2 else "y", h=h, pitch=1.15, windows=False, over=1)
-		return s.finish()
-	if style == "mushroom":
-		s = Iso(44, 44, 14)
-		cap = ("#c0392f", "#7a4fa8", "#2f8f8a", "#c9772f", "#a63c6a", "#4a7fb8")[seed % 6]
-		yard(s, rnd, -8, -7, 16, 15)
-		s.shadow(2.5, 1.2, 11, 5, 70)
-		r = 6.5 + tier * .9
-		tall = 6 + tier * 1.4
-		stem = "#efe6d0"
-		s.poly([(-r * .46, 0), (-r * .34, -tall), (r * .34, -tall), (r * .46, 0)], stem)
-		s.oval(0, 0, r * .46, r * .24, stem)
-		s.poly([(r * .05, 0), (r * .05, -tall), (r * .34, -tall), (r * .46, 0)], shade(stem, -.2))
-		s.poly([(-1.1, 1), (-1.1, -2.2), (0, -3.2), (1.1, -2.2), (1.1, 1)], "#6a4128")
-		s.rect(-2.6, -5, 1.3, 1.4, "#f3cf7a")
-		s.oval(0, -tall + .3, r * 1.06, r * .44, shade(cap, -.4))
-		for i in range(16):
-			a0, a1 = i / 16 * math.pi, (i + 1) / 16 * math.pi
-			x0, x1 = -math.cos(a0), -math.cos(a1)
-			tone = shade(cap, (x0 + x1) / 2 * -.28 + .04)
-			s.poly([(x0 * r, -tall + math.sin(a0) * r * .3), (x1 * r, -tall + math.sin(a1) * r * .3), (x1 * r * .3, -tall - r * .9 + (1 - abs(x1)) * -r * .12), (x0 * r * .3, -tall - r * .9 + (1 - abs(x0)) * -r * .12)], tone)
-		s.oval(0, -tall - r * .86, r * .36, r * .16, shade(cap, .12))
-		for _ in range(9 + tier * 2):
-			a = rnd.uniform(.2, math.pi - .2)
-			d = rnd.uniform(.25, .9)
-			x, y = -math.cos(a) * d * r, -tall - (1 - d) * r * .8 + math.sin(a) * r * .24 * d
-			size = rnd.uniform(.5, 1.05)
-			s.oval(x, y, size, size * .68, "#f6efe0")
-		s.line([(r * .45, -tall - r * .55), (r * .5, -tall - r * 1.05)], "#7a5c44", .7)
-		for _ in range(5):
-			bush(s, rnd, *s.p(rnd.uniform(-7, 7), 6), rnd.uniform(.5, .9), flowers=rnd.choice(FLOWERS))
-		return s.finish()
-	if style == "treehouse":
-		s = Iso(62, 64, 12)
-		s.shadow(3, 1, 13, 6, 80)
-		bark(s, 0, -24, 0, 3.4, "#5f4530", rnd)
-		colors = (("#3f7f4a", "#6bb06a", "#2b5c3b"), ("#3f8f7f", "#79c7b0", "#2a6258"), ("#5f8f3f", "#93bf5c", "#3f662c"))[seed % 3]
-		for ox, oy, rx, ry, count in ((-7, -36, 10, 8, 150), (7, -36, 10, 8, 150), (0, -43, 13, 10, 240)):
-			leaves(s, rnd, ox, oy, rx, ry, colors, count)
-		# the deck, the cabin on it, the lantern and the stair round the trunk
-		s.oval(0, -19, 10, 5, "#6a4a30")
-		s.oval(0, -19.8, 10, 5, "#8d6a48")
-		for i in range(14):
-			a = i / 14 * math.pi
-			x, y = -math.cos(a) * 10, -20 + math.sin(a) * 5
-			s.line([(x, y), (x, y - 1.6)], "#5a3d28", .25)
-		culture = {"roof": "#7f6a3f", "wall": "log", "base": "#8a6a44", "trim": "#4a3222"}
-		sheet = s
-		x, y = sheet.p(0, 0, 0)
-		s.oy -= 20
-		volume(s, culture, -3, -3, 6, 5.4, 3.4, rnd, axis="x", pitch=.8, ground_door=.5)
-		s.oy += 20
-		for t in (1.2, 5, 9, 13):
-			s.line([(-3.4 - t * .4, -t), (3.4 - t * .1, -t - 1)], "#8d6a48", .55)
-		for lx, ly in ((-9, -24), (8, -23)):
-			s.line([(lx, ly - 2), (lx, ly)], "#3f2a1a", .16)
-			s.oval(lx, ly + .4, .6, .7, "#ffd27a")
-		return s.finish()
-	if style == "dome":
-		s = Iso(50, 42, 16)
-		base = ("#ead9b8", "#e6c9a0", "#f0e6d2", "#dcc2a8")[seed % 4]
-		cap = ("#2f8a84", "#c9973a", "#3f6fa8", "#a8503f")[(seed + tier) % 4]
-		yard(s, rnd, -9, -9, 18, 18)
-		s.shadow(2, 1.5, 14, 7, 60)
-		culture = {"roof": cap, "wall": "plaster", "base": base, "trim": "#8a6a48"}
-		w, h = 10 + tier * .6, 4.5 + tier
-		left, right = wall_faces(s, -w / 2, -w / 2, 0, w, w, h)
-		plaster_face(left, base, rnd)
-		plaster_face(right, shade(base, -.2), rnd)
-		for face, shadeit in ((left, 0), (right, 1)):
-			for i in range(2 + tier // 2):
-				u = (i + .5) / (2 + tier // 2)
-				face.poly([(u - .1, .78), (u - .1, .36), (u, .2), (u + .1, .36), (u + .1, .78)], "#6a4a30" if i == 0 and not shadeit else "#f3cf7a")
-		s.quad([(-w / 2, -w / 2, h), (w / 2, -w / 2, h), (w / 2, w / 2, h), (-w / 2, w / 2, h)], shade(base, .08))
-		for i in range(int(w * 2)):
-			t = i / int(w * 2)
-			s.rect(*s.p(-w / 2 + t * w, w / 2, h + .7), .5, .7, shade(base, -.06))
-			s.rect(*s.p(w / 2, w / 2 - t * w, h + .7), .5, .7, shade(base, -.22))
-		cx, cy = s.p(0, 0, h)
-		dome(s, cx, cy, w * .36, cap, rnd, onion=seed % 2 == 0)
-		if tier >= 2:
-			px, py = s.p(w / 2 + .6, -w / 2 - .6, 0)
-			s.poly([(px - 1.2, py), (px - .9, py - h * 2.2), (px + .9, py - h * 2.2), (px + 1.2, py)], base)
-			s.poly([(px, py), (px, py - h * 2.2), (px + .9, py - h * 2.2), (px + 1.2, py)], shade(base, -.22))
-			dome(s, px, py - h * 2.2, 1.5, cap, rnd, onion=True)
-		return s.finish()
-	if style == "dwarf":
-		s = Iso(56, 34, 16)
-		stone = ("#6f6e6a", "#7a7063", "#5f6468")[seed % 3]
-		s.shadow(2.5, 1.5, 15, 7, 90)
-		w, d = 13 + tier, 9 + tier * .6
-		box(s, -w / 2 - 1.5, -d / 2 - 1.5, 0, w + 3, d + 3, 1.2, shade(stone, -.1), shade(stone, .12))
-		for level, (shrink, tall) in enumerate(((0, 4 + tier), (2.2, 2.6), (4.4, 2))):
-			h = 1.2 + ((4 + tier) if level >= 1 else 0) + (2.6 if level >= 2 else 0)
-			left, right = wall_faces(s, -w / 2 + shrink, -d / 2 + shrink * .6, h, w - shrink * 2, d - shrink * 1.2, tall)
-			stone_face(left, shade(stone, .1), 3 + level, 6, rnd)
-			stone_face(right, shade(stone, -.2), 3 + level, 5, rnd)
-			s.quad([(-w / 2 + shrink, -d / 2 + shrink * .6, h + tall), (w / 2 - shrink, -d / 2 + shrink * .6, h + tall), (w / 2 - shrink, d / 2 - shrink * .6, h + tall), (-w / 2 + shrink, d / 2 - shrink * .6, h + tall)], shade(stone, .2))
-		left, right = wall_faces(s, -w / 2, -d / 2, 1.2, w, d, 4 + tier)
-		left.poly([(.34, 1), (.34, .3), (.5, .12), (.66, .3), (.66, 1)], "#3a342c")
-		left.poly([(.4, 1), (.4, .36), (.5, .24), (.6, .36), (.6, 1)], "#ff9a3c")
-		for u in (.14, .86):
-			left.rect(u - .035, .25, u + .035, .75, "#7fd0e8")
-		for v in (.3, .55):
-			right.rect(.2, v, .3, v + .12, "#f08a32")
-			right.rect(.7, v, .8, v + .12, "#f08a32")
-		chimney(s, w / 2 - 4, -d / 2 + .5, 6, rnd, 6)
-		return s.finish()
-	if style == "crystal":
-		s = Iso(44, 58, 14)
-		color = ("#7fd0e8", "#b48cf0", "#6fe0b0", "#f08ad0")[seed % 4]
-		s.shadow(2, 1, 10, 5, 70)
-		s.oval(0, .8, 9, 4.5, "#5f5a68")
-		s.oval(0, 0, 9, 4.5, "#878292")
-		tall = 20 + tier * 5
-		crystal(s, 0, -1, tall, 3.6 + tier * .4, color, rnd)
-		for sign, size in ((-1, .55), (1, .45), (-.5, .35)):
-			crystal(s, sign * 4.5, 1, tall * size, 1.8, color, rnd)
-		culture = {"roof": "#3f3a5a", "wall": "stone", "base": "#a59fb0", "trim": "#3f3a5a"}
-		volume(s, culture, 2, 0, 5, 4.4, 3, rnd, axis="y", pitch=.8, ground_door=.5)
-		return s.finish()
-	if style == "wizard":
-		s = Iso(40, 66, 12)
-		roof = ("#4a3f9a", "#7a2f7f", "#2f6f8f", "#8f3f4f")[seed % 4]
-		yard(s, rnd, -6, -6, 12, 12)
-		s.shadow(2, 1, 9, 4.5, 70)
-		tipx, tipy = wizard_body(s, 0, 0, 0, 2.8 + tier * .2, 13 + tier * 2.4, rnd, roof)
-		s.oval(tipx, tipy - 1.6, 1.1, 1.1, ("#ffe07a", "#9fe8ff", "#d8a0ff", "#a0ffb8")[seed % 4])
-		return s.finish()
-	return house(culture_name, tier, seed)
-
-
-def palm(seed):
-	rnd = random.Random(seed + 610)
-	s = Iso(30, 28, 5)
-	s.shadow(2.5, .8, 6, 2.6, 80)
-	lean = (seed % 3 - 1) * 2.6
-	for i in range(12):
-		t0, t1 = i / 12, (i + 1) / 12
-		y0, y1 = -t0 * 17, -t1 * 17
-		s.poly([(lean * t0 * t0 - .8, y0), (lean * t0 * t0 + .8, y0), (lean * t1 * t1 + .7, y1 + .2), (lean * t1 * t1 - .7, y1 + .2)], shade("#8a6b48", .1 if i % 2 else -.1))
-	for i in range(9):
-		a = i / 9 * math.tau
-		dx, dy = math.cos(a) * 9, math.sin(a) * 3 - 1
-		pts = [(lean, -17), (lean + dx * .5, -17 + dy * .5 - 2.6), (lean + dx, -17 + dy + 1.6), (lean + dx * .5, -17 + dy * .5 - 1)]
-		s.poly(pts, shade("#4f8f3f", rnd.uniform(-.14, .16)))
-	for x in (-.8, .8):
-		s.oval(lean + x, -16.2, .7, .7, "#6a4628")
-	return s.finish()
-
-
-def landmark(kind, seed):
-	"""What a town shows off with."""
-	rnd = random.Random(seed + 700)
-	if kind == "crystal":
-		s = Iso(40, 54, 10)
-		color = ("#7fd0e8", "#b48cf0", "#6fe0b0")[seed % 3]
-		s.shadow(2, 1, 11, 5, 70)
-		s.oval(0, 0, 11, 5.5, "#6d6878")
-		crystal(s, 0, 0, 40, 5, color, rnd)
-		crystal(s, -6, 1.6, 20, 2.8, color, rnd)
-		crystal(s, 6, 1.2, 25, 3.2, color, rnd)
-		return s.finish()
-	if kind == "stones":
-		s = Iso(44, 18, 12)
-		s.oval(0, 0, 17, 8.5, "#6f9a4e")
-		for i in range(9):
-			a = i / 9 * math.tau
-			x, y = math.cos(a) * 14, math.sin(a) * 7
-			tall = rnd.uniform(6, 11)
-			s.shadow(x + 1, y + .4, 2.4, 1, 80)
-			s.poly([(x - 1.5, y), (x - 1.1, y - tall), (x + 1.1, y - tall - .7), (x + 1.5, y)], "#94918a")
-			s.poly([(x + .2, y), (x + .2, y - tall), (x + 1.1, y - tall - .7), (x + 1.5, y)], "#716e68")
-			s.line([(x - .6, y - tall * .35), (x - .6, y - tall * .75)], "#7fe0f0", .3)
-		s.oval(0, 0, 3, 1.5, (127, 224, 240, 150))
-		return s.finish()
-	if kind == "portal":
-		s = Iso(36, 38, 8)
-		s.shadow(1, 1, 12, 4, 80)
-		stone = "#8f8a9a"
-		for sign in (-1, 1):
-			s.poly([(sign * 9 - 2, 0), (sign * 8 - 2, -20), (sign * 8 + 2, -20), (sign * 9 + 2, 0)], stone if sign < 0 else shade(stone, -.2))
-		for i in range(16):
-			a0, a1 = i / 16 * math.pi, (i + 1) / 16 * math.pi
-			s.poly([(-math.cos(a0) * 10, -20 - math.sin(a0) * 10), (-math.cos(a1) * 10, -20 - math.sin(a1) * 10), (-math.cos(a1) * 6, -20 - math.sin(a1) * 6), (-math.cos(a0) * 6, -20 - math.sin(a0) * 6)], shade(stone, -.1 if i % 2 else .08))
-		for r, tone in ((6, "#5f3fb0"), (4.8, "#8f6fe8"), (3.2, "#cdb8ff")):
-			s.oval(0, -20, r, r, tone)
-			s.poly([(-r, -20), (r, -20), (r * .92, -1), (-r * .92, -1)], tone)
-		return s.finish()
-	# a dragon of stone on its plinth
-	s = Iso(46, 36, 8)
-	s.shadow(1.5, 1, 11, 4.5, 80)
-	box(s, -5, -5, 0, 10, 10, 3, "#9b978a", "#b0ac9e")
-	stone = "#7f8580"
-	s.poly([(-9, -9), (-1, -13), (5, -12), (9, -7), (5, -6), (-5, -6)], stone)
-	s.poly([(-6, -12), (-11, -27), (-2, -22), (0, -28), (3, -21), (4, -12)], shade(stone, .12))
-	s.poly([(4, -12), (8, -20), (12, -21), (14, -18), (9, -17), (8, -8)], stone)
-	s.oval(13, -19, .5, .5, "#ff5a3c")
-	s.line([(-9, -8), (-15, -6), (-17, -10)], stone, 1.2)
-	return s.finish()
-
-
-def seatx(style, culture_name, level, seed):
-	"""The strongholds that are not halls."""
-	rnd = random.Random(hash((style, level, seed)) & 0xffff)
-	big = 1 + max(0, level - 1) * .17
-	if style == "spires":
-		s = Iso(int(100 * big), int(120 * big), 26)
-		s.oval(0, 2, 34 * big, 17 * big, "#59536a")
-		s.oval(0, 0, 34 * big, 17 * big, "#878292")
-		roofs = ("#4a3f9a", "#7a2f7f", "#2f6f8f")
-		spots = sorted(((math.cos(i * 1.9) * 20 * big, math.sin(i * 1.9) * 7 * big) for i in range(4 + level)), key=lambda p: p[1])
-		for i, (x, y) in enumerate(spots):
-			u, v = (y * 2 + x) / 2, (y * 2 - x) / 2
-			wizard_body(s, u, v, 0, 3 + (i % 3), (20 + (i * 7) % 18) * big, rnd, roofs[i % 3])
-		wizard_body(s, 0, 2, 0, 6 * big, 46 * big, rnd, roofs[seed % 3])
-		crystal(s, 0, 10 * big, 14, 2, "#9fe8ff", rnd)
-		return s.finish()
-	if style == "palace":
-		s = Iso(int(110 * big), int(84 * big), 28)
-		base, cap = "#efe3c8", ("#2f8a84", "#c9973a", "#3f6fa8")[seed % 3]
-		s.shadow(4, 2, 40 * big, 18 * big, 80)
-		w = 30 * big
-		box(s, -w / 2 - 4, -w / 2 - 4, 0, w + 8, w + 8, 2.4, base, shade(base, .1))
-		h = 2.4
-		left, right = wall_faces(s, -w / 2, -w / 2, h, w, w, 12 * big)
-		plaster_face(left, base, rnd)
-		plaster_face(right, shade(base, -.2), rnd)
-		for face, dim in ((left, 0), (right, 1)):
-			for i in range(5):
-				u = (i + .5) / 5
-				face.poly([(u - .06, .9), (u - .06, .4), (u, .22), (u + .06, .4), (u + .06, .9)], "#3b2a1c" if i == 2 and not dim else "#f3cf7a")
-		s.quad([(-w / 2, -w / 2, h + 12 * big), (w / 2, -w / 2, h + 12 * big), (w / 2, w / 2, h + 12 * big), (-w / 2, w / 2, h + 12 * big)], shade(base, .08))
-		for x, y, r in ((-w * .28, -w * .28, 5), (w * .28, -w * .28, 5), (-w * .28, w * .28, 5), (w * .28, w * .28, 5), (0, 0, 11)):
-			cx, cy = s.p(x, y, h + 12 * big)
-			dome(s, cx, cy, r * big, cap, rnd, onion=True)
-		for x, y in ((-w / 2 - 3, -w / 2 - 3), (w / 2 + 3, -w / 2 - 3), (-w / 2 - 3, w / 2 + 3), (w / 2 + 3, w / 2 + 3)):
-			px, py = s.p(x, y, 2.4)
-			s.poly([(px - 2, py), (px - 1.4, py - 34 * big), (px + 1.4, py - 34 * big), (px + 2, py)], base)
-			s.poly([(px, py), (px, py - 34 * big), (px + 1.4, py - 34 * big), (px + 2, py)], shade(base, -.2))
-			dome(s, px, py - 34 * big, 2.4, cap, rnd, onion=True)
-		return s.finish()
-	if style == "gate":
-		# a hall hewn out of the rock: stepped front, giants beside the glowing door
-		s = Iso(int(100 * big), int(86 * big), 18)
-		stone = "#6d6c68"
-		s.shadow(3, 2, 34 * big, 13 * big, 100)
-		w = 56 * big
-		for i in range(5):
-			shrink, top = i * 5 * big, (64 - i * 11) * big
-			down = (i * 11) * big
-			s.poly([(-w / 2 + shrink, -down), (-w / 2 + shrink, -down - 13 * big), (w / 2 - shrink, -down - 13 * big), (w / 2 - shrink, -down)], shade(stone, .04 - i * .01))
-			for r in range(4):
-				for c in range(int((w - shrink * 2) / 4)):
-					x = -w / 2 + shrink + (c + (r % 2) * .5) * 4
-					if x + 3.7 < w / 2 - shrink:
-						s.rect(x, -down - (r + 1) * 3.2 * big, 3.7, 2.9 * big, shade(stone, rnd.uniform(-.1, .08)))
-		s.poly([(-9 * big, 0), (-9 * big, -22 * big), (0, -32 * big), (9 * big, -22 * big), (9 * big, 0)], "#3a342c")
-		s.poly([(-6.5 * big, 0), (-6.5 * big, -21 * big), (0, -28 * big), (6.5 * big, -21 * big), (6.5 * big, 0)], "#ff9a3c")
-		s.poly([(-4 * big, 0), (-4 * big, -18 * big), (0, -24 * big), (4 * big, -18 * big), (4 * big, 0)], "#ffd27a")
-		for sign in (-1, 1):
-			x = sign * 20 * big
-			s.poly([(x - 4, 0), (x - 3, -26 * big), (x + 3, -26 * big), (x + 4, 0)], shade(stone, .12))
-			s.oval(x, -29 * big, 3, 3.2, shade(stone, .16))
-			s.poly([(x - 3.2, -24 * big), (x - 6, -14 * big), (x - 3, -14 * big)], shade(stone, -.1))
-			s.poly([(x + 3.2, -24 * big), (x + 6, -14 * big), (x + 3, -14 * big)], shade(stone, -.2))
-			s.poly([(x - 2, -27 * big), (x + 2, -27 * big), (x, -18 * big)], "#d9d4c8")
-		return s.finish()
-	if style == "tree":
-		s = Iso(int(130 * big), int(120 * big), 22)
-		s.shadow(4, 2, 42 * big, 18 * big, 90)
-		bark(s, 0, -58 * big, 0, 9 * big, "#6a5140", rnd)
-		for sign in (-1, 1):
-			s.line([(sign * 3, -40 * big), (sign * 26 * big, -62 * big)], "#5f4635", 3.4)
-			s.line([(sign * 8, 2), (sign * 22, 6)], "#5f4635", 2.2)
-		colors = ("#2f8f7f", "#7fe0c0", "#1f5f58")
-		for ox, oy, rx, ry, count in ((-24, -66, 20, 14, 280), (24, -66, 20, 14, 280), (0, -84, 28, 19, 520), (0, -62, 28, 12, 300)):
-			leaves(s, rnd, ox * big, oy * big, rx * big, ry * big, colors, count)
-		culture = {"roof": "#2f7f6f", "wall": "plaster", "base": "#e8e6d2", "trim": "#5f4635"}
-		for x, h in ((-13, 14), (11, 24), (-9, 34)):
-			s.oval(x * big, -h * big + 2, 10, 5, "#8d6a48")
-			s.oy -= h * big
-			s.ox += x * big
-			volume(s, culture, -3, -3, 6, 5, 3.4, rnd, axis="y" if h % 2 else "x", pitch=.9, ground_door=.5)
-			s.oy += h * big
-			s.ox -= x * big
-		for _ in range(40):
-			s.oval(rnd.uniform(-44, 44) * big, rnd.uniform(-100, -40) * big, .5, .5, "#ffe9a0")
-		return s.finish()
-	if style == "citadel":
-		s = Iso(int(100 * big), int(120 * big), 24)
-		color = ("#7fd0e8", "#b48cf0", "#6fe0b0")[seed % 3]
-		s.shadow(3, 2, 34 * big, 15 * big, 80)
-		s.oval(0, 2, 33 * big, 16.5 * big, "#55505f")
-		s.oval(0, 0, 33 * big, 16.5 * big, "#878292")
-		for i in range(7):
-			a = i / 7 * math.tau + .3
-			if math.sin(a) < 0:
-				crystal(s, math.cos(a) * 22 * big, math.sin(a) * 11 * big, (34 + i * 3) * big, 5 * big, color, rnd)
-		crystal(s, 0, -2, 92 * big, 12 * big, color, rnd)
-		for i in range(7):
-			a = i / 7 * math.tau + .3
-			if math.sin(a) >= 0:
-				crystal(s, math.cos(a) * 22 * big, math.sin(a) * 11 * big, (22 + i * 2) * big, 4 * big, color, rnd)
-		s.poly([(-5, 15 * big), (-5, 4), (0, 0), (5, 4), (5, 15 * big)], "#3f3a5a")
-		s.poly([(-3, 15 * big), (-3, 5), (0, 2.4), (3, 5), (3, 15 * big)], color)
-		return s.finish()
-	return keep(culture_name, level, seed)
-
-
-def floating_isle(rx, seed):
-	"""A chunk of land in the air, roots and rock below it, a thread of water falling off."""
-	rnd = random.Random(seed + 810)
-	rx = int(rx)
-	ry = round(rx * .52)
-	deep = int(rx * .9)
-	s = Wide(rx * 2 + 8, ry + 6, ry + deep + 8)
-	for i in range(int(rx * 1.6)):
-		x = rnd.uniform(-rx, rx) * .96
-		edge = math.sqrt(max(0, 1 - (x / rx) ** 2))
-		down = edge * deep * rnd.uniform(.45, 1)
-		tone = shade("#7a6a58", rnd.uniform(-.2, .1) + (x / rx) * -.18)
-		s.poly([(x - rnd.uniform(1.5, 4), edge * ry * .6), (x + rnd.uniform(1.5, 4), edge * ry * .6), (x + rnd.uniform(-.6, .6), edge * ry * .6 + down)], tone)
-	s.oval(0, 1.6, rx, ry, "#6a5a48")
-	s.oval(0, 0, rx, ry, "#7fa55a")
-	for _ in range(rx * ry // 7):
-		a, d = rnd.uniform(0, 6.28), rnd.random() ** .5
-		s.oval(math.cos(a) * d * rx, math.sin(a) * d * ry, rnd.uniform(.5, 2), rnd.uniform(.3, 1), rnd.choice(("#6f9a4e", "#8ab263", "#769f52")))
-	fx = rx * .4
-	for i in range(12):
-		s.line([(fx + i * .15, ry * .7 + i * deep * .1), (fx + i * .15, ry * .7 + (i + 1) * deep * .1)], (*rgb("#bfe8f4"), 220 - i * 16), .8)
-	return s.finish()
-
-
-def isle_shadow(rx):
-	rx = int(rx)
-	s = Wide(rx * 2 + 8, rx // 2 + 6, rx // 2 + 6)
-	s.oval(0, 0, rx, rx * .5, (20, 28, 26, 90))
-	return s.finish()
-
-
-def rope(dx, dy):
-	dx, dy = int(dx), int(dy)
-	s = Wide(abs(dx) * 2 + 8, abs(dy) + 8, abs(dy) + 8)
-	for sag, c in ((0, "#8d6a48"), (-1.6, "#6a4a30")):
-		pts = [(dx * i / 12, dy * i / 12 + math.sin(i / 12 * math.pi) * 4 + sag) for i in range(13)]
-		s.line(pts, c, .6)
-	for i in range(1, 12):
-		x, y = dx * i / 12, dy * i / 12 + math.sin(i / 12 * math.pi) * 4
-		s.line([(x, y), (x, y - 1.6)], "#6a4a30", .2)
-	return s.finish()
-
-
-# ── all the small things ────────────────────────────────────────────────────
-
-def sheep(seed):
-	rnd = random.Random(seed + 40)
-	s = Iso(14, 8, 3)
-	s.shadow(.8, .5, 3.4, 1.4, 90)
-	for x in (-1.8, -.6, .8, 2):
-		s.line([(x, -1.4), (x, .2)], "#3f3a36", .34)
-	for _ in range(26):
-		a, d = rnd.uniform(0, 6.28), rnd.random() ** .5
-		x, y = math.cos(a) * d * 2.9, -2.7 + math.sin(a) * d * 1.6
-		s.oval(x, y, .85, .75, shade("#eeeade", (-x * .03 - (y + 2.7) * .1 + rnd.uniform(-.05, .05))))
-	side = 1 if seed % 2 else -1
-	s.oval(side * 3.2, -3.2, 1, .85, "#3f3a36")
-	s.oval(side * 2.7, -3.9, .5, .3, "#3f3a36")
-	return s.finish()
-
-
-def flowers(seed):
-	rnd = random.Random(seed + 50)
-	s = Iso(26, 8, 8)
-	for _ in range(14):
-		x, y = rnd.uniform(-10, 10), rnd.uniform(-3.5, 5)
-		s.oval(x, y, rnd.uniform(1, 2.4), rnd.uniform(.5, 1), rnd.choice(("#79a854", "#5f9147", "#8ebb60")))
-	for _ in range(70):
-		x, y = rnd.uniform(-11, 11), rnd.uniform(-4, 6)
-		tall = rnd.uniform(.7, 1.6)
-		s.line([(x, y), (x + rnd.uniform(-.2, .2), y - tall)], "#4f7f42", .14)
-		color = rnd.choice(FLOWERS)
-		for a in range(4):
-			s.oval(x + math.cos(a * 1.57) * .3, y - tall + math.sin(a * 1.57) * .2, .24, .2, color)
-		s.oval(x, y - tall, .13, .13, "#ffe07a")
-	return s.finish()
-
-
-def rock(seed):
-	rnd = random.Random(seed + 60)
-	s = Iso(20, 10, 5)
-	s.shadow(1.5, .8, 7, 2.8, 100)
-	for ox, oy, size in ((-3, 0, 3.4), (2.6, .8, 4.4), (0, 1.8, 2.6)):
-		tone = shade("#8f8b82", rnd.uniform(-.1, .08))
-		s.poly([(ox - size, oy), (ox - size * .7, oy - size * .8), (ox + size * .1, oy - size * 1.2), (ox + size, oy - size * .5), (ox + size, oy + size * .2), (ox, oy + size * .4)], tone)
-		s.poly([(ox + size * .1, oy - size * 1.2), (ox + size, oy - size * .5), (ox + size, oy + size * .2), (ox + size * .1, oy + size * .4)], shade(tone, -.24))
-		s.poly([(ox - size * .7, oy - size * .8), (ox + size * .1, oy - size * 1.2), (ox + size * .1, oy - size * .4)], shade(tone, .16))
-	return s.finish()
-
-
-def cart(seed):
-	rnd = random.Random(seed + 70)
-	s = Iso(26, 15, 6)
-	s.shadow(1.5, 1, 7, 3, 90)
-	for x, y in ((-3, 2.6), (3, 2.6)):
-		cx, cy = s.p(x, y, 1.4)
-		s.oval(cx, cy, 1.5, 1.6, "#4a3222")
-		s.oval(cx, cy, 1, 1.1, "#8d6a48")
-		s.oval(cx, cy, .3, .3, "#3f2a1a")
-	box(s, -5, -2, 1.6, 10, 4, 2.2, "#8d6a48", "#6a4a30")
-	left, right = wall_faces(s, -5, -2, 1.6, 10, 4, 2.2)
-	wood_face(left, "#9a7650", 8, rnd)
-	wood_face(right, "#6f5236", 4, rnd)
-	for _ in range(16):
-		a = s.p(rnd.uniform(-4.2, 4.2), rnd.uniform(-1.4, 1.4), 3.9)
-		s.oval(a[0], a[1] - rnd.uniform(0, .9), .75, .6, rnd.choice(("#d9b24c", "#c9973a", "#b8863a", "#e8c66a")))
-	s.line([s.p(5, 0, 2), s.p(10, 0, 1)], "#6a4a30", .36)
-	return s.finish()
-
-
-def crates(seed):
-	seed = seed if isinstance(seed, int) else 0
-	rnd = random.Random(seed + 80)
-	s = Iso(16, 10, 4)
-	s.shadow(.8, .5, 5, 2, 90)
-	for x, y, h, size in ((-2.6, -1.2, 0, 2.4), (.4, .6, 0, 2.2), (-1.6, -.6, 2.4, 1.7)):
-		box(s, x, y, h, size, size, size, "#9a7650", "#b08b62")
-		left, right = wall_faces(s, x, y, h, size, size, size)
-		wood_face(left, "#a57f58", 3, rnd)
-		wood_face(right, "#7a5a3c", 3, rnd)
-	cx, cy = s.p(3.6, -1.6)
-	s.poly([(cx - 1.2, cy), (cx - 1.4, cy - 1.6), (cx - 1, cy - 3), (cx + 1, cy - 3), (cx + 1.4, cy - 1.6), (cx + 1.2, cy)], "#8d6a48")
-	s.oval(cx, cy - 3, 1, .5, "#5f4530")
-	return s.finish()
-
-
-def statue(seed):
-	rnd = random.Random(seed + 90)
-	s = Iso(18, 24, 5)
-	s.shadow(1, .6, 5, 2.4, 90)
-	box(s, -2.4, -2.4, 0, 4.8, 4.8, 2.6, "#a8a295", "#bdb7a9")
-	left, right = wall_faces(s, -2.4, -2.4, 0, 4.8, 4.8, 2.6)
-	stone_face(left, "#b4ae9f", 2, 3, rnd)
-	stone_face(right, "#8e8879", 2, 3, rnd)
-	bronze = "#5f8f7f"
-	s.poly([(-1.7, -2.6), (-1.5, -8), (-1.8, -13), (1.8, -13), (1.5, -8), (1.7, -2.6)], bronze)
-	s.poly([(.2, -2.6), (.2, -13), (1.8, -13), (1.5, -8), (1.7, -2.6)], shade(bronze, -.24))
-	s.oval(0, -14.4, 1.3, 1.4, shade(bronze, .1))
-	s.line([(1.7, -12.4), (3.4, -18)], bronze, .6)
-	s.line([(2.3, -16.4), (4.4, -16.8)], "#c9973a", .3)
-	s.poly([(-1.8, -13), (-3, -8), (-1.6, -7)], shade(bronze, .12))
-	return s.finish()
-
-
-def gold_pile(amount, seed=0):
-	rnd = random.Random(f"gold{seed}")
-	size = 2.4 + min(5, float(amount) if str(amount).replace(".", "").isdigit() else 2) * .5
-	s = Iso(int(size * 5) + 6, int(size * 2.2) + 4, 4)
-	s.shadow(.8, .4, size * 1.4, size * .55, 80)
-	for _ in range(int(size * 42)):
-		a, d = rnd.uniform(0, 6.28), rnd.random() ** .6
-		x = math.cos(a) * d * size * 1.3
-		y = -(1 - d) * size * 1.3 + math.sin(a) * d * size * .4
-		tone = shade(rnd.choice(("#e8c044", "#d9a830", "#f4d868")), -x * .03)
-		s.oval(x, y, .55, .36, shade(tone, -.3))
-		s.oval(x, y - .12, .52, .32, tone)
-	for _ in range(6):
-		s.oval(rnd.uniform(-size, size), -rnd.uniform(0, size), .16, .16, "#fff6c8")
-	return s.finish()
-
-
-def milestone(seed):
-	"""A standing stone with runes for a finished task."""
-	rnd = random.Random(seed + 100)
-	s = Iso(12, 12, 3)
-	s.shadow(.7, .4, 3, 1.3, 90)
-	s.poly([(-1.9, .3), (-1.5, -7), (-.2, -8.6), (.3, .6)], "#a9a59a")
-	s.poly([(.3, .6), (-.2, -8.6), (1.4, -7.2), (1.9, -.1)], "#7f7c72")
-	for i in range(4):
-		y = -6.6 + i * 1.5
-		s.line([(-1.1, y), (-.4, y + .5), (-.9, y + .9)], "#6fd0e0", .18)
-	for _ in range(8):
-		s.oval(rnd.uniform(-2.4, 2.4), rnd.uniform(-.2, .8), rnd.uniform(.3, .7), .3, rnd.choice(("#4f7f42", "#6fa053")))
-	return s.finish()
-
-
-def campfire(seed):
-	rnd = random.Random(int(seed or 0) + 110)
-	s = Iso(14, 11, 4)
-	for i in range(9):
-		a = i / 9 * 6.28
-		s.oval(math.cos(a) * 3, math.sin(a) * 1.5, .75, .5, shade("#8f8b82", rnd.uniform(-.14, .1)))
-	for a, b in (((-2.4, .6), (2, -1.2)), ((2.4, .6), (-2, -1.2)), ((0, 1), (0, -2))):
-		s.line([a, b], "#5a3d28", .7)
-	s.poly([(-1.6, 0), (-.8, -3), (0, -5.6), (.9, -3), (1.6, 0)], "#e8702c")
-	s.poly([(-.9, 0), (-.3, -2.4), (.1, -3.8), (.7, -1.8), (.9, 0)], "#ffcf5a")
-	return s.finish()
-
-
-def ruin(seed):
-	rnd = random.Random(seed + 120)
-	s = Iso(50, 26, 12)
-	s.shadow(2, 1, 14, 6, 90)
-	stone = "#9a968a"
-	s.quad([(-10, -8, 0), (10, -8, 0), (10, 8, 0), (-10, 8, 0)], "#7f8f62")
-	for x, y, dx, dy, tall in ((-9, -7, 16, 2, 12), (-9, -7, 2, 14, 9), (6, -7, 2, 7, 6)):
-		left, right = wall_faces(s, x, y, 0, dx, dy, tall)
-		stone_face(left, shade(stone, .04), max(3, int(tall / 1.4)), max(2, int(dx / 1.7)), rnd)
-		stone_face(right, shade(stone, -.2), max(3, int(tall / 1.4)), max(2, int(dy / 1.7)), rnd)
-		s.quad([(x, y, tall), (x + dx, y, tall), (x + dx, y + dy, tall), (x, y + dy, tall)], shade(stone, .18))
-		for _ in range(int(dx + dy) // 2):
-			u = rnd.random()
-			px, py = s.p(x + dx * u, y + dy, tall)
-			s.rect(px - .8, py - rnd.uniform(0, 2.4), 1.6, rnd.uniform(.8, 2.4), (0, 0, 0, 0))
-	# a broken arch, fallen blocks and ivy
-	left, _ = wall_faces(s, -9, -7, 0, 16, 2, 12)
-	left.poly([(.38, 1), (.38, .5), (.5, .34), (.62, .5), (.62, 1)], "#3f3a30")
-	for _ in range(9):
-		x, y = rnd.uniform(-8, 9), rnd.uniform(-3, 7)
-		box(s, x, y, 0, rnd.uniform(1, 2.2), rnd.uniform(1, 2), rnd.uniform(.7, 1.4), stone)
-	for _ in range(46):
-		a = s.p(rnd.uniform(-9, 7), rnd.choice((-5, -6)), rnd.uniform(0, 10))
-		s.oval(a[0], a[1], rnd.uniform(.3, .6), rnd.uniform(.25, .5), rnd.choice(("#4f7f42", "#6fa053", "#3d6b3a")))
-	return s.finish()
-
-
-def pavilion(s, x, y, r, tall, color, rnd):
-	cx, cy = s.p(x, y)
-	s.oval(cx + .8, cy + .4, r * 1.1, r * .55, (*rgb("#1a2018"), 80))
-	wall = tall * .45
-	s.poly([(cx - r, cy), (cx - r, cy - wall), (cx + r, cy - wall), (cx + r, cy)], "#efe8d8")
-	s.oval(cx, cy, r, r * .5, "#efe8d8")
-	stripes = 12
-	for i in range(stripes):
-		u0, u1 = -1 + i * 2 / stripes, -1 + (i + 1) * 2 / stripes
-		tone = shade(color if i % 2 == 0 else "#f4eddc", (u0 + u1) / 2 * -.26)
-		lift0, lift1 = math.sqrt(max(0, 1 - u0 * u0)) * r * .5, math.sqrt(max(0, 1 - u1 * u1)) * r * .5
-		s.poly([(cx, cy - tall), (cx + u0 * r * 1.08, cy - wall + lift0), (cx + u1 * r * 1.08, cy - wall + lift1)], tone)
-	s.poly([(cx - r * .22, cy + r * .5), (cx - r * .14, cy - wall * .9 + r * .4), (cx + r * .14, cy - wall * .9 + r * .4), (cx + r * .22, cy + r * .5)], "#3f2d20")
-	s.line([(cx, cy - tall), (cx, cy - tall - 2.6)], "#3f352b", .22)
-	s.poly([(cx, cy - tall - 2.6), (cx + 2, cy - tall - 2.1), (cx, cy - tall - 1.4)], color)
-
-
-def market(seed):
-	rnd = random.Random(seed + 130)
-	s = Iso(44, 20, 12)
-	colors = ("#a63c2e", "#2f6f8f", "#c9973a", "#5b7f46", "#7a4f9a")
-	spots = ((-7, -5), (6, -6), (-4, 5), (7, 4))
-	for i, (x, y) in enumerate(spots):
-		pavilion(s, x, y, 4.2, 9.5, colors[(seed + i) % 5], rnd)
-	return s.finish()
-
-
-def tourney(seed):
-	rnd = random.Random(seed + 140)
-	s = Iso(66, 30, 18)
-	s.quad([(-18, -11, 0), (18, -11, 0), (18, 11, 0), (-18, 11, 0)], "#8ca95e")
-	s.quad([(-14, -1.2, 0), (14, -1.2, 0), (14, 1.2, 0), (-14, 1.2, 0)], "#b09b70")
-	for i in range(11):
-		s.line([s.p(-14 + i * 2.8, 0), s.p(-14 + i * 2.8, 0, 2)], "#6a4a30", .28)
-	s.line([s.p(-14, 0, 1.9), s.p(14, 0, 1.9)], "#a63c2e", .38)
-	colors = ("#a63c2e", "#2f6f8f", "#c9973a", "#7a4f9a")
-	for i, (x, y) in enumerate(((-13, -9), (-2, -9), (9, -9), (14, 8))):
-		pavilion(s, x, y, 5, 12, colors[(seed + i) % 4], rnd)
-	return s.finish()
-
-
-def lighthouse(seed):
-	rnd = random.Random(seed + 150)
-	s = Iso(26, 52, 8)
-	s.shadow(2, 1, 8, 3.6, 90)
-	culture = {"roof": "#a63c2e", "wall": "stone", "base": "#ddd5c4", "trim": "#3f352b"}
-	round_tower(s, 0, 0, 0, 5, 28, culture, rnd, roof=False)
-	for y0 in (-8, -20):
-		s.poly([(-5, y0), (-5, y0 - 5), (5, y0 - 5), (5, y0)], "#c0453a")
-		s.poly([(.5, y0), (.5, y0 - 5), (5, y0 - 5), (5, y0)], "#8f2f28")
-	s.rect(-3, -36, 6, 6.5, "#ffe08a")
-	for x in (-3, 0, 3):
-		s.line([(x, -36), (x, -29.5)], "#3f352b", .3)
-	round_tower(s, 0, 0, 34.5, 3.6, 0.1, culture, rnd, roof=True, cone="#a63c2e")
-	return s.finish()
-
-
-def boat(seed):
-	rnd = random.Random(int(seed or 0) + 170)
-	s = Iso(26, 26, 6)
-	s.oval(0, 2.4, 9, 2.4, (*rgb("#1a3a50"), 110))
-	p = s.p
-	s.poly([p(-7, 0, 1.6), p(7, 0, 1.6), p(8.6, 0, 1.2), p(5, 2.8, 0), p(-6, 2.8, 0)], "#8a5f3c")
-	s.poly([p(5, 2.8, 0), p(8.6, 0, 1.2), p(5, -2.8, 0)], "#6a4a30")
-	s.poly([p(-7, -2.2, 1.7), p(7, -2.2, 1.7), p(8.6, 0, 1.7), p(7, 2.2, 1.7), p(-7, 2.2, 1.7)], "#b08b62")
-	for i in range(6):
-		s.line([p(-6 + i * 2.4, -2.2, 1.7), p(-6 + i * 2.4, 2.2, 1.7)], "#8a6a48", .14)
-	s.line([p(0, 0, 1.7), p(0, 0, 17)], "#4d3c2d", .4)
-	s.poly([p(0, 0, 16.4), p(.4, 0, 4), p(6.6, 0, 4.8)], "#f4eddc")
-	s.poly([p(0, 0, 15), p(.2, 0, 4.4), p(-4.6, 0, 5)], "#d9cfb8")
-	s.poly([p(0, 0, 17), p(2, 0, 16.6), p(0, 0, 16)], "#c84b34")
-	return s.finish()
-
-
-def galleon(seed):
-	rnd = random.Random(int(seed or 0) + 180)
-	s = Iso(42, 38, 8)
-	s.oval(0, 4, 15, 4, (*rgb("#1a3a50"), 110))
-	p = s.p
-	s.poly([p(-12, 2, 4), p(12, 2, 4), p(15, 0, 3), p(10, 4.4, 0), p(-11, 4.4, 0)], "#7a5234")
-	for i in range(7):
-		s.line([p(-11, 2.4 + i * .28, 3.6 - i * .55), p(11, 2.4 + i * .28, 3.6 - i * .55)], "#5a3d28", .16)
-	s.poly([p(-13, -2, 4.4), p(12, -2, 4.4), p(15, 0, 4), p(12, 2, 4.4), p(-13, 2, 4.4)], "#b08b62")
-	box(s, -13, -2, 4.4, 6, 4, 3, "#8a5f3c", "#a58259")
-	for mast, tall in ((-3, 24), (6, 20)):
-		s.line([p(mast, 0, 4), p(mast, 0, tall)], "#4d3c2d", .5)
-		for level, width in ((tall - 3, 4), (tall - 11, 5.6)):
-			a, b, c, d = p(mast - width, 0, level), p(mast + width, 0, level), p(mast + width * .9, 0, level - 6.4), p(mast - width * .9, 0, level - 6.4)
-			mid = ((a[0] + b[0]) / 2 + 1.2, (a[1] + b[1]) / 2 - 3.2)
-			s.poly([a, b, c, mid, d], "#f4eddc")
-			s.poly([mid, c, d], "#d9cfb8")
-	s.poly([p(-3, 0, 24), p(0, 0, 23.4), p(-3, 0, 22.6)], "#c84b34")
-	return s.finish()
+def asset_seed(*parts):
+    return int.from_bytes(hashlib.blake2b(repr(parts).encode(), digest_size=8).digest(), 'big')
+
+
+def project(p):
+    x, y, z = p
+    return x - y, (x + y) * .5 - z
+
+
+class Surface:
+    """Ornament lives on its parent plane, never floating in front of a roof."""
+    def __init__(self, points, color):
+        self.points, self.color, self.marks = points, color, []
+        self.flecks = []
+
+    def rect(self, u, v, w, h, color):
+        self.marks.append(([(u,v),(u+w,v),(u+w,v+h),(u,v+h)], color, 0))
+
+    def line(self, points, color, width=.12):
+        self.marks.append((points, color, width))
+
+    def at(self, uv):
+        u,v = uv
+        a,b,c,d = [project(p) for p in self.points]
+        return tuple((a[i]*(1-u)+b[i]*u)*(1-v)+(d[i]*(1-u)+c[i]*u)*v for i in (0,1))
+
+
+class Model:
+    def __init__(self, seed=0):
+        self.rng = random.Random(asset_seed(seed))
+        self.faces = []
+        self.shadow = (8,4)
+
+    def poly(self, points, color):
+        f = Surface(points, color)
+        self.faces.append(f)
+        return f
+
+    def block(self, x,y,z,w,d,h,color, dress=None):
+        a = self.poly([(x,y+d,z+h),(x+w,y+d,z+h),(x+w,y+d,z),(x,y+d,z)],shade(color,.08))
+        b = self.poly([(x+w,y+d,z+h),(x+w,y,z+h),(x+w,y,z),(x+w,y+d,z)],shade(color,-.22))
+        self.poly([(x,y,z+h),(x+w,y,z+h),(x+w,y+d,z+h),(x,y+d,z+h)],shade(color,.23))
+        if dress:
+            for face,length in ((a,w),(b,d)):
+                self.masonry(face,length,h,dress)
+        return a,b
+
+    def masonry(self, face,w,h,kind):
+        rows = max(2,round(h/(.75 if kind=='brick' else 1.7)))
+        cols = max(2,round(w/(1.3 if kind=='brick' else 2.8)))
+        for row in range(rows):
+            face.line([(0,(row+1)/rows),(1,(row+1)/rows)],shade(face.color,-.16),.09)
+            for col in range(cols):
+                u = (col + .5*(row%2))/cols
+                face.line([(u,row/rows),(u,(row+1)/rows)],shade(face.color,-.18),.08)
+                if self.rng.random()<.3:
+                    face.rect(u+.015,row/rows+.025,min(.7/cols,1-u-.015),.65/rows,shade(face.color,self.rng.uniform(-.06,.06)))
+
+    def rod(self,a,b,r,color):
+        # A square beam follows any spatial direction.
+        av,bv=np.array(a,float),np.array(b,float)
+        axis=bv-av
+        if np.linalg.norm(axis)<1e-6: return
+        side=np.cross(axis,[0,0,1])
+        if np.linalg.norm(side)<1e-6: side=np.array([1.,0,0])
+        side=side/np.linalg.norm(side)*r
+        up=np.cross(axis,side); up=up/np.linalg.norm(up)*r
+        ring=[side+up,-side+up,-side-up,side-up]
+        for i in range(4):
+            self.poly([av+ring[i],bv+ring[i],bv+ring[(i+1)%4],av+ring[(i+1)%4]],shade(color,(.12,-.18,-.26,.02)[i]))
+
+    def drum(self,x,y,z,r,h,color,n=10,top=None,r2=None):
+        r2=r if r2 is None else r2
+        base=[(x+math.cos(i*TAU/n)*r,y+math.sin(i*TAU/n)*r,z) for i in range(n)]
+        rim=[(x+math.cos(i*TAU/n)*r2,y+math.sin(i*TAU/n)*r2,z+h) for i in range(n)]
+        for i in range(n):
+            lum=.13*math.cos(i*TAU/n+2)-.08
+            self.poly([base[i],base[(i+1)%n],rim[(i+1)%n],rim[i]],shade(color,lum))
+        self.poly(rim,top or shade(color,.2))
+
+    def roof(self,x,y,z,w,d,rise,color,kind='gable'):
+        x-=.7; y-=.7; w+=1.4; d+=1.4
+        if kind=='hip':
+            ridge=[(x+w*.25,y+d*.5,z+rise),(x+w*.75,y+d*.5,z+rise)]
+            planes=[[(x,y,z),(x+w,y,z),ridge[1],ridge[0]],[(x+w,y,z),(x+w,y+d,z),ridge[1]],[(x+w,y+d,z),(x,y+d,z),ridge[0],ridge[1]],[(x,y+d,z),(x,y,z),ridge[0]]]
+        elif kind=='butterfly':
+            return self.roof(x+.7,y+.7,z,w-1.4,d-1.4,rise*1.8,color,'gable')
+        else:
+            # Storybook roof: steep upper pitch and swept, overhanging eaves.
+            profile=[(0,.5),(.18,rise*.42),(.46,rise*1.5),(.74,rise*.5),(1,.35)]
+            planes=[]
+            for (t0,h0),(t1,h1) in zip(profile,profile[1:]):
+                planes.append([(x,y+d*t0,z+h0),(x+w,y+d*t0,z+h0),(x+w,y+d*t1,z+h1),(x,y+d*t1,z+h1)])
+            self.poly([(x+w,y,z),(x+w,y+d,z)]+[(x+w,y+d*t,z+h) for t,h in reversed(profile)],shade(color,-.3))
+            self.poly([(x,y,z)]+[(x,y+d*t,z+h) for t,h in profile]+[(x,y+d,z)],shade(color,-.1))
+        for index,points in enumerate(planes):
+            f=self.poly(points,shade(color,.08 if index==0 else -.12))
+            if len(points)==4:
+                for row in range(1,8):
+                    f.line([(0,row/8),(1,row/8)],shade(color,-.27),.12)
+                    for col in range(1,max(3,round(w/1.8))):
+                        u=(col-.4*(row%2))/max(3,round(w/1.8))
+                        f.line([(u,(row-1)/8),(u,row/8)],shade(color,-.2),.065)
+                f.line([(0,1),(1,1)],shade(color,.3),.22)
+        self.rod((x,y+d,z),(x+w,y+d,z),.22,shade(color,-.4))
+
+    def foliage(self,x,y,z,rx,ry,rz,color,seed=0):
+        rng=random.Random(asset_seed('foliage',seed))
+        rings=[]; n=9
+        for j in range(5):
+            a=-math.pi/2+(j+.15)*math.pi/4.3
+            rings.append([(x+math.cos(i*TAU/n)*math.cos(a)*rx*rng.uniform(.83,1.13),y+math.sin(i*TAU/n)*math.cos(a)*ry*rng.uniform(.83,1.13),z+math.sin(a)*rz*rng.uniform(.9,1.08)) for i in range(n)])
+        for j in range(4):
+            for i in range(n):
+                a,b,c,d=rings[j][i],rings[j][(i+1)%n],rings[j+1][(i+1)%n],rings[j+1][i]
+                light=.12*(j-1)-.14*math.sin(i*TAU/n)+rng.uniform(-.05,.05)
+                for triangle,tone in (([a,b,c],light),([a,c,d],light+.035)):
+                    face=self.poly(triangle,shade(color,tone))
+                    for _ in range(4):
+                        u,v=rng.random(),rng.random()
+                        if u+v>1: u,v=1-u,1-v
+                        point=tuple(triangle[0][k]*(1-u-v)+triangle[1][k]*u+triangle[2][k]*v for k in range(3))
+                        face.flecks.append((point,rng.uniform(.16,.35),shade(color,tone+.15)))
+        self.poly(rings[-1],shade(color,.26))
+
+    def scale(self, factor):
+        for face in self.faces:
+            face.points=[tuple(float(v)*factor for v in point) for point in face.points]
+            face.flecks=[(tuple(v*factor for v in point),radius*factor,color) for point,radius,color in face.flecks]
+        self.shadow=tuple(v*factor for v in self.shadow)
+
+    def finish(self):
+        pts=[project(p) for f in self.faces for p in f.points]
+        if not pts: raise ValueError('empty asset')
+        rx,ry=self.shadow
+        width=math.ceil(2*max(rx+4,max(abs(p[0]) for p in pts)+2))
+        up=math.ceil(max(ry+3,-min(p[1] for p in pts)+3))
+        down=math.ceil(max(ry+4,max(p[1] for p in pts)+3))
+        # Per-pixel depth avoids the intersecting roofs and hollow mushroom caps
+        # that sorting entire polygons by their centres would produce.
+        scale=sp.FINAL if width>180 else sp.FINAL*2
+        size=(width*scale,(up+down)*scale)
+        canvas=np.zeros((size[1],size[0],4),dtype=np.uint8)
+        depth=np.full((size[1],size[0]),-np.inf,dtype=np.float32)
+        def screen(p):
+            px,py=project(p)
+            return (px+width/2)*scale,(py+up)*scale
+        for f in self.faces:
+            pp=np.array([screen(p) for p in f.points])
+            left=max(0,int(math.floor(pp[:,0].min()))-1); right=min(size[0],int(math.ceil(pp[:,0].max()))+2)
+            top=max(0,int(math.floor(pp[:,1].min()))-1); bottom=min(size[1],int(math.ceil(pp[:,1].max()))+2)
+            if right<=left or bottom<=top:continue
+            matrix=np.column_stack((pp,np.ones(len(pp))))
+            coef,_,rank,_=np.linalg.lstsq(matrix,np.array([sum(p) for p in f.points]),rcond=None)
+            if rank<3:continue
+            tile=Image.new('RGBA',(right-left,bottom-top));draw=ImageDraw.Draw(tile)
+            points=[(float(x-left),float(y-top)) for x,y in pp]
+            tone=rgb(f.color) if isinstance(f.color,str) else f.color
+            draw.polygon(points,fill=tuple(tone))
+            def local(p):return (p[0]+width/2)*scale-left,(p[1]+up)*scale-top
+            for point,radius,color in f.flecks:
+                px,py=project(point)
+                draw.polygon([local(q) for q in ((px-radius,py),(px,py-radius*.65),(px+radius,py-.05),(px,py+radius*.4))],fill=color)
+            for points,color,line in f.marks:
+                points=[local(f.at(p)) for p in points]
+                tone=rgb(color) if isinstance(color,str) else color
+                if line: draw.line(points,fill=tone,width=max(1,round(line*scale)))
+                else: draw.polygon(points,fill=tone)
+            # Surface ornament cannot protrude through another plane at its edge.
+            mask=Image.new('L',tile.size);ImageDraw.Draw(mask).polygon([(float(x-left),float(y-top)) for x,y in pp],fill=255)
+            pixels=np.asarray(tile).copy();pixels[:,:,3]=np.minimum(pixels[:,:,3],np.asarray(mask))
+            yy,xx=np.ogrid[top:bottom,left:right]
+            zz=coef[0]*xx+coef[1]*yy+coef[2]
+            take=(pixels[:,:,3]>0)&(zz>=depth[top:bottom,left:right]-.00001)
+            canvas[top:bottom,left:right][take]=pixels[take]
+            depth[top:bottom,left:right][take]=zz[take]
+        shadow=Image.new('L',size)
+        if rx>0 and ry>0:
+            ImageDraw.Draw(shadow).ellipse(((width/2+2-rx)*scale,(up+1-ry)*scale,(width/2+2+rx)*scale,(up+1+ry)*scale),fill=65)
+            shadow=shadow.filter(ImageFilter.GaussianBlur(scale*.8))
+        out=Image.new('RGBA',size,(33,43,40,0));out.putalpha(shadow)
+        out.alpha_composite(Image.fromarray(canvas))
+        out=out.resize((width*sp.FINAL,(up+down)*sp.FINAL),Image.Resampling.LANCZOS)
+        return out,width/2,up
+
+
+
+def model(seed=0):
+    # All world geometry uses the same detailed materials as the approved study.
+    from detailed import RichModel
+    return RichModel(seed)
+
+
+def opening(face,u,v,w=.15,h=.26,trim='#efe1b7',lit=False):
+    face.rect(u-.025,v-.025,w+.05,h+.05,trim)
+    face.rect(u,v,w,h,'#edc47f' if lit else '#283e48')
+    face.rect(u+.025,v+.02,w*.36,h*.38,'#98b7b2')
+    face.line([(u+w*.5,v),(u+w*.5,v+h)],trim,.13)
+    face.line([(u,v+h*.52),(u+w,v+h*.52)],trim,.12)
+    face.rect(u-.04,v+h,w+.08,.035,shade(trim,-.17))
+
+
+def facade(m,face,count=3,timber=False,door=False):
+    if timber:
+        for u in (0,.33,.66,1): face.line([(u,0),(u,1)],'#5a473c',.32)
+        face.line([(0,.56),(1,.56)],'#5a473c',.3)
+        for u in (0,.66): face.line([(u,.56),(u+.3,.03)],'#5a473c',.22)
+    for i in range(count):
+        opening(face,(i+.3)/count,.15,.48/count,.26,lit=i%3==0)
+    if door:
+        face.rect(.41,.59,.19,.41,'#574d40')
+        face.rect(.435,.64,.12,.31,'#2e4142')
+        face.rect(.52,.8,.025,.035,'#eac57c')
+    else:
+        for i in range(count): opening(face,(i+.3)/count,.62,.48/count,.23)
+
+
+def pot(m,x,y,z=0,color='#a95f48',flowers=False):
+    m.drum(x,y,z,.65,1,color,n=7,r2=.9)
+    m.foliage(x,y,z+1.6,1.1,.9,.9,'#6f8e58',int(x*17+y*31))
+    if flowers:
+        for a in range(3): m.drum(x+math.cos(a*2)*.55,y+math.sin(a*2)*.55,z+2.2,.25,.12,'#efc77c',n=5)
+
+
+def stairs(m,x,y,z,w,n=3,axis='y'):
+    for i in range(n):
+        if axis=='y': m.block(x,y-i*.8,z,w,.85,(i+1)*.5,'#b7ad91')
+        else: m.block(x-i*.8,y,z,.85,w,(i+1)*.5,'#b7ad91')
+
+
+def residence(culture,tier,seed,style=None):
+    """Six architectural families with different massing, not recolored copies."""
+    m=model(('home',culture,tier,seed,style)); wall,roof,accent,wood=CULTURES.get(culture,CULTURES['alpine'])
+    tier=max(0,min(4,int(tier))); h=6+tier*1.3
+    m.shadow=(13,6)
+    # Broken stone doorstep: no square lawn tile around every house.
+    for x,y in ((-4,7),(-2,8),(0,8),(2,8),(4,7)):
+        m.block(x,y,0,1.7,1.3,.25,'#b4ac91')
+    if culture=='nordic':
+        # Long boathouse, steep roof, raised side porch, stacked firewood.
+        a,b=m.block(-7,-4,1,14,8,h,wall)
+        for face in (a,b):
+            for row in range(8): face.line([(0,row/8),(1,row/8)],wood,.18)
+        facade(m,a,3,door=True); facade(m,b,2)
+        m.roof(-7,-4,1+h,14,8,6,roof)
+        m.block(-8,4,0,8,3,1,wood)
+        for x in (-7,-4,-1): m.rod((x,6,1),(x,6,4),.14,wood)
+        m.rod((-7,6,3),(-1,6,3),.12,accent)
+        for i in range(4): m.drum(6,5+i*.55,.4,.45,2,wood,n=6)
+        m.rod((-8,0,h+9),(8,0,h+9),.25,wood)
+        for xx in (-8,8):
+            m.rod((xx,0,h+9),(xx*1.15,0,h+11),.3,wood)
+            m.poly([(xx*1.15,0,h+10),(xx*1.35,0,h+11),(xx*1.15,0,h+12)],accent)
+    elif culture=='southern':
+        # L-shaped courtyard residence, roof terrace and shaded pergola.
+        a,b=m.block(-6,-5,0,7,10,h,wall); facade(m,a,2,door=True); facade(m,b,2)
+        c,d=m.block(1,-5,0,6,5,h*.65,wall); facade(m,c,2)
+        m.roof(-6,-5,h,7,10,4.5,roof)
+        m.drum(-2,-2,h+6,2.2,2,accent,n=10,r2=2.7)
+        m.drum(-2,-2,h+8,2.7,4,accent,n=10,r2=.1)
+        m.block(1,-5,h*.65,6,5,.4,'#e7d7ac')
+        for px,py,pw,pd in ((1,-5,6,.4),(6.6,-5,.4,5),(1,-.4,6,.4)): m.block(px,py,h*.65,pw,pd,1.3,wall)
+        for x in (2,6): m.rod((x,5,0),(x,5,5.5),.18,wood)
+        for x in range(2,7): m.rod((x,0,5.5),(x,5.5,5.5),.12,wood)
+        for y in (1,3,5): m.rod((1.5,y,5.5),(6.5,y,5.5),.14,wood)
+        pot(m,4,3,flowers=True)
+    elif culture=='hanse':
+        # Tall narrow merchant house with stepped gable and hanging hoist.
+        a,b=m.block(-4,-6,0,8,11,h+4,wall,'brick'); facade(m,a,2,door=True); facade(m,b,3)
+        m.roof(-4,-6,h+4,8,11,4,roof)
+        for i in range(4): m.block(-4+i,-6,h+4,8-2*i,.7,i+1.2,wall)
+        m.block(-5,5,0,10,2,.8,'#aaa18a')
+        m.rod((3,4,h+3),(3,8,h+3),.22,wood)
+        m.rod((3,8,h+3),(3,8,h-1),.06,'#b29d74')
+        m.block(2.2,7.2,h-2,1.6,1.6,1.4,'#af8958')
+    elif culture=='eastern':
+        # Teahouse on an open ground-floor arcade and a broad tiered roof.
+        for x in (-5,0,5):
+            for y in (-4,4): m.rod((x,y,0),(x,y,4.2),.3,wood)
+        m.block(-5.8,-4.8,3.8,11.6,9.6,.7,wood)
+        a,b=m.block(-5,-4,4.5,10,8,h*.7,wall); facade(m,a,3); facade(m,b,2)
+        m.roof(-6,-5,4.5+h*.7,12,10,4.5,roof)
+        m.roof(-3,-2,9.5+h*.7,6,4,3.2,roof)
+        for x in (-5,5):
+            m.rod((x,5,2),(x,5,5),.12,wood); m.drum(x,5,2.2,.7,1.2,accent,n=8)
+        stairs(m,-2,7,0,4,4)
+    elif culture=='arcane':
+        # Observatory loft: octagonal tower, offset glass lantern and workshop.
+        m.drum(-1,0,0,5,h+4,wall,n=8)
+        m.drum(-1,0,h+4,6,.7,wood,n=8)
+        m.drum(-1,0,h+4.7,5,11,roof,n=8,r2=.2)
+        m.drum(-1,0,h+16,1.2,2,accent,n=8,r2=.1)
+        a,b=m.block(2,-3,0,5,7,5,wall); facade(m,a,2,door=True)
+        m.roof(2,-3,5,5,7,2,roof,'butterfly')
+        for i in range(4):
+            ang=i*math.pi/2
+            m.rod((-1+math.cos(ang)*5,math.sin(ang)*5,2),(-1+math.cos(ang)*5,math.sin(ang)*5,h+3),.16,wood)
+        m.drum(-1,0,h+18,1.2,.7,'#ecd38b',n=8)
+    else:
+        # Asymmetric chalet: stone lower floor, overhanging loft, side stair.
+        a,b=m.block(-5,-4,0,10,8,4,'#a7a390','stone'); facade(m,a,2,door=True)
+        a,b=m.block(-6,-4.5,4,12,9,h-1,wall); facade(m,a,3,True); facade(m,b,2,True)
+        m.roof(-6,-4.5,h+3,12,9,5,roof)
+        spire(m,5,-3,4,1.8,h+3,wall,roof)
+        m.block(-6,4.5,4,12,2,.45,wood)
+        for x in range(-6,7,2): m.rod((x,6.3,4.4),(x,6.3,6),.12,wood)
+        m.rod((-6,6.3,6),(6,6.3,6),.12,wood)
+        stairs(m,5,7,0,2.5,7)
+    if culture not in ('arcane','eastern'):
+        a,b=m.block(-2,-2,h+3,1.5,1.7,9,'#b3a793','brick')
+        m.block(-2.2,-2.2,h+12,1.9,2.1,.5,'#e2d3b1')
+    # Occupied details: lantern, signboard and clustered ceramic planters.
+    pot(m,-6,6,flowers=True); pot(m,-7,3)
+    m.rod((4,5,3.5),(4,6.5,3.5),.1,wood)
+    m.block(3.6,6.1,2.4,.8,.8,1.1,'#f0c77c')
+    if seed%2:
+        m.block(-7,0,0,1.5,3,1.2,wood)
+        for i in range(3): m.drum(-6.3,.5+i,.9,.35,.4,accent,n=6)
+    return m.finish()
+
+
+def house(culture,tier,seed): return residence(culture,tier,seed)
+
+
+def tree(kind,colors,seed,scale=1):
+    m=model(('tree',kind,seed)); r=m.rng
+    base=colors[0]; m.shadow=(9*scale,4*scale)
+    height=(19+seed%5)*scale
+    if kind=='pine':
+        m.rod((0,0,0),(.5,0,height+7),.55*scale,'#665346')
+        # Individual whorls made of drooping boughs, not stacked triangles.
+        for level in range(7):
+            z=(5+level*3)*scale; reach=(7-level*.75)*scale
+            for j in range(5):
+                a=j*TAU/5+level*.9
+                ex,ey=math.cos(a)*reach,math.sin(a)*reach
+                m.rod((0,0,z+1),(ex,ey,z-.9),.12*scale,'#665346')
+                m.foliage(ex*.65,ey*.65,z,reach*.46,reach*.38,1.9*scale,base,seed+level*9+j)
+        m.foliage(0,0,26*scale,1.1*scale,1.1*scale,3.1*scale,base,seed)
+    elif kind=='palm':
+        for i in range(9): m.rod((i*i*.025,0,i*2),( (i+1)**2*.025,0,(i+1)*2),.55,'#9a7954')
+        for j in range(9):
+            a=j*TAU/9; ex,ey=math.cos(a)*9,math.sin(a)*9
+            m.poly([(2,0,18),(2+ex*.6,ey*.6,20),(2+ex,ey,15),(2+ex*.4-ey*.14,ey*.4+ex*.14,18)],shade(base,.1 if j<4 else -.12))
+    else:
+        stems=3 if kind=='birch' else 1
+        for stem in range(stems):
+            sx=(stem-1)*1.2 if stems>1 else 0
+            lean=r.uniform(-2.8,2.8)*scale
+            bark='#d4d1b4' if kind=='birch' else '#78604b'
+            m.rod((sx,0,0),(sx+lean,.4,height*.75),(.35 if stems>1 else .95)*scale,bark)
+            for j in range(5):
+                a=j*2.4+seed*.3+stem
+                z=height*(.4+j*.105)
+                spread=(3 if stems>1 else 6)*scale*(1-abs(j-2)*.13)
+                ex,ey=sx+lean+math.cos(a)*spread,math.sin(a)*spread
+                m.rod((sx+lean*.5,0,z-3*scale),(ex,ey,z+2*scale),(.16 if stems>1 else .35)*scale,bark)
+                m.foliage(ex,ey,z+3*scale,(2.7 if stems>1 else 4.6)*scale,(2.1 if stems>1 else 3.7)*scale,(3.5 if stems>1 else 3)*scale,base,seed*41+stem*7+j)
+                if kind=='oak':
+                    for side in (-1,1):
+                        m.foliage(ex*.72+side*2*scale,ey*.7,z+2*scale+side*.7,3.2*scale,2.6*scale,2.4*scale,shade(base,.04*side),seed+j*7+side)
+                    m.rod((sx+lean*.4,0,z-3*scale),(ex*.6,ey*.6,z),.22*scale,shade(bark,.14))
+            if kind=='birch':
+                for j in range(6): m.rod((sx-.3,0,j*2.1+1),(sx+.3,0,j*2.1+1.2),.08,'#626559')
+        if kind=='oak':
+            for a in range(5): m.rod((0,0,.6),(math.cos(a*1.3)*2.8,math.sin(a*1.3)*2.8,.1),.3,'#78604b')
+    return m.finish()
+
+
+def oak(colors,seed): return tree('oak',colors,seed)
+def birch(colors,seed): return tree('birch',colors,seed)
+def pine(colors,seed): return tree('pine',colors,seed)
+def palm(seed): return tree('palm',('#4f8f70',),seed)
+def great_tree(seed): return tree('oak',('#6c926c',),seed,2.4)
+def world_tree(scale): return tree('oak',('#4f948a',),9,3.2*min(1.7,max(1,float(scale))))
+
+
+def spire(m,x,y,z,r,h,wall,roof):
+    m.drum(x,y,z,r,h,wall,n=8,r2=r*.84)
+    for zz in (z+2,z+h*.55,z+h-1): m.drum(x,y,zz,r*1.03,.5,'#bfb69d',n=8)
+    m.drum(x,y,z+h,r*1.35,1,roof,n=8,r2=r*1.15)
+    m.drum(x,y,z+h+1,r*1.15,r*3.6,roof,n=8,r2=.1)
+    m.drum(x,y,z+h+1+r*3.6,.4,.9,'#edc57c',n=6)
+    for a in (.4,1.3,2.1):
+        xx,yy=x+math.cos(a)*r*.95,y+math.sin(a)*r*.95
+        m.rod((xx,yy,z+h*.6),(xx,yy,z+h*.6+2),.18,'#f2ce89')
+
+
+def mushroom(m,x,y,z,r,h,seed):
+    m.drum(x,y,z,r*.3,h,'#d6c8a6',n=9,r2=r*.22)
+    n=28; rings=[(r*.25,h+3),(r*.65,h+2.5),(r,h+.5),(r*.94,h)]
+    previous=None
+    for radius,zz in rings:
+        points=[(x+math.cos(i*TAU/n)*radius,y+math.sin(i*TAU/n)*radius,z+zz) for i in range(n)]
+        if previous is None: m.poly(points,'#bf6854')
+        if previous:
+            for i in range(n):
+                f=m.poly([previous[i],previous[(i+1)%n],points[(i+1)%n],points[i]],shade('#b35a4d',.1*math.cos(i)))
+                for j in range(3):
+                    u=.13+j*.28
+                    f.line([(u,.02),(u+.04,.45),(u-.015,.96)],shade(f.color,-.08),.045)
+                if (i+seed)%3==0:
+                    for u,v,rr in ((.3,.2,.13),(.6,.58,.08),(.15,.75,.06)):
+                        f.marks.append(([(u+math.cos(j*TAU/7)*rr,v+math.sin(j*TAU/7)*rr) for j in range(7)],'#e3cf9f',0))
+        previous=points
+    m.poly(points,'#cbb69c')
+    for i in range(56):
+        a=i*TAU/56
+        m.rod((x+math.cos(a)*r*.24,y+math.sin(a)*r*.24,z+h-.12),(x+math.cos(a)*r*.92,y+math.sin(a)*r*.92,z+h-.07),.035,'#9f8d70')
+
+
+def fhouse(style,culture,tier,seed):
+    m=model(('fantasy',style,culture,tier,seed)); wall,roof,accent,wood=CULTURES[culture]
+    h=8+min(4,tier)*1.5; m.shadow=(12,6)
+    if style=='mushroom':
+        # Hollow stalk dwelling with an exterior spiral stair and two caps.
+        mushroom(m,0,0,0,9,h,seed)
+        mushroom(m,6,-3,0,4,h*.55,seed+1)
+        m.block(-1,3,0,2,.5,3,'#695448')
+        for i in range(11):
+            a=i*.28; x,y=math.cos(a)*3.5,math.sin(a)*3.5
+            m.block(x-.7,y-.5,i*.45,1.4,1,.45,'#b89f73')
+        for x in (-2,2): m.block(x,2.3,h*.58,.8,.2,1.4,'#f0ca83')
+        pot(m,-5,3,flowers=True)
+    elif style in ('treehouse','crooked'):
+        # Exposed roots carry a crooked, cantilevered timber room.
+        for a in range(4): m.rod((0,0,5),(math.cos(a*1.7)*6,math.sin(a*1.7)*6,0),.7,wood)
+        m.rod((0,0,0),(-2,0,15),1.3,wood)
+        a,b=m.block(-5,-4,5,10,8,h*.65,wall); facade(m,a,2,True,True); facade(m,b,2,True)
+        m.roof(-6,-4.5,5+h*.65,12,9,6,roof)
+        m.block(-6,4,4.5,13,2,.6,wood)
+        for i in range(8): m.rod((6,5-i*.55,i*.6),(8,5-i*.55,i*.6),.13,wood)
+        for i in range(4): m.foliage(-5+i*3,-4,14+i%2*3,3,2.5,2.5,'#7b9658',seed+i)
+        m.rod((-6,5,6),(-6,5,10),.13,wood)
+        m.block(-6.5,5,8.2,1,.6,1.2,'#f4d084')
+    elif style=='dwarf':
+        # Mountain lodge cut into a crag, huge stone lintel and brass gate.
+        m.foliage(0,0,4,10,7,7,'#898d82',seed)
+        a,b=m.block(-5,3,0,10,3,7,'#b5b09a','stone')
+        a.rect(.29,.3,.42,.7,'#3b4545'); a.rect(.34,.38,.32,.62,'#af8650')
+        for u in (.39,.52,.65): a.line([(u,.4),(u,1)],'#514738',.2)
+        m.block(-6,2,7,12,5,1.4,'#c6b88f')
+        for x in (-6,5): m.block(x,3,0,1.2,3,8,'#827c6d','stone')
+        stairs(m,-3,8,0,6,3)
+        m.foliage(-3,-2,8,4,3,2,'#6f8561',seed)
+    elif style=='crystal':
+        # A hexagonal apothecary beneath a cluster of translucent crystal roofs.
+        m.drum(0,0,0,6,h*.7,wall,n=6)
+        for j in range(3):
+            a=j*2.1; x,y=math.cos(a)*3,math.sin(a)*3
+            crystal(m,x,y,h*.7,2.8,9+j*3,('#8fc7c8','#b1a4cb','#8fb7bd')[j])
+        m.block(-3,4,0,6,3,3,wood)
+        for x in (-3,3):m.rod((x,6,0),(x,6,6),.16,wood)
+        m.roof(-4,3,6,8,5,2,roof)
+        pot(m,-6,2,flowers=True)
+    elif style=='dome':
+        # Desert alchemist: squat octagonal hall under a ribbed onion cupola.
+        m.drum(0,0,0,6,h,wall,n=8)
+        m.drum(0,0,h,7,2,roof,n=12,r2=6)
+        m.drum(0,0,h+2,6,4,roof,n=12,r2=3)
+        m.drum(0,0,h+6,3,4,roof,n=12,r2=.15)
+        a,b=m.block(-2,5,0,4,3,5,wall); facade(m,a,1,door=True)
+        m.roof(-2,5,5,4,3,2,roof,'hip')
+        m.rod((0,0,h+10),(0,0,h+13),.12,'#d7ae56')
+        for x in (-6,6): pot(m,x,2,flowers=True)
+    else:
+        # Wizard/crystal/turret homes: uneven stone shaft, hovering crystal cage.
+        spire(m,-1,0,0,4,h+6,wall,roof)
+        a,b=m.block(1,0,0,6,6,5,wall,'stone'); facade(m,a,2,door=True)
+        m.roof(1,0,5,6,6,3,roof)
+        m.drum(-1,0,h*.6,5,.6,wood,n=8)
+        for j in range(6):
+            a=j*TAU/6
+            m.rod((-1+math.cos(a)*4.8,math.sin(a)*4.8,h*.6),(-1+math.cos(a)*4.8,math.sin(a)*4.8,h*.6+1.8),.12,accent)
+        if style=='crystal':
+            for x,y in ((-5,3),(5,-4),(-3,-5)): crystal(m,x,y,0,1.3,7,accent)
+    if style=='crooked':
+        for face in m.faces:
+            face.points=[(x+max(0,z-4)*.19,y,z) for x,y,z in face.points]
+    return m.finish()
+
+
+def crystal(m,x,y,z,r,h,color):
+    m.drum(x,y,z,r,h*.7,color,n=5,r2=r*.8)
+    m.drum(x,y,z+h*.7,r*.8,h*.3,shade(color,.2),n=5,r2=0)
+
+
+def civic(kind,culture='alpine',level=2,seed=0):
+    m=model(('civic',kind,culture,level,seed)); wall,roof,accent,wood=CULTURES[culture]
+    m.shadow=(24,11); h=11+min(5,level)*1.8
+    if kind in ('keep','citadel','gate','palace'):
+        # A nested keep with courtyard, unequal towers and a bridge-like gate.
+        a,b=m.block(-10,-8,0,16,12,h,wall,'stone'); facade(m,a,4,True,True); facade(m,b,3)
+        m.roof(-10,-8,h,16,12,7,roof)
+        spire(m,-10,-5,0,3.5,h+7,wall,roof)
+        spire(m,8,-3,0,3,h+3,wall,roof)
+        m.rod((-10,-5,h+21.5),(-10,-5,h+25.5),.1,wood)
+        m.rod((8,-3,h+15.7),(8,-3,h+19.7),.1,wood)
+        a,b=m.block(-7,4,0,15,4,5,wall,'stone')
+        a.rect(.39,.24,.22,.76,'#344441')
+        for x in range(-7,9,3): m.block(x,7,5,1.6,1,1.4,wall)
+        stairs(m,-2,11,0,4,4)
+        m.block(-1,-4,h+3,3,3,5,wall,'stone')
+        m.roof(-1,-4,h+8,3,3,3,roof)
+        if kind=='palace':
+            for x in (-5,0,5): spire(m,x,-9,h*.3,1.4,h*.7,'#e7d9ba',roof)
+        if kind=='gate':
+            m.block(-12,6,0,4,4,h*.7,wall,'stone'); m.block(8,6,0,4,4,h*.7,wall,'stone')
+            m.block(-12,6,h*.7,24,4,3,wall,'stone'); m.roof(-12,6,h*.7+3,24,4,4,roof)
+    elif kind=='temple':
+        # Forest sanctuary with a clerestory and a separate bell tower.
+        a,b=m.block(-10,-5,0,18,10,9,'#d8ceb1','stone'); facade(m,a,5); facade(m,b,2,door=True)
+        m.roof(-10,-5,9,18,10,6,roof)
+        a,b=m.block(-8,-2,13,13,4,4,wall); facade(m,a,5)
+        m.roof(-8,-2,17,13,4,3,roof)
+        spire(m,9,-3,0,3,20,wall,roof)
+        for x in range(-9,9,4): m.block(x,5,0,1,2,7,'#b2ac94')
+        stairs(m,7,7,0,4,4)
+    elif kind=='tavern':
+        a,b=m.block(-8,-5,0,16,10,10,wall); facade(m,a,4,True,True); facade(m,b,2,True)
+        m.roof(-8,-5,10,16,10,6,roof)
+        a,b=m.block(-10,3,0,6,5,5,wall); facade(m,a,1)
+        m.roof(-10,3,5,6,5,3,roof)
+        for y in (7,10):
+            m.block(1,y,1.3,6,1.3,.3,wood)
+            for x in (1,6): m.rod((x,y,0),(x,y,1.5),.16,wood)
+        m.rod((-8,5,6),(-8,9,6),.13,wood)
+        f,_=m.block(-8.7,8,3.6,1.4,.4,2,wood); f.rect(.2,.2,.6,.4,'#e7c367')
+        for x in (-4,7): pot(m,x,6,flowers=True)
+    elif kind=='windmill':
+        m.drum(0,0,0,5,18,wall,n=8,r2=3)
+        m.drum(0,0,18,5,8,roof,n=8,r2=.1)
+        m.rod((0,0,22.3),(1.5,3.1,22.3),.3,wood)
+        m.drum(0,0,10,6,.6,wood,n=10)
+        for j in range(10):
+            a=j*TAU/10; m.rod((math.cos(a)*5.8,math.sin(a)*5.8,10),(math.cos(a)*5.8,math.sin(a)*5.8,12),.12,wood)
+        a,b=m.block(3,0,0,5,6,4,wall); facade(m,a,1,door=True)
+        m.roof(3,0,4,5,6,3,roof)
+    elif kind=='forge':
+        a,b=m.block(-6,-5,0,10,8,6,'#8e8b7b','stone'); facade(m,b,2)
+        a.rect(.1,.22,.8,.78,'#302f2b')
+        m.roof(-6,-5,6,10,8,4,roof)
+        m.block(-5,-4,7,3,3,13,'#a18f78','brick')
+        m.block(-5.5,-4.5,20,4,4,.7,'#d0b68c')
+        m.block(-3,2,1,3,2,1.7,'#d1793d'); m.block(-2.6,2.2,2.7,2.2,1.4,.3,'#f1bb57')
+        m.block(5,3,0,2,2,1.8,wood); m.block(4.5,2.7,1.8,3,2.6,.7,'#465455')
+        m.rod((7,-3,0),(7,-3,7),.2,wood); m.rod((3,-3,7),(7,-3,7),.2,wood)
+    elif kind in ('arena','theatre'):
+        for j in range(15):
+            a=math.pi*.15+j*math.pi*1.7/14
+            x,y=math.cos(a)*15,math.sin(a)*12
+            m.block(x-1.6,y-1.5,0,3.2,3,4+j%3,'#b4aa90','stone')
+            m.block(x-1.7,y-1.7,4+j%3,3.4,3.4,.5,wood)
+        m.block(-7,-6,0,14,9,1.3,wood)
+        for x in (-7,7): m.rod((x,-5,0),(x,-5,12),.3,wood)
+        m.roof(-8,-7,11,16,5,4,roof)
+        for x in (-6,6): m.block(x,-4,1.3,1.2,.5,8,'#af514b')
+    elif kind in ('spires','elf_tower','tree'):
+        for x,y,r,tall in ((-5,-3,2.5,26),(5,-2,2,21),(0,3,3,31)):
+            spire(m,x,y,3,r,tall,'#d4d4b8','#54867b')
+            for j in range(3):
+                a=j*2.2
+                m.rod((x,y,9),(x+math.cos(a)*6,y+math.sin(a)*6,0),.8,'#7c6b4c')
+        m.block(-7,-3,14,14,3,.6,'#a7b18d')
+        for x in (-8,8): m.foliage(x,-4,18,4,3,3,'#769c69',seed+int(x))
+    else:
+        # Crystal observatory with buttresses and a levitating central prism.
+        m.drum(0,0,0,9,7,wall,n=8)
+        for j in range(5):
+            a=j*TAU/5; x,y=math.cos(a)*9,math.sin(a)*9
+            spire(m,x,y,0,1.6,12,wall,roof)
+        crystal(m,0,0,12,4,17,'#8dd7d6')
+        m.drum(0,0,9,5,.5,'#d6b673',n=12)
+    if kind in ('keep','citadel','gate','palace','spires','tree'):
+        m.scale(.85+min(5,max(0,level))*.18)
+    return m.finish()
+
+
+def keep(culture,level,seed): return civic('keep',culture,level,seed)
+def seatx(style,culture,level,seed): return civic(style,culture,level,seed)
+def temple(culture,seed): return civic('temple',culture,2,seed)
+def tavern(culture,seed): return civic('tavern',culture,2,seed)
+def windmill(culture,seed): return civic('windmill',culture,2,seed)
+def forge(seed): return civic('forge',seed=seed)
+def round_hall(kind,seed=0): return civic(kind,seed=seed)
+def elf_tower(seed): return civic('elf_tower','arcane',seed=seed)
+
+
+def stall_model(m,x=0,y=0,seed=0):
+    wood='#79583f'; cloth=('#b85145','#467e85','#bea04d')[seed%3]
+    m.block(x-3,y-2,0,6,4,2,wood)
+    for xx in (-3,3):
+        for yy in (-2,2): m.rod((x+xx,y+yy,0),(x+xx,y+yy,6),.16,wood)
+    # Bowed canvas, with a scalloped apron and baskets of produce.
+    for i in range(6):
+        tone=cloth if i%2 else '#e8d6b1'
+        m.poly([(x-3+i,y-2,6.6),(x-2+i,y-2,6.6),(x-2+i,y+3,5.5),(x-3+i,y+3,5.5)],tone)
+        m.poly([(x-3+i,y+3,5.5),(x-2+i,y+3,5.5),(x-1.9+i,y+3,4.7),(x-2.5+i,y+3,4.5),(x-3+i,y+3,4.7)],tone)
+    for i in range(3):
+        m.block(x-2.6+i*1.8,y+.2,2,1.5,1.4,.4,'#ae865a')
+        for j in range(3): m.drum(x-2.2+i*1.8+(j%2)*.5,y+.5+(j//2)*.4,2.4,.3,.35,('#cf8050','#9fba65','#d6b856')[i],n=6)
+
+
+def prop(kind,seed=0,amount=1):
+    m=model(('prop',kind,seed)); wood='#826044'; stone='#b6b09a'; m.shadow=(9,4)
+    if kind in ('stall','market','tourney'):
+        if kind=='stall': stall_model(m,seed=seed)
+        elif kind=='market':
+            stall_model(m,-5,-2,seed); stall_model(m,5,2,seed+1)
+            m.block(-1,5,0,3,2,1.5,wood); pot(m,0,6,1.5,flowers=True)
+        else:
+            for x in (-8,8):
+                m.drum(x,0,0,4,5,'#e5d3af',n=8)
+                m.drum(x,0,5,4.8,6,'#9e5360' if x<0 else '#547e88',n=8,r2=.1)
+                m.rod((x,0,10),(x,0,14),.1,wood)
+                m.poly([(x,0,14),(x+3,0,13),(x,0,12)],'#d9ad5c')
+            m.rod((-8,5,2),(8,5,2),.18,wood)
+    elif kind in ('fountain','well','spring_head'):
+        m.drum(0,0,0,5.5,.8,stone,n=10)
+        m.drum(0,0,.8,4.6,.2,'#538e91',n=10)
+        if kind=='fountain':
+            m.drum(0,0,1,1,4,stone,n=8)
+            m.drum(0,0,5,3,.7,stone,n=8,r2=3.4)
+            m.drum(0,0,5.7,2.8,.1,'#80bec0',n=8)
+            crystal(m,0,0,6,.8,3,'#c6d6c2')
+            for a in range(5):
+                x,y=math.cos(a*TAU/5),math.sin(a*TAU/5)
+                m.rod((x*2.5,y*2.5,5.7),(x*3.8,y*3.8,1),.08,'#b4d9cb')
+        elif kind=='well':
+            m.drum(0,0,.8,3.2,2,stone,n=10)
+            m.drum(0,0,2.8,2.7,.1,'#33494d',n=10)
+            for x in (-4,4): m.rod((x,0,0),(x,0,8),.22,wood)
+            m.roof(-5,-3,8,10,6,3,'#677f6d')
+            m.rod((-4,0,5),(4,0,5),.22,wood)
+            m.rod((0,0,5),(0,0,2),.05,'#c6ae7c')
+        else:
+            m.foliage(-2,-2,3,4,3,4,'#868c7d',seed)
+            m.poly([(-2,0,4),(0,0,4),(1,2,1),(-1,2,1)],'#9acbc1')
+            for x in (-4,4): m.foliage(x,0,1,2,1.5,1.5,'#688b61',seed+int(x))
+    elif kind in ('flowers','field','hedge'):
+        if kind=='field':
+            m.block(-8,-5,0,16,10,.3,'#82694e')
+            for x in range(-7,8,2):
+                for y in range(-4,5,2):
+                    m.rod((x,y,0),(x+.25,y,1.7),.07,'#b1a565')
+                    m.drum(x+.25,y,1.7,.25,.7,'#d9be73',n=5,r2=.05)
+            for x in (-9,9):
+                m.rod((x,-5,0),(x,-5,2),.15,wood); m.rod((x,5,0),(x,5,2),.15,wood)
+                m.rod((x,-5,1.5),(x,5,1.5),.1,wood)
+        elif kind=='hedge':
+            for x in range(-6,7,3): m.foliage(x,0,1.6,2.4,1.5,2,'#567756',seed+x)
+        else:
+            for i in range(24):
+                x,y=m.rng.uniform(-8,8),m.rng.uniform(-4,4); h=m.rng.uniform(.7,2)
+                m.rod((x,y,0),(x+.2,y,h),.045,'#6e8c5a')
+                m.drum(x+.2,y,h,.27,.12,('#d9b16a','#bd7183','#e6d9ac','#7e91c2')[i%4],n=5)
+                m.poly([(x,y,.6),(x+.7,y+.2,1),(x+.1,y,.9)],'#789c62')
+    elif kind in ('rock','mountain','ruin'):
+        big=4 if kind=='mountain' else 1
+        for x,y,r,h in ((-3,0,3,4),(2,-2,4,6),(3,2,2,3)):
+            m.foliage(x*big,y*big,h*.4*big,r*big,r*.8*big,h*.7*big,'#8d9387',seed+int(x))
+        if kind=='mountain':
+            m.foliage(2*big,-2*big,6.5*big,2.2*big,1.8*big,2*big,'#dddcc6',seed)
+            m.shadow=(30,14)
+        if kind=='ruin':
+            for x,h in ((-5,8),(4,5)): m.block(x,-2,0,2,3,h,stone,'stone')
+            m.block(-5,-2,8,5,3,1,stone,'stone')
+            m.foliage(-4,0,1,3,2,1.5,'#68865a',seed)
+    elif kind in ('crates','cart'):
+        for x,y,z in ((-2,0,0),(1,0,0),(-1,-2,0),(-1,-1,2)):
+            a,b=m.block(x,y,z,2.4,2.2,2,'#a78458')
+            for f in (a,b):
+                for u in (.2,.4,.6,.8): f.line([(u,0),(u,1)],wood,.09)
+                f.line([(0,0),(1,1)],'#cfaf7c',.2)
+                f.line([(1,0),(0,1)],'#cfaf7c',.2)
+        if kind=='cart':
+            m.block(-4,-3,0,8,5,.6,wood)
+            for x in (-3,3):
+                m.rod((x,0,0),(x,0,2),.9,'#544b3d')
+                m.rod((x,-1,1),(x,-7,1.5),.15,wood)
+            for y in (-3,2): m.block(-4,y,1,8,.3,1.8,wood)
+    elif kind=='sheep':
+        for x in (-1.5,1.5):
+            for y in (-.8,.8): m.rod((x,y,0),(x,y,1.5),.15,'#504b42')
+        m.foliage(0,0,2,2.3,1.4,1.5,'#e0d7ba',seed)
+        m.foliage(2,0,2.1,.7,.65,.85,'#61594e',seed)
+        m.rod((2,-.7,2.4),(2,.7,2.4),.13,'#c4b898')
+    elif kind in ('statue','milestone','gold_pile','fire'):
+        if kind=='gold_pile':
+            for i in range(min(45,8+int(amount)*3)):
+                x,y=m.rng.uniform(-4,4),m.rng.uniform(-2,2)
+                m.drum(x,y,m.rng.uniform(0,1),.4,.18,'#d6ae58',n=8)
+            m.block(-3,-2,0,3,2,2,wood); m.block(-3,-2,2,3,.3,2,wood)
+        elif kind=='fire':
+            for i in range(7):
+                a=i*TAU/7; m.foliage(math.cos(a)*2.3,math.sin(a)*2.3,.3,.7,.6,.5,stone,i)
+            for a in range(3): m.rod((-1.4,a*.5,.4),(1.4,-a*.5,.4),.25,wood)
+            for x,y,h in ((-.4,0,3),(.5,.2,2),(0,-.2,4)):
+                crystal(m,x,y,.5,.5,h,'#eda758')
+        elif kind=='milestone':
+            m.rod((0,0,0),(0,0,6),.25,wood)
+            m.block(-2,-.2,4,4,.4,1,'#b79c6f'); m.block(-1,-.2,2.6,3,.4,1,'#b79c6f')
+        else:
+            m.block(-3,-3,0,6,6,1.4,stone,'stone')
+            m.drum(0,0,1.4,1.7,5,'#8d9a8c',n=6,r2=1)
+            m.foliage(0,0,7,1,1,1.4,'#a5b09b',seed)
+            # Winged guardian, not a generic plinth.
+            for sign in (-1,1):
+                m.poly([(sign*.5,0,5),(sign*6,-1,10),(sign*4,-1,5),(sign*2,0,3)],'#839b8e')
+    elif kind=='lighthouse':
+        m.drum(0,0,0,4,22,stone,n=8,r2=2.5)
+        for z in (6,12,18): m.drum(0,0,z,4-z*.065,.65,'#8a6a58',n=8)
+        m.drum(0,0,22,4,1,'#785b43',n=8)
+        m.drum(0,0,23,2.7,4,'#edcf86',n=8)
+        for i in range(6):
+            a=i*TAU/6; m.rod((math.cos(a)*2.8,math.sin(a)*2.8,23),(math.cos(a)*2.8,math.sin(a)*2.8,27),.12,'#4c615c')
+        m.drum(0,0,27,4,6,'#52796d',n=8,r2=.1)
+    else: raise ValueError(f'Unknown prop: {kind}')
+    return m.finish()
+
+
+def ship(seed,large=False):
+    m=model(('ship',seed,large)); m.shadow=(0,0)
+    length=13 if large else 7; beam=3.2 if large else 2.1
+    keel=[(-length,0,0),(-length*.7,beam,1),(length*.65,beam,1),(length+2,0,3),(length*.65,-beam,1),(-length*.7,-beam,1)]
+    deck=[(x,y,z+3) for x,y,z in keel]
+    for i in range(6):
+        f=m.poly([keel[i],keel[(i+1)%6],deck[(i+1)%6],deck[i]],'#8b6243')
+        for v in (.25,.5,.75): f.line([(0,v),(1,v)],'#4f4838',.12)
+    m.poly(deck,'#c3a371')
+    for y in (-beam,beam): m.rod((-length*.7,y,4),(length*.65,y,4),.15,'#5d4c3a')
+    # Tall swept prow and a lantern hung beneath the stern cabin.
+    m.rod((length,0,4),(length+3,0,8),.25,'#6a4d39')
+    if large:
+        a,b=m.block(-length*.8,-2,4,5,4,4,'#b89868'); facade(m,a,2)
+        m.roof(-length*.8,-2,8,5,4,2,'#607e71')
+    for x,h in ((0,20 if large else 13),)+(((7,16),) if large else ()):
+        m.rod((x,0,3),(x,0,h),.18,'#66513c')
+        m.rod((x,0,h),(length,0,5),.035,'#c3af84')
+        m.rod((x,0,h),(-length,0,4),.035,'#c3af84')
+        for side in (-1,1):
+            width=(6 if large else 4)*side
+            points=[(x,0,h-1),(x+width,0,h-4),(x+width*.75,1,h-10),(x,1,h-9)]
+            f=m.poly(points,'#decda7' if side<0 else '#a6524c')
+            for u in (.2,.4,.6,.8): f.line([(u,0),(u,1)],'#b69e74',.09)
+        m.poly([(x,0,h),(x+3,0,h-.6),(x,0,h-1.5)],'#d5b368')
+    return m.finish()
+
+
+def boat(seed): return ship(seed)
+def galleon(seed): return ship(seed,True)
 
 
 def bridge_art(seed):
-	"""A stone bridge with an arch; mirrored when the road runs the other way."""
-	rnd = random.Random(7)
-	s = Iso(46, 14, 18)
-	stone = "#a8a295"
-	p = s.p
-	x0, x1, w = -12, 12, 3
-	rise = lambda x: (1 - (x / 12) ** 2) * 4 + 1.6
-	s.shadow(0, 3, 14, 5, 80)
-	n = 16
-	for i in range(n):
-		u0, u1 = x0 + (x1 - x0) * i / n, x0 + (x1 - x0) * (i + 1) / n
-		tone = shade(stone, rnd.uniform(-.08, .06))
-		s.poly([p(u0, w, rise(u0)), p(u1, w, rise(u1)), p(u1, w, -2.4), p(u0, w, -2.4)], shade(tone, .06))
-		s.poly([p(u0, -w, rise(u0)), p(u1, -w, rise(u1)), p(u1, w, rise(u1)), p(u0, w, rise(u0))], shade("#c4b89c", rnd.uniform(-.1, .06)))
-	left = Face(s, p(-6, w, 3), p(6, w, 3), p(6, w, -2.4), p(-6, w, -2.4))
-	left.poly([(0, 1), (0, .5), (.2, .16), (.5, .02), (.8, .16), (1, .5), (1, 1)], "#2c3a42")
-	for side, d in ((w, .9), (-w, 0)):
-		for i in range(n + 1):
-			u = x0 + (x1 - x0) * i / n
-			a = p(u, side, rise(u))
-			s.rect(a[0] - .35, a[1] - 1.5, .7, 1.5, shade(stone, -.08 if side < 0 else .06))
-		s.line([p(x0 + (x1 - x0) * i / n, side, rise(x0 + (x1 - x0) * i / n) + 1.4) for i in range(n + 1)], shade(stone, .14), .4)
-	image, ax, ay = s.finish()
-	from PIL import ImageOps
-	return (ImageOps.mirror(image), image.width / sp.FINAL - ax, ay) if seed else (image, ax, ay)
+    m=model(seed); wood='#846a4c'; m.shadow=(0,0)
+    # A bowed timber bridge with stone abutments and lantern posts.
+    for x in (-10,8): m.block(x,-3,-1,3,6,3,'#a9a58e','stone')
+    for i in range(17):
+        x=-10+i*1.25; z=1.5+2.3*math.sin((i+.5)/17*math.pi)
+        m.block(x,-3,z,1.1,6,.4,shade(wood,.1*(i%3)))
+        if i%4==0:
+            for y in (-3,3): m.rod((x,y,z),(x,y,z+2.4),.14,wood)
+    for y in (-3,3):
+        for i in range(8):
+            a,b=i/8,(i+1)/8
+            m.rod((-10+20*a,y,4+2.3*math.sin(a*math.pi)),(-10+20*b,y,4+2.3*math.sin(b*math.pi)),.13,wood)
+    for x,y in ((-9,3),(9,-3)):
+        m.rod((x,y,1),(x,y,7),.18,wood); m.block(x-.4,y-.4,5.5,.8,.8,1.2,'#edc780')
+    return m.finish()
 
 
-def spring_head(seed):
-	rnd = random.Random(int(seed or 0) + 190)
-	s = Iso(26, 16, 8)
-	s.oval(0, 3, 9, 4, "#3f89a8")
-	for _ in range(12):
-		s.oval(rnd.uniform(-7, 7), rnd.uniform(1, 5), rnd.uniform(.5, 1.4), .2, "#9fd8e8")
-	for ox, oy, size in ((-5, -1, 4), (4, -2, 5), (0, -4, 6)):
-		s.poly([(ox - size, oy + 2), (ox - size * .6, oy - size), (ox + size * .3, oy - size * 1.2), (ox + size, oy + 2)], "#8f8b82")
-		s.poly([(ox + size * .1, oy - size * 1.2), (ox + size, oy + 2), (ox + size * .1, oy + 2)], "#6f6b64")
-	for x in (-.6, .3, 1):
-		s.line([(x, -6), (x, 2)], "#d9f2fb", .4)
-	return s.finish()
+def landmark(kind,seed):
+    if kind=='tree': return great_tree(seed)
+    m=model((kind,seed)); m.shadow=(13,6)
+    if kind=='portal':
+        for j in range(12):
+            a=j*TAU/12; b=(j+1)*TAU/12
+            outer=lambda t:(math.cos(t)*7,0,10+math.sin(t)*9)
+            inner=lambda t:(math.cos(t)*5.2,0,10+math.sin(t)*7)
+            m.poly([outer(a),outer(b),inner(b),inner(a)],shade('#a69db2',.12*math.sin(a)))
+        m.poly([(-4.5,0,6),(0,0,3),(4.5,0,6),(4.5,0,14),(0,0,17),(-4.5,0,14)],'#628f9f')
+        crystal(m,0,0,7,1.6,6,'#b7dfcb')
+        m.block(-8,-2,0,16,4,1,'#969b8b','stone')
+    elif kind=='stones':
+        for j in range(7):
+            a=j*TAU/7; x,y=math.cos(a)*9,math.sin(a)*9
+            m.drum(x,y,0,1.6,5+j%3,'#989e8d',n=5,r2=1.1)
+            m.rod((x+1,y,2),(x+1,y,4),.08,'#a3dbc4')
+        m.drum(0,0,0,3,.3,'#9ac5b5',n=10)
+    elif kind=='crystal':
+        for x,y,r,h in ((0,0,3,22),(-5,2,1.5,11),(5,1,2,15)):
+            crystal(m,x,y,1,r,h,'#8fc6cb')
+        m.drum(0,0,0,8,1,'#8a8d88',n=8)
+    else:
+        # Winged dragon monument with curled neck and a jagged tail.
+        m.block(-5,-4,0,10,8,2,'#989f8e','stone')
+        m.foliage(0,0,5,4,2,3,'#7b9d8f',seed)
+        m.rod((2,0,6),(3,0,11),.7,'#7b9d8f')
+        m.foliage(4,0,11,1.7,1,1.2,'#88ab99',seed)
+        for sign in (-1,1):
+            m.poly([(0,sign,6),(-3,sign*8,13),(1,sign*6,8),(3,sign*3,5)],'#8baa98')
+        m.rod((-3,0,4),(-7,2,3),.5,'#7b9d8f'); m.rod((-7,2,3),(-8,4,6),.3,'#7b9d8f')
+    return m.finish()
+
+
+class Wide(Sheet):
+    k=sp.FINAL
+
+
+def terrace(rx,ry,height,seed,marks,kind='stone'):
+    """Polygonal retaining terraces with buttresses and engraved ring paths."""
+    rx,ry,height=float(rx),float(ry),float(height)
+    s=Wide(math.ceil(rx*2+32),math.ceil(ry+height+14),math.ceil(ry+16))
+    rnd=random.Random(asset_seed('terrace',seed))
+    stone={'sand':'#bfa582','dark':'#707c7c','moss':'#8a967c'}.get(kind,'#a5aa95')
+    grass={'sand':'#c0b286','dark':'#838d80','water':'#849c7e'}.get(kind,'#8b9c76')
+    n=32
+    rim=[(math.cos(i*TAU/n)*rx,math.sin(i*TAU/n)*ry) for i in range(n)]
+    if kind=='water':
+        s.oval(0,0,rx+9,ry+5,'#6d8f8b'); s.oval(0,0,rx+7,ry+4,'#426d79')
+    s.shadow(2,3,rx+2,ry+2,75)
+    for i in range(n):
+        a,b=rim[i],rim[(i+1)%n]
+        s.poly([a,b,(b[0],b[1]-height),(a[0],a[1]-height)],shade(stone,-.12+.1*math.cos(i*TAU/n)))
+        if a[1]>=0:
+            for row in range(max(1,int(height/2))):
+                yy=(row+1)*height/max(1,int(height/2))
+                s.line([(a[0],a[1]-yy),(b[0],b[1]-yy)],shade(stone,-.2),.16)
+            s.line([(a[0],a[1]),(a[0],a[1]-height)],shade(stone,-.22),.22)
+    s.poly([(x,y-height) for x,y in rim],grass)
+    for _ in range(int(rx*ry/18)):
+        a=rnd.random()*TAU; r=math.sqrt(rnd.random())*.96
+        x,y=math.cos(a)*rx*r,math.sin(a)*ry*r-height
+        s.line([(x,y),(x+.5,y-.2)],shade(grass,rnd.uniform(-.14,.17)),.25)
+    for band in marks or ():
+        points=[(math.cos(i*TAU/160)*rx*band,math.sin(i*TAU/160)*ry*band-height) for i in range(161)]
+        s.line(points,'#b7b295',5)
+        s.line(points,'#c4bea3',3.5)
+        for i in range(0,160,2):
+            x,y=points[i]; s.line([(x-.6,y-.4),(x+.6,y+.4)],'#9c9e85',.13)
+    for i,(x,y) in enumerate(rim):
+        s.line([(x,y-height),(rim[(i+1)%n][0],rim[(i+1)%n][1]-height)],shade(stone,.22),.8)
+        if y>0 and height>2 and i%2==0:
+            s.poly([(x-1.1,y),(x+1.1,y),(x+.7,y-height),(x-.7,y-height)],shade(stone,.12))
+            for j in range(4):
+                yy=y-height+j*.9
+                s.poly([(x,yy),(x+1.1,yy+.4),(x+.3,yy+1.3),(x-.7,yy+.6)],'#638364')
+    return s.finish()
+
+
+def ground_square(half,seed):
+    s=Wide(math.ceil(half*4+12),math.ceil(half+8),math.ceil(half+8)); rnd=random.Random(seed)
+    s.poly([(0,-half),(half*2,0),(0,half),(-half*2,0)],'#8c9a77')
+    for axis in (-1,1):
+        for t in range(-int(half),int(half)+1,24):
+            s.line([(t-half,axis*(t+half)*.5),(t+half,axis*(t-half)*.5)],'#c0b89d',4)
+    for _ in range(int(half*2)):
+        x,y=rnd.uniform(-half,half),rnd.uniform(-half,half)
+        s.line([(x-y,(x+y)*.5),(x-y+.5,(x+y)*.5-.3)],'#a5b087',.4)
+    return s.finish()
+
+
+def plaza(radius):
+    m=model(('plaza',radius)); m.shadow=(0,0)
+    m.drum(0,0,0,radius*.72,.35,'#b6b49a',n=12)
+    for ring in range(1,max(2,int(radius/2))):
+        r=ring*1.3
+        for i in range(16):
+            a,b=i*TAU/16,(i+1)*TAU/16
+            m.poly([(math.cos(a)*r,math.sin(a)*r,.4),(math.cos(b)*r,math.sin(b)*r,.4),(math.cos(b)*(r-.2),math.sin(b)*(r-.2),.4),(math.cos(a)*(r-.2),math.sin(a)*(r-.2),.4)],'#89988d')
+    # Compass rose inlaid in the paving.
+    for i in range(8):
+        a=i*TAU/8
+        m.poly([(0,0,.5),(math.cos(a)*radius*.5,math.sin(a)*radius*.5,.5),(math.cos(a+.4)*2,math.sin(a+.4)*2,.5)],'#718d87' if i%2 else '#e3d4aa')
+    return m.finish()
+
+
+def wall(dx,dy):
+    s=Sheet(math.ceil(abs(dx)*2+14),math.ceil(abs(dy)+18),math.ceil(abs(dy)+7))
+    length=max(1,math.hypot(dx,dy)); n=max(2,round(length/2))
+    s.poly([(0,0),(dx,dy),(dx,dy-8),(0,-8)],'#8d998b')
+    for row in range(4):
+        for i in range(n):
+            t=(i+.5*(row%2))/n; t2=min(1,t+.93/n)
+            if t>=1:continue
+            s.poly([(dx*t,dy*t-row*2),(dx*t2,dy*t2-row*2),(dx*t2,dy*t2-row*2-1.8),(dx*t,dy*t-row*2-1.8)],shade('#b0b29b',-.06*(i%3)))
+    s.line([(0,-8),(dx,dy-8)],'#dfd3b3',.8)
+    for i in range(max(2,int(length/6))+1):
+        t=i/max(2,int(length/6)); x,y=dx*t,dy*t
+        s.poly([(x-1,y),(x+1,y),(x+.7,y-10),(x-.7,y-10)],'#c0bda1')
+        s.poly([(x-1.4,y-10),(x+1.4,y-10),(x,y-12)],'#536f69')
+    return s.finish()
+
+
+def wall_tower(culture):
+    m=model('watchtower'); wall,roof,_,_=CULTURES[culture]
+    spire(m,0,0,0,3.8,13,wall,roof)
+    m.drum(0,0,9,5,.8,'#9eaa90',n=8)
+    return m.finish()
+
+
+def gatehouse(culture):
+    m=model('gate'); wall,roof,accent,wood=CULTURES[culture]; m.shadow=(17,6)
+    for x,y in ((-6,6),(6,-6)): spire(m,x,y,0,3.2,16,wall,roof)
+    m.rod((-6,6,11),(6,-6,11),1.4,wall)
+    for i in range(7):
+        x=-3+i
+        m.rod((x,-x,7),(x,-x,11),.1,wood)
+    for x,y in ((-4,6),(6,-4)):
+        m.poly([(x,y,10),(x+1.3,y,10),(x+1.3,y,5),(x+.65,y,4.3),(x,y,5)],accent)
+    return m.finish()
+
+
+def steps(dx,dy,width):
+    s=Sheet(math.ceil(abs(dx)*2+width*2+14),math.ceil(abs(dy)+10),math.ceil(abs(dy)+10))
+    length=max(1,math.hypot(dx,dy)); nx,ny=-dy/length,dx/length*.52
+    def edge(t,sign):return dx*t+nx*width*.5*sign,dy*t+ny*width*.5*sign
+    n=max(3,int(length/1.4))
+    for i in range(n):
+        a,b=i/n,(i+1)/n
+        s.poly([edge(a,-1),edge(a,1),edge(b,1),edge(b,-1)],'#c5bda0' if i%2 else '#9b9f8b')
+    for sign in (-1,1):
+        a,b=edge(0,sign),edge(1,sign)
+        s.line([(a[0],a[1]-2),(b[0],b[1]-2)],'#7f694c',.35)
+        for t in (0,.5,1):
+            x,y=edge(t,sign);s.line([(x,y),(x,y-3)],'#7f694c',.4)
+    return s.finish()
+
+
+def floating_isle(rx,seed):
+    s=Wide(math.ceil(rx*2+12),math.ceil(rx*.55+8),math.ceil(rx*1.1+10)); rnd=random.Random(seed)
+    rim=[(math.cos(i*TAU/18)*rx,math.sin(i*TAU/18)*rx*.5) for i in range(18)]
+    for i,a in enumerate(rim):
+        b=rim[(i+1)%len(rim)]
+        s.poly([a,b,(rnd.uniform(-rx*.3,rx*.3),rx*rnd.uniform(.55,.9))],shade('#8b8c80',rnd.uniform(-.24,.12)))
+        if a[1]>0:
+            for j in range(5):
+                t=(j+.5)/5;xx=a[0]+(b[0]-a[0])*t;yy=a[1]+(b[1]-a[1])*t
+                depth=rnd.uniform(rx*.12,rx*.35)
+                s.line([(xx,yy),(xx*.8,yy+depth*.5),(xx*.65,yy+depth)],'#626e64',.22)
+                s.line([(xx+.25,yy),(xx*.8+.25,yy+depth*.5)],'#aaa990',.16)
+                if j%2==0:
+                    for k in range(6):
+                        vx=xx+math.sin(k)*.8;vy=yy+k*.7
+                        s.poly([(vx,vy),(vx+1,vy+.3),(vx+.4,vy+1.1),(vx-.5,vy+.5)],'#687d53')
+    s.poly(rim,'#82916e')
+    for i in range(int(rx*5)):
+        angle=rnd.random()*TAU;radius=math.sqrt(rnd.random())*rx*.95
+        x,y=math.cos(angle)*radius,math.sin(angle)*radius*.5
+        s.line([(x,y),(x-.3,y-.55),(x+.2,y-.2)],rnd.choice(('#9aa67d','#6b7d5b','#a6aa84')),.18)
+    for i in range(5):
+        x=(i-2)*rx*.3
+        s.line([(x,rx*.35),(x+2,rx*.65),(x-1,rx*.8)],'#6e765e',.5)
+    s.line([(rx*.3,rx*.35),(rx*.32,rx*.75)],'#a6d7c8',1.4)
+    return s.finish()
+
+
+def isle_shadow(rx):
+    s=Wide(math.ceil(rx*2+16),math.ceil(rx*.5+8),math.ceil(rx*.5+8));s.shadow(0,0,rx,rx*.5,55);return s.finish()
+
+
+def rope(dx,dy):
+    s=Wide(math.ceil(abs(dx)*2+12),math.ceil(abs(dy)+10),math.ceil(abs(dy)+14))
+    pts=[(dx*i/24,dy*i/24+math.sin(i/24*math.pi)*5) for i in range(25)]
+    for off in (-1.5,1.5):s.line([(x,y+off) for x,y in pts],'#9d8259',.3)
+    for i in range(0,25,2):
+        x,y=pts[i];s.line([(x,y-1.5),(x,y+1.5)],'#c3a77b',.45)
+    return s.finish()
 
 
 def mist(seed):
-	rnd = random.Random(seed + 200)
-	s = Iso(40, 12, 8)
-	for _ in range(30):
-		s.oval(rnd.uniform(-15, 15), rnd.uniform(-7, 4), rnd.uniform(2.4, 5), rnd.uniform(1, 2.4), (238, 240, 240, 30))
-	return s.finish()
+    s=Sheet(48,12,10)
+    for i in range(9):
+        pts=[(-19+j*2,math.sin(j*.45+i)*1.5+i*.6-4) for j in range(20)]
+        s.line(pts,(203,222,208,30),1.2)
+    return s.finish()
 
 
-def elf_tower(seed):
-	"""A white tower grown among the trees: slender, ringed with balconies, a leaf for a roof."""
-	rnd = random.Random(seed + 210)
-	s = Iso(36, 72, 8)
-	s.shadow(2.5, 1, 9, 4, 90)
-	white, gold, leaf = "#ece8dc", "#d9b24c", "#3f9f7f"
-	for ox, tall in ((-3, 7), (3, 6), (0, 9)):
-		s.poly([(ox - 2.4, 1), (ox - .8, -tall), (ox + .8, -tall), (ox + 2.4, 1)], "#5f4a38")
-	for i in range(28):
-		t0, t1 = i / 28, (i + 1) / 28
-		w = lambda t: 3.6 - t * 2 + math.sin(t * 9) * .22
-		y0, y1 = -3 - t0 * 46, -3 - t1 * 46
-		sway = math.sin(t0 * 2.6) * 1.1
-		sway1 = math.sin(t1 * 2.6) * 1.1
-		s.poly([(sway - w(t0), y0), (sway + w(t0), y0), (sway1 + w(t1), y1), (sway1 - w(t1), y1)], white)
-		s.poly([(sway + w(t0) * .15, y0), (sway + w(t0), y0), (sway1 + w(t1), y1), (sway1 + w(t1) * .15, y1)], shade(white, -.2))
-	for t, r in ((.3, 5.6), (.62, 4.6), (.88, 3.8)):
-		sway = math.sin(t * 2.6) * 1.1
-		y = -3 - t * 46
-		s.oval(sway, y + .6, r, r * .42, shade(gold, -.25))
-		s.oval(sway, y, r, r * .42, gold)
-		for a in (-.5, .3):
-			s.rect(sway + a * r * .7 - .35, y - 3, .7, 1.8, "#ffe9a0")
-	sway = math.sin(2.6) * 1.1
-	for sign, tone in ((-1, shade(leaf, .1)), (1, shade(leaf, -.2))):
-		s.poly([(sway, -49), (sway + sign * 5, -52), (sway + sign * 3.2, -59), (sway, -66)], tone)
-	s.line([(sway, -49), (sway, -66)], shade(leaf, .3), .25)
-	s.oval(sway, -67, .6, .6, "#ffe9a0")
-	for _ in range(20):
-		s.oval(rnd.uniform(-5, 5), rnd.uniform(-40, -8), rnd.uniform(.4, .9), rnd.uniform(.3, .6), rnd.choice(("#4f8f5a", "#6fb078")))
-	return s.finish()
-
-
-def world_tree(scale):
-	rnd = random.Random(909)
-	size = max(1, min(2.2, float(scale or 1)))
-	s = Iso(int(150 * size), int(150 * size), 26)
-	s.shadow(5, 2, 50 * size, 22 * size, 100)
-	colors = ("#3f9f8a", "#8fe8c8", "#22665c")
-	for sign in (-1, 1):
-		for i in range(3):
-			x = sign * (7 + i * 6) * size
-			s.line([(sign * 3 * size, -8 * size), (x, 3 + i * 2)], "#574132", 2.6 - i * .4)
-	bark(s, 0, -76 * size, 0, 12 * size, "#6a5140", rnd)
-	for sign in (-1, 1):
-		s.line([(sign * 3 * size, -52 * size), (sign * 34 * size, -82 * size)], "#5f4635", 5)
-		s.line([(sign * 4 * size, -66 * size), (sign * 18 * size, -96 * size)], "#5f4635", 3.6)
-	for ox, oy, rx, ry, count in ((-34, -86, 26, 18, 420), (34, -86, 26, 18, 420), (0, -112, 36, 24, 720), (0, -84, 38, 15, 460)):
-		leaves(s, rnd, ox * size, oy * size, rx * size, ry * size, colors, count)
-	for _ in range(70):
-		s.oval(rnd.uniform(-58, 58) * size, rnd.uniform(-132, -66) * size, .55, .55, "#fff2a8")
-	return s.finish()
-
-
-def person(seed, frame=0):
-	"""A townsman from above and the side: clothes with light on them, a hat here and there."""
-	rnd = random.Random(seed)
-	s = Sheet(6, 7, 1)
-	cloth = rnd.choice(("#a63c2e", "#2f6f8f", "#c9973a", "#5b7f46", "#7a4f9a", "#8a5f3c", "#3f6f6a", "#c0653a", "#596a8f", "#d9cfb8"))
-	skin_ = rnd.choice(("#e8c4a0", "#d4a67e", "#a87850", "#f0d4b8", "#7f5a3c"))
-	hair = rnd.choice(("#3f2a1a", "#6a4a2c", "#c9a24c", "#2a2420", "#8a8680", "#8f3f28"))
-	stride = .55 if frame else -.55
-	s.oval(.5, .3, 1.7, .6, (20, 26, 22, 90))
-	for x, y in ((-.55 + stride * .5, .1 + stride * .25), (.55 - stride * .5, .1 - stride * .25)):
-		s.line([(x * .8, -1.7), (x, y)], shade(cloth, -.46), .62)
-		s.oval(x, y + .05, .42, .24, "#2f241a")
-	long_ = seed % 3 == 0
-	s.poly([(-1.05, -4.1), (1.05, -4.1), (1.25 if long_ else 1.05, -.5 if long_ else -1.6), (-1.25 if long_ else -1.05, -.5 if long_ else -1.6)], cloth)
-	s.poly([(.2, -4.1), (1.05, -4.1), (1.25 if long_ else 1.05, -.5 if long_ else -1.6), (.2, -.5 if long_ else -1.6)], shade(cloth, -.24))
-	s.line([(-1.05, -2.6), (1.05, -2.6)], shade(cloth, -.4), .22)
-	s.line([(-1.2, -3.9), (-1.35 - stride * .4, -2.2)], shade(cloth, .1), .5)
-	s.line([(1.2, -3.9), (1.35 + stride * .4, -2.2)], shade(cloth, -.3), .5)
-	s.oval(0, -4.9, .82, .86, skin_)
-	s.oval(-.1, -5.28, .84, .56, hair)
-	if seed % 4 == 1:
-		s.oval(0, -5.5, 1.12, .36, rnd.choice(("#6a4a2c", "#3f5f6f", "#7a2f2f")))
-		s.oval(0, -5.8, .66, .46, rnd.choice(("#6a4a2c", "#3f5f6f", "#7a2f2f")))
-	return s.finish()
-
-
-def sails():
-	"""A mill's four sails, turned by the shell."""
-	s = Sheet(40, 20, 20)
-	for a in range(4):
-		a = a * math.pi / 2
-		dx, dy = math.cos(a), math.sin(a)
-		nx, ny = -dy, dx
-		s.line([(0, 0), (dx * 18.5, dy * 18.5)], "#5a3d28", .55)
-		s.poly([(dx * 3.5, dy * 3.5), (dx * 18.5, dy * 18.5), (dx * 18.5 + nx * 3.8, dy * 18.5 + ny * 3.8), (dx * 3.5 + nx * 3.2, dy * 3.5 + ny * 3.2)], (240, 232, 214, 235))
-		for i in range(1, 8):
-			t = 3.5 + i * 2.1
-			s.line([(dx * t, dy * t), (dx * t + nx * 3.7, dy * t + ny * 3.7)], "#7a5c44", .2)
-		s.line([(dx * 3.5 + nx * 3.4, dy * 3.5 + ny * 3.4), (dx * 18.5 + nx * 3.9, dy * 18.5 + ny * 3.9)], "#7a5c44", .22)
-	s.oval(0, 0, 1.4, 1.4, "#4a3222")
-	s.oval(-.3, -.3, .6, .6, "#8a6a48")
-	return s.finish()
-
-
-def scaffold(_seed):
-	"""Poles and planks round what is being built."""
-	s = Iso(36, 28, 6)
-	p = s.p
-	x, y, dx, dy = -9, -7, 18, 14
-	for a, b in ((x, y + dy), (x + dx / 2, y + dy), (x + dx, y + dy), (x + dx, y + dy / 2), (x + dx, y)):
-		s.line([p(a, b, 0), p(a, b, 16)], "#7a5c44", .4)
-	for h in (5, 10, 15):
-		s.line([p(x, y + dy, h), p(x + dx, y + dy, h)], "#a58259", .9)
-		s.line([p(x + dx, y + dy, h), p(x + dx, y, h)], "#8d6a48", .9)
-		s.line([p(x, y + dy, h - 3), p(x + dx / 2, y + dy, h)], "#7a5c44", .2)
-	return s.finish()
-
-
-def smoke(_seed):
-	"""A puff with a lit side and a shaded one, soft at the rim."""
-	rnd = random.Random(5)
-	s = Sheet(10, 5, 5)
-	for _ in range(16):
-		a, d = rnd.uniform(0, 6.28), rnd.random() ** .7
-		x, y = math.cos(a) * d * 2.8, math.sin(a) * d * 2.4
-		s.oval(x, y, rnd.uniform(1, 2), rnd.uniform(.9, 1.7), (*rgb("#b9b6b0" if x + y > .5 else "#f2f0ea"), 46))
-	return s.finish()
-
-
-def flag(_seed):
-	"""A pennant: cloth with folds and a hem."""
-	s = Sheet(8, 3, 3)
-	cloth = "#c84b34"
-	for i in range(8):
-		x0, x1 = -3.6 + i, -2.6 + i
-		w0, w1 = 1.9 - i * .2, 1.9 - (i + 1) * .2
-		s.poly([(x0, -w0), (x1, -w1), (x1, w1), (x0, w0)], shade(cloth, .16 if i % 2 else -.16))
-	s.line([(-3.6, -1.9), (4.4, -.3)], "#f0d060", .16)
-	s.line([(-3.6, 1.9), (4.4, .3)], "#f0d060", .16)
-	s.line([(-3.7, -2.4), (-3.7, 2.4)], "#4d3c2d", .3)
-	s.oval(-3.7, -2.4, .3, .3, "#f0d060")
-	return s.finish()
+def person(seed,frame=0):
+    # Fixed 36x48 frame contract for the live QML walkers.
+    s=Sheet(6,7,1);r=random.Random(seed);stride=.5 if frame else -.5
+    cloak=r.choice(('#517a72','#8a5263','#b77d45','#667393','#64825d'))
+    s.shadow(.4,.2,1.5,.5,65)
+    for x,step in ((-.5,stride),(.5,-stride)):
+        s.line([(x,-1.8),(x+step*.5,0)],'#514938',.55)
+    s.poly([(-.9,-4.5),(.8,-4.5),(1.3,-.8),(0,-1.1),(-1.4,-.7)],cloak)
+    s.poly([(-.9,-4.5),(0,-4.2),(-.3,-1),(-1.4,-.7)],shade(cloak,.2))
+    s.oval(.1,-4.8,.62,.7,r.choice(('#d8b08b','#a97e59','#ebc69b')))
+    # Pointed hood, satchel, and traveller's staff.
+    s.poly([(-.8,-4.9),(-.55,-5.9),(.15,-6.7),(.9,-4.9)],shade(cloak,-.08))
+    s.line([(-.7,-4),(.8,-2.2)],'#dac599',.15)
+    s.rect(.6,-2.5,.7,.9,'#9d7950')
+    s.line([(-.8,-3.1),(.7,-3)],'#554b3c',.18)
+    s.rect(-.1,-3.25,.27,.3,'#d8b870')
+    for xx in (-.7,.25,.7):s.line([(xx,-3.6),(xx-.2,-1.2)],shade(cloak,-.22),.09)
+    s.line([(-.55,-5.3),(-.25,-5.6),(.25,-5.55)],shade(cloak,.3),.09)
+    s.line([(.65,-2.15),(1.15,-2.15)],'#d4b783',.1)
+    if seed%2: s.line([(1.8,-4.7),(1.5,.1)],'#91764f',.16)
+    return s.finish()
 
 
 def golem(frame):
-	"""A walking stone man, runes burning in his chest."""
-	rnd = random.Random(23)
-	s = Sheet(12, 15, 1)
-	stone = "#8f8f92"
-	step = 1 if frame else -1
-	s.oval(.8, .1, 4.4, 1.3, (20, 26, 22, 90))
-	for x, lift in ((-2, max(0, step)), (2, max(0, -step))):
-		s.poly([(x - 1.5, -5), (x + 1.5, -5), (x + 1.3, -lift), (x - 1.3, -lift)], shade(stone, -.2 if x > 0 else -.06))
-	for sign, sw in ((-1, step), (1, -step)):
-		s.poly([(sign * 3.2, -11), (sign * 5.2, -11), (sign * 5.3 + sw * .5, -5), (sign * 3.5 + sw * .5, -5)], shade(stone, -.26 if sign > 0 else .04))
-	s.poly([(-3.8, -4.4), (-4.2, -11.4), (0, -12.2), (4.2, -11.4), (3.8, -4.4)], stone)
-	s.poly([(0, -4.4), (0, -12.2), (4.2, -11.4), (3.8, -4.4)], shade(stone, -.2))
-	for _ in range(20):
-		x, y = rnd.uniform(-3.4, 3.4), rnd.uniform(-11, -5)
-		s.line([(x, y), (x + rnd.uniform(.4, 1.2), y)], shade(stone, -.32), .1)
-	s.poly([(-2, -12), (-2.1, -14.4), (2.1, -14.4), (2, -12)], shade(stone, .12))
-	s.poly([(.2, -12), (.2, -14.4), (2.1, -14.4), (2, -12)], shade(stone, -.14))
-	for x in (-1, .9):
-		s.oval(x, -13.3, .44, .3, "#7fe7ff")
-	s.line([(0, -10), (-.9, -8.4), (.9, -7.8), (0, -6.2)], "#7fe7ff", .28)
-	for _ in range(8):
-		s.oval(rnd.uniform(-4, 4), rnd.uniform(-12, -5), rnd.uniform(.3, .6), .3, rnd.choice(("#5f8f4a", "#7ba85a")))
-	return s.finish()
+    s=Sheet(12,15,1);step=.7 if frame else -.7
+    s.shadow(.5,.1,3.4,1.2,75)
+    for x,y in ((-1.8,step),(1.8,-step)):
+        s.poly([(x-1,-4),(x+1,-4),(x+.7,y),(x-1.2,y)],'#646e65')
+    s.poly([(-3,-4),(-3.5,-9),(0,-11),(3.5,-9),(3,-4),(0,-3)],'#94a18c')
+    s.poly([(0,-11),(3.5,-9),(3,-4),(0,-3)],'#6a8178')
+    s.poly([(-2,-10),(-1.6,-13),(0,-14.5),(1.8,-13),(2,-10)],'#b1b79a')
+    for sign in (-1,1):
+        s.line([(sign*3,-8),(sign*4.5,-5+step*sign)],'#7e8b73',1.7)
+        s.oval(sign*.65,-11.6,.3,.2,'#eacf8a')
+    s.poly([(0,-8.8),(1,-7),(0,-5.8),(-1,-7)],'#eed394')
+    for x,y in ((-2,-10),(2,-9),(-3,-5)):s.poly([(x,y),(x+1,y-1),(x+.7,y+.4)],'#668e5e')
+    return s.finish()
 
 
-def foundation(_seed):
-	"""A dug plot: earth, stones laid out, a stake at each corner."""
-	rnd = random.Random(31)
-	s = Iso(30, 14, 12)
-	s.quad([(-11, -9, 0), (11, -9, 0), (11, 9, 0), (-11, 9, 0)], "#8d7350")
-	for _ in range(90):
-		a = s.p(rnd.uniform(-10.5, 10.5), rnd.uniform(-8.5, 8.5))
-		s.oval(a[0], a[1], rnd.uniform(.3, 1.1), rnd.uniform(.2, .5), rnd.choice(("#7a6244", "#9c8159", "#6d5a3f", "#a58a60")))
-	for i in range(22):
-		t = i / 22 * 4
-		side = int(t)
-		u = t - side
-		x, y = [(-8 + 16 * u, -6), (8, -6 + 12 * u), (8 - 16 * u, 6), (-8, 6 - 12 * u)][side]
-		box(s, x - .8, y - .7, 0, 1.6, 1.4, .8, shade("#a8a295", rnd.uniform(-.1, .08)))
-	for x, y in ((-11, -9), (11, -9), (11, 9), (-11, 9)):
-		s.line([s.p(x, y), s.p(x, y, 2.6)], "#6a4a30", .3)
-	return s.finish()
+def sails():
+    s=Sheet(40,20,20)
+    for i in range(4):
+        a=i*TAU/4+.12;dx,dy=math.cos(a),math.sin(a);nx,ny=-dy,dx
+        def p(t,w):return dx*t+nx*w,dy*t+ny*w
+        s.line([p(0,0),p(18,0)],'#745e45',.45)
+        s.poly([p(4,0),p(18,0),p(17,3),p(7,2)],'#d5c59f')
+        for j in range(5,18,2):s.line([p(j,0),p(j,2.4)],'#9a8561',.14)
+    s.oval(0,0,1.2,1.2,'#bda06b');return s.finish()
 
 
-def glow(color, size=64):
-	"""A soft round light, for what shines and what floats."""
-	from PIL import Image
-	yy, xx = np.mgrid[:size, :size]
-	d = np.hypot(xx - size / 2 + .5, yy - size / 2 + .5) / (size / 2)
-	alpha = np.clip(1 - d, 0, 1) ** 2
-	r, g, b = rgb(color)
-	return Image.fromarray(np.dstack([np.full(d.shape, r), np.full(d.shape, g), np.full(d.shape, b), alpha * 255]).astype(np.uint8), "RGBA")
+def scaffold(seed):
+    m=model(seed)
+    for x in (-8,8):
+        for y in (-5,5):m.rod((x,y,0),(x,y,17),.18,'#9a805a')
+    for z in (4,9,14):
+        m.block(-8,4.5,z,16,2,.3,'#ba9b6d')
+        m.rod((-8,5,z),(8,5,z+4),.1,'#8f7655')
+    for i in range(9):m.rod((8,0,i*1.6),(8,2,i*1.6),.1,'#b3986c')
+    return m.finish()
+
+
+def foundation(seed):
+    m=model(seed)
+    m.block(-8,-6,-.3,16,12,.4,'#827359')
+    for x,y,w,d in ((-8,-6,16,1),(-8,5,16,1),(-8,-6,1,12),(7,-6,1,12)):m.block(x,y,0,w,d,.9,'#a7a48c','stone')
+    for x in (-8,8):
+        for y in (-6,6):m.rod((x,y,0),(x,y,2.4),.13,'#ba9c6b')
+    return m.finish()
+
+
+def smoke(seed):
+    s=Sheet(10,5,5);r=random.Random(seed)
+    for i in range(12):
+        a=i*.6;x=math.sin(a)*1.8;y=2-i*.3
+        s.oval(x,y,1.2+i*.04,.7+i*.04,(212,216,195,35))
+    return s.finish()
+
+
+def flag(seed):
+    s=Sheet(8,3,3)
+    s.poly([(-3,-2),(1,-1.7),(3,0),(1,.5),(2,2),(-3,1.5)],'#8a4c63')
+    s.line([(-3,-2),(1,-1.7),(3,0)],'#d9b46b',.17)
+    s.poly([(-1,-1),(.1,-.2),(-1,.6),(-2,-.2)],'#e6cb89')
+    return s.finish()
+
+
+def glow(color,size=64):
+    yy,xx=np.mgrid[:size,:size];d=np.hypot(xx-size/2+.5,yy-size/2+.5)/(size/2)
+    alpha=np.clip(1-d,0,1)**2
+    return Image.fromarray(np.uint8(np.dstack([np.full(d.shape,c) for c in rgb(color)]+[alpha*255])),'RGBA')
+
+
+def draw_base(art):
+    """Complete manifest. Unknown assets fail visibly instead of using old art."""
+    name,*a=art
+    culture=lambda c:c['name'] if isinstance(c,dict) else c
+    if name in ('oak','birch','pine'):
+        return tree(name,sp.LEAVES['pine' if name=='pine' else a[0]],int(a[1])%7)
+    if name=='house':return house(culture(a[0]),a[1],a[2])
+    if name=='fhouse':return fhouse(a[0],culture(a[1]),a[2],a[3])
+    if name=='seat':return keep(culture(a[0]),a[1],a[2])
+    if name=='seatx':return seatx(a[0],culture(a[1]),a[2],a[3])
+    if name in ('temple','windmill'):return civic(name,culture(a[0]),2,a[1])
+    if name=='tavern':return tavern('alpine',a[0] if a else 0)
+    if name in ('arena','theatre','forge'):return civic(name,seed=a[0] if a else 0)
+    if name=='elf_tower':return elf_tower(a[0] if a else 0)
+    if name=='palm':return palm(a[0])
+    if name=='great_tree':return great_tree(a[0] if a else 0)
+    if name=='world_tree':return world_tree(a[0] if a else 1)
+    if name=='landmark':return landmark(*a)
+    if name=='boat':return boat(a[0] if a else 0)
+    if name=='harbour_ship':return galleon(a[0] if a else 0)
+    if name=='bridge':return bridge_art(a[0] if a else 0)
+    if name in ('wall_tower','gatehouse'):return globals()[name](culture(a[0]))
+    if name in ('terrace','ground_square','plaza','steps','wall','floating_isle','isle_shadow','rope','mist'):return globals()[name](*a)
+    if name=='gold_pile':return prop(name,a[1] if len(a)>1 else 0,a[0])
+    return prop(name,a[0] if a else 0)
+
+
+def base_attachments(art):
+    """Screen-space sockets for live effects, relative to the sprite foot."""
+    name,*args=art
+    if name=='house':
+        culture=args[0]['name'] if isinstance(args[0],dict) else args[0]
+        if culture not in ('arcane','eastern'):
+            h=6+min(4,max(0,args[1]))*1.3
+            return {'smoke':[(-.1,-h-13.7)]}
+    if name=='windmill': return {'mills':[(-1.6,-20)]}
+    if name=='seat' or (name=='seatx' and args[0] in ('citadel','gate','palace')):
+        level=args[1] if name=='seat' else args[2]
+        h=11+min(5,level)*1.8
+        factor=.85+min(5,max(0,level))*.18
+        return {'flags':[(x*factor,y*factor) for x,y in ((-5,-h-33),(11,-h-17.2))]}
+    return {}
 
 
 def draw(art):
-	"""The picture of a thing, when it has an isometric one; it knows them all."""
-	name, *a = art
-	if name == "oak":
-		return oak(sp.LEAVES[a[0]], a[1] % 5)
-	if name == "birch":
-		return birch(sp.LEAVES[a[0]], a[1] % 5)
-	if name == "pine":
-		return pine(sp.LEAVES["pine"], a[1] % 4)
-	if name == "house":
-		return house(a[0]["name"], a[1], a[2] % 6)
-	if name == "seat":
-		return keep(a[0]["name"], a[1], a[2] % 3)
-	if name == "seatx":
-		return seatx(a[0], a[1]["name"], a[2], a[3] % 3)
-	if name == "fhouse":
-		return fhouse(a[0], a[1]["name"], a[2], a[3] % 6)
-	if name == "palm":
-		return palm(a[0] % 3)
-	if name == "landmark":
-		return landmark(a[0], a[1] % 3)
-	if name == "floating_isle":
-		return floating_isle(a[0], a[1])
-	if name == "isle_shadow":
-		return isle_shadow(a[0])
-	if name == "rope":
-		return rope(a[0], a[1])
-	simple = {"sheep": sheep, "flowers": flowers, "rock": rock, "cart": cart, "crates": crates, "statue": statue, "milestone": milestone, "fire": campfire, "ruin": ruin,
-	          "market": market, "tourney": tourney, "lighthouse": lighthouse, "boat": boat, "harbour_ship": galleon, "bridge": bridge_art,
-	          "spring_head": spring_head, "mist": mist, "elf_tower": elf_tower}
-	if name in simple:
-		return simple[name](a[0] if a else 0)
-	if name == "world_tree":
-		return world_tree(a[0] if a else 1)
-	if name == "gold_pile":
-		return gold_pile(a[0], a[1])
-	if name == "temple":
-		return temple(a[0]["name"], a[1] % 3)
-	if name == "tavern":
-		return tavern("alpine", a[0] if a else 0)
-	if name == "stall":
-		return stall(a[0] if a else 0)
-	if name == "fountain":
-		return fountain(0)
-	if name == "well":
-		return well(0)
-	if name == "field":
-		return field(a[0] if a else 0)
-	if name == "hedge":
-		return hedge(a[0] if a else 0)
-	if name == "windmill":
-		return windmill(a[0]["name"], a[1] % 3)
-	if name == "forge":
-		return forge(0)
-	if name in ("arena", "theatre"):
-		return round_hall(name)
-	if name == "terrace":
-		return terrace(*a)
-	if name == "mountain":
-		return mountain(a[0] if a else 0)
-	if name == "plaza":
-		return plaza(a[0])
-	if name == "ground_square":
-		return ground_square(a[0], a[1])
-	if name == "steps":
-		return steps(a[0], a[1], a[2])
-	if name == "wall":
-		return wall(a[0], a[1])
-	if name == "wall_tower":
-		return wall_tower(a[0]["name"])
-	if name == "gatehouse":
-		return gatehouse(a[0]["name"])
-	if name == "great_tree":
-		return great_tree(a[0] if a else 0)
-	return None
+    from detailed import draw as detailed_draw
+    return detailed_draw(art)
+
+
+def attachments(art):
+    from detailed import attachments as detailed_attachments
+    return detailed_attachments(art)

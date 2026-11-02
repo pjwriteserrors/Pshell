@@ -93,15 +93,16 @@ Item {
 	}
 
 	Repeater {
-		model: root.city.flag ? 2 : 0
+		model: root.city.flags ?? []
 
 		Image {
 			id: flag
 
 			required property int index
+			required property var modelData
 
-			x: root.city.flag[0] + (flag.index ? 11 : -11)
-			y: root.city.flag[1] + flag.index * 2
+			x: flag.modelData[0] - 1
+			y: flag.modelData[1] - 1
 			width: 8
 			height: 5
 			source: root.sprites ? `file://${root.sprites}/_flag.png` : ""

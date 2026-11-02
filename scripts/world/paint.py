@@ -49,6 +49,30 @@ def smooth(a, b, x):
 	return t * t * (3 - 2 * t)
 
 
+def world_noise(shape, x, z, s, cell, seed, octaves=3):
+	"""Sample one continuous landscape, independent of crop and render scale."""
+	yy, xx = np.ogrid[:shape[0], :shape[1]]
+	px, pz = x + (xx + .5) / s, z + (yy + .5) / s
+	out = np.zeros(shape, dtype=np.float32)
+	weight, total = 1., 0.
+	for octave in range(octaves):
+		u, v = px / cell, pz / cell
+		i, j = np.floor(u).astype(np.int64), np.floor(v).astype(np.int64)
+		fx, fy = u - i, v - j
+		fx, fy = fx * fx * (3 - 2 * fx), fy * fy * (3 - 2 * fy)
+		def lattice(a, b):
+			n = (a * 374761393 + b * 668265263 + (seed + octave) * 1442695041) & 0xffffffff
+			n = ((n ^ (n >> 13)) * 1274126177) & 0xffffffff
+			return (n ^ (n >> 16)) / 4294967295.
+		top = lattice(i, j) * (1 - fx) + lattice(i + 1, j) * fx
+		bottom = lattice(i, j + 1) * (1 - fx) + lattice(i + 1, j + 1) * fx
+		out += ((top * (1 - fy) + bottom * fy) * 2 - 1) * weight
+		total += weight
+		weight *= .5
+		cell /= 2
+	return out / total
+
+
 def spline(points, step=5):
 	if len(points) < 3:
 		return points
@@ -102,38 +126,40 @@ def land_picture(fields, scene, x, z, w, h, s, seed):
 	town = np.clip(fields.read("town", x, z, w, h, s), 0, 1)
 	broad = fields.read("broad", x, z, w, h, s) * .5 + .5
 	shape = height.shape
-	coarse = noise(shape, 60 * s, seed, 4)
-	fine = noise(shape, 7 * s, seed + 1, 3)
-	grit = noise(shape, max(2, 1.4 * s), seed + 2, 2)
-	out = mix(np.broadcast_to(color("#7ea552"), (*shape, 3)).copy(), np.broadcast_to(color("#a5a95a"), (*shape, 3)), smooth(.42, .72, broad + coarse * .25))
-	out = mix(out, np.broadcast_to(color("#5f9147"), (*shape, 3)), smooth(.1, .7, coarse + fine * .4) * .6)
-	out *= (.93 + fine[..., None] * .1 + grit[..., None] * .06)
+	coarse = world_noise(shape, x, z, s, 60, seed, 4)
+	fine = world_noise(shape, x, z, s, 7, seed + 1, 3)
+	grit = world_noise(shape, x, z, s, 1.4, seed + 2, 2)
+	out = mix(np.broadcast_to(color("#788466"), (*shape, 3)).copy(), np.broadcast_to(color("#a49c75"), (*shape, 3)), smooth(.42, .78, broad + coarse * .25))
+	out = mix(out, np.broadcast_to(color("#586e59"), (*shape, 3)), smooth(.1, .7, coarse + fine * .4) * .6)
+	out *= (.98 + fine[..., None] * .09 + grit[..., None] * .035)
 	# the sun from the upper left
 	dy, dx = np.gradient(height)
 	light = np.clip(1 + (-(dx + dy * .7) * s * .23), .62, 1.3)
-	floor = color("#3e6b3d") * (.85 + fine[..., None] * .2 + grit[..., None] * .1)
+	floor = color("#46684f") * (.94 + fine[..., None] * .12 + grit[..., None] * .06)
 	out = mix(out, floor, smooth(.15, .7, forest + fine * .12) * .85)
 	out = mix(out, color("#a89f73") * (.9 + grit[..., None] * .14), smooth(.3, .85, town + fine * .15) * .5)
 	out = mix(out, color("#9b978a") * (.86 + fine[..., None] * .2 + grit[..., None] * .1), smooth(26, 40, height + fine * 8))
-	sand = smooth(3.4, 1.2, height + fine * .9) * smooth(-.6, .3, height)
-	out = mix(out, color("#ddc98e") * (.94 + grit[..., None] * .1), sand)
+	# Shore vegetation and sand follow the actual water mask, including rivers.
+	wet = np.clip(fields.read("wet", x, z, w, h, s), 0, 1)
+	bank = smooth(.025, .18, wet) * (1 - smooth(.28, .6, wet))
+	out = mix(out, color("#6d8363") * (.95 + fine[..., None] * .08), bank * .6)
+	sand = smooth(.12, .4, wet) * (1 - smooth(.55, .85, wet))
+	out = mix(out, color("#d3c39e") * (.97 + grit[..., None] * .06), sand)
 	out *= light[..., None]
 	if s >= 4:
-		tuft = smooth(.34, .5, noise(shape, 1.1 * s, seed + 3, 1))
+		tuft = smooth(.34, .5, world_noise(shape, x, z, s, 1.1, seed + 3, 1))
 		out = out * (1 - tuft[..., None] * .1)
 
 	# what is worn or laid into it
 	marks = {name: Image.new("L", (shape[1], shape[0]), 0) for name in ("way", "lane", "plaza", "border")}
 	draws = {name: ImageDraw.Draw(image) for name, image in marks.items()}
 	to = lambda p: ((p[0] - x) * s, (p[1] - z) * s)
-	inside = lambda p: x - 40 < p[0] < x + w + 40 and z - 40 < p[1] < z + h + 40
 	for road in scene["roads"]:
-		pts = [to(p) for p in road if inside(p)]
-		if len(pts) > 1:
-			draws["way"].line(pts, fill=255, width=max(2, round(3.4 * s)), joint="curve")
+		# PIL clips each segment; filtering vertices joined unrelated road sections.
+		if len(road) > 1:
+			draws["way"].line([to(p) for p in road], fill=255, width=max(2, round(3.4 * s)), joint="curve")
 	for lane in scene["lanes"]:
-		if inside(lane[0]):
-			draws["lane"].line([to(lane[0]), to(lane[1])], fill=255, width=max(1, round(2 * s)))
+		draws["lane"].line([to(lane[0]), to(lane[1])], fill=255, width=max(1, round(2 * s)))
 	for px, pz, r in scene["plazas"]:
 		a, b = to((px - r, pz - r * .52)), to((px + r, pz + r * .52))
 		draws["plaza"].ellipse((a[0], a[1], b[0], b[1]), fill=255)
@@ -141,9 +167,9 @@ def land_picture(fields, scene, x, z, w, h, s, seed):
 	way = soft("way", max(.8, .4 * s))
 	if way.max() > 0:
 		edge = smooth(.04, .3, way) * (1 - smooth(.3, .7, way))
-		out = out * (1 - edge[..., None] * .32)
-		dirt = color("#b89a6c") * (.88 + fine[..., None] * .16 + grit[..., None] * .14)
-		out = mix(out, dirt, smooth(.3, .62, way + grit * .08))
+		out = out * (1 - edge[..., None] * .14)
+		dirt = color("#a39270") * (.88 + fine[..., None] * .16 + grit[..., None] * .14)
+		out = mix(out, dirt, smooth(.18, .65, way + fine * .07 + grit * .12))
 	stones = cobble(shape, x, z, s)
 	lane = soft("lane", max(.6, .25 * s))
 	if lane.max() > 0:
@@ -164,7 +190,7 @@ def cobble(shape, x, z, s):
 		return np.full(shape, .96, dtype=np.float32)
 	row = np.floor(wz / 1.15)
 	u = wx / 1.5 + row * .5
-	ground = (np.abs(np.modf(u)[0] - .5) < .44) & (np.abs(np.modf(wz / 1.15)[0] - .5) < .42)
+	ground = (np.abs(np.mod(u, 1) - .5) < .44) & (np.abs(np.mod(wz / 1.15, 1) - .5) < .42)
 	rng = np.random.default_rng(5)
 	shades = rng.uniform(.88, 1.06, 1024).astype(np.float32)
 	tone = shades[((np.floor(u).astype(np.int64) * 73856093) ^ (row.astype(np.int64) * 19349663)) % 1024]
@@ -183,8 +209,8 @@ def place(cache, art, s, memo):
 	return memo[key]
 
 
-FLAT_THINGS = {"terrace", "plaza", "ground_square", "field", "flowers", "floating_isle", "isle_shadow", "rope", "steps", "bridge", "mist", "fire", "milestone", "hedge", "sheep", "gold_pile", "crates", "boat", "harbour_ship"}
-TREES = {"oak", "pine", "birch", "palm", "world_tree", "great_tree", "elf_tower"}
+FLAT_THINGS = {"ferns", "reeds", "fallen_log", "terrace", "plaza", "ground_square", "field", "flowers", "floating_isle", "isle_shadow", "rope", "steps", "bridge", "mist", "fire", "milestone", "hedge", "sheep", "gold_pile", "crates", "boat", "harbour_ship"}
+TREES = {"dead_tree", "oak", "pine", "birch", "palm", "world_tree", "great_tree", "elf_tower"}
 
 
 def things_on(canvas, items, cache, x, z, s, memo, birth=None, sway=None):
