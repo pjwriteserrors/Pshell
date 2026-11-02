@@ -17,9 +17,10 @@ Flickable {
 	// a channel's source id; "" for all
 	property string channel: ""
 	readonly property var channels: {
-		const seen = {};
-		for (const item of Streams.shownDiscoveries) seen[item.source] = item.sourceName;
-		return Object.keys(seen).map(id => ({ id: id, name: seen[id] })).sort((a, b) => a.name.localeCompare(b.name));
+		const count = {};
+		for (const item of Streams.shownDiscoveries) count[item.source] = (count[item.source] ?? 0) + 1;
+		const name = id => Streams.makerName(Streams.groupOf(id)).toLowerCase();
+		return Object.keys(count).map(id => ({ id: id, count: count[id] })).sort((a, b) => name(a.id).localeCompare(name(b.id)));
 	}
 	readonly property var shown: Streams.shownDiscoveries.filter(item => root.channel === "" || item.source === root.channel)
 	readonly property real progress: (Streams.scan.total ?? 0) > 0 ? Streams.scan.done / Streams.scan.total : 0
@@ -140,27 +141,13 @@ Flickable {
 			}
 		}
 
-		Flow {
+		ExploreChannels {
 			Layout.fillWidth: true
-			spacing: 6
 			visible: root.channels.length > 1
-
-			Chip {
-				text: "All channels"
-				selected: root.channel === ""
-				onClicked: root.channel = ""
-			}
-			Repeater {
-				model: root.channels
-
-				Chip {
-					required property var modelData
-
-					text: modelData.name
-					selected: root.channel === modelData.id
-					onClicked: root.channel = modelData.id
-				}
-			}
+			channels: root.channels
+			total: Streams.shownDiscoveries.length
+			current: root.channel
+			onPicked: id => root.channel = id
 		}
 
 		GridView {
