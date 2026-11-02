@@ -3,7 +3,8 @@ make things happen on the PC. What happens is in the host profile:
 
     "phone": { "presence": { "after": 120, "leave": ["lock", "pause"], "arrive": [] } }
 
-Actions: "lock" (the lock screen), "pause" (every player), "timer" (pause the
+Actions: "lock" (the lock screen, unless the phone-presence-lock plugin is
+off), "pause" (every player), "timer" (pause the
 time tracker), or a shell command as { "run": "…" }.
 """
 
@@ -50,7 +51,8 @@ def setup(hub, daemon):
         await publish()
         if hub.allowed("presence"):
             for action in settings().get("leave", ["lock", "pause"]):
-                await act(action)
+                if action != "lock" or hub.on("phone-presence-lock"):
+                    await act(action)
 
     @hub.hook("connect")
     async def connected(peer):

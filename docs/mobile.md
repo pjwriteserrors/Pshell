@@ -168,7 +168,7 @@ the phone alone have plugins of their own in the tab **Phone**, all requiring
 | Calls | `phone-telephony` | | pause media during a call, show the caller, silence |
 | Find | `phone-find` (+ `find-mouse`) | | ring the phone; make the PC speak up; light up where the PC's pointer is |
 | Unlock | `phone-unlock` (off), `lock-screen` | | a fingerprint lifts the lock screen |
-| Presence | `phone-presence` (off) | | lock, pause when the phone leaves |
+| Presence | `phone-presence` (off) | | lock, pause when the phone leaves; the lock as `phone-presence-lock` of its own |
 | Session | | locked or not | lock, suspend, log out, restart, shut down |
 
 `scripts/dev/plugin.py check` fails when a topic names a plugin that is not
