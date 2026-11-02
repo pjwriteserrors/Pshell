@@ -2,8 +2,12 @@
 
 A role of the world (mapping.json) lists providers in order of preference; the
 first whose plugins are on and which has data takes the role. So without the
-timer, towns grow from commits, then from screen time, then from finished
-todos, and at the very least from the hours the machine was up.
+timer, towns grow from focus blocks (screentime: time on one workspace without
+a pause, leisure left out), then from finished todos, and at the very least
+from the hours the machine was up; the forest grows from pauses away from it.
+
+A world starts on a day (world-start.json, today when it is missing, again
+today with `world.py --restart`); nothing from before counts.
 
 Providers read only. `realms` hands out work per day as
 {realm, plot, key, bill, other, ...}, the others a number per day. Numbers of
@@ -188,10 +192,54 @@ def realms_screentime(_mapping):
 	return out
 
 
+def leisure_of(mapping):
+	pattern = "|".join(mapping.get("leisure", []))
+	return re.compile(pattern, re.I) if pattern else None
+
+
+def realms_focus(mapping):
+	"""A house per focus block, the town what had most of it; leisure builds nothing."""
+	leisure = leisure_of(mapping)
+	out = defaultdict(list)
+	for day, data in screentime().items():
+		for block in data.get("blocks") or []:
+			try:
+				start, minutes, app, place, title = block[:5]
+			except (TypeError, ValueError):
+				continue
+			if leisure and leisure.search(f"{app}\n{place}\n{title}"):
+				continue
+			place = str(place or app or "Desktop")
+			out[day].append({"realm": place, "realmKey": f"f{norm(place)}", "plot": str(title or place)[:80], "key": f"f{norm(place)}/{norm(title)[:40]}",
+			                 "bill": int(minutes), "other": 0, "at": int(start) // 1000})
+	return out
+
+
+def realms_pauses(_mapping):
+	"""Time away from the screen within a day, as forest."""
+	out = defaultdict(list)
+	for day, data in screentime().items():
+		for pause in data.get("pauses") or []:
+			try:
+				minutes = int(pause[1])
+			except (TypeError, ValueError, IndexError):
+				continue
+			if minutes > 0:
+				# a night or a long absence is no bigger than an hour's walk
+				out[day].append({"realm": "Wald", "realmKey": "forest", "plot": "Wald", "key": "forest", "bill": 0, "other": min(minutes, 60)})
+	return out
+
+
 def realms_todos(_mapping):
-	"""Without dates a closed task stands on the day it was first seen by the ledger."""
+	"""Without dates a closed task stands on the day it was first seen closed;
+	what was closed when the world began stands nowhere."""
 	path = Path.home() / "todo/Tasks.md"
+	seen_path = state() / "world-todos.json"
 	today = date.today().isoformat()
+	first = since()
+	seen = read_json(seen_path)
+	fresh = seen.get("since") != first
+	done = {} if fresh else dict(seen.get("done") or {})
 	out = defaultdict(list)
 	group = "Tasks"
 	try:
@@ -202,7 +250,12 @@ def realms_todos(_mapping):
 		if line.startswith("## "):
 			group = line[3:].strip()
 		elif re.match(r"\s*- \[[xX]\]", line):
-			out[today].append({"realm": group, "realmKey": f"n{norm(group)}", "plot": group, "key": f"n{norm(group)}", "bill": 30, "other": 0})
+			key = f"{group}\n{line.strip()}"
+			if key not in done:
+				done[key] = "" if fresh else today
+			if done[key]:
+				out[done[key]].append({"realm": group, "realmKey": f"n{norm(group)}", "plot": group, "key": f"n{norm(group)}", "bill": 30, "other": 0})
+	write_json(seen_path, {"since": first, "done": done})
 	return out
 
 
@@ -230,6 +283,8 @@ def realms_boots(_mapping):
 
 REALMS = {
 	"tickets": (("qtrack",), lambda mapping: tickets()),
+	"focus": (("screentime",), realms_focus),
+	"pauses": (("screentime",), realms_pauses),
 	"git": ((), realms_git),
 	"screentime": (("screentime",), realms_screentime),
 	"todos": (("todos",), realms_todos),
@@ -366,6 +421,20 @@ def write_json(path, value):
 	scratch.replace(path)
 
 
+def since(restart=False):
+	"""The first day of the world."""
+	path = state() / "world-start.json"
+	known = read_json(path).get("since")
+	if restart or not known:
+		known = date.today().isoformat()
+		write_json(path, {"since": known})
+	return known
+
+
+def from_day(table, first):
+	return {day: value for day, value in table.items() if day >= first}
+
+
 def available(names, plugins, table):
 	for name in names:
 		needs, data = table.get(name, (("?",), None))
@@ -373,15 +442,16 @@ def available(names, plugins, table):
 			yield name, data
 
 
-def gather(mapping_path=HERE / "mapping.json"):
+def gather(mapping_path=HERE / "mapping.json", restart=False):
 	"""Everything the layout needs, and which provider took which role."""
 	mapping = read_json(mapping_path)
+	first = since(restart)
 	plugins = {name for name, on in host.plugins().items() if on}
 	used = {}
 
 	work = {}
 	for name, data in available(mapping["realms"], plugins, REALMS):
-		work = data(mapping)
+		work = from_day(data(mapping), first)
 		if work:
 			used["realms"] = name
 			break
@@ -392,7 +462,7 @@ def gather(mapping_path=HERE / "mapping.json"):
 		for name, data in available(mapping["forest"], plugins, REALMS):
 			if name == used.get("realms"):
 				continue
-			source = data(mapping) if name in REALMS else {}
+			source = from_day(data(mapping), first) if name in REALMS else {}
 			added = False
 			for day, items in source.items():
 				for item in items:
@@ -407,13 +477,15 @@ def gather(mapping_path=HERE / "mapping.json"):
 	today = date.today().isoformat()
 	ledger_path = state() / "world-ledger.json"
 	ledger = read_json(ledger_path)
+	if ledger.get("_since") != first:
+		ledger = {"_since": first}
 	result = {}
 	for role, names in mapping.items():
-		if role in ("realms", "forest", "gitRoots"):
+		if role in ("realms", "forest", "gitRoots", "leisure"):
 			continue
 		chosen = {}
 		for name, data in available(names, plugins, table):
-			chosen = data() if callable(data) else data
+			chosen = from_day(data() if callable(data) else data, first)
 			if chosen and any(chosen.values()):
 				used[role] = name
 				break
@@ -434,7 +506,8 @@ def gather(mapping_path=HERE / "mapping.json"):
 		repos = git_commits(mapping)
 		for name, repo in repos.items():
 			for day in repo["tags"]:
-				monuments[day] = monuments.get(day, 0) + 1
+				if day >= first:
+					monuments[day] = monuments.get(day, 0) + 1
 	result["monuments"] = monuments
 	sent = defaultdict(int)
 	unsent = defaultdict(int)

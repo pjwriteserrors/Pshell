@@ -19,6 +19,13 @@ import Quickshell.Wayland
 // A day keeps its total, its hours, its longest stretch without a pause and
 // the seconds per app, window, workspace, host and page (screentime.json).
 // Windows and pages of days older than two weeks shrink to the biggest few.
+//
+// It also keeps focus blocks and pauses (for the world): a block is time on
+// one workspace without a pause, where a look elsewhere shorter than
+// `strayMinutes` does not break it; only blocks of `blockMinutes` are kept, as
+// [start ms, minutes, appId, place, title] of what had the most of it. A pause
+// is time idle, locked or asleep of `pauseMinutes` within a day, as
+// [start ms, minutes].
 Singleton {
 	id: root
 
@@ -27,10 +34,13 @@ Singleton {
 	readonly property int idleSeconds: 90
 	readonly property int keepDays: 400
 	readonly property int detailDays: 14
+	readonly property int blockMinutes: 25
+	readonly property int strayMinutes: 2
+	readonly property int pauseMinutes: 5
 
 	// day (yyyy-MM-dd) → { total, longest, longestEnd, hours: [24], apps: { appId: s },
 	//   windows: { "appId\ntitle": s }, spaces: { "output\nname": s }, links: { host: s },
-	//   pages: { "host/path": [s, title] } }
+	//   pages: { "host/path": [s, title] }, blocks: [[...]], pauses: [[...]] }
 	// changed in place: whatever reads it binds to `stamp`
 	property var days: ({})
 	property int stamp: 0
@@ -39,6 +49,12 @@ Singleton {
 	// seconds at the screen since the last pause
 	property int stretch: 0
 	property bool dirty: false
+	// the block running: { space, start, last, strayFrom, seconds: { "app\nplace\ntitle": s } }
+	property var block: null
+	property real lastActive: 0
+
+	signal blockClosed(var block)
+	signal pauseEnded(var pause)
 	// the tab in front of each browser: { source: { host, path, title } }
 	property var tabs: ({})
 	readonly property bool browserLinked: Object.keys(root.tabs).length > 0
@@ -65,7 +81,7 @@ Singleton {
 	}
 
 	function emptyDay() {
-		return { total: 0, longest: 0, longestEnd: 0, hours: new Array(24).fill(0), apps: {}, windows: {}, spaces: {}, links: {}, pages: {} };
+		return { total: 0, longest: 0, longestEnd: 0, hours: new Array(24).fill(0), apps: {}, windows: {}, spaces: {}, links: {}, pages: {}, blocks: [], pauses: [] };
 	}
 
 	function format(seconds) {
@@ -192,10 +208,17 @@ Singleton {
 		// asleep, or nobody there
 		if (seconds > root.sampleSeconds * 4 || seconds <= 0 || Session.locked || idle.isIdle) {
 			root.stretch = 0;
+			root.closeBlock(root.block?.last ?? 0);
 			return;
 		}
 		if (!root.days[key]) root.days[key] = root.emptyDay();
 		const day = root.days[key];
+		if (root.lastActive > 0 && root.dayKey(new Date(root.lastActive)) === key && now - root.lastActive >= root.pauseMinutes * 60000) {
+			const pause = [Math.round(root.lastActive), Math.round((now - root.lastActive) / 60000)];
+			day.pauses.push(pause);
+			root.pauseEnded(pause);
+		}
+		root.lastActive = now;
 		const count = (table, name) => table[name] = (table[name] || 0) + seconds;
 
 		day.total += seconds;
@@ -206,8 +229,10 @@ Singleton {
 			day.longestEnd = now;
 		}
 		const space = Niri.workspaces.find(workspace => workspace.is_focused);
-		if (space) count(day.spaces, `${space.output}\n${space.name || space.idx}`);
+		const spaceKey = space ? `${space.output}\n${space.name || space.idx}` : "";
+		if (space) count(day.spaces, spaceKey);
 		const window = Niri.windows.find(each => each.is_focused);
+		let thing = "";
 		if (window) {
 			const app = String(window.app_id || "");
 			count(day.apps, app);
@@ -219,9 +244,48 @@ Singleton {
 				page[0] += seconds;
 				page[1] = tab.title;
 			}
+			thing = `${app}\n${tab ? tab.host : root.appName(app)}\n${tab ? tab.title : root.cleanTitle(window.title)}`;
 		}
+		root.follow(spaceKey, thing, seconds, now);
 		root.dirty = true;
 		root.stamp += 1;
+	}
+
+	// ── focus blocks ────────────────────────────────────────────────────────
+	function follow(space, thing, seconds, now) {
+		let block = root.block;
+		let start = now - seconds * 1000;
+		if (block && block.space !== space) {
+			if (block.strayFrom === 0) block.strayFrom = start;
+			// away long enough: the block ended where the look elsewhere began
+			if (now - block.strayFrom >= root.strayMinutes * 60000) {
+				start = block.strayFrom;
+				root.closeBlock(start);
+				block = null;
+			}
+		} else if (block) {
+			block.strayFrom = 0;
+		}
+		if (!block) block = root.block = { space: space, start: start, last: now, strayFrom: 0, seconds: {} };
+		block.last = now;
+		if (thing !== "") block.seconds[thing] = (block.seconds[thing] || 0) + seconds;
+	}
+
+	function closeBlock(end) {
+		const block = root.block;
+		root.block = null;
+		if (!block || end <= block.start) return;
+		const minutes = Math.round((end - block.start) / 60000);
+		if (minutes < root.blockMinutes) return;
+		const top = Object.keys(block.seconds).sort((a, b) => block.seconds[b] - block.seconds[a])[0] || "\nDesktop\n";
+		const parts = top.split("\n");
+		const entry = [Math.round(block.start), minutes, parts[0], parts[1], parts.slice(2).join(" ")];
+		const key = root.dayKey(new Date(block.start));
+		if (!root.days[key]) root.days[key] = root.emptyDay();
+		root.days[key].blocks.push(entry);
+		root.dirty = true;
+		root.stamp += 1;
+		root.blockClosed(entry);
 	}
 
 	// the biggest `keep` of a table
@@ -268,7 +332,10 @@ Singleton {
 		store.setText(JSON.stringify({ days: root.days }));
 	}
 
-	Component.onDestruction: root.save()
+	Component.onDestruction: {
+		root.closeBlock(root.block?.last ?? 0);
+		root.save();
+	}
 
 	IdleMonitor {
 		id: idle

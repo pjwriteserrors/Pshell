@@ -73,6 +73,14 @@ Singleton {
 	}
 	property bool stale: false
 
+	// the world begins again today; nothing from before counts
+	function restart() {
+		root.restartNext = true;
+		if (builder.running) root.stale = true;
+		else builder.running = true;
+	}
+	property bool restartNext: false
+
 	function open(folder) {
 		const next = String(folder || "").trim();
 		if (next === "" || next === root.folder) return;
@@ -145,9 +153,10 @@ Singleton {
 	Process {
 		id: builder
 
-		command: ["nice", "-n", "15", "python3", `${Paths.scripts}/world/world.py`, "--palette", JSON.stringify({ shell: WorldPalette.shell.map(color => String(color)), primary: String(Theme.primary) })]
+		command: ["nice", "-n", "15", "python3", `${Paths.scripts}/world/world.py`, "--palette", JSON.stringify({ shell: WorldPalette.shell.map(color => String(color)), primary: String(Theme.primary) }), ...(root.restartNext ? ["--restart"] : [])]
 		stdout: StdioCollector { onStreamFinished: if (root.wanted) root.open(text) }
 		stderr: StdioCollector { id: complaints }
+		onRunningChanged: if (running) root.restartNext = false
 		onExited: exitCode => {
 			if (exitCode !== 0) root.error = complaints.text.trim().split("\n").pop() || "World failed";
 			if (root.stale) {
@@ -280,6 +289,19 @@ Singleton {
 		}
 	}
 	property int todosSeen: -1
+
+	// a finished focus block builds, a pause grows the forest
+	Connections {
+		target: Plugins.on("screentime") ? Screentime : null
+		function onBlockClosed(block) {
+			root.announce("capital", `${block[1]} min ${block[3]}`);
+			root.grow();
+		}
+		function onPauseEnded(pause) {
+			root.announce("rest", `${pause[1]} min away`);
+			root.grow();
+		}
+	}
 
 	Connections {
 		target: Plugins.on("games") ? Games : null

@@ -1705,8 +1705,8 @@ def main(argv):
 	root.mkdir(parents=True, exist_ok=True)
 	palette = palette_of(argv)
 	(root / "palette.json").write_text(json.dumps(palette))
-	work, numbers, used, _plugins = sources.gather()
-	stamp = fingerprint(work, {**numbers, "palette": palette}, used)
+	work, numbers, used, _plugins = sources.gather(restart="--restart" in argv)
+	stamp = fingerprint(work, {**numbers, "palette": palette, "since": sources.since()}, used)
 	current = root / stamp
 	if (current / "world.json").exists() and "--force" not in argv:
 		print(current)

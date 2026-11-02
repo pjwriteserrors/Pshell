@@ -702,7 +702,13 @@ per city, and a small land per day and ticket in `mini/`. Towns from 8 houses on
 are planned by `plan_city`, each after one of the `ARCHETYPES`, which also decide
 what its people build. `scripts/world/mapping.json` says which source fills which
 role, first enabled plugin with data wins (`sources.py`), so the world does not
-need the timer. `core/views/world/` only moves over these pictures: `WorldMap` draws
+need the timer. Without it towns grow from focus blocks (`Screentime.blocks`: 25
+minutes and more on one workspace without a pause, a look elsewhere under two
+minutes does not break one; what `leisure` in the mapping matches builds nothing)
+and the forest from pauses away from the screen (`Screentime.pauses`, 5 minutes
+and more within a day). A world begins on the day in
+`~/.local/state/pshell/world-start.json`; nothing from before counts, and
+`scripts/ipc.sh world restart` begins it again today. `core/views/world/` only moves over these pictures: `WorldMap` draws
 them in one shader pass (`world.frag`: sea, wind in the trees, cloud shadows, night)
 and one clock at a fixed rate moves everything else, so that nothing asks for
 frames at the display's rate. Plates fade in above the map once loaded, so zooming

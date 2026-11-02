@@ -731,6 +731,9 @@ Scope {
 		function refresh(): void {
 			World.refresh();
 		}
+		function restart(): void {
+			World.restart();
+		}
 		function go(place: string): void {
 			World.show();
 			World.announce(place, place);

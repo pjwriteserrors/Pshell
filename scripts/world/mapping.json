@@ -1,6 +1,6 @@
 {
-	"realms": ["tickets", "git", "screentime", "todos", "boots"],
-	"forest": ["screentime", "mail", "boots"],
+	"realms": ["tickets", "focus", "todos", "boots"],
+	"forest": ["pauses", "mail", "boots"],
 	"water": ["water", "activity"],
 	"rest": ["breaks", "screentime-gaps", "hours"],
 	"storms": ["headaches", "pressure"],
@@ -13,5 +13,6 @@
 	"forge": ["printer"],
 	"ships": ["downloads"],
 	"wilderness": ["screentime-untracked"],
-	"gitRoots": ["~/Projects", "~/.config/quickshell/shell"]
+	"gitRoots": ["~/Projects", "~/.config/quickshell/shell"],
+	"leisure": ["youtube", "twitch", "netflix", "disney", "primevideo", "crunchyroll", "reddit", "instagram", "tiktok", "discord", "whatsapp", "telegram", "spotify", "steam", "lutris", "heroic", "Streams$", "mpv", "vlc", "celluloid", "jellyfin", "plex", "9gag"]
 }
