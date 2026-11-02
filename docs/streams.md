@@ -95,7 +95,16 @@ daemon writes a small HLS playlist naming both and serves it on 127.0.0.1
 (`net.player_streams`), which FFmpeg opens as one. The sound is always the
 original track, never one of YouTube's AI dubs (`net.original_audio`); yt-dlp's
 own `ba` for mpv and offline copies prefers it the same way. Where a video stopped is saved
-every five seconds and on leaving; playing it again starts there.
+every five seconds and on leaving; playing it again starts there. Such a report
+sends only what plays (event `playing`); the whole state, which the shell redraws
+in the thread that paints the picture, at most once a minute.
+
+The sound is the player's clock: a piece that comes late stops the picture too.
+So the daemon fetches the next three pieces while one plays, asks YouTube again
+after 6 and 8 seconds instead of waiting twenty, and writes slow or failed pieces
+to `~/.cache/pshell/streams/player.log`. A video that stops moving for 8 seconds
+while it plays, or breaks off with an error, is asked for anew and goes on from
+where it stood (at most once in 30 seconds).
 
 A written recap can become a short video (`recapcut.py`): each of its lines is
 matched to a transcript passage sharing at least two telling words, without a

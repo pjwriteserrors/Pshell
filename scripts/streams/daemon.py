@@ -102,6 +102,12 @@ DEFAULTS = {
     "nightLoad": False,      # the next episodes come at night, and go once watched
 }
 BLUETOOTH_DELAY = 190
+# pieces of sound fetched before the player asks: the sound is the player's
+# clock, one piece that comes late stops the picture as well
+SOUND_AHEAD = 3
+# a progress report sends the whole state at most this often; in between only
+# what plays (the shell redraws every list it is sent)
+PROGRESS_STATE = 60
 SECRETS = ("twitch-id", "twitch-secret", "twitch-token", "twitch-refresh", "youtube-key")
 
 
@@ -180,6 +186,11 @@ class Daemon(extras.Extras):
         self.recap_job = None
         self.sound_lists = {}
         self.sound_pieces = {}
+        self.sound_texts = {}
+        self.sound_cache = {}
+        self.sound_wait = {}
+        self.sound_lock = threading.Lock()
+        self.progress_told = 0
         self.sink_seen = (0, "")
         self.enrich_queued = set()
         self.enrich_waiting = collections.OrderedDict()
@@ -1067,7 +1078,12 @@ class Daemon(extras.Extras):
         self.set_playing(video_id, position, duration, via)
         if watched and not (known and known["watched"]):
             self.after_watched(video_id)
-        self.changed()
+            self.changed()
+        elif now - self.progress_told >= PROGRESS_STATE:
+            self.progress_told = now
+            self.changed()
+        else:
+            self.tell("playing", playing=self.playing)
 
     def set_playing(self, video_id, position, duration, via):
         member = self.store.one("SELECT m.series FROM member m WHERE m.video = ? AND m.state = 'sure'", video_id)
@@ -1288,24 +1304,103 @@ class Daemon(extras.Extras):
 
     def sound_piece(self, path):
         """Sound through here, so it can start early: a Bluetooth headset plays
-        everything late, and the player knows nothing of that."""
+        everything late, and the player knows nothing of that. The next pieces
+        are fetched while one plays, so a slow answer from YouTube is no gap."""
         token, _, name = path.partition("/")
         if not name:
             token = token.removesuffix(".m3u8")
-            url = self.sound_lists[token]
-            pieces = self.sound_pieces.setdefault(token, {})
+            with self.sound_lock:
+                text = self.sound_texts.get(token)
+            if text is None:
+                url = self.sound_lists[token]
+                pieces = self.sound_pieces.setdefault(token, {})
 
-            def address_of(piece):
-                number = pieces.setdefault(piece, len(pieces))
-                return f"/sound/{token}/{number}.aac"
-            return net.local_playlist(net.fetch(url, timeout=20).decode(), url, address_of).encode(), "application/vnd.apple.mpegurl"
+                def address_of(piece):
+                    number = pieces.setdefault(piece, len(pieces))
+                    return f"/sound/{token}/{number}.aac"
+                text = net.local_playlist(self.sound_fetch_bytes(url, f"sound list {token[:6]}").decode(), url, address_of)
+                with self.sound_lock:
+                    self.sound_texts[token] = text
+            return text.encode(), "application/vnd.apple.mpegurl"
         number = int(name.removesuffix(".aac"))
-        piece = next(url for url, index in self.sound_pieces[token].items() if index == number)
-        try:
-            data = net.fetch(piece, timeout=20)
-        except net.Failure:
-            data = net.fetch(piece, timeout=20)
+        data = self.sound_get(token, number)
+        for ahead in range(number + 1, number + 1 + SOUND_AHEAD):
+            threading.Thread(target=self.sound_get, args=(token, ahead, True), daemon=True).start()
         return net.shift_sound(data, self.sound_lead()["ms"]), "audio/aac"
+
+    def sound_get(self, token, number, ahead=False):
+        """One piece of sound, from what was fetched ahead or fetched now; asked
+        twice at once, it is fetched once."""
+        key = (token, number)
+        with self.sound_lock:
+            if key in self.sound_cache:
+                return self.sound_cache[key]
+            waiting = self.sound_wait.get(key)
+            if waiting is None:
+                urls = [url for url, index in sorted(self.sound_pieces.get(token, {}).items(), key=lambda item: item[1])]
+                if number >= len(urls):
+                    if ahead:
+                        return None
+                    raise KeyError(number)
+                url = urls[number]
+                self.sound_wait[key] = threading.Event()
+        if waiting is not None:
+            if ahead:
+                return None
+            waiting.wait(40)
+            with self.sound_lock:
+                if key in self.sound_cache:
+                    return self.sound_cache[key]
+            url = next(url for url, index in self.sound_pieces[token].items() if index == number)
+            return self.sound_fetch_bytes(url, f"sound {number}")
+        try:
+            data = self.sound_fetch_bytes(url, f"sound {number}{' ahead' if ahead else ''}")
+            with self.sound_lock:
+                self.sound_cache[key] = data
+                # what was played goes; a picture in picture may play beside it
+                for other in [other for other in self.sound_cache if other[0] == token and other[1] < number - 4]:
+                    self.sound_cache.pop(other)
+                while len(self.sound_cache) > 40:
+                    self.sound_cache.pop(next(iter(self.sound_cache)))
+            return data
+        except net.Failure:
+            if ahead:
+                return None
+            raise
+        finally:
+            with self.sound_lock:
+                event = self.sound_wait.pop(key, None)
+            if event:
+                event.set()
+
+    def sound_fetch_bytes(self, url, what):
+        """Quickly asked again: a request YouTube lets hang is no use after
+        seconds, the player runs dry long before twenty."""
+        started = time.time()
+        error = None
+        for attempt, timeout in enumerate((6, 8, 12)):
+            try:
+                data = net.fetch(url, timeout=timeout)
+                took = time.time() - started
+                if took > 1.5 or attempt:
+                    self.player_log(f"{what}: {took:.1f} s, {attempt + 1} tries")
+                return data
+            except net.Failure as failure:
+                error = failure
+        self.player_log(f"{what}: failed after {time.time() - started:.1f} s ({error})")
+        raise error
+
+    def player_log(self, text):
+        """What went wrong while something played, for when it stuttered:
+        ~/.cache/pshell/streams/player.log"""
+        try:
+            path = os.path.join(CACHE, "player.log")
+            if os.path.exists(path) and os.path.getsize(path) > 1 << 20:
+                os.replace(path, path + ".old")
+            with open(path, "a", encoding="utf-8") as file:
+                file.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {text}\n")
+        except OSError:
+            pass
 
     def sound_lead(self, args=None):
         """{sink, ms}: how early the sound comes on the output in use. Remembered
@@ -1388,6 +1483,7 @@ class Daemon(extras.Extras):
                 self.served.pop(old, None)
                 self.sound_lists.pop(old, None)
                 self.sound_pieces.pop(old, None)
+                self.sound_texts.pop(old, None)
             address = f"http://127.0.0.1:{self.server_port}/{token}.m3u8"
         step("extras")
         segments = []

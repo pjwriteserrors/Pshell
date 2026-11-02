@@ -281,6 +281,41 @@ Rectangle {
 		}
 	}
 
+	// a video that stops moving while it plays (YouTube gave nothing more, an
+	// address went stale, the daemon started again): asked anew, on from there
+	property real stuckAt: -1
+	property int stuckFor: 0
+	property real recoveredAt: 0
+
+	Timer {
+		interval: 1000
+		repeat: true
+		running: root.landed && root.playing && !root.intro && !root.live && root.address !== "" && root.error === ""
+		onTriggered: {
+			if (Math.abs(player.position - root.stuckAt) > 50) {
+				root.stuckAt = player.position;
+				root.stuckFor = 0;
+				return;
+			}
+			root.stuckFor += 1;
+			if (root.stuckFor >= 8) root.recover("The stream stalled, asked again");
+		}
+	}
+
+	function recover(why) {
+		// not again and again: once in half a minute
+		if (Date.now() - root.recoveredAt < 30000) return;
+		root.recoveredAt = Date.now();
+		root.stuckFor = 0;
+		root.seekTo = root.position;
+		root.started = false;
+		root.landed = false;
+		player.stop();
+		root.address = "";
+		root.resolve(root.height_, true);
+		root.say(why);
+	}
+
 	// only the moments that stand out: jumps from one to the next, nothing is cut
 	property var digest: []
 	property var moments: []
@@ -551,6 +586,7 @@ Rectangle {
 		}
 		onErrorOccurred: (code, text) => {
 			if (!root.landed) root.error = text || "The video could not be played";
+			else if (!root.live) root.recover("The stream broke off, asked again");
 		}
 		onMediaStatusChanged: {
 			// where it was left; the stream may need a moment before it can jump

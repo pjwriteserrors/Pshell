@@ -215,6 +215,10 @@ Singleton {
 			root.storyJob = state.storyJob;
 			break;
 		}
+		// a progress report between two states: only what plays
+		case "playing":
+			root.playing = message.playing;
+			break;
 		case "notify":
 			root.tell(message);
 			break;
