@@ -29,8 +29,10 @@ PanelWindow {
 	// wider than what takes the pointer, for the light; only the outermost
 	// pixel is the strip (the mask), the rest lets clicks through
 	readonly property int glow: 18
-	// room for the pointer's badge while it is on the edge
-	readonly property int room: root.hovered ? 200 : root.glow
+	// room for the pointer's badge while it is on the edge; always this big:
+	// grown on hover, a bottom or right strip moved away from the pointer
+	// (still where it was for Qt), so it left, shrank, came back – in a loop
+	readonly property int room: 200
 	implicitWidth: root.room
 	implicitHeight: root.room
 	exclusiveZone: 0
