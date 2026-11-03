@@ -21,7 +21,6 @@ class Telephony : BroadcastReceiver() {
 	override fun onReceive(context: Context, intent: Intent) {
 		if (intent.action != TelephonyManager.ACTION_PHONE_STATE_CHANGED) return
 		val app = context.applicationContext as App
-		if (!app.on("phone-telephony")) return
 		val state = when (intent.getStringExtra(TelephonyManager.EXTRA_STATE)) {
 			TelephonyManager.EXTRA_STATE_RINGING -> "ringing"
 			TelephonyManager.EXTRA_STATE_OFFHOOK -> "offhook"
@@ -32,6 +31,8 @@ class Telephony : BroadcastReceiver() {
 		val number = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER).orEmpty()
 		if (state == "ringing" && number.isEmpty() && context.checkSelfPermission(Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED) return
 		if (state == "idle") unsilence(context)
+		dev.pshell.app.zepp.WatchPhone.call(state, number, name(context, number))
+		if (!app.on("phone-telephony")) return
 		app.link.emit("phone.telephony", "call", json("state" to state, "number" to number, "name" to name(context, number)))
 	}
 

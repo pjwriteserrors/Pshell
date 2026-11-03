@@ -71,4 +71,12 @@ class Prefs(context: Context) {
 	val watchAddress = Setting("watchAddress", "")
 	/** names given to the watch's hidden settings, JSON {"gg/cc": name} (like the PC's amazfit.json names) */
 	val watchNames = Setting("watchNames", "{}")
+	/** the phone keeps the watch connected in the background (instead of Gadgetbridge) */
+	val watchKeep = Setting("watchKeep", false)
+	val watchHealth = Setting("watchHealth", true)
+	val watchNotify = Setting("watchNotify", true)
+	val watchCalls = Setting("watchCalls", true)
+	val watchMusic = Setting("watchMusic", true)
+	val watchWeather = Setting("watchWeather", true)
+	val watchFind = Setting("watchFind", true)
 }

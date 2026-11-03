@@ -139,6 +139,36 @@ the page's *Hidden settings* card remembers every value, and after one
 setting is changed in the watch's own menu, *What changed?* lists the code
 that moved – and lets it be named (`names` in amazfit.json).
 
+## Health data
+
+The daemon fetches what the watch measured after it connects and every 30
+minutes (`zepp/fetch.py`): endpoint 0x004B takes `01 type since`, answers
+`10 01 01 length start`; `02` sends the data as numbered packets on
+characteristic 0x0005, then `10 02 01 crc32`; `03 09` acks and **keeps it on
+the watch** (`03 01` would clear it – Gadgetbridge does that, which is why the
+watch hands out only what came after Gadgetbridge's last sync). Types:
+activity (8 bytes a minute: kind, intensity, steps, heart rate, ?, sleep,
+deep, REM; kind 115 not worn, 118 charging, 120 asleep), sleep sessions (594
+bytes: bed, wake, score, average heart rate, the stages light 4 / deep 5 /
+REM 8 / awake 7, their sums), stress (a byte a minute), blood oxygen, skin
+temperature, breathing rate in sleep, resting/manual/max heart rate, HRV,
+PAI. `zepp/healthbuild.py` keeps them raw (`amazfit-health.json`, 120 days)
+and builds the days and nights of the watch's health history
+(`pshell_phone/health.py`): the shell hands them to the phone daemon
+(`health.add`), where >watch and the phone app see them. A Gadgetbridge
+database export (Gadgetbridge → Settings → Export database) brings the
+history before that: *Import* on the page, read only.
+
+## Smart wake
+
+An alarm wakes at the best moment when it has a window: the watch then rings
+in light sleep up to that many minutes before the time. Found on the Active
+2: the window is the last byte of the alarm (`03 01 flags pos h m days 00 00
+00 00 window`) and the watch marks such an alarm with flag 0x02 itself; flag
+0x01 alone (Gadgetbridge's smart flag) it drops. It takes 10, 20, 30, 40 and
+50 minutes; anything else it keeps as 70. The *Smart* chip of an alarm (PC)
+or its moon (phone) goes off → 10 → 20 → 30 → 40 → 50 min.
+
 ## Auth key
 
 Zepp OS encrypts everything with a session key made from ECDH on NIST
@@ -172,7 +202,7 @@ the watch has listed its endpoints. The uhid input device BlueZ makes for
 the HID service is grabbed while the shell answers the keys, so apps do not
 get them twice.
 
-## Without the PC
+## Without the PC: instead of Gadgetbridge
 
 The phone app has a **Watch** screen (group *Phone & PC*, needs no PC
 plugin): the watch the phone is bonded with, the same auth key, and over
@@ -181,7 +211,22 @@ too), alarms, faces, battery, firmware and *find*. Gadgetbridge on the same
 phone shares the watch's connection: while the screen's link is open its
 session is replaced, and it authenticates again when it reconnects – so
 the link opens only on *Connect* and closes a moment after the last of its
-screens goes. *Hidden settings* (a row on the screen, its own page) lists the
+screens goes – unless *Keep the watch connected* is on: then the app's
+service holds it (Android's autoConnect brings it back when the watch is near)
+and the phone does Gadgetbridge's job, so Gadgetbridge should be off: its
+notifications on the watch (replies go back through the notification's
+reply action, a dismissal clears it on the phone), calls (reject needs
+*answer calls*, mute silences the ringer), the watch's music app steering
+the phone's player (media sessions, read with the notification access),
+weather for the phone's place (coarse location, open-meteo), *find my phone*
+(rings like the PC's *find*), and the health data every 30 min – kept in the
+app (`watch-health.json`) and handed to the PC (`health.add`) when one is
+connected; what the PC fetched comes back the other way (`health.get`). The
+**Health** screen shows the last night (hypnogram, score, stages, heart,
+breathing), 14 nights, today (steps, resting and maximum heart rate, stress,
+blood oxygen, HRV, PAI), the heart, stress, blood oxygen and skin
+temperature through the day, and 14 days of steps; it imports a Gadgetbridge
+export too. *Hidden settings* (a row on the screen, its own page) lists the
 unnamed and *likely* settings with the catalogue's notes, edits them, and
 tells them apart the same way as the PC's card: *Remember now*, change one
 thing on the watch, *What changed?*, name it. Names stay on the phone

@@ -15,6 +15,14 @@ import dev.pshell.app.link.json
 object Finder {
 	private var player: MediaPlayer? = null
 	private var previousVolume = -1
+	/** told when it stops ringing (the watch hears "found") */
+	var onStop: () -> Unit = {}
+	private var text = "The PC is looking for this phone"
+
+	fun ringFor(context: Context, why: String) {
+		text = why
+		ring(context)
+	}
 	private val handler = Handler(Looper.getMainLooper())
 
 	fun install(app: App) {
@@ -45,7 +53,7 @@ object Finder {
 		}.getOrNull()
 		val notification = Channels.builder(context, Channels.FIND)
 			.setContentTitle("Here I am")
-			.setContentText("The PC is looking for this phone")
+			.setContentText(text)
 			.setOngoing(true)
 			.setContentIntent(Channels.action(context, Actions.FIND_STOP, 1))
 			.addAction(android.app.Notification.Action.Builder(null, "Found it", Channels.action(context, Actions.FIND_STOP, 1)).build())
@@ -56,6 +64,8 @@ object Finder {
 
 	fun stop(context: Context) {
 		handler.removeCallbacksAndMessages(null)
+		if (player != null) onStop()
+		text = "The PC is looking for this phone"
 		player?.runCatching {
 			stop()
 			release()

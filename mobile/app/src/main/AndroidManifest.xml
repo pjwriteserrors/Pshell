@@ -22,6 +22,9 @@
 	<uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 	<!-- headphones that follow the music from the PC -->
 	<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+	<!-- the watch: rejecting a call from it, weather for its place -->
+	<uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
+	<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 	<!-- calls: asked for when "Calls" is opened the first time -->
 	<uses-permission android:name="android.permission.READ_PHONE_STATE" />
 	<uses-permission android:name="android.permission.READ_CALL_LOG" />

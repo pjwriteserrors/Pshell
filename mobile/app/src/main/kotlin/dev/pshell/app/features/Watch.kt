@@ -144,6 +144,11 @@ private fun WatchScreen() {
 			}
 		}
 
+		SectionLabel("Instead of Gadgetbridge")
+		Panel {
+			StandIn(app)
+		}
+
 		SectionLabel("Alarms")
 		Panel {
 			for (a in state.alarms) AlarmRow(a, onChange = zepp::setAlarm, onDelete = { zepp.deleteAlarm(a.position) })
@@ -190,8 +195,14 @@ private fun AlarmRow(a: Alarm, onChange: (Alarm) -> Unit, onDelete: () -> Unit) 
 	ListRow(
 		"%02d:%02d".format(a.hour, a.minute),
 		icon = "alarm",
-		subtitle = days.filterIndexed { i, _ -> a.repeat and (1 shl i) != 0 }.joinToString(" ").ifEmpty { "Once" } + if (a.smart) " · smart" else "",
+		subtitle = days.filterIndexed { i, _ -> a.repeat and (1 shl i) != 0 }.joinToString(" ").ifEmpty { "Once" } + if (a.smart) " · smart, up to ${a.window} min early" else "",
 	) {
+		// smart wake: in light sleep up to 10–50 min early; a tap goes on to the next window
+		IconButton(if (a.smart) "sleep" else "sleep_off") {
+			val windows = listOf(0, 10, 20, 30, 40, 50)
+			val next = windows[(windows.indexOf(if (a.smart) a.window else 0) + 1) % windows.size]
+			onChange(a.copy(smart = next > 0, window = next))
+		}
 		IconButton("minus") { onChange(a.copy(minute = (a.minute + 55) % 60, hour = if (a.minute < 5) (a.hour + 23) % 24 else a.hour)) }
 		IconButton("plus") { onChange(a.copy(minute = (a.minute + 5) % 60, hour = if (a.minute >= 55) (a.hour + 1) % 24 else a.hour)) }
 		Toggle(a.enabled) { onChange(a.copy(enabled = it)) }
@@ -356,4 +367,36 @@ private fun WatchHiddenPage() {
 			}
 		}
 	}
+}
+
+// ── the phone in Gadgetbridge's place ─────────────────────────────────────────
+@Composable
+private fun StandIn(app: dev.pshell.app.App) {
+	val context = LocalContext.current
+	val keep by app.prefs.watchKeep.flow.collectAsState()
+	val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
+	ListRow("Keep the watch connected", icon = "link_variant", subtitle = "In the background, back by itself when it is near – switch Gadgetbridge off for it") {
+		Toggle(keep) { on ->
+			app.prefs.watchKeep.value = on
+			if (on) {
+				ask.launch(arrayOf(Manifest.permission.ANSWER_PHONE_CALLS, Manifest.permission.ACCESS_COARSE_LOCATION))
+				dev.pshell.app.service.LinkService.start(context)
+			}
+		}
+	}
+	for ((setting, title, sub) in listOf(
+		Triple(app.prefs.watchHealth, "Health data", "Fetched every 30 min, kept on the watch, on to the PC"),
+		Triple(app.prefs.watchNotify, "Phone notifications on the watch", "Replies and dismissals come back"),
+		Triple(app.prefs.watchCalls, "Calls on the watch", "Reject or mute from the wrist"),
+		Triple(app.prefs.watchMusic, "Music remote", "The watch's music app steers what plays on the phone"),
+		Triple(app.prefs.watchWeather, "Weather", "For the phone's place (open-meteo)"),
+		Triple(app.prefs.watchFind, "Find the phone", "The watch can make the phone ring"),
+	)) {
+		val on by setting.flow.collectAsState()
+		ListRow(title, subtitle = sub) { Toggle(on) { setting.value = it } }
+	}
+	if (!dev.pshell.app.service.PhoneNotificationListener.enabled(context))
+		SoftButton("Allow reading notifications (for notifications and music)", icon = "bell_outline") {
+			context.startActivity(android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+		}
 }

@@ -50,9 +50,13 @@ class PhoneNotificationListener : NotificationListenerService() {
 		if (instance === this) instance = null
 	}
 
-	override fun onNotificationPosted(sbn: StatusBarNotification) = send(sbn, quiet = false)
+	override fun onNotificationPosted(sbn: StatusBarNotification) {
+		send(sbn, quiet = false)
+		dev.pshell.app.zepp.WatchPhone.posted(sbn)
+	}
 
 	override fun onNotificationRemoved(sbn: StatusBarNotification) {
+		dev.pshell.app.zepp.WatchPhone.removed(sbn)
 		if (sent.remove(sbn.key) != null) app.link.emit("phone.notifications", "removed", json("key" to sbn.key))
 	}
 
@@ -61,7 +65,7 @@ class PhoneNotificationListener : NotificationListenerService() {
 		runCatching { activeNotifications }.getOrNull()?.forEach { send(it, quiet = true) }
 	}
 
-	private fun wanted(sbn: StatusBarNotification): Boolean {
+	fun wanted(sbn: StatusBarNotification): Boolean {
 		val notification = sbn.notification
 		if (sbn.packageName == packageName) return false
 		if (notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return false
@@ -122,6 +126,13 @@ class PhoneNotificationListener : NotificationListenerService() {
 	}
 
 	private fun find(key: String): StatusBarNotification = runCatching { activeNotifications }.getOrNull()?.firstOrNull { it.key == key } ?: throw LinkError("gone", "That notification is gone")
+
+	/** A reply from the watch: into the notification's first action that takes text. */
+	fun reply(key: String, text: String) {
+		val actions = find(key).notification.actions.orEmpty()
+		val index = actions.indexOfFirst { !it.remoteInputs.isNullOrEmpty() }
+		if (index >= 0) act(key, index, text)
+	}
 
 	fun act(key: String, index: Int, text: String?) {
 		val action = find(key).notification.actions?.getOrNull(index) ?: throw LinkError("gone", "That action is gone")

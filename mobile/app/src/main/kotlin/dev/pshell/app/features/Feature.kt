@@ -107,6 +107,7 @@ val Features: List<Feature> = listOf(
 	CallsFeature,
 	FindFeature,
 	WatchFeature,
+	HealthFeature,
 )
 
 fun feature(id: String): Feature? = Features.firstOrNull { it.id == id }

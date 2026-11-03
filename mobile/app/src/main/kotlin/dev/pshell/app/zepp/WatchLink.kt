@@ -43,12 +43,35 @@ object WatchLink {
 		return runCatching { adapter.bondedDevices.filter { d -> listOf("Active", "Amazfit", "Balance", "Bip", "GTR", "GTS", "T-Rex", "Cheetah").any { (d.name ?: "").startsWith(it) } } }.getOrDefault(emptyList())
 	}
 
-	fun open(context: Context, address: String, key: ByteArray?) {
-		close()
+	/** Kept connected by the app's service (Gadgetbridge's job, when this replaces it). */
+	var keep = false
+		private set
+	var store: HealthStore? = null
+		private set
+
+	fun store(context: Context): HealthStore = store ?: HealthStore(java.io.File(context.filesDir, "watch-health.json")).also { store = it }
+
+	fun open(context: Context, address: String, key: ByteArray?, keep: Boolean = this.keep) {
+		shut()
+		this.keep = keep
 		val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter ?: return
 		val device = runCatching { adapter.getRemoteDevice(address) }.getOrNull() ?: return
-		gatt = GattHolder(context.applicationContext, device, key, catalog(context))
+		gatt = GattHolder(context.applicationContext, device, key, catalog(context), keep)
+		WatchPhone.attach(context.applicationContext)
 	}
+
+	/** From the service: connect and stay connected while [on]. */
+	fun keep(context: Context, on: Boolean, address: String, key: ByteArray?) {
+		if (!on) {
+			keep = false
+			if (holders <= 0) shut()
+			return
+		}
+		if (keep && gatt != null) return
+		open(context, address, key, keep = true)
+	}
+
+	fun fetchNow() = gatt?.fetch()
 
 	// the screens that use the link: it closes a moment after the last one goes
 	private var holders = 0
@@ -59,37 +82,78 @@ object WatchLink {
 
 	fun release() {
 		holders--
-		main.postDelayed({ if (holders <= 0) close() }, 1500)
+		main.postDelayed({ if (holders <= 0 && !keep) close() }, 1500)
 	}
 
 	fun close() {
+		if (keep && holders <= 0 && gatt != null) return  // the service keeps it
+		shut()
+	}
+
+	private fun shut() {
 		gatt?.close()
 		gatt = null
 		state.value = state.value.copy(link = "idle")
 	}
 
-	private class GattHolder(context: Context, device: BluetoothDevice, private val key: ByteArray?, catalog: Catalog) : BluetoothGattCallback() {
+	private class GattHolder(private val context: Context, device: BluetoothDevice, private val key: ByteArray?, catalog: Catalog, private val stay: Boolean) : BluetoothGattCallback() {
 		// one GATT operation at a time, as Android wants
 		private val ops = ArrayDeque<() -> Boolean>()
 		private var busy = false
 		private var chars = mapOf<String, BluetoothGattCharacteristic>()
 		val zepp = Zepp(catalog, { uuid, data -> main.post { queueWrite(uuid, data) } }) { s -> state.value = s }
-		private val gatt: BluetoothGatt = device.connectGatt(context, false, this, BluetoothDevice.TRANSPORT_LE)
+		// with autoConnect Android comes back to the watch whenever it is in reach
+		private val gatt: BluetoothGatt = device.connectGatt(context, stay, this, BluetoothDevice.TRANSPORT_LE)
+		private var closed = false
+		private val fetcher = Fetcher({ zepp.sendFetch(it) }, { kind, samples -> dates += store(context).add(kind, samples) }) { fetched() }
+		private val dates = HashSet<String>()
+		private val every = object : Runnable {
+			override fun run() {
+				fetch()
+				main.postDelayed(this, 30 * 60_000L)
+			}
+		}
 
 		init {
 			zepp.named(device.name ?: "Watch")
 			zepp.linkState("connecting")
+			zepp.events.fetchControl = { fetcher.onControl(it) }
+			zepp.events.ready = {
+				WatchPhone.ready(context, zepp)
+				main.removeCallbacks(every)
+				main.postDelayed(every, 5_000)
+			}
 		}
 
 		fun close() {
+			closed = true
+			main.removeCallbacks(every)
 			runCatching { gatt.disconnect(); gatt.close() }
+		}
+
+		fun fetch() {
+			if (state.value.link != "ready" || fetcher.busy || !zepp.supports(Fetcher.ENDPOINT)) return
+			val app = dev.pshell.app.App.instance
+			if (app.prefs.watchHealth.value.not()) return
+			dates.clear()
+			zepp.fetching(true)
+			subscribe(Fetcher.DATA)
+			queue { main.postDelayed({ fetcher.start(store(context).since) }, 300); false }
+		}
+
+		private fun fetched() {
+			val store = store(context)
+			val (days, nights) = store.build(dates)
+			store.save()
+			zepp.fetching(false)
+			WatchPhone.health(context, days, nights, state.value.battery)
 		}
 
 		private fun next() {
 			while (!busy && ops.isNotEmpty()) busy = ops.poll()!!.invoke()
 		}
 
-		private fun queue(op: () -> Boolean) {
+		fun queue(op: () -> Boolean) {
 			ops.add(op)
 			next()
 		}
@@ -106,7 +170,7 @@ object WatchLink {
 			}
 		}
 
-		private fun subscribe(uuid: String) = queue {
+		fun subscribe(uuid: String) = queue {
 			val c = chars[uuid] ?: return@queue false
 			gatt.setCharacteristicNotification(c, true)
 			val d = c.getDescriptor(CCCD) ?: return@queue false
@@ -122,7 +186,12 @@ object WatchLink {
 				if (newState == BluetoothProfile.STATE_CONNECTED) {
 					zepp.linkState("gatt")
 					g.requestMtu(247)
-				} else if (newState == BluetoothProfile.STATE_DISCONNECTED) zepp.gone()
+				} else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+					zepp.gone()
+					main.removeCallbacks(every)
+					// kept: Android's autoConnect brings it back when the watch is near again
+					if (stay && !closed) runCatching { g.connect() }
+				}
 			}
 		}
 
@@ -139,6 +208,7 @@ object WatchLink {
 				if (Chunked.READ !in chars || Chunked.WRITE !in chars) return@post zepp.linkState("failed", "no Zepp OS channel")
 				subscribe(Chunked.WRITE)
 				subscribe(Chunked.READ)
+				if (Fetcher.DATA in chars) subscribe(Fetcher.DATA)
 				queue { main.postDelayed({ zepp.start(key) }, 400); false }
 			}
 		}
@@ -156,7 +226,7 @@ object WatchLink {
 		override fun onCharacteristicChanged(g: BluetoothGatt, c: BluetoothGattCharacteristic, value: ByteArray) {
 			val uuid = c.uuid.toString().lowercase()
 			val copy = value.copyOf()
-			main.post { zepp.feed(uuid, copy) }
+			main.post { if (uuid == Fetcher.DATA) fetcher.onData(copy) else zepp.feed(uuid, copy) }
 		}
 	}
 }

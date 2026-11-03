@@ -43,11 +43,24 @@ class LinkService : Service() {
 		startForeground(ID, notification(app.link.state.value), ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
 		scope.launch {
 			app.link.state.collect { state ->
-				if (state is LinkState.Unpaired) stopSelf() else manager.notify(ID, notification(state))
+				if (state is LinkState.Unpaired && !app.prefs.watchKeep.value) stopSelf() else manager.notify(ID, notification(state))
 			}
 		}
 		media = MediaControls(this, app, scope).also { it.start() }
 		status = PhoneStatus(this, app).also { it.start() }
+		// the watch, kept connected here when the phone stands in for Gadgetbridge
+		scope.launch {
+			app.prefs.watchKeep.flow.collect { on ->
+				val key = app.prefs.watchKey.value.removePrefix("0x").takeIf { it.length == 32 }?.chunked(2)?.map { it.toInt(16).toByte() }?.toByteArray()
+				val address = app.prefs.watchAddress.value
+				if (address.isNotEmpty() && checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) == android.content.pm.PackageManager.PERMISSION_GRANTED)
+					dev.pshell.app.zepp.WatchLink.keep(this@LinkService, on, address, key)
+			}
+		}
+		// the PC's share of the watch's history (when it fetched itself) into the phone's
+		scope.launch {
+			app.link.connects.collect { runCatching { app.link.call("health", "get")?.let { dev.pshell.app.zepp.WatchLink.store(this@LinkService).merge(org.json.JSONObject(it.toString())) } } }
+		}
 	}
 
 	override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -84,7 +97,7 @@ class LinkService : Service() {
 
 		fun start(context: Context) {
 			val app = context.applicationContext as App
-			if (app.link.pcs.list.value.isEmpty()) return
+			if (app.link.pcs.list.value.isEmpty() && !app.prefs.watchKeep.value) return
 			runCatching { context.startForegroundService(Intent(context, LinkService::class.java)) }
 		}
 	}

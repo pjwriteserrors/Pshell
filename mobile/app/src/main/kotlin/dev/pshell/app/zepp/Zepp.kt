@@ -18,7 +18,8 @@ data class Entry(
 
 data class Group(val name: String, val id: Int, val version: Int, val entries: Map<Int, Entry>)
 
-data class Alarm(val position: Int, val enabled: Boolean, val smart: Boolean, val hour: Int, val minute: Int, val repeat: Int)
+/** [window]: smart wake – in light sleep up to this many minutes early (10–50), 0 = at the time. */
+data class Alarm(val position: Int, val enabled: Boolean, val smart: Boolean, val hour: Int, val minute: Int, val repeat: Int, val window: Int = 0)
 
 data class WatchState(
 	val link: String = "idle",            // idle, connecting, gatt, handshake, ready, nokey, wrongkey, failed, gone
@@ -33,7 +34,23 @@ data class WatchState(
 	val face: String? = null,
 	val services: Map<Int, Boolean> = emptyMap(),
 	val finding: Boolean = false,
+	val musicOpen: Boolean = false,
+	val fetching: Boolean = false,
+	val fetchedAt: Long = 0,
 )
+
+/** What the watch starts; set by WatchLink. */
+class ZeppEvents {
+	var findPhone: (Boolean) -> Unit = {}
+	var button: (String) -> Unit = {}
+	var musicOpen: (Boolean) -> Unit = {}
+	var reply: (Int, String) -> Unit = { _, _ -> }
+	var dismiss: (Int) -> Unit = {}
+	var callAction: (String) -> Unit = {}
+	var http: (Int, String) -> Unit = { _, _ -> }
+	var fetchControl: (ByteArray) -> Unit = {}
+	var ready: () -> Unit = {}
+}
 
 /** What the catalogue (scripts/amazfit/zepp/catalog.json, copied in as assets/zepp.json) says. */
 class Catalog(json: JSONObject) {
@@ -91,6 +108,10 @@ class Zepp(private val catalog: Catalog, private val write: (String, ByteArray) 
 	private var private = ByteArray(Ecdh.KEY_BYTES)
 	var state = WatchState()
 		private set
+	val events = ZeppEvents()
+	private var notifyCaps = 0
+	private var notifyPictures = false
+	private var notifyKey = false
 	private var encrypted = setOf(0x000a, 0x000f, 0x0023)
 	private var proved = false
 
@@ -189,7 +210,9 @@ class Zepp(private val catalog: Catalog, private val write: (String, ByteArray) 
 					val alarms = (0 until n).map { k ->
 						val o = 2 + k * 10
 						val f = p[o].toInt()
-						Alarm(p[o + 1].toInt(), f and 0x04 != 0, f and 0x01 != 0, p[o + 2].toInt(), p[o + 3].toInt(), p[o + 4].toInt() and 0xFF)
+						// the watch marks a smart one with 0x02 and keeps the window in the entry's last byte
+						val window = if (f and 0x02 != 0) p[o + 9].toInt() and 0xFF else 0
+						Alarm(p[o + 1].toInt(), f and 0x04 != 0, window > 0, p[o + 2].toInt(), p[o + 3].toInt(), p[o + 4].toInt() and 0xFF, window)
 					}.sortedBy { it.position }
 					set(state.copy(alarms = alarms))
 				}
@@ -204,10 +227,42 @@ class Zepp(private val catalog: Catalog, private val write: (String, ByteArray) 
 				0x08, 0xff -> send(0x0023, byteArrayOf(0x09))
 			}
 			0x001a -> when (p[0].toInt()) {
-				0x11 -> send(0x001a, byteArrayOf(0x12, 0x01))
-				0x13 -> send(0x001a, byteArrayOf(0x14))
+				0x11 -> { send(0x001a, byteArrayOf(0x12, 0x01)); events.findPhone(true) }
+				0x13 -> events.findPhone(false)
 				0x07 -> set(state.copy(finding = false))
 			}
+			0x004b -> events.fetchControl(p)
+			0x001b -> when (p[0].toInt()) {
+				0x04 -> { set(state.copy(musicOpen = p[1].toInt() == 1)); events.musicOpen(p[1].toInt() == 1) }
+				0x05 -> events.button(when (p[1].toInt()) { 0 -> "play"; 1 -> "pause"; 3 -> "next"; 4 -> "previous"; 5 -> "volup"; 6 -> "voldown"; else -> "?" })
+			}
+			0x001e -> when (p[0].toInt()) {
+				0x02 -> {
+					notifyCaps = p[1].toInt()
+					if (notifyCaps >= 5 && p.size >= 9) {
+						val r = Reader(p, 2); r.s16(); r.u8()
+						if (r.u8() != 0) r.i += r.s16()
+						if (r.left() >= 2) { notifyPictures = r.u8() != 0; notifyKey = r.u8() != 0 }
+					}
+				}
+				0x04 -> {
+					val id = ByteBuffer.wrap(p, 1, 4).order(ByteOrder.LITTLE_ENDIAN).int
+					events.reply(id, Reader(p, 5).cstr())
+					send(0x001e, byteArrayOf(0x06) + le32(id) + ByteArray(4))
+				}
+				0x05 -> when (p[1].toInt()) {
+					0x03 -> events.dismiss(ByteBuffer.wrap(p, 2, 4).order(ByteOrder.LITTLE_ENDIAN).int)
+					0x02 -> events.callAction("mute")
+					0x01 -> events.callAction("reject")
+				}
+				0x10 -> send(0x001e, byteArrayOf(0x11) + z(Reader(p, 1).cstr()) + 0)   // icons need file transfer: the watch shows its own
+			}
+			0x0001 -> if (p[0].toInt() == 0x01) {
+				val r = Reader(p, 1)
+				val id = r.u8(); r.cstr()
+				events.http(id, r.cstr())
+			}
+			0x003b -> if (p[0].toInt() == 0x05) send(0x003b, byteArrayOf(0x03, 0x00))
 		}
 	}
 
@@ -220,6 +275,8 @@ class Zepp(private val catalog: Catalog, private val write: (String, ByteArray) 
 		if (0x000f in s) send(0x000f, byteArrayOf(0x09))
 		if (0x0023 in s) { send(0x0023, byteArrayOf(0x05)); send(0x0023, byteArrayOf(0x09)) }
 		if (0x001a in s) send(0x001a, byteArrayOf(0x01))
+		if (0x001e in s) send(0x001e, byteArrayOf(0x01))
+		events.ready()
 	}
 
 	private fun config(p: ByteArray) {
@@ -304,9 +361,52 @@ class Zepp(private val catalog: Catalog, private val write: (String, ByteArray) 
 	}
 
 	fun setAlarm(a: Alarm) {
-		val flags = (if (a.enabled) 0x04 else 0) or (if (a.smart) 0x01 else 0)
-		send(0x000f, byteArrayOf(0x03, 0x01, flags.toByte(), a.position.toByte(), a.hour.toByte(), a.minute.toByte(), a.repeat.toByte(), 0, 0, 0, 0, 0))
+		// the watch takes windows of 10–50 minutes (anything else it keeps as 70) and marks them 0x02 itself
+		val window = if (a.smart) listOf(10, 20, 30, 40, 50).minByOrNull { kotlin.math.abs(it - (if (a.window > 0) a.window else 30)) }!! else 0
+		val flags = (if (a.enabled) 0x04 else 0) or (if (window > 0) 0x02 else 0)
+		send(0x000f, byteArrayOf(0x03, 0x01, flags.toByte(), a.position.toByte(), a.hour.toByte(), a.minute.toByte(), a.repeat.toByte(), 0, 0, 0, 0, window.toByte()))
 	}
+
+	fun supports(endpoint: Int) = endpoint in state.services
+
+	fun notify(id: Int, title: String, body: String, app: String, source: String, reply: Boolean, sms: Boolean = false) {
+		var out = byteArrayOf(0x03) + le32(id) + byteArrayOf(if (sms) 0x05 else 0xFA.toByte(), 0x00) + z(app) + z(title) + z(body.take(512)) + z(source) + byteArrayOf(if (reply) 1 else 0)
+		if (notifyCaps >= 5) out += 0
+		if (notifyPictures) out += 0
+		if (notifyKey) out += 0
+		send(0x001e, out)
+	}
+
+	fun unnotify(id: Int) = send(0x001e, byteArrayOf(0x03) + le32(id) + byteArrayOf(0xFA.toByte(), 0x02, 0, 0, 0, 0, 0))
+
+	fun call(name: String, number: String, ringing: Boolean) =
+		send(0x001e, byteArrayOf(0x03) + le32(0) + byteArrayOf(0x03, if (ringing) 0x00 else 0x02, 0x00) + z(name) + byteArrayOf(0, 0) + z(number) + byteArrayOf(if (number.isNotEmpty()) 1 else 0))
+
+	fun music(playing: Boolean?, artist: String, album: String, track: String, position: Int, duration: Int, volume: Int?) {
+		var flags = 0
+		var body = ByteArray(0)
+		if (playing != null) { flags = flags or 0x01; body += byteArrayOf(if (playing) 1 else 0, 0) + le16(position) }
+		for ((bit, text) in listOf(0x02 to artist, 0x04 to album, 0x08 to track)) if (text.isNotEmpty()) { flags = flags or bit; body += z(text.take(80)) }
+		if (duration > 0) { flags = flags or 0x10; body += le16(duration) }
+		if (volume != null) { flags = flags or 0x40; body += byteArrayOf(volume.coerceIn(0, 100).toByte()) }
+		if (playing == null && artist.isEmpty() && track.isEmpty()) { flags = flags or 0x20; body += 1 }
+		send(0x001b, byteArrayOf(0x03, flags.toByte()) + body)
+	}
+
+	fun foundPhone() = send(0x001a, byteArrayOf(0x14))
+
+	fun httpReply(id: Int, status: Int, body: String?) {
+		if (body == null) return send(0x0001, byteArrayOf(0x02, id.toByte(), 0x02, 0, 0, 0, 0))
+		val data = body.toByteArray()
+		send(0x0001, byteArrayOf(0x02, id.toByte(), 0x01, status.toByte()) + le32(data.size) + data)
+	}
+
+	fun weatherLocation(lat: Double, lon: Double, name: String) =
+		send(0x000e, byteArrayOf(0x09, 0x02, 0, 0, 0) + z("%.4f,%.4f,xiaomi_accu:%d".format(java.util.Locale.ROOT, lat, lon, System.currentTimeMillis() / 1000 % 65536)) + z(name))
+
+	fun fetching(on: Boolean) = set(state.copy(fetching = on, fetchedAt = if (on) state.fetchedAt else System.currentTimeMillis()))
+
+	fun sendFetch(payload: ByteArray) = send(0x004b, payload)
 
 	fun deleteAlarm(position: Int) = send(0x000f, byteArrayOf(0x05, 0x01, position.toByte()))
 
