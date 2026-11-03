@@ -12,6 +12,7 @@ Clickable {
 	property string title: ""
 	property string subtitle: ""
 	property bool selected: false
+	property int stageHeight: 76
 	default property alias scene: stage.data
 	readonly property bool playing: root.selected || root.hovered
 
@@ -30,7 +31,7 @@ Clickable {
 		x: 12
 		y: 12
 		width: parent.width - 24
-		height: 76
+		height: root.stageHeight
 		clip: true
 	}
 

@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import qs.style.theme
 import qs.style.widgets
 import qs.core.services
+import qs.core.views.overlays
 
 // Notifications (core/services/PhoneApps.qml): the programs that notified
 // on this PC, each with a switch for showing them; the apps of the phone
@@ -20,6 +21,93 @@ SettingsPage {
 		const date = new Date(at);
 		const today = new Date().toDateString() === date.toDateString();
 		return Qt.formatDateTime(date, today ? "HH:mm" : "d MMM, HH:mm");
+	}
+
+	SettingCard {
+		anchor: "notification-style"
+		title: "Look"
+		icon: "palette_outline"
+		modified: Notifs.toastStyle !== "card"
+		onReset: Notifs.setToastStyle("card")
+
+		GridLayout {
+			Layout.fillWidth: true
+			columns: 2
+			columnSpacing: 10
+			rowSpacing: 10
+
+			Repeater {
+				model: Notifs.toastStyles
+
+				delegate: OptionTile {
+					id: look
+
+					required property var modelData
+
+					title: look.modelData.label
+					stageHeight: 118
+					selected: Notifs.toastStyle === look.modelData.id
+					onClicked: Notifs.setToastStyle(look.modelData.id)
+
+					Item {
+						id: scene
+
+						property real remaining: 0.7
+
+						anchors.centerIn: parent
+						width: 340
+						height: sample.implicitHeight + 12
+						scale: Math.min(1, (parent.width - 8) / scene.width, (parent.height - 4) / scene.height)
+
+						NumberAnimation on remaining {
+							running: look.playing
+							loops: Animation.Infinite
+							from: 1
+							to: 0
+							duration: 5000
+						}
+
+						Repeater {
+							model: 2
+
+							delegate: Rectangle {
+								required property int index
+
+								z: -1 - index
+								x: (index + 1) * 10
+								y: sample.implicitHeight - height + (index + 1) * 6
+								width: scene.width - (index + 1) * 20
+								height: 30
+								radius: sample.radius
+								color: Qt.tint(sample.color, Qt.alpha(Theme.text, 0.03 * (index + 1)))
+								border.width: Math.max(1, sample.border.width)
+								border.color: sample.border.width > 0 ? sample.border.color : Theme.outline
+								opacity: 1 - index * 0.3
+							}
+						}
+
+						ToastCard {
+							id: sample
+
+							width: scene.width
+							look: look.modelData.id
+							still: true
+							hovered: look.hovered
+							remaining: scene.remaining
+							count: 3
+							entry: ({
+								internal: true,
+								status: "done",
+								app: "Messages",
+								icon: "message_text",
+								title: "Anna",
+								detail: "Are you coming over tonight? I made too much pasta again."
+							})
+						}
+					}
+				}
+			}
+		}
 	}
 
 	SettingCard {

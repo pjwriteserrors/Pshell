@@ -14,6 +14,50 @@ Singleton {
 
 	property int nextToastId: 0
 	property var toasts: []
+	// toasts of the same program (or the same part of the shell) share one
+	// card, newest first; the stacks keep the order they first came in
+	readonly property var stacks: {
+		const byKey = {};
+		const order = [];
+		for (const toast of root.toasts) {
+			if (!byKey[toast.stackKey]) {
+				byKey[toast.stackKey] = { key: toast.stackKey, toasts: [] };
+				order.push(byKey[toast.stackKey]);
+			}
+			byKey[toast.stackKey].toasts.unshift(toast);
+		}
+		return order;
+	}
+	readonly property int maxStacks: 5
+
+	// ── look of the toasts ─────────────────────────────────────────────────
+	readonly property var toastStyles: [
+		{ id: "card", label: "Card" },
+		{ id: "accent", label: "Accent" },
+		{ id: "compact", label: "Compact" },
+		{ id: "floating", label: "Floating" }
+	]
+	property string toastStyle: "card"
+
+	function setToastStyle(style) {
+		if (!root.toastStyles.some(entry => entry.id === style) || style === root.toastStyle) return;
+		root.toastStyle = style;
+		looks.setText(JSON.stringify({ style: style }, null, 2));
+	}
+
+	FileView {
+		id: looks
+
+		path: Paths.stateFile("toasts.json")
+		blockLoading: true
+		printErrors: false
+		onLoaded: {
+			try {
+				const style = String(JSON.parse(String(text() || "{}")).style || "");
+				if (root.toastStyles.some(entry => entry.id === style)) root.toastStyle = style;
+			} catch (error) {}
+		}
+	}
 	property var groups: []
 	readonly property int count: root.groups.length
 
@@ -198,13 +242,25 @@ Singleton {
 
 	function addToast(notification) {
 		root.nextToastId += 1;
-		root.toasts = root.toasts.concat([{
+		root.showToast({
 			toastId: root.nextToastId,
+			stackKey: root.appKey(notification),
 			notificationId: notification.id,
 			notification: notification,
 			internal: false,
 			duration: root.toastDuration(notification.expireTimeout)
-		}]);
+		});
+	}
+
+	// beyond maxStacks the oldest stack makes room (it stays in the centre)
+	function showToast(toast) {
+		let toasts = root.toasts.concat([toast]);
+		const keys = [...new Set(toasts.map(entry => entry.stackKey))];
+		if (keys.length > root.maxStacks) {
+			const gone = new Set(keys.slice(0, keys.length - root.maxStacks));
+			toasts = toasts.filter(entry => !gone.has(entry.stackKey));
+		}
+		root.toasts = toasts;
 	}
 
 	// A notification of the shell's own, in the centre and as a toast, like
@@ -265,8 +321,9 @@ Singleton {
 		const sound = extra.sound ?? (String(status) === "error" ? "error" : "");
 		if (sound !== "") Sounds.play(sound);
 		root.nextToastId += 1;
-		root.toasts = root.toasts.concat([{
+		root.showToast({
 			toastId: root.nextToastId,
+			stackKey: `shell::${extra.app || source || "Shell"}`,
 			notificationId: -root.nextToastId,
 			notification: null,
 			internal: true,
@@ -281,7 +338,7 @@ Singleton {
 			reply: extra.reply && typeof extra.reply.send === "function" ? extra.reply : null,
 			actions: Array.isArray(extra.actions) ? extra.actions : [],
 			duration: Number(extra.duration) > 0 ? Number(extra.duration) : (String(status) === "running" ? 8000 : 5000)
-		}]);
+		});
 		return root.nextToastId;
 	}
 
@@ -293,6 +350,19 @@ Singleton {
 		if (!toast) return;
 		if (toast.notification) toast.notification.dismiss();
 		root.removeToast(toast.toastId);
+	}
+
+	// thrown away: the programs' notifications go with it
+	function dismissStack(key) {
+		for (const toast of root.toasts)
+			if (toast.stackKey === key && toast.notification) toast.notification.dismiss();
+		root.removeStack(key);
+	}
+
+	// timed out: the notifications stay in the centre
+	function removeStack(key) {
+		const kept = root.toasts.filter(toast => toast.stackKey !== key);
+		if (kept.length !== root.toasts.length) root.toasts = kept;
 	}
 
 	function removeToastByNotificationId(notificationId) {
