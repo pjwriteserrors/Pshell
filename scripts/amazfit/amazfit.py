@@ -40,6 +40,7 @@ import signal
 import sys
 import threading
 import time
+import urllib.parse
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -423,7 +424,9 @@ class Daemon:
 
     def on_http(self, rid, method, url):
         w = self.option("weather") or {}
-        if url.startswith("/weather/") and isinstance(w.get("lat"), (int, float)):
+        # the watch asks Huami's server by its full address: https://api-mifit.huami.com/weather/…
+        path = urllib.parse.urlsplit(url).path
+        if path.startswith("/weather/") and isinstance(w.get("lat"), (int, float)):
             def go():
                 status, body = weather.handle(url, w["lat"], w["lon"])
                 self.loop.post(lambda: self.zepp.http_reply(rid, status, body))

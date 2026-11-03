@@ -150,9 +150,11 @@ object WatchPhone {
 	private fun weather(c: Context, id: Int, url: String) {
 		val z = zepp ?: return
 		val place = if (app.prefs.watchWeather.value) location(c) else null
-		if (!url.startsWith("/weather/") || place == null) return z.httpReply(id, 0, null)
+		// the watch asks Huami's server by its full address: https://api-mifit.huami.com/weather/…
+		val path = url.substringAfter("://", url).let { if (url.contains("://")) "/" + it.substringAfter('/', "") else it }
+		if (!path.startsWith("/weather/") || place == null) return z.httpReply(id, 0, null)
 		io.execute {
-			val (status, body) = runCatching { WeatherZepp.answer(url, place.first, place.second) }.getOrDefault(404 to "{}")
+			val (status, body) = runCatching { WeatherZepp.answer(path, place.first, place.second) }.getOrDefault(404 to "{}")
 			main.post { zepp?.httpReply(id, status, body) }
 		}
 	}
