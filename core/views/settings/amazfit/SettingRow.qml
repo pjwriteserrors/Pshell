@@ -17,10 +17,11 @@ ColumnLayout {
 	required property string group
 	required property var entry
 	readonly property var arg: Amazfit.argOf(row.group, row.entry.code)
-	readonly property string label: row.arg?.label ?? `Setting 0x${Number(row.entry.code).toString(16).padStart(2, "0")}`
+	readonly property string given: Amazfit.nameOf(row.group, row.entry.code)
+	readonly property string label: row.given || (row.arg ? row.arg.label + (row.arg.guess ? " (likely)" : "") : `Setting 0x${Number(row.entry.code).toString(16).padStart(2, "0")}`)
 	readonly property string unit: row.arg?.unit ?? ""
 	readonly property string type: row.entry.type ?? ""
-	readonly property bool hidden: !row.arg
+	readonly property bool hidden: !row.arg || row.arg.guess === true
 	// choices: { value, label } – the catalogue's names, else the raw values the watch allows
 	readonly property var choices: {
 		const named = row.arg?.options ?? null;
@@ -40,7 +41,8 @@ ColumnLayout {
 		return values.map(v => ({ value: v, label: named?.[String(v)] ?? String(v) }));
 	}
 	readonly property string hint: [
-		row.hidden ? `hidden · ${row.type}` : "",
+		row.hidden ? `hidden 0x${Number(row.entry.code).toString(16).padStart(2, "0")} · ${row.type}` : "",
+		row.arg?.note ?? "",
 		row.entry.min !== undefined && row.type !== "shorts" ? `${row.entry.min}–${row.entry.max}${row.unit ? " " + row.unit : ""}` : "",
 		row.entry.maxLength ? `up to ${row.entry.maxLength} characters` : ""
 	].filter(s => s).join(" · ")

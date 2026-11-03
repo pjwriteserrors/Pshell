@@ -104,6 +104,34 @@ Singleton {
 		return name ? name.replace(/_/g, " ").replace(/^./, c => c.toUpperCase()) : id;
 	}
 
+	// telling hidden settings apart: remember, change one on the watch, compare
+	property string comparing: ""   // "", "waiting", "ready", "done"
+	property var changes: []
+
+	function remember() {
+		root.comparing = "waiting";
+		root.changes = [];
+		root.send({ op: "snapshot" });
+	}
+
+	function compare() {
+		root.comparing = "waiting";
+		root.send({ op: "compare" });
+	}
+
+	// a name the user gave a hidden setting ("gg/cc" → text)
+	function nameOf(groupName, code) {
+		const id = `${Number(root.groupId(groupName)).toString(16).padStart(2, "0")}/${Number(code).toString(16).padStart(2, "0")}`;
+		return root.option("names", {})[id] ?? "";
+	}
+
+	function setName(id, text) {
+		const names = Object.assign({}, root.option("names", {}));
+		if (text.trim()) names[id] = text.trim();
+		else delete names[id];
+		root.setOption("names", names);
+	}
+
 	function call(name, args) {
 		root.send({ op: "zepp", call: name, args: args ?? {} });
 	}
@@ -614,6 +642,14 @@ Singleton {
 			break;
 		case "ack":
 			root.acked(data.what ?? "", data.ok !== false);
+			break;
+		case "snapshot":
+			root.comparing = "ready";
+			root.changes = [];
+			break;
+		case "compared":
+			root.comparing = "done";
+			root.changes = data.changes ?? [];
 			break;
 		case "state":
 			root.daemonState = data;

@@ -660,6 +660,26 @@ class Daemon:
         elif op == "found":
             if ready:
                 z.found_phone()
+        elif op == "snapshot":
+            # what changed on the watch between this and "compare": names a hidden setting
+            if ready:
+                z.reread()
+                self.loop.schedule(3.0, lambda: (setattr(self, "snap", z.values()), emit("snapshot", count=len(self.snap))))
+        elif op == "compare":
+            if ready and getattr(self, "snap", None) is not None:
+                z.reread()
+
+                def diff():
+                    now = z.values()
+                    changes = []
+                    for k, v in now.items():
+                        if self.snap.get(k) != v:
+                            g, code = (int(x, 16) for x in k.split("/"))
+                            arg = protocol.ARGS.get((g, code))
+                            changes.append({"id": k, "group": protocol.GROUPS.get(g, ""), "code": code,
+                                            "key": arg["key"] if arg else "", "old": self.snap.get(k), "new": v})
+                    emit("compared", changes=changes)
+                self.loop.schedule(3.0, diff)
         elif op == "silent":
             if ready:
                 z.silent(bool(c.get("on")))

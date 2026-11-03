@@ -440,6 +440,86 @@ SettingsPage {
 		}
 	}
 
+	// ── what a hidden setting is ───────────────────────────────────────────
+	SettingCard {
+		anchor: "amazfit-hidden"
+		visible: root.zepp
+		title: "Hidden settings"
+		subtitle: "The watch has settings nobody has named. Tell them apart: remember the watch's settings, change one thing in the watch's own menu, then ask what changed."
+		icon: "eye_off_outline"
+
+		RowLayout {
+			Layout.fillWidth: true
+			spacing: 6
+
+			TextButton {
+				variant: "tonal"
+				icon: "camera_outline"
+				text: Amazfit.comparing === "waiting" ? "Reading …" : "1 · Remember now"
+				enabled: Amazfit.comparing !== "waiting"
+				onActivated: Amazfit.remember()
+			}
+
+			StyledText {
+				Layout.fillWidth: true
+				text: Amazfit.comparing === "ready" ? "2 · Now change one setting on the watch …" : (Amazfit.comparing === "done" ? `${Amazfit.changes.length} changed` : "")
+				tone: Theme.textMuted
+			}
+
+			TextButton {
+				variant: "tonal"
+				icon: "compare_horizontal"
+				text: "3 · What changed?"
+				enabled: Amazfit.comparing === "ready" || Amazfit.comparing === "done"
+				onActivated: Amazfit.compare()
+			}
+		}
+
+		Repeater {
+			model: Amazfit.changes
+
+			delegate: RowLayout {
+				id: change
+
+				required property var modelData
+
+				Layout.fillWidth: true
+				Layout.leftMargin: 12
+				spacing: 10
+
+				StyledText {
+					Layout.preferredWidth: 220
+					text: `${Amazfit.catalog.groups[change.modelData.group]?.label ?? change.modelData.group} · 0x${Number(change.modelData.code).toString(16).padStart(2, "0")}`
+					font.weight: Font.Medium
+				}
+
+				StyledText {
+					Layout.preferredWidth: 200
+					text: `${JSON.stringify(change.modelData.old)} → ${JSON.stringify(change.modelData.new)}`
+					font.family: Theme.monoFamily
+					tone: Theme.textMuted
+					elide: Text.ElideRight
+				}
+
+				Field {
+					id: givenName
+
+					Layout.fillWidth: true
+					visible: !change.modelData.key || Amazfit.argOf(change.modelData.group, change.modelData.code)?.guess === true
+					text: Amazfit.option("names", {})[change.modelData.id] ?? ""
+					placeholder: "What is it on the watch? (name it)"
+					onAccepted: Amazfit.setName(change.modelData.id, givenName.text)
+				}
+
+				StyledText {
+					Layout.fillWidth: true
+					visible: !givenName.visible
+					text: Amazfit.argOf(change.modelData.group, change.modelData.code)?.label ?? ""
+				}
+			}
+		}
+	}
+
 	// ── alarms ─────────────────────────────────────────────────────────────
 	SettingCard {
 		anchor: "amazfit-alarms"

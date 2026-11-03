@@ -101,6 +101,44 @@ file transfer too, so the watch shows its own. The activity download
 (0x004B) is Gadgetbridge's and the shell's face syncs the health data
 (`>watch`).
 
+## Every setting, tried on the watch (2026-11-03)
+
+With the key, every setting of the display, sound, wearing, voice,
+language, health, workout and system groups was written with another value
+the watch allows, read back, put back and read again (`sweep`, below);
+the lock code and the Bluetooth group were left alone, the aGPS values only
+read. The watch took them all, with these findings:
+
+- **0 is "never set"** for some bytes: the offline voice language, the pool
+  length and workout 0x50 were 0 and do not take a 0 back (the pool length
+  answers `06 02`, refused). They stay at 1 after the test.
+- Changes the watch makes itself come back late: language, voice language,
+  the button choice – read back right away they still show the old value.
+- The system group acks with `06 02` although it takes the value.
+- Coupled settings show what hidden ones are: whatever else changed when one
+  was written was noted (and put back).
+
+What the hidden ones are (the catalogue names them; *likely* ones say so):
+
+| Code | Type | What |
+| --- | --- | --- |
+| system 0x29 | bool | **Battery saver** – on, the watch turns off raise to wake, cover to mute, read aloud, breathing quality and the workout prompt, cuts the screen timeout to 5 s, lowers workout detection |
+| agps 0x07 | string | the GNSS chip's firmware (`AG3352B_V3.1.0_20250120,S`, Airoha AG3352) |
+| display 0x07 | byte 0–2 | the always-on look, likely: it follows *Always-on follows the watch face* (off → 0, 2 switches that off) |
+| wearing 0x01 | byte 0/1 | likely the wrist (next to *Buttons on*) |
+| workout 0x04 | byte 0/1 | likely how heart rate zones are worked out: while 1, zones written to 0x05 land in 0x06 |
+| workout 0x06 | 6 shorts | the second set of heart rate zones (reserve) |
+| workout 0x07 | short 30–100 | likely the resting heart rate for the zones (0: the watch's own; not written) |
+
+Not known yet: display 0x11, 0x12; health 0x15–0x18 (0x18 takes the
+intervals 0/1/5/10/15/30 min), 0x61, 0x71; workout 0x50; system 0x09, 0x0d,
+0x19, 0x1f, 0x20, 0x24 (0–12), 0x27, 0x2a; Bluetooth 0x01, 0x03; aGPS
+0x0b–0x0f. Writing them changes nothing else the watch reports, and 0x1f,
+0x20, 0x27, 0x2a were not taken. Their meaning shows on the watch only:
+the page's *Hidden settings* card remembers every value, and after one
+setting is changed in the watch's own menu, *What changed?* lists the code
+that moved – and lets it be named (`names` in amazfit.json).
+
 ## Auth key
 
 Zepp OS encrypts everything with a session key made from ECDH on NIST

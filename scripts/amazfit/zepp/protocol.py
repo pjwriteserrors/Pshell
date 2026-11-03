@@ -762,6 +762,15 @@ class Zepp:
         url = r.cstr()
         self.emit("http", id=rid, method=method, url=url)
 
+    def values(self):
+        """Every setting's value now: {"gg/cc": value}."""
+        return {f"{g['id']:02x}/{int(c):02x}": e.get("value") for g in self.state["config"].values() for c, e in g["args"].items()}
+
+    def reread(self):
+        """Asks every group again for all it has."""
+        for g in self.state["config"].values():
+            self._send("config", bytes([0x03, 0x01, g["id"], 0x00]))
+
     # ── what the daemon asks ────────────────────────────────────────────
     def http_reply(self, rid, status, body):
         if body is None:

@@ -305,7 +305,8 @@
     "2": "English",
     "3": "German",
     "4": "Spanish"
-   }
+   },
+   "note": "0 means never set: the watch takes no 0 back"
   },
   {
    "group": "lockscreen",
@@ -635,7 +636,8 @@
    "type": "byte",
    "key": "pool_size",
    "label": "Pool length",
-   "unit": "m"
+   "unit": "m",
+   "note": "0 means never set: the watch takes no 0 back"
   },
   {
    "group": "system",
@@ -808,6 +810,82 @@
    "type": "bool",
    "key": "bt_advertise",
    "label": "Visible while connected"
+  },
+  {
+   "group": "system",
+   "code": 41,
+   "type": "bool",
+   "key": "battery_saver",
+   "label": "Battery saver",
+   "note": "switching it on turns off raise to wake, cover to mute, read aloud, breathing quality while asleep and the workout prompt, shortens the screen timeout to 5 s and lowers workout detection (tested 2026-11-03)"
+  },
+  {
+   "group": "agps",
+   "code": 7,
+   "type": "string",
+   "key": "gnss_firmware",
+   "label": "GNSS chip firmware",
+   "note": "AG3352B_… – the Airoha AG3352 satellite receiver's firmware"
+  },
+  {
+   "group": "display",
+   "code": 7,
+   "type": "byte",
+   "key": "aod_source",
+   "label": "Always-on look",
+   "options": {
+    "0": "Own style",
+    "1": "Like the watch face",
+    "2": "Chosen style"
+   },
+   "guess": true,
+   "note": "moves with 'Always-on follows the watch face': off → 0, and 2 turns that off (tested)"
+  },
+  {
+   "group": "wearing",
+   "code": 1,
+   "type": "byte",
+   "key": "wear_wrist",
+   "label": "Worn on",
+   "options": {
+    "0": "Left wrist",
+    "1": "Right wrist"
+   },
+   "guess": true,
+   "note": "next to 'Buttons on' in the wearing group"
+  },
+  {
+   "group": "workout",
+   "code": 4,
+   "type": "byte",
+   "key": "hr_zone_method",
+   "label": "Heart rate zones by",
+   "options": {
+    "0": "% of maximum",
+    "1": "Heart rate reserve"
+   },
+   "guess": true,
+   "note": "while 1, zones written to 0x05 land in 0x06 (tested)"
+  },
+  {
+   "group": "workout",
+   "code": 6,
+   "type": "shorts",
+   "key": "hr_zones_reserve",
+   "label": "Heart rate zones (reserve)",
+   "unit": "bpm",
+   "guess": true,
+   "note": "the second set of six zones; the one in use follows the zone method"
+  },
+  {
+   "group": "workout",
+   "code": 7,
+   "type": "short",
+   "key": "resting_hr",
+   "label": "Resting heart rate (for the zones)",
+   "unit": "bpm",
+   "guess": true,
+   "note": "30–100, 0 = measured by the watch; cannot be set back to 0"
   }
  ],
  "languages": {
