@@ -668,6 +668,7 @@ FocusScope {
 		const paths = rows.map(row => row.path);
 		const server = FileLibrary.setting("shareServer");
 		const images = rows.filter(row => row.kind === "image");
+		const host = FileLibrary.shareHost();
 		const dialog = root.form({
 			title: "Share a link",
 			subtitle: rows.length === 1 ? rows[0].name : `${rows.length} items (as one ZIP)`,
@@ -675,19 +676,19 @@ FocusScope {
 			action: "Upload",
 			actionIcon: "upload_outline",
 			fields: [
-				{ key: "host", type: "menu", label: "Upload to", value: FileLibrary.setting("shareHost") === "ssh" && !server ? "litterbox" : FileLibrary.setting("shareHost"), options: [
-					{ value: "litterbox", label: "Litterbox (up to 1 GB)", icon: "cloud_upload_outline" },
-					{ value: "0x0", label: "0x0.st (up to 512 MB)", icon: "cloud_upload_outline" },
+				{ key: "host", type: "menu", label: "Upload to", value: host === "ssh" && !server ? "gofile" : host, options: [
+					{ value: "gofile", label: "Gofile", icon: "cloud_upload_outline" },
+					{ value: "uguu", label: "Uguu (3 hours, up to 128 MB)", icon: "cloud_upload_outline" },
 					{ value: "ssh", label: server ? `My server (${server.name || "SSH"})` : "My server – set it up in the settings", icon: "server_network" }
 				] },
-				{ key: "hours", type: "menu", label: "For", value: FileLibrary.setting("shareHours"), options: [{ value: 1, label: "1 hour" }, { value: 12, label: "12 hours" }, { value: 24, label: "1 day" }, { value: 72, label: "3 days" }, { value: 168, label: "1 week (0x0.st)" }] },
+				{ key: "hours", type: "menu", label: "For", value: FileLibrary.setting("shareHours"), options: [{ value: 1, label: "1 hour" }, { value: 12, label: "12 hours" }, { value: 24, label: "1 day" }, { value: 72, label: "3 days" }, { value: 168, label: "1 week" }], when: v => v.host !== "uguu" },
 				{ key: "where", type: "info", tone: "warning", text: v => "Anyone with the link can download it until it runs out. The host can see what you upload.", when: v => v.host !== "ssh" },
 				{ key: "gps", type: "info", tone: "warning", icon: "map_marker_alert_outline", text: "A picture says where it was taken – use Edit picture → Remove location first if that should stay private.", when: v => !!v.located }
 			],
 			check: values => values.host === "ssh" && !server ? "Set up your server in the settings first" : ""
 		}, values => {
 			FileLibrary.set("shareHost", values.host);
-			FileLibrary.set("shareHours", Number(values.hours));
+			if (values.host !== "uguu") FileLibrary.set("shareHours", Number(values.hours));
 			Files.share(paths, { host: values.host, hours: Number(values.hours) });
 		});
 		for (const row of images.slice(0, 10)) Files.request("imageinfo", { path: row.path }, data => {

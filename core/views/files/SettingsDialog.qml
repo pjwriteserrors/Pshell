@@ -1225,12 +1225,12 @@ DialogFrame {
 					title: "Links to share"
 
 					Hint {
-						text: "Right click → Share a link… uploads a file (or a ZIP of several) and puts the link on the clipboard. Litterbox and 0x0.st delete it when the time is up; on your own server it is deleted by this PC once it ran out."
+						text: "Right click → Share a link… uploads a file (or a ZIP of several) and puts the link on the clipboard. Uguu deletes it after three hours; on Gofile and your own server it is deleted by this PC once it ran out."
 					}
 
 					Choice {
-						options: [{ value: "litterbox", label: "Litterbox" }, { value: "0x0", label: "0x0.st" }, { value: "ssh", label: "My server" }]
-						value: FileLibrary.setting("shareHost")
+						options: [{ value: "gofile", label: "Gofile" }, { value: "uguu", label: "Uguu" }, { value: "ssh", label: "My server" }]
+						value: FileLibrary.shareHost()
 						onPicked: value => FileLibrary.set("shareHost", value)
 					}
 				}

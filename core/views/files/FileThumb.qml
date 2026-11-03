@@ -47,8 +47,9 @@ Item {
 	}
 	readonly property string picture: {
 		Files.thumbTick;
-		const made = Files.thumbOf(root.path);
-		return made !== "" ? made : root.thumb;
+		const made = Files.thumbOf(root.path, root.mtime);
+		if (made !== "") return made;
+		return root.thumb.startsWith("/") && !root.thumb.includes("?") ? `${root.thumb}?${root.mtime}` : root.thumb;
 	}
 	readonly property var peek: {
 		Files.peekTick;
@@ -66,7 +67,7 @@ Item {
 
 	function ask() {
 		if (root.path === "") return;
-		if (!root.dir && root.canThumb && root.picture === "" && root.thumbAllowed) Files.wantThumb(root.path, root.mime, root.size);
+		if (!root.dir && root.canThumb && root.picture === "" && root.thumbAllowed) Files.wantThumb(root.path, root.mime, root.size, root.mtime);
 		if (!root.compact && (root.dir || (root.isText && !root.pictured && root.textShown))) Files.checkPeek(root.path, root.dir ? "inode/directory" : root.mime, root.mtime);
 	}
 

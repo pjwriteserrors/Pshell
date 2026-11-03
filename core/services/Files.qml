@@ -335,7 +335,7 @@ Singleton {
 		}
 		for (const action of pending.actions) {
 			if (action.kind === "phone") Phone.sendFiles([path]);
-			else if (action.kind === "link") root.share([path], { host: FileLibrary.setting("shareHost") || "0x0", hours: 24 });
+			else if (action.kind === "link") root.share([path], { host: FileLibrary.shareHost(), hours: FileLibrary.setting("shareHours") || 24 });
 			else if (action.kind === "pc") Pcs.sendFiles(action.id, [path]);
 			else if (action.kind === "vault" && action.path) root.transfer([path], action.path, "move");
 		}
@@ -733,7 +733,7 @@ Singleton {
 	}
 
 	// ── thumbnails and peeks ───────────────────────────────────────────────
-	// path → thumbnail made since the folder was read; thumbTick says it changed
+	// path → { thumb, at } of a thumbnail made since the folder was read; thumbTick says it changed
 	property var thumbMap: ({})
 	property int thumbTick: 0
 	// path → { count, pictures } of a folder, { snippet } of a text file
@@ -744,8 +744,13 @@ Singleton {
 	property var askedThumbs: ({})
 	property var askedPeeks: ({})
 
-	function thumbOf(path) {
-		return root.thumbMap[path] ?? "";
+	// the source carries when it was made: a picture made anew under the same
+	// cache file is not taken from Qt's image cache. One made before the file
+	// last changed is not shown.
+	function thumbOf(path, mtime) {
+		const made = root.thumbMap[path];
+		if (!made || (mtime && made.at < mtime)) return "";
+		return `${made.thumb}?${made.at}`;
 	}
 
 	function peekOf(path) {
@@ -753,8 +758,8 @@ Singleton {
 	}
 
 	// a card on the screen asks for its picture; asks are sent together
-	function wantThumb(path, mime, size) {
-		const key = `${path}|${size || "large"}`;
+	function wantThumb(path, mime, size, mtime) {
+		const key = `${path}|${size || "large"}|${mtime || 0}`;
 		if (root.askedThumbs[key]) return;
 		root.askedThumbs[key] = true;
 		root.wantedThumbs.push({ path: path, mime: mime, size: size || "large" });
@@ -791,16 +796,6 @@ Singleton {
 		askTimer.restart();
 	}
 
-	// a folder read again may have files that changed: their pictures are asked anew
-	function forget(paths) {
-		for (const path of paths) {
-			delete root.askedPeeks[path];
-			delete root.peekMap[path];
-			delete root.askedThumbs[`${path}|large`];
-			delete root.askedThumbs[`${path}|x-large`];
-		}
-	}
-
 	Timer {
 		id: askTimer
 
@@ -819,7 +814,7 @@ Singleton {
 
 	function thumbArrived(path, thumb) {
 		if (thumb === "") return;
-		root.thumbMap[path] = thumb;
+		root.thumbMap[path] = { thumb: thumb, at: Date.now() / 1000 };
 		tickTimer.thumbs = true;
 		if (!tickTimer.running) tickTimer.start();
 	}

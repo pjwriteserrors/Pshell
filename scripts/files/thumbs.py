@@ -110,6 +110,45 @@ class Index:
 INDEX = Index()
 
 
+_STAMPS = {}  # cache file → (its mtime, the Thumb::MTime it holds)
+
+
+def stamp(png, made):
+    """The Thumb::MTime a thumbnail was made for, read from its text chunks
+    (they come before the picture) once per version of the file."""
+    known = _STAMPS.get(png)
+    if known and known[0] == made:
+        return known[1]
+    value = None
+    try:
+        with open(png, "rb") as file:
+            if file.read(8) == b"\x89PNG\r\n\x1a\n":
+                while True:
+                    head = file.read(8)
+                    if len(head) < 8 or head[4:] in (b"IDAT", b"IEND"):
+                        break
+                    data = file.read(int.from_bytes(head[:4], "big"))
+                    file.read(4)
+                    if head[4:] == b"tEXt":
+                        key, _, text = data.partition(b"\0")
+                        if key == b"Thumb::MTime":
+                            value = int(text)
+                            break
+    except (OSError, ValueError):
+        pass
+    _STAMPS[png] = (made, value)
+    return value
+
+
+def current(png, made, mtime):
+    """Whether a thumbnail written at `made` still pictures a file changed at
+    `mtime`: another file moved in with an older time is not taken for it."""
+    if made < int(mtime):
+        return False
+    value = stamp(png, made)
+    return value is None or value == int(mtime)
+
+
 def existing(path, mtime, digest_=None, sizes=("large", "x-large", "normal")):
     """The newest cached thumbnail of a file, "" when there is none, None
     when an earlier try failed."""
@@ -117,10 +156,11 @@ def existing(path, mtime, digest_=None, sizes=("large", "x-large", "normal")):
     known = INDEX.fresh()
     for size in sizes:
         made = known.get(size, {}).get(key)
-        if made is not None and made >= int(mtime):
-            return os.path.join(CACHE, size, key + ".png")
+        png = os.path.join(CACHE, size, key + ".png")
+        if made is not None and current(png, made, mtime):
+            return png
     failed = known.get("fail", {}).get(key)
-    if failed is not None and failed >= int(mtime):
+    if failed is not None and current(os.path.join(FAIL, key + ".png"), failed, mtime):
         return None
     return ""
 
@@ -255,7 +295,7 @@ class Thumbnailer:
             return None
         target = thumb_path(path, size)
         try:
-            if os.stat(target).st_mtime >= mtime:
+            if current(target, os.stat(target).st_mtime, mtime):
                 return target
         except OSError:
             pass

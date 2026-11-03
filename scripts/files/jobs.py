@@ -1442,7 +1442,7 @@ class Manager:
         job.state = "running"
         job.report(True)
         try:
-            result = share.upload(Context(job), paths, args.get("host", "litterbox"), float(args.get("hours", 24)),
+            result = share.upload(Context(job), paths, args.get("host", "gofile"), float(args.get("hours", 24)),
                                   args.get("server"), args.get("baseUrl", ""), args.get("folder", ""))
         except (share.ShareError, remote.RemoteError) as error:
             raise Failure(str(error))

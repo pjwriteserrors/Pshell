@@ -62,7 +62,7 @@ Singleton {
 		avDownloads: false,
 		pdfQuality: "ebook",
 		restoreSelection: true,
-		shareHost: "litterbox",
+		shareHost: "gofile",
 		shareHours: 24,
 		shareServer: null,
 		gitBadges: true,
@@ -395,6 +395,12 @@ Singleton {
 	function setting(key) {
 		const value = root.settings[key];
 		return value === undefined ? root.defaults[key] : value;
+	}
+
+	// where links are shared to; Litterbox and 0x0.st no longer take uploads
+	function shareHost() {
+		const host = root.setting("shareHost");
+		return ["gofile", "uguu", "ssh"].includes(host) ? host : "gofile";
 	}
 
 	function set(key, value) {
