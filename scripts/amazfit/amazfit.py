@@ -51,7 +51,7 @@ import gatt  # noqa: E402
 import weather  # noqa: E402
 from engine import Engine  # noqa: E402
 from mouse import Loop  # noqa: E402
-from zepp import chunked, protocol  # noqa: E402
+from zepp import chunked, fetch, healthbuild, protocol  # noqa: E402
 
 DRY = os.environ.get("PSHELL_AMAZFIT_DRY") == "1"
 # a made-up watch instead of BlueZ, for looking at the page (fakewatch.py)
@@ -150,6 +150,10 @@ class Daemon:
         self.connect_at = 0.0
         self.connecting = False
         self.published = None
+        self.fetcher = fetch.Fetcher(lambda p: self.zepp_send(fetch.ENDPOINT, p), self.on_fetched, self.on_fetch_done, log)
+        self.store = healthbuild.Store(Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "pshell/amazfit-health.json")
+        self.fetched_dates = set()
+        self.fetch_at = 0.0
 
     # ── setup ───────────────────────────────────────────────────────────
     def start(self):
@@ -196,6 +200,9 @@ class Daemon:
             self.connect(quiet=True)
         if self.zepp_state[0] == "ready" and self.option("liveHr", False) and self.watching:
             self.zepp.realtime_hr(2)
+        if self.zepp_state[0] == "ready" and self.option("health", True) and not self.fetcher.busy() \
+                and time.monotonic() > self.fetch_at:
+            self.start_fetch()
 
     # ── BlueZ ───────────────────────────────────────────────────────────
     def on_device(self, state):
@@ -306,6 +313,8 @@ class Daemon:
                 self.on_key("keyboard", False)
         elif key in (chunked.READ, chunked.WRITE):
             self.session.feed(key, value)
+        elif key == fetch.DATA:
+            self.fetcher.on_data(value)
 
     def update_hr(self):
         want = self.option("liveHr", False) or self.watching
@@ -346,6 +355,9 @@ class Daemon:
         self.publish()
 
     def on_zepp_message(self, endpoint, payload):
+        if endpoint == fetch.ENDPOINT:
+            self.fetcher.on_control(payload)
+            return
         self.zepp.handle(endpoint, payload)
 
     def on_zepp_event(self, kind, **data):
@@ -368,6 +380,29 @@ class Daemon:
         if kind == "zepp" and data.get("part") == "services":
             self.after_services()
         emit(kind, **data)
+
+    # ── what the watch measured ─────────────────────────────────────────
+    def start_fetch(self):
+        self.fetch_at = time.monotonic() + 30 * 60
+        if not self.zepp.has("activity fetch"):
+            return
+        self.gatt.notify(fetch.DATA, True)
+        self.fetched_dates = set()
+        since = {k: self.store.since.get(k, time.time() - 30 * 86400) for k in fetch.TYPES}
+        self.loop.schedule(0.5, lambda: self.fetcher.start(since))
+        emit("fetching", on=True)
+
+    def on_fetched(self, kind, samples, until):
+        self.fetched_dates |= self.store.add(kind, samples)
+
+    def on_fetch_done(self):
+        self.gatt.notify(fetch.DATA, False)
+        self.store.save()
+        built = healthbuild.build(self.store, self.fetched_dates)
+        log(f"health: {len(built['days'])} days, {len(built['nights'])} nights")
+        emit("fetching", on=False)
+        if built["days"] or built["nights"]:
+            emit("health", **built)
 
     def after_services(self):
         """What goes on each time the session is up: the page's choices."""
@@ -660,6 +695,16 @@ class Daemon:
         elif op == "found":
             if ready:
                 z.found_phone()
+        elif op == "fetch":
+            if ready and not self.fetcher.busy():
+                self.start_fetch()
+        elif op == "import":
+            # a Gadgetbridge database export, read only
+            dates = healthbuild.import_gadgetbridge(self.store, str(c.get("path", "")))
+            self.store.save()
+            built = healthbuild.build(self.store, dates)
+            emit("imported", days=len(built["days"]), nights=len(built["nights"]))
+            emit("health", **built)
         elif op == "snapshot":
             # what changed on the watch between this and "compare": names a hidden setting
             if ready:

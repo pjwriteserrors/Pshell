@@ -208,6 +208,32 @@ class Health:
         self.nights = {k: v for k, v in self.nights.items() if k >= oldest}
         self.days = {k: v for k, v in self.days.items() if k >= oldest}
 
+    def merge(self, days, nights, synced=None, battery=None):
+        """Days and nights built from the watch's own data (scripts/amazfit or
+        the phone app): each replaces the one of its date, keeping what the
+        face had sent that the fetch has not (calories, goals)."""
+        changed = 0
+        for day in days or []:
+            if isinstance(day, dict) and isinstance(day.get("date"), str):
+                old = self.days.get(day["date"]) or {}
+                self.days[day["date"]] = {**old, **day}
+                changed += 1
+        for night in nights or []:
+            if isinstance(night, dict) and isinstance(night.get("date"), str):
+                old = self.nights.get(night["date"])
+                # an estimate from the minutes never replaces the watch's own night
+                if old and night.get("estimated") and not old.get("estimated"):
+                    continue
+                self.nights[night["date"]] = night
+                changed += 1
+        if changed:
+            self.synced = int(synced or time.time())
+            if battery is not None:
+                self.battery = int(battery)
+            self._trim(date.today().isoformat())
+            self.save()
+        return changed
+
     # ── what the shell sees ────────────────────────────────────────────────
     def view(self, link=None):
         today = date.today().isoformat()

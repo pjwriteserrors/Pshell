@@ -40,6 +40,8 @@ Singleton {
 		"seed_outline": "󰹣",
 		"chart_areaspline": "󰄧",
 		"watch": "󰖉",
+		"database_import": "󰥝",
+		"chart_line": "󰄪",
 		"compare_horizontal": "󱒒",
 		"bell_alert_outline": "󰺁",
 		"clock_check_outline": "󰾩",

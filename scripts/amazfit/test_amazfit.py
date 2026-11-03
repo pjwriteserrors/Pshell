@@ -154,7 +154,7 @@ class Tests(unittest.TestCase):
         link.run()
         sent = {ep: p for ep, p in w.got}
         create = [p for ep, p in w.got if ep == 0x000f and p[0] == 0x03][0]
-        self.assertEqual(create[:7], bytes([0x03, 0x01, 0x05, 3, 6, 45, 0x1f]))
+        self.assertEqual(create, bytes([0x03, 0x01, 0x06, 3, 6, 45, 0x1f, 0, 0, 0, 0, 30]))
         self.assertIn((0x000f, b"\x09"), w.got)  # asked again after the ack
         self.assertEqual(sent[0x0023], b"\x07" + struct.pack("<I", 0xABCDEF01))
         menu = [p for ep, p in w.got if ep == 0x0026 and p[0] == 0x05][0]

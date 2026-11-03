@@ -104,6 +104,19 @@ Singleton {
 		return name ? name.replace(/_/g, " ").replace(/^./, c => c.toUpperCase()) : id;
 	}
 
+	// what the watch measured: fetched after it connects and every 30 min
+	property bool fetching: false
+	property real healthAt: 0
+	property string imported: ""
+
+	function fetchHealth() {
+		root.send({ op: "fetch" });
+	}
+
+	function importGadgetbridge(path) {
+		root.send({ op: "import", path: String(path).replace(/^file:\/\//, "").replace(/^~/, Quickshell.env("HOME")) });
+	}
+
 	// telling hidden settings apart: remember, change one on the watch, compare
 	property string comparing: ""   // "", "waiting", "ready", "done"
 	property var changes: []
@@ -642,6 +655,16 @@ Singleton {
 			break;
 		case "ack":
 			root.acked(data.what ?? "", data.ok !== false);
+			break;
+		case "health":
+			// into the watch's health history, which the phone app and >watch both see
+			Phone.call("health", "add", { days: data.days ?? [], nights: data.nights ?? [], battery: root.battery, synced: Math.floor(Date.now() / 1000) }, result => root.healthAt = Date.now());
+			break;
+		case "fetching":
+			root.fetching = data.on === true;
+			break;
+		case "imported":
+			root.imported = `${data.days ?? 0} days, ${data.nights ?? 0} nights from Gadgetbridge`;
 			break;
 		case "snapshot":
 			root.comparing = "ready";

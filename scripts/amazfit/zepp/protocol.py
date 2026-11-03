@@ -518,7 +518,10 @@ class Zepp:
             for k in range(n):
                 o = 2 + k * 10
                 f = p[o]
-                alarms.append({"position": p[o + 1], "enabled": bool(f & 0x04), "smart": bool(f & 0x01),
+                # smart wake: the window (minutes before the time) in the entry's last byte; the
+                # watch marks it with flag 0x02 itself (flag 0x01 alone it drops, tested on the Active 2)
+                window = p[o + 9] if f & 0x02 else 0
+                alarms.append({"position": p[o + 1], "enabled": bool(f & 0x04), "smart": window > 0, "window": window,
                                "hour": p[o + 2], "minute": p[o + 3], "repeat": p[o + 4], "flags": f})
             self.state["alarms"] = sorted(alarms, key=lambda a: a["position"])
             self.changed("alarms")
@@ -802,9 +805,15 @@ class Zepp:
         self._send("config", encode_set(group, version, out))
         self.changed("config")
 
-    def set_alarm(self, position, hour, minute, repeat, enabled=True, smart=False):
-        flags = (0x04 if enabled else 0) | (0x01 if smart else 0)
-        self._send("alarms", bytes([0x03, 0x01, flags, position, hour, minute, repeat & 0xFF, 0, 0, 0, 0, 0]))
+    WINDOWS = (10, 20, 30, 40, 50)   # what the watch takes; anything else becomes 70
+
+    def set_alarm(self, position, hour, minute, repeat, enabled=True, smart=False, window=None):
+        """smart: wakes you in light sleep up to `window` minutes early (10–50, default 30)."""
+        window = (window or 30) if smart else 0
+        if window and window not in self.WINDOWS:
+            window = min(self.WINDOWS, key=lambda w: abs(w - window))
+        flags = (0x04 if enabled else 0) | (0x02 if window else 0)
+        self._send("alarms", bytes([0x03, 0x01, flags, position, hour, minute, repeat & 0xFF, 0, 0, 0, 0, window]))
 
     def delete_alarm(self, position):
         self._send("alarms", bytes([0x05, 0x01, position]))

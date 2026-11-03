@@ -7,6 +7,7 @@ import qs.style.widgets
 import qs.core.services
 import qs.core.views.settings.mouse
 import qs.core.views.settings.amazfit
+import Quickshell
 
 // An Amazfit watch on Zepp OS (core/services/Amazfit.qml): the watch, live;
 // its Zepp OS link (the auth key); what its keys do; every setting it reports
@@ -440,6 +441,71 @@ SettingsPage {
 		}
 	}
 
+	// ── what it measured ───────────────────────────────────────────────────
+	SettingCard {
+		anchor: "amazfit-health"
+		visible: root.zepp
+		title: "Health data"
+		subtitle: Amazfit.fetching ? "Fetching from the watch …" : (Amazfit.healthAt ? `Fetched ${new Date(Amazfit.healthAt).toLocaleTimeString(Qt.locale(), "HH:mm")} – kept on the watch too, so the phone gets it as well` : "Steps, heart, sleep stages, stress, blood oxygen, temperature, breathing, HRV, PAI – after it connects and every 30 min")
+		icon: "heart_pulse"
+
+		FlagRow {
+			icon: "sync"
+			title: "Fetch from the watch"
+			subtitle: "The data stays on the watch (the phone app or Gadgetbridge still gets it)"
+			checked: Amazfit.option("health", true)
+			onToggled: on => Amazfit.setOption("health", on)
+		}
+
+		RowLayout {
+			Layout.fillWidth: true
+			spacing: 6
+
+			TextButton {
+				variant: "tonal"
+				icon: "download"
+				text: "Fetch now"
+				enabled: !Amazfit.fetching
+				onActivated: Amazfit.fetchHealth()
+			}
+
+			TextButton {
+				variant: "ghost"
+				icon: "chart_line"
+				text: "Open the overview"
+				onActivated: Quickshell.execDetached(["qs", "ipc", "-p", Quickshell.shellDir, "call", "watch", "open"])
+			}
+		}
+
+		RowLayout {
+			Layout.fillWidth: true
+			spacing: 6
+
+			Field {
+				id: gbPath
+
+				Layout.fillWidth: true
+				placeholder: "Gadgetbridge database export (Gadgetbridge → Settings → Export database), e.g. ~/Downloads/Gadgetbridge.db"
+				icon: "database_import"
+			}
+
+			TextButton {
+				variant: "tonal"
+				text: "Import"
+				enabled: gbPath.text.trim() !== ""
+				onActivated: Amazfit.importGadgetbridge(gbPath.text.trim())
+			}
+		}
+
+		StyledText {
+			Layout.fillWidth: true
+			Layout.leftMargin: 12
+			text: Amazfit.imported || "The watch hands out only what Gadgetbridge has not fetched yet (Gadgetbridge clears it): the history before that is in Gadgetbridge's database – import its export once."
+			tone: Theme.textSubtle
+			wrapMode: Text.Wrap
+		}
+	}
+
 	// ── what a hidden setting is ───────────────────────────────────────────
 	SettingCard {
 		anchor: "amazfit-hidden"
@@ -525,7 +591,7 @@ SettingsPage {
 		anchor: "amazfit-alarms"
 		visible: root.zepp
 		title: "Alarms"
-		subtitle: `${(root.zs.alarms ?? []).length} of 10 · smart ones wake you in light sleep up to 30 min early`
+		subtitle: `${(root.zs.alarms ?? []).filter(a => a.enabled).length} on · smart ones wake you at the best moment: in light sleep, up to 10–50 min before the time`
 		icon: "alarm"
 
 		Repeater {
@@ -548,7 +614,7 @@ SettingsPage {
 					clearable: false
 					onAccepted: {
 						const m = /^(\d{1,2}):(\d{2})$/.exec(alarmTime.text.trim());
-						if (m) Amazfit.call("set_alarm", { position: alarm.modelData.position, hour: Number(m[1]), minute: Number(m[2]), repeat: alarm.modelData.repeat, enabled: alarm.modelData.enabled, smart: alarm.modelData.smart });
+						if (m) Amazfit.call("set_alarm", { position: alarm.modelData.position, hour: Number(m[1]), minute: Number(m[2]), repeat: alarm.modelData.repeat, enabled: alarm.modelData.enabled, smart: alarm.modelData.smart, window: alarm.modelData.window ?? 0 });
 					}
 				}
 
@@ -560,15 +626,20 @@ SettingsPage {
 
 						text: root.days[index]
 						selected: (alarm.modelData.repeat & (1 << index)) !== 0
-						onClicked: Amazfit.call("set_alarm", { position: alarm.modelData.position, hour: alarm.modelData.hour, minute: alarm.modelData.minute, repeat: alarm.modelData.repeat ^ (1 << index), enabled: alarm.modelData.enabled, smart: alarm.modelData.smart })
+						onClicked: Amazfit.call("set_alarm", { position: alarm.modelData.position, hour: alarm.modelData.hour, minute: alarm.modelData.minute, repeat: alarm.modelData.repeat ^ (1 << index), enabled: alarm.modelData.enabled, smart: alarm.modelData.smart, window: alarm.modelData.window ?? 0 })
 					}
 				}
 
+				// smart wake: in light sleep up to this many minutes early; a tap goes on to the next window
 				Chip {
-					text: "Smart"
+					readonly property var windows: [0, 10, 20, 30, 40, 50]
+					text: alarm.modelData.smart ? `Smart · ${alarm.modelData.window} min` : "Smart"
 					icon: "sleep"
 					selected: alarm.modelData.smart
-					onClicked: Amazfit.call("set_alarm", { position: alarm.modelData.position, hour: alarm.modelData.hour, minute: alarm.modelData.minute, repeat: alarm.modelData.repeat, enabled: alarm.modelData.enabled, smart: !alarm.modelData.smart })
+					onClicked: {
+						const next = windows[(windows.indexOf(alarm.modelData.smart ? alarm.modelData.window : 0) + 1) % windows.length];
+						Amazfit.call("set_alarm", { position: alarm.modelData.position, hour: alarm.modelData.hour, minute: alarm.modelData.minute, repeat: alarm.modelData.repeat, enabled: alarm.modelData.enabled, smart: next > 0, window: next });
+					}
 				}
 
 				Item {
@@ -577,7 +648,7 @@ SettingsPage {
 
 				Toggle {
 					checked: alarm.modelData.enabled
-					onToggled: on => Amazfit.call("set_alarm", { position: alarm.modelData.position, hour: alarm.modelData.hour, minute: alarm.modelData.minute, repeat: alarm.modelData.repeat, enabled: on, smart: alarm.modelData.smart })
+					onToggled: on => Amazfit.call("set_alarm", { position: alarm.modelData.position, hour: alarm.modelData.hour, minute: alarm.modelData.minute, repeat: alarm.modelData.repeat, enabled: on, smart: alarm.modelData.smart, window: alarm.modelData.window ?? 0 })
 				}
 
 				IconButton {
