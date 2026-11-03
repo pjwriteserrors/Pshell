@@ -238,6 +238,7 @@ Singleton {
 		Haptics.play("notification", notification.hints["suppress-sound"] ? "" : (critical ? "notificationCritical" : "notification"));
 		Keyboard.notified(critical);
 		Apex.notified(notification, critical);
+		Amazfit.notified(notification);
 	}
 
 	function addToast(notification) {

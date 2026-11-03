@@ -66,4 +66,7 @@ class Prefs(context: Context) {
 	val chatModel = Setting("chatModel", "")
 	/** words per minute of the fast reader on the phone */
 	val readerWpm = Setting("readerWpm", 300)
+	/** the Amazfit watch's Zepp OS auth key (hex) and its address, for features/Watch.kt */
+	val watchKey = Setting("watchKey", "")
+	val watchAddress = Setting("watchAddress", "")
 }

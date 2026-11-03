@@ -39,7 +39,8 @@ core/services/Phone.qml   the shell's end; core/phone/ holds one file per topic
   **PC** (unlock, system, screen time, connections, updates, quick settings,
   capture, Studio, lighting, displays, SSH, virtual machines, 3D printer, file manager,
   PC files, RPG, session) and **Phone & PC** (notifications, clipboard,
-  files, calls, find). Each group is a tab of the bar: it opens on
+  files, calls, find, and the Amazfit watch over
+  its own Bluetooth link – `docs/amazfit.md`). Each group is a tab of the bar: it opens on
   the group's first feature, the rest sit in a row of chips at the top. The
   home screen is a control centre (what is going on, what is changed most)
   followed by every group under its own heading; a search field at the top

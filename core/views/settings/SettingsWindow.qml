@@ -75,6 +75,7 @@ FloatingWindow {
 		{ id: "ultimate", label: "Controller", icon: "gamepad_variant", hint: "8BitDo: buttons, sticks, light, macros", plugin: "ultimate" },
 		{ id: "headset", label: "Headset", icon: "headset", hint: "Sidetone, microphone, buttons", plugin: "headset" },
 		{ id: "as50", label: "Avantree AS50", icon: "headphones", hint: "Codec, microphone, buttons, battery", plugin: "as50" },
+		{ id: "amazfit", label: "Amazfit watch", icon: "watch", hint: "Zepp OS settings, alarms, keys, notifications", plugin: "amazfit" },
 		{ id: "multicursor", label: "Multicursor", icon: "cursor_text", hint: "Lines and cursors in every text field", plugin: "multicursor" },
 		{ id: "rules", label: "Window rules", icon: "application_cog_outline", hint: "Per app: size, place, look" },
 		{ id: "workspaces", label: "Workspaces", icon: "view_grid_outline", hint: "Named workspaces" },
@@ -153,6 +154,27 @@ FloatingWindow {
 		{ page: "as50", anchor: "as50-eq", title: "AS50 sound mode", words: "avantree as50 eq equalizer clear voice balanced mode", plugin: "as50" },
 		{ page: "as50", anchor: "as50-connection", title: "AS50 connection", words: "avantree as50 bluetooth name rename trusted auto connect take over ensemble transmitter battery warning", plugin: "as50" },
 		{ page: "as50", anchor: "as50-info", title: "AS50 profiles", words: "avantree as50 sdp profiles hfp a2dp avrcp versions codecs", plugin: "as50" },
+		{ page: "amazfit", anchor: "amazfit-device", title: "Amazfit watch", words: "amazfit zepp watch active 2 battery connect disconnect clock heart rate steps find vibrate", plugin: "amazfit" },
+		{ page: "amazfit", anchor: "amazfit-zepp", title: "Watch auth key", words: "amazfit zepp watch active 2 zepp os auth key gadgetbridge huafetcher pairing encryption", plugin: "amazfit" },
+		{ page: "amazfit", anchor: "amazfit-keys", title: "Watch keys", words: "amazfit zepp watch active 2 media keys music remote camera shutter hid buttons per app hidden report", plugin: "amazfit" },
+		{ page: "amazfit", anchor: "amazfit-display", title: "Watch display", words: "amazfit zepp watch active 2 brightness always on display aod raise wrist screen timeout", plugin: "amazfit" },
+		{ page: "amazfit", anchor: "amazfit-sound", title: "Watch sound and vibration", words: "amazfit zepp watch active 2 volume vibration strength crown alert tone", plugin: "amazfit" },
+		{ page: "amazfit", anchor: "amazfit-health", title: "Watch health", words: "amazfit zepp watch active 2 heart rate stress spo2 blood oxygen sleep inactivity goals steps", plugin: "amazfit" },
+		{ page: "amazfit", anchor: "amazfit-system", title: "Watch system", words: "amazfit zepp watch active 2 do not disturb night mode time format date units buttons camera remote", plugin: "amazfit" },
+		{ page: "amazfit", anchor: "amazfit-workout", title: "Watch workouts", words: "amazfit zepp watch active 2 gps band satellites detection heart rate zones", plugin: "amazfit" },
+		{ page: "amazfit", anchor: "amazfit-alarms", title: "Watch alarms", words: "amazfit zepp watch active 2 alarm smart wake", plugin: "amazfit" },
+		{ page: "amazfit", anchor: "amazfit-faces", title: "Watch faces", words: "amazfit zepp watch active 2 watchface face", plugin: "amazfit" },
+		{ page: "amazfit", anchor: "amazfit-apps", title: "Watch apps", words: "amazfit zepp watch active 2 apps installed remove", plugin: "amazfit" },
+		{ page: "amazfit", anchor: "amazfit-menu", title: "Watch menus", words: "amazfit zepp watch active 2 apps menu shortcuts control centre order", plugin: "amazfit" },
+		{ page: "amazfit", anchor: "amazfit-notifications", title: "Watch notifications", words: "amazfit zepp watch active 2 notifications music weather do not disturb find phone", plugin: "amazfit" },
+		{ page: "amazfit", anchor: "amazfit-canned", title: "Watch quick replies", words: "amazfit zepp watch active 2 canned replies messages", plugin: "amazfit" },
+		{ page: "amazfit", anchor: "amazfit-reminders", title: "Watch reminders", words: "amazfit zepp watch active 2 reminders todo", plugin: "amazfit" },
+		{ page: "amazfit", anchor: "amazfit-calendar", title: "Watch calendar", words: "amazfit zepp watch active 2 calendar events", plugin: "amazfit" },
+		{ page: "amazfit", anchor: "amazfit-clocks", title: "Watch world clocks", words: "amazfit zepp watch active 2 world clocks time zones", plugin: "amazfit" },
+		{ page: "amazfit", anchor: "amazfit-vibration", title: "Watch vibration patterns", words: "amazfit zepp watch active 2 vibration patterns alerts", plugin: "amazfit" },
+		{ page: "amazfit", anchor: "amazfit-user", title: "Watch body data", words: "amazfit zepp watch active 2 height weight age gender", plugin: "amazfit" },
+		{ page: "amazfit", anchor: "amazfit-connection", title: "Watch connection", words: "amazfit zepp watch active 2 auto connect time sync battery warning", plugin: "amazfit" },
+		{ page: "amazfit", anchor: "amazfit-info", title: "This watch", words: "amazfit zepp watch active 2 serial firmware hardware services gatt", plugin: "amazfit" },
 		{ page: "headset", anchor: "headset-profile", title: "Headset profile", words: "sennheiser headset audio profile duplex output input pro audio off", plugin: "headset" },
 		{ page: "ultimate", anchor: "ultimate-pad", title: "8BitDo controller", words: "8bitdo ultimate 2 wireless controller gamepad pad profile battery", plugin: "ultimate" },
 		{ page: "ultimate", anchor: "ultimate-buttons", title: "Controller buttons", words: "8bitdo gamepad remap buttons paddles pl pr l4 r4 back buttons turbo", plugin: "ultimate" },
@@ -723,6 +745,7 @@ FloatingWindow {
 							case "ultimate": return ultimatePage;
 							case "headset": return headsetPage;
 						case "as50": return as50Page;
+						case "amazfit": return amazfitPage;
 							case "multicursor": return multicursorPage;
 							case "rules": return rulesPage;
 							case "workspaces": return workspacesPage;
@@ -1010,6 +1033,14 @@ FloatingWindow {
 		id: headsetPage
 
 		HeadsetPage {
+			onOpen: page => root.go(page, "")
+		}
+	}
+
+	Component {
+		id: amazfitPage
+
+		AmazfitPage {
 			onOpen: page => root.go(page, "")
 		}
 	}

@@ -1,0 +1,1070 @@
+{
+ "about": "What Zepp OS takes over its settings endpoint (0x000a), after Gadgetbridge's ZeppOsConfigService; shared by scripts/amazfit and the phone app.",
+ "groups": {
+  "agps": {
+   "id": 0,
+   "version": 1,
+   "label": "GPS assistance"
+  },
+  "display": {
+   "id": 1,
+   "version": 2,
+   "label": "Display"
+  },
+  "sound": {
+   "id": 3,
+   "version": 2,
+   "label": "Sound and vibration"
+  },
+  "lockscreen": {
+   "id": 4,
+   "version": 1,
+   "label": "Lock screen"
+  },
+  "wearing": {
+   "id": 5,
+   "version": 2,
+   "label": "Wearing"
+  },
+  "voice": {
+   "id": 6,
+   "version": 2,
+   "label": "Offline voice"
+  },
+  "language": {
+   "id": 7,
+   "version": 2,
+   "label": "Language"
+  },
+  "health": {
+   "id": 8,
+   "version": 3,
+   "label": "Health"
+  },
+  "workout": {
+   "id": 9,
+   "version": 1,
+   "label": "Workout"
+  },
+  "system": {
+   "id": 10,
+   "version": 1,
+   "label": "System"
+  },
+  "bluetooth": {
+   "id": 11,
+   "version": 1,
+   "label": "Bluetooth"
+  }
+ },
+ "types": {
+  "bool": 11,
+  "string": 32,
+  "strings": 33,
+  "short": 1,
+  "shorts": 2,
+  "int": 3,
+  "byte": 16,
+  "bytes": 17,
+  "hhmm": 48,
+  "millis": 64,
+  "intu": 80
+ },
+ "args": [
+  {
+   "group": "agps",
+   "code": 9,
+   "type": "millis",
+   "key": "agps_update",
+   "label": "Assistance data updated"
+  },
+  {
+   "group": "agps",
+   "code": 10,
+   "type": "millis",
+   "key": "agps_expire",
+   "label": "Assistance data expires"
+  },
+  {
+   "group": "agps",
+   "code": 8,
+   "type": "intu",
+   "key": "agps_unknown8",
+   "label": "Unknown (0x08)"
+  },
+  {
+   "group": "display",
+   "code": 1,
+   "type": "bool",
+   "key": "auto_brightness",
+   "label": "Automatic brightness"
+  },
+  {
+   "group": "display",
+   "code": 2,
+   "type": "short",
+   "key": "brightness",
+   "label": "Brightness",
+   "unit": "%"
+  },
+  {
+   "group": "display",
+   "code": 3,
+   "type": "byte",
+   "key": "screen_timeout",
+   "label": "Screen off after",
+   "unit": "s"
+  },
+  {
+   "group": "display",
+   "code": 4,
+   "type": "byte",
+   "key": "aod_mode",
+   "label": "Always-on display",
+   "options": {
+    "0": "Off",
+    "1": "Smart",
+    "2": "Scheduled",
+    "3": "Always"
+   }
+  },
+  {
+   "group": "display",
+   "code": 5,
+   "type": "hhmm",
+   "key": "aod_start",
+   "label": "Always-on from"
+  },
+  {
+   "group": "display",
+   "code": 6,
+   "type": "hhmm",
+   "key": "aod_end",
+   "label": "Always-on until"
+  },
+  {
+   "group": "display",
+   "code": 8,
+   "type": "byte",
+   "key": "lift_mode",
+   "label": "Raise to wake",
+   "options": {
+    "0": "Off",
+    "1": "Scheduled",
+    "2": "On",
+    "3": "Smart"
+   }
+  },
+  {
+   "group": "display",
+   "code": 9,
+   "type": "hhmm",
+   "key": "lift_start",
+   "label": "Raise to wake from"
+  },
+  {
+   "group": "display",
+   "code": 10,
+   "type": "hhmm",
+   "key": "lift_end",
+   "label": "Raise to wake until"
+  },
+  {
+   "group": "display",
+   "code": 11,
+   "type": "byte",
+   "key": "lift_sensitivity",
+   "label": "Raise to wake sensitivity",
+   "options": {
+    "0": "Normal",
+    "1": "Sensitive"
+   }
+  },
+  {
+   "group": "display",
+   "code": 12,
+   "type": "bool",
+   "key": "screen_on_notifications",
+   "label": "Screen on for notifications"
+  },
+  {
+   "group": "display",
+   "code": 13,
+   "type": "bool",
+   "key": "workout_screen_on",
+   "label": "Keep the screen on during workouts"
+  },
+  {
+   "group": "display",
+   "code": 14,
+   "type": "bool",
+   "key": "aod_follow_face",
+   "label": "Always-on follows the watch face"
+  },
+  {
+   "group": "display",
+   "code": 15,
+   "type": "strings",
+   "key": "aod_style",
+   "label": "Always-on style"
+  },
+  {
+   "group": "sound",
+   "code": 2,
+   "type": "short",
+   "key": "volume",
+   "label": "Speaker volume",
+   "unit": "%"
+  },
+  {
+   "group": "sound",
+   "code": 6,
+   "type": "bool",
+   "key": "crown_vibration",
+   "label": "Crown vibration"
+  },
+  {
+   "group": "sound",
+   "code": 7,
+   "type": "bool",
+   "key": "alert_tone",
+   "label": "Alert tone"
+  },
+  {
+   "group": "sound",
+   "code": 8,
+   "type": "bool",
+   "key": "cover_to_mute",
+   "label": "Cover to mute"
+  },
+  {
+   "group": "sound",
+   "code": 9,
+   "type": "bool",
+   "key": "vibrate_for_alert",
+   "label": "Vibrate for alerts"
+  },
+  {
+   "group": "sound",
+   "code": 10,
+   "type": "bool",
+   "key": "text_to_speech",
+   "label": "Read aloud (text to speech)"
+  },
+  {
+   "group": "sound",
+   "code": 18,
+   "type": "byte",
+   "key": "vibration_intensity",
+   "label": "Vibration strength",
+   "options": {
+    "0": "Normal",
+    "1": "Strong"
+   }
+  },
+  {
+   "group": "wearing",
+   "code": 2,
+   "type": "byte",
+   "key": "wear_direction",
+   "label": "Buttons on",
+   "options": {
+    "0": "Left",
+    "1": "Right"
+   }
+  },
+  {
+   "group": "voice",
+   "code": 1,
+   "type": "bool",
+   "key": "voice_turn_wrist",
+   "label": "Answer when the wrist turns"
+  },
+  {
+   "group": "voice",
+   "code": 2,
+   "type": "bool",
+   "key": "voice_screen_on",
+   "label": "Answer while the screen is on"
+  },
+  {
+   "group": "voice",
+   "code": 3,
+   "type": "bool",
+   "key": "voice_lighting",
+   "label": "Answer while the screen lights up"
+  },
+  {
+   "group": "voice",
+   "code": 4,
+   "type": "byte",
+   "key": "voice_language",
+   "label": "Voice language",
+   "options": {
+    "1": "Chinese",
+    "2": "English",
+    "3": "German",
+    "4": "Spanish"
+   }
+  },
+  {
+   "group": "lockscreen",
+   "code": 1,
+   "type": "bool",
+   "key": "password_on",
+   "label": "Lock with a code"
+  },
+  {
+   "group": "lockscreen",
+   "code": 2,
+   "type": "string",
+   "key": "password",
+   "label": "Code"
+  },
+  {
+   "group": "language",
+   "code": 1,
+   "type": "byte",
+   "key": "language",
+   "label": "Language",
+   "choices": "languages"
+  },
+  {
+   "group": "language",
+   "code": 2,
+   "type": "bool",
+   "key": "language_follow",
+   "label": "Language follows the phone"
+  },
+  {
+   "group": "health",
+   "code": 1,
+   "type": "byte",
+   "key": "hr_interval",
+   "label": "Heart rate all day",
+   "options": {
+    "255": "Smart",
+    "0": "Off",
+    "1": "Every minute",
+    "5": "Every 5 minutes",
+    "10": "Every 10 minutes",
+    "30": "Every 30 minutes"
+   }
+  },
+  {
+   "group": "health",
+   "code": 2,
+   "type": "byte",
+   "key": "hr_high",
+   "label": "Alert above",
+   "unit": "bpm"
+  },
+  {
+   "group": "health",
+   "code": 3,
+   "type": "byte",
+   "key": "hr_low",
+   "label": "Alert below",
+   "unit": "bpm"
+  },
+  {
+   "group": "health",
+   "code": 4,
+   "type": "bool",
+   "key": "hr_activity",
+   "label": "Measure more often while moving"
+  },
+  {
+   "group": "health",
+   "code": 5,
+   "type": "bool",
+   "key": "hr_share",
+   "label": "Share heart rate (Bluetooth)"
+  },
+  {
+   "group": "health",
+   "code": 17,
+   "type": "bool",
+   "key": "sleep_accurate",
+   "label": "Sleep with heart rate"
+  },
+  {
+   "group": "health",
+   "code": 18,
+   "type": "bool",
+   "key": "sleep_breathing",
+   "label": "Breathing quality while asleep"
+  },
+  {
+   "group": "health",
+   "code": 19,
+   "type": "bool",
+   "key": "stress",
+   "label": "Stress all day"
+  },
+  {
+   "group": "health",
+   "code": 20,
+   "type": "bool",
+   "key": "stress_relax",
+   "label": "Relaxation reminder"
+  },
+  {
+   "group": "health",
+   "code": 49,
+   "type": "bool",
+   "key": "spo2",
+   "label": "Blood oxygen all day"
+  },
+  {
+   "group": "health",
+   "code": 50,
+   "type": "byte",
+   "key": "spo2_low",
+   "label": "Alert when blood oxygen below",
+   "unit": "%"
+  },
+  {
+   "group": "health",
+   "code": 65,
+   "type": "bool",
+   "key": "idle_on",
+   "label": "Inactivity reminder"
+  },
+  {
+   "group": "health",
+   "code": 66,
+   "type": "hhmm",
+   "key": "idle_start",
+   "label": "Reminders from"
+  },
+  {
+   "group": "health",
+   "code": 67,
+   "type": "hhmm",
+   "key": "idle_end",
+   "label": "Reminders until"
+  },
+  {
+   "group": "health",
+   "code": 68,
+   "type": "bool",
+   "key": "idle_dnd",
+   "label": "Quiet hours for reminders"
+  },
+  {
+   "group": "health",
+   "code": 69,
+   "type": "hhmm",
+   "key": "idle_dnd_start",
+   "label": "Quiet from"
+  },
+  {
+   "group": "health",
+   "code": 70,
+   "type": "hhmm",
+   "key": "idle_dnd_end",
+   "label": "Quiet until"
+  },
+  {
+   "group": "health",
+   "code": 81,
+   "type": "bool",
+   "key": "goal_notify",
+   "label": "Tell when a goal is reached"
+  },
+  {
+   "group": "health",
+   "code": 82,
+   "type": "int",
+   "key": "goal_steps",
+   "label": "Steps goal",
+   "unit": "steps"
+  },
+  {
+   "group": "health",
+   "code": 83,
+   "type": "short",
+   "key": "goal_calories",
+   "label": "Calories goal",
+   "unit": "kcal"
+  },
+  {
+   "group": "health",
+   "code": 84,
+   "type": "int",
+   "key": "goal_weight",
+   "label": "Weight goal",
+   "unit": "kg"
+  },
+  {
+   "group": "health",
+   "code": 85,
+   "type": "short",
+   "key": "goal_sleep",
+   "label": "Sleep goal",
+   "unit": "min"
+  },
+  {
+   "group": "health",
+   "code": 86,
+   "type": "short",
+   "key": "goal_stand",
+   "label": "Stand goal",
+   "unit": "h"
+  },
+  {
+   "group": "health",
+   "code": 87,
+   "type": "short",
+   "key": "goal_fatburn",
+   "label": "Fat burn goal",
+   "unit": "min"
+  },
+  {
+   "group": "workout",
+   "code": 5,
+   "type": "shorts",
+   "key": "hr_zones",
+   "label": "Heart rate zones",
+   "unit": "bpm"
+  },
+  {
+   "group": "workout",
+   "code": 32,
+   "type": "byte",
+   "key": "gps_preset",
+   "label": "GPS mode",
+   "options": {
+    "0": "Accuracy",
+    "1": "Balanced",
+    "2": "Power saving",
+    "4": "Custom"
+   }
+  },
+  {
+   "group": "workout",
+   "code": 33,
+   "type": "byte",
+   "key": "gps_band",
+   "label": "GPS band",
+   "options": {
+    "0": "Single band",
+    "1": "Dual band"
+   }
+  },
+  {
+   "group": "workout",
+   "code": 34,
+   "type": "byte",
+   "key": "gps_combination",
+   "label": "Satellites",
+   "options": {
+    "0": "Low-power GPS",
+    "1": "GPS",
+    "2": "GPS + BeiDou",
+    "3": "GPS + GLONASS",
+    "4": "GPS + Galileo",
+    "5": "All systems"
+   }
+  },
+  {
+   "group": "workout",
+   "code": 35,
+   "type": "byte",
+   "key": "gps_search",
+   "label": "Satellite search",
+   "options": {
+    "0": "Speed first",
+    "1": "Accuracy first"
+   }
+  },
+  {
+   "group": "workout",
+   "code": 48,
+   "type": "bool",
+   "key": "agps_reminder",
+   "label": "Remind when GPS assistance expires"
+  },
+  {
+   "group": "workout",
+   "code": 49,
+   "type": "hhmm",
+   "key": "agps_reminder_time",
+   "label": "Reminder at"
+  },
+  {
+   "group": "workout",
+   "code": 64,
+   "type": "bytes",
+   "key": "detect_categories",
+   "label": "Detect workouts",
+   "options": {
+    "3": "Walking",
+    "40": "Indoor walking",
+    "1": "Outdoor running",
+    "2": "Treadmill",
+    "4": "Outdoor cycling",
+    "6": "Pool swimming",
+    "9": "Elliptical",
+    "23": "Rowing machine"
+   }
+  },
+  {
+   "group": "workout",
+   "code": 65,
+   "type": "bool",
+   "key": "detect_alert",
+   "label": "Ask when a workout is detected"
+  },
+  {
+   "group": "workout",
+   "code": 66,
+   "type": "byte",
+   "key": "detect_sensitivity",
+   "label": "Detection sensitivity",
+   "options": {
+    "0": "High",
+    "1": "Standard",
+    "2": "Low"
+   }
+  },
+  {
+   "group": "workout",
+   "code": 81,
+   "type": "byte",
+   "key": "pool_size",
+   "label": "Pool length",
+   "unit": "m"
+  },
+  {
+   "group": "system",
+   "code": 1,
+   "type": "byte",
+   "key": "time_format",
+   "label": "Time format",
+   "options": {
+    "0": "24 h",
+    "1": "12 h"
+   }
+  },
+  {
+   "group": "system",
+   "code": 2,
+   "type": "string",
+   "key": "date_format",
+   "label": "Date format"
+  },
+  {
+   "group": "system",
+   "code": 5,
+   "type": "byte",
+   "key": "distance_unit",
+   "label": "Distance",
+   "options": {
+    "0": "Metric",
+    "1": "Imperial"
+   }
+  },
+  {
+   "group": "system",
+   "code": 10,
+   "type": "byte",
+   "key": "dnd_mode",
+   "label": "Do not disturb",
+   "options": {
+    "0": "Off",
+    "1": "Scheduled",
+    "2": "Smart",
+    "3": "On"
+   }
+  },
+  {
+   "group": "system",
+   "code": 11,
+   "type": "hhmm",
+   "key": "dnd_start",
+   "label": "Do not disturb from"
+  },
+  {
+   "group": "system",
+   "code": 12,
+   "type": "hhmm",
+   "key": "dnd_end",
+   "label": "Do not disturb until"
+  },
+  {
+   "group": "system",
+   "code": 17,
+   "type": "short",
+   "key": "call_delay",
+   "label": "Show calls after",
+   "unit": "s"
+  },
+  {
+   "group": "system",
+   "code": 18,
+   "type": "byte",
+   "key": "temperature_unit",
+   "label": "Temperature",
+   "options": {
+    "0": "Celsius",
+    "1": "Fahrenheit"
+   }
+  },
+  {
+   "group": "system",
+   "code": 19,
+   "type": "bool",
+   "key": "time_follow",
+   "label": "Time format follows the phone"
+  },
+  {
+   "group": "system",
+   "code": 21,
+   "type": "strings",
+   "key": "upper_long",
+   "label": "Upper button held",
+   "choices": "menu"
+  },
+  {
+   "group": "system",
+   "code": 22,
+   "type": "strings",
+   "key": "lower_press",
+   "label": "Lower button pressed",
+   "choices": "menu"
+  },
+  {
+   "group": "system",
+   "code": 24,
+   "type": "bool",
+   "key": "display_caller",
+   "label": "Show who calls"
+  },
+  {
+   "group": "system",
+   "code": 26,
+   "type": "byte",
+   "key": "weight_unit",
+   "label": "Weight",
+   "options": {
+    "0": "Kilogram",
+    "1": "Jin",
+    "2": "Pound",
+    "3": "Stone"
+   }
+  },
+  {
+   "group": "system",
+   "code": 27,
+   "type": "byte",
+   "key": "night_mode",
+   "label": "Night mode",
+   "options": {
+    "0": "Off",
+    "1": "At sunset",
+    "2": "Scheduled"
+   }
+  },
+  {
+   "group": "system",
+   "code": 28,
+   "type": "hhmm",
+   "key": "night_start",
+   "label": "Night mode from"
+  },
+  {
+   "group": "system",
+   "code": 29,
+   "type": "hhmm",
+   "key": "night_end",
+   "label": "Night mode until"
+  },
+  {
+   "group": "system",
+   "code": 33,
+   "type": "bool",
+   "key": "sleep_screen",
+   "label": "Sleep mode: screen off"
+  },
+  {
+   "group": "system",
+   "code": 34,
+   "type": "bool",
+   "key": "sleep_smart",
+   "label": "Sleep mode by itself"
+  },
+  {
+   "group": "system",
+   "code": 35,
+   "type": "bool",
+   "key": "camera_remote",
+   "label": "Camera remote"
+  },
+  {
+   "group": "bluetooth",
+   "code": 2,
+   "type": "bool",
+   "key": "bt_advertise",
+   "label": "Visible while connected"
+  }
+ ],
+ "languages": {
+  "zh_CN": 0,
+  "zh_TW": 1,
+  "en_US": 2,
+  "es_ES": 3,
+  "ru_RU": 4,
+  "ko_KO": 5,
+  "fr_FR": 6,
+  "de_DE": 7,
+  "id_ID": 8,
+  "pl_PL": 9,
+  "it_IT": 10,
+  "ja_JP": 11,
+  "th_TH": 12,
+  "ar_SA": 13,
+  "vi_VN": 14,
+  "pt_PT": 15,
+  "nl_NL": 16,
+  "tr_TR": 17,
+  "uk_UA": 18,
+  "he_IL": 19,
+  "pt_BR": 20,
+  "ro_RO": 21,
+  "cs_CZ": 22,
+  "el_GR": 23,
+  "sh_SP": 24,
+  "ca_ES": 25,
+  "fi_FI": 26,
+  "nb_NO": 27,
+  "da_DK": 28,
+  "sv_SE": 29,
+  "hu_HU": 30,
+  "ms_MY": 31
+ },
+ "menu": {
+  "00000001": "personal_activity_intelligence",
+  "00000002": "hr",
+  "00000003": "workout",
+  "00000004": "weather",
+  "00000009": "alarm",
+  "0000000A": "takephoto",
+  "0000000B": "music",
+  "0000000C": "stopwatch",
+  "0000000D": "countdown",
+  "0000000E": "findphone",
+  "0000000F": "mutephone",
+  "00000010": "cards",
+  "00000011": "alipay",
+  "00000013": "settings",
+  "00000014": "workout_history",
+  "00000015": "eventreminder",
+  "00000016": "compass",
+  "00000019": "pai",
+  "0000001A": "worldclock",
+  "0000001C": "stress",
+  "0000001D": "female_health",
+  "0000001E": "workout_status",
+  "00000020": "calendar",
+  "00000023": "sleep",
+  "00000024": "spo2",
+  "00000025": "phone",
+  "00000026": "events",
+  "00000031": "wechat_pay",
+  "00000033": "breathing",
+  "00000038": "pomodoro",
+  "00000039": "alexa2",
+  "0000003B": "thermometer",
+  "0000003E": "todo",
+  "0000003F": "mi_ai",
+  "00000041": "barometer",
+  "00000042": "voice_memos",
+  "00000044": "sun_moon",
+  "00000045": "one_tap_measuring",
+  "00000046": "zepp_coach",
+  "00000047": "membership_cards",
+  "00000049": "body_composition",
+  "0000004A": "readiness",
+  "0000004B": "map",
+  "0000004C": "zepp_pay",
+  "0000004D": "heart_rate_push",
+  "00000052": "audio_control",
+  "00000053": "golf",
+  "00000056": "bio_charge",
+  "00000100": "alexa",
+  "00000101": "offline_voice",
+  "00000102": "flashlight",
+  "000FFD39": "hrv",
+  "000FC452": "bluetooth_scale_assistant",
+  "000F425B": "calculator",
+  "000F5D0A": "running_calculator",
+  "000F4258": "real_time_heart_rate",
+  "000F4263": "watch_storage_space",
+  "000F4259": "water_time",
+  "000F636F": "diary",
+  "000F63A5": "calorie_intake_record",
+  "000F653B": "meditation",
+  "0010132C": "breathing2",
+  "00100446": "worldclock2",
+  "00100F0A": "takephoto2",
+  "0010660A": "zepp_flow",
+  "0010953E": "zepp_flow2",
+  "000FFD3C": "jet_lag_manager",
+  "00000057": "training_calendar",
+  "00108DA2": "podcast",
+  "0010A78D": "intervals_icu"
+ },
+ "shortcuts": {
+  "00000001": "hr",
+  "00000002": "weather",
+  "00000003": "pai",
+  "00000004": "music",
+  "00000005": "sleep",
+  "00000006": "alipay",
+  "00000008": "wechat_pay",
+  "00000009": "cards",
+  "0000000A": "workout",
+  "0000000B": "workout_history",
+  "0000000C": "workout_status",
+  "0000000E": "one_tap_measuring",
+  "0000000F": "stress",
+  "00000011": "female_health",
+  "00000012": "breathing",
+  "00000013": "spo2",
+  "00000015": "thermometer",
+  "00000016": "alarm",
+  "00000017": "calendar",
+  "00000018": "events",
+  "00000019": "todo",
+  "0000001A": "worldclock",
+  "0000001B": "compass",
+  "0000001C": "barometer",
+  "0000001E": "voice_memos",
+  "00000020": "activity",
+  "00000021": "eventreminder",
+  "00000023": "mi_ai",
+  "00000025": "alexa",
+  "00000027": "workout_shortcuts",
+  "00000028": "apps_shortcuts",
+  "00000029": "body_composition",
+  "0000002A": "readiness",
+  "0000002B": "zepp_pay",
+  "0000002D": "bio_charge",
+  "00100446": "worldclock2",
+  "0010132C": "breathing2",
+  "000FFD39": "hrv"
+ },
+ "control": {
+  "00000000": "flashlight",
+  "00000001": "brightness",
+  "00000002": "lockscreen",
+  "00000003": "dnd",
+  "00000004": "sleep",
+  "00000005": "findphone",
+  "00000006": "volume",
+  "00000007": "battery",
+  "00000008": "theater_mode",
+  "00000009": "screen_always_lit",
+  "0000000A": "bluetooth",
+  "0000000B": "wifi",
+  "0000000D": "calendar",
+  "00000010": "music",
+  "00000012": "alarm",
+  "00000013": "settings",
+  "00000014": "buzzer_intensity",
+  "00000015": "barometer",
+  "00000016": "compass",
+  "00000017": "countdown",
+  "00000018": "stopwatch",
+  "00000019": "eject_water",
+  "0000001A": "headphone",
+  "0000001B": "night_display",
+  "0000001C": "always_on_display",
+  "0000001E": "flashlight2",
+  "0000001D": "text_size",
+  "0000001F": "sos_flashlight",
+  "00000020": "mute"
+ },
+ "faces": {
+  "00002D38": "Red Fantasy",
+  "00002D10": "Multiple Data",
+  "00002D37": "Rush",
+  "00002D0E": "Minimalist",
+  "00002D08": "Simplicity Data",
+  "00002D09": "Vibrant",
+  "00002D0D": "Business Style",
+  "00002D0A": "Emerald Moonlight",
+  "00002D0F": "Rotating Earth",
+  "00002D0C": "Superposition",
+  "00002DB6": "Vast Sky",
+  "00002DB7": "Lightning Flash",
+  "00002DB9": "Free Combination",
+  "00002DBA": "Pure White",
+  "00002DBB": "Guider",
+  "00002DBC": "City of Speed",
+  "00002DBD": "Starry Sky",
+  "00002DBE": "The Ultima",
+  "00002DE4": "Elegant",
+  "00002DE5": "Deep Space",
+  "00002DE6": "Silver Shadows",
+  "00002DE7": "Rhythm",
+  "00002DE8": "Digital Wraith",
+  "00002DE9": "Vital Orange",
+  "00002DEA": "Vital"
+ },
+ "endpoints": {
+  "0000": "services",
+  "0001": "http",
+  "0003": "wifi",
+  "0006": "ftp",
+  "0007": "calendar",
+  "0008": "worldclocks",
+  "0009": "shortcut cards",
+  "000a": "config",
+  "000b": "phone",
+  "000d": "file transfer",
+  "000e": "weather",
+  "000f": "alarms",
+  "0013": "canned messages",
+  "0014": "contacts",
+  "0015": "connection",
+  "0016": "steps",
+  "0017": "user info",
+  "0018": "vibration patterns",
+  "0019": "workout",
+  "001a": "find device",
+  "001b": "music",
+  "001d": "heart rate",
+  "001e": "notifications",
+  "0023": "watchfaces",
+  "0026": "display items",
+  "0029": "battery",
+  "0033": "voice memos",
+  "0038": "reminders",
+  "003a": "logs",
+  "003b": "silent mode",
+  "003c": "loyalty cards",
+  "003f": "morning updates",
+  "0042": "agps",
+  "0043": "device info",
+  "0046": "maps",
+  "0047": "time",
+  "004b": "activity fetch",
+  "0082": "authentication",
+  "00a0": "apps"
+ },
+ "vibrations": {
+  "app_alerts": 0,
+  "incoming_call": 1,
+  "incoming_sms": 2,
+  "goal_notification": 4,
+  "alarm": 5,
+  "idle_alerts": 6,
+  "event_reminder": 8,
+  "find_band": 9,
+  "todo_list": 10,
+  "schedule": 12
+ }
+}

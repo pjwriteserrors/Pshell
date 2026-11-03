@@ -15,6 +15,9 @@ abstract class ShellAssets : DefaultTask() {
 	@get:InputFile
 	abstract val protocol: RegularFileProperty
 
+	@get:InputFile
+	abstract val zepp: RegularFileProperty
+
 	@get:OutputDirectory
 	abstract val output: DirectoryProperty
 
@@ -29,6 +32,7 @@ abstract class ShellAssets : DefaultTask() {
 		val glyphs = names.entries.joinToString(",\n") { "\"${it.key}\": \"${it.value}\"" }
 		out.resolve("icons.json").writeText("{\n$glyphs\n}\n")
 		protocol.get().asFile.copyTo(out.resolve("protocol.json"), overwrite = true)
+		zepp.get().asFile.copyTo(out.resolve("zepp.json"), overwrite = true)
 	}
 }
 
@@ -37,6 +41,7 @@ val shellAssets = tasks.register<ShellAssets>("shellAssets") {
 	icons.set(shellRoot.resolve("style/theme/Icons.qml"))
 	allIcons.set(layout.projectDirectory.file("icons-md.json"))
 	protocol.set(shellRoot.resolve("mobile/protocol/protocol.json"))
+	zepp.set(shellRoot.resolve("scripts/amazfit/zepp/catalog.json"))
 }
 
 androidComponents {

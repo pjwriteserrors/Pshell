@@ -531,6 +531,37 @@ Scope {
 		}
 	}
 
+	// the Amazfit watch: `amazfit open`, `amazfit find on|off`, `amazfit time`, `amazfit hr`,
+	// `amazfit battery`, `amazfit key <hex>`, `amazfit state`
+	IpcHandler {
+		target: "amazfit"
+		enabled: Plugins.on("amazfit")
+
+		function open(): void {
+			NiriSettings.page = "amazfit";
+			Popups.withFocusedScreen(screen => Popups.openModal("niri", screen));
+		}
+		function find(on: string): void {
+			Amazfit.findWatch(on !== "off");
+		}
+		function time(): void {
+			Amazfit.syncTime();
+		}
+		function hr(): string {
+			return Amazfit.hr ? String(Amazfit.hr) : "";
+		}
+		function battery(): string {
+			return Amazfit.battery === null ? "" : String(Amazfit.battery);
+		}
+		function key(hex: string): void {
+			Amazfit.setKey(hex);
+		}
+		function state(): string {
+			Amazfit.send({ op: "state" });
+			return JSON.stringify({ online: Amazfit.online, present: Amazfit.present, zepp: Amazfit.zeppState, keySet: Amazfit.keySet, battery: Amazfit.battery, firmware: Amazfit.info.software ?? "", clock: Amazfit.clock, settings: Object.keys(Amazfit.zepp.config ?? {}).length, rules: Amazfit.rules.length, daemon: Amazfit.daemonState });
+		}
+	}
+
 	// the 8BitDo Ultimate 2 Wireless: `ultimate open`, `ultimate light dynamic|hotwheel|custom|off`, `ultimate state`
 	IpcHandler {
 		target: "ultimate"

@@ -141,6 +141,7 @@
 	{ "id": "ultimate", "name": "8BitDo controller", "category": "Hardware", "default": false, "requires": ["niri-settings"], "icon": "gamepad_variant" },
 	{ "id": "headset", "name": "Sennheiser headset", "category": "Hardware", "default": false, "requires": ["niri-settings"], "icon": "headset" },
 	{ "id": "as50", "name": "Avantree AS50", "category": "Hardware", "default": false, "requires": ["niri-settings"], "icon": "headphones" },
+	{ "id": "amazfit", "name": "Amazfit watch", "category": "Hardware", "default": false, "requires": ["niri-settings"], "icon": "watch" },
 	{ "id": "printer", "name": "3D printer", "category": "Hardware", "default": false, "icon": "printer_3d" },
 
 	{ "id": "phone", "name": "Phone app", "category": "Phone", "default": false, "icon": "cellphone" },
