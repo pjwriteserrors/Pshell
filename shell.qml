@@ -40,6 +40,9 @@ ShellRoot {
 	// the headset's daemon: its sidetone back after each replug, its buttons,
 	// the cable's mute switch (core/services/Headset.qml)
 	readonly property bool headset: Headset.enabled
+	// the Avantree AS50's daemon: its codec and latency back on each
+	// connect, its buttons, the battery warning (core/services/As50.qml)
+	readonly property bool as50: As50.enabled
 	// the cursor theme in the theme's colours and niri's corner radius
 	// (core/services/CursorTheme.qml)
 	readonly property bool cursorTheme: CursorTheme.enabled

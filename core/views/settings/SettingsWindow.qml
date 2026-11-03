@@ -74,6 +74,7 @@ FloatingWindow {
 		{ id: "apex", label: "Apex Pro", icon: "keyboard_variant", hint: "Actuation, Rapid Trigger, keys, OLED", plugin: "apex" },
 		{ id: "ultimate", label: "Controller", icon: "gamepad_variant", hint: "8BitDo: buttons, sticks, light, macros", plugin: "ultimate" },
 		{ id: "headset", label: "Headset", icon: "headset", hint: "Sidetone, microphone, buttons", plugin: "headset" },
+		{ id: "as50", label: "Avantree AS50", icon: "headphones", hint: "Codec, microphone, buttons, battery", plugin: "as50" },
 		{ id: "multicursor", label: "Multicursor", icon: "cursor_text", hint: "Lines and cursors in every text field", plugin: "multicursor" },
 		{ id: "rules", label: "Window rules", icon: "application_cog_outline", hint: "Per app: size, place, look" },
 		{ id: "workspaces", label: "Workspaces", icon: "view_grid_outline", hint: "Named workspaces" },
@@ -144,6 +145,14 @@ FloatingWindow {
 		{ page: "headset", anchor: "headset-mic", title: "Headset microphone", words: "sennheiser headset microphone mic gain level mute cable switch", plugin: "headset" },
 		{ page: "headset", anchor: "headset-sidetone", title: "Sidetone", words: "sennheiser headset sidetone hear yourself own voice monitoring", plugin: "headset" },
 		{ page: "headset", anchor: "headset-buttons", title: "Headset buttons", words: "sennheiser headset buttons volume up down remote press double hold per app", plugin: "headset" },
+		{ page: "as50", anchor: "as50-device", title: "Avantree AS50", words: "avantree as50 ensemble bluetooth headphones headset battery connect disconnect", plugin: "as50" },
+		{ page: "as50", anchor: "as50-sound", title: "AS50 sound", words: "avantree as50 bluetooth headphones volume absolute avrcp mute", plugin: "as50" },
+		{ page: "as50", anchor: "as50-codec", title: "AS50 codec", words: "avantree as50 bluetooth codec aac sbc sbc-xq faststream latency lip sync delay a2dp", plugin: "as50" },
+		{ page: "as50", anchor: "as50-mic", title: "AS50 microphone", words: "avantree as50 bluetooth microphone mic hfp call faststream duplex gain mute autoswitch", plugin: "as50" },
+		{ page: "as50", anchor: "as50-buttons", title: "AS50 buttons", words: "avantree as50 buttons play pause next previous redial double press per app media keys", plugin: "as50" },
+		{ page: "as50", anchor: "as50-eq", title: "AS50 sound mode", words: "avantree as50 eq equalizer clear voice balanced mode", plugin: "as50" },
+		{ page: "as50", anchor: "as50-connection", title: "AS50 connection", words: "avantree as50 bluetooth name rename trusted auto connect take over ensemble transmitter battery warning", plugin: "as50" },
+		{ page: "as50", anchor: "as50-info", title: "AS50 profiles", words: "avantree as50 sdp profiles hfp a2dp avrcp versions codecs", plugin: "as50" },
 		{ page: "headset", anchor: "headset-profile", title: "Headset profile", words: "sennheiser headset audio profile duplex output input pro audio off", plugin: "headset" },
 		{ page: "ultimate", anchor: "ultimate-pad", title: "8BitDo controller", words: "8bitdo ultimate 2 wireless controller gamepad pad profile battery", plugin: "ultimate" },
 		{ page: "ultimate", anchor: "ultimate-buttons", title: "Controller buttons", words: "8bitdo gamepad remap buttons paddles pl pr l4 r4 back buttons turbo", plugin: "ultimate" },
@@ -713,6 +722,7 @@ FloatingWindow {
 							case "apex": return apexPage;
 							case "ultimate": return ultimatePage;
 							case "headset": return headsetPage;
+						case "as50": return as50Page;
 							case "multicursor": return multicursorPage;
 							case "rules": return rulesPage;
 							case "workspaces": return workspacesPage;
@@ -1000,6 +1010,14 @@ FloatingWindow {
 		id: headsetPage
 
 		HeadsetPage {
+			onOpen: page => root.go(page, "")
+		}
+	}
+
+	Component {
+		id: as50Page
+
+		As50Page {
 			onOpen: page => root.go(page, "")
 		}
 	}

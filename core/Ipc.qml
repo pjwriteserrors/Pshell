@@ -492,6 +492,45 @@ Scope {
 		}
 	}
 
+	// the Avantree AS50: `as50 open`, `as50 connect|disconnect|toggle`, `as50 mic on|off|call|toggle`,
+	// `as50 codec aac|sbc|sbc-xq|faststream|next`, `as50 battery`, `as50 state`
+	IpcHandler {
+		target: "as50"
+		enabled: Plugins.on("as50")
+
+		function open(): void {
+			NiriSettings.page = "as50";
+			Popups.withFocusedScreen(screen => Popups.openModal("niri", screen));
+		}
+		function connect(): void {
+			As50.connect();
+		}
+		function disconnect(): void {
+			As50.disconnect();
+		}
+		function toggle(): void {
+			if (As50.online) As50.disconnect();
+			else As50.connect();
+		}
+		function mic(what: string): void {
+			if (what === "toggle") As50.ownOp("mic");
+			else if (what === "call") As50.setMic("headset-head-unit");
+			else As50.setMic(what === "on" ? "a2dp-sink-faststream_duplex" : "");
+		}
+		function codec(name: string): void {
+			const profiles = { aac: "a2dp-sink", sbc: "a2dp-sink-sbc", "sbc-xq": "a2dp-sink-sbc_xq", faststream: "a2dp-sink-faststream" };
+			if (name === "next") As50.ownOp("codec");
+			else if (profiles[name]) As50.setMusic(profiles[name]);
+		}
+		function battery(): string {
+			return As50.battery === null ? "" : String(As50.battery);
+		}
+		function state(): string {
+			As50.send({ op: "state" });
+			return JSON.stringify({ online: As50.online, present: As50.present, address: As50.address, battery: As50.battery, profile: As50.profile, codec: As50.transport?.codec ?? "", volume: As50.raw, watching: As50.watching, rules: As50.rules.length, daemon: As50.daemonState });
+		}
+	}
+
 	// the 8BitDo Ultimate 2 Wireless: `ultimate open`, `ultimate light dynamic|hotwheel|custom|off`, `ultimate state`
 	IpcHandler {
 		target: "ultimate"
