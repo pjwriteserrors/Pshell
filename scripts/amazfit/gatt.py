@@ -7,6 +7,7 @@ UUID; HID reports by UUID and report id (their Report Reference descriptor).
 """
 
 import threading
+import time
 
 try:
     import dbus
@@ -50,6 +51,7 @@ class Gatt:
         self.notifying = set()
         self.thread = None
         self.lock = threading.Lock()
+        self.last = {}      # key -> (value, when): BlueZ hands each notification to every subscriber's signal
 
     @property
     def ok(self):
@@ -181,6 +183,10 @@ class Gatt:
                 key = next((k for k, p in self.chars.items() if p == path), None)
             if key:
                 value = bytes(changed["Value"])
+                now = time.monotonic()
+                if self.last.get(key, (None, 0))[0] == value and now - self.last[key][1] < 0.05:
+                    return
+                self.last[key] = (value, now)
                 self.post(lambda: self.on_value(key, value))
         elif interface in (DEVICE, "org.bluez.Battery1"):
             self._later(self._scan)

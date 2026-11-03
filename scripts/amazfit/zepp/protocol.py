@@ -68,6 +68,7 @@ class Session:
         self.decoder.session = None
         self.key = key
         self.probe = probe
+        self.proved = False
         if key is None and not probe:
             self._state("nokey", "")
             return
@@ -118,6 +119,8 @@ class Session:
         if len(p) < 3 or p[0] != 0x10:
             return
         if p[1] == 0x04:
+            if self.proved or self.state != "handshake":
+                return  # the same answer again (a second subscriber makes BlueZ hand each one out twice)
             if p[2] != 0x01 or len(p) < 67:
                 self._state("failed", f"public key refused ({p[2]:02x})")
                 return
@@ -135,8 +138,11 @@ class Session:
             self.encoder.sequence = sequence
             self.decoder.session = session
             proof = chunked.aes_ecb(self.key, remote_random) + chunked.aes_ecb(session, remote_random)
+            self.proved = True
             self._send(AUTH, b"\x05" + proof, False)
         elif p[1] == 0x05:
+            if self.state != "handshake":
+                return
             if p[2] == 0x01:
                 self._state("ready", "")
             elif p[2] == 0x25:
