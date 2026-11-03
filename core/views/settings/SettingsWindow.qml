@@ -73,6 +73,7 @@ FloatingWindow {
 		{ id: "keyboard", label: "Keyboard", icon: "keyboard_settings", hint: "Special keys, backlight, Fn keys", plugin: "keyboard" },
 		{ id: "apex", label: "Apex Pro", icon: "keyboard_variant", hint: "Actuation, Rapid Trigger, keys, OLED", plugin: "apex" },
 		{ id: "ultimate", label: "Controller", icon: "gamepad_variant", hint: "8BitDo: buttons, sticks, light, macros", plugin: "ultimate" },
+		{ id: "headset", label: "Headset", icon: "headset", hint: "Sidetone, microphone, buttons", plugin: "headset" },
 		{ id: "multicursor", label: "Multicursor", icon: "cursor_text", hint: "Lines and cursors in every text field", plugin: "multicursor" },
 		{ id: "rules", label: "Window rules", icon: "application_cog_outline", hint: "Per app: size, place, look" },
 		{ id: "workspaces", label: "Workspaces", icon: "view_grid_outline", hint: "Named workspaces" },
@@ -138,6 +139,12 @@ FloatingWindow {
 		{ page: "apex", anchor: "apex-oled", title: "Apex display", words: "steelseries apex oled screen display clock media notification picture text", plugin: "apex" },
 		{ page: "apex", anchor: "apex-light", title: "Apex light", words: "steelseries apex brightness light rgb", plugin: "apex" },
 		{ page: "apex", anchor: "apex-configs", title: "Apex configs", words: "steelseries apex onboard config profile slot rename copy backup restore", plugin: "apex" },
+		{ page: "headset", anchor: "headset-device", title: "Headset", words: "sennheiser epos pc 8.2 usb headset headphones", plugin: "headset" },
+		{ page: "headset", anchor: "headset-sound", title: "Headset sound", words: "sennheiser headset volume balance left right mute", plugin: "headset" },
+		{ page: "headset", anchor: "headset-mic", title: "Headset microphone", words: "sennheiser headset microphone mic gain level mute cable switch", plugin: "headset" },
+		{ page: "headset", anchor: "headset-sidetone", title: "Sidetone", words: "sennheiser headset sidetone hear yourself own voice monitoring", plugin: "headset" },
+		{ page: "headset", anchor: "headset-buttons", title: "Headset buttons", words: "sennheiser headset buttons volume up down remote press double hold per app", plugin: "headset" },
+		{ page: "headset", anchor: "headset-profile", title: "Headset profile", words: "sennheiser headset audio profile duplex output input pro audio off", plugin: "headset" },
 		{ page: "ultimate", anchor: "ultimate-pad", title: "8BitDo controller", words: "8bitdo ultimate 2 wireless controller gamepad pad profile battery", plugin: "ultimate" },
 		{ page: "ultimate", anchor: "ultimate-buttons", title: "Controller buttons", words: "8bitdo gamepad remap buttons paddles pl pr l4 r4 back buttons turbo", plugin: "ultimate" },
 		{ page: "ultimate", anchor: "ultimate-sticks", title: "Controller sticks", words: "8bitdo gamepad stick dead zone invert swap d-pad", plugin: "ultimate" },
@@ -196,6 +203,7 @@ FloatingWindow {
 		{ page: "sounds", anchor: "sounds-list", title: "Every sound", words: "sound notification usb drive display monitor bluetooth error battery charger lock workspace screenshot" },
 		{ page: "lighting", anchor: "lighting", title: "Lighting", words: "lighting rgb openrgb led leds keyboard gpu fans argb wallpaper live screen ambient off dark" },
 		{ page: "lighting", anchor: "lighting-live", title: "Live lighting", words: "live screen mirror ambient monitor fps frames smoothing openrgb effects screen copy" },
+		{ page: "phone", anchor: "notification-style", title: "Notification look", words: "notifications toasts look style design card accent compact floating aussehen" },
 		{ page: "phone", anchor: "notification-apps", title: "Notifications", words: "notifications programs apps mute hide off silence benachrichtigungen ausschalten" },
 		{ page: "phone", anchor: "phone-apps", title: "Phone notifications", words: "phone handy notifications apps whatsapp mail mute hide off android benachrichtigungen" },
 		{ page: "phone", anchor: "phone-pc-apps", title: "Notifications to the phone", words: "phone handy notifications programs apps mirror send mute off pc benachrichtigungen" },
@@ -704,6 +712,7 @@ FloatingWindow {
 							case "keyboard": return keyboardPage;
 							case "apex": return apexPage;
 							case "ultimate": return ultimatePage;
+							case "headset": return headsetPage;
 							case "multicursor": return multicursorPage;
 							case "rules": return rulesPage;
 							case "workspaces": return workspacesPage;
@@ -983,6 +992,14 @@ FloatingWindow {
 		id: apexPage
 
 		ApexPage {
+			onOpen: page => root.go(page, "")
+		}
+	}
+
+	Component {
+		id: headsetPage
+
+		HeadsetPage {
 			onOpen: page => root.go(page, "")
 		}
 	}

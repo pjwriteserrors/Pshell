@@ -37,6 +37,9 @@ ShellRoot {
 	// the 8BitDo controller's daemon: its profiles, battery and the profile
 	// button's OSD (core/services/Ultimate.qml)
 	readonly property bool ultimate: Ultimate.enabled
+	// the headset's daemon: its sidetone back after each replug, its buttons,
+	// the cable's mute switch (core/services/Headset.qml)
+	readonly property bool headset: Headset.enabled
 	// the cursor theme in the theme's colours and niri's corner radius
 	// (core/services/CursorTheme.qml)
 	readonly property bool cursorTheme: CursorTheme.enabled

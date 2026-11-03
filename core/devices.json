@@ -7,5 +7,6 @@
 	{ "id": "logitech-hidpp-keyboard", "name": "Logitech keyboard (HID++)", "match": { "hidpp": { "kind": ["keyboard", "numpad"] } }, "page": "keyboard", "plugin": "keyboard", "partial": true },
 	{ "id": "8bitdo-ultimate-2-wireless", "name": "8BitDo Ultimate 2 Wireless", "match": { "usb": ["2dc8:310b", "2dc8:6012", "2dc8:6013"], "name": "Ultimate 2 Wireless" }, "page": "ultimate", "plugin": "ultimate" },
 	{ "id": "apex-pro-tkl-gen3", "name": "Apex Pro TKL Gen 3", "match": { "usb": ["1038:1642"] }, "page": "apex", "plugin": "apex" },
+	{ "id": "sennheiser-pc-8-2-usb", "name": "Sennheiser PC 8.2 USB", "match": { "usb": ["1395:0099"] }, "page": "headset", "plugin": "headset" },
 	{ "id": "elan-touchpad", "name": "ELAN touchpad", "match": { "hid": ["04f3:3169"] }, "page": "input" }
 ]

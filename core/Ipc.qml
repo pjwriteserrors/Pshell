@@ -467,6 +467,31 @@ Scope {
 		}
 	}
 
+	// the Sennheiser headset: `headset open`, `headset sidetone on|off|up|down|0-30`, `headset mic mute`, `headset state`
+	IpcHandler {
+		target: "headset"
+		enabled: Plugins.on("headset")
+
+		function open(): void {
+			NiriSettings.page = "headset";
+			Popups.withFocusedScreen(screen => Popups.openModal("niri", screen));
+		}
+		function sidetone(level: string): void {
+			if (level === "on" || level === "off") Headset.setSidetoneOn(level === "on");
+			else if (level === "up" || level === "down") Headset.test({ kind: "headset", op: `sidetone-${level}` });
+			else if (level === "toggle") Headset.test({ kind: "headset", op: "sidetone" });
+			else Headset.setSidetone(Math.max(0, Math.min(30, Number(level) || 0)));
+		}
+		// mute | unmute | toggle
+		function mic(what: string): void {
+			Headset.setMicMuted(what === "toggle" ? !Headset.micMuted : what !== "unmute");
+		}
+		function state(): string {
+			Headset.send({ op: "state" });
+			return JSON.stringify({ online: Headset.online, serial: Headset.serial, sidetone: Headset.sidetone, sidetoneOn: Headset.sidetoneOn, cable: Headset.cable, profile: Headset.profile, watching: Headset.watching, recording: Headset.recording, rules: Headset.rules.length, daemon: Headset.daemonState });
+		}
+	}
+
 	// the 8BitDo Ultimate 2 Wireless: `ultimate open`, `ultimate light dynamic|hotwheel|custom|off`, `ultimate state`
 	IpcHandler {
 		target: "ultimate"
