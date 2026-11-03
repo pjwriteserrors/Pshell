@@ -37,7 +37,7 @@ data class WatchState(
 
 /** What the catalogue (scripts/amazfit/zepp/catalog.json, copied in as assets/zepp.json) says. */
 class Catalog(json: JSONObject) {
-	class Arg(val group: String, val code: Int, val type: String, val key: String, val label: String, val options: Map<Int, String>, val choices: String?, val unit: String?)
+	class Arg(val group: String, val code: Int, val type: String, val key: String, val label: String, val options: Map<Int, String>, val choices: String?, val unit: String?, val note: String?, val guess: Boolean)
 
 	val groups: Map<String, Pair<Int, Int>> = json.getJSONObject("groups").let { g ->
 		g.keys().asSequence().associateWith { k -> g.getJSONObject(k).let { it.getInt("id") to it.getInt("version") } }
@@ -49,7 +49,8 @@ class Catalog(json: JSONObject) {
 			val o = a.getJSONObject(i)
 			val opts = o.optJSONObject("options")
 			Arg(o.getString("group"), o.getInt("code"), o.getString("type"), o.getString("key"), o.getString("label"),
-				opts?.keys()?.asSequence()?.associate { it.toInt() to opts.getString(it) } ?: emptyMap(), o.optString("choices").ifEmpty { null }, o.optString("unit").ifEmpty { null })
+				opts?.keys()?.asSequence()?.associate { it.toInt() to opts.getString(it) } ?: emptyMap(), o.optString("choices").ifEmpty { null }, o.optString("unit").ifEmpty { null },
+				o.optString("note").ifEmpty { null }, o.optBoolean("guess", false))
 		}
 	}
 	val languages: Map<String, Int> = json.getJSONObject("languages").let { l -> l.keys().asSequence().associateWith { l.getInt(it) } }
@@ -91,6 +92,7 @@ class Zepp(private val catalog: Catalog, private val write: (String, ByteArray) 
 	var state = WatchState()
 		private set
 	private var encrypted = setOf(0x000a, 0x000f, 0x0023)
+	private var proved = false
 
 	private fun set(next: WatchState) {
 		state = next
@@ -104,6 +106,7 @@ class Zepp(private val catalog: Catalog, private val write: (String, ByteArray) 
 	fun start(authKey: ByteArray?) {
 		encoder.reset(); decoder.reset(); decoder.session = null
 		key = authKey
+		proved = false
 		if (authKey == null) return set(state.copy(link = "nokey"))
 		val random = SecureRandom()
 		var pub: ByteArray?
@@ -135,6 +138,7 @@ class Zepp(private val catalog: Catalog, private val write: (String, ByteArray) 
 		if (p.size < 3 || p[0].toInt() != 0x10) return
 		when (p[1].toInt()) {
 			0x04 -> {
+				if (proved || state.link != "handshake") return  // the same answer again
 				if (p[2].toInt() != 1 || p.size < 67) return set(state.copy(link = "failed", detail = "public key refused"))
 				val k = key ?: return
 				val shared = Ecdh.sharedSecret(private, p.copyOfRange(19, 67)) ?: return set(state.copy(link = "failed", detail = "the watch's key is not on B-163"))
@@ -143,9 +147,10 @@ class Zepp(private val catalog: Catalog, private val write: (String, ByteArray) 
 				encoder.sequence = ByteBuffer.wrap(shared, 0, 4).order(ByteOrder.LITTLE_ENDIAN).int
 				decoder.session = session
 				val r = p.copyOfRange(3, 19)
+				proved = true
 				raw(0x0082, byteArrayOf(0x05) + Chunked.aes(k, r) + Chunked.aes(session, r), false)
 			}
-			0x05 -> when (p[2].toInt() and 0xFF) {
+			0x05 -> if (state.link == "handshake") when (p[2].toInt() and 0xFF) {
 				0x01 -> {
 					set(state.copy(link = "ready", detail = ""))
 					raw(0x0000, byteArrayOf(0x03), false)
@@ -265,6 +270,14 @@ class Zepp(private val catalog: Catalog, private val write: (String, ByteArray) 
 				set(state.copy(config = config))
 			}
 		}
+	}
+
+	/** Every setting's value now, by "gg/cc". */
+	fun values(): Map<String, Any?> = state.config.values.flatMap { g -> g.entries.values.map { "%02x/%02x".format(g.id, it.code) to it.value } }.toMap()
+
+	/** Asks every group again for all it has (the answers update [state]). */
+	fun reread() {
+		for (g in state.config.values) send(0x000a, byteArrayOf(0x03, 0x01, g.id.toByte(), 0x00))
 	}
 
 	// ── what the screen asks ──────────────────────────────────────────────

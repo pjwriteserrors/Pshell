@@ -50,6 +50,18 @@ object WatchLink {
 		gatt = GattHolder(context.applicationContext, device, key, catalog(context))
 	}
 
+	// the screens that use the link: it closes a moment after the last one goes
+	private var holders = 0
+
+	fun hold() {
+		holders++
+	}
+
+	fun release() {
+		holders--
+		main.postDelayed({ if (holders <= 0) close() }, 1500)
+	}
+
 	fun close() {
 		gatt?.close()
 		gatt = null

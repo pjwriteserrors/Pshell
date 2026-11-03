@@ -69,4 +69,6 @@ class Prefs(context: Context) {
 	/** the Amazfit watch's Zepp OS auth key (hex) and its address, for features/Watch.kt */
 	val watchKey = Setting("watchKey", "")
 	val watchAddress = Setting("watchAddress", "")
+	/** names given to the watch's hidden settings, JSON {"gg/cc": name} (like the PC's amazfit.json names) */
+	val watchNames = Setting("watchNames", "{}")
 }

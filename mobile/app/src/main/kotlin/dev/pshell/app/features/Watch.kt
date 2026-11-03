@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import dev.pshell.app.ui.LocalApp
 import dev.pshell.app.ui.theme.Theme
 import dev.pshell.app.ui.widgets.Chip
@@ -54,7 +55,19 @@ val WatchFeature = Feature(
 	group = Group.Link,
 	keywords = listOf("amazfit", "zepp", "uhr", "smartwatch", "active", "wecker", "alarm", "einstellungen"),
 	screen = { WatchScreen() },
+	page = { WatchHiddenPage() },
 )
+
+/** The names given to hidden settings, "gg/cc" → name. */
+@Composable
+private fun watchNames(): Map<String, String> {
+	val raw by LocalApp.current.prefs.watchNames.flow.collectAsState()
+	return remember(raw) { runCatching { org.json.JSONObject(raw).let { o -> o.keys().asSequence().associateWith { o.getString(it) } } }.getOrDefault(emptyMap()) }
+}
+
+private fun settingId(catalog: Catalog, group: String, code: Int) = "%02x/%02x".format(catalog.groups[group]?.first ?: 0, code)
+
+private fun isHidden(catalog: Catalog, group: String, code: Int) = catalog.arg(group, code)?.let { it.guess } ?: true
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -68,7 +81,12 @@ private fun WatchScreen() {
 	val savedKey by app.prefs.watchKey.flow.collectAsState()
 	var key by remember { mutableStateOf(savedKey) }
 	val open = state.link !in listOf("idle", "gone", "failed", "wrongkey")
-	DisposableEffect(Unit) { onDispose { WatchLink.close() } }
+	val nav = dev.pshell.app.ui.LocalNav.current
+	val names = watchNames()
+	DisposableEffect(Unit) {
+		WatchLink.hold()
+		onDispose { WatchLink.release() }
+	}
 
 	Screen("Watch", subtitle = if (state.name.isNotEmpty()) state.name else "Zepp OS, without the PC") {
 		if (!allowed) {
@@ -119,6 +137,13 @@ private fun WatchScreen() {
 			}
 		}
 
+		val hiddenCount = state.config.values.sumOf { g -> g.entries.values.count { isHidden(catalog, g.name, it.code) } }
+		Panel {
+			ListRow("Hidden settings", icon = "eye_off_outline", subtitle = "$hiddenCount the watch has that nobody named · tell them apart", onClick = { nav.open("feature/watch-zepp/hidden") }) {
+				dev.pshell.app.ui.widgets.Glyph("chevron_right", size = 20.dp, color = Theme.colors.textSubtle)
+			}
+		}
+
 		SectionLabel("Alarms")
 		Panel {
 			for (a in state.alarms) AlarmRow(a, onChange = zepp::setAlarm, onDelete = { zepp.deleteAlarm(a.position) })
@@ -141,7 +166,7 @@ private fun WatchScreen() {
 			SectionLabel(catalog.groupLabels[group.name] ?: "Group ${group.name}")
 			Panel {
 				for (e in group.entries.values.sortedWith(compareBy({ catalog.arg(group.name, it.code) == null }, { it.code }))) {
-					SettingLine(catalog, group.name, e) { value -> zepp.setSetting(group.name, e.code, value) }
+					SettingLine(catalog, group.name, e, names) { value -> zepp.setSetting(group.name, e.code, value) }
 				}
 			}
 		}
@@ -176,12 +201,15 @@ private fun AlarmRow(a: Alarm, onChange: (Alarm) -> Unit, onDelete: () -> Unit) 
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SettingLine(catalog: Catalog, group: String, e: Entry, set: (Any) -> Unit) {
+private fun SettingLine(catalog: Catalog, group: String, e: Entry, names: Map<String, String>, set: (Any) -> Unit) {
 	val arg = catalog.arg(group, e.code)
-	val label = arg?.label ?: "Setting 0x%02x (hidden)".format(e.code)
-	val range = if (e.min != null && e.max != null) "${e.min}–${e.max}${arg?.unit?.let { " $it" } ?: ""}" else ""
+	val label = names[settingId(catalog, group, e.code)] ?: arg?.let { it.label + if (it.guess) " (likely)" else "" } ?: "Setting 0x%02x (hidden)".format(e.code)
+	val range = listOfNotNull(
+		if (e.min != null && e.max != null) "${e.min}–${e.max}${arg?.unit?.let { " $it" } ?: ""}" else null,
+		arg?.note,
+	).joinToString(" · ")
 	when (e.type) {
-		"bool" -> ListRow(label, subtitle = if (arg == null) "nobody has named it yet" else "") { Toggle(e.value == true) { set(it) } }
+		"bool" -> ListRow(label, subtitle = range.ifEmpty { if (arg == null) "nobody has named it yet" else "" }) { Toggle(e.value == true) { set(it) } }
 		"byte" -> {
 			val named = arg?.options ?: emptyMap()
 			val values = (e.allowed?.map { (it as Number).toInt() }?.takeIf { it.isNotEmpty() } ?: named.keys.toList())
@@ -238,4 +266,94 @@ private fun TextLine(label: String, value: String, set: (Any) -> Unit) {
 	Label(label, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
 	Field(text, modifier = Modifier.padding(horizontal = 10.dp), onSubmit = { set(text.trim()) }) { text = it }
 	Spacer(Modifier.height(6.dp))
+}
+
+// ── the hidden settings, and telling them apart ───────────────────────────────
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun WatchHiddenPage() {
+	val context = LocalContext.current
+	val app = LocalApp.current
+	val state by WatchLink.flow.collectAsState()
+	val names = watchNames()
+	DisposableEffect(Unit) {
+		WatchLink.hold()
+		onDispose { WatchLink.release() }
+	}
+	val scope = androidx.compose.runtime.rememberCoroutineScope()
+	var snapshot by remember { mutableStateOf<Map<String, Any?>?>(null) }
+	var changes by remember { mutableStateOf<List<Triple<String, Any?, Any?>>?>(null) }
+	var busy by remember { mutableStateOf(false) }
+
+	Screen("Hidden settings", subtitle = "What the watch has that nobody named") {
+		val zepp = WatchLink.zepp
+		if (state.link != "ready" || zepp == null) {
+			EmptyState("watch", "Not connected", text = "Connect on the Watch screen first.")
+			return@Screen
+		}
+		val catalog = WatchLink.catalog(context)
+		fun rename(id: String, text: String) {
+			val o = org.json.JSONObject(app.prefs.watchNames.value)
+			if (text.isBlank()) o.remove(id) else o.put(id, text.trim())
+			app.prefs.watchNames.value = o.toString()
+		}
+
+		Panel {
+			Label("Remember the watch's settings, change one thing in the watch's own menu, then ask what changed: the code that moved is that setting – name it.", style = Theme.Type.small, color = Theme.colors.textMuted, maxLines = 6)
+			Spacer(Modifier.height(12.dp))
+			Row(verticalAlignment = Alignment.CenterVertically) {
+				PrimaryButton(if (busy) "Reading …" else "Remember now", icon = "camera_outline", enabled = !busy) {
+					busy = true
+					changes = null
+					zepp.reread()
+					scope.launch {
+						kotlinx.coroutines.delay(3000)
+						snapshot = zepp.values()
+						busy = false
+					}
+				}
+				Spacer(Modifier.width(8.dp))
+				SoftButton("What changed?", icon = "compare_horizontal") {
+					val before = snapshot ?: return@SoftButton
+					busy = true
+					zepp.reread()
+					scope.launch {
+						kotlinx.coroutines.delay(3000)
+						val now = zepp.values()
+						changes = now.filter { before[it.key] != it.value }.map { Triple(it.key, before[it.key], it.value) }
+						busy = false
+					}
+				}
+			}
+			if (snapshot != null && changes == null && !busy) Label("Now change one setting on the watch …", modifier = Modifier.padding(top = 8.dp), color = Theme.colors.primary)
+			val found = changes
+			if (found != null) {
+				Spacer(Modifier.height(8.dp))
+				if (found.isEmpty()) Label("Nothing changed (yet).", color = Theme.colors.textMuted)
+				for ((id, old, new) in found) {
+					val (g, c) = id.split("/").map { it.toInt(16) }
+					val group = catalog.groupName(g)
+					val arg = catalog.arg(group, c)
+					var text by remember(id) { mutableStateOf(names[id] ?: "") }
+					ListRow("${catalog.groupLabels[group] ?: group} · 0x%02x".format(c), icon = "swap_horizontal", subtitle = "$old → $new" + (arg?.let { " · ${it.label}" } ?: ""))
+					if (arg == null || arg.guess) Field(text, placeholder = "What is it on the watch?", icon = "pencil", onSubmit = { rename(id, text) }) { text = it }
+				}
+			}
+		}
+
+		for (group in state.config.values.sortedBy { it.id }) {
+			val hidden = group.entries.values.filter { isHidden(catalog, group.name, it.code) }.sortedBy { it.code }
+			if (hidden.isEmpty()) continue
+			SectionLabel(catalog.groupLabels[group.name] ?: "Group ${group.name}")
+			Panel {
+				for (e in hidden) {
+					val id = settingId(catalog, group.name, e.code)
+					var text by remember(id) { mutableStateOf(names[id] ?: "") }
+					SettingLine(catalog, group.name, e, names) { value -> zepp.setSetting(group.name, e.code, value) }
+					Field(text, modifier = Modifier.padding(horizontal = 10.dp), placeholder = "Name 0x%02x".format(e.code), icon = "pencil", onSubmit = { rename(id, text) }) { text = it }
+					Spacer(Modifier.height(10.dp))
+				}
+			}
+		}
+	}
 }

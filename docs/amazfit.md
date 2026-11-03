@@ -180,7 +180,12 @@ its own GATT connection the Zepp OS settings (all groups, the hidden ones
 too), alarms, faces, battery, firmware and *find*. Gadgetbridge on the same
 phone shares the watch's connection: while the screen's link is open its
 session is replaced, and it authenticates again when it reconnects – so
-the link opens only on *Connect* and closes with the screen.
+the link opens only on *Connect* and closes a moment after the last of its
+screens goes. *Hidden settings* (a row on the screen, its own page) lists the
+unnamed and *likely* settings with the catalogue's notes, edits them, and
+tells them apart the same way as the PC's card: *Remember now*, change one
+thing on the watch, *What changed?*, name it. Names stay on the phone
+(`watchNames`); the PC keeps its own in amazfit.json.
 
 ## Testing
 
