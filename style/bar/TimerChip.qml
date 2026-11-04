@@ -3,7 +3,7 @@ import qs.style.theme
 import qs.core.services
 import qs.style.widgets
 
-// qtrack live activity. Tracking: a tinted capsule with a breathing dot,
+// qtrack live activity. Tracking: a tinted capsule with a pulsing dot,
 // the running clock and the project. Paused: muted capsule. Idle: a quiet
 // "Track" affordance. Always present so the timer is never out of sight.
 BarButton {
@@ -21,6 +21,9 @@ BarButton {
 	tooltip: QtrackTimer.tracking ? `${QtrackTimer.project} — ${QtrackTimer.description}` : (QtrackTimer.paused ? "Timer paused · click to resume" : "Start a timer")
 	padding: 6
 	onClicked: toggle()
+	onLiveChanged: if (root.live) ring.play(3)
+	onHoveredChanged: if (root.hovered && root.live && !pulse.running) ring.play(2)
+	Component.onCompleted: if (root.live) ring.play(3)
 	onMiddleClicked: {
 		if (QtrackTimer.tracking) QtrackTimer.pause();
 		else if (QtrackTimer.canResume || QtrackTimer.paused) QtrackTimer.resume();
@@ -66,41 +69,60 @@ BarButton {
 					color: Theme.primary
 				}
 
+				// the pulse: a few times when the clock starts, resumes or is
+				// pointed at, then once a minute. Running for good it kept
+				// every bar drawing at full frame rate
 				Rectangle {
+					id: ring
+
 					anchors.centerIn: parent
 					visible: root.live
 					width: 8
 					height: 8
 					radius: width / 2
 					color: "transparent"
+					opacity: 0
 					border.width: 1.5
 					border.color: Theme.primary
 
-					SequentialAnimation on scale {
-						running: root.live
-						loops: Animation.Infinite
-						NumberAnimation {
-							from: 1
-							to: 2.3
-							duration: 1400
-							easing.type: Easing.OutCubic
+					SequentialAnimation {
+						id: pulse
+
+						loops: 3
+
+						ParallelAnimation {
+							NumberAnimation {
+								target: ring
+								property: "scale"
+								from: 1
+								to: 2.3
+								duration: 1400
+								easing.type: Easing.OutCubic
+							}
+							NumberAnimation {
+								target: ring
+								property: "opacity"
+								from: 0.9
+								to: 0
+								duration: 1400
+								easing.type: Easing.OutCubic
+							}
 						}
 						PauseAnimation {
 							duration: 2600
 						}
 					}
-					SequentialAnimation on opacity {
+
+					function play(times) {
+						pulse.loops = times;
+						pulse.restart();
+					}
+
+					Timer {
 						running: root.live
-						loops: Animation.Infinite
-						NumberAnimation {
-							from: 0.9
-							to: 0
-							duration: 1400
-							easing.type: Easing.OutCubic
-						}
-						PauseAnimation {
-							duration: 2600
-						}
+						repeat: true
+						interval: 60000
+						onTriggered: if (!pulse.running) ring.play(1)
 					}
 				}
 

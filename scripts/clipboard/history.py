@@ -22,6 +22,7 @@ import json
 import os
 import select
 import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -32,6 +33,13 @@ import clipstore as store  # noqa: E402
 TEXT_TYPES = ("text/plain;charset=utf-8", "UTF8_STRING", "text/plain", "STRING", "TEXT")
 SECRET_TYPES = ("x-kde-passwordManagerHint",)
 
+
+
+def _die_with_parent():
+    """The child ends with this process: the shell ends its helpers with
+    SIGKILL (a reload), which leaves no time to end their own children."""
+    import ctypes
+    ctypes.CDLL("libc.so.6", use_errno=True).prctl(1, signal.SIGTERM)  # PR_SET_PDEATHSIG
 
 def emit(**event):
     print(json.dumps(event), flush=True)
@@ -152,7 +160,7 @@ def main():
         store.write([])
         threading.Thread(target=take_over_cliphist, daemon=True).start()
     watch = subprocess.Popen(["wl-paste", "--watch", "sh", "-c", 'echo "${CLIPBOARD_STATE:-data}"'],
-                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, preexec_fn=_die_with_parent)
     stdin = sys.stdin.fileno()
     from_shell = from_watch = b""
     try:

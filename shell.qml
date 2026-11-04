@@ -19,10 +19,27 @@ ShellRoot {
 	Surfaces {}
 	Frame {}
 
-	// wallpaper and colours of the last session
+	// wallpaper and colours of the last session: once a session, not again
+	// on every reload (it started the wallpaper processes and a palette
+	// prewarm anew each time)
 	Process {
-		running: true
+		id: restoreTheme
+
 		command: ["bash", `${Quickshell.shellDir}/scripts/restore_theme.sh`]
+	}
+
+	PersistentProperties {
+		id: session
+
+		reloadableId: "session"
+
+		property bool themeRestored: false
+
+		onLoaded: {
+			if (session.themeRestored) return;
+			session.themeRestored = true;
+			restoreTheme.running = true;
+		}
 	}
 
 	// keyboard and LEDs: the wallpaper's colours or the screen, live
@@ -37,6 +54,9 @@ ShellRoot {
 	// the 8BitDo controller's daemon: its profiles, battery and the profile
 	// button's OSD (core/services/Ultimate.qml)
 	readonly property bool ultimate: Ultimate.enabled
+	// the Logitech keyboard's daemon: its key rules (lock, screenshot …) from
+	// the start, not from the first notification on (core/services/Keyboard.qml)
+	readonly property bool keyboard: Keyboard.enabled
 	// the headset's daemon: its sidetone back after each replug, its buttons,
 	// the cable's mute switch (core/services/Headset.qml)
 	readonly property bool headset: Headset.enabled

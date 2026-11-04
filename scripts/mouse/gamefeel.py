@@ -68,10 +68,12 @@ except ImportError:  # the daemon says so once
     evdev = None
     E = None
 
-try:
-    import numpy as np
-except ImportError:
-    np = None
+# numpy only for the sound's rumble, loaded when that starts: imported here
+# it cost every daemon that imports mouse.py (keyboard, headset, apex) about
+# 20 MB
+import importlib.util
+
+HAVE_NUMPY = importlib.util.find_spec("numpy") is not None
 
 
 PAD_NAME = "Pshell haptic pad"
@@ -751,6 +753,8 @@ class Stream:
             self.proc = None
 
     def listen(self, proc):
+        import numpy as np
+
         block = HOP * 2 * 4
         window = np.hanning(FFT).astype(np.float32)
         freqs = np.fft.rfftfreq(FFT, 1 / RATE)
@@ -909,7 +913,7 @@ class Ears:
 
     def wanted(self):
         options = self.options()
-        if np is None or options.get("rumbleSound", True) is False:
+        if not HAVE_NUMPY or options.get("rumbleSound", True) is False:
             return False
         if options.get("rumbleSource", "auto") == "input":
             return False
