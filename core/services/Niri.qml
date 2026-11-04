@@ -27,6 +27,8 @@ Singleton {
 	property var taskById: ({})
 	property string groupsKey: ""
 	property string tasksKey: ""
+	property string workspacesKey: ""
+	property string windowsKey: ""
 	// the focused window covers its whole output (fullscreen video, games …)
 	property bool focusedFullscreen: false
 	// the focused window's id, -1 none
@@ -236,8 +238,17 @@ Singleton {
 			root.tasks = tasks;
 			root.taskGroups = taskGroups;
 		}
-		root.workspaces = workspaces.map(ws => Object.assign({}, ws));
-		root.windows = windows.map(window => Object.assign({}, window));
+		// only when something changed: every binding on them runs again
+		const workspacesKey = JSON.stringify(workspaces);
+		if (workspacesKey !== root.workspacesKey) {
+			root.workspacesKey = workspacesKey;
+			root.workspaces = workspaces.map(ws => Object.assign({}, ws));
+		}
+		const windowsKey = JSON.stringify(windows);
+		if (windowsKey !== root.windowsKey) {
+			root.windowsKey = windowsKey;
+			root.windows = windows.map(window => Object.assign({}, window));
+		}
 
 		const focused = windows.find(w => w.is_focused);
 		root.focusedId = focused ? Number(focused.id) : -1;
@@ -327,7 +338,9 @@ Singleton {
 				const change = root.apply(event);
 				if (change === "all" || change === "workspaces") {
 					root.ready = true;
-					root.publish();
+					// once for the lines read together (a layout change comes
+					// with its focus and size changes)
+					Qt.callLater(root.publish);
 				} else if (change === "title" && !titleTimer.running) {
 					titleTimer.start();
 				}

@@ -32,7 +32,7 @@ Singleton {
 			probe.path = `${Quickshell.shellDir}/style/views/${name}.qml`;
 			root.replaced[name] = probe.text() !== "";
 		}
-		return root.replaced[name] ? Qt.resolvedUrl(`../style/views/${name}.qml`) : Qt.resolvedUrl(`views/${view}.qml`);
+		return root.replaced[name] ? Qt.resolvedUrl(`../../style/views/${name}.qml`) : Qt.resolvedUrl(`../views/${view}.qml`);
 	}
 
 	function register(entry) {

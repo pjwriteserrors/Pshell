@@ -1,7 +1,9 @@
 import QtQuick
 import Quickshell
 
-// Every topic the shell publishes to the phone; one file each.
+// Every topic the shell publishes to the phone; one file each. Built by
+// Phone once a phone wants a topic or calls one, not at the start: the
+// topics pull in about twenty services.
 Scope {
 	id: root
 
@@ -50,5 +52,4 @@ Scope {
 	TodosTopic { link: root.link }
 	PrinterTopic { link: root.link }
 
-	Incoming { link: root.link }
 }

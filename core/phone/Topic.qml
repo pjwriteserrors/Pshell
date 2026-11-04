@@ -44,5 +44,10 @@ Scope {
 		onTriggered: topic.flush()
 	}
 
-	Component.onCompleted: topic.link.register(topic)
+	Component.onCompleted: {
+		topic.link.register(topic);
+		// built while already wanted (Phone builds the topics late): no
+		// change of `wanted` will say so
+		if (topic.wanted) timer.restart();
+	}
 }

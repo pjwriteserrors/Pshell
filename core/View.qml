@@ -1,4 +1,5 @@
 import QtQuick
+import qs.core.services
 
 // A surface, built from its file while it is wanted (see Views): naming
 // its type in Surfaces.qml would compile its whole tree at every start.

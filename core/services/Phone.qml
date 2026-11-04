@@ -252,6 +252,8 @@ Singleton {
 			root.send(ok ? { type: "result", id: message.id, ok: true, data: payload ?? {} }
 				: { type: "result", id: message.id, ok: false, error: payload });
 		};
+		// built here and now when no topic was wanted yet
+		root.topicsBuilt = true;
 		const topic = root.topics[message.topic];
 		if (!topic) return reply(false, { code: "unknown-topic", message: String(message.topic) });
 		if (!topic.allowed) return reply(false, { code: "plugin-off", message: String(message.topic) });
@@ -313,8 +315,19 @@ Singleton {
 		}
 	}
 
-	Topics {
+	// what the phone tells the shell (its notifications, a call)
+	Incoming {
 		link: root
+	}
+
+	// the topics, from the first time a phone wants or calls one on
+	property bool topicsBuilt: false
+
+	onWantedChanged: if (root.wanted.length > 0) root.topicsBuilt = true
+
+	Loader {
+		active: root.enabled && root.topicsBuilt
+		onActiveChanged: if (active) setSource(Qt.resolvedUrl("../phone/Topics.qml"), { link: root })
 	}
 
 	Socket {

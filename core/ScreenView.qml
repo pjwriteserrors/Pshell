@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
+import qs.core.services
 
 // A surface on each screen (or of each entry of `model`), built from its
 // file while it is wanted, like View.
