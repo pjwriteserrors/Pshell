@@ -10,7 +10,7 @@ import Quickshell.Services.Pipewire
 // a microphone or camera device feeding a program's stream, or one of niri's
 // screencasts feeding a program that is not the shell's own (the light
 // mirroring, the game's eyes, a live screenshot). A camera opened without
-// PipeWire is found by its open device, looked for every few seconds while
+// PipeWire is found by its open device (scripts/camera_watch.py) while
 // anything is watching.
 Singleton {
 	id: root
@@ -41,18 +41,12 @@ Singleton {
 	readonly property bool camera: root.cameraLinked || root.cameraOpen
 
 	// a camera can be used without PipeWire: its device is open
-	Timer {
-		interval: 4000
-		repeat: true
-		running: root.watched
-		triggeredOnStart: true
-		onTriggered: if (!probe.running) probe.running = true
-	}
-
 	Process {
-		id: probe
-
-		command: ["sh", "-c", "ls /dev/video* >/dev/null 2>&1 || exit 1; find /proc/[0-9]*/fd -lname '/dev/video*' -print -quit 2>/dev/null | grep -q ."]
-		onExited: code => root.cameraOpen = code === 0
+		running: root.watched
+		command: ["python3", `${Paths.scripts}/camera_watch.py`]
+		stdout: SplitParser {
+			onRead: line => root.cameraOpen = String(line).trim() === "1"
+		}
+		onRunningChanged: if (!running) root.cameraOpen = false
 	}
 }

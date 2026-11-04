@@ -19,8 +19,13 @@ Row {
 	anchors.verticalCenter: parent ? parent.verticalCenter : undefined
 	spacing: 6
 
+	// keyed: a focus change or a window that comes keeps the other buttons
+	// (and their animations); what changes is read from Niri.taskById
 	Repeater {
-		model: Niri.taskGroups
+		model: ScriptModel {
+			values: Niri.taskGroups
+			objectProp: "output"
+		}
 
 		delegate: ScreenGroup {
 			id: group
@@ -32,17 +37,21 @@ Row {
 			inset: 1
 
 			Repeater {
-				model: group.modelData.tasks
+				model: ScriptModel {
+					values: Niri.tasksOn[group.modelData.output] ?? []
+					objectProp: "id"
+				}
 
 				delegate: BarButton {
 					id: task
 
 					required property var modelData
+					readonly property var live: Niri.taskById[task.modelData.id] ?? task.modelData
 
 					bar: root.bar
 					padding: 6
 					implicitHeight: group.height
-					tooltip: task.hovered ? `${Niri.titleOf(task.modelData.id)}  ·  ${task.modelData.output}` : ""
+					tooltip: task.hovered ? `${Niri.titleOf(task.modelData.id)}  ·  ${task.live.output}` : ""
 					onClicked: Niri.focusWindow(task.modelData.id)
 					onMiddleClicked: Niri.closeWindow(task.modelData.id)
 
@@ -89,7 +98,7 @@ Row {
 							smooth: true
 							mipmap: true
 							asynchronous: true
-							opacity: task.modelData.onActiveWorkspace ? 1 : 0.4
+							opacity: task.live.onActiveWorkspace ? 1 : 0.4
 							scale: task.hovered ? 1.14 : 1
 
 							Behavior on scale {
@@ -105,8 +114,8 @@ Row {
 							anchors.bottomMargin: 1
 							height: 3
 							radius: 1.5
-							width: task.modelData.isFocused ? 12 : (task.modelData.isUrgent ? 6 : 0)
-							color: task.modelData.isUrgent ? Theme.danger : Theme.primary
+							width: task.live.isFocused ? 12 : (task.live.isUrgent ? 6 : 0)
+							color: task.live.isUrgent ? Theme.danger : Theme.primary
 
 							Behavior on width {
 								SpatialAnim {

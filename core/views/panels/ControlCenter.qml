@@ -341,30 +341,33 @@ Drawer {
 						anchors.rightMargin: 10
 						spacing: 14
 
+						// the values are read by each ring: in the model they rebuilt
+						// both every two seconds
 						Repeater {
 							model: Plugins.on("system-monitor") ? [
-								{ label: "CPU", value: SysStats.cpu, color: Theme.primary },
-								{ label: "RAM", value: SysStats.memory, color: Theme.secondary }
+								{ label: "CPU", key: "cpu", color: Theme.primary },
+								{ label: "RAM", key: "memory", color: Theme.secondary }
 							] : []
 
 							delegate: RowLayout {
 								id: stat
 
 								required property var modelData
+								readonly property real value: stat.modelData.key === "cpu" ? SysStats.cpu : SysStats.memory
 
 								spacing: 8
 
 								Ring {
 									Layout.preferredWidth: 44
 									Layout.preferredHeight: 44
-									value: stat.modelData.value
+									value: stat.value
 									thickness: 5
 									sweep: 270
-									color: stat.modelData.value > 0.85 ? Theme.danger : stat.modelData.color
+									color: stat.value > 0.85 ? Theme.danger : stat.modelData.color
 
 									StyledText {
 										anchors.centerIn: parent
-										text: Math.round(stat.modelData.value * 100)
+										text: Math.round(stat.value * 100)
 										tabular: true
 										font.pixelSize: Theme.size.small
 										font.weight: Font.Bold

@@ -99,11 +99,12 @@ FloatingWindow {
 		active: false
 		asynchronous: !root.entry
 		focus: true
-		sourceComponent: FilesView {
-			focus: true
-			chooserMode: true
-			shown: root.visible
+		// from its file: named here, the file manager was compiled at every
+		// start, whether it was opened or not
+		onActiveChanged: if (content.active) content.setSource(Qt.resolvedUrl("FilesView.qml"), { focus: true, chooserMode: true })
+		onLoaded: {
+			content.item.shown = Qt.binding(() => root.visible);
+			if (root.visible) content.item.takeFocus();
 		}
-		onLoaded: if (root.visible) content.item.takeFocus()
 	}
 }

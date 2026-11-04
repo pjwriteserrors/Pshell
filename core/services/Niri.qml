@@ -19,6 +19,12 @@ Singleton {
 	property var workspaceGroups: []
 	property var tasks: []
 	property var taskGroups: []
+	// the same by key, for views that keep their delegates (ScriptModel with
+	// objectProp) and read what changes from here: output -> [entry], id -> entry
+	property var workspacesOn: ({})
+	property var workspaceById: ({})
+	property var tasksOn: ({})
+	property var taskById: ({})
 	property string groupsKey: ""
 	property string tasksKey: ""
 	// the focused window covers its whole output (fullscreen video, games …)
@@ -208,11 +214,25 @@ Singleton {
 		const groupsKey = JSON.stringify(groups);
 		if (groupsKey !== root.groupsKey) {
 			root.groupsKey = groupsKey;
+			const on = {};
+			const byId = {};
+			for (const group of groups) {
+				on[group.output] = group.workspaces;
+				for (const entry of group.workspaces) byId[entry.id] = entry;
+			}
+			root.workspacesOn = on;
+			root.workspaceById = byId;
 			root.workspaceGroups = groups;
 		}
 		const tasksKey = JSON.stringify(tasks);
 		if (tasksKey !== root.tasksKey) {
 			root.tasksKey = tasksKey;
+			const on = {};
+			const byId = {};
+			for (const group of taskGroups) on[group.output] = group.tasks;
+			for (const task of tasks) byId[task.id] = task;
+			root.tasksOn = on;
+			root.taskById = byId;
 			root.tasks = tasks;
 			root.taskGroups = taskGroups;
 		}

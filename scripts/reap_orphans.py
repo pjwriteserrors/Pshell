@@ -38,7 +38,7 @@ STARTED = [
 # being applied, a download) and the daemons meant to outlive it are not here
 HELPERS = re.compile(r"/scripts/(input_watch|mouse/mouse|multicursor|autocorrect|games_guard|games_pad|printer/printer"
                      r"|clipboard/history|shelf|apply_lighting|lighting_live|bluetooth_agent|messages/daemon|lyrics"
-                     r"|song_detect)\.py$")
+                     r"|song_detect|camera_watch)\.py$")
 
 
 def cmdline(pid):

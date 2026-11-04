@@ -137,65 +137,66 @@ Scope {
 		keep: 60000
 	}
 
-	LazyLoader {
-		active: Plugins.on("window-switcher") && switching.held
-
-		SwitcherWindow {}
+	View {
+		view: "switcher/SwitcherWindow"
+		available: Plugins.on("window-switcher")
+		when: switching.held
 	}
 
 	// the light on a pointer that is shaken
-	Variants {
-		model: Plugins.on("find-mouse") && finding.held ? Quickshell.screens : []
-
-		MouseFinder {}
+	ScreenView {
+		view: "overlays/MouseFinder"
+		available: Plugins.on("find-mouse")
+		when: finding.held
 	}
 
 	// the laser pointer, for presentations
-	Variants {
-		model: Plugins.on("laser-pointer") && lasering.held ? Quickshell.screens : []
-
-		LaserPointer {}
+	ScreenView {
+		view: "overlays/LaserPointer"
+		available: Plugins.on("laser-pointer")
+		when: lasering.held
 	}
 
 	// where the pointer is, for an ultra macro of the Apex keyboard
-	Variants {
-		model: Plugins.on("apex") && Apex.probing !== 0 ? Quickshell.screens : []
-
-		PointerProbe {}
+	ScreenView {
+		view: "overlays/PointerProbe"
+		available: Plugins.on("apex")
+		when: Apex.probing !== 0
 	}
 
-	Variants {
-		model: Plugins.on("screenshot") && capturing.held ? Quickshell.screens : []
-
-		ScreenshotOverlay {}
+	ScreenView {
+		view: "screenshot/ScreenshotOverlay"
+		available: Plugins.on("screenshot")
+		when: capturing.held
 	}
 
 	// pinned screenshots, always on top
-	Variants {
-		model: Plugins.on("pins") && pinning.held ? Quickshell.screens : []
-
-		ScreenshotPins {}
+	ScreenView {
+		view: "screenshot/ScreenshotPins"
+		available: Plugins.on("pins")
+		when: pinning.held
 	}
 
 	// shelves (Dropover-like stashes), above the windows
-	Variants {
-		model: Plugins.on("shelves") && shelving.held ? Quickshell.screens : []
-
-		Shelves {}
+	ScreenView {
+		view: "shelf/Shelves"
+		available: Plugins.on("shelves")
+		when: shelving.held
 	}
 
 	// the app trays on the edges of the screens (by id: a changed tray is not built again)
-	Variants {
-		model: AppTray.enabled && AppTray.loaded ? AppTray.trays.map(tray => tray.id) : []
-
-		AppTrayWindow {}
+	ScreenView {
+		view: "tray/AppTrayWindow"
+		available: AppTray.enabled
+		when: AppTray.loaded
+		model: AppTray.trays.map(tray => tray.id)
 	}
 
 	// commands for what is being dragged, around the pointer
-	Variants {
-		model: Plugins.on("drop-commands") && dropping.held ? Quickshell.screens : []
-
-		CommandRing {}
+	ScreenView {
+		view: "overlays/CommandRing"
+		available: Plugins.on("drop-commands")
+		when: dropping.held
 	}
 
 	// panels (one instance each, they follow the screen they are opened on).
@@ -204,359 +205,365 @@ Scope {
 	// built, they open all the time and have to be there at once.
 	Launcher {}
 
-	LazyLoader {
-		active: Plugins.on("quick-settings")
-
-		ControlCenter {}
+	View {
+		view: "panels/ControlCenter"
+		available: Plugins.on("quick-settings")
+		// not needed in the first moment
+		when: Views.started
+		asynchronous: true
 	}
 
-	LazyLoader {
-		active: Plugins.on("notifications") || Plugins.on("calendar") || Plugins.on("weather")
-
-		TodayPanel {}
+	View {
+		view: "panels/TodayPanel"
+		available: Plugins.on("notifications") || Plugins.on("calendar") || Plugins.on("weather")
+		// not needed in the first moment
+		when: Views.started
+		asynchronous: true
 	}
 
-	LazyLoader {
-		active: Plugins.on("breaks") && Popups.wanted("breaks")
-
-		BreaksPanel {}
+	View {
+		view: "breaks/BreaksPanel"
+		available: Plugins.on("breaks")
+		when: Popups.wanted("breaks")
 	}
 
-	LazyLoader {
-		active: Plugins.on("screentime") && Popups.wanted("screentime")
-
-		ScreentimePanel {}
+	View {
+		view: "screentime/ScreentimePanel"
+		available: Plugins.on("screentime")
+		when: Popups.wanted("screentime")
 	}
 
-	LazyLoader {
-		active: Plugins.on("watch") && Popups.wanted("watch")
-
-		WatchPanel {}
+	View {
+		view: "watch/WatchPanel"
+		available: Plugins.on("watch")
+		when: Popups.wanted("watch")
 	}
 
-	LazyLoader {
-		active: Plugins.on("printer") && Popups.wanted("printer")
-
-		PrinterPanel {}
+	View {
+		view: "printer/PrinterPanel"
+		available: Plugins.on("printer")
+		when: Popups.wanted("printer")
 	}
 
 	// popped out, and the camera's feed
-	LazyLoader {
-		active: Plugins.on("printer") && !Printer.surface.panelled && Printer.windowOpen
-
-		PrinterWindow {}
+	View {
+		view: "printer/PrinterWindow"
+		available: Plugins.on("printer")
+		when: !Printer.surface.panelled && Printer.windowOpen
 	}
 
-	LazyLoader {
-		active: Plugins.on("printer") && Printer.camera
-
-		CameraWindow {}
+	View {
+		view: "printer/CameraWindow"
+		available: Plugins.on("printer")
+		when: Printer.camera
 	}
 
-	LazyLoader {
-		active: Plugins.on("media") && Popups.wanted("media")
-
-		MediaPanel {}
+	View {
+		view: "media/MediaPanel"
+		available: Plugins.on("media")
+		when: Popups.wanted("media")
 	}
 
-	LazyLoader {
-		active: Plugins.on("clipboard") && Popups.wanted("clipboard")
-
-		ClipboardPanel {}
+	View {
+		view: "panels/ClipboardPanel"
+		available: Plugins.on("clipboard")
+		when: Popups.wanted("clipboard")
 	}
 
-	LazyLoader {
-		active: Plugins.on("tray") && Popups.wanted("tray")
-
-		TrayMenuPanel {}
+	View {
+		view: "panels/TrayMenuPanel"
+		available: Plugins.on("tray")
+		when: Popups.wanted("tray")
 	}
 
-	LazyLoader {
-		active: Plugins.on("overview") && Popups.wanted("overview")
-
-		OverviewPanel {}
+	View {
+		view: "panels/OverviewPanel"
+		available: Plugins.on("overview")
+		when: Popups.wanted("overview")
 	}
 
-	LazyLoader {
-		active: Plugins.on("updates") && Popups.wanted("updates")
-
-		UpdatesPanel {}
+	View {
+		view: "panels/UpdatesPanel"
+		available: Plugins.on("updates")
+		when: Popups.wanted("updates")
 	}
 
-	LazyLoader {
-		active: Plugins.on("qtrack") && Popups.wanted("timer")
-
-		TimerPanel {}
+	View {
+		view: "panels/TimerPanel"
+		available: Plugins.on("qtrack")
+		when: Popups.wanted("timer")
 	}
 
-	LazyLoader {
-		active: Plugins.on("qtrack") && Popups.wanted("tracking")
-
-		TrackingPanel {}
+	View {
+		view: "tracking/TrackingPanel"
+		available: Plugins.on("qtrack")
+		when: Popups.wanted("tracking")
 	}
 
-	LazyLoader {
-		active: Plugins.on("ssh") && Popups.wanted("ssh")
-
-		SshPanel {}
+	View {
+		view: "ssh/SshPanel"
+		available: Plugins.on("ssh")
+		when: Popups.wanted("ssh")
 	}
 
-	LazyLoader {
-		active: Plugins.on("notes") && Popups.wanted("notes")
-
-		NotesPanel {}
+	View {
+		view: "panels/NotesPanel"
+		available: Plugins.on("notes")
+		when: Popups.wanted("notes")
 	}
 
-	LazyLoader {
-		active: Plugins.on("messages") && Popups.wanted("messages")
-
-		MessagesPanel {}
-	}
-
-	// … and the same as a window of its own
-	LazyLoader {
-		active: Plugins.on("messages") && !Messages.surface.panelled && Messages.windowOpen
-
-		MessagesWindow {}
-	}
-
-	LazyLoader {
-		active: Plugins.on("identities") && Popups.wanted("identity")
-
-		IdentityPanel {}
+	View {
+		view: "messages/MessagesPanel"
+		available: Plugins.on("messages")
+		when: Popups.wanted("messages")
 	}
 
 	// … and the same as a window of its own
-	LazyLoader {
-		active: Plugins.on("identities") && !Identities.surface.panelled && Identities.windowOpen
-
-		IdentityWindow {}
+	View {
+		view: "messages/MessagesWindow"
+		available: Plugins.on("messages")
+		when: !Messages.surface.panelled && Messages.windowOpen
 	}
 
-	LazyLoader {
-		active: Plugins.on("fast-reader") && Popups.wanted("reader")
+	View {
+		view: "identity/IdentityPanel"
+		available: Plugins.on("identities")
+		when: Popups.wanted("identity")
+	}
 
-		ReaderPanel {}
+	// … and the same as a window of its own
+	View {
+		view: "identity/IdentityWindow"
+		available: Plugins.on("identities")
+		when: !Identities.surface.panelled && Identities.windowOpen
+	}
+
+	View {
+		view: "panels/ReaderPanel"
+		available: Plugins.on("fast-reader")
+		when: Popups.wanted("reader")
 	}
 
 	// full-screen overlays
-	LazyLoader {
-		active: Popups.wanted("plugins")
-
-		PluginsWindow {}
+	View {
+		view: "overlays/PluginsWindow"
+		when: Popups.wanted("plugins")
 	}
 
-	LazyLoader {
-		active: Plugins.on("niri-settings") && Popups.wanted("niri")
-
-		SettingsWindow {}
+	View {
+		view: "settings/SettingsWindow"
+		available: Plugins.on("niri-settings")
+		when: Popups.wanted("niri")
 	}
 
-	LazyLoader {
-		active: Plugins.on("power-menu") && Popups.wanted("power")
-
-		PowerMenu {}
+	View {
+		view: "overlays/PowerMenu"
+		available: Plugins.on("power-menu")
+		when: Popups.wanted("power")
 	}
 
-	LazyLoader {
-		active: Plugins.on("vm-launcher") && Popups.wanted("vm")
-
-		VmLauncher {}
+	View {
+		view: "vm/VmLauncher"
+		available: Plugins.on("vm-launcher")
+		when: Popups.wanted("vm")
 	}
 
-	LazyLoader {
-		active: Plugins.on("games") && Popups.wanted("games")
-
-		GameLibrary {}
+	View {
+		view: "games/GameLibrary"
+		available: Plugins.on("games")
+		when: Popups.wanted("games")
 	}
 
 	// … and as a panel under the bar
-	LazyLoader {
-		active: Plugins.on("games-bar") && Popups.wanted("gamebar")
-
-		GamesPanel {}
+	View {
+		view: "games/GamesPanel"
+		available: Plugins.on("games-bar")
+		when: Popups.wanted("gamebar")
 	}
 
 	// the file manager, a window of its own
-	LazyLoader {
-		active: Plugins.on("filemanager")
-
-		FilesWindow {}
+	View {
+		view: "files/FilesWindow"
+		available: Plugins.on("filemanager")
 	}
 
 	// every app's file chooser (and the shell's own), a window beside it
-	LazyLoader {
-		active: Plugins.on("filemanager")
-
-		ChooserWindow {}
+	View {
+		view: "files/ChooserWindow"
+		available: Plugins.on("filemanager")
 	}
 
 	// "Open with" for every app
-	LazyLoader {
-		active: Plugins.on("filemanager") && Files.appChoosing !== null
-
-		OpenWithWindow {}
+	View {
+		view: "files/OpenWithWindow"
+		available: Plugins.on("filemanager")
+		when: Files.appChoosing !== null
 	}
 
 	// the downloads under the bar, with their statistics
-	LazyLoader {
-		active: Plugins.on("downloads") && Popups.wanted("downloads")
-
-		DownloadsPanel {}
+	View {
+		view: "downloads/DownloadsPanel"
+		available: Plugins.on("downloads")
+		when: Popups.wanted("downloads")
 	}
 
 	// the torrent client's window; the downloads run in its daemon
-	LazyLoader {
-		active: Plugins.on("torrents") && !Torrents.surface.panelled && Torrents.windowOpen
-
-		TorrentsWindow {}
+	View {
+		view: "torrents/TorrentsWindow"
+		available: Plugins.on("torrents")
+		when: !Torrents.surface.panelled && Torrents.windowOpen
 	}
 
 	// what is followed: its window, or under the bar …
-	LazyLoader {
-		active: Plugins.on("streams") && !Streams.surface.panelled && Streams.windowOpen
-
-		StreamsWindow {}
+	View {
+		view: "streams/StreamsWindow"
+		available: Plugins.on("streams")
+		when: !Streams.surface.panelled && Streams.windowOpen
 	}
 
-	LazyLoader {
-		active: Plugins.on("streams-bar") && Popups.wanted("streams")
-
-		StreamsPanel {}
+	View {
+		view: "streams/StreamsPanel"
+		available: Plugins.on("streams-bar")
+		when: Popups.wanted("streams")
 	}
 
 	// the player, in a window of its own unless the streams window is open
-	LazyLoader {
-		active: Plugins.on("streams") && !!Streams.player && !Streams.playerInside
-
-		PlayerWindow {}
+	View {
+		view: "streams/PlayerWindow"
+		available: Plugins.on("streams")
+		when: !!Streams.player && !Streams.playerInside
 	}
 
 	// … and the next episode coming up, in a corner of the screen
-	LazyLoader {
-		active: Plugins.on("streams") && !!Streams.upNext
-
-		NextUpOverlay {}
+	View {
+		view: "streams/NextUpOverlay"
+		available: Plugins.on("streams")
+		when: !!Streams.upNext
 	}
 
 	// under the bar, from the magnet in the bar
-	LazyLoader {
-		active: Plugins.on("torrents-bar") && Popups.wanted("torrents")
-
-		TorrentsPanel {}
+	View {
+		view: "torrents/TorrentsPanel"
+		available: Plugins.on("torrents-bar")
+		when: Popups.wanted("torrents")
 	}
 
-	LazyLoader {
-		active: Plugins.on("radial-menu")
-
-		RadialMenu {}
+	View {
+		view: "overlays/RadialMenu"
+		available: Plugins.on("radial-menu")
+		// not needed in the first moment
+		when: Views.started
+		asynchronous: true
 	}
 
-	LazyLoader {
-		active: Plugins.on("eye-rest") && Popups.wanted("eyerest")
-
-		EyeRest {}
+	View {
+		view: "overlays/EyeRest"
+		available: Plugins.on("eye-rest")
+		when: Popups.wanted("eyerest")
 	}
 
-	LazyLoader {
-		active: Plugins.on("stretch") && Popups.wanted("stretch")
-
-		StretchBreak {}
+	View {
+		view: "overlays/StretchBreak"
+		available: Plugins.on("stretch")
+		when: Popups.wanted("stretch")
 	}
 
 	// Studio
-	LazyLoader {
-		active: Plugins.on("studio-wallpaper") && Popups.wanted("theme")
-
-		ThemePicker {}
+	View {
+		view: "studio/ThemePicker"
+		available: Plugins.on("studio-wallpaper")
+		when: Popups.wanted("theme")
 	}
 
-	LazyLoader {
-		active: Plugins.on("studio-motion") && Popups.wanted("animation")
-
-		AnimationPicker {}
+	View {
+		view: "studio/AnimationPicker"
+		available: Plugins.on("studio-motion")
+		when: Popups.wanted("animation")
 	}
 
-	LazyLoader {
-		active: Plugins.on("studio-dress") && Popups.wanted("dress")
-
-		DressPage {}
+	View {
+		view: "studio/DressPage"
+		available: Plugins.on("studio-dress")
+		when: Popups.wanted("dress")
 	}
 
-	LazyLoader {
-		active: Plugins.on("studio-styles") && Popups.wanted("styles")
-
-		StylePage {}
+	View {
+		view: "studio/StylePage"
+		available: Plugins.on("studio-styles")
+		when: Popups.wanted("styles")
 	}
 
-	LazyLoader {
-		active: Plugins.on("studio-combinations") && Popups.wanted("combinations")
-
-		CombinationsPage {}
+	View {
+		view: "studio/CombinationsPage"
+		available: Plugins.on("studio-combinations")
+		when: Popups.wanted("combinations")
 	}
 
-	LazyLoader {
-		active: Plugins.on("studio-sounds") && Popups.wanted("sounds")
-
-		SoundPackPage {}
+	View {
+		view: "studio/SoundPackPage"
+		available: Plugins.on("studio-sounds")
+		when: Popups.wanted("sounds")
 	}
 
 	// a program asks for an administrator's password
-	LazyLoader {
-		active: Polkit.active
-
-		PolkitDialog {}
+	View {
+		view: "overlays/PolkitDialog"
+		when: Polkit.active
 	}
 
-	LazyLoader {
-		active: Plugins.on("lock-screen")
-
-		LockScreen {}
+	View {
+		view: "overlays/LockScreen"
+		available: Plugins.on("lock-screen")
 	}
 
 	// the story of Bing's image of the day, on the wallpaper
-	LazyLoader {
-		active: Plugins.on("daily-caption")
-
-		DailyCaption {}
+	View {
+		view: "overlays/DailyCaption"
+		available: Plugins.on("daily-caption")
+		// not needed in the first moment
+		when: Views.started
+		asynchronous: true
 	}
 
 	// todo lists pinned to the desktop (bottom layer, primary screen)
-	LazyLoader {
-		active: Plugins.on("todos")
-
-		TodoWidgets {}
+	View {
+		view: "todos/TodoWidgets"
+		available: Plugins.on("todos")
+		// not needed in the first moment
+		when: Views.started
+		asynchronous: true
 	}
 
 	// the editor of a todo list, a window of its own while it is open
-	LazyLoader {
-		active: Plugins.on("todos") && Todos.editorOpen
-
-		TodoEditor {}
+	View {
+		view: "todos/TodoEditor"
+		available: Plugins.on("todos")
+		when: Todos.editorOpen
 	}
 
 	// the useless fact of the day, a card on the desktop
-	LazyLoader {
-		active: Plugins.on("useless-fact")
-
-		UselessFact {}
+	View {
+		view: "overlays/UselessFact"
+		available: Plugins.on("useless-fact")
+		// not needed in the first moment
+		when: Views.started
+		asynchronous: true
 	}
 
-	LazyLoader {
-		active: Plugins.on("rpg")
-
-		Rpg {}
+	View {
+		view: "rpg/Rpg"
+		available: Plugins.on("rpg")
 	}
 
-	LazyLoader {
-		active: Plugins.on("world") && World.windowLoaded
-
-		WorldWindow {}
+	View {
+		view: "world/WorldWindow"
+		available: Plugins.on("world")
+		when: World.windowLoaded
 	}
 
-	Variants {
-		model: Plugins.on("world") && World.wallpaperLoaded ? Quickshell.screens : []
-
-		WorldWallpaper {}
+	ScreenView {
+		view: "world/WorldWallpaper"
+		available: Plugins.on("world")
+		when: World.wallpaperLoaded
 	}
 }
