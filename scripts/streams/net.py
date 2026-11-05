@@ -94,7 +94,14 @@ def stamp(text):
 def youtube_feed(kind, ref):
     """(title, videos): the last 15 entries, with whole descriptions."""
     param = "playlist_id" if kind == "playlist" else "channel_id"
-    raw = fetch(f"{YOUTUBE}/feeds/videos.xml?{param}={urllib.parse.quote(ref)}")
+    try:
+        raw = fetch(f"{YOUTUBE}/feeds/videos.xml?{param}={urllib.parse.quote(ref)}")
+    except Failure as error:
+        # YouTube's feed server goes down for every channel at times (404 or 5xx)
+        # while the site itself works: the list through yt-dlp then
+        if not re.match(r"HTTP (404|5\d\d)", str(error)):
+            raise
+        return youtube_list(kind, ref)
     try:
         root = ET.fromstring(raw)
     except ET.ParseError as error:
@@ -120,6 +127,19 @@ def youtube_feed(kind, ref):
             "published": stamp(entry.findtext("a:published", "", NS)), "views": views, "kind": "short" if "/shorts/" in url else "video",
         })
     return root.findtext("a:title", "", NS), videos
+
+
+def youtube_list(kind, ref):
+    """What youtube_feed gives, read from the channel's or list's page instead:
+    no descriptions, dates only guessed."""
+    url = f"{YOUTUBE_REAL}/playlist?list={ref}" if kind == "playlist" else f"{YOUTUBE_REAL}/channel/{ref}/videos"
+    data = ytdlp_json(["--flat-playlist", "--playlist-end", "15", *([] if kind == "playlist" else ["--extractor-args", "youtubetab:approximate_date"]), url], timeout=120)
+    videos = flat_entries(data)
+    for video in videos:
+        video["guessed"] = 1
+        if kind == "playlist":
+            video["published"] = 0
+    return data.get("channel") if kind != "playlist" else data.get("title"), videos
 
 
 def channel_avatar(channel_id):
@@ -241,6 +261,10 @@ def ytdlp_channel(url, limit=1000, dates=True):
     """A list's titles and lengths in one go; no descriptions, dates only roughly
     ("3 weeks ago"). In a playlist those say nothing."""
     data = ytdlp_json(["--flat-playlist", "--playlist-end", str(limit), *(["--extractor-args", "youtubetab:approximate_date"] if dates else []), url], timeout=300)
+    return flat_entries(data)
+
+
+def flat_entries(data):
     videos = []
     entries = data.get("entries") or []
     for entry in entries:

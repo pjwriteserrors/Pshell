@@ -17,7 +17,8 @@ CardFrame {
 	colors: root.channel?.colors ?? null
 	accent: Streams.accent(root.channel?.colors)
 	dimmed: root.watched
-	onClicked: Streams.play(root.video.id)
+	// the feed shows where a video belongs first; the mark on hover still plays
+	onClicked: Streams.open({ video: root.video })
 	onHoveredChanged: if (root.hovered) Streams.prefetch([root.video?.id])
 
 	overlay: [

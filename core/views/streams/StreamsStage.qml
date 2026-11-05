@@ -35,7 +35,7 @@ Item {
 	readonly property var openItem: Streams.seriesById[root.openId] ?? null
 	// the bar clears over the home page's picture
 	readonly property bool barClear: root.page === "now" && homePage.contentY < 180 && Streams.ownSources.length > 0
-	readonly property bool covered: workshop.shown || tonight.shown || partsSheet.shown
+	readonly property bool covered: workshop.shown || tonight.shown || partsSheet.shown || videoSheet.shown
 
 	function takeFocus() {
 		keys.forceActiveFocus();
@@ -53,6 +53,7 @@ Item {
 		if (wanted.newSeries) root.showWorkshop(wanted.newSeries);
 		if (wanted.add) Qt.callLater(() => sourcesPage.add(wanted.add));
 		if (wanted.parts) root.showParts(wanted.parts);
+		if (wanted.video) root.showVideo(wanted.video);
 	}
 
 	function go(id) {
@@ -60,6 +61,7 @@ Item {
 		workshop.shown = false;
 		tonight.shown = false;
 		partsSheet.shown = false;
+		videoSheet.shown = false;
 		if (root.page !== id) root.lastPage = root.page;
 		root.page = id;
 	}
@@ -89,6 +91,11 @@ Item {
 	}
 
 	// the series inside a series: { name, parts, whole: discovery | null }
+	function showVideo(video) {
+		videoSheet.body.show(video);
+		videoSheet.shown = true;
+	}
+
 	function showParts(what) {
 		partsSheet.body.show(what);
 		partsSheet.shown = true;
@@ -121,6 +128,7 @@ Item {
 		focus: true
 		Keys.onEscapePressed: {
 			if (workshop.shown) workshop.shown = false;
+			else if (videoSheet.shown) videoSheet.shown = false;
 			else if (partsSheet.shown) partsSheet.shown = false;
 			else if (tonight.shown) tonight.shown = false;
 			else if (root.openId !== "") root.closeSeries();
@@ -154,7 +162,7 @@ Item {
 			// what is underneath steps back as a series opens
 			scale: 1 - root.bloom * 0.05
 			opacity: 1 - root.bloom * 0.85
-			visible: root.bloom < 0.999 && !(workshop.reveal >= 0.999) && !(tonight.reveal >= 0.999) && !(partsSheet.reveal >= 0.999)
+			visible: root.bloom < 0.999 && !(workshop.reveal >= 0.999) && !(tonight.reveal >= 0.999) && !(partsSheet.reveal >= 0.999) && !(videoSheet.reveal >= 0.999)
 
 			component PageFade: Item {
 				id: fade
@@ -556,6 +564,19 @@ Item {
 				onClose: partsSheet.shown = false
 				onOpenSeries: id => {
 					partsSheet.shown = false;
+					root.page = "series";
+					root.openSeries(id, null);
+				}
+			}
+		}
+
+		Sheet {
+			id: videoSheet
+
+			sourceComponent: VideoSheet {
+				onClose: videoSheet.shown = false
+				onOpenSeries: id => {
+					videoSheet.shown = false;
 					root.page = "series";
 					root.openSeries(id, null);
 				}

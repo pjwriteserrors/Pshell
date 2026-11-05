@@ -243,6 +243,10 @@ Scope {
 			const item = Streams.series.find(entry => entry.name.toLowerCase() === name.toLowerCase());
 			if (item) Streams.open({ page: "series", series: item.id });
 		}
+		// one video and the series it is in
+		function video(id: string): void {
+			Streams.open({ page: "feed", video: { id: id } });
+		}
 		// the rule workshop, filled in: {"name", "sources": [ids], "rule": {…}}
 		function newSeries(preset: string): void {
 			Streams.open({ newSeries: JSON.parse(preset || "{}") });

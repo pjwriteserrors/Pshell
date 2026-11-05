@@ -606,6 +606,49 @@ class Daemon(extras.Extras):
         head = {**sources[0], "name": " ".join(source["name"] for source in sources), "footer": self.footer_of([source["id"] for source in sources]) if len(sources) > 1 else None}
         return self.view_parts(self.parts_of(head, ids, series["name"], "", {one: by_id[one] for one in ids}, others)) if ids else []
 
+    def video_series(self, args):
+        """Where one video belongs: the series that hold it, the suggestions and
+        the channel's own playlists it is in, each ready to be followed."""
+        video_id = args["video"]
+        followed = self.store.all(
+            """SELECT s.id, s.name, m.state FROM member m JOIN series s ON s.id = m.series
+               WHERE m.video = ? AND m.state IN ('sure', 'maybe') ORDER BY m.state = 'maybe', s.name COLLATE NOCASE""", video_id)
+        held = {row["playlist"].split(":", 1)[-1] for row in self.store.all("SELECT playlist FROM series WHERE playlist != ''")}
+        suggested, seen = [], set(held)
+        for item in self.discovered:
+            if video_id not in self.discovered_ids.get(item["key"], ()):
+                continue
+            seen.add(item["playlist"])
+            part = next((part for part in item["parts"] if video_id in part["ids"]), None) if len(item["parts"]) > 1 else None
+            suggested.append({
+                "key": item["key"], "name": item["name"], "sources": item["sources"], "sourceName": item["sourceName"], "why": item["why"][0] if item["why"] else "", "count": item["count"], "seconds": item["seconds"], "colors": item["colors"],
+                "part": {**part, "pictures": []} if part and not part["followed"] else None,
+            })
+        sources = [row["source"] for row in self.store.all("SELECT source FROM video_source WHERE video = ?", video_id)]
+        channels = {one for source in sources for one in self.group_of(source)}
+        playlists = []
+        for row in self.store.all("SELECT * FROM playlist_scan WHERE ids LIKE ? ORDER BY title COLLATE NOCASE", f'%"{video_id}"%'):
+            if row["id"] in seen or (channels and row["channel"] not in channels) or video_id not in loads(row["ids"], []):
+                continue
+            channel = self.store.one("SELECT name FROM source WHERE id = ?", row["channel"])
+            playlists.append({"id": row["id"], "channel": row["channel"], "channelName": channel["name"] if channel else "", "name": rules.clean_playlist_name(row["title"], channel["name"] if channel else ""), "count": len(loads(row["ids"], []))})
+        video = self.store.one(
+            """SELECT v.id, v.title, v.thumb, v.duration, v.published, v.kind, COALESCE(w.position, 0) AS position, COALESCE(w.watched, 0) AS watched,
+                      (SELECT vs.source FROM video_source vs JOIN source s ON s.id = vs.source WHERE vs.video = v.id ORDER BY s.hidden, s.kind != 'youtube', s.id LIMIT 1) AS source
+               FROM video v LEFT JOIN watch w ON w.video = v.id WHERE v.id = ?""", video_id)
+        if video:
+            video["thumb"] = self.thumb_of(video) or video["thumb"]
+        return {"video": video, "followed": followed, "suggested": suggested, "playlists": playlists}
+
+    def follow_playlist(self, args):
+        """One of a channel's playlists followed as a series, as a suggestion of it would be."""
+        row = self.store.one("SELECT * FROM playlist_scan WHERE id = ?", args["id"])
+        if not row:
+            raise net.Failure("That playlist is not known any more")
+        channel = self.store.one("SELECT name FROM source WHERE id = ?", row["channel"])
+        playlist = self.add_source({"input": f"https://www.youtube.com/playlist?list={row['id']}", "hidden": True})["id"]
+        return self.create_series({"name": rules.clean_playlist_name(row["title"], channel["name"] if channel else "") or row["title"], "sources": self.group_of(row["channel"]), "playlist": playlist, "rule": {}})
+
     def follow_part(self, args):
         """A part becomes a series: its words for what comes, its videos as they are."""
         created = self.create_series({"name": args["name"], "sources": self.group_of(args["source"]), "rule": args.get("rule") or {}, "taught": {one: "yes" for one in args.get("ids") or []}})
@@ -2707,7 +2750,7 @@ class Daemon(extras.Extras):
         table = {
             "add": self.add_source, "removeSource": self.remove_source, "updateSource": self.update_source, "createSeries": self.create_series, "updateSeries": self.update_series,
             "deleteSeries": self.delete_series, "unfollowSeries": self.unfollow_series, "teach": self.teach, "series": self.series_detail, "preview": self.preview, "play": self.play, "playLive": self.play_live, "tonight": self.tonight,
-            "mark": self.mark, "recap": self.recap, "review": self.review, "secrets": self.secrets, "signin": self.twitch_signin, "importFollows": self.import_follows, "settings": self.set_settings, "playlists": self.source_playlists, "followDiscovery": self.follow_discovery, "followPart": self.follow_part, "resolve": self.resolve, "sheets": self.sheets_view, "sheet": self.sheet_op, "aiStatus": self.ai_status, "aiTest": self.ai_test, "editNote": self.edit_note, "addNote": self.add_note, "notes": self.notes, "removeNote": self.remove_note, "subtitles": self.subtitles, "searchSeries": self.search_series, "indexSeries": self.index_series, "together": self.together_op, "pipFrom": self.pip_from, "playerPosition": self.player_position, "playerClosed": self.player_closed, "feed": self.feed, "seriesParts": self.series_parts, "soundLead": self.sound_lead, "recapVideo": self.recap_video, "mergeSources": self.merge_sources, "unmergeSource": self.unmerge_source,
+            "mark": self.mark, "recap": self.recap, "review": self.review, "secrets": self.secrets, "signin": self.twitch_signin, "importFollows": self.import_follows, "settings": self.set_settings, "playlists": self.source_playlists, "followDiscovery": self.follow_discovery, "followPart": self.follow_part, "resolve": self.resolve, "sheets": self.sheets_view, "sheet": self.sheet_op, "aiStatus": self.ai_status, "aiTest": self.ai_test, "editNote": self.edit_note, "addNote": self.add_note, "notes": self.notes, "removeNote": self.remove_note, "subtitles": self.subtitles, "searchSeries": self.search_series, "indexSeries": self.index_series, "together": self.together_op, "pipFrom": self.pip_from, "playerPosition": self.player_position, "playerClosed": self.player_closed, "feed": self.feed, "videoSeries": self.video_series, "followPlaylist": self.follow_playlist, "seriesParts": self.series_parts, "soundLead": self.sound_lead, "recapVideo": self.recap_video, "mergeSources": self.merge_sources, "unmergeSource": self.unmerge_source,
             **self.extra_ops(),
         }
         if op == "hello":
