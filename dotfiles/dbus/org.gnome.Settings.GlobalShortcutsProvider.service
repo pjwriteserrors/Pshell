@@ -1,0 +1,6 @@
+# The provider would ask xdg-desktop-portal (still waiting for portal-gnome,
+# which waits for this provider) for its Settings portal at startup: the
+# second 25 s D-Bus timeout of every login (see no-portal-loop.conf).
+[D-BUS Service]
+Name=org.gnome.Settings.GlobalShortcutsProvider
+Exec=/usr/bin/env GDK_DEBUG=no-portals ADW_DISABLE_PORTAL=1 /usr/lib/gnome-control-center-global-shortcuts-provider

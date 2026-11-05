@@ -20,6 +20,7 @@ link    spicetify/pacman              ~/.config/spicetify/Themes/custom/pacman  
 link    pc/spicetify_maker.py         ~/Scripts/themes/changer/spicetify_maker.py     host:pc
 link    pc/update_steam_theme.py      ~/Scripts/themes/changer/update_steam_theme.py  host:pc
 link    systemd/xdg-desktop-portal-gnome.service.d/no-portal-loop.conf ~/.config/systemd/user/xdg-desktop-portal-gnome.service.d/no-portal-loop.conf all
+link    dbus/org.gnome.Settings.GlobalShortcutsProvider.service ~/.local/share/dbus-1/services/org.gnome.Settings.GlobalShortcutsProvider.service all
 link    systemd/keyring-unlock.service ~/.config/systemd/user/keyring-unlock.service all
 link    systemd/openrgb-theme.service ~/.config/systemd/user/openrgb-theme.service    hook:openrgb
 link    systemd/quickshell-lighting.service ~/.config/systemd/user/quickshell-lighting.service hook:openrgb
