@@ -55,6 +55,14 @@ settings › Bar & wallpaper); `style/bar/BarZone.qml` maps an item id to
 what the style draws for it. Game mode (`GameMode`, plugin `game-mode`)
 follows the game windows `games_guard.py` reports.
 
+The task manager (`TaskManager`, plugins `task-manager`, `-bar`,
+`-alerts`, `-hints`; docs/taskmanager.md) is a daemon
+(`scripts/taskmgr/daemon.py`) that looks only as often as something shows
+what it knows: `TaskManager.watch(delta, gpu)` holds it awake, the open
+window makes it look every second. Other services ask it rather than
+reading `/proc` themselves (`windowLoad`, `hot`, `top`, `pauseWindow`,
+`endWindow`, `explainBusy`).
+
 App trays (`AppTray`, plugin `app-tray`, `core/views/tray/`) are strips on
 a screen's edge holding apps, launcher commands (and through them the
 plugins), shell lines, files, folders and links (`app-tray.json`). Each is
@@ -218,13 +226,32 @@ pause at punctuation and the countdown are kept in
 `~/.local/state/pshell/reader.json`.
 
 `find-mouse` shows where the pointer is: shaking it with no key or button
-held dims the screens but a circle around it, which closes in on the pointer
-and sends rings off until the shaking ends; a click ends it at once.
+held grows the arrow, more with every turn of the shake (up to five times
+its size, drawn from a still four times as big), and it shrinks back within
+a moment of the shaking ending; a click ends it at once. Not while the laser
+pointer is on.
 `scripts/input_watch.py` (the shell's one reader of mice, touchpads and
 keyboards, also for the shaken drag of the shelves and the RPG's counts) reads them for the
 shake, the screens take the pointer while the light is on to learn where it
-is. `scripts/ipc.sh findmouse find` asks for it from a key; the light then
-comes with the pointer's next move.
+is. `scripts/ipc.sh findmouse find` asks for it from a key; the arrow then
+grows with the pointer's next move.
+
+`parked-windows` parks windows on the right edge of a screen: a window
+dragged (niri's interactive move) and let go on the outermost pixels of that
+edge waits there as a tab, like a docked shelf; let go anywhere else, also on
+the next screen, it lands as usual. niri reports no drag, but a moved window
+has no workspace while it moves, so `Parking` maps a strip on every right
+edge (`ParkingEdge`) only then; niri gives the pointer to nobody during the
+move and to the strip once it is let go there. Parked windows wait on a
+workspace named `parked:<output>` (kept by niri over shell restarts, left out
+of the bar, stepped over going up and down, unnamed once empty). A tab
+(`ParkedTabs`) shows the icon, the icon with the title, or the window live
+(`window_shots.py`); per window by a right click, kept in
+`~/.local/state/pshell/parking.json`. Resting on a tab shows the window live
+beside it; a dot says the title changed since it was last looked at, a
+spinner that an agent works in it, urgent ones breathe. A click brings the
+window back (also `Niri.focusWindow`, so the taskbar and Alt+Tab do), a
+middle click closes it; `scripts/ipc.sh parking park|restore` from keys.
 
 `laser-pointer` turns the pointer into a laser dot for presentations
 (Mod+Alt+L in `dotfiles/niri/pshell.kdl`, `scripts/ipc.sh laser toggle`):

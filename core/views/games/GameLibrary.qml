@@ -95,10 +95,10 @@ ModalWindow {
 	}
 
 	// card sizes follow the screen
-	readonly property real cardH: Math.max(210, Math.min(330, root.height * 0.24))
+	readonly property real cardH: Math.max(210, Math.min(330, root.areaHeight * 0.24))
 	readonly property real cardW: Math.round(root.cardH * 2 / 3)
 	readonly property real bigW: Math.round(root.cardW * 1.32)
-	readonly property real side: Math.max(48, Math.round(root.width * 0.045))
+	readonly property real side: Math.max(48, Math.round(root.areaWidth * 0.045))
 
 	function select(i, quiet) {
 		if (root.list.length === 0) return;
@@ -168,7 +168,7 @@ ModalWindow {
 			return;
 		}
 		const card = root.grid ? gridView.currentItem : shelf.currentItem;
-		let from = Qt.rect(root.width / 2 - 100, root.height - 300, 200, 300);
+		let from = Qt.rect(root.areaWidth / 2 - 100, root.areaHeight - 300, 200, 300);
 		if (card) {
 			const point = card.mapToItem(curtain, 0, card.height - card.width * 1.5);
 			from = Qt.rect(point.x, point.y, card.width, card.width * 1.5);
@@ -260,7 +260,7 @@ ModalWindow {
 			if (focus !== "" && root.list.some(game => game.id === focus)) {
 				root.selectedId = focus;
 				shelf.positionViewAtIndex(root.index, ListView.Beginning);
-				if (withMenu) Qt.callLater(() => root.openMenu(root.side + 300, root.height / 2));
+				if (withMenu) Qt.callLater(() => root.openMenu(root.side + 300, root.areaHeight / 2));
 				if (withStats) Qt.callLater(() => stats.show(root.selected));
 			}
 		});
@@ -423,7 +423,7 @@ ModalWindow {
 				break;
 			case "y":
 			case "start":
-				root.openMenu(root.side + 300, root.height / 2);
+				root.openMenu(root.side + 300, root.areaHeight / 2);
 				break;
 			case "lb":
 				root.cycleFilter(-1);
@@ -510,7 +510,7 @@ ModalWindow {
 				root.cycleFilter(-1);
 				break;
 			case Qt.Key_Menu:
-				root.openMenu(root.side + 300, root.height / 2);
+				root.openMenu(root.side + 300, root.areaHeight / 2);
 				break;
 			case Qt.Key_Escape:
 				if (root.query !== "") {
@@ -708,7 +708,7 @@ ModalWindow {
 		}
 
 		StyledText {
-			visible: root.width >= 1700
+			visible: root.areaWidth >= 1700
 			text: `${root.filters[0]?.count ?? 0} games${root.totalMinutes > 60 ? ` · ${GameText.hours(root.totalMinutes)} h played` : ""}`
 			tone: Qt.rgba(1, 1, 1, 0.45)
 			surface: "transparent"
@@ -718,7 +718,7 @@ ModalWindow {
 		Field {
 			id: search
 
-			Layout.preferredWidth: (search.focused || root.query !== "" ? 340 : 240) * (root.width < 1500 ? 0.8 : 1)
+			Layout.preferredWidth: (search.focused || root.query !== "" ? 340 : 240) * (root.areaWidth < 1500 ? 0.8 : 1)
 			implicitHeight: 40
 			icon: "magnify"
 			placeholder: "Search games"
@@ -1256,7 +1256,7 @@ ModalWindow {
 		orientation: ListView.Horizontal
 		spacing: 22
 		leftMargin: root.side
-		rightMargin: root.width
+		rightMargin: root.areaWidth
 		model: games
 		highlightRangeMode: ListView.StrictlyEnforceRange
 		preferredHighlightBegin: root.side

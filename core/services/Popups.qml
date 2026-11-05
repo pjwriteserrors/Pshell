@@ -89,6 +89,7 @@ Singleton {
 		games: "games",
 		gamebar: "games-bar",
 		torrents: "torrents-bar",
+		taskmgr: "task-manager-bar",
 		streams: "streams-bar",
 		downloads: "downloads",
 		radial: "radial-menu",

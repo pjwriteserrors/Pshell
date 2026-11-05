@@ -207,7 +207,8 @@ Item {
 				property: "lift"
 				to: 0
 				duration: 460
-				easing.type: Easing.OutBounce
+				easing.type: Easing.BezierSpline
+				easing.bezierCurve: Motion.spatial
 			}
 		}
 
@@ -226,7 +227,8 @@ Item {
 				property: "scale"
 				to: 1
 				duration: 560
-				easing.type: Easing.OutElastic
+				easing.type: Easing.BezierSpline
+				easing.bezierCurve: Motion.spatial
 			}
 		}
 

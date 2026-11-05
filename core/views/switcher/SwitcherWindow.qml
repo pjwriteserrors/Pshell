@@ -521,7 +521,9 @@ PanelWindow {
 				break;
 			case Qt.Key_Delete:
 			case Qt.Key_Q:
-				if (Switcher.current) Switcher.closeWindow(Switcher.current.id);
+				// with Shift the whole app ends, as in the task manager
+				if (Switcher.current && (event.modifiers & Qt.ShiftModifier) && Plugins.on("task-manager")) TaskManager.endWindow(Switcher.current.id);
+				else if (Switcher.current) Switcher.closeWindow(Switcher.current.id);
 				break;
 			case Qt.Key_BracketLeft:
 				Switcher.cycleLayout(-1);

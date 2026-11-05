@@ -23,6 +23,31 @@ Topic {
 		memoryHistory: topic.rounded(SysStats.memoryHistory),
 		disks: SysStats.disks,
 		battery: SysStats.batteryAvailable ? { percent: SysStats.batteryPercent, charging: SysStats.charging } : null,
-		mouse: SysStats.mouseAvailable ? { name: SysStats.mouseName, level: SysStats.mouseLevel, text: SysStats.mouseText } : null
+		mouse: SysStats.mouseAvailable ? { name: SysStats.mouseName, level: SysStats.mouseLevel, text: SysStats.mouseText } : null,
+		// from the task manager: what takes the machine, and what can be ended from the phone
+		tasks: topic.tasks ? {
+			temp: TaskManager.temps.cpu ?? null,
+			gpu: TaskManager.hasGpu ? Math.round(TaskManager.gpu * 1000) / 1000 : null,
+			top: TaskManager.top.slice(0, 6).map(item => ({ key: item.key, name: item.name, kind: item.kind, cpu: item.c, mem: item.m, paused: TaskManager.isPaused(item.key) }))
+		} : null
 	}) : null
+
+	readonly property bool tasks: Plugins.on("task-manager") && TaskManager.connected
+	// the daemon keeps looking while the phone shows the page
+	onWantedChanged: if (Plugins.on("task-manager")) TaskManager.watch(topic.wanted ? 1 : -1, false)
+
+	function call(action, args, done) {
+		if (!topic.tasks) throw new Error("plugin-off");
+		const key = String(args.key ?? "");
+		switch (action) {
+		case "end":
+		case "kill":
+		case "pause":
+		case "resume":
+			if (key === "" || key === "pshell") throw new Error("Not this one");
+			TaskManager.act(key, action);
+			return {};
+		}
+		throw new Error("unknown-action");
+	}
 }

@@ -21,6 +21,7 @@ import qs.core.views.settings
 import qs.core.views.shelf
 import qs.core.views.ssh
 import qs.core.views.switcher
+import qs.core.views.taskmgr
 import qs.core.views.studio
 import qs.core.views.todos
 import qs.core.views.torrents
@@ -143,7 +144,7 @@ Scope {
 		when: switching.held
 	}
 
-	// the light on a pointer that is shaken
+	// the pointer grown while it is shaken
 	ScreenView {
 		view: "overlays/MouseFinder"
 		available: Plugins.on("find-mouse")
@@ -182,6 +183,19 @@ Scope {
 		view: "shelf/Shelves"
 		available: Plugins.on("shelves")
 		when: shelving.held
+	}
+
+	// windows parked on the right edges, and the edges while a window is dragged
+	ScreenView {
+		view: "parking/ParkedTabs"
+		available: Plugins.on("parked-windows")
+		when: Parking.any
+	}
+
+	ScreenView {
+		view: "overlays/ParkingEdge"
+		available: Plugins.on("parked-windows")
+		when: Parking.armed
 	}
 
 	// the app trays on the edges of the screens (by id: a changed tray is not built again)
@@ -439,6 +453,19 @@ Scope {
 		view: "streams/NextUpOverlay"
 		available: Plugins.on("streams")
 		when: !!Streams.upNext
+	}
+
+	// the task manager's window (Ctrl+Shift+Escape)
+	View {
+		view: "taskmgr/TaskManagerWindow"
+		available: Plugins.on("task-manager")
+		when: !TaskManager.surface.panelled && TaskManager.windowOpen
+	}
+
+	View {
+		view: "taskmgr/TaskManagerPanel"
+		available: Plugins.on("task-manager-bar")
+		when: Popups.wanted("taskmgr")
 	}
 
 	// under the bar, from the magnet in the bar

@@ -16,7 +16,7 @@ Drawer {
 	centered: true
 	contentHeight: view.implicitHeight
 
-	onPanelOpened: Printer.refresh()
+	onPanelSettled: Printer.refresh()
 
 	PrinterView {
 		id: view

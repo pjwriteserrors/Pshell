@@ -13,7 +13,7 @@ import Quickshell.Io
 //              threshold, torque, wheelInvert, wheelHires, thumbInvert,
 //              hapticOn, hapticLevel, force, seen } }
 //   rules:   [{ id, control, trigger, app, mods, action, feel, repeat, on }]
-//   options: { feedback, feedbackWave, holdMs, doubleMs, swipeDistance, thumbStep, apps }
+//   options: { feedback, feedbackWave, holdMs, doubleMs, swipeMm, thumbStep, apps }
 Singleton {
 	id: root
 
@@ -43,6 +43,8 @@ Singleton {
 	// the movement of the held control since it went down
 	property real moveX: 0
 	property real moveY: 0
+	// how far a swipe goes before it fires, in the same counts as moveX/moveY
+	property real moveReach: 470
 	property string moveControl: ""
 	signal fired(string rule, string control, string trigger)
 	signal pressedControl(string control, bool down)
@@ -1104,6 +1106,7 @@ Singleton {
 			root.moveControl = data.control;
 			root.moveX = data.dx;
 			root.moveY = data.dy;
+			if (data.reach) root.moveReach = data.reach;
 			break;
 		case "wheel":
 			root.wheeled(data.wheel, data.delta);
@@ -1276,6 +1279,10 @@ Singleton {
 		{ id: "shot-window", label: "Screenshot of the window", icon: "application_outline", group: "Screenshot", run: () => Screenshot.window() },
 		{ id: "picker", label: "Pick a colour", icon: "eyedropper", group: "Screenshot", run: () => Screenshot.picker() },
 		{ id: "ocr", label: "Copy text from the screen", icon: "text_recognition", group: "Screenshot", run: () => Screenshot.ocr() },
+		{ id: "window-switch-left", label: "Window switch left", icon: "arrow_left_right", group: "Windows", run: () => Niri.swapWindow("left") },
+		{ id: "window-switch-right", label: "Window switch right", icon: "arrow_left_right", group: "Windows", run: () => Niri.swapWindow("right") },
+		{ id: "window-switch-up", label: "Window switch up", icon: "arrow_up_down", group: "Windows", run: () => Niri.swapWindow("up") },
+		{ id: "window-switch-down", label: "Window switch down", icon: "arrow_up_down", group: "Windows", run: () => Niri.swapWindow("down") },
 		{ id: "play", label: "Play / pause", icon: "play_pause", group: "Media", run: () => Media.player?.togglePlaying() },
 		{ id: "next", label: "Next track", icon: "skip_next", group: "Media", run: () => Media.player?.next() },
 		{ id: "previous", label: "Previous track", icon: "skip_previous", group: "Media", run: () => Media.player?.previous() },

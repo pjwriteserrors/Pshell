@@ -107,6 +107,12 @@ Singleton {
 			entries.push({ id: "mic", label: Words.of("radial.mic", "Microphone"), icon: Audio.micIcon, active: Audio.micMuted, run: () => Audio.toggleMicMute() });
 		if (Plugins.on("filemanager"))
 			entries.push({ id: "files", label: Words.of("radial.files", "Files"), icon: "folder_outline", children: root.filesEntries });
+		if (Plugins.on("task-manager"))
+			entries.push({ id: "taskmgr", label: "Tasks", icon: "monitor_dashboard", children: [
+				{ id: "taskmgr-open", label: "Task manager", icon: "monitor_dashboard", run: () => TaskManager.open() },
+				{ id: "taskmgr-pause", label: "Pause app", icon: "pause", enabled: Niri.focusedId >= 0, run: () => TaskManager.pauseWindow(Niri.focusedId) },
+				{ id: "taskmgr-end", label: "End app", icon: "close_octagon_outline", hold: true, danger: true, enabled: Niri.focusedId >= 0, run: () => TaskManager.endWindow(Niri.focusedId) }
+			] });
 		entries.push({ id: "power", label: Words.of("radial.power", "Power"), icon: "power", children: root.powerEntries });
 		if (Plugins.on("ssh"))
 			entries.push({ id: "ssh", label: Words.of("radial.ssh", "SSH"), icon: "console", enabled: root.sshEntries.length > 0, children: root.sshEntries });

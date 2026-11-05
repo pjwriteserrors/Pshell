@@ -72,9 +72,9 @@ PanelWindow {
 		return ((delta % 360) + 540) % 360 - 180;
 	}
 
-	// ease out with a soft overshoot, for the staggered entries
+	// ease out with a hint of overshoot, for the staggered entries
 	function backOut(t) {
-		const c = 1.4;
+		const c = 0.7;
 		return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2);
 	}
 

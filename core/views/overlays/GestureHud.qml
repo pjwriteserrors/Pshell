@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Shapes
 import Quickshell
 import Quickshell.Wayland
 import qs.style.theme
@@ -8,10 +9,10 @@ import qs.style.widgets
 import qs.core.services
 import "../settings/mouse/Controls.js" as Controls
 
-// What the swipes of a held mouse button do, in the middle of the focused
-// screen: it comes after a moment of holding (a quick swipe never sees it),
-// the dot follows the mouse, the way it heads for lights up, and the one that
-// fires flashes as it all goes. Nothing to click – it only shows.
+// What the swipes of a held mouse button do, small in the middle of the
+// focused screen. It only comes when the button is held still for a moment
+// (a swipe made at once never sees it); each way's arc fills as the mouse
+// heads for it and is full where the swipe fires. Nothing to click.
 PanelWindow {
 	id: root
 
@@ -24,9 +25,20 @@ PanelWindow {
 	property string firedWay: ""
 	property real reveal: root.wanted ? 1 : 0
 
-	readonly property real distance: Mouse.option("swipeDistance", 70)
-	readonly property real nx: Mouse.moveControl === root.control ? Mouse.moveX / root.distance : 0
-	readonly property real ny: Mouse.moveControl === root.control ? Mouse.moveY / root.distance : 0
+	readonly property bool tracking: Mouse.moveControl === root.control
+	readonly property real nx: root.tracking ? Mouse.moveX / Math.max(1, Mouse.moveReach) : 0
+	readonly property real ny: root.tracking ? Mouse.moveY / Math.max(1, Mouse.moveReach) : 0
+
+	// the dot, eased toward the mouse every frame instead of re-animated per report
+	property real dotX: 0
+	property real dotY: 0
+
+	readonly property var ways: [
+		{ id: "up", dx: 0, dy: -1, angle: -90 },
+		{ id: "right", dx: 1, dy: 0, angle: 0 },
+		{ id: "down", dx: 0, dy: 1, angle: 90 },
+		{ id: "left", dx: -1, dy: 0, angle: 180 }
+	]
 
 	function way(trigger) {
 		const rule = Mouse.effective(root.control, trigger, Mouse.focusApp);
@@ -37,9 +49,30 @@ PanelWindow {
 		return ["up", "down", "left", "right"].some(t => Mouse.effective(control, t, Mouse.focusApp));
 	}
 
+	// 0..1 along one way; only the axis the mouse mostly goes counts
+	function toward(entry) {
+		const along = root.nx * entry.dx + root.ny * entry.dy;
+		const across = Math.abs(entry.dx !== 0 ? root.ny : root.nx);
+		return along > across ? Math.max(0, Math.min(1, along)) : 0;
+	}
+
+	readonly property var heading: {
+		if (root.firedWay !== "") return root.ways.find(entry => entry.id === root.firedWay) ?? null;
+		let best = null, value = 0.2;
+		for (const entry of root.ways) {
+			const t = root.toward(entry);
+			if (t > value && root.way(entry.id)) {
+				best = entry;
+				value = t;
+			}
+		}
+		return best;
+	}
+	readonly property var headingInfo: root.heading ? root.way(root.heading.id) : null
+
 	Behavior on reveal {
-		SpatialAnim {
-			duration: root.wanted ? Motion.long : Motion.short
+		Anim {
+			duration: root.wanted ? Motion.short : Motion.micro
 		}
 	}
 
@@ -51,6 +84,8 @@ PanelWindow {
 			if (down && root.hasSwipes(control)) {
 				root.control = control;
 				root.firedWay = "";
+				root.dotX = 0;
+				root.dotY = 0;
 				showSoon.restart();
 			} else if (!down && control === root.control) {
 				showSoon.stop();
@@ -58,24 +93,38 @@ PanelWindow {
 			}
 		}
 		function onFired(rule, control, trigger) {
-			if (control !== root.control || !root.wanted) return;
+			if (control !== root.control) return;
+			showSoon.stop();
+			if (!root.wanted) return;
 			root.firedWay = trigger;
 			goSoon.restart();
 		}
 	}
 
+	// only for a hesitating hand: a swipe already under way goes without it
 	Timer {
 		id: showSoon
 
-		interval: 230
-		onTriggered: if (Mouse.pressed[root.control]) root.wanted = true
+		interval: 380
+		onTriggered: {
+			if (Mouse.pressed[root.control] && Math.hypot(root.nx, root.ny) < 0.4) root.wanted = true;
+		}
 	}
 
 	Timer {
 		id: goSoon
 
-		interval: 260
+		interval: 220
 		onTriggered: root.wanted = false
+	}
+
+	FrameAnimation {
+		running: root.visible
+		onTriggered: {
+			const k = Math.min(1, frameTime * 22);
+			root.dotX += (Math.max(-1, Math.min(1, root.nx)) - root.dotX) * k;
+			root.dotY += (Math.max(-1, Math.min(1, root.ny)) - root.dotY) * k;
+		}
 	}
 
 	anchors.top: true
@@ -94,150 +143,134 @@ PanelWindow {
 	Item {
 		id: hud
 
+		readonly property real size: 132
+		readonly property real rim: 56
+		readonly property real sweep: 58
+
 		anchors.centerIn: parent
-		width: 460
-		height: 360
-		opacity: Math.min(1, root.reveal)
-		scale: 0.85 + 0.15 * root.reveal
+		width: hud.size
+		height: hud.size
+		opacity: root.reveal
+		scale: 0.92 + 0.08 * root.reveal
 
-		// a soft disc behind it all, so it reads on any window
 		Rectangle {
-			anchors.centerIn: parent
-			width: 470
-			height: 370
-			radius: 185
-			color: Qt.alpha(Theme.base, 0.72)
+			anchors.fill: parent
+			radius: width / 2
+			color: Qt.alpha(Theme.base, 0.88)
 			border.width: 1
-			border.color: Qt.alpha(Theme.text, 0.06)
-			scale: 0.9 + 0.1 * root.reveal
-		}
-
-		// the middle: the button that is held
-		Rectangle {
-			id: middle
-
-			anchors.centerIn: parent
-			width: 86
-			height: 86
-			radius: 43
-			color: Qt.alpha(Theme.base, 0.92)
-			border.width: 1.5
-			border.color: Qt.alpha(Theme.primary, 0.5)
-
-			Glyph {
-				anchors.centerIn: parent
-				icon: Controls.byId(root.control)?.icon ?? "mouse"
-				size: 30
-				color: Theme.primary
-			}
-
-			// the mouse, as it moves
-			Rectangle {
-				width: 16
-				height: 16
-				radius: 8
-				z: 3
-				color: Theme.primary
-				border.width: 3
-				border.color: Qt.alpha(Theme.primary, 0.3)
-				x: middle.width / 2 - 8 + Math.max(-1.3, Math.min(1.3, root.nx)) * 120
-				y: middle.height / 2 - 8 + Math.max(-1.3, Math.min(1.3, root.ny)) * 105
-
-				Behavior on x {
-					SpatialAnim {
-						duration: Motion.micro
-					}
-				}
-				Behavior on y {
-					SpatialAnim {
-						duration: Motion.micro
-					}
-				}
-			}
+			border.color: Qt.alpha(Theme.text, 0.08)
 		}
 
 		Repeater {
-			model: [
-				{ id: "up", dx: 0, dy: -1 }, { id: "down", dx: 0, dy: 1 },
-				{ id: "left", dx: -1, dy: 0 }, { id: "right", dx: 1, dy: 0 }
-			]
+			model: root.ways
 
-			delegate: Rectangle {
-				id: pill
+			delegate: Item {
+				id: slot
 
 				required property var modelData
-				required property int index
-				// slides out from the middle, one after the other
-				property real out: 0
-				readonly property var info: root.way(pill.modelData.id)
-				readonly property real toward: Math.max(0, Math.min(1, root.nx * pill.modelData.dx + root.ny * pill.modelData.dy))
-				readonly property bool firing: root.firedWay === pill.modelData.id
+				readonly property var info: root.way(slot.modelData.id)
+				readonly property bool fired: root.firedWay === slot.modelData.id
+				readonly property real fill: slot.fired ? 1 : root.toward(slot.modelData)
+				readonly property real rad: slot.modelData.angle * Math.PI / 180
 
-				x: hud.width / 2 - width / 2 + pill.modelData.dx * 158 * pill.out
-				y: hud.height / 2 - height / 2 + pill.modelData.dy * 128 * pill.out
-				opacity: pill.out
+				anchors.fill: parent
+				visible: slot.info !== null
 
-				Connections {
-					target: root
+				Shape {
+					anchors.fill: parent
+					preferredRendererType: Shape.CurveRenderer
 
-					function onWantedChanged() {
-						if (root.wanted) {
-							pill.out = 0;
-							slide.restart();
+					ShapePath {
+						strokeColor: Qt.alpha(Theme.text, 0.12)
+						strokeWidth: 3
+						fillColor: "transparent"
+						capStyle: ShapePath.RoundCap
+
+						PathAngleArc {
+							centerX: hud.size / 2
+							centerY: hud.size / 2
+							radiusX: hud.rim
+							radiusY: hud.rim
+							startAngle: slot.modelData.angle - hud.sweep / 2
+							sweepAngle: hud.sweep
+						}
+					}
+
+					ShapePath {
+						strokeColor: Qt.alpha(Theme.primary, slot.fill > 0.01 ? 1 : 0)
+						strokeWidth: slot.fired ? 5 : 3
+						fillColor: "transparent"
+						capStyle: ShapePath.RoundCap
+
+						PathAngleArc {
+							centerX: hud.size / 2
+							centerY: hud.size / 2
+							radiusX: hud.rim
+							radiusY: hud.rim
+							startAngle: slot.modelData.angle - hud.sweep * slot.fill / 2
+							sweepAngle: hud.sweep * slot.fill
 						}
 					}
 				}
 
-				SequentialAnimation {
-					id: slide
-
-					PauseAnimation {
-						duration: pill.index * 35
-					}
-					NumberAnimation {
-						target: pill
-						property: "out"
-						to: 1
-						duration: Motion.long
-						easing.type: Easing.BezierSpline
-						easing.bezierCurve: Motion.spatial
-					}
+				Glyph {
+					x: hud.size / 2 + Math.cos(slot.rad) * 34 - width / 2
+					y: hud.size / 2 + Math.sin(slot.rad) * 34 - height / 2
+					icon: slot.info?.icon || ({ up: "arrow_up", down: "arrow_down", left: "arrow_left", right: "arrow_right" })[slot.modelData.id]
+					size: 18
+					surface: "transparent"
+					color: slot.fill > 0.2 ? Theme.primary : Theme.textMuted
+					scale: 1 + 0.15 * slot.fill
 				}
-				width: Math.max(120, label.implicitWidth + 58)
-				height: 46
-				radius: 23
-				visible: pill.info !== null
-				color: pill.firing ? Theme.primary : Qt.tint(Qt.alpha(Theme.base, 0.92), Qt.alpha(Theme.primary, pill.toward * 0.35))
-				border.width: 1.5
-				border.color: Qt.alpha(Theme.primary, 0.25 + pill.toward * 0.75)
-				scale: pill.firing ? 1.15 : 1 + pill.toward * 0.08
+			}
+		}
 
-				Behavior on scale {
-					SpatialAnim {
-						duration: Motion.short
-					}
+		// the held button, and the mouse as it moves
+		Glyph {
+			anchors.centerIn: parent
+			icon: Controls.byId(root.control)?.icon ?? "mouse"
+			size: 16
+			surface: "transparent"
+			color: Theme.textFaint
+			opacity: 1 - Math.min(1, Math.hypot(root.dotX, root.dotY) * 3)
+		}
+
+		Rectangle {
+			x: hud.size / 2 + root.dotX * 18 - width / 2
+			y: hud.size / 2 + root.dotY * 18 - height / 2
+			width: 8
+			height: 8
+			radius: 4
+			color: Theme.primary
+			opacity: Math.min(1, Math.hypot(root.dotX, root.dotY) * 4)
+		}
+
+		// what the way headed for does
+		Rectangle {
+			anchors.horizontalCenter: parent.horizontalCenter
+			anchors.top: parent.bottom
+			anchors.topMargin: 10
+			width: label.implicitWidth + 24
+			height: 28
+			radius: height / 2
+			color: root.firedWay !== "" ? Theme.primary : Qt.alpha(Theme.base, 0.88)
+			opacity: root.headingInfo ? 1 : 0
+
+			Behavior on opacity {
+				Anim {
+					duration: Motion.micro
 				}
+			}
 
-				Row {
-					anchors.centerIn: parent
-					spacing: 8
+			StyledText {
+				id: label
 
-					Glyph {
-						anchors.verticalCenter: parent.verticalCenter
-						icon: pill.info?.icon || ({ up: "arrow_up", down: "arrow_down", left: "arrow_left", right: "arrow_right" })[pill.modelData.id]
-						size: 17
-						color: pill.firing ? Theme.onPrimary : Theme.primary
-					}
-
-					StyledText {
-						id: label
-
-						anchors.verticalCenter: parent.verticalCenter
-						text: pill.info?.label ?? ""
-						tone: pill.firing ? Theme.onPrimary : Theme.text
-						font.weight: Font.DemiBold
-					}
-				}
+				anchors.centerIn: parent
+				text: root.headingInfo?.label ?? ""
+				tone: root.firedWay !== "" ? Theme.onPrimary : Theme.text
+				surface: "transparent"
+				font.pixelSize: Theme.size.label
+				font.weight: Font.DemiBold
 			}
 		}
 	}

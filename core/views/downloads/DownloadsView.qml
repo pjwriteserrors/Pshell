@@ -512,7 +512,7 @@ ColumnLayout {
 					add: Transition {
 						ParallelAnimation {
 							NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Motion.long; easing.type: Easing.OutCubic }
-							NumberAnimation { property: "scale"; from: 0.92; to: 1; duration: Motion.long; easing.type: Easing.OutBack }
+							NumberAnimation { property: "scale"; from: 0.92; to: 1; duration: Motion.long; easing.type: Easing.BezierSpline; easing.bezierCurve: Motion.spatial }
 						}
 					}
 					remove: Transition {

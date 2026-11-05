@@ -104,7 +104,8 @@ Item {
 			property: "value"
 			to: 1
 			duration: 420
-			easing.type: Easing.OutElastic
+			easing.type: Easing.BezierSpline
+			easing.bezierCurve: Motion.spatial
 		}
 	}
 

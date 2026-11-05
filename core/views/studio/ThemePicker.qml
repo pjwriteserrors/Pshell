@@ -616,8 +616,8 @@ ModalWindow {
 		}
 	}
 
-	readonly property real panelWidth: Math.min(1440, root.width - 120)
-	readonly property real panelHeight: Math.min(900, root.height - 170)
+	readonly property real panelWidth: Math.min(1440, root.areaWidth - 120)
+	readonly property real panelHeight: Math.min(900, root.areaHeight - 170)
 	readonly property color previewBg: root.previewPaletteData && root.previewPaletteData.background ? root.previewPaletteData.background : Theme.layer2
 	readonly property color previewFg: root.previewPaletteData && root.previewPaletteData.foreground ? root.previewPaletteData.foreground : Theme.text
 	readonly property bool paletteReady: root.previewPaletteStatus === "ready"

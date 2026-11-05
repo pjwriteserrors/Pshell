@@ -51,9 +51,14 @@ Row {
 					bar: root.bar
 					padding: 6
 					implicitHeight: group.height
-					tooltip: task.hovered ? `${Niri.titleOf(task.modelData.id)}  ·  ${task.live.output}` : ""
+					// its app keeps more than half a core busy (task-manager-hints)
+					readonly property bool hot: Plugins.on("task-manager-hints") && TaskManager.hot.includes(Number(task.modelData.id))
+					readonly property var load: task.hovered && Plugins.on("task-manager") ? TaskManager.windowLoad[String(task.modelData.id)] ?? null : null
+
+					tooltip: task.hovered ? `${Niri.titleOf(task.modelData.id)}  ·  ${task.live.output}${task.load ? `  ·  ${TaskManager.percent(task.load[0], 0)} CPU · ${Format.bytes(task.load[1])}` : ""}` : ""
 					onClicked: Niri.focusWindow(task.modelData.id)
 					onMiddleClicked: Niri.closeWindow(task.modelData.id)
+					onRightClicked: if (Plugins.on("task-manager")) TaskManager.showWindow(task.modelData.id)
 
 					// dragged onto an app tray, the app goes in
 					DragHandler {
@@ -104,6 +109,43 @@ Row {
 							Behavior on scale {
 								SpatialAnim {
 									duration: Motion.short
+								}
+							}
+						}
+
+						Rectangle {
+							anchors.right: parent.right
+							anchors.top: parent.top
+							anchors.topMargin: (task.height - 18) / 2 - 2
+							anchors.rightMargin: -3
+							width: 7
+							height: 7
+							radius: 3.5
+							color: Theme.warning
+							border.width: 1.5
+							border.color: Theme.bg
+							scale: task.hot ? 1 : 0
+							visible: scale > 0.01
+
+							Behavior on scale {
+								SpatialAnim {
+									duration: Motion.medium
+								}
+							}
+
+							SequentialAnimation on opacity {
+								running: task.hot
+								loops: Animation.Infinite
+								alwaysRunToEnd: true
+								NumberAnimation {
+									to: 0.55
+									duration: 900
+									easing.type: Easing.InOutSine
+								}
+								NumberAnimation {
+									to: 1
+									duration: 900
+									easing.type: Easing.InOutSine
 								}
 							}
 						}

@@ -16,9 +16,9 @@ Drawer {
 
 	onPanelOpened: {
 		Torrents.wake();
-		Torrents.fetchDetails();
 		view.takeFocus();
 	}
+	onPanelSettled: Torrents.fetchDetails()
 
 	TorrentsView {
 		id: view

@@ -108,7 +108,7 @@ Rectangle {
 		StyledText {
 			anchors.left: parent.left
 			anchors.top: parent.top
-			text: `${root.kind === "cpu" ? "CPU" : "RAM"} ${Math.round(root.kind === "cpu" ? SysStats.cpu : SysStats.memory)}%`
+			text: `${root.kind === "cpu" ? "CPU" : "RAM"} ${Math.round((root.kind === "cpu" ? SysStats.cpu : SysStats.memory) * 100)}%`
 			font.pixelSize: Math.max(8, root.unit * 0.18)
 			font.weight: Font.DemiBold
 			tabular: true

@@ -13,6 +13,10 @@
 	{ "id": "bluetooth", "name": "Bluetooth", "category": "Panels" },
 	{ "id": "sound", "name": "Sound", "category": "Panels" },
 	{ "id": "system-monitor", "name": "System monitor", "category": "Panels" },
+	{ "id": "task-manager", "name": "Task manager", "category": "Panels", "icon": "monitor_dashboard", "preview": {"on": ["bar"], "ipc": ["taskmgr open"], "wait": 4} },
+	{ "id": "task-manager-bar", "name": "Task manager under the bar", "category": "Panels", "default": false, "requires": ["task-manager"], "icon": "monitor_dashboard", "preview": {"on": ["bar", "clock"], "ipc": ["taskmgr open"], "wait": 4} },
+	{ "id": "task-manager-alerts", "name": "Task manager alerts", "category": "Panels", "requires": ["task-manager"], "icon": "bell_alert_outline" },
+	{ "id": "task-manager-hints", "name": "Busy windows", "category": "Panels", "requires": ["task-manager"], "icon": "fire" },
 	{ "id": "notifications", "name": "Notifications", "category": "Panels" },
 	{ "id": "dnd", "name": "Do not disturb", "category": "Panels", "requires": ["notifications"] },
 	{ "id": "calendar", "name": "Calendar", "category": "Panels" },
@@ -99,6 +103,7 @@
 	{ "id": "streams-bar", "name": "Streams in the bar", "category": "Desktop", "requires": ["streams"], "icon": "play_circle", "preview": {"on": ["bar", "clock"], "ipc": ["streams open"]} },
 	{ "id": "torrents-bar", "name": "Torrents under the bar", "category": "Desktop", "requires": ["torrents"], "icon": "magnet", "preview": {"on": ["bar", "clock"], "ipc": ["torrents open"]} },
 	{ "id": "app-tray", "name": "App tray", "category": "Desktop", "default": false, "icon": "dock_window" },
+	{ "id": "parked-windows", "name": "Parked windows", "category": "Desktop", "icon": "dock_right" },
 
 	{ "id": "clipboard-hints", "name": "Clipboard hints", "category": "Automation" },
 	{ "id": "agents", "name": "Agent status", "category": "Automation", "icon": "robot" },

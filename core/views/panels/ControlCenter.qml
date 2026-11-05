@@ -37,6 +37,8 @@ Drawer {
 		root.page = Popups.page !== "" && root.offers(Popups.page) ? Popups.page : "main";
 		root.userHost = `${Host.user}@${Host.hostname}`;
 		root.uptime = Host.uptime();
+	}
+	onPanelSettled: {
 		Audio.refreshSinks();
 		if (Plugins.on("backlight")) Brightness.refresh(false);
 		Ddc.refresh();
@@ -1243,6 +1245,15 @@ Drawer {
 					title: Words.of("control.system", "System")
 					subtitle: SysStats.cpuText
 					onBack: root.page = "main"
+
+					IconButton {
+						visible: Plugins.on("task-manager")
+						icon: "monitor_dashboard"
+						onClicked: {
+							Popups.close();
+							TaskManager.open("performance");
+						}
+					}
 				}
 
 				Repeater {

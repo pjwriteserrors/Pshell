@@ -44,9 +44,9 @@ Drawer {
 		root.query = "";
 		search.text = "";
 		root.selected = 0;
-		Clipboard.refresh();
 		Qt.callLater(() => search.focusInput());
 	}
+	onPanelSettled: Clipboard.refresh()
 	onFilteredChanged: root.selected = Math.max(0, Math.min(root.selected, root.filtered.length - 1))
 
 	ColumnLayout {

@@ -435,8 +435,8 @@ ModalWindow {
 
 		anchors.centerIn: parent
 		anchors.verticalCenterOffset: 25
-		width: Math.min(1400, root.width - 120)
-		height: Math.min(860, root.height - 170)
+		width: Math.min(1400, root.areaWidth - 120)
+		height: Math.min(860, root.areaHeight - 170)
 		radius: Theme.radius.huge + 6
 		color: Theme.base
 

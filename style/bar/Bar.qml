@@ -75,7 +75,7 @@ PanelWindow {
 	// keep awake (quick settings)
 	IdleInhibitor {
 		window: root
-		enabled: KeepAwake.active
+		enabled: KeepAwake.holding
 	}
 
 	Timer {

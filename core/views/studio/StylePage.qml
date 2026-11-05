@@ -265,8 +265,8 @@ ModalWindow {
 		anchors.horizontalCenter: parent.horizontalCenter
 		anchors.top: parent.top
 		anchors.topMargin: Math.max(85, (parent.height - 900) / 2 + 25)
-		width: Math.min(760, root.width - 120)
-		height: Math.min(root.height - 170, Math.max(420, 22 * 2 + 46 + 20 + 18 * 2 + noticeColumn.height + rowColumn.height + 16))
+		width: Math.min(760, root.areaWidth - 120)
+		height: Math.min(root.areaHeight - 170, Math.max(420, 22 * 2 + 46 + 20 + 18 * 2 + noticeColumn.height + rowColumn.height + 16))
 		radius: Theme.radius.huge + 6
 		color: Theme.base
 
