@@ -276,7 +276,7 @@ ColumnLayout {
 		readonly property real cellW: Math.min(210, (cross.width - 16) / 3)
 		readonly property real cellH: 70
 		readonly property bool live: Mouse.moveControl === root.control && !!Mouse.pressed[root.control]
-		readonly property real distance: Mouse.option("swipeDistance", 70)
+		readonly property real distance: Mouse.moveReach
 		readonly property real nx: cross.live ? Mouse.moveX / cross.distance : 0
 		readonly property real ny: cross.live ? Mouse.moveY / cross.distance : 0
 

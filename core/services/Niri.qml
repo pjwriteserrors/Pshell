@@ -302,6 +302,43 @@ Singleton {
 		sequence.running = true;
 	}
 
+	// the focused window trades places with the active window of the monitor
+	// in that direction (left, right, up, down) and keeps the focus; with an
+	// empty workspace there it just moves over
+	function swapWindow(direction) {
+		const spaces = Object.values(root.workspaceMap);
+		const here = spaces.find(ws => ws.is_focused);
+		const mine = here?.active_window_id;
+		if (mine === null || mine === undefined) return;
+		const screens = Quickshell.screens;
+		const from = screens.find(s => String(s.name) === String(here.output));
+		if (!from) return;
+		const horizontal = direction === "left" || direction === "right";
+		const sign = direction === "left" || direction === "up" ? -1 : 1;
+		let target = null, best = Infinity;
+		for (const s of screens) {
+			if (s === from) continue;
+			const dx = (s.x + s.width / 2) - (from.x + from.width / 2);
+			const dy = (s.y + s.height / 2) - (from.y + from.height / 2);
+			const along = sign * (horizontal ? dx : dy);
+			if (along <= 0) continue;
+			const score = along + 2 * Math.abs(horizontal ? dy : dx);
+			if (score < best) {
+				best = score;
+				target = s;
+			}
+		}
+		if (!target) return;
+		const there = spaces.find(ws => String(ws.output) === String(target.name) && ws.is_active);
+		const theirs = there?.active_window_id;
+		const steps = [];
+		if (theirs !== null && theirs !== undefined)
+			steps.push(["niri", "msg", "action", "move-window-to-monitor", "--id", String(theirs), String(here.output)]);
+		steps.push(["niri", "msg", "action", "move-window-to-monitor", "--id", String(mine), String(target.name)]);
+		steps.push(["niri", "msg", "action", "focus-window", "--id", String(mine)]);
+		root.inOrder(steps);
+	}
+
 	function focusWorkspaceRelative(direction) {
 		Quickshell.execDetached(["niri", "msg", "action", direction > 0 ? "focus-workspace-down" : "focus-workspace-up"]);
 	}

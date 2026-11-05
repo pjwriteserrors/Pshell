@@ -370,6 +370,10 @@ Scope {
 		target: "mouse"
 		enabled: Plugins.on("mouse")
 
+		// Solaar's settings and rules come over, Solaar stops
+		function takeover(): void {
+			Mouse.takeOver();
+		}
 		function open(): void {
 			NiriSettings.page = "mouse";
 			Popups.withFocusedScreen(screen => Popups.openModal("niri", screen));
@@ -968,6 +972,24 @@ Scope {
 		function down(): void {
 			Niri.focusWorkspaceRelative(1);
 			Haptics.play("workspace");
+		}
+	}
+
+	// window switch: trade places with the window on the monitor in that direction
+	IpcHandler {
+		target: "window"
+
+		function switchLeft(): void {
+			Niri.swapWindow("left");
+		}
+		function switchRight(): void {
+			Niri.swapWindow("right");
+		}
+		function switchUp(): void {
+			Niri.swapWindow("up");
+		}
+		function switchDown(): void {
+			Niri.swapWindow("down");
 		}
 	}
 

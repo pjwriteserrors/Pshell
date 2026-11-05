@@ -76,6 +76,8 @@ class Engine:
         self.pending = None  # (control, rules, token) waiting for a second click
         self.token = 0
         self.thumb_acc = 0.0
+        # the mouse's DPI now, so a swipe is as long on the desk at any speed
+        self.dpi = lambda: 1000.0
 
     # ── setup ───────────────────────────────────────────────────────────
     def configure(self, rules, options):
@@ -92,7 +94,14 @@ class Engine:
 
     @property
     def swipe_distance(self):
-        return float(self.options.get("swipeDistance", 70))
+        """How far a swipe goes before it fires, in the sensor's counts:
+        `swipeMm` millimetres on the desk at the DPI the mouse has now."""
+        mm = float(self.options.get("swipeMm", 12))
+        try:
+            dpi = float(self.dpi() or 1000)
+        except Exception:
+            dpi = 1000.0
+        return max(20.0, mm * dpi / 25.4)
 
     @property
     def thumb_step(self):
@@ -229,7 +238,7 @@ class Engine:
             if lasting(state.held.get("action")):
                 self._fire(state.held, control, "hold", "end")
             return
-        if state.swiped or state.travel > self.swipe_distance:
+        if state.swiped or state.travel > self.swipe_distance * 0.5:
             return
         if "double" in state.rules:
             self.token += 1
@@ -271,11 +280,15 @@ class Engine:
         state.dx += dx
         state.dy += dy
         state.travel = max(state.travel, math.hypot(state.dx, state.dy))
-        self.live("move", control=state.control, dx=state.dx, dy=state.dy)
+        distance = self.swipe_distance
+        self.live("move", control=state.control, dx=state.dx, dy=state.dy, reach=distance)
         if state.done_swipe or state.held:
             return
-        distance = self.swipe_distance
-        if abs(state.dx) < distance and abs(state.dy) < distance:
+        major, minor = max(abs(state.dx), abs(state.dy)), min(abs(state.dx), abs(state.dy))
+        if major < distance:
+            return
+        # a diagonal waits until one way is clearly meant
+        if major < 1.6 * minor and state.travel < 2 * distance:
             return
         if abs(state.dx) >= abs(state.dy):
             direction = "right" if state.dx > 0 else "left"

@@ -33,7 +33,13 @@ back and forward, the gesture button and the haptic sense panel (left and
 right stay the mouse's own). Triggers of a button: click, double click,
 hold, a swipe up/down/left/right (held and moved), the wheel or the thumb
 wheel turned while it is held; of the thumb wheel: turned either way, once
-per step. The most exact rule wins (app and keys, then app, then keys, then
+per step. A swipe fires after `swipeMm` millimetres on the desk (12 by
+default, turned into counts with the DPI the mouse has now) and only once
+one way clearly leads (1.6 times the other axis, or twice the distance
+travelled); the daemon sends the distance along with each `move`
+(`reach`), which the gesture HUD and the cross on the page fill up to. The
+HUD (`GestureHud.qml`) only comes when the button is held still for 380 ms.
+The most exact rule wins (app and keys, then app, then keys, then
 everywhere); a control with no rule in the focused app does what it does on
 its own (the daemon presses the button through uinput, scrolls sideways
 for the thumb wheel, switches the ratchet for SmartShift).

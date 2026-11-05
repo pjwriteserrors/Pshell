@@ -265,6 +265,7 @@ class Daemon:
         self.solaar = solaar_running()
         self.output = None
         self.engine = Engine(self.fire, self.native, self.loop.schedule, self.live)
+        self.engine.dpi = self.current_dpi
         self.app = ""
         self.windows = {}
         self.windows_known = False
@@ -763,11 +764,27 @@ class Daemon:
         if kind == "fired":
             emit("fired", **data)
         elif kind == "move" and (self.watching or self.config["options"].get("hud", True)):
-            # at most 30 a second
+            # at most 60 a second; the last one always goes out
             now = time.monotonic()
-            if now - self.last_move > 0.033:
+            wait = 0.016 - (now - self.last_move)
+            if wait <= 0:
                 self.last_move = now
+                self.move_pending = None
                 emit("move", **data)
+                return
+            if self.move_pending is None:
+                self.loop.schedule(wait, self.flush_move)
+            self.move_pending = data
+
+    def flush_move(self):
+        data, self.move_pending = self.move_pending, None
+        if data is not None:
+            self.last_move = time.monotonic()
+            emit("move", **data)
+
+    def current_dpi(self):
+        mouse = self.current()
+        return ((mouse.state.get("dpi") or {}).get("value") if mouse else None) or 1000
 
     def current(self):
         for mouse in self.mice.values():
@@ -1620,13 +1637,14 @@ def solaar_running():
             args = (proc / "cmdline").read_bytes().split(b"\0")
         except OSError:
             continue
-        if any(os.path.basename(arg) == b"solaar" for arg in args[:2]):
+        # also wrappers named solaar-* (solaar-online)
+        if any(os.path.basename(arg).startswith(b"solaar") for arg in args[:2]):
             return True
     return False
 
 
 def stop_solaar():
-    subprocess.run(["pkill", "-f", "^[^ ]*python[0-9.]* [^ ]*/solaar( |$)"], check=False)
+    subprocess.run(["pkill", "-f", "^[^ ]*python[0-9.]* [^ ]*/solaar(-[a-z]+)?( |$)"], check=False)
     subprocess.run(["pkill", "-x", "solaar"], check=False)
 
 
@@ -1707,6 +1725,24 @@ KEY_WORDS = {"KEY_LEFTMETA": "super", "KEY_RIGHTMETA": "super", "KEY_LEFTCTRL": 
              "KEY_LEFTSHIFT": "shift", "KEY_RIGHTSHIFT": "shift", "KEY_LEFTALT": "alt", "KEY_RIGHTALT": "altgr"}
 
 
+# `qs -c shell ipc call <target> <function>` in a Solaar rule: the shell's own action
+IPC_ACTIONS = {("lock", "lock"): "lock", ("radial", "toggle"): "radial", ("launcher", "toggle"): "launcher",
+               ("screenshot", "region"): "shot-region", ("laser", "toggle"): "laser",
+               ("clipboard", "toggle"): "clipboard"}
+
+
+def ipc_action(command):
+    try:
+        args = shlex.split(command)
+    except ValueError:
+        return None
+    if not args or os.path.basename(args[0]) != "qs" or "call" not in args:
+        return None
+    at = args.index("call")
+    shell_id = IPC_ACTIONS.get(tuple(args[at + 1:at + 3]))
+    return {"kind": "shell", "id": shell_id} if shell_id and len(args) == at + 3 else None
+
+
 def script_keys(command):
     """A helper script that only presses keys through ydotool (what Solaar
     rules on Wayland are often made of) becomes those keys: pressed and let
@@ -1785,7 +1821,7 @@ def convert_solaar_rule(items):
             mods = [SOLAAR_MODS[m] for m in (value if isinstance(value, list) else [value]) if m in SOLAAR_MODS]
         elif name == "Execute":
             command = value if isinstance(value, str) else " ".join(shlex.quote(str(v)) for v in value)
-            action = script_keys(command) or {"kind": "command", "command": command}
+            action = ipc_action(command) or script_keys(command) or {"kind": "command", "command": command}
         elif name == "KeyPress":
             keys = value[0] if isinstance(value, list) and value and isinstance(value[0], list) else value
             keys = keys if isinstance(keys, list) else [keys]

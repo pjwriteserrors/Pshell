@@ -105,8 +105,8 @@ SettingsPage {
 				pressed: Mouse.pressed
 				ratchet: root.st.smartshift?.ratchet ?? true
 				moving: Mouse.moveControl
-				moveX: Mouse.moveX / Mouse.option("swipeDistance", 70)
-				moveY: Mouse.moveY / Mouse.option("swipeDistance", 70)
+				moveX: Mouse.moveX / Mouse.moveReach
+				moveY: Mouse.moveY / Mouse.moveReach
 				opacity: root.has ? 1 : 0.4
 				onPicked: control => root.pick(control)
 
@@ -406,13 +406,14 @@ SettingsPage {
 		}
 
 		ValueSlider {
-			from: 30
-			to: 200
-			step: 5
+			from: 4
+			to: 30
+			step: 1
+			unit: " mm"
 			icon: "gesture_swipe"
 			label: "Swipe distance"
-			value: Mouse.option("swipeDistance", 70)
-			onMoved: v => Mouse.setOption("swipeDistance", v)
+			value: Mouse.option("swipeMm", 12)
+			onMoved: v => Mouse.setOption("swipeMm", v)
 		}
 	}
 
