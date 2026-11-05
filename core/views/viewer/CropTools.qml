@@ -181,6 +181,17 @@ Item {
 		if (apply && q) root.setQuad(q);
 	}
 
+	// one of the changes of the geometry back (Recipe.edits ids: turn, crop, quad …)
+	function revert(id) {
+		const edit = Recipe.edits(Viewer.recipe).find(e => e.id === id);
+		if (!edit) return;
+		root.commitGeometry(edit.revert());
+		if (id === "crop") {
+			root.aspectId = "free";
+			root.aspect = 0;
+		}
+	}
+
 	function resetGeometry() {
 		const next = Recipe.copy(Viewer.recipe);
 		next.geometry = Geo.defaults();
@@ -511,6 +522,21 @@ Item {
 				model: root.aspects()
 				boundsBehavior: Flickable.StopAtBounds
 
+				footer: Item {
+					width: uncrop.visible ? uncrop.width + 6 : 0
+					height: 32
+
+					Chip {
+						id: uncrop
+
+						x: 6
+						visible: root.geometry.crop.w < 1 - 1e-5 || root.geometry.crop.h < 1 - 1e-5 || root.geometry.crop.x > 1e-5 || root.geometry.crop.y > 1e-5
+						text: "Uncrop"
+						icon: "backup_restore"
+						onClicked: root.revert("crop")
+					}
+				}
+
 				delegate: Chip {
 					required property var modelData
 
@@ -546,6 +572,11 @@ Item {
 					icon: "flip_horizontal"
 					checked: root.geometry.flip
 					onClicked: root.mirror()
+				}
+
+				RevertButton {
+					shown: root.geometry.rot !== 0 || root.geometry.flip
+					onClicked: root.revert("turn")
 				}
 
 				Rectangle {
@@ -614,6 +645,11 @@ Item {
 					icon: "vector_square"
 					checked: !!root.geometry.quad
 					onClicked: root.startCorners()
+				}
+
+				RevertButton {
+					shown: !!root.geometry.quad
+					onClicked: root.revert("quad")
 				}
 
 				IconButton {

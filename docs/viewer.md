@@ -10,8 +10,16 @@ off`); without a running shell `default.py open` starts the app before.
 
     scripts/ipc.sh viewer open <path> | edit <path> [adjust|crop|markup] | paste
                           | from <path> <screen> <x> <y> <w> <h> | next | previous
-                          | mode <view|adjust|crop|markup> | act <action> | save
-                          | recipe <json> | state | toggle | close
+                          | mode <view|adjust|crop|markup|retouch|compare> | act <action>
+                          | save | last | slideshow [path] | cull [path]
+                          | apply <paths> | collage <paths> | recipe <json> | state
+                          | toggle | close
+
+`act` does what a button does: auto, look:<id>, horizon, page, aspect:<id>,
+turn[:left], mirror, cutout, faces, similar, describe, split, compare,
+mark, slideshow[:off], print, export, copy, wallpaper, edits, more,
+revert:<edit id>, fit, actual. Every `: void` function of the target can be
+put on a key in Pshell settings › Keybinds.
 
 ## Looking
 
@@ -63,11 +71,43 @@ colour.
   with a `host`), on the result so far; its annotations stay part of the
   recipe and move along when the crop or the turn changes later
   (`Geometry.remapItems`). `Markings.qml` draws them in the viewer.
+- **Remove things** (menu): paint over what should go; it is filled from
+  around it (the helper's `inpaint`). The strokes stay in the recipe, the
+  filled picture in `~/.cache/pshell/viewer/retouch/` (made again from the
+  strokes when the cache is gone).
+- **Blur faces and number plates** (menu): found (YuNet, downloaded once;
+  tesseract for plates) and pixelated as drawings that can be moved or
+  taken away.
+- **Border**: a width and a colour, or filled up to a shape (1:1, 4:5 …)
+  with the whole picture kept.
 - **Cut out** (menu): what is in front is kept, the rest goes see-through –
   with rembg (set up once from the toast into
   `~/.local/share/pshell/viewer-venv`, model in `viewer-models`), otherwise
   roughly with OpenCV's GrabCut. The mask is in
   `~/.cache/pshell/viewer/masks/`.
+
+Every change can be taken back on its own: each slider has its arrow back
+(and a double-click), each section a Reset, the crop bar Uncrop and the
+ways back for turns and a page's corners, and the *Edited* pill lists every
+change of the picture with one click to take it back. The wheel never
+changes a value, it scrolls the panel. The zoom pill goes to 100 % and back.
+
+## Many pictures
+
+Shift+1…5 gives stars (1…5 while sorting out), Ctrl+F makes it a favourite
+of the file manager, the menu tags it. *Sort out* walks the folder: ↑ or K
+keeps, ↓ or X rejects and goes on; the rejected go to the trash together.
+*Show only* filters by stars, kept or not sorted yet (stars and flags are
+kept in `~/.local/state/pshell/viewer-ratings.json`). M marks a picture:
+two to four marked are compared side by side, zoomed and moved together;
+marked ones make a collage (justified rows, beside the first) or take the
+changes copied with Ctrl+Shift+C (Ctrl+Shift+V lays them on one; the
+window walks the marked ones and saves each copy). F5 is a slideshow over
+the whole screen (Space pauses, 3–15 s a picture, shuffled if wanted); it
+is a player of the desktop while it runs (`scripts/viewer/slides.py`,
+MPRIS `pshell_pictures`), so the phone, the watch and media keys steer it.
+*Similar pictures here* walks the ones of the folder that look alike
+(perceptual hashes, cached).
 
 ## Saving
 
@@ -77,7 +117,9 @@ picture's format (PNG where it was see-through), with what the camera
 wrote (EXIF, ICC, XMP; turned upright). Ctrl+Shift+S asks first: format
 (JPEG, PNG, WebP, AVIF) and quality with the size it will have, a smaller
 size, a watermark, without camera data or without the place, another
-folder. The copy remembers its recipe: opened, it offers to change it again
+folder, or 2× / 4× larger (Real-ESRGAN once it is set up from the dialog,
+otherwise smoothly enlarged). Ctrl+P prints on paper through CUPS (the
+printer, the paper, fitted or filling, how many). The copy remembers its recipe: opened, it offers to change it again
 from the original. The result is a grab of the developed picture at full
 size (so it is exactly what is seen), encoded by the helper.
 
@@ -99,7 +141,21 @@ opens the clipboard's picture (saved into `~/Pictures`).
   can be walked; a saved screenshot's *Open* opens here.
 - The clipboard history has a button on pictures that opens a copy here.
 - Notifications' pictures open here with a click; pictures of mails and
-  WhatsApp open here (the pencil adjusts them).
+  WhatsApp open here (the pencil adjusts them, and a WhatsApp picture's
+  saved copy is offered back to its chat).
+- `>pictures` (`>img`) in the launcher: the pictures opened lately and the
+  session's screenshots, filtered by the words after it.
+- The radial menu: *Edit last* (the newest screenshot) and *Edit image*
+  (the clipboard's); `ipc viewer last` for a key.
+- A pin's pencil draws on it here (the pin stays).
+- Files: several pictures can be compared, made into a collage, shown as
+  a slideshow, sorted out or given the copied changes; a picture opened
+  grows out of its card. Sharing from Files uses the same targets.
+- Dropping pictures on the window opens them; dragging the fitted picture
+  out of it hands over the file (the result, when it is changed). The menu
+  puts it on the shelf.
+- Describe it (the file manager's Ollama picture model) writes alt text in
+  the facts; *Ask AI about it* opens the launcher's chat with the picture.
 
 ## The helper
 

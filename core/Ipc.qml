@@ -1311,6 +1311,28 @@ Scope {
 		function state(): string {
 			return JSON.stringify({ open: Viewer.windowOpen, path: Viewer.path, index: Viewer.index, count: Viewer.files.length, mode: Viewer.mode, edited: Viewer.edited, saved: Viewer.saved, busy: Viewer.busy, recipe: Viewer.recipe, info: Viewer.info, error: Viewer.error });
 		}
+		// the newest screenshot, to draw on
+		function last(): void {
+			if (Screenshot.shots.length > 0) Viewer.open(Screenshot.shots[0].path, { mode: "markup", list: Screenshot.shots.map(shot => shot.path) });
+		}
+		// a slideshow of a folder (or of what is open), F5 in the window
+		function slideshow(path: string): void {
+			if (path) Viewer.open(path);
+			Qt.callLater(() => Viewer.slideshow(true));
+		}
+		// sorting a folder out: up keeps, down rejects
+		function cull(path: string): void {
+			if (path) Viewer.open(path);
+			Viewer.culling = true;
+		}
+		// the copied changes onto these pictures (paths separated by newlines)
+		function apply(paths: string): void {
+			Viewer.batch(paths.split("\n").filter(p => p));
+		}
+		// a collage of these pictures (paths separated by newlines)
+		function collage(paths: string): void {
+			Viewer.collage(paths.split("\n").filter(p => p));
+		}
 		// a recipe set from outside (testing, scripts): JSON of Recipe.js
 		function recipe(json: string): void {
 			try {

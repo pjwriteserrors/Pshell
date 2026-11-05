@@ -23,8 +23,10 @@ Item {
 	// the plain picture, pressed and held (before / after)
 	property bool original: false
 	property bool exporting: false
-	// before / after side by side: where the line is (0..1 of the width, 0: off)
+	// before / after side by side: where the line is (0..1 of the width, 0: off);
+	// dragging the line asks for a new place (the owner keeps the value)
 	property real split: 0
+	signal splitDragged(real value)
 	property bool markingsShown: true
 	readonly property Item exported: root.front ? root.front.content : null
 	readonly property Item frontSlot: root.front
@@ -35,6 +37,8 @@ Item {
 	readonly property bool sharp: !!root.front && root.front.develop.sharp
 	property bool interacting: false
 	signal pointerMoved
+	// a fitted picture dragged: it is to go out as a file
+	signal dragOut
 
 	property Item front: slotA
 	readonly property Item behind: root.front === slotA ? slotB : slotA
@@ -316,7 +320,8 @@ Item {
 			Develop {
 				id: develop
 
-				source: slot.path
+				// what was taken out is in a filled copy of the picture
+				source: slot.recipe?.retouch?.base || slot.path
 				sourceWidth: slot.sourceWidth
 				sourceHeight: slot.sourceHeight
 				recipe: slot.recipe
@@ -460,7 +465,7 @@ Item {
 			onPositionChanged: event => {
 				if (!pressed || !divider.f) return;
 				const p = mapToItem(root, event.x, event.y);
-				root.split = Math.max(0.02, Math.min(0.98, (p.x - divider.f.x) / Math.max(1, divider.f.content.width * divider.f.s)));
+				root.splitDragged(Math.max(0.02, Math.min(0.98, (p.x - divider.f.x) / Math.max(1, divider.f.content.width * divider.f.s))));
 			}
 		}
 	}
@@ -533,15 +538,29 @@ Item {
 			if (!pressed) return;
 			const dx = event.x - mouse.lastX, dy = event.y - mouse.lastY;
 			if (Math.abs(dx) + Math.abs(dy) > 0) mouse.moved = true;
+			// nothing to move: the picture itself is taken along
+			if (root.front?.fitted && !mouse.dragged && Math.hypot(event.x - mouse.pressX, event.y - mouse.pressY) > 14 && Viewer.mode === "view") {
+				mouse.dragged = true;
+				root.dragOut();
+				return;
+			}
+			if (mouse.dragged) return;
 			root.interacting = true;
 			root.panBy(dx, dy);
 			mouse.lastX = event.x;
 			mouse.lastY = event.y;
 		}
+		property real pressX: 0
+		property real pressY: 0
+		property bool dragged: false
+
 		onPressed: event => {
 			mouse.lastX = event.x;
 			mouse.lastY = event.y;
+			mouse.pressX = event.x;
+			mouse.pressY = event.y;
 			mouse.moved = false;
+			mouse.dragged = false;
 		}
 		onReleased: root.interacting = false
 		onDoubleClicked: event => root.actualSize(event.x, event.y)

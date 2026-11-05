@@ -10,6 +10,7 @@ in a folder of its own and asks scripts/viewer/viewer.py about it.
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -325,6 +326,161 @@ class Encode(Case):
                         "target": self.path(f"real.{fmt}"), "metadata": False})["bytes"]
             self.assertAlmostEqual(guess / real, 1, delta=0.25, msg=fmt)
             self.assertLess(took, 2.5, fmt)
+
+
+class Inpaint(Case):
+    def test_blob_goes(self):
+        x = np.linspace(0, 1, 400)[None, :, None]
+        y = np.linspace(0, 1, 300)[:, None, None]
+        gradient = np.concatenate([x * 0.8 + 0.1 + y * 0 , y * 0.6 + 0.2 + x * 0, (x + y) * 0.4 + 0.1], axis=2)
+        clean = (np.clip(gradient, 0, 1) * 255).astype(np.uint8)
+        dirty = clean.copy()
+        yy, xx = np.mgrid[0:300, 0:400]
+        blob = (yy - 150) ** 2 + (xx - 200) ** 2 < 30 ** 2
+        dirty[blob] = 0
+        Image.fromarray(dirty).save(self.path("g.png"))
+        out = ask({"op": "inpaint", "path": self.path("g.png"), "out": self.path("filled.jpg"),
+                   "strokes": [{"points": [[0.5, 0.5]], "radius": 36 / 400}]})
+        self.assertEqual(out["path"], self.path("filled.jpg"))
+        with Image.open(out["path"]) as image:
+            self.assertEqual((image.format, image.size), ("JPEG", (400, 300)))
+            filled = np.asarray(image.convert("RGB")).astype(int)
+        self.assertLess(np.abs(filled[blob] - clean[blob].astype(int)).mean(), 12)
+        self.assertGreater(filled[blob].mean(), 60)  # no black left
+        # thin strokes, and a previous result taken further
+        again = ask({"op": "inpaint", "path": out["path"], "out": self.path("again.png"),
+                     "strokes": [{"points": [[0.1, 0.1], [0.3, 0.2]], "radius": 0.005}]})
+        with Image.open(again["path"]) as image:
+            self.assertEqual(image.format, "PNG")
+        self.assertIn("error", ask({"op": "inpaint", "path": self.path("g.png"), "out": self.path("x.jpg"), "strokes": []}))
+
+
+class Upscale(Case):
+    def test_lanczos(self):
+        viewer_esrgan = viewer.esrgan
+        viewer.esrgan = lambda: None
+        try:
+            self.assertEqual(ask({"op": "upscalestatus"})["engine"], "lanczos")
+            Image.new("RGBA", (40, 30), (200, 10, 10, 128)).save(self.path("u.png"))
+            out = ask({"op": "upscale", "path": self.path("u.png"), "factor": 4, "out": self.path("big.png")})
+            self.assertEqual(out["engine"], "lanczos")
+            with Image.open(out["path"]) as image:
+                self.assertEqual((image.size, image.mode), ((160, 120), "RGBA"))
+            self.assertIn("error", ask({"op": "upscale", "path": self.path("u.png"), "factor": 3, "out": self.path("x.png")}))
+        finally:
+            viewer.esrgan = viewer_esrgan
+
+
+class Faces(Case):
+    def test_plate(self):
+        if not shutil.which("tesseract"):
+            self.skipTest("no tesseract")
+        image = Image.new("RGB", (1200, 800), (90, 100, 110))
+        draw = ImageDraw.Draw(image)
+        draw.rectangle((300, 300, 900, 500), fill=(150, 40, 40))
+        draw.rectangle((420, 420, 780, 500), fill=(250, 250, 250), outline=(0, 0, 0), width=4)
+        draw.text((440, 428), "B AB 1234", font=imagetools.font(60), fill=(0, 0, 0))
+        draw.text((80, 80), "Hello there", font=imagetools.font(40), fill=(255, 255, 255))
+        image.save(self.path("car.jpg"), quality=92)
+        plates = viewer.find_plates(image, lambda value, text="": None)
+        self.assertEqual(len(plates), 1)
+        x, y, w, h = viewer.padded(plates[0])
+        self.assertTrue(x < 440 / 1200 and x + w > 760 / 1200 and y < 440 / 800 and y + h > 480 / 800)
+        words = [("B", (10, 10, 20, 30), "a"), ("AB", (40, 10, 40, 30), "a"), ("1234", (90, 10, 80, 30), "a"), ("Hi", (0, 90, 30, 30), "b")]
+        self.assertEqual(viewer.plates_in_words(words), [(10, 10, 160, 30)])
+        if os.path.exists(os.path.join(viewer.MODELS, viewer.YUNET)):
+            out = ask({"op": "faces", "path": self.path("car.jpg")})
+            self.assertEqual(out["faces"], [])
+            self.assertEqual(len(out["plates"]), 1)
+
+    def test_plate_words(self):
+        for text in ("B AB 1234", "M-XY 99E", "KA AB 12H", "AB12CD3"):
+            self.assertTrue(viewer.plate_like(text), text)
+        for text in ("HELLO", "2024", "Hello there", "ABCDEFGHIJ1"):
+            self.assertFalse(viewer.plate_like(text), text)
+
+
+class Collage(Case):
+    def test_layouts(self):
+        sizes = [(400, 300), (300, 400), (500, 250), (300, 300), (640, 360)]
+        paths = []
+        for n, size in enumerate(sizes):
+            Image.new("RGB", size, (40 * n, 200 - 30 * n, 90)).save(self.path(f"c{n}.jpg"))
+            paths.append(self.path(f"c{n}.jpg"))
+        # stored sideways: counted the right way up
+        Image.new("RGB", (400, 300), (10, 10, 10)).save(self.path("side.jpg"), exif=camera_exif(6).tobytes())
+        paths.append(self.path("side.jpg"))
+        out = ask({"op": "collage", "paths": paths, "layout": "auto", "gap": 10, "background": "#ffffff", "width": 1200,
+                   "out": self.path("auto.jpg")})
+        self.assertNotIn("error", out)
+        with Image.open(out["path"]) as image:
+            self.assertEqual((image.format, image.width, image.height), ("JPEG", 1200, out["height"]))
+            self.assertGreater(min(image.getpixel((5, 5))), 250)
+            # every row reaches the right margin
+            column = np.asarray(image.convert("L"))[:, 1200 - 12]
+            self.assertLess((column < 250).mean(), 1)
+        rows = viewer.justified_rows([4 / 3, 3 / 4, 2, 1, 16 / 9, 3 / 4], 1180, 10, 1180 / 3.2)
+        self.assertEqual(rows[0][0], 0)
+        self.assertEqual(rows[-1][1], 6)
+        grid = ask({"op": "collage", "paths": paths, "layout": "grid", "gap": 0, "background": "transparent", "width": 900,
+                    "out": self.path("grid.png")})
+        with Image.open(grid["path"]) as image:
+            self.assertEqual((image.format, image.mode, image.width), ("PNG", "RGBA", 900))
+            self.assertEqual(image.height, 2 * 225)  # cells of the middle shape, 4:3
+        row = ask({"op": "collage", "paths": paths[:2], "layout": "row", "gap": 0, "width": 1000, "out": self.path("row.jpg")})
+        self.assertEqual(row["height"], round(1000 / (4 / 3 + 3 / 4)))
+        column = ask({"op": "collage", "paths": paths[:2], "layout": "column", "gap": 0, "width": 300, "out": self.path("col.jpg")})
+        self.assertEqual(column["height"], 225 + 400)
+        self.assertIn("error", ask({"op": "collage", "paths": [], "out": self.path("n.jpg")}))
+
+
+class Similar(Case):
+    def test_copies_and_strangers(self):
+        photo = scene(6, 600, 400)
+        save_array(photo, self.path("a.jpg"))
+        Image.open(self.path("a.jpg")).resize((300, 200), Image.Resampling.LANCZOS).save(self.path("a small.webp"), quality=70)
+        brighter = np.clip(photo * 1.08 + 0.03, 0, 1)
+        save_array(brighter, self.path("a brighter.png"))
+        save_array(scene(7, 600, 400), self.path("other.jpg"))
+        Path(self.path("notes.txt")).write_text("x")
+        out = ask({"op": "similar", "path": self.path("a.jpg")})
+        names = [os.path.basename(s["path"]) for s in out["similar"]]
+        self.assertIn("a small.webp", names)
+        self.assertNotIn("other.jpg", names)
+        self.assertNotIn("a.jpg", names)
+        self.assertEqual(out["similar"], sorted(out["similar"], key=lambda s: s["distance"]))
+        self.assertIn({"path": self.path("a small.webp")}, out["duplicates"])
+        cache = json.loads(Path(viewer.HASHES).read_text())
+        self.assertIn(self.path("other.jpg"), cache)
+        self.assertEqual(ask({"op": "similar", "path": self.path("a.jpg")}), out)  # from the cache, the same
+
+
+class Describe(Case):
+    def test_mocked(self):
+        import ai
+        saved = ai.status, ai.generate
+        asked = {}
+
+        def generate(model, prompt, images=(), **kwargs):
+            with Image.open(images[0]) as image:
+                asked.update(model=model, prompt=prompt, image=image.size)
+            return '"A red square."'
+
+        try:
+            Image.new("RGB", (2000, 1000), (200, 0, 0)).save(self.path("r.png"))
+            ai.status = lambda feature="", picked=None: {"running": True, "vision": "moondream:latest", "text": ""}
+            ai.generate = generate
+            out = ask({"op": "describe", "path": self.path("r.png")})
+            self.assertEqual(out["text"], "A red square.")
+            self.assertEqual(asked["image"], (1024, 512))
+            ask({"op": "describe", "path": self.path("r.png"), "question": "What colour is it?"})
+            self.assertIn("What colour is it?", asked["prompt"])
+            ai.status = lambda feature="", picked=None: {"running": True, "vision": "", "text": "qwen3"}
+            self.assertIn("picture model", ask({"op": "describe", "path": self.path("r.png")})["error"])
+            ai.status = lambda feature="", picked=None: {"running": False, "vision": "", "text": ""}
+            self.assertIn("Ollama", ask({"op": "describe", "path": self.path("r.png")})["error"])
+        finally:
+            ai.status, ai.generate = saved
 
 
 class Watermark(Case):

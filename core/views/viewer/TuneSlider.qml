@@ -4,7 +4,8 @@ import qs.style.widgets
 
 // A slider for a change that can go either way: the fill grows from the
 // middle (or from the left with `from: 0`), the thumb follows the pointer
-// 1:1, the wheel nudges, a double-click puts it back. `moved` while it is
+// 1:1, a double-click or the arrow beside the value puts it back; the
+// wheel scrolls past it and never changes it. `moved` while it is
 // dragged (the picture follows live), `committed` when it is let go.
 Item {
 	id: root
@@ -61,7 +62,36 @@ Item {
 		tone: root.changed ? Theme.text : Theme.textMuted
 	}
 
+	// back to how it was, for this one change
+	IconButton {
+		id: revert
+
+		anchors.right: valueLabel.left
+		anchors.rightMargin: 4
+		anchors.verticalCenter: glyph.verticalCenter
+		width: 22
+		height: 22
+		icon: "backup_restore"
+		iconSize: 14
+		opacity: root.changed && !root.dragging ? 1 : 0
+		visible: opacity > 0.01
+		scale: root.changed ? 1 : 0.6
+		onClicked: {
+			root.moved(root.origin);
+			root.committed(root.origin);
+		}
+
+		Behavior on opacity {
+			Anim {}
+		}
+		Behavior on scale {
+			SpatialAnim {}
+		}
+	}
+
 	StyledText {
+		id: valueLabel
+
 		anchors.right: parent.right
 		anchors.verticalCenter: glyph.verticalCenter
 		text: root.valueText
@@ -166,20 +196,6 @@ Item {
 			root.moved(root.origin);
 			root.committed(root.origin);
 		}
-		onWheel: wheel => {
-			const v = Math.max(root.from, Math.min(root.to, root.value + (wheel.angleDelta.y > 0 ? 1 : -1) * root.step * 5));
-			root.moved(v);
-			wheelCommit.value = v;
-			wheelCommit.restart();
-		}
 	}
 
-	Timer {
-		id: wheelCommit
-
-		property real value: 0
-
-		interval: 400
-		onTriggered: root.committed(wheelCommit.value)
-	}
 }

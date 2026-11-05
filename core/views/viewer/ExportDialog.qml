@@ -73,15 +73,22 @@ Item {
 	function resize() {
 		if (root.sizeMode === "longest") return { longest: root.longest };
 		if (root.sizeMode === "percent") return { percent: root.percent };
+		if (root.sizeMode === "larger") return { percent: root.larger * 100, upscale: true };
 		return null;
 	}
+
+	// larger than it is: Real-ESRGAN when it is set up, otherwise smoothly
+	property int larger: 2
+	property var upscaler: null
+
+
 
 	function watermark() {
 		return root.marked && root.markText.trim() ? { text: root.markText.trim(), position: root.markWhere, opacity: root.markOpacity, size: 0.05 } : null;
 	}
 
 	function options() {
-		return { format: root.format, quality: Math.round(root.quality), resize: root.resize(), watermark: root.watermark(), metadata: root.metadata, location: root.location };
+		return { format: root.format, quality: Math.round(root.quality), resize: root.sizeMode === "larger" ? null : root.resize(), upscale: root.sizeMode === "larger" ? root.larger : 0, watermark: root.watermark(), metadata: root.metadata, location: root.location };
 	}
 
 	function measure() {
@@ -104,7 +111,10 @@ Item {
 
 	onFormatChanged: root.measure()
 	onQualityChanged: root.measure()
-	onSizeModeChanged: root.measure()
+	onSizeModeChanged: {
+		root.measure();
+		if (root.sizeMode === "larger" && !root.upscaler) Viewer.request("upscalestatus", {}, data => root.upscaler = data);
+	}
 	onLongestChanged: root.measure()
 	onPercentChanged: root.measure()
 
@@ -227,13 +237,48 @@ Item {
 			Segmented {
 				width: parent.width
 				height: 34
-				options: [{ value: "full", label: "Full size" }, { value: "longest", label: `${root.longest} px` }, { value: "percent", label: `${root.percent} %` }]
+				options: [{ value: "full", label: "Full size" }, { value: "longest", label: `${root.longest} px` }, { value: "percent", label: `${root.percent} %` }, { value: "larger", label: `${root.larger}× larger` }]
 				current: root.sizeMode
 				onSelected: value => root.sizeMode = value
 			}
 
 			Row {
-				visible: root.sizeMode !== "full"
+				visible: root.sizeMode === "larger"
+				spacing: 8
+
+				Chip {
+					text: "2×"
+					selected: root.larger === 2
+					onClicked: root.larger = 2
+				}
+
+				Chip {
+					text: "4×"
+					selected: root.larger === 4
+					onClicked: root.larger = 4
+				}
+
+				StyledText {
+					anchors.verticalCenter: parent.verticalCenter
+					text: root.upscaler?.installed ? "with Real-ESRGAN" : "smoothly enlarged"
+					tone: Theme.textSubtle
+					font.pixelSize: Theme.size.small
+				}
+
+				TextButton {
+					visible: !!root.upscaler && !root.upscaler.installed
+					text: "Sharper (set up Real-ESRGAN, ~45 MB)"
+					variant: "ghost"
+					onActivated: Viewer.request("upscaleinstall", {}, (data, error) => {
+						if (error) return Viewer.fail(error);
+						root.upscaler = { installed: true, engine: "realesrgan" };
+						Viewer.say("Real-ESRGAN is set up", "check");
+					})
+				}
+			}
+
+			Row {
+				visible: root.sizeMode === "longest" || root.sizeMode === "percent"
 				spacing: 6
 
 				Repeater {

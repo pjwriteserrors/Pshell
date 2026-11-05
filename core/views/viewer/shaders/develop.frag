@@ -38,6 +38,7 @@ layout(std140, binding = 0) uniform buf {
 	float vignette;
 	float grain;
 	float sharpen;
+	float denoise;
 	float curves;
 	float masked;
 	float clip;
@@ -79,6 +80,22 @@ void main() {
 	float alpha = texelColor.a;
 	vec3 c = straight(texelColor);
 
+	// noise smoothed away where neighbours are alike, edges kept (a small bilateral)
+	if (denoise > 0.0 && qt_TexCoord0.x >= split) {
+		vec3 sum = c;
+		float weight = 1.0;
+		float sigma = mix(0.02, 0.16, denoise);
+		for (int i = 0; i < 8; i++) {
+			float a = float(i) * 0.785398;
+			vec2 off = vec2(cos(a), sin(a)) * texel * (1.0 + denoise * 1.5);
+			vec3 n = straight(texture(source, st + off));
+			vec3 d = n - c;
+			float w = exp(-dot(d, d) / (2.0 * sigma * sigma));
+			sum += n * w;
+			weight += w;
+		}
+		c = mix(c, sum / weight, min(1.0, denoise * 1.4));
+	}
 	if (sharpen > 0.0 && qt_TexCoord0.x >= split) {
 		vec3 around = straight(texture(source, st + vec2(texel.x, 0.0))) + straight(texture(source, st - vec2(texel.x, 0.0)))
 			+ straight(texture(source, st + vec2(0.0, texel.y))) + straight(texture(source, st - vec2(0.0, texel.y)));

@@ -327,7 +327,9 @@ Rectangle {
 			icon: "image_edit_outline"
 			variant: "tonal"
 			onClicked: {
-				Viewer.open(root.shown, { mode: "adjust" });
+				// a picture of a WhatsApp chat can go back to it once it is saved
+				const chat = WhatsApp.openId ? WhatsApp.openChat : null;
+				Viewer.open(root.shown, { mode: "adjust", replyTo: chat });
 				Mail.picture = "";
 			}
 		}

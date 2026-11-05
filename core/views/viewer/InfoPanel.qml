@@ -14,6 +14,32 @@ Item {
 	id: root
 
 	property var histogram: null
+	property string description: ""
+	property bool describing: false
+	signal describeAsked
+	// the picture's main colours (the helper's palette), asked when it changes
+	property var palette: []
+
+	Connections {
+		target: Viewer
+
+		function onShownPathChanged() {
+			root.palette = [];
+			if (Viewer.shownPath && !Viewer.info?.animated) paletteTimer.restart();
+		}
+	}
+
+	Timer {
+		id: paletteTimer
+
+		interval: 300
+		onTriggered: {
+			const path = Viewer.shownPath;
+			Viewer.request("palette", { path: path, count: 6 }, data => {
+				if (data && Viewer.shownPath === path) root.palette = data.colors ?? [];
+			});
+		}
+	}
 	readonly property var info: Viewer.info ?? ({})
 	readonly property var file: Viewer.current ?? ({})
 
@@ -88,6 +114,81 @@ Item {
 			Histogram {
 				width: parent.width
 				values: root.histogram
+			}
+
+			// its colours: a click copies one
+			Row {
+				spacing: 6
+				visible: root.palette.length > 0
+
+				Repeater {
+					model: root.palette
+
+					delegate: Rectangle {
+						required property string modelData
+
+						width: 34
+						height: 34
+						radius: 10
+						color: modelData
+						border.width: 1
+						border.color: Theme.outline
+						scale: swatch.containsMouse ? 1.1 : 1
+
+						Behavior on scale {
+							SpatialAnim {}
+						}
+
+						MouseArea {
+							id: swatch
+
+							anchors.fill: parent
+							hoverEnabled: true
+							cursorShape: Qt.PointingHandCursor
+							onClicked: {
+								Quickshell.execDetached(["wl-copy", parent.modelData]);
+								Viewer.say(`${parent.modelData} copied`, "eyedropper_variant");
+							}
+						}
+					}
+				}
+			}
+
+			// in words, for alt text
+			Column {
+				width: parent.width
+				spacing: 6
+
+				Row {
+					spacing: 8
+
+					TextButton {
+						text: root.describing ? "Looking at it…" : (root.description ? "Describe again" : "Describe it")
+						icon: "creation"
+						variant: "tonal"
+						busy: root.describing
+						onActivated: root.describeAsked()
+					}
+
+					TextButton {
+						visible: root.description !== ""
+						text: "Copy"
+						icon: "content_copy"
+						variant: "ghost"
+						onActivated: {
+							Quickshell.execDetached(["wl-copy", root.description]);
+							Viewer.say("The description is in the clipboard", "content_copy");
+						}
+					}
+				}
+
+				StyledText {
+					width: parent.width
+					visible: root.description !== ""
+					text: root.description
+					wrapMode: Text.Wrap
+					tone: Theme.textMuted
+				}
 			}
 
 			Fact {

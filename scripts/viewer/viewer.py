@@ -20,6 +20,12 @@ What it answers:
   document     the corners of a sheet of paper or a screen in it
   palette      its main colours
   cutout*      a mask of what is in front (rembg when installed, else GrabCut)
+  inpaint      what was painted over, filled in from around it
+  upscale*     2 or 4 times as big (Real-ESRGAN when installed, else Lanczos)
+  faces        faces (YuNet) and number plates (tesseract), to hide them
+  collage      pictures packed into one, in justified rows or a grid
+  similar      pictures of the folder that look alike, and duplicates
+  describe     alt text, or an answer about the picture (the file manager's Ollama)
   encode       the edited picture as a file, with the camera's metadata
   estimate     how big that file would be
   unique       a free name beside the picture
@@ -1372,12 +1378,771 @@ def op_estimate(req, progress):
     return {"bytes": int(buffer.tell() * scale)}
 
 
+# ── filling in what was stroked away ───────────────────────────────────────
+def save_family(image, out, alpha=None):
+    """JPEG (q95) when there is no transparency, PNG (level 1) when there is
+    or when out asks for PNG; written in place atomically."""
+    alpha = has_alpha(image) if alpha is None else alpha
+    as_png = alpha or ext_of(out) == "png"
+    icc = image.info.get("icc_profile")
+
+    def write(tmp):
+        options = {"icc_profile": icc} if icc else {}
+        if as_png:
+            image.save(tmp, "PNG", compress_level=1, **options)
+        else:
+            image.convert("RGB").save(tmp, "JPEG", quality=95, **options)
+
+    os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
+    atomic_save(write, out)
+    return "png" if as_png else "jpeg"
+
+
+def stroke_mask(size, strokes):
+    from PIL import ImageDraw
+    width, height = size
+    side = max(width, height)
+    mask = Image.new("L", size, 0)
+    draw = ImageDraw.Draw(mask)
+    widest = 0
+    for stroke in strokes or []:
+        radius = max(1.0, float(stroke.get("radius") or 0.01) * side)
+        widest = max(widest, radius)
+        points = [(float(x) * width, float(y) * height) for x, y in stroke.get("points") or []]
+        if len(points) > 1:
+            draw.line(points, fill=255, width=max(1, round(radius * 2)), joint="curve")
+        for x, y in points:
+            draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=255)
+    return mask, widest
+
+
+def exemplar_fill(bgr, hole, patch=9):
+    """Fills hole (bool) patch by patch with the best-matching piece from
+    around it, the most certain places at edges first (after Criminisi et
+    al.): texture and edges go on instead of being smeared."""
+    import cv2
+    import numpy as np
+    half = patch // 2
+    ys, xs = np.nonzero(hole)
+    if not len(ys):
+        return bgr
+    # pieces are looked for near the hole only: quicker, and what is near fits better
+    reach = max(30, int(max(ys.max() - ys.min(), xs.max() - xs.min())) // 2 + patch)
+    top, left = max(0, ys.min() - reach), max(0, xs.min() - reach)
+    bottom, right = min(hole.shape[0], ys.max() + reach + 1), min(hole.shape[1], xs.max() + reach + 1)
+    img = cv2.copyMakeBorder(np.ascontiguousarray(bgr[top:bottom, left:right]), half, half, half, half, cv2.BORDER_REFLECT)
+    gone = cv2.copyMakeBorder(hole[top:bottom, left:right].astype(np.uint8), half, half, half, half, cv2.BORDER_CONSTANT, value=0).astype(bool)
+    height, width = gone.shape
+    known = ~gone
+    # windows wholly outside the hole may be copied from
+    source = cv2.erode(known.astype(np.uint8), np.ones((patch, patch), np.uint8), borderType=cv2.BORDER_CONSTANT, borderValue=0).astype(bool)
+    if not source.any():
+        return None
+    guess = cv2.inpaint(img, gone.astype(np.uint8) * 255, 5, cv2.INPAINT_TELEA)
+    gray = cv2.cvtColor(guess, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    strength = cv2.magnitude(cv2.Sobel(gray, cv2.CV_32F, 1, 0), cv2.Sobel(gray, cv2.CV_32F, 0, 1)) / 255
+    confidence = known.astype(np.float32)
+    work = img.astype(np.float32)
+    squares = work * work
+    ring = np.ones((3, 3), np.uint8)
+    while gone.any():
+        front = gone & cv2.dilate(known.astype(np.uint8), ring).astype(bool)
+        fy, fx = np.nonzero(front)
+        if not len(fy):
+            fy, fx = np.nonzero(gone)
+        sure = cv2.boxFilter(confidence, -1, (patch, patch), normalize=True)
+        k = int(np.argmax(sure[fy, fx] * (strength[fy, fx] + 0.05)))
+        y, x = min(max(fy[k], half), height - half - 1), min(max(fx[k], half), width - half - 1)
+        window = (slice(y - half, y + half + 1), slice(x - half, x + half + 1))
+        target = work[window]
+        weights = known[window].astype(np.float32)
+        if not weights.any():
+            weights[:] = 1
+            target = guess[window].astype(np.float32)
+        # masked sum of squared differences at every centre: sum M·I² − 2·sum (M·T)·I
+        distance = cv2.filter2D(squares, -1, weights, borderType=cv2.BORDER_CONSTANT).sum(axis=2)
+        for channel in range(3):
+            distance -= 2 * cv2.filter2D(np.ascontiguousarray(work[..., channel]), -1, weights * target[..., channel],
+                                         borderType=cv2.BORDER_CONSTANT)
+        distance[~source] = np.inf
+        sy, sx = np.unravel_index(int(np.argmin(distance)), distance.shape)
+        fill = gone[window]
+        work[window][fill] = work[sy - half:sy + half + 1, sx - half:sx + half + 1][fill]
+        squares[window][fill] = work[window][fill] ** 2
+        confidence[window][fill] = sure[y, x]
+        gone[window] = False
+        known[window] = True
+    out = bgr.copy()
+    out[top:bottom, left:right] = np.clip(work, 0, 255).astype(np.uint8)[half:height - half, half:width - half]
+    return out
+
+
+def fill_region(bgr, mask, radius):
+    """bgr with mask (255 = gone) filled: thin strokes flow in from the edge
+    (Telea); wider areas are rebuilt from pieces of their surroundings on a
+    copy small enough to be quick, which is then lifted back up."""
+    import cv2
+    import numpy as np
+    if radius <= 8:
+        return cv2.inpaint(bgr, mask, max(3, round(radius)), cv2.INPAINT_TELEA)
+    height, width = mask.shape
+    area = max(1, int((mask > 0).sum()))
+    scale = min(1.0, math.sqrt(10000 / area))
+    if scale < 1:
+        work = cv2.resize(bgr, (max(16, round(width * scale)), max(16, round(height * scale))), interpolation=cv2.INTER_AREA)
+        work_mask = cv2.resize(mask, (work.shape[1], work.shape[0]), interpolation=cv2.INTER_AREA) > 0
+    else:
+        work, work_mask = bgr, mask > 0
+    work_mask = cv2.dilate(work_mask.astype(np.uint8), np.ones((3, 3), np.uint8)).astype(bool)
+    filled = exemplar_fill(work, work_mask)
+    if filled is None:
+        return cv2.inpaint(bgr, mask, max(3, round(min(radius, 12))), cv2.INPAINT_TELEA)
+    smooth = cv2.medianBlur(filled, 3)
+    filled = np.where(work_mask[..., None], smooth, filled)
+    if scale < 1:
+        filled = cv2.resize(filled, (width, height), interpolation=cv2.INTER_CUBIC)
+    # the fill blends into what stays over a few pixels
+    soft = cv2.GaussianBlur(cv2.dilate(mask, np.ones((5, 5), np.uint8)).astype(np.float32) / 255, (0, 0), 2)[..., None]
+    return (filled * soft + bgr * (1 - soft)).astype(np.uint8)
+
+
+def op_inpaint(req, progress):
+    import cv2
+    import numpy as np
+    path, out = req.get("path") or "", req.get("out") or ""
+    if not out:
+        raise ViewerError("Say where the filled-in picture goes")
+    progress(0.05, "Reading the picture")
+    image = load_upright(path, progress)
+    icc = image.info.get("icc_profile")
+    alpha = has_alpha(image)
+    rgba = np.asarray(image.convert("RGBA")).copy()
+    mask_image, radius = stroke_mask(image.size, req.get("strokes"))
+    mask = np.asarray(mask_image)
+    box = mask_image.getbbox()
+    if not box:
+        raise ViewerError("Paint over what should go first")
+    progress(0.2, "Filling in")
+    # only the part around the strokes is worked on
+    margin = round(radius * 3 + 48)
+    left, top = max(0, box[0] - margin), max(0, box[1] - margin)
+    right, bottom = min(image.width, box[2] + margin), min(image.height, box[3] + margin)
+    piece = cv2.cvtColor(np.ascontiguousarray(rgba[top:bottom, left:right, :3]), cv2.COLOR_RGB2BGR)
+    piece_mask = np.ascontiguousarray(mask[top:bottom, left:right])
+    filled = fill_region(piece, piece_mask, radius)
+    rgba[top:bottom, left:right, :3] = cv2.cvtColor(filled, cv2.COLOR_BGR2RGB)
+    if alpha:
+        plane = np.ascontiguousarray(rgba[top:bottom, left:right, 3])
+        rgba[top:bottom, left:right, 3] = cv2.inpaint(plane, piece_mask, max(3, round(min(radius, 10))), cv2.INPAINT_TELEA)
+    result = Image.fromarray(rgba, "RGBA")
+    if not alpha:
+        result = result.convert("RGB")
+    if icc:
+        result.info["icc_profile"] = icc
+    progress(0.9, "Saving")
+    fmt = save_family(result, out, alpha)
+    progress(1, "Done")
+    return {"path": out, "format": fmt, "width": result.width, "height": result.height}
+
+
+# ── upscaling ──────────────────────────────────────────────────────────────
+UPSCALE_DIR = os.path.join(DATA, "viewer-upscale")
+UPSCALE_ZIP = "realesrgan-ncnn-vulkan-20220424-ubuntu.zip"
+UPSCALE_URL = "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/" + UPSCALE_ZIP
+UPSCALE_MODEL = "realesrgan-x4plus"
+UPSCALE_MAX = 120_000_000
+
+
+def esrgan():
+    """The realesrgan-ncnn-vulkan program, from PATH or our own install."""
+    found = shutil.which("realesrgan-ncnn-vulkan")
+    if found:
+        return found
+    for candidate in glob.glob(os.path.join(UPSCALE_DIR, "**", "realesrgan-ncnn-vulkan"), recursive=True):
+        if os.access(candidate, os.X_OK):
+            return candidate
+    return None
+
+
+def op_upscalestatus(req, progress):
+    found = esrgan()
+    return {"installed": bool(found), "engine": "realesrgan" if found else "lanczos", "installing": UPSCALE_INSTALLING.is_set()}
+
+
+UPSCALE_INSTALLING = threading.Event()
+
+
+def download(url, target, progress, start, end, text):
+    """url into target (atomically), telling how far between start and end."""
+    import urllib.request
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    tmp = target + ".part"
+    try:
+        request = urllib.request.Request(url, headers={"User-Agent": "pshell-viewer"})
+        with urllib.request.urlopen(request, timeout=60) as response, open(tmp, "wb") as file:
+            total = int(response.headers.get("Content-Length") or 0)
+            done = 0
+            while True:
+                chunk = response.read(1 << 16)
+                if not chunk:
+                    break
+                file.write(chunk)
+                done += len(chunk)
+                share = done / total if total else 0
+                progress(start + (end - start) * share, f"{text} ({done >> 20} of {total >> 20} MB)" if total else text)
+        os.replace(tmp, target)
+    except (OSError, ValueError) as error:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        reason = getattr(error, "reason", None) or getattr(error, "strerror", None) or error
+        raise ViewerError(f"The download did not work ({reason})")
+
+
+def op_upscaleinstall(req, progress):
+    import zipfile
+    if UPSCALE_INSTALLING.is_set():
+        raise ViewerError("It is being installed already")
+    UPSCALE_INSTALLING.set()
+    try:
+        archive = os.path.join(UPSCALE_DIR, UPSCALE_ZIP)
+        download(UPSCALE_URL, archive, progress, 0.02, 0.8, "Downloading Real-ESRGAN")
+        progress(0.85, "Unpacking")
+        try:
+            with zipfile.ZipFile(archive) as packed:
+                for member in packed.namelist():
+                    if member.startswith("/") or ".." in member.split("/"):
+                        raise ViewerError("The download looks wrong")
+                packed.extractall(UPSCALE_DIR)
+        except zipfile.BadZipFile:
+            raise ViewerError("The download is not a zip file")
+        finally:
+            if os.path.exists(archive):
+                os.unlink(archive)
+        for candidate in glob.glob(os.path.join(UPSCALE_DIR, "**", "realesrgan-ncnn-vulkan"), recursive=True):
+            os.chmod(candidate, 0o755)
+        found = esrgan()
+        if not found:
+            raise ViewerError("The download has no realesrgan-ncnn-vulkan in it")
+        progress(0.95, "Trying it")
+        check = run([found, "-h"], timeout=30)
+        said = (check.stdout + check.stderr).decode("utf-8", "replace")
+        if "usage" not in said.lower():
+            raise ViewerError("Real-ESRGAN was unpacked but does not start: " + (said.strip().splitlines() or ["no answer"])[-1])
+        progress(1, "Ready")
+        return {"installed": True, "engine": "realesrgan"}
+    finally:
+        UPSCALE_INSTALLING.clear()
+
+
+def lanczos_up(image, factor):
+    size = (image.width * factor, image.height * factor)
+    bigger = image.resize(size, Image.Resampling.LANCZOS)
+    return bigger.filter(ImageFilter.UnsharpMask(radius=1.2 * factor / 2, percent=50, threshold=2))
+
+
+def esrgan_up(program, image, factor, progress):
+    """4× with realesrgan-x4plus (2× is that, made half as big)."""
+    os.makedirs(CACHE, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=CACHE) as work:
+        source, target = os.path.join(work, "in.png"), os.path.join(work, "out.png")
+        image.convert("RGB").save(source, "PNG", compress_level=1)
+        models = os.path.join(os.path.dirname(program), "models")
+        args = [program, "-i", source, "-o", target, "-n", UPSCALE_MODEL, "-s", "4"]
+        if os.path.isdir(models):
+            args += ["-m", models]
+        process = start(args)
+        tail = []
+        for line in process.stdout:
+            line = line.decode("utf-8", "replace").strip()
+            match = re.match(r"([\d.]+)%", line)
+            if match:
+                progress(0.1 + 0.8 * float(match.group(1)) / 100, "Making it bigger")
+            elif line:
+                tail = (tail + [line])[-3:]
+        process.wait()
+        forget(process)
+        if process.returncode != 0 or not os.path.exists(target):
+            raise ViewerError("Real-ESRGAN did not work: " + (tail[-1] if tail else "it stopped"))
+        result = Image.open(target)
+        result.load()
+    if factor == 2:
+        result = result.resize((image.width * 2, image.height * 2), Image.Resampling.LANCZOS)
+    return result
+
+
+def op_upscale(req, progress):
+    path, out = req.get("path") or "", req.get("out") or ""
+    if not out:
+        raise ViewerError("Say where the bigger picture goes")
+    factor = int(req.get("factor") or 2)
+    if factor not in (2, 4):
+        raise ViewerError("It can be made 2 or 4 times as big")
+    progress(0.03, "Reading the picture")
+    image = load_upright(path, progress)
+    if image.width * image.height * factor * factor > UPSCALE_MAX:
+        raise ViewerError(f"{image.width * factor} × {image.height * factor} px would be too big")
+    icc = image.info.get("icc_profile")
+    alpha = has_alpha(image)
+    program = esrgan()
+    engine = "lanczos"
+    result = None
+    if program:
+        try:
+            result = esrgan_up(program, image, factor, progress)
+            engine = "realesrgan"
+        except ViewerError as error:
+            log(f"{error}; Lanczos instead")
+    if result is None:
+        progress(0.3, "Making it bigger")
+        result = lanczos_up(image.convert("RGBA" if alpha else "RGB"), factor)
+    if alpha:
+        result = result.convert("RGB")
+        result.putalpha(image.getchannel("A").resize(result.size, Image.Resampling.LANCZOS))
+    if icc:
+        result.info["icc_profile"] = icc
+    progress(0.92, "Saving")
+    save_family(result, out, alpha)
+    progress(1, "Done")
+    return {"path": out, "engine": engine, "width": result.width, "height": result.height}
+
+
+# ── faces and number plates (to hide them) ─────────────────────────────────
+YUNET = "face_detection_yunet_2023mar.onnx"
+YUNET_URL = "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/" + YUNET
+PLATE_DE = re.compile(r"^[A-ZÄÖÜ]{1,3}[ -]?[A-Z]{1,2}[ -]?\d{1,4}[EH]?$")
+PLATE_ANY = re.compile(r"^(?=.*[A-Z])(?=.*\d)[A-Z0-9]{5,8}$")
+MODEL_LOCK = threading.Lock()
+
+
+def plate_like(text):
+    text = re.sub(r"[^A-ZÄÖÜ0-9 -]", "", text.upper()).strip(" -")
+    if PLATE_DE.match(text):
+        return True
+    return bool(PLATE_ANY.match(text.replace(" ", "").replace("-", "")))
+
+
+def yunet_model(progress):
+    target = os.path.join(MODELS, YUNET)
+    with MODEL_LOCK:
+        if not os.path.exists(target):
+            download(YUNET_URL, target, progress, 0.05, 0.3, "Downloading the face model")
+    return target
+
+
+def find_faces(image, progress):
+    import cv2
+    import numpy as np
+    model = yunet_model(progress)
+    copy = image.convert("RGB")
+    copy.thumbnail((1600, 1600), Image.Resampling.BILINEAR)
+    bgr = cv2.cvtColor(np.asarray(copy), cv2.COLOR_RGB2BGR)
+    height, width = bgr.shape[:2]
+    detector = cv2.FaceDetectorYN.create(model, "", (width, height), 0.7, 0.3, 500)
+    _, found = detector.detect(bgr)
+    boxes = []
+    for row in found if found is not None else []:
+        x, y, w, h = (float(v) for v in row[:4])
+        boxes.append([x / width, y / height, w / width, h / height])
+    return boxes
+
+
+def tesseract_words(image, psm):
+    """[(text, (x, y, w, h), line key)] in image pixels."""
+    os.makedirs(CACHE, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=CACHE, suffix=".png") as file:
+        image.save(file.name, "PNG", compress_level=1)
+        langs = "deu+eng" if "deu" in tesseract_langs() else "eng"
+        result = run(["tesseract", file.name, "stdout", "--psm", str(psm), "-l", langs, "tsv"], timeout=60)
+    words = []
+    for line in result.stdout.decode("utf-8", "replace").splitlines()[1:]:
+        parts = line.split("\t")
+        if len(parts) < 12 or not parts[11].strip():
+            continue
+        try:
+            confidence = float(parts[10])
+            box = tuple(int(v) for v in parts[6:10])
+        except ValueError:
+            continue
+        if confidence >= 20:
+            words.append((parts[11].strip(), box, tuple(parts[1:5])))
+    return words
+
+
+LANGS = []
+
+
+def tesseract_langs():
+    if not LANGS:
+        try:
+            LANGS.append(run(["tesseract", "--list-langs"], timeout=10).stdout.decode())
+        except (OSError, subprocess.TimeoutExpired):
+            LANGS.append("")
+    return LANGS[0]
+
+
+def union(boxes):
+    left = min(b[0] for b in boxes)
+    top = min(b[1] for b in boxes)
+    right = max(b[0] + b[2] for b in boxes)
+    bottom = max(b[1] + b[3] for b in boxes)
+    return (left, top, right - left, bottom - top)
+
+
+def plates_in_words(words):
+    """Boxes of words, or runs of words on a line, that read like a plate."""
+    found = []
+    lines = {}
+    for text, box, key in words:
+        lines.setdefault(key, []).append((text, box))
+    for entries in lines.values():
+        entries.sort(key=lambda e: e[1][0])
+        used = set()
+        for length in (3, 2, 1):  # "B AB 1234" is three words
+            for i in range(len(entries) - length + 1):
+                if any(j in used for j in range(i, i + length)):
+                    continue
+                group = entries[i:i + length]
+                if plate_like(" ".join(t for t, _ in group)):
+                    found.append(union([b for _, b in group]))
+                    used.update(range(i, i + length))
+    return found
+
+
+def plate_shapes(gray):
+    """Rectangles shaped like a plate (2–5.5 : 1), biggest first."""
+    import cv2
+    height, width = gray.shape
+    edges = cv2.Canny(cv2.GaussianBlur(gray, (3, 3), 0), 50, 150)
+    contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    shapes = []
+    for contour in contours:
+        x, y, w, h = cv2.boundingRect(contour)
+        if h < 12 or w < 40 or w * h > width * height * 0.25 or not 2 <= w / h <= 5.5:
+            continue
+        if cv2.contourArea(cv2.convexHull(contour)) < w * h * 0.6:
+            continue
+        shapes.append((x, y, w, h))
+    shapes.sort(key=lambda s: -s[2] * s[3])
+    kept = []
+    for shape in shapes:
+        if all(not overlaps(shape, other) for other in kept):
+            kept.append(shape)
+    return kept[:8]
+
+
+def overlaps(a, b):
+    return a[0] < b[0] + b[2] and b[0] < a[0] + a[2] and a[1] < b[1] + b[3] and b[1] < a[1] + a[3]
+
+
+def find_plates(image, progress):
+    import numpy as np
+    if not shutil.which("tesseract"):
+        return []
+    copy = image.convert("RGB")
+    copy.thumbnail((2400, 2400), Image.Resampling.LANCZOS)
+    width, height = copy.size
+    boxes = plates_in_words(tesseract_words(copy, 11))
+    progress(0.75, "Looking at plate-shaped things")
+    gray = np.asarray(copy.convert("L"))
+    for x, y, w, h in plate_shapes(gray):
+        if any(overlaps((x, y, w, h), b) for b in boxes):
+            continue
+        piece = copy.crop((x, y, x + w, y + h))
+        if piece.height < 40:
+            piece = piece.resize((round(piece.width * 40 / piece.height), 40), Image.Resampling.LANCZOS)
+        words = tesseract_words(piece, 7)
+        if plate_like(" ".join(t for t, _, _ in words)):
+            boxes.append((x, y, w, h))
+    return [[b[0] / width, b[1] / height, b[2] / width, b[3] / height] for b in boxes]
+
+
+def padded(box, share=0.1):
+    x, y, w, h = box
+    x, y, w, h = x - w * share, y - h * share, w * (1 + 2 * share), h * (1 + 2 * share)
+    left, top = max(0.0, x), max(0.0, y)
+    right, bottom = min(1.0, x + w), min(1.0, y + h)
+    return [round(left, 4), round(top, 4), round(right - left, 4), round(bottom - top, 4)]
+
+
+def op_faces(req, progress):
+    progress(0.02, "Reading the picture")
+    image = small(req.get("path") or "", 2400)
+    progress(0.05, "Looking for faces")
+    faces = find_faces(image, progress)
+    progress(0.4, "Looking for number plates")
+    plates = find_plates(image, progress)
+    progress(1, "Done")
+    return {"faces": [padded(b) for b in faces], "plates": [padded(b) for b in plates]}
+
+
+# ── collage ────────────────────────────────────────────────────────────────
+def parse_colour(text):
+    text = (text or "#ffffff").strip()
+    if text == "transparent":
+        return None
+    match = re.fullmatch(r"#?([0-9a-fA-F]{6})", text)
+    if not match:
+        raise ViewerError(f"{text} is not a colour like #rrggbb")
+    value = match.group(1)
+    return tuple(int(value[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def justified_rows(aspects, width, gap, wanted):
+    """Breaks into rows so each row, filled to the width, is near the wanted
+    height (least squares over all rows, like Google Photos)."""
+    count = len(aspects)
+    best = [0.0] + [math.inf] * count
+    back = [0] * (count + 1)
+    for end in range(1, count + 1):
+        total = 0.0
+        for begin in range(end - 1, max(-1, end - 13), -1):
+            total += aspects[begin]
+            height = (width - gap * (end - begin - 1)) / total
+            cost = best[begin] + (math.log(height / wanted)) ** 2 * (end - begin)
+            if cost < best[end]:
+                best[end], back[end] = cost, begin
+    rows, end = [], count
+    while end > 0:
+        rows.append((back[end], end))
+        end = back[end]
+    return rows[::-1]
+
+
+def op_collage(req, progress):
+    paths = [p for p in req.get("paths") or [] if p]
+    if not paths:
+        raise ViewerError("Choose the pictures for the collage")
+    if len(paths) > 200:
+        raise ViewerError("A collage takes up to 200 pictures")
+    width = max(200, min(20000, int(req.get("width") or 3000)))
+    gap = max(0, min(width // 10, int(req.get("gap") if req.get("gap") is not None else 12)))
+    colour = parse_colour(req.get("background"))
+    layout = req.get("layout") or "auto"
+    out = req.get("out") or ""
+    if not out:
+        raise ViewerError("Say where the collage goes")
+    images = []
+    for index, path in enumerate(paths):
+        progress(0.6 * index / len(paths), f"Reading {os.path.basename(path)}")
+        image = small(path, width)
+        images.append(image.convert("RGBA"))
+    inner = width - 2 * gap
+    places = []  # (image index, x, y, w, h, crop to cell)
+    if layout == "row":
+        total = sum(i.width / i.height for i in images)
+        height = (inner - gap * (len(images) - 1)) / total
+        x = gap
+        for n, image in enumerate(images):
+            w = image.width / image.height * height
+            places.append((n, x, gap, w, height, False))
+            x += w + gap
+        canvas_height = height + 2 * gap
+    elif layout == "column":
+        y = gap
+        for n, image in enumerate(images):
+            h = inner * image.height / image.width
+            places.append((n, gap, y, inner, h, False))
+            y += h + gap
+        canvas_height = y
+    elif layout == "grid":
+        columns = math.ceil(math.sqrt(len(images)))
+        rows = math.ceil(len(images) / columns)
+        aspect = sorted(i.width / i.height for i in images)[len(images) // 2]
+        cell_w = (inner - gap * (columns - 1)) / columns
+        cell_h = cell_w / aspect
+        for n in range(len(images)):
+            row, column = divmod(n, columns)
+            places.append((n, gap + column * (cell_w + gap), gap + row * (cell_h + gap), cell_w, cell_h, True))
+        canvas_height = 2 * gap + rows * cell_h + (rows - 1) * gap
+    elif layout == "auto":
+        aspects = [i.width / i.height for i in images]
+        wanted = inner / 3.2 if len(images) > 2 else inner / max(1.0, sum(aspects))
+        y = gap
+        for begin, end in justified_rows(aspects, inner, gap, wanted):
+            height = (inner - gap * (end - begin - 1)) / sum(aspects[begin:end])
+            x = gap
+            for n in range(begin, end):
+                w = aspects[n] * height
+                places.append((n, x, y, w, height, False))
+                x += w + gap
+            y += height + gap
+        canvas_height = y
+    else:
+        raise ViewerError(f"There is no layout {layout!r}")
+    canvas_height = max(1, round(canvas_height))
+    if width * canvas_height > 250_000_000:
+        raise ViewerError("That collage would be too big")
+    canvas = Image.new("RGBA", (width, canvas_height), (colour or (0, 0, 0)) + ((255,) if colour else (0,)))
+    for count, (n, x, y, w, h, crop) in enumerate(places):
+        progress(0.6 + 0.3 * count / len(places), "Placing")
+        # edges rounded so neighbours meet exactly and rows end at the margin
+        left, top = round(x), round(y)
+        size = (max(1, round(x + w) - left), max(1, round(y + h) - top))
+        image = images[n]
+        piece = ImageOps.fit(image, size, Image.Resampling.LANCZOS) if crop else image.resize(size, Image.Resampling.LANCZOS)
+        canvas.alpha_composite(piece, (left, top))
+    progress(0.95, "Saving")
+    result = canvas if colour is None else canvas.convert("RGB")
+
+    def write(tmp):
+        if colour is None:
+            result.save(tmp, "PNG", optimize=False, compress_level=6)
+        else:
+            result.save(tmp, "JPEG", quality=92)
+
+    os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
+    atomic_save(write, out)
+    progress(1, "Done")
+    return {"path": out, "width": width, "height": canvas_height, "format": "png" if colour is None else "jpeg"}
+
+
+# ── pictures that look alike ───────────────────────────────────────────────
+HASHES = os.path.join(CACHE, "hashes.json")
+HASH_LOCK = threading.Lock()
+HASH_LIMIT = 200
+
+
+def picture_hashes(path):
+    """(dHash, pHash), each 64 bits as an int."""
+    import cv2
+    import numpy as np
+    image = small(path, 256).convert("L")
+    gray = np.asarray(image, dtype=np.float32)
+    tiny = cv2.resize(gray, (9, 8), interpolation=cv2.INTER_AREA)
+    dhash = 0
+    for bit in (tiny[:, 1:] > tiny[:, :-1]).flatten():
+        dhash = (dhash << 1) | int(bit)
+    block = cv2.dct(cv2.resize(gray, (32, 32), interpolation=cv2.INTER_AREA))[:8, :8].flatten()
+    median = np.median(block[1:])
+    phash = 0
+    for bit in block > median:
+        phash = (phash << 1) | int(bit)
+    return dhash, phash
+
+
+def load_hashes():
+    try:
+        with open(HASHES, encoding="utf-8") as file:
+            data = json.load(file)
+            return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_hashes(data):
+    if len(data) > 20000:
+        for key in sorted(data, key=lambda k: data[k].get("seen", 0))[:len(data) - 20000]:
+            data.pop(key)
+    os.makedirs(CACHE, exist_ok=True)
+
+    def write(tmp):
+        with open(tmp, "w", encoding="utf-8") as file:
+            json.dump(data, file, separators=(",", ":"))
+
+    atomic_save(write, HASHES)
+
+
+def op_similar(req, progress):
+    path = os.path.abspath(req.get("path") or "")
+    folder = req.get("folder") or os.path.dirname(path)
+    listing = op_list({"path": folder}, progress)["files"]
+    with HASH_LOCK:
+        cache = load_hashes()
+    now = time.time()
+    made = 0
+    more = False
+    found = {}
+    wanted = [entry for entry in listing if entry["path"] == path] + [entry for entry in listing if entry["path"] != path]
+    if not any(entry["path"] == path for entry in listing):
+        try:
+            st = os.stat(path)
+        except FileNotFoundError:
+            raise ViewerError(f"{os.path.basename(path)} is not there any more")
+        wanted.insert(0, {"path": path, "mtime": st.st_mtime, "size": st.st_size})
+    for entry in wanted:
+        stamp = f"{entry['mtime']}:{entry['size']}"
+        known = cache.get(entry["path"])
+        if known and known.get("stamp") == stamp:
+            known["seen"] = now
+            found[entry["path"]] = (int(known["d"], 16), int(known["p"], 16))
+            continue
+        if made >= HASH_LIMIT:
+            more = True
+            continue
+        if ext_of(entry["path"]) in ("svg", "svgz"):
+            continue
+        if ext_of(entry["path"]) in RAW and not decoded_path(entry["path"], os.stat(entry["path"])):
+            continue  # developing every raw picture would take minutes
+        progress(min(0.95, made / max(1, min(HASH_LIMIT, len(wanted)))), f"Looking at {os.path.basename(entry['path'])}")
+        try:
+            hashes = picture_hashes(entry["path"])
+        except Exception as error:
+            log(f"no hash for {entry['path']}: {error}")
+            continue
+        made += 1
+        found[entry["path"]] = hashes
+        cache[entry["path"]] = {"stamp": stamp, "d": f"{hashes[0]:016x}", "p": f"{hashes[1]:016x}", "seen": now}
+    if made:
+        with HASH_LOCK:
+            merged = load_hashes()
+            merged.update({key: value for key, value in cache.items() if key in found})
+            save_hashes(merged)
+    mine = found.get(path)
+    if mine is None:
+        raise ViewerError(f"{os.path.basename(path)} could not be looked at")
+    similar = []
+    for other, hashes in found.items():
+        if other == path:
+            continue
+        distance = round((bin(mine[0] ^ hashes[0]).count("1") + bin(mine[1] ^ hashes[1]).count("1")) / 2)
+        if distance <= 12:
+            similar.append({"path": other, "distance": distance})
+    similar.sort(key=lambda s: (s["distance"], natural(os.path.basename(s["path"]))))
+    progress(1, "Done")
+    return {"similar": similar, "duplicates": [{"path": s["path"]} for s in similar if s["distance"] <= 3], "more": more}
+
+
+# ── what the picture shows (the file manager's Ollama) ────────────────────
+DESCRIBE = ("Write alt text for this picture: one or two short sentences saying what is in it, any important text, "
+            "and the kind of picture (photo, screenshot, drawing, document). Plain text, no preamble.")
+ASK = "Answer briefly, in plain text, about this picture: {question}"
+
+
+def op_describe(req, progress):
+    import ai
+    progress(0.05, "Asking the picture model")
+    state = ai.status("name")
+    if not state.get("running"):
+        raise ViewerError("No AI is set up: Ollama is not running (Files → Settings → AI)")
+    model = state.get("vision")
+    if not model:
+        raise ViewerError(f"Ollama has no picture model; install one such as {ai.SUGGESTED_VISION} (Files → Settings → AI)")
+    image = small(req.get("path") or "", 1024).convert("RGB")
+    question = str(req.get("question") or "").strip()
+    os.makedirs(CACHE, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=CACHE, suffix=".jpg") as file:
+        image.save(file.name, "JPEG", quality=88)
+        progress(0.2, f"{model.split(':')[0]} is looking")
+        try:
+            text = ai.generate(model, ASK.format(question=question) if question else DESCRIBE, images=[file.name], timeout=180)
+        except ai.AiError as error:
+            raise ViewerError(str(error))
+    text = text.strip().strip('"').strip()
+    if not text:
+        raise ViewerError("The picture model gave no answer")
+    progress(1, "Done")
+    return {"text": text, "model": model}
+
+
 # ── running ────────────────────────────────────────────────────────────────
 OPS = {"list": op_list, "info": op_info, "decode": op_decode, "histogram": op_histogram, "auto": op_auto,
        "straighten": op_straighten, "document": op_document, "palette": op_palette, "cutoutstatus": op_cutoutstatus,
        "cutoutinstall": op_cutoutinstall, "cutout": op_cutout, "encode": op_encode, "estimate": op_estimate,
-       "unique": op_unique}
-SLOW = {"decode", "cutout", "cutoutinstall", "encode", "estimate"}
+       "unique": op_unique, "inpaint": op_inpaint, "upscale": op_upscale, "upscalestatus": op_upscalestatus,
+       "upscaleinstall": op_upscaleinstall, "faces": op_faces, "collage": op_collage, "similar": op_similar,
+       "describe": op_describe}
+SLOW = {"decode", "cutout", "cutoutinstall", "encode", "estimate", "inpaint", "upscale", "upscaleinstall", "faces",
+        "collage", "similar", "describe"}
 CHILDREN = set()
 CHILDREN_LOCK = threading.Lock()
 

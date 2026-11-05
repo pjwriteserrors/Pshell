@@ -776,6 +776,11 @@ Singleton {
 		if (!pin || root.phase !== "idle") return;
 		const path = pin.live ? (root.liveFrames[id] ?? "") : pin.path;
 		if (path === "") return;
+		// with the picture viewer the pin stays and is drawn on there (its history copy)
+		if (Viewer.enabled && !pin.live) {
+			Viewer.open(path, { mode: "markup" });
+			return;
+		}
 		root.pins = root.pins.filter(p => p.id !== id);
 		if (pin.live) {
 			root.stopLive(id);

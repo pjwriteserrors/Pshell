@@ -20,6 +20,7 @@ const SLIDERS = [
 	{ group: "Colour", id: "saturation", label: "Saturation", icon: "palette_outline" },
 	{ group: "Colour", id: "vibrance", label: "Vibrance", icon: "creation" },
 	{ group: "Effects", id: "sharpen", label: "Sharpen", icon: "details", min: 0 },
+	{ group: "Effects", id: "denoise", label: "Less noise", icon: "blur_radial", min: 0 },
 	{ group: "Effects", id: "vignette", label: "Vignette", icon: "circle_half_full" },
 	{ group: "Effects", id: "grain", label: "Grain", icon: "grain", min: 0 },
 	{ group: "Effects", id: "fade", label: "Fade", icon: "blur_linear", min: 0 }
@@ -43,12 +44,28 @@ const LOOKS = [
 	{ id: "punch", label: "Punch", adjust: { contrast: 0.3, saturation: 0.25, sharpen: 0.35, vignette: -0.2 } }
 ];
 
+// looks made from the shell's theme colours (set by the view, they follow the theme)
+var themeLooks = [];
+
+function setThemeColours(primary, secondary, tertiary) {
+	const hex = c => String(c).slice(0, 7);
+	themeLooks = [
+		{ id: "theme", label: "Theme", adjust: { contrast: 0.1, saturation: -0.15 }, tones: { shadow: hex(secondary), shadowAmount: 0.45, highlight: hex(primary), highlightAmount: 0.35 } },
+		{ id: "theme-duo", label: "Theme duotone", adjust: { saturation: -1, contrast: 0.15 }, tones: { shadow: hex(tertiary), shadowAmount: 0.75, highlight: hex(primary), highlightAmount: 0.6 } },
+		{ id: "theme-soft", label: "Theme soft", adjust: { fade: 0.3, saturation: -0.25, brightness: 0.08 }, tones: { shadow: hex(primary), shadowAmount: 0.35, highlight: hex(secondary), highlightAmount: 0.25 } }
+	];
+}
+
+function allLooks() {
+	return themeLooks.concat(LOOKS);
+}
+
 function lookById(id) {
-	return LOOKS.find(l => l.id === id) ?? null;
+	return allLooks().find(l => l.id === id) ?? null;
 }
 
 function blank() {
-	return { adjust: {}, curves: {}, tones: {}, look: "", geometry: Geo.defaults(), cutout: "", markup: { items: [] } };
+	return { adjust: {}, curves: {}, tones: {}, look: "", geometry: Geo.defaults(), cutout: "", markup: { items: [] }, retouch: null };
 }
 
 function normalised(r) {
@@ -61,7 +78,8 @@ function normalised(r) {
 		look: String(r.look || ""),
 		geometry: Geo.normalised(r.geometry),
 		cutout: String(r.cutout || ""),
-		markup: { items: (r.markup?.items || []).slice() }
+		markup: { items: (r.markup?.items || []).slice() },
+		retouch: r.retouch ? JSON.parse(JSON.stringify(r.retouch)) : null
 	};
 }
 
@@ -92,7 +110,7 @@ function colourIsPlain(r) {
 
 function isPlain(r) {
 	r = normalised(r);
-	return colourIsPlain(r) && Geo.isIdentity(r.geometry) && !r.cutout && r.markup.items.length === 0;
+	return colourIsPlain(r) && Geo.isIdentity(r.geometry) && !r.cutout && r.markup.items.length === 0 && !(r.retouch?.strokes?.length > 0);
 }
 
 function same(a, b) {
@@ -188,4 +206,48 @@ function lut(r) {
 		return master.map(v => own[Math.round(v * 255)]);
 	});
 	return rows;
+}
+
+// ── every change on its own ────────────────────────────────────────────────
+// [{ id, label, icon, revert: recipe → recipe without it }], in the order
+// they act; each can be taken back alone
+function edits(r) {
+	r = normalised(r);
+	const out = [];
+	const g = r.geometry;
+	const sign = v => (v > 0 ? "+" : "") + Math.round(v * 100);
+	const without = change => {
+		const next = copy(r);
+		change(next);
+		return next;
+	};
+	if (g.rot !== 0 || g.flip) out.push({ id: "turn", label: [g.rot ? `Turned ${g.rot * 90}°` : "", g.flip ? "mirrored" : ""].filter(v => v).join(", "), icon: "rotate_right", geometry: true,
+		revert: () => without(n => {
+			n.geometry.rot = 0;
+			n.geometry.flip = false;
+			n.geometry.crop = { x: 0, y: 0, w: 1, h: 1 };
+		}) });
+	if (Math.abs(g.angle) > 1e-4) out.push({ id: "angle", label: `Straightened ${g.angle.toFixed(1)}°`, icon: "angle_acute", geometry: true, revert: () => without(n => n.geometry.angle = 0) });
+	if (Math.abs(g.vertical) > 1e-4 || Math.abs(g.horizontal) > 1e-4) out.push({ id: "perspective", label: "Perspective", icon: "arrow_expand_vertical", geometry: true, revert: () => without(n => {
+		n.geometry.vertical = 0;
+		n.geometry.horizontal = 0;
+	}) });
+	if (g.quad) out.push({ id: "quad", label: "Page straightened", icon: "vector_square", geometry: true, revert: () => without(n => n.geometry.quad = null) });
+	const c = g.crop;
+	if (c.x > 1e-5 || c.y > 1e-5 || c.w < 1 - 1e-5 || c.h < 1 - 1e-5) out.push({ id: "crop", label: "Cropped", icon: "crop", geometry: true, revert: () => without(n => n.geometry.crop = { x: 0, y: 0, w: 1, h: 1 }) });
+	if (g.pad && Number(g.pad.size) > 0) out.push({ id: "pad", label: "Border", icon: "border_outside", geometry: true, revert: () => without(n => n.geometry.pad = null) });
+	if (r.retouch && r.retouch.strokes && r.retouch.strokes.length > 0) out.push({ id: "retouch", label: `Removed ${r.retouch.strokes.length === 1 ? "one thing" : r.retouch.strokes.length + " things"}`, icon: "auto_fix", revert: () => without(n => n.retouch = null) });
+	if (r.look) out.push({ id: "look", label: `Look: ${lookById(r.look)?.label ?? r.look}`, icon: "palette_swatch_outline", revert: () => withLook(r, "") });
+	for (const s of SLIDERS) {
+		const v = value(r, s.id);
+		if (Math.abs(v) > 1e-4) out.push({ id: s.id, label: `${s.label} ${sign(v)}`, icon: s.icon, revert: () => without(n => delete n.adjust[s.id]) });
+	}
+	for (const [key, name] of [["rgb", "Curve"], ["r", "Red curve"], ["g", "Green curve"], ["b", "Blue curve"]])
+		if (!curveIsFlat(r.curves[key])) out.push({ id: "curve-" + key, label: name, icon: "chart_bell_curve_cumulative", revert: () => without(n => delete n.curves[key]) });
+	if ((Number(r.tones.shadowAmount) || 0) > 0) out.push({ id: "shadowTone", label: "Tinted shadows", icon: "format_color_fill", revert: () => without(n => n.tones.shadowAmount = 0) });
+	if ((Number(r.tones.highlightAmount) || 0) > 0) out.push({ id: "highlightTone", label: "Tinted highlights", icon: "format_color_fill", revert: () => without(n => n.tones.highlightAmount = 0) });
+	if (r.cutout) out.push({ id: "cutout", label: "Background cut out", icon: "account_box_outline", revert: () => without(n => n.cutout = "") });
+	const items = r.markup.items.length;
+	if (items > 0) out.push({ id: "markup", label: items === 1 ? "One drawing" : `${items} drawings`, icon: "draw", revert: () => without(n => n.markup = { items: [] }) });
+	return out;
 }

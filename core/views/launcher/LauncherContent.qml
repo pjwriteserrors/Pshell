@@ -76,6 +76,7 @@ Item {
 		{ id: "delay", plugin: "delayed-screenshot", parent: "shot", command: "delay", name: "Delayed Screenshot", keywords: "5 seconds timer" },
 		{ id: "scroll", plugin: "scroll-screenshot", parent: "shot", command: "scroll", name: "Scroll Screenshot", keywords: "long page" },
 		{ id: "shots", plugin: "screenshot-history", parent: "shot", command: "shots", name: "Screenshot History", aliases: ["history"], status: Screenshot.shots.length > 0 ? String(Screenshot.shots.length) : "" },
+		{ id: "pictures", plugin: "viewer", command: "pictures", name: "Pictures", aliases: ["img", "images", "photos", "bilder"], status: Viewer.recent.length > 0 ? String(Viewer.recent.length) : "" },
 		{ id: "unpin", plugin: "pins", parent: "shot", command: "unpin", name: "Remove Pins", keywords: "close pinned" },
 		{ id: "calculator", plugin: "calculator", group: "tools", command: "c", name: "Calculator", aliases: ["calc", "calculator"], keywords: "math" },
 		{ id: "converter", plugin: "converter", group: "tools", command: "conv", name: "Convert", aliases: ["convert"], keywords: "units currency" },
@@ -324,8 +325,9 @@ Item {
 	readonly property bool inAiActionsMode: Plugins.on("ai-actions") && (root.commandQuery === "ai" || root.commandQuery.startsWith("ai "))
 	readonly property bool inPhoneMode: Phone.offered && (root.commandQuery === "phone" || root.commandQuery.startsWith("phone "))
 	readonly property bool inShotsMode: Plugins.on("screenshot-history") && (root.commandQuery === "shots" || root.commandQuery.startsWith("shots "))
+	readonly property bool inPicturesMode: Plugins.on("viewer") && ["pictures", "img"].some(c => root.commandQuery === c || root.commandQuery.startsWith(c + " "))
 	readonly property bool inEditMode: Plugins.on("editor") && (root.commandQuery === "edit" || root.commandQuery.startsWith("edit "))
-	readonly property bool inViewMode: root.inEditMode || root.inTranslateMode || root.inConvertMode || root.inTodoMode || root.inWebMode || root.inAiActionsMode || root.inPhoneMode || root.inShotsMode || root.inFinderMode
+	readonly property bool inViewMode: root.inEditMode || root.inTranslateMode || root.inConvertMode || root.inTodoMode || root.inWebMode || root.inAiActionsMode || root.inPhoneMode || root.inShotsMode || root.inPicturesMode || root.inFinderMode
 	// what follows the command token, as typed (">t fr hello" → "fr hello")
 	readonly property string modeArgument: {
 		const match = /^>\S+\s([\s\S]*)$/.exec(root.searchText);
@@ -1098,6 +1100,9 @@ Item {
 		case "shots":
 			root.setLauncherSearch(">shots");
 			break;
+		case "pictures":
+			root.setLauncherSearch(">pictures");
+			break;
 		case "unpin":
 			Screenshot.unpinAll();
 			root.closeRequested();
@@ -1488,6 +1493,7 @@ Item {
 		if (root.inAiActionsMode) return "ai";
 		if (root.inPhoneMode) return "phone";
 		if (root.inShotsMode) return "shots";
+		if (root.inPicturesMode) return "pictures";
 		if (root.inFinderMode) return "finder";
 		if (root.inChatMode) return "chat";
 		if (root.inAiMode) return "chats";
@@ -1510,6 +1516,7 @@ Item {
 		case "ai": return "creation";
 		case "phone": return "cellphone";
 		case "shots": return "image_multiple";
+		case "pictures": return "image_edit_outline";
 		case "finder": return "folder_search_outline";
 		case "chat": return "chat";
 		case "chats": return "forum";
@@ -1558,6 +1565,7 @@ Item {
 		case "delay": return "timer_outline";
 		case "scroll": return "arrow_expand_vertical";
 		case "shots": return "image_multiple";
+		case "pictures": return "image_edit_outline";
 		case "unpin": return "pin_off_outline";
 		case "song": return "waveform";
 		case "lyrics": return "microphone_variant";
@@ -1599,6 +1607,7 @@ Item {
 		case "ai": return aiActionsView.item;
 		case "phone": return phoneView.item;
 		case "shots": return shotsView.item;
+		case "pictures": return picturesView.item;
 		case "finder": return finderView.item;
 		case "apps": return appsView;
 		default: return null;
@@ -1630,6 +1639,7 @@ Item {
 		case "ai": return "AI";
 		case "phone": return "Phone";
 		case "shots": return "Screenshots";
+		case "pictures": return "Pictures";
 		case "finder": return "Files";
 		default: return "";
 		}
@@ -1646,6 +1656,7 @@ Item {
 		case "ai": return "run";
 		case "phone": return "send";
 		case "shots": return "copy";
+		case "pictures": return "open";
 		case "apps": return appsView.zone === "actions" ? "run" : (appsView.current === null && appsView.searching && Plugins.on("web-search") ? "search the web" : "open");
 		default: return "open";
 		}
@@ -2545,6 +2556,31 @@ Item {
 
 					Connections {
 						target: shotsView.item
+						ignoreUnknownSignals: true
+
+						function onCloseRequested() {
+							root.closeRequested();
+						}
+					}
+				}
+			}
+
+			// pictures opened lately, the clipboard's, the screenshots (the viewer)
+			ModeLayer {
+				current: root.mode === "pictures"
+
+				ModeView {
+					id: picturesView
+
+					file: "PicturesView.qml"
+					current: root.mode === "pictures"
+					values: ({
+						active: root.mode === "pictures",
+						argument: root.modeArgument
+					})
+
+					Connections {
+						target: picturesView.item
 						ignoreUnknownSignals: true
 
 						function onCloseRequested() {

@@ -30,6 +30,8 @@ Singleton {
 		{ id: "text", label: "Text", icon: "text_recognition", shown: Screenshot.offers("ocr"), run: () => Screenshot.ocr() },
 		{ id: "qr", label: "QR", icon: "qrcode_scan", shown: Screenshot.offers("qr"), run: () => Screenshot.qr() },
 		{ id: "scroll", label: "Scroll", icon: "arrow_expand_vertical", shown: Screenshot.offers("scroll"), run: () => Screenshot.scroll() },
+		// the newest screenshot, straight into the picture viewer to draw on
+		{ id: "lastshot", label: "Edit last", icon: "image_edit_outline", shown: Viewer.enabled && Screenshot.shots.length > 0, run: () => Viewer.open(Screenshot.shots[0].path, { mode: "markup", list: Screenshot.shots.map(shot => shot.path) }) },
 		{
 			id: "delay", label: "Timer", icon: "timer_outline", shown: Plugins.on("delayed-screenshot"),
 			children: [3, 5, 10].map(seconds => ({
@@ -43,8 +45,9 @@ Singleton {
 
 	readonly property var clipboardEntries: [
 		{ id: "image", label: "Last image", icon: "image_outline", run: () => Clipboard.restoreLatest("image") },
+		{ id: "imageedit", label: "Edit image", icon: "image_edit_outline", shown: Viewer.enabled, run: () => Viewer.paste() },
 		{ id: "text", label: "Last text", icon: "text_short", run: () => Clipboard.restoreLatest("text") }
-	]
+	].filter(entry => entry.shown !== false)
 
 	readonly property var powerEntries: [
 		{ id: "lock", label: Words.of("power.lock", "Lock"), icon: "lock", shown: Plugins.on("lock-screen"), run: () => Session.run("lock") },

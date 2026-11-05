@@ -44,6 +44,7 @@ Singleton {
 	// where the last open came from, for the window's growth: { x, y, w, h, screen }
 	property var origin: null
 	property int openSerial: 0
+	property var replyTo: null
 	// which way the last step went (the next picture slides in from there)
 	property int direction: 1
 
@@ -97,7 +98,7 @@ Singleton {
 
 	// the recipe helpers live in the view's Recipe.js; these few are needed here
 	function blankRecipe() {
-		return { adjust: {}, curves: {}, tones: {}, look: "", geometry: { rot: 0, flip: false, angle: 0, vertical: 0, horizontal: 0, quad: null, crop: { x: 0, y: 0, w: 1, h: 1 } }, cutout: "", markup: { items: [] } };
+		return { adjust: {}, curves: {}, tones: {}, look: "", geometry: { rot: 0, flip: false, angle: 0, vertical: 0, horizontal: 0, quad: null, crop: { x: 0, y: 0, w: 1, h: 1 }, pad: null }, cutout: "", markup: { items: [] }, retouch: null };
 	}
 
 	function same(a, b) {
@@ -113,7 +114,8 @@ Singleton {
 		const c = g.crop || { x: 0, y: 0, w: 1, h: 1 };
 		const shaped = (g.rot || 0) % 4 !== 0 || !!g.flip || Math.abs(g.angle || 0) > 1e-4 || Math.abs(g.vertical || 0) > 1e-4 || Math.abs(g.horizontal || 0) > 1e-4 || !!g.quad
 			|| c.x > 1e-5 || c.y > 1e-5 || c.w < 1 - 1e-5 || c.h < 1 - 1e-5;
-		return !nonzero && !curves && !tones && !shaped && !r.cutout && (r.markup?.items || []).length === 0;
+		const padded = !!g.pad && (Number(g.pad.size) > 0 || Number(g.pad.aspect) > 0);
+		return !nonzero && !curves && !tones && !shaped && !padded && !r.cutout && !(r.retouch?.strokes?.length > 0) && (r.markup?.items || []).length === 0;
 	}
 
 	// ── opening ────────────────────────────────────────────────────────────
@@ -126,22 +128,27 @@ Singleton {
 			path = decodeURIComponent(path);
 		} catch (error) {}
 		root.origin = o.from || null;
+		// a chat it came from: a saved copy is offered back to it
+		root.replyTo = o.replyTo || null;
 		root.openSerial += 1;
 		root.pasted = !!o.pasted;
 		const wanted = o.mode || "view";
 		if (o.list && o.list.length > 0) {
-			root.files = o.list.map(p => root.entryFor(String(p)));
+			root.allFiles = o.list.map(p => root.entryFor(String(p)));
+			root.files = root.allFiles;
 			root.folder = "";
 			root.show(Math.max(0, o.list.indexOf(path)), wanted);
 		} else {
 			// at once with this one picture, its folder follows
 			root.files = [root.entryFor(path)];
+			root.allFiles = root.files;
 			root.folder = path.slice(0, path.lastIndexOf("/")) || "/";
 			root.show(0, wanted);
 			if (!root.pasted) root.listFolder(path);
 		}
 		root.windowOpen = true;
 		root.focusWindow();
+		root.noteRecent(path);
 	}
 
 	// where an item of a window of the shell is on its screen, for open()'s
@@ -162,6 +169,14 @@ Singleton {
 		return { screen: output, x: x, y: y, w: item.width, h: item.height };
 	}
 
+	// pictures opened lately, newest first (>pictures)
+	readonly property var recent: root.setting("recent", [])
+
+	function noteRecent(path) {
+		if (!path || root.pasted || path.startsWith(root.workDir)) return;
+		root.setSetting("recent", [path].concat(root.recent.filter(p => p !== path)).slice(0, 60));
+	}
+
 	function entryFor(path) {
 		return { path: path, name: path.slice(path.lastIndexOf("/") + 1), mtime: 0, size: 0 };
 	}
@@ -170,8 +185,8 @@ Singleton {
 		root.request("list", { path: path, sort: root.setting("sort", "name"), reverse: root.setting("reverse", false) }, (data, error) => {
 			if (error || !data || root.path !== path) return;
 			root.folder = data.folder;
-			root.files = data.files;
 			root.index = Math.max(0, data.index);
+			root.setFiles(data.files, path);
 		});
 	}
 
@@ -206,6 +221,20 @@ Singleton {
 	// the picture's facts, then what Qt is to load, then its recipe
 	signal aboutToLoad
 
+	// the filled copy of what was taken out went with the cache: made again from the strokes
+	function checkRetouch(path) {
+		const r = root.recipe.retouch;
+		if (!r?.base || !(r.strokes?.length > 0)) return;
+		root.request("info", { path: r.base }, (data, error) => {
+			if (!error || root.path !== path) return;
+			root.request("inpaint", { path: root.shownPath, strokes: r.strokes, out: r.base }, (made, failed) => {
+				if (failed || root.path !== path) return;
+				// the same path again: the shader is told by a new recipe object
+				root.recipe = JSON.parse(JSON.stringify(root.recipe));
+			});
+		});
+	}
+
 	function load() {
 		const path = root.path;
 		root.aboutToLoad();
@@ -219,6 +248,7 @@ Singleton {
 			root.info = known;
 			root.shownPath = path;
 			root.prefetch();
+			root.checkRetouch(path);
 			return;
 		}
 		root.request("info", { path: path }, (data, error) => {
@@ -232,6 +262,7 @@ Singleton {
 			root.prefetch();
 			if (!data.proxy) {
 				root.shownPath = path;
+				root.checkRetouch(path);
 				return;
 			}
 			root.decoding = true;
@@ -283,6 +314,8 @@ Singleton {
 
 	function close() {
 		root.leaveMode();
+		if (root.sliding) root.slideshow(false);
+		root.culling = false;
 		root.windowOpen = false;
 	}
 
@@ -414,6 +447,26 @@ Singleton {
 		root.committed = r;
 	}
 
+	// the recipe another picture has (for comparing, without opening it)
+	function recipeOf(path) {
+		store.path = root.sidecarPath(path);
+		try {
+			const data = JSON.parse(String(store.text() || "{}"));
+			if (data.path === path && data.recipe) return Object.assign(root.blankRecipe(), data.recipe);
+		} catch (error) {}
+		return root.blankRecipe();
+	}
+
+	// what the helper read of a picture, from the cache or asked: done(info)
+	function infoOf(path, done) {
+		if (root.infoCache[path]) return done(root.infoCache[path]);
+		root.request("info", { path: path }, data => {
+			if (!data) return;
+			root.remember(path, data);
+			done(data);
+		});
+	}
+
 	function writeSidecar() {
 		const path = root.path;
 		if (!path || root.pasted) return;
@@ -480,6 +533,28 @@ Singleton {
 				root.fail("The picture could not be rendered");
 				return;
 			}
+			// larger first, then encoded
+			if (o.upscale > 1 && !o.upscaled) {
+				const big = src.replace(/\.tiff$/, "-larger.png");
+				root.busyText = "Enlarging…";
+				root.request("upscale", { path: src, factor: o.upscale, out: big }, (data, error) => {
+					Quickshell.execDetached(["rm", "-f", src]);
+					if (error) {
+						root.busy = false;
+						return root.fail(error);
+					}
+					root.busy = false;
+					root.encodeCopy(Object.assign({}, o, { upscaled: true }), data.path, original, recipe, done);
+				});
+				return;
+			}
+			root.encodeCopy(o, src, original, recipe, done);
+		});
+	}
+
+	function encodeCopy(o, src, original, recipe, done) {
+		root.busy = true;
+		{
 			const ext = root.extensionFor(o.format, original);
 			const request = {
 				src: src, original: root.pasted ? "" : original, format: o.format, quality: o.quality, resize: o.resize,
@@ -508,7 +583,7 @@ Singleton {
 				if (root.folder && root.path === original) root.listFolder(original);
 				if (done) done(data.path);
 			});
-		});
+		}
 	}
 
 	// paths this session wrote (so "exists" knows them without asking the disk)
@@ -536,6 +611,14 @@ Singleton {
 
 	function announceSaved(path, bytes) {
 		const name = path.slice(path.lastIndexOf("/") + 1);
+		const chat = root.replyTo;
+		if (chat) {
+			root.said(`Saved – send it back to ${chat.name}?`, "whatsapp");
+			root.offered(`Send to ${chat.name}`, () => {
+				Files.sendToChat(chat, [path]);
+				root.say(`Sent to ${chat.name}`, "whatsapp");
+			});
+		}
 		Notifs.post({
 			app: "Pictures",
 			summary: `Saved as ${name}`,
@@ -661,6 +744,301 @@ Singleton {
 		idle.restart();
 	}
 
+	// ── stars, keep or reject, marks ───────────────────────────────────────
+	// path → { stars: 0..5, flag: "keep" | "reject" | "" } (viewer-ratings.json)
+	property var ratings: ({})
+	// "" | "stars:<n>" (at least n stars) | "kept" | "unsorted"
+	property string filter: ""
+	// all of the folder's pictures; `files` is what the filter lets through
+	property var allFiles: []
+	// pictures marked for comparing, a collage, changes on many (paths, in order)
+	property var marked: []
+	// sorting out: ↑ keeps, ↓ rejects, and on to the next
+	property bool culling: false
+
+	function ratingOf(path) {
+		return root.ratings[path] ?? { stars: 0, flag: "" };
+	}
+
+	function rate(path, changes) {
+		if (!path || root.pasted) return;
+		const next = Object.assign({}, root.ratings);
+		const now = Object.assign({ stars: 0, flag: "" }, next[path] || {}, changes);
+		if (now.stars === 0 && !now.flag) delete next[path];
+		else next[path] = now;
+		root.ratings = next;
+		ratingsFile.setText(JSON.stringify(root.ratings) + "\n");
+	}
+
+	function setStars(stars) {
+		const now = root.ratingOf(root.path).stars;
+		root.rate(root.path, { stars: now === stars ? 0 : stars });
+		root.say(now === stars ? "No stars" : "★".repeat(stars), "star_outline");
+	}
+
+	function setFlag(flag) {
+		root.rate(root.path, { flag: root.ratingOf(root.path).flag === flag ? "" : flag });
+		if (root.culling) cullNext.restart();
+	}
+
+	Timer {
+		id: cullNext
+
+		interval: 180
+		onTriggered: {
+			if (root.index < root.files.length - 1) root.step(1);
+			else root.say("That was the last – the rejected ones can go to the trash now", "check_all");
+		}
+	}
+
+	readonly property var rejected: root.allFiles.filter(f => root.ratingOf(f.path).flag === "reject")
+
+	function trashRejected() {
+		const paths = root.rejected.map(f => f.path);
+		if (paths.length === 0) return;
+		Files.trash(paths);
+		const left = root.allFiles.filter(f => !paths.includes(f.path));
+		const next = Object.assign({}, root.ratings);
+		for (const p of paths) delete next[p];
+		root.ratings = next;
+		ratingsFile.setText(JSON.stringify(root.ratings) + "\n");
+		root.setFiles(left, root.path);
+		root.say(paths.length === 1 ? "One picture went to the trash" : `${paths.length} pictures went to the trash`, "trash_can_outline");
+	}
+
+	function passes(file) {
+		const r = root.ratingOf(file.path);
+		if (root.filter.startsWith("stars:")) return r.stars >= Number(root.filter.slice(6));
+		if (root.filter === "kept") return r.flag === "keep";
+		if (root.filter === "unsorted") return !r.flag;
+		return true;
+	}
+
+	// the list shown, from all of them through the filter, staying on `keep` when it is there
+	function setFiles(all, keep) {
+		root.allFiles = all;
+		let shown = all.filter(f => root.passes(f));
+		if (shown.length === 0 && all.length > 0) {
+			root.filter = "";
+			shown = all;
+		}
+		root.files = shown;
+		const i = shown.findIndex(f => f.path === keep);
+		if (i >= 0) root.index = i;
+		else if (shown.length > 0) root.show(Math.min(Math.max(0, root.index), shown.length - 1));
+	}
+
+	function setFilter(filter) {
+		root.filter = root.filter === filter ? "" : filter;
+		root.setFiles(root.allFiles, root.path);
+	}
+
+	function toggleMark(path) {
+		path = path || root.path;
+		if (!path) return;
+		root.marked = root.marked.includes(path) ? root.marked.filter(p => p !== path) : root.marked.concat([path]);
+	}
+
+	FileView {
+		id: ratingsFile
+
+		path: Paths.stateFile("viewer-ratings.json")
+		printErrors: false
+		onLoaded: {
+			try {
+				root.ratings = JSON.parse(String(text() || "{}"));
+			} catch (error) {}
+		}
+	}
+
+	// ── a slideshow ────────────────────────────────────────────────────────
+	property bool sliding: false
+	property bool slidePaused: false
+
+	function slideshow(start) {
+		if (start === false || root.sliding) {
+			root.sliding = false;
+			root.fullscreen(false);
+			return;
+		}
+		if (root.files.length === 0) return;
+		root.leaveMode();
+		root.sliding = true;
+		root.slidePaused = false;
+		root.fullscreen(true);
+		slideTimer.restart();
+	}
+
+	Timer {
+		id: slideTimer
+
+		interval: Math.max(2, Number(root.setting("slideSeconds", 5))) * 1000
+		repeat: true
+		running: root.sliding && !root.slidePaused && root.windowOpen
+		onTriggered: {
+			if (root.setting("slideShuffle", false) && root.files.length > 2) {
+				let i = root.index;
+				while (i === root.index) i = Math.floor(Math.random() * root.files.length);
+				root.direction = 1;
+				root.show(i);
+			} else root.step(1);
+		}
+	}
+
+	// the window over the whole screen (niri's own fullscreen)
+	function fullscreen(on) {
+		const window = Niri.windows.find(window => String(window.title) === root.windowTitle && /quickshell/i.test(String(window.app_id)));
+		if (!window) return;
+		const now = !!window.is_fullscreen || root.isFullscreen;
+		if (now === on) return;
+		root.isFullscreen = on;
+		Quickshell.execDetached(["niri", "msg", "action", "fullscreen-window", "--id", String(window.id)]);
+	}
+
+	property bool isFullscreen: false
+
+	// the slideshow as a player of the desktop (scripts/viewer/slides.py):
+	// the phone, the watch, media keys and playerctl steer it
+	Process {
+		id: slides
+
+		running: root.sliding
+		stdinEnabled: true
+		command: ["python3", "-u", `${Paths.scripts}/viewer/slides.py`]
+		stdout: SplitParser {
+			onRead: line => {
+				let message;
+				try {
+					message = JSON.parse(line);
+				} catch (error) {
+					return;
+				}
+				switch (message.command) {
+				case "next":
+					root.step(1);
+					break;
+				case "previous":
+					root.step(-1);
+					break;
+				case "play":
+					root.slidePaused = false;
+					break;
+				case "pause":
+					root.slidePaused = true;
+					break;
+				case "toggle":
+					root.slidePaused = !root.slidePaused;
+					break;
+				case "stop":
+					root.slideshow(false);
+					break;
+				case "raise":
+					root.focusWindow();
+					break;
+				}
+			}
+		}
+		onRunningChanged: if (slides.running) root.tellSlides()
+	}
+
+	function tellSlides() {
+		if (!slides.running) return;
+		slides.write(JSON.stringify({ title: root.current?.name ?? "", art: root.path, playing: !root.slidePaused }) + "\n");
+	}
+
+	onPathChanged: root.tellSlides()
+	onSlidePausedChanged: root.tellSlides()
+
+	// ── changes for many ───────────────────────────────────────────────────
+	// the light, colour, look and border of a picture, to be laid onto others
+	property var copiedRecipe: null
+
+	function copyEdits() {
+		const r = JSON.parse(JSON.stringify(root.recipe));
+		root.copiedRecipe = { adjust: r.adjust, curves: r.curves, tones: r.tones, look: r.look, pad: r.geometry?.pad ?? null };
+		root.say("The changes are copied – Ctrl+Shift+V lays them onto another picture", "content_copy");
+	}
+
+	function pastedOnto(recipe) {
+		const c = root.copiedRecipe;
+		const next = JSON.parse(JSON.stringify(recipe || root.blankRecipe()));
+		next.adjust = Object.assign({}, c.adjust);
+		next.curves = JSON.parse(JSON.stringify(c.curves));
+		next.tones = Object.assign({}, c.tones);
+		next.look = c.look;
+		next.geometry = Object.assign({}, next.geometry, { pad: c.pad });
+		return next;
+	}
+
+	function pasteEdits() {
+		if (!root.copiedRecipe) return root.say("Copy the changes of a picture first (Ctrl+Shift+C)", "content_copy");
+		root.commit(root.pastedOnto(root.recipe));
+	}
+
+	// the copied changes onto each of `paths`, each saved as its copy: the
+	// window walks them so each is rendered as it is shown
+	property var batchQueue: []
+	property int batchTotal: 0
+	readonly property bool batching: root.batchTotal > 0
+
+	function batch(paths) {
+		if (!root.copiedRecipe) return root.say("Copy the changes of a picture first (Ctrl+Shift+C)", "content_copy");
+		const list = (paths && paths.length > 0 ? paths : root.marked).slice();
+		if (list.length === 0) return;
+		root.batchQueue = list;
+		root.batchTotal = list.length;
+		root.open(list[0], { list: list });
+		batchStep.restart();
+	}
+
+	Timer {
+		id: batchStep
+
+		interval: 400
+		onTriggered: {
+			if (root.batchQueue.length === 0) {
+				root.say(`Changed and saved ${root.batchTotal} pictures`, "check_all");
+				root.batchTotal = 0;
+				return;
+			}
+			const path = root.batchQueue[0];
+			if (root.path !== path) {
+				const i = root.files.findIndex(f => f.path === path);
+				if (i >= 0) root.show(i);
+				batchStep.restart();
+				return;
+			}
+			if (!root.info || !root.shownPath || !root.renderer?.ready) {
+				batchStep.restart();
+				return;
+			}
+			root.commit(root.pastedOnto(root.recipe));
+			root.busyText = `Picture ${root.batchTotal - root.batchQueue.length + 1} of ${root.batchTotal}`;
+			Qt.callLater(() => root.saveCopy({}, () => {
+				root.batchQueue = root.batchQueue.slice(1);
+				batchStep.restart();
+			}));
+		}
+	}
+
+	// a collage of the marked pictures (or of `paths`), opened when it is made
+	function collage(paths, layout) {
+		const list = (paths && paths.length > 1 ? paths : root.marked).slice();
+		if (list.length < 2) return root.say("Mark two pictures or more first (M)", "checkbox_multiple_marked_outline");
+		const first = list[0];
+		const folder = first.slice(0, first.lastIndexOf("/"));
+		root.busy = true;
+		root.busyText = "Making the collage…";
+		root.request("unique", { path: `${folder}/Collage ${Qt.formatDateTime(new Date(), "yyyy-MM-dd")}.jpg`, label: "", ext: "jpg" }, data => {
+			root.request("collage", { paths: list, layout: layout || "auto", gap: 16, background: "#ffffff", width: 3200, out: data?.path ?? `${folder}/Collage.jpg` }, (made, error) => {
+				root.busy = false;
+				if (error) return root.fail(error);
+				root.open(made.path);
+				root.say(`The collage of ${list.length} pictures is beside them`, "view_quilt_outline");
+			});
+		});
+	}
+
 	// ── as an app of the desktop ───────────────────────────────────────────
 	// the entry "Pshell Pictures" is there while the plugin is on; with
 	// viewer-default pictures opened anywhere come here (scripts/viewer/default.py)
@@ -693,6 +1071,8 @@ Singleton {
 
 	// ── telling ────────────────────────────────────────────────────────────
 	signal said(string text, string icon)
+	// a line with a button: offered(label, run)
+	signal offered(string label, var run)
 
 	function say(text, icon) {
 		root.said(text, icon || "information_outline");

@@ -42,8 +42,13 @@ XML = """<node>
 
 
 class Mpris:
-    def __init__(self, on_command):
+    # the bus name's part and how the player is called (the picture viewer's
+    # slideshow is one too: scripts/viewer/slides.py)
+    def __init__(self, on_command, name="pshell_streams", identity="Streams", entry="pshell-streams"):
         self.on_command = on_command
+        self.name = name
+        self.identity = identity
+        self.entry = entry
         self.state = None
         self.connection = None
         self.owner = 0
@@ -104,7 +109,7 @@ class Mpris:
             self.connection = None
             self.objects = []
             self.owner = 0
-        self.owner = Gio.bus_own_name(Gio.BusType.SESSION, f"{ROOT}.pshell_streams.instance{os.getpid()}", Gio.BusNameOwnerFlags.NONE, acquired, None, lost)
+        self.owner = Gio.bus_own_name(Gio.BusType.SESSION, f"{ROOT}.{self.name}.instance{os.getpid()}", Gio.BusNameOwnerFlags.NONE, acquired, None, lost)
 
     def release(self):
         if self.connection:
@@ -126,7 +131,7 @@ class Mpris:
 
     def track(self):
         name = re.sub(r"\W", "_", str((self.state or {}).get("id") or "none"), flags=re.ASCII)
-        return f"/org/pshell/streams/{name or 'none'}"
+        return f"/org/pshell/{self.name}/{name or 'none'}"
 
     def metadata(self):
         state = self.state or {}
@@ -149,7 +154,7 @@ class Mpris:
     def get(self, _connection, _sender, _path, _interface, name):
         state = self.state or {}
         plain = {
-            "CanQuit": ("b", True), "CanRaise": ("b", True), "HasTrackList": ("b", False), "Identity": ("s", "Streams"), "DesktopEntry": ("s", "pshell-streams"),
+            "CanQuit": ("b", True), "CanRaise": ("b", True), "HasTrackList": ("b", False), "Identity": ("s", self.identity), "DesktopEntry": ("s", self.entry),
             "SupportedUriSchemes": ("as", []), "SupportedMimeTypes": ("as", []), "PlaybackStatus": ("s", self.status()), "Rate": ("d", float(state.get("rate") or 1)),
             "Volume": ("d", float(state.get("volume") if state.get("volume") is not None else 1)), "Position": ("x", self.micro()), "MinimumRate": ("d", 0.25), "MaximumRate": ("d", 3.0),
             "CanGoNext": ("b", bool(state.get("canNext"))), "CanGoPrevious": ("b", bool(state.get("canSeek"))), "CanPlay": ("b", True), "CanPause": ("b", True),

@@ -185,6 +185,14 @@ QtObject {
 	function sendEntries(rows) {
 		const files = rows.filter(row => !row.dir);
 		const view = root.view;
+		// only files: the shell's one list of where things go (ShareTargets), as the picture viewer has it
+		if (files.length === rows.length && files.length > 0) {
+			const shared = ShareTargets.entries(root.paths(files));
+			if (Plugins.on("ssh")) shared.push({ label: "A server…", icon: "server_network", run: () => view.sendToServer(rows) });
+			shared.push({ separator: true });
+			shared.push({ label: "Share a link…", icon: "link_variant", run: () => view.shareDialog(rows) });
+			return shared;
+		}
 		const out = [];
 		if (Plugins.on("mail") && Mail.accounts.length > 0) out.push({ label: "Mail", icon: "email_outline", run: () => Files.mailFiles(root.paths(rows)) });
 		if (Files.recentChats.length > 0 && files.length > 0) out.push({ label: "WhatsApp", icon: "whatsapp", children: () => Files.recentChats.map(chat => ({
@@ -322,8 +330,23 @@ QtObject {
 			{ label: "Pin to the screen", icon: "pin_outline", shown: !!one && root.pins, run: () => Screenshot.pinShot(one.path) },
 			{ label: "Set as wallpaper", icon: "wallpaper", shown: !!one && root.wallpaper, run: () => root.view.setWallpaper(one.path) },
 			{ label: one ? "Make a PDF of it" : "Make one PDF of them", icon: "file_pdf_box", run: () => Files.pdfTool("fromimages", paths, {}) },
-			{ label: "Convert to", icon: "swap_horizontal", children: done => Files.convertible(paths, targets => done(root.convertEntries(images, targets))) }
-		];
+			{ label: "Convert to", icon: "swap_horizontal", children: done => Files.convertible(paths, targets => done(root.convertEntries(images, targets))) },
+			{ header: "In the picture viewer", shown: root.viewer },
+			{ label: "Compare them", icon: "view_grid_outline", shown: root.viewer && images.length > 1 && images.length <= 4, run: () => {
+				Viewer.marked = paths;
+				Viewer.open(paths[0], { list: paths, mode: "compare" });
+			} },
+			{ label: "Make a collage", icon: "view_quilt_outline", shown: root.viewer && images.length > 1, run: () => Viewer.collage(paths) },
+			{ label: "Lay the copied changes on them", icon: "content_paste", shown: root.viewer && !!Viewer.copiedRecipe, run: () => Viewer.batch(paths) },
+			{ label: "Slideshow", icon: "play_box_outline", shown: root.viewer, run: () => {
+				Viewer.open(paths[0], images.length > 1 ? { list: paths } : {});
+				Qt.callLater(() => Viewer.slideshow(true));
+			} },
+			{ label: "Sort them out", icon: "thumbs_up_down_outline", shown: root.viewer, run: () => {
+				Viewer.open(paths[0], images.length > 1 ? { list: paths } : {});
+				Viewer.culling = true;
+			} }
+		].filter(entry => entry.shown !== false);
 	}
 
 	function openWith(row, done) {

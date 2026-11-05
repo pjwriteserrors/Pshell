@@ -6,6 +6,7 @@ import qs.style.theme
 import qs.style.widgets
 import qs.core.services
 import "Recipe.js" as Recipe
+import "Geometry.js" as Geo
 
 // Light and colour: a look to start from, the sliders, the tone curve and
 // tints for shadows and highlights. Everything shows live while it moves
@@ -19,6 +20,11 @@ Item {
 	signal splitToggled
 
 	readonly property var recipe: Viewer.recipe
+	// the theme's own looks first; they change with the theme
+	readonly property var looks: {
+		Recipe.setThemeColours(Theme.primary, Theme.secondary, Theme.tertiary);
+		return [{ id: "", label: "None" }].concat(Recipe.allLooks());
+	}
 	property string channel: "rgb"
 	property bool autoBusy: false
 
@@ -63,6 +69,18 @@ Item {
 			Viewer.say(Recipe.colourIsPlain(next) ? "The picture is fine as it is" : "Light and colour set by the picture", "auto_fix");
 		});
 	}
+
+	// a border around the picture, in a colour, filled up to a shape
+	function setPad(changes, commit) {
+		const next = Recipe.copy(commit ? Viewer.recipe : Viewer.committed);
+		const pad = Object.assign({ size: 0, color: "#ffffff", aspect: 0 }, next.geometry.pad || {}, changes);
+		next.geometry.pad = pad.size > 0 || pad.aspect > 0 ? pad : null;
+		next.markup.items = Geo.remapItems((commit ? Viewer.recipe : Viewer.committed).markup?.items ?? [], (commit ? Viewer.recipe : Viewer.committed).geometry, next.geometry, Viewer.info?.width ?? 1, Viewer.info?.height ?? 1);
+		if (commit) Viewer.commit(next);
+		else Viewer.preview(next);
+	}
+
+	readonly property var pad: root.recipe.geometry?.pad ?? null
 
 	function resetColour() {
 		const next = Recipe.copy(Viewer.recipe);
@@ -149,8 +167,11 @@ Item {
 				}
 			}
 
-			SectionLabel {
+			RevertHeader {
+				width: parent.width
 				text: "Looks"
+				changed: !!root.recipe.look
+				onReverted: Viewer.commit(Recipe.withLook(Viewer.recipe, ""))
 			}
 
 			// a row of small previews, each the picture in that look
@@ -163,7 +184,7 @@ Item {
 				spacing: 8
 				clip: true
 				boundsBehavior: Flickable.StopAtBounds
-				model: [{ id: "", label: "None" }].concat(Recipe.LOOKS)
+				model: root.looks
 
 				delegate: Clickable {
 					id: lookTile
@@ -227,8 +248,15 @@ Item {
 					width: column.width
 					spacing: 4
 
-					SectionLabel {
+					RevertHeader {
+						width: group.width
 						text: group.modelData
+						changed: Recipe.SLIDERS.some(s => s.group === group.modelData && Math.abs(Recipe.value(root.recipe, s.id)) > 1e-4)
+						onReverted: {
+							const next = Recipe.copy(Viewer.recipe);
+							for (const s of Recipe.SLIDERS) if (s.group === group.modelData) delete next.adjust[s.id];
+							Viewer.commit(next);
+						}
 					}
 
 					Repeater {
@@ -249,8 +277,11 @@ Item {
 				}
 			}
 
-			SectionLabel {
+			RevertHeader {
+				width: parent.width
 				text: "Curve"
+				changed: !Recipe.curveIsFlat(root.recipe.curves?.[root.channel])
+				onReverted: root.setCurve([[0, 0], [1, 1]], true)
 			}
 
 			Segmented {
@@ -271,8 +302,84 @@ Item {
 				onCommitted: points => root.setCurve(points, true)
 			}
 
-			SectionLabel {
+			RevertHeader {
+				width: parent.width
+				text: "Border"
+				changed: !!root.pad
+				onReverted: root.setPad({ size: 0, aspect: 0 }, true)
+			}
+
+			TuneSlider {
+				width: parent.width
+				label: "Width"
+				icon: "border_outside"
+				from: 0
+				to: 0.25
+				step: 0.002
+				value: Number(root.pad?.size ?? 0)
+				valueText: `${Math.round(shown * 400)} %`
+				onMoved: value => root.setPad({ size: value }, false)
+				onCommitted: value => root.setPad({ size: value }, true)
+			}
+
+			Row {
+				spacing: 6
+
+				Repeater {
+					model: ["#ffffff", "#000000", "#f4efe6", "#1c1c1c", String(Theme.primary), String(Theme.base)]
+
+					delegate: Rectangle {
+						required property string modelData
+						readonly property bool current: !!root.pad && Qt.colorEqual(root.pad.color, modelData)
+
+						width: 24
+						height: 24
+						radius: 12
+						color: modelData
+						border.width: current ? 2 : 1
+						border.color: current ? Theme.primary : Theme.outline
+
+						MouseArea {
+							anchors.fill: parent
+							cursorShape: Qt.PointingHandCursor
+							onClicked: root.setPad({ color: parent.modelData, size: Math.max(Number(root.pad?.size ?? 0), root.pad?.aspect > 0 ? 0 : 0.04) }, true)
+						}
+					}
+				}
+			}
+
+			StyledText {
+				text: "Filled up to a shape, the whole picture kept"
+				font.pixelSize: Theme.size.small
+				tone: Theme.textSubtle
+			}
+
+			Flow {
+				width: parent.width
+				spacing: 6
+
+				Repeater {
+					model: [{ label: "As it is", value: 0 }, { label: "1:1", value: 1 }, { label: "4:5", value: 4 / 5 }, { label: "9:16", value: 9 / 16 }, { label: "16:9", value: 16 / 9 }, { label: "3:2", value: 3 / 2 }]
+
+					delegate: Chip {
+						required property var modelData
+
+						text: modelData.label
+						selected: Math.abs(Number(root.pad?.aspect ?? 0) - modelData.value) < 1e-3
+						onClicked: root.setPad({ aspect: modelData.value }, true)
+					}
+				}
+			}
+
+			RevertHeader {
+				width: parent.width
 				text: "Tint shadows and highlights"
+				changed: Recipe.tonesOn(root.recipe)
+				onReverted: {
+					const next = Recipe.copy(Viewer.recipe);
+					next.tones = {};
+					Viewer.commit(next);
+				}
 			}
 
 			Repeater {

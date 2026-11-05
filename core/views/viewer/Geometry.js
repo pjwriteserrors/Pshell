@@ -5,7 +5,8 @@
 //     clockwise (straighten), vertical, horizontal: perspective -1..1,
 //     quad: null | four corners TL TR BR BL (0..1 of the turned picture),
 //     crop: { x, y, w, h } 0..1 of what turn, straighten and perspective
-//     made }
+//     made, pad: null | { size: 0..0.5 of the longer side, color, aspect:
+//     0 | width / height the border fills up to } }
 // and one projective map takes the result's 0..1 to the source's 0..1 (the
 // shader's `geo`). Matrices are arrays of nine, row by row.
 
@@ -59,7 +60,7 @@ function squareToQuad(q) {
 }
 
 function defaults() {
-	return { rot: 0, flip: false, angle: 0, vertical: 0, horizontal: 0, quad: null, crop: { x: 0, y: 0, w: 1, h: 1 } };
+	return { rot: 0, flip: false, angle: 0, vertical: 0, horizontal: 0, quad: null, crop: { x: 0, y: 0, w: 1, h: 1 }, pad: null };
 }
 
 function normalised(g) {
@@ -69,14 +70,15 @@ function normalised(g) {
 		rot: ((Number(g.rot) || 0) % 4 + 4) % 4, flip: !!g.flip, angle: Number(g.angle) || 0,
 		vertical: Number(g.vertical) || 0, horizontal: Number(g.horizontal) || 0,
 		quad: Array.isArray(g.quad) && g.quad.length === 4 ? g.quad.map(p => [Number(p[0]), Number(p[1])]) : null,
-		crop: g.crop ? { x: Number(g.crop.x) || 0, y: Number(g.crop.y) || 0, w: Number(g.crop.w) || 1, h: Number(g.crop.h) || 1 } : d.crop
+		crop: g.crop ? { x: Number(g.crop.x) || 0, y: Number(g.crop.y) || 0, w: Number(g.crop.w) || 1, h: Number(g.crop.h) || 1 } : d.crop,
+		pad: g.pad && (Number(g.pad.size) > 0 || Number(g.pad.aspect) > 0) ? { size: Number(g.pad.size) || 0, color: String(g.pad.color || "#ffffff"), aspect: Number(g.pad.aspect) || 0 } : null
 	};
 }
 
 function isIdentity(g) {
 	g = normalised(g);
 	return g.rot === 0 && !g.flip && Math.abs(g.angle) < 1e-4 && Math.abs(g.vertical) < 1e-4 && Math.abs(g.horizontal) < 1e-4
-		&& !g.quad && g.crop.x < 1e-5 && g.crop.y < 1e-5 && g.crop.w > 1 - 1e-5 && g.crop.h > 1 - 1e-5;
+		&& !g.quad && !g.pad && g.crop.x < 1e-5 && g.crop.y < 1e-5 && g.crop.w > 1 - 1e-5 && g.crop.h > 1 - 1e-5;
 }
 
 // the turned picture's size
@@ -93,10 +95,26 @@ function fullSize(g, w, h) {
 	return [Math.max(1, (len(q[0], q[1]) + len(q[3], q[2])) / 2), Math.max(1, (len(q[0], q[3]) + len(q[1], q[2])) / 2)];
 }
 
+// the cropped picture inside its border: { iw, ih, x, y, W, H } in pixels
+function padBox(g, w, h) {
+	const [fw, fh] = fullSize(g, w, h);
+	const iw = Math.max(1, Math.round(fw * g.crop.w)), ih = Math.max(1, Math.round(fh * g.crop.h));
+	if (!g.pad) return { iw: iw, ih: ih, x: 0, y: 0, W: iw, H: ih };
+	const p = Math.round(Math.max(0, Math.min(0.5, g.pad.size)) * Math.max(iw, ih));
+	let W = iw + 2 * p, H = ih + 2 * p;
+	// filled up to a shape (a square for a feed, a screen …)
+	const a = g.pad.aspect;
+	if (a > 0) {
+		if (W / H < a) W = Math.round(H * a);
+		else H = Math.round(W / a);
+	}
+	return { iw: iw, ih: ih, x: Math.round((W - iw) / 2), y: Math.round((H - ih) / 2), W: W, H: H };
+}
+
 function outputSize(g, w, h) {
 	g = normalised(g);
-	const [fw, fh] = fullSize(g, w, h);
-	return [Math.max(1, Math.round(fw * g.crop.w)), Math.max(1, Math.round(fh * g.crop.h))];
+	const b = padBox(g, w, h);
+	return [b.W, b.H];
 }
 
 // turned 0..1 → source 0..1
@@ -131,11 +149,16 @@ function cropMatrix(c) {
 	return [c.w, 0, c.x, 0, c.h, c.y, 0, 0, 1];
 }
 
-// the result's 0..1 → the source's 0..1
+// the result's 0..1 → the source's 0..1 (the border maps outside of it)
 function matrix(g, w, h, withoutCrop) {
 	g = normalised(g);
 	const c = withoutCrop ? { x: 0, y: 0, w: 1, h: 1 } : g.crop;
-	return mul(unturn(g), mul(straighten(g, w, h), cropMatrix(c)));
+	let m = mul(unturn(g), mul(straighten(g, w, h), cropMatrix(c)));
+	if (g.pad && !withoutCrop) {
+		const b = padBox(g, w, h);
+		m = mul(m, [b.W / b.iw, 0, -b.x / b.iw, 0, b.H / b.ih, -b.y / b.ih, 0, 0, 1]);
+	}
+	return m;
 }
 
 // before the crop 0..1 → inside the turned picture?

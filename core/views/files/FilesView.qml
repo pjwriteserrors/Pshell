@@ -387,7 +387,13 @@ FocusScope {
 		// pictures open in the shell's own viewer, with the others of the pane to walk
 		if (rest.length > 0 && Viewer.isDefault && rest.every(row => Kinds.kindOf(row) === "image")) {
 			const pictures = rest.length > 1 ? rest : pane.rows.filter(row => !row.dir && Kinds.kindOf(row) === "image");
-			Viewer.open(rest[0].path, { list: pictures.map(row => row.path), from: root.openOrigin });
+			// it grows out of its card (Quick Look's picture when it came from there)
+			let from = root.openOrigin;
+			if (!from) {
+				const card = root.activeBrowse()?.itemOf(pane.rows.findIndex(row => row.path === rest[0].path));
+				if (card) from = Viewer.originOf(card, Files.windowTitle);
+			}
+			Viewer.open(rest[0].path, { list: pictures.map(row => row.path), from: from });
 			root.openOrigin = null;
 			return;
 		}
