@@ -3,6 +3,9 @@
 core/views/settings/DevicesPage.qml).
 
     scripts/devices/devices.py            every device, as JSON
+    scripts/devices/devices.py network    what the local network and the
+                                          Wi-Fi around show (a few seconds),
+                                          also kept in the state dir
     scripts/devices/devices.py prompt ID  writes what a Claude session needs
                                           to teach the shell a new device,
                                           prints the file's path
@@ -16,11 +19,22 @@ core/devices.json is the registry: each entry says which devices it covers
 (`match`), the settings page and plugin that look after them, and whether
 that is all the device can do (`partial` for a page that fits a family but
 was not made for this model). The first entry that matches wins.
+
+Besides HID: the paired Bluetooth devices (BlueZ, also headphones, watches
+…), what answers on the local network (ARP, mDNS, SSDP) and the Wi-Fi
+networks around, and the user's own devices – added by hand, often with the
+vendor's app (a Linux or Windows program) to learn the protocol from.
 """
 
+import ipaddress
 import json
-import os
+import re
+import socket
+import subprocess
 import sys
+import time
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -239,7 +253,313 @@ def matches(entry, device):
             return False
     if "name" in match and match["name"].lower() not in device.get("name", "").lower():
         return False
+    # Bluetooth address, network MAC or Wi-Fi BSSID
+    if "mac" in match and device.get("mac", "").lower() not in [m.lower() for m in match["mac"]]:
+        return False
+    # a Bluetooth service uuid or an mDNS service type the device offers
+    if "service" in match and not set(match["service"]) & set(device.get("services", [])):
+        return False
+    if "custom" in match and device.get("id", "").removeprefix("custom:") not in match["custom"]:
+        return False
     return bool(match)
+
+
+# ── paired Bluetooth devices ─────────────────────────────────────────────
+BT_KINDS = {"audio-headset": "headset", "audio-headphones": "headphones", "audio-card": "speaker",
+            "input-keyboard": "keyboard", "input-mouse": "mouse", "input-gaming": "gamepad",
+            "input-tablet": "tablet", "phone": "phone", "computer": "computer", "camera-photo": "camera",
+            "printer": "printer", "video-display": "display", "multimedia-player": "speaker"}
+
+
+def run(command, timeout=5.0):
+    try:
+        return subprocess.run(command, capture_output=True, text=True, timeout=timeout).stdout
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return getattr(error, "stdout", "") or ""
+
+
+def bluetooth_devices(hid_macs):
+    """The paired devices BlueZ knows, also the ones not connected now. A
+    Bluetooth HID device that is connected is already in the HID list."""
+    out = []
+    for line in run(["bluetoothctl", "devices", "Paired"]).splitlines():
+        parts = line.split(" ", 2)
+        if len(parts) < 2 or parts[0] != "Device":
+            continue
+        mac = parts[1].upper()
+        if mac.lower() in hid_macs:
+            continue
+        info, uuids = {}, []
+        for row in run(["bluetoothctl", "info", mac]).splitlines():
+            key, _, value = row.strip().partition(": ")
+            if key == "UUID":
+                found = re.search(r"\(([0-9a-f-]{36})\)", value)
+                uuids.append({"name": value.split("(")[0].strip(), "uuid": found.group(1) if found else value})
+            elif key:
+                info.setdefault(key, value)
+        vendor = product = ""
+        found = re.search(r"usb:v([0-9A-F]{4})p([0-9A-F]{4})", info.get("Modalias", ""), re.I)
+        if found:
+            vendor, product = found.group(1).lower(), found.group(2).lower()
+        kind = BT_KINDS.get(info.get("Icon", ""), "device")
+        out.append({
+            "id": f"bt:{mac}", "mac": mac, "name": info.get("Alias") or info.get("Name") or mac,
+            "bus": "bluetooth", "source": "bluetooth", "kind": kind, "kinds": [kind],
+            "vendor": vendor, "product": product, "online": info.get("Connected") == "yes",
+            "icon": info.get("Icon", ""), "class": info.get("Class", ""), "modalias": info.get("Modalias", ""),
+            "services": [u["uuid"] for u in uuids], "uuids": uuids,
+        })
+    return out
+
+
+# ── the local network and the Wi-Fi around ───────────────────────────────
+VIRTUAL_IFACES = ("docker", "br-", "veth", "virbr", "vnet", "tun", "tap", "wg", "lo")
+OUI = Path("/usr/share/hwdata/oui.txt")
+
+
+def oui_vendors(macs):
+    want = {m.replace(":", "")[:6].upper() for m in macs}
+    found = {}
+    try:
+        with OUI.open(errors="replace") as handle:
+            for line in handle:
+                if "(base 16)" in line:
+                    prefix = line[:6].upper()
+                    if prefix in want:
+                        found[prefix] = line.split("(base 16)", 1)[1].strip()
+    except OSError:
+        pass
+    return found
+
+
+def mdns(seconds=3.0):
+    """mDNS services, resolved: by address, [{ type, name, port, txt, host }]."""
+    out = {}
+    for line in run(["avahi-browse", "-aprt"], timeout=seconds).splitlines():
+        fields = line.split(";")
+        if len(fields) < 10 or fields[0] != "=":
+            continue
+        _, _iface, _proto, name, kind, _domain, hostname, address, port, txt = fields[:10]
+        entries = out.setdefault(address, [])
+        entry = {"type": kind, "name": name.replace("\\032", " "), "port": int(port or 0),
+                 "host": hostname, "txt": re.findall(r'"([^"]*)"', txt)}
+        if entry not in entries:
+            entries.append(entry)
+    return out
+
+
+def ssdp(seconds=2.5):
+    """What answers an SSDP M-SEARCH: by address, [{ server, location, st }]."""
+    out = {}
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    try:
+        sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
+        sock.settimeout(0.3)
+        ask = ("M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: \"ssdp:discover\"\r\n"
+               "MX: 2\r\nST: ssdp:all\r\n\r\n").encode()
+        sock.sendto(ask, ("239.255.255.250", 1900))
+        end = time.monotonic() + seconds
+        while time.monotonic() < end:
+            try:
+                data, (address, _port) = sock.recvfrom(4096)
+            except socket.timeout:
+                continue
+            headers = {}
+            for row in data.decode(errors="replace").split("\r\n")[1:]:
+                key, _, value = row.partition(":")
+                if key:
+                    headers[key.strip().lower()] = value.strip()
+            entry = {k: headers.get(k, "") for k in ("server", "location", "st")}
+            entries = out.setdefault(address, [])
+            if entry not in entries:
+                entries.append(entry)
+    except OSError:
+        pass
+    finally:
+        sock.close()
+    return out
+
+
+def wifi_networks():
+    """The Wi-Fi networks in reach, from NetworkManager's last scan. Many
+    devices open their own (cameras, drones, printers being set up)."""
+    out = []
+    raw = run(["nmcli", "-t", "-e", "yes", "-f", "SSID,BSSID,SIGNAL,SECURITY,CHAN,IN-USE", "dev", "wifi", "list", "--rescan", "auto"], timeout=8)
+    for line in raw.splitlines():
+        fields = re.split(r"(?<!\\):", line)
+        if len(fields) < 6:
+            continue
+        ssid, bssid, signal, security, chan, used = (f.replace("\\:", ":") for f in fields[:6])
+        out.append({
+            "id": f"wifi:{bssid.upper()}", "mac": bssid.upper(), "name": ssid or "(hidden network)",
+            "bus": "wifi", "source": "wifi", "kind": "wifi", "kinds": ["wifi"], "online": True,
+            "signal": int(signal or 0), "security": security, "channel": chan, "connected": used == "*",
+            "vendor": "", "product": "",
+        })
+    return out
+
+
+def own_networks():
+    """This PC's addresses and its IPv4 networks on real interfaces."""
+    own, nets = set(), []
+    try:
+        links = json.loads(run(["ip", "-j", "addr"]) or "[]")
+    except ValueError:
+        return own, nets
+    for link in links:
+        for addr in link.get("addr_info", []):
+            own.add(addr.get("local", ""))
+            if addr.get("family") == "inet" and not link.get("ifname", "").startswith(VIRTUAL_IFACES):
+                try:
+                    nets.append(ipaddress.ip_network(f"{addr['local']}/{addr['prefixlen']}", strict=False))
+                except ValueError:
+                    pass
+    return own, nets
+
+
+def wake_neighbours(nets):
+    """One UDP packet to every address of the own /24 (or smaller) networks:
+    the kernel asks ARP for each, so devices nobody talked to lately show
+    up in the neighbour table too. Nothing is opened on them."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        for net in nets:
+            if net.num_addresses > 1024:
+                continue
+            for address in net.hosts():
+                try:
+                    sock.sendto(b"", (str(address), 9))
+                except OSError:
+                    pass
+    finally:
+        sock.close()
+
+
+def upnp_description(location):
+    """friendlyName, manufacturer and model from a UPnP description."""
+    try:
+        with urllib.request.urlopen(location, timeout=1.5) as reply:
+            text = reply.read(65536).decode(errors="replace")
+    except (OSError, ValueError):
+        return {}
+    out = {}
+    for key in ("friendlyName", "manufacturer", "modelName", "modelNumber", "modelDescription", "deviceType"):
+        found = re.search(f"<{key}>([^<]*)</{key}>", text)
+        if found:
+            out[key] = found.group(1).strip()
+    return out
+
+
+def reverse_name(address):
+    try:
+        return socket.gethostbyaddr(address)[0]
+    except OSError:
+        return ""
+
+
+def network():
+    """Everything the local network shows of itself, merged by address."""
+    own, nets = own_networks()
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        waking = pool.submit(wake_neighbours, nets)
+        asking_mdns, asking_ssdp = pool.submit(mdns), pool.submit(ssdp)
+        waking.result()
+        services, upnp = asking_mdns.result(), asking_ssdp.result()
+        locations = {s["location"] for entries in upnp.values() for s in entries if s["location"].startswith("http")}
+        described = dict(zip(locations, pool.map(upnp_description, locations)))
+    for entries in upnp.values():
+        for entry in entries:
+            entry.update(described.get(entry["location"], {}))
+    neighbours = []
+    try:
+        neighbours = json.loads(run(["ip", "-j", "neigh"]) or "[]")
+    except ValueError:
+        pass
+    by_ip = {}
+    for n in neighbours:
+        if n.get("dst") in own:
+            continue
+        if not n.get("lladdr") or n.get("dev", "").startswith(VIRTUAL_IFACES) or "FAILED" in n.get("state", []):
+            continue
+        by_ip[n["dst"]] = {"ip": n["dst"], "mac": n["lladdr"].upper(), "iface": n["dev"], "router": "router" in n}
+    for address in (set(services) | set(upnp)) - own:
+        by_ip.setdefault(address, {"ip": address, "mac": "", "iface": "", "router": False})
+    # one device has an IPv4 and IPv6 addresses: by MAC where known
+    devices = {}
+    for address, base in by_ip.items():
+        key = base["mac"] or address
+        device = devices.setdefault(key, {"mac": base["mac"], "addresses": [], "iface": base["iface"],
+                                          "router": False, "mdns": [], "ssdp": []})
+        device["addresses"].append(address)
+        device["router"] |= base["router"]
+        device["mdns"] += [s for s in services.get(address, []) if s not in device["mdns"]]
+        device["ssdp"] += [s for s in upnp.get(address, []) if s not in device["ssdp"]]
+    # an address that only came from mDNS/SSDP (IPv6 …) whose host has a MAC too
+    for key, d in list(devices.items()):
+        hosts = {s["host"] for s in d["mdns"] if s["host"]}
+        twin = next((o for k, o in devices.items() if k != key and o["mac"] and hosts & {s["host"] for s in o["mdns"]}), None)
+        if not d["mac"] and twin:
+            twin["addresses"] += d["addresses"]
+            twin["mdns"] += [s for s in d["mdns"] if s not in twin["mdns"]]
+            twin["ssdp"] += [s for s in d["ssdp"] if s not in twin["ssdp"]]
+            del devices[key]
+    vendors = oui_vendors([d["mac"] for d in devices.values() if d["mac"]])
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        asked = sorted({a for d in devices.values() for a in d["addresses"] if ":" not in a})
+        names = dict(zip(asked, pool.map(reverse_name, asked)))
+    out = []
+    for key, d in devices.items():
+        if not d["mac"] and not d["mdns"] and not d["ssdp"]:
+            continue
+        ipv4 = sorted(a for a in d["addresses"] if ":" not in a)
+        if not ipv4 and not d["mdns"] and not d["ssdp"]:
+            continue  # only IPv6 neighbours of a known device: noise
+        hostname = next((s["host"] for s in d["mdns"] if s["host"]), "") or names.get(ipv4[0] if ipv4 else "", "")
+        # a random-looking instance name (Android's nearby share …) names nothing
+        friendly = next((s["friendlyName"] for s in d["ssdp"] if s.get("friendlyName")), "") or next(
+            (s["name"] for s in d["mdns"] if not re.match(r"_[0-9A-F]{8,}\.", s["type"]) and not re.fullmatch(r"[\d-]+", s["name"])), "")
+        server = next((s["server"] for s in d["ssdp"] if s["server"]), "")
+        model = next((" ".join(filter(None, (s.get("manufacturer"), s.get("modelName")))) for s in d["ssdp"] if s.get("modelName")), "")
+        out.append({
+            "id": f"net:{d['mac'] or key}", "mac": d["mac"],
+            "name": friendly or hostname.removesuffix(".local") or vendors.get(d["mac"].replace(":", "")[:6], "") or (ipv4 or d["addresses"])[0],
+            "bus": "network", "source": "network", "kind": "router" if d["router"] else "network", "kinds": ["network"],
+            "online": True, "ip": (ipv4 or d["addresses"])[0], "addresses": sorted(d["addresses"]), "hostname": hostname,
+            "maker": vendors.get(d["mac"].replace(":", "")[:6], "") if d["mac"] else "", "model": model,
+            "iface": d["iface"], "mdns": d["mdns"], "ssdp": d["ssdp"], "server": server,
+            "services": sorted({s["type"] for s in d["mdns"]}), "vendor": "", "product": "",
+        })
+    out.sort(key=lambda d: tuple(int(p) if p.isdigit() else 0 for p in d["ip"].split(".")))
+    result = {"time": int(time.time()), "devices": out, "wifi": wifi_networks()}
+    registry = load_registry()
+    for device in result["devices"] + result["wifi"]:
+        device["handler"] = next((e for e in registry if matches(e, device)), None)
+    return result
+
+
+def network_cache():
+    return host.state_dir() / "devices" / "network.json"
+
+
+# ── the user's own devices ───────────────────────────────────────────────
+def custom_devices():
+    """Added by hand on the Devices page (the state dir's devices.json):
+    { id, name, connection, app, address, notes }."""
+    try:
+        data = json.loads((host.state_dir() / "devices.json").read_text())
+    except (OSError, ValueError):
+        return []
+    out = []
+    for entry in data.get("custom", []):
+        if not isinstance(entry, dict) or not entry.get("id"):
+            continue
+        out.append({
+            "id": f"custom:{entry['id']}", "name": entry.get("name") or entry["id"], "bus": "custom",
+            "source": "custom", "connection": entry.get("connection", "other"), "kind": entry.get("kind", "device"),
+            "kinds": [], "app": entry.get("app", ""), "address": entry.get("address", ""),
+            "notes": entry.get("notes", ""), "online": None, "vendor": "", "product": "",
+        })
+    return out
 
 
 def scan():
@@ -259,6 +579,9 @@ def scan():
                     device["hidpp"] = hid
                     device["kind"] = hid["kind"]
         out.append(device)
+    hid_macs = {d["id"].split("@", 1)[1].lower() for d in out if "@" in d["id"]}
+    out += bluetooth_devices(hid_macs)
+    out += custom_devices()
     for device in out:
         entry = next((e for e in registry if matches(e, device)), None)
         device["handler"] = entry
@@ -267,6 +590,12 @@ def scan():
 
 def prompt(device_id):
     devices = scan()
+    if device_id.startswith(("net:", "wifi:")):
+        try:
+            cached = json.loads(network_cache().read_text())
+        except (OSError, ValueError):
+            cached = network()
+        devices += cached.get("devices", []) + cached.get("wifi", [])
     device = next((d for d in devices if d["id"] == device_id), None)
     if device is None:
         print(f"no device {device_id}", file=sys.stderr)
@@ -277,8 +606,21 @@ def prompt(device_id):
         if descriptor.exists():
             descriptors.append(str(descriptor))
     handler = device.get("handler")
-    facts = {k: v for k, v in device.items() if k not in ("handler",)}
-    text = f"""Teach the Pshell (this repo) a new device, completely.
+    facts = {k: v for k, v in device.items() if k not in ("handler", "services" if "uuids" in device else "")}
+    source = device.get("source", "hid")
+    if source != "hid":
+        text = other_prompt(device, facts, handler)
+    else:
+        text = hid_prompt(device, facts, handler, descriptors)
+    state = host.state_dir() / "devices"
+    state.mkdir(parents=True, exist_ok=True)
+    path = state / f"prompt-{re.sub(r'[^A-Za-z0-9_.-]', '-', device_id)}.md"
+    path.write_text(text)
+    print(path)
+
+
+def hid_prompt(device, facts, handler, descriptors):
+    return f"""Teach the Pshell (this repo) a new device, completely.
 
 The device:
 
@@ -313,16 +655,113 @@ used – nothing left out because it is hard. Work like this:
 5. Register it in core/devices.json (by its exact model, so the Devices page
    shows it as known), add a docs/<device>.md, and test it on the real device.
 """
-    state = host.state_dir() / "devices"
-    state.mkdir(parents=True, exist_ok=True)
-    path = state / f"prompt-{device_id.replace(':', '-').replace('#', '-').replace('@', '-')}.md"
-    path.write_text(text)
-    print(path)
+
+
+HOW = {
+    "bluetooth": """2. Reverse engineer the device over Bluetooth: its services (the UUIDs
+   above – vendor-specific ones are where the settings live), its GATT
+   characteristics (read every readable one, decode them), RFCOMM/SPP
+   channels, AVRCP/HFP vendor commands. Find the vendor's phone or desktop
+   app and learn its protocol (decompile the APK with jadx, look for the
+   command tables; check Gadgetbridge, OpenSCQ30, Home Assistant, the Linux
+   drivers and other open projects that already know this model). btmon
+   shows the traffic (it needs root – ask me to run it). Install a library
+   such as bleak only into a venv, and ask first.""",
+    "network": """2. Reverse engineer the device over the network: its mDNS services and
+   TXT records, its SSDP/UPnP description (fetch the location URL), the
+   ports it offers (nmap only this one address, service detection, no
+   brute force, no exploits; log in with default credentials only after
+   asking me), its web UI and APIs (REST, websockets, MQTT, vendor
+   protocols such as LG's SSAP on 3000/3001, Cast, HomeKit …). Check what
+   open projects already know (Home Assistant integrations, python
+   libraries, the vendor's app – decompile an APK with jadx). Pairing or
+   allowing access on the device itself (a code on a TV …) is done by me:
+   tell me when and what.""",
+    "wifi": """2. This is a Wi-Fi network in reach – often a device opening its own access
+   point (a camera, a drone, a printer, a device waiting to be set up). Find
+   out what device it is (SSID pattern, BSSID vendor, security) and how its
+   app talks to it. Connecting this PC to it drops its own network: ask me
+   before, and connect back afterwards. Then reverse engineer it as a network
+   device: its ports, web UI, APIs and the vendor's app (decompile an APK
+   with jadx), and what open projects already know.""",
+    "custom": """2. Reverse engineer the device. The user added it by hand; what they
+   wrote is above. If there is an app, it is the best source: it already
+   speaks the device's protocol. It is a download – untrusted: copy or
+   extract it into its own new directory under the state dir
+   ({state}), never run anything from inside it with an
+   interpreter, and do not run the app itself without asking me.
+   - AppImage: `unsquashfs -o $(OFFSET) …` with the offset of the squashfs
+     (do not run `--appimage-extract`, that executes it). Electron apps keep
+     their code in resources/app.asar (extract it, read the JS); Python apps
+     their .pyc (decompile); Java/Kotlin with jadx; .NET with ilspycmd.
+   - Windows: 7z unpacks installers (.exe, .msi) and many programs; look
+     for the protocol in .NET assemblies, strings, config files and bundled
+     web code. Running it under wine is possible, ask first.
+   - Look for how it finds the device (USB ids, Bluetooth UUIDs, mDNS
+     types, ports, SSH keys, cloud endpoints), the commands it sends, and
+     the settings the user can change in it.
+   If the device is reachable from here (USB, Bluetooth, network), check
+   what you found against it, read-only first. If it is not, say so and
+   ask me to connect it.""",
+}
+
+
+def other_prompt(device, facts, handler):
+    source = device.get("source")
+    known = (f"It is covered only partly today, by the {handler['page']} page ({handler['id']} in "
+             f"core/devices.json): find what that page misses for this device and add it."
+             if handler else "Nothing in the shell knows it yet.")
+    match = {
+        "bluetooth": f'{{ "mac": ["{device.get("mac", "")}"] }} (or a vendor service uuid as "service", or "name", so every unit of this model matches)',
+        "network": '{ "service": [its mDNS type] } or { "name": … } – not the MAC alone, the device may be replaced; "mac" is fine for this one unit',
+        "wifi": '{ "mac": [its BSSID] } or { "name": … } for the SSID',
+        "custom": f'{{ "custom": ["{device["id"].removeprefix("custom:")}"] }} (and what else identifies it once it is found: usb, mac, service, name)',
+    }[source]
+    how = HOW[source].replace("{state}", str(host.state_dir() / "devices" / "apps"))
+    return f"""Teach the Pshell (this repo) a new device, completely.
+
+The device ({ {"bluetooth": "paired over Bluetooth", "network": "found on the local network",
+               "wifi": "a Wi-Fi network in reach", "custom": "added by hand"}[source] }):
+
+```json
+{json.dumps(facts, indent=1)}
+```
+
+{known}
+
+The goal: a settings page where EVERY setting and feature this device has can be
+used – nothing left out because it is hard. Work like this:
+
+1. Read docs/devices.md first, then docs/mouse.md and the newest device pages
+   (docs/headset.md, docs/apex.md …) – how a device is done here (a Python
+   daemon speaking to the device, a service in core/services, a page in
+   core/views/settings, a plugin in core/plugins.json, an entry in
+   core/devices.json). Follow the conventions there and in the surrounding code.
+{how}
+   List every feature it has – also hidden or undocumented ones – before
+   writing code, and ask me if something stays unclear.
+3. Probe read-only first. Write only to try a setting out, and put back what was
+   there afterwards. Never flash firmware, never unpair, never factory-reset,
+   never change its network settings. Do not send dummy calls to the live shell.
+   Another program may use the device too: leave what is theirs alone.
+4. The device is optional: it may be off, out of reach or on another network.
+   The shell must start and run without it, and set it up again each time it
+   comes back.
+5. Register it in core/devices.json – match: {match} – so the Devices page shows
+   it as known, add a docs/<device>.md, and test it on the real device.
+"""
 
 
 def main():
     if len(sys.argv) > 2 and sys.argv[1] == "prompt":
         prompt(sys.argv[2])
+        return
+    if len(sys.argv) > 1 and sys.argv[1] == "network":
+        result = network()
+        cache = network_cache()
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text(json.dumps(result, separators=(",", ":")) + "\n")
+        print(json.dumps(result, separators=(",", ":")))
         return
     print(json.dumps({"devices": scan()}, separators=(",", ":")))
 
