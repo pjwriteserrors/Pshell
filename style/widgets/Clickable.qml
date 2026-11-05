@@ -3,7 +3,7 @@ import qs.style.theme
 import qs.core.services
 
 // Base for every pressable surface. Presses sink the surface slightly and it
-// springs back with a small overshoot when released.
+// eases back when released.
 //
 // The content sits above the interaction layer: plain content lets clicks
 // fall through to the surface, while nested controls (a chevron, a toggle,

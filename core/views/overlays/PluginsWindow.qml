@@ -147,8 +147,8 @@ ModalWindow {
 
 	Rectangle {
 		anchors.centerIn: parent
-		width: Math.min(1240, root.width - 120)
-		height: Math.min(900, root.height - 120)
+		width: Math.min(1240, root.areaWidth - 120)
+		height: Math.min(900, root.areaHeight - 120)
 		radius: Theme.radius.huge + 6
 		color: Theme.base
 

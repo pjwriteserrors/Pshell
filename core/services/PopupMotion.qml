@@ -33,10 +33,10 @@ Singleton {
 		const base = Motion.long / Math.max(0.3, root.speed);
 		switch (style) {
 		case "liquid": return { duration: base * 2.1, type: Easing.OutElastic, amplitude: 1, period: 0.55, curve: Motion.spatial };
-		case "pop": return { duration: base * 1.15, type: Easing.OutBack, overshoot: 2.2, curve: Motion.spatial };
-		case "curtain": return { duration: base * 1.35, type: Easing.BezierSpline, curve: Motion.decel };
-		case "glass": return { duration: base * 1.4, type: Easing.BezierSpline, curve: Motion.decel };
-		case "button": return { duration: base * 1.3, type: Easing.BezierSpline, curve: Motion.emphasized };
+		case "pop": return { duration: base * 1.15, type: Easing.OutBack, overshoot: 1.3, curve: Motion.spatial };
+		case "curtain": return { duration: base * 1.1, type: Easing.BezierSpline, curve: Motion.decel };
+		case "glass": return { duration: base * 1.15, type: Easing.BezierSpline, curve: Motion.decel };
+		case "button": return { duration: base * 1.15, type: Easing.BezierSpline, curve: Motion.emphasized };
 		default: return { duration: base, type: Easing.BezierSpline, curve: Motion.spatial };
 		}
 	}

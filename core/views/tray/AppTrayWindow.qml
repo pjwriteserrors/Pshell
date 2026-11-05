@@ -1112,7 +1112,8 @@ PanelWindow {
 								property: "enter"
 								to: 0
 								duration: Motion.medium
-								easing.type: Easing.InBack
+								easing.type: Easing.BezierSpline
+								easing.bezierCurve: Motion.accel
 							}
 							NumberAnimation {
 								target: cell
@@ -1157,7 +1158,8 @@ PanelWindow {
 							property: "bounce"
 							to: 0
 							duration: 260
-							easing.type: Easing.OutBounce
+							easing.type: Easing.BezierSpline
+							easing.bezierCurve: Motion.spatial
 						}
 					}
 

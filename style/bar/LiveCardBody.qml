@@ -74,7 +74,8 @@ Rectangle {
 							target: shift
 							property: "y"
 							duration: 420
-							easing.type: Easing.OutBack
+							easing.type: Easing.BezierSpline
+							easing.bezierCurve: Motion.spatial
 						}
 					}
 				}

@@ -3,7 +3,7 @@ import qs.style.theme
 import qs.core.services
 
 // Switch with a liquid thumb: it stretches in the direction of travel and
-// settles with a small overshoot. The thumb carries a check / cross glyph.
+// settles softly. The thumb carries a check / cross glyph.
 Item {
 	id: root
 

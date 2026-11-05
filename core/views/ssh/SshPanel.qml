@@ -31,9 +31,9 @@ Drawer {
 		root.adding = false;
 		// a transfer that still runs is what the panel comes back to
 		if (!Ssh.sending) Ssh.closeTransfer();
-		Ssh.refresh();
 		Qt.callLater(() => root.sending ? transfer.focusPath() : search.focusInput());
 	}
+	onPanelSettled: Ssh.refresh()
 
 	onSendingChanged: Qt.callLater(() => root.sending ? transfer.focusPath() : search.focusInput())
 

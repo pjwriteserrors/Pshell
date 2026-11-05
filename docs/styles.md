@@ -128,8 +128,16 @@ style/
   - Layer-Shell: `WlrLayershell.*`, `exclusiveZone`, `screen`, `anchors` von
     Fenstern,
   - in `Drawer` und `ModalWindow`: `shown`, `targetScreen`, `reveal`,
-    `panelOpened`/`modalOpened`, `Popups.close()` beim Klick daneben und bei Esc,
-    `Popups.anchorFor(...)`,
+    `panelOpened`/`modalOpened`, `panelSettled` (erst nach dem Hereinkommen:
+    Refreshes und Befehle laufen dort, nicht mitten in der Animation),
+    `Popups.close()` beim Klick daneben und bei Esc, `Popups.anchorFor(...)`,
+  - das Fenster beider bleibt: geschlossen ein Streifen von 1 px ohne Eingabe
+    (`expanded`, `mask`), sichtbar erst einen Takt nach dem Bauen (`alive`).
+    Versteckt würde es zerstört und beim nächsten Öffnen samt Szene neu
+    gebaut; von Anfang an sichtbar übernimmt Quickshell es beim Reload und
+    stürzt beim Umzug auf einen anderen Bildschirm ab. Der Inhalt eines
+    `ModalWindow` richtet sich nach `areaWidth`/`areaHeight`, nicht nach der
+    Fenstergröße,
   - `Theme.qml`: `wal`, `reload()` und das Einlesen von
     `~/.cache/wal/colors.json`.
 - **Frei** sind Form, Farbe, Material, Schatten, Tiefe, Typografie, Maße,
@@ -386,9 +394,8 @@ Kommentare direkt darüber wandern mit.
 Die mitgelieferte `style/animations/motion.kdl` hält sich an die Uhr der
 Shell: Hereinkommen und Bewegen dauern 260 ms auf „land“
 (`cubic-bezier 0.3 0.8 0.5 1`), Weggehen 200 ms auf Motion.accel, nichts
-federt nach. „land“ statt Motion.decel, weil decel für das letzte Zehntel des
-Wegs 230 ms braucht: Ein Workspace sieht dann aus, als müsste man auf ihn
-warten. Die sechs Fensteranimationen öffnen ebenso in 260 ms (`ps_enter`) und
+federt nach. „land“ kommt schneller an als die frühere Motion.decel: Ein
+Workspace soll nicht aussehen, als müsste man auf ihn warten. Die sechs Fensteranimationen öffnen ebenso in 260 ms (`ps_enter`) und
 schließen in 200 ms; Swing steht von Haus aus auf „None“.
 
 Von Hand gesetzte Werte gewinnen: Studio → Motion → **Springs & curves**
@@ -398,9 +405,10 @@ alles. Das speichert `scripts/niri_motion.py` in
 `$THEME_STATE_DIR/motion-overrides.json` und schreibt es nach jedem
 `apply_niri_animation.sh` wieder über die `motion.kdl` des Styles.
 
-Wer die eigenen Kurven der Shell (`Motion.qml`) treffen will, setzt
-`curve "linear"` und nimmt `ps_enter(p)` (Motion.decel, mit Schwung
-Motion.spatial) bzw. `ps_exit(p)` (Motion.accel) aus `common.glsl`.
+Eigene Fensteranimationen setzen `curve "linear"` und nehmen `ps_enter(p)`
+(„land“, mit Schwung leicht überschwingend) bzw. `ps_exit(p)` (hält kurz,
+dann los) aus `common.glsl`. Die Panels der Shell laufen auf den Kurven von
+`Motion.qml` (seit 2026-11-05 ein Ease-out ohne Überschwingen).
 
 **Regler** (`scripts/animation_options.py`): Studio → Motion zeigt für eine
 Style-Animation unter „Fine-tune“ jede Option als Segmented-Leiste. Eine

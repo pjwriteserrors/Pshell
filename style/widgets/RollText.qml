@@ -148,8 +148,8 @@ Item {
 					to: 1
 					// characters further left roll a touch later, like a counter
 					duration: 420 + slot.index * 25
-					easing.type: Easing.OutBack
-					easing.overshoot: 1.4
+					easing.type: Easing.BezierSpline
+					easing.bezierCurve: Motion.spatial
 				}
 			}
 		}
@@ -207,7 +207,8 @@ Item {
 				property: "lift"
 				to: 0
 				duration: 380
-				easing.type: Easing.OutBack
+				easing.type: Easing.BezierSpline
+				easing.bezierCurve: Motion.spatial
 			}
 		}
 	}

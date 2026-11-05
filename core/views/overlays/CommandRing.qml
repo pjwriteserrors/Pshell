@@ -511,7 +511,8 @@ PanelWindow {
 					property: "pop"
 					to: 0
 					duration: Motion.medium
-					easing.type: Easing.OutBack
+					easing.type: Easing.BezierSpline
+					easing.bezierCurve: Motion.spatial
 				}
 			}
 		}

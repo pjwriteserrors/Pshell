@@ -10,7 +10,7 @@ import qs.core.services
 // A panel that grows out of the bar underneath the button that opened it.
 //
 // How it opens is the user's (PopupMotion, Desktop page): classic extrudes
-// downward with a soft overshoot while the neck widens, the others come out
+// downward while the neck widens, the others come out
 // of the button, wobble, unroll, settle out of a blur or spring. All of them
 // are one progress value (`reveal`) turned into the panel's size and its
 // content's way in by PopupMotion.shape().
@@ -41,26 +41,57 @@ PanelWindow {
 	property real belowInset: Theme.panelRadius + Theme.panelFillet + 8
 	readonly property real belowTargetHeight: Math.min(Math.max(0, root.height - root.targetHeight - 24), root.belowContentHeight + root.padding * 2)
 	readonly property bool belowShown: root.shown && root.belowOpen
-	property real belowReveal: root.belowShown ? 1 : 0
+	property real belowReveal: 0
+	// which way the panel below goes: set before belowReveal changes, so its
+	// Behavior takes the right duration and curve
+	property bool belowEntering: false
+	function followBelow() {
+		root.belowEntering = root.belowShown;
+		root.belowReveal = root.belowShown ? 1 : 0;
+	}
+	onBelowShownChanged: root.followBelow()
 	readonly property bool shown: Popups.current === root.panelId
 	property var targetScreen: Popups.primaryScreen
 	property real reveal: 0
 
 	signal panelOpened
 	signal panelClosed
+	// the way in is done: the time for refreshes, external commands and
+	// anything else that rebuilds content. Started in panelOpened they ran
+	// in the middle of the animation and cost it every other frame.
+	signal panelSettled
+	property bool settling: false
+	function settle() {
+		if (!root.settling || root.reveal < 1) return;
+		root.settling = false;
+		root.panelSettled();
+	}
+	onRevealChanged: root.settle()
 
 	// the panel is built when it opens (Popups.wanted): then it grows out
 	// of the bar just the same. `shown` already changes while it is being
 	// built, before the Behavior on reveal is live, so that is left to
 	// onCompleted
 	property bool built: false
+	// Visible only a moment after it was built: on a reload Quickshell takes
+	// over the old window of an instance that is visible from the start, and
+	// moving that one to another screen (the new instance starts on the
+	// primary one) crashes it in QWindow::setScreen. So the old one goes and
+	// a new one is made.
+	property bool alive: false
 	onShownChanged: if (root.built) root.followShown()
 	Component.onCompleted: {
 		root.built = true;
+		Qt.callLater(() => root.alive = true);
 		if (root.shown) root.followShown();
+		if (root.belowShown) root.followBelow();
 	}
 
 	function followShown() {
+		// before reveal changes: a binding on `shown` could still hold the
+		// other direction when the Behavior reads it, and closing ran with
+		// the opening's duration and curve
+		root.motion = root.shown ? PopupMotion.opening(PopupMotion.style) : PopupMotion.closing(PopupMotion.style);
 		if (root.shown) {
 			root.targetScreen = Popups.screen || Popups.primaryScreen;
 			root.panelOpened();
@@ -68,15 +99,25 @@ PanelWindow {
 		} else {
 			root.panelClosed();
 		}
+		root.settling = root.shown;
 		if (!root.shown || root.placed) root.reveal = root.shown ? 1 : 0;
+		// opened again while it was still all there: nothing left to wait for
+		root.settle();
 	}
 
-	// a new window has the screen's width only once the compositor answered;
+	// Closed, the window stays: a strip of one pixel that lets every click
+	// through. Hidden it would be destroyed, and the next opening built a new
+	// one with its whole scene, a first frame 50–140 ms late that swallowed
+	// the first third of the way in.
+	readonly property bool expanded: root.shown || root.reveal > 0.002
+	readonly property Region passThrough: Region {}
+
+	// the window has the screen's size only once the compositor answered;
 	// until then the panel would start its way in at the left edge
-	readonly property bool placed: Math.abs(root.width - (root.screen?.width ?? root.width)) < 2
+	readonly property bool placed: Math.abs(root.width - (root.screen?.width ?? root.width)) < 2 && root.height > 1
 	onPlacedChanged: if (root.built && root.shown && root.placed) root.reveal = 1
 
-	readonly property var motion: root.shown ? PopupMotion.opening(PopupMotion.style) : PopupMotion.closing(PopupMotion.style)
+	property var motion: PopupMotion.opening(PopupMotion.style)
 
 	Behavior on reveal {
 		NumberAnimation {
@@ -91,21 +132,23 @@ PanelWindow {
 
 	Behavior on belowReveal {
 		NumberAnimation {
-			duration: root.belowShown ? Motion.long : Motion.medium - 60
+			duration: root.belowEntering ? Motion.long : Motion.medium - 60
 			easing.type: Easing.BezierSpline
-			easing.bezierCurve: root.belowShown ? Motion.spatial : Motion.accel
+			easing.bezierCurve: root.belowEntering ? Motion.spatial : Motion.accel
 		}
 	}
 
 	screen: root.targetScreen
-	visible: root.shown || root.reveal > 0.002
+	visible: root.alive
 	color: "transparent"
 	anchors {
 		left: true
 		right: true
 		top: true
-		bottom: true
+		bottom: root.expanded
 	}
+	implicitHeight: 1
+	mask: root.expanded ? null : root.passThrough
 	margins.top: Theme.barHeight
 	exclusiveZone: 0
 	WlrLayershell.namespace: `shell-${root.panelId}`

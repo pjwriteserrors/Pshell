@@ -57,6 +57,8 @@ Drawer {
 	onPanelOpened: {
 		root.page = Popups.page !== "" ? Popups.page : "main";
 		Updates.clear();
+	}
+	onPanelSettled: {
 		if (Date.now() - Updates.lastScan > 30000) Updates.scan();
 		root.autoCheckOnOpen();
 	}

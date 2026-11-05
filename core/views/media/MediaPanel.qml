@@ -26,8 +26,8 @@ Drawer {
 
 	onPanelOpened: {
 		root.showOutputs = false;
-		Audio.refreshSinks();
 	}
+	onPanelSettled: Audio.refreshSinks()
 
 	Binding {
 		target: Lyrics

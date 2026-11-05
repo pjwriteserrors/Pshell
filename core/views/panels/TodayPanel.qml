@@ -38,8 +38,8 @@ Drawer {
 			calendar.selected = new Date(event.start);
 			MsCalendar.selected = event;
 		}
-		MsCalendar.refresh();
 	}
+	onPanelSettled: MsCalendar.refresh()
 	onPanelClosed: {
 		MsCalendar.selected = null;
 		sky.radar = false;

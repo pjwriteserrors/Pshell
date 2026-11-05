@@ -62,10 +62,10 @@ Drawer {
 
 	onPanelOpened: {
 		QtrackTimer.seedDraft(false);
-		QtrackTimer.refresh();
 		root.tab = root.hasSelectedToday || (QtrackTimer.paused && root.todayTasks.length > 0) ? "today" : "new";
 		if (root.tab === "new") Qt.callLater(() => description.focusInput());
 	}
+	onPanelSettled: QtrackTimer.refresh()
 
 	ColumnLayout {
 		id: layout

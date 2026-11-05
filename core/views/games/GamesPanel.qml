@@ -106,7 +106,6 @@ Drawer {
 
 	onPanelOpened: {
 		Games.watched = true;
-		Games.refresh();
 		root.filter = "recent";
 		root.query = "";
 		search.text = "";
@@ -118,6 +117,7 @@ Drawer {
 		grid.positionViewAtBeginning();
 		Qt.callLater(() => keys.forceActiveFocus());
 	}
+	onPanelSettled: Games.refresh()
 	onPanelClosed: Games.watched = Popups.modal === "games"
 
 	onListChanged: {

@@ -37,6 +37,8 @@ Drawer {
 		root.page = Popups.page !== "" && root.offers(Popups.page) ? Popups.page : "main";
 		root.userHost = `${Host.user}@${Host.hostname}`;
 		root.uptime = Host.uptime();
+	}
+	onPanelSettled: {
 		Audio.refreshSinks();
 		if (Plugins.on("backlight")) Brightness.refresh(false);
 		Ddc.refresh();
