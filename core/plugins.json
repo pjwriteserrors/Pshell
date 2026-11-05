@@ -99,6 +99,7 @@
 	{ "id": "streams-bar", "name": "Streams in the bar", "category": "Desktop", "requires": ["streams"], "icon": "play_circle", "preview": {"on": ["bar", "clock"], "ipc": ["streams open"]} },
 	{ "id": "torrents-bar", "name": "Torrents under the bar", "category": "Desktop", "requires": ["torrents"], "icon": "magnet", "preview": {"on": ["bar", "clock"], "ipc": ["torrents open"]} },
 	{ "id": "app-tray", "name": "App tray", "category": "Desktop", "default": false, "icon": "dock_window" },
+	{ "id": "parked-windows", "name": "Parked windows", "category": "Desktop", "icon": "dock_right" },
 
 	{ "id": "clipboard-hints", "name": "Clipboard hints", "category": "Automation" },
 	{ "id": "agents", "name": "Agent status", "category": "Automation", "icon": "robot" },

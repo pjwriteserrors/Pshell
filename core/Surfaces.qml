@@ -184,6 +184,19 @@ Scope {
 		when: shelving.held
 	}
 
+	// windows parked on the right edges, and the edges while a window is dragged
+	ScreenView {
+		view: "parking/ParkedTabs"
+		available: Plugins.on("parked-windows")
+		when: Parking.any
+	}
+
+	ScreenView {
+		view: "overlays/ParkingEdge"
+		available: Plugins.on("parked-windows")
+		when: Parking.armed
+	}
+
 	// the app trays on the edges of the screens (by id: a changed tray is not built again)
 	ScreenView {
 		view: "tray/AppTrayWindow"

@@ -228,6 +228,23 @@ shake, the screens take the pointer while the light is on to learn where it
 is. `scripts/ipc.sh findmouse find` asks for it from a key; the arrow then
 grows with the pointer's next move.
 
+`parked-windows` parks windows on the right edge of a screen: a window
+dragged (niri's interactive move) and let go on the outermost pixels of that
+edge waits there as a tab, like a docked shelf; let go anywhere else, also on
+the next screen, it lands as usual. niri reports no drag, but a moved window
+has no workspace while it moves, so `Parking` maps a strip on every right
+edge (`ParkingEdge`) only then; niri gives the pointer to nobody during the
+move and to the strip once it is let go there. Parked windows wait on a
+workspace named `parked:<output>` (kept by niri over shell restarts, left out
+of the bar, stepped over going up and down, unnamed once empty). A tab
+(`ParkedTabs`) shows the icon, the icon with the title, or the window live
+(`window_shots.py`); per window by a right click, kept in
+`~/.local/state/pshell/parking.json`. Resting on a tab shows the window live
+beside it; a dot says the title changed since it was last looked at, a
+spinner that an agent works in it, urgent ones breathe. A click brings the
+window back (also `Niri.focusWindow`, so the taskbar and Alt+Tab do), a
+middle click closes it; `scripts/ipc.sh parking park|restore` from keys.
+
 `laser-pointer` turns the pointer into a laser dot for presentations
 (Mod+Alt+L in `dotfiles/niri/pshell.kdl`, `scripts/ipc.sh laser toggle`):
 `Laser` holds whether it is on and where the pointer is, `LaserPointer` (an

@@ -181,6 +181,8 @@ Singleton {
 		});
 		const groups = [];
 		for (const ws of sortedWs) {
+			// where parked windows wait is not a workspace to go to (Parking)
+			if (Parking.isParkingSpace(ws)) continue;
 			const entry = { id: ws.id, idx: ws.idx, output: String(ws.output || ""), name: ws.name || "", active: !!ws.is_active, focused: !!ws.is_focused, occupied: !!occupied[ws.id] };
 			const last = groups[groups.length - 1];
 			if (last && last.output === entry.output) last.workspaces.push(entry);
@@ -267,6 +269,10 @@ Singleton {
 
 	function focusWindow(id) {
 		if (id === undefined || id === null) return;
+		if (Parking.isParked(id)) {
+			Parking.restore(id);
+			return;
+		}
 		Quickshell.execDetached(["niri", "msg", "action", "focus-window", "--id", String(id)]);
 	}
 
@@ -283,6 +289,19 @@ Singleton {
 		root.inOrder([["niri", "msg", "action", "move-window-to-monitor", "--id", String(Number(id)), String(workspace.output)],
 			["niri", "msg", "action", "move-window-to-workspace", "--window-id", String(Number(id)), "--focus", "false", ref]]);
 	}
+
+	// niri actions as JSON straight to its socket, one after the other like
+	// inOrder: what the CLI cannot say (workspaces by id)
+	function request(actions) {
+		root.inOrder(actions.map(action => ["python3", "-c", root.requestScript, JSON.stringify({ Action: action })]));
+	}
+
+	readonly property string requestScript: "import os, socket, sys\n"
+		+ "s = socket.socket(socket.AF_UNIX)\n"
+		+ "s.connect(os.environ['NIRI_SOCKET'])\n"
+		+ "s.sendall(sys.argv[1].encode() + b'\\n')\n"
+		+ "reply = s.makefile().readline()\n"
+		+ "sys.exit(0 if reply.startswith('{\"Ok\"') else 1)\n"
 
 	// niri actions one after the other, each once the one before is done;
 	// a step that fails ends its row

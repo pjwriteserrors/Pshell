@@ -993,6 +993,19 @@ Scope {
 		}
 	}
 
+	// parked windows: the focused one onto its screen's right edge, the last one back
+	IpcHandler {
+		target: "parking"
+		enabled: Plugins.on("parked-windows")
+
+		function park(): void {
+			Parking.parkFocused();
+		}
+		function restore(): void {
+			Parking.restoreLast();
+		}
+	}
+
 	// the same under its old name, which key binds may still call
 	IpcHandler {
 		target: "niri"
