@@ -163,7 +163,9 @@ def interface(source: str) -> dict:
 def surfaces(tree: Tree) -> dict:
     """Every surface core/Surfaces.qml creates: name -> core file, root, id."""
     text = tree.read("core/Surfaces.qml") or ""
-    names = sorted(set(re.findall(r"^\s*([A-Z]\w*) \{\}\s*$", text, re.M)))
+    # named inline (`Toasts {}`) or loaded from its file (`view: "panels/ControlCenter"`)
+    names = sorted(set(re.findall(r"^\s*([A-Z]\w*) \{\}\s*$", text, re.M))
+                   | {path.rsplit("/", 1)[-1] for path in re.findall(r'^\s*view: "([\w/]+)"\s*$', text, re.M)})
     views = {Path(p).stem: p for p in tree.files("core/views") if p.endswith(".qml")}
     result = {}
     for name in names:

@@ -372,9 +372,20 @@ Singleton {
 
 	// file name → SoundEffect, one each, loaded once
 	property var effects: ({})
+	// the effects (and Qt Multimedia with them) come after the shell is up,
+	// a few at a time: building all of them held up the start
+	property bool loading: false
+
+	Timer {
+		running: true
+		interval: 400
+		onTriggered: root.loading = true
+	}
 
 	Instantiator {
+		asynchronous: true
 		model: {
+			if (!root.loading) return [];
 			const files = [];
 			for (const moment of root.moments) {
 				const name = root.fileFor(moment);
@@ -396,12 +407,15 @@ Singleton {
 			}
 		}
 
+		// built a few at a time: one taken back before it was done is null
 		onObjectAdded: (index, object) => {
+			if (!object) return;
 			const effects = Object.assign({}, root.effects);
 			effects[object.modelData] = object;
 			root.effects = effects;
 		}
 		onObjectRemoved: (index, object) => {
+			if (!object) return;
 			const effects = Object.assign({}, root.effects);
 			if (effects[object.modelData] === object) delete effects[object.modelData];
 			root.effects = effects;

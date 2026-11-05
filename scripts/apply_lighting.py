@@ -60,6 +60,7 @@ import os
 from pathlib import Path
 import re
 import select
+import signal
 import socket
 import struct
 import subprocess
@@ -169,6 +170,13 @@ DEFAULT_CONFIG = {
 
 
 # ------------------------------------------------------------------ palette ---
+
+
+def _die_with_parent():
+    """The child ends with this process: the shell ends its helpers with
+    SIGKILL (a reload), which leaves no time to end their own children."""
+    import ctypes
+    ctypes.CDLL("libc.so.6", use_errno=True).prctl(1, signal.SIGTERM)  # PR_SET_PDEATHSIG
 
 def load_config() -> dict:
     config = json.loads(json.dumps(DEFAULT_CONFIG))
@@ -839,6 +847,7 @@ def watch() -> int:
     monitor = subprocess.Popen(
         ["udevadm", "monitor", "--udev", "--property", "--subsystem-match=hidraw"],
         stdout=subprocess.PIPE,
+        preexec_fn=_die_with_parent,
     )
     channel = monitor.stdout.fileno()
     pending = b""

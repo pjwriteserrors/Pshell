@@ -38,6 +38,15 @@ system/          root-level setup: SDDM theme, fingerprint PAM
 - **Nothing addresses the shell by config name from scripts.** Scripts use
   `scripts/ipc.sh <target> <function>`; niri binds use `qs -c shell`.
 - **No absolute home paths.** `$HOME`, `Paths`, `Host`.
+- **A surface is loaded from its file.** Quickshell's `qs:` URLs never reach
+  Qt's disk cache, so every type named in a file is compiled at every start
+  with its whole tree, used or not. `core/Surfaces.qml` therefore loads a
+  surface with `View { view: "panels/ControlCenter"; available: …; when: … }`
+  (`ScreenView` for one per screen), not `LazyLoader { ControlCenter {} }`;
+  the same goes for big content inside a view (`FilesWindow` loads
+  `FilesView.qml`). `Views` compiles every available surface in the
+  background a few seconds after the start, so the first opening is as quick
+  as before, and resolves `style/views/<Name>.qml` over the core view.
 
 ## Done by the shell itself
 

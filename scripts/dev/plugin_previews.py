@@ -430,7 +430,8 @@ def prepare(work: Path):
 
     # nothing that reaches outside the nested session, nothing personal
     entry = shell / "shell.qml"
-    entry.write_text(re.sub(r"\n\t// [^\n]*\n\tProcess \{.*?\n\t\}\n", "\n", entry.read_text(), flags=re.S))
+    # the theme of the real session is not restored in there
+    entry.write_text(re.sub(r"\n\t// [^\n]*\n\tProcess \{.*?\n\t\}\n", "\n", entry.read_text().replace("restoreTheme.running = true;", ""), flags=re.S))
     bluetooth = shell / "core/services/Bluetooth.qml"
     bluetooth.write_text(bluetooth.read_text().replace("running: root.available && root.agentEnabled", "running: false"))
     network = shell / "core/services/Network.qml"

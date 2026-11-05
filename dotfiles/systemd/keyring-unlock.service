@@ -1,0 +1,11 @@
+[Unit]
+Description=Unlock the GNOME keyring with the TPM-stored password
+After=gnome-keyring-daemon.service dbus.socket
+ConditionPathExists=%h/.local/state/pshell/keyring.cred
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/.config/quickshell/shell/scripts/keyring_unlock.py
+
+[Install]
+WantedBy=graphical-session-pre.target

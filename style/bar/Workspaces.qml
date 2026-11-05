@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import Quickshell
 import qs.style.theme
 import qs.core.services
 import qs.style.widgets
@@ -27,8 +28,12 @@ BarButton {
 		anchors.verticalCenter: parent.verticalCenter
 		spacing: 6
 
+		// keyed, like the taskbar: switching keeps the dots, so they move
 		Repeater {
-			model: Niri.workspaceGroups
+			model: ScriptModel {
+				values: Niri.workspaceGroups
+				objectProp: "output"
+			}
 
 			delegate: ScreenGroup {
 				id: group
@@ -41,14 +46,18 @@ BarButton {
 				spacing: 5
 
 				Repeater {
-					model: group.modelData.workspaces
+					model: ScriptModel {
+						values: Niri.workspacesOn[group.modelData.output] ?? []
+						objectProp: "id"
+					}
 
 					delegate: Item {
 						id: dot
 
 						required property var modelData
+						readonly property var live: Niri.workspaceById[dot.modelData.id] ?? dot.modelData
 
-						width: dot.modelData.focused ? 22 : (dot.modelData.active ? 14 : 8)
+						width: dot.live.focused ? 22 : (dot.live.active ? 14 : 8)
 						height: group.height
 
 						Behavior on width {
@@ -60,12 +69,12 @@ BarButton {
 						Rectangle {
 							anchors.centerIn: parent
 							width: parent.width
-							height: dotMouse.containsMouse && !dot.modelData.focused ? 10 : 8
+							height: dotMouse.containsMouse && !dot.live.focused ? 10 : 8
 							radius: height / 2
-							color: dot.modelData.focused ? Theme.primary
-								: (dot.modelData.active ? Theme.textMuted
-								: (dot.modelData.occupied ? Theme.textSubtle : "transparent"))
-							border.width: dot.modelData.focused || dot.modelData.active || dot.modelData.occupied ? 0 : 1.5
+							color: dot.live.focused ? Theme.primary
+								: (dot.live.active ? Theme.textMuted
+								: (dot.live.occupied ? Theme.textSubtle : "transparent"))
+							border.width: dot.live.focused || dot.live.active || dot.live.occupied ? 0 : 1.5
 							border.color: Theme.textSubtle
 
 							Behavior on color {
@@ -86,7 +95,7 @@ BarButton {
 							hoverEnabled: true
 							cursorShape: Qt.PointingHandCursor
 								onPressed: Popups.close()
-								onClicked: Niri.focusWorkspace(dot.modelData)
+								onClicked: Niri.focusWorkspace(dot.live)
 						}
 					}
 				}

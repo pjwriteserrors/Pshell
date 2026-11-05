@@ -1573,15 +1573,15 @@ Item {
 
 	readonly property var activeModeView: {
 		switch (root.mode) {
-		case "edit": return editView;
-		case "translate": return translateView;
-		case "convert": return convertView;
-		case "todo": return todoView;
-		case "web": return webSearchView;
-		case "ai": return aiActionsView;
-		case "phone": return phoneView;
-		case "shots": return shotsView;
-		case "finder": return finderView;
+		case "edit": return editView.item;
+		case "translate": return translateView.item;
+		case "convert": return convertView.item;
+		case "todo": return todoView.item;
+		case "web": return webSearchView.item;
+		case "ai": return aiActionsView.item;
+		case "phone": return phoneView.item;
+		case "shots": return shotsView.item;
+		case "finder": return finderView.item;
 		case "apps": return appsView;
 		default: return null;
 		}
@@ -1591,7 +1591,7 @@ Item {
 		case "edit": return "File or words";
 		case "translate": return "Text";
 		case "convert": return "5 kg in lb";
-		case "todo": return todoView.placeholder;
+		case "todo": return todoView.item?.placeholder ?? "";
 		case "web": return "Search the web";
 		case "ai": return "Ask, find, translate…";
 		case "phone": return "Text to send";
@@ -1623,8 +1623,8 @@ Item {
 		case "edit": return "open";
 		case "convert":
 		case "translate": return "copy";
-		case "todo": return todoView.enterHint;
-		case "web": return webSearchView.showingResults ? "open" : "search";
+		case "todo": return todoView.item?.enterHint ?? "";
+		case "web": return webSearchView.item?.showingResults ? "open" : "search";
 		case "ai": return "run";
 		case "phone": return "send";
 		case "shots": return "copy";
@@ -1673,6 +1673,30 @@ Item {
 	}
 	// a group that opens sweeps its commands in
 	onOpenGroupChanged: if (root.mode === "commands") palette.replay()
+
+	// a mode's view from its file, built a moment after the start (or at
+	// once when it is asked for first): named here, every mode was compiled
+	// and built at every start
+	component ModeView: Loader {
+		id: modeView
+
+		required property string file
+		required property bool current
+		// set on the view, again whenever one of them changes
+		property var values: ({})
+
+		function apply() {
+			if (!modeView.item) return;
+			for (const key in modeView.values) modeView.item[key] = modeView.values[key];
+		}
+
+		anchors.fill: parent
+		active: modeView.current || Views.started
+		asynchronous: !modeView.current
+		source: Qt.resolvedUrl(modeView.file)
+		onValuesChanged: modeView.apply()
+		onLoaded: modeView.apply()
+	}
 
 	component ModeLayer: Item {
 		id: layer
@@ -2252,15 +2276,24 @@ Item {
 			ModeLayer {
 				current: root.mode === "edit"
 
-				EditView {
+				ModeView {
 					id: editView
 
-					anchors.fill: parent
-					active: root.mode === "edit"
-					argument: root.modeArgument
-					onCloseRequested: {
-						root.closeRequested();
-						root.launchRequested();
+					file: "EditView.qml"
+					current: root.mode === "edit"
+					values: ({
+						active: root.mode === "edit",
+						argument: root.modeArgument
+					})
+
+					Connections {
+						target: editView.item
+						ignoreUnknownSignals: true
+
+						function onCloseRequested() {
+							root.closeRequested();
+							root.launchRequested();
+						}
 					}
 				}
 			}
@@ -2268,17 +2301,29 @@ Item {
 			ModeLayer {
 				current: root.mode === "translate"
 
-				TranslateView {
+				ModeView {
 					id: translateView
 
-					anchors.fill: parent
-					active: root.mode === "translate"
-					argument: root.modeArgument
-					onCloseRequested: {
-						root.closeRequested();
-						root.launchRequested();
+					file: "TranslateView.qml"
+					current: root.mode === "translate"
+					values: ({
+						active: root.mode === "translate",
+						argument: root.modeArgument
+					})
+
+					Connections {
+						target: translateView.item
+						ignoreUnknownSignals: true
+
+						function onCloseRequested() {
+							root.closeRequested();
+							root.launchRequested();
+						}
+
+						function onArgumentRequested(text) {
+							root.setLauncherSearch(`>t ${text}`);
+						}
 					}
-					onArgumentRequested: text => root.setLauncherSearch(`>t ${text}`)
 				}
 			}
 
@@ -2286,17 +2331,29 @@ Item {
 			ModeLayer {
 				current: root.mode === "convert"
 
-				ConvertView {
+				ModeView {
 					id: convertView
 
-					anchors.fill: parent
-					active: root.mode === "convert"
-					argument: root.modeArgument
-					onCloseRequested: {
-						root.closeRequested();
-						root.launchRequested();
+					file: "ConvertView.qml"
+					current: root.mode === "convert"
+					values: ({
+						active: root.mode === "convert",
+						argument: root.modeArgument
+					})
+
+					Connections {
+						target: convertView.item
+						ignoreUnknownSignals: true
+
+						function onCloseRequested() {
+							root.closeRequested();
+							root.launchRequested();
+						}
+
+						function onArgumentRequested(text) {
+							root.setLauncherSearch(`>conv ${text}`);
+						}
 					}
-					onArgumentRequested: text => root.setLauncherSearch(`>conv ${text}`)
 				}
 			}
 
@@ -2304,17 +2361,29 @@ Item {
 			ModeLayer {
 				current: root.mode === "todo"
 
-				TodoView {
+				ModeView {
 					id: todoView
 
-					anchors.fill: parent
-					active: root.mode === "todo"
-					argument: root.modeArgument
-					onCloseRequested: {
-						root.closeRequested();
-						root.launchRequested();
+					file: "../todos/TodoView.qml"
+					current: root.mode === "todo"
+					values: ({
+						active: root.mode === "todo",
+						argument: root.modeArgument
+					})
+
+					Connections {
+						target: todoView.item
+						ignoreUnknownSignals: true
+
+						function onCloseRequested() {
+							root.closeRequested();
+							root.launchRequested();
+						}
+
+						function onArgumentRequested(text) {
+							root.setLauncherSearch(`>todo ${text}`);
+						}
 					}
-					onArgumentRequested: text => root.setLauncherSearch(`>todo ${text}`)
 				}
 			}
 
@@ -2322,15 +2391,24 @@ Item {
 			ModeLayer {
 				current: root.mode === "web"
 
-				WebSearchView {
+				ModeView {
 					id: webSearchView
 
-					anchors.fill: parent
-					active: root.mode === "web"
-					argument: root.modeArgument
-					onCloseRequested: {
-						root.closeRequested();
-						root.launchRequested();
+					file: "WebSearchView.qml"
+					current: root.mode === "web"
+					values: ({
+						active: root.mode === "web",
+						argument: root.modeArgument
+					})
+
+					Connections {
+						target: webSearchView.item
+						ignoreUnknownSignals: true
+
+						function onCloseRequested() {
+							root.closeRequested();
+							root.launchRequested();
+						}
 					}
 				}
 			}
@@ -2339,25 +2417,41 @@ Item {
 			ModeLayer {
 				current: root.mode === "ai"
 
-				AiActionsView {
+				ModeView {
 					id: aiActionsView
 
-					anchors.fill: parent
-					active: root.mode === "ai"
-					argument: root.modeArgument
-					model: AiChat.selectedAiModel
-					models: AiChat.aiModels.map(model => String(model.name || model.model || ""))
-					busy: AiChat.aiStreaming
-					onRunRequested: (prompt, text) => root.runClipboardAction(prompt, text)
-					onChatRequested: prompt => {
-						AiChat.startNewChat();
-						if (prompt !== "") AiChat.sendChatPrompt(prompt);
-					}
-					onCommandRequested: query => root.setLauncherSearch(query)
-					onFilesRequested: query => {
-						if (query !== "") Files.goTo({ kind: "search", path: Files.home, query: query, ai: true });
-						else Files.show({ paths: [], kind: "search", query: "", newTab: false });
-						root.closeRequested();
+					file: "AiActionsView.qml"
+					current: root.mode === "ai"
+					values: ({
+						active: root.mode === "ai",
+						argument: root.modeArgument,
+						model: AiChat.selectedAiModel,
+						models: AiChat.aiModels.map(model => String(model.name || model.model || "")),
+						busy: AiChat.aiStreaming
+					})
+
+					Connections {
+						target: aiActionsView.item
+						ignoreUnknownSignals: true
+
+						function onRunRequested(prompt, text) {
+							root.runClipboardAction(prompt, text);
+						}
+
+						function onChatRequested(prompt) {
+							AiChat.startNewChat();
+							if (prompt !== "") AiChat.sendChatPrompt(prompt);
+						}
+
+						function onCommandRequested(query) {
+							root.setLauncherSearch(query);
+						}
+
+						function onFilesRequested(query) {
+							if (query !== "") Files.goTo({ kind: "search", path: Files.home, query: query, ai: true });
+							else Files.show({ paths: [], kind: "search", query: "", newTab: false });
+							root.closeRequested();
+						}
 					}
 				}
 			}
@@ -2366,17 +2460,29 @@ Item {
 			ModeLayer {
 				current: root.mode === "phone"
 
-				PhoneView {
+				ModeView {
 					id: phoneView
 
-					anchors.fill: parent
-					active: root.mode === "phone"
-					argument: root.modeArgument
-					onCloseRequested: {
-						root.closeRequested();
-						root.launchRequested();
+					file: "PhoneView.qml"
+					current: root.mode === "phone"
+					values: ({
+						active: root.mode === "phone",
+						argument: root.modeArgument
+					})
+
+					Connections {
+						target: phoneView.item
+						ignoreUnknownSignals: true
+
+						function onCloseRequested() {
+							root.closeRequested();
+							root.launchRequested();
+						}
+
+						function onPickFileRequested() {
+							root.pickFileForPhone();
+						}
 					}
-					onPickFileRequested: root.pickFileForPhone()
 				}
 			}
 
@@ -2384,13 +2490,24 @@ Item {
 			ModeLayer {
 				current: root.mode === "finder"
 
-				FileFinderView {
+				ModeView {
 					id: finderView
 
-					anchors.fill: parent
-					active: root.mode === "finder"
-					argument: root.modeArgument
-					onCloseRequested: root.closeRequested()
+					file: "FileFinderView.qml"
+					current: root.mode === "finder"
+					values: ({
+						active: root.mode === "finder",
+						argument: root.modeArgument
+					})
+
+					Connections {
+						target: finderView.item
+						ignoreUnknownSignals: true
+
+						function onCloseRequested() {
+							root.closeRequested();
+						}
+					}
 				}
 			}
 
@@ -2398,13 +2515,24 @@ Item {
 			ModeLayer {
 				current: root.mode === "shots"
 
-				ShotsView {
+				ModeView {
 					id: shotsView
 
-					anchors.fill: parent
-					active: root.mode === "shots"
-					argument: root.modeArgument
-					onCloseRequested: root.closeRequested()
+					file: "ShotsView.qml"
+					current: root.mode === "shots"
+					values: ({
+						active: root.mode === "shots",
+						argument: root.modeArgument
+					})
+
+					Connections {
+						target: shotsView.item
+						ignoreUnknownSignals: true
+
+						function onCloseRequested() {
+							root.closeRequested();
+						}
+					}
 				}
 			}
 
@@ -3968,7 +4096,7 @@ Item {
 			KeyHint {
 				visible: root.mode === "todo"
 				key: "^N"
-				label: todoView.newLabel
+				label: todoView.item?.newLabel ?? ""
 			}
 
 			KeyHint {

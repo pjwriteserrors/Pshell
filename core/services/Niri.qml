@@ -19,8 +19,16 @@ Singleton {
 	property var workspaceGroups: []
 	property var tasks: []
 	property var taskGroups: []
+	// the same by key, for views that keep their delegates (ScriptModel with
+	// objectProp) and read what changes from here: output -> [entry], id -> entry
+	property var workspacesOn: ({})
+	property var workspaceById: ({})
+	property var tasksOn: ({})
+	property var taskById: ({})
 	property string groupsKey: ""
 	property string tasksKey: ""
+	property string workspacesKey: ""
+	property string windowsKey: ""
 	// the focused window covers its whole output (fullscreen video, games …)
 	property bool focusedFullscreen: false
 	// the focused window's id, -1 none
@@ -208,16 +216,39 @@ Singleton {
 		const groupsKey = JSON.stringify(groups);
 		if (groupsKey !== root.groupsKey) {
 			root.groupsKey = groupsKey;
+			const on = {};
+			const byId = {};
+			for (const group of groups) {
+				on[group.output] = group.workspaces;
+				for (const entry of group.workspaces) byId[entry.id] = entry;
+			}
+			root.workspacesOn = on;
+			root.workspaceById = byId;
 			root.workspaceGroups = groups;
 		}
 		const tasksKey = JSON.stringify(tasks);
 		if (tasksKey !== root.tasksKey) {
 			root.tasksKey = tasksKey;
+			const on = {};
+			const byId = {};
+			for (const group of taskGroups) on[group.output] = group.tasks;
+			for (const task of tasks) byId[task.id] = task;
+			root.tasksOn = on;
+			root.taskById = byId;
 			root.tasks = tasks;
 			root.taskGroups = taskGroups;
 		}
-		root.workspaces = workspaces.map(ws => Object.assign({}, ws));
-		root.windows = windows.map(window => Object.assign({}, window));
+		// only when something changed: every binding on them runs again
+		const workspacesKey = JSON.stringify(workspaces);
+		if (workspacesKey !== root.workspacesKey) {
+			root.workspacesKey = workspacesKey;
+			root.workspaces = workspaces.map(ws => Object.assign({}, ws));
+		}
+		const windowsKey = JSON.stringify(windows);
+		if (windowsKey !== root.windowsKey) {
+			root.windowsKey = windowsKey;
+			root.windows = windows.map(window => Object.assign({}, window));
+		}
 
 		const focused = windows.find(w => w.is_focused);
 		root.focusedId = focused ? Number(focused.id) : -1;
@@ -307,7 +338,9 @@ Singleton {
 				const change = root.apply(event);
 				if (change === "all" || change === "workspaces") {
 					root.ready = true;
-					root.publish();
+					// once for the lines read together (a layout change comes
+					// with its focus and size changes)
+					Qt.callLater(root.publish);
 				} else if (change === "title" && !titleTimer.running) {
 					titleTimer.start();
 				}

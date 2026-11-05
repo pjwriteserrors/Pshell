@@ -243,106 +243,37 @@ Singleton {
 			mapProcess.running = true;
 	}
 
+	// the index, as scripts/app_icons.py keeps it
+	FileView {
+		id: index
+
+		printErrors: false
+		onLoaded: root.setMap(index.text())
+	}
+
+	// which index is current, made anew only when an icon or app came or went
 	Process {
 		id: mapProcess
+
 		running: true
 		environment: ({ PSHELL_ICON_ROOT: root.pshellDir })
+		command: ["python3", `${Paths.scripts}/app_icons.py`]
 		onExited: {
 			if (root.stale) {
 				root.stale = false;
 				mapProcess.running = true;
 			}
 		}
-		command: ["sh", "-c", `
-python3 - <<'PY'
-import json
-import os
-import shlex
-from pathlib import Path
-
-roots = [Path("/usr/share/icons/Papirus"), Path.home() / ".local/share/icons/Papirus"]
-# the Pshell icons are PNGs: their largest, so nothing is scaled up
-pshell = os.environ.get("PSHELL_ICON_ROOT", "")
-if pshell:
-    roots.insert(0, Path(pshell))
-sizes = ["48x48", "64x64", "32x32", "24x24", "22x22", "16x16", "scalable"]
-contexts = ["apps", "devices", "status", "panel", "symbolic/status", "symbolic/devices"]
-icons = {}
-
-def add_alias(name, path, mine=False):
-    if not name or not path:
-        return
-    key = name.strip().lower()
-    if not key:
-        return
-    # an app's names lead to its Pshell icon, over a Papirus icon of that name
-    put = icons.__setitem__ if mine else icons.setdefault
-    put(key, str(path))
-    if key.endswith((".png", ".svg", ".xpm")):
-        key = Path(key).stem.lower()
-        put(key, str(path))
-    put(f"{key}.desktop", str(path))
-
-for root in roots:
-    for size in (["128x128", "96x96", "64x64"] if pshell and str(root) == pshell else sizes):
-        for context in contexts:
-            icon_dir = root / size / context
-            if not icon_dir.is_dir():
-                continue
-            for path in sorted(icon_dir.iterdir()):
-                if path.suffix.lower() not in (".svg", ".png", ".xpm"):
-                    continue
-                add_alias(path.stem, path)
-
-for path in sorted(Path("/usr/share/icons").glob("*.png")):
-    add_alias(path.name, path)
-
-for app_root in (Path("/usr/share/applications"), Path.home() / ".local/share/applications"):
-    if not app_root.is_dir():
-        continue
-    for desktop in sorted(app_root.glob("*.desktop")):
-        data = {}
-        try:
-            for line in desktop.read_text(errors="ignore").splitlines():
-                if "=" not in line or line.startswith("[") or line.startswith("#"):
-                    continue
-                key, value = line.split("=", 1)
-                if key in ("Icon", "StartupWMClass", "Exec", "Name"):
-                    data.setdefault(key, value.strip())
-        except OSError:
-            continue
-        icon = data.get("Icon", "")
-        resolved = None
-        icon_key = icon.lower()
-        if icon_key in icons:
-            resolved = icons[icon_key]
-        elif Path(icon_key).stem.lower() in icons:
-            resolved = icons[Path(icon_key).stem.lower()]
-        elif icon.endswith((".png", ".svg", ".xpm")):
-            for candidate in (Path("/usr/share/icons") / icon, Path.home() / ".local/share/icons" / icon):
-                if candidate.is_file():
-                    resolved = str(candidate)
-                    break
-        if not resolved:
-            continue
-        mine = bool(pshell) and resolved.startswith(pshell)
-        add_alias(desktop.name, resolved, mine)
-        add_alias(desktop.stem, resolved, mine)
-        add_alias(data.get("StartupWMClass", ""), resolved, mine)
-        if data.get("Name"):
-            add_alias(data["Name"], resolved, mine)
-        if data.get("Exec"):
-            try:
-                command = shlex.split(data["Exec"])[0]
-                add_alias(Path(command).name, resolved, mine)
-            except (ValueError, IndexError):
-                pass
-
-print(json.dumps(icons, separators=(",", ":")))
-PY
-`]
 		stdout: StdioCollector {
-			onStreamFinished: root.setMap(text)
+			onStreamFinished: {
+				const [path, how] = String(text).trim().split("\t");
+				if (!path) return;
+				if (index.path === path) {
+					if (how === "changed") index.reload();
+				} else {
+					index.path = path;
+				}
+			}
 		}
 	}
 }
