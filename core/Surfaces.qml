@@ -28,6 +28,7 @@ import qs.core.views.torrents
 import qs.core.views.streams
 import qs.core.views.tray
 import qs.core.views.tracking
+import qs.core.views.viewer
 import qs.core.views.world
 import qs.core.views.vm
 import qs.core.views.watch
@@ -399,6 +400,19 @@ Scope {
 	View {
 		view: "files/FilesWindow"
 		available: Plugins.on("filemanager")
+	}
+
+	// pictures: looked at and changed, a window of its own
+	View {
+		view: "viewer/ViewerWindow"
+		available: Plugins.on("viewer")
+	}
+
+	// … grown out of the spot it was opened from
+	View {
+		view: "viewer/ViewerGhost"
+		available: Plugins.on("viewer")
+		when: !!Viewer.origin
 	}
 
 	// every app's file chooser (and the shell's own), a window beside it

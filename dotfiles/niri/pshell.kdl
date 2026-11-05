@@ -32,6 +32,14 @@ window-rule {
     open-focused true
 }
 
+// the shell's pictures (core/views/viewer/ViewerWindow.qml) float in the
+// middle of the screen like a lightbox
+window-rule {
+    match app-id=r#"quickshell"# title=r#" – Pictures$|^Pictures$"#
+    open-floating true
+    open-focused true
+}
+
 // the shell's copy of the wallpaper for the overview and the gaps between
 // workspaces (core/views/overlays/WallpaperLayer.qml, backdrop)
 layer-rule {

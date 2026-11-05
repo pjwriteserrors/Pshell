@@ -41,6 +41,10 @@ FocusScope {
 	required property rect initialCrop
 	required property bool fromFrozen
 	required property real density
+	// another surface that draws with the editor (the picture viewer):
+	// { items, done(items), save(items) } – no crop of its own, closing
+	// and saving hand the annotations back instead of leaving the shot
+	property var host: null
 
 	readonly property string sourceUrl: Screenshot.fileUrl(editor.source)
 	readonly property real srcW: base.implicitWidth
@@ -104,7 +108,7 @@ FocusScope {
 		{ id: "erase", icon: "eraser_variant", label: "Smart erase", key: "W", group: 3 },
 		{ id: "crop", icon: "crop", label: "Crop", key: "X", group: 4 },
 		{ id: "eyedropper", icon: "eyedropper_variant", label: "Pick colour", key: "I", group: 4 }
-	]
+	].filter(t => !editor.host || t.id !== "crop")
 	// annotations that replace image content sit below the spotlight dimming
 	readonly property var surfaceTypes: ["pixelate", "blur", "erase"]
 
@@ -144,6 +148,7 @@ FocusScope {
 		editor.crop = initial;
 		editor.cropDraft = initial;
 		if (editor.tool === "crop" || editor.tool === "eyedropper") editor.tool = "rect";
+		if (editor.host) editor.items = (editor.host.items || []).slice();
 		Qt.callLater(() => editor.settled = true);
 	}
 
@@ -466,7 +471,7 @@ FocusScope {
 
 	// ── settings ───────────────────────────────────────────────────────────
 	function setTool(id) {
-		if (id === editor.tool) return;
+		if (id === editor.tool || (editor.host && id === "crop")) return;
 		editor.commitText();
 		if (editor.tool === "crop") editor.applyCrop(false);
 		if (id === "crop") {
@@ -897,8 +902,14 @@ FocusScope {
 				return;
 			}
 			Screenshot.copied(path);
-			if (Screenshot.earlyExit && !stay) Screenshot.closeEditor();
+			if (Screenshot.earlyExit && !stay && !editor.host) Screenshot.closeEditor();
 		});
+	}
+
+	// the screenshot is done with (or, drawn for another surface, handed back)
+	function leave() {
+		if (editor.host) editor.host.done(editor.items);
+		else Screenshot.closeEditor();
 	}
 
 	// render and float the result above all windows where it was taken
@@ -914,11 +925,16 @@ FocusScope {
 				return;
 			}
 			Screenshot.pin(path, output, logical);
-			Screenshot.closeEditor();
+			editor.leave();
 		});
 	}
 
 	function save(stay) {
+		if (editor.host) {
+			editor.commitText();
+			editor.host.save(editor.items);
+			return;
+		}
 		if (editor.busy) return;
 		const path = Screenshot.nextSavePath();
 		editor.render(path, ok => {
@@ -1176,6 +1192,10 @@ FocusScope {
 
 	function close() {
 		editor.commitText();
+		if (editor.host) {
+			editor.host.done(editor.items);
+			return;
+		}
 		if (Screenshot.autoSave && !editor.savedOnce) {
 			editor.save(false);
 			if (!Screenshot.earlyExit) Screenshot.closeEditor();

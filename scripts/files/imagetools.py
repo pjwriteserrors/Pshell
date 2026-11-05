@@ -72,6 +72,34 @@ def exact_size(image, fmt, wanted_width, wanted_height, fit):
     return image.resize((wanted_width, wanted_height), Image.Resampling.LANCZOS)
 
 
+def watermark(image, options):
+    """The picture (RGBA) with the text of options written on it: size is a
+    share of the shorter side, position a corner, center or tile."""
+    text = str(options.get("text") or "").strip()
+    if not text:
+        raise ImageError("Write the text of the watermark")
+    image = image.convert("RGBA")
+    layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+    size = max(10, int(min(image.size) * float(options.get("size", 0.05))))
+    face = font(size)
+    box = draw.textbbox((0, 0), text, font=face)
+    tw, th = box[2] - box[0], box[3] - box[1]
+    margin = int(size * 0.8)
+    where = options.get("position", "bottomright")
+    x = {"bottomleft": margin, "topleft": margin, "center": (image.width - tw) // 2}.get(where, image.width - tw - margin)
+    y = {"topleft": margin, "topright": margin, "center": (image.height - th) // 2}.get(where, image.height - th - margin)
+    alpha = int(255 * max(0.05, min(1.0, float(options.get("opacity", 0.5)))))
+    if where == "tile":
+        step_x, step_y = tw + size * 3, th + size * 3
+        for row, ty in enumerate(range(-th, image.height + th, step_y)):
+            for tx in range(-tw + (row % 2) * step_x // 2, image.width + tw, step_x):
+                draw.text((tx, ty), text, font=face, fill=(255, 255, 255, alpha), stroke_width=max(1, size // 18), stroke_fill=(0, 0, 0, alpha // 2))
+    else:
+        draw.text((x, y), text, font=face, fill=(255, 255, 255, alpha), stroke_width=max(1, size // 18), stroke_fill=(0, 0, 0, alpha // 2))
+    return Image.alpha_composite(image, layer)
+
+
 def edit(tool, path, options, unique):
     """The path of the picture made."""
     if tool == "strip":
@@ -126,29 +154,7 @@ def edit(tool, path, options, unique):
         image = ImageOps.mirror(image) if options.get("axis", "horizontal") == "horizontal" else ImageOps.flip(image)
         label = "mirrored"
     elif tool == "watermark":
-        text = str(options.get("text") or "").strip()
-        if not text:
-            raise ImageError("Write the text of the watermark")
-        image = image.convert("RGBA")
-        layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
-        draw = ImageDraw.Draw(layer)
-        size = max(10, int(min(image.size) * float(options.get("size", 0.05))))
-        face = font(size)
-        box = draw.textbbox((0, 0), text, font=face)
-        tw, th = box[2] - box[0], box[3] - box[1]
-        margin = int(size * 0.8)
-        where = options.get("position", "bottomright")
-        x = {"bottomleft": margin, "topleft": margin, "center": (image.width - tw) // 2}.get(where, image.width - tw - margin)
-        y = {"topleft": margin, "topright": margin, "center": (image.height - th) // 2}.get(where, image.height - th - margin)
-        alpha = int(255 * max(0.05, min(1.0, float(options.get("opacity", 0.5)))))
-        if where == "tile":
-            step_x, step_y = tw + size * 3, th + size * 3
-            for row, ty in enumerate(range(-th, image.height + th, step_y)):
-                for tx in range(-tw + (row % 2) * step_x // 2, image.width + tw, step_x):
-                    draw.text((tx, ty), text, font=face, fill=(255, 255, 255, alpha), stroke_width=max(1, size // 18), stroke_fill=(0, 0, 0, alpha // 2))
-        else:
-            draw.text((x, y), text, font=face, fill=(255, 255, 255, alpha), stroke_width=max(1, size // 18), stroke_fill=(0, 0, 0, alpha // 2))
-        image = Image.alpha_composite(image, layer)
+        image = watermark(image, options)
         if fmt == "JPEG":
             image = image.convert("RGB")
         label = "marked"

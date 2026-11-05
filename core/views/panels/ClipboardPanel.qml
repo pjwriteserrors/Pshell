@@ -231,6 +231,26 @@ Drawer {
 							}
 						}
 
+						// a picture of the history into the picture viewer
+						IconButton {
+							Layout.preferredWidth: 30
+							Layout.preferredHeight: 30
+							visible: entry.modelData.isImage && Viewer.enabled
+							icon: "image_edit_outline"
+							iconSize: 16
+							opacity: entry.hovered || entry.current ? 1 : 0
+							onClicked: {
+								Viewer.openCopied(entry.modelData.path);
+								Popups.close();
+							}
+
+							Behavior on opacity {
+								Anim {
+									duration: Motion.short
+								}
+							}
+						}
+
 						IconButton {
 							Layout.preferredWidth: 30
 							Layout.preferredHeight: 30

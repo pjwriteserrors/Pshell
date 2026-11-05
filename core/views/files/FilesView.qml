@@ -384,11 +384,22 @@ FocusScope {
 				rest.push(row);
 			}
 		}
+		// pictures open in the shell's own viewer, with the others of the pane to walk
+		if (rest.length > 0 && Viewer.isDefault && rest.every(row => Kinds.kindOf(row) === "image")) {
+			const pictures = rest.length > 1 ? rest : pane.rows.filter(row => !row.dir && Kinds.kindOf(row) === "image");
+			Viewer.open(rest[0].path, { list: pictures.map(row => row.path), from: root.openOrigin });
+			root.openOrigin = null;
+			return;
+		}
+		root.openOrigin = null;
 		if (rest.length > 0) {
 			Files.launch(rest.map(row => row.path));
 			Sounds.play("open");
 		}
 	}
+
+	// where the next picture opened grows from (Quick Look's picture)
+	property var openOrigin: null
 
 	function openElsewhere(pane, row) {
 		if (row.pcId) {

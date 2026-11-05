@@ -321,10 +321,26 @@ Rectangle {
 			onClicked: Mail.withPicture("save", root.shown)
 		}
 
+		// a picture that is a file here: changed in the picture viewer
+		IconButton {
+			visible: !root.video && Viewer.enabled && root.shown.startsWith("/")
+			icon: "image_edit_outline"
+			variant: "tonal"
+			onClicked: {
+				Viewer.open(root.shown, { mode: "adjust" });
+				Mail.picture = "";
+			}
+		}
+
 		IconButton {
 			icon: "open_in_new"
 			variant: "tonal"
-			onClicked: Qt.openUrlExternally(root.shown.startsWith("/") ? `file://${root.shown}` : root.shown)
+			onClicked: {
+				if (!root.video && Viewer.enabled && root.shown.startsWith("/")) {
+					Viewer.open(root.shown);
+					Mail.picture = "";
+				} else Qt.openUrlExternally(root.shown.startsWith("/") ? `file://${root.shown}` : root.shown);
+			}
 		}
 
 		IconButton {

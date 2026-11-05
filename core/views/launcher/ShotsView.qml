@@ -91,7 +91,8 @@ Item {
 
 		property string path: ""
 		interval: Motion.medium
-		onTriggered: Screenshot.editShot(editLater.path)
+		// in the picture viewer the history can be walked; drawing is the same editor
+		onTriggered: Viewer.enabled ? Viewer.open(editLater.path, { mode: "markup", list: root.shots.map(shot => shot.path) }) : Screenshot.editShot(editLater.path)
 	}
 
 	EmptyState {

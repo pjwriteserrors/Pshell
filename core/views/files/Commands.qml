@@ -17,6 +17,7 @@ QtObject {
 	readonly property bool ai: Plugins.on("chat")
 	readonly property bool reader: Plugins.on("fast-reader")
 	readonly property bool captures: Plugins.on("screenshot")
+	readonly property bool viewer: Viewer.enabled
 	readonly property bool pins: Plugins.on("pins")
 	readonly property bool ocr: Plugins.on("ocr")
 	readonly property bool wallpaper: Plugins.on("studio-wallpaper")
@@ -302,8 +303,9 @@ QtObject {
 		const one = images.length === 1 ? images[0] : null;
 		return [
 			{ header: "Edit" },
-			{ label: "Draw on it", icon: "draw", shown: !!one && root.captures, run: () => Screenshot.editShot(one.path) },
-			{ label: "Crop…", icon: "crop", shown: !!one, run: () => root.view.crop(one.path) },
+			{ label: "Adjust light and colour…", icon: "tune_variant", shown: !!one && root.viewer, run: () => Viewer.open(one.path, { mode: "adjust" }) },
+			{ label: "Draw on it", icon: "draw", shown: !!one && (root.viewer || root.captures), run: () => root.viewer ? Viewer.open(one.path, { mode: "markup" }) : Screenshot.editShot(one.path) },
+			{ label: "Crop…", icon: "crop", shown: !!one, run: () => root.viewer ? Viewer.open(one.path, { mode: "crop" }) : root.view.crop(one.path) },
 			{ label: "Resize…", icon: "resize", run: () => root.view.resizeDialog(images) },
 			{ label: "Turn left", icon: "rotate_left", run: () => Files.imageTool("rotate", paths, { degrees: 270 }) },
 			{ label: "Turn right", icon: "rotate_right", run: () => Files.imageTool("rotate", paths, { degrees: 90 }) },

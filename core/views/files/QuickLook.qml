@@ -215,8 +215,15 @@ Item {
 				break;
 			case Qt.Key_Return:
 			case Qt.Key_Enter:
+				// a picture flies on from here into the picture viewer
+				if (root.kind === "image" && photo.status === Image.Ready) root.view.openOrigin = Viewer.originOf(photo, Files.windowTitle);
 				root.close();
 				root.view.openRow(root.pane, root.row, false);
+				break;
+			case Qt.Key_E:
+				if (root.kind !== "image" || !Viewer.enabled) return;
+				Viewer.open(root.row.path, { mode: "adjust", list: root.rows.filter(row => Kinds.kindOf(row) === "image").map(row => row.path), from: Viewer.originOf(photo, Files.windowTitle) });
+				root.close();
 				break;
 			case Qt.Key_K:
 			case Qt.Key_P:

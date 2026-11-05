@@ -293,7 +293,7 @@ Singleton {
 		case "saved":
 			Notifs.pushInternal("success", String(data.path).split("/").pop(), "Downloads", {
 				icon: "download",
-				actions: [{ label: "Open", icon: "open_in_new", run: () => Quickshell.execDetached(["xdg-open", data.path]) }]
+				actions: [{ label: "Open", icon: "open_in_new", run: () => Viewer.enabled && /\.(jpe?g|png|webp|gif|avif|heic)$/i.test(String(data.path)) ? Viewer.open(data.path) : Quickshell.execDetached(["xdg-open", data.path]) }]
 			});
 			break;
 		case "error":

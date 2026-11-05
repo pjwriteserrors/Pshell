@@ -94,6 +94,8 @@
 	{ "id": "games-bar", "name": "Games in the bar", "category": "Desktop", "requires": ["games"], "icon": "gamepad_variant", "preview": {"on": ["bar", "clock"], "ipc": ["games panel"]} },
 	{ "id": "filemanager", "name": "File manager", "category": "Desktop", "icon": "folder_open" },
 	{ "id": "files-default", "name": "Default file manager", "category": "Desktop", "requires": ["filemanager"], "icon": "folder_star_outline" },
+	{ "id": "viewer", "name": "Picture viewer", "category": "Desktop", "icon": "image_edit_outline" },
+	{ "id": "viewer-default", "name": "Default picture viewer", "category": "Desktop", "requires": ["viewer"], "icon": "image_multiple_outline" },
 	{ "id": "files-chooser", "name": "File chooser for all apps", "category": "Desktop", "requires": ["filemanager"], "icon": "file_find_outline" },
 	{ "id": "find-mouse", "name": "Find my mouse", "category": "Desktop", "icon": "mouse_variant" },
 	{ "id": "laser-pointer", "name": "Laser pointer", "category": "Desktop", "icon": "target" },

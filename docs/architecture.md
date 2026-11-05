@@ -416,6 +416,11 @@ There is no polkit agent in the session, which is why root goes through
 sudo in a terminal. Looking Glass is started with `lookingGlass.args` of
 `vms.json` (default `-F`).
 
+`viewer` shows and changes pictures, a window of its own; `viewer-default`
+makes it what pictures open in (docs/viewer.md; `scripts/ipc.sh viewer
+open <path>`, `core/services/Viewer.qml`, `core/views/viewer/`). Changes are
+a recipe drawn by one shader and saved as a copy beside the picture.
+
 `filemanager` is the shell's file manager, a window of its own (`>file`,
 `>file <words>` searches,
 `scripts/ipc.sh files toggle|open <path>|tab <path>|reveal <path>|search

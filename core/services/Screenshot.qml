@@ -941,7 +941,7 @@ Singleton {
 			icon: "content_save",
 			image: root.fileUrl(path),
 			actions: [
-				{ label: "Open", icon: "open_in_new", run: () => Quickshell.execDetached(["xdg-open", path]) },
+				{ label: "Open", icon: "open_in_new", run: () => Viewer.enabled ? Viewer.open(path) : Quickshell.execDetached(["xdg-open", path]) },
 				{ label: "Folder", icon: "folder_open", run: () => Quickshell.execDetached(["xdg-open", root.saveDir]) },
 				{ label: "Copy", icon: "content_copy", run: () => Quickshell.execDetached(["bash", root.script, "copy", path]) }
 			]

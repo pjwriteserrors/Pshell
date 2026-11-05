@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import Quickshell.Widgets
 import qs.style.theme
 import qs.core.services
@@ -289,6 +290,21 @@ Rectangle {
 				cache: false
 				smooth: true
 				mipmap: true
+			}
+
+			// a click opens the picture in the picture viewer, grown from here
+			MouseArea {
+				anchors.fill: parent
+				enabled: Viewer.enabled && /^(file:\/\/)?\//.test(root.preview)
+				cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+				onClicked: {
+					const win = previewFrame.QsWindow.window;
+					const p = previewImage.mapToItem(null, 0, 0);
+					const scr = win?.screen;
+					const box = previewImage.paintedWidth > 0 ? Qt.rect((previewImage.width - previewImage.paintedWidth) / 2, (previewImage.height - previewImage.paintedHeight) / 2, previewImage.paintedWidth, previewImage.paintedHeight) : Qt.rect(0, 0, previewImage.width, previewImage.height);
+					const from = win && scr ? { screen: scr.name, x: scr.width - (win.margins?.right ?? 0) - win.width + p.x + box.x, y: (win.margins?.top ?? 0) + p.y + box.y, w: box.width, h: box.height } : null;
+					Viewer.open(root.preview, { from: from });
+				}
 			}
 		}
 

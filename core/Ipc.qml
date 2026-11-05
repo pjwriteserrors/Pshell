@@ -1266,6 +1266,60 @@ Scope {
 	}
 
 	IpcHandler {
+		target: "viewer"
+		enabled: Plugins.on("viewer")
+
+		// a picture (its folder can be walked)
+		function open(path: string): void {
+			Viewer.open(path);
+		}
+		// straight into a way of changing it: adjust, crop, markup
+		function edit(path: string, mode: string): void {
+			Viewer.open(path, { mode: mode || "adjust" });
+		}
+		// grown out of a spot of a screen: x y w h in its logical pixels
+		function from(path: string, screen: string, x: real, y: real, w: real, h: real): void {
+			Viewer.open(path, { from: { screen: screen, x: x, y: y, w: w, h: h } });
+		}
+		// the picture in the clipboard
+		function paste(): void {
+			Viewer.paste();
+		}
+		function toggle(): void {
+			Viewer.toggle();
+		}
+		function close(): void {
+			Viewer.close();
+		}
+		function next(): void {
+			Viewer.step(1);
+		}
+		function previous(): void {
+			Viewer.step(-1);
+		}
+		function mode(mode: string): void {
+			Viewer.setMode(mode);
+		}
+		function save(): void {
+			Viewer.saveCopy();
+		}
+		// what the window's buttons do: auto, horizon, page, cutout, export,
+		// copy, wallpaper, look:<id>, aspect:<id>, turn, mirror, fit, actual
+		function act(action: string): void {
+			Viewer.act(action);
+		}
+		function state(): string {
+			return JSON.stringify({ open: Viewer.windowOpen, path: Viewer.path, index: Viewer.index, count: Viewer.files.length, mode: Viewer.mode, edited: Viewer.edited, saved: Viewer.saved, busy: Viewer.busy, recipe: Viewer.recipe, info: Viewer.info, error: Viewer.error });
+		}
+		// a recipe set from outside (testing, scripts): JSON of Recipe.js
+		function recipe(json: string): void {
+			try {
+				Viewer.commit(Object.assign(Viewer.blankRecipe(), JSON.parse(json)));
+			} catch (error) {}
+		}
+	}
+
+	IpcHandler {
 		target: "agents"
 		enabled: Plugins.on("agents")
 
