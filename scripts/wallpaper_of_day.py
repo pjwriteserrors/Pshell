@@ -348,26 +348,28 @@ def wallhaven_candidate() -> dict[str, object]:
         raise RuntimeError("Wallhaven returned no wallpaper of the day")
 
     ranked = rotating_candidates(candidates, "wallhaven", "views")
-    preferred: list[dict[str, object]] = []
+
     # The broad daily listing is never restricted by tags. Details are only
-    # inspected to softly prefer landscape/fantasy-landscape/minimal results.
-    for item in ranked:
+    # inspected to softly prefer landscape/fantasy-landscape/minimal results,
+    # all of them side by side.
+    def preferred(item: dict[str, object]) -> bool:
         item_id = str(item.get("id") or "")
         if not item_id:
-            continue
+            return False
         try:
             details = get_json(f"https://wallhaven.cc/api/v1/w/{urllib.parse.quote(item_id)}")
-            data = details.get("data", {}) if isinstance(details, dict) else {}
-            tags = data.get("tags", []) if isinstance(data, dict) else []
-            tag_text = " ".join(
-                str(tag.get("name") or "") for tag in tags if isinstance(tag, dict)
-            ).lower()
-            if any(preference in tag_text for preference in WALLHAVEN_PREFERENCES):
-                preferred.append(item)
         except Exception:
-            continue
+            return False
+        data = details.get("data", {}) if isinstance(details, dict) else {}
+        tags = data.get("tags", []) if isinstance(data, dict) else []
+        tag_text = " ".join(
+            str(tag.get("name") or "") for tag in tags if isinstance(tag, dict)
+        ).lower()
+        return any(preference in tag_text for preference in WALLHAVEN_PREFERENCES)
 
-    best = preferred[0] if preferred else ranked[0]
+    with ThreadPoolExecutor(8) as pool:
+        matches = list(pool.map(preferred, ranked))
+    best = next((item for item, match in zip(ranked, matches) if match), ranked[0])
     return {
         "provider": "wallhaven",
         "title": f"Wallhaven {best.get('id', '')}".strip(),
@@ -657,14 +659,12 @@ def prepare(directory: Path) -> dict[str, str]:
     fields = line.split("\t")
     if len(fields) < 5:
         return {"preview_path": "", "media_type": "image"}
-    subprocess.run(
-        ["bash", catalog, "prewarm", str(directory), fields[3], wallust_backend()],
-        capture_output=True,
-    )
-    # and what applying it needs (its palette, GTK theme and icons), in the
-    # background, so choosing it is as quick as a library entry
+    # its colours, then what applying it needs (its palette, GTK theme and
+    # icons), in the background: the picker shows the picture as soon as its
+    # preview is there and asks for a cell itself when it is not made yet
     subprocess.Popen(
-        ["setsid", "-f", "bash", str(SCRIPT_DIR / "theme_prewarm.sh"), str(directory)],
+        ["setsid", "-f", "bash", "-c", 'bash "$1" prewarm "$2" "$3" "$4"; exec bash "$5" "$2"', "prewarm",
+         catalog, str(directory), fields[3], wallust_backend(), str(SCRIPT_DIR / "theme_prewarm.sh")],
         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     return {"preview_path": fields[3], "media_type": fields[4]}
