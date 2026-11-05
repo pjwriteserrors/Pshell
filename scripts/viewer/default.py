@@ -101,18 +101,18 @@ def open_paths(args):
         if arg.startswith("file://"):
             arg = urllib.parse.unquote(urllib.parse.urlparse(arg).path)
         paths.append(os.path.abspath(arg))
-    shown = bool(paths)
-    for path in paths[:1]:
-        try:
-            result = subprocess.run([os.path.join(SCRIPTS, "ipc.sh"), "viewer", "open", path], capture_output=True, timeout=5)
-            shown = result.returncode == 0 and b"No running" not in result.stderr + result.stdout
-        except (OSError, subprocess.SubprocessError):
-            shown = False
-    if shown or not paths:
+    # started as an app without a picture: the window as it was left
+    call = ["viewer", "open", paths[0]] if paths else ["viewer", "start"]
+    try:
+        result = subprocess.run([os.path.join(SCRIPTS, "ipc.sh"), *call], capture_output=True, timeout=5)
+        shown = result.returncode == 0 and b"No running" not in result.stderr + result.stdout
+    except (OSError, subprocess.SubprocessError):
+        shown = False
+    if shown:
         return
     # no shell: the app that opened pictures before
     import mimetypes
-    mime = mimetypes.guess_type(paths[0])[0] or "image/png"
+    mime = (mimetypes.guess_type(paths[0])[0] if paths else None) or "image/png"
     before = remembered().get(mime) or "org.gnome.Loupe.desktop"
     for folder in (APPS, "/usr/share/applications"):
         entry = os.path.join(folder, before)

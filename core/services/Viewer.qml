@@ -321,7 +321,44 @@ Singleton {
 
 	function toggle() {
 		if (root.windowOpen) root.close();
-		else if (root.files.length > 0) root.windowOpen = true;
+		else root.showWindow();
+	}
+
+	// the window on its own (started as an app): as it was left, else the
+	// picture looked at last, else the newest of Pictures
+	function showWindow() {
+		if (!root.enabled) return;
+		if (root.files.length > 0) {
+			root.windowOpen = true;
+			root.focusWindow();
+			return;
+		}
+		const last = root.recent[0];
+		if (!last) return root.openFolder(`${Paths.home}/Pictures`);
+		root.request("info", { path: last }, (data, error) => {
+			if (error) root.openFolder(last.slice(0, last.lastIndexOf("/")) || `${Paths.home}/Pictures`);
+			else root.open(last);
+		});
+	}
+
+	// a folder's first picture (and the folder to walk), or the window saying there is none
+	function openFolder(folder) {
+		root.request("list", { path: folder, sort: root.setting("sort", "name"), reverse: root.setting("reverse", false) }, (data, error) => {
+			const files = data?.files ?? [];
+			if (files.length > 0) {
+				root.open(files[0].path);
+				return;
+			}
+			if (folder !== `${Paths.home}/Pictures`) return root.openFolder(`${Paths.home}/Pictures`);
+			root.files = [];
+			root.allFiles = [];
+			root.index = -1;
+			root.info = null;
+			root.shownPath = "";
+			root.error = "No pictures here yet – open one from Files, or paste one (Ctrl+V)";
+			root.windowOpen = true;
+			root.focusWindow();
+		});
 	}
 
 	// a window that is already up somewhere is brought here

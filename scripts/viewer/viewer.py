@@ -63,9 +63,9 @@ MODELS = os.path.join(DATA, "viewer-models")
 WORKER = os.path.join(HERE, "cutout_worker.py")
 
 RAW = {"cr2", "cr3", "nef", "arw", "dng", "raf", "orf", "rw2", "pef", "srw"}
-IMAGES = {"jpg", "jpeg", "jpe", "png", "gif", "webp", "bmp", "tif", "tiff", "svg", "svgz", "avif", "heic", "heif",
+IMAGES = {"jpg", "jpeg", "jpe", "jfif", "png", "gif", "webp", "bmp", "tif", "tiff", "svg", "svgz", "avif", "heic", "heif",
           "jxl", "ico", "tga", "qoi"} | RAW
-QT = {"jpg", "jpeg", "jpe", "png", "gif", "webp", "bmp", "tif", "tiff", "svg", "svgz", "ico", "tga", "pdf"}
+QT = {"jpg", "jpeg", "jpe", "jfif", "png", "gif", "webp", "bmp", "tif", "tiff", "svg", "svgz", "ico", "tga", "pdf"}
 MIMES = {"svg": "image/svg+xml", "svgz": "image/svg+xml", "heic": "image/heic", "heif": "image/heif", "jxl": "image/jxl",
          "avif": "image/avif", "qoi": "image/qoi", "cr2": "image/x-canon-cr2", "cr3": "image/x-canon-cr3",
          "nef": "image/x-nikon-nef", "arw": "image/x-sony-arw", "dng": "image/x-adobe-dng", "raf": "image/x-fuji-raf",

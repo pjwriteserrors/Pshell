@@ -1288,6 +1288,11 @@ Scope {
 		function toggle(): void {
 			Viewer.toggle();
 		}
+		// the window on its own: as it was left, the last picture, or Pictures
+		// ("show" is a word of qs ipc itself)
+		function start(): void {
+			Viewer.showWindow();
+		}
 		function close(): void {
 			Viewer.close();
 		}

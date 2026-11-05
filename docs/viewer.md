@@ -13,7 +13,7 @@ off`); without a running shell `default.py open` starts the app before.
                           | mode <view|adjust|crop|markup|retouch|compare> | act <action>
                           | save | last | slideshow [path] | cull [path]
                           | apply <paths> | collage <paths> | recipe <json> | state
-                          | toggle | close
+                          | start | toggle | close
 
 `act` does what a button does: auto, look:<id>, horizon, page, aspect:<id>,
 turn[:left], mirror, cutout, faces, similar, describe, split, compare,
