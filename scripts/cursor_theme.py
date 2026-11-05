@@ -1539,7 +1539,11 @@ def write_for_shell(root: Path, pal: Palette):
         pen = Pen(48, pal, fit_of(name, pal), hotspot)
         draw(pen, rest_t(period, step, active))
         pen.finish().write_to_png(str(stills / f"{key}.png"))
-        out[key] = {"file": f"stills/{key}.png", "hotspot": list(hotspot)}
+        # four times as big, for the pointer grown by a shake (FindMouse)
+        big = Pen(48 * 4, pal, fit_of(name, pal), hotspot)
+        draw(big, rest_t(period, step, active))
+        big.finish().write_to_png(str(stills / f"{key}-large.png"))
+        out[key] = {"file": f"stills/{key}.png", "large": f"stills/{key}-large.png", "hotspot": list(hotspot)}
     data = {
         "core": hexed(pal.core), "outline": hexed(pal.outline),
         "accent": hexed(pal.accent), "danger": hexed(pal.danger),

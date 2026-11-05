@@ -143,7 +143,7 @@ Scope {
 		when: switching.held
 	}
 
-	// the light on a pointer that is shaken
+	// the pointer grown while it is shaken
 	ScreenView {
 		view: "overlays/MouseFinder"
 		available: Plugins.on("find-mouse")

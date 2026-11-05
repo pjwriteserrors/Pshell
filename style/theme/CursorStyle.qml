@@ -35,6 +35,11 @@ Singleton {
 		const s = root.data.stills?.[name];
 		return s ? `file://${root.dir}/${s.file}?${root.stamp}` : "";
 	}
+	// the same drawn four times as big, for a cursor shown grown
+	function large(name) {
+		const s = root.data.stills?.[name];
+		return s?.large ? `file://${root.dir}/${s.large}?${root.stamp}` : root.still(name);
+	}
 	function hotspot(name) {
 		const s = root.data.stills?.[name];
 		return s ? Qt.point(s.hotspot[0] * root.unit, s.hotspot[1] * root.unit) : Qt.point(0, 0);

@@ -1266,7 +1266,7 @@ Scope {
 		}
 	}
 
-	// the light on the pointer, as shaking it brings
+	// the pointer grown, as shaking it does
 	IpcHandler {
 		target: "findmouse"
 		enabled: FindMouse.available

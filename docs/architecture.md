@@ -218,13 +218,15 @@ pause at punctuation and the countdown are kept in
 `~/.local/state/pshell/reader.json`.
 
 `find-mouse` shows where the pointer is: shaking it with no key or button
-held dims the screens but a circle around it, which closes in on the pointer
-and sends rings off until the shaking ends; a click ends it at once.
+held grows the arrow, more with every turn of the shake (up to five times
+its size, drawn from a still four times as big), and it shrinks back within
+a moment of the shaking ending; a click ends it at once. Not while the laser
+pointer is on.
 `scripts/input_watch.py` (the shell's one reader of mice, touchpads and
 keyboards, also for the shaken drag of the shelves and the RPG's counts) reads them for the
 shake, the screens take the pointer while the light is on to learn where it
-is. `scripts/ipc.sh findmouse find` asks for it from a key; the light then
-comes with the pointer's next move.
+is. `scripts/ipc.sh findmouse find` asks for it from a key; the arrow then
+grows with the pointer's next move.
 
 `laser-pointer` turns the pointer into a laser dot for presentations
 (Mod+Alt+L in `dotfiles/niri/pshell.kdl`, `scripts/ipc.sh laser toggle`):
