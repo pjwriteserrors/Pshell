@@ -16,10 +16,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.pshell.app.link.bool
 import dev.pshell.app.link.double
 import dev.pshell.app.link.float
 import dev.pshell.app.link.get
 import dev.pshell.app.link.int
+import dev.pshell.app.link.json
 import dev.pshell.app.link.list
 import dev.pshell.app.link.present
 import dev.pshell.app.link.string
@@ -27,6 +29,7 @@ import dev.pshell.app.ui.link
 import dev.pshell.app.ui.theme.Theme
 import dev.pshell.app.ui.topic
 import dev.pshell.app.ui.widgets.Glyph
+import dev.pshell.app.ui.widgets.IconButton
 import dev.pshell.app.ui.widgets.Label
 import dev.pshell.app.ui.widgets.Meter
 import dev.pshell.app.ui.widgets.Panel
@@ -103,6 +106,7 @@ private fun SystemScreen() {
 		}
 		Graph("chip", "Processor", system["cores"].int.takeIf { it > 0 }?.let { "$it cores" } ?: "", system["cpu"].float, system["cpuHistory"].list.map { it.float }, Theme.colors.primary)
 		Graph("memory", "Memory", "${storage(system["memoryUsed"].double)} / ${storage(system["memoryTotal"].double)}", system["memory"].float, system["memoryHistory"].list.map { it.float }, Theme.colors.secondary)
+		system["tasks"]?.let { tasks -> Tasks(tasks) }
 		val disks = system["disks"].list
 		if (disks.isNotEmpty()) {
 			SectionLabel("Disks")
@@ -150,5 +154,61 @@ private fun Level(icon: String, title: String, text: String, value: Float) {
 			Label(text, style = Theme.Type.small, color = Theme.colors.textMuted)
 		}
 		Meter(value, color = if (value < 0.2f) Theme.colors.danger else Theme.colors.success)
+	}
+}
+
+// from the PC's task manager: temperature, graphics, and what takes the most;
+// a tap pauses or ends it, holding the end button ends it at once
+@Composable
+private fun Tasks(tasks: JsonElement) {
+	val pc = link
+	if (tasks["temp"].present || tasks["gpu"].present) {
+		SectionLabel("Load")
+		Panel {
+			Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+				if (tasks["gpu"].present) Level("expansion_card_variant", "Graphics", "${(tasks["gpu"].float * 100).toInt()}%", tasks["gpu"].float)
+				if (tasks["temp"].present) {
+					val temp = tasks["temp"].float
+					Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+						Row(verticalAlignment = Alignment.CenterVertically) {
+							Glyph("thermometer", size = 18.dp, color = Theme.colors.textMuted)
+							Spacer(Modifier.width(8.dp))
+							Label("Processor", Modifier.weight(1f), style = Theme.Type.body.copy(fontWeight = FontWeight.SemiBold))
+							Label("${temp.toInt()} °C", style = Theme.Type.small, color = Theme.colors.textMuted)
+						}
+						Meter(temp / 100f, color = if (temp > 90f) Theme.colors.danger else if (temp > 80f) Theme.colors.warning else Theme.colors.success)
+					}
+				}
+			}
+		}
+	}
+	val top = tasks["top"].list
+	if (top.isEmpty()) return
+	SectionLabel("Busiest")
+	Panel {
+		Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+			for (item in top) {
+				val key = item["key"].string
+				val paused = item["paused"].bool
+				Row(verticalAlignment = Alignment.CenterVertically) {
+					Column(Modifier.weight(1f)) {
+						Label(item["name"].string, style = Theme.Type.body.copy(fontWeight = FontWeight.SemiBold))
+						Label(
+							listOf("${"%.1f".format(item["cpu"].float * 100)}%", bytesSaid(item["mem"].double.toLong()), if (paused) "paused" else "").filter { it.isNotEmpty() }.joinToString(" · "),
+							style = Theme.Type.small,
+							color = Theme.colors.textMuted,
+						)
+					}
+					if (key != "pshell") {
+						IconButton(if (paused) "play" else "pause", size = 40.dp, iconSize = 20.dp) {
+							pc.run("system", if (paused) "resume" else "pause", json("key" to key))
+						}
+						IconButton("close", size = 40.dp, iconSize = 20.dp, tint = Theme.colors.danger, onLongClick = { pc.run("system", "kill", json("key" to key)) }) {
+							pc.run("system", "end", json("key" to key))
+						}
+					}
+				}
+			}
+		}
 	}
 }

@@ -20,8 +20,11 @@ Singleton {
 		if (root.available) Sounds.play(root.active ? "toggleOn" : "toggleOff");
 	}
 
+	// also while the task manager waits for a watched process to finish
+	readonly property bool holding: root.active || (Plugins.on("task-manager") && TaskManager.holdsAwake)
+
 	Process {
-		running: root.active
+		running: root.holding
 		command: ["systemd-inhibit", "--what=idle:sleep", "--who=Quickshell", "--why=Keep awake", "--mode=block", "sleep", "infinity"]
 	}
 }

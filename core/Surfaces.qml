@@ -21,6 +21,7 @@ import qs.core.views.settings
 import qs.core.views.shelf
 import qs.core.views.ssh
 import qs.core.views.switcher
+import qs.core.views.taskmgr
 import qs.core.views.studio
 import qs.core.views.todos
 import qs.core.views.torrents
@@ -452,6 +453,19 @@ Scope {
 		view: "streams/NextUpOverlay"
 		available: Plugins.on("streams")
 		when: !!Streams.upNext
+	}
+
+	// the task manager's window (Ctrl+Shift+Escape)
+	View {
+		view: "taskmgr/TaskManagerWindow"
+		available: Plugins.on("task-manager")
+		when: !TaskManager.surface.panelled && TaskManager.windowOpen
+	}
+
+	View {
+		view: "taskmgr/TaskManagerPanel"
+		available: Plugins.on("task-manager-bar")
+		when: Popups.wanted("taskmgr")
 	}
 
 	// under the bar, from the magnet in the bar

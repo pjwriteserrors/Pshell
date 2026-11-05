@@ -134,6 +134,11 @@ Item {
 				{ id: "streams-said", command: "said", name: "What was said", glyph: "magnify", keywords: "search subtitles words spoken transcript", status: "" }]
 				.concat(Streams.series.filter(item => item.status === "active" && item.left > 0).map(item => ({ id: "streams-series", series: item.id, command: item.name.toLowerCase(), name: item.name, glyph: "play", keywords: "next episode watch", status: `${item.left} left` })))
 		},
+		{ id: "taskmgr", plugin: "task-manager", group: "system", command: "top", name: "Task Manager", aliases: ["taskmgr", "tasks", "processes", "kill", "htop"], keywords: "cpu memory process end kill hang frozen ports services startup", status: TaskManager.connected ? `${Math.round(TaskManager.cpu * 100)} %` : "",
+			children: [{ id: "taskmgr-open", command: "top open", name: "Task Manager", glyph: "monitor_dashboard", keywords: "window", status: "" },
+				{ id: "taskmgr-ports", command: "top ports", name: "Ports", glyph: "lan", keywords: "listening server localhost", status: "" }]
+				.concat(TaskManager.top.slice(0, 6).map(item => ({ id: "taskmgr-app", key: item.key, command: `top ${String(item.name).toLowerCase()}`, name: item.name, glyph: item.kind === "app" ? "application_outline" : "cog_outline", keywords: "end kill", status: `${Math.round(item.c * 100)} %` })))
+		},
 		{ id: "games", plugin: "games", group: "tools", command: "games", name: "Games", aliases: ["game", "play", "steam", "library"], keywords: "steam proton wine library play launch covers", status: Games.running.length > 0 ? "Playing" : "" },
 		{ id: "vm", plugin: "vm-launcher", group: "system", command: "vm", name: "Virtual Machines", aliases: ["vms", "windows", "win", "virt"], keywords: "looking glass qemu libvirt start boot", status: Machines.vms.some(vm => vm.running) ? "On" : "" },
 		{ id: "dnd", plugin: "dnd", group: "system", command: "dnd", name: "Do Not Disturb", aliases: ["quiet", "silent"], keywords: "notifications", status: Notifs.dnd ? "On" : "" },
@@ -1144,6 +1149,18 @@ Item {
 			root.closeRequested();
 			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "torrents", "open"]);
 			break;
+		case "taskmgr-open":
+			root.closeRequested();
+			TaskManager.open();
+			break;
+		case "taskmgr-ports":
+			root.closeRequested();
+			TaskManager.open("ports");
+			break;
+		case "taskmgr-app":
+			root.closeRequested();
+			TaskManager.showKey(command.key);
+			break;
 		case "streams-open":
 			root.closeRequested();
 			Streams.open();
@@ -1555,6 +1572,7 @@ Item {
 		case "games": return "gamepad_variant";
 		case "downloads": return "download";
 		case "torrents": return "magnet";
+		case "taskmgr": return "monitor_dashboard";
 		case "streams": return "play_circle";
 		case "streams-open":
 		case "streams-live":

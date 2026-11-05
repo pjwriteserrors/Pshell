@@ -33,6 +33,7 @@ Singleton {
 		const next = Object.assign({}, root.busy);
 		next[id] = { since: Date.now(), agent: agent, source: source };
 		root.busy = next;
+		TaskManager.agentStarted(id);
 	}
 
 	function finish(id) {
@@ -43,6 +44,7 @@ Singleton {
 		root.busy = next;
 		const seconds = (Date.now() - entry.since) / 1000;
 		const window = Niri.windows.find(w => Number(w.id) === Number(id));
+		TaskManager.agentFinished(id, entry.agent, root.topic(window?.title));
 		if (!window || seconds < root.minimumSeconds) return;
 		if (window.is_focused && !Session.locked) return;
 		root.announce(window, entry.agent, seconds);

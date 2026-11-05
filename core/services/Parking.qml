@@ -92,6 +92,47 @@ Singleton {
 		saveTimer.restart();
 	}
 
+	// apps (by app id) that are paused while all their windows are parked;
+	// they go on the moment one comes back (task-manager)
+	property var pauseApps: []
+	property var pausedIds: []
+	readonly property bool canPause: Plugins.on("task-manager")
+
+	function pausesWhileParked(id) {
+		return root.pauseApps.includes(String(Niri.windowMap[id]?.app_id ?? ""));
+	}
+
+	function setPauseWhileParked(id, on) {
+		const app = String(Niri.windowMap[id]?.app_id ?? "");
+		if (app === "") return;
+		root.pauseApps = on ? root.pauseApps.filter(a => a !== app).concat([app]) : root.pauseApps.filter(a => a !== app);
+		saveTimer.restart();
+		if (on && root.isParked(id)) root.pauseParked(id);
+		if (!on) root.resumeParked(id);
+	}
+
+	function pauseParked(id) {
+		if (!root.canPause || root.pausedIds.includes(id)) return;
+		if (TaskManager.pauseWindow(id, other => root.isParked(other))) root.pausedIds = root.pausedIds.concat([id]);
+	}
+
+	function resumeParked(id) {
+		if (!root.pausedIds.includes(id)) return;
+		root.pausedIds = root.pausedIds.filter(each => each !== id);
+		TaskManager.resumeWindow(id);
+	}
+
+	property var lastParked: []
+
+	function followPauses() {
+		const now = root.parkedIds;
+		for (const id of root.lastParked)
+			if (!now.includes(id)) root.resumeParked(id);
+		for (const id of now)
+			if (!root.lastParked.includes(id) && root.pausesWhileParked(id)) root.pauseParked(id);
+		root.lastParked = now;
+	}
+
 	// window id → the title last looked at; another one since is news
 	property var seenTitle: ({})
 
@@ -109,6 +150,7 @@ Singleton {
 	}
 
 	onParkedIdsChanged: {
+		root.followPauses();
 		const next = {};
 		for (const id of root.parkedIds) next[id] = root.seenTitle[id] ?? Niri.windowMap[id]?.title ?? "";
 		root.seenTitle = next;
@@ -172,7 +214,7 @@ Singleton {
 		id: saveTimer
 
 		interval: 300
-		onTriggered: file.setText(JSON.stringify({ view: root.view, viewFor: root.viewFor }, null, "\t") + "\n")
+		onTriggered: file.setText(JSON.stringify({ view: root.view, viewFor: root.viewFor, pauseApps: root.pauseApps }, null, "\t") + "\n")
 	}
 
 	FileView {
@@ -192,6 +234,7 @@ Singleton {
 			}
 			if (root.views.some(view => view.id === saved.view)) root.view = saved.view;
 			if (saved.viewFor && typeof saved.viewFor === "object") root.viewFor = saved.viewFor;
+			if (Array.isArray(saved.pauseApps)) root.pauseApps = saved.pauseApps.map(String);
 		}
 	}
 
@@ -286,6 +329,7 @@ Singleton {
 	// back onto the workspace its screen shows, focused
 	function restore(id) {
 		root.markSeen(id);
+		root.resumeParked(Number(id));
 		const window = Niri.windowMap[id];
 		const output = Niri.workspaceMap[window?.workspace_id]?.output;
 		const target = Niri.workspaces.find(ws => String(ws.output) === String(output) && ws.is_active && !root.isParkingSpace(ws))

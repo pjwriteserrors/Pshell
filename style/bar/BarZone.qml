@@ -425,6 +425,14 @@ Row {
 			}
 
 			DelegateChoice {
+				roleValue: "taskmgr"
+
+				Quick {
+					onClicked: TaskManager.toggle()
+				}
+			}
+
+			DelegateChoice {
 				roleValue: "printer"
 
 				Quick {

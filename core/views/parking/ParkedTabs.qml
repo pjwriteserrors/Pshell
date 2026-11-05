@@ -63,6 +63,12 @@ PanelWindow {
 		}));
 		entries.push({ label: "Same for all", icon: "select_all", run: () => Parking.setViewForAll(Parking.viewOf(window.id)) });
 		entries.push({ separator: true });
+		if (Parking.canPause) entries.push({
+			label: "Pause while parked",
+			icon: "pause_circle_outline",
+			checked: () => Parking.pausesWhileParked(window.id),
+			run: () => Parking.setPauseWhileParked(window.id, !Parking.pausesWhileParked(window.id))
+		});
 		entries.push({ label: "Bring back", icon: "restore", run: () => Parking.restore(window.id) });
 		entries.push({ label: "Close", icon: "window_close", danger: true, run: () => Niri.closeWindow(window.id) });
 		const top = tabItem.mapToItem(root.contentItem, 0, 0);
@@ -205,6 +211,33 @@ PanelWindow {
 							height: width
 							visible: tab.busy
 							color: Theme.primary
+						}
+
+						// paused while parked
+						Rectangle {
+							x: parent.width - width + 3
+							y: parent.height - height + 3
+							width: 13
+							height: 13
+							radius: 6.5
+							color: Theme.warning
+							border.width: 1.5
+							border.color: face.color
+							scale: Parking.pausedIds.includes(Number(tab.modelData.id)) ? 1 : 0
+							visible: scale > 0.01
+
+							Behavior on scale {
+								SpatialAnim {
+									duration: Motion.medium
+								}
+							}
+
+							Glyph {
+								anchors.centerIn: parent
+								icon: "pause"
+								size: 8
+								color: Theme.bg
+							}
 						}
 
 						Rectangle {

@@ -55,6 +55,14 @@ settings › Bar & wallpaper); `style/bar/BarZone.qml` maps an item id to
 what the style draws for it. Game mode (`GameMode`, plugin `game-mode`)
 follows the game windows `games_guard.py` reports.
 
+The task manager (`TaskManager`, plugins `task-manager`, `-bar`,
+`-alerts`, `-hints`; docs/taskmanager.md) is a daemon
+(`scripts/taskmgr/daemon.py`) that looks only as often as something shows
+what it knows: `TaskManager.watch(delta, gpu)` holds it awake, the open
+window makes it look every second. Other services ask it rather than
+reading `/proc` themselves (`windowLoad`, `hot`, `top`, `pauseWindow`,
+`endWindow`, `explainBusy`).
+
 App trays (`AppTray`, plugin `app-tray`, `core/views/tray/`) are strips on
 a screen's edge holding apps, launcher commands (and through them the
 plugins), shell lines, files, folders and links (`app-tray.json`). Each is

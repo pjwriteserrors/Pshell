@@ -1245,6 +1245,15 @@ Drawer {
 					title: Words.of("control.system", "System")
 					subtitle: SysStats.cpuText
 					onBack: root.page = "main"
+
+					IconButton {
+						visible: Plugins.on("task-manager")
+						icon: "monitor_dashboard"
+						onClicked: {
+							Popups.close();
+							TaskManager.open("performance");
+						}
+					}
 				}
 
 				Repeater {

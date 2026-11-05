@@ -1820,6 +1820,10 @@ Singleton {
 	function vaultDo(args, done) {
 		root.request("vault", args, (data, error) => {
 			if (data) root.vaults = data;
+			if (error && String(error).startsWith("Something still uses") && Plugins.on("task-manager")) {
+				const vault = (root.vaults.vaults ?? []).find(v => v.id === args.vault);
+				if (vault?.mount) TaskManager.explainBusy(String(vault.mount), vault.name);
+			}
 			if (done) done(data, error);
 			else if (error && error !== "password") root.fail(error);
 		});
@@ -2049,7 +2053,9 @@ Singleton {
 
 	function unmount(place, eject) {
 		root.request("unmount", { place: String(place.uri || place.path), eject: !!eject }, (data, error) => {
-			if (error) root.fail(error);
+			// the task manager names what holds it and offers to end it
+			if (error && String(error).startsWith("Something still uses") && place.path && Plugins.on("task-manager")) TaskManager.explainBusy(String(place.path), place.name);
+			else if (error) root.fail(error);
 			else root.say(eject ? `${place.name} can be removed` : `${place.name} unmounted`, "eject");
 		});
 	}

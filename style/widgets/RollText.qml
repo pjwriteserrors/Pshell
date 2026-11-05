@@ -17,6 +17,10 @@ Item {
 	property real minimumWidth: 0
 	property int alignment: Qt.AlignLeft
 	property bool animated: true
+	// for values that change every second: a short, small nudge instead of a
+	// roll, so a screen full of them stays quiet
+	property bool calm: false
+	readonly property real travel: root.calm ? 0.35 : 1
 	// 1 the value grew, -1 it fell
 	property int direction: 1
 	property string before: ""
@@ -48,7 +52,7 @@ Item {
 	implicitHeight: probe.implicitHeight
 
 	Behavior on implicitWidth {
-		enabled: root.animated
+		enabled: root.animated && !root.calm
 		SpatialAnim {
 			duration: Motion.medium
 		}
@@ -91,7 +95,7 @@ Item {
 				clip: true
 
 				Behavior on width {
-					enabled: root.animated
+					enabled: root.animated && !root.calm
 					SpatialAnim {
 						duration: Motion.medium
 					}
@@ -116,7 +120,7 @@ Item {
 				}
 
 				StyledText {
-					y: -root.direction * slot.height * slot.t
+					y: -root.direction * slot.height * root.travel * slot.t
 					text: slot.old
 					tone: root.tone
 					opacity: 1 - slot.t
@@ -129,10 +133,10 @@ Item {
 				StyledText {
 					id: now
 
-					y: root.direction * slot.height * (1 - slot.t)
+					y: root.direction * slot.height * root.travel * (1 - slot.t)
 					text: slot.shown
 					tone: root.tone
-					opacity: 0.25 + 0.75 * slot.t
+					opacity: root.calm ? slot.t : 0.25 + 0.75 * slot.t
 					tabular: true
 					font.pixelSize: root.pixelSize
 					font.weight: root.weight
@@ -147,8 +151,8 @@ Item {
 					from: 0
 					to: 1
 					// characters further left roll a touch later, like a counter
-					duration: 420 + slot.index * 25
-					easing.type: Easing.BezierSpline
+					duration: root.calm ? 160 : 420 + slot.index * 25
+					easing.type: root.calm ? Easing.OutCubic : Easing.BezierSpline
 					easing.bezierCurve: Motion.spatial
 				}
 			}

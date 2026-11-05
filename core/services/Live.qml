@@ -66,7 +66,7 @@ Singleton {
 		{ value: "icon", label: "Icon", icon: "circle_small" }
 	]
 
-	readonly property var sources: [cpu, memory, network, battery, volume, mic, brightness, power, bluetooth,
+	readonly property var sources: [cpu, memory, gpuSource, tempSource, topSource, network, battery, volume, mic, brightness, power, bluetooth,
 		notifications, messages, updates, downloads, torrents, filejobs, editorSource, recording, sharing, gamemode, agents, keepawake, clipboard, shelf,
 		timer, worked, screentime, water, eyes, meeting, todos, weather,
 		phone, watch, mouse, printer, vm, pcs, game, media]
@@ -155,6 +155,12 @@ Singleton {
 		value: root.held("network")
 	}
 
+	// the task manager's daemon looks only while something shows what it knows
+	readonly property bool taskWatch: root.held("gpu") || root.held("temperature") || root.held("top")
+	readonly property bool gpuWatch: root.held("gpu")
+	onTaskWatchChanged: TaskManager.watch(root.taskWatch ? 1 : -1, false)
+	onGpuWatchChanged: TaskManager.gpuWatchers = Math.max(0, TaskManager.gpuWatchers + (root.gpuWatch ? 1 : -1))
+
 	Binding {
 		target: SysStats
 		property: "liveWatched"
@@ -195,16 +201,18 @@ Singleton {
 		glyph: "cpu_64_bit"
 		group: "system"
 		about: "Load of all cores, with its last minute"
-		text: cpu.on ? (root.percent(SysStats.cpu)) : ""
-		detail: cpu.on ? (SysStats.cpuText !== "" ? `${SysStats.cpuText} · ${Math.round(SysStats.cpu)}% busy` : `${Math.round(SysStats.cpu)}% busy`) : ""
-		level: cpu.on ? (SysStats.cpu / 100) : -1
+		// SysStats counts 0..1
+		text: cpu.on ? (root.percent(SysStats.cpu * 100)) : ""
+		detail: cpu.on ? (SysStats.cpuText !== "" ? `${SysStats.cpuText} · ${Math.round(SysStats.cpu * 100)}% busy` : `${Math.round(SysStats.cpu * 100)}% busy`) : ""
+		level: cpu.on ? (SysStats.cpu) : -1
 		history: cpu.on ? (SysStats.cpuHistory) : null
-		maximum: 100
-		tone: cpu.on ? (SysStats.cpu > 90 ? "bad" : (SysStats.cpu > 70 ? "warn" : "normal")) : "normal"
-		busy: cpu.on ? (SysStats.cpu > 25) : false
-		panel: "control"
+		maximum: 1
+		tone: cpu.on ? (SysStats.cpu > 0.9 ? "bad" : (SysStats.cpu > 0.7 ? "warn" : "normal")) : "normal"
+		busy: cpu.on ? (SysStats.cpu > 0.25) : false
+		panel: Plugins.on("task-manager") ? "" : "control"
 		page: "system"
-		hint: "Opens the system page"
+		act: Plugins.on("task-manager") ? (() => TaskManager.open("performance")) : null
+		hint: Plugins.on("task-manager") ? "Opens the task manager" : "Opens the system page"
 	}
 
 	Source {
@@ -217,16 +225,96 @@ Singleton {
 		glyph: "expansion_card"
 		group: "system"
 		about: "How full the memory is"
-		text: memory.on ? (root.percent(SysStats.memory)) : ""
+		text: memory.on ? (root.percent(SysStats.memory * 100)) : ""
 		detail: memory.on ? (SysStats.memoryText) : ""
-		level: memory.on ? (SysStats.memory / 100) : -1
+		level: memory.on ? (SysStats.memory) : -1
 		history: memory.on ? (SysStats.memoryHistory) : null
-		maximum: 100
-		tone: memory.on ? (SysStats.memory > 90 ? "bad" : (SysStats.memory > 75 ? "warn" : "normal")) : "normal"
-		busy: memory.on ? (SysStats.memory > 60) : false
-		panel: "control"
+		maximum: 1
+		tone: memory.on ? (SysStats.memory > 0.9 ? "bad" : (SysStats.memory > 0.75 ? "warn" : "normal")) : "normal"
+		busy: memory.on ? (SysStats.memory > 0.6) : false
+		panel: Plugins.on("task-manager") ? "" : "control"
 		page: "system"
-		hint: "Opens the system page"
+		act: Plugins.on("task-manager") ? (() => {
+				TaskManager.device = "memory";
+				TaskManager.open("performance");
+			}) : null
+		hint: Plugins.on("task-manager") ? "Opens the task manager" : "Opens the system page"
+	}
+
+	// ── from the task manager's daemon ──────────────────────────────────
+	Source {
+		id: gpuSource
+
+		key: "gpu"
+		prefers: "spark"
+		widest: "100%"
+		name: "Graphics"
+		glyph: "expansion_card_variant"
+		group: "system"
+		plugin: "task-manager"
+		about: "How busy the graphics card is"
+		ready: gpuSource.on ? TaskManager.hasGpu : true
+		text: gpuSource.on ? root.percent(TaskManager.gpu * 100) : ""
+		detail: gpuSource.on ? (TaskManager.topGpu.length > 0 ? `${Math.round(TaskManager.gpu * 100)}% · ${TaskManager.topGpu[0].name}` : `${Math.round(TaskManager.gpu * 100)}% busy`) : ""
+		level: gpuSource.on ? TaskManager.gpu : -1
+		history: gpuSource.on ? (TaskManager.series.gpu ?? null) : null
+		maximum: 1
+		tone: gpuSource.on ? (TaskManager.gpu > 0.9 ? "warn" : "normal") : "normal"
+		busy: gpuSource.on ? (TaskManager.gpu > 0.3) : false
+		act: () => {
+			TaskManager.device = TaskManager.gpus.length > 0 ? `gpu:${TaskManager.gpus[0].pci}` : "cpu";
+			TaskManager.open("performance");
+		}
+		hint: "Opens the task manager"
+	}
+
+	Source {
+		id: tempSource
+
+		key: "temperature"
+		prefers: "chip"
+		widest: "100 °C"
+		name: "Temperature"
+		glyph: "thermometer"
+		group: "system"
+		plugin: "task-manager"
+		about: "The processor's temperature"
+		ready: tempSource.on ? (TaskManager.temps.cpu ?? null) !== null : true
+		text: tempSource.on ? `${Math.round(TaskManager.temps.cpu ?? 0)} °C` : ""
+		detail: tempSource.on ? `Processor ${Math.round(TaskManager.temps.cpu ?? 0)} °C` : ""
+		level: tempSource.on ? Math.min(1, (TaskManager.temps.cpu ?? 0) / 100) : -1
+		history: tempSource.on ? (TaskManager.series.temp ?? null) : null
+		maximum: 100
+		tone: tempSource.on ? ((TaskManager.temps.cpu ?? 0) > 90 ? "bad" : ((TaskManager.temps.cpu ?? 0) > 80 ? "warn" : "normal")) : "normal"
+		pulse: tempSource.on ? (TaskManager.temps.cpu ?? 0) > 92 : false
+		busy: tempSource.on ? (TaskManager.temps.cpu ?? 0) > 70 : false
+		act: () => {
+			TaskManager.device = "sensors";
+			TaskManager.open("performance");
+		}
+		hint: "Opens the task manager"
+	}
+
+	Source {
+		id: topSource
+
+		key: "top"
+		prefers: "chip"
+		widest: "Floorp 100%"
+		name: "Busiest app"
+		glyph: "fire"
+		group: "system"
+		plugin: "task-manager"
+		about: "What takes the processor right now"
+		readonly property var first: TaskManager.top[0] ?? null
+		ready: topSource.on ? topSource.first !== null : true
+		text: topSource.on && topSource.first ? `${topSource.first.name} ${Math.round(topSource.first.c * 100)}%` : ""
+		detail: topSource.on ? TaskManager.top.slice(0, 3).map(item => `${item.name} ${Math.round(item.c * 100)}%`).join(" · ") : ""
+		level: topSource.on && topSource.first ? Math.min(1, topSource.first.c) : -1
+		tone: topSource.on && topSource.first && topSource.first.c > 0.5 ? "warn" : "normal"
+		busy: topSource.on && topSource.first ? topSource.first.c > 0.25 : false
+		act: () => topSource.first ? TaskManager.showKey(topSource.first.key) : TaskManager.open()
+		hint: "Shows it in the task manager"
 	}
 
 	Source {

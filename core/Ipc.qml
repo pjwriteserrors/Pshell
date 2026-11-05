@@ -272,6 +272,58 @@ Scope {
 	}
 
 	// the game library: `games add <path>` opens it to add a program
+	// the task manager; `taskmgr top` and `taskmgr ports` answer as JSON
+	IpcHandler {
+		target: "taskmgr"
+		enabled: Plugins.on("task-manager")
+
+		function open(): void {
+			TaskManager.open();
+		}
+		function toggle(): void {
+			TaskManager.toggle();
+		}
+		function close(): void {
+			TaskManager.close();
+		}
+		function popOut(): void {
+			TaskManager.popOut();
+		}
+		function dock(): void {
+			TaskManager.dock();
+		}
+		// apps, performance, services, startup, ports or history
+		function tab(name: string): void {
+			TaskManager.open(name);
+		}
+		// an app's id, a pid or a row key
+		function reveal(what: string): void {
+			TaskManager.resolve(what, key => TaskManager.showKey(key));
+		}
+		function end(what: string): void {
+			TaskManager.actOn(what, "end");
+		}
+		function kill(what: string): void {
+			TaskManager.actOn(what, "kill");
+		}
+		function pause(what: string): void {
+			TaskManager.actOn(what, "pause");
+		}
+		function resume(what: string): void {
+			TaskManager.actOn(what, "resume");
+		}
+		// ends the focused window's app
+		function endFocused(): void {
+			if (Niri.focusedId >= 0) TaskManager.endWindow(Niri.focusedId);
+		}
+		function top(): string {
+			return JSON.stringify(TaskManager.top.map(item => ({ key: item.key, name: item.name, cpu: item.c, mem: item.m, windows: item.w })));
+		}
+		function ports(): string {
+			return JSON.stringify(TaskManager.lastPorts);
+		}
+	}
+
 	IpcHandler {
 		target: "torrents"
 		enabled: Plugins.on("torrents")

@@ -50,6 +50,7 @@ window-rule {
 binds {
     Mod+Alt+N { spawn "qs" "-c" "shell" "ipc" "call" "editor" "scratch"; }
     Mod+D { spawn "qs" "-c" "shell" "ipc" "call" "launcher" "toggle"; }
+    Ctrl+Shift+Escape { spawn "qs" "-c" "shell" "ipc" "call" "taskmgr" "toggle"; }
     Super+Ctrl+L { spawn "qs" "-c" "shell" "ipc" "call" "lock" "lock"; }
     Ctrl+Mod+V { spawn "qs" "-c" "shell" "ipc" "call" "clipboard" "toggle"; }
     Mod+X { spawn "qs" "-c" "shell" "ipc" "call" "radial" "toggle"; }
