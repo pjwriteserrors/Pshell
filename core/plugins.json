@@ -96,6 +96,8 @@
 	{ "id": "files-default", "name": "Default file manager", "category": "Desktop", "requires": ["filemanager"], "icon": "folder_star_outline" },
 	{ "id": "viewer", "name": "Picture viewer", "category": "Desktop", "icon": "image_edit_outline" },
 	{ "id": "viewer-default", "name": "Default picture viewer", "category": "Desktop", "requires": ["viewer"], "icon": "image_multiple_outline" },
+	{ "id": "music", "name": "Music player", "category": "Desktop", "icon": "music_note" },
+	{ "id": "music-default", "name": "Default music player", "category": "Desktop", "requires": ["music"], "icon": "playlist_music" },
 	{ "id": "files-chooser", "name": "File chooser for all apps", "category": "Desktop", "requires": ["filemanager"], "icon": "file_find_outline" },
 	{ "id": "find-mouse", "name": "Find my mouse", "category": "Desktop", "icon": "mouse_variant" },
 	{ "id": "laser-pointer", "name": "Laser pointer", "category": "Desktop", "icon": "target" },

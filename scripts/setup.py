@@ -81,6 +81,8 @@ PROGRAMS = {
                ("heif-convert", "HEIC photos (libheif)"), ("dcraw_emu", "camera RAW files (libraw)"), ("vips", "JPEG XL pictures"),
                ("exiv2", "camera data of HEIC and RAW in the copy")],
     "viewer-default": [("xdg-mime", "pictures open in the picture viewer")],
+    "music": [("mpv", "playing"), ("ffprobe", "tags and length of songs"), ("ffmpeg", "covers and the waveform"), ("cava", "the moving bars (optional)")],
+    "music-default": [("xdg-mime", "music opens in the music player")],
     "mail": [("secret-tool", "mail passwords"), ("xdg-open", "attachments, sign-in page"), ("wl-copy", "sign-in code")],
     "microsoft-calendar": [("wl-copy", "sign-in code"), ("xdg-open", "sign-in page, joining meetings")],
     "whatsapp": [("go", "building the WhatsApp bridge"), ("ffmpeg", "voice messages, GIFs, stickers, videos"), ("ffprobe", "length of what is sent"),

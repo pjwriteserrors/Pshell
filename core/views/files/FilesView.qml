@@ -397,7 +397,16 @@ FocusScope {
 			root.openOrigin = null;
 			return;
 		}
+		// songs play in the shell's own player: one alone with the rest of the pane after it
+		if (rest.length > 0 && Music.isDefault && rest.every(row => Kinds.kindOf(row) === "audio")) {
+			const songs = rest.length > 1 ? rest : pane.rows.filter(row => !row.dir && Kinds.kindOf(row) === "audio");
+			Music.open(rest[0].path, { list: songs.map(row => row.path), start: root.openStart });
+			root.openOrigin = null;
+			root.openStart = 0;
+			return;
+		}
 		root.openOrigin = null;
+		root.openStart = 0;
 		if (rest.length > 0) {
 			Files.launch(rest.map(row => row.path));
 			Sounds.play("open");
@@ -406,6 +415,8 @@ FocusScope {
 
 	// where the next picture opened grows from (Quick Look's picture)
 	property var openOrigin: null
+	// where the next song opened starts (Quick Look played it that far)
+	property real openStart: 0
 
 	function openElsewhere(pane, row) {
 		if (row.pcId) {

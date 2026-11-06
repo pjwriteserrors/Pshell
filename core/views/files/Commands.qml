@@ -18,6 +18,7 @@ QtObject {
 	readonly property bool reader: Plugins.on("fast-reader")
 	readonly property bool captures: Plugins.on("screenshot")
 	readonly property bool viewer: Viewer.enabled
+	readonly property bool music: Music.enabled
 	readonly property bool pins: Plugins.on("pins")
 	readonly property bool ocr: Plugins.on("ocr")
 	readonly property bool wallpaper: Plugins.on("studio-wallpaper")
@@ -149,6 +150,14 @@ QtObject {
 		}
 		if (all(row => row.kind === "audio")) {
 			const entries = [];
+			if (root.music) {
+				const songs = root.paths(files);
+				entries.push({ header: "In the music player" });
+				entries.push({ label: files.length === 1 ? "Play" : `Play ${files.length} songs`, icon: "play", run: () => files.length === 1 ? Music.open(songs[0]) : Music.openMany(songs) });
+				entries.push({ label: "Play next", icon: "playlist_play", run: () => Music.add(songs, true) });
+				entries.push({ label: "Add to the queue", icon: "playlist_plus", run: () => Music.add(songs, false) });
+				entries.push({ header: "Edit" });
+			}
 			if (one) entries.push({ label: "Edit the tags…", icon: "tag_text_outline", run: () => view.tagsDialog(one) });
 			entries.push(convert());
 			return { label: files.length === 1 ? "Edit the song" : "Edit the songs", short: "Edit", icon: "music_note", entries: entries };
@@ -177,8 +186,9 @@ QtObject {
 			{ label: "Make a rule for it…", icon: "playlist_check", run: () => view.ruleDialog(null, folder) },
 			{ label: "New vault in it…", icon: "safe_square_outline", enabled: writable !== false, run: () => view.newVault(folder) },
 			{ label: "Its own workspace", icon: "view_dashboard_outline", children: () => root.workspaceEntries(folder) },
-			{ label: "Wallpapers from it…", icon: "wallpaper", shown: root.wallpaper, run: () => view.wallpaperFolder(folder) }
-		];
+			{ label: "Wallpapers from it…", icon: "wallpaper", shown: root.wallpaper, run: () => view.wallpaperFolder(folder) },
+			{ label: "Play the music in it", icon: "playlist_music", shown: root.music, run: () => Music.open(folder) }
+		].filter(entry => entry.shown !== false);
 	}
 
 	// mail, chats, the phone, a server, a link

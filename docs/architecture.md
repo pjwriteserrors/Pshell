@@ -421,6 +421,11 @@ makes it what pictures open in (docs/viewer.md; `scripts/ipc.sh viewer
 open <path>`, `core/services/Viewer.qml`, `core/views/viewer/`). Changes are
 a recipe drawn by one shader and saved as a copy beside the picture.
 
+`music` plays music, a window of its own; `music-default` makes it what
+songs open in (docs/music.md; `scripts/ipc.sh music open <path>`,
+`core/services/Music.qml`, `core/views/music/`, `scripts/music/`). mpv
+plays headless and holds the queue; the player is on the bus (MPRIS).
+
 `filemanager` is the shell's file manager, a window of its own (`>file`,
 `>file <words>` searches,
 `scripts/ipc.sh files toggle|open <path>|tab <path>|reveal <path>|search

@@ -1347,6 +1347,87 @@ Scope {
 	}
 
 	IpcHandler {
+		target: "music"
+		enabled: Plugins.on("music")
+
+		// songs, one per line: one alone plays with the rest of its folder after it
+		function open(paths: string): void {
+			Music.openMany(paths.split("\n").filter(p => p));
+		}
+		// into the queue, at its end
+		function add(paths: string): void {
+			Music.add(paths.split("\n").filter(p => p), false);
+		}
+		// into the queue, next
+		function upnext(paths: string): void {
+			Music.add(paths.split("\n").filter(p => p), true);
+		}
+		// the window as it was left (the queue of last time when nothing is queued)
+		function start(): void {
+			Music.showWindow();
+		}
+		function window(): void {
+			Music.toggleWindow();
+		}
+		function close(): void {
+			Music.close();
+		}
+		function toggle(): void {
+			Music.toggle();
+		}
+		function play(): void {
+			Music.play();
+		}
+		function pause(): void {
+			Music.pause();
+		}
+		function next(): void {
+			Music.next();
+		}
+		function previous(): void {
+			Music.previous();
+		}
+		function stop(): void {
+			Music.stop();
+		}
+		// seconds, or +n / -n from here
+		function seek(to: string): void {
+			if (/^[+-]/.test(to)) Music.seekBy(Number(to));
+			else Music.seek(Number(to));
+		}
+		function volume(percent: int): void {
+			Music.setVolume(percent);
+		}
+		function speed(value: string): void {
+			Music.setSpeed(Number(value) || 1);
+		}
+		function shuffle(): void {
+			Music.toggleShuffle();
+		}
+		function repeat(): void {
+			Music.cycleRepeat();
+		}
+		// minutes until it fades out; -1 after this song, 0 off
+		function sleep(minutes: int): void {
+			Music.sleep(minutes);
+		}
+		// queue | lyrics | none
+		function pane(name: string): void {
+			Music.setSetting("pane", name === "none" ? "" : name);
+		}
+		function mini(): void {
+			const w = Music.niriWindow();
+			Music.toggleMini(w?.layout?.window_size?.[0] ?? 1040, w?.layout?.window_size?.[1] ?? 640);
+		}
+		function state(): string {
+			return JSON.stringify({ open: Music.windowOpen, playing: Music.playing, idle: Music.idle, path: Music.path, index: Music.index, queue: Music.queue.length,
+				position: Math.round(Music.positionNow() * 10) / 10, duration: Music.duration, speed: Music.speed, volume: Music.volume, repeat: Music.repeatMode,
+				shuffle: Music.shuffled, pane: Music.pane, sleepAt: Music.sleepAt, song: Music.song, art: Music.art, accent: Music.accentHex,
+				wave: Music.wave.length, lyrics: Music.lyrics.state ?? "", lyricLine: Music.lyricLine });
+		}
+	}
+
+	IpcHandler {
 		target: "agents"
 		enabled: Plugins.on("agents")
 

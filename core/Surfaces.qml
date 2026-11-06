@@ -10,6 +10,7 @@ import qs.core.views.games
 import qs.core.views.identity
 import qs.core.views.launcher
 import qs.core.views.media
+import qs.core.views.music
 import qs.core.views.messages
 import qs.core.views.overlays
 import qs.core.views.panels
@@ -413,6 +414,12 @@ Scope {
 		view: "viewer/ViewerGhost"
 		available: Plugins.on("viewer")
 		when: !!Viewer.origin
+	}
+
+	// music: played by mpv, a window of its own
+	View {
+		view: "music/MusicWindow"
+		available: Plugins.on("music")
 	}
 
 	// every app's file chooser (and the shell's own), a window beside it

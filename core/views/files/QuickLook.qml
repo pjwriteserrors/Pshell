@@ -217,6 +217,11 @@ Item {
 			case Qt.Key_Enter:
 				// a picture flies on from here into the picture viewer
 				if (root.kind === "image" && photo.status === Image.Ready) root.view.openOrigin = Viewer.originOf(photo, Files.windowTitle);
+				// a song goes on in the music player where it was
+				if (root.kind === "audio" && Music.isDefault) {
+					root.view.openStart = player.position / 1000;
+					player.stop();
+				}
 				root.close();
 				root.view.openRow(root.pane, root.row, false);
 				break;
