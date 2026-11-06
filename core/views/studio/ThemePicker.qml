@@ -3,6 +3,8 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import QtMultimedia
+// its Video by name: the shell's Video service is called the same
+import QtMultimedia as Multimedia
 import Quickshell
 import Quickshell.Io
 import Quickshell.Widgets
@@ -1253,7 +1255,7 @@ ModalWindow {
 				}
 
 				// MoeWalls' preview of a live wallpaper, over its still once it runs
-				Video {
+				Multimedia.Video {
 					id: livePreview
 
 					readonly property string wanted: root.shown && root.view === "online" ? String(root.currentTheme?.stage?.video ?? "") : ""

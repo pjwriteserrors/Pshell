@@ -11,6 +11,7 @@ import qs.core.views.identity
 import qs.core.views.launcher
 import qs.core.views.media
 import qs.core.views.music
+import qs.core.views.video
 import qs.core.views.messages
 import qs.core.views.overlays
 import qs.core.views.panels
@@ -420,6 +421,19 @@ Scope {
 	View {
 		view: "music/MusicWindow"
 		available: Plugins.on("music")
+	}
+
+	// videos: played by Qt Multimedia in the shell, also the editor
+	View {
+		view: "video/VideoWindow"
+		available: Plugins.on("video")
+	}
+
+	// … grown out of the spot it was opened from
+	View {
+		view: "video/VideoGhost"
+		available: Plugins.on("video")
+		when: !!Video.origin
 	}
 
 	// every app's file chooser (and the shell's own), a window beside it

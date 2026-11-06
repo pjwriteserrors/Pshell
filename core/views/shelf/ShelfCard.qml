@@ -192,6 +192,14 @@ Item {
 			entries.push({ label: "Add to the queue", icon: "playlist_plus", run: () => Music.add(songs.map(t => t.path), false) });
 			entries.push({ separator: true });
 		}
+		// videos: into the video player, several one after the other in its editor
+		const films = targets.filter(t => t.kind === "file" && Video.isVideo(t.path));
+		if (Video.enabled && films.length === targets.length) {
+			entries.push({ label: films.length === 1 ? "Play" : `Play ${films.length} videos`, icon: "play", run: () => Video.openMany(films.map(t => t.path)) });
+			if (films.length === 1) entries.push({ label: "Edit", icon: "movie_edit_outline", run: () => Video.edit(films[0].path) });
+			else entries.push({ label: `Join ${films.length} videos`, icon: "movie_open_plus_outline", run: () => Video.join(films.map(t => t.path)) });
+			entries.push({ separator: true });
+		}
 		entries.push({ label: many ? `Copy ${targets.length} files` : "Copy", icon: "content_copy", run: () => Shelf.copyItems(targets) });
 		entries.push({ label: many ? "Copy paths" : "Copy path", icon: "clipboard_text", run: () => Shelf.copyPaths(targets) });
 		if (!many && item.kind === "file") entries.push({ label: "Rename", icon: "pencil", run: () => root.renamingItem = item.id });

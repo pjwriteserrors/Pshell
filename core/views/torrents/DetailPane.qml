@@ -23,6 +23,8 @@ Flickable {
 	property string userMode: ""
 	readonly property string graphMode: root.userMode !== "" ? root.userMode : (root.complete ? "whole" : "live")
 	property bool more: false
+	// its videos, to play when it is through
+	readonly property var films: Video.enabled ? (root.details?.files ?? []).filter(file => Video.isVideo(file.path)) : []
 	property bool showPeers: false
 
 	contentWidth: width
@@ -151,6 +153,18 @@ Flickable {
 				icon: root.halted ? "play" : "pause"
 				text: root.halted ? (root.phase === "done" ? "Seed" : "Resume") : "Pause"
 				onActivated: root.halted ? Torrents.resume(root.hash) : Torrents.pause(root.hash)
+			}
+
+			TextButton {
+				visible: root.complete && root.films.length > 0
+				icon: "movie_open_outline"
+				text: root.films.filter(file => Video.episodeOf(file.path)).length > 1 ? "Watch" : "Play"
+				onActivated: {
+					// episodes in their order; else the film is the biggest of them (not its sample)
+					const episodes = root.films.filter(file => Video.episodeOf(file.path));
+					const biggest = root.films.reduce((a, b) => (b.size > a.size ? b : a), root.films[0]);
+					Torrents.playVideos(root.hash, episodes.length > 1 ? "" : biggest.path);
+				}
 			}
 
 			TextButton {

@@ -37,13 +37,20 @@ Singleton {
 		Haptics.play("recordingStopped");
 		if (file === "") return;
 		const folder = file.slice(0, file.lastIndexOf("/"));
+		// with the video player: straight into its editor when asked to, else Edit and Play here
+		if (Video.enabled && Video.setting("openRecordings", false)) return Video.edit(file);
+		const actions = Video.enabled ? [
+			{ label: "Edit", icon: "movie_edit_outline", run: () => Video.edit(file) },
+			{ label: "Play", icon: "play", run: () => Video.open(file) },
+			{ label: "Folder", icon: "folder", run: () => Files.enabled ? Files.reveal([file]) : Quickshell.execDetached(["xdg-open", folder]) }
+		] : [
+			{ label: "Open", icon: "play", run: () => Quickshell.execDetached(["xdg-open", file]) },
+			{ label: "Folder", icon: "folder", run: () => Quickshell.execDetached(["xdg-open", folder]) },
+			{ label: "Copy path", icon: "content_copy", run: () => Quickshell.execDetached(["wl-copy", file]) }
+		];
 		Notifs.pushInternal("done", "Recording saved", file.split("/").pop(), {
 			icon: "record_rec",
-			actions: [
-				{ label: "Open", icon: "play", run: () => Quickshell.execDetached(["xdg-open", file]) },
-				{ label: "Folder", icon: "folder", run: () => Quickshell.execDetached(["xdg-open", folder]) },
-				{ label: "Copy path", icon: "content_copy", run: () => Quickshell.execDetached(["wl-copy", file]) }
-			]
+			actions: actions
 		});
 	}
 

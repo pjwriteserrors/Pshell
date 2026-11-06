@@ -112,6 +112,15 @@ Clickable {
 				implicitWidth: 30
 				implicitHeight: 30
 				iconSize: 16
+				visible: !root.failed && Video.enabled && Video.isVideo(root.item?.path ?? "")
+				icon: "play"
+				onClicked: Downloads.play(root.key)
+			}
+
+			IconButton {
+				implicitWidth: 30
+				implicitHeight: 30
+				iconSize: 16
 				visible: !root.failed && (root.item?.path ?? "") !== ""
 				icon: "folder_open"
 				onClicked: Downloads.reveal(root.key)

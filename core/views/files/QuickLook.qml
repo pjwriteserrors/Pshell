@@ -85,6 +85,39 @@ Item {
 		root.closed();
 	}
 
+	// what is looked at goes on where it was: a picture flies on into the picture
+	// viewer, a song plays on in the music player, a video in Video – growing
+	// out of its picture as it stands now. then() opens it.
+	function handOver(then) {
+		if (root.view?.chooser) return then();
+		if (root.kind === "image" && photo.status === Image.Ready) root.view.openOrigin = Viewer.originOf(photo, Files.windowTitle);
+		if (root.kind === "audio" && Music.isDefault) {
+			root.view.openStart = player.position / 1000;
+			player.stop();
+		}
+		if (root.kind === "video" && Video.isDefault) {
+			root.view.openStart = player.position / 1000;
+			player.pause();
+			const from = Viewer.originOf(video, Files.windowTitle);
+			const r = video.contentRect;
+			if (from && r.width > 0) {
+				from.x += r.x;
+				from.y += r.y;
+				from.w = r.width;
+				from.h = r.height;
+				root.view.openOrigin = from;
+				// the frame as it is now (the grab is kept with it, its picture lives as long)
+				const grabbing = video.grabToImage(result => {
+					from.image = String(result.url);
+					from.grab = result;
+					then();
+				}, Qt.size(Math.round(r.width), Math.round(r.height)));
+				if (grabbing) return;
+			}
+		}
+		then();
+	}
+
 	function takeKeys() {
 		keys.forceActiveFocus();
 	}
@@ -214,17 +247,14 @@ Item {
 				root.go(1);
 				break;
 			case Qt.Key_Return:
-			case Qt.Key_Enter:
-				// a picture flies on from here into the picture viewer
-				if (root.kind === "image" && photo.status === Image.Ready) root.view.openOrigin = Viewer.originOf(photo, Files.windowTitle);
-				// a song goes on in the music player where it was
-				if (root.kind === "audio" && Music.isDefault) {
-					root.view.openStart = player.position / 1000;
-					player.stop();
-				}
-				root.close();
-				root.view.openRow(root.pane, root.row, false);
+			case Qt.Key_Enter: {
+				const row = root.row;
+				root.handOver(() => {
+					root.close();
+					root.view.openRow(root.pane, row, false);
+				});
 				break;
+			}
 			case Qt.Key_E:
 				if (root.kind !== "image" || !Viewer.enabled) return;
 				Viewer.open(root.row.path, { mode: "adjust", list: root.rows.filter(row => Kinds.kindOf(row) === "image").map(row => row.path), from: Viewer.originOf(photo, Files.windowTitle) });
@@ -395,8 +425,10 @@ Item {
 					icon: root.view?.chooser && !root.row?.dir ? "check" : "open_in_app"
 					onClicked: {
 						const row = root.row;
-						root.close();
-						root.view.openRow(root.pane, row, false);
+						root.handOver(() => {
+							root.close();
+							root.view.openRow(root.pane, row, false);
+						});
 					}
 				}
 				TextButton {

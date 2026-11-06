@@ -30,11 +30,20 @@ Singleton {
 			for (const player of Mpris.players.values)
 				if (player === root.selectedPlayer) return player;
 		}
+		// the shell's video while it plays, before whatever else plays (music it paused, a tab)
+		if (Video.playing) {
+			for (const player of Mpris.players.values)
+				if (String(player.dbusName).includes("pshell_video")) return player;
+		}
 		if (root.activePlayer) return root.activePlayer;
-		// the shell's own player, while it has something: before one that only paused
+		// the shell's own players, while they have something: before one that only paused
 		if (Music.current) {
 			for (const player of Mpris.players.values)
 				if (String(player.dbusName).includes("pshell_music")) return player;
+		}
+		if (Video.current) {
+			for (const player of Mpris.players.values)
+				if (String(player.dbusName).includes("pshell_video")) return player;
 		}
 		for (const player of Mpris.players.values)
 			if (player === root.rememberedPlayer) return player;

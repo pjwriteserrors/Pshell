@@ -267,7 +267,10 @@ Singleton {
 	function openFile(hash, relative) {
 		const item = root.byHash[hash];
 		if (!item) return;
-		Quickshell.execDetached(["xdg-open", `${item.destination}/${relative}`]);
+		const path = `${item.destination}/${relative}`;
+		// a video plays in the shell's own player, with the torrent's other videos around it
+		if (Video.enabled && Video.isVideo(path)) return root.videosIn(`${item.destination}/${item.name}`, films => Video.open(path, films.includes(path) ? { list: films } : {}));
+		Quickshell.execDetached(["xdg-open", path]);
 	}
 
 	function copy(text) {
@@ -396,13 +399,15 @@ Singleton {
 		// the downloads list plays its sound for what it shows
 		if (!Plugins.on("downloads")) Sounds.play("download");
 		const hash = torrent.hash;
-		const tell = songs => {
+		const tell = (songs, films) => {
 			const actions = [{ text: "Show folder", invoke: () => root.reveal(hash) }, { text: "Torrents", invoke: () => {
 				root.select(hash);
 				root.open();
 			} }];
 			// an album: played from here
 			if (songs.length > 0) actions.unshift({ text: "Play", invoke: () => Music.open(songs[0], { list: songs }) });
+			// a film or a season: its episodes in order, else the film without its sample
+			else if (films.length > 0) actions.unshift({ text: "Play", invoke: () => Video.open(films[0], { list: films }) });
 			Notifs.post({
 				app: "Torrents",
 				icon: `${Paths.assets}/icons/pshell-torrents.svg`,
@@ -411,8 +416,34 @@ Singleton {
 				actions: actions
 			});
 		};
-		if (!Music.enabled || !torrent.destination) return tell([]);
-		Music.request("songs", { path: `${torrent.destination}/${torrent.name}` }, data => tell(data?.paths ?? []));
+		if (!torrent.destination) return tell([], []);
+		const where = `${torrent.destination}/${torrent.name}`;
+		const withFilms = songs => {
+			if (songs.length > 0 || !Video.enabled) return tell(songs, []);
+			root.videosIn(where, films => tell([], films));
+		};
+		if (!Music.enabled) return withFilms([]);
+		Music.request("songs", { path: where }, data => withFilms(data?.paths ?? []));
+	}
+
+	// a finished torrent's videos: a season from the first episode not seen yet,
+	// a film as its biggest file (relative to the destination, as the files list has it)
+	function playVideos(hash, biggest) {
+		const item = root.byHash[hash];
+		if (!item || !Video.enabled) return;
+		if (biggest) return root.openFile(hash, biggest);
+		root.videosIn(`${item.destination}/${item.name}`, films => {
+			if (films.length > 0) Video.open(films.find(p => !Video.progressOf(p)?.watched) ?? films[0], { list: films });
+		});
+	}
+
+	// the videos a torrent brought (a file, or a folder and below), to play in order
+	function videosIn(where, done) {
+		if (Video.isVideo(where)) return done([where]);
+		Video.request("folder", { path: where, below: true }, data => {
+			const films = (data?.paths ?? []).filter(p => !/(^|[\/ ._-])sample([ ._-]|\.[^/]+$)/i.test(p.slice(p.lastIndexOf("/"))));
+			done(films);
+		});
 	}
 
 

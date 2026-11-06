@@ -426,6 +426,12 @@ songs open in (docs/music.md; `scripts/ipc.sh music open <path>`,
 `core/services/Music.qml`, `core/views/music/`, `scripts/music/`). mpv
 plays headless and holds the queue; the player is on the bus (MPRIS).
 
+`video` plays and edits videos, a window of its own; `video-default`
+makes it what videos open in (docs/video.md; `scripts/ipc.sh video open
+<path>`, `core/services/Video.qml`, `core/views/video/`, `scripts/video/`).
+Qt Multimedia plays inside the shell's scene; edits are a recipe shown by
+the viewer's shader and exported beside the file by ffmpeg.
+
 `filemanager` is the shell's file manager, a window of its own (`>file`,
 `>file <words>` searches,
 `scripts/ipc.sh files toggle|open <path>|tab <path>|reveal <path>|search

@@ -64,7 +64,7 @@ Singleton {
 		{ value: "windows", label: "Windows" },
 		{ value: "spaces", label: "Workspaces" },
 		{ value: "links", label: "Links" }
-	].concat(Music.enabled ? [{ value: "music", label: "Music" }] : [])
+	].concat(Music.enabled ? [{ value: "music", label: "Music" }] : []).concat(Video.enabled ? [{ value: "video", label: "Video" }] : [])
 
 	function dayKey(date) {
 		return Qt.formatDate(date, "yyyy-MM-dd");
@@ -81,7 +81,7 @@ Singleton {
 	}
 
 	function emptyDay() {
-		return { total: 0, longest: 0, longestEnd: 0, hours: new Array(24).fill(0), apps: {}, windows: {}, spaces: {}, links: {}, pages: {}, music: {}, blocks: [], pauses: [] };
+		return { total: 0, longest: 0, longestEnd: 0, hours: new Array(24).fill(0), apps: {}, windows: {}, spaces: {}, links: {}, pages: {}, music: {}, video: {}, blocks: [], pauses: [] };
 	}
 
 	function format(seconds) {
@@ -145,6 +145,9 @@ Singleton {
 				row.label = parts[1] || parts[0];
 				row.detail = parts[1] ? parts[0] : "";
 				row.icon = "music_note";
+			} else if (kind === "video") {
+				// the title of what was watched
+				row.icon = "movie_outline";
 			} else if (kind === "spaces") {
 				row.label = /^\d+$/.test(parts[1]) ? `Workspace ${parts[1]}` : parts[1];
 				row.detail = Object.keys(outputs).length > 1 ? parts[0] : "";
@@ -216,6 +219,13 @@ Singleton {
 			const heard = root.days[key].music || (root.days[key].music = {});
 			const name = `${Music.artistOf(Music.path)}\n${Music.titleOf(Music.path)}`;
 			heard[name] = (heard[name] || 0) + seconds;
+			root.dirty = true;
+		}
+		// a video counts while it plays where it can be seen: its window, or small in a corner
+		if (seconds > 0 && seconds <= root.sampleSeconds * 4 && Video.playing && Video.current && (Video.windowOpen || Video.pip)) {
+			if (!root.days[key]) root.days[key] = root.emptyDay();
+			const watched = root.days[key].video || (root.days[key].video = {});
+			watched[Video.title] = (watched[Video.title] || 0) + seconds;
 			root.dirty = true;
 		}
 		// asleep, or nobody there

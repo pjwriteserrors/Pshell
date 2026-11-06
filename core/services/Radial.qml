@@ -123,6 +123,15 @@ Singleton {
 				{ id: "music-now", label: Music.current ? Music.titleOf(Music.path) : "What plays?", icon: "album", run: () => Music.showWindow() },
 				{ id: "music-small", label: "Small player", icon: "arrow_collapse", run: () => Music.showSmall() }
 			] });
+		// while a video is open: the few things done with it from anywhere
+		if (Plugins.on("video") && Video.current)
+			entries.push({ id: "video", label: Words.of("radial.video", "Video"), icon: "movie_open_outline", active: Video.playing, children: [
+				{ id: "video-toggle", label: Video.playing ? "Pause" : "Play", icon: Video.playing ? "pause" : "play", run: () => Video.toggle() },
+				{ id: "video-pip", label: Video.pip ? "Back to the window" : "Picture in picture", icon: "picture_in_picture_bottom_right", run: () => Video.togglePip() },
+				{ id: "video-full", label: Video.fullscreen ? "Leave fullscreen" : "Fullscreen", icon: Video.fullscreen ? "fullscreen_exit" : "fullscreen", run: () => Video.toggleFullscreen() },
+				{ id: "video-now", label: Video.title, icon: "movie_outline", run: () => Video.showWindow() },
+				{ id: "video-snapshot", label: "Take a picture of it", icon: "camera_outline", run: () => Video.snapshot(false) }
+			] });
 		entries.push({ id: "power", label: Words.of("radial.power", "Power"), icon: "power", children: root.powerEntries });
 		if (Plugins.on("ssh"))
 			entries.push({ id: "ssh", label: Words.of("radial.ssh", "SSH"), icon: "console", enabled: root.sshEntries.length > 0, children: root.sshEntries });

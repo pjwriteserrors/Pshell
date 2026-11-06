@@ -64,6 +64,8 @@ Item {
 	readonly property bool thumbAllowed: (!root.remote || FileLibrary.setting("remoteThumbs"))
 		&& (Number(FileLibrary.setting("thumbLimit")) === 0 || root.bytes <= Number(FileLibrary.setting("thumbLimit")) * 1e6)
 	readonly property bool textShown: FileLibrary.setting("textPreviews")
+	// a video: how far it was seen in Video ({ pos, dur, watched } or null)
+	readonly property var seen: root.kind === "video" && Video.enabled ? Video.progressOf(root.path) : null
 
 	function ask() {
 		if (root.path === "") return;
@@ -124,6 +126,117 @@ Item {
 			}
 		}
 
+		// a video under the pointer runs through its pictures: one sheet of them
+		// (Video's sprites, made once), a tile shown at a time – nothing decodes
+		// only videos get it: the rest of the tiles stay as light as they were
+		Loader {
+			anchors.fill: parent
+			active: root.kind === "video" && Video.enabled
+
+			sourceComponent: Component {
+				Item {
+					id: flick
+
+					property var sheet: null
+					property int tile: 0
+					readonly property bool wanted: root.kind === "video" && root.hovered && !root.compact && Video.enabled && Video.setting("hoverPreview", true)
+					// the tile scaled to cover the frame, the sheet moved under it
+					readonly property real cover: flick.sheet ? Math.max(width / flick.sheet.tile_w, height / flick.sheet.tile_h) : 1
+
+					anchors.fill: parent
+					visible: !!flick.sheet && sheetImage.status === Image.Ready
+					onWantedChanged: {
+						if (flick.wanted) return flickWait.restart();
+						flickWait.stop();
+						flick.sheet = null;
+					}
+
+					Connections {
+						target: root
+
+						function onPathChanged() {
+							flick.sheet = null;
+						}
+					}
+
+					Timer {
+						id: flickWait
+
+						interval: 400
+						onTriggered: {
+							const path = root.path;
+							Video.spritesOf(path, meta => {
+								if (!flick.wanted || root.path !== path || !meta?.file) return;
+								// from a little in, past the black of the start
+								flick.tile = Math.floor(meta.count * 0.04);
+								flick.sheet = meta;
+							});
+						}
+					}
+
+					Timer {
+						interval: 350
+						repeat: true
+						running: flick.visible
+						onTriggered: flick.tile = (flick.tile + 1) % Math.max(1, flick.sheet.count)
+					}
+
+					Image {
+						id: sheetImage
+
+						readonly property int column: flick.sheet ? flick.tile % flick.sheet.cols : 0
+						readonly property int line: flick.sheet ? Math.floor(flick.tile / flick.sheet.cols) : 0
+						readonly property real tw: flick.sheet ? flick.sheet.tile_w * flick.cover : 0
+						readonly property real th: flick.sheet ? flick.sheet.tile_h * flick.cover : 0
+
+						x: (flick.width - sheetImage.tw) / 2 - sheetImage.column * sheetImage.tw
+						y: (flick.height - sheetImage.th) / 2 - sheetImage.line * sheetImage.th
+						width: flick.sheet ? flick.sheet.cols * sheetImage.tw : 0
+						height: flick.sheet ? flick.sheet.rows * sheetImage.th : 0
+						source: flick.sheet ? Video.fileUrl(flick.sheet.file) : ""
+						asynchronous: true
+						smooth: true
+					}
+				}
+			}
+		}
+
+		// how far it was seen: a thin line along the bottom
+		Rectangle {
+			visible: !!root.seen && !root.seen.watched && (root.seen.pos ?? 0) > 0 && (root.seen.dur ?? 0) > 0
+			anchors.left: parent.left
+			anchors.right: parent.right
+			anchors.bottom: parent.bottom
+			height: root.compact ? 2 : 4
+			color: Qt.rgba(0, 0, 0, 0.45)
+
+			Rectangle {
+				width: parent.width * Math.min(1, (root.seen?.pos ?? 0) / Math.max(1, root.seen?.dur ?? 1))
+				height: parent.height
+				color: Theme.primary
+			}
+		}
+
+		// seen to the end
+		Rectangle {
+			visible: !!root.seen?.watched
+			anchors.top: parent.top
+			anchors.right: parent.right
+			anchors.margins: root.compact ? 2 : 6
+			width: root.compact ? 12 : 20
+			height: width
+			radius: width / 2
+			color: Qt.alpha(Theme.success, 0.92)
+
+			Glyph {
+				anchors.centerIn: parent
+				icon: "check"
+				size: parent.width * 0.7
+				color: "white"
+				surface: "transparent"
+			}
+		}
+
 		// a video says it plays
 		Rectangle {
 			visible: root.kind === "video" && !root.compact
@@ -133,6 +246,14 @@ Item {
 			radius: width / 2
 			color: Qt.rgba(0, 0, 0, root.hovered ? 0.55 : 0.38)
 			scale: root.hovered ? 1.12 : 1
+			// out of the way while the pictures run
+			opacity: flick.visible ? 0 : 1
+
+			Behavior on opacity {
+				Anim {
+					duration: Motion.short
+				}
+			}
 
 			Behavior on scale {
 				SpatialAnim {

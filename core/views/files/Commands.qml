@@ -19,6 +19,7 @@ QtObject {
 	readonly property bool captures: Plugins.on("screenshot")
 	readonly property bool viewer: Viewer.enabled
 	readonly property bool music: Music.enabled
+	readonly property bool video: Video.enabled
 	readonly property bool pins: Plugins.on("pins")
 	readonly property bool ocr: Plugins.on("ocr")
 	readonly property bool wallpaper: Plugins.on("studio-wallpaper")
@@ -140,6 +141,24 @@ QtObject {
 		if (pdfs.length > 0 && all(row => row.mime === "application/pdf" || row.kind === "image")) return { label: "PDF tools", short: "PDF tools", icon: "file_pdf_box", entries: root.pdfEntries(rows, pdfs) };
 		if (all(row => row.kind === "video")) {
 			const entries = [];
+			if (root.video) {
+				const films = root.paths(files);
+				const seen = films.every(path => Video.progressOf(path)?.watched);
+				entries.push({ header: "In the video player" });
+				entries.push({ label: files.length === 1 ? "Play" : `Play ${files.length} videos`, icon: "play", run: () => Video.openMany(films) });
+				entries.push({ label: "Play from the start", icon: "restart", run: () => Video.open(films[0], { start: 0, list: films.length > 1 ? films : undefined }) });
+				if (one) entries.push({ label: "Edit", icon: "movie_edit_outline", run: () => Video.edit(one.path) });
+				else entries.push({ label: `Join ${files.length} videos`, icon: "movie_open_plus_outline", run: () => Video.join(films) });
+				entries.push({ label: seen ? "Mark as unwatched" : "Mark as watched", icon: seen ? "eye_off_outline" : "eye_check_outline", run: () => films.forEach(path => Video.setWatched(path, !seen)) });
+				if (one) {
+					entries.push({ label: "Make it smaller", icon: "arrow_collapse_all", children: () => [
+						{ label: "For WhatsApp (16 MB)", icon: "whatsapp", run: () => Video.shrink(one.path, 16, file => file && Video.tellMade(file, "Made smaller")) },
+						{ label: "For Discord (10 MB)", icon: "message_video", run: () => Video.shrink(one.path, 10, file => file && Video.tellMade(file, "Made smaller")) }
+					] });
+					entries.push({ label: "Take the sound out", icon: "music_box_outline", run: () => Video.extractAudio(one.path) });
+				}
+				entries.push({ header: "Edit" });
+			}
 			if (one) {
 				entries.push({ label: "Cut the recording…", icon: "content_cut", run: () => view.trim(one.path, "cut") });
 				entries.push({ label: "Make a GIF…", icon: "file_gif_box", run: () => view.trim(one.path, "gif") });

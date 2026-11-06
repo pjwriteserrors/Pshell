@@ -291,6 +291,20 @@ DialogFrame {
 				onClicked: root.hide()
 			}
 
+			// more than a cut: the part into the video editor, trimmed already
+			TextButton {
+				visible: Plugins.on("video")
+				text: "Open in the editor"
+				icon: "movie_edit_outline"
+				variant: "tonal"
+				onClicked: {
+					const part = root.end - root.start >= 0.2 ? [root.start, root.end] : null;
+					player.stop();
+					root.hide();
+					Video.edit(root.path, part ? { trim: part } : {});
+				}
+			}
+
 			TextButton {
 				text: root.mode === "gif" ? "Make the GIF" : "Cut"
 				icon: root.mode === "gif" ? "file_gif_box" : "content_cut"

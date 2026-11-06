@@ -508,7 +508,16 @@ Singleton {
 
 	function open(key) {
 		const item = root.table[key];
-		if (item && item.state === "done") Quickshell.execDetached(["xdg-open", item.path]);
+		if (!item || item.state !== "done") return;
+		// a video plays in the shell's own player at once, without the trip through xdg-open
+		if (Video.isDefault && Video.isVideo(item.path)) return Video.open(item.path);
+		Quickshell.execDetached(["xdg-open", item.path]);
+	}
+
+	// a finished video, in the shell's own player even when it is not the default
+	function play(key) {
+		const item = root.table[key];
+		if (item && item.state === "done" && Video.enabled && Video.isVideo(item.path)) Video.open(item.path);
 	}
 
 	// the file manager, with the file picked where it can do that

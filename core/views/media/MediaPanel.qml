@@ -21,6 +21,24 @@ Drawer {
 	// the player in front is the shell's own: its window and its queue are here too
 	readonly property bool ownPlayer: Music.enabled && String(Media.player?.dbusName ?? "").includes("pshell_music")
 	readonly property var upNext: root.ownPlayer && Music.index >= 0 ? Music.queue.slice(Music.index + 1, Music.index + 4) : []
+	// … or the shell's video, with the next episode
+	readonly property bool ownVideo: Video.enabled && String(Media.player?.dbusName ?? "").includes("pshell_video")
+	readonly property string nextVideo: root.ownVideo && Video.hasNext ? Video.list[Video.index + 1] : ""
+	property string nextFrame: ""
+	property string nextFrameOf: ""
+
+	// a picture of the next episode, once per episode, only while the panel is looked at
+	function wantNextFrame() {
+		const path = root.nextVideo;
+		if (path === "" || root.nextFrameOf === path) return;
+		root.nextFrameOf = path;
+		root.nextFrame = "";
+		Video.frameOf(path, 60, file => {
+			if (root.nextFrameOf === path) root.nextFrame = file;
+		}, 160);
+	}
+
+	onNextVideoChanged: if (root.shown) root.wantNextFrame()
 
 	panelId: "media"
 	panelWidth: 480
@@ -29,6 +47,7 @@ Drawer {
 
 	onPanelOpened: {
 		root.showOutputs = false;
+		root.wantNextFrame();
 	}
 	onPanelSettled: Audio.refreshSinks()
 
@@ -248,10 +267,10 @@ Drawer {
 
 					// the shell's own player: its window
 					IconButton {
-						visible: root.ownPlayer
+						visible: root.ownPlayer || root.ownVideo
 						icon: "open_in_new"
 						iconSize: 18
-						onClicked: Music.showWindow()
+						onClicked: root.ownVideo ? Video.showWindow() : Music.showWindow()
 					}
 				}
 			}
@@ -504,6 +523,76 @@ Drawer {
 								tone: Theme.textMuted
 								font.pixelSize: Theme.size.small
 							}
+						}
+					}
+				}
+			}
+
+			// the next episode (or video of the folder) in the shell's video
+			Column {
+				Layout.fillWidth: true
+				visible: root.nextVideo !== ""
+				spacing: 2
+
+				StyledText {
+					x: 4
+					text: Video.episodeOf(root.nextVideo) ? "Next episode" : "Up next"
+					tone: Theme.textMuted
+					font.pixelSize: Theme.size.small
+					font.weight: Font.DemiBold
+				}
+
+				Clickable {
+					id: nextEpisode
+
+					width: parent.width
+					height: 48
+					radius: Theme.radius.medium
+					color: nextEpisode.hovered ? Theme.layer1 : "transparent"
+					onClicked: Video.next()
+
+					Rectangle {
+						id: episodeFrame
+
+						anchors.left: parent.left
+						anchors.leftMargin: 4
+						anchors.verticalCenter: parent.verticalCenter
+						width: 64
+						height: 36
+						radius: Theme.radius.small
+						color: Theme.layer2
+						clip: true
+
+						Image {
+							anchors.fill: parent
+							source: root.nextFrame !== "" ? Video.fileUrl(root.nextFrame) : ""
+							sourceSize: Qt.size(128, 72)
+							fillMode: Image.PreserveAspectCrop
+							asynchronous: true
+						}
+					}
+
+					Column {
+						anchors.left: episodeFrame.right
+						anchors.leftMargin: 10
+						anchors.right: parent.right
+						anchors.rightMargin: 8
+						anchors.verticalCenter: parent.verticalCenter
+
+						StyledText {
+							width: parent.width
+							elide: Text.ElideRight
+							text: Video.titleOf(root.nextVideo)
+							font.weight: Font.DemiBold
+						}
+
+						StyledText {
+							width: parent.width
+							elide: Text.ElideRight
+							visible: text !== ""
+							text: Video.episodeOf(root.nextVideo)?.label ?? ""
+							tone: Theme.textMuted
+							font.pixelSize: Theme.size.small
 						}
 					}
 				}

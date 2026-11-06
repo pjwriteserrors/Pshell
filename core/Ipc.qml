@@ -1457,6 +1457,90 @@ Scope {
 	}
 
 	IpcHandler {
+		target: "video"
+		enabled: Plugins.on("video")
+
+		// videos, one per line: one alone plays with the rest of its folder around it
+		function open(paths: string): void {
+			Video.openMany(paths.split("\n").filter(p => p));
+		}
+		// straight into the editor
+		function edit(path: string): void {
+			Video.edit(path);
+		}
+		// several, one after the other, in the editor
+		function join(paths: string): void {
+			Video.join(paths.split("\n").filter(p => p));
+		}
+		// the window as it was left, else the video seen last ("show" is a word of qs ipc itself)
+		function start(): void {
+			Video.showWindow();
+		}
+		function window(): void {
+			Video.toggleWindow();
+		}
+		function close(): void {
+			Video.close();
+		}
+		function toggle(): void {
+			Video.toggle();
+		}
+		function play(): void {
+			Video.play();
+		}
+		function pause(): void {
+			Video.pause();
+		}
+		function next(): void {
+			Video.next();
+		}
+		function previous(): void {
+			Video.previous();
+		}
+		function stop(): void {
+			Video.stop();
+		}
+		// seconds, or +n / -n from here
+		function seek(to: string): void {
+			if (/^[+-]/.test(to)) Video.seekBy(Number(to));
+			else Video.seek(Number(to));
+		}
+		function volume(percent: int): void {
+			Video.setVolume(percent);
+		}
+		function speed(value: string): void {
+			Video.setSpeed(Number(value) || 1);
+		}
+		function pip(): void {
+			Video.togglePip();
+		}
+		function fullscreen(): void {
+			Video.toggleFullscreen();
+		}
+		// minutes until it fades out; -1 at the end of this video, 0 off
+		function sleep(minutes: int): void {
+			Video.sleep(minutes);
+		}
+		// what the window does on a word: play-pause, edit, subtitles, snapshot, export …
+		function act(name: string): void {
+			Video.act(name);
+		}
+		// a setting of video.json, its value as JSON ("true", "\"subs\"", "4")
+		function set(name: string, value: string): void {
+			try {
+				Video.setSetting(name, JSON.parse(value));
+			} catch (error) {
+				Video.setSetting(name, value);
+			}
+		}
+		function state(): string {
+			return JSON.stringify({ open: Video.windowOpen, playing: Video.playing, path: Video.path, position: Math.round(Video.position * 10) / 10, duration: Video.duration,
+				speed: Video.speed, volume: Video.volume, editing: Video.editing, pip: Video.pip, fullscreen: Video.fullscreen, list: Video.list.length, index: Video.index,
+				subFile: Video.subFile, cues: Video.cues.length, jobs: Video.runningJobs.length, sprite: !!Video.sprite, edited: Video.edited, outDuration: Video.outDuration });
+		}
+	}
+
+	IpcHandler {
 		target: "agents"
 		enabled: Plugins.on("agents")
 

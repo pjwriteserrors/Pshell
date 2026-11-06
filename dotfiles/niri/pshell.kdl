@@ -48,6 +48,14 @@ window-rule {
     open-focused true
 }
 
+// the shell's videos (core/views/video/VideoWindow.qml) float as well; picture
+// in picture is the same window made small in a corner
+window-rule {
+    match app-id=r#"quickshell"# title=r#" – Video$|^Video$"#
+    open-floating true
+    open-focused true
+}
+
 // the shell's copy of the wallpaper for the overview and the gaps between
 // workspaces (core/views/overlays/WallpaperLayer.qml, backdrop)
 layer-rule {

@@ -405,6 +405,21 @@ FocusScope {
 			root.openStart = 0;
 			return;
 		}
+		// videos play in the shell's own player, the others of the pane around them; the
+		// window grows out of the card (Quick Look's picture, at its moment, when it came from there)
+		if (rest.length > 0 && Video.isDefault && rest.every(row => Kinds.kindOf(row) === "video")) {
+			const films = rest.length > 1 ? rest : pane.rows.filter(row => !row.dir && Kinds.kindOf(row) === "video");
+			let from = root.openOrigin;
+			if (!from) {
+				const card = root.activeBrowse()?.itemOf(pane.rows.findIndex(row => row.path === rest[0].path));
+				if (card) from = Viewer.originOf(card, Files.windowTitle);
+			}
+			if (from && !from.image) from.image = Files.thumbOf(rest[0].path, rest[0].mtime) || String(rest[0].thumb || "");
+			Video.open(rest[0].path, { list: films.map(row => row.path), start: root.openStart > 0 ? root.openStart : -1, origin: from });
+			root.openOrigin = null;
+			root.openStart = 0;
+			return;
+		}
 		root.openOrigin = null;
 		root.openStart = 0;
 		if (rest.length > 0) {
@@ -415,7 +430,7 @@ FocusScope {
 
 	// where the next picture opened grows from (Quick Look's picture)
 	property var openOrigin: null
-	// where the next song opened starts (Quick Look played it that far)
+	// where the next song or video opened starts (Quick Look played it that far)
 	property real openStart: 0
 
 	function openElsewhere(pane, row) {
