@@ -396,16 +396,23 @@ Singleton {
 		// the downloads list plays its sound for what it shows
 		if (!Plugins.on("downloads")) Sounds.play("download");
 		const hash = torrent.hash;
-		Notifs.post({
-			app: "Torrents",
-			icon: `${Paths.assets}/icons/pshell-torrents.svg`,
-			summary: "Download complete",
-			body: `${torrent.name} · ${Format.bytes(torrent.size)}`,
-			actions: [{ text: "Show folder", invoke: () => root.reveal(hash) }, { text: "Torrents", invoke: () => {
+		const tell = songs => {
+			const actions = [{ text: "Show folder", invoke: () => root.reveal(hash) }, { text: "Torrents", invoke: () => {
 				root.select(hash);
 				root.open();
-			} }]
-		});
+			} }];
+			// an album: played from here
+			if (songs.length > 0) actions.unshift({ text: "Play", invoke: () => Music.open(songs[0], { list: songs }) });
+			Notifs.post({
+				app: "Torrents",
+				icon: `${Paths.assets}/icons/pshell-torrents.svg`,
+				summary: "Download complete",
+				body: `${torrent.name} · ${Format.bytes(torrent.size)}`,
+				actions: actions
+			});
+		};
+		if (!Music.enabled || !torrent.destination) return tell([]);
+		Music.request("songs", { path: `${torrent.destination}/${torrent.name}` }, data => tell(data?.paths ?? []));
 	}
 
 

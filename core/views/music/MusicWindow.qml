@@ -26,6 +26,9 @@ FloatingWindow {
 
 	onVisibleChanged: {
 		if (!root.visible && Music.windowOpen) Music.close();
+		// a window shown again has its first size, not the strip's
+		if (!root.visible) Music.mini = false;
+		if (root.visible && Music.wantMini) toSmall.restart();
 		if (root.visible) {
 			Sounds.play("open");
 			if (content.item) content.item.takeFocus();
@@ -41,6 +44,25 @@ FloatingWindow {
 
 		function onWindowOpenChanged() {
 			root.follow();
+		}
+	}
+
+	// asked to come up small: once niri knows the window
+	Timer {
+		id: toSmall
+
+		interval: 220
+		onTriggered: {
+			Music.wantMini = false;
+			if (!Music.mini && Music.niriWindow()) Music.toggleMini(root.width, root.height);
+		}
+	}
+
+	Connections {
+		target: Music
+
+		function onWantMiniChanged() {
+			if (Music.wantMini && root.visible) toSmall.restart();
 		}
 	}
 

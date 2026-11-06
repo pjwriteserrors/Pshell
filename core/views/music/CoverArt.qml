@@ -137,7 +137,7 @@ Item {
 
 				Glyph {
 					anchors.centerIn: parent
-					icon: "music_note"
+					icon: Music.voicePath !== "" && Music.path === Music.voicePath ? "microphone" : "music_note"
 					size: parent.width * 0.32
 					color: Qt.alpha(root.accent, 0.8)
 				}

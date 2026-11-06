@@ -55,6 +55,17 @@ class Pure(unittest.TestCase):
         self.assertEqual(index, 2)
         self.assertEqual(music.folder_of(str(self.dir))[2], 0)
 
+    def test_songs_of_a_download(self):
+        album = Path(tempfile.mkdtemp(dir=TEMP))
+        (album / "CD 2").mkdir()
+        (album / "CD 10").mkdir()
+        tone(album / "CD 2" / "1 b.mp3", seconds=1)
+        tone(album / "CD 10" / "1 c.mp3", seconds=1)
+        tone(album / "intro.ogg", seconds=1)
+        (album / "info.nfo").write_text("x")
+        self.assertEqual([str(Path(p).relative_to(album)) for p in music.songs_in(str(album))], ["intro.ogg", "CD 2/1 b.mp3", "CD 10/1 c.mp3"])
+        self.assertEqual(music.songs_in(str(album / "info.nfo")), [])
+
     def test_tags_and_bare_names(self):
         tags = music.tags_of(music.probe(self.tagged), self.tagged)
         self.assertEqual((tags["title"], tags["artist"], tags["album"], tags["track"]), ("Named", "Band", "Record", "3"))
@@ -97,6 +108,31 @@ class Pure(unittest.TestCase):
         self.assertIsNone(music.local_lyrics(self.bare, {}))
         plain = music.local_lyrics(self.bare, {"lyrics": "just\nwords"})
         self.assertFalse(plain["synced"])
+
+    def test_tags_written_into_the_file(self):
+        folder = Path(tempfile.mkdtemp(dir=TEMP))
+        for name in ("a.mp3", "b.flac", "c.ogg"):
+            song = tone(folder / name, seconds=1, tags={"title": "Old"})
+            result = music.write_tags(song, {"title": "Neu – Ä", "artist": "Band", "album": "Platte", "track": "4", "year": "2021"}, str(self.dir / "red.png"))
+            tags = music.tags_of(music.probe(song), song)
+            self.assertEqual((tags["title"], tags["artist"], tags["album"], tags["track"], tags["year"]), ("Neu – Ä", "Band", "Platte", "4", "2021"), name)
+            self.assertAlmostEqual(tags["duration"], 1, delta=0.2)
+            if name == "c.ogg":
+                # no picture inside an Ogg: one beside it
+                self.assertFalse(result["inside"])
+                self.assertTrue(result["beside"].endswith("cover.jpg"))
+            else:
+                self.assertTrue(result["inside"] and tags["picture"], name)
+        self.assertEqual(sorted(p.name for p in folder.iterdir()), ["a.mp3", "b.flac", "c.ogg", "cover.jpg"])
+
+    def test_filter_chain(self):
+        self.assertEqual(music.filter_chain(), "@gain:lavfi=[volume@v=volume=1.0000]")
+        chain = music.filter_chain([3, 0, 0, 0, 0, 0, 0, 0, 0, -2], 2, 0.5)
+        self.assertIn("equalizer@b0=f=31:t=o:w=1:g=3.0", chain)
+        self.assertIn("equalizer@b9=f=16000:t=o:w=1:g=-2.0", chain)
+        self.assertIn("volume@h=volume=0.7079", chain)
+        self.assertIn("@pitch:rubberband=pitch-scale=1.12246", chain)
+        self.assertTrue(chain.endswith("@gain:lavfi=[volume@v=volume=0.5000]"))
 
 
 @unittest.skipUnless(shutil.which("mpv") and shutil.which("dbus-run-session"), "needs mpv and dbus-run-session")
@@ -178,6 +214,40 @@ class Player(unittest.TestCase):
         self.assertEqual((end["repeat"], end["shuffle"]), ("one", False))
         queue = [line for line in lines if line.get("event") == "queue"][-1]["paths"]
         self.assertEqual(queue, self.songs)
+
+    def test_voice_between_the_songs(self):
+        voice = tone(self.dir / "voice.opus", seconds=1.5, frequency=900)
+        lines = self.run_helper([
+            {"id": 1, "op": "open", "paths": self.songs, "index": 1, "start": 2, "_wait": 0.8},
+            {"id": 2, "op": "voice", "path": voice, "speed": 1.5, "_wait": 0.3},
+            {"id": 3, "op": "state", "_wait": 1.6},
+            {"id": 4, "op": "state"},
+        ])
+        during = self.answer(lines, 3)
+        self.assertEqual((during["path"], during["index"], during["speed"]), (voice, 2, 1.5))
+        self.assertTrue(any(line.get("event") == "voice-done" for line in lines))
+        after = self.answer(lines, 4)
+        self.assertEqual((after["path"], after["index"], after["speed"]), (self.songs[1], 1, 1))
+        self.assertGreaterEqual(after["position"], 2.4)
+        self.assertEqual([line for line in lines if line.get("event") == "queue"][-1]["paths"], self.songs)
+
+    def test_sound_loop_and_duck(self):
+        lines = self.run_helper([
+            {"id": 1, "op": "open", "paths": self.songs, "index": 0, "_wait": 0.8},
+            {"id": 2, "op": "sound", "eq": [4, 2, 0, 0, 0, 0, 0, 0, 1, 0], "pitch": 1, "fade": 2},
+            {"id": 3, "op": "ab", "a": 1, "b": 2},
+            {"id": 4, "op": "duck", "level": 0.3, "seconds": 0.2, "_wait": 0.6},
+            {"id": 5, "op": "eq", "gains": [4, 3, 0, 0, 0, 0, 0, 0, 1, 0]},
+            {"id": 6, "op": "state", "_wait": 2.2},
+        ])
+        state = self.answer(lines, 6)
+        self.assertEqual((state["loopA"], state["loopB"]), (1, 2))
+        # the stretch is played again and again
+        self.assertGreaterEqual(state["position"], 0.9)
+        self.assertLessEqual(state["position"], 2.2)
+        self.assertEqual(state["eq"][:2], [4, 3])
+        self.assertEqual((state["pitch"], state["fade"], state["duck"]), (1, 2, 0.3))
+        self.assertEqual(state["path"], self.songs[0])
 
 
 def tearDownModule():

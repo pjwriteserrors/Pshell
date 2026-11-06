@@ -49,6 +49,9 @@ Item {
 	readonly property real lead: root.head && !root.newDay ? 10 : 0
 	readonly property real joint: Messages.bubbleJoint
 	readonly property bool playing: WhatsApp.playing === root.message.id
+	// voice and sound play in the music player's strip (at the voice speed), the songs waiting
+	readonly property bool viaMusic: Music.enabled && (root.kind === "voice" || root.kind === "audio")
+	readonly property bool inMusic: root.viaMusic && root.file !== "" && Music.voicePath === root.file && Music.path === root.file
 	// the reactions are offered instead of the tools
 	property bool reacting: false
 	// plays as soon as its file is here
@@ -83,7 +86,13 @@ Item {
 			WhatsApp.fetch(root.message.id, "");
 			return;
 		}
+		if (root.viaMusic) return root.toMusic();
 		WhatsApp.playing = root.playing ? "" : root.message.id;
+	}
+
+	function toMusic() {
+		if (root.inMusic) return Music.toggle();
+		Music.playVoice(root.file, { title: root.kind === "voice" ? "Voice message" : (root.media?.name || "Sound"), artist: root.mine ? "You" : (root.message.name || "") });
 	}
 
 	function vote(option) {
@@ -108,6 +117,7 @@ Item {
 	onFileChanged: if (root.awaited && root.file !== "") {
 		root.awaited = false;
 		if (root.kind === "video") Mail.view(root.file);
+		else if (root.viaMusic) root.toMusic();
 		else WhatsApp.playing = root.message.id;
 	}
 	// it could not be fetched: nothing is waited for
@@ -580,7 +590,7 @@ Item {
 							IconButton {
 								implicitWidth: 34
 								implicitHeight: 34
-								icon: root.awaited && root.file === "" ? "" : (root.playing && sound.item?.playbackState === MediaPlayer.PlayingState ? "pause" : "play")
+								icon: root.awaited && root.file === "" ? "" : ((root.inMusic ? Music.playing : root.playing && sound.item?.playbackState === MediaPlayer.PlayingState) ? "pause" : "play")
 								variant: "filled"
 								onClicked: root.play()
 
@@ -596,7 +606,7 @@ Item {
 							Loader {
 								id: sound
 
-								active: root.playing && root.file !== ""
+								active: root.playing && root.file !== "" && !root.viaMusic
 								sourceComponent: MediaPlayer {
 									source: `file://${root.file}`
 									audioOutput: AudioOutput {}
@@ -612,7 +622,7 @@ Item {
 								color: Qt.alpha(Theme.text, 0.14)
 
 								Rectangle {
-									width: parent.width * (sound.item && sound.item.duration > 0 ? sound.item.position / sound.item.duration : 0)
+									width: parent.width * (root.inMusic ? Music.progress : (sound.item && sound.item.duration > 0 ? sound.item.position / sound.item.duration : 0))
 									height: parent.height
 									radius: 2
 									color: Messages.accent
@@ -621,8 +631,12 @@ Item {
 								MouseArea {
 									anchors.fill: parent
 									anchors.margins: -8
-									enabled: sound.item !== null
-									onClicked: event => sound.item.position = sound.item.duration * Math.max(0, Math.min(1, (event.x - 8) / parent.width))
+									enabled: sound.item !== null || root.inMusic
+									onClicked: event => {
+										const at = Math.max(0, Math.min(1, (event.x - 8) / parent.width));
+										if (root.inMusic) Music.seek(at * Music.duration);
+										else sound.item.position = sound.item.duration * at;
+									}
 								}
 							}
 
@@ -633,7 +647,7 @@ Item {
 							}
 
 							StyledText {
-								text: Format.clock(sound.item ? sound.item.position / 1000 : (root.media?.seconds ?? 0))
+								text: Format.clock(root.inMusic ? Music.position : (sound.item ? sound.item.position / 1000 : (root.media?.seconds ?? 0)))
 								tone: Theme.textMuted
 								tabular: true
 								font.pixelSize: Theme.size.small

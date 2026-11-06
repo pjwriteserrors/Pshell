@@ -538,8 +538,29 @@ Scope {
 				spacing: 18
 				visible: Media.hasPlayer && Media.title !== ""
 
+				Rectangle {
+					anchors.verticalCenter: parent.verticalCenter
+					width: 40
+					height: 40
+					radius: Theme.radius.medium
+					color: Qt.alpha("white", 0.12)
+					clip: true
+					visible: lockArt.status === Image.Ready
+
+					Image {
+						id: lockArt
+
+						anchors.fill: parent
+						source: Media.art
+						sourceSize: Qt.size(80, 80)
+						fillMode: Image.PreserveAspectCrop
+						asynchronous: true
+					}
+				}
+
 				Glyph {
 					anchors.verticalCenter: parent.verticalCenter
+					visible: lockArt.status !== Image.Ready
 					icon: Media.playing ? "music_note" : "pause"
 					size: 16
 					color: "white"
@@ -553,6 +574,40 @@ Scope {
 					tone: "white"
 					surface: "transparent"
 					font.pixelSize: Theme.size.label
+				}
+
+				// the keys, without unlocking
+				Row {
+					anchors.verticalCenter: parent.verticalCenter
+					spacing: 2
+
+					Repeater {
+						model: [
+							{ icon: "skip_previous", run: () => Media.player?.previous() },
+							{ icon: Media.playing ? "pause" : "play", run: () => Media.player?.togglePlaying() },
+							{ icon: "skip_next", run: () => Media.player?.next() }
+						]
+
+						delegate: Clickable {
+							id: lockKey
+
+							required property var modelData
+
+							width: 34
+							height: 34
+							radius: 17
+							color: lockKey.hovered ? Qt.alpha("white", 0.16) : "transparent"
+							onClicked: lockKey.modelData.run()
+
+							Glyph {
+								anchors.centerIn: parent
+								icon: lockKey.modelData.icon
+								size: 18
+								color: "white"
+								surface: "transparent"
+							}
+						}
+					}
 				}
 			}
 		}

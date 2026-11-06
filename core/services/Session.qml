@@ -71,6 +71,8 @@ Singleton {
 
 	function busy() {
 		const pending = root.pending;
+		// the music fell asleep: nothing to wait for but the grace
+		if (pending.what === "music") return Music.playing;
 		if (pending.what === "agent") {
 			if (Niri.windows.length === 0) return true;
 			const id = Number(pending.window);

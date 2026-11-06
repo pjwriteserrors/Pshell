@@ -1358,6 +1358,35 @@ Scope {
 		function add(paths: string): void {
 			Music.add(paths.split("\n").filter(p => p), false);
 		}
+		// a voice message (or any sound) between the songs, in the strip, at the voice speed
+		function voice(path: string, from: string): void {
+			Music.playVoice(path, { artist: from });
+		}
+		// A then B, or off: a stretch played again and again
+		function loop(): void {
+			Music.cycleLoop();
+		}
+		// the equalizer: a preset's name ("Bass", "Flat", …)
+		function eq(preset: string): void {
+			const found = Music.eqPresets.find(p => p.name.toLowerCase() === preset.toLowerCase());
+			if (found) Music.setEq(found.gains, found.name);
+		}
+		// quieter for a reason (0..100, 100 again ends it)
+		function duck(reason: string, percent: int): void {
+			Music.duck(reason || "ipc", percent / 100);
+		}
+		// the small strip at once
+		function small(): void {
+			Music.showSmall();
+		}
+		// a setting of music.json, its value as JSON ("true", "\"ring\"", "4")
+		function set(name: string, value: string): void {
+			try {
+				Music.setSetting(name, JSON.parse(value));
+			} catch (error) {
+				Music.setSetting(name, value);
+			}
+		}
 		// into the queue, next
 		function upnext(paths: string): void {
 			Music.add(paths.split("\n").filter(p => p), true);

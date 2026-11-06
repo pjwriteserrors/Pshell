@@ -18,6 +18,9 @@ Drawer {
 	id: root
 
 	property bool showOutputs: false
+	// the player in front is the shell's own: its window and its queue are here too
+	readonly property bool ownPlayer: Music.enabled && String(Media.player?.dbusName ?? "").includes("pshell_music")
+	readonly property var upNext: root.ownPlayer && Music.index >= 0 ? Music.queue.slice(Music.index + 1, Music.index + 4) : []
 
 	panelId: "media"
 	panelWidth: 480
@@ -242,6 +245,14 @@ Drawer {
 						checked: Lyrics.open
 						onClicked: Lyrics.toggle()
 					}
+
+					// the shell's own player: its window
+					IconButton {
+						visible: root.ownPlayer
+						icon: "open_in_new"
+						iconSize: 18
+						onClicked: Music.showWindow()
+					}
 				}
 			}
 
@@ -416,6 +427,84 @@ Drawer {
 						const state = Media.player.loopState;
 						Media.player.loopState = state === MprisLoopState.None ? MprisLoopState.Playlist
 							: (state === MprisLoopState.Playlist ? MprisLoopState.Track : MprisLoopState.None);
+					}
+				}
+			}
+
+			// what comes next in the shell's own player
+			Column {
+				Layout.fillWidth: true
+				visible: root.ownPlayer && root.upNext.length > 0
+				spacing: 2
+
+				StyledText {
+					x: 4
+					text: "Up next"
+					tone: Theme.textMuted
+					font.pixelSize: Theme.size.small
+					font.weight: Font.DemiBold
+				}
+
+				Repeater {
+					model: root.upNext
+
+					delegate: Clickable {
+						id: nextRow
+
+						required property var modelData
+						required property int index
+
+						width: parent.width
+						height: 40
+						radius: Theme.radius.medium
+						color: nextRow.hovered ? Theme.layer1 : "transparent"
+						onClicked: Music.jump(Music.index + 1 + nextRow.index)
+
+						Rectangle {
+							id: nextThumb
+
+							anchors.left: parent.left
+							anchors.leftMargin: 4
+							anchors.verticalCenter: parent.verticalCenter
+							width: 32
+							height: 32
+							radius: Theme.radius.small
+							color: Theme.layer2
+							clip: true
+							Component.onCompleted: Music.wantCover(nextRow.modelData)
+
+							Image {
+								anchors.fill: parent
+								source: Music.covers[nextRow.modelData]?.art ? "file://" + Music.covers[nextRow.modelData].art : ""
+								sourceSize: Qt.size(64, 64)
+								fillMode: Image.PreserveAspectCrop
+								asynchronous: true
+							}
+						}
+
+						Column {
+							anchors.left: nextThumb.right
+							anchors.leftMargin: 10
+							anchors.right: parent.right
+							anchors.rightMargin: 8
+							anchors.verticalCenter: parent.verticalCenter
+
+							StyledText {
+								width: parent.width
+								elide: Text.ElideRight
+								text: Music.titleOf(nextRow.modelData)
+								font.weight: Font.DemiBold
+							}
+
+							StyledText {
+								width: parent.width
+								elide: Text.ElideRight
+								visible: text !== ""
+								text: Music.artistOf(nextRow.modelData)
+								tone: Theme.textMuted
+								font.pixelSize: Theme.size.small
+							}
+						}
 					}
 				}
 			}

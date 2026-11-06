@@ -563,6 +563,8 @@ Item {
 
 			// music: the cover (to the left when the words are there)
 			FileThumb {
+				id: audioCover
+
 				visible: root.kind === "audio"
 				anchors.centerIn: parent
 				anchors.horizontalCenterOffset: root.lyrics.length > 0 ? -parent.width * 0.22 : 0
@@ -583,6 +585,111 @@ Item {
 				kind: "audio"
 				thumb: root.row?.thumb ?? ""
 				canThumb: !!root.row?.canThumb
+			}
+
+			// the song along its length under the cover (the music player's helper
+			// reads it): drawn once, the played part a clipped copy; a click goes there
+			Item {
+				id: audioWave
+
+				readonly property string path: root.kind === "audio" && Music.enabled ? (root.row?.path ?? "") : ""
+				property var peaks: []
+				readonly property real progress: waveSeek.pressed ? waveSeek.ratio : (player.duration > 0 ? player.position / player.duration : 0)
+
+				visible: audioWave.path !== "" && audioWave.peaks.length > 0
+				x: audioCover.x
+				y: audioCover.y + audioCover.height + 14
+				width: audioCover.width
+				height: 40
+				opacity: visible ? 1 : 0
+
+				Behavior on opacity {
+					Anim {}
+				}
+
+				onPathChanged: {
+					audioWave.peaks = [];
+					if (!audioWave.path) return;
+					const path = audioWave.path;
+					Music.request("wave", { path: path }, data => {
+						if (data && audioWave.path === path) audioWave.peaks = data.peaks || [];
+					});
+				}
+				onPeaksChanged: {
+					waveBase.requestPaint();
+					wavePlayed.requestPaint();
+				}
+
+				function paint(canvas, colour) {
+					const ctx = canvas.getContext("2d");
+					ctx.reset();
+					const w = canvas.width, h = canvas.height, peaks = audioWave.peaks;
+					if (peaks.length === 0 || w <= 0) return;
+					const bar = 3, gap = 2;
+					const count = Math.max(1, Math.floor((w + gap) / (bar + gap)));
+					ctx.fillStyle = colour;
+					for (let i = 0; i < count; i += 1) {
+						const from = Math.floor(i * peaks.length / count);
+						const to = Math.max(from + 1, Math.floor((i + 1) * peaks.length / count));
+						let level = 0;
+						for (let j = from; j < to; j += 1) level = Math.max(level, peaks[j]);
+						const bh = Math.max(3, level * h * 0.94);
+						ctx.beginPath();
+						ctx.roundedRect(i * (bar + gap), (h - bh) / 2, bar, bh, 1.5, 1.5);
+						ctx.fill();
+					}
+				}
+
+				Canvas {
+					id: waveBase
+
+					anchors.fill: parent
+					renderStrategy: Canvas.Cooperative
+					onPaint: audioWave.paint(waveBase, Qt.alpha(Theme.text, 0.22))
+					onAvailableChanged: if (available) requestPaint()
+					onWidthChanged: requestPaint()
+				}
+
+				Item {
+					width: parent.width * audioWave.progress
+					height: parent.height
+					clip: true
+
+					Canvas {
+						id: wavePlayed
+
+						width: audioWave.width
+						height: audioWave.height
+						renderStrategy: Canvas.Cooperative
+						onPaint: audioWave.paint(wavePlayed, Theme.primary)
+						onAvailableChanged: if (available) requestPaint()
+						onWidthChanged: requestPaint()
+
+						Connections {
+							target: Theme
+
+							function onPrimaryChanged() {
+								wavePlayed.requestPaint();
+							}
+						}
+					}
+				}
+
+				MouseArea {
+					id: waveSeek
+
+					property real ratio: 0
+
+					anchors.fill: parent
+					anchors.margins: -6
+					cursorShape: Qt.PointingHandCursor
+					preventStealing: true
+					onPressed: mouse => waveSeek.ratio = Math.max(0, Math.min(1, (mouse.x - 6) / audioWave.width))
+					onPositionChanged: mouse => {
+						if (waveSeek.pressed) waveSeek.ratio = Math.max(0, Math.min(1, (mouse.x - 6) / audioWave.width));
+					}
+					onReleased: if (player.duration > 0) player.position = waveSeek.ratio * player.duration
+				}
 			}
 
 			// the words of the song, the line that is sung lit

@@ -116,6 +116,13 @@ Singleton {
 				{ id: "taskmgr-pause", label: "Pause app", icon: "pause", enabled: Niri.focusedId >= 0, run: () => TaskManager.pauseWindow(Niri.focusedId) },
 				{ id: "taskmgr-end", label: "End app", icon: "close_octagon_outline", hold: true, danger: true, enabled: Niri.focusedId >= 0, run: () => TaskManager.endWindow(Niri.focusedId) }
 			] });
+		if (Plugins.on("music"))
+			entries.push({ id: "music", label: Words.of("radial.music", "Music"), icon: "music_note", active: Music.playing, children: [
+				{ id: "music-toggle", label: Music.playing ? "Pause" : "Play", icon: Music.playing ? "pause" : "play", run: () => Music.toggle() },
+				{ id: "music-next", label: "Next song", icon: "skip_next", enabled: Music.queue.length > 1 || Music.repeatMode !== "off", run: () => Music.next() },
+				{ id: "music-now", label: Music.current ? Music.titleOf(Music.path) : "What plays?", icon: "album", run: () => Music.showWindow() },
+				{ id: "music-small", label: "Small player", icon: "arrow_collapse", run: () => Music.showSmall() }
+			] });
 		entries.push({ id: "power", label: Words.of("radial.power", "Power"), icon: "power", children: root.powerEntries });
 		if (Plugins.on("ssh"))
 			entries.push({ id: "ssh", label: Words.of("radial.ssh", "SSH"), icon: "console", enabled: root.sshEntries.length > 0, children: root.sshEntries });

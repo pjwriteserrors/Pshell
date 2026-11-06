@@ -31,6 +31,11 @@ Singleton {
 				if (player === root.selectedPlayer) return player;
 		}
 		if (root.activePlayer) return root.activePlayer;
+		// the shell's own player, while it has something: before one that only paused
+		if (Music.current) {
+			for (const player of Mpris.players.values)
+				if (String(player.dbusName).includes("pshell_music")) return player;
+		}
 		for (const player of Mpris.players.values)
 			if (player === root.rememberedPlayer) return player;
 		return Mpris.players.values.length > 0 ? Mpris.players.values[0] : null;

@@ -16,6 +16,7 @@ Singleton {
 		"playlist_play": "󰐑",
 		"album": "󰀥",
 		"book_open_variant": "󱓷",
+		"repeat_variant": "󰕇",
 		"blur_radial": "󰂸",
 		"chat_question_outline": "󱜹",
 		"checkbox_blank_off_outline": "󱋭",

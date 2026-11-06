@@ -1414,9 +1414,11 @@ Singleton {
 			{ label: "Show", icon: "folder_open_outline", run: () => root.reveal([path]) }
 		];
 		if (archive) actions.push({ label: "Extract", icon: "package_variant", run: () => root.extract(path, root.parentOf(path)) });
+		const song = Music.enabled && /\.(mp3|flac|ogg|oga|opus|m4a|m4b|aac|wav|wv|ape|aiff?|wma|mka|alac)$/i.test(name);
+		if (song) actions.unshift({ label: "Play", icon: "play", run: () => Music.open(path) });
 		if (!FileLibrary.setting("avDownloads") && (root.av.clamav || root.vtKeySet)) actions.push({ label: "Scan", icon: "shield_search", run: () => root.av.clamav ? root.avScan([path]) : root.vtScan([path]) });
 		Notifs.pushInternal("done", name, `Downloaded to ${root.pretty(root.parentOf(path))}`, {
-			icon: archive ? "package_variant_closed" : "download",
+			icon: archive ? "package_variant_closed" : (song ? "music_note" : "download"),
 			image: /\.(png|jpe?g|jpe|jfif?|jif|webp|gif)$/i.test(name) ? path : "",
 			duration: 9000,
 			actions: actions

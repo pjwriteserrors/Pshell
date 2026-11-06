@@ -64,7 +64,7 @@ Singleton {
 		{ value: "windows", label: "Windows" },
 		{ value: "spaces", label: "Workspaces" },
 		{ value: "links", label: "Links" }
-	]
+	].concat(Music.enabled ? [{ value: "music", label: "Music" }] : [])
 
 	function dayKey(date) {
 		return Qt.formatDate(date, "yyyy-MM-dd");
@@ -81,7 +81,7 @@ Singleton {
 	}
 
 	function emptyDay() {
-		return { total: 0, longest: 0, longestEnd: 0, hours: new Array(24).fill(0), apps: {}, windows: {}, spaces: {}, links: {}, pages: {}, blocks: [], pauses: [] };
+		return { total: 0, longest: 0, longestEnd: 0, hours: new Array(24).fill(0), apps: {}, windows: {}, spaces: {}, links: {}, pages: {}, music: {}, blocks: [], pauses: [] };
 	}
 
 	function format(seconds) {
@@ -140,6 +140,11 @@ Singleton {
 				row.label = parts[1] || root.appName(parts[0]);
 				row.detail = parts[1] ? root.appName(parts[0]) : "";
 				row.appId = parts[0];
+			} else if (kind === "music") {
+				// "artist\ntitle": what was listened to, also while nobody looked
+				row.label = parts[1] || parts[0];
+				row.detail = parts[1] ? parts[0] : "";
+				row.icon = "music_note";
 			} else if (kind === "spaces") {
 				row.label = /^\d+$/.test(parts[1]) ? `Workspace ${parts[1]}` : parts[1];
 				row.detail = Object.keys(outputs).length > 1 ? parts[0] : "";
@@ -204,6 +209,14 @@ Singleton {
 		if (key !== root.today) {
 			root.today = key;
 			root.prune();
+		}
+		// music counts while it plays, looked at or not
+		if (seconds > 0 && seconds <= root.sampleSeconds * 4 && Music.playing && Music.current && !Music.voicePath) {
+			if (!root.days[key]) root.days[key] = root.emptyDay();
+			const heard = root.days[key].music || (root.days[key].music = {});
+			const name = `${Music.artistOf(Music.path)}\n${Music.titleOf(Music.path)}`;
+			heard[name] = (heard[name] || 0) + seconds;
+			root.dirty = true;
 		}
 		// asleep, or nobody there
 		if (seconds > root.sampleSeconds * 4 || seconds <= 0 || Session.locked || idle.isIdle) {

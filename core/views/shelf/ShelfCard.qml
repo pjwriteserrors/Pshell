@@ -185,6 +185,13 @@ Item {
 			if (!item.dir && item.kind !== "link") entries.push({ label: "Preview", icon: "eye", run: () => root.previewRequested(item) });
 			entries.push({ separator: true });
 		}
+		// songs: into the music player
+		const songs = targets.filter(t => t.kind === "file" && (String(t.mime).startsWith("audio/") || /\.(mp3|flac|ogg|opus|m4a|m4b|aac|wav)$/i.test(String(t.path))));
+		if (Music.enabled && songs.length === targets.length) {
+			entries.push({ label: songs.length === 1 ? "Play" : `Play ${songs.length} songs`, icon: "play", run: () => Music.openMany(songs.map(t => t.path)) });
+			entries.push({ label: "Add to the queue", icon: "playlist_plus", run: () => Music.add(songs.map(t => t.path), false) });
+			entries.push({ separator: true });
+		}
 		entries.push({ label: many ? `Copy ${targets.length} files` : "Copy", icon: "content_copy", run: () => Shelf.copyItems(targets) });
 		entries.push({ label: many ? "Copy paths" : "Copy path", icon: "clipboard_text", run: () => Shelf.copyPaths(targets) });
 		if (!many && item.kind === "file") entries.push({ label: "Rename", icon: "pencil", run: () => root.renamingItem = item.id });

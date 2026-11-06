@@ -181,7 +181,9 @@ Singleton {
 	}
 
 	// ── semantic roles ─────────────────────────────────────────────────────
-	readonly property color primary: root.legible(root.ranked[0].color, 3.2)
+	// a colour laid over the palette's own for a while (the cover of the music that plays)
+	property color accentOverride: "transparent"
+	readonly property color primary: root.accentOverride.a > 0 ? root.legible(root.accentOverride, 3.2) : root.legible(root.ranked[0].color, 3.2)
 	readonly property color secondary: root.legible(root.pickDistinct(root.ranked[0].hue, 1), 3.0)
 	readonly property color tertiary: root.legible(root.pickDistinct(root.secondary.hsvHue, 2), 3.0)
 	readonly property color onPrimary: root.contrast(root.primary, root.bg) >= root.contrast(root.primary, root.fg) ? root.bg : root.fg

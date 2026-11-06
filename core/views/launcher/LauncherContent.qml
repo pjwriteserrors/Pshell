@@ -77,6 +77,7 @@ Item {
 		{ id: "scroll", plugin: "scroll-screenshot", parent: "shot", command: "scroll", name: "Scroll Screenshot", keywords: "long page" },
 		{ id: "shots", plugin: "screenshot-history", parent: "shot", command: "shots", name: "Screenshot History", aliases: ["history"], status: Screenshot.shots.length > 0 ? String(Screenshot.shots.length) : "" },
 		{ id: "pictures", plugin: "viewer", command: "pictures", name: "Pictures", aliases: ["img", "images", "photos", "bilder"], status: Viewer.recent.length > 0 ? String(Viewer.recent.length) : "" },
+		{ id: "music", plugin: "music", command: "music", name: "Music", aliases: ["songs", "musik", "player"], status: Music.current ? Music.titleOf(Music.path) : "" },
 		{ id: "unpin", plugin: "pins", parent: "shot", command: "unpin", name: "Remove Pins", keywords: "close pinned" },
 		{ id: "calculator", plugin: "calculator", group: "tools", command: "c", name: "Calculator", aliases: ["calc", "calculator"], keywords: "math" },
 		{ id: "converter", plugin: "converter", group: "tools", command: "conv", name: "Convert", aliases: ["convert"], keywords: "units currency" },
@@ -326,8 +327,9 @@ Item {
 	readonly property bool inPhoneMode: Phone.offered && (root.commandQuery === "phone" || root.commandQuery.startsWith("phone "))
 	readonly property bool inShotsMode: Plugins.on("screenshot-history") && (root.commandQuery === "shots" || root.commandQuery.startsWith("shots "))
 	readonly property bool inPicturesMode: Plugins.on("viewer") && ["pictures", "img"].some(c => root.commandQuery === c || root.commandQuery.startsWith(c + " "))
+	readonly property bool inMusicMode: Plugins.on("music") && ["music", "songs"].some(c => root.commandQuery === c || root.commandQuery.startsWith(c + " "))
 	readonly property bool inEditMode: Plugins.on("editor") && (root.commandQuery === "edit" || root.commandQuery.startsWith("edit "))
-	readonly property bool inViewMode: root.inEditMode || root.inTranslateMode || root.inConvertMode || root.inTodoMode || root.inWebMode || root.inAiActionsMode || root.inPhoneMode || root.inShotsMode || root.inPicturesMode || root.inFinderMode
+	readonly property bool inViewMode: root.inEditMode || root.inTranslateMode || root.inConvertMode || root.inTodoMode || root.inWebMode || root.inAiActionsMode || root.inPhoneMode || root.inShotsMode || root.inPicturesMode || root.inMusicMode || root.inFinderMode
 	// what follows the command token, as typed (">t fr hello" → "fr hello")
 	readonly property string modeArgument: {
 		const match = /^>\S+\s([\s\S]*)$/.exec(root.searchText);
@@ -1103,6 +1105,9 @@ Item {
 		case "pictures":
 			root.setLauncherSearch(">pictures");
 			break;
+		case "music":
+			root.setLauncherSearch(">music");
+			break;
 		case "unpin":
 			Screenshot.unpinAll();
 			root.closeRequested();
@@ -1494,6 +1499,7 @@ Item {
 		if (root.inPhoneMode) return "phone";
 		if (root.inShotsMode) return "shots";
 		if (root.inPicturesMode) return "pictures";
+		if (root.inMusicMode) return "music";
 		if (root.inFinderMode) return "finder";
 		if (root.inChatMode) return "chat";
 		if (root.inAiMode) return "chats";
@@ -1517,6 +1523,7 @@ Item {
 		case "phone": return "cellphone";
 		case "shots": return "image_multiple";
 		case "pictures": return "image_edit_outline";
+		case "music": return "music_note";
 		case "finder": return "folder_search_outline";
 		case "chat": return "chat";
 		case "chats": return "forum";
@@ -1566,6 +1573,7 @@ Item {
 		case "scroll": return "arrow_expand_vertical";
 		case "shots": return "image_multiple";
 		case "pictures": return "image_edit_outline";
+		case "music": return "music_note";
 		case "unpin": return "pin_off_outline";
 		case "song": return "waveform";
 		case "lyrics": return "microphone_variant";
@@ -1608,6 +1616,7 @@ Item {
 		case "phone": return phoneView.item;
 		case "shots": return shotsView.item;
 		case "pictures": return picturesView.item;
+		case "music": return musicView.item;
 		case "finder": return finderView.item;
 		case "apps": return appsView;
 		default: return null;
@@ -1623,6 +1632,7 @@ Item {
 		case "ai": return "Ask, find, translate…";
 		case "phone": return "Text to send";
 		case "finder": return "Search your files";
+		case "music": return "Song, artist or album";
 		case "apps": return "Search apps  ·  > for commands";
 		default: return "";
 		}
@@ -1640,6 +1650,7 @@ Item {
 		case "phone": return "Phone";
 		case "shots": return "Screenshots";
 		case "pictures": return "Pictures";
+		case "music": return "Music";
 		case "finder": return "Files";
 		default: return "";
 		}
@@ -1657,6 +1668,7 @@ Item {
 		case "phone": return "send";
 		case "shots": return "copy";
 		case "pictures": return "open";
+		case "music": return "play";
 		case "apps": return appsView.zone === "actions" ? "run" : (appsView.current === null && appsView.searching && Plugins.on("web-search") ? "search the web" : "open");
 		default: return "open";
 		}
@@ -2581,6 +2593,31 @@ Item {
 
 					Connections {
 						target: picturesView.item
+						ignoreUnknownSignals: true
+
+						function onCloseRequested() {
+							root.closeRequested();
+						}
+					}
+				}
+			}
+
+			// what plays, comes and played (the music player)
+			ModeLayer {
+				current: root.mode === "music"
+
+				ModeView {
+					id: musicView
+
+					file: "MusicModeView.qml"
+					current: root.mode === "music"
+					values: ({
+						active: root.mode === "music",
+						argument: root.modeArgument
+					})
+
+					Connections {
+						target: musicView.item
 						ignoreUnknownSignals: true
 
 						function onCloseRequested() {

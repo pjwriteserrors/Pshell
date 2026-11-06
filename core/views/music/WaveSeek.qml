@@ -18,7 +18,9 @@ Item {
 	property bool slim: false
 
 	readonly property var peaks: Music.wave
-	readonly property bool hasWave: root.peaks.length > 0
+	// what is drawn: the old wave stays, sunk, until the new one is read
+	property var drawn: []
+	readonly property bool hasWave: root.drawn.length > 0
 	readonly property real shownProgress: seek.pressed ? seek.dragRatio : Music.progress
 
 	implicitHeight: root.slim ? 18 : 64
@@ -27,33 +29,69 @@ Item {
 	property real grow: 0
 
 	onPeaksChanged: {
+		swap.stop();
+		if (root.peaks.length === 0) {
+			// a new song: the old wave sinks while the new one is read
+			if (root.drawn.length > 0 && root.visible) sink.restart();
+			else root.grow = 0;
+			return;
+		}
+		sink.stop();
+		swap.start();
+	}
+
+	function take() {
+		root.drawn = root.peaks;
 		base.requestPaint();
 		played.requestPaint();
-		// the peaks themselves: hasWave may not have heard of them yet
-		if (root.peaks.length > 0) growAnim.restart();
-		else root.grow = 0;
 	}
 
 	// the wave was there before this
-	Component.onCompleted: if (root.hasWave) root.grow = 1
+	Component.onCompleted: if (root.peaks.length > 0) {
+		root.drawn = root.peaks;
+		root.grow = 1;
+	}
 
 	NumberAnimation {
-		id: growAnim
+		id: sink
 
 		target: root
 		property: "grow"
-		from: 0
-		to: 1
-		duration: Motion.extraLong
-		easing.type: Easing.BezierSpline
-		easing.bezierCurve: Motion.spatial
+		to: 0.25
+		duration: Motion.medium
+		easing.type: Easing.OutQuad
+	}
+
+	// down, the new one in, up
+	SequentialAnimation {
+		id: swap
+
+		NumberAnimation {
+			target: root
+			property: "grow"
+			to: 0
+			duration: root.grow > 0.3 ? Motion.short : 0
+			easing.type: Easing.InQuad
+		}
+		ScriptAction {
+			script: root.take()
+		}
+		NumberAnimation {
+			target: root
+			property: "grow"
+			from: 0
+			to: 1
+			duration: Motion.extraLong
+			easing.type: Easing.BezierSpline
+			easing.bezierCurve: Motion.spatial
+		}
 	}
 
 	function paint(canvas, colour) {
 		const ctx = canvas.getContext("2d");
 		ctx.reset();
 		const w = canvas.width, h = canvas.height;
-		const peaks = root.peaks;
+		const peaks = root.drawn;
 		if (peaks.length === 0 || w <= 0) return;
 		const bar = 3, gap = 2;
 		const count = Math.max(1, Math.floor((w + gap) / (bar + gap)));
@@ -82,7 +120,7 @@ Item {
 			origin.y: waveArea.height / 2
 			yScale: 0.2 + 0.8 * root.grow
 		}
-		opacity: root.grow
+		opacity: Math.min(1, root.grow * 1.6)
 
 		Canvas {
 			id: base
