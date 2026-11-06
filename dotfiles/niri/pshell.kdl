@@ -56,6 +56,14 @@ window-rule {
     open-focused true
 }
 
+// the shell's PDFs (core/views/pdf/PdfWindow.qml) float too; slides are the
+// same window made fullscreen
+window-rule {
+    match app-id=r#"quickshell"# title=r#" – PDF$|^PDF$"#
+    open-floating true
+    open-focused true
+}
+
 // the shell's copy of the wallpaper for the overview and the gaps between
 // workspaces (core/views/overlays/WallpaperLayer.qml, backdrop)
 layer-rule {

@@ -100,6 +100,8 @@
 	{ "id": "music-default", "name": "Default music player", "category": "Desktop", "requires": ["music"], "icon": "playlist_music" },
 	{ "id": "video", "name": "Video player", "category": "Desktop", "icon": "movie_open_outline" },
 	{ "id": "video-default", "name": "Default video player", "category": "Desktop", "requires": ["video"], "icon": "movie_open_play_outline" },
+	{ "id": "pdf", "name": "PDF viewer and editor", "category": "Desktop", "icon": "file_pdf_box" },
+	{ "id": "pdf-default", "name": "Default PDF viewer", "category": "Desktop", "requires": ["pdf"], "icon": "file_document_check_outline" },
 	{ "id": "files-chooser", "name": "File chooser for all apps", "category": "Desktop", "requires": ["filemanager"], "icon": "file_find_outline" },
 	{ "id": "find-mouse", "name": "Find my mouse", "category": "Desktop", "icon": "mouse_variant" },
 	{ "id": "laser-pointer", "name": "Laser pointer", "category": "Desktop", "icon": "target" },

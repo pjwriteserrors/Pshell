@@ -1541,6 +1541,75 @@ Scope {
 	}
 
 	IpcHandler {
+		target: "pdf"
+		enabled: Plugins.on("pdf")
+
+		// PDFs, one per line: one alone opens with the rest of its folder around it, several are put together
+		function open(paths: string): void {
+			Pdf.openMany(paths.split("\n").filter(p => p));
+		}
+		// at a page (1 = the first)
+		function page(path: string, number: int): void {
+			Pdf.open(path, { page: Math.max(0, number - 1) });
+		}
+		// straight into the editor, with a tool (annotate, pages, text, forms, sign, redact, stamp, layout, crop, export, security, info, compare, scan, ai) or none
+		function edit(path: string, tool: string): void {
+			Pdf.edit(path, tool);
+		}
+		// opened and searched for
+		function search(path: string, text: string): void {
+			Pdf.open(path, { search: text });
+		}
+		// the window as it was left, else the PDF read last ("show" is a word of qs ipc itself)
+		function start(): void {
+			Pdf.showWindow();
+		}
+		function window(): void {
+			Pdf.toggleWindow();
+		}
+		function close(): void {
+			Pdf.close();
+		}
+		function go(number: int): void {
+			Pdf.goTo(number - 1);
+		}
+		function next(): void {
+			Pdf.nextPage();
+		}
+		function previous(): void {
+			Pdf.previousPage();
+		}
+		function save(): void {
+			Pdf.save();
+		}
+		function present(): void {
+			Pdf.present();
+		}
+		// what the window does on a word: edit, search, night, layout, present, undo, tool-<name>, draw-<name> …
+		function act(name: string): void {
+			Pdf.act(name);
+		}
+		// a setting of pdf.json, its value as JSON
+		function set(name: string, value: string): void {
+			try {
+				Pdf.setSetting(name, JSON.parse(value));
+			} catch (error) {
+				Pdf.setSetting(name, value);
+			}
+		}
+		// the recipe as it is (tests and scripts)
+		function recipe(): string {
+			return JSON.stringify(Pdf.recipe);
+		}
+		function state(): string {
+			return JSON.stringify({ open: Pdf.windowOpen, path: Pdf.path, pages: Pdf.pageCount, page: Pdf.page, zoom: Math.round(Pdf.zoom * 100) / 100, fit: Pdf.fit,
+				layout: Pdf.layout, night: Pdf.night, mode: Pdf.mode, tool: Pdf.tool, draw: Pdf.draw, items: Pdf.items.length, selected: Pdf.selected,
+				selectedPages: Pdf.selectedPages, dirty: Pdf.dirty, undo: Pdf.undoStack.length, locked: Pdf.locked, error: Pdf.error, sidebar: Pdf.sidebar,
+				search: Pdf.searchText, hits: Pdf.searchCount, presenting: Pdf.presenting, jobs: Pdf.runningJobs.length, selection: Pdf.selectionText, generation: Pdf.generation });
+		}
+	}
+
+	IpcHandler {
 		target: "agents"
 		enabled: Plugins.on("agents")
 

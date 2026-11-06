@@ -20,6 +20,7 @@ QtObject {
 	readonly property bool viewer: Viewer.enabled
 	readonly property bool music: Music.enabled
 	readonly property bool video: Video.enabled
+	readonly property bool pdf: Pdf.enabled
 	readonly property bool pins: Plugins.on("pins")
 	readonly property bool ocr: Plugins.on("ocr")
 	readonly property bool wallpaper: Plugins.on("studio-wallpaper")
@@ -138,7 +139,7 @@ QtObject {
 		if (all(row => row.kind === "image")) return { label: files.length === 1 ? "Edit the picture" : "Edit the pictures", short: "Edit", icon: "image_edit_outline", entries: root.imageEntries(files) };
 		// PDFs, also with pictures to merge them into
 		const pdfs = files.filter(row => row.mime === "application/pdf");
-		if (pdfs.length > 0 && all(row => row.mime === "application/pdf" || row.kind === "image")) return { label: "PDF tools", short: "PDF tools", icon: "file_pdf_box", entries: root.pdfEntries(rows, pdfs) };
+		if (pdfs.length > 0 && all(row => row.mime === "application/pdf" || row.kind === "image")) return { label: "PDF tools", short: "PDF tools", icon: "file_pdf_box", entries: root.pdfEditorEntries(files, pdfs).concat(root.pdfEntries(rows, pdfs)) };
 		if (all(row => row.kind === "video")) {
 			const entries = [];
 			if (root.video) {
@@ -194,6 +195,34 @@ QtObject {
 		if (all(row => /\.(docx?|odt|rtf|xlsx?|ods|pptx?|odp)$/i.test(row.name))) return { label: "Make a PDF", short: "PDF", icon: "file_pdf_box", entries: [root.pdfEntry("officetopdf", "Make a PDF", "file_pdf_box", files)] };
 		if (all(row => /\.html?$/i.test(row.name))) return { label: "Make a PDF", short: "PDF", icon: "file_pdf_box", entries: [root.pdfEntry("htmltopdf", "Make a PDF", "file_pdf_box", files)] };
 		return null;
+	}
+
+	// the shell's own PDF editor, first in the PDF tools: each tool opens the document there
+	function pdfEditorEntries(files, pdfs) {
+		if (!root.pdf) return [];
+		const one = pdfs.length === 1 && files.length === 1 ? pdfs[0] : null;
+		const entries = [{ header: "In the PDF editor" }];
+		if (one) {
+			entries.push({ label: "Open", icon: "file_pdf_box", run: () => Pdf.open(one.path) });
+			entries.push({ label: "Edit", icon: "file_document_edit_outline", run: () => Pdf.edit(one.path, "") });
+			entries.push({ label: "Mark and comment", icon: "marker", run: () => Pdf.edit(one.path, "annotate") });
+			entries.push({ label: "Fill in and sign", icon: "draw_pen", run: () => Pdf.edit(one.path, "forms") });
+			entries.push({ label: "Black out…", icon: "marker_cancel", run: () => Pdf.edit(one.path, "redact") });
+			entries.push({ label: "Pages", icon: "file_document_multiple_outline", run: () => Pdf.edit(one.path, "pages") });
+			entries.push({ label: "Present", icon: "presentation_play", run: () => {
+				Pdf.open(one.path, { page: 0 });
+				Pdf.present(true);
+			} });
+		} else {
+			const paths = files.map(row => row.path);
+			entries.push({ label: `Put ${files.length} together in the editor`, icon: "file_document_multiple_outline", run: () => Pdf.openTogether(paths) });
+			if (pdfs.length === 2 && files.length === 2) entries.push({ label: "Compare in the editor", icon: "compare", run: () => {
+				Pdf.compareWith = pdfs[1].path;
+				Pdf.open(pdfs[0].path, { edit: true, tool: "compare" });
+			} });
+		}
+		entries.push({ header: "Tools" });
+		return entries;
 	}
 
 	// a folder: what is in it, its rules, where its terminals open

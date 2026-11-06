@@ -648,7 +648,11 @@ Item {
 								radius: Theme.radius.small
 								color: Qt.alpha(Theme.fg, 0.07)
 								pressedScale: 0.98
-								onClicked: Mail.openAttachment(root.message.id, file.modelData.id)
+								// a PDF opens in the shell's viewer knowing its mail, to go back as the answer
+								onClicked: {
+									if (Pdf.isDefault && /\.pdf$/i.test(String(file.modelData.name ?? ""))) Pdf.openMailAttachment(Mail.openId, root.message, file.modelData);
+									else Mail.openAttachment(root.message.id, file.modelData.id);
+								}
 
 								RowLayout {
 									anchors.fill: parent

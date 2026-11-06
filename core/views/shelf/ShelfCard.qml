@@ -200,6 +200,17 @@ Item {
 			else entries.push({ label: `Join ${films.length} videos`, icon: "movie_open_plus_outline", run: () => Video.join(films.map(t => t.path)) });
 			entries.push({ separator: true });
 		}
+		// PDFs (and pictures with them): into the PDF editor, several put together into one
+		const documents = targets.filter(t => t.kind === "file" && Pdf.isPdf(t.path));
+		const sheets = targets.filter(t => t.kind === "file" && (Pdf.isPdf(t.path) || /\.(png|jpe?g|webp|tiff?|bmp|heic|avif)$/i.test(String(t.path))));
+		if (Pdf.enabled && documents.length > 0 && sheets.length === targets.length) {
+			if (targets.length === 1) {
+				entries.push({ label: "Open in the PDF viewer", icon: "file_pdf_box", run: () => Pdf.open(documents[0].path) });
+				entries.push({ label: "Edit", icon: "file_document_edit_outline", run: () => Pdf.edit(documents[0].path, "") });
+				entries.push({ label: "Sign", icon: "draw_pen", run: () => Pdf.edit(documents[0].path, "sign") });
+			} else entries.push({ label: `Put ${targets.length} together into one PDF`, icon: "file_document_multiple_outline", run: () => Pdf.openTogether(sheets.map(t => t.path)) });
+			entries.push({ separator: true });
+		}
 		entries.push({ label: many ? `Copy ${targets.length} files` : "Copy", icon: "content_copy", run: () => Shelf.copyItems(targets) });
 		entries.push({ label: many ? "Copy paths" : "Copy path", icon: "clipboard_text", run: () => Shelf.copyPaths(targets) });
 		if (!many && item.kind === "file") entries.push({ label: "Rename", icon: "pencil", run: () => root.renamingItem = item.id });

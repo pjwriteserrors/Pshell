@@ -12,6 +12,7 @@ videos open in (plugin "video-default").
 """
 import json
 import os
+import shutil
 import subprocess
 import sys
 import urllib.parse

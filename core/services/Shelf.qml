@@ -470,6 +470,7 @@ Singleton {
 	}
 
 	function open(item) {
+		if (item.kind === "file" && Pdf.isDefault && Pdf.isPdf(item.path)) return Pdf.open(item.path);
 		Quickshell.execDetached(["xdg-open", item.kind === "link" ? item.url : item.path]);
 	}
 

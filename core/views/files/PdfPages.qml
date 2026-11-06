@@ -13,6 +13,12 @@ Item {
 	id: root
 
 	property string path: ""
+	// the page looked at (the shell's PDF viewer opens there) and its sheet, to grow out of
+	readonly property int page: pageList.count > 0 ? Math.max(0, pageList.indexAt(pageList.width / 2, pageList.contentY + pageList.height / 3)) : 0
+
+	function sheetOf(index) {
+		return pageList.itemAtIndex(index)?.sheet ?? null;
+	}
 
 	PdfDocument {
 		id: pdf
@@ -41,7 +47,11 @@ Item {
 			width: pageList.width
 			height: pageList.width * 0.8 * (pageItem.pageSize.height / Math.max(1, pageItem.pageSize.width))
 
+			property alias sheet: sheet
+
 			Rectangle {
+				id: sheet
+
 				anchors.horizontalCenter: parent.horizontalCenter
 				width: parent.width * 0.8
 				height: parent.height

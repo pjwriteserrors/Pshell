@@ -12,6 +12,7 @@ import qs.core.views.launcher
 import qs.core.views.media
 import qs.core.views.music
 import qs.core.views.video
+import qs.core.views.pdf
 import qs.core.views.messages
 import qs.core.views.overlays
 import qs.core.views.panels
@@ -434,6 +435,19 @@ Scope {
 		view: "video/VideoGhost"
 		available: Plugins.on("video")
 		when: !!Video.origin
+	}
+
+	// PDFs: drawn by QtQuick.Pdf in the shell, also the editor
+	View {
+		view: "pdf/PdfWindow"
+		available: Plugins.on("pdf")
+	}
+
+	// … grown out of the spot it was opened from
+	View {
+		view: "pdf/PdfGhost"
+		available: Plugins.on("pdf")
+		when: !!Pdf.origin
 	}
 
 	// every app's file chooser (and the shell's own), a window beside it

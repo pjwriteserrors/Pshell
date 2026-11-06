@@ -29,3 +29,8 @@ card's reset goes back to the host profile's.
 
 `python3 scripts/default_apps.py list | set <kind> <desktop-id> | set-type
 <mime>[,<mime>…] <desktop-id>` does the same from a terminal.
+
+The shell's own viewers take their kinds themselves when their plugin's
+"default" is on: pictures (`viewer-default`), music (`music-default`), videos
+(`video-default`) and PDFs (`pdf-default`, the entry "Pshell PDF",
+docs/pdf.md); turning one off gives the kind back to the app it had.

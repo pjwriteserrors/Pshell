@@ -132,6 +132,21 @@ Singleton {
 				{ id: "video-now", label: Video.title, icon: "movie_outline", run: () => Video.showWindow() },
 				{ id: "video-snapshot", label: "Take a picture of it", icon: "camera_outline", run: () => Video.snapshot(false) }
 			] });
+		// while a PDF is open: reading it, editing it, showing it as slides
+		if (Plugins.on("pdf") && Pdf.current)
+			entries.push({ id: "pdf", label: Words.of("radial.pdf", "PDF"), icon: "file_pdf_box", active: Pdf.windowOpen, children: [
+				{ id: "pdf-now", label: Pdf.title, icon: "file_document_outline", run: () => Pdf.showWindow() },
+				{ id: "pdf-edit", label: Pdf.editing ? "Back to reading" : "Edit", icon: Pdf.editing ? "book_open_page_variant_outline" : "file_document_edit_outline", run: () => {
+					Pdf.showWindow();
+					Pdf.toggleEditing();
+				} },
+				{ id: "pdf-present", label: Pdf.presenting ? "End the slides" : "Present", icon: "presentation_play", run: () => {
+					Pdf.showWindow();
+					Pdf.present();
+				} },
+				{ id: "pdf-night", label: Pdf.night ? "Pages as they are" : "Pages at night", icon: Pdf.night ? "white_balance_sunny" : "weather_night", run: () => Pdf.night = !Pdf.night },
+				{ id: "pdf-save", label: "Save", icon: "content_save_outline", enabled: Pdf.dirty, run: () => Pdf.save() }
+			] });
 		entries.push({ id: "power", label: Words.of("radial.power", "Power"), icon: "power", children: root.powerEntries });
 		if (Plugins.on("ssh"))
 			entries.push({ id: "ssh", label: Words.of("radial.ssh", "SSH"), icon: "console", enabled: root.sshEntries.length > 0, children: root.sshEntries });
