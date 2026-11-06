@@ -592,12 +592,8 @@ Item {
 			return;
 		}
 		root.picked = false;
-		// a command answers ahead of the apps when a word of it starts
-		// with what is typed and no app's name does
-		const best = root.commands[0];
-		const app = root.results.find(result => result.kind === "app");
-		const commandFirst = best && best.score >= 60 && !(app && app.item.name.toLowerCase().startsWith(typed));
-		root.listIndex = commandFirst || !app ? 0 : root.results.indexOf(app);
+		// a command that answers what is typed is chosen ahead of the apps
+		root.listIndex = 0;
 		resultList.currentIndex = root.listIndex;
 		root.clampSelection();
 	}

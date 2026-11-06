@@ -10,6 +10,7 @@ Drawer {
 
 	panelId: "launcher"
 	centered: true
+	grabKeyboard: true
 	panelWidth: 780
 	contentHeight: {
 		switch (content.mode) {

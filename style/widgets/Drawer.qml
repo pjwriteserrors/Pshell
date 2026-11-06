@@ -24,6 +24,9 @@ PanelWindow {
 	property real contentHeight: 300
 	property real padding: Theme.panelPadding
 	property bool keyboard: true
+	// takes the keyboard while open, rather than on a click: niri hands an
+	// on-demand surface the keys again only if it was the last one clicked
+	property bool grabKeyboard: false
 	property bool centered: false
 	readonly property real maxBodyHeight: Math.max(160, (root.screen?.height ?? 1080) - Theme.barHeight - 48)
 	readonly property real targetHeight: Math.min(root.maxBodyHeight, root.contentHeight + root.padding * 2)
@@ -154,7 +157,7 @@ PanelWindow {
 	WlrLayershell.namespace: `shell-${root.panelId}`
 	WlrLayershell.layer: WlrLayer.Overlay
 	WlrLayershell.exclusionMode: ExclusionMode.Ignore
-	WlrLayershell.keyboardFocus: root.shown && root.keyboard ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+	WlrLayershell.keyboardFocus: root.shown && root.keyboard ? (root.grabKeyboard ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.OnDemand) : WlrKeyboardFocus.None
 
 	MouseArea {
 		anchors.fill: parent
