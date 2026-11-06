@@ -86,7 +86,7 @@ Singleton {
 	readonly property var choosing: root.chooseQueue.find(each => each.method !== "ChooseApplication") ?? null
 	// "Open with" (the portal's AppChooser): OpenWithWindow.qml
 	readonly property var appChoosing: root.chooseQueue.find(each => each.method === "ChooseApplication") ?? null
-	readonly property string chooserTitle: "Pshell chooser"
+	readonly property string chooserTitle: "File chooser"
 	property int chooseSerial: 0
 
 	// pick(options, done): the shell asks for files; done(paths) gets what
@@ -436,7 +436,7 @@ Singleton {
 
 		interval: 80
 		onTriggered: {
-			const window = Niri.windows.find(window => String(window.title).startsWith(root.chooserTitle) && String(window.title).endsWith("Open with") === root.focusOpenWith && /quickshell/i.test(String(window.app_id)));
+			const window = Niri.windows.find(window => (root.focusOpenWith ? String(window.title) === "Open with" : String(window.title).startsWith(root.chooserTitle)) && /quickshell/i.test(String(window.app_id)));
 			if (window && !window.is_focused) Niri.focusWindow(window.id);
 		}
 	}

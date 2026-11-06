@@ -72,6 +72,36 @@ Rectangle {
 			}
 		}
 
+		// which of the shell's windows it is, when it is one
+		Rectangle {
+			readonly property var shell: root.kind === "window" ? RuleSchema.shellWindow(root.node.props) : null
+
+			visible: shell !== null
+			implicitWidth: shellRow.implicitWidth + 20
+			implicitHeight: 32
+			radius: 16
+			color: Theme.layer3
+
+			RowLayout {
+				id: shellRow
+
+				anchors.centerIn: parent
+				spacing: 5
+
+				Glyph {
+					icon: parent.parent.shell?.icon ?? ""
+					size: 13
+					color: Theme.textMuted
+				}
+
+				StyledText {
+					text: parent.parent.shell?.name ?? ""
+					font.pixelSize: Theme.size.label
+					font.weight: Font.Medium
+				}
+			}
+		}
+
 		Repeater {
 			model: root.keys
 
@@ -127,6 +157,12 @@ Rectangle {
 							radius: 11
 							visible: root.kind === "window" && (cond.modelData === "app-id" || cond.modelData === "title")
 							onClicked: NiriSettings.pickWindow(window => {
+								// a shell window: its app-id is every shell window's, so the title's steady part comes along
+								const shell = RuleSchema.shellOf({ appId: window.appId, title: window.title });
+								if (shell) {
+									root.changed(root.withProps(Object.assign({}, root.node.props || {}, { "app-id": RuleSchema.SHELL_APP_ID, title: shell.title })));
+									return;
+								}
 								const text = cond.modelData === "title" ? window.title : window.appId;
 								if (text !== "") root.setProp(cond.modelData, `^${root.quoteRegex(text)}$`);
 							})

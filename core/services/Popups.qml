@@ -166,7 +166,7 @@ Singleton {
 	}
 
 	// ── the settings: a window of their own (SettingsWindow.qml) ───────────
-	readonly property string settingsTitle: "Pshell settings"
+	readonly property string settingsTitle: "Settings"
 	property bool settingsOpen: false
 
 	function openSettings() {

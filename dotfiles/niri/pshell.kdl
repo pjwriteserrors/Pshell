@@ -27,7 +27,7 @@ window-rule {
 // every app's file chooser (Pshell Files, core/views/files/ChooserWindow.qml)
 // floats over the app like a dialog
 window-rule {
-    match app-id=r#"quickshell"# title=r#"^Pshell chooser"#
+    match app-id=r#"quickshell"# title=r#"^File chooser|^Open with$"#
     open-floating true
     open-focused true
 }

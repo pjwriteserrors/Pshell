@@ -39,6 +39,12 @@ ColumnLayout {
 	}
 
 	function addSurface(surface) {
+		const shell = surface.shell ?? RuleSchema.shellOf(surface);
+		if (shell) {
+			if (root.matchers.some(m => m.name === "match" && m.props?.title === shell.title)) return;
+			root.append(Nodes.make("match", [], { "app-id": RuleSchema.SHELL_APP_ID, title: shell.title }));
+			return;
+		}
 		const key = root.kind === "layer" ? "namespace" : "app-id";
 		const value = `^${String(root.kind === "layer" ? surface.namespace : surface.appId).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`;
 		if (root.matchers.some(m => m.name === "match" && m.props?.[key] === value)) return;
@@ -165,7 +171,7 @@ ColumnLayout {
 
 				StyledText {
 					Layout.fillWidth: true
-					text: root.fitting.length === 0 ? "Fits nothing that is open now" : `Fits ${root.fitting.length} open now: ${root.fitting.slice(0, 6).map(w => root.kind === "layer" ? w.namespace : RuleSchema.nice(w.appId)).filter((v, i, a) => a.indexOf(v) === i).join(", ")}`
+					text: root.fitting.length === 0 ? "Fits nothing that is open now" : `Fits ${root.fitting.length} open now: ${root.fitting.slice(0, 6).map(w => root.kind === "layer" ? w.namespace : RuleSchema.windowName(w)).filter((v, i, a) => a.indexOf(v) === i).join(", ")}`
 					tone: root.fitting.length > 0 ? Theme.text : Theme.textSubtle
 					font.pixelSize: Theme.size.small
 					elide: Text.ElideRight

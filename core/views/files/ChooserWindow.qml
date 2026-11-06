@@ -81,7 +81,7 @@ FloatingWindow {
 		interval: 2000
 		repeat: true
 		onTriggered: {
-			if (!root.visible || (Niri.ready && !Niri.windows.some(window => String(window.title).startsWith(Files.chooserTitle) && !String(window.title).endsWith("Open with") && /quickshell/i.test(String(window.app_id))))) root.showAgain();
+			if (!root.visible || (Niri.ready && !Niri.windows.some(window => String(window.title).startsWith(Files.chooserTitle) && /quickshell/i.test(String(window.app_id))))) root.showAgain();
 		}
 	}
 

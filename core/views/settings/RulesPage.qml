@@ -25,7 +25,13 @@ Item {
 	readonly property var setupRules: (NiriSettings.profileRules || []).filter(n => n.name === root.nodeName)
 	readonly property var surfaces: root.kind === "layer"
 		? (NiriSettings.live.layers || []).map(l => ({ namespace: l[0], layer: l[1], appId: l[0], title: l[1] })).filter(s => s.namespace !== "")
-		: (NiriSettings.live.windows || []).filter((w, i, all) => all.findIndex(o => o.appId === w.appId) === i)
+		: (NiriSettings.live.windows || []).filter((w, i, all) => !/quickshell/.test(w.appId) && all.findIndex(o => o.appId === w.appId) === i)
+	// the shell's own windows, open or not; they share one app-id, the title tells them apart
+	readonly property var shellSurfaces: RuleSchema.SHELL.map(w => ({
+		appId: "org.quickshell",
+		shell: w,
+		open: (NiriSettings.live.windows || []).some(o => /quickshell/.test(o.appId) && new RegExp(w.title).test(o.title))
+	}))
 
 	onActiveChanged: if (root.active) NiriSettings.refreshLive()
 
@@ -43,26 +49,35 @@ Item {
 		NiriSettings.setItems(root.nodeName, list, "Rule changed", `${root.nodeName}-${root.picked}`);
 	}
 
+	// what a surface is called, and the match that picks it out
+	function nameOf(surface) {
+		if (surface.shell) return surface.shell.name;
+		return RuleSchema.nice(root.kind === "layer" ? surface.namespace : surface.appId);
+	}
+
+	function matchFor(surface) {
+		if (surface.shell) return Nodes.make("match", [], { "app-id": RuleSchema.SHELL_APP_ID, title: surface.shell.title });
+		const key = root.kind === "layer" ? "namespace" : "app-id";
+		const value = String(root.kind === "layer" ? surface.namespace : surface.appId);
+		return Nodes.make("match", [], { [key]: `^${value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$` });
+	}
+
 	function create(surface) {
 		const rule = Nodes.make(root.nodeName, [], {}, []);
 		if (surface) {
-			const key = root.kind === "layer" ? "namespace" : "app-id";
-			const value = String(root.kind === "layer" ? surface.namespace : surface.appId);
-			rule.children.push(Nodes.make("match", [], { [key]: `^${value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$` }));
-			rule.comment = [RuleSchema.nice(value)];
+			rule.children.push(root.matchFor(surface));
+			rule.comment = [root.nameOf(surface)];
 		}
-		root.write(root.rules.concat([rule]), surface ? `Rule for ${RuleSchema.nice(root.kind === "layer" ? surface.namespace : surface.appId)}` : "New rule");
+		root.write(root.rules.concat([rule]), surface ? `Rule for ${root.nameOf(surface)}` : "New rule");
 		root.picked = root.rules.length;
 	}
 
 	function addTo(index, surface) {
 		const list = root.rules.slice();
 		const rule = Nodes.clone(list[index]);
-		const key = root.kind === "layer" ? "namespace" : "app-id";
-		const value = String(root.kind === "layer" ? surface.namespace : surface.appId);
-		rule.children = (rule.children || []).concat([Nodes.make("match", [], { [key]: `^${value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$` })]);
+		rule.children = (rule.children || []).concat([root.matchFor(surface)]);
 		list[index] = rule;
-		root.write(list, `${RuleSchema.nice(value)} added to the rule`);
+		root.write(list, `${root.nameOf(surface)} added to the rule`);
 		root.picked = index;
 	}
 
@@ -148,6 +163,50 @@ Item {
 				icon: "refresh"
 				variant: "tonal"
 				onClicked: NiriSettings.refreshLive()
+			}
+		}
+
+		// the shell's own windows, also the closed ones: drag one onto a rule
+		RowLayout {
+			Layout.fillWidth: true
+			visible: root.kind === "window"
+			spacing: 10
+
+			StyledText {
+				text: "Shell windows"
+				tone: Theme.textSubtle
+				font.pixelSize: Theme.size.small
+				font.weight: Font.DemiBold
+			}
+
+			Flickable {
+				Layout.fillWidth: true
+				Layout.preferredHeight: 36
+				contentWidth: shellTokens.implicitWidth
+				clip: true
+				boundsBehavior: Flickable.StopAtBounds
+				interactive: contentWidth > width
+
+				Row {
+					id: shellTokens
+
+					spacing: 6
+
+					Repeater {
+						model: root.shellSurfaces
+
+						delegate: DragToken {
+							required property var modelData
+
+							text: modelData.shell.name
+							icon: modelData.shell.icon
+							opacity: modelData.open ? 1 : 0.6
+							dragKey: "niri-window"
+							payload: modelData
+							onClicked: root.create(modelData)
+						}
+					}
+				}
 			}
 		}
 

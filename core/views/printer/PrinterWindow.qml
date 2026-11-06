@@ -8,7 +8,7 @@ import qs.core.views.printer
 // other work; the part gets the room the window has.
 PopoutWindow {
 	surface: Printer.surface
-	title: `${Printer.name} · Pshell`
+	title: `${Printer.name} · Printer`
 	implicitWidth: 1240
 	implicitHeight: 780
 	minimumSize: Qt.size(980, 660)

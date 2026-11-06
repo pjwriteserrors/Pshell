@@ -46,7 +46,7 @@ FloatingWindow {
 		return out;
 	}
 
-	title: `${Files.chooserTitle} – Open with`
+	title: "Open with"
 	visible: root.entry !== null
 	implicitWidth: 520
 	implicitHeight: 620

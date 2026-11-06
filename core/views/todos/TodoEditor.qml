@@ -30,7 +30,7 @@ FloatingWindow {
 	property bool applying: false
 	readonly property var progress: Todos.counts(area.text)
 
-	title: root.currentPath === "" ? "New note" : Todos.displayName(root.currentPath)
+	title: root.currentPath === "" ? "New note" : `${Todos.displayName(root.currentPath)} – Notes`
 	visible: true
 	implicitWidth: 680
 	implicitHeight: 760

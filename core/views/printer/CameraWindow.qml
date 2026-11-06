@@ -13,7 +13,7 @@ import qs.style.widgets
 FloatingWindow {
 	id: root
 
-	title: `${Printer.name} · Camera`
+	title: `${Printer.name} · Printer camera`
 	visible: Printer.camera
 	implicitWidth: 760
 	implicitHeight: 470

@@ -49,6 +49,48 @@ const LAYER = [
 ];
 
 // matchers: text ones are regexes, the others true/false
+// The shell's own windows: all of them have the app-id org.quickshell (one
+// per process, Quickshell cannot give a window its own), so a rule tells
+// them apart by the title, which always has this part that stays put.
+var SHELL_APP_ID = "^org\\.quickshell$";
+var SHELL = [
+	{ name: "Settings", title: "^Settings$", icon: "cog_outline" },
+	{ name: "Files", title: "^Files$", icon: "folder_outline" },
+	{ name: "File chooser", title: "^File chooser", icon: "file_find_outline" },
+	{ name: "Open with", title: "^Open with$", icon: "open_in_app" },
+	{ name: "Pictures", title: " – Pictures$|^Pictures$", icon: "image_outline" },
+	{ name: "Music", title: " – Music$|^Music$", icon: "music_note" },
+	{ name: "Streams", title: "^Streams( · |$)", icon: "television" },
+	{ name: "Player", title: " – Player$|^Player$", icon: "play_box_outline" },
+	{ name: "Notes", title: " – Notes$|^New note$", icon: "note_text_outline" },
+	{ name: "Messages", title: "^Messages$", icon: "message_outline" },
+	{ name: "Identity", title: "^Identity$", icon: "card_account_details_outline" },
+	{ name: "Torrents", title: "^Torrents( · |$)", icon: "magnet" },
+	{ name: "Task manager", title: "^Task manager( · |$)", icon: "chart_line" },
+	{ name: "Printer", title: " · Printer$", icon: "printer_3d" },
+	{ name: "Printer camera", title: " · Printer camera$", icon: "camera_outline" },
+	{ name: "World", title: "^World$", icon: "earth" },
+	{ name: "Archiv der verlorenen Stunden", title: "^Archiv der verlorenen Stunden$", icon: "sword" }
+];
+
+// the shell window an open window is, or null
+function shellOf(window) {
+	if (!window || !/quickshell/.test(String(window.appId ?? ""))) return null;
+	return SHELL.find(w => new RegExp(w.title).test(String(window.title ?? ""))) ?? null;
+}
+
+// what a person would call an open window
+function windowName(window) {
+	const shell = shellOf(window);
+	return shell ? shell.name : nice(window.appId);
+}
+
+// the shell window a match is for, or null
+function shellWindow(props) {
+	if (!props || props.title === undefined || !/quickshell/.test(String(props["app-id"] ?? ""))) return null;
+	return SHELL.find(w => w.title === props.title) ?? null;
+}
+
 const WINDOW_MATCH = [
 	{ name: "app-id", label: "App", type: "regex" },
 	{ name: "title", label: "Title", type: "regex" },
@@ -140,6 +182,8 @@ function who(rule, kind) {
 	if (matches.length === 0) return kind === "layer" ? "Every surface" : "Every window";
 	const names = matches.map(m => {
 		const p = m.props || {};
+		const shell = shellWindow(p);
+		if (shell) return shell.name;
 		if (p["app-id"] !== undefined) return nice(p["app-id"]);
 		if (p.namespace !== undefined) return nice(p.namespace);
 		if (p.title !== undefined) return `“${nice(p.title)}”`;
