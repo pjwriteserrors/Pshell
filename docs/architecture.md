@@ -440,6 +440,13 @@ left; `appimage-default` makes it what AppImages open in (docs/appimages.md;
 `core/views/appimages/`, `scripts/appimage/`). Nothing runs an AppImage to
 look into it: its squashfs is read at the ELF header's offset.
 
+`pdf` reads and edits PDFs, a window of its own; `pdf-default` makes it
+what PDFs open in (docs/pdf.md; `scripts/ipc.sh pdf open <path>`,
+`core/services/Pdf.qml`, `core/views/pdf/`, `scripts/pdf/`). QtQuick.Pdf
+draws the pages inside the shell's scene; edits are a recipe (pages, real
+annotations, forms, signatures, black-outs, the finish) written on saving
+by pikepdf, the old file kept among its versions.
+
 `filemanager` is the shell's file manager, a window of its own (`>file`,
 `>file <words>` searches,
 `scripts/ipc.sh files toggle|open <path>|tab <path>|reveal <path>|search

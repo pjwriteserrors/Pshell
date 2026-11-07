@@ -117,6 +117,16 @@ Clickable {
 				onClicked: Downloads.play(root.key)
 			}
 
+			// a PDF: straight to signing it in the shell's editor
+			IconButton {
+				implicitWidth: 30
+				implicitHeight: 30
+				iconSize: 16
+				visible: !root.failed && Pdf.enabled && Pdf.isPdf(root.item?.path ?? "")
+				icon: "draw_pen"
+				onClicked: Pdf.edit(root.item.path, "sign")
+			}
+
 			IconButton {
 				implicitWidth: 30
 				implicitHeight: 30

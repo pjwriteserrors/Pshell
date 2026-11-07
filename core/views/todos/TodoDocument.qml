@@ -217,7 +217,7 @@ ColumnLayout {
 								return root.px(root.compact ? Theme.size.label + 1 : Theme.size.body + 1);
 							}
 							font.weight: row.heading ? Font.Bold : Font.Normal
-							onLinkActivated: link => Qt.openUrlExternally(link)
+							onLinkActivated: link => Pdf.openLink(link) || Qt.openUrlExternally(link)
 						}
 
 						Glyph {

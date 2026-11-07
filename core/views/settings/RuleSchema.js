@@ -61,6 +61,8 @@ var SHELL = [
 	{ name: "Pictures", title: " – Pictures$|^Pictures$", icon: "image_outline" },
 	{ name: "Music", title: " – Music$|^Music$", icon: "music_note" },
 	{ name: "AppImages", title: "^AppImages$", icon: "package_variant" },
+	{ name: "Video", title: " – Video$|^Video$", icon: "movie_open_outline" },
+	{ name: "PDF", title: " – PDF$|^PDF$", icon: "file_pdf_box" },
 	{ name: "Streams", title: "^Streams( · |$)", icon: "television" },
 	{ name: "Player", title: " – Player$|^Player$", icon: "play_box_outline" },
 	{ name: "Notes", title: " – Notes$|^New note$", icon: "note_text_outline" },

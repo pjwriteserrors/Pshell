@@ -261,7 +261,7 @@ Drawer {
 						wrapMode: Text.Wrap
 						textFormat: Text.MarkdownText
 						text: Notes.markdown(root.note?.body ?? "")
-						onLinkActivated: link => Qt.openUrlExternally(link)
+						onLinkActivated: link => Pdf.openLink(link) || Qt.openUrlExternally(link)
 
 						HoverHandler {
 							cursorShape: rendered.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor

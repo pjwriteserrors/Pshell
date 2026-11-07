@@ -425,8 +425,27 @@ FocusScope {
 			root.openStart = 0;
 			return;
 		}
+		// PDFs open in the shell's own viewer at the page Quick Look showed, growing out of the card;
+		// several at once are put together in its editor
+		if (rest.length > 0 && Pdf.isDefault && rest.every(row => Pdf.isPdf(row.path))) {
+			let from = root.openOrigin;
+			if (!from) {
+				const card = root.activeBrowse()?.itemOf(pane.rows.findIndex(row => row.path === rest[0].path));
+				if (card) from = Viewer.originOf(card, Files.windowTitle);
+			}
+			if (from && !from.image) from.image = Files.thumbOf(rest[0].path, rest[0].mtime) || String(rest[0].thumb || "");
+			if (rest.length > 1) Pdf.openMany(rest.map(row => row.path));
+			else Pdf.open(rest[0].path, { list: pane.rows.filter(row => !row.dir && Pdf.isPdf(row.path)).map(row => row.path), page: root.openPage, origin: from, edit: root.openEdit });
+			root.openOrigin = null;
+			root.openStart = 0;
+			root.openPage = -1;
+			root.openEdit = false;
+			return;
+		}
 		root.openOrigin = null;
 		root.openStart = 0;
+		root.openPage = -1;
+		root.openEdit = false;
 		if (rest.length > 0) {
 			Files.launch(rest.map(row => row.path));
 			Sounds.play("open");
@@ -437,6 +456,9 @@ FocusScope {
 	property var openOrigin: null
 	// where the next song or video opened starts (Quick Look played it that far)
 	property real openStart: 0
+	// the page the next PDF opened goes to (Quick Look showed it), and whether into the editor
+	property int openPage: -1
+	property bool openEdit: false
 
 	function openElsewhere(pane, row) {
 		if (row.pcId) {

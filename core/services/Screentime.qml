@@ -64,7 +64,7 @@ Singleton {
 		{ value: "windows", label: "Windows" },
 		{ value: "spaces", label: "Workspaces" },
 		{ value: "links", label: "Links" }
-	].concat(Music.enabled ? [{ value: "music", label: "Music" }] : []).concat(Video.enabled ? [{ value: "video", label: "Video" }] : [])
+	].concat(Music.enabled ? [{ value: "music", label: "Music" }] : []).concat(Video.enabled ? [{ value: "video", label: "Video" }] : []).concat(Pdf.enabled ? [{ value: "reading", label: "Reading" }] : [])
 
 	function dayKey(date) {
 		return Qt.formatDate(date, "yyyy-MM-dd");
@@ -81,7 +81,7 @@ Singleton {
 	}
 
 	function emptyDay() {
-		return { total: 0, longest: 0, longestEnd: 0, hours: new Array(24).fill(0), apps: {}, windows: {}, spaces: {}, links: {}, pages: {}, music: {}, video: {}, blocks: [], pauses: [] };
+		return { total: 0, longest: 0, longestEnd: 0, hours: new Array(24).fill(0), apps: {}, windows: {}, spaces: {}, links: {}, pages: {}, music: {}, video: {}, reading: {}, blocks: [], pauses: [] };
 	}
 
 	function format(seconds) {
@@ -148,6 +148,9 @@ Singleton {
 			} else if (kind === "video") {
 				// the title of what was watched
 				row.icon = "movie_outline";
+			} else if (kind === "reading") {
+				// the PDF read in the shell's viewer
+				row.icon = "file_pdf_box";
 			} else if (kind === "spaces") {
 				row.label = /^\d+$/.test(parts[1]) ? `Workspace ${parts[1]}` : parts[1];
 				row.detail = Object.keys(outputs).length > 1 ? parts[0] : "";
@@ -226,6 +229,13 @@ Singleton {
 			if (!root.days[key]) root.days[key] = root.emptyDay();
 			const watched = root.days[key].video || (root.days[key].video = {});
 			watched[Video.title] = (watched[Video.title] || 0) + seconds;
+			root.dirty = true;
+		}
+		// a PDF counts while its window is the one looked at and someone is there
+		if (seconds > 0 && seconds <= root.sampleSeconds * 4 && Pdf.current && Pdf.windowOpen && !Session.locked && !idle.isIdle && (Pdf.niriWindow()?.is_focused ?? false)) {
+			if (!root.days[key]) root.days[key] = root.emptyDay();
+			const read = root.days[key].reading || (root.days[key].reading = {});
+			read[Pdf.title] = (read[Pdf.title] || 0) + seconds;
 			root.dirty = true;
 		}
 		// asleep, or nobody there

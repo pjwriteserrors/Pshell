@@ -95,6 +95,21 @@ Item {
 			root.view.openStart = player.position / 1000;
 			player.stop();
 		}
+		// a PDF opens at the page looked at, out of that page
+		if (pages.item && Pdf.isDefault && Pdf.isPdf(root.row?.path ?? "")) {
+			root.view.openPage = pages.item.page;
+			const sheet = pages.item.sheetOf(pages.item.page);
+			const from = sheet ? Viewer.originOf(sheet, Files.windowTitle) : null;
+			if (from && sheet.width > 0) {
+				root.view.openOrigin = from;
+				const grabbing = sheet.grabToImage(result => {
+					from.image = String(result.url);
+					from.grab = result;
+					then();
+				}, Qt.size(Math.round(sheet.width), Math.round(sheet.height)));
+				if (grabbing) return;
+			}
+		}
 		if (root.kind === "video" && Video.isDefault) {
 			root.view.openStart = player.position / 1000;
 			player.pause();
@@ -256,6 +271,18 @@ Item {
 				break;
 			}
 			case Qt.Key_E:
+				// a PDF straight into the editor, at the page looked at
+				if (Pdf.enabled && Pdf.isPdf(root.row?.path ?? "")) {
+					const row = root.row;
+					root.handOver(() => {
+						root.close();
+						if (Pdf.isDefault) {
+							root.view.openEdit = true;
+							root.view.openRow(root.pane, row, false);
+						} else Pdf.open(row.path, { edit: true, page: pages.item?.page ?? 0 });
+					});
+					break;
+				}
 				if (root.kind !== "image" || !Viewer.enabled) return;
 				Viewer.open(root.row.path, { mode: "adjust", list: root.rows.filter(row => Kinds.kindOf(row) === "image").map(row => row.path), from: Viewer.originOf(photo, Files.windowTitle) });
 				root.close();

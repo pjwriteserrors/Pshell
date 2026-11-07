@@ -239,7 +239,7 @@ Clickable {
 				tone: root.shownClosed ? Theme.textSubtle : Theme.text
 				font.strikeout: root.shownClosed
 				font.pixelSize: root.px(root.compact ? Theme.size.label + 1 : Theme.size.body + 1)
-				onLinkActivated: link => Qt.openUrlExternally(link)
+				onLinkActivated: link => Pdf.openLink(link) || Qt.openUrlExternally(link)
 
 				Behavior on color {
 					ColorAnim {}
@@ -257,7 +257,7 @@ Clickable {
 				linkColor: Theme.primary
 				tone: root.shownClosed ? Theme.textFaint : Theme.textMuted
 				font.pixelSize: root.px(root.compact ? Theme.size.small : Theme.size.label)
-				onLinkActivated: link => Qt.openUrlExternally(link)
+				onLinkActivated: link => Pdf.openLink(link) || Qt.openUrlExternally(link)
 			}
 
 			// ── in place editing ──────────────────────────────────────────

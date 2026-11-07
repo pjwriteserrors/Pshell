@@ -65,7 +65,13 @@ Item {
 		&& (Number(FileLibrary.setting("thumbLimit")) === 0 || root.bytes <= Number(FileLibrary.setting("thumbLimit")) * 1e6)
 	readonly property bool textShown: FileLibrary.setting("textPreviews")
 	// a video: how far it was seen in Video ({ pos, dur, watched } or null)
-	readonly property var seen: root.kind === "video" && Video.enabled ? Video.progressOf(root.path) : null
+	// a PDF: how far it was read in the shell's PDF viewer, the same way (pages for seconds)
+	readonly property var seen: root.kind === "video" && Video.enabled ? Video.progressOf(root.path) : (Pdf.enabled && root.mime === "application/pdf" ? root.readOf(Pdf.files_[root.path]) : null)
+
+	function readOf(kept) {
+		if (!kept?.view || !(kept.pages > 1) || !(kept.view.page > 0)) return null;
+		return { pos: kept.view.page + 1, dur: kept.pages, watched: false };
+	}
 
 	function ask() {
 		if (root.path === "") return;
@@ -130,6 +136,8 @@ Item {
 		// (Video's sprites, made once), a tile shown at a time – nothing decodes
 		// only videos get it: the rest of the tiles stay as light as they were
 		Loader {
+			id: flickLoader
+
 			anchors.fill: parent
 			active: root.kind === "video" && Video.enabled
 
@@ -247,7 +255,7 @@ Item {
 			color: Qt.rgba(0, 0, 0, root.hovered ? 0.55 : 0.38)
 			scale: root.hovered ? 1.12 : 1
 			// out of the way while the pictures run
-			opacity: flick.visible ? 0 : 1
+			opacity: flickLoader.item?.visible ? 0 : 1
 
 			Behavior on opacity {
 				Anim {
@@ -352,6 +360,22 @@ Item {
 					Anim {
 						duration: Motion.short
 					}
+				}
+			}
+
+			// a PDF read in the shell's viewer: how far, a line along the page's foot
+			Rectangle {
+				visible: !!root.seen && (root.seen.pos ?? 0) > 0 && (root.seen.dur ?? 0) > 0 && root.mime === "application/pdf"
+				anchors.left: parent.left
+				anchors.right: parent.right
+				anchors.bottom: parent.bottom
+				height: root.compact ? 2 : 3
+				color: Qt.rgba(0, 0, 0, 0.12)
+
+				Rectangle {
+					width: parent.width * Math.min(1, (root.seen?.pos ?? 0) / Math.max(1, root.seen?.dur ?? 1))
+					height: parent.height
+					color: Theme.primary
 				}
 			}
 

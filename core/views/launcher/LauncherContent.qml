@@ -79,6 +79,7 @@ Item {
 		{ id: "pictures", plugin: "viewer", command: "pictures", name: "Pictures", aliases: ["img", "images", "photos", "bilder"], status: Viewer.recent.length > 0 ? String(Viewer.recent.length) : "" },
 		{ id: "music", plugin: "music", command: "music", name: "Music", aliases: ["songs", "musik", "player"], status: Music.current ? Music.titleOf(Music.path) : "" },
 		{ id: "video", plugin: "video", command: "video", name: "Video", aliases: ["videos", "film", "movie", "player", "filme"], status: Video.current ? Video.title : "" },
+		{ id: "pdf", plugin: "pdf", command: "pdf", name: "PDF", aliases: ["pdfs", "docs", "dokument", "document", "lesen", "read"], status: Pdf.current ? Pdf.title : "" },
 		{ id: "unpin", plugin: "pins", parent: "shot", command: "unpin", name: "Remove Pins", keywords: "close pinned" },
 		{ id: "calculator", plugin: "calculator", group: "tools", command: "c", name: "Calculator", aliases: ["calc", "calculator"], keywords: "math" },
 		{ id: "converter", plugin: "converter", group: "tools", command: "conv", name: "Convert", aliases: ["convert"], keywords: "units currency" },
@@ -331,8 +332,9 @@ Item {
 	readonly property bool inPicturesMode: Plugins.on("viewer") && ["pictures", "img"].some(c => root.commandQuery === c || root.commandQuery.startsWith(c + " "))
 	readonly property bool inMusicMode: Plugins.on("music") && ["music", "songs"].some(c => root.commandQuery === c || root.commandQuery.startsWith(c + " "))
 	readonly property bool inVideoMode: Plugins.on("video") && ["video", "videos", "film"].some(c => root.commandQuery === c || root.commandQuery.startsWith(c + " "))
+	readonly property bool inPdfMode: Plugins.on("pdf") && ["pdf", "pdfs", "docs"].some(c => root.commandQuery === c || root.commandQuery.startsWith(c + " "))
 	readonly property bool inEditMode: Plugins.on("editor") && (root.commandQuery === "edit" || root.commandQuery.startsWith("edit "))
-	readonly property bool inViewMode: root.inEditMode || root.inTranslateMode || root.inConvertMode || root.inTodoMode || root.inWebMode || root.inAiActionsMode || root.inPhoneMode || root.inShotsMode || root.inPicturesMode || root.inMusicMode || root.inVideoMode || root.inFinderMode
+	readonly property bool inViewMode: root.inEditMode || root.inTranslateMode || root.inConvertMode || root.inTodoMode || root.inWebMode || root.inAiActionsMode || root.inPhoneMode || root.inShotsMode || root.inPicturesMode || root.inMusicMode || root.inVideoMode || root.inPdfMode || root.inFinderMode
 	// what follows the command token, as typed (">t fr hello" → "fr hello")
 	readonly property string modeArgument: {
 		const match = /^>\S+\s([\s\S]*)$/.exec(root.searchText);
@@ -1114,6 +1116,9 @@ Item {
 		case "video":
 			root.setLauncherSearch(">video");
 			break;
+		case "pdf":
+			root.setLauncherSearch(">pdf");
+			break;
 		case "unpin":
 			Screenshot.unpinAll();
 			root.closeRequested();
@@ -1511,6 +1516,7 @@ Item {
 		if (root.inPicturesMode) return "pictures";
 		if (root.inMusicMode) return "music";
 		if (root.inVideoMode) return "video";
+		if (root.inPdfMode) return "pdf";
 		if (root.inFinderMode) return "finder";
 		if (root.inChatMode) return "chat";
 		if (root.inAiMode) return "chats";
@@ -1536,6 +1542,7 @@ Item {
 		case "pictures": return "image_edit_outline";
 		case "music": return "music_note";
 		case "video": return "movie_open_outline";
+		case "pdf": return "file_pdf_box";
 		case "finder": return "folder_search_outline";
 		case "chat": return "chat";
 		case "chats": return "forum";
@@ -1587,6 +1594,7 @@ Item {
 		case "pictures": return "image_edit_outline";
 		case "music": return "music_note";
 		case "video": return "movie_open_outline";
+		case "pdf": return "file_pdf_box";
 		case "unpin": return "pin_off_outline";
 		case "song": return "waveform";
 		case "lyrics": return "microphone_variant";
@@ -1632,6 +1640,7 @@ Item {
 		case "pictures": return picturesView.item;
 		case "music": return musicView.item;
 		case "video": return videoView.item;
+		case "pdf": return pdfView.item;
 		case "finder": return finderView.item;
 		case "apps": return appsView;
 		default: return null;
@@ -1649,6 +1658,7 @@ Item {
 		case "finder": return "Search your files";
 		case "music": return "Song, artist or album";
 		case "video": return "Film or episode";
+		case "pdf": return "Name, words in it, or a page";
 		case "apps": return "Search apps  ·  > for commands";
 		default: return "";
 		}
@@ -1668,6 +1678,7 @@ Item {
 		case "pictures": return "Pictures";
 		case "music": return "Music";
 		case "video": return "Video";
+		case "pdf": return "PDF";
 		case "finder": return "Files";
 		default: return "";
 		}
@@ -1687,6 +1698,7 @@ Item {
 		case "pictures": return "open";
 		case "music": return "play";
 		case "video": return "play";
+		case "pdf": return "open";
 		case "apps": return appsView.zone === "actions" ? "run" : (appsView.current === null && appsView.searching && Plugins.on("web-search") ? "search the web" : "open");
 		default: return "open";
 		}
@@ -2661,6 +2673,31 @@ Item {
 
 					Connections {
 						target: videoView.item
+						ignoreUnknownSignals: true
+
+						function onCloseRequested() {
+							root.closeRequested();
+						}
+					}
+				}
+			}
+
+			// the PDF open, the half read, what their text says (the PDF viewer)
+			ModeLayer {
+				current: root.mode === "pdf"
+
+				ModeView {
+					id: pdfView
+
+					file: "PdfModeView.qml"
+					current: root.mode === "pdf"
+					values: ({
+						active: root.mode === "pdf",
+						argument: root.modeArgument
+					})
+
+					Connections {
+						target: pdfView.item
 						ignoreUnknownSignals: true
 
 						function onCloseRequested() {

@@ -1062,6 +1062,11 @@ Singleton {
 		const files = paths.filter(path => String(path) !== "");
 		if (files.length === 0) return;
 		for (const path of files) FileLibrary.noteOpened(path);
+		// PDFs in the shell's own viewer, without the trip through xdg-open
+		if (!app && Pdf.isDefault && files.every(path => Pdf.isPdf(path))) {
+			Pdf.openMany(files);
+			return;
+		}
 		// a file of a folder with a workspace of its own opens there
 		const workspace = FileLibrary.workspaceOf(root.parentOf(files[0]));
 		if (workspace >= 0) Quickshell.execDetached(["niri", "msg", "action", "focus-workspace", String(workspace)]);
@@ -1437,9 +1442,11 @@ Singleton {
 		if (song) actions.unshift({ label: "Play", icon: "play", run: () => Music.open(path) });
 		const film = Video.enabled && Video.isVideo(name);
 		if (film) actions.unshift({ label: "Play", icon: "play", run: () => Video.open(path) });
+		const document = Pdf.enabled && Pdf.isPdf(name);
+		if (document) actions.splice(0, 1, { label: "Open", icon: "file_pdf_box", run: () => Pdf.open(path) }, { label: "Sign", icon: "draw_pen", run: () => Pdf.edit(path, "sign") });
 		if (!FileLibrary.setting("avDownloads") && (root.av.clamav || root.vtKeySet)) actions.push({ label: "Scan", icon: "shield_search", run: () => root.av.clamav ? root.avScan([path]) : root.vtScan([path]) });
 		Notifs.pushInternal("done", name, `Downloaded to ${root.pretty(root.parentOf(path))}`, {
-			icon: archive ? "package_variant_closed" : (song ? "music_note" : (film ? "movie_outline" : "download")),
+			icon: archive ? "package_variant_closed" : (song ? "music_note" : (film ? "movie_outline" : (document ? "file_pdf_box" : "download"))),
 			image: /\.(png|jpe?g|jpe|jfif?|jif|webp|gif)$/i.test(name) ? path : "",
 			duration: 9000,
 			actions: actions

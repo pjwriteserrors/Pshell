@@ -511,6 +511,7 @@ Singleton {
 		if (!item || item.state !== "done") return;
 		// a video plays in the shell's own player at once, without the trip through xdg-open
 		if (Video.isDefault && Video.isVideo(item.path)) return Video.open(item.path);
+		if (Pdf.isDefault && Pdf.isPdf(item.path)) return Pdf.open(item.path);
 		Quickshell.execDetached(["xdg-open", item.path]);
 	}
 
