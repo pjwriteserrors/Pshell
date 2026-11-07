@@ -375,6 +375,11 @@ FocusScope {
 			if (commands.isArchive(row) && FileLibrary.setting("archiveOpen") === "extract" && !/\.(iso|img|deb|rpm|apk|jar|cbz|cbr|epub)$/i.test(row.name)) {
 				Files.extract(row.path, pane.isFolder ? pane.location.path : Files.parentOf(row.path));
 				Sounds.play("open");
+			} else if (AppImages.enabled && /\.appimage$/i.test(row.name)) {
+				// an AppImage goes in as an app; one that is in starts
+				const app = AppImages.installed.find(each => each.file === row.path);
+				if (app) AppImages.launch(app);
+				else AppImages.install(row.path);
 			} else if (Kinds.isWindows(row)) {
 				Files.runWindows(row.path, "auto");
 			} else if (/\.ics$/i.test(row.name) && MsCalendar.enabled && MsCalendar.signedIn) {

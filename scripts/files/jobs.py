@@ -8,6 +8,7 @@ undoing a copy that replaced files brings the old ones back.
 """
 import os
 import re
+import shlex
 import shutil
 import signal
 import stat
@@ -25,6 +26,7 @@ from gi.repository import Gio, GLib  # noqa: E402
 import ai  # noqa: E402
 import archives  # noqa: E402
 import captures  # noqa: E402
+import commands  # noqa: E402
 import compare  # noqa: E402
 import convert  # noqa: E402
 import dupes  # noqa: E402
@@ -242,7 +244,7 @@ class Job:
         # (from, to) of what was moved or renamed: tags and favourites follow
         self.moves = []
         # a job that may be held: it waits between two chunks (or its process is stopped)
-        self.can_pause = kind in ("copy", "move", "auto", "paste", "extract", "compress", "download", "delete", "pdf", "vtscan", "convert", "upload", "avscan", "dupes", "storage", "share", "sync", "image", "trim", "gif", "translate")
+        self.can_pause = kind in ("copy", "move", "auto", "paste", "extract", "compress", "download", "delete", "pdf", "vtscan", "convert", "upload", "avscan", "dupes", "storage", "share", "sync", "image", "trim", "gif", "translate", "command")
         self.paused = False
         self.process = None
         # what a job found out, for the window to show (a scan's verdict)
@@ -797,11 +799,13 @@ class Manager:
 
     # ── archives ───────────────────────────────────────────────────────────
     def _do_extract(self, job, args):
-        archive = args["path"]
+        # an archive in volumes is opened at its first, whichever was clicked
+        parts = archives.volumes(args["path"])
+        archive = parts[0]
         folder = args.get("target") or os.path.dirname(archive)
-        stem = re.sub(r"(\.tar)?\.[^.]+$", "", os.path.basename(archive)) or "Archive"
+        stem = re.sub(r"(\.tar)?\.[^.]+$", "", archives.set_name(archive)) or "Archive"
         out = unique(os.path.join(folder, stem))
-        job.title = f"Extracting {os.path.basename(archive)}"
+        job.title = f"Extracting {archives.set_name(archive)}" + (f" ({len(parts)} parts)" if len(parts) > 1 else "")
         job.files_total = 1
         job.state = "running"
         job.report(True)
@@ -834,13 +838,14 @@ class Manager:
         job.created.append(out)
         job.undo.append(("trash", out))
         job.files_done = 1
-        # the archive itself may go once it is out
+        # the archive itself may go once it is out, every part of it
         if args.get("trashArchive"):
-            try:
-                trash_one(archive)
-                job.undo.append(("restore", archive, time.time()))
-            except GLib.Error:
-                pass
+            for part in parts:
+                try:
+                    trash_one(part)
+                    job.undo.append(("restore", part, time.time()))
+                except GLib.Error:
+                    pass
 
     def _do_compress(self, job, args):
         paths = args.get("paths", [])
@@ -1227,7 +1232,11 @@ class Manager:
         if kind == "trash":
             self._do_trash(job, {"paths": paths})
         elif kind == "extract":
+            # the parts of one archive are unpacked once, from the first
+            firsts = {}
             for path in paths:
+                firsts.setdefault(archives.volumes(path)[0], path)
+            for path in firsts.values():
                 self._do_extract(job, {"path": path, "target": os.path.dirname(path), "trashArchive": bool(action.get("trashSource"))})
         else:
             by_target = {}
@@ -1572,6 +1581,83 @@ class Manager:
         job.bytes_done = job.bytes_total
         job.files_done = job.files_total
         job.created.append(target)
+
+    # ── a command of one's own ("Open with" → "Command…") ──────────────────
+    def _do_command(self, job, args):
+        """Runs the command on each file in the file's folder, in a terminal
+        of its own (a pty: the program flushes its progress as it would on
+        screen); the percentages it prints move the bar, its last line is
+        what it is doing, what appears next to the file is what it made."""
+        import pty
+        command = str(args.get("command") or "").strip()
+        paths = [path for path in args.get("paths", []) if path and os.path.exists(path)]
+        if not command or not paths:
+            raise Failure("Nothing to run", "invalid")
+        program = os.path.basename(shlex.split(command)[0]) if shlex.split(command) else command
+        job.title = f"{program} · {os.path.basename(paths[0])}" if len(paths) == 1 else f"{program} · {len(paths)} files"
+        job.undo_title = job.title
+        job.files_total = len(paths) if len(paths) > 1 else 0
+        job.target = os.path.dirname(paths[0])
+        job.state = "running"
+        job.report(True)
+        failed = []
+        for index, path in enumerate(paths):
+            job.check()
+            folder = os.path.dirname(path)
+            before = set(os.listdir(folder))
+            master, slave = pty.openpty()
+            process = subprocess.Popen(["sh", "-c", commands.line_for(command, path)], cwd=folder, stdin=subprocess.DEVNULL,
+                                       stdout=slave, stderr=slave, start_new_session=True)
+            os.close(slave)
+            job.process = process
+            tail = []
+            pending = ""
+            try:
+                while True:
+                    try:
+                        chunk = os.read(master, 4096)
+                    except OSError:
+                        break
+                    if not chunk:
+                        break
+                    pending += chunk.decode("utf-8", "replace")
+                    parts = re.split(r"[\r\n]", pending)
+                    pending = parts.pop()
+                    for number, part in enumerate(parts + [pending]):
+                        text = commands.tidy(part)
+                        if not text:
+                            continue
+                        found = commands.PERCENT.findall(text)
+                        if found:
+                            share = min(100.0, float(found[-1].replace(",", "."))) / 100
+                            job.bytes_total = len(paths) * 1000
+                            job.bytes_done = int((index + share) * 1000)
+                        job.current = text[:200]
+                        if number < len(parts) and (not tail or tail[-1] != text):
+                            tail = (tail + [text])[-20:]
+                    job.report()
+            finally:
+                os.close(master)
+                process.wait()
+                job.process = None
+            job.check()
+            made = sorted(set(os.listdir(folder)) - before)
+            for name in made:
+                job.created.append(os.path.join(folder, name))
+                job.undo.append(("trash", os.path.join(folder, name)))
+            if process.returncode != 0:
+                if pending.strip():
+                    tail.append(commands.tidy(pending))
+                failed.append((path, tail[-1] if tail else f"{program} stopped with code {process.returncode}"))
+                job.failed_paths.append(path)
+            if job.bytes_total:
+                job.bytes_done = (index + 1) * 1000
+            job.files_done = index + 1
+            job.report(True)
+        if failed and len(failed) == len(paths):
+            raise Failure(failed[0][1])
+        if failed:
+            job.error = f"{len(failed)} failed: {failed[0][1]}"
 
     # ── undo ───────────────────────────────────────────────────────────────
     def _do_undo(self, job, args):

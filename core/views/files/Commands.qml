@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import Quickshell
 import qs.core.services
 import "FileKinds.js" as Kinds
 import "../../lib/AiIntents.js" as Intents
@@ -135,6 +136,22 @@ QtObject {
 		const convert = () => ({ label: "Convert to", icon: "swap_horizontal", children: done => Files.convertible(root.paths(files), targets => done(root.convertEntries(files, targets))) });
 
 		if (one?.dir) return { label: "Folder", short: "Folder", icon: "folder_open_outline", entries: root.folderEntries(pane, one.path) };
+		// an AppImage: in as an app (core/services/AppImages.qml), or what to do with one that is
+		if (one && AppImages.enabled && /\.appimage$/i.test(one.name)) {
+			const app = AppImages.installed.find(each => each.file === one.path);
+			if (app) return { label: app.name, short: "App", icon: "package_variant", entries: [
+				{ label: `Start ${app.name}`, icon: "play", run: () => AppImages.launch(app) },
+				{ label: app.update ? `Update to ${app.update.version}` : "Look for an update", icon: "arrow_up_bold_circle_outline", run: () => app.update ? AppImages.update(app.id) : AppImages.check(app.id) },
+				{ label: "Remove from the system…", icon: "delete_outline", danger: true, run: () => {
+					AppImages.open();
+					AppImages.askRemove(app.id);
+				} }
+			] };
+			return { label: "AppImage", short: "Install", icon: "package_down", entries: [
+				{ label: "Install as an app", icon: "package_down", run: () => AppImages.install(one.path) },
+				{ label: "Start without installing", icon: "play", run: () => Quickshell.execDetached(["sh", "-c", 'chmod +x "$1" && exec "$1"', "sh", one.path]) }
+			] };
+		}
 		if (all(row => row.kind === "image")) return { label: files.length === 1 ? "Edit the picture" : "Edit the pictures", short: "Edit", icon: "image_edit_outline", entries: root.imageEntries(files) };
 		// PDFs, also with pictures to merge them into
 		const pdfs = files.filter(row => row.mime === "application/pdf");
@@ -395,8 +412,32 @@ QtObject {
 				})) });
 			}
 			if (entries.length === 0) entries.push({ label: "No app opens this", enabled: false });
+			entries.push({ separator: true });
+			entries.push({ label: "Command…", icon: "console", run: () => root.commandDialog(row) });
+			const own = apps.filter(app => app.command);
+			if (own.length > 0) entries.push({ label: "Forget a command", icon: "delete_outline", children: own.map(app => ({
+				label: app.name,
+				icon: "console",
+				run: () => Files.forgetCommand(app.id)
+			})) });
 			done(entries);
 		});
+	}
+
+	// a command of one's own: pkg2zip for .pkg files, run in the file's folder
+	// with a progress bar; kept for the type, so a double click runs it too
+	function commandDialog(row) {
+		const dot = row.name.lastIndexOf(".");
+		const ext = dot > 0 ? row.name.slice(dot) : "";
+		root.view.form({
+			title: `Open ${row.name} with a command`,
+			icon: "console",
+			action: "Run",
+			fields: [
+				{ key: "command", type: "text", label: "Command", placeholder: "pkg2zip -x", required: true, hint: "Runs in the file's folder with the file last. %f is the file, %d its folder, %n its name, %b its name without the extension." },
+				{ key: "always", type: "switch", label: ext ? `Always open ${ext} files with it` : "Always open files of this type with it", value: true }
+			]
+		}, values => Files.openWithCommand([row.path], String(values.command).trim(), !!values.always));
 	}
 
 	// the formats of the same kind, videos also to their sound

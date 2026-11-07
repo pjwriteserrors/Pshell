@@ -35,6 +35,7 @@ import archives  # noqa: E402
 import captures  # noqa: E402
 import chooser  # noqa: E402
 import clips  # noqa: E402
+import commands  # noqa: E402
 import compare  # noqa: E402
 import convert  # noqa: E402
 import fm1  # noqa: E402
@@ -592,6 +593,26 @@ class Daemon:
         error = lookup.launch(request.get("paths", []), request.get("app", ""))
         if error:
             raise RuntimeError(error)
+        return {}
+
+    def op_commandapp(self, client, request):
+        """A command of one's own as an app for the file's type ("Open with" →
+        "Command…"); `always` makes it the default, for the extension alone
+        when the type stands for many kinds of files: { path, command, always } → { app }."""
+        path = request["path"]
+        mime = lookup.describe(path)["mime"]
+        if request.get("always") and mime in commands.GENERIC:
+            mime = commands.own_type(path, mime) or mime
+            lookup.forget_type(path)
+        app = commands.write_entry(str(request["command"]), mime)
+        if request.get("always"):
+            error = lookup.set_default_app(path, app, mime)
+            if error:
+                raise RuntimeError(error)
+        return {"app": app}
+
+    def op_commandforget(self, client, request):
+        commands.forget(request["app"])
         return {}
 
     def op_setdefault(self, client, request):

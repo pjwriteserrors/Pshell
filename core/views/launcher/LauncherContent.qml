@@ -130,6 +130,7 @@ Item {
 		},
 		{ id: "downloads", plugin: "downloads", group: "tools", command: "downloads", name: "Downloads", aliases: ["download", "accelerator", "dl"], keywords: "download manager speed up accelerate statistics link", status: Downloads.running.length > 0 ? Format.rate(Downloads.speed) : "" },
 		{ id: "torrents", plugin: "torrents", group: "tools", command: "torrents", name: "Torrents", aliases: ["torrent", "magnet", "bittorrent", "p2p"], keywords: "download magnet link seed peers mirror", status: Torrents.running.length > 0 && Torrents.ratio >= 0 ? `${Math.floor(Torrents.ratio * 100)} %` : "" },
+		{ id: "appimages", plugin: "appimage", group: "tools", command: "appimage", name: "AppImages", aliases: ["appimages", "appimg"], keywords: "install installer uninstall remove update app package", status: AppImages.updateCount > 0 ? (AppImages.updateCount === 1 ? "1 update" : `${AppImages.updateCount} updates`) : "" },
 		{ id: "streams", plugin: "streams", group: "tools", command: "streams", name: "Streams", aliases: ["stream", "youtube", "twitch", "series", "rss"], keywords: "channels subscribe follow episodes watch", status: Streams.liveCount > 0 ? `${Streams.liveCount} live` : "",
 			children: [{ id: "streams-open", command: "streams open", name: "Streams", glyph: "play_circle", keywords: "window", status: "" },
 				{ id: "streams-live", command: "live", name: "Who is live", glyph: "cast", keywords: "stream twitch", status: Streams.liveCount > 0 ? `${Streams.liveCount} live` : "Nobody" },
@@ -1160,6 +1161,10 @@ Item {
 			root.closeRequested();
 			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "downloads", "open"]);
 			break;
+		case "appimages":
+			root.closeRequested();
+			AppImages.open();
+			break;
 		case "torrents":
 			root.closeRequested();
 			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "torrents", "open"]);
@@ -1596,6 +1601,7 @@ Item {
 		case "games": return "gamepad_variant";
 		case "downloads": return "download";
 		case "torrents": return "magnet";
+		case "appimages": return "package_variant";
 		case "taskmgr": return "monitor_dashboard";
 		case "streams": return "play_circle";
 		case "streams-open":

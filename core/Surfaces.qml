@@ -12,6 +12,7 @@ import qs.core.views.launcher
 import qs.core.views.media
 import qs.core.views.music
 import qs.core.views.video
+import qs.core.views.appimages
 import qs.core.views.messages
 import qs.core.views.overlays
 import qs.core.views.panels
@@ -434,6 +435,12 @@ Scope {
 		view: "video/VideoGhost"
 		available: Plugins.on("video")
 		when: !!Video.origin
+	}
+
+	// AppImages: installed as apps, kept up to date, removed with all they left
+	View {
+		view: "appimages/AppImagesWindow"
+		available: Plugins.on("appimage")
 	}
 
 	// every app's file chooser (and the shell's own), a window beside it

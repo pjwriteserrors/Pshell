@@ -1347,6 +1347,42 @@ Scope {
 	}
 
 	IpcHandler {
+		target: "appimage"
+		enabled: Plugins.on("appimage")
+
+		// the window ("show" is a word of qs ipc itself)
+		function open(): void {
+			AppImages.open();
+		}
+		function toggle(): void {
+			AppImages.toggle();
+		}
+		function close(): void {
+			AppImages.close();
+		}
+		// a file (path or file://) or a download link: the window asks how it goes in
+		function install(what: string): void {
+			AppImages.install(what);
+		}
+		// looks for updates now ("" for all)
+		function check(id: string): void {
+			AppImages.check(id);
+		}
+		function update(id: string): void {
+			if (id === "") AppImages.updateAll();
+			else AppImages.update(id);
+		}
+		// the window, with what removing one (an id or a file) takes – asked, not done
+		function remove(target: string): void {
+			AppImages.open();
+			AppImages.askRemove(target);
+		}
+		function list(): string {
+			return JSON.stringify(AppImages.installed.map(app => ({ id: app.id, name: app.name, version: app.version, command: app.command, update: app.update?.version ?? "" })));
+		}
+	}
+
+	IpcHandler {
 		target: "music"
 		enabled: Plugins.on("music")
 

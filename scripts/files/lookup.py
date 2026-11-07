@@ -109,6 +109,13 @@ def mime_of(name, is_dir=False):
     return mime
 
 
+def forget_type(path):
+    """The extension's type is asked again (it got one of its own)."""
+    name = os.path.basename(path)
+    dot = name.rfind(".")
+    _MIMES.pop(name[dot:].lower() if dot > 0 else "", None)
+
+
 def textual(mime):
     return mime.startswith(TEXTUAL) or mime in TEXTUAL
 
@@ -434,7 +441,7 @@ def info(path):
     return result
 
 
-ARCHIVE = re.compile(r"\.(zip|tar|tgz|tbz2?|txz|tzst|gz|xz|zst|bz2|lz4|lzma|7z|rar|cab|iso|jar|apk|cbz|cbr|deb|rpm)$", re.I)
+ARCHIVE = re.compile(r"\.(zip|tar|tgz|tbz2?|txz|tzst|gz|xz|zst|bz2|lz4|lzma|7z|rar|cab|iso|jar|apk|cbz|cbr|deb|rpm|r\d\d|z\d\d)$|\.(7z|zip|rar)\.\d{3}$", re.I)
 WEBLINK = re.compile(r"\.(url|webloc|desktop)$", re.I)
 
 
@@ -799,12 +806,14 @@ def apps_for(path):
     extra = list(Gio.AppInfo.get_all_for_type("text/plain")) if is_texty(path, mime) else []
     for app in ([default] if default else []) + list(Gio.AppInfo.get_all_for_type(mime)) + extra:
         app_id = app.get_id() or ""
-        if not app_id or app_id in seen or not app.should_show():
+        # commands of one's own are hidden entries, but they are listed here
+        own = app_id.startswith("pshell-cmd-")
+        if not app_id or app_id in seen or not (app.should_show() or own):
             continue
         seen.add(app_id)
         icon = app.get_icon()
         apps.append({"id": app_id, "name": app.get_display_name(), "icon": icon.to_string() if icon else "",
-                     "default": bool(default) and app_id == default.get_id()})
+                     "default": bool(default) and app_id == default.get_id(), "command": own})
     return {"path": path, "mime": mime, "apps": apps}
 
 
@@ -844,8 +853,8 @@ def launch(paths, app_id=""):
         return error.message
 
 
-def set_default_app(path, app_id):
-    mime = describe(path)["mime"]
+def set_default_app(path, app_id, mime=""):
+    mime = mime or describe(path)["mime"]
     app = Gio.DesktopAppInfo.new(app_id)
     if app is None:
         return "Not installed"

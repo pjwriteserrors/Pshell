@@ -4,7 +4,7 @@
 // a colour role of the theme and a short label for cards.
 
 const CODE = /\.(c|h|cc|cpp|hpp|rs|go|py|js|mjs|ts|tsx|jsx|qml|java|kt|kts|swift|rb|php|lua|sh|bash|zsh|fish|pl|r|scala|cs|dart|zig|nim|hs|ml|ex|exs|clj|el|vim|sql|css|scss|sass|less|html|htm|xml|json|jsonc|yaml|yml|toml|ini|conf|cfg|kdl|nix|cmake|mk|gradle|vue|svelte|astro|glsl|frag|vert|wgsl|diff|patch)$/i;
-const ARCHIVE = /\.(zip|tar|tgz|gz|xz|zst|bz2|7z|rar|lz|lzma|cab|deb|rpm|apk|jar|txz|tbz2)$/i;
+const ARCHIVE = /\.(zip|tar|tgz|gz|xz|zst|bz2|7z|rar|lz|lzma|cab|deb|rpm|apk|jar|txz|tbz2|r\d\d|z\d\d)$|\.(7z|zip|rar)\.\d{3}$/i;
 const DISK = /\.(iso|img|qcow2|vdi|vmdk|vhdx?|dmg)$/i;
 const APP = /\.(appimage|desktop|exe|msi|run|flatpakref)$/i;
 const WEBLINK = /\.(url|webloc)$/i;

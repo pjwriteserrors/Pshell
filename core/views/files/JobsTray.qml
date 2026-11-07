@@ -121,7 +121,7 @@ Item {
 								anchors.centerIn: parent
 								size: 16
 								color: card.done ? Theme.success : card.failed ? Theme.danger : Theme.primary
-								icon: card.done ? "check" : card.failed ? "alert_circle_outline" : ({ copy: "content_copy", move: "folder_move_outline", auto: "folder_move_outline", trash: "trash_can_outline", delete: "delete_outline", compress: "zip_box_outline", extract: "package_variant", download: "download", paste: "content_paste", undo: "undo", restore: "restore", emptytrash: "delete_sweep_outline", pdf: "file_pdf_box", vtscan: "shield_search", steamadd: "steam", convert: "swap_horizontal", upload: "server_network" })[card.job.kind] ?? "cog_outline"
+								icon: card.done ? "check" : card.failed ? "alert_circle_outline" : ({ copy: "content_copy", move: "folder_move_outline", auto: "folder_move_outline", trash: "trash_can_outline", delete: "delete_outline", compress: "zip_box_outline", extract: "package_variant", download: "download", paste: "content_paste", undo: "undo", restore: "restore", emptytrash: "delete_sweep_outline", pdf: "file_pdf_box", vtscan: "shield_search", steamadd: "steam", convert: "swap_horizontal", upload: "server_network", command: "console" })[card.job.kind] ?? "cog_outline"
 							}
 						}
 
@@ -150,6 +150,13 @@ Item {
 									if (job.state === "conflict") return "Waits for an answer";
 									if (job.paused) return `Paused${job.bytesTotal > 0 ? " at " + Math.round(card.ratio * 100) + " %" : ""}`;
 									const parts = [];
+									// a command's bar is its percentages, the line it printed last says the rest
+									if (job.kind === "command") {
+										if (job.bytesTotal > 0) parts.push(`${Math.round(card.ratio * 100)} %`);
+										const line = String(job.current || "").replace(/^\[\*\]\s*/, "").replace(/\s*\d{1,3}(?:[.,]\d+)?\s?%/g, "").trim();
+										if (line) parts.push(line);
+										return parts.join(" · ") || "Running…";
+									}
 									if (job.bytesTotal > 0) parts.push(`${Format.bytes(job.bytes)} of ${Format.bytes(job.bytesTotal)}`);
 									else if (job.filesTotal > 1) parts.push(`${job.files} of ${job.filesTotal}`);
 									if (job.speed > 0 && job.bytesTotal > 0) parts.push(`${Format.bytes(job.speed)}/s`);

@@ -100,6 +100,8 @@
 	{ "id": "music-default", "name": "Default music player", "category": "Desktop", "requires": ["music"], "icon": "playlist_music" },
 	{ "id": "video", "name": "Video player", "category": "Desktop", "icon": "movie_open_outline" },
 	{ "id": "video-default", "name": "Default video player", "category": "Desktop", "requires": ["video"], "icon": "movie_open_play_outline" },
+	{ "id": "appimage", "name": "AppImage installer", "category": "Desktop", "icon": "package_variant" },
+	{ "id": "appimage-default", "name": "AppImages open in the installer", "category": "Desktop", "requires": ["appimage"], "icon": "package_down" },
 	{ "id": "files-chooser", "name": "File chooser for all apps", "category": "Desktop", "requires": ["filemanager"], "icon": "file_find_outline" },
 	{ "id": "find-mouse", "name": "Find my mouse", "category": "Desktop", "icon": "mouse_variant" },
 	{ "id": "laser-pointer", "name": "Laser pointer", "category": "Desktop", "icon": "target" },

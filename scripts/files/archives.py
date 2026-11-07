@@ -26,8 +26,52 @@ class NeedsPassword(Exception):
     pass
 
 
+# an archive in volumes: name.part1.rar …, name.rar + name.r00 …,
+# name.zip + name.z01 …, name.7z.001 … (zip and rar too)
+PART_RAR = re.compile(r"^(.*)\.part(\d+)\.rar$", re.I)
+OLD_RAR = re.compile(r"^(.*)\.(rar|r\d\d)$", re.I)
+SPLIT_ZIP = re.compile(r"^(.*)\.(zip|z\d\d)$", re.I)
+NUMBERED = re.compile(r"^(.*\.(?:7z|zip|rar))\.(\d{3})$", re.I)
+
+
+def volumes(path):
+    """Every part of the archive `path` belongs to, the one 7-Zip opens
+    first in front (whichever part was given); [path] when it stands alone."""
+    folder, name = os.path.split(path)
+
+    def gather(pattern, base, order):
+        try:
+            siblings = os.listdir(folder or ".")
+        except OSError:
+            return [path]
+        found = sorted((order(match), other) for other in siblings
+                       if (match := pattern.match(other)) and match.group(1) == base)
+        return [os.path.join(folder, other) for _, other in found] or [path]
+
+    if match := PART_RAR.match(name):
+        return gather(PART_RAR, match.group(1), lambda found: int(found.group(2)))
+    if match := NUMBERED.match(name):
+        return gather(NUMBERED, match.group(1), lambda found: int(found.group(2)))
+    # the old ones: the .rar opens the set, the .zip closes it but opens it too
+    for pattern in (OLD_RAR, SPLIT_ZIP):
+        if match := pattern.match(name):
+            parts = gather(pattern, match.group(1), lambda found: -1 if found.group(2).lower() in ("rar", "zip") else int(found.group(2)[1:]))
+            return parts if len(parts) > 1 else [path]
+    return [path]
+
+
+def set_name(path):
+    """The name of the archive without its volume: name.part1.rar → name.rar."""
+    name = os.path.basename(path)
+    name = re.sub(r"\.part\d+(\.rar)$", r"\1", name, flags=re.I)
+    name = re.sub(r"(\.(?:7z|zip|rar))\.\d{3}$", r"\1", name, flags=re.I)
+    return re.sub(r"\.(r|z)\d\d$", lambda found: ".rar" if found.group(1).lower() == "r" else ".zip", name, flags=re.I)
+
+
 def kind_of(path):
     name = os.path.basename(path)
+    if len(volumes(path)) > 1 or NUMBERED.match(name):
+        return "seven"
     if TAR.search(name):
         return "tar"
     if ZIP.search(name) or zipfile.is_zipfile(path):
@@ -41,6 +85,8 @@ def kind_of(path):
 def listing(path, limit=3000):
     """{ entries: [{ name, size, dir, mtime }], files, folders, size, packed,
     encrypted, truncated } – names with their folders, as stored."""
+    pieces = volumes(path)
+    given, path = path, pieces[0]
     kind = kind_of(path)
     entries = []
     encrypted = False
@@ -62,9 +108,9 @@ def listing(path, limit=3000):
         else:
             entries, encrypted = _seven_listing(path)
     except (OSError, zipfile.BadZipFile, tarfile.TarError, EOFError, ValueError) as error:
-        return {"path": path, "entries": [], "error": str(error) or "This archive cannot be read"}
+        return {"path": given, "entries": [], "error": str(error) or "This archive cannot be read"}
     except NeedsPassword:
-        return {"path": path, "entries": [], "encrypted": True, "error": "This archive is locked with a password"}
+        return {"path": given, "entries": [], "encrypted": True, "error": "This archive is locked with a password"}
     # folders that are only implied by the names of their files
     known = {entry["name"] for entry in entries if entry["dir"]}
     for entry in list(entries):
@@ -76,12 +122,12 @@ def listing(path, limit=3000):
                 entries.append({"name": folder, "size": 0, "dir": True, "mtime": 0})
     files = [entry for entry in entries if not entry["dir"]]
     return {
-        "path": path,
+        "path": given,
         "entries": sorted(entries, key=lambda entry: entry["name"].casefold())[:limit],
         "files": len(files),
         "folders": len(entries) - len(files),
         "size": sum(entry["size"] for entry in files),
-        "packed": os.path.getsize(path),
+        "packed": sum(os.path.getsize(piece) for piece in pieces),
         "encrypted": encrypted,
         "truncated": len(entries) > limit,
     }
@@ -138,6 +184,7 @@ class _Quiet:
 def member(path, name, out):
     """Takes the file `name` (as the listing names it) out of the archive
     into the folder `out` and returns where it lies."""
+    path = volumes(path)[0]
     kind = kind_of(path)
     os.makedirs(out, exist_ok=True)
     target = os.path.join(out, os.path.basename(name.replace("\\", "/").rstrip("/")) or "file")
@@ -217,6 +264,7 @@ def safe_target(out, name):
 
 
 def extract(path, out, progress, password=""):
+    path = volumes(path)[0]
     kind = kind_of(path)
     if kind == "zip":
         _extract_zip(path, out, progress, password)
@@ -373,7 +421,7 @@ PERCENT = re.compile(rb"(\d{1,3})%")
 
 def _extract_seven(path, out, progress, password):
     """7-Zip prints how far it is; a pause stops the process, a stop ends it."""
-    total = os.path.getsize(path)
+    total = sum(os.path.getsize(part) for part in volumes(path))
     progress.total(total)
     command = ["7z", "x", "-y", "-bsp1", "-bso0", "-bse1", f"-o{out}", f"-p{password}", path]
     process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)

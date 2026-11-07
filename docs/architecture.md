@@ -432,6 +432,14 @@ makes it what videos open in (docs/video.md; `scripts/ipc.sh video open
 Qt Multimedia plays inside the shell's scene; edits are a recipe shown by
 the viewer's shader and exported beside the file by ffmpeg.
 
+`appimage` installs AppImages as apps – from a file or a download link – with
+a desktop entry, their icon and a command in `~/.local/bin`, looks for their
+updates (GitHub releases, zsync, a link) and removes them with what they
+left; `appimage-default` makes it what AppImages open in (docs/appimages.md;
+`scripts/ipc.sh appimage install <file|url>`, `core/services/AppImages.qml`,
+`core/views/appimages/`, `scripts/appimage/`). Nothing runs an AppImage to
+look into it: its squashfs is read at the ELF header's offset.
+
 `filemanager` is the shell's file manager, a window of its own (`>file`,
 `>file <words>` searches,
 `scripts/ipc.sh files toggle|open <path>|tab <path>|reveal <path>|search

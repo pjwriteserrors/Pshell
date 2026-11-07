@@ -222,7 +222,7 @@ Singleton {
 		if (/\.(mp4|mkv|webm|mov|avi|m4v)$/.test(n)) return "video";
 		if (/\.(mp3|flac|ogg|opus|wav|m4a|aac)$/.test(n)) return "audio";
 		if (/\.(pdf|docx?|odt|xlsx?|ods|pptx?|odp|epub|rtf|csv)$/.test(n)) return "document";
-		if (/\.(zip|tar|tgz|gz|xz|zst|bz2|7z|rar)$/.test(n)) return "archive";
+		if (/\.(zip|tar|tgz|gz|xz|zst|bz2|7z|rar|r\d\d|z\d\d)$|\.(7z|zip|rar)\.\d{3}$/.test(n)) return "archive";
 		if (/\.(txt|md|json|log)$/.test(n)) return "text";
 		return "";
 	}
@@ -854,7 +854,7 @@ Singleton {
 	signal jobFinished(var job)
 
 	// ── long jobs: awake, a word when through, a shutdown after ────────────
-	readonly property var heavyKinds: ["copy", "move", "auto", "paste", "download", "extract", "compress", "emptytrash", "delete", "convert", "pdf", "upload", "avscan", "avupdate", "vtscan", "dupes", "storage", "share", "sync", "trim", "gif", "aipull", "image"]
+	readonly property var heavyKinds: ["copy", "move", "auto", "paste", "download", "extract", "compress", "emptytrash", "delete", "convert", "pdf", "upload", "avscan", "avupdate", "vtscan", "dupes", "storage", "share", "sync", "trim", "gif", "aipull", "image", "command"]
 	readonly property bool longJobs: root.activeJobs.some(job => root.heavyKinds.includes(job.kind) && Number(job.elapsed) > 8)
 	// the machine does not sleep while one runs
 	readonly property bool awake: root.longJobs && FileLibrary.setting("keepAwake") !== false
@@ -979,7 +979,7 @@ Singleton {
 		else if (["copy", "move", "auto", "paste", "download"].includes(job.kind)) Sounds.play("filed");
 		if (Number(job.elapsed) > 20 && !root.windowActive) root.pulse(true);
 		// away from the window, a longer job says it is through
-		if (long && !root.windowActive && ["copy", "move", "auto", "paste", "download", "extract", "compress", "emptytrash", "delete", "convert", "pdf", "upload"].includes(job.kind)) {
+		if (long && !root.windowActive && ["copy", "move", "auto", "paste", "download", "extract", "compress", "emptytrash", "delete", "convert", "pdf", "upload", "command"].includes(job.kind)) {
 			const created = job.created || [];
 			Notifs.pushInternal("done", root.doneTitle(job), job.skipped > 0 ? `${job.skipped} skipped` : "", {
 				icon: "folder_check_outline",
@@ -1074,6 +1074,25 @@ Singleton {
 		root.request("setdefault", { path: path, app: app }, (data, error) => {
 			if (error) root.fail(error);
 			else root.say("Opens with it from now on", "check");
+		});
+	}
+
+	// "Open with" → "Command…": the command becomes an app for the type (the
+	// default with `always`), and runs on the files as a job with a progress bar
+	function openWithCommand(paths, command, always) {
+		if (paths.length === 0 || command === "") return;
+		root.request("commandapp", { path: paths[0], command: command, always: always }, (data, error) => {
+			if (error) root.fail(error);
+			else if (always) root.say("Opens with it from now on", "check");
+		});
+		for (const path of paths) FileLibrary.noteOpened(path);
+		root.startJob("command", { command: command, paths: paths });
+	}
+
+	function forgetCommand(app) {
+		root.request("commandforget", { app: app }, (data, error) => {
+			if (error) root.fail(error);
+			else root.say("Forgotten", "check");
 		});
 	}
 
@@ -1408,7 +1427,7 @@ Singleton {
 	// a download that is through: what can be done with it, right in the toast
 	function downloadToast(path) {
 		const name = root.nameOf(path);
-		const archive = /\.(zip|tar|tgz|gz|xz|zst|bz2|7z|rar)$/i.test(name) && !/\.(deb|rpm|apk|jar)$/i.test(name);
+		const archive = /\.(zip|tar|tgz|gz|xz|zst|bz2|7z|rar|r\d\d|z\d\d)$|\.(7z|zip|rar)\.\d{3}$/i.test(name) && !/\.(deb|rpm|apk|jar)$/i.test(name);
 		const actions = [
 			{ label: "Open", icon: "open_in_app", run: () => root.launch([path]) },
 			{ label: "Show", icon: "folder_open_outline", run: () => root.reveal([path]) }

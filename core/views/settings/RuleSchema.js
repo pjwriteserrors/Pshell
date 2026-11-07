@@ -60,6 +60,7 @@ var SHELL = [
 	{ name: "Open with", title: "^Open with$", icon: "open_in_app" },
 	{ name: "Pictures", title: " – Pictures$|^Pictures$", icon: "image_outline" },
 	{ name: "Music", title: " – Music$|^Music$", icon: "music_note" },
+	{ name: "AppImages", title: "^AppImages$", icon: "package_variant" },
 	{ name: "Streams", title: "^Streams( · |$)", icon: "television" },
 	{ name: "Player", title: " – Player$|^Player$", icon: "play_box_outline" },
 	{ name: "Notes", title: " – Notes$|^New note$", icon: "note_text_outline" },
