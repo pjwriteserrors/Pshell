@@ -1116,6 +1116,9 @@ class Daemon:
         # the keyboards that can be taken, and the ones that are
         self.keyboards: set[str] = set()
         self.grabs: set[str] = set()
+        # devices looked at once and left: each close waits on the kernel
+        # (synchronize_rcu), which under heavy disk load holds the keys up
+        self.ignored: set[str] = set()
         self.denied = 0
         self.scan()
         if not self.keyboards:
@@ -1180,8 +1183,10 @@ class Daemon:
         """Keyboards to take, and whatever clicks: a click moves the cursor."""
         ecodes = self.evdev.ecodes
         self.denied = 0
-        for path in self.evdev.list_devices():
-            if path in self.devices:
+        paths = self.evdev.list_devices()
+        self.ignored &= set(paths)
+        for path in paths:
+            if path in self.devices or path in self.ignored:
                 continue
             try:
                 device = self.evdev.InputDevice(path)
@@ -1195,6 +1200,7 @@ class Daemon:
             clicks = ecodes.BTN_LEFT in keys or TOUCH in keys
             types = ecodes.KEY_A in keys and not clicks and ecodes.EV_REL not in capabilities and ecodes.EV_ABS not in capabilities
             if device.name.startswith("pshell ") or not (types or clicks):
+                self.ignored.add(path)
                 device.close()
                 continue
             self.devices[path] = device
@@ -1288,6 +1294,23 @@ class Daemon:
         for code in list(self.out):
             self.write(code, 0)
         self.out.clear()
+
+    def settle(self):
+        """Lets go of what is down for the compositor but no longer on a keyboard:
+        a key whose release went missing (a full buffer while the daemon was
+        held up) would stay pressed until the keyboards were given back."""
+        if not self.out:
+            return
+        held: set[int] = set()
+        for path in list(self.keyboards):
+            try:
+                held.update(self.devices[path].active_keys())
+            except OSError:
+                self.drop(path)
+        for code in self.out - held:
+            self.write(code, 0)
+            self.out.discard(code)
+        self.down &= held
 
     def hold(self):
         """Presses again what is held on a keyboard."""
@@ -1506,6 +1529,7 @@ class Daemon:
             while self.queue:
                 self.handle(*self.queue.popleft())
             self.flush()
+            self.settle()
             self.busy = 0.0
             if time.monotonic() >= rescan:
                 self.scan()
