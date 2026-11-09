@@ -51,6 +51,7 @@
 	{ "id": "ollama", "name": "Ollama models", "category": "Launcher" },
 	{ "id": "ai-actions", "name": "AI actions", "category": "Launcher", "requires": ["chat"] },
 	{ "id": "translate", "name": "Translate", "category": "Launcher" },
+	{ "id": "dictionary", "name": "Dictionary", "category": "Launcher", "icon": "book_open_page_variant", "preview": {"on": ["bar", "launcher-button"], "ipc": ["launcher search '>d Schmetterling'"]} },
 	{ "id": "web-search", "name": "Web search", "category": "Launcher" },
 	{ "id": "todos", "name": "Todo lists", "category": "Launcher", "default": false },
 	{ "id": "todo-links", "name": "Note connections", "category": "Launcher", "requires": ["todos"], "icon": "link_variant" },

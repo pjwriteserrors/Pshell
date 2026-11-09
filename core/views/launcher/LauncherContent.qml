@@ -84,6 +84,7 @@ Item {
 		{ id: "calculator", plugin: "calculator", group: "tools", command: "c", name: "Calculator", aliases: ["calc", "calculator"], keywords: "math" },
 		{ id: "converter", plugin: "converter", group: "tools", command: "conv", name: "Convert", aliases: ["convert"], keywords: "units currency" },
 		{ id: "translate", plugin: "translate", group: "tools", command: "t", name: "Translate", aliases: ["translate", "tr"], keywords: "language" },
+		{ id: "dictionary", plugin: "dictionary", group: "tools", command: "d", name: "Dictionary", aliases: ["dict", "define", "wb", "wörterbuch", "duden"], keywords: "word meaning explain pictures wiktionary bedeutung" },
 		{ id: "web-search", plugin: "web-search", group: "tools", command: "w", name: "Web Search", aliases: ["web", "search"], keywords: "browser" },
 		// with the file manager on, >file opens it (and searches for what follows)
 		{ id: "file-browser", plugin: "files", shown: !Plugins.on("filemanager"), group: "tools", command: "file", name: "Files", aliases: ["files"], keywords: "browse open folder" },
@@ -323,6 +324,7 @@ Item {
 	readonly property bool inFinderMode: Plugins.on("filemanager") && !Phone.pickingFile && /^(file|files|fm)( |$)/.test(root.commandQuery)
 	readonly property string fileManagerQuery: ""
 	readonly property bool inTranslateMode: Plugins.on("translate") && (root.commandQuery === "t" || root.commandQuery.startsWith("t "))
+	readonly property bool inDictionaryMode: Plugins.on("dictionary") && ["d", "dict", "define", "wb"].some(c => root.commandQuery === c || root.commandQuery.startsWith(c + " "))
 	readonly property bool inConvertMode: Plugins.on("converter") && (root.commandQuery === "conv" || root.commandQuery.startsWith("conv "))
 	readonly property bool inTodoMode: Plugins.on("todos") && (root.commandQuery === "todo" || root.commandQuery.startsWith("todo "))
 	readonly property bool inWebMode: Plugins.on("web-search") && (root.commandQuery === "w" || root.commandQuery.startsWith("w "))
@@ -334,7 +336,7 @@ Item {
 	readonly property bool inVideoMode: Plugins.on("video") && ["video", "videos", "film"].some(c => root.commandQuery === c || root.commandQuery.startsWith(c + " "))
 	readonly property bool inPdfMode: Plugins.on("pdf") && ["pdf", "pdfs", "docs"].some(c => root.commandQuery === c || root.commandQuery.startsWith(c + " "))
 	readonly property bool inEditMode: Plugins.on("editor") && (root.commandQuery === "edit" || root.commandQuery.startsWith("edit "))
-	readonly property bool inViewMode: root.inEditMode || root.inTranslateMode || root.inConvertMode || root.inTodoMode || root.inWebMode || root.inAiActionsMode || root.inPhoneMode || root.inShotsMode || root.inPicturesMode || root.inMusicMode || root.inVideoMode || root.inPdfMode || root.inFinderMode
+	readonly property bool inViewMode: root.inEditMode || root.inTranslateMode || root.inDictionaryMode || root.inConvertMode || root.inTodoMode || root.inWebMode || root.inAiActionsMode || root.inPhoneMode || root.inShotsMode || root.inPicturesMode || root.inMusicMode || root.inVideoMode || root.inPdfMode || root.inFinderMode
 	// what follows the command token, as typed (">t fr hello" → "fr hello")
 	readonly property string modeArgument: {
 		const match = /^>\S+\s([\s\S]*)$/.exec(root.searchText);
@@ -1053,6 +1055,9 @@ Item {
 		case "translate":
 			root.setLauncherSearch(">t ");
 			break;
+		case "dictionary":
+			root.setLauncherSearch(">d ");
+			break;
 		case "converter":
 			root.setLauncherSearch(">conv ");
 			break;
@@ -1507,6 +1512,7 @@ Item {
 	readonly property string mode: {
 		if (root.inEditMode) return "edit";
 		if (root.inTranslateMode) return "translate";
+		if (root.inDictionaryMode) return "dictionary";
 		if (root.inConvertMode) return "convert";
 		if (root.inTodoMode) return "todo";
 		if (root.inWebMode) return "web";
@@ -1533,6 +1539,7 @@ Item {
 		case "files": return Phone.pickingFile ? "cellphone" : "folder";
 		case "edit": return "file_document_outline";
 		case "translate": return "translate";
+		case "dictionary": return "book_open_page_variant";
 		case "convert": return "swap_horizontal";
 		case "todo": return "format_list_checks";
 		case "web": return "web";
@@ -1576,6 +1583,7 @@ Item {
 		case "ollama": return "robot";
 		case "edit": return "file_document_outline";
 		case "translate": return "translate";
+		case "dictionary": return "book_open_page_variant";
 		case "converter": return "swap_horizontal";
 		case "todo": return "format_list_checks";
 		case "web-search": return "web";
@@ -1631,6 +1639,7 @@ Item {
 		switch (root.mode) {
 		case "edit": return editView.item;
 		case "translate": return translateView.item;
+		case "dictionary": return dictionaryView.item;
 		case "convert": return convertView.item;
 		case "todo": return todoView.item;
 		case "web": return webSearchView.item;
@@ -1650,6 +1659,7 @@ Item {
 		switch (root.mode) {
 		case "edit": return "File or words";
 		case "translate": return "Text";
+		case "dictionary": return "A word";
 		case "convert": return "5 kg in lb";
 		case "todo": return todoView.item?.placeholder ?? "";
 		case "web": return "Search the web";
@@ -1669,6 +1679,7 @@ Item {
 		case "commands": return root.openGroup ? root.openGroup.name : "Commands";
 		case "edit": return "Editor";
 		case "translate": return "Translate";
+		case "dictionary": return "Dictionary";
 		case "convert": return "Convert";
 		case "todo": return "Todo";
 		case "web": return "Web Search";
@@ -1689,6 +1700,7 @@ Item {
 		case "calc":
 		case "edit": return "open";
 		case "convert":
+		case "dictionary":
 		case "translate": return "copy";
 		case "todo": return todoView.item?.enterHint ?? "";
 		case "web": return webSearchView.item?.showingResults ? "open" : "search";
@@ -2393,6 +2405,35 @@ Item {
 
 						function onArgumentRequested(text) {
 							root.setLauncherSearch(`>t ${text}`);
+						}
+					}
+				}
+			}
+
+			// a word explained and shown
+			ModeLayer {
+				current: root.mode === "dictionary"
+
+				ModeView {
+					id: dictionaryView
+
+					file: "DictionaryView.qml"
+					current: root.mode === "dictionary"
+					values: ({
+						active: root.mode === "dictionary",
+						argument: root.modeArgument
+					})
+
+					Connections {
+						target: dictionaryView.item
+						ignoreUnknownSignals: true
+
+						function onCloseRequested() {
+							root.closeRequested();
+						}
+
+						function onArgumentRequested(text) {
+							root.setLauncherSearch(`>d ${text}`);
 						}
 					}
 				}

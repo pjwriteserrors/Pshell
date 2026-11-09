@@ -616,6 +616,25 @@ is found by, `status` what its tile says right now. The app search shows the
 commands that answer above the apps, and picks one ahead of them when a word
 of it starts with what is typed and no app's name does.
 
+`dictionary` explains a word in the launcher (`>d word`, also `>dict`,
+`>define`, `>wb`; `>d en word` asks the English side only;
+`core/views/launcher/DictionaryView.qml`, `core/services/Dictionary.qml`).
+`scripts/dictionary.py` reads German words from de.wiktionary's wikitext
+(meanings with their labels, syllables, IPA and the spoken recording, an
+example, synonyms, origin, the pictures it puts to a meaning) and English
+ones from dictionaryapi.dev, en.wiktionary as fallback; a noun also gets
+two sentences and the lead picture of its Wikipedia article. More pictures
+come from Commons and from Openverse, searched with the English name. It
+answers in JSON lines, the entry first and then the pictures in their
+order as each arrives, kept in `~/.cache/pshell/dictionary` (a month, misses
+a day; a source that did not answer is never kept as a miss). The view: the
+word, its sound (Ctrl+P), the meanings, a quote, similar words that look
+themselves up; beside them one large picture that drifts slowly, changes by
+itself and on hover over the small ones, and opens in the picture viewer
+with the others. Enter copies the meanings, ↑/↓ change the picture, Ctrl+O
+opens Wiktionary. Looked-up words are offered again (`dictionary.json`).
+Tests: `scripts/tests/test_dictionary.py`.
+
 `screentime` counts where the time at the screen goes (`>screentime`,
 `scripts/ipc.sh screentime toggle`): every few seconds the time since the
 last look goes to the focused window, its app, its workspace and, in a
