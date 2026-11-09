@@ -882,10 +882,34 @@ Item {
 			}
 			readonly property int spread: Pdf.page <= 0 ? 0 : Math.floor((Pdf.page + 1) / 2)
 			property int shown: book.spread
-			// the leaf turning: -1 back, 1 on, 0 still; t 0..1
+			// the leaf in hand or turning: 1 a right one on, -1 a left one back, 0 none
 			property int turning: 0
-			property real t: 0
-			property int from: 0
+			readonly property int to: book.shown + book.turning
+			// idle, peel (the pointer at its free edge), drag (held), settle (going over or back)
+			property string phase: "idle"
+			// in the leaf's space (u from the spine, v down from its top): the grabbed
+			// point of its free edge (a corner, or the edge where it was taken), where
+			// that point is now, and where it is drawn to
+			property real cy: 0
+			property point m: Qt.point(0, 0)
+			property point aim: Qt.point(0, 0)
+			// settling: from where, over or back, how far along
+			property point settleFrom: Qt.point(0, 0)
+			property bool settleOver: false
+			property real p: 0
+			// the pointer while held: whether it moved, how fast toward the spine (px/ms)
+			property bool pressedLeaf: false
+			property point pressAt: Qt.point(0, 0)
+			property real lastU: 0
+			property real lastT: 0
+			property real speed: 0
+			// the leaf's two sides; never emptied (a page image made again for a
+			// page of the same document draws its first one), the next one on
+			// laid ready while the book rests
+			property string frontId: ""
+			property string backId: ""
+			onShownChanged: book.ready(1)
+			Component.onCompleted: book.ready(1)
 
 			// the scale: the widest spread fits the window
 			readonly property real bk: {
@@ -898,20 +922,171 @@ Item {
 				return Math.max(0.05, Math.min((book.width - 80) / (2 * w), (book.height - 40) / h));
 			}
 
+			// where the spine is, how big the leaf, where its top
+			readonly property real spineX: book.width / 2
+			readonly property real leafW: leafFront.width
+			readonly property real leafH: leafFront.height
+			readonly property real leafTop: (book.height - book.leafH) / 2
+
+			// the roll, from where the grabbed point is: the axis (a point, its normal
+			// toward the free edge) and the radius – wide while the leaf is in the
+			// air, nothing where it lies flat; the spine edge never lifts
+			readonly property var roll: {
+				const W = book.leafW, H = book.leafH;
+				const dx = W - book.m.x, dy = book.cy - book.m.y;
+				const len = Math.hypot(dx, dy);
+				if (len < 0.5) return { p: Qt.point(W + 1000, book.cy), n: Qt.point(1, 0), r: 0.5 };
+				const nx = dx / len, ny = dy / len;
+				const r = Math.max(0.5, Math.min(W * 0.085, len * 0.3, Math.max(0, 2 * W - len) * 0.3));
+				const s = (len + Math.PI * r) / 2;
+				let px = W - nx * s, py = book.cy - ny * s;
+				for (const qy of [0, H]) {
+					const d = -px * nx + (qy - py) * ny;
+					if (d > -0.5) {
+						px += nx * (d + 0.5);
+						py += ny * (d + 0.5);
+					}
+				}
+				return { p: Qt.point(px, py), n: Qt.point(nx, ny), r: r };
+			}
+
+			function ready(dir) {
+				const front = book.idsOf(book.shown, dir === 1 ? "right" : "left");
+				const back = book.idsOf(book.shown + dir, dir === 1 ? "left" : "right");
+				if (front !== "") book.frontId = front;
+				if (back !== "") book.backId = back;
+			}
+
 			function idsOf(s, side) {
 				const ids = book.spreads[s] ?? [];
 				if (s === 0) return side === "right" ? (ids[0] ?? "") : "";
 				return side === "left" ? (ids[0] ?? "") : (ids[1] ?? "");
 			}
 
+			function canTurn(dir) {
+				return dir === 1 ? book.shown + 1 < book.spreads.length && book.idsOf(book.shown, "right") !== "" : book.shown > 0;
+			}
+
+			// the free edge of a leaf under the pointer: 1 the right one's, -1 the left one's, 0 none
+			function edgeAt(x, y) {
+				for (const dir of [1, -1]) {
+					if (book.turning !== 0 && book.turning !== dir) continue;
+					if (book.turning === 0 && !book.canTurn(dir)) continue;
+					const pg = book.turning === dir ? leafFront : (dir === 1 ? rightPage : leftPage);
+					const u = (x - book.spineX) * dir, v = y - (book.height - pg.height) / 2;
+					const hz = Math.max(36, pg.width * 0.13);
+					if (u > pg.width - hz && u < pg.width + 24 && v > -24 && v < pg.height + 24) return dir;
+				}
+				return 0;
+			}
+
+			// the leaf hangs at the spine: what is grabbed gets no farther from either
+			// end of it than it is lying flat
+			function reach(u, v) {
+				const W = book.leafW;
+				for (const sy of [0, book.leafH]) {
+					const most = Math.hypot(W, book.cy - sy), dx = u, dy = v - sy, len = Math.hypot(dx, dy);
+					if (len > most) {
+						u = dx * most / len;
+						v = sy + dy * most / len;
+					}
+				}
+				return Qt.point(u, v);
+			}
+
+			// near the top or the bottom a corner is taken, else the edge where the pointer is
+			function grabAt(v) {
+				const H = book.leafH;
+				return v < H * 0.28 ? 0 : (v > H * 0.72 ? H : v);
+			}
+
+			function aimAt(x, y) {
+				let u = (x - book.spineX) * book.turning;
+				const v = y - book.leafTop;
+				if (book.phase === "peel") {
+					// hovered only, the edge just lifts toward the pointer, taken where the pointer is along it
+					u = Math.min(u, book.leafW - 34);
+					const cy = book.grabAt(v), shift = cy - book.cy;
+					book.cy = cy;
+					book.m = Qt.point(book.m.x, book.m.y + shift);
+				}
+				book.aim = book.reach(u, v);
+			}
+
+			function take(dir, x, y) {
+				book.ready(dir);
+				book.turning = dir;
+				book.cy = book.grabAt(y - book.leafTop);
+				book.m = Qt.point(book.leafW, book.cy);
+				book.phase = "peel";
+				book.aimAt(x, y);
+			}
+
+			function settle(over, duration, easing) {
+				book.settleFrom = book.m;
+				book.settleOver = over;
+				book.phase = "settle";
+				book.p = 0;
+				settleAnim.duration = duration;
+				settleAnim.easing.type = easing;
+				settleAnim.restart();
+			}
+
+			// let the leaf go where the hand left it: over when past the middle or flung
+			function release() {
+				const moved = Math.hypot(book.m.x - book.pressAt.x, book.m.y - book.pressAt.y) > 6;
+				const over = !moved || book.m.x < book.leafW * 0.45 || book.speed < -0.45;
+				const left = over ? (book.m.x + book.leafW) / (2 * book.leafW) : (book.leafW - book.m.x) / (2 * book.leafW);
+				book.settle(over, 220 + 520 * Math.max(0, Math.min(1, left)), Easing.OutCubic);
+			}
+
+			// a turn asked for elsewhere (keys, wheel, a click on a page): the lower corner goes over
+			function turnOver(dir) {
+				book.ready(dir);
+				book.turning = dir;
+				book.cy = book.leafH;
+				book.m = Qt.point(book.leafW, book.cy);
+				book.settle(true, Motion.extraLong + 300, Easing.InOutSine);
+			}
+
+			function done() {
+				if (book.phase !== "settle") return;
+				settleAnim.stop();
+				const over = book.settleOver, target = book.to;
+				book.turning = 0;
+				book.phase = "idle";
+				if (!over) return;
+				book.shown = target;
+				if (book.spread !== target) Pdf.page = target === 0 ? 0 : target * 2 - 1;
+			}
+
+			onPChanged: {
+				if (book.phase !== "settle") return;
+				const W = book.leafW, H = book.leafH, a = book.settleFrom;
+				const ex = book.settleOver ? -W : W;
+				// going over, a corner arcs up off its edge as it would in the hand
+				const lift = !book.settleOver ? 0 : Math.sin(Math.PI * book.p) * H * 0.1 * (book.cy >= H * 0.72 ? -1 : (book.cy <= H * 0.28 ? 1 : 0));
+				book.m = book.reach(a.x + (ex - a.x) * book.p, a.y + (book.cy - a.y) * book.p + lift);
+			}
+
 			onSpreadChanged: {
 				if (book.spread === book.shown) return;
 				const delta = book.spread - book.shown;
-				if (Math.abs(delta) === 1) {
-					book.from = book.shown;
-					book.turning = delta;
-					book.shown = book.spread;
-					turn.restart();
+				// the leaf in hand goes over itself when the turn is its own
+				if ((book.phase === "peel" || book.phase === "drag") && book.turning === delta) {
+					book.pressedLeaf = false;
+					book.settle(true, 220 + 420 * Math.max(0, Math.min(1, (book.m.x + book.leafW) / (2 * book.leafW))), Easing.InOutCubic);
+					return;
+				}
+				if (book.phase === "settle") book.done();
+				else if (book.phase !== "idle") {
+					book.turning = 0;
+					book.phase = "idle";
+				}
+				if (book.spread === book.shown) return;
+				const d = book.spread - book.shown;
+				if (Math.abs(d) === 1 && book.canTurn(d)) {
+					book.turnOver(d);
 				} else {
 					book.shown = book.spread;
 					bookFade.restart();
@@ -919,17 +1094,21 @@ Item {
 			}
 
 			NumberAnimation {
-				id: turn
+				id: settleAnim
 
 				target: book
-				property: "t"
+				property: "p"
 				from: 0
 				to: 1
-				duration: Motion.extraLong + 150
-				easing.type: Easing.InOutCubic
-				onFinished: {
-					book.turning = 0;
-					book.t = 0;
+				onFinished: book.done()
+			}
+
+			// the held or hovered corner follows the pointer softly, like paper does
+			FrameAnimation {
+				running: book.phase === "peel" || book.phase === "drag"
+				onTriggered: {
+					const a = 1 - Math.exp(-frameTime * (book.phase === "drag" ? 22 : 11));
+					book.m = Qt.point(book.m.x + (book.aim.x - book.m.x) * a, book.m.y + (book.aim.y - book.m.y) * a);
 				}
 			}
 
@@ -943,120 +1122,210 @@ Item {
 				duration: Motion.long
 			}
 
-			// where the spine is
-			readonly property real spineX: book.width / 2
+			// the leaf's two sides, drawn for the roll only
+			PdfPage {
+				id: leafFront
+
+				pageId: book.frontId
+				reader: root
+				k: book.bk
+				renderK: book.bk
+				interactive: false
+				shadow: false
+			}
+
+			PdfPage {
+				id: leafBack
+
+				pageId: book.backId
+				reader: root
+				k: book.bk
+				renderK: book.bk
+				interactive: false
+				shadow: false
+			}
+
+			ShaderEffectSource {
+				id: frontSrc
+
+				sourceItem: leafFront
+				hideSource: true
+				live: book.turning !== 0
+				textureSize: Qt.size(Math.ceil(leafFront.width * Screen.devicePixelRatio), Math.ceil(leafFront.height * Screen.devicePixelRatio))
+				visible: false
+			}
+
+			ShaderEffectSource {
+				id: backSrc
+
+				sourceItem: leafBack
+				hideSource: true
+				live: book.turning !== 0
+				textureSize: Qt.size(Math.ceil(leafFront.width * Screen.devicePixelRatio), Math.ceil(leafFront.height * Screen.devicePixelRatio))
+				visible: false
+			}
 
 			Item {
 				id: spreadItem
 
 				anchors.fill: parent
 
-				// the left: while turning on, the old left stays; turning back, the new left
+				// the left: turning back, the one under the leaf
 				PdfPage {
+					id: leftPage
+
 					anchors.right: parent.horizontalCenter
 					anchors.verticalCenter: parent.verticalCenter
-					pageId: book.turning === 1 ? book.idsOf(book.from, "left") : book.idsOf(book.shown, "left")
+					pageId: book.turning === -1 ? book.idsOf(book.to, "left") : book.idsOf(book.shown, "left")
 					reader: root
 					k: book.bk
 					renderK: book.bk
 					visible: pageId !== ""
 				}
 
-				// the right: turning on, the new right is under the leaf; turning back, the old right
+				// the right: turning on, the one under the leaf
 				PdfPage {
+					id: rightPage
+
 					anchors.left: parent.horizontalCenter
 					anchors.verticalCenter: parent.verticalCenter
-					pageId: book.turning === -1 ? book.idsOf(book.from, "right") : book.idsOf(book.shown, "right")
+					pageId: book.turning === 1 ? book.idsOf(book.to, "right") : book.idsOf(book.shown, "right")
 					reader: root
 					k: book.bk
 					renderK: book.bk
 					visible: pageId !== ""
 				}
 
-				// the leaf: on its front the page turned away, on its back the one coming
-				Item {
-					id: leaf
-
-					visible: book.turning !== 0
-					x: book.turning === 1 ? book.spineX : book.spineX - leaf.width
-					anchors.verticalCenter: parent.verticalCenter
-					width: front.width
-					height: front.height
-					// 0 lies flat where it started, 180 lies flat on the other side
-					readonly property real angle: 180 * book.t
-					transform: Rotation {
-						origin.x: book.turning === 1 ? 0 : leaf.width
-						origin.y: leaf.height / 2
-						axis.x: 0
-						axis.y: 1
-						axis.z: 0
-						angle: book.turning === 1 ? -leaf.angle : leaf.angle
-					}
-
-					PdfPage {
-						id: front
-
-						pageId: book.turning === 1 ? book.idsOf(book.from, "right") : book.idsOf(book.from, "left")
-						reader: root
-						k: book.bk
-						renderK: book.bk
-						interactive: false
-						visible: leaf.angle < 90 && front.pageId !== ""
-					}
-
-					PdfPage {
-						id: backPage
-
-						pageId: book.turning === 1 ? book.idsOf(book.shown, "left") : book.idsOf(book.shown, "right")
-						reader: root
-						k: book.bk
-						renderK: book.bk
-						interactive: false
-						visible: leaf.angle >= 90 && backPage.pageId !== ""
-						transform: Scale {
-							origin.x: backPage.width / 2
-							xScale: -1
+				// the gutter: each page bending into the spine, over its whole height
+				// (the leaf shader shades its sides the same, see shaders/leaf.frag)
+				Rectangle {
+					anchors.right: leftPage.right
+					anchors.top: leftPage.top
+					anchors.bottom: leftPage.bottom
+					width: leftPage.width * 0.1
+					visible: leftPage.visible
+					gradient: Gradient {
+						orientation: Gradient.Horizontal
+						GradientStop {
+							position: 0
+							color: "transparent"
+						}
+						GradientStop {
+							position: 0.7
+							color: Qt.rgba(0, 0, 0, 0.08)
+						}
+						GradientStop {
+							position: 1
+							color: Qt.rgba(0, 0, 0, 0.22)
 						}
 					}
+				}
 
-					// the shade of the bend
-					Rectangle {
-						anchors.fill: parent
-						color: "black"
-						opacity: 0.28 * Math.sin(Math.PI * book.t)
+				Rectangle {
+					anchors.left: rightPage.left
+					anchors.top: rightPage.top
+					anchors.bottom: rightPage.bottom
+					width: rightPage.width * 0.1
+					// the cover alone has no gutter
+					visible: rightPage.visible && (book.turning === 1 ? book.to : book.shown) > 0
+					gradient: Gradient {
+						orientation: Gradient.Horizontal
+						GradientStop {
+							position: 0
+							color: Qt.rgba(0, 0, 0, 0.22)
+						}
+						GradientStop {
+							position: 0.3
+							color: Qt.rgba(0, 0, 0, 0.08)
+						}
+						GradientStop {
+							position: 1
+							color: "transparent"
+						}
 					}
+				}
+
+				// the leaf: soft paper rolled over toward where it is drawn
+				ShaderEffect {
+					visible: book.turning !== 0
+					x: book.spineX - book.leafW - 2
+					y: book.leafTop - book.leafH * 0.3
+					width: 2 * book.leafW + 4
+					height: book.leafH * 1.6
+					property vector2d itemSize: Qt.vector2d(width, height)
+					property vector2d origin: Qt.vector2d(book.spineX - x, book.leafTop - y)
+					property vector2d leafSize: Qt.vector2d(book.leafW, book.leafH)
+					property real dir: book.turning
+					property vector2d axisP: Qt.vector2d(book.roll.p.x, book.roll.p.y)
+					property vector2d axisN: Qt.vector2d(book.roll.n.x, book.roll.n.y)
+					property real r: book.roll.r
+					property real gutterFront: book.turning === 1 && book.shown === 0 ? 0 : 1
+					property real gutterBack: book.turning === -1 && book.to === 0 ? 0 : 1
+					property real shadow: Pdf.night ? 1 : 0.85
+					property var front: frontSrc
+					property var back: backSrc
+					fragmentShader: Qt.resolvedUrl("shaders/leaf.frag.qsb")
 				}
 			}
 
-			// the spine's shadow
-			Rectangle {
-				x: book.spineX - 14
-				width: 28
-				anchors.verticalCenter: parent.verticalCenter
-				height: book.height * 0.8
-				visible: book.shown > 0
-				gradient: Gradient {
-					orientation: Gradient.Horizontal
-					GradientStop {
-						position: 0
-						color: "transparent"
-					}
-					GradientStop {
-						position: 0.5
-						color: Qt.rgba(0, 0, 0, 0.16)
-					}
-					GradientStop {
-						position: 1
-						color: "transparent"
-					}
-				}
-			}
-
-			// clicks on a side turn that way, the wheel turns too
+			// a leaf's free edge peels toward the pointer, taken there it turns by
+			// hand; a click elsewhere on a side turns that way, the wheel turns too
 			MouseArea {
 				anchors.fill: parent
 				acceptedButtons: Qt.LeftButton
-				onClicked: mouse => mouse.x > book.spineX ? root.bookStep(1) : root.bookStep(-1)
+				hoverEnabled: true
+				cursorShape: book.phase === "drag" ? Qt.ClosedHandCursor : (book.phase === "peel" ? Qt.OpenHandCursor : Qt.ArrowCursor)
+				onPositionChanged: mouse => {
+					if (book.phase === "drag") {
+						book.aimAt(mouse.x, mouse.y);
+						const u = (mouse.x - book.spineX) * book.turning, t = Date.now();
+						const dt = Math.max(1, t - book.lastT);
+						book.speed = 0.6 * book.speed + 0.4 * (u - book.lastU) / dt;
+						book.lastU = u;
+						book.lastT = t;
+						return;
+					}
+					const edge = book.edgeAt(mouse.x, mouse.y);
+					if (book.phase === "idle" && edge !== 0) {
+						book.take(edge, mouse.x, mouse.y);
+					} else if (book.phase === "settle" && !book.settleOver && edge === book.turning) {
+						// back into the edge while it falls back: caught again
+						settleAnim.stop();
+						book.phase = "peel";
+						book.aimAt(mouse.x, mouse.y);
+					} else if (book.phase === "peel") {
+						if (edge === book.turning) book.aimAt(mouse.x, mouse.y);
+						else book.settle(false, 360, Easing.OutCubic);
+					}
+				}
+				onExited: {
+					if (book.phase === "peel") book.settle(false, 360, Easing.OutCubic);
+				}
+				onPressed: mouse => {
+					book.pressedLeaf = false;
+					if (book.phase === "idle") {
+						const edge = book.edgeAt(mouse.x, mouse.y);
+						if (edge !== 0) book.take(edge, mouse.x, mouse.y);
+					}
+					if (book.phase !== "peel") return;
+					book.pressedLeaf = true;
+					book.phase = "drag";
+					book.aimAt(mouse.x, mouse.y);
+					book.pressAt = book.aim;
+					book.lastU = (mouse.x - book.spineX) * book.turning;
+					book.lastT = Date.now();
+					book.speed = 0;
+				}
+				onReleased: {
+					if (book.phase === "drag") book.release();
+				}
+				onCanceled: {
+					if (book.phase === "drag") book.settle(false, 360, Easing.OutCubic);
+				}
+				onClicked: mouse => {
+					if (book.pressedLeaf) return;
+					mouse.x > book.spineX ? root.bookStep(1) : root.bookStep(-1);
+				}
 				onWheel: wheel => {
 					if (wheelGuard.running) return;
 					wheelGuard.start();
@@ -1069,7 +1338,6 @@ Item {
 
 				interval: 380
 			}
-
 		}
 	}
 

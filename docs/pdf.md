@@ -62,6 +62,15 @@ signature and redact are burnt into the page; a black-out makes its page a
 picture with black boxes, so nothing is left under them; its other marks and
 form fields stay as they were, those lying under a box go with what they hide.
 
+The book (layout `book`): the cover alone, then pairs, each page bending into
+the spine with a gutter shade over its whole height. A leaf is soft paper
+rolled over a cylinder (`core/views/pdf/shaders/leaf.frag`, its back the next
+page, its shadow on the page under it): with the pointer at a leaf's free
+edge it lifts toward it (a corner near the top or bottom, else the edge
+where the pointer is), held there it follows the hand and goes over when let
+go past the middle or flung, back otherwise; a click on a side, the wheel and
+the keys turn it over from the lower corner.
+
 Undo goes back over every step (300). What is left unsaved is kept per file
 (`~/.local/state/pshell/pdf-files.json`, with where it was read, the zoom and
 the night mode) and comes back when the file is opened again unchanged.
