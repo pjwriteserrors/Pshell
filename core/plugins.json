@@ -108,6 +108,7 @@
 	{ "id": "files-chooser", "name": "File chooser for all apps", "category": "Desktop", "requires": ["filemanager"], "icon": "file_find_outline" },
 	{ "id": "find-mouse", "name": "Find my mouse", "category": "Desktop", "icon": "mouse_variant" },
 	{ "id": "laser-pointer", "name": "Laser pointer", "category": "Desktop", "icon": "target" },
+	{ "id": "mouse-capture", "name": "Mouse capture", "category": "Desktop", "icon": "cursor_default_click" },
 	{ "id": "useless-fact", "name": "Useless fact", "category": "Desktop", "icon": "lightbulb", "preview": {"on": ["bar"], "base": "off", "wait": 5} },
 	{ "id": "torrents", "name": "Torrents", "category": "Desktop", "default": false, "icon": "magnet", "preview": {"on": ["bar"], "ipc": ["torrents open"]} },
 	{ "id": "streams", "name": "Streams", "category": "Desktop", "default": false, "icon": "play_circle", "preview": {"on": ["bar"], "ipc": ["streams open"]} },

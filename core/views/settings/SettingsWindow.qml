@@ -122,6 +122,7 @@ FloatingWindow {
 		{ page: "input", anchor: "pointer", title: "Mouse, touchpad, trackpoint, trackball", words: "accel speed natural scroll tap dwt left-handed middle-emulation scroll-factor", take: ["input/mouse", "input/touchpad", "input/trackpoint", "input/trackball"] },
 		{ page: "input", anchor: "tablet", title: "Tablet and touch screen", words: "tablet touch map-to-output calibration", take: ["input/tablet", "input/touch"] },
 		{ page: "input", anchor: "focus", title: "Focus follows mouse", words: "focus-follows-mouse warp-mouse-to-focus", take: ["input/focus-follows-mouse", "input/warp-mouse-to-focus"] },
+		{ page: "input", anchor: "mouse-capture", title: "Capture the mouse in a window", words: "mouse capture confine lock trap pointer game window monitor page down", plugin: "mouse-capture" },
 		{ page: "input", anchor: "mod", title: "Mod key", words: "mod-key mod-key-nested super alt", take: ["input/mod-key", "input/mod-key-nested"] },
 		{ page: "input", anchor: "input-more", title: "Power key, workspace back and forth, cursor", words: "disable-power-key-handling workspace-auto-back-and-forth hide-when-typing hide-after-inactive-ms cursor", take: ["input/disable-power-key-handling", "input/workspace-auto-back-and-forth", "cursor/hide-when-typing", "cursor/hide-after-inactive-ms"] },
 		{ page: "keys", anchor: "binds", title: "Key binds", words: "keys shortcuts binds hotkeys", take: ["@binds"] },

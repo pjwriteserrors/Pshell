@@ -253,6 +253,20 @@ spinner that an agent works in it, urgent ones breathe. A click brings the
 window back (also `Niri.focusWindow`, so the taskbar and Alt+Tab do), a
 middle click closes it; `scripts/ipc.sh parking park|restore` from keys.
 
+`mouse-capture` holds the pointer inside the focused window until it is
+let go (`scripts/ipc.sh mousecapture toggle`, bound per machine in
+keybinds.kdl, not in pshell.kdl: here Page Down). niri confines only for a
+window that asks, so `scripts/mouse_capture.py` takes the mice for the
+capture (EVIOCGRAB): buttons and wheels go on through clones, movement is
+added up with libinput's acceleration copied, clamped and placed through an
+absolute uinput pointer. `PointerProbe` tells it where the pointer starts.
+niri gives no position for tiled windows, so `MouseCapture.placeOf` holds a
+screen-sized one to its screen and a bigger-than-half one to the part it
+covers wherever it is scrolled; smaller tiled windows get the whole screen.
+`MouseCaptureHud` shows it coming and going. Settings › Input › Capture the
+mouse. Games that lock the pointer themselves get no relative motion while
+captured.
+
 `laser-pointer` turns the pointer into a laser dot for presentations
 (Mod+Alt+L in `dotfiles/niri/pshell.kdl`, `scripts/ipc.sh laser toggle`):
 `Laser` holds whether it is on and where the pointer is, `LaserPointer` (an

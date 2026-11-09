@@ -163,11 +163,39 @@ Scope {
 		when: lasering.held
 	}
 
-	// where the pointer is, for an ultra macro of the Apex keyboard
+	// where the pointer is, for an ultra macro of the Apex keyboard or a
+	// mouse capture starting
 	ScreenView {
 		view: "overlays/PointerProbe"
-		available: Plugins.on("apex")
-		when: Apex.probing !== 0
+		available: Plugins.on("apex") || Plugins.on("mouse-capture")
+		when: Apex.probing !== 0 || MouseCapture.probing
+	}
+
+	// the mouse capture coming and going
+	Hold {
+		id: caging
+		when: hudLife.running
+		keep: 600
+	}
+
+	Timer {
+		id: hudLife
+		interval: 2600
+	}
+
+	Connections {
+		target: MouseCapture
+
+		function onFlashesChanged() {
+			hudLife.restart();
+		}
+	}
+
+	ScreenView {
+		view: "overlays/MouseCaptureHud"
+		available: Plugins.on("mouse-capture")
+		when: caging.held
+		model: Quickshell.screens.filter(screen => screen.name === MouseCapture.flashOutput)
 	}
 
 	ScreenView {

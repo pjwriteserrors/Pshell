@@ -487,6 +487,113 @@ SettingsPage {
 		}
 	}
 
+	// ── mouse capture ──────────────────────────────────────────────────────
+	SettingCard {
+		id: capture
+
+		// the niri bind that calls it, if there is one
+		readonly property var bind: Keybinds.binds.find(b => !b.disabled && Keybinds.isShell(b) && Keybinds.shellCall(b).target === "mousecapture" && Keybinds.shellCall(b).fn === "toggle") ?? null
+
+		anchor: "mouse-capture"
+		visible: MouseCapture.available
+		title: "Capture the mouse in a window"
+		subtitle: "A key holds the pointer inside the focused window – in a game it never slips onto another window or monitor. The key again lets it go."
+		icon: "cursor_default_click"
+		trailing: [
+			TextButton {
+				variant: MouseCapture.active ? "tonal" : "ghost"
+				icon: MouseCapture.active ? "lock_open_variant_outline" : "lock"
+				text: MouseCapture.active ? "Let go" : "Try it in 3 s"
+				onActivated: MouseCapture.active ? MouseCapture.release("key") : tryLater.restart()
+
+				// time to click into the window it is meant for
+				Timer {
+					id: tryLater
+
+					interval: 3000
+					onTriggered: MouseCapture.capture()
+				}
+			}
+		]
+
+		RowLayout {
+			Layout.fillWidth: true
+			Layout.leftMargin: 12
+			Layout.rightMargin: 12
+			spacing: 14
+
+			Glyph {
+				icon: "keyboard"
+				size: 18
+				color: Theme.textMuted
+			}
+
+			StyledText {
+				Layout.fillWidth: true
+				text: capture.bind ? "Key" : "No key yet – bind “mousecapture toggle” under Keys"
+				font.weight: Font.Medium
+				wrapMode: Text.WordWrap
+			}
+
+			KeyCombo {
+				visible: capture.bind !== null
+				key: capture.bind?.key ?? ""
+				size: 26
+			}
+		}
+
+		FlagRow {
+			title: "Let go when another window gets the focus"
+			subtitle: "Alt+Tab or a workspace switch ends it; off: it stays until the key"
+			icon: "swap_horizontal"
+			checked: MouseCapture.releaseOnFocus
+			onToggled: on => MouseCapture.set("releaseOnFocus", on)
+		}
+
+		FlagRow {
+			title: "Show it on the screen"
+			subtitle: "Corners close around the window and a lock springs up, both ways"
+			icon: "animation_play_outline"
+			checked: MouseCapture.hud
+			onToggled: on => MouseCapture.set("hud", on)
+		}
+
+		RowLayout {
+			Layout.fillWidth: true
+			spacing: 12
+
+			Glyph {
+				Layout.leftMargin: 12
+				icon: "speedometer"
+				size: 18
+				color: Theme.textMuted
+			}
+
+			StyledText {
+				text: "Pointer speed while captured"
+				font.weight: Font.Medium
+			}
+
+			ValueSlider {
+				from: 0.25
+				to: 3
+				step: 0.05
+				value: MouseCapture.speed
+				format: v => `${Math.round(v * 100)}%`
+				onMoved: v => MouseCapture.set("speed", v)
+			}
+		}
+
+		StyledText {
+			Layout.fillWidth: true
+			Layout.leftMargin: 12
+			text: "The pointer is moved by the shell while it is held, with niri's acceleration copied – if it feels faster or slower than usual, even it out here. Games that lock the pointer themselves (looking around with the mouse) need no capture."
+			tone: Theme.textSubtle
+			font.pixelSize: Theme.size.small
+			wrapMode: Text.WordWrap
+		}
+	}
+
 	// ── more ───────────────────────────────────────────────────────────────
 	SettingCard {
 		anchor: "input-more"

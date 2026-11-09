@@ -1747,6 +1747,22 @@ Scope {
 		}
 	}
 
+	// the pointer held inside the focused window, and let go again
+	IpcHandler {
+		target: "mousecapture"
+		enabled: MouseCapture.available
+
+		function toggle(): void {
+			MouseCapture.toggle();
+		}
+		function capture(): void {
+			MouseCapture.capture();
+		}
+		function release(): void {
+			MouseCapture.release("key");
+		}
+	}
+
 	// the pointer as a laser dot, for presentations
 	IpcHandler {
 		target: "laser"
