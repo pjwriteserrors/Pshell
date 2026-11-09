@@ -128,6 +128,7 @@
 
 	{ "id": "studio-wallpaper", "name": "Wallpaper", "category": "Studio" },
 	{ "id": "studio-wallpaper-online", "name": "Online wallpapers", "category": "Studio", "requires": ["studio-wallpaper"], "icon": "earth" },
+	{ "id": "studio-wallpaper-upscale", "name": "Upscale small pictures of the day", "category": "Studio", "default": false, "requires": ["studio-wallpaper"], "icon": "image_size_select_large" },
 	{ "id": "studio-motion", "name": "Motion", "category": "Studio" },
 	{ "id": "studio-dress", "name": "Icons & pointer", "category": "Studio" },
 	{ "id": "studio-styles", "name": "Style", "category": "Studio" },

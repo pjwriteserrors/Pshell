@@ -1064,6 +1064,18 @@ with its preview and its wallust colours, so the tab shows them without
 waiting. Applying one links it into the library's `Wallpaper of the day` and
 applies that.
 
+A picture smaller than the largest screen (NASA's are often 1200 px wide) is
+marked `small`, and the picker offers "Upscale with AI": `--upscale <source>`
+runs Real-ESRGAN's Vulkan build on the Radeon (picked by name from
+`vulkaninfo`) with Upscayl's UltraSharp model, made 4× and then brought to
+the screen's size. realesrgan-x4plus is not used here, since it wipes faint
+stars away as noise. The program is the picture viewer's install, the model
+is downloaded once from a pinned commit and checked by its hash. The bigger
+picture gets its own folder (`<picture>-ai`) with the original beside it as
+`.original.*`; `--original` takes it back and marks it `kept_small`. A worn
+picture is applied again. With the plugin `studio-wallpaper-upscale` on, a
+new small picture is upscaled as soon as it is fetched.
+
 At shell start `restore_theme.sh` only restarts the wallpaper, unless colours
 are missing or the wallpaper of the day changed. Screens that appear later get
 the shell's wallpaper at once; mpvpaper puts a video on them itself, and

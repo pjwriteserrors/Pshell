@@ -1549,6 +1549,8 @@ def op_inpaint(req, progress):
 UPSCALE_DIR = os.path.join(DATA, "viewer-upscale")
 UPSCALE_ZIP = "realesrgan-ncnn-vulkan-20220424-ubuntu.zip"
 UPSCALE_URL = "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/" + UPSCALE_ZIP
+# the same file through the API, for when the download link answers 504
+UPSCALE_ASSET = "https://api.github.com/repos/xinntao/Real-ESRGAN/releases/assets/63494485"
 UPSCALE_MODEL = "realesrgan-x4plus"
 UPSCALE_MAX = 120_000_000
 
@@ -1572,13 +1574,13 @@ def op_upscalestatus(req, progress):
 UPSCALE_INSTALLING = threading.Event()
 
 
-def download(url, target, progress, start, end, text):
+def download(url, target, progress, start, end, text, accept="*/*"):
     """url into target (atomically), telling how far between start and end."""
     import urllib.request
     os.makedirs(os.path.dirname(target), exist_ok=True)
     tmp = target + ".part"
     try:
-        request = urllib.request.Request(url, headers={"User-Agent": "pshell-viewer"})
+        request = urllib.request.Request(url, headers={"User-Agent": "pshell-viewer", "Accept": accept})
         with urllib.request.urlopen(request, timeout=60) as response, open(tmp, "wb") as file:
             total = int(response.headers.get("Content-Length") or 0)
             done = 0
@@ -1605,7 +1607,10 @@ def op_upscaleinstall(req, progress):
     UPSCALE_INSTALLING.set()
     try:
         archive = os.path.join(UPSCALE_DIR, UPSCALE_ZIP)
-        download(UPSCALE_URL, archive, progress, 0.02, 0.8, "Downloading Real-ESRGAN")
+        try:
+            download(UPSCALE_URL, archive, progress, 0.02, 0.8, "Downloading Real-ESRGAN")
+        except ViewerError:
+            download(UPSCALE_ASSET, archive, progress, 0.02, 0.8, "Downloading Real-ESRGAN", "application/octet-stream")
         progress(0.85, "Unpacking")
         try:
             with zipfile.ZipFile(archive) as packed:

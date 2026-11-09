@@ -361,6 +361,7 @@ ModalWindow {
 	function dismiss() {
 		if (root.applyPending) root.applyPending = false;
 		else if (root.scaling) root.cancelScaling();
+		else if (Daily.growing !== "") Daily.cancelUpscale();
 		else if (online.saving) online.cancelSave();
 		else if (root.filtersOpen) root.filtersOpen = false;
 		else Popups.closeModal();
@@ -470,6 +471,18 @@ ModalWindow {
 		root.scaling = true;
 		scaleProcess.command = ["bash", root.themeCatalogScriptPath, "scale", theme.path, root.selectedResolution];
 		scaleProcess.running = true;
+	}
+
+	// a picture of the day that was made bigger while it is worn is painted
+	// again, with the look the picker shows
+	Connections {
+		target: Daily
+
+		function onGrown(entry) {
+			if (!entry.worn) return;
+			Quickshell.execDetached(["bash", root.applyScriptPath, Daily.themeDir,
+				"--backend", root.selectedBackend, "--palette", root.selectedColorSpace, "--style", root.selectedPalette]);
+		}
 	}
 
 	function cancelScaling() {
@@ -1761,6 +1774,58 @@ ModalWindow {
 						}
 					}
 
+					// a picture smaller than the screen: made bigger by AI on
+					// the Radeon, or taken back to the downloaded one
+					RowLayout {
+						Layout.topMargin: 6
+						Layout.bottomMargin: 2
+						spacing: 10
+						visible: !!caption.daily && (caption.daily.small === true || !!caption.daily.upscaled)
+
+						Rectangle {
+							implicitHeight: 32
+							implicitWidth: growLabel.implicitWidth + 24
+							radius: 16
+							color: Qt.rgba(0, 0, 0, 0.45)
+
+							StyledText {
+								id: growLabel
+
+								anchors.centerIn: parent
+								text: {
+									const daily = caption.daily;
+									if (!daily) return "";
+									const from = daily.upscaled;
+									return from ? `AI  ·  ${from.width} × ${from.height} → ${daily.width} × ${daily.height}`
+										: `${daily.width} × ${daily.height}  ·  smaller than the screen`;
+								}
+								tone: "white"
+								surface: "transparent"
+								font.pixelSize: Theme.size.label
+								font.weight: Font.DemiBold
+							}
+						}
+
+						TextButton {
+							implicitHeight: 32
+							text: caption.daily?.upscaled ? "Original" : "Upscale with AI"
+							icon: caption.daily?.upscaled ? "undo" : "image_size_select_large"
+							variant: "tonal"
+							enabled: Daily.growing === "" && !root.scaling
+							busy: Daily.growing !== "" && Daily.growing === caption.daily?.provider
+							onActivated: Daily.upscale(caption.daily.provider, !!caption.daily.upscaled)
+						}
+					}
+
+					StyledText {
+						Layout.topMargin: 2
+						visible: Daily.growError !== "" && Daily.growing === "" && !!caption.daily
+						text: Daily.growError
+						tone: Qt.rgba(1, 0.75, 0.72, 1)
+						surface: "transparent"
+						font.pixelSize: Theme.size.label
+					}
+
 					StyledText {
 						Layout.fillWidth: true
 						visible: text !== ""
@@ -2016,7 +2081,7 @@ ModalWindow {
 							text: "Apply"
 							icon: "check"
 							variant: "filled"
-							enabled: root.currentTheme !== null && !root.scaling && !(root.currentTheme.online && root.previewPaletteStatus === "error")
+							enabled: root.currentTheme !== null && !root.scaling && Daily.growing === "" && !(root.currentTheme.online && root.previewPaletteStatus === "error")
 							busy: (root.previewPaletteStatus === "loading" && root.currentTheme !== null) || root.scaling || online.saving
 							onActivated: root.applyTheme(root.currentTheme)
 						}
@@ -2033,8 +2098,10 @@ ModalWindow {
 					// a small one (MoeWalls' still) would only flash
 					readonly property bool staging: root.view === "online" && online.currentStaging && (online.stageTotal > 2097152 || root.applyPending)
 					readonly property bool reading: root.applyPending && !progressCard.staging
-					readonly property bool shown: root.scaling || progressCard.saving || progressCard.staging || progressCard.reading
-					readonly property real progress: progressCard.saving ? online.saveProgress
+					readonly property bool growing: Daily.growing !== "" && !Daily.shrinking
+					readonly property bool shown: root.scaling || progressCard.growing || progressCard.saving || progressCard.staging || progressCard.reading
+					readonly property real progress: progressCard.growing ? Daily.growProgress
+						: progressCard.saving ? online.saveProgress
 						: progressCard.staging ? online.stageProgress
 						: progressCard.reading ? 1 : root.scaleProgress
 					readonly property string detail: progressCard.saving ? root.downloadText(online.saveBytes, online.saveTotal, online.saveStarted)
@@ -2068,7 +2135,8 @@ ModalWindow {
 
 							StyledText {
 								Layout.fillWidth: true
-								text: progressCard.saving || progressCard.staging ? "Downloading"
+								text: progressCard.growing ? Daily.growText
+									: progressCard.saving || progressCard.staging ? "Downloading"
 									: progressCard.reading ? "Reading the colours" : `Scaling to ${root.scalingLabel}`
 								font.pixelSize: Theme.size.body
 								font.weight: Font.DemiBold

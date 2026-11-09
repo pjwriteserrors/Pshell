@@ -33,6 +33,17 @@ Singleton {
 	property var applied: ({})
 	property real asked: 0
 	readonly property bool fetching: fetcher.running
+	// the picture being made bigger (or taken back), how far, and why the
+	// last one failed
+	property string growing: ""
+	property bool shrinking: false
+	property real growProgress: 0
+	property string growText: ""
+	property string growError: ""
+
+	// an entry that was made bigger or taken back; `worn` when the desktop
+	// wears it and should be painted again
+	signal grown(var entry)
 
 	function wears(entry) {
 		return !!entry && root.applied.provider === entry.provider && root.applied.candidate_id === entry.candidate_id;
@@ -75,6 +86,57 @@ Singleton {
 			errors[answer.provider] = String(answer.error || "");
 			root.errors = errors;
 		}
+	}
+
+	// a small picture made as big as the largest screen by Real-ESRGAN on the
+	// Radeon; `back` takes it back to the downloaded one
+	function upscale(provider, back) {
+		if (grower.running) return;
+		root.growing = provider;
+		root.shrinking = !!back;
+		root.growProgress = 0;
+		root.growText = back ? "Taking the original back" : "Starting";
+		root.growError = "";
+		grower.command = ["python3", root.script, back ? "--original" : "--upscale", provider];
+		grower.running = true;
+	}
+
+	function cancelUpscale() {
+		grower.running = false;
+	}
+
+	Process {
+		id: grower
+
+		command: ["true"]
+		stdout: SplitParser {
+			onRead: line => {
+				const match = String(line).match(/^progress ([0-9.]+) (.*)$/);
+				if (match) {
+					root.growProgress = Math.max(0, Math.min(1, Number(match[1])));
+					root.growText = match[2];
+					return;
+				}
+				let answer;
+				try {
+					answer = JSON.parse(line);
+				} catch (error) {
+					return;
+				}
+				if (!answer.entry) return;
+				const entries = Object.assign({}, root.entries);
+				entries[answer.entry.provider] = answer.entry;
+				root.entries = entries;
+				root.grown(answer.entry);
+			}
+		}
+		stderr: StdioCollector {
+			onStreamFinished: {
+				const said = String(text).trim().split("\n").pop() || "";
+				if (said !== "") root.growError = said.replace(/^wallpaper of the day: /, "");
+			}
+		}
+		onExited: root.growing = ""
 	}
 
 	Process {

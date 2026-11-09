@@ -9,6 +9,13 @@ its preview and its wallust colours, so the theme picker shows them at once:
   --list             what is kept, without asking anyone
   --provider NAME    make NAME's picture the "Wallpaper of the day" theme
                      (--cached: the one that is kept, without asking)
+  --upscale NAME     make NAME's kept picture as big as the largest screen
+                     with Real-ESRGAN on the Radeon ("progress <0-1> <text>"
+                     lines, then the entry); --original NAME takes it back
+
+A picture smaller than the largest screen is "small" in the list. With the
+plugin studio-wallpaper-upscale on, a new small one is made bigger as soon as
+it is fetched.
 """
 
 from __future__ import annotations
@@ -118,6 +125,24 @@ HISTORY_FILE = STATE_DIR / "wallpaper-of-day-history.json"
 CACHE_DIR = STATE_DIR / "daily"
 PREVIEW_DIR = Path(os.environ.get("THEME_PREVIEW_DIR", STATE_DIR / "previews"))
 WALLUST_CONFIG_FILE = Path(os.environ.get("WALLUST_CONFIG_FILE", HOME / ".config" / "wallust" / "wallust.toml"))
+# the picture viewer's Real-ESRGAN (scripts/viewer/viewer.py), shared
+UPSCALE_DIR = Path(os.environ.get("XDG_DATA_HOME") or HOME / ".local" / "share") / "pshell" / "viewer-upscale"
+UPSCALE_ZIP = "realesrgan-ncnn-vulkan-20220424-ubuntu.zip"
+UPSCALE_URL = "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/" + UPSCALE_ZIP
+# the same file through the API, for when the download link answers 504
+UPSCALE_ASSET = "https://api.github.com/repos/xinntao/Real-ESRGAN/releases/assets/63494485"
+# UltraSharp (from Upscayl's models): realesrgan-x4plus takes faint stars
+# for noise and wipes them away, UltraSharp keeps them and invents nothing
+UPSCALE_MODEL = "ultrasharp-4x"
+UPSCALE_MODELS = UPSCALE_DIR / "wallpaper-models"
+UPSCALE_MODEL_URL = "https://raw.githubusercontent.com/upscayl/upscayl/6cfaf45b2aae2847cba4f2313b57ca20a0ddd79c/resources/models/"
+UPSCALE_MODEL_SHA256 = {
+    ".param": "0136ca83686809a8f17f7111f11b951e8db93610e24b7f4137c9ffe4dbc4a806",
+    ".bin": "fb3e279d40d4cddb44db4e684d59e68d0aa39852c8cc14dc3f23ccc7e6eee9c1",
+}
+UPSCALE_MAX = 120_000_000
+# smaller than the screen by less than this is left as it is
+UPSCALE_SLACK = 1.05
 
 
 def request(url: str, *, timeout: int = 30) -> urllib.response.addinfourl:
@@ -760,13 +785,280 @@ def install(entry: dict[str, object]) -> Path:
     return target
 
 
+# ── made bigger ────────────────────────────────────────────────────────────
+# The upscaled picture gets a folder of its own (<picture>-ai) with the
+# original beside it as .original.*, which the catalog does not see; taking it
+# back makes a <picture>-orig folder of the original the same way.
+
+
+def screen_size() -> tuple[int, int]:
+    """The largest screen's pixels, 4K when niri cannot tell."""
+    try:
+        outputs = json.loads(subprocess.run(
+            ["niri", "msg", "--json", "outputs"], capture_output=True, text=True, timeout=5,
+        ).stdout)
+        sizes = []
+        for output in outputs.values():
+            mode = output["modes"][output["current_mode"]]
+            turned = (output.get("logical") or {}).get("transform", "Normal") in ("90", "270", "Flipped90", "Flipped270")
+            sizes.append((mode["height"], mode["width"]) if turned else (mode["width"], mode["height"]))
+        return max(sizes, key=lambda size: size[0] * size[1])
+    except (OSError, ValueError, KeyError, IndexError, TypeError, AttributeError, subprocess.SubprocessError):
+        return 3840, 2160
+
+
+def needed_scale(entry: dict[str, object], screen: tuple[int, int]) -> float:
+    """How much bigger the picture has to be to cover the screen."""
+    width, height = int(entry.get("width") or 0), int(entry.get("height") or 0)
+    if entry.get("media_type", "image") != "image" or not width or not height:
+        return 1.0
+    return max(screen[0] / width, screen[1] / height)
+
+
+def described(entry: dict[str, object], screen: tuple[int, int]) -> dict[str, object]:
+    entry = with_size(entry)
+    return {**entry, "small": needed_scale(entry, screen) > UPSCALE_SLACK} if entry else entry
+
+
+def auto_upscale() -> bool:
+    return subprocess.run(
+        [sys.executable, str(SCRIPT_DIR / "host.py"), "has", "studio-wallpaper-upscale"], capture_output=True
+    ).returncode == 0
+
+
+def say(fraction: float, text: str) -> None:
+    print(f"progress {fraction:.3f} {text}", flush=True)
+
+
+def esrgan() -> str:
+    found = shutil.which("realesrgan-ncnn-vulkan")
+    if found:
+        return found
+    for candidate in sorted(UPSCALE_DIR.glob("**/realesrgan-ncnn-vulkan")):
+        if os.access(candidate, os.X_OK):
+            return str(candidate)
+    return ""
+
+
+def fetch_file(sources, target: Path, progress, start: float, end: float, text: str) -> None:
+    """The first of (url, accept) sources that answers, into target, telling
+    how far between start and end."""
+    for url, accept in sources:
+        try:
+            answer = urllib.request.urlopen(
+                urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": accept}), timeout=60
+            )
+            break
+        except OSError as error:
+            failure = error
+    else:
+        raise RuntimeError(f"{text} did not work ({failure})")
+    shown = -1
+    with answer as response, target.open("wb") as output:
+        total = int(response.headers.get("Content-Length") or 0)
+        done = 0
+        while chunk := response.read(1 << 16):
+            output.write(chunk)
+            done += len(chunk)
+            if total and done >> 20 != shown:
+                shown = done >> 20
+                progress(start + (end - start) * done / total, f"{text} ({shown} of {total >> 20} MB)")
+
+
+def install_esrgan(progress) -> str:
+    """Real-ESRGAN's Vulkan build where the viewer keeps it (about 45 MB)."""
+    import zipfile
+    UPSCALE_DIR.mkdir(parents=True, exist_ok=True)
+    partial = UPSCALE_DIR / f"{UPSCALE_ZIP}.part.{os.getpid()}"
+    try:
+        sources = ((UPSCALE_URL, "*/*"), (UPSCALE_ASSET, "application/octet-stream"))
+        fetch_file(sources, partial, progress, 0, 0.12, "Downloading Real-ESRGAN")
+        with zipfile.ZipFile(partial) as packed:
+            if any(member.startswith("/") or ".." in member.split("/") for member in packed.namelist()):
+                raise RuntimeError("the Real-ESRGAN download looks wrong")
+            packed.extractall(UPSCALE_DIR)
+    finally:
+        partial.unlink(missing_ok=True)
+    for candidate in UPSCALE_DIR.glob("**/realesrgan-ncnn-vulkan"):
+        candidate.chmod(0o755)
+    found = esrgan()
+    if not found:
+        raise RuntimeError("the Real-ESRGAN download has no program in it")
+    return found
+
+
+def model_files(progress) -> Path:
+    """The folder with the UltraSharp model, downloaded once (about 33 MB)."""
+    UPSCALE_MODELS.mkdir(parents=True, exist_ok=True)
+    for suffix, digest in UPSCALE_MODEL_SHA256.items():
+        target = UPSCALE_MODELS / (UPSCALE_MODEL + suffix)
+        if target.is_file():
+            continue
+        partial = target.with_name(target.name + f".part.{os.getpid()}")
+        try:
+            fetch_file([(UPSCALE_MODEL_URL + target.name, "*/*")], partial, progress, 0.12, 0.25, "Downloading the model")
+            if hashlib.sha256(partial.read_bytes()).hexdigest() != digest:
+                raise RuntimeError("the downloaded model is not the one expected")
+            os.replace(partial, target)
+        finally:
+            partial.unlink(missing_ok=True)
+    return UPSCALE_MODELS
+
+
+def radeon() -> tuple[str, str]:
+    """The Vulkan index and name of the Radeon (ncnn counts devices as
+    vulkaninfo does), else of the first card; ("", "") when unknown."""
+    try:
+        summary = subprocess.run(["vulkaninfo", "--summary"], capture_output=True, text=True, timeout=20).stdout
+    except (OSError, subprocess.SubprocessError):
+        return "", ""
+    cards = re.findall(r"^GPU(\d+):.*?deviceName\s*=\s*([^\n]+)", summary, re.M | re.S)
+    # "AMD Radeon RX 5700 XT (RADV NAVI10)" is shown as "AMD Radeon RX 5700 XT"
+    cards = [(index, re.sub(r"\s*\(.*\)$", "", name.strip())) for index, name in cards if "llvmpipe" not in name.lower()]
+    for index, name in cards:
+        if re.search(r"AMD|Radeon|RADV", name):
+            return index, name
+    return cards[0] if cards else ("", "")
+
+
+def link_or_copy(source: Path, target: Path) -> None:
+    try:
+        os.link(source, target)
+    except OSError:
+        shutil.copy2(source, target)
+
+
+def replace_kept(provider: str, entry: dict[str, object], directory: Path, extra: dict[str, object]) -> dict[str, object]:
+    """The entry now kept in directory; the old folder goes, and the library's
+    theme of the day follows when it is worn."""
+    old = Path(str(entry["theme_path"]))
+    media = next(path for path in sorted(directory.iterdir()) if path.name.startswith("media."))
+    worn = applied()
+    result = {
+        **{key: value for key, value in entry.items() if key not in ("upscaled", "kept_small", "small")},
+        "theme_path": str(directory),
+        "media_path": str(media),
+        **dict(zip(("width", "height"), media_size(media))),
+        **extra,
+        **prepare(directory),
+    }
+    write_json_atomic(CACHE_DIR / provider / "entry.json", result)
+    forget(old)
+    if worn.get("provider") == provider and worn.get("candidate_id") == entry.get("candidate_id"):
+        result["worn"] = True
+        update(provider, False, False, 1, cached=True)
+    return result
+
+
+def upscale(provider: str, progress=say) -> dict[str, object]:
+    """The kept picture of a source, made as big as the largest screen."""
+    from PIL import Image
+
+    with (CACHE_DIR / f"{provider}.lock").open("w") as lock, (CACHE_DIR / "upscale.lock").open("w") as gpu:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        entry = with_size(cached_entry(provider))
+        if not entry:
+            raise RuntimeError("no picture is kept for " + provider)
+        if entry.get("upscaled"):
+            return entry
+        scale = needed_scale(entry, screen_size())
+        if scale <= UPSCALE_SLACK:
+            raise RuntimeError("the picture is as big as the screen already")
+        width, height = int(entry["width"]), int(entry["height"])
+        if width * height * 16 > UPSCALE_MAX:
+            raise RuntimeError(f"{width} × {height} px is too big to be made four times bigger")
+        fcntl.flock(gpu, fcntl.LOCK_EX)
+        program = esrgan() or install_esrgan(progress)
+        models = model_files(progress)
+        index, card = radeon()
+
+        source = Path(str(entry["media_path"]))
+        base = re.sub(r"-(ai|orig)$", "", Path(str(entry["theme_path"])).name)
+        directory = CACHE_DIR / provider / f"{base}-ai"
+        shutil.rmtree(directory, ignore_errors=True)
+        directory.mkdir(parents=True)
+        try:
+            link_or_copy(source, directory / f".original{source.suffix}")
+            raw = directory / ".esrgan.png"
+            args = [program, "-i", str(source), "-o", str(raw), "-n", UPSCALE_MODEL, "-s", "4", "-m", str(models)]
+            if index:
+                args += ["-g", index]
+            progress(0.27, f"Upscaling on the {card}" if card else "Upscaling")
+            process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+            tail: list[str] = []
+            buffer = b""
+            while chunk := process.stdout.read1(4096):  # type: ignore[union-attr]
+                buffer += chunk
+                *lines, buffer = re.split(rb"[\r\n]", buffer)
+                for line in lines:
+                    text = line.decode("utf-8", "replace").strip()
+                    match = re.match(r"([\d.]+)%", text)
+                    if match:
+                        progress(0.27 + 0.6 * float(match.group(1)) / 100, f"Upscaling on the {card}" if card else "Upscaling")
+                    elif text:
+                        tail = (tail + [text])[-3:]
+            if process.wait() != 0 or not raw.is_file():
+                raise RuntimeError("Real-ESRGAN did not work: " + (tail[-1] if tail else "it stopped"))
+            progress(0.9, "Saving")
+            factor = min(4.0, scale)
+            with Image.open(raw) as image:
+                image = image.convert("RGB")
+                size = (round(width * factor), round(height * factor))
+                if image.size != size:
+                    image = image.resize(size, Image.Resampling.LANCZOS)
+                image.save(directory / "media.jpg", "JPEG", quality=95, subsampling=0)
+            raw.unlink()
+        except BaseException:
+            shutil.rmtree(directory, ignore_errors=True)
+            raise
+        progress(0.97, "Reading the colours")
+        upscaled = {"width": width, "height": height, "model": UPSCALE_MODEL, "gpu": card}
+        return replace_kept(provider, entry, directory, {"upscaled": upscaled})
+
+
+def original(provider: str) -> dict[str, object]:
+    """Takes an upscaled picture back to the one that was downloaded."""
+    with (CACHE_DIR / f"{provider}.lock").open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        entry = cached_entry(provider)
+        if not entry.get("upscaled"):
+            return entry
+        old = Path(str(entry["theme_path"]))
+        kept = next((path for path in old.iterdir() if path.name.startswith(".original.")), None)
+        if kept is None:
+            raise RuntimeError("the original picture is gone")
+        directory = CACHE_DIR / provider / (re.sub(r"-(ai|orig)$", "", old.name) + "-orig")
+        shutil.rmtree(directory, ignore_errors=True)
+        directory.mkdir(parents=True)
+        link_or_copy(kept, directory / ("media" + kept.suffix))
+        # what was given back is not made bigger again on its own
+        return replace_kept(provider, entry, directory, {"kept_small": True})
+
+
+def grown(entry: dict[str, object], screen: tuple[int, int]) -> dict[str, object]:
+    """A newly kept small picture, upscaled when the plugin says so."""
+    if (
+        not entry
+        or entry.get("upscaled")
+        or entry.get("kept_small")
+        or needed_scale(entry, screen) <= UPSCALE_SLACK
+        or not auto_upscale()
+    ):
+        return entry
+    try:
+        return upscale(str(entry["provider"]), lambda *_: None)
+    except Exception as error:
+        print(f"wallpaper of the day: upscaling failed: {error}", file=sys.stderr)
+        return entry
+
+
 def update(provider: str, force: bool, resolve_only: bool, retries: int, cached: bool = False) -> dict[str, object]:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     if resolve_only:
         return resolve(provider)
     entry = cached_entry(provider) if cached and not force else {}
     if not entry:
-        entry = fetch(provider, force, retries)
+        entry = grown(fetch(provider, force, retries), screen_size())
     PROVIDER_FILE.write_text(provider + "\n")
     result = {
         key: value
@@ -794,12 +1086,16 @@ def applied() -> dict[str, object]:
 def fetch_all(force: bool) -> None:
     os.nice(10)
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    screen = screen_size()
     with ThreadPoolExecutor(len(PROVIDERS)) as pool:
-        futures = {pool.submit(fetch, provider, force): provider for provider in PROVIDERS}
+        futures = {
+            pool.submit(lambda provider: grown(fetch(provider, force), screen), provider): provider
+            for provider in PROVIDERS
+        }
         for future in as_completed(futures):
             provider = futures[future]
             try:
-                line: dict[str, object] = {"provider": provider, "entry": future.result()}
+                line: dict[str, object] = {"provider": provider, "entry": described(future.result(), screen)}
             except Exception as error:
                 line = {"provider": provider, "error": str(error)}
             print(json.dumps(line, ensure_ascii=False), flush=True)
@@ -815,8 +1111,18 @@ def main() -> int:
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--resolve-only", action="store_true")
     parser.add_argument("--retries", type=int, default=1)
+    parser.add_argument("--upscale", choices=PROVIDERS)
+    parser.add_argument("--original", choices=PROVIDERS)
     args = parser.parse_args()
 
+    if args.upscale or args.original:
+        try:
+            entry = upscale(args.upscale) if args.upscale else original(args.original)
+            print(json.dumps({"entry": described(entry, screen_size())}, ensure_ascii=False), flush=True)
+            return 0
+        except Exception as error:
+            print(f"wallpaper of the day: {error}", file=sys.stderr)
+            return 1
     if args.status:
         metadata = load_metadata()
         try:
@@ -826,7 +1132,8 @@ def main() -> int:
         print(json.dumps({**metadata, "selected_provider": selected}, ensure_ascii=False))
         return 0
     if args.list:
-        entries = [with_size(entry) for entry in map(cached_entry, PROVIDERS) if entry]
+        screen = screen_size()
+        entries = [described(entry, screen) for entry in map(cached_entry, PROVIDERS) if entry]
         print(json.dumps({"entries": entries, "applied": applied()}, ensure_ascii=False))
         return 0
     if args.fetch_all:
