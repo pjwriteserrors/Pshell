@@ -56,6 +56,7 @@ class Held:
         self.passing = False  # the press went straight through (native or sustained)
         self.done = False  # the click fired on the press already
         self.done_swipe = False
+        self.aiming = False  # held still with the HUD up: the way is picked on release
         self.wheel = 0.0
         self.thumb = 0.0
         self.token = 0
@@ -102,6 +103,10 @@ class Engine:
         except Exception:
             dpi = 1000.0
         return max(20.0, mm * dpi / 25.4)
+
+    @property
+    def aim_ms(self):
+        return float(self.options.get("aimMs", 380))
 
     @property
     def thumb_step(self):
@@ -205,6 +210,29 @@ class Engine:
         if "hold" in rules:
             token = state.token
             self.schedule(self.hold_ms / 1000.0, lambda: self._hold(control, token))
+        elif self.options.get("hud", True) and any(way in rules for way in SWIPES):
+            token = state.token
+            self.schedule(self.aim_ms / 1000.0, lambda: self._aim(control, token))
+
+    def _aim(self, control, token):
+        """Held still for a moment: the HUD comes and the swipe waits for the
+        release instead of firing on the way."""
+        state = self.held.get(control)
+        if not state or state.token != token or state.swiped or state.done_swipe:
+            return
+        if math.hypot(state.dx, state.dy) >= self.swipe_distance * 0.4:
+            return
+        state.aiming = True
+        self.live("aim", control=control)
+
+    def _aimed(self, state):
+        """The way the mouse points at on release, or None back in the middle."""
+        major, minor = max(abs(state.dx), abs(state.dy)), min(abs(state.dx), abs(state.dy))
+        if major < self.swipe_distance or major <= minor:
+            return None
+        if abs(state.dx) >= abs(state.dy):
+            return "right" if state.dx > 0 else "left"
+        return "down" if state.dy > 0 else "up"
 
     def _hold(self, control, token):
         state = self.held.get(control)
@@ -238,6 +266,13 @@ class Engine:
             if lasting(state.held.get("action")):
                 self._fire(state.held, control, "hold", "end")
             return
+        if state.aiming:
+            way = self._aimed(state)
+            if way and way in state.rules:
+                self._fire(state.rules[way], control, way)
+                return
+            if way or state.travel > self.swipe_distance * 0.5:
+                return
         if state.swiped or state.travel > self.swipe_distance * 0.5:
             return
         if "double" in state.rules:
@@ -282,7 +317,7 @@ class Engine:
         state.travel = max(state.travel, math.hypot(state.dx, state.dy))
         distance = self.swipe_distance
         self.live("move", control=state.control, dx=state.dx, dy=state.dy, reach=distance)
-        if state.done_swipe or state.held:
+        if state.done_swipe or state.held or state.aiming:
             return
         major, minor = max(abs(state.dx), abs(state.dy)), min(abs(state.dx), abs(state.dy))
         if major < distance:

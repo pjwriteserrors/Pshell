@@ -2480,15 +2480,16 @@ class Helper:
             count = len(pdf.pages)
         # pages without text (a scan): a few of them looked at
         picks = sorted({int(i * (count - 1) / 7) for i in range(8)}) if count > 8 else list(range(count))
-        empty = 0
-        for index in picks:
+        def empty(index):
             try:
                 text = run(["pdftotext", "-f", str(index + 1), "-l", str(index + 1), *poppler_pw(password), path, "-"], timeout=30)
-                if len(text.decode("utf-8", "replace").strip()) < 16:
-                    empty += 1
+                return len(text.decode("utf-8", "replace").strip()) < 16
             except PdfError:
-                pass
-        info["scanned"] = bool(picks) and empty * 2 > len(picks)
+                return False
+        # side by side: the pages wait for this answer
+        with ThreadPoolExecutor(max_workers=len(picks) or 1) as pool:
+            blanks = sum(pool.map(empty, picks))
+        info["scanned"] = bool(picks) and blanks * 2 > len(picks)
         return info
 
     @staticmethod

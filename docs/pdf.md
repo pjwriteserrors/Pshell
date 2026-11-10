@@ -25,9 +25,16 @@ settings › Keybinds.
 
 QtQuick.Pdf (PDFium, it comes with qt6-webengine) draws the pages inside the
 shell's scene: only the views import it, and the window is loaded by URL, so
-a machine without it only misses this window. A page shows a small picture
-at once and the sharp one when it is ready; deep zoom asks the helper for a
-tile of what is seen (`render`, pdftoppm with a clip). The window is built a
+a machine without it only misses this window. PDFium draws one picture at a
+time, and while it draws every other call to it waits – on the shell's thread
+that is the whole shell. So the links, the outline and the text selection ask
+it only while it is idle (`Pdf.rendering`, `Pdf.docKey`), and a big scan (a
+picture that takes it seconds whatever the size) is drawn as few times as
+possible: the pages looked at first and sharp at once; the small picture (the
+same one for the page, its thumbnail and the glow) goes first only in a file
+known to be quick; thumbnails wait until PDFium is idle; a new zoom is drawn
+while the old picture stays. Deep zoom asks the helper for a tile of what is
+seen (`render`, pdftoppm with a clip). The window is built a
 few seconds after the shell starts and kept when it closes, so a document
 opens at once; it floats (`dotfiles/niri/pshell.kdl`, title "<name> – PDF").
 

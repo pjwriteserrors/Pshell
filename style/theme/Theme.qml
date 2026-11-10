@@ -186,6 +186,20 @@ Singleton {
 	readonly property color primary: root.accentOverride.a > 0 ? root.legible(root.accentOverride, 3.2) : root.legible(root.ranked[0].color, 3.2)
 	readonly property color secondary: root.legible(root.pickDistinct(root.ranked[0].hue, 1), 3.0)
 	readonly property color tertiary: root.legible(root.pickDistinct(root.secondary.hsvHue, 2), 3.0)
+	// a third colour clearly apart from primary and secondary (the GPU next to CPU and RAM);
+	// the palette's if it has one, else primary turned a third around the wheel
+	readonly property color third: {
+		const taken = [root.primary.hsvHue, root.secondary.hsvHue].filter(hue => hue >= 0);
+		const apart = hue => taken.every(other => Math.min(Math.abs(hue - other), 1 - Math.abs(hue - other)) > 0.12);
+		const found = root.ranked.find(entry => entry.hue >= 0 && entry.color.hsvSaturation > 0.25 && apart(entry.hue));
+		if (found) return root.legible(found.color, 3.0);
+		const base = root.primary;
+		for (const turn of [0.33, 0.67, 0.5]) {
+			const hue = ((base.hsvHue < 0 ? 0.6 : base.hsvHue) + turn) % 1;
+			if (apart(hue)) return root.legible(Qt.hsva(hue, Math.max(0.45, base.hsvSaturation), Math.max(0.75, base.hsvValue), 1), 3.0);
+		}
+		return root.legible(Qt.hsva(((base.hsvHue < 0 ? 0.6 : base.hsvHue) + 0.33) % 1, 0.55, 0.85, 1), 3.0);
+	}
 	readonly property color onPrimary: root.contrast(root.primary, root.bg) >= root.contrast(root.primary, root.fg) ? root.bg : root.fg
 	readonly property color danger: root.legible(Qt.tint("#e5484d", Qt.alpha(root.primary, 0.12)), 3.4)
 	readonly property color warning: root.legible(Qt.tint("#f5a524", Qt.alpha(root.primary, 0.1)), 3.4)

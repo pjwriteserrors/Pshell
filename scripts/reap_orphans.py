@@ -16,12 +16,16 @@ the browser's download host, video wallpapers).
     reap_orphans.py            end them, say how many
     reap_orphans.py --dry-run  only list them
     reap_orphans.py --under DIR  also helpers of a shell copy in DIR (tests)
+    reap_orphans.py --after DIR  as --under, once the copy in DIR has ended
+                                 (ended if it is still there); test harnesses
+                                 run it when their nested niri is gone
 """
 
 import os
 import re
 import signal
 import sys
+import time
 
 SHELL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STARTED = [
@@ -67,11 +71,42 @@ def comm(pid):
         return ""
 
 
+def copies(root):
+    """the quickshell processes running the shell copy in root"""
+    wanted = {root, root + "/shell.qml"}
+    out = []
+    for name in os.listdir("/proc"):
+        if name.isdigit():
+            parts = cmdline(int(name))
+            if parts and os.path.basename(parts[0]) in ("quickshell", "qs") and "-p" in parts[:-1] \
+                    and os.path.abspath(parts[parts.index("-p") + 1]) in wanted:
+                out.append(int(name))
+    return out
+
+
+def end_copy(root):
+    # a copy whose compositor is gone dies by itself; its helpers become
+    # orphans only after that
+    for sig in (None, signal.SIGTERM, signal.SIGKILL):
+        for pid in copies(root) if sig else []:
+            try:
+                os.kill(pid, sig)
+            except OSError:
+                pass
+        for _ in range(25):
+            if not copies(root):
+                return
+            time.sleep(0.2)
+
+
 def main():
     dry = "--dry-run" in sys.argv
     roots = [SHELL]
-    if "--under" in sys.argv:
-        roots.append(sys.argv[sys.argv.index("--under") + 1])
+    for flag in ("--under", "--after"):
+        if flag in sys.argv:
+            roots.append(os.path.abspath(sys.argv[sys.argv.index(flag) + 1]))
+    if "--after" in sys.argv and not dry:
+        end_copy(roots[-1])
     uid = os.getuid()
     me = os.getpid()
     # whoever runs this (start_shell.sh, which niri's spawn leaves to systemd

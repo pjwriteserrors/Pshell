@@ -20,9 +20,31 @@ Item {
 	PdfBookmarkModel {
 		id: bookmarks
 
-		document: root.reader?.docs?.a ?? null
+		// read while PDFium is idle (it would hold the whole shell until a page is drawn)
+		document: root.readFor === Pdf.docKey ? (root.reader?.docs?.a ?? null) : null
 		onModelReset: root.tick += 1
 		onRowsInserted: root.tick += 1
+	}
+
+	property string readFor: ""
+	readonly property bool docReady: root.reader?.docs?.a?.status === PdfDocument.Ready
+
+	function readOutline() {
+		if (root.docReady && Pdf.rendering === 0) root.readFor = Pdf.docKey;
+	}
+	onDocReadyChanged: root.readOutline()
+	Component.onCompleted: root.readOutline()
+
+	Connections {
+		target: Pdf
+		enabled: root.readFor !== Pdf.docKey
+
+		function onRenderingChanged() {
+			root.readOutline();
+		}
+		function onDocKeyChanged() {
+			root.readOutline();
+		}
 	}
 
 	// grows when PDFium has read the outline (it comes after the document)

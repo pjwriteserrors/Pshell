@@ -1133,6 +1133,7 @@ PanelWindow {
 		Keys.onPressed: event => {
 			if (event.key === Qt.Key_Escape) Screenshot.cancel();
 			else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) Screenshot.stopScroll();
+			else if (event.key === Qt.Key_A) Screenshot.autoScroll();
 			else return;
 			event.accepted = true;
 		}
@@ -1147,6 +1148,40 @@ PanelWindow {
 			border.width: 2
 			border.color: Theme.primary
 			radius: 3
+		}
+
+		// a flash for every frame taken; grows outward only, never into the region
+		Rectangle {
+			id: scrollFlash
+
+			x: scrollKeys.area.x - 10
+			y: scrollKeys.area.y - 10
+			width: scrollKeys.area.width + 20
+			height: scrollKeys.area.height + 20
+			color: "transparent"
+			border.width: 8
+			border.color: Theme.primary
+			radius: 10
+			opacity: 0
+
+			NumberAnimation on opacity {
+				id: scrollFlashAnim
+
+				from: 0.9
+				to: 0
+				duration: Motion.extraLong
+				easing.type: Easing.OutCubic
+				running: false
+			}
+		}
+
+		Connections {
+			target: Screenshot
+
+			function onScrollFrame() {
+				scrollFlashAnim.restart();
+				scrollCountBump.restart();
+			}
 		}
 
 		Rectangle {
@@ -1192,31 +1227,52 @@ PanelWindow {
 
 				Item {
 					anchors.verticalCenter: parent.verticalCenter
-					width: 30
+					width: Math.max(30, scrollCount.implicitWidth + 16)
 					height: 30
 
 					Rectangle {
+						id: scrollCountBadge
+
 						anchors.centerIn: parent
-						width: 10
-						height: 10
-						radius: 5
+						width: Math.max(24, scrollCount.implicitWidth + 12)
+						height: 24
+						radius: 12
 						color: Theme.danger
 						opacity: Screenshot.scrollStopping ? 0.3 : 1
 
-						SequentialAnimation on opacity {
-							running: root.scrolling && !Screenshot.scrollStopping
-							loops: Animation.Infinite
+						SequentialAnimation on scale {
+							id: scrollCountBump
+
+							running: false
 
 							Anim {
-								to: 0.3
-								duration: Motion.extraLong
+								to: 1.3
+								duration: Motion.micro
 							}
 							Anim {
 								to: 1
-								duration: Motion.extraLong
+								duration: Motion.medium
 							}
 						}
+
+						StyledText {
+							id: scrollCount
+
+							anchors.centerIn: parent
+							text: Screenshot.scrollFrames
+							color: Theme.bg
+							font.pixelSize: Theme.size.label
+							font.weight: Font.DemiBold
+						}
 					}
+				}
+
+				TextButton {
+					anchors.verticalCenter: parent.verticalCenter
+					visible: !Screenshot.scrollAuto && !Screenshot.scrollStopping
+					icon: "arrow_expand_vertical"
+					text: "Whole page"
+					onActivated: Screenshot.autoScroll()
 				}
 
 				TextButton {

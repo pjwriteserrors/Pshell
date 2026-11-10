@@ -22,6 +22,26 @@ Singleton {
 
 	readonly property bool enabled: Plugins.on("pdf")
 	readonly property string helperScript: `${Paths.scripts}/pdf/pdf.py`
+	// the width of a page's small picture (PdfPage.qml), shared by the thumbnails and the glow
+	readonly property int smallPx: 320
+	// pictures PDFium is drawing now: it draws one at a time and holds every other PDF call meanwhile
+	property int rendering: 0
+	// the file as it is read now (a new one, or written again)
+	readonly property string docKey: `${root.path}#${root.generation}`
+	property var drawing: new Set()
+	// not a property of its own: a binding that takes a ticket must not follow the count
+	property var tickets: ({ n: 0 })
+
+	function ticket() {
+		root.tickets.n += 1;
+		return root.tickets.n;
+	}
+	// a picture loading or not (also when it goes away), by its ticket
+	function rendered(ticket, busy) {
+		if (busy) root.drawing.add(ticket);
+		else root.drawing.delete(ticket);
+		root.rendering = root.drawing.size;
+	}
 	readonly property string windowTitle: root.current ? `${root.nameOf(root.path)} – PDF` : "PDF"
 
 	function isPdf(path) {

@@ -120,6 +120,10 @@ Singleton {
 	property string scrollScreen: ""
 	property rect scrollRect: Qt.rect(0, 0, 0, 0)
 	property bool scrollStopping: false
+	property int scrollFrames: 0
+	// the page is scrolled by the capture itself (scripts/scroll_capture.py)
+	property bool scrollAuto: false
+	signal scrollFrame()
 
 	// picked colours, newest first (persisted)
 	property var colorHistory: []
@@ -1091,14 +1095,25 @@ Singleton {
 		root.scrollScreen = String(output);
 		root.scrollRect = r;
 		root.scrollStopping = false;
+		root.scrollFrames = 0;
+		root.scrollAuto = false;
 		root.phase = "scroll";
 		// the live screen shows through from now on
 		root.frozen = {};
 		Quickshell.execDetached(["bash", root.script, "clean"]);
 		scrollProc.cancelled = false;
 		scrollProc.tag = root.session;
-		scrollProc.command = ["bash", root.script, "scroll-capture", root.session, `${Math.round(screen.x + r.x)},${Math.round(screen.y + r.y)} ${r.width}x${r.height}`];
+		const screens = Quickshell.screens;
+		const bounds = [Math.min(...screens.map(s => s.x)), Math.min(...screens.map(s => s.y)), Math.max(...screens.map(s => s.x + s.width)), Math.max(...screens.map(s => s.y + s.height))];
+		scrollProc.command = ["bash", root.script, "scroll-capture", root.session, `${Math.round(screen.x + r.x)},${Math.round(screen.y + r.y)} ${r.width}x${r.height}`, bounds.join(",")];
 		scrollProc.running = true;
+	}
+
+	// the whole page, top to bottom, scrolled by the capture
+	function autoScroll() {
+		if (root.phase !== "scroll" || root.scrollStopping || root.scrollAuto) return;
+		root.scrollAuto = true;
+		Quickshell.execDetached(["touch", `${root.tmpDir}/scroll-${scrollProc.tag}/auto`]);
 	}
 
 	function stopScroll() {
@@ -1112,6 +1127,24 @@ Singleton {
 
 		property bool cancelled: false
 		property string tag: ""
+		stdout: SplitParser {
+			onRead: line => {
+				if (root.phase !== "scroll" || scrollProc.cancelled) return;
+				if (line === "auto") {
+					root.scrollFrames = 0;
+					return;
+				}
+				if (line === "error uinput") {
+					scrollProc.cancelled = true;
+					root.fail("Scroll screenshot failed", "no access to /dev/uinput");
+					return;
+				}
+				const n = parseInt(line);
+				if (isNaN(n)) return;
+				root.scrollFrames = n;
+				root.scrollFrame();
+			}
+		}
 		onExited: exitCode => {
 			if (scrollProc.cancelled) {
 				Quickshell.execDetached(["bash", root.script, "scroll-drop", scrollProc.tag]);
@@ -1208,6 +1241,7 @@ Singleton {
 		countdownTick.stop();
 		root.countdown = 0;
 		root.scrollStopping = false;
+		root.scrollAuto = false;
 		root.phase = "idle";
 		root.cleanup();
 	}

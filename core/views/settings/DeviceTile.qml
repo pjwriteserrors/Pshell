@@ -26,7 +26,7 @@ Rectangle {
 	readonly property bool pluginOn: !tile.handler?.plugin || Plugins.on(tile.handler.plugin)
 
 	function icon(kind) {
-		return ({ keyboard: "keyboard", mouse: "mouse_variant", trackball: "mouse_variant", touchpad: "gesture_tap", gamepad: "gamepad_variant", tablet: "draw", touchscreen: "gesture_tap", "media keys": "play_pause", numpad: "dialpad", presenter: "devices", headset: "headset", headphones: "headphones", speaker: "speaker", phone: "cellphone", computer: "monitor", camera: "camera", printer: "printer", display: "television", network: "lan", router: "web", wifi: "wifi", tv: "television" })[kind] ?? "devices";
+		return ({ keyboard: "keyboard", mouse: "mouse_variant", trackball: "mouse_variant", touchpad: "gesture_tap", gamepad: "gamepad_variant", tablet: "draw", touchscreen: "gesture_tap", "media keys": "play_pause", numpad: "dialpad", presenter: "devices", headset: "headset", headphones: "headphones", speaker: "speaker", phone: "cellphone", computer: "monitor", camera: "camera", audio: "volume_high", fingerprint: "fingerprint", bluetooth: "bluetooth", storage: "harddisk", smartcard: "usb", printer: "printer", display: "television", network: "lan", router: "web", wifi: "wifi", tv: "television" })[kind] ?? "devices";
 	}
 
 	Layout.fillWidth: true

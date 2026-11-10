@@ -995,6 +995,16 @@ Scope {
 		}
 	}
 
+	// the fingerprint unlock animation, played by hand
+	IpcHandler {
+		target: "fingerprint"
+		enabled: Plugins.on("fingerprint") || Plugins.on("phone-unlock")
+
+		function unlocked(): void {
+			Fingerprint.playUnlock();
+		}
+	}
+
 	// what plays (MPRIS): for key binds and scripts, instead of playerctl
 	IpcHandler {
 		target: "media"

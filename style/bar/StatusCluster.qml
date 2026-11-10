@@ -3,7 +3,7 @@ import qs.style.theme
 import qs.core.services
 import qs.style.widgets
 
-// Network, Bluetooth, sound, battery and a tiny CPU/RAM meter in one target.
+// Network, Bluetooth, sound, battery and a tiny CPU/RAM/GPU meter in one target.
 // States that are easy to forget show up only while they apply: keep awake,
 // a non-default power profile and a phone that is running low.
 // Click for quick settings, scroll for volume, middle click to mute.
@@ -29,13 +29,19 @@ BarButton {
 			visible: Plugins.on("system-monitor")
 			spacing: 2.5
 
-			// two fixed meters: a Repeater over [cpu, memory] made them anew every update
+			// fixed meters: a Repeater over [cpu, memory] made them anew every update
 			BarMeter {
 				value: SysStats.cpu
 			}
 
 			BarMeter {
 				value: SysStats.memory
+			}
+
+			BarMeter {
+				visible: SysStats.gpu >= 0
+				value: Math.max(0, SysStats.gpu)
+				tint: Theme.third
 			}
 		}
 

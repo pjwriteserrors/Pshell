@@ -503,6 +503,12 @@ def environment(work: Path):
     return env
 
 
+def end_copy(work: Path):
+    """once the nested niri is gone: the shell copy and what it left running
+    (pactl subscribe, gdbus monitor, systemd-inhibit … outlive it otherwise)"""
+    sh(f"python3 {REPO}/scripts/reap_orphans.py --after {work / 'shell'}", timeout=30)
+
+
 def outside(names):
     work = Path(tempfile.mkdtemp(prefix="pshell-previews-"))
     try:
@@ -525,6 +531,7 @@ def outside(names):
             process.wait(timeout=60 + len(names) * 20)
         except subprocess.TimeoutExpired:
             process.terminate()
+        end_copy(work)
         OUT.mkdir(parents=True, exist_ok=True)
         done = sorted((work / "out").glob("*.png")) if (work / "out").exists() else []
         for picture in done:

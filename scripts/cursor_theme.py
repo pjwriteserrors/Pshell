@@ -9,6 +9,8 @@
                                                     the everyday ones
     cursor_theme.py sheet   [--out PNG] [colours]   every cursor's frames, on
                                                     dark, light and accent
+                            [--marks a,b;c]         …or the marked ones
+                            [--season S|moon]       …in another season
 
 colours: --bg --fg --primary --danger --warning --success (#rrggbb) and
 --radius (niri's
@@ -91,10 +93,13 @@ def hls(h, l, s):
 
 class Palette:
     def __init__(self, bg, fg, primary, danger, radius, warning="#e89e27", success="#4ba056",
-                 accent=True, motion="full", season="", size=24):
+                 accent=True, motion="full", season="", moon=False, size=24):
         bg, fg, primary, danger = (hex_rgb(v) for v in (bg, fg, primary, danger))
         self.motion = motion
         self.season = season
+        # a full moon tonight: the wait spinner carries it instead of the
+        # season's sign
+        self.moon = moon
         # the nominal size niri asks for, and twice that for scaled screens
         self.sizes = (size, size * 2)
         self.dark = luminance(bg) < 0.18
@@ -642,7 +647,7 @@ def comet_ring(pen, cx, cy, r, t, width, track=True):
 def c_wait():
     def draw(pen, t):
         comet_ring(pen, C, C, 7.2, t, 2.6)
-        if pen.pal.season:
+        if pen.pal.season or pen.pal.moon:
             season_glyph(pen, pen.pal.season, C, C, 2.3, t)
     return (C, C), 1500, 25, None, draw
 
@@ -1025,7 +1030,34 @@ def c_move():
 # occasional light becomes the season passing by it, and the wait spinner
 # carries the season's sign at its centre. Nothing else changes.
 
+def easter_of(year):
+    """Easter Sunday (the Gregorian computus)."""
+    import datetime
+    a, b, c = year % 19, year // 100, year % 100
+    d, e = b // 4, b % 4
+    g = (b - (b + 8) // 25 + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = c // 4, c % 4
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    n = h + l - 7 * m + 114
+    return datetime.date(year, n // 31, n % 31 + 1)
+
+
+def full_moon(day) -> bool:
+    """Whether the moon is full (within a day) on this evening."""
+    import datetime
+    # a new moon: 2000-01-06 18:14 UTC; the synodic month
+    days = (datetime.datetime(day.year, day.month, day.day, 21) - datetime.datetime(2000, 1, 6, 18, 14)).total_seconds() / 86400
+    age = days % 29.530588853
+    return abs(age - 14.765) <= 1.0
+
+
 def season_of(day) -> str:
+    import datetime
+    easter = easter_of(day.year)
+    if easter - datetime.timedelta(days=2) <= day <= easter + datetime.timedelta(days=1):
+        return "easter"
     md = (day.month, day.day)
     if md >= (12, 31) or md <= (1, 1):
         return "newyear"
@@ -1037,7 +1069,7 @@ def season_of(day) -> str:
             6: "summer", 7: "summer", 8: "summer"}.get(day.month, "autumn")
 
 
-SEASONS = ("winter", "spring", "summer", "autumn", "halloween", "christmas", "newyear")
+SEASONS = ("winter", "spring", "summer", "autumn", "easter", "halloween", "christmas", "newyear")
 
 
 def edged(pen, fill, alpha=1.0, edge=0.55):
@@ -1169,10 +1201,54 @@ def bat(pen, x, y, r, flap, alpha=1.0, glyph=False):
     cr.fill()
 
 
+def egg(pen, x, y, r, turn, alpha=1.0):
+    """An Easter egg in the accent, a zigzag band round it in the body
+    colour."""
+    cr = pen.cr
+    cr.save()
+    cr.translate(x, y)
+    cr.rotate(turn)
+    cr.new_path()
+    cr.move_to(0, -r)
+    cr.curve_to(r * 0.62, -r, r * 0.8, r * 0.1, r * 0.75, r * 0.35)
+    cr.curve_to(r * 0.65, r * 0.95, -r * 0.65, r * 0.95, -r * 0.75, r * 0.35)
+    cr.curve_to(-r * 0.8, r * 0.1, -r * 0.62, -r, 0, -r)
+    cr.close_path()
+    m = cr.get_matrix()
+    cr.restore()
+    edged(pen, pen.pal.accent, alpha)
+    cr.save()
+    cr.set_matrix(m)
+    cr.new_path()
+    for i in range(7):
+        px = -r * 0.78 + i * r * 0.26
+        (cr.move_to if i == 0 else cr.line_to)(px, r * (0.05 if i % 2 else 0.3))
+    cr.set_line_width(r * 0.16)
+    cr.set_line_join(cairo.LINE_JOIN_ROUND)
+    cr.set_source_rgba(*pen.pal.core, alpha)
+    cr.stroke()
+    cr.restore()
+
+
+def moon(pen, x, y, r, alpha=1.0):
+    """The full moon: a disc in the accent with two craters."""
+    cr = pen.cr
+    cr.new_path()
+    cr.arc(x, y, r, 0, 2 * math.pi)
+    edged(pen, pen.pal.accent, alpha)
+    for cx, cy, cr_ in ((-0.3, -0.25, 0.26), (0.32, 0.3, 0.18)):
+        cr.new_path()
+        cr.arc(x + cx * r, y + cy * r, cr_ * r, 0, 2 * math.pi)
+        cr.set_source_rgba(*pen.pal.core, 0.55 * alpha)
+        cr.fill()
+
+
 def season_glyph(pen, season, x, y, r, t):
     """The season's sign, still or slowly turning with the loop."""
     turn = 2 * math.pi * t
-    if season in ("winter",):
+    if pen.pal.moon:
+        moon(pen, x, y, r * (0.92 + 0.08 * wave(t)))
+    elif season in ("winter",):
         flake(pen, x, y, r, turn / 3)
     elif season == "spring":
         for k in range(3):
@@ -1182,6 +1258,8 @@ def season_glyph(pen, season, x, y, r, t):
         sparkle(pen, x, y, r * (0.9 + 0.12 * wave(t)))
     elif season == "autumn":
         leaf(pen, x, y, r * 0.9, -0.6 + 0.25 * math.sin(turn))
+    elif season == "easter":
+        egg(pen, x, y, r, 0.25 * math.sin(turn))
     elif season == "halloween":
         bat(pen, x, y + 0.15 * math.sin(turn), r * 0.9, math.sin(turn * 2), glyph=True)
     elif season == "christmas":
@@ -1218,6 +1296,11 @@ def season_event(pen, season, p, build, body):
     elif season == "autumn":
         q = p
         leaf(pen, 22.5 + 2.2 * math.sin(q * 6.5), 7.0 + 19.5 * ease_in_out(q), 2.0, -0.8 + 0.7 * math.sin(q * 6.5), fade(q))
+    elif season == "easter":
+        # an egg hops past the arrow's corner, twice
+        x = 28.5 - 9.5 * ease_in_out(p)
+        y = 25.5 - 4.5 * abs(math.sin(2 * math.pi * p))
+        egg(pen, x, y, 1.9, -0.5 * math.sin(2 * math.pi * p), fade(p))
     elif season == "halloween":
         x = 28.0 - 10.5 * ease_in_out(p)
         y = 23.0 - 15.0 * ease_out(p) + 1.2 * math.sin(p * 9)
@@ -1365,14 +1448,15 @@ def fit_of(name, pal):
     return _fits[name]
 
 
-def render(spec, size, pal, name=None):
+def render(spec, size, pal, name=None, marked=False):
     hotspot, period, step, active, draw = spec()
     # 30 frames a second are smooth for a cursor and keep the files half as big
     step = max(step, 33)
     fit = fit_of(name, pal)
     plan = frame_plan(period, step, active)
     # quieter: only what says something is going on keeps moving
-    if pal.motion == "off" or (pal.motion == "subtle" and name not in CALM_MOVES):
+    # (marks say something is going on, too)
+    if pal.motion == "off" or (pal.motion == "subtle" and name not in CALM_MOVES and not marked):
         plan = [(rest_t(period, step, active), 1000)]
     images = []
     for t, delay in plan:
@@ -1469,6 +1553,7 @@ def inputs(args) -> dict:
     if season == "auto" or season is True:
         season = season_of(datetime.date.today())
     given["season"] = season if season in SEASONS else ""
+    given["moon"] = opts["seasons"] not in ("off", False) and full_moon(datetime.date.today())
     given["accent"] = bool(opts["accent"])
     given["motion"] = opts["animations"] if opts["animations"] in ("full", "subtle", "off") else "full"
     given["size"] = niri_size()
@@ -1478,7 +1563,8 @@ def inputs(args) -> dict:
 def palette(spec) -> Palette:
     return Palette(spec["bg"], spec["fg"], spec["primary"], spec["danger"], spec["radius"],
                    warning=spec.get("warning") or "#e89e27", success=spec.get("success") or "#4ba056",
-                   accent=spec["accent"], motion=spec["motion"], season=spec["season"], size=spec["size"])
+                   accent=spec["accent"], motion=spec["motion"], season=spec["season"],
+                   moon=spec.get("moon", False), size=spec["size"])
 
 
 def build(args, quiet=False) -> bool:
@@ -1558,21 +1644,403 @@ def write_for_shell(root: Path, pal: Palette):
 # ---------------------------------------------------------------- marks
 #
 # States the pointer carries over every window, worn as a variant of the
-# theme (Pshell-M-<marks>) that holds only the cursors that change: a red dot
-# that beats while recording, the microphone and camera in use (their usual
-# orange and green), the screen being shared (a ring in the accent), and
-# Caps Lock on the text cursor.
+# theme (Pshell-M-<marks>) that holds only the cursors that change. The
+# cursor itself stays as it is, at rest; beside it:
+#
+#   dots     a red dot that beats while recording, the microphone and camera
+#            in use (their usual orange and green), the screen being shared
+#            (a ring in the accent)
+#   caps     ⇪ on the text cursor
+#   around   the pointer held in a window (brackets round the hotspot),
+#            several text cursors (a faint second pointer behind it)
+#   a sign   one small badge, the first of SIGNS that is there
+#
+# Every mark is a short event and then rest, looped on niri's clock. Their
+# loops are 1.2 s doubled, so any of them fit into the longest; one that
+# keeps moving (a beating dot, the fingerprint, steam) sets the loop, and
+# longer ones are held still beside it.
 
-MARKS = ("rec", "mic", "cam", "share", "caps")
+MARKS = ("rec", "mic", "cam", "share", "caps", "capture", "multi",
+         "alert", "finger", "secret", "battery", "offline", "reboot", "guest",
+         "break", "dnd", "awake", "down1", "down2", "down3", "down4")
 DOTS = ("rec", "mic", "cam", "share")
+AROUND = ("capture", "multi")
+SIGNS = ("alert", "finger", "secret", "battery", "offline", "reboot", "guest",
+         "break", "dnd", "awake", "down1", "down2", "down3", "down4")
+BEAT = 1200
 # the cursors a mark goes on, and where its row of dots starts
 MARKED = {"left_ptr": (23.4, 24.6), "hand2": (23.4, 24.6), "xterm": (C + 5.6, C + 8.6),
           "vertical-text": (C + 8.6, C + 5.6), "left_ptr_watch": (23.0, 8.4)}
+# where the sign sits, and its badge's radius (the busy arrow has its own
+# badge there: no sign)
+SIGN_AT = {"left_ptr": (22.6, 8.6, 3.4), "hand2": (22.6, 8.6, 3.4), "xterm": (6.8, C, 2.9),
+           "vertical-text": (12.0, 6.9, 2.9)}
 TEXT = {"xterm", "vertical-text"}
 
 
+def worn_marks(given) -> list:
+    """What is worn of these: every dot, caps and what goes around, and one
+    sign."""
+    sign = next((s for s in SIGNS if s in given), None)
+    return [m for m in MARKS if m in given and (m not in SIGNS or m == sign)]
+
+
 def variant_name(marks) -> str:
-    return NAME + "-M-" + "-".join(m for m in MARKS if m in marks)
+    return NAME + "-M-" + "-".join(worn_marks(marks))
+
+
+def carries(cursor, marks) -> bool:
+    """Whether this cursor looks any different with these marks."""
+    if any(m in marks for m in DOTS + AROUND) and cursor in MARKED:
+        return True
+    if "caps" in marks and cursor in TEXT:
+        return True
+    return any(m in marks for m in SIGNS) and cursor in SIGN_AT
+
+
+def stroked(pen, width, color=None, alpha=1.0):
+    cr = pen.cr
+    cr.set_line_cap(cairo.LINE_CAP_ROUND)
+    cr.set_line_join(cairo.LINE_JOIN_ROUND)
+    cr.set_line_width(width)
+    cr.set_source_rgba(*(color or pen.pal.accent), alpha)
+    cr.stroke()
+
+
+def filled(pen, color=None, alpha=1.0):
+    pen.cr.set_source_rgba(*(color or pen.pal.accent), alpha)
+    pen.cr.fill()
+
+
+def blip(t, a, b):
+    """0 → 1 → 0 while t is within [a, b]."""
+    p = phase(t, a, b)
+    return bump(p) if p is not None else 0.0
+
+
+# ---------------------------------------------------------------- signs
+#
+# (period ms, active ranges or None for always, draw(pen, x, y, s, t)); s is
+# the scale (1 at the arrow's badge), t runs over the sign's own loop.
+
+def sign_alert(pen, x, y, s, t):
+    """Something is wrong with the machine: ! in red, a ring going out."""
+    cr = pen.cr
+    p = phase(t, 0.0, 0.5)
+    if p is not None:
+        r = 3.4 * s + 0.4 + 2.0 * ease_out(p)
+        for w, color, a in ((2.2, pen.pal.core, 0.7), (0.9, pen.pal.danger, 1.0)):
+            cr.new_path()
+            cr.arc(x, y, r, 0, 2 * math.pi)
+            stroked(pen, w, color, a * (1 - p) ** 1.4)
+    pen.body(disc(x, y, 3.4 * s))
+    cr.new_path()
+    cr.move_to(x, y - 1.7 * s)
+    cr.line_to(x, y + 0.35 * s)
+    stroked(pen, 0.95 * s, pen.pal.danger)
+    cr.new_path()
+    cr.arc(x, y + 1.5 * s, 0.55 * s, 0, 2 * math.pi)
+    filled(pen, pen.pal.danger)
+
+
+def sign_finger(pen, x, y, s, t):
+    """A fingerprint waits: its ridges light up from the middle out."""
+    cr = pen.cr
+    pen.body(disc(x, y, 3.4 * s))
+    cx, cy = x, y + 0.5 * s
+    for i, (rad, a0, a1) in enumerate(((0.65, 1.0, 2.0), (1.35, 0.92, 2.08), (2.05, 0.84, 2.16))):
+        lit = blip(t, i * 0.16, i * 0.16 + 0.42)
+        cr.new_path()
+        cr.arc(cx, cy, rad * s, math.pi * a0, math.pi * a1)
+        stroked(pen, 0.55 * s, alpha=0.55 + 0.45 * lit)
+    cr.new_path()
+    cr.move_to(cx, cy - 0.1 * s)
+    cr.line_to(cx, cy + 0.95 * s)
+    stroked(pen, 0.55 * s, alpha=0.55 + 0.45 * blip(t, 0.0, 0.42))
+
+
+def sign_secret(pen, x, y, s, t):
+    """A password is on the clipboard: a key, a glint running over it."""
+    cr = pen.cr
+    pen.body(disc(x, y, 3.4 * s))
+    x -= 0.05 * s
+    cr.push_group()
+    cr.new_path()
+    cr.arc(x - 1.05 * s, y, 0.8 * s, 0, 2 * math.pi)
+    cr.move_to(x - 0.25 * s, y)
+    cr.line_to(x + 1.95 * s, y)
+    cr.move_to(x + 1.2 * s, y)
+    cr.line_to(x + 1.2 * s, y + 0.85 * s)
+    cr.move_to(x + 1.85 * s, y)
+    cr.line_to(x + 1.85 * s, y + 0.6 * s)
+    stroked(pen, 0.62 * s)
+    p = phase(t, 0.0, 0.14)
+    if p is not None:
+        gx = x - 2.6 * s + 5.2 * s * ease_in_out(p)
+        glint = cairo.LinearGradient(gx - 1.2 * s, y - 0.6 * s, gx + 1.2 * s, y + 0.6 * s)
+        light = mix(pen.pal.accent, (1, 1, 1), 0.75)
+        glint.add_color_stop_rgba(0, *light, 0)
+        glint.add_color_stop_rgba(0.5, *light, 0.95)
+        glint.add_color_stop_rgba(1, *light, 0)
+        cr.set_operator(cairo.OPERATOR_ATOP)
+        cr.set_source(glint)
+        cr.paint()
+        cr.set_operator(cairo.OPERATOR_OVER)
+    cr.pop_group_to_source()
+    cr.paint()
+
+
+def sign_battery(pen, x, y, s, t):
+    """The mouse is nearly empty: what is left blinks twice."""
+    cr = pen.cr
+    pen.body(disc(x, y, 3.4 * s))
+    w, h = 3.3 * s, 1.95 * s
+    bx, by = x - w / 2 - 0.25 * s, y - h / 2
+    cr.new_path()
+    rrect(cr, bx, by, w, h, 0.5 * s)
+    stroked(pen, 0.5 * s, pen.pal.outline)
+    cr.new_path()
+    rrect(cr, bx + w + 0.15 * s, y - 0.48 * s, 0.5 * s, 0.96 * s, 0.22 * s)
+    filled(pen, pen.pal.outline)
+    p = phase(t, 0.0, 0.18)
+    blink = bump((p * 2) % 1.0) if p is not None else 0.0
+    cr.new_path()
+    rrect(cr, bx + 0.55 * s, by + 0.55 * s, 0.75 * s, h - 1.1 * s, 0.2 * s)
+    filled(pen, pen.pal.danger, 1 - 0.8 * blink)
+
+
+def sign_offline(pen, x, y, s, t):
+    """No network: the wireless sign struck through; now and then its arcs
+    light up one after the other, as if looking, and go out again."""
+    cr = pen.cr
+    pen.body(disc(x, y, 3.4 * s))
+    cx, cy = x, y + 1.35 * s
+    for i, rad in enumerate((1.05, 2.0, 2.95)):
+        lit = blip(t, i * 0.06, i * 0.06 + 0.14)
+        cr.new_path()
+        cr.arc(cx, cy, rad * s * 0.8, math.pi * 1.27, math.pi * 1.73)
+        stroked(pen, 0.55 * s, pen.pal.outline, 0.75 + 0.25 * lit)
+    cr.new_path()
+    cr.arc(cx, cy - 0.1 * s, 0.38 * s, 0, 2 * math.pi)
+    filled(pen, pen.pal.outline, 0.7)
+    cr.new_path()
+    cr.move_to(x - 1.7 * s, y - 1.7 * s)
+    cr.line_to(x + 1.7 * s, y + 1.7 * s)
+    stroked(pen, 0.65 * s + 0.8, pen.pal.core)
+    cr.new_path()
+    cr.move_to(x - 1.7 * s, y - 1.7 * s)
+    cr.line_to(x + 1.7 * s, y + 1.7 * s)
+    stroked(pen, 0.65 * s, pen.pal.warning)
+
+
+def sign_reboot(pen, x, y, s, t):
+    """Restart to finish an update: a round arrow that turns once."""
+    cr = pen.cr
+    pen.body(disc(x, y, 3.4 * s))
+    p = phase(t, 0.0, 0.12)
+    turn = 2 * math.pi * ease_in_out(p) if p is not None else 0.0
+    R = 1.6 * s
+    a0, a1 = -math.pi / 2 + 0.45 + turn, -math.pi / 2 + 2 * math.pi - 0.75 + turn
+    cr.new_path()
+    cr.arc(x, y, R, a0, a1)
+    stroked(pen, 0.6 * s)
+    ex, ey = x + R * math.cos(a1), y + R * math.sin(a1)
+    tx, ty = -math.sin(a1), math.cos(a1)
+    nx, ny = math.cos(a1), math.sin(a1)
+    cr.new_path()
+    cr.move_to(ex + tx * 0.95 * s, ey + ty * 0.95 * s)
+    cr.line_to(ex + nx * 0.8 * s, ey + ny * 0.8 * s)
+    cr.line_to(ex - nx * 0.8 * s, ey - ny * 0.8 * s)
+    cr.close_path()
+    cr.set_line_join(cairo.LINE_JOIN_ROUND)
+    cr.set_line_width(0.3 * s)
+    cr.set_source_rgb(*pen.pal.accent)
+    cr.stroke_preserve()
+    cr.fill()
+
+
+def sign_guest(pen, x, y, s, t):
+    """Another PC's mouse is here: two arrows passing each other."""
+    cr = pen.cr
+    pen.body(disc(x, y, 3.4 * s))
+    k = blip(t, 0.0, 0.16)
+    cr.new_path()
+    for d, yy in ((1, y - 0.85 * s), (-1, y + 0.85 * s)):
+        off = d * 0.5 * s * k
+        x0, x1 = x - 1.6 * s * d + off, x + 1.6 * s * d + off
+        cr.move_to(x0, yy)
+        cr.line_to(x1, yy)
+        cr.move_to(x1 - d * 0.75 * s, yy - 0.7 * s)
+        cr.line_to(x1, yy)
+        cr.line_to(x1 - d * 0.75 * s, yy + 0.7 * s)
+    stroked(pen, 0.58 * s)
+
+
+def sign_break(pen, x, y, s, t):
+    """A break is due: a cup, steam rising from it."""
+    cr = pen.cr
+    pen.body(disc(x, y, 3.4 * s))
+    top = y - 0.05 * s
+    cr.new_path()
+    cr.move_to(x - 1.75 * s, top)
+    cr.line_to(x + 0.95 * s, top)
+    cr.line_to(x + 0.75 * s, top + 1.35 * s)
+    cr.curve_to(x + 0.65 * s, top + 1.85 * s, x - 1.45 * s, top + 1.85 * s, x - 1.55 * s, top + 1.35 * s)
+    cr.close_path()
+    cr.new_sub_path()
+    cr.arc(x + 1.1 * s, top + 0.65 * s, 0.55 * s, -math.pi / 2, math.pi / 2)
+    stroked(pen, 0.5 * s, pen.pal.outline)
+    for k in range(2):
+        q = (t + k * 0.5) % 1.0
+        wx = x - 0.85 * s + k * 1.05 * s
+        yb = top - 0.55 * s - 1.4 * s * q
+        sway = 0.35 * s * math.sin(2 * math.pi * q + k)
+        cr.new_path()
+        cr.move_to(wx + sway, yb)
+        cr.curve_to(wx + sway - 0.4 * s, yb - 0.35 * s, wx + sway + 0.4 * s, yb - 0.65 * s, wx + sway, yb - 1.0 * s)
+        stroked(pen, 0.45 * s, alpha=bump(q))
+
+
+def sign_dnd(pen, x, y, s, t):
+    """Do not disturb: a crescent, now and then a star beside it."""
+    cr = pen.cr
+    pen.body(disc(x, y, 3.4 * s))
+    cr.push_group()
+    cr.new_path()
+    cr.arc(x - 0.3 * s, y + 0.25 * s, 1.75 * s, 0, 2 * math.pi)
+    filled(pen)
+    cr.set_operator(cairo.OPERATOR_CLEAR)
+    cr.new_path()
+    cr.arc(x + 0.55 * s, y - 0.55 * s, 1.4 * s, 0, 2 * math.pi)
+    cr.fill()
+    cr.set_operator(cairo.OPERATOR_OVER)
+    cr.pop_group_to_source()
+    cr.paint()
+    k = blip(t, 0.0, 0.16)
+    if k > 0:
+        sparkle(pen, x + 1.3 * s, y - 1.25 * s, (0.3 + 0.6 * k) * s, k)
+
+
+def sign_awake(pen, x, y, s, t):
+    """Kept awake: an open eye that blinks once in a while."""
+    cr = pen.cr
+    pen.body(disc(x, y, 3.4 * s))
+    lid = max(0.08, 1 - 0.92 * blip(t, 0.0, 0.07))
+    cr.save()
+    cr.translate(x, y)
+    cr.scale(1, lid)
+    cr.new_path()
+    cr.move_to(-2.0 * s, 0)
+    cr.curve_to(-1.0 * s, -1.45 * s, 1.0 * s, -1.45 * s, 2.0 * s, 0)
+    cr.curve_to(1.0 * s, 1.45 * s, -1.0 * s, 1.45 * s, -2.0 * s, 0)
+    cr.close_path()
+    cr.restore()
+    stroked(pen, 0.5 * s)
+    cr.save()
+    cr.translate(x, y)
+    cr.scale(1, lid)
+    cr.new_path()
+    cr.arc(0, 0, 0.72 * s, 0, 2 * math.pi)
+    cr.restore()
+    filled(pen)
+
+
+def sign_down(level):
+    def draw(pen, x, y, s, t):
+        """Something is downloading: how far, in quarters; the arrow dips."""
+        cr = pen.cr
+        pen.body(disc(x, y, 3.4 * s))
+        R = 2.45 * s
+        cr.new_path()
+        cr.arc(x, y, R, 0, 2 * math.pi)
+        stroked(pen, 0.55 * s, pen.pal.outline, 0.22)
+        cr.new_path()
+        cr.arc(x, y, R, -math.pi / 2, -math.pi / 2 + 2 * math.pi * level / 4)
+        stroked(pen, 0.7 * s)
+        dy = 0.45 * s * blip(t, 0.0, 0.2)
+        cr.new_path()
+        cr.move_to(x, y - 1.05 * s + dy)
+        cr.line_to(x, y + 0.8 * s + dy)
+        cr.move_to(x - 0.7 * s, y + 0.1 * s + dy)
+        cr.line_to(x, y + 0.8 * s + dy)
+        cr.line_to(x + 0.7 * s, y + 0.1 * s + dy)
+        stroked(pen, 0.55 * s)
+    return draw
+
+
+SIGN_LOOKS = {
+    "alert": (2 * BEAT, [(0.0, 0.5)], sign_alert),
+    "finger": (BEAT, None, sign_finger),
+    "secret": (4 * BEAT, [(0.0, 0.14)], sign_secret),
+    "battery": (4 * BEAT, [(0.0, 0.18)], sign_battery),
+    "offline": (4 * BEAT, [(0.0, 0.3)], sign_offline),
+    "reboot": (8 * BEAT, [(0.0, 0.12)], sign_reboot),
+    "guest": (4 * BEAT, [(0.0, 0.16)], sign_guest),
+    "break": (2 * BEAT, None, sign_break),
+    "dnd": (4 * BEAT, [(0.0, 0.16)], sign_dnd),
+    "awake": (4 * BEAT, [(0.0, 0.07)], sign_awake),
+    **{f"down{n}": (2 * BEAT, [(0.0, 0.2)], sign_down(n)) for n in (1, 2, 3, 4)},
+}
+
+
+# ---------------------------------------------------------------- around
+
+def brackets(pen, hotspot, t):
+    """The pointer is held: four corners round its hotspot, now and then
+    gripping and springing back."""
+    cr = pen.cr
+    p = phase(t, 0.0, 0.25)
+    if p is None:
+        k = 0.0
+    elif p < 0.45:
+        k = ease_out(p / 0.45)
+    else:
+        k = 1 - ease_out_back((p - 0.45) / 0.55)
+    hx, hy = hotspot
+    d = 3.9 - 1.0 * k
+    leg = 1.5
+    cr.new_path()
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            cx, cy = hx + sx * d, hy + sy * d
+            cr.move_to(cx, cy - sy * leg)
+            cr.line_to(cx, cy)
+            cr.line_to(cx - sx * leg, cy)
+    path = cr.copy_path()
+    stroked(pen, 0.95 + 2 * pen.OUTLINE * 0.6, pen.pal.core)
+    cr.append_path(path)
+    stroked(pen, 0.95)
+
+
+def ghost(pen, draw, rest, t):
+    """Several text cursors: a faint second pointer behind this one, now
+    and then drifting out and snapping back."""
+    cr = pen.cr
+    p = phase(t, 0.0, 0.3)
+    if p is None:
+        k = 0.0
+    elif p < 0.4:
+        k = ease_in_out(p / 0.4)
+    else:
+        k = 1 - ease_out_back((p - 0.4) / 0.6)
+    cr.push_group()
+    cr.translate(2.6 + 1.6 * k, 1.2 + 0.7 * k)
+    draw(pen, rest)
+    cr.pop_group_to_source()
+    cr.paint_with_alpha(0.38)
+
+
+AROUND_LOOKS = {"capture": (2 * BEAT, [(0.0, 0.25)]), "multi": (4 * BEAT, [(0.0, 0.3)])}
+
+
+def merged(ranges):
+    out = []
+    for a, b in sorted(ranges):
+        if out and a <= out[-1][1] + 1e-9:
+            out[-1] = (out[-1][0], max(out[-1][1], b))
+        else:
+            out.append((a, b))
+    return out
 
 
 def mark_cursor(name, marks):
@@ -1580,14 +2048,44 @@ def mark_cursor(name, marks):
     def spec():
         hotspot, period, step, active, draw = CURSORS[name][0]()
         rest = rest_t(period, step, active)
+        dots = [m for m in DOTS if m in marks] if name in MARKED else []
+        around = [m for m in AROUND if m in marks] if name in MARKED else []
+        sign = next((m for m in SIGNS if m in marks), None) if name in SIGN_AT else None
+
+        # the loops: (key, period, active)
+        loops = []
+        if any(m in dots for m in ("rec", "share")):
+            loops.append(("dots", BEAT, None))
+        loops += [(m, *AROUND_LOOKS[m]) for m in around]
+        if sign:
+            loops.append(("sign", *SIGN_LOOKS[sign][:2]))
+        moving = [p for _, p, a in loops if a is None]
+        span = max(moving) if moving else max([p for _, p, _ in loops] or [BEAT])
+        # longer than a loop that never rests: held still
+        held = {k: rest_t(p, 33, a) for k, p, a in loops if p > span}
+        if moving:
+            ranges = None
+        else:
+            ranges = merged([((n + a) * p / span, (n + b) * p / span)
+                             for _, p, act in loops if p <= span
+                             for n in range(span // p) for a, b in act])
+        periods = {k: p for k, p, _ in loops}
+
+        def local(key, t):
+            if key in held:
+                return held[key]
+            return (t * span / periods[key]) % 1.0
 
         def drawn(pen, t):
+            if "multi" in around:
+                ghost(pen, draw, rest, local("multi", t))
             draw(pen, rest)
-            x, y = MARKED[name]
-            dots = [m for m in DOTS if m in marks]
+            if "capture" in around:
+                brackets(pen, hotspot, local("capture", t))
+            x, y = MARKED.get(name, (0, 0))
+            beat = wave(local("dots", t)) if "dots" in periods else 0.0
             for i, mark in enumerate(dots):
                 dx = x - i * 4.4
-                beat = wave(t)
                 if mark == "rec":
                     pen.orb(dx, y, 2.1 + 0.45 * beat, kind="danger")
                 elif mark == "mic":
@@ -1602,10 +2100,12 @@ def mark_cursor(name, marks):
                         cr.set_line_width(w)
                         cr.set_source_rgb(*color)
                         cr.stroke()
+            if sign:
+                sx, sy, r = SIGN_AT[name]
+                SIGN_LOOKS[sign][2](pen, sx, sy, r / 3.4, local("sign", t))
             if "caps" in marks and name in TEXT:
                 caps_glyph(pen, name)
-        moving = any(m in marks for m in ("rec", "share"))
-        return hotspot, 1400, 50 if moving else 1400, None, drawn
+        return hotspot, span, 50 if moving else 33, ranges, drawn
     return spec
 
 
@@ -1628,17 +2128,18 @@ def caps_glyph(pen, name):
 
 def build_variant(marks, pal: Palette) -> str:
     """The theme with these marks; built once per look."""
+    marks = worn_marks(marks)
     name = variant_name(marks)
     root = ICONS / name
     cursors = root / "cursors"
     if (root / "index.theme").exists():
         return name
     cursors.mkdir(parents=True, exist_ok=True)
-    dotted = any(m in marks for m in DOTS)
     for cursor in MARKED:
-        if not dotted and cursor not in TEXT:
+        if not carries(cursor, marks):
             continue
-        write_xcursor(cursors / cursor, [(s, *render(mark_cursor(cursor, marks), s, pal, cursor)) for s in pal.sizes])
+        write_xcursor(cursors / cursor, [(s, *render(mark_cursor(cursor, marks), s, pal, cursor, marked=True))
+                                         for s in pal.sizes])
         for alias in CURSORS[cursor][1]:
             link = cursors / alias
             if link.is_symlink() or link.exists():
@@ -1719,17 +2220,30 @@ def apply(args):
 
 def sheet(args):
     """Cursors at 48 px, a few frames each, on dark, light, accent and grey."""
-    pal = palette(inputs(args))
+    spec = inputs(args)
+    if args.season == "moon":
+        spec["moon"] = True
+    elif args.season:
+        spec["season"], spec["moon"] = args.season, False
+    pal = palette(spec)
     size, cols = 48, args.cols
     only = set(args.only.split(",")) if args.only else None
-    names = [n for n in CURSORS if not only or n in only]
+    # rows: (label, spec, cursor name, marked)
+    rows = []
+    if args.marks:
+        for group in args.marks.split(";"):
+            marks = worn_marks(group.split(","))
+            rows += [(c, mark_cursor(c, marks), c, True) for c in MARKED
+                     if carries(c, marks) and (not only or c in only)]
+    else:
+        rows = [(n, CURSORS[n][0], n, False) for n in CURSORS if not only or n in only]
     cell = round(size * CANVAS * ZOOM)
     bgs = [(0.06, 0.06, 0.07), (0.95, 0.94, 0.92), pal.accent, (0.42, 0.47, 0.53)]
     w = cols * cell * len(bgs) + (len(bgs) - 1) * 8
-    out = cairo.ImageSurface(cairo.FORMAT_ARGB32, w, len(names) * cell)
+    out = cairo.ImageSurface(cairo.FORMAT_ARGB32, w, len(rows) * cell)
     cr = cairo.Context(out)
-    for ri, name in enumerate(names):
-        _, _, images = render(CURSORS[name][0], size, pal, name)
+    for ri, (_, spec, name, marked) in enumerate(rows):
+        _, _, images = render(spec, size, pal, name, marked=marked)
         moving = [im for im in images if im[1] < 400] or images
         picks = [moving[min(len(moving) - 1, round(i * (len(moving) - 1) / max(1, cols - 1)))] for i in range(cols)]
         for bi, bg in enumerate(bgs):
@@ -1761,6 +2275,9 @@ def main():
     sub.choices["wear"].add_argument("--marks", default="", help="comma-separated: " + ",".join(MARKS))
     sub.choices["sheet"].add_argument("--out", default="cursor-sheet.png")
     sub.choices["sheet"].add_argument("--cols", type=int, default=4)
+    sub.choices["sheet"].add_argument("--marks", help="cursors with these marks instead: "
+                                      "comma-separated, groups split by ;")
+    sub.choices["sheet"].add_argument("--season", help="draw as in this season (or 'moon')")
     args = p.parse_args()
     {"build": build, "apply": apply, "sheet": sheet, "wear": wear}[args.cmd](args)
 

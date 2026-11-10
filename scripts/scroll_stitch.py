@@ -3,7 +3,7 @@
 
 usage: scroll_stitch.py <frame-dir> <out.png>
 
-The frames (NNNN.png, same size, taken while the content scrolled down) are
+The frames (NNNN.png or .ppm, same size, taken while the content scrolled down) are
 decoded with magick. For each pair of consecutive frames the vertical shift
 of the content is found by comparing row signatures (cheap projections of
 every row) and verifying the best candidates on the real pixels. Rows that
@@ -91,7 +91,7 @@ def main():
         print(__doc__, file=sys.stderr)
         return 2
     frame_dir, out = sys.argv[1], sys.argv[2]
-    names = sorted(n for n in os.listdir(frame_dir) if n.endswith(".png"))
+    names = sorted(n for n in os.listdir(frame_dir) if n.endswith((".png", ".ppm")))
     if not names:
         return 1
     frames = []

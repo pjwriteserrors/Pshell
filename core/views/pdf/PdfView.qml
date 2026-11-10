@@ -86,13 +86,19 @@ FocusScope {
 
 			anchors.fill: parent
 			visible: false
-			active: !!glowLoader.doc && glowLoader.doc.status === PdfDocument.Ready
+			// after the page itself, and the small picture the thumbnails have
+			active: !!glowLoader.doc && glowLoader.doc.status === PdfDocument.Ready && glowLoader.doc.drawnOnce
 
 			sourceComponent: PdfPageImage {
 				document: glowLoader.doc
 				currentFrame: glowLoader.p?.n ?? 0
-				sourceSize.width: 48
+				sourceSize.width: Pdf.smallPx
 				asynchronous: true
+
+				readonly property int ticket: Pdf.ticket()
+				readonly property bool busy: status === Image.Loading
+				onBusyChanged: Pdf.rendered(ticket, busy)
+				Component.onDestruction: Pdf.rendered(ticket, false)
 				fillMode: Image.Stretch
 			}
 		}

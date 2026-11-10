@@ -73,6 +73,9 @@ Item {
 
 			required property string modelData
 			property bool blank: false
+			// how long the first sharp page took (PdfPage.qml), and whether one is drawn
+			property real renderMs: -1
+			property bool drawnOnce: false
 
 			source: doc.blank || !Pdf.sourcePath(doc.modelData) ? "" : Pdf.fileUrl(Pdf.sourcePath(doc.modelData))
 			password: Pdf.recipe.sources?.[doc.modelData]?.password ?? ""

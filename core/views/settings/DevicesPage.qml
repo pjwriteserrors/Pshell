@@ -51,6 +51,7 @@ SettingsPage {
 
 	function where(device) {
 		if (device.bus === "receiver") return device.via;
+		if (device.builtIn) return "Built in";
 		return ({ usb: "USB", bluetooth: "Bluetooth", i2c: "Built in" })[device.bus] ?? device.bus;
 	}
 

@@ -19,6 +19,7 @@
 	--mono: "Adwaita Mono", monospace;
 	--icons: "Symbols Nerd Font", "Symbols Nerd Font Mono";
 	--text: 15px;
+	--sheet: 760px;
 	--r-s: 8px; --r-m: 12px; --r-l: 16px; --r-h: 22px;
 
 	--spatial: cubic-bezier(.38, 1.21, .22, 1);
@@ -123,7 +124,15 @@ body.scratch #app { grid-template-columns: minmax(0, 1fr); }
 .cm-editor { flex: 1; min-width: 0; height: 100%; background: transparent; color: var(--fg); outline: none !important; font-size: var(--text); }
 .cm-scroller { font-family: var(--font) !important; line-height: 1.65 !important; overflow: auto; }
 .cm-content { padding: 18px 0 40vh !important; caret-color: transparent; user-select: text; -webkit-user-select: text; max-width: 100%; }
-.cm-line { padding: 0 max(28px, calc((100% - 760px) / 2)) !important; }
+.cm-line { padding: 0 max(28px, calc((100% - var(--sheet)) / 2)) !important; }
+.sheet-edge { position: absolute; top: 0; bottom: 0; z-index: 4; width: 14px; cursor: ew-resize; }
+.sheet-edge.right { left: calc(50% + min(var(--sheet), 100% - 56px) / 2 + 2px); }
+.sheet-edge.left { right: calc(50% + min(var(--sheet), 100% - 56px) / 2 + 2px); }
+.sheet-edge::after { content: ""; position: absolute; top: 50%; left: 5px; width: 4px; height: 40px; border-radius: 4px; background: var(--textFaint); opacity: 0; transform: translateY(-50%); transition: opacity var(--short) var(--standard), height var(--medium) var(--spatial), background-color var(--short) var(--standard); }
+.sheet-edge:hover::after { opacity: 1; height: 72px; }
+.sizing-sheet .sheet-edge::after { opacity: 1; height: 120px; background: var(--primary); }
+.sizing-sheet, .sizing-sheet * { cursor: ew-resize !important; user-select: none !important; -webkit-user-select: none !important; }
+.pane-body:has(> .empty) > .sheet-edge { display: none; }
 .cm-cursor { border-left: 2px solid var(--primary) !important; border-radius: 2px; transition: left 70ms var(--standard), top 70ms var(--standard), height 70ms var(--standard); }
 .cm-selectionBackground { background: color-mix(in srgb, var(--primary) 30%, transparent) !important; border-radius: 3px; }
 .cm-focused .cm-selectionBackground { background: color-mix(in srgb, var(--primary) 35%, transparent) !important; }
@@ -292,7 +301,7 @@ body.scratch #app { grid-template-columns: minmax(0, 1fr); }
 .md-rendered table { background: var(--layer1); border-radius: var(--r-m); overflow: hidden; }
 .reader { position: absolute; inset: 0; overflow: auto; visibility: hidden; }
 .reader.shown { visibility: visible; }
-.reader-sheet { max-width: 760px; margin: 0 auto; padding: 24px 28px 80px; }
+.reader-sheet { max-width: var(--sheet); margin: 0 auto; padding: 24px 28px 80px; }
 .reader-sheet.multi { max-width: none; column-count: var(--reader-columns); column-gap: 40px; column-rule: 1px solid var(--outline); padding: 24px 40px 80px; }
 .reader-sheet.multi > * { break-inside: avoid; }
 .reader-sheet.multi h1, .reader-sheet.multi h2 { break-after: avoid; }

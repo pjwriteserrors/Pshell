@@ -20,6 +20,10 @@ core/devices.json is the registry: each entry says which devices it covers
 that is all the device can do (`partial` for a page that fits a family but
 was not made for this model). The first entry that matches wins.
 
+The other USB devices lsusb shows (cameras, audio, fingerprint readers,
+storage …; hubs left out) are listed with them, named from the USB id
+database when they do not name themselves.
+
 Besides HID: the paired Bluetooth devices (BlueZ, also headphones, watches
 …), what answers on the local network (ARP, mDNS, SSDP) and the Wi-Fi
 networks around, and the user's own devices – added by hand, often with the
@@ -147,6 +151,73 @@ def hid_devices():
         group["drivers"] = sorted(group["drivers"])
         group["name"] = group["name"] or group["usbName"]
         out.append(group)
+    return out
+
+
+# ── USB devices without HID ──────────────────────────────────────────────
+# by interface class; the first one found in this order names the device
+USB_CLASSES = [(0x0E, "camera"), (0x06, "camera"), (0x01, "audio"), (0x08, "storage"), (0x07, "printer"),
+               (0x0B, "smartcard"), (0xE0, "bluetooth"), (0x02, "network"), (0x0A, "network")]
+FINGERPRINT_HWDB = Path("/usr/lib/udev/hwdb.d/60-autosuspend-fingerprint-reader.hwdb")
+
+
+def fingerprint_ids():
+    """The USB ids libfprint knows as fingerprint readers."""
+    try:
+        text = FINGERPRINT_HWDB.read_text(errors="replace")
+    except OSError:
+        return set()
+    return {f"{v}:{p}".lower() for v, p in re.findall(r"^usb:v([0-9A-Fa-f]{4})p([0-9A-Fa-f]{4})", text, re.M)}
+
+
+def usb_names(vendor, product):
+    """Maker and model from the USB id database, as lsusb names them."""
+    info = {}
+    for line in run(["systemd-hwdb", "query", f"usb:v{vendor.upper()}p{product.upper()}"], timeout=2).splitlines():
+        key, _, value = line.partition("=")
+        info[key] = value
+    return info.get("ID_VENDOR_FROM_DATABASE", ""), info.get("ID_MODEL_FROM_DATABASE", "")
+
+
+def usb_devices(taken):
+    """What lsusb shows besides the HID devices (`taken`: their USB sysfs
+    dirs) – cameras, audio, storage, fingerprint readers … Hubs left out."""
+    out = []
+    readers = None
+    for node in sorted(Path("/sys/bus/usb/devices").glob("*")):
+        if ":" in node.name or not (node / "idVendor").exists():
+            continue
+        real = node.resolve()
+        vendor, product = read(node / "idVendor").lower(), read(node / "idProduct").lower()
+        if str(real) in taken or vendor == "1d6b" or read(node / "bDeviceClass") == "09":
+            continue
+        classes, drivers = set(), set()
+        for iface in node.glob(f"{node.name}:*"):
+            try:
+                classes.add(int(read(iface / "bInterfaceClass", "0"), 16))
+            except ValueError:
+                pass
+            if (iface / "driver").exists():
+                drivers.add((iface / "driver").resolve().name)
+        if 0x09 in classes or 0x03 in classes:
+            continue
+        kind = next((k for c, k in USB_CLASSES if c in classes), "device")
+        if kind == "device":
+            if readers is None:
+                readers = fingerprint_ids()
+            if f"{vendor}:{product}" in readers:
+                kind = "fingerprint"
+        manufacturer, name = read(node / "manufacturer"), read(node / "product")
+        if not name or not manufacturer:
+            maker, model = usb_names(vendor, product)
+            manufacturer, name = manufacturer or maker, name or model
+        out.append({
+            "id": f"{vendor}:{product}", "vendor": vendor, "product": product,
+            "name": name or f"{vendor}:{product}", "manufacturer": manufacturer, "usbName": name,
+            "bus": "usb", "builtIn": read(node / "removable") == "fixed", "kind": kind, "kinds": [kind],
+            "usbClasses": sorted(f"{c:02x}" for c in classes), "drivers": sorted(drivers),
+            "hidraw": [], "sys": [str(real)], "online": True,
+        })
     return out
 
 
@@ -579,6 +650,9 @@ def scan():
                     device["hidpp"] = hid
                     device["kind"] = hid["kind"]
         out.append(device)
+    taken = {str(Path(p).resolve()) for d in out for p in d.get("sys", [])}
+    taken = {str(usb) for p in taken if (usb := usb_parent(Path(p)))}
+    out += usb_devices(taken)
     hid_macs = {d["id"].split("@", 1)[1].lower() for d in out if "@" in d["id"]}
     out += bluetooth_devices(hid_macs)
     out += custom_devices()
@@ -619,6 +693,25 @@ def prompt(device_id):
     print(path)
 
 
+HID_HOW = """2. Reverse engineer the device: its report descriptors (decode them), its
+   vendor protocol (HID++, vendor usage pages, feature reports), and what
+   open projects already know (Solaar, libratbag/piper, OpenRGB, ckb-next,
+   the Linux hid drivers …). List every feature it has – also hidden or
+   undocumented ones – before writing code, and ask me if something stays unclear."""
+
+USB_HOW = """2. It is a USB device without HID (its interface classes are above): read its
+   descriptors (`lsusb -v -d VID:PID`) and reverse engineer what it offers by
+   its class – a camera's UVC controls and vendor extension units
+   (`v4l2-ctl --list-ctrls-menus`, the XU GUIDs, what uvcdynctrl, guvcview
+   and the vendor's tools set), an audio interface's ALSA mixer controls and
+   vendor requests, a fingerprint reader through libfprint/fprintd, a
+   vendor-class device through its control transfers (libusb/pyusb).
+   usbmon/Wireshark shows the traffic (it needs root – ask me to run it).
+   Check what open projects and the vendor's Windows software already know.
+   List every feature it has – also hidden or undocumented ones – before
+   writing code, and ask me if something stays unclear."""
+
+
 def hid_prompt(device, facts, handler, descriptors):
     return f"""Teach the Pshell (this repo) a new device, completely.
 
@@ -628,7 +721,7 @@ The device:
 {json.dumps(facts, indent=1)}
 ```
 
-HID report descriptors: {", ".join(descriptors) or "none"}.
+{"" if device.get("usbClasses") else "HID report descriptors: " + (", ".join(descriptors) or "none") + "."}
 {"It is covered only partly today, by the " + handler["page"] + " page (" + handler["id"] + " in core/devices.json): find what that page misses for this model and add it." if handler else "Nothing in the shell knows it yet."}
 
 The goal: a settings page where EVERY setting and feature this device has can be
@@ -639,11 +732,7 @@ used – nothing left out because it is hard. Work like this:
    device, a service in core/services, a page in core/views/settings, a plugin in
    core/plugins.json, an entry in core/devices.json). Follow the conventions
    there and in the surrounding code.
-2. Reverse engineer the device: its report descriptors (decode them), its
-   vendor protocol (HID++, vendor usage pages, feature reports), and what
-   open projects already know (Solaar, libratbag/piper, OpenRGB, ckb-next,
-   the Linux hid drivers …). List every feature it has – also hidden or
-   undocumented ones – before writing code, and ask me if something stays unclear.
+{USB_HOW if device.get("usbClasses") else HID_HOW}
 3. Probe read-only first. Write only to try a setting out, and put back what was
    there afterwards. Never flash firmware, never unpair, never factory-reset.
    Do not send dummy calls to the live shell. Another program may use the

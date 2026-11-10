@@ -66,7 +66,7 @@ function createPane() {
 	pane.strip.append(pane.indicator);
 	pane.watcher = new ResizeObserver(() => placeIndicator(pane));
 	pane.bar.append(pane.strip, iconButton("plus", "New", () => { setActive(pane); newUntitled(); }, "bar-action"));
-	pane.body = el("div", "pane-body");
+	pane.body = el("div", "pane-body", sheetEdge(pane, "left"), sheetEdge(pane, "right"));
 	pane.banner = el("div", "banner-slot");
 	if (!scratch) pane.dom.append(pane.bar);
 	pane.dom.append(pane.banner, pane.body);
@@ -758,8 +758,39 @@ function updateChrome() {
 			bridge.call("status", { open: true, tabs: [...docs.values()].length, unsaved: dirtyCount, title: tab ? docName(tab.doc) : "", path: tab?.doc.path ?? "", words });
 		}
 		drawOutline();
+		tellProse();
 	});
 }
+
+// Autocorrect (the shell's, it types) only where the cursor stands in running
+// text: not in code, a link's address, front matter or a file that is code.
+const NOT_PROSE = new Set(["FencedCode", "CodeBlock", "InlineCode", "CodeText", "HTMLBlock", "HTMLTag", "CommentBlock", "ProcessingInstructionBlock", "URL", "Autolink", "LinkReference"]);
+function inProse() {
+	const tab = activePane?.active;
+	const view = tab?.view;
+	if (!view || tab.mode === "reader" || !isMarkdown(tab.doc.path) || tab.doc.readonly || !view.hasFocus) return false;
+	const { state } = view;
+	if (state.selection.ranges.length > 1) return false;
+	const head = state.selection.main.head;
+	for (let node = syntaxTree(state).resolveInner(head, -1); node; node = node.parent) if (NOT_PROSE.has(node.name)) return false;
+	const line = state.doc.lineAt(head);
+	if (/\[\[[^\]]*$/.test(line.text.slice(0, head - line.from))) return false;
+	if (state.doc.line(1).text.trimEnd() === "---") {
+		for (let number = 2; number <= Math.min(state.doc.lines, 200); number += 1) {
+			if (/^(---|\.\.\.)\s*$/.test(state.doc.line(number).text)) { if (line.number <= number) return false; break; }
+		}
+	}
+	return true;
+}
+let proseTold = null;
+function tellProse() {
+	const on = inProse();
+	if (on === proseTold) return;
+	proseTold = on;
+	bridge.call("prose", on);
+}
+addEventListener("focusin", () => updateChrome());
+addEventListener("focusout", () => setTimeout(updateChrome));
 
 // ── sidebar ─────────────────────────────────────────────────────────────
 const side = { open: false, view: "files", roots: [], opened: new Set() };
@@ -918,6 +949,42 @@ function insertAtCursor(view, text) {
 	view.focus();
 }
 
+const PICTURE = /\.(png|jpe?g|gif|webp|svg|avif|bmp)$/i;
+function linkUris(doc, list) {
+	return list.split(/\r?\n/).filter(each => each && !each.startsWith("#")).map(uri => {
+		if (!uri.startsWith("file://")) return `[${uri}](${uri})`;
+		const path = decodeURIComponent(uri.slice(7));
+		const target = relativeTo(doc, path);
+		return PICTURE.test(path) ? `![${basename(path)}](${target})` : `[${basename(path)}](${target})`;
+	}).join("\n");
+}
+
+function readBase64(file) {
+	return new Promise((resolve, reject) => {
+		const reader = new FileReader();
+		reader.onload = () => resolve(String(reader.result).replace(/^data:[^,]*,/, ""));
+		reader.onerror = () => reject(reader.error);
+		reader.readAsDataURL(file);
+	});
+}
+
+async function pastePictures(view, doc, files) {
+	for (const file of files) {
+		let done;
+		try {
+			done = await bridge.call("pasteImage", doc.path ?? "", file.type, await readBase64(file));
+		} catch (error) {
+			done = { error: String(error) };
+		}
+		pasted(view, doc, done);
+	}
+}
+
+function pasted(view, doc, done) {
+	if (done.error) toast(done.error, "danger");
+	if (done.path) insertAtCursor(view, `![](${relativeTo(doc, done.path)})\n`);
+}
+
 function relativeTo(doc, path) {
 	const encode = each => each.split("/").map(part => encodeURIComponent(part)).join("/");
 	if (!doc.path) return encode(path);
@@ -981,19 +1048,36 @@ const appApi = {
 			const list = event.dataTransfer?.getData("text/uri-list");
 			if (!list) return false;
 			event.preventDefault();
-			const uris = list.split(/\r?\n/).filter(each => each && !each.startsWith("#"));
-			const doc = activePane.active.doc;
 			const at = view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.head;
-			const parts = uris.map(uri => {
-				if (!uri.startsWith("file://")) return `[${uri}](${uri})`;
-				const path = decodeURIComponent(uri.slice(7));
-				const target = relativeTo(doc, path);
-				return /\.(png|jpe?g|gif|webp|svg|avif|bmp)$/i.test(path) ? `![${basename(path)}](${target})` : `[${basename(path)}](${target})`;
-			});
-			const text = parts.join("\n");
+			const text = linkUris(activePane.active.doc, list);
 			view.dispatch({ changes: { from: at, insert: text }, selection: EditorSelection.cursor(at + text.length) });
 			view.focus();
 			return true;
+		},
+		paste(event, view) {
+			const tab = activePane?.active;
+			const data = event.clipboardData;
+			if (!tab || tab.doc.readonly || !data || !isMarkdown(tab.doc.path)) return false;
+			const pictures = [...data.files].filter(file => file.type.startsWith("image/"));
+			if (pictures.length) {
+				event.preventDefault();
+				pastePictures(view, tab.doc, pictures);
+				return true;
+			}
+			// files copied in a file manager: links, pictures shown
+			const list = data.getData("text/uri-list");
+			if (list && list.split(/\r?\n/).some(each => each.startsWith("file://"))) {
+				event.preventDefault();
+				insertAtCursor(view, linkUris(tab.doc, list));
+				return true;
+			}
+			// no text: perhaps a picture WebKit does not hand over
+			if (!data.types.includes("text/plain")) {
+				event.preventDefault();
+				bridge.call("pasteImage", tab.doc.path ?? "").then(done => pasted(view, tab.doc, done));
+				return true;
+			}
+			return false;
 		},
 	},
 	async askAi(view) {
@@ -1155,6 +1239,9 @@ const commands = [
 	{ title: "Open folder", icon: "folder", run: openFolder },
 	{ title: "Larger text", keys: "Ctrl+=", key: "c-=", also: "c-+", run: () => zoom(1) },
 	{ title: "Smaller text", keys: "Ctrl+-", key: "c--", run: () => zoom(-1) },
+	{ title: "Wider column", icon: "arrow_expand_horizontal", run: () => stepSheet(1) },
+	{ title: "Narrower column", icon: "arrow_collapse_horizontal", run: () => stepSheet(-1) },
+	{ title: "Column width: standard", icon: "arrow_collapse_horizontal", run: () => setSheet(SHEET.standard) },
 	{ title: "Shortcuts", icon: "keyboard_outline", keys: "Ctrl+/", key: "c-/", run: showShortcuts },
 ].filter(each => each.keys !== "Ctrl+B");
 
@@ -1190,6 +1277,53 @@ function cyclePane(delta) {
 	const next = panes[(panes.indexOf(activePane) + delta + panes.length) % panes.length];
 	setActive(next);
 	next.active?.view?.focus();
+}
+
+// the width of the text column, dragged at its edges; the same in every pane
+const SHEET = { min: 360, max: 4000, step: 80, standard: 760 };
+let sheetWidth = SHEET.standard;
+function setSheet(width, save = true) {
+	sheetWidth = Math.round(Math.min(SHEET.max, Math.max(SHEET.min, width)));
+	document.documentElement.style.setProperty("--sheet", `${sheetWidth}px`);
+	measureAll();
+	if (save) saveSoon();
+}
+// as wide as the pane: kept at the most, so a larger window is filled as well
+const sheetRoom = () => Math.max(...allPanes().map(pane => pane.body.clientWidth - 56), SHEET.min);
+const sheetShown = () => Math.min(sheetWidth, sheetRoom());
+function stepSheet(delta) {
+	const next = sheetShown() + delta * SHEET.step;
+	setSheet(next >= sheetRoom() ? SHEET.max : next);
+}
+
+function sheetEdge(pane, side) {
+	const edge = el("div", `sheet-edge ${side}`);
+	edge.addEventListener("pointerdown", event => {
+		if (event.button !== 0) return;
+		event.preventDefault();
+		edge.setPointerCapture(event.pointerId);
+		const room = pane.body.clientWidth - 56;
+		const startX = event.clientX;
+		const start = Math.min(sheetWidth, room);
+		const sign = side === "right" ? 1 : -1;
+		document.body.classList.add("sizing-sheet");
+		const move = each => {
+			const next = start + sign * 2 * (each.clientX - startX);
+			setSheet(next >= room ? SHEET.max : next, false);
+		};
+		const up = () => {
+			edge.removeEventListener("pointermove", move);
+			edge.removeEventListener("pointerup", up);
+			edge.removeEventListener("pointercancel", up);
+			document.body.classList.remove("sizing-sheet");
+			saveSoon();
+		};
+		edge.addEventListener("pointermove", move);
+		edge.addEventListener("pointerup", up);
+		edge.addEventListener("pointercancel", up);
+	});
+	edge.addEventListener("dblclick", () => setSheet(SHEET.standard));
+	return edge;
 }
 
 let textSize = 15;
@@ -1285,7 +1419,7 @@ function saveLayout(node) {
 
 function saveSession() {
 	if (!root) return;
-	bridge.call("sessionSave", kind, { layout: saveLayout(root), side: { open: side.open, view: side.view, roots: side.roots, opened: [...side.opened] }, textSize });
+	bridge.call("sessionSave", kind, { layout: saveLayout(root), side: { open: side.open, view: side.view, roots: side.roots, opened: [...side.opened] }, textSize, sheet: sheetWidth });
 }
 
 async function restoreLayout(data, parent) {
@@ -1370,6 +1504,7 @@ async function start() {
 	side.opened = new Set(saved?.side?.opened ?? side.roots);
 	side.view = saved?.side?.view ?? "files";
 	if (saved?.textSize) { textSize = saved.textSize; zoom(0); }
+	if (saved?.sheet) setSheet(saved.sheet, false);
 	if (side.view === "outline") side.tabs?.set("outline");
 	side.tree?.classList.toggle("shown", side.view === "files");
 	side.outline?.classList.toggle("shown", side.view === "outline");

@@ -1,5 +1,6 @@
 """What the editor's page may ask of the machine and of the shell (app.py)."""
 import ast
+import base64
 import json
 import operator
 import os
@@ -65,12 +66,16 @@ def background_rgba():
 
 
 def write_status(status):
-    path = os.path.join(runtime_dir(), "editor-status.json")
+    write_runtime("editor-status.json", status or {"open": False})
+
+
+def write_runtime(name, data):
+    path = os.path.join(runtime_dir(), name)
     try:
         os.makedirs(runtime_dir(), exist_ok=True)
         temp = f"{path}.{os.getpid()}"
         with open(temp, "w", encoding="utf-8") as file:
-            json.dump(status or {"open": False}, file)
+            json.dump(data, file)
         os.replace(temp, path)
     except OSError:
         pass
@@ -311,8 +316,54 @@ def clip_entries():
         return []
 
 
+def attachments(document):
+    return os.path.join(os.path.dirname(document), "attachments") if document else os.path.expanduser("~/Pictures/Screenshots")
+
+
+def free_name(folder, stem, extension):
+    path = os.path.join(folder, f"{stem}.{extension}")
+    number = 2
+    while os.path.exists(path):
+        path = os.path.join(folder, f"{stem}-{number}.{extension}")
+        number += 1
+    return path
+
+
+IMAGE_TYPES = {"image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp",
+               "image/avif": "avif", "image/bmp": "bmp", "image/svg+xml": "svg"}
+IMAGE_LIMIT = 64 * 1024 * 1024
+
+
+def paste_image(document, kind=None, data=None):
+    """A picture of the clipboard (given by the page, else read with wl-paste) kept beside the document."""
+    try:
+        if data is not None:
+            content = base64.b64decode(data)
+        else:
+            offered = subprocess.run(["wl-paste", "--list-types"], capture_output=True, text=True, timeout=5).stdout.split()
+            kind = next((each for each in IMAGE_TYPES if each in offered), None)
+            if kind is None:
+                return {"none": True}
+            content = subprocess.run(["wl-paste", "--no-newline", "--type", kind], capture_output=True, timeout=20, check=True).stdout
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        return {"error": str(error)}
+    if not content:
+        return {"none": True}
+    if len(content) > IMAGE_LIMIT:
+        return {"error": "Picture too large"}
+    folder = attachments(document)
+    try:
+        os.makedirs(folder, exist_ok=True)
+        path = free_name(folder, time.strftime("pasted-%Y%m%d-%H%M%S"), IMAGE_TYPES.get(kind, "png"))
+        with open(path, "xb") as file:
+            file.write(content)
+    except OSError as error:
+        return {"error": str(error)}
+    return {"path": path}
+
+
 def screenshot(document):
-    folder = os.path.join(os.path.dirname(document), "attachments") if document else os.path.expanduser("~/Pictures/Screenshots")
+    folder = attachments(document)
     try:
         region = subprocess.run(["slurp"], capture_output=True, text=True, timeout=120)
         if region.returncode != 0:
@@ -420,7 +471,7 @@ FAST = {
     "sessionLoad": session_load, "sessionSave": session_save, "aiModel": ai_model,
 }
 SLOW = {
-    "files": files_in, "search": search, "clipEntries": clip_entries, "screenshot": screenshot, "calc": calc,
+    "files": files_in, "search": search, "clipEntries": clip_entries, "screenshot": screenshot, "pasteImage": paste_image, "calc": calc,
     "translate": translate, "ai": ai, "runOutput": run_output, "runTerminal": run_terminal, "shelfFile": shelf_file,
     "shelfText": shelf_text, "phoneText": phone_text, "phoneFile": phone_file, "addTask": add_task,
 }

@@ -5,13 +5,23 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Services.UPower
 
-// CPU, memory, disks, the mouse battery (the mouse daemon, UPower or a Razer
+// CPU, memory, the GPU (from TaskManager), disks, the mouse battery (the mouse daemon, UPower or a Razer
 // mouse's sysfs) and the laptop battery (UPower, as it changes). CPU/RAM keep a short history for charts.
 Singleton {
 	id: root
 
 	property real cpu: 0
 	property real memory: 0
+	// the busiest GPU, as the task manager's daemon measures it; -1 without one
+	readonly property real gpu: TaskManager.hasGpu ? root.clamp01(TaskManager.gpu) : -1
+	readonly property var gpuHistory: {
+		const series = TaskManager.series.gpu ?? [];
+		return root.zeros().concat(series).slice(-40);
+	}
+	readonly property string gpuText: TaskManager.gpus[0]?.name ?? ""
+	// the daemon samples the GPU only while someone asks for it
+	readonly property bool gpuWanted: Plugins.on("system-monitor")
+	property bool gpuHeld: false
 	property real memoryUsedKiB: 0
 	property real memoryTotalKiB: 0
 	property int cpuCores: 0
@@ -63,6 +73,15 @@ Singleton {
 		if (root.batteryPercent >= 95) return "battery";
 		return `battery_${level * 10}`;
 	}
+
+	function holdGpu() {
+		if (root.gpuWanted === root.gpuHeld) return;
+		root.gpuHeld = root.gpuWanted;
+		TaskManager.watch(root.gpuHeld ? 1 : -1, true);
+	}
+
+	onGpuWantedChanged: root.holdGpu()
+	Component.onCompleted: root.holdGpu()
 
 	function zeros() {
 		const out = [];

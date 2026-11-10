@@ -69,4 +69,6 @@ ShellRoot {
 	// the cursor theme in the theme's colours and niri's corner radius
 	// (core/services/CursorTheme.qml)
 	readonly property bool cursorTheme: CursorTheme.enabled
+	// its theme file kept up to date, its window loaded ahead
+	readonly property bool editor: Editor.enabled
 }

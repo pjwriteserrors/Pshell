@@ -348,15 +348,17 @@ Drawer {
 						Repeater {
 							model: Plugins.on("system-monitor") ? [
 								{ label: "CPU", key: "cpu", color: Theme.primary },
-								{ label: "RAM", key: "memory", color: Theme.secondary }
+								{ label: "RAM", key: "memory", color: Theme.secondary },
+								{ label: "GPU", key: "gpu", color: Theme.third }
 							] : []
 
 							delegate: RowLayout {
 								id: stat
 
 								required property var modelData
-								readonly property real value: stat.modelData.key === "cpu" ? SysStats.cpu : SysStats.memory
+								readonly property real value: stat.modelData.key === "cpu" ? SysStats.cpu : (stat.modelData.key === "memory" ? SysStats.memory : Math.max(0, SysStats.gpu))
 
+								visible: stat.modelData.key !== "gpu" || SysStats.gpu >= 0
 								spacing: 8
 
 								Ring {
@@ -1258,7 +1260,7 @@ Drawer {
 
 				Repeater {
 					// the values are bound in the card: a model that changed with them would build both anew every sample
-					model: 2
+					model: 3
 
 					delegate: Rectangle {
 						id: usage
@@ -1266,8 +1268,11 @@ Drawer {
 						required property int index
 						readonly property var modelData: usage.index === 0
 							? { label: "Processor", icon: "chip", value: SysStats.cpu, detail: SysStats.cpuText, history: SysStats.cpuHistory, color: Theme.primary }
-							: { label: "Memory", icon: "memory", value: SysStats.memory, detail: SysStats.memoryText, history: SysStats.memoryHistory, color: Theme.secondary }
+							: usage.index === 1
+							? { label: "Memory", icon: "memory", value: SysStats.memory, detail: SysStats.memoryText, history: SysStats.memoryHistory, color: Theme.secondary }
+							: { label: "Graphics", icon: "expansion_card_variant", value: Math.max(0, SysStats.gpu), detail: SysStats.gpuText, history: SysStats.gpuHistory, color: Theme.third }
 
+						visible: usage.index < 2 || SysStats.gpu >= 0
 						Layout.fillWidth: true
 						implicitHeight: 96
 						radius: Theme.radius.large

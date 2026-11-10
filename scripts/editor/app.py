@@ -7,6 +7,11 @@ this is WebKitGTK; files, watching and the shell's tools are behind a bridge.
 
     pe [file[:line[:col]]...]    open
     pe --scratch                 the scratchpad comes or goes
+    pe --warm                    started without a window (the shell does this)
+    pe --quit                    gone, also the window kept ready
+
+The process stays: when the window closes a new one is loaded hidden, so the
+next `pe` only shows it (starting WebKit takes seconds).
 
 The page runs at pe://app/, only its top frame knows the bridge's token.
 Rendered code blocks live at pe://preview/ in a sandboxed iframe with a CSP of
@@ -56,6 +61,9 @@ class Page:
         self.kind = kind
         self.ready = False
         self.queue = []
+        self.status = None
+        # the cursor stands in running text, where autocorrect may work
+        self.prose = False
         self.token = secrets.token_urlsafe(32)
 
         content = WebKit.UserContentManager()
@@ -85,6 +93,7 @@ class Page:
         self.window.set_default_size(*((720, 520) if kind == "scratch" else (1180, 780)))
         self.window.set_child(self.view)
         self.window.connect("close-request", self.on_close)
+        self.window.connect("notify::is-active", lambda *_: self.app.write_prose())
         self.view.load_uri("pe://app/index.html")
 
     # ── the page's calls ────────────────────────────────────────────────
@@ -153,7 +162,15 @@ class Page:
         return True
 
     def do_status(self, status):
-        self.app.set_status(self, status)
+        # the window kept ready tells nothing until it is shown
+        self.status = status
+        if self.window.get_visible():
+            self.app.set_status(self, status)
+        return True
+
+    def do_prose(self, on):
+        self.prose = bool(on)
+        self.app.write_prose()
         return True
 
     def do_openUri(self, uri):
@@ -205,10 +222,20 @@ class Editor(Gtk.Application):
         self.monitors = {}
         self.statuses = {}
         self.theme_monitor = None
+        self.warm_timer = 0
+        self.quitting = False
+        self.prose = None
         self.connect("command-line", self.on_command_line)
+        # GTK 4 sends no "destroy" for a window closed by itself
+        self.connect("window-removed", self.on_window_removed)
         self.connect("startup", self.on_startup)
 
     def on_startup(self, _app):
+        # no window is no reason to go: the next one is kept ready
+        self.hold()
+        # what an editor before this one left behind
+        tools.write_status(None)
+        self.write_prose()
         context = WebKit.WebContext.get_default()
         context.register_uri_scheme("pe", self.on_scheme)
         context.get_security_manager().register_uri_scheme_as_secure("pe")
@@ -231,25 +258,59 @@ class Editor(Gtk.Application):
             return self.scratch
         if self.main is None:
             self.main = Page(self, "main")
-            self.main.window.connect("destroy", self.on_main_gone)
         return self.main
 
-    def on_main_gone(self, _window):
+    def on_window_removed(self, _app, window):
+        if self.main is not None and window is self.main.window:
+            self.on_main_gone()
+
+    def on_main_gone(self):
         self.main = None
         self.set_status(None, None)
+        self.write_prose()
+        # a moment later, when the session the old one wrote is on disk
+        if not self.quitting and not self.warm_timer:
+            self.warm_timer = GLib.timeout_add(1500, self.warm)
+
+    def warm(self):
+        self.warm_timer = 0
+        if self.main is None and not self.quitting:
+            self.page("main")
+        return False
 
     def on_command_line(self, _app, command_line):
         args = command_line.get_arguments()[1:]
         cwd = command_line.get_cwd() or os.path.expanduser("~")
         flags = [each for each in args if each.startswith("--")]
         files = [each for each in args if not each.startswith("--")]
+        if "--quit" in flags:
+            self.quitting = True
+            tools.write_runtime("editor-prose.json", {"prose": False})
+            if self.main and self.main.window.get_visible():
+                # open: it asks about what is unsaved and closes itself
+                self.main.window.close()
+            elif self.main:
+                self.main.window.destroy()
+            if self.scratch:
+                self.scratch.emit("hiding", {})
+                window = self.scratch.window
+                GLib.timeout_add(300, lambda: (window.destroy(), False)[1])
+            self.release()
+            return 0
+        if "--warm" in flags:
+            self.warm()
+            return 0
         if "--scratch" in flags:
             self.toggle_scratch()
             return 0
         main = self.page("main")
         for each in files:
             main.emit("open", tools.parse_target(each, cwd))
+        shown = main.window.get_visible()
         self.bring(main.window, "Pshell Editor")
+        if not shown:
+            main.emit("shown", {})
+            self.set_status(main, main.status)
         return 0
 
     @staticmethod
@@ -353,6 +414,12 @@ class Editor(Gtk.Application):
         for page in (self.main, self.scratch):
             if page and path in self.monitors and page.kind in self.monitors[path][0]:
                 page.emit("fileChanged", {"path": path, **info})
+
+    def write_prose(self):
+        on = any(page is not None and page.prose and page.window.is_active() for page in (self.main, self.scratch))
+        if on != self.prose:
+            self.prose = on
+            tools.write_runtime("editor-prose.json", {"prose": on})
 
     def set_status(self, page, status):
         self.statuses["main"] = status if page is None or page.kind == "main" else self.statuses.get("main")

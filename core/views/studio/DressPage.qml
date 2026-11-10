@@ -950,6 +950,31 @@ ModalWindow {
 									checked: CursorTheme.marks.caps
 									onToggled: on => CursorTheme.setMark("caps", on)
 								}
+								Repeater {
+									model: [
+										{ key: "capture", label: "Mouse captured" },
+										{ key: "multi", label: "Multicursor" },
+										{ key: "alert", label: "System trouble" },
+										{ key: "finger", label: "Fingerprint wanted" },
+										{ key: "secret", label: "Password copied" },
+										{ key: "battery", label: "Mouse battery low" },
+										{ key: "offline", label: "Offline" },
+										{ key: "reboot", label: "Restart needed" },
+										{ key: "guest", label: "Other PC's mouse" },
+										{ key: "breaks", label: "Break due" },
+										{ key: "dnd", label: "Do not disturb" },
+										{ key: "awake", label: "Kept awake" },
+										{ key: "downloads", label: "Downloads" }
+									]
+
+									SwitchRow {
+										required property var modelData
+
+										label: modelData.label
+										checked: CursorTheme.marks[modelData.key] === true
+										onToggled: on => CursorTheme.setMark(modelData.key, on)
+									}
+								}
 								SwitchRow {
 									label: "Hide while typing"
 									checked: NiriSettings.flag(["cursor", "hide-when-typing"])

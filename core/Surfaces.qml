@@ -171,6 +171,33 @@ Scope {
 		when: Apex.probing !== 0 || MouseCapture.probing
 	}
 
+	// a finger unlocked something
+	Hold {
+		id: unlocking
+		when: unlockLife.running
+		keep: 400
+	}
+
+	Timer {
+		id: unlockLife
+		interval: 1700
+	}
+
+	Connections {
+		target: Fingerprint
+
+		function onUnlocksChanged() {
+			unlockLife.restart();
+		}
+	}
+
+	ScreenView {
+		view: "overlays/FingerprintUnlock"
+		available: Plugins.on("fingerprint") || Plugins.on("phone-unlock")
+		when: unlocking.held
+		model: Quickshell.screens.filter(screen => screen.name === Fingerprint.unlockOutput)
+	}
+
 	// the mouse capture coming and going
 	Hold {
 		id: caging

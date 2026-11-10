@@ -48,6 +48,8 @@ Singleton {
 	property string moveControl: ""
 	signal fired(string rule, string control, string trigger)
 	signal pressedControl(string control, bool down)
+	// held still with swipes on it: the HUD shows, the swipe fires on release
+	signal aiming(string control)
 	signal wheeled(string wheel, int delta)
 	signal imported(int rules, int skipped)
 
@@ -1113,6 +1115,9 @@ Singleton {
 			break;
 		case "fired":
 			root.fired(data.rule ?? "", data.control ?? "", data.trigger ?? "");
+			break;
+		case "aim":
+			root.aiming(data.control ?? "");
 			break;
 		case "state":
 			root.daemonState = data;

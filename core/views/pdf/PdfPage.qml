@@ -53,6 +53,57 @@ Item {
 	// what the sharp picture would need; above this a tile of the visible part is drawn instead
 	readonly property real fullPx: Math.max(root.base.width, root.base.height) * root.renderK * root.dpr
 	readonly property int capPx: 4096
+	// the small picture: one size for the page, the thumbnails and the glow, so PDFium draws it once
+	readonly property int thumbPx: Math.round(root.base.width * root.renderK * root.dpr)
+	readonly property int smallPx: root.thumbnail && root.thumbPx > Pdf.smallPx ? root.thumbPx : Pdf.smallPx
+	// a picture of a big scan takes PDFium seconds whatever its size, one after the other: the
+	// small one is drawn first only in a file known to be quick, thumbnails wait for the pages looked at
+	readonly property bool smallFirst: root.thumbnail ? root.thumbGo : (root.doc?.renderMs ?? 0) >= 0 && (root.doc?.renderMs ?? 0) < 250
+	// a thumbnail is asked for when PDFium is idle (the pages looked at go first), then kept
+	readonly property bool thumbMay: root.thumbnail && root.ready && ((root.doc?.drawnOnce ?? true) || thumbWait.done) && Pdf.rendering === 0
+	property bool thumbGo: false
+	// a turn later: asking changes `Pdf.rendering`, which this reads
+	onThumbMayChanged: if (root.thumbMay) Qt.callLater(() => root.thumbGo = true)
+
+	Timer {
+		id: thumbWait
+
+		property bool done: false
+
+		running: root.thumbnail && root.ready && !thumbWait.done
+		interval: 1500
+		onTriggered: thumbWait.done = true
+	}
+
+	// asked for only once the page stays: a render PDFium has begun cannot be taken back
+	property bool settled: false
+
+	Timer {
+		running: !root.settled
+		interval: 90
+		onTriggered: root.settled = true
+	}
+
+	// links ask PDFium on this thread, and wait while it draws: read when it is idle, once per file
+	readonly property bool wantsLinks: root.interactive && root.active && root.ready && !root.page?.blank
+	property string linksFor: ""
+
+	function readLinks() {
+		if (root.wantsLinks && Pdf.rendering === 0) root.linksFor = Pdf.docKey;
+	}
+	onWantsLinksChanged: root.readLinks()
+
+	Connections {
+		target: Pdf
+		enabled: root.wantsLinks && root.linksFor !== Pdf.docKey
+
+		function onRenderingChanged() {
+			root.readLinks();
+		}
+		function onDocKeyChanged() {
+			root.readLinks();
+		}
+	}
 
 	// the item a point of the page space is drawn in (the overlay and the reader map through it)
 	readonly property alias space: space
@@ -117,12 +168,12 @@ Item {
 				// built only while the document is read: a page image without one loads the whole file again
 				readonly property bool drawn: root.ready && !root.page?.blank && !root.page?.image
 
-				// a small one first, at once
+				// a small one first, at once (in a quick file)
 				Loader {
 					id: lowLoader
 
 					anchors.fill: parent
-					active: space.drawn
+					active: space.drawn && root.smallFirst && root.settled
 					visible: !shade.on
 
 					sourceComponent: PdfPageImage {
@@ -131,20 +182,26 @@ Item {
 						asynchronous: true
 						cache: true
 						smooth: true
-						sourceSize.width: root.thumbnail ? Math.max(48, Math.round(root.base.width * root.renderK * root.dpr)) : 260
+						sourceSize.width: root.smallPx
 						opacity: sharp.ready && sharp.shownOnce ? 0 : 1
+
+						readonly property int ticket: Pdf.ticket()
+						readonly property bool busy: status === Image.Loading
+						onBusyChanged: Pdf.rendered(ticket, busy)
+						Component.onDestruction: Pdf.rendered(ticket, false)
 					}
 				}
 
-				// the sharp one, faded over it the first time; later renders swap under it
+				// the sharp one, faded over it the first time; a new size is drawn while the old one stays
 				Loader {
 					id: sharp
 
 					readonly property bool ready: !!sharp.item && sharp.item.status === Image.Ready
 					property bool shownOnce: false
+					property real asked: 0
 
 					anchors.fill: parent
-					active: space.drawn && !root.thumbnail && root.active
+					active: space.drawn && !root.thumbnail && root.active && root.settled
 					visible: !shade.on
 
 					sourceComponent: PdfPageImage {
@@ -154,12 +211,27 @@ Item {
 						currentFrame: root.n
 						asynchronous: true
 						cache: false
+						retainWhileLoading: true
 						smooth: true
 						mipmap: false
-						sourceSize.width: Math.round(root.base.width * root.renderK * root.dpr * Math.min(1, root.capPx / Math.max(1, root.fullPx)))
-						sourceSize.height: Math.round(root.base.height * root.renderK * root.dpr * Math.min(1, root.capPx / Math.max(1, root.fullPx)))
-						opacity: sharpImage.status === Image.Ready ? 1 : 0
-						onStatusChanged: if (sharpImage.status === Image.Ready) sharp.shownOnce = true
+						// both sides at once: one after the other would ask PDFium twice
+						sourceSize: {
+							const f = root.renderK * root.dpr * Math.min(1, root.capPx / Math.max(1, root.fullPx));
+							return Qt.size(Math.round(root.base.width * f), Math.round(root.base.height * f));
+						}
+						opacity: sharp.shownOnce || sharpImage.status === Image.Ready ? 1 : 0
+						Component.onCompleted: sharp.asked = Date.now()
+						readonly property int ticket: Pdf.ticket()
+						readonly property bool busy: status === Image.Loading
+						onBusyChanged: Pdf.rendered(ticket, busy)
+						Component.onDestruction: Pdf.rendered(ticket, false)
+						onStatusChanged: {
+							if (sharpImage.status !== Image.Ready) return;
+							sharp.shownOnce = true;
+							const doc = root.doc;
+							if (doc && doc.renderMs !== undefined && doc.renderMs < 0) doc.renderMs = Date.now() - sharp.asked;
+							if (doc && doc.drawnOnce === false) doc.drawnOnce = true;
+						}
 
 						Behavior on opacity {
 							enabled: !sharp.shownOnce
@@ -281,12 +353,13 @@ Item {
 					}
 				}
 
-				// the text selected (PDFium finds it between the two points)
+				// the text selected (PDFium finds it between the two points); without a selection it has
+				// no document, as it asks PDFium again on every zoom and would wait for a page being drawn
 				PdfSelection {
 					id: selection
 
 					anchors.fill: parent
-					document: root.interactive ? root.doc : null
+					document: root.interactive && (textDrag.pressed || root.selecting || selection.text !== "") ? root.doc : null
 					page: root.n
 					renderScale: Math.max(0.01, root.k)
 					hold: !textDrag.pressed && !root.selecting
@@ -405,7 +478,7 @@ Item {
 				PdfLinkModel {
 					id: linkModel
 
-					document: root.interactive && root.active && root.ready ? root.doc : null
+					document: root.wantsLinks && root.linksFor === Pdf.docKey ? root.doc : null
 					page: root.n
 				}
 
@@ -527,7 +600,10 @@ Item {
 	}
 
 	// the pages the reader built, by id: it finds them for the selection and the keys
-	Component.onCompleted: if (root.interactive && root.reader?.pageItems) root.reader.pageItems[root.pageId] = root
+	Component.onCompleted: {
+		if (root.interactive && root.reader?.pageItems) root.reader.pageItems[root.pageId] = root;
+		if (root.thumbMay) root.thumbGo = true;
+	}
 	Component.onDestruction: if (root.reader?.pageItems && root.reader.pageItems[root.pageId] === root) delete root.reader.pageItems[root.pageId]
 
 	// the bounds of the selection in this item's coordinates (for the menu above it)

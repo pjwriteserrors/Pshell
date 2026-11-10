@@ -24,7 +24,7 @@ Singleton {
 		"foot(client)?", "st", "rio", "warp", "org\\.gnome\\.console",
 		// code
 		"code(-oss|-insiders|-url-handler)?", "(vs)?codium", "cursor", "(dev\\.zed\\.)?zed.*", "jetbrains-.*",
-		"sublime_text", "neovide", "emacs.*", "lapce", "de\\.pshell\\.Editor",
+		"sublime_text", "neovide", "emacs.*", "lapce",
 		// file managers
 		"org\\.gnome\\.nautilus", "thunar", "org\\.kde\\.dolphin", "nemo", "pcmanfm.*", "org\\.gnome\\.files", "spacefm", "doublecmd", "krusader",
 		// passwords
@@ -50,9 +50,11 @@ Singleton {
 	// Messages in a window of its own has the keyboard only while niri says so:
 	// Qt's word for it can stay behind after the window went away
 	readonly property bool writing: root.field !== null && (!Messages.windowed || root.own)
+	// the shell's editor says itself whether its cursor stands in running text
+	readonly property bool editor: root.window !== null && String(root.window.app_id || "") === "de.pshell.Editor"
 	// no window has the keyboard while it is in the launcher or a panel
 	readonly property bool active: root.enabled && !Session.locked
-		&& (root.writing || (root.window !== null && !root.own && !root.skips(root.window.app_id)))
+		&& (root.writing || (root.window !== null && !root.own && (root.editor ? Editor.prose : !root.skips(root.window.app_id))))
 	// how a correction is typed; of several one is picked each time
 	readonly property var animations: [
 		Plugins.on("autocorrect-scramble") ? "scramble" : "",

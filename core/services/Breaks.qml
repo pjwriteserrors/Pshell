@@ -53,6 +53,8 @@ Singleton {
 	property int sinceMove: 0
 	property int sinceWater: 0
 	property real eyesDueAt: 0
+	// asked to stretch and not done yet
+	property bool stretchDue: false
 	property string warnedFallDay: ""
 	property int bottleLeft: root.bottleSize
 	// what the bottles put aside still hold: size → millilitres
@@ -294,6 +296,7 @@ Singleton {
 	}
 
 	function tookBreak() {
+		root.stretchDue = false;
 		root.sinceEyes = 0;
 		root.sinceMove = 0;
 		root.change(entry => entry.breaks += 1);
@@ -328,13 +331,17 @@ Singleton {
 		if (Plugins.on("stretch") && root.sinceMove >= root.moveSeconds) {
 			root.sinceMove = 0;
 			root.sinceEyes = 0;
+			root.stretchDue = true;
 			Notifs.pushInternal("running", "Time to stretch", "5 min · stand up, stretch, walk", {
 				icon: "human_handsup",
 				sound: "reminder",
 				duration: 60000,
 				actions: [
 					{ label: "Start", icon: "play", run: () => root.startStretch() },
-					{ label: "Later", icon: "timer_outline", run: () => root.sinceMove = root.moveSeconds - root.snoozeSeconds }
+					{ label: "Later", icon: "timer_outline", run: () => {
+						root.stretchDue = false;
+						root.sinceMove = root.moveSeconds - root.snoozeSeconds;
+					} }
 				]
 			});
 		} else if (!Plugins.on("water")) {
@@ -369,6 +376,7 @@ Singleton {
 	// ── guided stretch ───────────────────────────────────────────────────
 	function startStretch() {
 		if (!Plugins.on("stretch")) return;
+		root.stretchDue = false;
 		root.sinceMove = 0;
 		root.sinceEyes = 0;
 		Popups.withFocusedScreen(screen => Popups.openModal("stretch", screen));

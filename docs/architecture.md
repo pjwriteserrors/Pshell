@@ -203,7 +203,9 @@ it works.
 `editor` is the text editor (`scripts/editor/`, `Editor`, `pe file[:line]`).
 Quickshell cannot host a web view (QtWebEngine crashes it), so it is a process
 of its own: `app.py` is a Gtk.Application with WebKitGTK, one window per
-session, `tools.py` what the page may ask of the machine and the shell, `web/`
+session, kept warm: the shell starts it (`--warm`) a while after itself and a
+closed window is followed by a new one loaded hidden, so `pe` only shows it
+(`--quit` when the plugin goes off); `tools.py` what the page may ask of the machine and the shell, `web/`
 CodeMirror 6 with the page (`bun build.mjs` in `web/`; `dist/` is committed).
 Markdown is edited live (`live.js`: what the cursor is not in shows rendered),
 tabs sit in panes that split, drag and show one document several times; `:::
@@ -1096,9 +1098,10 @@ from its own start, so every animation is a loop, never an entrance.
 Studio › Icons & Pointer sets it (`~/.local/state/pshell/cursor.json`):
 animations full, subtle (only waiting and the arrow's light) or off, accent
 details, corners like niri's windows or a radius of their own, the seasons
-(by the date: winter, spring, summer, autumn, Halloween, Christmas, New
-Year – the arrow's rare light becomes the season passing by, the wait
-spinner carries its sign), which marks it carries, and niri's hiding of the
+(by the date: winter, spring, summer, autumn, Easter (Good Friday to
+Easter Monday), Halloween, Christmas, New Year – the arrow's rare light
+becomes the season passing by, the wait spinner carries its sign, on a
+full moon the moon), which marks it carries, and niri's hiding of the
 pointer while typing or idle. The theme is drawn for niri's `xcursor-size`
 and twice that.
 
@@ -1108,7 +1111,20 @@ cursors that change): a red dot while recording, orange and green while a
 microphone or camera is in use and a ring while the screen is shared
 (`core/services/Privacy.qml`, from PipeWire's links; the shell's own readers
 of the screen don't count), ⇪ on the text cursor while Caps Lock is on
-(`input_watch.py --caps`).
+(`input_watch.py --caps`), corners round the hotspot while
+the mouse is captured, a faint second pointer behind it while there are
+several text cursors. Beside the arrow, the hand and the text cursors sits
+at most one sign, the first of: the machine in trouble (the task manager's
+heat and memory limits, a disk 97 % full; held 10 s), the fingerprint
+reader waiting for a finger, a password on the clipboard (`wl-paste
+--watch` reports `CLIPBOARD_STATE=sensitive`; the text is never read), the
+mouse below 10 %, offline (held 5 s), a restart after a kernel update,
+another PC's mouse here (`Kvm.mode` guest), a stretch due (`Breaks.stretchDue`
+until it is done or put off), do not disturb, kept awake, a download in
+quarters (after 3 s). Each is a short event and then rest; their loops are
+1.2 s doubled so they fit into each other, and one that never rests sets
+the loop while longer ones are held still. `cursor_theme.py sheet --marks
+"finger;rec,alert"` draws marked cursors to look at.
 
 A Wayland pointer only takes the standard shapes, so the shell's own
 cursors are drawn by the shell: `style/theme/CursorStyle.qml` reads

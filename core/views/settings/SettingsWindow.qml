@@ -74,6 +74,7 @@ FloatingWindow {
 		{ id: "apex", label: "Apex Pro", icon: "keyboard_variant", hint: "Actuation, Rapid Trigger, keys, OLED", plugin: "apex" },
 		{ id: "ultimate", label: "Controller", icon: "gamepad_variant", hint: "8BitDo: buttons, sticks, light, macros", plugin: "ultimate" },
 		{ id: "headset", label: "Headset", icon: "headset", hint: "Sidetone, microphone, buttons", plugin: "headset" },
+		{ id: "fingerprint", label: "Fingerprint", icon: "fingerprint", hint: "Fingers, where they unlock", plugin: "fingerprint" },
 		{ id: "as50", label: "Avantree AS50", icon: "headphones", hint: "Codec, microphone, buttons, battery", plugin: "as50" },
 		{ id: "amazfit", label: "Amazfit watch", icon: "watch", hint: "Zepp OS settings, alarms, keys, notifications", plugin: "amazfit" },
 		{ id: "multicursor", label: "Multicursor", icon: "cursor_text", hint: "Lines and cursors in every text field", plugin: "multicursor" },
@@ -150,6 +151,9 @@ FloatingWindow {
 		{ page: "headset", anchor: "headset-mic", title: "Headset microphone", words: "sennheiser headset microphone mic gain level mute cable switch", plugin: "headset" },
 		{ page: "headset", anchor: "headset-sidetone", title: "Sidetone", words: "sennheiser headset sidetone hear yourself own voice monitoring", plugin: "headset" },
 		{ page: "headset", anchor: "headset-buttons", title: "Headset buttons", words: "sennheiser headset buttons volume up down remote press double hold per app", plugin: "headset" },
+		{ page: "fingerprint", anchor: "fingerprint-device", title: "Fingerprint reader", words: "fingerprint finger reader sensor elan enroll test delete fprintd", plugin: "fingerprint" },
+		{ page: "fingerprint", anchor: "fingerprint-use", title: "Unlock with the finger", words: "fingerprint unlock lock screen sudo polkit admin login sddm swaylock su pam tries timeout", plugin: "fingerprint" },
+		{ page: "fingerprint", anchor: "fingerprint-reader", title: "Fingerprint reader details", words: "fingerprint wake sleep suspend touch firmware usb delete all", plugin: "fingerprint" },
 		{ page: "as50", anchor: "as50-device", title: "Avantree AS50", words: "avantree as50 ensemble bluetooth headphones headset battery connect disconnect", plugin: "as50" },
 		{ page: "as50", anchor: "as50-sound", title: "AS50 sound", words: "avantree as50 bluetooth headphones volume absolute avrcp mute", plugin: "as50" },
 		{ page: "as50", anchor: "as50-codec", title: "AS50 codec", words: "avantree as50 bluetooth codec aac sbc sbc-xq faststream latency lip sync delay a2dp", plugin: "as50" },
@@ -748,6 +752,7 @@ FloatingWindow {
 							case "apex": return apexPage;
 							case "ultimate": return ultimatePage;
 							case "headset": return headsetPage;
+						case "fingerprint": return fingerprintPage;
 						case "as50": return as50Page;
 						case "amazfit": return amazfitPage;
 							case "multicursor": return multicursorPage;
@@ -1037,6 +1042,14 @@ FloatingWindow {
 		id: headsetPage
 
 		HeadsetPage {
+			onOpen: page => root.go(page, "")
+		}
+	}
+
+	Component {
+		id: fingerprintPage
+
+		FingerprintPage {
 			onOpen: page => root.go(page, "")
 		}
 	}

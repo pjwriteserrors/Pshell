@@ -684,6 +684,11 @@ class Daemon:
             elif function == 1:
                 dx = int.from_bytes(params[0:2], "big", signed=True)
                 dy = int.from_bytes(params[2:4], "big", signed=True)
+                # the first report after a press carries what the sensor saw
+                # before it (hundreds of counts at once): not part of a swipe
+                if getattr(mouse, "stale_xy", False):
+                    mouse.stale_xy = False
+                    return
                 if self.in_charge:
                     self.engine.move(dx, dy)
         elif fid == hidpp.UNIFIED_BATTERY and function == 0:
@@ -732,6 +737,8 @@ class Daemon:
             if self.in_charge:
                 self.engine.up(name, now)
                 self.chord_wheel(mouse, name, False)
+        if down:
+            mouse.stale_xy = True
         for name in down:
             if live:
                 emit("press", device=mouse.serial, control=name, down=True)
@@ -763,6 +770,8 @@ class Daemon:
     def live(self, kind, **data):
         if kind == "fired":
             emit("fired", **data)
+        elif kind == "aim":
+            emit("aim", **data)
         elif kind == "move" and (self.watching or self.config["options"].get("hud", True)):
             # at most 60 a second; the last one always goes out
             now = time.monotonic()

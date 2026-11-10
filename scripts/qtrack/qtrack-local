@@ -1672,7 +1672,13 @@ class TrackerStore:
 
             entry["teamwork_synced_ranges"] = synced_count
             entry["teamwork_total_ranges"] = len(ranges)
-            entry["teamwork_synced"] = bool(ranges) and synced_count == len(ranges)
+            # a checked entry with nothing to send counts as sent
+            nothing_to_send = (
+                bool(entry.get("checked"))
+                and not entry.get("is_running")
+                and int(entry.get("tracking_minutes") or 0) <= 0
+            )
+            entry["teamwork_synced"] = nothing_to_send or (bool(ranges) and synced_count == len(ranges))
             entry["teamwork_sync_pending"] = bool(entry.get("checked")) and not entry["teamwork_synced"]
 
     def day_entry_time_offsets(self, day_label: str) -> dict[tuple[str, str], tuple[int, int]]:
@@ -1974,6 +1980,11 @@ class TrackerStore:
         errors: list[str] = []
 
         for entry in sync_entries:
+            if not any(
+                int(item["ended_ts"]) > int(item["started_ts"])
+                for item in entry.get("rounded_range_timestamps") or []
+            ):
+                continue
             task_id = parse_optional_int(entry.get("teamwork_task_id"))
             project_id = parse_optional_int(entry.get("teamwork_project_id"))
             if task_id is None or project_id is None:

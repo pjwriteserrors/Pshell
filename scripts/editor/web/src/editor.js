@@ -12,7 +12,13 @@ import * as format from "./format.js";
 import { livePreview } from "./live.js";
 import { slashSource } from "./slash.js";
 
-export const isMarkdown = path => !path || /\.(md|markdown|mdown|mkd|txt)$/i.test(path);
+// a name without an ending is a note as well, unless it names code (Makefile, Dockerfile …)
+const CODE_NAMES = /^(GNU)?makefile$|^(PKGBUILD|Jenkinsfile|Vagrantfile|Gemfile|Rakefile|Procfile|Justfile|Containerfile)$/i;
+export const isMarkdown = path => {
+	if (!path || /\.(md|markdown|mdown|mkd|txt)$/i.test(path)) return true;
+	const name = path.replace(/^.*\//, "");
+	return !name.includes(".") && !CODE_NAMES.test(name) && !LanguageDescription.matchFilename(languages, name);
+};
 
 const mdKeys = [
 	{ key: "Mod-b", run: view => format.wrap(view, "**") },

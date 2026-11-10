@@ -11,7 +11,12 @@ and devices added by hand.
   (keyboard, mouse, touchpad …), and what sits behind a Logitech receiver –
   also asleep, from the receiver's pairing registers (Bolt: 0xB5 0x5N/0x6N,
   Unifying: 0x2N/0x4N) with model id (wpid), kind, serial and name. Awake
-  HID++ devices are asked for their features. Then the paired Bluetooth
+  HID++ devices are asked for their features. The other USB devices
+  (`/sys/bus/usb/devices` without hubs, root hubs and the ones with a HID
+  interface) come next, their kind from the interface classes (camera,
+  audio, storage, Bluetooth adapter …; a fingerprint reader by libfprint's
+  hwdb), their name from `systemd-hwdb` when the device gives none, *Built
+  in* when sysfs calls its port fixed. Then the paired Bluetooth
   devices (`bluetoothctl`: name, class, icon, service UUIDs – a connected
   Bluetooth HID device is already in the HID list) and the user's own
   devices. `network` takes a few seconds and runs only on *Scan*: one empty
@@ -21,7 +26,7 @@ and devices added by hand.
   `/usr/share/hwdata/oui.txt`, and NetworkManager's Wi-Fi list; the result
   is kept in the state dir (`devices/network.json`). `prompt <id>` writes
   what a Claude session needs to teach the shell that device – each source
-  with its own way in (HID descriptors, GATT/RFCOMM, ports and APIs, the
+  with its own way in (HID descriptors, USB class controls, GATT/RFCOMM, ports and APIs, the
   vendor's app).
 - `core/devices.json` – the registry, first match wins:
   `{ id, name, match, page, plugin, partial, role }`. `match` takes `usb` /

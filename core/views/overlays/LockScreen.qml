@@ -16,8 +16,8 @@ import qs.style.widgets
 Scope {
 	id: root
 
-	property bool enableFingerprint: Plugins.on("fingerprint")
-	property int maxFingerprintTries: 5
+	property bool enableFingerprint: Plugins.on("fingerprint") && Fingerprint.lockScreen
+	property int maxFingerprintTries: Fingerprint.lockTries
 	property int screenSleepDelay: 100000
 
 	property bool locked: false
@@ -85,7 +85,10 @@ Scope {
 	Connections {
 		target: Session
 		function onUnlockRequested() {
-			if (Plugins.on("phone-unlock") && root.locked) root.unlock();
+			if (!Plugins.on("phone-unlock") || !root.locked) return;
+			root.unlock();
+			// the phone's fingerprint: the same animation as the reader's
+			if (Fingerprint.unlockAnimation) Fingerprint.playUnlock();
 		}
 		function onLockRequested() {
 			root.lock();

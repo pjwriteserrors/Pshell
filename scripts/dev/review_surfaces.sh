@@ -90,6 +90,7 @@ chmod +x "$work/run.sh"
 printf 'spawn-at-startup "%s"\nhotkey-overlay { skip-at-startup; }\n' "$work/run.sh" >"$work/niri.kdl"
 
 timeout $((30 + ${#SURFACES[@]} * 5)) dbus-run-session -- niri -c "$work/niri.kdl" >"$work/niri.log" 2>&1 || true
+python3 "$REPO/scripts/reap_orphans.py" --after "$work/shell" >/dev/null 2>&1
 
 grep -E 'WARN|ERROR' "$work/qs.log" | grep -vE 'does not exist|portal|dropped operation|Wayland connection' || true
 echo "screenshots in $OUT"

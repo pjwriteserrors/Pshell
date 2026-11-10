@@ -180,20 +180,7 @@ scroll-capture)
 	mkdir -p "$frames"
 	# let the selection overlay leave the screen first
 	sleep 0.4
-	n=0
-	prev=""
-	while [[ ! -e "$frames/stop" ]] && (( n < 400 )); do
-		file="$frames/$(printf '%04d' "$n").png"
-		grim -l 1 -g "$3" "$file" || exit 1
-		# a frame without movement is dropped right away
-		if [[ -n "$prev" ]] && cmp -s "$prev" "$file"; then
-			rm -f "$file"
-		else
-			prev="$file"
-			n=$((n + 1))
-		fi
-		sleep 0.3
-	done
+	exec python3 "$(dirname "$0")/scroll_capture.py" "$frames" "$3" "$4"
 	;;
 scroll-stitch)
 	frames="$dir/scroll-$2"

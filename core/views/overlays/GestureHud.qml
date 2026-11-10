@@ -11,8 +11,9 @@ import "../settings/mouse/Controls.js" as Controls
 
 // What the swipes of a held mouse button do, small in the middle of the
 // focused screen. It only comes when the button is held still for a moment
-// (a swipe made at once never sees it); each way's arc fills as the mouse
-// heads for it and is full where the swipe fires. Nothing to click.
+// (a swipe made at once never sees it, it fires on the way); then the mouse
+// only points, the arc it heads for fills, and letting go there runs it –
+// back in the middle nothing. The daemon decides when (event "aim").
 PanelWindow {
 	id: root
 
@@ -58,7 +59,7 @@ PanelWindow {
 
 	readonly property var heading: {
 		if (root.firedWay !== "") return root.ways.find(entry => entry.id === root.firedWay) ?? null;
-		let best = null, value = 0.2;
+		let best = null, value = 0.99;
 		for (const entry of root.ways) {
 			const t = root.toward(entry);
 			if (t > value && root.way(entry.id)) {
@@ -86,28 +87,21 @@ PanelWindow {
 				root.firedWay = "";
 				root.dotX = 0;
 				root.dotY = 0;
-				showSoon.restart();
-			} else if (!down && control === root.control) {
-				showSoon.stop();
+				goSoon.stop();
 				root.wanted = false;
+			} else if (!down && control === root.control && root.wanted) {
+				// the swipe it pointed at fires right after the release
+				goSoon.restart();
 			}
 		}
+		function onAiming(control) {
+			if (!Mouse.option("hud", true) || !root.here || control !== root.control) return;
+			root.wanted = true;
+		}
 		function onFired(rule, control, trigger) {
-			if (control !== root.control) return;
-			showSoon.stop();
-			if (!root.wanted) return;
+			if (control !== root.control || !root.wanted) return;
 			root.firedWay = trigger;
 			goSoon.restart();
-		}
-	}
-
-	// only for a hesitating hand: a swipe already under way goes without it
-	Timer {
-		id: showSoon
-
-		interval: 380
-		onTriggered: {
-			if (Mouse.pressed[root.control] && Math.hypot(root.nx, root.ny) < 0.4) root.wanted = true;
 		}
 	}
 
@@ -219,7 +213,7 @@ PanelWindow {
 					icon: slot.info?.icon || ({ up: "arrow_up", down: "arrow_down", left: "arrow_left", right: "arrow_right" })[slot.modelData.id]
 					size: 18
 					surface: "transparent"
-					color: slot.fill > 0.2 ? Theme.primary : Theme.textMuted
+					color: slot.fill > 0.99 ? Theme.primary : Theme.textMuted
 					scale: 1 + 0.15 * slot.fill
 				}
 			}

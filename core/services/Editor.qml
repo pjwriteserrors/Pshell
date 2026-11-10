@@ -22,6 +22,8 @@ Singleton {
 	property int unsaved: 0
 	property int words: 0
 	property string title: ""
+	// the focused window's cursor stands in running text (Autocorrect)
+	property bool prose: false
 
 	function open(path, line) {
 		if (!root.enabled) return;
@@ -54,11 +56,22 @@ Singleton {
 	onEnabledChanged: {
 		themeTimer.restart();
 		root.applyDefault();
+		if (root.enabled) warmTimer.restart();
+		else Quickshell.execDetached(["python3", root.program, "--quit"]);
 	}
 	onIsDefaultChanged: root.applyDefault()
 	Component.onCompleted: {
 		themeTimer.restart();
 		root.applyDefault();
+		if (root.enabled) warmTimer.restart();
+	}
+
+	// the editor started a while after the shell, its window loaded hidden: it opens at once
+	Timer {
+		id: warmTimer
+
+		interval: 8000
+		onTriggered: if (root.enabled) Quickshell.execDetached(["python3", root.program, "--warm"])
 	}
 
 	Timer {
@@ -95,6 +108,23 @@ Singleton {
 				root.running = false;
 			}
 		}
+	}
+
+	FileView {
+		id: proseFile
+
+		path: root.enabled ? `${Paths.runtime}/editor-prose.json` : ""
+		watchChanges: true
+		printErrors: false
+		onFileChanged: reload()
+		onLoaded: {
+			try {
+				root.prose = !!JSON.parse(proseFile.text()).prose;
+			} catch (error) {
+				root.prose = false;
+			}
+		}
+		onLoadFailed: root.prose = false
 	}
 
 	// ── as an app of the desktop ───────────────────────────────────────
