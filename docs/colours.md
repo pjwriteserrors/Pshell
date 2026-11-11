@@ -39,6 +39,29 @@ Two steps, kept apart so only the first ever touches pixels:
    hue, and every colour is moved in lightness until it has the minimum
    contrast on the background.
 
+## Where the apps take the roles
+
+The terminal colours 1–6 keep their ANSI meaning, so whatever read them as
+"the accent" takes the roles now (a wallust palette keeps the old slots):
+
+- `Theme.qml`, and `dotfiles/spicetify/generate.py` `derive()` for Spotify
+  and Discord: `"roles"` of `colors.json`
+- GTK (`apply_theme_selection.sh`, gtk.css): accent, destructive, success,
+  warning from the roles; headerbar, sidebar, cards and popovers as
+  neutral layers of the text over the background (not `color8`, `color7`,
+  `color3`, `color14`)
+- oomox / Papirus (`theme_variants.sh`): selection, buttons and folders in
+  `primary`, header buttons in `secondary`
+- Floorp (`dotfiles/floorp/pshell.css`): Pywalfox only knows the slots, so
+  `palette.py apply` writes `~/.cache/wal/pshell-roles.css`, which
+  `floorp_theme.py install` links beside the sheet; it comes with a restart
+  or ☰ → userChrome CSS → Rebuild
+
+Settings › Colours › Preview draws the shell, kitty, GTK, Floorp, Spotify
+and Discord in the drafted colours the way their themes map them
+(`core/views/settings/colours/Look.js`); held, the compare button shows the
+colours worn now.
+
 ## Styles
 
 | Style | |

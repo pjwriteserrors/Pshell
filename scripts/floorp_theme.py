@@ -5,7 +5,8 @@
   floorp_theme.py remove  [--profile DIR] [--all]
   floorp_theme.py status
 
-install links dotfiles/floorp/pshell.css into <profile>/chrome/CSS/, where
+install links dotfiles/floorp/pshell.css into <profile>/chrome/CSS/ (and
+~/.cache/wal/pshell-roles.css, the palette engine's roles, beside it), where
 Floorp's own CSS loader picks it up at the next start (or at once with
 ☰ → userChrome CSS → Rebuild). Nothing of the profile is changed or replaced:
 userChrome.css, userContent.css and every pref stay as they are, so remove
@@ -19,12 +20,16 @@ from __future__ import annotations
 
 import argparse
 import configparser
+import os
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "dotfiles" / "floorp" / "pshell.css"
 NAME = "pshell.css"
+# the roles of the palette engine (scripts/palette/palette.py apply)
+ROLES = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "wal" / "pshell-roles.css"
+ROLES_NAME = "pshell-roles.css"
 FLOORP_DIRS = [Path.home() / ".config" / "floorp", Path.home() / ".floorp"]
 
 
@@ -67,6 +72,7 @@ def ours(path: Path) -> bool:
 def install(profile: Path) -> bool:
     path = target(profile)
     if ours(path):
+        link_roles(profile)
         print(f"already in {profile}")
         return True
     if path.exists() or path.is_symlink():
@@ -75,6 +81,7 @@ def install(profile: Path) -> bool:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.symlink_to(SOURCE)
     print(f"linked {path}")
+    link_roles(profile)
     disabled = disabled_in(profile)
     if disabled:
         print("  note: pshell.css is unticked in ☰ → userChrome CSS; tick it there")
@@ -82,7 +89,25 @@ def install(profile: Path) -> bool:
     return True
 
 
+def link_roles(profile: Path) -> None:
+    roles = profile / "chrome" / "CSS" / ROLES_NAME
+    if roles.is_symlink() and roles.resolve() == ROLES.resolve():
+        return
+    if roles.exists() or roles.is_symlink():
+        print(f"{roles} exists and is not ours; leaving it alone", file=sys.stderr)
+        return
+    if not ROLES.exists():
+        ROLES.parent.mkdir(parents=True, exist_ok=True)
+        ROLES.write_text("")
+    roles.symlink_to(ROLES)
+    print(f"linked {roles}")
+
+
 def remove(profile: Path) -> bool:
+    roles = profile / "chrome" / "CSS" / ROLES_NAME
+    if roles.is_symlink() and roles.resolve() == ROLES.resolve():
+        roles.unlink()
+        print(f"removed {roles}")
     path = target(profile)
     if not (path.exists() or path.is_symlink()):
         print(f"not in {profile}")

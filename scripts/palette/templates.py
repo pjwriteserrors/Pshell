@@ -4,7 +4,8 @@ The templates keep wallust's pywal syntax, so they work with either engine:
 {name} and {name.filter}, {{ and }} for braces. Names: background,
 foreground, cursor, color0 … color15, wallpaper, alpha, and – only from this
 engine – the shell's roles: primary, secondary, tertiary, on_primary, danger,
-warning, success. Filters as wallust writes them: strip (BBCCDD), rgb
+warning, success (from a wallust scheme: color1, color2, color3 … as the
+templates had them before). Filters as wallust writes them: strip (BBCCDD), rgb
 (r,g,b), rgba (r,g,b,a), xrgba (bb/cc/dd/ff), alpha ([100]#BBCCDD),
 alpha_dec (1.0), red, green, blue.
 
@@ -35,6 +36,10 @@ def variables(scheme: dict, wallpaper: str, alpha: int = 100) -> dict:
     }
     for i, c in enumerate(scheme["colors"]):
         out[f"color{i}"] = c
+    # a wallust scheme has no roles: the slots templates used before them
+    colors = scheme["colors"]
+    out.update({"primary": colors[1], "secondary": colors[2], "tertiary": colors[3], "on_primary": colors[0],
+                "danger": colors[1], "warning": colors[3], "success": colors[2]})
     for name, c in (scheme.get("roles") or {}).items():
         out[name] = c
     out["wallpaper"] = wallpaper

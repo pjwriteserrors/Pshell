@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import qs.style.theme
 import qs.style.widgets
 import qs.core.services
+import qs.core.views.settings.colours
 
 // Colours (core/services/Colours.qml): the engine that reads the wallpaper,
 // the style and mode worn, and the tuning of every style. The sliders change
@@ -22,6 +23,14 @@ SettingsPage {
 	readonly property bool changed: Colours.dirty || root.style !== Colours.style || root.mode !== Colours.mode
 	readonly property var params: Colours.params(root.style)
 	readonly property var scheme: Colours.preview[root.style]?.[root.mode] ?? null
+	// held: the colours worn now, to compare
+	property bool comparing: false
+	readonly property var worn: ({
+			background: Theme.wal.special?.background ?? "#141414",
+			foreground: Theme.wal.special?.foreground ?? "#e6e6e6",
+			colors: Array.from({ length: 16 }, (_, i) => Theme.wal.colors?.[`color${i}`] ?? "#808080"),
+			roles: Theme.wal.roles ?? null
+		})
 
 	onActiveChanged: Colours.previewWanted = root.active && root.own
 	onOwnChanged: Colours.previewWanted = root.active && root.own
@@ -126,9 +135,19 @@ SettingsPage {
 		icon: "circle_half_full"
 		visible: root.own
 
-		Mock {
+		trailing: IconButton {
+			implicitWidth: 34
+			implicitHeight: 34
+			icon: "compare"
+			checked: pressed
+			onPressedChanged: root.comparing = pressed
+		}
+
+		AppPreview {
 			Layout.fillWidth: true
-			scheme: root.scheme
+			scheme: root.comparing ? root.worn : root.scheme
+			title: root.comparing ? "" : (Colours.styleNames[root.style] ?? root.style)
+			mode: root.comparing ? (Theme.dark ? "dark" : "light") : root.mode
 		}
 	}
 
@@ -271,156 +290,6 @@ SettingsPage {
 			anchors.fill: parent
 			cursorShape: Qt.PointingHandCursor
 			onClicked: root.style = tile.style
-		}
-	}
-
-	// a small shell in the colours of a scheme: a panel, its text, buttons,
-	// the signal colours and the terminal's sixteen
-	component Mock: Rectangle {
-		id: mock
-
-		property var scheme: null
-		readonly property color bg: mock.scheme ? mock.scheme.background : Theme.layer2
-		readonly property color fg: mock.scheme ? mock.scheme.foreground : Theme.text
-		function c(name) {
-			return mock.scheme?.roles?.[name] ?? Theme.layer3;
-		}
-
-		implicitHeight: 210
-		radius: Theme.radius.large
-		color: mock.bg
-
-		Behavior on color {
-			ColorAnim {}
-		}
-
-		ColumnLayout {
-			anchors.fill: parent
-			anchors.margins: 18
-			spacing: 14
-
-			RowLayout {
-				Layout.fillWidth: true
-				spacing: 10
-
-				Rectangle {
-					implicitWidth: 34
-					implicitHeight: 34
-					radius: 17
-					color: Qt.alpha(mock.c("primary"), 0.2)
-
-					Glyph {
-						anchors.centerIn: parent
-						icon: "palette"
-						size: 18
-						color: mock.c("primary")
-					}
-				}
-
-				ColumnLayout {
-					spacing: 0
-
-					StyledText {
-						text: Colours.styleNames[root.style] ?? root.style
-						color: mock.fg
-						font.weight: Font.Medium
-					}
-
-					StyledText {
-						text: root.mode === "light" ? "Light" : "Dark"
-						color: Qt.alpha(mock.fg, 0.64)
-						font.pixelSize: Theme.size.small
-					}
-				}
-
-				Item {
-					Layout.fillWidth: true
-				}
-
-				Repeater {
-					model: ["success", "warning", "danger"]
-
-					delegate: Rectangle {
-						required property string modelData
-
-						implicitWidth: 26
-						implicitHeight: 26
-						radius: 13
-						color: Qt.alpha(mock.c(modelData), 0.18)
-
-						Rectangle {
-							anchors.centerIn: parent
-							width: 10
-							height: 10
-							radius: 5
-							color: mock.c(parent.modelData)
-						}
-					}
-				}
-			}
-
-			RowLayout {
-				Layout.fillWidth: true
-				spacing: 8
-
-				Rectangle {
-					implicitWidth: 110
-					implicitHeight: 34
-					radius: 17
-					color: mock.c("primary")
-
-					StyledText {
-						anchors.centerIn: parent
-						text: "Primary"
-						color: mock.c("on_primary")
-						font.weight: Font.Medium
-					}
-				}
-
-				Repeater {
-					model: ["secondary", "tertiary"]
-
-					delegate: Rectangle {
-						required property string modelData
-
-						implicitWidth: 110
-						implicitHeight: 34
-						radius: 17
-						color: Qt.alpha(mock.c(modelData), 0.16)
-
-						StyledText {
-							anchors.centerIn: parent
-							text: parent.modelData === "secondary" ? "Secondary" : "Tertiary"
-							color: mock.c(parent.modelData)
-							font.weight: Font.Medium
-						}
-					}
-				}
-
-				Item {
-					Layout.fillWidth: true
-				}
-			}
-
-			Row {
-				Layout.fillWidth: true
-				spacing: 4
-
-				Repeater {
-					model: 16
-
-					delegate: Rectangle {
-						required property int index
-
-						width: (mock.width - 36 - 15 * 4) / 16
-						height: 26
-						radius: 6
-						color: mock.scheme ? mock.scheme.colors[index] : Theme.layer3
-						border.width: index === 0 ? 1 : 0
-						border.color: Qt.alpha(mock.fg, 0.12)
-					}
-				}
-			}
 		}
 	}
 }

@@ -320,29 +320,47 @@ gtk_colors.extend(
     "@define-color color{} {};".format(i, colors["color{}".format(i)])
     for i in range(16)
 )
+# the roles of the Pshell palette engine; a wallust palette keeps the slots
+# libadwaita had before (its colour 1-6 are picture colours, the engine'"'"'s
+# are near their ANSI meaning: blue, cyan and a bright cyan header otherwise)
+roles = data.get("roles") or {}
+gtk_colors += [
+    "@define-color pshell_accent {};".format(roles.get("primary") or "@color4"),
+    "@define-color pshell_accent_bg {};".format(roles.get("primary") or "@color6"),
+    "@define-color pshell_accent_fg {};".format(roles.get("on_primary") or "@foreground"),
+    "@define-color pshell_danger {};".format(roles.get("danger") or "@color1"),
+    "@define-color pshell_success {};".format(roles.get("success") or "@color2"),
+    "@define-color pshell_warning {};".format(roles.get("warning") or "@color3"),
+    "@define-color pshell_backdrop {};".format("@color0" if roles else "@color14"),
+    # surfaces as the shell layers them: the text tinted over the background
+    "@define-color pshell_card {};".format("mix(@background, @foreground, 0.085)" if roles else "@color7"),
+    "@define-color pshell_popover {};".format("mix(@background, @foreground, 0.13)" if roles else "@color3"),
+    "@define-color pshell_outline {};".format("@color8" if roles else "@color4"),
+    "@define-color pshell_header {};".format("mix(@background, @foreground, 0.06)" if roles else "@color8"),
+]
 gtk_colors_path.parent.mkdir(parents=True, exist_ok=True)
 gtk_colors_path.write_text("\n".join(gtk_colors) + "\n")
 
 gtk_css = """@import url("file://GTK_COLORS_PATH");
 
-@define-color accent_color @color4;
-@define-color accent_bg_color @color6;
-@define-color accent_fg_color @foreground;
+@define-color accent_color @pshell_accent;
+@define-color accent_bg_color @pshell_accent_bg;
+@define-color accent_fg_color @pshell_accent_fg;
 
-@define-color destructive_color @color1;
-@define-color destructive_bg_color shade(@color1, 0.8);
+@define-color destructive_color @pshell_danger;
+@define-color destructive_bg_color shade(@pshell_danger, 0.8);
 @define-color destructive_fg_color @foreground;
 
-@define-color success_color @color2;
-@define-color success_bg_color shade(@color2, 0.8);
+@define-color success_color @pshell_success;
+@define-color success_bg_color shade(@pshell_success, 0.8);
 @define-color success_fg_color @foreground;
 
-@define-color warning_color @color3;
-@define-color warning_bg_color shade(@color3, 0.8);
+@define-color warning_color @pshell_warning;
+@define-color warning_bg_color shade(@pshell_warning, 0.8);
 @define-color warning_fg_color @color0;
 
-@define-color error_color @color1;
-@define-color error_bg_color shade(@color1, 0.8);
+@define-color error_color @pshell_danger;
+@define-color error_bg_color shade(@pshell_danger, 0.8);
 @define-color error_fg_color @foreground;
 
 @define-color window_bg_color @background;
@@ -350,25 +368,25 @@ gtk_css = """@import url("file://GTK_COLORS_PATH");
 @define-color view_bg_color @background;
 @define-color view_fg_color @foreground;
 
-@define-color headerbar_bg_color @color8;
+@define-color headerbar_bg_color @pshell_header;
 @define-color headerbar_fg_color @foreground;
 @define-color headerbar_border_color @color0;
-@define-color headerbar_backdrop_color @color14;
+@define-color headerbar_backdrop_color @pshell_backdrop;
 @define-color headerbar_shade_color rgba(0, 0, 0, 0.36);
 
-@define-color card_bg_color @color7;
+@define-color card_bg_color @pshell_card;
 @define-color card_fg_color @foreground;
 @define-color card_shade_color rgba(0, 0, 0, 0.36);
 
-@define-color popover_bg_color @color3;
+@define-color popover_bg_color @pshell_popover;
 @define-color popover_fg_color @foreground;
 
 @define-color shade_color rgba(0, 0, 0, 0.36);
-@define-color scrollbar_outline_color @color4;
+@define-color scrollbar_outline_color @pshell_outline;
 @define-color borders @color0;
 
 .placessidebar {
-    background-color: @color8;
+    background-color: @pshell_header;
 }
 .navigation-sidebar {
     background-color: transparent;

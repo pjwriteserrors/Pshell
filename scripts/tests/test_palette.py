@@ -127,6 +127,20 @@ class Templates(unittest.TestCase):
             self.assertFalse([p for p in (tmp / "out").iterdir() if p.name.startswith(".staging")])
 
 
+class RolesCss(unittest.TestCase):
+    def test_written_beside_colors_json_and_empty_for_wallust(self):
+        import palette
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            palette.write_roles_css({"roles": {"primary": "#112233", "on_primary": "#FFFFFF"}}, [tmp / "colors.json"])
+            text = (tmp / "pshell-roles.css").read_text()
+            self.assertIn("--pshell-primary: #112233;", text)
+            self.assertIn("--pshell-on-primary: #FFFFFF;", text)
+            palette.write_roles_css({"roles": {}}, [tmp / "colors.json"])
+            self.assertEqual((tmp / "pshell-roles.css").read_text(), "")
+
+
 class Settings(unittest.TestCase):
     def test_tuning_changes_the_key(self):
         with tempfile.TemporaryDirectory() as tmp:

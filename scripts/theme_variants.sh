@@ -46,23 +46,29 @@ def darken(color, amount):
     return "".join("{:02X}".format(max(0, int(value[i:i + 2], 16) - amount)) for i in (0, 2, 4))
 
 
+# the roles of the Pshell's palette engine where it wrote them; a wallust
+# palette's slots as before
+roles = data.get("roles") or {}
+accent = roles.get("primary") or colors["color3"]
+header = roles.get("secondary") or colors["color1"]
+
 mapping = {
     "BG": special["background"],
     "FG": special["foreground"],
     "MENU_BG": special["background"],
     "MENU_FG": special["foreground"],
-    "SEL_BG": colors["color3"],
+    "SEL_BG": accent,
     "SEL_FG": special["background"],
     "TXT_BG": special["background"],
     "TXT_FG": special["foreground"],
-    "BTN_BG": colors["color3"],
+    "BTN_BG": accent,
     "BTN_FG": special["foreground"],
-    "HDR_BTN_BG": colors["color1"],
+    "HDR_BTN_BG": header,
     "HDR_BTN_FG": special["foreground"],
     # the Papirus plugin shades folders in three layers
-    "ICONS_LIGHT_FOLDER": colors["color3"],
-    "ICONS_MEDIUM": darken(colors["color3"], 20),
-    "ICONS_DARK": darken(colors["color3"], 56),
+    "ICONS_LIGHT_FOLDER": accent,
+    "ICONS_MEDIUM": darken(accent, 20),
+    "ICONS_DARK": darken(accent, 56),
     "ICONS_SYMBOLIC_ACTION": special["foreground"],
     "ICONS_SYMBOLIC_PANEL": special["foreground"],
 }

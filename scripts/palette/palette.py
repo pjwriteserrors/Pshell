@@ -264,6 +264,24 @@ def choose(style: str | None, mode: str | None) -> tuple[str, str]:
     return settings.chosen(data)
 
 
+def write_roles_css(scheme: dict, written: list) -> None:
+    """pshell-roles.css beside colors.json: the roles as CSS custom
+    properties, for sheets that cannot read JSON (Floorp's pshell.css); empty
+    for a wallust palette, whose sheets keep their own way."""
+    folder = next((p.parent for p in written if p.name == "colors.json"), None)
+    if folder is None:
+        return
+    roles = scheme.get("roles") or {}
+    text = ""
+    if roles:
+        lines = [f"\t--pshell-{name.replace('_', '-')}: {value};" for name, value in sorted(roles.items())]
+        text = "/* the Pshell palette engine's roles (scripts/palette) */\n:root {\n" + "\n".join(lines) + "\n}\n"
+    path = folder / "pshell-roles.css"
+    tmp = path.with_name(f".{path.name}.{os.getpid()}")
+    tmp.write_text(text)
+    os.replace(tmp, path)
+
+
 def serve() -> None:
     memo = {}
     for line in sys.stdin:
@@ -325,7 +343,8 @@ def main(argv: list[str]) -> int:
         import templates
 
         scheme = from_pywal(json.loads(Path(args[0]).read_text()))
-        templates.write(scheme, args[1] if len(args) > 1 else "", WALLUST_CONFIG)
+        written = templates.write(scheme, args[1] if len(args) > 1 else "", WALLUST_CONFIG)
+        write_roles_css(scheme, written)
     elif command == "analyse":
         print(json.dumps(analysis_of(Path(args[0])), indent=1))
     elif command == "matrix":

@@ -136,13 +136,19 @@ def derive(wal: dict) -> dict[str, Color]:
                 return c
         return ranked_colors[min(offset, len(ranked_colors) - 1)]
 
-    primary = legible(ranked_colors[0], 3.2)
-    secondary = legible(pick_distinct(ranked_colors[0].hsv_hue, 1), 3.0)
-    tertiary = legible(pick_distinct(secondary.hsv_hue, 2), 3.0)
+    # the Pshell's palette engine writes the roles itself (Theme.qml takes them)
+    own = wal.get("roles") or {}
+
+    def role(name: str):
+        return Color.parse(own[name]) if own.get(name) else None
+
+    primary = legible(role("primary") or ranked_colors[0], 3.2)
+    secondary = legible(role("secondary") or pick_distinct(ranked_colors[0].hsv_hue, 1), 3.0)
+    tertiary = legible(role("tertiary") or pick_distinct(secondary.hsv_hue, 2), 3.0)
     on_primary = bg if contrast(primary, bg) >= contrast(primary, fg) else fg
-    danger = legible(tint(Color.parse("#e5484d"), primary, 0.12), 3.4)
-    warning = legible(tint(Color.parse("#f5a524"), primary, 0.1), 3.4)
-    success = legible(tint(Color.parse("#46a758"), primary, 0.1), 3.4)
+    danger = legible(role("danger") or tint(Color.parse("#e5484d"), primary, 0.12), 3.4)
+    warning = legible(role("warning") or tint(Color.parse("#f5a524"), primary, 0.1), 3.4)
+    success = legible(role("success") or tint(Color.parse("#46a758"), primary, 0.1), 3.4)
 
     layer1 = tint(bg, fg, 0.045)
     layer2 = tint(bg, fg, 0.085)

@@ -17,6 +17,12 @@
  *   light    --tab-text-color-selected  --toolbarbutton-          icons_attention (5)
  *                                       background-color-hover (7)
  *
+ * The Pshell's palette engine writes its roles besides (pshell-roles.css,
+ * linked next to this sheet by scripts/floorp_theme.py; --pshell-primary,
+ * --pshell-on-primary, --pshell-danger …): where they are, they win over the
+ * slot above, whose ANSI-near magenta is not the picture's accent. They come
+ * with a restart or ☰ → userChrome CSS → Rebuild; everything else stays live.
+ *
  * The root keeps those sources untouched; the two light ones are only
  * replaced below the root (body), where the browser reads them.
  *
@@ -42,11 +48,11 @@
 	--ps-outline: color-mix(in srgb, var(--ps-fg) 8%, transparent);
 
 	/* the accent pushed until it reads on the background (Theme.legible) */
-	--ps-primary: oklch(from var(--ps-accent-raw) min(l, 0.5) max(c, 0.08) h);
-	--ps-on-primary: var(--ps-bg);
+	--ps-primary: var(--pshell-primary, oklch(from var(--ps-accent-raw) min(l, 0.5) max(c, 0.08) h));
+	--ps-on-primary: var(--pshell-on-primary, var(--ps-bg));
 	--ps-primary-soft: color-mix(in srgb, var(--ps-primary) 14%, transparent);
 	--ps-primary-container: color-mix(in srgb, var(--ps-primary) 20%, var(--ps-bg));
-	--ps-danger: #e5484d;
+	--ps-danger: var(--pshell-danger, #e5484d);
 
 	--ps-radius-small: 8px;
 	--ps-radius-medium: 12px;
@@ -67,7 +73,7 @@
 }
 
 :root[lwtheme-brighttext] {
-	--ps-primary: oklch(from var(--ps-accent-raw) max(l, 0.72) max(c, 0.08) h);
+	--ps-primary: var(--pshell-primary, oklch(from var(--ps-accent-raw) max(l, 0.72) max(c, 0.08) h));
 	--ps-shadow: rgba(0, 0, 0, 0.55);
 }
 
