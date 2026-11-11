@@ -5,9 +5,16 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/theme_paths.sh"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/theme_palette.sh"
 
 theme_ensure_runtime_dirs
 
+# With the Pshell's own engine (theme_palette.sh) the matrices come from
+# scripts/palette/palette.py: one analysis per picture, every style x mode
+# made from it at once; the first axis is then its style (vivid, muted,
+# pastel, mono), the second its mode, and the backend means nothing.
+#
 # wallust v4 remap: the first axis (still named "color_space" throughout this
 # script and in the JSON it emits, for compatibility with the picker) now
 # carries the wallust PALETTE (kmeans/salience/ansi). The second axis ("palette")
@@ -420,6 +427,18 @@ PY
 	rm -f "$tsv"
 }
 
+# the picker's matrix of one theme from the own engine
+own_matrix_json() {
+	local theme_dir preview_path media
+	theme_dir="$(resolve_theme_dir "$1")"
+	preview_path="$2"
+	media="$(theme_pick_media "$theme_dir" 2>/dev/null)" || {
+		echo "theme not found: $theme_dir" >&2
+		return 1
+	}
+	python3 "$THEME_PALETTE_PY" matrix "$theme_dir" "$media" "$preview_path"
+}
+
 prewarm_theme() {
 	local theme_dir preview_path backend
 
@@ -540,7 +559,11 @@ case "${1:-list}" in
 			echo "usage: $0 palette-json <theme-dir-or-name> <preview-path> <backend> <color-space> <palette>" >&2
 			exit 1
 		fi
-		palette_json "$@"
+		if theme_palette_own; then
+			own_matrix_json "$1" "$2" | python3 -c 'import json,sys; m=json.load(sys.stdin); print(json.dumps(next(i for i in m["items"] if i["colorSpace"]==sys.argv[1] and i["palette"]==sys.argv[2])))' "$4" "$5"
+		else
+			palette_json "$@"
+		fi
 		;;
 	matrix-json)
 		shift
@@ -548,7 +571,11 @@ case "${1:-list}" in
 			echo "usage: $0 matrix-json <theme-dir-or-name> <preview-path> <backend>" >&2
 			exit 1
 		fi
-		matrix_json "$@"
+		if theme_palette_own; then
+			own_matrix_json "$@"
+		else
+			matrix_json "$@"
+		fi
 		;;
 	prewarm)
 		shift
@@ -556,7 +583,11 @@ case "${1:-list}" in
 			echo "usage: $0 prewarm <theme-dir-or-name> <preview-path> <backend>" >&2
 			exit 1
 		fi
-		prewarm_theme "$@"
+		if theme_palette_own; then
+			theme_pick_media "$(resolve_theme_dir "$1")" | python3 "$THEME_PALETTE_PY" prewarm
+		else
+			prewarm_theme "$@"
+		fi
 		;;
 	scale)
 		# the scaled copy of a picture of the day made ahead of its apply,
@@ -575,7 +606,11 @@ case "${1:-list}" in
 			echo "usage: $0 matrix-all <backend>" >&2
 			exit 1
 		fi
-		matrix_all_json "$@"
+		if theme_palette_own; then
+			list_themes | python3 "$THEME_PALETTE_PY" matrix-all
+		else
+			matrix_all_json "$@"
+		fi
 		;;
 	*)
 		echo "usage: $0 [list|entry|palette-json|matrix-json|matrix-all|prewarm|scale]" >&2

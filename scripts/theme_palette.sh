@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 
-# The wallust palette of a theme, made once and kept. Sourced after
-# theme_paths.sh by apply_theme_selection.sh and theme_prewarm.sh.
+# The palette of a theme, made once and kept. Sourced after theme_paths.sh
+# by apply_theme_selection.sh, theme_prewarm.sh and theme_catalog.sh.
+#
+# Two engines make it, chosen in Settings › Colours (palette.json): the
+# Pshell's own (scripts/palette, the default) and wallust. With the own one
+# the "palette" of the functions below is its style (vivid, muted, pastel,
+# mono) and the "style" its mode (dark, light), the backend means nothing,
+# and palette.py keeps what it makes itself, beside wallust's (pshell-*.json
+# next to the media's analysis). The rest of this file is wallust's way.
 #
 # A palette is a function of the painted media and the wallust settings, so it
 # is kept per media (path and signature) and per settings (the global section
@@ -18,10 +25,27 @@
 # so a kept palette is exactly what wallust makes from frame.png.
 
 THEME_PALETTE_DIR="${THEME_PALETTE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/pshell/palettes}"
+export THEME_PALETTE_DIR THEME_ONLINE_DIR WALLUST_CONFIG_FILE
+THEME_PALETTE_PY="$THEME_SCRIPTS_DIR/palette/palette.py"
+PSHELL_PALETTE_FILE="${PSHELL_PALETTE_SETTINGS:-${XDG_STATE_HOME:-$HOME/.local/state}/pshell/palette.json}"
 THEME_TMP_DIR="${THEME_TMP_DIR:-${XDG_RUNTIME_DIR:-/tmp}/pshell-theme}"
 WALLUST_CONFIG_DIR="${WALLUST_CONFIG_DIR:-$(dirname -- "$WALLUST_CONFIG_FILE")}"
 # the palettes wallust 4.0.0-alpha can panic on: salience with too few buckets
 THEME_PALETTE_THRESHOLDS=(20 10 5 2 1)
+
+# which engine makes the colours: "pshell" unless palette.json says wallust
+theme_palette_engine() {
+	if grep -qE '"engine"[[:space:]]*:[[:space:]]*"wallust"' "$PSHELL_PALETTE_FILE" 2>/dev/null; then
+		printf 'wallust\n'
+	else
+		printf 'pshell\n'
+	fi
+}
+THEME_PALETTE_ENGINE="${THEME_PALETTE_ENGINE:-$(theme_palette_engine)}"
+
+theme_palette_own() {
+	[[ "$THEME_PALETTE_ENGINE" == "pshell" ]]
+}
 
 # the global section of wallust.toml: what is above the first [table], without
 # comments, blank lines and the three keys a theme sets itself
@@ -36,8 +60,16 @@ theme_palette_global_section() {
 	' "$WALLUST_CONFIG_FILE"
 }
 
-# a value of the global section, as the file has it now
+# a value of the global section, as the file has it now; with the own engine
+# palette and style are its style and mode
 theme_palette_config_value() {
+	if theme_palette_own; then
+		case "$1" in
+			palette) python3 "$THEME_PALETTE_PY" get style; return ;;
+			style) python3 "$THEME_PALETTE_PY" get mode; return ;;
+			backend) printf 'pshell\n'; return ;;
+		esac
+	fi
 	[[ -f "$WALLUST_CONFIG_FILE" ]] || return 0
 	sed -n "s/^$1[[:space:]]*=[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" "$WALLUST_CONFIG_FILE" | head -n 1
 }
@@ -60,6 +92,10 @@ theme_palette_media_key() {
 # where the palette of a media and settings is kept (made or not)
 theme_palette_path() {
 	local media="$1" backend="$2" palette="$3" style="$4" root="$THEME_PALETTE_DIR"
+	if theme_palette_own; then
+		python3 "$THEME_PALETTE_PY" path "$media" "$palette" "$style"
+		return
+	fi
 	# an online wallpaper's in memory beside it, under its worn/<stamp>
 	if theme_is_online "$media"; then
 		local stamp="${media#"$THEME_ONLINE_DIR"/worn/}"
@@ -129,6 +165,11 @@ theme_palette_ensure() {
 	local media="$1" backend="$2" palette="$3" style="$4"
 	local path frame code
 
+	if theme_palette_own; then
+		python3 "$THEME_PALETTE_PY" make "$media" "$palette" "$style"
+		return
+	fi
+
 	path="$(theme_palette_path "$media" "$backend" "$palette" "$style")"
 	[[ -s "$path" ]] && { printf '%s\n' "$path"; return 0; }
 
@@ -150,41 +191,12 @@ theme_palette_ensure() {
 	printf '%s\n' "$path"
 }
 
-# Puts a kept palette on: wallust's templates (~/.cache/wal and any other
-# target), the terminals' colours. The templates are written beside
-# ~/.cache/wal first and moved in with colors.json last, so the shell, which
-# watches that file, never reads one half written; `wallust cs` names the
-# palette file as the wallpaper, which is set back to <frame> on the way.
+# Puts a kept palette on: the wallust templates (~/.cache/wal and any other
+# target wallust.toml names), written by scripts/palette/templates.py for
+# either engine – the same files `wallust cs` wrote, in a fraction of the
+# time. Beside ~/.cache/wal first and moved in with colors.json last, so the
+# shell, which watches that file, never reads one half written.
 theme_palette_apply() {
 	local scheme="$1" frame="$2"
-	local work staging file code
-
-	mkdir -p "$THEME_TMP_DIR" "$WAL_CACHE_DIR"
-	work="$(mktemp -d "$THEME_TMP_DIR/apply.XXXXXX")" || return 1
-	staging="$(mktemp -d "$WAL_CACHE_DIR/.staging.XXXXXX")" || { rm -rf "$work"; return 1; }
-
-	# the user's config with the pywal target turned to the staging folder
-	sed -E "s#(dst[[:space:]]*=[[:space:]]*)[\"'](~|$HOME)/\\.cache/wal/?[\"']#\\1\"$staging/\"#" \
-		"$WALLUST_CONFIG_FILE" >"$work/wallust.toml" 2>/dev/null
-	[[ -d "$WALLUST_CONFIG_DIR/templates" ]] && ln -s "$WALLUST_CONFIG_DIR/templates" "$work/templates"
-	if ! grep -qF "$staging/" "$work/wallust.toml"; then
-		# a config that writes elsewhere: straight in, the wallpaper set after
-		rm -rf "$work" "$staging"
-		wallust cs --quiet --format pywal "$scheme" || return 1
-		grep -rlF -- "$scheme" "$WAL_CACHE_DIR" 2>/dev/null | xargs -r -d '\n' sed -i "s|$scheme|$frame|g"
-		return 0
-	fi
-
-	wallust cs --quiet --config-dir "$work" --format pywal "$scheme"
-	code=$?
-	if (( code == 0 )); then
-		grep -rlF -- "$scheme" "$staging" | xargs -r -d '\n' sed -i "s|$scheme|$frame|g"
-		for file in "$staging"/* "$staging"/.[!.]*; do
-			[[ -e "$file" && "${file##*/}" != "colors.json" ]] || continue
-			mv -f -- "$file" "$WAL_CACHE_DIR/"
-		done
-		[[ -e "$staging/colors.json" ]] && mv -f -- "$staging/colors.json" "$WAL_CACHE_DIR/colors.json"
-	fi
-	rm -rf "$work" "$staging"
-	return "$code"
+	python3 "$THEME_PALETTE_PY" apply "$scheme" "$frame"
 }

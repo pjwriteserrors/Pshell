@@ -5,7 +5,11 @@
 # hosts/<profile>.json) for everything else that follows the wallpaper.
 #
 #   apply_theme_selection.sh <theme> [--backend B] [--palette P] [--style S] [--animation KIND:NAME]
-#                            [--resolution original|2160|1440|1080]
+#                            [--resolution original|2160|1440|1080] [--colours-only]
+#
+# --colours-only puts the colours on again (Settings › Colours, after the
+# engine was tuned): the wallpaper, its frame and the animation stay as they
+# are, the palette, the templates and the hooks run.
 #
 # <theme> is a library entry (image, video or a directory holding one), by
 # path or by name. --resolution paints it scaled down (theme_scaled_media in
@@ -34,6 +38,7 @@ WALLUST_PALETTE=""
 WALLUST_STYLE=""
 NIRI_ANIMATION_ID=""
 RESOLUTION=""
+COLOURS_ONLY=0
 RUN_ID="$(date +%Y%m%d-%H%M%S)"
 LOG_FILE="$THEME_STATE_DIR/apply-$RUN_ID.log"
 GTK_WAL_COLORS_FILE="$WAL_CACHE_DIR/gtk-colors.css"
@@ -67,6 +72,10 @@ while (($# > 0)); do
 		--resolution)
 			RESOLUTION="${2:-}"
 			shift 2
+			;;
+		--colours-only)
+			COLOURS_ONLY=1
+			shift
 			;;
 		--*)
 			echo "unknown option: $1" >&2
@@ -378,8 +387,15 @@ for css_path in gtk_css_paths:
 ' "$WAL_CACHE_DIR/colors.json" "$GTK_WAL_COLORS_FILE" "$GTK3_CSS_FILE" "$GTK4_CSS_FILE"
 }
 
-# only what was asked for changes; nothing asked, nothing runs
+# only what was asked for changes; nothing asked, nothing runs. With the own
+# engine --palette is its style and --style its mode, kept in palette.json
 update_wallust_config() {
+	if theme_palette_own; then
+		[[ -n "$WALLUST_PALETTE$WALLUST_STYLE" ]] || return 0
+		log "Palette style: ${WALLUST_PALETTE:-unchanged}, mode: ${WALLUST_STYLE:-unchanged}"
+		run_step "palette choice" python3 "$THEME_PALETTE_PY" choose "${WALLUST_PALETTE:--}" "${WALLUST_STYLE:--}"
+		return
+	fi
 	if [[ ! -f "$WALLUST_CONFIG_FILE" ]]; then
 		return 0
 	fi
@@ -493,16 +509,24 @@ frame_path="$THEME_CURRENT_FRAME_FILE"
 log "Theme: $THEME_ENTRY"
 log "Media: $THEME_MEDIA ($media_type)"
 
-run_step "niri screen transition" niri msg action do-screen-transition --delay-ms 350 || true
+if (( COLOURS_ONLY )) && [[ -s "$frame_path" ]]; then
+	# the wallpaper is up and its frame is there
+	true &
+	FRAME_PID=$!
+	true &
+	WALLPAPER_PID=$!
+else
+	run_step "niri screen transition" niri msg action do-screen-transition --delay-ms 350 || true
 
-# frame.png for the hooks and the runtime, and the runtime itself, which
-# waits for the frame only where it paints from it (a video, swaybg)
-log "START wallpaper frame"
-(theme_write_frame "$THEME_MEDIA" "$frame_path") >>"$LOG_FILE" 2>&1 &
-FRAME_PID=$!
-log "START wallpaper runtime"
-(bash "$SCRIPT_DIR/apply_wallpaper_runtime.sh" "$THEME_MEDIA") >>"$LOG_FILE" 2>&1 &
-WALLPAPER_PID=$!
+	# frame.png for the hooks and the runtime, and the runtime itself, which
+	# waits for the frame only where it paints from it (a video, swaybg)
+	log "START wallpaper frame"
+	(theme_write_frame "$THEME_MEDIA" "$frame_path") >>"$LOG_FILE" 2>&1 &
+	FRAME_PID=$!
+	log "START wallpaper runtime"
+	(bash "$SCRIPT_DIR/apply_wallpaper_runtime.sh" "$THEME_MEDIA") >>"$LOG_FILE" 2>&1 &
+	WALLPAPER_PID=$!
+fi
 
 update_wallust_config
 backend="$(effective_backend)"
@@ -519,7 +543,7 @@ else
 	if ! palette_file="$(theme_palette_ensure "$THEME_MEDIA" "$backend" "$palette" "$style" 2>>"$LOG_FILE")"; then
 		log "FAIL palette"
 		FAIL_COUNT=$((FAIL_COUNT + 1))
-		echo "wallust failed; keeping the previous colours" >&2
+		echo "no palette could be made; keeping the previous colours" >&2
 		await_frame || true
 		await_wallpaper_runtime || true
 		finish_report
@@ -528,7 +552,7 @@ else
 	log "OK palette: $palette_file"
 fi
 if ! run_step "colours" theme_palette_apply "$palette_file" "$frame_path"; then
-	echo "wallust could not apply the palette; keeping the previous colours" >&2
+	echo "the palette could not be put on; keeping the previous colours" >&2
 	await_frame || true
 	await_wallpaper_runtime || true
 	finish_report
@@ -551,7 +575,7 @@ run_theme_hooks now
 run_bg "gtk colour scheme" update_gtk_color_scheme "$selected_palette_mode"
 update_gtk_wal_theme
 
-if [[ -n "$NIRI_ANIMATION_ID" ]]; then
+if [[ -n "$NIRI_ANIMATION_ID" ]] && (( ! COLOURS_ONLY )); then
 	run_step "niri animation update" bash "$SCRIPT_DIR/apply_niri_animation.sh" --animation "$NIRI_ANIMATION_ID" || true
 fi
 # a style's window animation may be painted in the palette (@color4@ …): write

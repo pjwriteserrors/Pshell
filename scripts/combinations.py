@@ -109,7 +109,15 @@ def current_branch() -> str:
 
 
 def current_wallust() -> dict:
-    """Backend, palette and style as wallust.toml has them."""
+    """Backend, palette and style as the colours are made now: the Pshell's
+    own engine (palette.json: its style and mode) or wallust (wallust.toml)."""
+    state = Path(os.environ.get("XDG_STATE_HOME") or HOME / ".local/state") / "pshell/palette.json"
+    try:
+        own = json.loads(state.read_text())
+    except (OSError, ValueError):
+        own = {}
+    if own.get("engine") != "wallust":
+        return {"backend": "pshell", "palette": str(own.get("style") or "vivid"), "style": str(own.get("mode") or "dark")}
     path = HOME / ".config/wallust/wallust.toml"
     try:
         text = path.read_text()

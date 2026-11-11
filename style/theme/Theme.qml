@@ -6,10 +6,12 @@ import Quickshell.Io
 
 // Single source of truth for colors, type and metrics.
 //
-// Colors are derived from the wallust palette (~/.cache/wal/colors.json).
-// Instead of hard-wiring color4 as the accent, the most vivid palette entry
-// that still reads well on the background is chosen, so every wallpaper
-// produces a legible, saturated shell. Elevation is expressed with tints of
+// Colors are derived from the palette (~/.cache/wal/colors.json). The
+// Pshell's own engine (scripts/palette) writes the roles beside the sixteen
+// colours ("roles": primary, secondary, tertiary, danger, warning, success);
+// they are taken as they are. A wallust palette has none: then the most vivid
+// palette entry that still reads well on the background is chosen, so every
+// wallpaper produces a legible, saturated shell. Elevation is expressed with tints of
 // the foreground over the background — no hairline borders.
 Singleton {
 	id: root
@@ -181,11 +183,17 @@ Singleton {
 	}
 
 	// ── semantic roles ─────────────────────────────────────────────────────
+	// the engine's, where it wrote them (legible() only as a safety net)
+	function role(name) {
+		const value = root.wal.roles?.[name];
+		return value ? Qt.color(value) : null;
+	}
+
 	// a colour laid over the palette's own for a while (the cover of the music that plays)
 	property color accentOverride: "transparent"
-	readonly property color primary: root.accentOverride.a > 0 ? root.legible(root.accentOverride, 3.2) : root.legible(root.ranked[0].color, 3.2)
-	readonly property color secondary: root.legible(root.pickDistinct(root.ranked[0].hue, 1), 3.0)
-	readonly property color tertiary: root.legible(root.pickDistinct(root.secondary.hsvHue, 2), 3.0)
+	readonly property color primary: root.accentOverride.a > 0 ? root.legible(root.accentOverride, 3.2) : root.legible(root.role("primary") ?? root.ranked[0].color, 3.2)
+	readonly property color secondary: root.legible(root.role("secondary") ?? root.pickDistinct(root.ranked[0].hue, 1), 3.0)
+	readonly property color tertiary: root.legible(root.role("tertiary") ?? root.pickDistinct(root.secondary.hsvHue, 2), 3.0)
 	// a third colour clearly apart from primary and secondary (the GPU next to CPU and RAM);
 	// the palette's if it has one, else primary turned a third around the wheel
 	readonly property color third: {
@@ -201,9 +209,9 @@ Singleton {
 		return root.legible(Qt.hsva(((base.hsvHue < 0 ? 0.6 : base.hsvHue) + 0.33) % 1, 0.55, 0.85, 1), 3.0);
 	}
 	readonly property color onPrimary: root.contrast(root.primary, root.bg) >= root.contrast(root.primary, root.fg) ? root.bg : root.fg
-	readonly property color danger: root.legible(Qt.tint("#e5484d", Qt.alpha(root.primary, 0.12)), 3.4)
-	readonly property color warning: root.legible(Qt.tint("#f5a524", Qt.alpha(root.primary, 0.1)), 3.4)
-	readonly property color success: root.legible(Qt.tint("#46a758", Qt.alpha(root.primary, 0.1)), 3.4)
+	readonly property color danger: root.legible(root.role("danger") ?? Qt.tint("#e5484d", Qt.alpha(root.primary, 0.12)), 3.4)
+	readonly property color warning: root.legible(root.role("warning") ?? Qt.tint("#f5a524", Qt.alpha(root.primary, 0.1)), 3.4)
+	readonly property color success: root.legible(root.role("success") ?? Qt.tint("#46a758", Qt.alpha(root.primary, 0.1)), 3.4)
 
 	// surfaces — the bar and every attached panel share `base`
 	readonly property color base: root.bg

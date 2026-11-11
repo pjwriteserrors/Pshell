@@ -86,6 +86,7 @@ FloatingWindow {
 		{ id: "bar", label: "Desktop", icon: "dock_window", hint: "Bar, wallpaper, game mode", plugin: "bar" },
 		{ id: "tray", label: "App tray", icon: "dock_left", hint: "Apps and commands on a screen edge", plugin: "app-tray" },
 		{ id: "sounds", label: "Sounds", icon: "volume_high", hint: "Clicks, notifications, devices", plugin: "sounds" },
+		{ id: "colours", label: "Colours", icon: "palette", hint: "Wallpaper colours: engine, style, tuning" },
 		{ id: "lighting", label: "Lighting", icon: "led_strip_variant", hint: "Keyboard and LEDs: wallpaper or screen", shown: Lighting.enabled },
 		{ id: "phone", label: "Notifications", icon: "bell_outline", hint: "Which programs notify, here and on the phone", plugin: "notifications" },
 		{ id: "debug", label: "Debug", icon: "bug_outline", hint: "Rendering and driver switches" }
@@ -240,6 +241,9 @@ FloatingWindow {
 		{ page: "sounds", anchor: "sound-pack", title: "Sound pack", words: "sound pack theme cosy cozy install zip" },
 		{ page: "sounds", anchor: "sounds", title: "Sounds", words: "sound audio click volume mute quiet feedback do not disturb" },
 		{ page: "sounds", anchor: "sounds-list", title: "Every sound", words: "sound notification usb drive display monitor bluetooth error battery charger lock workspace screenshot" },
+		{ page: "colours", anchor: "colours-engine", title: "Colour engine", words: "colours colors palette wallust pshell engine wallpaper theme" },
+		{ page: "colours", anchor: "colours-style", title: "Colour style", words: "colours colors palette style vivid muted pastel professional pro mono dark light mode" },
+		{ page: "colours", anchor: "colours-tuning", title: "Colour tuning", words: "colours colors palette saturation brightness background depth tint grey gray contrast variety hue terminal ansi" },
 		{ page: "lighting", anchor: "lighting", title: "Lighting", words: "lighting rgb openrgb led leds keyboard gpu fans argb wallpaper live screen ambient off dark" },
 		{ page: "lighting", anchor: "lighting-live", title: "Live lighting", words: "live screen mirror ambient monitor fps frames smoothing openrgb effects screen copy" },
 		{ page: "phone", anchor: "notification-style", title: "Notification look", words: "notifications toasts look style design card accent compact floating aussehen" },
@@ -250,7 +254,7 @@ FloatingWindow {
 	]
 
 	// a page of the shell's own: no niri file behind it, nothing to undo
-	readonly property bool shellPage: ["bar", "tray", "multicursor", "sounds", "lighting", "phone", "mouse", "hud", "apps"].includes(root.current)
+	readonly property bool shellPage: ["bar", "tray", "multicursor", "sounds", "colours", "lighting", "phone", "mouse", "hud", "apps"].includes(root.current)
 
 	readonly property var results: {
 		if (root.query === "") return [];
@@ -692,7 +696,7 @@ FloatingWindow {
 									variant: "ghost"
 									icon: "tray_arrow_down"
 									text: "Export"
-									visible: root.current !== "bar" && root.current !== "tray" && root.current !== "sounds" && root.current !== "lighting" && root.current !== "phone" && root.current !== "mouse" && root.current !== "hud" && root.current !== "apps"
+									visible: root.current !== "bar" && root.current !== "tray" && root.current !== "sounds" && root.current !== "lighting" && root.current !== "colours" && root.current !== "phone" && root.current !== "mouse" && root.current !== "hud" && root.current !== "apps"
 									enabled: NiriSettings.loaded
 									onActivated: exportSheet.show(root.current)
 								}
@@ -764,6 +768,7 @@ FloatingWindow {
 							case "bar": return barPage;
 						case "tray": return trayPage;
 							case "sounds": return soundsPage;
+							case "colours": return coloursPage;
 							case "lighting": return lightingPage;
 							case "phone": return phonePage;
 							default: return debugPage;
@@ -1130,6 +1135,12 @@ FloatingWindow {
 		id: soundsPage
 
 		SoundsPage {}
+	}
+
+	Component {
+		id: coloursPage
+
+		ColoursPage {}
 	}
 
 	Component {

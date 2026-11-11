@@ -3,7 +3,8 @@
 # Makes ahead what a theme change would otherwise wait for, for every entry of
 # the wallpaper library (and the picture of the day):
 #
-#   1. the palette with the current wallust settings (theme_palette.sh)
+#   1. the palette with the current settings (theme_palette.sh; with the
+#      Pshell's own engine every style x mode at once, from one analysis)
 #   2. its GTK theme and Papirus icons (theme_variants.sh), when the oomox
 #      hook is on
 #   3. the palettes of the other cells the picker offers (palette x style)
@@ -54,7 +55,7 @@ STYLES=(dark light)
 backend="$(theme_palette_config_value backend)"
 palette="$(theme_palette_config_value palette)"
 style="$(theme_palette_config_value style)"
-[[ -n "$backend" && -n "$palette" && -n "$style" ]] || { log "wallust.toml has no backend/palette/style"; exit 0; }
+[[ -n "$backend" && -n "$palette" && -n "$style" ]] || { log "no backend/palette/style chosen"; exit 0; }
 oomox_on=0
 python3 "$SCRIPT_DIR/host.py" hooks 2>/dev/null | grep -qx oomox && oomox_on=1
 preset_base="$HOME/.config/oomox/colors/wal"
@@ -159,12 +160,19 @@ run_limited() {
 	"$@" &
 }
 
-for media in "${medias[@]}"; do run_limited palettes_of "$media" "$current_cell"; done
-wait
+if theme_palette_own; then
+	printf '%s\n' "${medias[@]}" | python3 "$THEME_PALETTE_PY" prewarm 2>>"$LOG_FILE"
+	log "palettes: own engine"
+else
+	for media in "${medias[@]}"; do run_limited palettes_of "$media" "$current_cell"; done
+	wait
+fi
 # the GTK builds one after another: oomox is a few processes of its own
 for media in "${medias[@]}"; do variants_of "$media"; done
-for media in "${medias[@]}"; do run_limited palettes_of "$media" "${other_cells[@]}"; done
-wait
+if ! theme_palette_own; then
+	for media in "${medias[@]}"; do run_limited palettes_of "$media" "${other_cells[@]}"; done
+	wait
+fi
 
 theme_variant_prune "$THEME_OOMOX_VARIANTS" "$THEME_OOMOX_LINK"
 theme_variant_prune "$THEME_PAPIRUS_VARIANTS" "$THEME_PAPIRUS_LINK"

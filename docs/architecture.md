@@ -1007,14 +1007,17 @@ stay on the phone. A file `demo` in the state folder, or
 `scripts/apply_theme_selection.sh <theme>`:
 
 1. the colours, first and without waiting for anything else: the palette
-   is kept per media (path and signature) and wallust settings in
-   `~/.cache/pshell/palettes` (`theme_palette.sh`) and put on with
-   `wallust cs` – the templates are written beside `~/.cache/wal` and moved
+   is kept per media (path and signature) and settings in
+   `~/.cache/pshell/palettes` (`theme_palette.sh`). The Pshell's own engine
+   makes it (`scripts/palette`, see [colours.md](colours.md)), or wallust
+   when Settings › Colours says so. Either way `scripts/palette/templates.py`
+   puts it on – the templates are written beside `~/.cache/wal` and moved
    in with `colors.json` last, so the shell, which watches that file, never
    reads one half written. The shell wears the new palette some 50 ms after
-   the choice. A palette that was not made ahead is made from a raw frame
-   (PAM on tmpfs, the same pixels as `frame.png`, so the same palette; a
-   second for a 4K picture)
+   the choice. With wallust, a palette that was not made ahead is made from
+   a raw frame (PAM on tmpfs, the same pixels as `frame.png`; seconds to
+   tens of seconds for a 4K picture), with the own engine from the
+   picture's kept analysis (a millisecond; the analysis itself 50–450 ms)
 2. beside it the still frame (`theme_write_frame` in `theme_paths.sh`, one
    writer at a time) and the wallpaper runtime (`apply_wallpaper_runtime.sh`):
    it writes `current/` of the theme state, which the shell follows and draws

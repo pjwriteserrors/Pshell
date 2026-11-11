@@ -12,7 +12,7 @@ colours, while the still frame is still being written: a hook that reads
 the frame is there; `# theme-hook: after-wallpaper` waits for the wallpaper
 runtime as well (sddm links what it set up).
 
-A hook runs after wallust has written `~/.cache/wal` and gets:
+A hook runs after the palette (the Pshell's own engine or wallust, docs/colours.md) has been written to `~/.cache/wal` and gets:
 
 | Variable | |
 | --- | --- |

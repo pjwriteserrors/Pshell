@@ -32,8 +32,9 @@ ModalWindow {
 	exclusiveKeyboard: true
 	onModalOpened: root.reset()
 
-	// wallust v4 remap: "colour space" carries the wallust PALETTE (kmeans /
-	// salience / ansi), "palette" carries the wallust STYLE (dark / light).
+	// "colour space" carries the palette engine's style: the Pshell's own
+	// (Colours: vivid, muted, pastel, professional, mono) or wallust's palette
+	// (kmeans / salience / ansi); "palette" carries the mode (dark / light).
 	property string view: "library"
 	// the Online tab is a plugin of its own (studio-wallpaper-online)
 	readonly property bool onlineOn: Plugins.on("studio-wallpaper-online")
@@ -94,7 +95,12 @@ ModalWindow {
 	readonly property string applyScriptPath: `${Quickshell.shellDir}/scripts/apply_theme_selection.sh`
 	readonly property string wallustConfigPath: `${Quickshell.env("HOME")}/.config/wallust/wallust.toml`
 	readonly property var backendOptions: ["full", "resized", "wal", "thumb", "fastresize"]
-	readonly property var colorSpaceOptions: ["kmeans", "salience", "ansi"]
+	readonly property bool ownEngine: Colours.engine === "pshell"
+	readonly property var colorSpaceOptions: root.ownEngine ? (Colours.styles.length > 0 ? Colours.styles : ["vivid", "muted", "pastel", "pro", "mono"]) : ["kmeans", "salience", "ansi"]
+	// what the matrices are asked with, and kept by: the own engine's
+	// tuning is part of it, so a tuned style is never shown from before
+	readonly property string catalogBackend: root.ownEngine ? "pshell" : root.selectedBackend
+	readonly property string matrixBackend: root.ownEngine ? `pshell:${JSON.stringify(Colours.tuned)}` : root.selectedBackend
 	readonly property var paletteOptions: ["dark", "light"]
 	readonly property int selectedColorIndex: Math.max(0, root.colorSpaceOptions.indexOf(root.selectedColorSpace))
 	readonly property var filteredThemes: {
@@ -194,6 +200,10 @@ ModalWindow {
 	}
 
 	function setWallustConfig(raw) {
+		if (root.ownEngine) {
+			root.selectVariant(Colours.style, Colours.mode);
+			return;
+		}
 		const backend = root.parseWallustValue(raw, "backend");
 		const palette = root.parseWallustValue(raw, "palette");
 		const style = root.parseWallustValue(raw, "style");
@@ -230,7 +240,7 @@ ModalWindow {
 			return;
 		}
 
-		const key = root.matrixKey(theme, root.selectedBackend);
+		const key = root.matrixKey(theme, root.matrixBackend);
 		root.previewMatrixRequestKey = key;
 		if (root.matrixCache[key] !== undefined) {
 			root.settleVariant();
@@ -241,7 +251,7 @@ ModalWindow {
 		loadPreviewMatrixProcess.key = key;
 		loadPreviewMatrixProcess.command = [
 			"bash", root.themeCatalogScriptPath, "matrix-json",
-			theme.path, theme.previewPath, root.selectedBackend
+			theme.path, theme.previewPath, root.catalogBackend
 		];
 		loadPreviewMatrixProcess.running = true;
 	}
@@ -266,7 +276,7 @@ ModalWindow {
 	function prewarmMatrices() {
 		if (root.themes.length === 0) return;
 		prewarmMatricesProcess.running = false;
-		prewarmMatricesProcess.command = ["bash", root.themeCatalogScriptPath, "matrix-all", root.selectedBackend];
+		prewarmMatricesProcess.command = ["bash", root.themeCatalogScriptPath, "matrix-all", root.catalogBackend];
 		prewarmMatricesProcess.running = true;
 	}
 
@@ -277,7 +287,7 @@ ModalWindow {
 			const data = JSON.parse(text);
 			const next = Object.assign({}, root.matrixCache);
 			for (const matrix of (Array.isArray(data.matrices) ? data.matrices : []))
-				next[root.matrixKey({ path: matrix.themePath, previewPath: matrix.previewPath }, matrix.backend)] = root.matrixOf(matrix);
+				next[root.matrixKey({ path: matrix.themePath, previewPath: matrix.previewPath }, root.matrixBackend)] = root.matrixOf(matrix);
 			root.matrixCache = next;
 			root.settleVariant();
 		} catch (error) {
@@ -438,7 +448,7 @@ ModalWindow {
 			return;
 		}
 		const look = [
-			"--backend", root.selectedBackend,
+			"--backend", root.catalogBackend,
 			"--palette", root.selectedColorSpace,
 			"--style", root.selectedPalette
 		];
@@ -481,7 +491,7 @@ ModalWindow {
 		function onGrown(entry) {
 			if (!entry.worn) return;
 			Quickshell.execDetached(["bash", root.applyScriptPath, Daily.themeDir,
-				"--backend", root.selectedBackend, "--palette", root.selectedColorSpace, "--style", root.selectedPalette]);
+				"--backend", root.catalogBackend, "--palette", root.selectedColorSpace, "--style", root.selectedPalette]);
 		}
 	}
 
