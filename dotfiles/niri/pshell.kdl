@@ -110,4 +110,11 @@ binds {
 
     Ctrl+Mod+S { spawn "qs" "-c" "shell" "ipc" "call" "screenshot" "region"; }
     Ctrl+Mod+R { spawn-sh "~/.local/bin/record"; }
+
+    // the browser (docs/browser.md, plugins browser-*)
+    Mod+B { spawn "qs" "-c" "shell" "ipc" "call" "browser" "search" ""; }
+    Mod+Shift+M { spawn "qs" "-c" "shell" "ipc" "call" "browser" "muteActive"; }
+    Mod+Alt+Page_Down { spawn "qs" "-c" "shell" "ipc" "call" "browser" "workspace" "next"; }
+    Mod+Alt+Page_Up { spawn "qs" "-c" "shell" "ipc" "call" "browser" "workspace" "previous"; }
+    Mod+Shift+Print { spawn "qs" "-c" "shell" "ipc" "call" "browser" "capturePage" "full"; }
 }

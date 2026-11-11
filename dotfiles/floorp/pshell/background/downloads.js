@@ -1,6 +1,7 @@
 // Tells the shell what this browser downloads and does what the shell asks
 // (pause, resume, cancel), over native messaging: the browser starts
-// scripts/downloads_host.py and talks to it through its stdin and stdout.
+// scripts/downloads_host.py and talks to it through its stdin and stdout
+// (link.js).
 //
 // Every new download is offered to the shell's download accelerator
 // (scripts/downloads/boost.py) with what it needs to be let in like the
@@ -20,8 +21,6 @@
 //                 { type: "cmd", cmd: "pause" | "resume" | "cancel" | "takeover", id }
 //                 { type: "cmd", cmd: "fetch", url }     download it here after all
 
-const HOST = "pshell_downloads";
-let port = null;
 let ticking = null;
 let browserName = "Browser";
 
@@ -41,13 +40,16 @@ function plain(download) {
 	};
 }
 
+const downloadsLink = new ShellLink("pshell_downloads", {
+	onMessage: message => {
+		if (message.type === "sync") snapshot();
+		else if (message.type === "cmd") command(message);
+	},
+	onConnect: () => snapshot()
+});
+
 function send(message) {
-	if (!port) return;
-	try {
-		port.postMessage(message);
-	} catch (error) {
-		port = null;
-	}
+	downloadsLink.send(message);
 }
 
 // under way, or held: what the shell has to know about without being told
@@ -76,14 +78,14 @@ async function reportTab() {
 async function tick() {
 	const running = await browser.downloads.search({ state: "in_progress" });
 	for (const download of running) send({ type: "item", item: plain(download) });
-	if (running.length === 0 || !port) {
+	if (running.length === 0 || !downloadsLink.connected) {
 		clearInterval(ticking);
 		ticking = null;
 	}
 }
 
 function watch() {
-	if (!ticking && port) ticking = setInterval(tick, 1000);
+	if (!ticking && downloadsLink.connected) ticking = setInterval(tick, 1000);
 }
 
 async function report(id) {
@@ -108,7 +110,7 @@ async function cookiesFor(url) {
 
 async function offer(download) {
 	// what this extension fetched itself (the shell gave it back), private windows and anything not on the web stay
-	if (!port || download.incognito || download.byExtensionId === browser.runtime.id || !/^https?:/.test(download.url || "")) return;
+	if (!downloadsLink.connected || download.incognito || download.byExtensionId === browser.runtime.id || !/^https?:/.test(download.url || "")) return;
 	if (download.state !== "in_progress") return;
 	send({
 		type: "offer",
@@ -152,24 +154,6 @@ async function command(message) {
 	report(message.id);
 }
 
-function connect() {
-	try {
-		port = browser.runtime.connectNative(HOST);
-	} catch (error) {
-		port = null;
-		return setTimeout(connect, 15000);
-	}
-	port.onMessage.addListener(message => {
-		if (message.type === "sync") snapshot();
-		else if (message.type === "cmd") command(message);
-	});
-	port.onDisconnect.addListener(() => {
-		port = null;
-		setTimeout(connect, 15000);
-	});
-	snapshot();
-}
-
 browser.downloads.onCreated.addListener(download => {
 	report(download.id);
 	offer(download);
@@ -187,4 +171,4 @@ browser.windows.onFocusChanged.addListener(id => {
 
 browser.runtime.getBrowserInfo().then(info => {
 	browserName = info.name;
-}).finally(connect);
+}).finally(() => downloadsLink.connect());

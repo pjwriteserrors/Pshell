@@ -1029,8 +1029,10 @@ Singleton {
 		}
 	}
 
+	// a file held in memory ($XDG_RUNTIME_DIR, e.g. from the browser's menu)
+	// is gone at the next start: it is not listed
 	function remember(path) {
-		if (!path) return;
+		if (!path || String(path).startsWith(`${Paths.runtime}/`)) return;
 		root.recent = [path].concat(root.recent.filter(p => p !== path)).slice(0, 80);
 		recentFile.setText(JSON.stringify(root.recent) + "\n");
 	}

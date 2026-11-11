@@ -907,7 +907,7 @@ Item {
 							radius: Theme.radius.small
 							pressedScale: 0.99
 							color: Qt.alpha(Theme.text, 0.07)
-							onClicked: Qt.openUrlExternally(root.message.link.url)
+							onClicked: Browser.openLink(root.message.link.url, "WhatsApp")
 
 							RowLayout {
 								anchors.fill: parent
@@ -992,7 +992,7 @@ Item {
 							font.family: Theme.fontFamily
 							font.pixelSize: root.message.big ? 34 : Messages.textSize
 							font.weight: root.kind === "poll" ? Font.DemiBold : Font.Normal
-							onLinkActivated: link => Qt.openUrlExternally(link)
+							onLinkActivated: link => Browser.openLink(link, "WhatsApp")
 
 							HoverHandler {
 								cursorShape: parent.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.IBeamCursor

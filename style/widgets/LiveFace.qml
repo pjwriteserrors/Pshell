@@ -63,7 +63,9 @@ Row {
 		width: root.shape === "ring" ? root.glyphSize + 4 : root.glyphSize + 2
 		height: width
 
-		// breathing light behind it
+		// light behind it: breathes a few times when it comes, then stays still
+		// (a breath without end redrew the whole bar 60 times a second on
+		// every screen, ~30 % CPU while an agent worked)
 		Rectangle {
 			id: glow
 
@@ -72,40 +74,75 @@ Row {
 			height: width
 			radius: width / 2
 			color: root.toneColor
-			opacity: 0
+			opacity: 0.22
 			visible: root.src?.pulse ?? false
+			onVisibleChanged: glow.breathe()
+			Component.onCompleted: glow.breathe()
 
-			SequentialAnimation on opacity {
-				running: glow.visible && root.animated
-				loops: Animation.Infinite
-				onRunningChanged: if (!running) glow.opacity = 0
-				NumberAnimation {
-					from: 0.05
-					to: 0.32
-					duration: 900
-					easing.type: Easing.InOutSine
-				}
-				NumberAnimation {
-					from: 0.32
-					to: 0.05
-					duration: 900
-					easing.type: Easing.InOutSine
-				}
+			function breathe() {
+				breath.stop();
+				glow.opacity = 0.22;
+				glow.scale = 1;
+				if (glow.visible && root.animated) breath.start();
 			}
-			SequentialAnimation on scale {
-				running: glow.visible && root.animated
-				loops: Animation.Infinite
-				NumberAnimation {
-					from: 0.75
-					to: 1.15
-					duration: 900
-					easing.type: Easing.InOutSine
+
+			SequentialAnimation {
+				id: breath
+
+				ParallelAnimation {
+					loops: 3
+					SequentialAnimation {
+						NumberAnimation {
+							target: glow
+							property: "opacity"
+							from: 0.05
+							to: 0.32
+							duration: 900
+							easing.type: Easing.InOutSine
+						}
+						NumberAnimation {
+							target: glow
+							property: "opacity"
+							from: 0.32
+							to: 0.05
+							duration: 900
+							easing.type: Easing.InOutSine
+						}
+					}
+					SequentialAnimation {
+						NumberAnimation {
+							target: glow
+							property: "scale"
+							from: 0.75
+							to: 1.15
+							duration: 900
+							easing.type: Easing.InOutSine
+						}
+						NumberAnimation {
+							target: glow
+							property: "scale"
+							from: 1.15
+							to: 0.75
+							duration: 900
+							easing.type: Easing.InOutSine
+						}
+					}
 				}
-				NumberAnimation {
-					from: 1.15
-					to: 0.75
-					duration: 900
-					easing.type: Easing.InOutSine
+				ParallelAnimation {
+					NumberAnimation {
+						target: glow
+						property: "opacity"
+						to: 0.22
+						duration: 450
+						easing.type: Easing.OutSine
+					}
+					NumberAnimation {
+						target: glow
+						property: "scale"
+						to: 1
+						duration: 450
+						easing.type: Easing.OutSine
+					}
 				}
 			}
 		}

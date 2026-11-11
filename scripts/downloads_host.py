@@ -1,24 +1,19 @@
 #!/usr/bin/env python3
 """The link between a browser's downloads and the shell.
 
-  downloads_host.py install    registers the host with Firefox and Floorp
-                               and packs the extension
-  downloads_host.py remove     takes both away again
+  downloads_host.py install    the same as browser_host.py install: registers
+                               both hosts and packs the Pshell extension
+  downloads_host.py remove     takes them away again
   downloads_host.py status
 
-The browser extension (dotfiles/floorp/downloads) starts this program
+The Pshell extension (dotfiles/floorp/pshell, background/downloads.js) starts this program
 itself, through Mozilla's native messaging, and talks to it over stdin and
 stdout; it passes every message on to the shell's socket
 ($XDG_RUNTIME_DIR/pshell/downloads.sock, core/services/Downloads.qml) and
 back. Nothing listens on the network. The shell may come and go: the host
 keeps asking for it and has the extension tell everything anew.
 
-install writes pshell_downloads.json into the native-messaging-hosts
-folders and packs the extension as ~/.local/state/pshell/pshell-downloads.xpi.
-The extension is not signed: Floorp installs it once
-xpinstall.signatures.required is false in about:config (about:addons →
-gear → Install Add-on From File); Firefox release builds only load it for a
-session, in about:debugging.
+Setting up is browser_host.py's (docs/browser.md).
 """
 
 from __future__ import annotations
@@ -30,17 +25,12 @@ import struct
 import sys
 import threading
 import time
-import zipfile
 from pathlib import Path
 import host  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
-EXTENSION = ROOT / "dotfiles" / "floorp" / "downloads"
 NAME = "pshell_downloads"
 ID = "downloads@pshell"
-HOSTS = [Path.home() / ".mozilla" / "native-messaging-hosts", Path.home() / ".config" / "floorp" / "native-messaging-hosts"]
-STATE = host.state_dir()
-PACKAGE = STATE / "pshell-downloads.xpi"
 RUNTIME = os.environ.get("PSHELL_RUNTIME_DIR") or os.path.join(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}", "pshell")
 SOCKET = Path(RUNTIME) / "downloads.sock"
 
@@ -112,40 +102,20 @@ def relay():
 
 
 # ── setting it up ────────────────────────────────────────────────────────────
+# both hosts and the extension are set up together (scripts/browser_host.py)
 def install():
-    manifest = {
-        "name": NAME,
-        "description": "Pshell: downloads in the shell",
-        "path": str(Path(__file__).resolve()),
-        "type": "stdio",
-        "allowed_extensions": [ID],
-    }
-    for folder in HOSTS:
-        folder.mkdir(parents=True, exist_ok=True)
-        (folder / f"{NAME}.json").write_text(json.dumps(manifest, indent=2) + "\n")
-        print(f"host: {folder / (NAME + '.json')}")
-    STATE.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(PACKAGE, "w", zipfile.ZIP_DEFLATED) as package:
-        for file in sorted(EXTENSION.iterdir()):
-            package.write(file, file.name)
-    print(f"extension: {PACKAGE}")
-    print("in Floorp: about:config → xpinstall.signatures.required = false, then about:addons → gear → Install Add-on From File")
-    return 0
+    import browser_host
+    return browser_host.install()
 
 
 def remove():
-    for file in [folder / f"{NAME}.json" for folder in HOSTS] + [PACKAGE]:
-        if file.exists():
-            file.unlink()
-            print(f"removed {file}")
-    return 0
+    import browser_host
+    return browser_host.remove()
 
 
 def status():
-    for file in [folder / f"{NAME}.json" for folder in HOSTS] + [PACKAGE]:
-        print(f"{'ok     ' if file.exists() else 'missing'} {file}")
-    print(f"{'ok     ' if SOCKET.exists() else 'missing'} {SOCKET} (the shell, with the downloads plugin on)")
-    return 0
+    import browser_host
+    return browser_host.status()
 
 
 def main(args):

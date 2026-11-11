@@ -23,6 +23,8 @@ Singleton {
 
 	// the page the window shows (set before opening it: `>keys` → "keys")
 	property string page: "displays"
+	// a section of `page` to scroll to once it shows (`settings open page#anchor`)
+	property string anchor: ""
 
 	property var nodes: []
 	property var outputs: []

@@ -32,8 +32,12 @@ libc.inotify_add_watch.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_uint3
 
 
 def devices() -> list[str]:
+    """The cameras' nodes. Virtual ones (v4l2loopback) have no device behind
+    them in sysfs: the webcam daemon keeps theirs open all the time to feed
+    them, and whoever reads one makes the daemon open the real camera."""
     try:
-        return sorted(f"/dev/{name}" for name in os.listdir("/dev") if name.startswith("video"))
+        return sorted(f"/dev/{name}" for name in os.listdir("/dev")
+                      if name.startswith("video") and os.path.exists(f"/sys/class/video4linux/{name}/device"))
     except OSError:
         return []
 

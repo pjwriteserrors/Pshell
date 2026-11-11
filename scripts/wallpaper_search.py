@@ -15,7 +15,8 @@ before it):
                 with their tags, in a folder the picker reads like a theme
   wear JSON     the staged result as the folder apply_theme_selection.sh puts
                 on (MoeWalls' video is downloaded here); the scripts forget it
-                once something else is worn
+                once something else is worn. {"item": {"source": "web",
+                "url"}} wears a picture from a page instead (no stage)
   forget        every staged result, with its preview and its colours
   key           whether a Wallhaven API key is kept (in the keyring)
   key-set       keeps the key read from stdin; an empty one forgets it
@@ -412,13 +413,43 @@ def stage(item: dict[str, object]) -> dict[str, object]:
     return result
 
 
+WEB_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif", "image/avif": ".avif", "image/bmp": ".bmp"}
+
+
+def web_picture(url: str, target: Path) -> None:
+    """A picture from a page (the browser's Pshell menu, WebMenu.qml): an
+    http(s) or data: URL, worn the way an online result is."""
+    scheme = urllib.parse.urlparse(url).scheme
+    if scheme not in ("http", "https", "data"):
+        raise RuntimeError("not a picture that can be downloaded")
+    if scheme == "data":
+        suffix = WEB_TYPES.get(url[5:].split(";", 1)[0].split(",", 1)[0].lower(), "")
+    else:
+        suffix = Path(urllib.parse.urlparse(url).path).suffix.lower()
+        suffix = ".jpg" if suffix == ".jpeg" else suffix
+    if suffix not in WEB_TYPES.values():
+        suffix = ".jpg"
+    path = download(url, target / f"media{suffix}", 120, progress=True)
+    # the name a page gives is not always what it is
+    head = path.read_bytes()[:16]
+    found = (".png" if head.startswith(b"\x89PNG") else ".jpg" if head.startswith(b"\xff\xd8") else
+             ".gif" if head.startswith(b"GIF8") else ".webp" if head[:4] == b"RIFF" and head[8:12] == b"WEBP" else
+             ".avif" if head[4:12] in (b"ftypavif", b"ftypavis") else ".bmp" if head.startswith(b"BM") else "")
+    if not found:
+        raise RuntimeError("not a picture")
+    if found != suffix:
+        path.rename(path.with_suffix(found))
+
+
 def wear(item: dict[str, object], staged: dict[str, object]) -> dict[str, object]:
     """A folder of its own for each wearing: the palettes made of it are
     keyed by it and go with it."""
     target = WORN_DIR / secrets.token_hex(6) / "Online wallpaper"
     target.mkdir(parents=True)
     try:
-        if item.get("source") == "wallhaven":
+        if item.get("source") == "web":
+            web_picture(str(item.get("url") or ""), target)
+        elif item.get("source") == "wallhaven":
             source = next(Path(str(staged.get("themePath") or "")).glob("media.*"), None)
             if source is None:
                 raise RuntimeError("the picture is not here any more")

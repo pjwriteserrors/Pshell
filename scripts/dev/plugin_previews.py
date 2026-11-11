@@ -514,7 +514,7 @@ def outside(names):
     try:
         prepare(work)
         run = work / "run.sh"
-        run.write_text(f"#!/usr/bin/env bash\nexec python3 {work}/shell/scripts/plugin_previews.py --inside {work} {' '.join(names)}\n")
+        run.write_text(f"#!/usr/bin/env bash\nPYTHONPATH={work}/shell/scripts exec python3 {work}/shell/scripts/dev/plugin_previews.py --inside {work} {' '.join(names)}\n")
         run.chmod(0o755)
         (work / "niri.kdl").write_text(f'spawn-at-startup "{run}"\nhotkey-overlay {{ skip-at-startup; }}\nprefer-no-csd\n')
         before = {window["id"] for window in json.loads(sh("niri msg -j windows").stdout or "[]")}

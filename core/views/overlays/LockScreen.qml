@@ -12,7 +12,8 @@ import qs.style.widgets
 
 // Session lock. Wallpaper frame blurred behind a large clock; the password
 // pill holds a bar that fills up per keystroke, shakes on a wrong password
-// and glows while checking. PAM password + fprintd, screen sleep after idle.
+// and glows while checking. PAM password + fprintd, the face (HpCamera),
+// screen sleep after idle.
 Scope {
 	id: root
 
@@ -27,6 +28,7 @@ Scope {
 	readonly property string statusText: {
 		if (root.passwordActive) return "Checking…";
 		if (root.fingerprintActive) return "Touch the fingerprint sensor";
+		if (root.faceActive) return "Look at the camera";
 		if (root.authState === "fingerprint-failed") return root.authMessage || "Fingerprint not recognized";
 		if (root.authState === "fingerprint-error") return root.authMessage || "Fingerprint error";
 		if (root.authState === "fingerprint-max") return root.authMessage || "Use password";
@@ -50,6 +52,10 @@ Scope {
 	property int fingerprintErrorTries: 0
 	property bool fingerprintSuspended: false
 	property real fingerprintStartedAt: 0
+	// the face (core/services/HpCamera.qml): a check of a few seconds, again while tries are left
+	readonly property bool enableFace: HpCamera.faceReady
+	property bool faceActive: false
+	property int faceTries: 0
 	property bool screensDimmed: false
 	property bool screensPoweredOff: false
 
@@ -74,6 +80,7 @@ Scope {
 			fingerprintAvailableRetry.stop();
 			fingerprintAvailableCheck.running = false;
 			root.fingerprintSuspended = false;
+			root.stopFace();
 			root.wakeScreens();
 			root.passwordSubmission = "";
 			root.authState = "";
@@ -95,6 +102,42 @@ Scope {
 		}
 	}
 
+	Connections {
+		target: HpCamera
+		function onFaceResult(result) {
+			root.faceActive = false;
+			if (!root.locked) return;
+			if (result === "match") {
+				root.unlock();
+				if (Fingerprint.unlockAnimation) Fingerprint.playUnlock();
+				return;
+			}
+			// the camera gone or taken: no more tries until the screens wake again
+			if (["nomatch", "notlive", "noface"].includes(result)) faceRetry.restart();
+		}
+	}
+
+	function startFace() {
+		if (!root.locked || !root.enableFace || root.faceActive || root.screensPoweredOff || root.faceTries >= HpCamera.faceTries) return;
+		if (HpCamera.checkFace(4)) {
+			root.faceActive = true;
+			root.faceTries++;
+		}
+	}
+
+	function stopFace() {
+		faceRetry.stop();
+		if (root.faceActive) HpCamera.stopFace();
+		root.faceActive = false;
+	}
+
+	Timer {
+		id: faceRetry
+
+		interval: 1000
+		onTriggered: root.startFace()
+	}
+
 	function primeForLock() {
 		authMessageReset.stop();
 		root.lockNow = new Date();
@@ -104,6 +147,7 @@ Scope {
 		root.fingerprintAvailable = false;
 		root.fingerprintTries = 0;
 		root.fingerprintErrorTries = 0;
+		root.faceTries = 0;
 		root.clearPasswordInput();
 		root.wallpaperFrameSerial = Date.now();
 	}
@@ -131,6 +175,7 @@ Scope {
 		root.fingerprintSuspended = true;
 		fingerprintRetry.stop();
 		if (fingerprintPam.active) fingerprintPam.abort();
+		root.stopFace();
 		root.screensPoweredOff = true;
 		Quickshell.execDetached(["niri", "msg", "action", "power-off-monitors"]);
 	}
@@ -142,6 +187,10 @@ Scope {
 		if (shouldPowerOn) {
 			Quickshell.execDetached(["niri", "msg", "action", "power-on-monitors"]);
 			if (root.locked && root.enableFingerprint) fingerprintWakeRetry.restart();
+			if (root.locked) {
+				root.faceTries = 0;
+				faceRetry.restart();
+			}
 		}
 	}
 
@@ -161,6 +210,7 @@ Scope {
 		root.primeForLock();
 		root.locked = true;
 		root.startFingerprintCheck();
+		faceRetry.restart();
 		return true;
 	}
 
@@ -361,12 +411,12 @@ Scope {
 
 						x: 20
 						anchors.verticalCenter: parent.verticalCenter
-						icon: root.fingerprintActive ? "fingerprint" : (root.passwordActive ? "lock_outline" : "lock")
+						icon: root.fingerprintActive ? "fingerprint" : (root.faceActive ? "face_recognition" : (root.passwordActive ? "lock_outline" : "lock"))
 						size: 20
 						color: root.failing ? Theme.danger : Theme.primary
 
 						SequentialAnimation on opacity {
-							running: root.fingerprintActive || root.passwordActive
+							running: root.fingerprintActive || root.passwordActive || root.faceActive
 							loops: Animation.Infinite
 							onRunningChanged: if (!running) lockGlyph.opacity = 1
 							NumberAnimation { to: 0.35; duration: 600; easing.type: Easing.InOutSine }

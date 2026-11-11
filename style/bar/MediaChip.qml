@@ -23,7 +23,9 @@ BarButton {
 	readonly property real textWidth: root.showTitle && root.room >= 9 + 48 ? Math.min(220, label.implicitWidth, root.room - 9) : 0
 
 	panelId: "media"
-	tooltip: Media.hasPlayer ? "Media · scroll for volume · middle-click play/pause · right-click next" : "Media"
+	// the browser plays: the site it plays on (plugin browser-media)
+	readonly property string playingHost: Plugins.on("browser-media") && WebLink.audibleTabs.length > 0 && /floorp|firefox|librewolf|zen|waterfox/i.test(`${Media.player?.identity ?? ""} ${Media.player?.dbusName ?? ""}`) ? [...new Set(WebLink.audibleTabs.map(tab => tab.host))].join(", ") : ""
+	tooltip: root.playingHost !== "" ? `${root.playingHost} · scroll for volume · middle-click play/pause · right-click next` : Media.hasPlayer ? "Media · scroll for volume · middle-click play/pause · right-click next" : "Media"
 	padding: 10
 	wheelEnabled: true
 	onClicked: toggle()

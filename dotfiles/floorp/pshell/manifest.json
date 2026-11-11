@@ -1,0 +1,52 @@
+{
+	"manifest_version": 2,
+	"name": "Pshell",
+	"version": "2.0",
+	"description": "The browser as part of the Pshell: downloads and the accelerator, tabs in the launcher and Alt+Tab, the shell's colours live, its menu on pages, links and pictures, the new tab page, identities in sign-up forms, which tab uses camera or microphone, and the site in front for screen time.",
+	"browser_specific_settings": {
+		"gecko": { "id": "downloads@pshell", "strict_min_version": "139.0" }
+	},
+	"icons": { "48": "icon.svg", "96": "icon.svg" },
+	"permissions": [
+		"downloads",
+		"tabs",
+		"tabGroups",
+		"nativeMessaging",
+		"cookies",
+		"menus",
+		"theme",
+		"storage",
+		"bookmarks",
+		"history",
+		"topSites",
+		"search",
+		"scripting",
+		"webNavigation",
+		"contextualIdentities",
+		"<all_urls>"
+	],
+	"background": {
+		"scripts": ["background/link.js", "background/downloads.js", "background/bridge.js"],
+		"persistent": true
+	},
+	"content_scripts": [
+		{
+			"matches": ["http://*/*", "https://*/*"],
+			"js": ["content/page.js"],
+			"run_at": "document_idle",
+			"all_frames": false
+		}
+	],
+	"chrome_url_overrides": { "newtab": "newtab/newtab.html" },
+	"experiment_apis": {
+		"pshellChrome": {
+			"schema": "experiments/schema.json",
+			"parent": {
+				"scopes": ["addon_parent"],
+				"script": "experiments/chrome.js",
+				"paths": [["pshellChrome"]],
+				"events": ["startup"]
+			}
+		}
+	}
+}

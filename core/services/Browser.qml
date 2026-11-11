@@ -21,6 +21,15 @@ Singleton {
 		else Quickshell.execDetached([root.program, String(url)]);
 	}
 
+	// a link from inside the shell (mail, chat): a web page goes to the
+	// browser's peek when that is wanted (WebPage.openLink), anything else
+	// as the desktop opens it. `source` names where it came from ("Mail").
+	function openLink(url, source) {
+		const text = String(url || "");
+		if (/^https?:\/\//i.test(text) && WebPage.openLink(text, source)) return;
+		Qt.openUrlExternally(text);
+	}
+
 	function search(query) {
 		root.open(root.searchUrl + encodeURIComponent(String(query).trim().replace(/\s+/g, " ")));
 	}

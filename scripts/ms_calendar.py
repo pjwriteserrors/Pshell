@@ -9,6 +9,8 @@
                                         (YYYY-MM-DD, TO exclusive)
   ms_calendar.py import FILE.ics        put the events of an .ics file into
                                         the calendar (prints how many)
+  ms_calendar.py peek FILE.ics          the events of an .ics file, without
+                                        touching the calendar
   ms_calendar.py logout
 
 The refresh token lives in $XDG_STATE_HOME/pshell/microsoft.json (0600) and
@@ -323,6 +325,14 @@ def ics_events(path):
     return events_out
 
 
+def peek_ics(path):
+    """What import would add: {"events": [{ subject, start, end (ISO), allDay, location }]}."""
+    found = [{"subject": event["subject"], "start": event["start"].isoformat(), "end": event["end"].isoformat(),
+              "allDay": event["allDay"], "location": event["location"]} for event in ics_events(path)]
+    out({"events": found})
+    return 0
+
+
 def import_ics(path):
     access = token()
     if access is None:
@@ -363,6 +373,8 @@ def main(argv):
             return events(argv[2], argv[3])
         elif command == "import" and len(argv) == 3:
             return import_ics(argv[2])
+        elif command == "peek" and len(argv) == 3:
+            return peek_ics(argv[2])
         else:
             print(__doc__, file=sys.stderr)
             return 2

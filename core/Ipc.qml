@@ -100,6 +100,91 @@ Scope {
 		}
 	}
 
+	// the browser (docs/browser.md): its tabs, Floorp's workspaces, a page
+	// as a picture
+	IpcHandler {
+		target: "browser"
+
+		// [{ key, title, url, host, active, audible, muted, pinned, hidden, group, container }]
+		function tabs(): string {
+			return JSON.stringify(WebLink.recentTabs.map(tab => ({ key: tab.key, title: tab.title, url: tab.url, host: tab.host, active: tab.active,
+				audible: tab.audible, muted: tab.muted, pinned: tab.pinned, hidden: tab.hidden, group: tab.group, container: tab.container })));
+		}
+		// a key from tabs(), else the first tab whose title or address has the text
+		function activate(key: string): string {
+			const text = key.toLowerCase();
+			const tab = WebLink.tab(key) ?? WebLink.recentTabs.find(tab => `${tab.title} ${tab.url}`.toLowerCase().includes(text));
+			if (!tab) return "no such tab";
+			WebLink.activate(tab);
+			return tab.key;
+		}
+		// the launcher on >tab
+		function search(text: string): void {
+			Popups.withFocusedScreen(screen => {
+				if (Popups.current === "launcher") Popups.close();
+				Popups.open("launcher", screen, "", `>tab ${text}`);
+			});
+		}
+		// next, previous, or a Floorp workspace by name or id
+		function workspace(which: string): string {
+			if (!FloorpWorkspaces.enabled) return "plugin browser-workspaces is off";
+			if (which === "next") FloorpWorkspaces.next();
+			else if (which === "previous" || which === "prev") FloorpWorkspaces.previous();
+			else FloorpWorkspaces.switchTo(which);
+			return FloorpWorkspaces.error;
+		}
+		function workspaces(): string {
+			return JSON.stringify({ current: FloorpWorkspaces.currentId, workspaces: FloorpWorkspaces.workspaces, error: FloorpWorkspaces.error });
+		}
+		// full | visible: saved like a screenshot and copied
+		function capturePage(how: string): string {
+			if (!WebLink.connected) return "no browser connected";
+			WebLink.capture(how !== "visible", (ok, data) => {
+				if (!ok || !data?.path) {
+					console.warn("browser capturePage:", data);
+					return;
+				}
+				Screenshot.saveCopyOf(data.path);
+				Screenshot.copyFile(data.path);
+			});
+			return "";
+		}
+		// the tab rail: hover | open | icons | top ("" only reads it)
+		function rail(style: string): string {
+			if (style !== "" && !WebPage.railStyles.includes(style)) return `hover, open, icons or top`;
+			if (style !== "") WebPage.setRail({ style: style });
+			return JSON.stringify(WebPage.rail);
+		}
+		// a page in the browser's peek (or as a tab, as Settings › Browser says)
+		function peek(url: string): string {
+			if (!WebLink.connected) return "no browser connected";
+			if (!WebPage.openLink(url, "Shell")) WebLink.open(url);
+			return "";
+		}
+		// link hints on the page in front: open | peek | spur | bg
+		function hints(mode: string): string {
+			const how = mode === "" ? "open" : mode;
+			if (!["open", "peek", "spur", "bg"].includes(how)) return "open, peek, spur or bg";
+			const tab = WebLink.activeTab;
+			if (!tab) return "no tab";
+			WebLink.activate(tab, ok => {
+				if (ok) WebLink.command("hints", { mode: how }, null, tab.source);
+			});
+			return "";
+		}
+		// the archived tabs, newest first
+		function archive(): string {
+			return JSON.stringify({ count: WebPage.archive.length, tabs: WebPage.archive.map(entry => ({ title: entry.title, url: entry.url, closedAt: entry.closedAt })) });
+		}
+		// the tab in front: muted, or heard again
+		function muteActive(): string {
+			const tab = WebLink.activeTab;
+			if (!tab) return "no tab";
+			WebLink.mute(tab, !tab.muted);
+			return tab.muted ? "unmuted" : "muted";
+		}
+	}
+
 	// the window switcher (Alt+Tab). niri's binds call next/prev with the
 	// scope (all, others, output, workspace; "" = the setting) and the
 	// filter ("app": only windows of the focused app)
@@ -524,6 +609,30 @@ Scope {
 		function state(): string {
 			Apex.send({ op: "state" });
 			return JSON.stringify({ online: Apex.online, slot: Apex.slot, firmware: Apex.info.firmware ?? "", rules: Apex.rules.length, daemon: Apex.daemonState });
+		}
+	}
+
+	// the Bluetooth adapter: `btadapter open`, `btadapter visible on|off`, `btadapter advertise on|off`,
+	// `btadapter restart`, `btadapter state`
+	IpcHandler {
+		target: "btadapter"
+		enabled: Plugins.on("bt-adapter")
+
+		function open(): void {
+			NiriSettings.page = "btadapter";
+			Popups.withFocusedScreen(screen => Popups.openModal("niri", screen));
+		}
+		function visible(on: string): void {
+			BtAdapter.setAdapter("Discoverable", on === "toggle" ? !BtAdapter.adapter?.Discoverable : on !== "off");
+		}
+		function advertise(on: string): void {
+			BtAdapter.setAdvertising({ on: on === "toggle" ? !(BtAdapter.kept.advertising?.on === true) : on !== "off" });
+		}
+		function restart(): void {
+			BtAdapter.restartBluetooth();
+		}
+		function state(): string {
+			return JSON.stringify({ present: BtAdapter.present, powered: BtAdapter.powered, helper: BtAdapter.helper, address: BtAdapter.info?.address ?? "", settings: BtAdapter.current, links: BtAdapter.links.length, advertising: BtAdapter.advertising, kept: BtAdapter.kept, restartPending: BtAdapter.restartPending });
 		}
 	}
 
@@ -983,8 +1092,11 @@ Scope {
 		target: "settings"
 		enabled: Plugins.on("niri-settings")
 
+		// `page` or `page#anchor`
 		function open(page: string): void {
-			if (page !== "") NiriSettings.page = page;
+			const [id, anchor] = page.split("#");
+			NiriSettings.anchor = anchor ?? "";
+			if (id !== "") NiriSettings.page = id;
 			Popups.withFocusedScreen(screen => Popups.openModal("niri", screen));
 		}
 		function close(): void {
@@ -1002,6 +1114,115 @@ Scope {
 
 		function unlocked(): void {
 			Fingerprint.playUnlock();
+		}
+	}
+
+	// the webcam: `webcam open`, `webcam photo [view]`, `webcam raw`, `webcam zoom in|out|1-4`,
+	// `webcam follow on|off|toggle`, `webcam mirror on|off|toggle`, `webcam virtual on|off`,
+	// `webcam light auto|on|blink|off`, `webcam mic mute|unmute|toggle`, `webcam enhance`, `webcam state`
+	IpcHandler {
+		target: "webcam"
+		enabled: Plugins.on("webcam")
+
+		function open(): void {
+			NiriSettings.page = "webcam";
+			Popups.withFocusedScreen(screen => Popups.openModal("niri", screen));
+		}
+
+		function photo(what: string): void {
+			Webcam.photo(what === "view");
+		}
+
+		function raw(): void {
+			Webcam.raw();
+		}
+
+		function zoom(level: string): void {
+			const now = Webcam.view.zoom;
+			const z = level === "in" ? now * 1.25 : (level === "out" ? now / 1.25 : Number(level) || 1);
+			Webcam.setView({ zoom: Math.max(1, Math.min(4, Math.round(z * 100) / 100)) });
+		}
+
+		function follow(on: string): void {
+			Webcam.setView({ follow: on === "toggle" ? !Webcam.view.follow : on !== "off" });
+		}
+
+		function mirror(on: string): void {
+			Webcam.setView({ mirror: on === "toggle" ? !Webcam.view.mirror : on !== "off" });
+		}
+
+		function virtual(on: string): void {
+			Webcam.setVirtual(on === "toggle" ? !Webcam.virtual : on !== "off");
+		}
+
+		function light(mode: string): void {
+			const m = ({ off: 0, on: 1, blink: 2, auto: 3 })[mode];
+			if (m !== undefined) Webcam.setLed(m, null);
+		}
+
+		function mic(what: string): void {
+			const muted = Webcam.saved.mic?.muted ?? Webcam.mic?.muted ?? false;
+			Webcam.setMic("muted", what === "toggle" ? !muted : what !== "unmute");
+		}
+
+		function enhance(): void {
+			Webcam.enhance();
+		}
+
+		function state(): string {
+			return JSON.stringify({ online: Webcam.online, serial: Webcam.device.serial ?? "", stream: Webcam.streamState, view: Webcam.view, virtual: Webcam.virtual, led: Webcam.led, mic: Webcam.mic, saved: Webcam.saved, enhancing: Webcam.enhancing.status ?? "" });
+		}
+	}
+
+	// the HP camera: `hpcamera open`, `hpcamera photo [view]`, `hpcamera irphoto`,
+	// `hpcamera zoom in|out|1-4`, `hpcamera follow on|off|toggle`, `hpcamera mirror on|off|toggle`,
+	// `hpcamera virtual on|off|toggle`, `hpcamera enhance`, `hpcamera face` (starts the lock
+	// screen's check; its answer goes to the lock screen), `hpcamera state`
+	IpcHandler {
+		target: "hpcamera"
+		enabled: Plugins.on("hp-camera")
+
+		function open(): void {
+			NiriSettings.page = "hpcamera";
+			Popups.withFocusedScreen(screen => Popups.openModal("niri", screen));
+		}
+
+		function photo(what: string): void {
+			HpCamera.photo(what === "view");
+		}
+
+		function irphoto(): void {
+			HpCamera.irPhoto();
+		}
+
+		function zoom(level: string): void {
+			const now = HpCamera.view.zoom;
+			const z = level === "in" ? now * 1.25 : (level === "out" ? now / 1.25 : Number(level) || 1);
+			HpCamera.setView({ zoom: Math.max(1, Math.min(4, Math.round(z * 100) / 100)) });
+		}
+
+		function follow(on: string): void {
+			HpCamera.setView({ follow: on === "toggle" ? !HpCamera.view.follow : on !== "off" });
+		}
+
+		function mirror(on: string): void {
+			HpCamera.setView({ mirror: on === "toggle" ? !HpCamera.view.mirror : on !== "off" });
+		}
+
+		function virtual(on: string): void {
+			HpCamera.setVirtual(on === "toggle" ? !HpCamera.virtual : on !== "off");
+		}
+
+		function enhance(): void {
+			HpCamera.enhance();
+		}
+
+		function face(): string {
+			return HpCamera.checkFace(4) ? "checking" : (HpCamera.faces.length ? "off" : "no face added");
+		}
+
+		function state(): string {
+			return JSON.stringify({ online: HpCamera.online, nodes: [HpCamera.device.rgb ?? "", HpCamera.device.ir ?? ""], stream: HpCamera.streamState, irStream: HpCamera.irState, face: HpCamera.face, view: HpCamera.view, virtual: HpCamera.virtual, saved: HpCamera.saved, faceUnlock: HpCamera.faceUnlock, enhancing: HpCamera.enhancing.status ?? "" });
 		}
 	}
 

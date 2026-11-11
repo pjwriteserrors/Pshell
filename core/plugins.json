@@ -161,6 +161,9 @@
 	{ "id": "as50", "name": "Avantree AS50", "category": "Hardware", "default": false, "requires": ["niri-settings"], "icon": "headphones" },
 	{ "id": "amazfit", "name": "Amazfit watch", "category": "Hardware", "default": false, "requires": ["niri-settings"], "icon": "watch" },
 	{ "id": "printer", "name": "3D printer", "category": "Hardware", "default": false, "icon": "printer_3d" },
+	{ "id": "bt-adapter", "name": "Bluetooth adapter", "category": "Hardware", "default": false, "requires": ["niri-settings"], "icon": "bluetooth_settings" },
+	{ "id": "hp-camera", "name": "HP HD Camera", "category": "Hardware", "default": false, "requires": ["niri-settings"], "icon": "video" },
+	{ "id": "webcam", "name": "Webcam C310", "category": "Hardware", "default": false, "requires": ["niri-settings"], "icon": "video", "preview": {"on": ["niri-settings"], "ipc": ["settings open webcam"], "base": "none", "wait": 6} },
 
 	{ "id": "phone", "name": "Phone app", "category": "Phone", "default": false, "icon": "cellphone" },
 	{ "id": "phone-status", "name": "Phone status", "category": "Phone", "requires": ["phone"], "icon": "battery" },
@@ -191,5 +194,18 @@
 	{ "id": "mail-unsubscribe", "name": "Newsletters", "category": "Messages", "requires": ["mail"], "icon": "newspaper_variant_outline", "preview": {"on": ["bar", "mail"], "ipc": ["messages newsletters"], "wait": 4} },
 	{ "id": "mail-ai", "name": "Mail assistant", "category": "Messages", "default": false, "requires": ["mail"], "icon": "creation" },
 	{ "id": "whatsapp", "name": "WhatsApp", "category": "Messages", "default": false, "requires": ["messages"], "icon": "whatsapp", "preview": {"on": ["bar"], "ipc": ["messages whatsapp '120363000000000001@g.us'"], "wait": 5} },
-	{ "id": "whatsapp-notifications", "name": "WhatsApp notifications", "category": "Messages", "requires": ["whatsapp", "notifications"], "icon": "bell_outline" }
+	{ "id": "whatsapp-notifications", "name": "WhatsApp notifications", "category": "Messages", "requires": ["whatsapp", "notifications"], "icon": "bell_outline" },
+	{ "id": "browser-link", "name": "Browser link", "category": "Desktop", "icon": "web", "default": false },
+	{ "id": "browser-launcher", "name": "Browser tabs in the launcher", "category": "Launcher", "requires": ["browser-link"], "icon": "tab", "default": false },
+	{ "id": "browser-switcher", "name": "Browser tabs in Alt+Tab", "category": "Desktop", "requires": ["browser-link", "window-switcher"], "icon": "tab", "default": false },
+	{ "id": "browser-workspaces", "name": "Floorp workspaces follow niri", "category": "Desktop", "requires": ["browser-link"], "icon": "monitor_dashboard", "default": false },
+	{ "id": "browser-menu", "name": "Pshell menu in the browser", "category": "Desktop", "requires": ["browser-link"], "icon": "menu", "default": false },
+	{ "id": "browser-newtab", "name": "New tab page from the shell", "category": "Desktop", "requires": ["browser-link"], "icon": "tab_plus", "default": false },
+	{ "id": "browser-forms", "name": "Identities in sign-up forms", "category": "Desktop", "requires": ["browser-link", "identities"], "icon": "account", "default": false },
+	{ "id": "browser-mail", "name": "Mail and calendar links from the browser", "category": "Messages", "requires": ["browser-link"], "icon": "email", "default": false },
+	{ "id": "browser-focus", "name": "Keep sites away during focus", "category": "Automation", "requires": ["browser-link"], "icon": "block_helper", "default": false },
+	{ "id": "browser-media", "name": "Browser tabs in media and breaks", "category": "Desktop", "requires": ["browser-link"], "icon": "volume_high", "default": false },
+	{ "id": "browser-privacy", "name": "Which tab uses camera or microphone", "category": "Desktop", "requires": ["browser-link"], "icon": "microphone", "default": false },
+	{ "id": "browser-capture", "name": "Whole-page screenshots", "category": "Capture", "requires": ["browser-link"], "icon": "camera", "default": false },
+	{ "id": "browser-qtrack", "name": "qtrack timer from the browser", "category": "Automation", "requires": ["browser-link"], "icon": "timer", "default": false }
 ]

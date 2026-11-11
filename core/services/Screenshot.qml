@@ -1081,6 +1081,45 @@ Singleton {
 		});
 	}
 
+	// ── the browser's page (plugin browser-capture, docs/browser.md) ──────
+	// The extension draws the whole page in front, not only what is on the
+	// screen; the picture goes into the editor like any other. Its text
+	// comes from the page itself, no OCR needed.
+	readonly property bool pageOffered: Plugins.on("screenshot") && Plugins.on("browser-capture") && WebLink.connected
+	property bool pageBusy: false
+
+	function page() {
+		if (!root.pageOffered || root.pageBusy || root.phase !== "idle") return;
+		root.pageBusy = true;
+		WebLink.capture(true, (ok, data) => {
+			root.pageBusy = false;
+			if (!ok || !data?.path) {
+				root.fail("Page screenshot failed", typeof data === "string" ? data : "");
+				return;
+			}
+			Haptics.play("captured");
+			root.editShot(String(data.path));
+		});
+	}
+
+	function pageText() {
+		if (!root.pageOffered || root.pageBusy) return;
+		root.pageBusy = true;
+		WebLink.pageText((ok, data) => {
+			root.pageBusy = false;
+			const text = ok ? String(data?.text || "").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim() : "";
+			if (text === "") {
+				Haptics.play("taskFailed");
+				Notifs.pushInternal("error", "No text found", "", { icon: "text_recognition" });
+				return;
+			}
+			Quickshell.execDetached(["bash", root.script, "text", text]);
+			Haptics.play("copied");
+			const lines = text.split("\n").length;
+			Notifs.pushInternal("done", lines > 1 ? `Page text copied · ${lines} lines` : "Page text copied", text.length > 220 ? `${text.slice(0, 220)}…` : text, { icon: "text_recognition" });
+		});
+	}
+
 	// ── scroll screenshot ──────────────────────────────────────────────────
 	// The region is grabbed live (grim -g) while the user scrolls; the overlay
 	// only draws a frame outside of it. Enter / Stop stitches the frames.

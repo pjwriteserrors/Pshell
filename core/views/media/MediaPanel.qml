@@ -23,6 +23,9 @@ Drawer {
 	readonly property var upNext: root.ownPlayer && Music.index >= 0 ? Music.queue.slice(Music.index + 1, Music.index + 4) : []
 	// … or the shell's video, with the next episode
 	readonly property bool ownVideo: Video.enabled && String(Media.player?.dbusName ?? "").includes("pshell_video")
+	// the player in front is the browser: which of its tabs play (plugin browser-media)
+	readonly property bool browserPlays: /floorp|firefox|librewolf|zen|waterfox/i.test(`${Media.player?.identity ?? ""} ${Media.player?.dbusName ?? ""}`)
+	readonly property var playingTabs: Plugins.on("browser-media") && root.browserPlays ? WebLink.audibleTabs : []
 	readonly property string nextVideo: root.ownVideo && Video.hasNext ? Video.list[Video.index + 1] : ""
 	property string nextFrame: ""
 	property string nextFrameOf: ""
@@ -116,7 +119,8 @@ Drawer {
 				anchors.left: parent.left
 				anchors.right: parent.right
 				anchors.top: parent.top
-				anchors.topMargin: 60
+				// stays behind the seek bar when the browser's tabs are listed above it
+				anchors.topMargin: 60 + (browserTabs.visible ? browserTabs.height + layout.spacing : 0)
 				height: 150
 				spacing: 3
 				opacity: 0.55
@@ -271,6 +275,57 @@ Drawer {
 						icon: "open_in_new"
 						iconSize: 18
 						onClicked: root.ownVideo ? Video.showWindow() : Music.showWindow()
+					}
+				}
+			}
+
+			// the browser's tabs that play: to the tab, or mute it
+			ColumnLayout {
+				id: browserTabs
+
+				Layout.fillWidth: true
+				visible: root.playingTabs.length > 0
+				spacing: 2
+
+				Repeater {
+					model: root.playingTabs
+
+					delegate: ListItem {
+						id: tabRow
+
+						required property var modelData
+
+						Layout.fillWidth: true
+						implicitHeight: 48
+						icon: "web"
+						title: tabRow.modelData.title || tabRow.modelData.host
+						subtitle: tabRow.modelData.host
+						leading: tabRow.modelData.favicon ? favicon : null
+						onClicked: WebLink.activate(tabRow.modelData)
+
+						Component {
+							id: favicon
+
+							Item {
+								Image {
+									anchors.centerIn: parent
+									source: tabRow.modelData.favicon
+									sourceSize: Qt.size(20, 20)
+									width: 20
+									height: 20
+									asynchronous: true
+								}
+							}
+						}
+
+						IconButton {
+							implicitWidth: 32
+							implicitHeight: 32
+							iconSize: 18
+							icon: tabRow.modelData.muted ? "volume_off" : "volume_high"
+							checked: tabRow.modelData.muted
+							onClicked: WebLink.mute(tabRow.modelData, !tabRow.modelData.muted)
+						}
 					}
 				}
 			}

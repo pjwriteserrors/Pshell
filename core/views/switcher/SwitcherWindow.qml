@@ -401,8 +401,75 @@ PanelWindow {
 		}
 	}
 
+	// ── a browser window's tabs (browser-switcher) ─────────────────────────
+	ListView {
+		id: tabStrip
+
+		anchors.horizontalCenter: parent.horizontalCenter
+		anchors.bottom: hints.top
+		anchors.bottomMargin: 14
+		width: Math.min(contentWidth, parent.width - 160)
+		height: 36
+		visible: Switcher.currentTabs.length > 1
+		opacity: root.reveal
+		orientation: ListView.Horizontal
+		spacing: 6
+		clip: true
+		interactive: false
+		model: tabStrip.visible ? Switcher.currentTabs : []
+		currentIndex: Switcher.tabIndex >= 0 ? Switcher.tabIndex : Switcher.currentTabs.findIndex(tab => tab.active)
+		highlightFollowsCurrentItem: false
+		onCurrentIndexChanged: if (currentIndex >= 0) positionViewAtIndex(currentIndex, ListView.Contain)
+
+		delegate: Clickable {
+			id: chip
+
+			required property var modelData
+			required property int index
+			readonly property bool chosen: Switcher.tabIndex >= 0 ? Switcher.tabIndex === chip.index : chip.modelData.active
+
+			width: Math.min(220, chipRow.implicitWidth + 20)
+			height: 36
+			radius: Theme.radius.medium
+			showHover: false
+			color: chip.chosen ? Theme.primaryContainer : Qt.alpha(Theme.bg, chip.hovered ? 0.9 : 0.75)
+			border.width: 1
+			border.color: chip.chosen ? Qt.alpha(Theme.primary, 0.6) : Qt.alpha(Theme.fg, 0.12)
+			onClicked: Switcher.pickTab(chip.index)
+
+			Row {
+				id: chipRow
+
+				anchors.verticalCenter: parent.verticalCenter
+				x: 10
+				spacing: 8
+
+				Image {
+					anchors.verticalCenter: parent.verticalCenter
+					width: 16
+					height: 16
+					visible: status === Image.Ready
+					source: chip.modelData.favicon || ""
+					sourceSize: Qt.size(32, 32)
+					asynchronous: true
+				}
+
+				StyledText {
+					anchors.verticalCenter: parent.verticalCenter
+					width: Math.min(implicitWidth, 172)
+					text: chip.modelData.title || chip.modelData.host
+					font.pixelSize: Theme.size.small
+					font.weight: chip.modelData.active ? Font.DemiBold : Font.Normal
+					tone: Theme.text
+				}
+			}
+		}
+	}
+
 	// ── what is shown at the bottom ────────────────────────────────────────
 	Row {
+		id: hints
+
 		anchors.horizontalCenter: parent.horizontalCenter
 		anchors.bottom: parent.bottom
 		anchors.bottomMargin: 34
@@ -413,6 +480,7 @@ PanelWindow {
 			model: [
 				{ key: "Tab", text: "next" },
 				{ key: "Enter", text: "switch" },
+				...(Switcher.currentTabs.length > 1 ? [{ key: ", .", text: "tabs" }] : []),
 				{ key: "Del", text: "close" },
 				{ key: "[ ]", text: Switcher.layouts.find(l => l.id === Switcher.layout)?.label ?? "" },
 				{ key: "Esc", text: "cancel" }
@@ -524,6 +592,12 @@ PanelWindow {
 				// with Shift the whole app ends, as in the task manager
 				if (Switcher.current && (event.modifiers & Qt.ShiftModifier) && Plugins.on("task-manager")) TaskManager.endWindow(Switcher.current.id);
 				else if (Switcher.current) Switcher.closeWindow(Switcher.current.id);
+				break;
+			case Qt.Key_Comma:
+				Switcher.moveTab(-1);
+				break;
+			case Qt.Key_Period:
+				Switcher.moveTab(1);
 				break;
 			case Qt.Key_BracketLeft:
 				Switcher.cycleLayout(-1);

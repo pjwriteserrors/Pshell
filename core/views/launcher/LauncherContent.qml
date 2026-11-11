@@ -86,6 +86,8 @@ Item {
 		{ id: "translate", plugin: "translate", group: "tools", command: "t", name: "Translate", aliases: ["translate", "tr"], keywords: "language" },
 		{ id: "dictionary", plugin: "dictionary", group: "tools", command: "d", name: "Dictionary", aliases: ["dict", "define", "wb", "wörterbuch", "duden"], keywords: "word meaning explain pictures wiktionary bedeutung" },
 		{ id: "web-search", plugin: "web-search", group: "tools", command: "w", name: "Web Search", aliases: ["web", "search"], keywords: "browser" },
+		{ id: "browser-workspaces", plugin: "browser-workspaces", group: "tools", command: "ws", name: "Browser Workspaces", aliases: ["workspaces"], keywords: "browser floorp workspace" },
+		{ id: "browser-tabs", plugin: "browser-launcher", group: "tools", command: "tab", name: "Browser Tabs", aliases: ["tabs"], keywords: "browser floorp firefox bookmarks history" },
 		// with the file manager on, >file opens it (and searches for what follows)
 		{ id: "file-browser", plugin: "files", shown: !Plugins.on("filemanager"), group: "tools", command: "file", name: "Files", aliases: ["files"], keywords: "browse open folder" },
 		{ id: "file-manager", plugin: "filemanager", group: "tools", command: "file", name: "Files", aliases: ["files", "fm", "explorer", "manager"], keywords: "file manager folders window tabs browse open" },
@@ -328,6 +330,8 @@ Item {
 	readonly property bool inConvertMode: Plugins.on("converter") && (root.commandQuery === "conv" || root.commandQuery.startsWith("conv "))
 	readonly property bool inTodoMode: Plugins.on("todos") && (root.commandQuery === "todo" || root.commandQuery.startsWith("todo "))
 	readonly property bool inWebMode: Plugins.on("web-search") && (root.commandQuery === "w" || root.commandQuery.startsWith("w "))
+	readonly property bool inTabsMode: Plugins.on("browser-launcher") && /^tabs?(\s|$)/.test(root.commandQuery)
+	readonly property bool inBrowserWsMode: Plugins.on("browser-workspaces") && /^ws(\s|$)/.test(root.commandQuery)
 	readonly property bool inAiActionsMode: Plugins.on("ai-actions") && (root.commandQuery === "ai" || root.commandQuery.startsWith("ai "))
 	readonly property bool inPhoneMode: Phone.offered && (root.commandQuery === "phone" || root.commandQuery.startsWith("phone "))
 	readonly property bool inShotsMode: Plugins.on("screenshot-history") && (root.commandQuery === "shots" || root.commandQuery.startsWith("shots "))
@@ -336,7 +340,7 @@ Item {
 	readonly property bool inVideoMode: Plugins.on("video") && ["video", "videos", "film"].some(c => root.commandQuery === c || root.commandQuery.startsWith(c + " "))
 	readonly property bool inPdfMode: Plugins.on("pdf") && ["pdf", "pdfs", "docs"].some(c => root.commandQuery === c || root.commandQuery.startsWith(c + " "))
 	readonly property bool inEditMode: Plugins.on("editor") && (root.commandQuery === "edit" || root.commandQuery.startsWith("edit "))
-	readonly property bool inViewMode: root.inEditMode || root.inTranslateMode || root.inDictionaryMode || root.inConvertMode || root.inTodoMode || root.inWebMode || root.inAiActionsMode || root.inPhoneMode || root.inShotsMode || root.inPicturesMode || root.inMusicMode || root.inVideoMode || root.inPdfMode || root.inFinderMode
+	readonly property bool inViewMode: root.inEditMode || root.inTranslateMode || root.inDictionaryMode || root.inConvertMode || root.inTodoMode || root.inWebMode || root.inTabsMode || root.inBrowserWsMode || root.inAiActionsMode || root.inPhoneMode || root.inShotsMode || root.inPicturesMode || root.inMusicMode || root.inVideoMode || root.inPdfMode || root.inFinderMode
 	// what follows the command token, as typed (">t fr hello" → "fr hello")
 	readonly property string modeArgument: {
 		const match = /^>\S+\s([\s\S]*)$/.exec(root.searchText);
@@ -1067,6 +1071,12 @@ Item {
 		case "web-search":
 			root.setLauncherSearch(">w ");
 			break;
+		case "browser-tabs":
+			root.setLauncherSearch(">tab ");
+			break;
+		case "browser-workspaces":
+			root.setLauncherSearch(">ws ");
+			break;
 		case "ai-actions":
 			root.setLauncherSearch(">ai ");
 			break;
@@ -1516,6 +1526,8 @@ Item {
 		if (root.inConvertMode) return "convert";
 		if (root.inTodoMode) return "todo";
 		if (root.inWebMode) return "web";
+		if (root.inTabsMode) return "tabs";
+		if (root.inBrowserWsMode) return "browser-ws";
 		if (root.inAiActionsMode) return "ai";
 		if (root.inPhoneMode) return "phone";
 		if (root.inShotsMode) return "shots";
@@ -1543,6 +1555,8 @@ Item {
 		case "convert": return "swap_horizontal";
 		case "todo": return "format_list_checks";
 		case "web": return "web";
+		case "tabs": return "tab";
+		case "browser-ws": return "monitor_dashboard";
 		case "ai": return "creation";
 		case "phone": return "cellphone";
 		case "shots": return "image_multiple";
@@ -1587,6 +1601,8 @@ Item {
 		case "converter": return "swap_horizontal";
 		case "todo": return "format_list_checks";
 		case "web-search": return "web";
+		case "browser-tabs": return "tab";
+		case "browser-workspaces": return "monitor_dashboard";
 		case "ai-actions": return "creation";
 		case "phone": return "cellphone";
 		case "color-picker": return "eyedropper";
@@ -1643,6 +1659,8 @@ Item {
 		case "convert": return convertView.item;
 		case "todo": return todoView.item;
 		case "web": return webSearchView.item;
+		case "tabs": return tabsView.item;
+		case "browser-ws": return browserWsView.item;
 		case "ai": return aiActionsView.item;
 		case "phone": return phoneView.item;
 		case "shots": return shotsView.item;
@@ -1663,6 +1681,8 @@ Item {
 		case "convert": return "5 kg in lb";
 		case "todo": return todoView.item?.placeholder ?? "";
 		case "web": return "Search the web";
+		case "tabs": return "Search tabs, bookmarks, history";
+		case "browser-ws": return "Floorp workspace";
 		case "ai": return "Ask, find, translate…";
 		case "phone": return "Text to send";
 		case "finder": return "Search your files";
@@ -1683,6 +1703,8 @@ Item {
 		case "convert": return "Convert";
 		case "todo": return "Todo";
 		case "web": return "Web Search";
+		case "tabs": return "Browser Tabs";
+		case "browser-ws": return "Browser Workspaces";
 		case "ai": return "AI";
 		case "phone": return "Phone";
 		case "shots": return "Screenshots";
@@ -1704,6 +1726,8 @@ Item {
 		case "translate": return "copy";
 		case "todo": return todoView.item?.enterHint ?? "";
 		case "web": return webSearchView.item?.showingResults ? "open" : "search";
+		case "tabs": return tabsView.item?.selected?.tab ? "switch" : "open";
+		case "browser-ws": return "switch";
 		case "ai": return "run";
 		case "phone": return "send";
 		case "shots": return "copy";
@@ -2494,6 +2518,59 @@ Item {
 
 						function onArgumentRequested(text) {
 							root.setLauncherSearch(`>todo ${text}`);
+						}
+					}
+				}
+			}
+
+			// browser tabs, bookmarks, history
+			ModeLayer {
+				current: root.mode === "tabs"
+
+				ModeView {
+					id: tabsView
+
+					file: "TabsView.qml"
+					current: root.mode === "tabs"
+					values: ({
+						active: root.mode === "tabs",
+						argument: root.modeArgument
+					})
+
+					Connections {
+						target: tabsView.item
+						ignoreUnknownSignals: true
+
+						function onCloseRequested() {
+							root.closeRequested();
+							root.launchRequested();
+						}
+					}
+				}
+			}
+
+			// Floorp's workspaces
+			ModeLayer {
+				current: root.mode === "browser-ws"
+
+				ModeView {
+					id: browserWsView
+
+					file: "TabsView.qml"
+					current: root.mode === "browser-ws"
+					values: ({
+						kind: "workspaces",
+						active: root.mode === "browser-ws",
+						argument: root.modeArgument
+					})
+
+					Connections {
+						target: browserWsView.item
+						ignoreUnknownSignals: true
+
+						function onCloseRequested() {
+							root.closeRequested();
+							root.launchRequested();
 						}
 					}
 				}
@@ -4303,6 +4380,12 @@ Item {
 				visible: root.mode === "web"
 				key: "^↵"
 				label: "results"
+			}
+
+			KeyHint {
+				visible: root.mode === "tabs" && !!tabsView.item?.selected?.tab
+				key: "^W"
+				label: "close tab"
 			}
 
 			KeyHint {

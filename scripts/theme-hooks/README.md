@@ -29,19 +29,55 @@ not as a failure).
 
 ## Floorp in the shell's look
 
-`pywalfox` only colours the browser. `scripts/floorp_theme.py install` adds
-the shell's look on top (`dotfiles/floorp/pshell.css`: the bar's pills, the
-panels, the page's rounded top corners under the bar, the shell's motion),
-linked into `<profile>/chrome/CSS/` where Floorp's own CSS loader reads it.
-Nothing else in the profile changes: `floorp_theme.py remove`, or unticking
-`pshell.css` under ☰ → userChrome CSS, gives the previous look back. Changes
-show after a restart or ☰ → userChrome CSS → Rebuild; colours follow the
-wallpaper live through Pywalfox.
+`scripts/floorp_theme.py install` links `dotfiles/floorp/pshell.css` into
+`<profile>/chrome/CSS/`, where Floorp's own CSS loader reads it, with two
+sheets beside it: `pshell-vars.css` (the shell's corner radii, font, spacing,
+bar height and motion curves, from `~/.local/state/pshell/floorp/`) and
+`pshell-roles.css` (the palette engine's roles, from `~/.cache/wal`). Changes
+show after a restart or ☰ → userChrome CSS → Rebuild.
 
-The sheet reads the wallust colours from the slots Pywalfox puts them in,
-which differ between its dark and light mode, so the hook has to keep
-Pywalfox's mode on `THEME_MODE` (that mode also decides whether pages are
-dark).
+The layout: tabs in a rail on the left (Firefox's own vertical tabs) that
+opens over the page while the pointer rests on it and closes again, both
+animated; tab groups as tinted chips with a line along their tabs, a collapsed
+group as its initial with the number of its tabs; a preview card for the tab
+under the pointer; workspaces, the sidebar button and back/forward/reload on
+the left of the bar, the address in the middle; bookmarks centred under it;
+the page as a rounded panel; Floorp's panel sidebar on the left, its buttons
+at the foot of the rail and its panel between the rail and the page. Nothing is
+hidden, only moved.
+
+That needs a few settings, which `install` writes into a marked block of
+`<profile>/user.js` after keeping the profile's own values in
+`~/.local/state/pshell/floorp-prefs-backup.json`:
+`sidebar.revamp`, `sidebar.verticalTabs`, `sidebar.position_start`,
+`sidebar.visibility = expand-on-hover`,
+`sidebar.animation.enabled`, `sidebar.animation.expand-on-hover.duration-ms`
+(300) and `.delay-duration-ms` (200), `browser.tabs.hoverPreview.enabled`,
+`browser.tabs.hoverPreview.showThumbnails`, `browser.tabs.groups.enabled`,
+`xpinstall.signatures.required` false, `extensions.autoDisableScopes` 14,
+`extensions.experiments.enabled` (the extension's part in the window, which
+switches the rail's style from Settings › Browser › Tabs), and
+`position_start` false in `floorp.panelSidebar.config` (the panel sidebar on
+the left, where pshell.css joins it to the rail). Once Floorp has
+started and saved them, `floorp_theme.py settle` takes the block out again, so
+they stay ordinary settings. `floorp_theme.py remove` unlinks the sheets and
+writes the kept values back the same way; `status` shows what is linked and
+whether settings are still waiting in `user.js`.
+
+Colours come from the Pshell extension (`dotfiles/floorp/pshell`) through the
+browser's theme, live with the wallpaper; Pywalfox is not needed. The theme's
+keys carry the shell's roles: `frame` background, `tab_background_text` text,
+`icons_attention` primary, `tab_line` secondary, `toolbar_bottom_separator`
+tertiary, `tab_background_separator` danger, `toolbar_vertical_separator`
+warning, `toolbar_top_separator` success, `popup_highlight_text` on-primary.
+Without the extension the sheet falls back to `pshell-roles.css`.
+
+Not possible with CSS alone (Floorp loads no chrome scripts): closing the rail
+right after a tab switch instead of when the pointer leaves (Firefox keeps it
+open while a menu of it is open, so clicks inside it do not close it),
+workspace dots and wheel switching in the rail, and the rail's easing
+(Firefox animates it with a fixed ease-in-out; only the duration is a
+setting).
 
 ## Discord in the shell's look (BetterDiscord)
 

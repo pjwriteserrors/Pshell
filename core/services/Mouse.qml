@@ -1284,6 +1284,8 @@ Singleton {
 		{ id: "shot-window", label: "Screenshot of the window", icon: "application_outline", group: "Screenshot", run: () => Screenshot.window() },
 		{ id: "picker", label: "Pick a colour", icon: "eyedropper", group: "Screenshot", run: () => Screenshot.picker() },
 		{ id: "ocr", label: "Copy text from the screen", icon: "text_recognition", group: "Screenshot", run: () => Screenshot.ocr() },
+		{ id: "shot-page", label: "Screenshot of the whole page", icon: "web", group: "Screenshot", run: () => Screenshot.page() },
+		{ id: "page-text", label: "Copy the page's text", icon: "text_box_outline", group: "Screenshot", run: () => Screenshot.pageText() },
 		{ id: "window-switch-left", label: "Window switch left", icon: "arrow_left_right", group: "Windows", run: () => Niri.swapWindow("left") },
 		{ id: "window-switch-right", label: "Window switch right", icon: "arrow_left_right", group: "Windows", run: () => Niri.swapWindow("right") },
 		{ id: "window-switch-up", label: "Window switch up", icon: "arrow_up_down", group: "Windows", run: () => Niri.swapWindow("up") },

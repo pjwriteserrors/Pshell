@@ -86,6 +86,39 @@ Singleton {
 	readonly property real radius: root.corner < 0 ? Math.min(40, Theme.windowRadius) : root.corner
 	readonly property string shotDir: `${Paths.runtime}/switcher`
 
+	// a browser window's tabs (plugin browser-switcher, WebLink); tabIndex -1
+	// keeps the tab it shows, another one is brought to the front on pick
+	readonly property bool tabsOn: Plugins.on("browser-link") && Plugins.on("browser-switcher")
+	readonly property var currentTabs: root.open && root.tabsOn && root.current ? root.tabsFor(root.current) : []
+	property int tabIndex: -1
+
+	onCurrentChanged: root.tabIndex = -1
+
+	function tabsFor(item) {
+		if (!WebLink.connected || !/floorp|firefox|librewolf|zen|waterfox/i.test(String(item.appId || ""))) return [];
+		const title = String(item.title || "");
+		const windowTabs = window => WebLink.tabs.filter(tab => tab.source === window.source && tab.windowId === window.id);
+		const window = WebLink.windows.find(window => window.title !== "" && window.title === title)
+			?? WebLink.windows.find(window => {
+				const active = windowTabs(window).find(tab => tab.active);
+				return !!active && active.title !== "" && title.startsWith(active.title);
+			});
+		return window ? windowTabs(window).filter(tab => !tab.hidden) : [];
+	}
+
+	function moveTab(direction) {
+		const count = root.currentTabs.length;
+		if (count === 0) return;
+		const from = root.tabIndex >= 0 ? root.tabIndex : Math.max(0, root.currentTabs.findIndex(tab => tab.active));
+		root.tabIndex = ((from + direction) % count + count) % count;
+	}
+
+	function pickTab(at) {
+		if (at < 0 || at >= root.currentTabs.length) return;
+		root.tabIndex = at;
+		root.pick();
+	}
+
 	function shot(id, rev) {
 		const file = root.shotFiles[id];
 		return file ? `file://${file.path}?${file.n}` : "";
@@ -216,8 +249,10 @@ Singleton {
 			root.close();
 			return;
 		}
+		const tab = root.tabIndex >= 0 ? root.currentTabs[root.tabIndex] ?? null : null;
 		root.picked = item.id;
 		root.close();
+		if (tab && !tab.active) WebLink.command("activate", { tabId: tab.id }, null, tab.source);
 		if (!item.focused) Niri.focusWindow(item.id);
 	}
 

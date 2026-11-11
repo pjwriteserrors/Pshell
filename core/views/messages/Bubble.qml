@@ -97,7 +97,7 @@ Item {
 
 	function follow(link) {
 		if (link.startsWith("pshell-picture:")) Mail.view(link.slice(15));
-		else Qt.openUrlExternally(link);
+		else Browser.openLink(link, "Mail");
 	}
 
 	// a mail that just arrived comes up out of its corner
@@ -730,7 +730,7 @@ Item {
 									font.family: Theme.fontFamily
 									font.pixelSize: Theme.size.body
 									text: parent.visible ? root.message.signature : ""
-									onLinkActivated: link => Qt.openUrlExternally(link)
+									onLinkActivated: link => Browser.openLink(link, "Mail")
 								}
 							}
 						}

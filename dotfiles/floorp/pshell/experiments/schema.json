@@ -1,0 +1,49 @@
+[
+	{
+		"namespace": "pshellChrome",
+		"functions": [
+			{
+				"name": "setRail",
+				"type": "function",
+				"async": true,
+				"parameters": [
+					{
+						"name": "rail",
+						"type": "object",
+						"properties": {
+							"style": { "type": "string", "enum": ["hover", "open", "icons", "top"] },
+							"width": { "type": "integer", "optional": true }
+						}
+					}
+				]
+			},
+			{
+				"name": "setTabs",
+				"type": "function",
+				"async": true,
+				"parameters": [
+					{ "name": "tabs", "type": "object", "additionalProperties": { "type": "any" } }
+				]
+			},
+			{
+				"name": "command",
+				"type": "function",
+				"async": true,
+				"parameters": [
+					{ "name": "name", "type": "string" },
+					{ "name": "args", "type": "object", "optional": true, "additionalProperties": { "type": "any" } }
+				]
+			}
+		],
+		"events": [
+			{
+				"name": "onEvent",
+				"type": "function",
+				"parameters": [
+					{ "name": "name", "type": "string" },
+					{ "name": "data", "type": "any" }
+				]
+			}
+		]
+	}
+]

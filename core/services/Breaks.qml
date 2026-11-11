@@ -380,6 +380,7 @@ Singleton {
 		root.sinceMove = 0;
 		root.sinceEyes = 0;
 		Popups.withFocusedScreen(screen => Popups.openModal("stretch", screen));
+		root.pauseBrowserFor("stretch");
 	}
 
 	function finishStretch(done) {
@@ -412,6 +413,49 @@ Singleton {
 		root.eyesDueAt = 0;
 		root.sinceEyes = 0;
 		Popups.withFocusedScreen(screen => Popups.openModal("eyerest", screen));
+		root.pauseBrowserFor("eyerest");
+	}
+
+	// ── the browser's media during a break (plugin browser-media) ────────
+	// only when switched on (Settings › Browser): what played goes on after
+	property bool pauseBrowser: false
+	// the break the browser was paused for, and its tabs that played
+	property string browserPausedFor: ""
+	property var browserPausedTabs: []
+
+	function setPauseBrowser(on) {
+		root.pauseBrowser = on;
+		saveDelay.restart();
+	}
+
+	function pauseBrowserFor(modal) {
+		if (!root.pauseBrowser || !Plugins.on("browser-media") || !WebLink.connected || WebLink.audibleTabs.length === 0) return;
+		root.browserPausedFor = modal;
+		WebLink.pauseMedia((ok, data) => {
+			const tabs = ok && Array.isArray(data?.tabs) ? data.tabs : [];
+			if (root.browserPausedFor !== modal) {
+				// the break was over before the browser answered
+				if (tabs.length > 0) WebLink.resumeMedia(tabs);
+				return;
+			}
+			root.browserPausedTabs = tabs;
+			if (Popups.modal !== modal) root.resumeBrowser();
+		});
+	}
+
+	function resumeBrowser() {
+		const tabs = root.browserPausedTabs;
+		root.browserPausedFor = "";
+		root.browserPausedTabs = [];
+		if (tabs.length > 0) WebLink.resumeMedia(tabs);
+	}
+
+	Connections {
+		target: Popups
+
+		function onModalChanged() {
+			if (root.browserPausedFor !== "" && Popups.modal !== root.browserPausedFor) root.resumeBrowser();
+		}
 	}
 
 	function finishEyeRest() {
@@ -456,7 +500,7 @@ Singleton {
 		id: saveDelay
 
 		interval: 5000
-		onTriggered: store.setText(JSON.stringify({ enabled: root.enabled, warnedFallDay: root.warnedFallDay, bottleSize: root.bottleSize, bottleLeft: root.bottleLeft, bottleLevels: root.bottleLevels, days: root.days }))
+		onTriggered: store.setText(JSON.stringify({ enabled: root.enabled, pauseBrowser: root.pauseBrowser, warnedFallDay: root.warnedFallDay, bottleSize: root.bottleSize, bottleLeft: root.bottleLeft, bottleLevels: root.bottleLevels, days: root.days }))
 	}
 
 	FileView {
@@ -469,6 +513,7 @@ Singleton {
 			try {
 				const data = JSON.parse(String(text() || "{}")) || {};
 				root.enabled = data.enabled !== false;
+				root.pauseBrowser = data.pauseBrowser === true;
 				root.warnedFallDay = data.warnedFallDay || "";
 				root.bottleSize = root.bottleSizes.includes(data.bottleSize) ? data.bottleSize : 750;
 				root.bottleLeft = Number.isFinite(data.bottleLeft) ? Math.min(data.bottleLeft, root.bottleSize) : root.bottleSize;

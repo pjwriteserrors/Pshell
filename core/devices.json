@@ -14,5 +14,8 @@
 	{ "id": "amazfit-zepp-os", "name": "Amazfit watch (Zepp OS)", "match": { "service": ["0000fee0-0000-1000-8000-00805f9b34fb"] }, "page": "amazfit", "plugin": "amazfit", "partial": true },
 	{ "id": "avantree-as50-any", "name": "Avantree AS50", "match": { "name": "Avantree AS50" }, "page": "as50", "plugin": "as50" },
 	{ "id": "elan-arm-m4-fingerprint", "name": "ELAN fingerprint reader (ARM-M4)", "match": { "usb": ["04f3:0c5e"] }, "page": "fingerprint", "plugin": "fingerprint" },
+	{ "id": "hp-hd-camera-30c9-000f", "name": "HP HD Camera", "match": { "usb": ["30c9:000f"] }, "page": "hpcamera", "plugin": "hp-camera" },
+	{ "id": "logitech-webcam-c310", "name": "Logitech Webcam C310", "match": { "usb": ["046d:081b"] }, "page": "webcam", "plugin": "webcam" },
+	{ "id": "intel-ax201-bluetooth", "name": "Intel AX201 Bluetooth", "match": { "usb": ["8087:0026"] }, "page": "btadapter", "plugin": "bt-adapter" },
 	{ "id": "elan-touchpad", "name": "ELAN touchpad", "match": { "hid": ["04f3:3169"] }, "page": "input" }
 ]

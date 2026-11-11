@@ -66,6 +66,15 @@ ShellRoot {
 	// the Amazfit watch's daemon: Zepp OS session, its keys, notifications
 	// and music to it, the battery warning (core/services/Amazfit.qml)
 	readonly property bool amazfit: Amazfit.enabled
+	// the Bluetooth adapter's daemon: what its page keeps put back whenever
+	// the adapter comes, powers on or the PC wakes (core/services/BtAdapter.qml)
+	readonly property bool btAdapter: BtAdapter.enabled
+	// the webcam's daemon: its settings, LED and microphone back whenever it
+	// comes again, the virtual camera fed (core/services/Webcam.qml)
+	readonly property bool webcam: Webcam.enabled
+	// the HP camera's daemon: its settings back whenever it comes again, the
+	// virtual camera fed, the face for the lock screen (core/services/HpCamera.qml)
+	readonly property bool hpCamera: HpCamera.enabled
 	// the cursor theme in the theme's colours and niri's corner radius
 	// (core/services/CursorTheme.qml)
 	readonly property bool cursorTheme: CursorTheme.enabled

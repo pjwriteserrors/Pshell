@@ -1,42 +1,125 @@
-/* Pshell for Floorp: the browser window drawn like the shell's default style.
+/* Pshell for Floorp: the browser window drawn in the shell's language.
  *
  * Loaded by Floorp's own CSS loader (<profile>/chrome/CSS/, toggled under
- * ☰ → userChrome CSS), placed by scripts/floorp_theme.py. Only colours,
- * corners, spacing and type change here: nothing is hidden, moved or
- * reordered, so every Floorp feature (panel sidebar, workspaces, split view,
- * tab stacks, status bar, …) keeps working as before.
+ * ☰ → userChrome CSS), placed by scripts/floorp_theme.py, which also sets the
+ * few settings the layout stands on (Firefox's vertical tabs, expanding while
+ * the pointer rests on them; tab groups; the preview card; Floorp's panel
+ * sidebar on the right).
  *
- * The colours follow the wallpaper live, through Pywalfox: its theme puts the
- * wallust colours into the browser's theme variables, the shell's roles
- * (style/theme/Theme.qml) are derived from those here. Which slot carries
- * what depends on Pywalfox's mode, which the theme hook keeps on the shell's
- * dark/light (it also decides whether pages are dark):
+ * The layout (docs: scripts/theme-hooks/README.md, "Floorp in the shell's look"):
+ *   - a rail on the left holds the tabs, icons only; resting on it opens it
+ *     over the page with the titles (Firefox animates both ways), resting on a
+ *     tab shows its card. Tab groups wear their colour: an open group a header
+ *     and a line along its tabs, a closed one a chip with its count.
+ *   - one bar on top, like the shell's: Floorp's workspace above the rail,
+ *     the sidebar button, back, forward, reload, the address as a pill in the
+ *     middle, then the window buttons and the extensions; the bookmarks in the
+ *     middle below it.
+ *   - the page is a panel of the shell: inset, every corner rounded like the
+ *     windows (niri's corner radius).
+ * Nothing is hidden: every button and toolbar is where the browser keeps it,
+ * only put in another order (flex `order`) and drawn differently.
  *
- *            background (color0)        foreground                accent
- *   dark     --lwt-accent-color         --lwt-text-color (15)     icons_attention (13)
- *   light    --tab-text-color-selected  --toolbarbutton-          icons_attention (5)
- *                                       background-color-hover (7)
+ * Colours: the Pshell extension (dotfiles/floorp/pshell) sets them live through
+ * the browser's theme. Firefox turns the theme into variables on the root,
+ * which are read here as the shell's roles:
  *
- * The Pshell's palette engine writes its roles besides (pshell-roles.css,
- * linked next to this sheet by scripts/floorp_theme.py; --pshell-primary,
- * --pshell-on-primary, --pshell-danger …): where they are, they win over the
- * slot above, whose ANSI-near magenta is not the picture's accent. They come
- * with a restart or ☰ → userChrome CSS → Rebuild; everything else stays live.
+ *   theme key                  variable                               role
+ *   frame                      --lwt-accent-color                     bg
+ *   tab_background_text        --lwt-text-color                       fg
+ *   icons_attention            --toolbarbutton-icon-fill-attention    primary
+ *   tab_line                   --lwt-tab-line-color                   secondary
+ *   toolbar_bottom_separator   --chrome-content-separator-color       tertiary
+ *   tab_background_separator   --lwt-background-tab-separator-color   danger
+ *   toolbar_vertical_separator --toolbarseparator-color               warning
+ *   toolbar_top_separator      --tabs-navbar-separator-color          success
+ *   popup_highlight_text       --urlbarview-text-color-selected       on primary
  *
- * The root keeps those sources untouched; the two light ones are only
- * replaced below the root (body), where the browser reads them.
+ * Where those variables are also the browser's own (separators, the selected
+ * row), they are given new values below the root (on body), so the palette
+ * here still reads the theme's. Without the extension (no theme) the palette
+ * engine's roles (pshell-roles.css, --pshell-*) and fixed defaults are used.
+ *
+ * The shell's metrics come from pshell-vars.css, which the shell writes as
+ * they change: corner radius (niri's), type, gaps, bar height and motion.
+ * Both sheets are read at a Rebuild or restart.
  *
  * A user sheet loses to the browser's own rules unless it is !important,
  * hence the !important throughout. */
 
 @-moz-document url("chrome://browser/content/browser.xhtml") {
 
+/* ── metrics (pshell-vars.css) ──────────────────────────────────────────── */
+:root {
+	--ps-radius-window: var(--pshell-radius-window, 18px);
+	--ps-radius-small: var(--pshell-radius-small, 8px);
+	--ps-radius-medium: var(--pshell-radius-medium, 12px);
+	--ps-radius-large: var(--pshell-radius-large, 16px);
+	--ps-radius-huge: var(--pshell-radius-huge, 22px);
+	--ps-radius-full: 999px;
+	--ps-font: var(--pshell-font, "Adwaita Sans"), sans-serif;
+	--ps-font-mono: var(--pshell-font-mono, "Adwaita Mono"), monospace;
+	--ps-font-size: var(--pshell-font-size, 13px);
+	--ps-gap-xs: var(--pshell-gap-xs, 4px);
+	--ps-gap-sm: var(--pshell-gap-sm, 8px);
+	--ps-gap-md: var(--pshell-gap-md, 12px);
+	--ps-gap-lg: var(--pshell-gap-lg, 16px);
+	--ps-bar-height: var(--pshell-bar-height, 38px);
+
+	/* Motion.qml: panels bloom open on the spatial curve and snap shut */
+	--ps-micro: var(--pshell-micro, 100ms);
+	--ps-short: var(--pshell-short, 160ms);
+	--ps-medium: var(--pshell-medium, 220ms);
+	--ps-long: var(--pshell-long, 300ms);
+	--ps-spatial: var(--pshell-spatial, cubic-bezier(0.38, 1.21, 0.22, 1));
+	--ps-standard: var(--pshell-standard, cubic-bezier(0.2, 0, 0, 1));
+	--ps-accel: var(--pshell-accel, cubic-bezier(0.4, 0, 1, 1));
+	--ps-decel: var(--pshell-decel, cubic-bezier(0, 0, 0.2, 1));
+
+	/* the page sits this far from the window's edges, like the gaps of niri */
+	--ps-inset: 6px;
+}
+
 /* ── palette ────────────────────────────────────────────────────────────── */
 :root {
+	--ps-bg: var(--pshell-bg, #141414);
+	--ps-fg: var(--pshell-fg, #e6e6e6);
+	--ps-primary-src: var(--pshell-primary, #8fb0e8);
+	--ps-secondary-src: var(--pshell-secondary, #9ad0a2);
+	--ps-tertiary-src: var(--pshell-tertiary, #d8a4e0);
+	--ps-danger-src: var(--pshell-danger, #e5484d);
+	--ps-warning-src: var(--pshell-warning, #f5a524);
+	--ps-success-src: var(--pshell-success, #46a758);
+	--ps-on-primary-src: var(--pshell-on-primary, var(--ps-bg));
+}
+
+/* the Pshell extension's theme */
+:root[lwtheme] {
 	--ps-bg: var(--lwt-accent-color, #141414);
 	--ps-fg: var(--lwt-text-color, #e6e6e6);
-	--ps-accent-raw: var(--toolbarbutton-icon-fill-attention, #6f9fd8);
+	--ps-primary-src: var(--toolbarbutton-icon-fill-attention, var(--pshell-primary, #8fb0e8));
+	--ps-secondary-src: var(--lwt-tab-line-color, var(--pshell-secondary, #9ad0a2));
+	--ps-tertiary-src: var(--chrome-content-separator-color, var(--pshell-tertiary, #d8a4e0));
+	--ps-danger-src: var(--lwt-background-tab-separator-color, var(--pshell-danger, #e5484d));
+	--ps-warning-src: var(--toolbarseparator-color, var(--pshell-warning, #f5a524));
+	--ps-success-src: var(--tabs-navbar-separator-color, var(--pshell-success, #46a758));
+	--ps-on-primary-src: var(--urlbarview-text-color-selected, var(--ps-bg));
+}
 
+/* the values are taken once here, on body, so that the browser's own uses of
+   these variables below can be given new ones without a loop */
+:root > body {
+	--ps-primary: var(--ps-primary-src);
+	--ps-secondary: var(--ps-secondary-src);
+	--ps-tertiary: var(--ps-tertiary-src);
+	--ps-danger: var(--ps-danger-src);
+	--ps-warning: var(--ps-warning-src);
+	--ps-success: var(--ps-success-src);
+	--ps-on-primary: var(--ps-on-primary-src);
+}
+
+:root,
+:root > body {
 	/* Theme.qml: layers are the foreground tinted over the background */
 	--ps-layer1: color-mix(in srgb, var(--ps-fg) 4.5%, var(--ps-bg));
 	--ps-layer2: color-mix(in srgb, var(--ps-fg) 8.5%, var(--ps-bg));
@@ -46,55 +129,34 @@
 	--ps-text-subtle: color-mix(in srgb, var(--ps-fg) 42%, transparent);
 	--ps-text-faint: color-mix(in srgb, var(--ps-fg) 24%, transparent);
 	--ps-outline: color-mix(in srgb, var(--ps-fg) 8%, transparent);
-
-	/* the accent pushed until it reads on the background (Theme.legible) */
-	--ps-primary: var(--pshell-primary, oklch(from var(--ps-accent-raw) min(l, 0.5) max(c, 0.08) h));
-	--ps-on-primary: var(--pshell-on-primary, var(--ps-bg));
 	--ps-primary-soft: color-mix(in srgb, var(--ps-primary) 14%, transparent);
 	--ps-primary-container: color-mix(in srgb, var(--ps-primary) 20%, var(--ps-bg));
-	--ps-danger: var(--pshell-danger, #e5484d);
-
-	--ps-radius-small: 8px;
-	--ps-radius-medium: 12px;
-	--ps-radius-large: 16px;
-	--ps-radius-panel: 18px; /* niri's geometry-corner-radius, like the shell's panels */
-	--ps-radius-full: 999px;
-	--ps-font: "Adwaita Sans", sans-serif;
 	--ps-shadow: rgba(0, 0, 0, 0.28);
-
-	/* Motion.qml: panels bloom open on the spatial curve and snap shut */
-	--ps-spatial: cubic-bezier(0.38, 1.21, 0.22, 1);
-	--ps-accel: cubic-bezier(0.3, 0, 0.8, 0.15);
-	--ps-standard: cubic-bezier(0.2, 0, 0, 1);
-	--ps-micro: 100ms;
-	--ps-short: 160ms;
-	--ps-medium: 250ms;
-	--ps-long: 360ms;
 }
 
-:root[lwtheme-brighttext] {
-	--ps-primary: var(--pshell-primary, oklch(from var(--ps-accent-raw) max(l, 0.72) max(c, 0.08) h));
+:root[lwtheme-brighttext],
+:root[lwtheme-brighttext] > body {
 	--ps-shadow: rgba(0, 0, 0, 0.55);
 }
 
-/* Pywalfox's light mode: it builds its own frame and text, the wallpaper's
-   come through other slots */
-:root[lwtheme]:not([lwtheme-brighttext]) {
-	--ps-bg: var(--tab-text-color-selected, #f0ede5);
-	--ps-fg: var(--toolbarbutton-background-color-hover, #2a261d);
-}
-
-/* the browser reads these two directly; replaced below the root so the
-   palette above still sees Pywalfox's values */
+/* the browser's own uses of the variables the theme carries the roles in */
 :root > body {
+	--lwt-tab-line-color: var(--ps-primary) !important;
+	--chrome-content-separator-color: transparent !important;
+	--lwt-background-tab-separator-color: transparent !important;
+	--toolbarseparator-color: var(--ps-outline) !important;
+	--tabs-navbar-separator-color: transparent !important;
+	--urlbarview-text-color-selected: var(--ps-text) !important;
 	--toolbarbutton-background-color-hover: var(--ps-layer2) !important;
 	--toolbarbutton-background-color-active: var(--ps-layer3) !important;
 	--tab-text-color-selected: var(--ps-text) !important;
 }
 
 /* ── browser tokens ─────────────────────────────────────────────────────── */
-:root {
-	background-color: var(--ps-bg) !important;
+:root > body,
+#mainPopupSet,
+#navigator-toolbox,
+#browser {
 	--toolbox-background-color: var(--ps-bg) !important;
 	--toolbox-background-color-inactive: var(--ps-bg) !important;
 	--toolbox-text-color: var(--ps-text) !important;
@@ -103,8 +165,6 @@
 	--toolbar-bgcolor: var(--ps-bg) !important;
 	--toolbar-text-color: var(--ps-text) !important;
 	--toolbar-color: var(--ps-text) !important;
-	--chrome-content-separator-color: transparent !important;
-	--tabs-navbar-separator-color: transparent !important;
 	--content-area-shadow: none !important;
 
 	--focus-outline-color: var(--ps-primary) !important;
@@ -117,8 +177,9 @@
 	--link-color-active: var(--ps-primary) !important;
 	--tab-attention-dot-color: var(--ps-primary) !important;
 	--toolbarbutton-icon-fill: var(--ps-text) !important;
+	--icon-color: var(--ps-text) !important;
 
-	/* buttons in the toolbars: round, tinted on hover like the bar's pills */
+	/* buttons: round, tinted on hover like the bar's pills */
 	--toolbarbutton-border-radius: var(--ps-radius-full) !important;
 	--toolbarbutton-hover-background: var(--ps-layer2) !important;
 	--toolbarbutton-active-background: var(--ps-layer3) !important;
@@ -131,26 +192,28 @@
 	--button-border-color: transparent !important;
 	--border-color-interactive: var(--ps-outline) !important;
 	--border-color: var(--ps-outline) !important;
+	--border-color-card: var(--ps-outline) !important;
 	--border-color-deemphasized: var(--ps-outline) !important;
 	--text-color-deemphasized: var(--ps-text-muted) !important;
 
 	/* tabs */
-	--tab-border-radius: var(--ps-radius-full) !important;
+	--tab-border-radius: var(--ps-radius-medium) !important;
 	--tab-background-color-hover: var(--ps-layer1) !important;
-	--tab-background-color-selected: var(--ps-layer2) !important;
-	--tab-selected-bgcolor: var(--ps-layer2) !important;
+	--tab-hover-background-color: var(--ps-layer1) !important;
+	--tab-background-color-selected: var(--ps-primary-container) !important;
+	--tab-selected-bgcolor: var(--ps-primary-container) !important;
 	--tab-selected-textcolor: var(--ps-text) !important;
 	--tab-box-shadow-selected: none !important;
+	--tab-selected-shadow: none !important;
 	--tab-border-color-selected: transparent !important;
+	--tab-selected-outline-color: transparent !important;
 	--tab-loading-fill: var(--ps-primary) !important;
+	--tab-icon-fill-loading: var(--ps-primary) !important;
 	--tabstrip-inner-border: 1px solid transparent !important;
 	--tab-close-button-background-color-hover: var(--ps-layer2) !important;
 	--tab-close-button-background-color-active: var(--ps-layer3) !important;
 	--arrowscrollbox-scrollicon-hover-background-color: var(--ps-layer2) !important;
 	--arrowscrollbox-scrollicon-active-background-color: var(--ps-layer3) !important;
-	--urlbarview-background-color-hover: var(--ps-layer1) !important;
-	--urlbarview-background-color-selected: var(--ps-primary-soft) !important;
-	--urlbarview-text-color-selected: var(--ps-text) !important;
 
 	/* address bar: a pill on the bar */
 	--toolbar-field-background-color: var(--ps-layer1) !important;
@@ -164,19 +227,21 @@
 	--urlbar-box-hover-bgcolor: var(--ps-layer3) !important;
 	--urlbar-box-text-color: var(--ps-text) !important;
 	--urlbar-box-hover-text-color: var(--ps-text) !important;
+	--urlbarview-background-color-hover: var(--ps-layer1) !important;
+	--urlbarview-background-color-selected: var(--ps-primary-soft) !important;
 
 	/* menus and panels: the shell's panels, base colour with a faint outline */
 	--panel-background-color: var(--ps-bg) !important;
 	--panel-text-color: var(--ps-text) !important;
 	--panel-border-color: var(--ps-outline) !important;
-	--panel-border-radius: var(--ps-radius-panel) !important;
+	--panel-border-radius: var(--ps-radius-window) !important;
 	--panel-separator-color: var(--ps-outline) !important;
 	--panel-banner-item-background-color: var(--ps-primary-container) !important;
 	--panel-banner-item-hover-bgcolor: var(--ps-primary-container) !important;
 	--arrowpanel-background: var(--ps-bg) !important;
 	--arrowpanel-color: var(--ps-text) !important;
 	--arrowpanel-border-color: var(--ps-outline) !important;
-	--arrowpanel-border-radius: var(--ps-radius-panel) !important;
+	--arrowpanel-border-radius: var(--ps-radius-window) !important;
 	--arrowpanel-dimmed: var(--ps-layer2) !important;
 	--menu-background-color: var(--ps-bg) !important;
 	--menu-color: var(--ps-text) !important;
@@ -193,22 +258,25 @@
 	--lwt-sidebar-background-color: var(--ps-bg) !important;
 	--lwt-sidebar-text-color: var(--ps-text) !important;
 
-	/* new tab page and the browser behind a page that has not painted yet */
+	/* the browser behind a page that has not painted yet */
 	--tabpanel-background-color: var(--ps-bg) !important;
 }
 
 /* ── type ───────────────────────────────────────────────────────────────── */
 #navigator-toolbox,
+#sidebar-main,
 #sidebar-box,
 #panel-sidebar-box,
+#panel-sidebar-select-box,
 #nora-statusbar,
+#tab-preview-panel,
 findbar,
 menupopup,
 panel {
 	font-family: var(--ps-font) !important;
 }
 
-/* ── the bar ────────────────────────────────────────────────────────────── */
+/* ══ the bar ═══════════════════════════════════════════════════════════════ */
 #navigator-toolbox {
 	background-color: var(--ps-bg) !important;
 	color: var(--ps-text) !important;
@@ -224,32 +292,115 @@ panel {
 	box-shadow: none !important;
 }
 
-/* address bar: Firefox builds it from variables scoped to the bar itself */
+#nav-bar {
+	min-height: calc(var(--ps-bar-height) + var(--ps-gap-sm)) !important;
+}
+
+/* the row in the shell's order: the workspace over the rail, the sidebar
+   button, back, forward, reload, the address in the middle, the window
+   buttons, a gap, the extensions and downloads; the app menu stays last.
+   Springs give way to the address's auto margins, which keep it centred
+   between both sides. */
+#nav-bar-customization-target {
+	gap: 2px;
+
+	> * {
+		order: 3;
+	}
+
+	> #workspaces-toolbar-button {
+		order: -10;
+	}
+	> #sidebar-button {
+		order: -9;
+	}
+	> #back-button {
+		order: -8;
+	}
+	> #forward-button {
+		order: -7;
+	}
+	> #stop-reload-button,
+	> :is(#reload-button, #stop-button) {
+		order: -6;
+	}
+	> #urlbar-container {
+		order: 0;
+		margin-inline: auto !important;
+	}
+	> :is(#new-window-button, #privatebrowsing-button, #smartwindow-group-tabs-button, #ai-window-toggle,
+		#alltabs-button, #firefox-view-button, #undo-closed-tab, #profile-manager-button, #fxa-toolbar-menu-button,
+		#new-tab-button, #home-button, #sidebar-reverse-position-toolbar, #screenshot-button, #fullscreen-button) {
+		order: 1;
+	}
+	/* the gap between the window buttons and the extensions */
+	&::after {
+		content: "";
+		order: 2;
+		width: var(--ps-gap-md);
+	}
+
+	> toolbarspring {
+		order: 4;
+		flex: 0 0 0 !important;
+		min-width: 0 !important;
+		max-width: 0 !important;
+	}
+	> #vertical-spacer {
+		order: 4;
+	}
+}
+
+/* the address: a pill in the middle of the bar */
+#urlbar-container {
+	width: clamp(320px, 42vw, 640px) !important;
+	max-width: 640px !important;
+	flex: 0 1 auto !important;
+}
+
 .urlbar,
 #searchbar {
 	--urlbarview-border-radius: var(--ps-radius-large) !important;
 	--urlbar-background-color: var(--ps-layer1) !important;
 	--urlbar-background-color-focus: var(--ps-layer2) !important;
-	--toolbar-field-border-color: var(--ps-outline) !important;
-	--toolbar-field-border-color-focus: var(--ps-primary) !important;
+	--toolbar-field-border-color: transparent !important;
+	--toolbar-field-border-color-focus: transparent !important;
 	--urlbar-background-outline-focused: none !important;
-	--urlbar-background-border-focused: 1.5px solid var(--ps-primary) !important;
+	--urlbar-background-border-focused: 1.5px solid color-mix(in srgb, var(--ps-primary) 55%, transparent) !important;
 	--urlbar-background-border-open: 1px solid var(--ps-outline) !important;
-	--urlbar-background-box-shadow-open: 0 12px 32px var(--ps-shadow) !important;
+	--urlbar-background-box-shadow-open: 0 18px 40px var(--ps-shadow) !important;
 	--urlbarview-background-color-selected: var(--ps-primary-soft) !important;
 	--urlbarview-text-color-selected: var(--ps-text) !important;
 }
 
 .urlbar-background {
+	border-radius: var(--ps-radius-full) !important;
 	transition: background-color var(--ps-short) var(--ps-standard),
-		border-color var(--ps-short) var(--ps-standard) !important;
+		border-color var(--ps-short) var(--ps-standard),
+		border-radius var(--ps-medium) var(--ps-standard) !important;
 }
 
-#urlbar ::selection,
-#searchbar ::selection,
-findbar ::selection {
-	background-color: var(--ps-primary) !important;
-	color: var(--ps-on-primary) !important;
+/* open, the pill grows into a panel of the shell */
+#urlbar[open] > .urlbar-background,
+.urlbar[open] > .urlbar-background {
+	border-radius: var(--ps-radius-window) !important;
+	background-color: var(--ps-layer2) !important;
+}
+
+#urlbar[open] .urlbarView,
+.urlbar[open] .urlbarView {
+	transform-origin: top center;
+
+	@media not (prefers-reduced-motion) {
+		animation: ps-bloom var(--ps-long) var(--ps-spatial);
+	}
+}
+
+@keyframes ps-bloom {
+	from {
+		opacity: 0;
+		transform: scaleY(0.92) translateY(-6px);
+	}
 }
 
 .urlbarView-row {
@@ -261,63 +412,16 @@ findbar ::selection {
 	color: var(--ps-text) !important;
 }
 
-/* tabs: pills on the bar; the selected one gets the shell's focus mark,
-   a short accent line under it */
-.tabbrowser-tab {
-	color: var(--ps-text-muted) !important;
+#urlbar ::selection,
+#searchbar ::selection,
+findbar ::selection {
+	background-color: var(--ps-primary) !important;
+	color: var(--ps-on-primary) !important;
 }
 
-.tabbrowser-tab[selected],
-.tabbrowser-tab[multiselected],
-.tabbrowser-tab:is([selected], [multiselected]) .tab-label {
-	color: var(--ps-text) !important;
-}
-
-.tab-background {
+/* the search engines under the results: chips */
+.search-one-offs .searchbar-engine-one-off-item {
 	border-radius: var(--ps-radius-full) !important;
-	box-shadow: none !important;
-	outline: none !important;
-	/* the focus mark grows from the middle like the bar's (spatial curve) */
-	background-image: linear-gradient(var(--ps-primary), var(--ps-primary)) !important;
-	background-size: 0 2px !important;
-	background-position: 50% calc(100% - 2px) !important;
-	background-repeat: no-repeat !important;
-	transition: background-color var(--ps-short) var(--ps-standard),
-		background-size var(--ps-long) var(--ps-spatial) !important;
-}
-
-.tabbrowser-tab:not([selected], [multiselected]) > .tab-stack > .tab-background {
-	background-color: transparent !important;
-}
-
-.tabbrowser-tab:not([selected], [multiselected]):hover > .tab-stack > .tab-background {
-	background-color: var(--ps-layer1) !important;
-}
-
-.tabbrowser-tab:is([selected], [multiselected]) > .tab-stack > .tab-background {
-	background-color: var(--ps-layer2) !important;
-}
-
-.tabbrowser-tab[selected] > .tab-stack > .tab-background {
-	background-size: 16px 2px !important;
-}
-
-.tabbrowser-tab[multiselected]:not([selected]) > .tab-stack > .tab-background {
-	background-color: var(--ps-primary-soft) !important;
-}
-
-.tab-throbber[busy]::before,
-.tab-throbber[progress]::before {
-	fill: var(--ps-primary) !important;
-}
-
-.tab-close-button {
-	border-radius: var(--ps-radius-full) !important;
-}
-
-/* the hairlines between tabs: the bar separates by spacing, not lines */
-.tabbrowser-tab > .tab-stack::before {
-	background-color: transparent !important;
 }
 
 /* toolbar buttons */
@@ -338,29 +442,806 @@ toolbarbutton[open] > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
 	box-shadow: none !important;
 }
 
-/* bookmarks */
+/* Floorp's workspace: a pill over the rail like the shell's workspace
+   indicator – the workspace's icon in an accent chip, its name, and the
+   fold that says it opens the list */
+#workspaces-toolbar-button {
+	/* the chip's middle over the rail's column of icons (the gutter and the
+	   middle of the rail's 58px, less the chip's half and the pill's inset) */
+	margin-inline: calc(var(--ps-rail-gutter) + 29px - 16px - 3px) var(--ps-gap-sm) !important;
+	padding: 3px 10px 3px 3px !important;
+	border-radius: var(--ps-radius-full) !important;
+	background-color: var(--ps-layer1) !important;
+	transition: background-color var(--ps-short) var(--ps-standard) !important;
+
+	> :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
+		width: 32px !important;
+		height: 32px !important;
+		padding: 7px !important;
+		background-color: var(--ps-primary-container) !important;
+		fill: var(--ps-primary) !important;
+		border-radius: var(--ps-radius-full) !important;
+	}
+
+	> .toolbarbutton-text {
+		font-weight: 600 !important;
+		padding-inline: 8px 0 !important;
+		background: none !important;
+	}
+
+	&::after {
+		content: "";
+		width: 12px;
+		height: 12px;
+		margin-inline-start: 6px;
+		align-self: center;
+		background-color: currentColor;
+		mask: url("chrome://global/skin/icons/arrow-down.svg") center / contain no-repeat;
+		opacity: 0.6;
+		transition: rotate var(--ps-medium) var(--ps-standard);
+	}
+
+	&:hover {
+		background-color: var(--ps-layer2) !important;
+	}
+
+	&[open] {
+		background-color: var(--ps-layer3) !important;
+
+		&::after {
+			rotate: 180deg;
+		}
+	}
+}
+
+/* a workspace with a container: Floorp's bar beside it becomes a ring around
+   its icon in the container's colour (the button and the list alike) */
+:is(#workspaces-toolbar-button, .workspaceButton) {
+	&[data-has-container="true"] {
+		border-inline-start: none !important;
+		border-left: none !important;
+
+		> :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
+			box-shadow: inset 0 0 0 1.5px var(--ps-ws-container, var(--ps-outline)) !important;
+		}
+	}
+	&[data-container-color="blue"] { --ps-ws-container: #37adff; }
+	&[data-container-color="turquoise"] { --ps-ws-container: #00c79a; }
+	&[data-container-color="green"] { --ps-ws-container: #51cd00; }
+	&[data-container-color="yellow"] { --ps-ws-container: #ffcb00; }
+	&[data-container-color="orange"] { --ps-ws-container: #ff9f00; }
+	&[data-container-color="red"] { --ps-ws-container: #ff613d; }
+	&[data-container-color="pink"] { --ps-ws-container: #ff4bda; }
+	&[data-container-color="purple"] { --ps-ws-container: #af51f5; }
+	&[data-container-color="toolbar"] { --ps-ws-container: var(--ps-text-muted); }
+}
+
+/* the list grows out of the toolbar like the shell's popouts out of its bar:
+   flush under it, the toolbar's colour, inverted corners where they meet
+   (a user sheet cannot reach the panel's ::part(content), only its variables) */
+#customizationui-widget-panel[viewId="workspacesToolbarButtonPanel"] {
+	--ps-fillet: var(--ps-radius-window);
+	--panel-border-color: transparent !important;
+	--panel-border-radius: 0px !important;
+	--panel-box-shadow: none !important;
+	--panel-background-color:
+		radial-gradient(circle at 0 100%, transparent var(--ps-fillet), var(--ps-bg) calc(var(--ps-fillet) + 0.5px)) left top / var(--ps-fillet) var(--ps-fillet) no-repeat,
+		radial-gradient(circle at 100% 100%, transparent var(--ps-fillet), var(--ps-bg) calc(var(--ps-fillet) + 0.5px)) right top / var(--ps-fillet) var(--ps-fillet) no-repeat !important;
+	margin-top: 1px !important;
+	margin-inline-start: calc(-4px - var(--ps-fillet)) !important;
+
+	panelmultiview {
+		padding-inline: var(--ps-fillet) !important;
+	}
+
+	.panel-viewcontainer {
+		background-color: var(--ps-bg) !important;
+		border-radius: 0 0 var(--ps-radius-window) var(--ps-radius-window) !important;
+	}
+}
+
+/* the list of workspaces: rows like the shell's, the one worn in the accent */
+#workspacesToolbarButtonPanelBox {
+	padding: var(--ps-gap-xs) !important;
+}
+
+.workspaceButton {
+	margin: 1px 0 !important;
+	padding: 5px 12px 5px 5px !important;
+	border-radius: var(--ps-radius-medium) !important;
+	background-color: transparent !important;
+	color: var(--ps-text-muted) !important;
+	transition: background-color var(--ps-short) var(--ps-standard) !important;
+
+	> .workspaceButtonIcon {
+		width: 32px !important;
+		height: 32px !important;
+		padding: 7px !important;
+		margin-inline-end: 4px !important;
+		border-radius: var(--ps-radius-full) !important;
+		background-color: var(--ps-layer2) !important;
+	}
+
+	&:hover {
+		background-color: var(--ps-layer1) !important;
+		color: var(--ps-text) !important;
+	}
+
+	&[data-selected="true"] {
+		background-color: var(--ps-primary-container) !important;
+		color: var(--ps-text) !important;
+
+		> .workspaceButtonIcon {
+			background-color: color-mix(in srgb, var(--ps-primary) 28%, var(--ps-bg)) !important;
+		}
+
+		.workspace-name {
+			font-weight: 600 !important;
+		}
+	}
+}
+
+#workspacesPopupSeparator {
+	border-color: var(--ps-outline) !important;
+	margin-inline: var(--ps-gap-sm) !important;
+}
+
+#workspacesPopupFooter toolbarbutton {
+	border-radius: var(--ps-radius-medium) !important;
+	color: var(--ps-text-muted) !important;
+
+	&:hover {
+		background-color: var(--ps-layer1) !important;
+		color: var(--ps-text) !important;
+	}
+}
+
+/* the bookmarks: chips in the middle under the address */
+#PersonalToolbar {
+	padding-block: 0 var(--ps-gap-xs) !important;
+	min-height: 28px !important;
+}
+
+#PlacesToolbar,
+#personal-toolbar-empty {
+	flex: 1 1 auto !important;
+}
+
+#PlacesToolbarItems,
+#personal-toolbar-empty {
+	justify-content: center !important;
+}
+
+#personal-toolbar-empty-description {
+	margin-inline: auto !important;
+	color: var(--ps-text-subtle) !important;
+}
+
+#personal-bookmarks {
+	flex: 1 1 auto !important;
+}
+
 #PersonalToolbar toolbarbutton.bookmark-item {
+	border-radius: var(--ps-radius-full) !important;
+	padding: 3px 9px 3px 6px !important;
+	margin-inline: 1px !important;
+	color: var(--ps-text-muted) !important;
+
+	&:hover,
+	&[open] {
+		background-color: var(--ps-layer2) !important;
+		color: var(--ps-text) !important;
+	}
+}
+
+/* ══ the rail ══════════════════════════════════════════════════════════════ */
+#sidebar-main,
+#sidebar-container,
+#vertical-tabs,
+#tabbrowser-tabs[orient="vertical"] {
+	background-color: var(--ps-bg) !important;
+	color: var(--ps-text) !important;
+}
+
+#sidebar-launcher-splitter {
+	background: transparent !important;
+	border: none !important;
+}
+
+/* expanded over the page, the rail casts the shadow of a shell panel */
+:root[sidebar-expand-on-hover] #sidebar-container {
+	border: none !important;
+	background-image: none !important;
+	background-color: var(--ps-bg) !important;
+	transition: box-shadow var(--ps-medium) var(--ps-standard) !important;
+
+	/* open, it reaches over the page with the shell bar's inverted corners:
+	   where it meets the bar above and the window's foot, its edge curves into
+	   them (the corners are drawn beside it; the shadow follows their shape) */
+	&:is([sidebar-launcher-expanded], [sidebar-ongoing-animations]) {
+		border-radius: 0 !important;
+		box-shadow: none !important;
+		/* Firefox slides it in with translate and moves its content the other
+		   way, so the titles must be cut at its edge (only the corners, drawn
+		   beside it, may lie past it) */
+		overflow: clip !important;
+		overflow-clip-margin: var(--ps-radius-window);
+		filter: drop-shadow(8px 0 14px var(--ps-shadow));
+
+		&::before,
+		&::after {
+			content: "";
+			position: absolute;
+			inset-inline-start: 100%;
+			width: var(--ps-radius-window);
+			height: var(--ps-radius-window);
+			pointer-events: none;
+		}
+		&::before {
+			top: 0;
+			background: radial-gradient(circle at 100% 100%, transparent var(--ps-radius-window), var(--ps-bg) calc(var(--ps-radius-window) + 0.5px));
+		}
+		&::after {
+			bottom: 0;
+			background: radial-gradient(circle at 100% 0, transparent var(--ps-radius-window), var(--ps-bg) calc(var(--ps-radius-window) + 0.5px));
+		}
+	}
+
+	/* wide enough for the titles (Firefox keeps the width last dragged to;
+	   wider stays possible); with the extension's chrome part the width
+	   from Settings › Browser › Tabs is set instead */
+	:root:not([pshell-rail]) &[sidebar-launcher-expanded] {
+		min-width: 300px !important;
+	}
+}
+
+/* the titles come in after the rail has opened */
+#tabbrowser-tabs[orient="vertical"][expanded] .tabbrowser-tab .tab-label-container,
+#tabbrowser-tabs[orient="vertical"][expanded] .tab-group-label {
+	transition: opacity var(--ps-medium) var(--ps-standard) var(--ps-micro);
+
+	@starting-style {
+		opacity: 0;
+	}
+}
+
+/* tabs */
+#tabbrowser-tabs[orient="vertical"] {
+	--tab-min-height: 34px !important;
+	--tab-block-margin: 2px !important;
+}
+
+.tabbrowser-tab {
+	color: var(--ps-text-muted) !important;
+
+	&:is([selected], [multiselected]) {
+		color: var(--ps-text) !important;
+	}
+
+	&:hover {
+		color: var(--ps-text) !important;
+	}
+}
+
+.tab-background {
+	border-radius: var(--ps-radius-medium) !important;
+	box-shadow: none !important;
+	transition: background-color var(--ps-short) var(--ps-standard) !important;
+}
+
+.tabbrowser-tab:not([selected], [multiselected]) > .tab-stack > .tab-background {
+	background-color: transparent !important;
+}
+
+.tabbrowser-tab:not([selected], [multiselected]):hover > .tab-stack > .tab-background {
+	background-color: var(--ps-layer1) !important;
+}
+
+.tabbrowser-tab:is([selected], [multiselected]) > .tab-stack > .tab-background {
+	background-color: var(--ps-primary-container) !important;
+}
+
+.tabbrowser-tab[multiselected]:not([selected]) > .tab-stack > .tab-background {
+	background-color: var(--ps-primary-soft) !important;
+}
+
+/* the shell's focus mark: in the rail a short bar at the tab's start that
+   grows out of its middle; on a horizontal strip a line under it */
+.tabbrowser-tab > .tab-stack > .tab-background {
+	background-image: linear-gradient(var(--ps-primary), var(--ps-primary)) !important;
+	background-repeat: no-repeat !important;
+	transition: background-color var(--ps-short) var(--ps-standard),
+		background-size var(--ps-long) var(--ps-spatial) !important;
+}
+
+#tabbrowser-tabs[orient="vertical"] .tabbrowser-tab > .tab-stack > .tab-background {
+	background-size: 3px 0 !important;
+	background-position: 0 50% !important;
+}
+
+#tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[selected] > .tab-stack > .tab-background {
+	background-size: 3px 16px !important;
+}
+
+#tabbrowser-tabs[orient="horizontal"] .tabbrowser-tab > .tab-stack > .tab-background {
+	background-size: 0 2px !important;
+	background-position: 50% calc(100% - 2px) !important;
+}
+
+#tabbrowser-tabs[orient="horizontal"] .tabbrowser-tab[selected] > .tab-stack > .tab-background {
+	background-size: 16px 2px !important;
+}
+
+.tab-throbber[busy]::before,
+.tab-throbber[progress]::before {
+	fill: var(--ps-primary) !important;
+}
+
+.tab-close-button {
 	border-radius: var(--ps-radius-full) !important;
 }
 
-/* ── the page: a panel of the shell, with its corners ─────────────────── */
+.tab-icon-image {
+	border-radius: 4px;
+}
+
+/* the hairlines between tabs: the shell separates by spacing, not lines */
+.tabbrowser-tab > .tab-stack::before {
+	background-color: transparent !important;
+}
+
+/* a margin between the window's edge and the rail: the rail opens by where
+   the pointer was last seen in the window, and under Wayland that stays
+   where it left – a rail flush with the edge opened whenever the pointer
+   left the window across it */
+:root {
+	--ps-rail-gutter: 24px;
+}
+
+:root:not([sidebar-positionend]) sidebar-main {
+	margin-inline-start: var(--ps-rail-gutter) !important;
+}
+
+/* pinned tabs at the top of the rail: a grid of pills */
+#vertical-pinned-tabs-container {
+	border-bottom: none !important;
+	padding-block-end: var(--ps-gap-xs) !important;
+}
+
+#vertical-pinned-tabs-container-separator {
+	background: var(--ps-outline) !important;
+	border: none !important;
+}
+
+/* open, the pinned tabs are icons side by side, wrapping – in every rail
+   style (Firefox lays them out so only when the rail does not open on hover);
+   the row itself is in the extension's chrome.css, a user sheet cannot reach
+   ::part() */
+#tabbrowser-tabs[orient="vertical"][expanded] > #pinned-tabs-container {
+	.tabbrowser-tab {
+		flex: none !important;
+		width: 36px !important;
+		min-width: 36px !important;
+		max-width: 36px !important;
+		padding: 0 !important;
+		margin: 0 !important;
+	}
+
+	.tab-background {
+		margin: 0 !important;
+	}
+
+	.tabbrowser-tab:not([selected], [multiselected], :hover) > .tab-stack > .tab-background {
+		background-color: color-mix(in srgb, currentColor 7%, transparent) !important;
+	}
+
+	.tab-content {
+		justify-content: center !important;
+		padding-inline: 0 !important;
+	}
+
+	.tab-label-container,
+	.tab-close-button,
+	.tab-secondary-label {
+		display: none !important;
+	}
+}
+
+/* collapsed, a pinned tab's icon sits in the same column as every other */
+#tabbrowser-tabs[orient="vertical"]:not([expanded]) #pinned-tabs-container .tabbrowser-tab > .tab-stack > .tab-content {
+	padding-inline-start: 21px !important;
+}
+
+/* the line under the pinned tabs: a hairline as wide as a tab's pill */
+#vertical-pinned-tabs-splitter {
+	background: var(--ps-outline) !important;
+	min-height: 1px !important;
+	max-height: 1px !important;
+	margin-block: var(--ps-gap-xs) !important;
+	margin-inline: 11px !important;
+}
+
+#tabbrowser-tabs[orient="vertical"]:not([expanded]) #vertical-pinned-tabs-splitter {
+	max-width: 36px !important;
+}
+
+/* a container: a dot at the icon's lower corner instead of a line under the
+   tab; it hangs on the icon, so it is in its place collapsed and open */
+#tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[usercontextid] > .tab-stack > .tab-content::before {
+	display: none !important;
+}
+
+#tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[usercontextid] .tab-icon-stack::after {
+	content: "";
+	grid-area: 1 / 1;
+	justify-self: end;
+	align-self: end;
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background-color: var(--identity-tab-color);
+	box-shadow: 0 0 0 1.5px var(--ps-bg);
+	translate: 2px 2px;
+	pointer-events: none;
+}
+
+/* something new in a tab: a dot at the icon's upper corner (Firefox measures
+   it from the tab's start, which lands under the title in the open rail) */
+#tabbrowser-tabs[orient="vertical"] .tabbrowser-tab > .tab-stack > .tab-content:is([attention], [titlechanged]):not([selected]) {
+	background-image: radial-gradient(circle at 18px 3px, var(--ps-primary) 3px, transparent 3.5px) !important;
+	background-origin: content-box !important;
+	background-size: 22px 22px !important;
+	background-position: -3px center !important;
+	background-repeat: no-repeat !important;
+}
+
+/* the new tab button at the end of the tabs */
+#tabs-newtab-button,
+#vertical-tabs-newtab-button {
+	border-radius: var(--ps-radius-medium) !important;
+	color: var(--ps-text-muted) !important;
+
+	&:hover {
+		background-color: var(--ps-layer1) !important;
+		color: var(--ps-text) !important;
+	}
+}
+
+/* ── tab groups ─────────────────────────────────────────────────────────── */
+/* the group's colour comes from Firefox (--tab-group-color, light on a dark
+   theme); its header is a chip tinted with it */
+tab-group {
+	--ps-group: var(--tab-group-color);
+	--tab-group-line-thickness: 2px;
+	--tab-group-line-color: color-mix(in srgb, var(--ps-group) 75%, transparent) !important;
+}
+
+.tab-group-label {
+	color: var(--ps-group) !important;
+	background-color: color-mix(in srgb, var(--ps-group) 22%, var(--ps-bg)) !important;
+	border-radius: var(--ps-radius-small) !important;
+	font-weight: 600 !important;
+	text-shadow: none !important;
+	transition: background-color var(--ps-short) var(--ps-standard),
+		border-radius var(--ps-medium) var(--ps-standard) !important;
+}
+
+.tab-group-label-hover-highlight {
+	border-radius: var(--ps-radius-medium) !important;
+}
+
+#tabbrowser-tabs[orient="vertical"][expanded] .tab-group-label {
+	text-align: start !important;
+	max-width: none !important;
+	padding-inline: var(--ps-gap-sm) 34px !important;
+}
+
+/* a closed group: a folder chip, ringed in its colour, with how many tabs it
+   holds (counted with :has: the tabs of a closed group are not drawn, so a
+   counter would not see them; the badge hangs on the label's highlight, the
+   label itself clips what it holds) */
+tab-group[collapsed] > .tab-group-label-container .tab-group-label {
+	background-color: color-mix(in srgb, var(--ps-group) 14%, var(--ps-bg)) !important;
+	box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ps-group) 70%, transparent) !important;
+	color: var(--ps-group) !important;
+}
+
+.tab-group-label-hover-highlight {
+	position: relative !important;
+}
+
+tab-group .tab-group-label-hover-highlight::after {
+	position: absolute;
+	z-index: 2;
+	min-width: 15px;
+	height: 15px;
+	padding-inline: 3px;
+	box-sizing: border-box;
+	border-radius: var(--ps-radius-full);
+	background-color: var(--ps-group);
+	color: var(--ps-bg);
+	font-size: 9.5px;
+	font-weight: 700;
+	line-height: 15px;
+	text-align: center;
+	box-shadow: 0 0 0 2px var(--ps-bg);
+	pointer-events: none;
+}
+
+#tabbrowser-tabs[orient="vertical"]:not([expanded]) tab-group .tab-group-label-hover-highlight::after {
+	inset-inline-start: calc(50% + 2px);
+	inset-block-end: -5px;
+}
+
+#tabbrowser-tabs[orient="vertical"][expanded] tab-group .tab-group-label-hover-highlight::after {
+	inset-inline-end: 8px;
+	inset-block-start: 50%;
+	margin-top: -7.5px;
+	background-color: color-mix(in srgb, var(--ps-group) 30%, var(--ps-bg));
+	color: var(--ps-group);
+	box-shadow: none;
+}
+
+tab-group:has(> tab:nth-of-type(1)) .tab-group-label-hover-highlight::after { content: "1"; }
+tab-group:has(> tab:nth-of-type(2)) .tab-group-label-hover-highlight::after { content: "2"; }
+tab-group:has(> tab:nth-of-type(3)) .tab-group-label-hover-highlight::after { content: "3"; }
+tab-group:has(> tab:nth-of-type(4)) .tab-group-label-hover-highlight::after { content: "4"; }
+tab-group:has(> tab:nth-of-type(5)) .tab-group-label-hover-highlight::after { content: "5"; }
+tab-group:has(> tab:nth-of-type(6)) .tab-group-label-hover-highlight::after { content: "6"; }
+tab-group:has(> tab:nth-of-type(7)) .tab-group-label-hover-highlight::after { content: "7"; }
+tab-group:has(> tab:nth-of-type(8)) .tab-group-label-hover-highlight::after { content: "8"; }
+tab-group:has(> tab:nth-of-type(9)) .tab-group-label-hover-highlight::after { content: "9"; }
+tab-group:has(> tab:nth-of-type(10)) .tab-group-label-hover-highlight::after { content: "9+"; }
+
+/* an open group shows its count only in the expanded rail */
+#tabbrowser-tabs[orient="vertical"]:not([expanded]) tab-group:not([collapsed]) .tab-group-label-hover-highlight::after {
+	content: none;
+}
+
+/* the tabs of an open group: a faint wash of its colour under the line
+   (not in the collapsed rail, where a pill around some icons and not the
+   others reads as a selection) */
+#tabbrowser-tabs:is([orient="horizontal"], [expanded]) tab-group:not([collapsed]) > .tabbrowser-tab:not([selected], [multiselected]) > .tab-stack > .tab-background {
+	background-color: color-mix(in srgb, var(--ps-group) 6%, transparent) !important;
+}
+
+.tab-group-line {
+	border-radius: 2px !important;
+}
+
+/* the line runs at the rail's edge for every tab of the group alike (the
+   browser places it against a different box for the selected tab) */
+#tabbrowser-tabs[orient="vertical"] .tab-background {
+	position: relative !important;
+}
+
+#tabbrowser-tabs[orient="vertical"] .tab-group-line {
+	inset-inline: -7px auto !important;
+}
+
+.tab-group-overflow-count {
+	color: var(--ps-group) !important;
+	font-weight: 600 !important;
+}
+
+/* ══ the page: a panel of the shell ═══════════════════════════════════════ */
 #browser,
 #tabbrowser-tabbox,
 #tabbrowser-tabpanels {
 	background-color: var(--ps-bg) !important;
 }
 
-/* the page sits under the bar like the desktop under the shell's bar: its
-   top corners are rounded, so the bar's colour curves down into them (the
-   shell's inverted screen corners). The sides and bottom stay flush; niri
-   rounds the window there. Each pane of a split view gets its own. */
+/* inset from the window's edges; the rail is its left neighbour */
+#tabbrowser-tabbox {
+	margin-block-end: var(--ps-inset) !important;
+	margin-inline-end: var(--ps-inset) !important;
+	box-shadow: none !important;
+	outline: none !important;
+	border: none !important;
+}
+
+#tabbrowser-tabbox,
+#tabbrowser-tabpanels,
+.browserSidebarContainer,
+.browserContainer,
 .browserStack {
-	border-start-start-radius: var(--ps-radius-panel) !important;
-	border-start-end-radius: var(--ps-radius-panel) !important;
+	border-radius: var(--ps-radius-window) !important;
+}
+
+.browserContainer,
+.browserStack {
 	overflow: clip !important;
 }
 
-/* ── menus ──────────────────────────────────────────────────────────────── */
+/* the panel's frame, where split view puts two pages side by side */
+.browserSidebarContainer {
+	outline: none !important;
+	box-shadow: none !important;
+}
+
+/* ══ Floorp's panel sidebar, in the rail ═══════════════════════════════════ */
+/* its buttons sit at the foot of the rail, its panel opens beside the rail:
+   the browser row becomes a grid whose first column holds the rail over the
+   buttons (with vertical tabs only) */
+:root:has(#tabbrowser-tabs[orient="vertical"]) #browser {
+	display: grid !important;
+	/* the first column keeps the collapsed rail's width (Firefox measures it)
+	   while the rail is open over the page */
+	grid-template-columns: minmax(var(--sidebar-launcher-collapsed-width, 0px), max-content) auto auto auto auto auto minmax(0, 1fr) auto auto !important;
+	grid-template-rows: minmax(0, 1fr) auto !important;
+
+	> * {
+		grid-row: 1 / span 2;
+	}
+	> #sidebar-container {
+		grid-column: 1;
+		grid-row: 1;
+		min-height: 0;
+
+		/* open over the page: out of the grid's flow, from the row's start
+		   (only while it opens on hover; always open it takes its column) */
+		:root[sidebar-expand-on-hover] &:is([sidebar-launcher-expanded], [sidebar-ongoing-animations]) {
+			grid-column: 1 / -1;
+			inset-inline: 0 auto !important;
+		}
+	}
+	/* the column already keeps the rail's room; Firefox's margin for it would
+	   count it twice */
+	> :is(#tabbrowser-tabbox, #sidebar-box) {
+		margin-inline-start: 0 !important;
+	}
+	> #panel-sidebar-select-box {
+		grid-column: 1;
+		grid-row: 2;
+	}
+	> #sidebar-launcher-splitter { grid-column: 2; }
+	> #sidebar-box { grid-column: 3; }
+	> #sidebar-splitter { grid-column: 4; }
+	> #panel-sidebar-box { grid-column: 5; }
+	> #panel-sidebar-splitter { grid-column: 6; }
+	> #tabbrowser-tabbox { grid-column: 7; }
+	> #ai-window-splitter { grid-column: 8; }
+	> #ai-window-box { grid-column: 9; }
+
+	/* Firefox hides these with visibility: collapse, which only a flex row
+	   honours */
+	> :is([collapsed="true"], [hidden="true"]) {
+		display: none !important;
+	}
+}
+
+:root:has(#tabbrowser-tabs[orient="vertical"]) #panel-sidebar-select-box {
+	/* as wide as the rail, so its buttons stand in the column of the tabs */
+	width: auto !important;
+	justify-self: stretch !important;
+	max-width: none !important;
+	/* the collapsed rail's width: it holds the column while the rail is open
+	   over the page, so the page does not move */
+	min-width: 58px !important;
+	align-items: center !important;
+	padding-block: var(--ps-gap-xs) var(--ps-inset) !important;
+	padding-inline: 0 !important;
+	margin-inline-start: var(--ps-rail-gutter) !important;
+
+	/* a hairline over the buttons, like the one under the pinned tabs */
+	border-top: 1px solid var(--ps-outline) !important;
+
+	> spacer {
+		display: none !important;
+	}
+}
+
+/* the rail open for good (not over the page): the buttons as rows across
+   it, so that they do not take the tabs' height */
+:root:not([sidebar-expand-on-hover]):has(#tabbrowser-tabs[orient="vertical"][expanded]) #panel-sidebar-select-box {
+	flex-direction: row !important;
+	flex-wrap: wrap !important;
+	justify-content: flex-start !important;
+	align-items: center !important;
+	align-content: flex-start !important;
+	gap: 2px !important;
+	padding-inline: var(--ps-gap-sm) !important;
+	/* its row must not widen the rail's column: it wraps within it */
+	contain: inline-size;
+	min-width: 0 !important;
+
+	> #panel-sidebar-bottomButtonBox {
+		flex-direction: row !important;
+		align-items: center !important;
+		margin-inline-start: auto !important;
+	}
+}
+
+:root:has(#tabbrowser-tabs[orient="vertical"]) #panel-sidebar-box {
+	margin-inline: 0 !important;
+}
+#panel-sidebar-select-box,
+#panel-sidebar-box,
+#panel-sidebar-header {
+	background-color: var(--ps-bg) !important;
+	color: var(--ps-text) !important;
+	border-color: transparent !important;
+}
+
+#panel-sidebar-select-box {
+	padding-inline: var(--ps-gap-xs) !important;
+	gap: 2px;
+}
+
+#panel-sidebar-box {
+	margin-block-end: var(--ps-inset) !important;
+	margin-inline-end: var(--ps-inset) !important;
+}
+
+#panel-sidebar-browser-box,
+#panel-sidebar-box browser {
+	border-radius: var(--ps-radius-window) !important;
+	overflow: clip !important;
+}
+
+/* its panel buttons; a container's colour mark (inline border) stays */
+#panel-sidebar-select-box :is(toolbarbutton, .panel-sidebar-panel) {
+	border-radius: var(--ps-radius-medium) !important;
+}
+
+#panel-sidebar-select-box :is(toolbarbutton, .panel-sidebar-panel):hover {
+	background-color: var(--ps-layer1) !important;
+}
+
+#panel-sidebar-select-box :is(toolbarbutton[checked], .panel-sidebar-panel[data-checked="true"]) {
+	background-color: var(--ps-primary-container) !important;
+}
+
+#panel-sidebar-splitter {
+	background-color: transparent !important;
+	border: none !important;
+}
+
+/* Firefox's own sidebar (bookmarks, history, …), opened from the rail */
+#sidebar-box,
+#sidebar-header {
+	background-color: var(--ps-bg) !important;
+	color: var(--ps-text) !important;
+	border-color: transparent !important;
+}
+
+#sidebar {
+	border-radius: var(--ps-radius-window) !important;
+	box-shadow: none !important;
+	outline: none !important;
+}
+
+#sidebar-splitter {
+	background: transparent !important;
+	border: none !important;
+}
+
+/* ══ the tab's card ════════════════════════════════════════════════════════ */
+#tab-preview-panel {
+	--panel-width: 290px !important;
+	--panel-padding: var(--ps-gap-sm) !important;
+	--panel-border-radius: var(--ps-radius-window) !important;
+	--panel-background-color: var(--ps-layer2) !important;
+	--panel-border-color: var(--ps-outline) !important;
+	--text-color-deemphasized: var(--ps-text-muted) !important;
+}
+
+.tab-preview-thumbnail-container {
+	border-radius: var(--ps-radius-medium) !important;
+	overflow: clip !important;
+	background-color: var(--ps-bg) !important;
+}
+
+.tab-preview-title {
+	color: var(--ps-text) !important;
+	font-weight: 600 !important;
+}
+
+.tab-preview-uri {
+	color: var(--ps-text-muted) !important;
+}
+
+/* ══ menus ═════════════════════════════════════════════════════════════════ */
 /* popups set their colours on themselves (the GTK theme's Menu colour by
    default), so the root's values never reach them */
 menupopup,
@@ -424,9 +1305,9 @@ menuitem[type="radio"][checked] > .menu-icon {
 	color: var(--ps-primary) !important;
 }
 
-/* ── panels (app menu, extensions, downloads, …) ─────────────────────────── */
+/* ── panels (app menu, extensions, downloads, workspaces, …) ─────────────── */
 panel {
-	--panel-border-radius: var(--ps-radius-panel) !important;
+	--panel-border-radius: var(--ps-radius-window) !important;
 }
 
 panelview .toolbarbutton-1,
@@ -462,46 +1343,11 @@ button.primary:hover {
 	background-color: var(--color-accent-primary-hover) !important;
 }
 
-/* ── sidebars ───────────────────────────────────────────────────────────── */
-#sidebar-box,
-#sidebar-header,
-#sidebar-main,
-#sidebar-splitter {
-	background-color: var(--ps-bg) !important;
-	color: var(--ps-text) !important;
-	border-color: transparent !important;
-}
-
-/* Floorp's panel sidebar: the icon rail like the shell's rail of pills */
-#panel-sidebar-select-box,
-#panel-sidebar-box,
-#panel-sidebar-header {
-	background-color: var(--ps-bg) !important;
-	color: var(--ps-text) !important;
-	border-color: transparent !important;
-}
-
-#panel-sidebar-browser-box {
-	border-radius: var(--ps-radius-panel) !important;
-	overflow: clip !important;
-}
-
-/* its panel buttons; a container's colour mark (inline border) stays */
-#panel-sidebar-select-box :is(toolbarbutton, .panel-sidebar-panel) {
-	border-radius: var(--ps-radius-full) !important;
-}
-
-#panel-sidebar-select-box :is(toolbarbutton, .panel-sidebar-panel):hover {
-	background-color: var(--ps-layer2) !important;
-}
-
-#panel-sidebar-select-box :is(toolbarbutton[checked], .panel-sidebar-panel[data-checked="true"]) {
-	background-color: var(--ps-primary-soft) !important;
-}
-
-#panel-sidebar-splitter {
-	background-color: transparent !important;
-	border: none !important;
+/* destructive actions wear the danger role */
+button.danger,
+.popup-notification-secondary-button.danger,
+.subviewbutton[danger] {
+	color: var(--ps-danger) !important;
 }
 
 /* ── find bar, status bar, notifications ─────────────────────────────── */
@@ -525,11 +1371,28 @@ findbar .findbar-textbox:focus {
 	outline-offset: -1.5px !important;
 }
 
+findbar .findbar-textbox[status="notfound"] {
+	outline-color: var(--ps-danger) !important;
+}
+
 notification-message,
 .notificationbox-stack notification-message {
 	--message-bar-background-color: var(--ps-layer2) !important;
 	--message-bar-text-color: var(--ps-text) !important;
 	border-radius: var(--ps-radius-medium) !important;
+}
+
+notification-message[type="warning"] {
+	--message-bar-icon-color: var(--ps-warning) !important;
+}
+
+notification-message[type="critical"],
+notification-message[type="error"] {
+	--message-bar-icon-color: var(--ps-danger) !important;
+}
+
+notification-message[type="success"] {
+	--message-bar-icon-color: var(--ps-success) !important;
 }
 
 /* toggles and checkboxes in panels */
@@ -539,21 +1402,21 @@ moz-toggle {
 	accent-color: var(--ps-primary) !important;
 }
 
-
-/* ── motion ─────────────────────────────────────────────────────────────── */
-/* popups grow out of the bar: open on the spatial curve (Motion.long), close
-   on the accelerating one, shorter (Motion.medium - 60) */
+/* ══ motion ════════════════════════════════════════════════════════════════ */
+/* popups grow out of where they hang: open on the spatial curve (Motion.long),
+   close on the accelerating one, shorter (Motion.medium - 60) */
 panel[type="arrow"],
-.animatable-menupopup {
-	transition-duration: 190ms !important;
+.animatable-menupopup,
+#tab-preview-panel {
+	transition-duration: 160ms !important;
 	transition-timing-function: var(--ps-accel) !important;
 	transform-origin: top center !important;
 
 	@media not (prefers-reduced-motion) {
-		transform: translateY(-10px) scale(0.96) !important;
+		transform: translateY(-8px) scale(0.96) !important;
 
 		&:where([side="bottom"]) {
-			transform: translateY(10px) scale(0.96) !important;
+			transform: translateY(8px) scale(0.96) !important;
 			transform-origin: bottom center !important;
 		}
 	}
@@ -566,6 +1429,15 @@ panel[type="arrow"],
 
 	&[animate="cancel"] {
 		transform: none !important;
+	}
+}
+
+/* the card comes in from the rail */
+#tab-preview-panel {
+	transform-origin: left center !important;
+
+	@media not (prefers-reduced-motion) {
+		transform: translateX(-8px) !important;
 	}
 }
 

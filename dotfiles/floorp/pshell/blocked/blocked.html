@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Gesperrt</title>
+<style>
+	:root { color-scheme: dark light; font: 15px "Adwaita Sans", system-ui, sans-serif; }
+	body { margin: 0; height: 100vh; display: grid; place-items: center; background: Canvas; color: CanvasText; }
+	main { text-align: center; display: grid; gap: 10px; justify-items: center; }
+	h1 { margin: 0; font-size: 26px; font-weight: 600; }
+	p { margin: 0; opacity: .65; }
+	button { margin-top: 10px; font: inherit; border: 0; border-radius: 999px; padding: 9px 18px; cursor: pointer;
+		background: color-mix(in srgb, CanvasText 10%, Canvas); color: inherit; }
+	button:hover { background: color-mix(in srgb, CanvasText 16%, Canvas); }
+</style>
+</head>
+<body>
+<main>
+	<h1 id="host"></h1>
+	<p id="until"></p>
+	<button id="go">Trotzdem öffnen</button>
+</main>
+<script src="blocked.js"></script>
+</body>
+</html>

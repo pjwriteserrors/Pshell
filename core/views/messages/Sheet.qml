@@ -222,7 +222,7 @@ Item {
 			width: modelData.w * root.factor
 			height: modelData.h * root.factor
 			cursorShape: Qt.PointingHandCursor
-			onClicked: Qt.openUrlExternally(modelData.href)
+			onClicked: Browser.openLink(modelData.href, "Mail")
 		}
 	}
 }

@@ -133,9 +133,12 @@ Row {
 								}
 							}
 
+							// a few times when it turns hot, then the dot stays still: a
+							// pulse without end redrew every bar 60 times a second for as
+							// long as the app was busy
 							SequentialAnimation on opacity {
 								running: task.hot
-								loops: Animation.Infinite
+								loops: 3
 								alwaysRunToEnd: true
 								NumberAnimation {
 									to: 0.55

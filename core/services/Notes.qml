@@ -10,6 +10,8 @@ Singleton {
 
 	property var notes: []
 	property bool collapsed: false
+	// notes.json was read (a note written before would replace the others)
+	property bool loaded: false
 	readonly property var pinned: root.notes.filter(note => note.pinned !== false)
 
 	function load(raw) {
@@ -87,6 +89,10 @@ Singleton {
 		// a machine without notes never reads the file
 		path: Plugins.on("notes") ? Paths.stateFile("notes.json") : ""
 		printErrors: false
-		onLoaded: root.load(text())
+		onLoaded: {
+			root.load(text());
+			root.loaded = true;
+		}
+		onLoadFailed: root.loaded = true
 	}
 }

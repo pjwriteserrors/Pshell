@@ -1,0 +1,758 @@
+/* What the extension's chrome part adds to the browser window, drawn in the
+ * shell's language. Loaded into each window by parts/base.js (an author
+ * sheet); the --ps-* variables come from pshell.css (on body) and have
+ * fallbacks for a window without it. */
+
+body {
+	--pshell-bg: var(--ps-bg, #1b1311);
+	--pshell-text: var(--ps-text, #f2e6e2);
+	--pshell-muted: var(--ps-text-muted, #bba9a3);
+	--pshell-faint: var(--ps-text-faint, #8a7a75);
+	--pshell-l1: var(--ps-layer1, rgba(255, 255, 255, 0.05));
+	--pshell-l2: var(--ps-layer2, rgba(255, 255, 255, 0.09));
+	--pshell-l3: var(--ps-layer3, rgba(255, 255, 255, 0.14));
+	--pshell-primary: var(--ps-primary, #efb146);
+	--pshell-on-primary: var(--ps-on-primary, #2a1600);
+	--pshell-primary-c: var(--ps-primary-container, rgba(239, 177, 70, 0.22));
+	--pshell-outline: var(--ps-outline, rgba(255, 255, 255, 0.1));
+	--pshell-shadow: var(--ps-shadow, rgba(0, 0, 0, 0.45));
+	--pshell-r-small: var(--ps-radius-small, 8px);
+	--pshell-r-medium: var(--ps-radius-medium, 12px);
+	--pshell-r-large: var(--ps-radius-large, 16px);
+	--pshell-r-window: var(--ps-radius-window, 18px);
+	--pshell-font: var(--ps-font, sans-serif);
+	--pshell-mono: var(--ps-font-mono, monospace);
+	--pshell-spatial: var(--ps-spatial, cubic-bezier(0.38, 1.21, 0.22, 1));
+	--pshell-standard: var(--ps-standard, cubic-bezier(0.2, 0, 0, 1));
+	--pshell-short: var(--ps-short, 160ms);
+	--pshell-medium: var(--ps-medium, 220ms);
+	--pshell-long: var(--ps-long, 300ms);
+}
+
+/* ══ environments ═══════════════════════════════════════════════════════════ */
+/* each group's --pshell-env comes from a sheet env.js makes from the list */
+
+/* the group wears the environment's own colour, not Firefox's nearest */
+tab-group[pshell-env] {
+	--tab-group-color: var(--pshell-env) !important;
+	--tab-group-color-invert: var(--pshell-bg) !important;
+	--tab-group-color-pale: color-mix(in srgb, var(--pshell-env) 25%, var(--pshell-bg)) !important;
+}
+
+/* no lines at the start: in a group its header says it (Firefox's group
+   line goes), a tab of no group gets a dot at its end, hidden while its
+   close button shows */
+:root[pshell-envs] tab-group[pshell-env] .tab-group-line,
+tab-group[pshell-site] .tab-group-line {
+	display: none !important;
+}
+
+:root[pshell-envs] .tabbrowser-tab[pshell-env]:not(tab-group > .tabbrowser-tab) > .tab-stack > .tab-content::after {
+	content: "";
+	order: 100;
+	flex: none;
+	width: 6px;
+	height: 6px;
+	margin-inline: 6px 4px;
+	border-radius: 50%;
+	background: var(--pshell-env);
+}
+
+:root[pshell-envs] .tabbrowser-tab[pshell-env]:not(tab-group > .tabbrowser-tab):is([selected], :hover) > .tab-stack > .tab-content::after,
+#tabbrowser-tabs:not([expanded]) .tabbrowser-tab[pshell-env] > .tab-stack > .tab-content::after {
+	display: none;
+}
+
+/* the page's frame in the colour of the tab in front (drawn over the page's
+   edge: pshell.css keeps the box itself without outline or shadow) */
+#tabbrowser-tabbox {
+	position: relative;
+
+	&::after {
+		content: "";
+		position: absolute;
+		inset: 0;
+		z-index: 30;
+		border: 2px solid transparent;
+		border-radius: var(--pshell-r-window);
+		pointer-events: none;
+		transition: border-color var(--pshell-medium) var(--pshell-standard);
+	}
+}
+
+:root[pshell-envs][pshell-env] #tabbrowser-tabbox::after {
+	border-color: var(--pshell-env);
+}
+
+/* and its name in the address bar */
+#pshell-env-chip {
+	display: none;
+	align-self: center;
+	margin-inline: 4px 2px;
+	padding: 3px 8px;
+	border-radius: 999px;
+	background: var(--pshell-env);
+	color: #140c0a;
+	font: 700 10px/1 var(--pshell-mono);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	cursor: pointer;
+	white-space: nowrap;
+	transition: transform var(--pshell-short) var(--pshell-spatial), filter var(--pshell-short);
+
+	&:hover {
+		filter: brightness(1.12);
+	}
+	&:active {
+		transform: scale(0.94);
+	}
+}
+
+:root[pshell-envs][pshell-env] #pshell-env-chip {
+	display: inline-block;
+
+	@starting-style {
+		transform: scale(0.6);
+		opacity: 0;
+	}
+}
+
+/* ══ states on the icon ════════════════════════════════════════════════════ */
+:root[pshell-states] .tab-icon-stack[pshell-badge]::before,
+:root[pshell-states] .tab-icon-stack[pshell-draft]:not([pshell-badge])::before {
+	content: attr(pshell-badge);
+	grid-area: 1 / 1;
+	/* from the icon's start: the stack can be wider than the 16px icon */
+	justify-self: start;
+	align-self: start;
+	z-index: 2;
+	translate: 9px -6px;
+	min-width: 14px;
+	height: 14px;
+	padding-inline: 3px;
+	box-sizing: border-box;
+	border-radius: 999px;
+	background: var(--pshell-primary);
+	color: var(--pshell-on-primary);
+	box-shadow: 0 0 0 2px var(--pshell-bg);
+	font: 700 9px/14px var(--pshell-font);
+	text-align: center;
+	pointer-events: none;
+	animation: pshell-pop var(--pshell-long) var(--pshell-spatial);
+}
+
+/* a Spur: how many columns, on a square */
+:root[pshell-states] .tab-icon-stack[pshell-spur]::before {
+	border-radius: 4px;
+	background: var(--ps-tertiary, #d4a5c9);
+}
+
+/* a draft: a small pen-coloured dot at the lower corner */
+:root[pshell-states] .tab-icon-stack[pshell-draft]:not([pshell-badge])::before {
+	content: "";
+	align-self: end;
+	translate: 11px 3px;
+	min-width: 8px;
+	width: 8px;
+	height: 8px;
+	padding: 0;
+	background: var(--ps-secondary, #8fb0e8);
+}
+
+@keyframes pshell-pop {
+	from {
+		scale: 0.3;
+		opacity: 0;
+	}
+}
+
+/* asleep: the icon fades */
+:root[pshell-states] .tabbrowser-tab[pending] .tab-icon-image {
+	opacity: 0.45;
+	filter: grayscale(0.7);
+}
+
+/* camera, microphone or screen in use: a ring in the alarm colour */
+:root[pshell-states] .tabbrowser-tab[sharing] .tab-icon-image {
+	border-radius: 50% !important;
+	box-shadow: 0 0 0 2px var(--ps-danger, #e5484d);
+}
+
+/* ══ Recent ════════════════════════════════════════════════════════════════ */
+/* the rail's tab box holds Recent and the filter above the tabs */
+#vertical-tabs:has(> #pshell-recent) {
+	flex-direction: column !important;
+
+	> #tabbrowser-tabs {
+		flex: 1 1 auto !important;
+		min-height: 0 !important;
+	}
+	> #pshell-recent,
+	> #pshell-filter {
+		flex: none;
+	}
+}
+
+#pshell-recent {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 6px;
+	margin: 4px 8px 6px;
+	padding-bottom: 8px;
+	border-bottom: 1px solid var(--pshell-outline);
+
+	&[hidden],
+	&[empty] {
+		display: none;
+	}
+}
+
+:root[pshell-rail="top"] #pshell-recent {
+	display: none;
+}
+
+/* the closed rail: one column of icons */
+#vertical-tabs:has(> #tabbrowser-tabs:not([expanded])) #pshell-recent {
+	grid-template-columns: minmax(0, 1fr);
+	margin-inline: 6px;
+
+	/* a column of six would take the tabs' room: the three latest */
+	> .pshell-rt:not([recent3]) {
+		display: none;
+	}
+}
+
+.pshell-rt {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 5px;
+	height: 52px;
+	padding-inline: 4px;
+	border-radius: var(--pshell-r-medium);
+	background: var(--pshell-l1);
+	color: var(--pshell-muted);
+	overflow: hidden;
+	cursor: default;
+	opacity: var(--pshell-fade, 1);
+	filter: saturate(var(--pshell-fade, 1));
+	transition: opacity 0.8s var(--pshell-standard), filter 0.8s var(--pshell-standard), background-color var(--pshell-short) var(--pshell-standard),
+		transform var(--pshell-long) var(--pshell-spatial);
+
+	&:hover {
+		background: var(--pshell-l2);
+		color: var(--pshell-text);
+		opacity: 1;
+		filter: none;
+	}
+	&:active {
+		transform: scale(0.95);
+	}
+	&[selected] {
+		background: var(--pshell-primary-c);
+		color: var(--pshell-text);
+	}
+	/* its environment: a dot in the corner */
+	&[pshell-env]::before {
+		content: "";
+		position: absolute;
+		top: 6px;
+		right: 6px;
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: var(--pshell-env);
+	}
+	&[entering],
+	&[leaving] {
+		opacity: 0;
+		transform: scale(0.82);
+	}
+	&[leaving] {
+		transition-duration: 0.26s;
+		pointer-events: none;
+	}
+}
+
+#vertical-tabs:has(> #tabbrowser-tabs:not([expanded])) .pshell-rt {
+	height: 36px;
+}
+
+.pshell-rt-icon {
+	width: 18px;
+	height: 18px;
+	border-radius: 4px;
+	flex: none;
+	-moz-context-properties: fill, fill-opacity;
+	fill: currentColor;
+}
+
+.pshell-rt[busy] .pshell-rt-icon {
+	animation: pshell-breathe 1.1s ease-in-out infinite;
+}
+
+@keyframes pshell-breathe {
+	50% {
+		opacity: 0.45;
+	}
+}
+
+.pshell-rt-label {
+	max-width: 100%;
+	font: 500 10px/1.2 var(--pshell-font);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+#vertical-tabs:has(> #tabbrowser-tabs:not([expanded])) .pshell-rt-label {
+	display: none;
+}
+
+/* what is left of its time: a line that shrinks at the tile's foot */
+.pshell-rt-left {
+	position: absolute;
+	left: 0;
+	bottom: 0;
+	height: 2px;
+	width: var(--pshell-left, 100%);
+	border-radius: 2px;
+	background: var(--pshell-primary);
+	opacity: 0.7;
+	transition: width 10s linear;
+}
+
+.pshell-rt[selected] .pshell-rt-left {
+	transition-duration: 0.4s;
+}
+
+/* ══ typing over the rail ═══════════════════════════════════════════════════ */
+#pshell-filter {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0 8px;
+	padding: 0 10px;
+	height: 0;
+	border-radius: var(--pshell-r-medium);
+	background: var(--pshell-l2);
+	color: var(--pshell-text);
+	font: 600 12px/1 var(--pshell-font);
+	overflow: hidden;
+	opacity: 0;
+	transition: height var(--pshell-medium) var(--pshell-spatial), opacity var(--pshell-short) var(--pshell-standard), margin var(--pshell-medium) var(--pshell-standard);
+
+	&[open] {
+		height: 30px;
+		margin-block: 2px 6px;
+		opacity: 1;
+	}
+}
+
+.pshell-filter-icon {
+	width: 12px;
+	height: 12px;
+	flex: none;
+	background: currentColor;
+	mask: url("chrome://global/skin/icons/search-glass.svg") center / contain no-repeat;
+	opacity: 0.7;
+}
+
+.pshell-filter-text::after {
+	content: "";
+	display: inline-block;
+	width: 1.5px;
+	height: 13px;
+	margin-inline-start: 1px;
+	vertical-align: -2px;
+	background: var(--pshell-primary);
+	animation: pshell-caret 1s steps(1) infinite;
+}
+
+@keyframes pshell-caret {
+	50% {
+		opacity: 0;
+	}
+}
+
+#vertical-tabs:has(> #tabbrowser-tabs:not([expanded])) #pshell-filter {
+	display: none;
+}
+
+.tabbrowser-tab {
+	transition: opacity var(--pshell-medium) var(--pshell-standard);
+}
+
+:root[pshell-filtering] .tabbrowser-tab[pshell-miss],
+:root[pshell-filtering] tab-group[pshell-miss] > .tab-group-label-container,
+:root[pshell-filtering] #pshell-recent .pshell-rt {
+	opacity: 0.22;
+}
+
+tab-group > .tab-group-label-container {
+	transition: opacity var(--pshell-medium) var(--pshell-standard);
+}
+
+/* (pshell.css takes the tab background's shadow) */
+:root[pshell-filtering] .tabbrowser-tab[pshell-first] > .tab-stack {
+	outline: 1.5px solid var(--pshell-primary);
+	outline-offset: -1.5px;
+	border-radius: var(--pshell-r-medium);
+}
+
+/* ══ the dock: pinned tabs at the foot ══════════════════════════════════════ */
+/* a grid, so that the places of closed pinned tabs stand in the pinned
+   tabs' row */
+:root[pshell-dock] #tabbrowser-tabs[orient="vertical"] {
+	display: grid !important;
+	grid-template-columns: minmax(0, 1fr) auto;
+	grid-template-rows: minmax(0, 1fr) auto auto auto auto;
+
+	> * { grid-column: 1 / -1; }
+	> #tabbrowser-arrowscrollbox { grid-row: 1; min-height: 0; }
+	> #vertical-tabs-newtab-button { grid-row: 2; }
+	> #pinned-drop-indicator,
+	> #drag-to-pin-promo-card { grid-row: 3; }
+	> #vertical-pinned-tabs-splitter { grid-row: 4; }
+	> #pinned-tabs-container { grid-row: 5; grid-column: 1; min-width: 0; }
+	> #pshell-ghosts { grid-row: 5; grid-column: 2; align-self: center; }
+	> :is(#tabbrowser-tab-a11y-desc, hbox:not([id])) { grid-row: 1; }
+}
+
+/* open, the pinned tabs wrap as a row of icons (pshell.css sizes them) */
+#tabbrowser-tabs[orient="vertical"][expanded] > #pinned-tabs-container::part(items-wrapper) {
+	display: flex !important;
+	flex-direction: row !important;
+	flex-wrap: wrap !important;
+	align-content: flex-start !important;
+	gap: 4px !important;
+	padding-inline: 8px !important;
+	padding-block: 2px !important;
+}
+
+/* the numbers of Alt+1…6 */
+:root[pshell-dock] #tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[pshell-slot] {
+	position: relative;
+
+	&::after {
+		content: attr(pshell-slot);
+		position: absolute;
+		inset-inline-start: 5px;
+		top: 3px;
+		z-index: 3;
+		font: 700 8px/1 var(--pshell-mono);
+		color: var(--pshell-faint);
+		pointer-events: none;
+	}
+}
+
+#pshell-ghosts {
+	display: flex;
+	gap: 4px;
+	padding-inline: 4px 8px;
+
+	&[hidden] {
+		display: none;
+	}
+}
+
+.pshell-ghost {
+	position: relative;
+	display: grid;
+	place-items: center;
+	width: 36px;
+	height: 32px;
+	border-radius: var(--pshell-r-medium);
+	outline: 1.5px dashed var(--pshell-outline);
+	outline-offset: -1.5px;
+	transition: background-color var(--pshell-short), outline-color var(--pshell-short);
+
+	> img {
+		width: 16px;
+		height: 16px;
+		-moz-context-properties: fill, fill-opacity;
+		fill: var(--pshell-text);
+		opacity: 0.4;
+		filter: grayscale(1);
+		transition: opacity var(--pshell-short), filter var(--pshell-short);
+	}
+	&:hover {
+		background: var(--pshell-l1);
+		outline-color: var(--pshell-muted);
+
+		> img {
+			opacity: 0.9;
+			filter: none;
+		}
+	}
+	&::after {
+		content: attr(pshell-slot);
+		position: absolute;
+		left: 4px;
+		top: 2px;
+		font: 700 8px/1 var(--pshell-mono);
+		color: var(--pshell-faint);
+	}
+}
+
+/* ══ Peek ══════════════════════════════════════════════════════════════════ */
+.browserStack {
+	position: relative;
+}
+
+.pshell-peek {
+	position: absolute;
+	inset: 0;
+	z-index: 20;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(8, 4, 3, 0.42);
+}
+
+.pshell-peek-card {
+	display: flex;
+	flex-direction: column;
+	width: min(1100px, 86%);
+	height: 90%;
+	border-radius: var(--pshell-r-window);
+	background: var(--pshell-bg);
+	box-shadow: 0 24px 64px var(--pshell-shadow), 0 0 0 1px var(--pshell-outline);
+	overflow: clip;
+	transform-origin: 0 0;
+}
+
+.pshell-peek-bar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: 40px;
+	padding-inline: 14px 8px;
+	flex: none;
+	color: var(--pshell-text);
+	font: 13px/1.2 var(--pshell-font);
+}
+
+.pshell-peek-titles {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	flex: 1;
+	min-width: 0;
+}
+
+.pshell-peek-title {
+	font-weight: 600;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.pshell-peek-host {
+	color: var(--pshell-muted);
+	font-size: 11.5px;
+	white-space: nowrap;
+}
+
+.pshell-peek-source {
+	padding: 3px 8px;
+	border-radius: 999px;
+	background: var(--pshell-l2);
+	color: var(--pshell-muted);
+	font-size: 11px;
+
+	&[hidden] {
+		display: none;
+	}
+}
+
+.pshell-peek-button {
+	appearance: none;
+	height: 28px;
+	padding-inline: 12px;
+	border: none;
+	border-radius: 999px;
+	background: var(--pshell-l2);
+	color: var(--pshell-text);
+	font: 600 12px/1 var(--pshell-font);
+	transition: background-color var(--pshell-short), transform var(--pshell-short) var(--pshell-spatial);
+
+	&:hover {
+		background: var(--pshell-l3);
+	}
+	&:active {
+		transform: scale(0.94);
+	}
+	&[hidden] {
+		display: none;
+	}
+}
+
+.pshell-peek-close {
+	width: 28px;
+	padding: 0;
+	background: transparent;
+
+	&::before {
+		content: "";
+		display: block;
+		width: 12px;
+		height: 12px;
+		margin: auto;
+		background: currentColor;
+		mask: url("chrome://global/skin/icons/close.svg") center / contain no-repeat;
+	}
+}
+
+.pshell-peek-frame {
+	display: flex;
+	flex: 1;
+	min-height: 0;
+	margin: 0 6px 6px;
+	border-radius: calc(var(--pshell-r-window) - 6px);
+	overflow: clip;
+	background: #fff;
+}
+
+.pshell-peek-browser {
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+}
+
+/* ══ Spur ══════════════════════════════════════════════════════════════════ */
+.browserStack[pshell-spur] {
+	display: flex !important;
+	flex-direction: row !important;
+	gap: 6px;
+	/* room for the crumbs, which lie over the stack's top (the container
+	   around it is Firefox's grid of named areas) */
+	padding-top: 34px !important;
+	box-sizing: border-box !important;
+	background: var(--pshell-bg) !important;
+	border-radius: 0 !important;
+
+	> browser {
+		flex: var(--pshell-grow, 1) 1 0 !important;
+		min-width: 0 !important;
+		width: auto !important;
+		border-radius: var(--pshell-r-window);
+		overflow: clip;
+		outline: 2px solid transparent;
+		outline-offset: -2px;
+		transition: flex-grow var(--pshell-long) var(--pshell-spatial), opacity var(--pshell-medium) var(--pshell-standard), outline-color var(--pshell-short);
+	}
+	> browser[pshell-active] {
+		outline-color: color-mix(in srgb, var(--pshell-primary) 70%, transparent);
+	}
+	> browser[pshell-hidden] {
+		flex-grow: 0 !important;
+		margin-inline-end: -6px;
+		opacity: 0;
+		pointer-events: none;
+	}
+}
+
+.pshell-spur-bar {
+	position: absolute;
+	inset: 0 0 auto 0;
+	z-index: 2;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 34px;
+	padding-inline: 4px;
+	flex: none;
+	background: var(--pshell-bg);
+	color: var(--pshell-muted);
+	font: 500 12px/1 var(--pshell-font);
+}
+
+.pshell-spur-crumbs {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+}
+
+.pshell-spur-crumb {
+	max-width: 220px;
+	padding: 6px 10px;
+	border-radius: 999px;
+	background: var(--pshell-l1);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	flex-shrink: 1;
+	transition: background-color var(--pshell-short), color var(--pshell-short);
+
+	&:hover {
+		background: var(--pshell-l2);
+		color: var(--pshell-text);
+	}
+	&[active] {
+		background: var(--pshell-primary-c);
+		color: var(--pshell-text);
+	}
+	&[older] {
+		opacity: 0.7;
+	}
+	&[fresh] {
+		animation: pshell-crumb var(--pshell-long) var(--pshell-spatial);
+	}
+}
+
+@keyframes pshell-crumb {
+	from {
+		opacity: 0;
+		translate: 12px 0;
+	}
+}
+
+.pshell-spur-arrow::before {
+	content: "›";
+	color: var(--pshell-faint);
+}
+
+.pshell-spur-end {
+	appearance: none;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex: none;
+	height: 26px;
+	padding-inline: 10px 12px;
+	border: none;
+	border-radius: 999px;
+	background: var(--pshell-l2);
+	color: var(--pshell-text);
+	font: 600 12px/1 var(--pshell-font);
+	transition: background-color var(--pshell-short), color var(--pshell-short);
+
+	&::before {
+		content: "";
+		width: 10px;
+		height: 10px;
+		background: currentColor;
+		mask: url("chrome://global/skin/icons/close.svg") center / contain no-repeat;
+	}
+	&:hover {
+		background: var(--pshell-primary);
+		color: var(--pshell-on-primary);
+	}
+	&:active {
+		transform: scale(0.96);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.pshell-rt,
+	#pshell-filter,
+	.browserStack[pshell-spur] > browser {
+		transition-duration: 1ms !important;
+	}
+}

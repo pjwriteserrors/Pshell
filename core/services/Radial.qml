@@ -30,6 +30,8 @@ Singleton {
 		{ id: "text", label: "Text", icon: "text_recognition", shown: Screenshot.offers("ocr"), run: () => Screenshot.ocr() },
 		{ id: "qr", label: "QR", icon: "qrcode_scan", shown: Screenshot.offers("qr"), run: () => Screenshot.qr() },
 		{ id: "scroll", label: "Scroll", icon: "arrow_expand_vertical", shown: Screenshot.offers("scroll"), run: () => Screenshot.scroll() },
+		{ id: "page", label: "Page", icon: "web", shown: Screenshot.pageOffered, run: () => Screenshot.page() },
+		{ id: "pagetext", label: "Page text", icon: "text_box_outline", shown: Screenshot.pageOffered, run: () => Screenshot.pageText() },
 		// the newest screenshot, straight into the picture viewer to draw on
 		{ id: "lastshot", label: "Edit last", icon: "image_edit_outline", shown: Viewer.enabled && Screenshot.shots.length > 0, run: () => Viewer.open(Screenshot.shots[0].path, { mode: "markup", list: Screenshot.shots.map(shot => shot.path) }) },
 		{
@@ -81,6 +83,23 @@ Singleton {
 		icon: "folder_outline",
 		run: () => Files.open(entry.path)
 	})))
+
+	// the pinned tabs of the browser window in front, in their order, so
+	// each keeps its direction (docs/browser.md › Tabs)
+	readonly property var browserTabEntries: {
+		if (!Plugins.on("browser-link") || !WebLink.connected) return [];
+		const window = WebLink.focusedWindow;
+		return WebLink.tabs
+			.filter(tab => tab.pinned && !tab.hidden && (!window || (tab.source === window.source && tab.windowId === window.id)))
+			.slice(0, 6)
+			.map((tab, index) => ({
+				id: `browser-tab-${index}`,
+				label: String(tab.title || tab.host || ""),
+				icon: "tab",
+				active: tab.active,
+				run: () => WebLink.activate(tab)
+			}));
+	}
 
 	readonly property var timerEntries: [
 		{ id: "pause", label: "Pause", icon: "pause", enabled: QtrackTimer.tracking, run: () => QtrackTimer.pause() },
@@ -147,6 +166,8 @@ Singleton {
 				{ id: "pdf-night", label: Pdf.night ? "Pages as they are" : "Pages at night", icon: Pdf.night ? "white_balance_sunny" : "weather_night", run: () => Pdf.night = !Pdf.night },
 				{ id: "pdf-save", label: "Save", icon: "content_save_outline", enabled: Pdf.dirty, run: () => Pdf.save() }
 			] });
+		if (root.browserTabEntries.length > 0)
+			entries.push({ id: "browser-tabs", label: Words.of("radial.tabs", "Tabs"), icon: "tab", children: root.browserTabEntries });
 		entries.push({ id: "power", label: Words.of("radial.power", "Power"), icon: "power", children: root.powerEntries });
 		if (Plugins.on("ssh"))
 			entries.push({ id: "ssh", label: Words.of("radial.ssh", "SSH"), icon: "console", enabled: root.sshEntries.length > 0, children: root.sshEntries });

@@ -171,7 +171,7 @@ Clickable {
 			wrapMode: Text.Wrap
 			elide: Text.ElideNone
 			maximumLineCount: 400
-			onLinkActivated: link => Qt.openUrlExternally(link)
+			onLinkActivated: link => Browser.openLink(link, "Mail")
 
 			HoverHandler {
 				cursorShape: parent.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor

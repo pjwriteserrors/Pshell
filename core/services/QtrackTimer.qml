@@ -401,4 +401,56 @@ Singleton {
 		onTriggered: root.now = Date.now()
 	}
 
+	// ── the Teamwork task in the browser (plugin browser-qtrack) ─────────
+	// A task page in front of the focused browser offers its timer, once a
+	// task and only while none runs; nothing starts without the click.
+	readonly property bool offersBrowserTask: Plugins.on("qtrack") && Plugins.on("browser-qtrack") && WebLink.connected
+	readonly property string browserTaskId: {
+		if (!root.offersBrowserTask || root.tracking) return "";
+		const focused = Niri.windows.find(window => window.id === Niri.focusedId);
+		if (!focused || !/floorp|firefox|librewolf|zen|waterfox/i.test(String(focused.app_id || ""))) return "";
+		const match = /teamwork\.com\/(?:app\/|#\/?)?tasks\/(\d+)/i.exec(String(WebLink.activeTab?.url || ""));
+		return match ? match[1] : "";
+	}
+	// task ids offered this session
+	property var browserTasksOffered: ({})
+
+	property var browserTasksLookedUp: ({})
+
+	onBrowserTaskIdChanged: browserTaskSettle.restart()
+	onTeamworkRefreshingChanged: if (!root.teamworkRefreshing && root.browserTaskId !== "" && !browserTaskSettle.running) root.offerBrowserTask()
+
+	Timer {
+		id: browserTaskSettle
+
+		// looked at, not passed through
+		interval: 4000
+		onTriggered: root.offerBrowserTask()
+	}
+
+	function offerBrowserTask() {
+		const id = root.browserTaskId;
+		if (id === "" || root.browserTasksOffered[id]) return;
+		const task = root.findTeamworkTaskById(id);
+		if (!task) {
+			// not among the tasks known yet: asked for once
+			if (!root.browserTasksLookedUp[id]) {
+				root.browserTasksLookedUp = Object.assign({}, root.browserTasksLookedUp, { [id]: true });
+				root.refreshTeamworkTasks();
+			}
+			return;
+		}
+		if (String(task.project_id || "") === "") return;
+		root.browserTasksOffered = Object.assign({}, root.browserTasksOffered, { [id]: true });
+		const project = root.projectLabelFromTeamworkTask(task);
+		const description = String(task.task_name || task.name || "").trim() || project;
+		Notifs.pushInternal("running", "Teamwork task open", project, {
+			icon: "timer_outline",
+			duration: 20000,
+			actions: [{ label: "Start timer for this task", icon: "play", run: () => {
+				if (!root.tracking) root.runAction(root.buildStartArgs(project, description, task));
+			} }]
+		});
+	}
+
 }

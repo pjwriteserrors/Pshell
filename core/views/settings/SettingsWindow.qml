@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
 import qs.style.theme
 import qs.style.widgets
@@ -53,7 +54,7 @@ FloatingWindow {
 		search.text = "";
 		root.exportError = "";
 		exportSheet.close();
-		root.go(NiriSettings.page || root.current || "displays", "");
+		root.go(NiriSettings.page || root.current || "displays", NiriSettings.anchor);
 	}
 
 	property string current: "displays"
@@ -75,6 +76,9 @@ FloatingWindow {
 		{ id: "ultimate", label: "Controller", icon: "gamepad_variant", hint: "8BitDo: buttons, sticks, light, macros", plugin: "ultimate" },
 		{ id: "headset", label: "Headset", icon: "headset", hint: "Sidetone, microphone, buttons", plugin: "headset" },
 		{ id: "fingerprint", label: "Fingerprint", icon: "fingerprint", hint: "Fingers, where they unlock", plugin: "fingerprint" },
+		{ id: "btadapter", label: "Bluetooth adapter", icon: "bluetooth_settings", hint: "Radio, channels, modes, timing, bluetoothd", plugin: "bt-adapter" },
+		{ id: "webcam", label: "Webcam", icon: "video", hint: "Picture, Enhance, virtual camera, light, microphone", plugin: "webcam" },
+		{ id: "hpcamera", label: "HP camera", icon: "video", hint: "Picture, exposure spot, IR, face unlock, virtual camera", plugin: "hp-camera" },
 		{ id: "as50", label: "Avantree AS50", icon: "headphones", hint: "Codec, microphone, buttons, battery", plugin: "as50" },
 		{ id: "amazfit", label: "Amazfit watch", icon: "watch", hint: "Zepp OS settings, alarms, keys, notifications", plugin: "amazfit" },
 		{ id: "multicursor", label: "Multicursor", icon: "cursor_text", hint: "Lines and cursors in every text field", plugin: "multicursor" },
@@ -83,6 +87,7 @@ FloatingWindow {
 		{ id: "overview", label: "Overview & gestures", icon: "gesture_swipe", hint: "Overview, hot corners, Alt-Tab" },
 		{ id: "system", label: "System", icon: "cog_outline", hint: "Startup, environment, screenshots, blur" },
 		{ id: "apps", label: "Default apps", icon: "apps", hint: "Which program opens what, the terminal" },
+		{ id: "browser", label: "Browser", icon: "web", hint: "Extension, look, what the shell does in it" },
 		{ id: "bar", label: "Desktop", icon: "dock_window", hint: "Bar, wallpaper, game mode", plugin: "bar" },
 		{ id: "tray", label: "App tray", icon: "dock_left", hint: "Apps and commands on a screen edge", plugin: "app-tray" },
 		{ id: "sounds", label: "Sounds", icon: "volume_high", hint: "Clicks, notifications, devices", plugin: "sounds" },
@@ -155,6 +160,37 @@ FloatingWindow {
 		{ page: "fingerprint", anchor: "fingerprint-device", title: "Fingerprint reader", words: "fingerprint finger reader sensor elan enroll test delete fprintd", plugin: "fingerprint" },
 		{ page: "fingerprint", anchor: "fingerprint-use", title: "Unlock with the finger", words: "fingerprint unlock lock screen sudo polkit admin login sddm swaylock su pam tries timeout", plugin: "fingerprint" },
 		{ page: "fingerprint", anchor: "fingerprint-reader", title: "Fingerprint reader details", words: "fingerprint wake sleep suspend touch firmware usb delete all", plugin: "fingerprint" },
+		{ page: "btadapter", anchor: "btadapter-device", title: "Bluetooth adapter", words: "bluetooth adapter intel ax201 name alias visible discoverable pairable connectable rfkill power root helper", plugin: "bt-adapter" },
+		{ page: "btadapter", anchor: "btadapter-links", title: "Bluetooth connections", words: "bluetooth link rssi signal quality transmit power afh channel map paired wake trusted blocked disconnect", plugin: "bt-adapter" },
+		{ page: "btadapter", anchor: "btadapter-radio", title: "Bluetooth radio", words: "bluetooth phy le 2m coded edr slots channels afh wifi coexistence avoid link policy sniff role switch central", plugin: "bt-adapter" },
+		{ page: "btadapter", anchor: "btadapter-modes", title: "Bluetooth modes", words: "bluetooth classic le dual fast connectable secure connections ssp link security wide band speech privacy random address debug keys", plugin: "bt-adapter" },
+		{ page: "btadapter", anchor: "btadapter-identity", title: "Bluetooth identity", words: "bluetooth address mac public static class of device appearance device id did", plugin: "bt-adapter" },
+		{ page: "btadapter", anchor: "btadapter-advertising", title: "Bluetooth advertising", words: "bluetooth advertising beacon ibeacon eddystone url manufacturer data transmit power broadcast", plugin: "bt-adapter" },
+		{ page: "btadapter", anchor: "btadapter-timing", title: "Bluetooth timing", words: "bluetooth page scan inquiry scan interval window sniff supervision timeout le scan connection interval latency advertising monitor", plugin: "bt-adapter" },
+		{ page: "btadapter", anchor: "btadapter-security", title: "Bluetooth security", words: "bluetooth key size encryption mitm just works repairing bonded gatt security", plugin: "bt-adapter" },
+		{ page: "btadapter", anchor: "btadapter-experimental", title: "Bluetooth experimental", words: "bluetooth experimental quality report iso le audio mesh central peripheral kernel", plugin: "bt-adapter" },
+		{ page: "btadapter", anchor: "btadapter-bluez", title: "bluetoothd settings", words: "bluetooth bluetoothd main.conf auto enable reconnect gatt cache mtu eatt avdtp avrcp absolute volume hid restart", plugin: "bt-adapter" },
+		{ page: "btadapter", anchor: "btadapter-power", title: "Bluetooth power and driver", words: "bluetooth usb autosuspend sleep wake btusb module parameters ertm esco reset adapter", plugin: "bt-adapter" },
+		{ page: "btadapter", anchor: "btadapter-debug", title: "Bluetooth debug", words: "bluetooth debugfs advertising channels dut device under test intel diagnostics quirk", plugin: "bt-adapter" },
+		{ page: "btadapter", anchor: "btadapter-about", title: "About the Bluetooth adapter", words: "bluetooth firmware version intel chip codecs features buffers secure boot", plugin: "bt-adapter" },
+		{ page: "webcam", anchor: "webcam-device", title: "Webcam", words: "webcam camera logitech c310 preview photo raw dng picture", plugin: "webcam" },
+		{ page: "webcam", anchor: "webcam-enhance", title: "Enhance the webcam", words: "webcam enhance auto tune improve picture ai ollama model local", plugin: "webcam" },
+		{ page: "webcam", anchor: "webcam-picture", title: "Webcam picture", words: "webcam brightness contrast saturation sharpness gain white balance temperature backlight compensation anti flicker power line 50 60 hz", plugin: "webcam" },
+		{ page: "webcam", anchor: "webcam-exposure", title: "Webcam exposure", words: "webcam exposure automatic manual time low light frame rate rightlight sensor boost gain", plugin: "webcam" },
+		{ page: "webcam", anchor: "webcam-processing", title: "Webcam processing", words: "webcam color boost gamma lens shading pixel defect correction tde mjpeg resync markers logitech extension unit", plugin: "webcam" },
+		{ page: "webcam", anchor: "webcam-virtual", title: "Virtual camera", words: "webcam virtual camera v4l2loopback zoom pan digital follow face tracking frame mirror output resolution", plugin: "webcam" },
+		{ page: "webcam", anchor: "webcam-led", title: "Webcam light", words: "webcam led light off on blink auto privacy", plugin: "webcam" },
+		{ page: "webcam", anchor: "webcam-mic", title: "Webcam microphone", words: "webcam microphone mic gain mute level default", plugin: "webcam" },
+		{ page: "hpcamera", anchor: "hpcamera-device", title: "HP camera", words: "hp hd camera built in laptop probook sunplus spca2650 preview photo picture", plugin: "hp-camera" },
+		{ page: "hpcamera", anchor: "hpcamera-enhance", title: "Enhance the HP camera", words: "hp camera enhance auto tune improve picture ai ollama model local", plugin: "hp-camera" },
+		{ page: "hpcamera", anchor: "hpcamera-picture", title: "HP camera picture", words: "hp camera brightness contrast saturation hue gamma sharpness gain white balance temperature backlight compensation anti flicker power line 50 60 hz", plugin: "hp-camera" },
+		{ page: "hpcamera", anchor: "hpcamera-exposure", title: "HP camera exposure", words: "hp camera exposure automatic manual time low light frame rate spot region of interest roi aim", plugin: "hp-camera" },
+		{ page: "hpcamera", anchor: "hpcamera-vendor", title: "HP camera Sunplus unit", words: "hp camera sunplus extension unit vendor selector", plugin: "hp-camera" },
+		{ page: "hpcamera", anchor: "hpcamera-ir", title: "IR camera", words: "hp ir infrared camera emitter windows hello lit dark difference metadata photo", plugin: "hp-camera" },
+		{ page: "hpcamera", anchor: "hpcamera-face", title: "Unlock with the face", words: "face unlock recognition enroll add test lock screen windows hello ir tries", plugin: "hp-camera" },
+		{ page: "hpcamera", anchor: "hpcamera-virtual", title: "HP virtual camera", words: "hp camera virtual camera v4l2loopback zoom pan digital follow face tracking frame mirror output resolution", plugin: "hp-camera" },
+		{ page: "hpcamera", anchor: "hpcamera-about", title: "About the HP camera", words: "hp camera chip firmware formats usb power nodes reset defaults", plugin: "hp-camera" },
+		{ page: "webcam", anchor: "webcam-about", title: "About the webcam", words: "webcam firmware sensor lens field of view formats usb power reset defaults", plugin: "webcam" },
 		{ page: "as50", anchor: "as50-device", title: "Avantree AS50", words: "avantree as50 ensemble bluetooth headphones headset battery connect disconnect", plugin: "as50" },
 		{ page: "as50", anchor: "as50-sound", title: "AS50 sound", words: "avantree as50 bluetooth headphones volume absolute avrcp mute", plugin: "as50" },
 		{ page: "as50", anchor: "as50-codec", title: "AS50 codec", words: "avantree as50 bluetooth codec aac sbc sbc-xq faststream latency lip sync delay a2dp", plugin: "as50" },
@@ -250,11 +286,20 @@ FloatingWindow {
 		{ page: "phone", anchor: "notification-apps", title: "Notifications", words: "notifications programs apps mute hide off silence benachrichtigungen ausschalten" },
 		{ page: "phone", anchor: "phone-apps", title: "Phone notifications", words: "phone handy notifications apps whatsapp mail mute hide off android benachrichtigungen" },
 		{ page: "phone", anchor: "phone-pc-apps", title: "Notifications to the phone", words: "phone handy notifications programs apps mirror send mute off pc benachrichtigungen" },
+		{ page: "browser", anchor: "browser-link", title: "Browser extension", words: "browser floorp firefox extension pshell xpi native host link install status" },
+		{ page: "browser", anchor: "browser-look", title: "Browser look", words: "browser floorp theme css userchrome look layout install remove settle" },
+		{ page: "browser", anchor: "browser-tabs", title: "Browser tabs", words: "browser floorp tabs rail sidebar vertical hover open icons top width recent pinned dock ctrl tab filter states leiste seitenleiste gerade fest" },
+		{ page: "browser", anchor: "browser-envs", title: "Browser environments", words: "browser floorp live stage staging dev development environment groups colours colors umgebung gruppen" },
+		{ page: "browser", anchor: "browser-navigation", title: "Browser navigation", words: "browser floorp hints keyboard peek spur columns links from outside" },
+		{ page: "browser", anchor: "browser-cleanup", title: "Browser archive", words: "browser floorp archive old tabs cleanup untouched aufräumen archiv" },
+		{ page: "browser", anchor: "browser-plugins", title: "Browser plugins", words: "browser floorp tabs launcher alt-tab workspaces menu newtab forms mail focus media privacy capture qtrack" },
+		{ page: "browser", anchor: "browser-breaks", title: "Browser media in breaks", words: "browser media pause break stretch eye rest video music tabs" },
+		{ page: "browser", anchor: "browser-focus", title: "Sites kept away", words: "browser focus block sites websites distraction" },
 		{ page: "debug", anchor: "debug", title: "Debug options", words: "debug preview-render drm overlay planes scanout", take: ["debug"] }
 	]
 
 	// a page of the shell's own: no niri file behind it, nothing to undo
-	readonly property bool shellPage: ["bar", "tray", "multicursor", "sounds", "colours", "lighting", "phone", "mouse", "hud", "apps"].includes(root.current)
+	readonly property bool shellPage: ["bar", "tray", "multicursor", "sounds", "colours", "lighting", "phone", "mouse", "hud", "apps", "browser"].includes(root.current)
 
 	readonly property var results: {
 		if (root.query === "") return [];
@@ -274,6 +319,7 @@ FloatingWindow {
 	}
 
 	function go(id, anchor) {
+		NiriSettings.anchor = "";
 		const visited = Object.assign({}, root.visited);
 		visited[id] = true;
 		root.visited = visited;
@@ -303,7 +349,11 @@ FloatingWindow {
 		target: NiriSettings
 
 		function onPageChanged() {
-			if (root.shown && NiriSettings.page !== "" && NiriSettings.page !== root.current) root.go(NiriSettings.page, "");
+			if (root.shown && NiriSettings.page !== "" && NiriSettings.page !== root.current) root.go(NiriSettings.page, NiriSettings.anchor);
+		}
+
+		function onAnchorChanged() {
+			if (root.shown && NiriSettings.anchor !== "" && NiriSettings.page === root.current) root.go(root.current, NiriSettings.anchor);
 		}
 	}
 
@@ -757,6 +807,9 @@ FloatingWindow {
 							case "ultimate": return ultimatePage;
 							case "headset": return headsetPage;
 						case "fingerprint": return fingerprintPage;
+						case "btadapter": return btAdapterPage;
+						case "webcam": return webcamPage;
+						case "hpcamera": return hpCameraPage;
 						case "as50": return as50Page;
 						case "amazfit": return amazfitPage;
 							case "multicursor": return multicursorPage;
@@ -765,6 +818,7 @@ FloatingWindow {
 							case "overview": return overviewPage;
 							case "system": return systemPage;
 							case "apps": return defaultAppsPage;
+							case "browser": return browserPage;
 							case "bar": return barPage;
 						case "tray": return trayPage;
 							case "sounds": return soundsPage;
@@ -1060,6 +1114,30 @@ FloatingWindow {
 	}
 
 	Component {
+		id: btAdapterPage
+
+		BtAdapterPage {
+			onOpen: page => root.go(page, "")
+		}
+	}
+
+	Component {
+		id: hpCameraPage
+
+		HpCameraPage {
+			onOpen: page => root.go(page, "")
+		}
+	}
+
+	Component {
+		id: webcamPage
+
+		WebcamPage {
+			onOpen: page => root.go(page, "")
+		}
+	}
+
+	Component {
 		id: amazfitPage
 
 		AmazfitPage {
@@ -1159,5 +1237,669 @@ FloatingWindow {
 		id: debugPage
 
 		DebugPage {}
+	}
+
+	// Settings › Browser (docs/browser.md): the link, the look, the plugins.
+	// Inline: a new page type would wait for the shell's next start.
+	Component {
+		id: browserPage
+
+		SettingsPage {
+			id: browser
+
+			readonly property string scripts: `${Quickshell.shellDir}/scripts`
+			readonly property var link: {
+				const sources = Object.keys(WebLink.links);
+				return sources.length > 0 ? WebLink.links[sources[sources.length - 1]] : null;
+			}
+			readonly property var plugins: ["browser-link", "browser-launcher", "browser-switcher", "browser-workspaces", "browser-menu", "browser-newtab", "browser-forms", "browser-mail", "browser-focus", "browser-media", "browser-privacy", "browser-capture", "browser-qtrack"]
+			// [{ ok, text }] from browser_host.py status and floorp_theme.py status
+			property var hostLines: []
+			property var themeLines: []
+			property string packed: ""
+			property bool mapExists: false
+			readonly property bool canFocus: typeof WebPage.setFocusSites === "function"
+			readonly property var focusSites: browser.canFocus ? (WebPage.focusSites || []) : []
+
+			function home(path) {
+				return String(path).replace(Quickshell.env("HOME"), "~");
+			}
+
+			function refresh() {
+				hostStatus.running = true;
+				themeStatus.running = true;
+				mapCheck.running = true;
+			}
+
+			function run(command, done) {
+				if (job.running) return;
+				job.done = done || null;
+				job.command = command;
+				job.running = true;
+			}
+
+			title: "Browser"
+			onActiveChanged: if (browser.active) browser.refresh()
+			Component.onCompleted: browser.refresh()
+
+			Process {
+				id: hostStatus
+
+				command: ["python3", `${browser.scripts}/browser_host.py`, "status"]
+				stdout: StdioCollector {
+					onStreamFinished: browser.hostLines = text.split("\n").filter(line => line.trim() !== "").map(line => ({ ok: line.startsWith("ok"), text: browser.home(line.replace(/^(ok|missing)\s+/, "").replace(/\s+\(.*\)$/, "")) }))
+				}
+			}
+
+			Process {
+				id: themeStatus
+
+				command: ["python3", `${browser.scripts}/floorp_theme.py`, "status"]
+				stdout: StdioCollector {
+					onStreamFinished: browser.themeLines = text.split("\n").filter(line => line.trim() !== "").map(line => ({ ok: /: installed/.test(line), text: browser.home(line) }))
+				}
+			}
+
+			Process {
+				id: mapCheck
+
+				command: ["test", "-f", `${Quickshell.shellDir}/core/views/settings/browser/WorkspaceMap.qml`]
+				onExited: code => browser.mapExists = code === 0
+			}
+
+			Process {
+				id: job
+
+				property var done: null
+				stdout: StdioCollector {
+					id: jobOut
+				}
+				stderr: StdioCollector {
+					id: jobErr
+				}
+				onExited: code => {
+					if (job.done) job.done(code, jobOut.text);
+					if (code !== 0) Notifs.pushInternal("error", "Browser", String(jobErr.text || "").trim().split("\n").pop() || `exit ${code}`, { icon: "web" });
+					browser.refresh();
+				}
+			}
+
+			SettingCard {
+				anchor: "browser-link"
+				title: browser.link ? `${browser.link.browser || "Browser"} ${browser.link.version}`.trim() : "Not connected"
+				subtitle: WebLink.connected ? `${WebLink.tabs.length} tabs` : ""
+				icon: "web"
+
+				trailing: TextButton {
+					variant: "filled"
+					icon: "puzzle"
+					text: "Install extension"
+					busy: job.running
+					onActivated: browser.run(["python3", `${browser.scripts}/browser_host.py`, "install"], (code, out) => {
+						const line = String(out).split("\n").find(each => each.startsWith("extension: "));
+						if (code === 0 && line) browser.packed = line.slice(11).trim();
+					})
+				}
+
+				Repeater {
+					model: browser.hostLines
+
+					delegate: RowLayout {
+						required property var modelData
+
+						Layout.fillWidth: true
+						spacing: 10
+
+						Glyph {
+							icon: modelData.ok ? "check_circle_outline" : "close_circle_outline"
+							size: 16
+							color: modelData.ok ? Theme.success : Theme.textSubtle
+						}
+
+						StyledText {
+							Layout.fillWidth: true
+							text: modelData.text
+							tone: modelData.ok ? Theme.text : Theme.textMuted
+							font.pixelSize: Theme.size.label
+							elide: Text.ElideMiddle
+						}
+					}
+				}
+
+				RowLayout {
+					Layout.fillWidth: true
+					visible: browser.packed !== ""
+					spacing: 10
+
+					Glyph {
+						icon: "package_variant_closed"
+						size: 16
+						color: Theme.primary
+					}
+
+					StyledText {
+						Layout.fillWidth: true
+						text: browser.home(browser.packed)
+						font.pixelSize: Theme.size.label
+						font.weight: Font.Medium
+						elide: Text.ElideMiddle
+					}
+
+					IconButton {
+						implicitWidth: 28
+						implicitHeight: 28
+						iconSize: 16
+						icon: "content_copy"
+						onClicked: Quickshell.execDetached(["wl-copy", "--", browser.packed])
+					}
+				}
+			}
+
+			SettingCard {
+				anchor: "browser-look"
+				title: "Look"
+				icon: "palette_outline"
+
+				trailing: RowLayout {
+					spacing: 4
+
+					TextButton {
+						variant: "ghost"
+						icon: "delete_outline"
+						text: "Remove"
+						confirm: true
+						enabled: !job.running && browser.themeLines.some(line => line.ok)
+						onActivated: browser.run(["python3", `${browser.scripts}/floorp_theme.py`, "remove"])
+					}
+
+					TextButton {
+						variant: "ghost"
+						icon: "check_all"
+						text: "Settle"
+						enabled: !job.running && browser.themeLines.some(line => line.ok)
+						onActivated: browser.run(["python3", `${browser.scripts}/floorp_theme.py`, "settle"])
+					}
+
+					TextButton {
+						variant: "filled"
+						icon: "download"
+						text: "Install theme"
+						busy: job.running
+						onActivated: browser.run(["python3", `${browser.scripts}/floorp_theme.py`, "install"])
+					}
+				}
+
+				Repeater {
+					model: browser.themeLines
+
+					delegate: RowLayout {
+						required property var modelData
+
+						Layout.fillWidth: true
+						spacing: 10
+
+						Glyph {
+							icon: modelData.ok ? "check_circle_outline" : "circle_outline"
+							size: 16
+							color: modelData.ok ? Theme.success : Theme.textSubtle
+						}
+
+						StyledText {
+							Layout.fillWidth: true
+							text: modelData.text
+							tone: modelData.ok ? Theme.text : Theme.textMuted
+							font.pixelSize: Theme.size.label
+							elide: Text.ElideMiddle
+						}
+					}
+				}
+			}
+
+			SettingCard {
+				anchor: "browser-tabs"
+				title: "Tabs"
+				icon: "tab"
+				visible: Plugins.on("browser-link")
+
+				Segmented {
+					Layout.fillWidth: true
+					options: [
+						{ value: "hover", label: "Hover", icon: "cursor_default_outline" },
+						{ value: "open", label: "Open", icon: "dock_left" },
+						{ value: "icons", label: "Icons", icon: "view_sequential_outline" },
+						{ value: "top", label: "Top", icon: "dock_top" }
+					]
+					current: WebPage.rail.style
+					onSelected: value => WebPage.setRail({ style: value })
+				}
+
+				ValueSlider {
+					visible: ["hover", "open"].includes(WebPage.rail.style)
+					from: 200
+					to: 480
+					step: 10
+					icon: "arrow_expand_horizontal"
+					label: "Width"
+					unit: " px"
+					value: WebPage.rail.width
+					onMoved: v => WebPage.setRail({ width: v })
+				}
+
+				FlagRow {
+					title: "Recent"
+					icon: "history"
+					checked: WebPage.tabs.recent.on
+					onToggled: on => WebPage.setTabs({ recent: { on: on } })
+				}
+
+				ValueSlider {
+					visible: WebPage.tabs.recent.on
+					from: 5
+					to: 15
+					step: 1
+					icon: "timer_outline"
+					label: "Recent window"
+					unit: " min"
+					value: WebPage.tabs.recent.minutes
+					onMoved: v => WebPage.setTabs({ recent: { minutes: v } })
+				}
+
+				FlagRow {
+					title: "Pinned at the foot"
+					icon: "pin_outline"
+					checked: WebPage.tabs.dock
+					onToggled: on => WebPage.setTabs({ dock: on })
+				}
+
+				FlagRow {
+					title: "Group by site"
+					icon: "web"
+					checked: WebPage.tabs.bySite
+					onToggled: on => WebPage.setTabs({ bySite: on })
+				}
+
+				FlagRow {
+					title: "Ctrl+Tab by use"
+					icon: "keyboard_tab"
+					checked: WebPage.tabs.ctrlTab
+					onToggled: on => WebPage.setTabs({ ctrlTab: on })
+				}
+
+				FlagRow {
+					title: "Typing filters the rail"
+					icon: "filter_outline"
+					checked: WebPage.tabs.filter
+					onToggled: on => WebPage.setTabs({ filter: on })
+				}
+
+				FlagRow {
+					title: "States on icons"
+					icon: "tab"
+					checked: WebPage.tabs.states
+					onToggled: on => WebPage.setTabs({ states: on })
+				}
+
+				FlagRow {
+					title: "Ctrl+K opens the launcher"
+					icon: "magnify"
+					checked: WebPage.tabs.launcherKey
+					onToggled: on => WebPage.setTabs({ launcherKey: on })
+				}
+			}
+
+			SettingCard {
+				anchor: "browser-envs"
+				title: "Environments"
+				icon: "layers_outline"
+				visible: Plugins.on("browser-link")
+
+				FlagRow {
+					title: "Colours"
+					icon: "palette_outline"
+					checked: WebPage.tabs.envs.on
+					onToggled: on => WebPage.setTabs({ envs: { on: on } })
+				}
+
+				FlagRow {
+					visible: WebPage.tabs.envs.on
+					title: "Group"
+					icon: "tab"
+					checked: WebPage.tabs.envs.group
+					onToggled: on => WebPage.setTabs({ envs: { group: on } })
+				}
+
+				Repeater {
+					model: WebPage.tabs.envs.on ? WebPage.tabs.envs.list : []
+
+					delegate: ColumnLayout {
+						id: envRow
+
+						required property var modelData
+						required property int index
+						readonly property string savedPatterns: (envRow.modelData.patterns || []).join(", ")
+
+						Layout.fillWidth: true
+						Layout.topMargin: envRow.index > 0 ? 6 : 0
+						spacing: 4
+
+						RowLayout {
+							Layout.fillWidth: true
+							spacing: 6
+
+							ColorWell {
+								size: 20
+								alpha: false
+								showHex: false
+								value: envRow.modelData.color
+								onPicked: css => WebPage.changeEnv(envRow.modelData.id, { color: String(css).slice(0, 7) })
+							}
+
+							Field {
+								id: nameField
+
+								Layout.preferredWidth: 160
+								clearable: false
+								placeholder: "Name"
+								text: envRow.modelData.name
+								function commit() {
+									if (nameField.text.trim() !== "" && nameField.text.trim() !== envRow.modelData.name) WebPage.changeEnv(envRow.modelData.id, { name: nameField.text.trim() });
+									nameField.text = Qt.binding(() => envRow.modelData.name);
+								}
+								onAccepted: nameField.commit()
+								onFocusedChanged: if (!nameField.focused) nameField.commit()
+							}
+
+							Item {
+								Layout.fillWidth: true
+							}
+
+							TextButton {
+								implicitHeight: 28
+								variant: envRow.modelData.cycle ? "tonal" : "ghost"
+								text: "Alt+E"
+								onClicked: WebPage.changeEnv(envRow.modelData.id, { cycle: !envRow.modelData.cycle })
+							}
+
+							IconButton {
+								implicitWidth: 28
+								implicitHeight: 28
+								icon: "chevron_up"
+								enabled: envRow.index > 0
+								opacity: enabled ? 1 : 0.35
+								onClicked: WebPage.moveEnv(envRow.modelData.id, -1)
+							}
+
+							IconButton {
+								implicitWidth: 28
+								implicitHeight: 28
+								icon: "chevron_down"
+								enabled: envRow.index < WebPage.tabs.envs.list.length - 1
+								opacity: enabled ? 1 : 0.35
+								onClicked: WebPage.moveEnv(envRow.modelData.id, 1)
+							}
+
+							IconButton {
+								implicitWidth: 28
+								implicitHeight: 28
+								icon: "delete_outline"
+								onClicked: WebPage.removeEnv(envRow.modelData.id)
+							}
+						}
+
+						Field {
+							id: envField
+
+							Layout.fillWidth: true
+							placeholder: "example.com, *.example.com, /regex/"
+							text: envRow.savedPatterns
+							function commit() {
+								if (envField.text.trim() !== envRow.savedPatterns) WebPage.changeEnv(envRow.modelData.id, { patterns: envField.text });
+								envField.text = Qt.binding(() => envRow.savedPatterns);
+							}
+							onAccepted: envField.commit()
+							onFocusedChanged: if (!envField.focused) envField.commit()
+						}
+					}
+				}
+
+				TextButton {
+					visible: WebPage.tabs.envs.on && WebPage.tabs.envs.list.length < 12
+					implicitHeight: 30
+					variant: "ghost"
+					icon: "plus"
+					text: "Add group"
+					onClicked: WebPage.addEnv()
+				}
+			}
+
+			SettingCard {
+				anchor: "browser-navigation"
+				title: "Navigation"
+				icon: "cursor_default_click_outline"
+				visible: Plugins.on("browser-link")
+
+				FlagRow {
+					title: "Hints"
+					icon: "keyboard_outline"
+					checked: WebPage.tabs.hints.on
+					onToggled: on => WebPage.setTabs({ hints: { on: on } })
+				}
+
+				RowLayout {
+					visible: WebPage.tabs.hints.on
+					Layout.fillWidth: true
+					spacing: 12
+
+					StyledText {
+						text: "Hint keys"
+						tone: Theme.textMuted
+						font.pixelSize: Theme.size.body
+					}
+
+					Field {
+						id: hintField
+
+						Layout.fillWidth: true
+						text: WebPage.tabs.hints.chars
+						clearable: false
+						function commit() {
+							if (hintField.text.trim() !== WebPage.tabs.hints.chars) WebPage.setTabs({ hints: { chars: hintField.text.trim() } });
+							hintField.text = Qt.binding(() => WebPage.tabs.hints.chars);
+						}
+						onAccepted: hintField.commit()
+						onFocusedChanged: if (!hintField.focused) hintField.commit()
+					}
+				}
+
+				FlagRow {
+					title: "Peek"
+					icon: "eye_outline"
+					checked: WebPage.tabs.peek.on
+					onToggled: on => WebPage.setTabs({ peek: { on: on } })
+				}
+
+				RowLayout {
+					visible: WebPage.tabs.peek.on
+					Layout.fillWidth: true
+					spacing: 12
+
+					StyledText {
+						text: "Links from the shell"
+						tone: Theme.textMuted
+						font.pixelSize: Theme.size.body
+					}
+
+					Segmented {
+						Layout.fillWidth: true
+						options: [
+							{ value: "peek", label: "Peek", icon: "eye_outline" },
+							{ value: "tab", label: "Tab", icon: "tab" }
+						]
+						current: WebPage.tabs.peek.external
+						onSelected: value => WebPage.setTabs({ peek: { external: value } })
+					}
+				}
+
+				FlagRow {
+					title: "Spur"
+					icon: "view_column_outline"
+					checked: WebPage.tabs.spur.on
+					onToggled: on => WebPage.setTabs({ spur: { on: on } })
+				}
+
+				ValueSlider {
+					visible: WebPage.tabs.spur.on
+					from: 2
+					to: 4
+					step: 1
+					icon: "view_column_outline"
+					label: "Columns"
+					value: WebPage.tabs.spur.columns
+					onMoved: v => WebPage.setTabs({ spur: { columns: v } })
+				}
+			}
+
+			SettingCard {
+				anchor: "browser-cleanup"
+				title: "Archive"
+				subtitle: WebPage.archive.length > 0 ? `${WebPage.archive.length} tabs` : ""
+				icon: "archive_outline"
+				visible: Plugins.on("browser-link")
+
+				FlagRow {
+					title: "Offer to archive old tabs"
+					icon: "archive_outline"
+					checked: WebPage.tabs.archive.on
+					onToggled: on => WebPage.setTabs({ archive: { on: on } })
+				}
+
+				ValueSlider {
+					visible: WebPage.tabs.archive.on
+					from: 6
+					to: 168
+					step: 6
+					icon: "timer_outline"
+					label: "Untouched for"
+					unit: " h"
+					value: WebPage.tabs.archive.after
+					onMoved: v => WebPage.setTabs({ archive: { after: v } })
+				}
+
+				ValueSlider {
+					from: 1
+					to: 365
+					step: 1
+					icon: "calendar_outline"
+					label: "Keep archive"
+					unit: " days"
+					value: WebPage.tabs.archive.keep
+					onMoved: v => WebPage.setTabs({ archive: { keep: v } })
+				}
+			}
+
+			SettingCard {
+				anchor: "browser-plugins"
+				title: "In the shell"
+				icon: "puzzle"
+
+				Repeater {
+					model: browser.plugins
+
+					delegate: FlagRow {
+						required property string modelData
+
+						title: Plugins.byId[modelData]?.name ?? modelData
+						icon: Plugins.byId[modelData]?.icon ?? ""
+						enabled: modelData === "browser-link" || Plugins.on("browser-link")
+						opacity: enabled ? 1 : 0.5
+						checked: Plugins.wanted(modelData)
+						onToggled: on => Plugins.set(modelData, on)
+					}
+				}
+			}
+
+			SettingCard {
+				anchor: "browser-breaks"
+				title: "Breaks"
+				icon: "coffee_outline"
+				visible: Plugins.on("browser-media")
+
+				FlagRow {
+					title: "Pause what plays in the browser during a break"
+					checked: Breaks.pauseBrowser
+					onToggled: on => Breaks.setPauseBrowser(on)
+				}
+			}
+
+			SettingCard {
+				anchor: "browser-workspaces"
+				title: "Workspaces"
+				icon: "monitor_dashboard"
+				visible: Plugins.on("browser-workspaces") && browser.mapExists
+
+				Loader {
+					Layout.fillWidth: true
+					active: browser.mapExists
+					source: browser.mapExists ? Qt.resolvedUrl("browser/WorkspaceMap.qml") : ""
+				}
+			}
+
+			SettingCard {
+				anchor: "browser-focus"
+				title: "Sites kept away"
+				subtitle: browser.focusSites.length > 0 ? `${browser.focusSites.length} sites` : ""
+				icon: "block_helper"
+				visible: Plugins.on("browser-focus") && browser.canFocus
+
+				Repeater {
+					model: browser.focusSites
+
+					delegate: RowLayout {
+						required property var modelData
+						readonly property string host: typeof modelData === "string" ? modelData : String(modelData?.host ?? "")
+
+						Layout.fillWidth: true
+						spacing: 10
+
+						Glyph {
+							icon: "web"
+							size: 16
+							color: Theme.textMuted
+						}
+
+						StyledText {
+							Layout.fillWidth: true
+							text: parent.host
+							font.pixelSize: Theme.size.body
+							elide: Text.ElideRight
+						}
+
+						IconButton {
+							implicitWidth: 28
+							implicitHeight: 28
+							iconSize: 16
+							icon: "close"
+							onClicked: WebPage.setFocusSites(browser.focusSites.filter(site => site !== parent.modelData))
+						}
+					}
+				}
+
+				Field {
+					id: siteField
+
+					Layout.fillWidth: true
+					icon: "plus"
+					placeholder: "example.com"
+					onAccepted: {
+						const host = siteField.text.trim().toLowerCase().replace(/^[a-z]+:\/\//, "").replace(/\/.*$/, "").replace(/^www\./, "");
+						if (host === "") return;
+						const sample = browser.focusSites[0];
+						const entry = sample !== undefined && typeof sample !== "string" ? Object.assign({}, sample, { host: host }) : host;
+						if (!browser.focusSites.some(site => (typeof site === "string" ? site : site?.host) === host)) WebPage.setFocusSites(browser.focusSites.concat([entry]));
+						siteField.text = "";
+					}
+				}
+			}
+		}
 	}
 }

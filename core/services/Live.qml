@@ -67,7 +67,7 @@ Singleton {
 	]
 
 	readonly property var sources: [cpu, memory, gpuSource, tempSource, topSource, network, battery, volume, mic, brightness, power, bluetooth,
-		notifications, messages, updates, downloads, torrents, filejobs, editorSource, recording, sharing, gamemode, agents, keepawake, clipboard, shelf,
+		notifications, messages, updates, downloads, torrents, filejobs, editorSource, recording, sharing, browserSharing, gamemode, agents, keepawake, clipboard, shelf,
 		timer, worked, screentime, water, eyes, meeting, todos, weather,
 		phone, watch, mouse, printer, vm, pcs, game, media]
 	readonly property var byId: {
@@ -623,11 +623,40 @@ Singleton {
 		group: "shell"
 		about: "Lights up while an app watches the screen"
 		text: sharing.on ? (Notifs.sharing ? "Shared" : "Private") : ""
-		detail: sharing.on ? (Notifs.sharing ? "An app sees your screen" : "Nobody sees your screen") : ""
+		readonly property var browserTab: sharing.on && Plugins.on("browser-privacy") ? (WebLink.sharingTabs.find(tab => tab.sharing.screen) ?? null) : null
+		detail: sharing.on ? (Notifs.sharing ? (sharing.browserTab ? `${sharing.browserTab.host} sees your screen` : "An app sees your screen") : "Nobody sees your screen") : ""
 		tone: sharing.on ? (Notifs.sharing ? "bad" : "muted") : "normal"
 		pulse: sharing.on ? (Notifs.sharing) : false
 		busy: sharing.on ? (Notifs.sharing) : false
 		quiet: true
+		act: sharing.browserTab ? (screen => WebLink.activate(sharing.browserTab)) : null
+	}
+
+	// which of the browser's tabs uses the camera, the microphone or the
+	// screen; a click goes to the tab (plugin browser-privacy)
+	Source {
+		id: browserSharing
+
+		readonly property var tabs: browserSharing.on ? WebLink.sharingTabs : []
+		readonly property var first: browserSharing.tabs[0] ?? null
+		function uses(tab) {
+			return [tab.sharing.camera ? "camera" : "", tab.sharing.microphone ? "microphone" : "", tab.sharing.screen ? "screen" : ""].filter(part => part !== "").join(", ");
+		}
+
+		key: "browser-sharing"
+		name: "Browser tab sharing"
+		glyph: browserSharing.first?.sharing.screen ? "monitor_share" : browserSharing.first?.sharing.camera ? "camera" : "microphone"
+		group: "shell"
+		plugin: "browser-privacy"
+		about: "The tab that uses the camera, the microphone or the screen"
+		text: browserSharing.first ? (browserSharing.tabs.length > 1 ? `${browserSharing.first.host} +${browserSharing.tabs.length - 1}` : browserSharing.first.host) : ""
+		detail: browserSharing.tabs.map(tab => `${tab.title || tab.host} · ${browserSharing.uses(tab)}`).join("\n")
+		tone: browserSharing.first ? "bad" : "normal"
+		pulse: !!browserSharing.first
+		busy: !!browserSharing.first
+		quiet: true
+		hint: "Click: to the tab"
+		act: screen => WebLink.activate(browserSharing.first)
 	}
 
 	Source {

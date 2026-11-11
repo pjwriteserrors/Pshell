@@ -640,6 +640,18 @@ Singleton {
 
 	// "#group" picks the group (the start of its name is enough), "!" "!!" "!!!"
 	// the priority; returns the group the task went to
+	// a task as it is, without reading #group or ! out of it (the browser's
+	// menu); nothing before Tasks.md was read, it would be written over
+	function addPlain(groupName, text) {
+		const group = groupName || root.inbox;
+		const clean = String(text || "").replace(/\s+/g, " ").trim();
+		if (clean === "" || !root.tasksLoaded) return "";
+		root.writeTasks(root.withTaskIn(root.tasksText, group, clean, 0));
+		const added = root.tasks.filter(task => task.group === group && task.text === clean).sort((left, right) => right.line - left.line)[0];
+		if (added) root.classify(added.key);
+		return group;
+	}
+
 	function addTask(groupName, input) {
 		let group = groupName || root.inbox;
 		let priority = 0;

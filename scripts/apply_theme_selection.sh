@@ -6,10 +6,13 @@
 #
 #   apply_theme_selection.sh <theme> [--backend B] [--palette P] [--style S] [--animation KIND:NAME]
 #                            [--resolution original|2160|1440|1080] [--colours-only]
+#                            [--colours-from PICTURE]
 #
 # --colours-only puts the colours on again (Settings › Colours, after the
 # engine was tuned): the wallpaper, its frame and the animation stay as they
-# are, the palette, the templates and the hooks run.
+# are, the palette, the templates and the hooks run. --colours-from does the
+# same with the palette of another picture (the browser's Pshell menu); one
+# under $THEME_ONLINE_DIR/worn is forgotten afterwards like an online wallpaper.
 #
 # <theme> is a library entry (image, video or a directory holding one), by
 # path or by name. --resolution paints it scaled down (theme_scaled_media in
@@ -39,6 +42,7 @@ WALLUST_STYLE=""
 NIRI_ANIMATION_ID=""
 RESOLUTION=""
 COLOURS_ONLY=0
+COLOURS_FROM=""
 RUN_ID="$(date +%Y%m%d-%H%M%S)"
 LOG_FILE="$THEME_STATE_DIR/apply-$RUN_ID.log"
 GTK_WAL_COLORS_FILE="$WAL_CACHE_DIR/gtk-colors.css"
@@ -77,6 +81,11 @@ while (($# > 0)); do
 			COLOURS_ONLY=1
 			shift
 			;;
+		--colours-from)
+			COLOURS_ONLY=1
+			COLOURS_FROM="${2:-}"
+			shift 2
+			;;
 		--*)
 			echo "unknown option: $1" >&2
 			exit 1
@@ -104,6 +113,12 @@ if [[ -z "$THEME_MEDIA" ]]; then
 	echo "theme not found: $THEME_ARG" >&2
 	exit 1
 fi
+if [[ -n "$COLOURS_FROM" && ! -s "$COLOURS_FROM" ]]; then
+	echo "picture not found: $COLOURS_FROM" >&2
+	exit 1
+fi
+# the palette's picture: the wallpaper's own unless another one is given
+PALETTE_MEDIA="${COLOURS_FROM:-$THEME_MEDIA}"
 
 theme_ensure_runtime_dirs
 # keep the last twenty logs
@@ -553,12 +568,12 @@ style="$(effective_style)"
 selected_palette_mode="$(palette_mode "$style")"
 log "Palette: backend=$backend palette=$palette style=$style mode=$selected_palette_mode"
 
-palette_file="$(theme_palette_path "$THEME_MEDIA" "$backend" "$palette" "$style")"
+palette_file="$(theme_palette_path "$PALETTE_MEDIA" "$backend" "$palette" "$style")"
 if [[ -s "$palette_file" ]]; then
 	log "Palette kept: $palette_file"
 else
 	log "START palette (not made ahead)"
-	if ! palette_file="$(theme_palette_ensure "$THEME_MEDIA" "$backend" "$palette" "$style" 2>>"$LOG_FILE")"; then
+	if ! palette_file="$(theme_palette_ensure "$PALETTE_MEDIA" "$backend" "$palette" "$style" 2>>"$LOG_FILE")"; then
 		log "FAIL palette"
 		FAIL_COUNT=$((FAIL_COUNT + 1))
 		echo "no palette could be made; keeping the previous colours" >&2

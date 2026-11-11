@@ -42,11 +42,25 @@ Singleton {
 
 	// a camera can be used without PipeWire: its device is open
 	Process {
+		id: cameraWatch
+
 		running: root.watched
 		command: ["python3", `${Paths.scripts}/camera_watch.py`]
 		stdout: SplitParser {
 			onRead: line => root.cameraOpen = String(line).trim() === "1"
 		}
 		onRunningChanged: if (!running) root.cameraOpen = false
+		onExited: {
+			root.cameraOpen = false;
+			if (root.watched) rewatch.restart();
+		}
+	}
+
+	// the watcher ended without being asked to: again a little later
+	Timer {
+		id: rewatch
+
+		interval: 2000
+		onTriggered: cameraWatch.running = root.watched
 	}
 }

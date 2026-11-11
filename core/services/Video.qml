@@ -730,7 +730,7 @@ Singleton {
 	}
 
 	function keepFor(path, fields) {
-		if (!path) return;
+		if (!path || !root.keeps(path)) return;
 		const next = Object.assign({}, root.progress_);
 		next[path] = Object.assign({}, next[path] || {}, fields, { at: Date.now() });
 		root.progress_ = next;
@@ -783,8 +783,14 @@ Singleton {
 		}
 	}
 
+	// a file held in memory ($XDG_RUNTIME_DIR, e.g. from the browser's menu)
+	// is gone at the next start: nothing of it is kept
+	function keeps(path) {
+		return !String(path).startsWith(`${Paths.runtime}/`);
+	}
+
 	function remember(path) {
-		if (!path) return;
+		if (!path || !root.keeps(path)) return;
 		root.recent = [path].concat(root.recent.filter(p => p !== path)).slice(0, 60);
 		recentFile.setText(JSON.stringify(root.recent) + "\n");
 	}

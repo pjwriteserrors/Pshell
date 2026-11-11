@@ -11,6 +11,8 @@ Singleton {
 
 	readonly property var glyphs: ({
 		"alphabetical": "󰀬",
+		"dock_top": "󱔓",
+		"view_sequential_outline": "󱒏",
 		"barcode": "󰁱",
 		"incognito": "󰗹",
 		"rectangle": "󰹞",
@@ -605,6 +607,13 @@ Singleton {
 		"bell_outline": "󰂜",
 		"bell_ring": "󰂞",
 		"bell_sleep": "󰂠",
+		"radar": "󰐷",
+		"broadcast": "󱜠",
+		"identifier": "󰻾",
+		"antenna": "󱄙",
+		"access_point": "󰀃",
+		"bluetooth_transfer": "󰂴",
+		"flask_outline": "󰂖",
 		"bluetooth": "󰂯",
 		"bluetooth_audio": "󰂰",
 		"bluetooth_connect": "󰂱",

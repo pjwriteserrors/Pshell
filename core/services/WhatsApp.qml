@@ -311,7 +311,8 @@ Singleton {
 			app: "WhatsApp",
 			avatar: message.avatar ?? "",
 			duration: 9000,
-			actions: [{ label: "Open", icon: "forum", run: () => root.show(message.chat) }],
+			actions: message.call ? [{ label: "Open", icon: "forum", run: () => root.show(message.chat) }]
+				: [{ label: "Open", icon: "forum", run: () => root.show(message.chat) }, { label: "Mark read", icon: "check_all", run: () => root.read(message.chat) }],
 			// answered from the toast: it was read then
 			reply: message.call ? null : {
 				placeholder: "Reply",

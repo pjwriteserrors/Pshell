@@ -538,7 +538,7 @@ Singleton {
 			app: "Mail",
 			avatar: root.avatars[mail.email] ?? "",
 			duration: 9000,
-			actions: [{ label: "Open", icon: "forum", run: () => root.show(mail.chat) }],
+			actions: [{ label: "Open", icon: "forum", run: () => root.show(mail.chat) }, { label: "Mark read", icon: "email_open_outline", run: () => root.setRead(mail.chat, true) }],
 			reply: mail.id ? { placeholder: `Reply to ${String(mail.name).split(/\s+/)[0]}`, send: text => root.answer(mail, text) } : null
 		});
 	}
