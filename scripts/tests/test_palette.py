@@ -124,6 +124,7 @@ class Templates(unittest.TestCase):
             self.assertEqual(len(written), len(list(TEMPLATES.iterdir())))
             data = json.loads((tmp / "out/colors.json").read_text())
             self.assertEqual(data["special"]["background"], "#130C08")
+            self.assertEqual(data["roles"], {"primary": "#E17D0C"})
             self.assertFalse([p for p in (tmp / "out").iterdir() if p.name.startswith(".staging")])
 
 

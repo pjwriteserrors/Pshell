@@ -13,11 +13,13 @@ Where they go comes from the [templates] table of wallust.toml: the pywal
 entry is the whole folder into ~/.cache/wal, every other entry one file.
 The files of a folder are written beside it first and moved in with
 colors.json last: the shell watches that file and never reads a palette half
-written.
+written. The engine's roles go into that colors.json too ("roles", as
+Theme.qml reads them); a wallust scheme's stays as wallust writes it.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -119,7 +121,7 @@ def write(scheme: dict, wallpaper: str, config_file: Path, alpha: int = 100) -> 
     written = []
     for source, dest, folder in targets(config_file):
         if folder:
-            written += _write_folder(source, dest, values, alpha)
+            written += _write_folder(source, dest, values, alpha, scheme.get("roles") or {})
         elif source.is_file():
             dest.parent.mkdir(parents=True, exist_ok=True)
             tmp = dest.with_name(f".{dest.name}.tmp{os.getpid()}")
@@ -129,7 +131,7 @@ def write(scheme: dict, wallpaper: str, config_file: Path, alpha: int = 100) -> 
     return written
 
 
-def _write_folder(source: Path, dest: Path, values: dict, alpha: int) -> list[Path]:
+def _write_folder(source: Path, dest: Path, values: dict, alpha: int, roles: dict) -> list[Path]:
     dest.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=".staging.", dir=dest))
     written = []
@@ -149,6 +151,10 @@ def _write_folder(source: Path, dest: Path, values: dict, alpha: int) -> list[Pa
         for out in sorted(p for p in staging.rglob("*") if p.is_file()):
             rel = out.relative_to(staging)
             if rel.as_posix() == "colors.json":
+                if roles:
+                    data = json.loads(out.read_text())
+                    data["roles"] = roles
+                    out.write_text(json.dumps(data, indent=4) + "\n")
                 last.append((out, dest / rel))
                 continue
             (dest / rel).parent.mkdir(parents=True, exist_ok=True)
