@@ -205,8 +205,26 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
     a rumble of the game's within 150 ms after an echo is not played
     again. A press that rumbled less than half the time is never echoed
     (a step; a charged shot on its cooldown rumbles every other try, so it
-    is echoed – on its cooldown too). A quick release (under 250 ms) or one
-    inside a held key's beat teaches nothing: what follows is the press's.
+    is echoed – on its cooldown too). A press is learned twice – tapped
+    (let go before its rumble's moment: Hanzo's bow loosed at once) and
+    held (still down then: the bow drawn, which rumbles nothing; pistols,
+    which rumble on the press) – and the echo plays the one that came
+    true; a release after a held key's beat does not count the next beat
+    (one at the beat's time and strength) as its own; a press and its
+    release that would both echo the same shot echo it once. A soft rumble
+    (under 0.1, a bow being drawn) does not keep a press from teaching.
+    *Per hero*: the models are kept per game and hero (`Overwatch#2`), the
+    hero told by the portrait in the HUD's corner (`Portrait`: grim grabs
+    x 0.040–0.075, y 0.848–0.920 of the fullscreen window, shrunk to
+    12×12 colours; the same hero's two grabs differ by ~0, two heroes by
+    40+; within 14 it is a known one) – grabbed 0.8 s after the game hides
+    its cursor again (the hero picker or a menu closed; again every second
+    up to 6 times while it does not hold still – the spawn) and every 20 s.
+    A new portrait must look the same twice a second apart to be a hero
+    (the picker closing is not); while the cursor shows and until the
+    hero is told, nothing is echoed or learned (`#?`). Measured: Hanzo
+    after a switch told in ~5 s from "Continue" (the spawn included), the
+    hero switched back to known at once, no learning again.
   - *The game's sound* (`rumbleSound`): only the game's own PipeWire stream
     – found by its processes (`games_guard.py` sends the pids with each game
     window; a stream whose `application.process.id` is one of them or a
