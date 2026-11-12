@@ -156,6 +156,15 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
     device with `BTN_SOUTH`) is plugged in, since a game would take ours as
     player one; it gives way within 5 s of a real one appearing and comes
     back when it is gone. `games.py pads` and `games_pad.py` leave it out.
+    Many games (Overwatch among them) rumble only the controller that is
+    the active input, and one that never moves gets nothing: with the
+    *nudge* (`rumblePadNudge`, off by default; `ipc mouse padNudge on|off`)
+    every press while the game has the focus tips the pad's left stick by
+    `rumblePadNudgeAmount` (0..1, 0.3) for `rumblePadNudgeHold` ms (40),
+    alternately left and right, at most every 50 ms. It is written on the
+    press thread straight from evdev, so it reaches the game before the
+    press does through the compositor. The hero may twitch a hair; turn the
+    amount down until it stops rumbling, then one step up.
   - *The game's sound* (`rumbleSound`): only the game's own PipeWire stream
     – found by its processes (`games_guard.py` sends the pids with each game
     window; a stream whose `application.process.id` is one of them or a

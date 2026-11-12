@@ -107,6 +107,13 @@ def games_now():
                 continue
             pids.add(pid)
             todo += children.get(pid, [])
+        # a game in gamescope: the window is gamescope's, which runs above
+        # Steam's reaper (`gamescope … -- reaper SteamLaunch …`)
+        parent = table.get(root, (0, []))[0]
+        while parent in table and table[parent][1] and \
+                os.path.basename(table[parent][1][0]).startswith("gamescope"):
+            pids.add(parent)
+            parent = table[parent][0]
         names = set()
         for pid in pids:
             for part in table[pid][1][:2]:

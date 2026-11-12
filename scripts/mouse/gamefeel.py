@@ -249,6 +249,9 @@ class Pad:
         self.last_rumble = 0.0
         self.pulses = 0
         self.blocked = ""     # the real controller that keeps the pad away
+        self.nudged = 0.0     # when the last nudge went out
+        self.nudge_sign = 1
+        self.nudge_lock = threading.Lock()
 
     def wanted(self):
         options = self.daemon.config["options"]
@@ -418,6 +421,56 @@ class Pad:
 
     def recent(self, seconds=3.0):
         return self.last_rumble > 0 and time.monotonic() - self.last_rumble < seconds
+
+    # ── the nudge (rumblePadNudge) ──────────────────────────────────────
+    # Many games (Overwatch among them) rumble only the controller that is
+    # the active input: one that never moves gets nothing. With the nudge,
+    # every press of yours tips the left stick a little for a few frames
+    # (alternately left and right, so nothing drifts), and the pad is the
+    # last input when the game decides whom to rumble. Called on the press
+    # thread, straight away: the raw evdev press is here before the game
+    # has it through the compositor.
+    def nudging(self):
+        options = self.daemon.config["options"]
+        return self.ui is not None and options.get("rumblePadNudge", False) is True and self.daemon.game_focused
+
+    def press(self, code, down):
+        if not down or not self.nudging():
+            return
+        now = time.monotonic()
+        with self.nudge_lock:
+            if now - self.nudged < 0.05:
+                return
+            self.nudged = now
+            self.nudge_sign = -self.nudge_sign
+            sign = self.nudge_sign
+        options = self.daemon.config["options"]
+        try:
+            amount = float(options.get("rumblePadNudgeAmount", 0.3))
+            hold = int(options.get("rumblePadNudgeHold", 40))
+        except (TypeError, ValueError):
+            amount, hold = 0.3, 40
+        amount = max(0.0, min(1.0, amount))
+        hold = max(10, min(500, hold))
+        ui = self.ui
+        try:
+            ui.write(E.EV_ABS, E.ABS_X, int(sign * amount * 32767))
+            ui.syn()
+        except (OSError, AttributeError):
+            return
+        # held for a few frames, else a game that polls once a frame never sees it
+        timer = threading.Timer(hold / 1000, self.release, args=(ui,))
+        timer.daemon = True
+        timer.start()
+
+    def release(self, ui):
+        if ui is not self.ui:
+            return
+        try:
+            ui.write(E.EV_ABS, E.ABS_X, 0)
+            ui.syn()
+        except OSError:
+            pass
 
 
 class Memory:

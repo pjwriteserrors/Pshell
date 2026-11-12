@@ -1306,9 +1306,10 @@ class Triggers:
 
     def gating(self):
         """The ears want to know about every press – or the eyes (press
-        and click zones, the HUD cells to learn)."""
-        ears, eyes = self.daemon.ears, self.daemon.eyes
-        return (ears is not None and ears.on and ears.gated()) or (eyes is not None and eyes.wants_presses())
+        and click zones, the HUD cells to learn), or the pad's nudge."""
+        ears, eyes, pad = self.daemon.ears, self.daemon.eyes, self.daemon.pad
+        return ((ears is not None and ears.on and ears.gated()) or (eyes is not None and eyes.wants_presses())
+                or (pad is not None and pad.nudging()))
 
     def wanted(self):
         if actions.evdev is None or not self.mode_on():
@@ -1404,6 +1405,8 @@ class Triggers:
                         if event.type != actions.E.EV_KEY or event.value not in (0, 1):
                             continue
                         if gating:
+                            # first: the nudge has to beat the press to the game
+                            self.daemon.pad.press(event.code, event.value == 1)
                             self.daemon.ears.press(event.code, event.value == 1)
                             self.daemon.eyes.press(event.code, event.value == 1)
                         bind = binds.get(event.code)

@@ -542,6 +542,11 @@ Scope {
 		function pad(on: string): void {
 			Mouse.setOption("rumblePad", on === "on" || on === "true" || on === "1");
 		}
+		// the pad tips its stick on each press, for games that only rumble the
+		// active controller: `mouse padNudge on|off`
+		function padNudge(on: string): void {
+			Mouse.setOption("rumblePadNudge", on === "on" || on === "true" || on === "1");
+		}
 		// game haptics: `mouse feel no` – the sound just felt was not an
 		// action, never feel it again; `mouse feel forget` starts the game over
 		// `mouse feel record` keeps 2 minutes of the game's sound and presses for tuning
