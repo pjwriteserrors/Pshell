@@ -164,9 +164,10 @@ def pack():
 def install():
     for name, (program, description) in HOSTS.items():
         manifest = {"name": name, "description": description, "path": str(program), "type": "stdio", "allowed_extensions": [ID]}
-        for folder in FOLDERS:
-            if folder == FOLDERS[2] and not folder.parent.exists():
-                continue
+        # only beside a browser that is there: a ~/.floorp made here makes
+        # Floorp leave ~/.config/floorp for an empty profile in it
+        folders = [folder for folder in FOLDERS if folder.parent.is_dir()] or FOLDERS[:1]
+        for folder in folders:
             folder.mkdir(parents=True, exist_ok=True)
             (folder / f"{name}.json").write_text(json.dumps(manifest, indent=2) + "\n")
             print(f"host: {folder / (name + '.json')}")
