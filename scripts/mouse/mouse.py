@@ -305,7 +305,7 @@ class Daemon:
             pass
         self.engine.configure(self.config["rules"], self.config["options"])
         self.output = actions.Output()
-        self.pad = gamefeel.Pad(self, STATE / "mouse-padecho.json")
+        self.pad = gamefeel.Pad(self)
         self.ears = gamefeel.Ears(self, gamefeel.Memory(STATE / "mouse-gamefeel.json"))
         self.eyes = gamefeel.Eyes(self, self.ears.memory, self.ears.gate)
         self.triggers = Triggers(self)
@@ -809,9 +809,7 @@ class Daemon:
         if waveform:
             self.play(waveform)
 
-    def play(self, waveform, mouse=None, wait=True):
-        """`wait` False: sent without waiting for the answer (the pad's
-        pulses – the next one may come before a dozing mouse answers)."""
+    def play(self, waveform, mouse=None):
         mouse = mouse or self.current()
         if not mouse or "haptic" not in mouse.state:
             return
@@ -822,8 +820,8 @@ class Daemon:
             log(f"DRY play {waveform}")
             return
         try:
-            mouse.device.play(code, wait=wait)
-        except (HidppError, TimeoutError, OSError) as error:
+            mouse.device.play(code)
+        except (HidppError, TimeoutError) as error:
             log(f"haptic: {error}")
 
     def fire(self, rule, control, trigger, phase):
@@ -992,27 +990,19 @@ class Daemon:
     def log(self, text):
         log(text)
 
-    def felt(self, source, kind, strength, waveform, label, stream="", cluster=-1, now=False):
+    def felt(self, source, kind, strength, waveform, label, stream="", cluster=-1):
         """A game event to feel (the pad, the sound, a bound press): plays
         it and, while the page watches, says what it was (`cluster`: the
-        learned sound, for the page to mute). `now`: played at once on the
-        caller's thread (the pad's pulser), every one of them – the rest
-        is told on the loop."""
-        if now:
-            self.last_felt = time.monotonic()
-            self.play(waveform, wait=False)
-
+        learned sound, for the page to mute)."""
         def go():
-            if not now:
-                at = time.monotonic()
-                # the sound and the picture often say the same thing at once
-                if at - self.last_felt < 0.05:
-                    return
-                self.last_felt = at
+            now = time.monotonic()
+            # the sound and the picture often say the same thing at once
+            if now - self.last_felt < 0.05:
+                return
+            self.last_felt = now
             self.felt_count[source] = self.felt_count.get(source, 0) + 1
             gamefeel.felt_log(f"felt {source} {kind} {waveform} {label}")
-            if not now:
-                self.play(waveform)
+            self.play(waveform)
             if self.watching:
                 emit("felt", source=source, kind=kind, strength=round(float(strength), 2), wave=waveform,
                      label=label, stream=stream, cluster=cluster)
@@ -1411,10 +1401,6 @@ class Triggers:
                         scanned = 0.0
                         continue
                     for event in events:
-                        if gating and event.type == actions.E.EV_REL:
-                            # looking around: the game may withhold its rumble (the pad's echo)
-                            self.daemon.pad.moved()
-                            continue
                         # 2 is the keyboard's own repeat
                         if event.type != actions.E.EV_KEY or event.value not in (0, 1):
                             continue

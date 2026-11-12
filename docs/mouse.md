@@ -149,82 +149,22 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
     play with mouse and keyboard – with the haptics their makers designed:
     this weapon's reload, that one's recoil, a hit taken, an explosion
     nearby. Every effect the game uploads (`FF_RUMBLE`, `FF_PERIODIC`,
-    `FF_CONSTANT`) and plays is felt by its strength (whisper, subtle,
-    damp, sharp collision): a rumble that starts or gets clearly harder
-    (+0.08) is a pulse at once, one that keeps its strength is a row of
-    pulses (denser the harder; at most 5 s unchanged), one that fades gives
-    none more – Overwatch's shot is one frame at 0.36–0.6 fading over
-    ~150 ms, one pulse. The strength is read on the pad's thread the moment
-    the game sends it and played by a thread of its own (`Pulser`), never
-    through the daemon's loop or the 50 ms guard against sound and picture
-    saying the same thing, and sent without waiting for the mouse's answer
-    (`Channel.send`, software id 0x0D, whose answers the reader passes by):
-    a one-frame rumble read later was often 0 already, and pulses that
-    came while a haptic call waited (10–20 ms, the first after the mouse
-    dozed off up to a second) were lost. The pad is only there while no real controller (a non-virtual
+    `FF_CONSTANT`) and plays becomes a row of pulses by its strength
+    (whisper, subtle, damp, sharp collision) for as long as it runs (denser
+    the harder; at most 3 s on its own – SDL games stop and re-upload
+    theirs). The pad is only there while no real controller (a non-virtual
     device with `BTN_SOUTH`) is plugged in, since a game would take ours as
     player one; it gives way within 5 s of a real one appearing and comes
     back when it is gone. `games.py pads` and `games_pad.py` leave it out.
     Many games (Overwatch among them) rumble only the controller that is
     the active input, and one that never moves gets nothing: with the
     *nudge* (`rumblePadNudge`, off by default; `ipc mouse padNudge on|off`)
-    every press and every release while the game has the focus, and every
-    400 ms while a key or button is held, tips the pad's left stick by
-    `rumblePadNudgeAmount` (0..1, 0.26 – just past XInput's dead zone of
-    7849/32767; 0.21 was too little for Overwatch, 0.25 enough) for
-    `rumblePadNudgeHold` ms (20), alternately left and right, at most every
-    30 ms. Overwatch takes a held mouse button for mouse-and-keyboard input
-    after about a second (900 ms between nudges still held, 400 is the
-    margin): without the keep-alive the rumble of automatic fire stopped
-    mid-magazine, and without the release nudge a charged shot let go
-    rumbled nothing. It is written on the press thread straight from evdev, so it
-    reaches the game before the press does through the compositor; the
-    camera does not move, the hero at most a hair. Only while the game
-    hides its cursor (`GameCursor`: XFixes on the game's X display – the
-    one inside gamescope when the game's environment has
-    `GAMESCOPE_WAYLAND_DISPLAY` – told of every change): in a menu the
-    stick moved the menu's focus, the game took the pad for the input, hid
-    the cursor and lost the click. When the display cannot be watched the
-    nudge goes out everywhere, as before (logged).
-    *Echo*: mouse motion after the nudge – looking around while
-    shooting – takes the pad away for as long as the mouse moves, and
-    nothing the pad does wins against it (a nudge every 20 ms, the stick
-    held over: still no rumble). So what each key sets off is learned
-    while the mouse rests (`mouse-padecho.json`, per game: per press and
-    per release the burst of rumbles that follows within 150 ms of a quiet
-    start – when, how strong – and the beat while it is held, from two
-    rumbles in a row with the mouse at rest), and where the game stays
-    silent at that moment (+35 ms) after recent motion, the learned rumble
-    is played ("Controller (echo)" on the page). "Recent" is generous on
-    purpose – measured on Overwatch, "moved after the last nudge" was right
-    74 times in 80 (a nudge 100 ms ahead restored the pad once and not the
-    next time, and a held key's beat wanders by 50 ms): motion within the
-    last beat, or up to 150 ms before the last nudge, counts; once a held
-    key's beat is echoed it stays echoed until the game's own beat is back
-    or the mouse rested 0.6 s. A pulse too many is caught by the pulser:
-    a rumble of the game's within 150 ms after an echo is not played
-    again. A press that rumbled less than half the time is never echoed
-    (a step; a charged shot on its cooldown rumbles every other try, so it
-    is echoed – on its cooldown too). A press is learned twice – tapped
-    (let go before its rumble's moment: Hanzo's bow loosed at once) and
-    held (still down then: the bow drawn, which rumbles nothing; pistols,
-    which rumble on the press) – and the echo plays the one that came
-    true; a release after a held key's beat does not count the next beat
-    (one at the beat's time and strength) as its own; a press and its
-    release that would both echo the same shot echo it once. A soft rumble
-    (under 0.1, a bow being drawn) does not keep a press from teaching.
-    *Per hero*: the models are kept per game and hero (`Overwatch#2`), the
-    hero told by the portrait in the HUD's corner (`Portrait`: grim grabs
-    x 0.040–0.075, y 0.848–0.920 of the fullscreen window, shrunk to
-    12×12 colours; the same hero's two grabs differ by ~0, two heroes by
-    40+; within 14 it is a known one) – grabbed 0.8 s after the game hides
-    its cursor again (the hero picker or a menu closed; again every second
-    up to 6 times while it does not hold still – the spawn) and every 20 s.
-    A new portrait must look the same twice a second apart to be a hero
-    (the picker closing is not); while the cursor shows and until the
-    hero is told, nothing is echoed or learned (`#?`). Measured: Hanzo
-    after a switch told in ~5 s from "Continue" (the spawn included), the
-    hero switched back to known at once, no learning again.
+    every press while the game has the focus tips the pad's left stick by
+    `rumblePadNudgeAmount` (0..1, 0.3) for `rumblePadNudgeHold` ms (40),
+    alternately left and right, at most every 50 ms. It is written on the
+    press thread straight from evdev, so it reaches the game before the
+    press does through the compositor. The hero may twitch a hair; turn the
+    amount down until it stops rumbling, then one step up.
   - *The game's sound* (`rumbleSound`): only the game's own PipeWire stream
     – found by its processes (`games_guard.py` sends the pids with each game
     window; a stream whose `application.process.id` is one of them or a
