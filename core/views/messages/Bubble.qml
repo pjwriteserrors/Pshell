@@ -434,7 +434,11 @@ Item {
 							active: root.message.loaded && root.message.html !== "" && !root.page
 							visible: active
 							Layout.fillWidth: true
+							Layout.preferredWidth: inner.width
+							// as tall as the text is at its width (see WaBubble's words)
+							Layout.preferredHeight: item?.contentHeight ?? 0
 							sourceComponent: TextEdit {
+								width: inner.width
 								readOnly: true
 								selectByMouse: true
 								textFormat: TextEdit.RichText
@@ -458,7 +462,10 @@ Item {
 							active: !body.active && !root.page && root.chain.length === 0 && (root.message.text !== "" || !root.message.loaded)
 							visible: active
 							Layout.fillWidth: true
+							Layout.preferredWidth: inner.width
+							Layout.preferredHeight: item?.contentHeight ?? 0
 							sourceComponent: StyledText {
+								width: inner.width
 								text: root.message.text || "…"
 								tone: root.message.loaded ? Theme.text : Theme.textMuted
 								wrapMode: Text.Wrap
@@ -586,7 +593,10 @@ Item {
 													}
 
 													TextEdit {
+														width: cardColumn.width
 														Layout.fillWidth: true
+														Layout.preferredWidth: cardColumn.width
+														Layout.preferredHeight: contentHeight
 														readOnly: true
 														selectByMouse: true
 														textFormat: TextEdit.RichText
@@ -744,7 +754,10 @@ Item {
 							active: root.expanded && folded !== ""
 							visible: active
 							Layout.fillWidth: true
+							Layout.preferredWidth: inner.width
+							Layout.preferredHeight: item?.contentHeight ?? 0
 							sourceComponent: TextEdit {
+								width: inner.width
 								readOnly: true
 								selectByMouse: true
 								textFormat: TextEdit.RichText

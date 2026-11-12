@@ -1,9 +1,10 @@
-/* "Pinned": the pinned tabs as a row at the foot of the rail, numbered, on
- * Alt+1…6 (Settings › Browser › Tabs: Pinned at the foot).
+/* "Pinned": the pinned tabs as a row at the foot of the rail (Settings ›
+ * Browser › Tabs: Pinned at the foot). Alt+1…9 belong to the recent tiles;
+ * the shell's "slot" command still takes a place by its number.
  *
- * A pinned tab remembers the page it was pinned on; Alt+N on the tab already
- * in front goes back there. A pinned tab that was closed leaves its place
- * behind, faded: Alt+N or a click opens it again, a middle click lets it go.
+ * A pinned tab remembers the page it was pinned on; the slot command on the
+ * tab already in front goes back there. A pinned tab that was closed leaves
+ * its place behind, faded: a click opens it again, a middle click lets it go.
  * Unpinning lets a place go as well. */
 "use strict";
 
@@ -90,16 +91,9 @@
 		number(W);
 	}
 
-	// the number of each place, for the sheet (pinned tabs, then left places)
+	// the places carry no numbers any more (Alt+1…9 are the recent tiles')
 	function number(W) {
-		const tabs = pinned(W);
-		tabs.forEach((tab, index) => {
-			if (index < MAX && tabsConfig().dock) tab.setAttribute("pshell-slot", String(index + 1));
-			else tab.removeAttribute("pshell-slot");
-		});
-		if (W.ghostBox) {
-			[...W.ghostBox.children].forEach((node, index) => node.setAttribute("pshell-slot", String(tabs.length + index + 1)));
-		}
+		for (const tab of pinned(W)) tab.removeAttribute("pshell-slot");
 	}
 
 	COMMANDS.slot = async args => {

@@ -1,7 +1,9 @@
 /* The window's own keys:
  *   Ctrl+K      the shell's launcher on >tab (instead of the search bar's)
- *   Alt+1…6     the dock's places (instead of the tab with that number)
+ *   Alt+1…9     the recent tiles (instead of the tab with that number),
+ *               Alt+0 the last of them
  *   Alt+E       the same page in the next environment
+ *   Alt+Shift+S the page style editor (before the menu bar's History)
  * and Ctrl+Tab by use, with previews (Firefox's own, a pref).
  * With the shell's link connected a click in the address bar can open the
  * launcher as well (Settings, off by default). */
@@ -10,10 +12,13 @@
 (function () {
 	const OWN = [
 		{ id: "pshell-key-launcher", key: "K", modifiers: "accel", replaces: ["key_search", "key_search2"], when: tabs => tabs.launcherKey && tabs.connected, run: () => emit("launcher") },
-		{ id: "pshell-key-env", key: "E", modifiers: "alt", replaces: [], early: true, when: tabs => tabs.envs.on, run: W => PARTS.find(part => part.name === "env").switchEnv(W) }
+		{ id: "pshell-key-env", key: "E", modifiers: "alt", replaces: [], early: true, when: tabs => tabs.envs.on, run: W => PARTS.find(part => part.name === "env").switchEnv(W) },
+		{ id: "pshell-key-restyle", key: "S", modifiers: "alt,shift", shift: true, replaces: [], early: true, private: true, when: () => true, run: () => emit("restyle") }
 	];
-	for (let n = 1; n <= 6; n++) {
-		OWN.push({ id: `pshell-key-slot${n}`, key: String(n), modifiers: "alt", replaces: [`key_selectTab${n}`], when: tabs => tabs.dock, run: W => PARTS.find(part => part.name === "dock").slot(W, n) });
+	// Alt+1…9 the recent tiles in their places, Alt+0 the last of them
+	for (let n = 0; n <= 9; n++) {
+		const replaces = n === 9 ? ["key_selectLastTab"] : n > 0 ? [`key_selectTab${n}`] : [];
+		OWN.push({ id: `pshell-key-recent${n}`, key: String(n), modifiers: "alt", replaces, when: tabs => tabs.recent.on, run: W => PARTS.find(part => part.name === "recent").pick(W, n) });
 	}
 
 	function setCtrlTab(on) {
@@ -42,11 +47,11 @@
 				});
 				W.keyset.appendChild(key);
 			}
-			// Alt+E belongs to the menu bar's Edit menu first; taken before it
+			// Alt+E and Alt+Shift+S belong to the menu bar (Edit, History) first; taken before it
 			on(W, W.win, "keydown", event => {
-				if (!event.altKey || event.ctrlKey || event.shiftKey || event.metaKey || event.repeat) return;
-				const own = OWN.find(item => item.early && event.key.toUpperCase() === item.key);
-				if (!own || !own.when(tabsConfig()) || W.private) return;
+				if (!event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;
+				const own = OWN.find(item => item.early && event.key.toUpperCase() === item.key && !!item.shift === event.shiftKey);
+				if (!own || !own.when(tabsConfig()) || (W.private && !own.private)) return;
 				event.preventDefault();
 				event.stopPropagation();
 				own.run(W);

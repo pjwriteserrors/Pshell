@@ -15,7 +15,8 @@ import Quickshell.Io
 //   saved:   { v4l2: {key: value}, xu: {sunplusN: value}, roi: {rect, auto}, ir: {metadata} }
 //   view:    { zoom, cx, cy, follow, frameFace, mirror }
 //   virtual: bool, size: [w, h], fps, photoDir
-//   options: { preview, irPreview, irMode, enhanceAi, enhanceModel, faceUnlock, faceTries }
+//   options: { preview, irPreview, irMode, enhanceAi, enhanceModel, faceUnlock, faceTries,
+//              faceStart: { lock, sleep, wake } – auto, a modifier (Control, Shift, Alt, Meta) or off }
 Singleton {
 	id: root
 
@@ -70,6 +71,14 @@ Singleton {
 	readonly property string enhanceModel: root.options.enhanceModel || (root.models[0]?.name ?? "")
 	readonly property bool faceUnlock: root.options.faceUnlock ?? false
 	readonly property int faceTries: root.options.faceTries ?? 3
+	// when the lock screen looks: per occasion (locked, woken from standby, screens back on)
+	readonly property var faceStart: Object.assign({ lock: "auto", sleep: "auto", wake: "auto" }, root.options.faceStart ?? {})
+
+	function setFaceStart(occasion, mode) {
+		const start = Object.assign({}, root.faceStart);
+		start[occasion] = mode;
+		root.setOption("faceStart", start);
+	}
 	// the lock screen may look for a face: the plugin on, the option on, a face enrolled
 	readonly property bool faceReady: root.enabled && root.faceUnlock && root.faces.length > 0
 

@@ -13,7 +13,8 @@
 //                 { type: "answer", rid, ok, data | error }
 // from the shell: { type: "sync" }                     → ready, tabs (the host sends it on reaching the shell)
 //                 { type: "config", config }           menu entries, what to intercept, forms, blocked sites, the rail, tabs
-//                 { type: "theme", theme }             browser.theme.update
+//                 { type: "theme", theme, ansi }       browser.theme.update,
+//                                                      ansi: colours 0–15 for the tab groups
 //                 { type: "newtab", data }             what the new tab page shows
 //                 { type: "cmd", rid, cmd, ... }       → answer (see COMMANDS)
 //                 { type: "answer", rid, ok, data }    to an ask
@@ -222,7 +223,8 @@ if (browser.contextualIdentities) {
 
 // ── the theme ────────────────────────────────────────────────────────────────
 // kept, so the browser starts in the colours it had and not in its own
-async function applyTheme(theme) {
+async function applyTheme(theme, ansi) {
+	if (Array.isArray(ansi)) applyAnsi(ansi);
 	if (!theme || !theme.colors) return;
 	try {
 		await browser.theme.update(theme);
@@ -230,6 +232,17 @@ async function applyTheme(theme) {
 	} catch (error) {
 		console.error("[pshell] theme:", error);
 	}
+}
+
+// the palette's terminal colours, for the tab groups (experiments/parts/palette.js)
+let ansiApplied = "";
+function applyAnsi(ansi) {
+	if (!Array.isArray(ansi) || !browser.pshellChrome) return;
+	const key = JSON.stringify(ansi);
+	if (key === ansiApplied) return;
+	ansiApplied = key;
+	browser.storage.local.set({ ansi });
+	browser.pshellChrome.command("palette", { colors: ansi }).catch(error => console.error("[pshell] palette:", error));
 }
 
 // the tab rail's style (Settings › Browser › Tabs), through the extension's
@@ -261,6 +274,7 @@ function applyTabs(tabs, force) {
 if (browser.pshellChrome) {
 	browser.pshellChrome.onEvent.addListener((name, data) => {
 		if (name === "launcher") toShell({ type: "event", name: "launcher" });
+		if (name === "restyle") browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => openEditor(tab));
 	});
 }
 
@@ -288,8 +302,9 @@ async function offerStale() {
 }
 setInterval(offerStale, 10 * 60 * 1000);
 
-browser.storage.local.get(["theme", "config", "rail", "tabs"]).then(kept => {
+browser.storage.local.get(["theme", "ansi", "config", "rail", "tabs"]).then(kept => {
 	if (kept.theme) browser.theme.update(kept.theme).catch(() => {});
+	applyAnsi(kept.ansi);
 	if (kept.config) config = Object.assign(config, kept.config);
 	applyRail(kept.rail);
 	if (kept.tabs && !config.tabs) config.tabs = kept.tabs;
@@ -304,9 +319,9 @@ browser.storage.local.get(["theme", "config", "rail", "tabs"]).then(kept => {
 async function buildMenu() {
 	await browser.menus.removeAll();
 	const entries = (config.menu || []).filter(entry => entry && entry.id && entry.title);
-	if (entries.length === 0) return;
 	browser.menus.create({ id: "pshell", title: "Pshell", contexts: ["all", "tab"] });
-	let lastGroup = null;
+	stylesMenu("pshell");
+	let lastGroup = entries.length ? "pshell-styles" : null;
 	let separators = 0;
 	for (const entry of entries) {
 		if (lastGroup !== null && entry.group !== lastGroup) {
@@ -579,13 +594,14 @@ function fromShell(message) {
 		asks.delete(message.rid);
 		return message.ok ? waiting.resolve(message.data) : waiting.reject(new Error(message.error || "failed"));
 	}
-	if (message.type === "theme") return applyTheme(message.theme);
+	if (message.type === "theme") return applyTheme(message.theme, message.ansi);
 	if (message.type === "config") {
 		config = Object.assign({}, config, message.config || {});
 		// what the pages' script reads: no menu, nothing of the blocked sites
 		browser.storage.local.set({
 			config: { intercept: config.intercept, forms: config.forms, newtab: config.newtab },
-			pageConfig: { intercept: config.intercept, forms: config.forms }
+			pageConfig: { intercept: config.intercept, forms: config.forms },
+			...(config.measures ? { measures: config.measures } : {})
 		});
 		applyRail(config.rail);
 		applyTabs(config.tabs);

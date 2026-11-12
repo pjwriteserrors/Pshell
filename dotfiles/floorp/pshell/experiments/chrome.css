@@ -254,6 +254,16 @@ tab-group[pshell-site] .tab-group-line {
 		background: var(--pshell-primary-c);
 		color: var(--pshell-text);
 	}
+	/* its number for Alt+1…9 */
+	&[pshell-n]::after {
+		content: attr(pshell-n);
+		position: absolute;
+		top: 4px;
+		left: 6px;
+		font: 700 8px/1 var(--pshell-mono);
+		color: var(--pshell-faint);
+		pointer-events: none;
+	}
 	/* its environment: a dot in the corner */
 	&[pshell-env]::before {
 		content: "";
@@ -432,22 +442,6 @@ tab-group > .tab-group-label-container {
 	padding-block: 2px !important;
 }
 
-/* the numbers of Alt+1…6 */
-:root[pshell-dock] #tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[pshell-slot] {
-	position: relative;
-
-	&::after {
-		content: attr(pshell-slot);
-		position: absolute;
-		inset-inline-start: 5px;
-		top: 3px;
-		z-index: 3;
-		font: 700 8px/1 var(--pshell-mono);
-		color: var(--pshell-faint);
-		pointer-events: none;
-	}
-}
-
 #pshell-ghosts {
 	display: flex;
 	gap: 4px;
@@ -487,14 +481,15 @@ tab-group > .tab-group-label-container {
 			filter: none;
 		}
 	}
-	&::after {
-		content: attr(pshell-slot);
-		position: absolute;
-		left: 4px;
-		top: 2px;
-		font: 700 8px/1 var(--pshell-mono);
-		color: var(--pshell-faint);
-	}
+}
+
+/* Floorp's workspace list in the page's corner (pshell.css draws it): its
+   content flush with the popup's edge – no margin, no border (a user sheet
+   cannot reach ::part(content)) */
+#customizationui-widget-panel[viewId="workspacesToolbarButtonPanel"]::part(content) {
+	margin: 0 !important;
+	border: none !important;
+	max-width: none !important;
 }
 
 /* ══ Peek ══════════════════════════════════════════════════════════════════ */

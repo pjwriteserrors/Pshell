@@ -1,0 +1,15 @@
+:root { color-scheme: dark light; }
+body { margin: 0; padding: 6px; width: 260px; font: 13px system-ui, sans-serif; background: var(--bg, #141414); color: var(--fg, #e6e6e6); }
+button { all: unset; box-sizing: border-box; cursor: pointer; }
+#restyle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border-radius: 10px; font-weight: 600; }
+#restyle:hover, .style:hover { background: var(--layer2, #282828); }
+#restyle:disabled { opacity: .4; cursor: default; background: none; }
+svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+#styles:not(:empty) { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--outline, #ffffff14); }
+.style { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 10px; }
+.style span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.style.off span { opacity: .45; }
+.toggle { width: 30px; height: 18px; border-radius: 9px; background: var(--layer3, #323232); position: relative; flex: none; }
+.toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 50%; background: var(--fg, #e6e6e6); transition: left .12s; }
+.on .toggle { background: var(--primary, #8ab4f8); }
+.on .toggle::after { left: 15px; background: var(--on-primary, #141414); }

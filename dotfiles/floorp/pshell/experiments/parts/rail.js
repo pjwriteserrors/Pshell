@@ -2,7 +2,8 @@
  * the pointer rests), open (with titles), icons (never opens) or top (tabs
  * above the page), and the open rail's width. And the rail closes when the
  * pointer leaves the window: Firefox takes the last position it saw, which is
- * inside the rail when the pointer leaves across it, so it opened again. */
+ * inside the rail when the pointer leaves across it, so it opened again.
+ * Floorp's workspace list opens in the page's corner. */
 "use strict";
 
 (function () {
@@ -62,10 +63,27 @@
 		}, 0);
 	}
 
+	// Floorp's workspace list: grown into the page's upper left corner, right
+	// of the rail, instead of hanging over it from its button (pshell.css
+	// draws it with --ps-ws-x/--ps-ws-y as its margins)
+	const GAP = 0;
+	const isWorkspaces = popup => popup?.localName === "panel" && popup.getAttribute("viewId") === "workspacesToolbarButtonPanel";
+
+	function placeWorkspaces(W, panel) {
+		const page = W.doc.getElementById("tabbrowser-tabbox")?.getBoundingClientRect();
+		const anchor = (panel.anchorNode || W.doc.getElementById("workspaces-toolbar-button"))?.getBoundingClientRect();
+		if (!page || !anchor) return;
+		panel.style.setProperty("--ps-ws-x", `${Math.round(page.left + GAP - anchor.left)}px`);
+		panel.style.setProperty("--ps-ws-y", `${Math.round(page.top + GAP - anchor.bottom)}px`);
+	}
+
 	PARTS.push({
 		name: "rail",
 		attach(W) {
 			on(W, W.win, "mouseout", onMouseOut);
+			on(W, W.doc, "popupshowing", event => {
+				if (isWorkspaces(event.target)) placeWorkspaces(W, event.target);
+			}, true);
 			applyWindow(W);
 		},
 		detach(W) {

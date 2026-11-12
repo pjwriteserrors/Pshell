@@ -6,7 +6,7 @@
  * opens on the right of its column, cutting off what was right of it. Only
  * the last few columns show, the older ones shrink and then live only in the
  * crumbs above; a crumb shows its column again. Alt+←/→ moves between
- * columns. The whole Spur is one tab, titled after its newest column; ending
+ * columns, a middle click on a crumb closes its column. The whole Spur is one tab, titled after its newest column; ending
  * it ("Beenden" on the crumbs, Alt+Esc) keeps the newest column as the tab's
  * page. */
 "use strict";
@@ -41,6 +41,16 @@
 		crumbs.addEventListener("click", event => {
 			const crumb = event.target.closest(".pshell-spur-crumb");
 			if (crumb) cut(W, spur, Number(crumb.dataset.index));
+		});
+		// a middle click closes a crumb's column, like a tab
+		crumbs.addEventListener("mousedown", event => {
+			if (event.button === 1 && event.target.closest(".pshell-spur-crumb")) event.preventDefault();
+		});
+		crumbs.addEventListener("auxclick", event => {
+			const crumb = event.target.closest(".pshell-spur-crumb");
+			if (event.button !== 1 || !crumb) return;
+			event.preventDefault();
+			close(W, spur, Number(crumb.dataset.index));
 		});
 		end.addEventListener("click", () => finish(W, tab));
 		tab.setAttribute("pshell-spur", "1");
@@ -109,6 +119,43 @@
 		}
 		spur.active = Math.min(spur.active, spur.cols.length - 1);
 		spur.start = Math.min(spur.start, Math.max(0, spur.cols.length - tabsConfig().spur.columns));
+	}
+
+	// one column goes; the others stay. The tab's own page cannot leave its
+	// tab: the next column's page moves into it instead. One left ends the Spur.
+	function close(W, spur, index) {
+		if (index < 0 || index >= spur.cols.length) return;
+		if (spur.cols.length === 2) {
+			if (index === 0) finish(W, spur.tab); // keeps the newest
+			else {
+				teardown(W, spur);
+				spur.tab.linkedBrowser.focus();
+			}
+			return;
+		}
+		let gone = index;
+		if (index === 0) {
+			// (Firefox keeps swapping a page between browsers to itself, so the
+			// next column's address loads in the tab instead)
+			const url = spur.cols[1].browser.currentURI?.spec;
+			if (!url) return;
+			spur.tab.linkedBrowser.fixupAndLoadURIString(url, { triggeringPrincipal: SYSTEM() });
+			gone = 1;
+		}
+		const [col] = spur.cols.splice(gone, 1);
+		try {
+			col.browser.webProgress?.removeProgressListener(col.progress);
+		} catch (error) {}
+		col.browser.remove();
+		if (spur.active > index || spur.active >= spur.cols.length) spur.active = Math.max(0, spur.active - 1);
+		spur.start = Math.max(0, Math.min(spur.start, spur.cols.length - tabsConfig().spur.columns));
+		// the crumbs from the gone one on are made anew
+		const nodes = [...spur.crumbs.querySelectorAll(".pshell-spur-crumb")];
+		for (const node of nodes.slice(index)) node.pshellBrowser = null;
+		layout(W, spur);
+		spur.cols[spur.active].browser.focus();
+		retitle(W, spur);
+		for (const left of spur.cols) updatePage(W, left.browser);
 	}
 
 	function cut(W, spur, index) {
@@ -197,15 +244,19 @@
 		const newest = spur.cols[spur.cols.length - 1];
 		if (!newest.own) {
 			let moved = false;
-			try {
-				const remoteType = newest.browser.remoteType;
-				if (remoteType && tab.linkedBrowser.remoteType !== remoteType) {
-					W.gBrowser.updateBrowserRemoteness(tab.linkedBrowser, { remoteType });
+			// the page itself moves where Firefox still lets it (older versions);
+			// otherwise its address loads in the tab
+			if (typeof W.gBrowser._swapBrowserDocShells === "function") {
+				try {
+					const remoteType = newest.browser.remoteType;
+					if (remoteType && tab.linkedBrowser.remoteType !== remoteType) {
+						W.gBrowser.updateBrowserRemoteness(tab.linkedBrowser, { remoteType });
+					}
+					W.gBrowser._swapBrowserDocShells(tab, newest.browser);
+					moved = true;
+				} catch (error) {
+					console.error("[pshell] spur end:", error);
 				}
-				W.gBrowser._swapBrowserDocShells(tab, newest.browser);
-				moved = true;
-			} catch (error) {
-				console.error("[pshell] spur end:", error);
 			}
 			if (!moved) {
 				const url = newest.browser.currentURI?.spec;
@@ -249,6 +300,14 @@
 		},
 		attach(W) {
 			W.spurs = new Map();
+			// the tab's own page got a title: its crumb follows, and the tab keeps
+			// the newest column's
+			on(W, W.gBrowser.tabContainer, "TabAttrModified", event => {
+				const spur = W.spurs.get(event.target);
+				if (!spur || !event.detail?.changed?.includes("label")) return;
+				drawCrumbs(W, spur);
+				retitle(W, spur);
+			});
 			on(W, W.gBrowser.tabContainer, "TabClose", event => {
 				const spur = W.spurs.get(event.target);
 				if (spur) teardown(W, spur);

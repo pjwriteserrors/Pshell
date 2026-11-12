@@ -516,27 +516,34 @@ toolbarbutton[open] > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
 	&[data-container-color="toolbar"] { --ps-ws-container: var(--ps-text-muted); }
 }
 
-/* the list grows out of the toolbar like the shell's popouts out of its bar:
-   flush under it, the toolbar's colour, inverted corners where they meet
-   (a user sheet cannot reach the panel's ::part(content), only its variables) */
+/* the list is a piece of the frame grown into the page's upper left corner,
+   right of the rail: flush with the toolbar above and the rail's side, its
+   lower right corner round, inverted corners where it meets the page (the
+   extension's rail.js sets --ps-ws-x/--ps-ws-y when it opens; without it the
+   list hangs under its button). A user sheet reaches only the panel's
+   variables, not its ::part(content) */
 #customizationui-widget-panel[viewId="workspacesToolbarButtonPanel"] {
 	--ps-fillet: var(--ps-radius-window);
 	--panel-border-color: transparent !important;
 	--panel-border-radius: 0px !important;
 	--panel-box-shadow: none !important;
+	--panel-shadow-margin: 0px !important;
+	--panel-padding: 0px !important;
 	--panel-background-color:
-		radial-gradient(circle at 0 100%, transparent var(--ps-fillet), var(--ps-bg) calc(var(--ps-fillet) + 0.5px)) left top / var(--ps-fillet) var(--ps-fillet) no-repeat,
-		radial-gradient(circle at 100% 100%, transparent var(--ps-fillet), var(--ps-bg) calc(var(--ps-fillet) + 0.5px)) right top / var(--ps-fillet) var(--ps-fillet) no-repeat !important;
-	margin-top: 1px !important;
-	margin-inline-start: calc(-4px - var(--ps-fillet)) !important;
+		radial-gradient(circle at 100% 100%, transparent var(--ps-fillet), var(--ps-bg) calc(var(--ps-fillet) + 0.5px)) right top / var(--ps-fillet) var(--ps-fillet) no-repeat,
+		radial-gradient(circle at 100% 100%, transparent var(--ps-fillet), var(--ps-bg) calc(var(--ps-fillet) + 0.5px)) left bottom / var(--ps-fillet) var(--ps-fillet) no-repeat !important;
+	margin-inline-start: var(--ps-ws-x, 0px) !important;
+	margin-top: var(--ps-ws-y, 0px) !important;
 
+	/* (as wide as the list and the corner beside it) */
 	panelmultiview {
-		padding-inline: var(--ps-fillet) !important;
+		padding: 0 var(--ps-fillet) var(--ps-fillet) 0 !important;
+		min-width: max-content !important;
 	}
 
 	.panel-viewcontainer {
 		background-color: var(--ps-bg) !important;
-		border-radius: 0 0 var(--ps-radius-window) var(--ps-radius-window) !important;
+		border-radius: 0 0 var(--ps-radius-window) 0 !important;
 	}
 }
 
@@ -865,24 +872,10 @@ toolbarbutton[open] > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
 	max-width: 36px !important;
 }
 
-/* a container: a dot at the icon's lower corner instead of a line under the
-   tab; it hangs on the icon, so it is in its place collapsed and open */
-#tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[usercontextid] > .tab-stack > .tab-content::before {
+/* no mark for a tab's container (Firefox's line under the tab goes too) */
+#tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[usercontextid] > .tab-stack > .tab-content::before,
+.tabbrowser-tab[usercontextid] .tab-context-line {
 	display: none !important;
-}
-
-#tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[usercontextid] .tab-icon-stack::after {
-	content: "";
-	grid-area: 1 / 1;
-	justify-self: end;
-	align-self: end;
-	width: 6px;
-	height: 6px;
-	border-radius: 50%;
-	background-color: var(--identity-tab-color);
-	box-shadow: 0 0 0 1.5px var(--ps-bg);
-	translate: 2px 2px;
-	pointer-events: none;
 }
 
 /* something new in a tab: a dot at the icon's upper corner (Firefox measures
@@ -908,8 +901,54 @@ toolbarbutton[open] > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
 }
 
 /* ── tab groups ─────────────────────────────────────────────────────────── */
-/* the group's colour comes from Firefox (--tab-group-color, light on a dark
-   theme); its header is a chip tinted with it */
+/* Firefox's group colours are the palette's terminal colours (--pshell-color0…15,
+   set on the root by the extension: experiments/parts/palette.js): red 1,
+   green 2, yellow 3, blue 4, purple 5, cyan 6, gray 7; orange and pink lie
+   between two of them. Groups, the colour swatches and the menus read these. */
+:root {
+	--ps-g-red: var(--pshell-color1, #e5534b);
+	--ps-g-green: var(--pshell-color2, #57ab5a);
+	--ps-g-yellow: var(--pshell-color3, #c69026);
+	--ps-g-blue: var(--pshell-color4, #4d9ef0);
+	--ps-g-purple: var(--pshell-color5, #a371f7);
+	--ps-g-cyan: var(--pshell-color6, #39c5cf);
+	--ps-g-gray: var(--pshell-color7, #8b949e);
+	--ps-g-orange: color-mix(in oklch, var(--ps-g-red), var(--ps-g-yellow));
+	--ps-g-pink: color-mix(in oklch, var(--ps-g-purple) 60%, var(--ps-g-red));
+
+	--tab-group-red: var(--ps-g-red) !important;
+	--tab-group-green: var(--ps-g-green) !important;
+	--tab-group-yellow: var(--ps-g-yellow) !important;
+	--tab-group-blue: var(--ps-g-blue) !important;
+	--tab-group-purple: var(--ps-g-purple) !important;
+	--tab-group-cyan: var(--ps-g-cyan) !important;
+	--tab-group-gray: var(--ps-g-gray) !important;
+	--tab-group-orange: var(--ps-g-orange) !important;
+	--tab-group-pink: var(--ps-g-pink) !important;
+
+	--tab-group-red-invert: var(--ps-bg) !important;
+	--tab-group-green-invert: var(--ps-bg) !important;
+	--tab-group-yellow-invert: var(--ps-bg) !important;
+	--tab-group-blue-invert: var(--ps-bg) !important;
+	--tab-group-purple-invert: var(--ps-bg) !important;
+	--tab-group-cyan-invert: var(--ps-bg) !important;
+	--tab-group-gray-invert: var(--ps-bg) !important;
+	--tab-group-orange-invert: var(--ps-bg) !important;
+	--tab-group-pink-invert: var(--ps-bg) !important;
+
+	--tab-group-red-pale: color-mix(in srgb, var(--ps-g-red) 25%, var(--ps-bg)) !important;
+	--tab-group-green-pale: color-mix(in srgb, var(--ps-g-green) 25%, var(--ps-bg)) !important;
+	--tab-group-yellow-pale: color-mix(in srgb, var(--ps-g-yellow) 25%, var(--ps-bg)) !important;
+	--tab-group-blue-pale: color-mix(in srgb, var(--ps-g-blue) 25%, var(--ps-bg)) !important;
+	--tab-group-purple-pale: color-mix(in srgb, var(--ps-g-purple) 25%, var(--ps-bg)) !important;
+	--tab-group-cyan-pale: color-mix(in srgb, var(--ps-g-cyan) 25%, var(--ps-bg)) !important;
+	--tab-group-gray-pale: color-mix(in srgb, var(--ps-g-gray) 25%, var(--ps-bg)) !important;
+	--tab-group-orange-pale: color-mix(in srgb, var(--ps-g-orange) 25%, var(--ps-bg)) !important;
+	--tab-group-pink-pale: color-mix(in srgb, var(--ps-g-pink) 25%, var(--ps-bg)) !important;
+}
+
+/* the group's colour (--tab-group-color, one of the above); its header is a
+   chip tinted with it */
 tab-group {
 	--ps-group: var(--tab-group-color);
 	--tab-group-line-thickness: 2px;

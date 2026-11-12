@@ -39,9 +39,9 @@ var DEFAULT_TABS = {
 		on: true,
 		group: true,
 		list: [
-			{ id: "live", name: "Live", color: "#e5534b", patterns: [], cycle: true },
-			{ id: "stage", name: "Stage", color: "#4d9ef0", patterns: ["staging.*", "stage.*", "*.staging.*"], cycle: true },
-			{ id: "dev", name: "Dev", color: "#57ab5a", patterns: ["localhost", "*.test", "*.ddev.site", "*.local"], cycle: true }
+			{ id: "live", name: "Live", color: 1, patterns: [], cycle: true },
+			{ id: "stage", name: "Stage", color: 4, patterns: ["staging.*", "stage.*", "*.staging.*"], cycle: true },
+			{ id: "dev", name: "Dev", color: 2, patterns: ["localhost", "*.test", "*.ddev.site", "*.local"], cycle: true }
 		]
 	},
 	hints: { on: true, chars: "asdfghjkl" },

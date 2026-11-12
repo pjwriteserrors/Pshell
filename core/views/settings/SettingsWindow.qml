@@ -1586,12 +1586,48 @@ FloatingWindow {
 							Layout.fillWidth: true
 							spacing: 6
 
-							ColorWell {
-								size: 20
-								alpha: false
-								showHex: false
-								value: envRow.modelData.color
-								onPicked: css => WebPage.changeEnv(envRow.modelData.id, { color: String(css).slice(0, 7) })
+							// the palette's terminal colours 1–6
+							Row {
+								spacing: 2
+
+								Repeater {
+									model: [1, 2, 3, 4, 5, 6]
+
+									delegate: Item {
+										id: slot
+
+										required property int modelData
+										readonly property bool chosen: envRow.modelData.color === slot.modelData
+
+										width: 20
+										height: 20
+
+										Rectangle {
+											anchors.centerIn: parent
+											width: slot.chosen ? 18 : (slotMouse.containsMouse ? 14 : 12)
+											height: width
+											radius: width / 2
+											color: (Theme.wal.colors && Theme.wal.colors[`color${slot.modelData}`]) || Theme.textSubtle
+											border.width: slot.chosen ? 2 : 0
+											border.color: Theme.text
+
+											Behavior on width {
+												NumberAnimation {
+													duration: Motion.short
+												}
+											}
+										}
+
+										MouseArea {
+											id: slotMouse
+
+											anchors.fill: parent
+											hoverEnabled: true
+											cursorShape: Qt.PointingHandCursor
+											onClicked: if (!slot.chosen) WebPage.changeEnv(envRow.modelData.id, { color: slot.modelData })
+										}
+									}
+								}
 							}
 
 							Field {

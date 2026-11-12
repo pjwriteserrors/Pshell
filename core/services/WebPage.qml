@@ -153,9 +153,9 @@ Singleton {
 			// in this order before every other tab; Alt+E goes round those with
 			// cycle, the first of them being where a site lives
 			list: [
-				{ id: "live", name: "Live", color: "#e5534b", patterns: [], cycle: true },
-				{ id: "stage", name: "Stage", color: "#4d9ef0", patterns: ["staging.*", "stage.*", "*.staging.*"], cycle: true },
-				{ id: "dev", name: "Dev", color: "#57ab5a", patterns: ["localhost", "*.test", "*.ddev.site", "*.local"], cycle: true }
+				{ id: "live", name: "Live", color: 1, patterns: [], cycle: true },
+				{ id: "stage", name: "Stage", color: 4, patterns: ["staging.*", "stage.*", "*.staging.*"], cycle: true },
+				{ id: "dev", name: "Dev", color: 2, patterns: ["localhost", "*.test", "*.ddev.site", "*.local"], cycle: true }
 			]
 		},
 		hints: { on: true, chars: "asdfghjkl" },
@@ -213,7 +213,29 @@ Singleton {
 		return out;
 	}
 
-	readonly property var envPalette: ["#e5534b", "#4d9ef0", "#57ab5a", "#c69026", "#a371f7", "#39c5cf", "#e275ad", "#8b949e"]
+	// a group's colour: the palette's terminal colour 1–6, in this order for new ones
+	readonly property var envPalette: [1, 4, 2, 3, 5, 6]
+
+	// (a colour of its own from before: the nearest terminal colour by hue)
+	function envSlot(color) {
+		const n = Number(color);
+		if (n >= 1 && n <= 6 && Math.floor(n) === n) return n;
+		if (!/^#[0-9a-fA-F]{6}$/.test(String(color))) return 0;
+		const c = Qt.color(String(color));
+		if (c.hsvSaturation < 0.2) return 4;
+		const hue = c.hsvHue * 360;
+		const hues = { 1: 5, 3: 45, 2: 120, 6: 185, 4: 215, 5: 285 };
+		let best = 4;
+		let distance = 999;
+		for (const slot in hues) {
+			const d = Math.min(Math.abs(hue - hues[slot]), 360 - Math.abs(hue - hues[slot]));
+			if (d < distance) {
+				distance = d;
+				best = Number(slot);
+			}
+		}
+		return best;
+	}
 
 	// the groups of envs: each with a unique id (its tabs' pshell-env), a name,
 	// a colour, its patterns and whether Alt+E goes through it
@@ -239,7 +261,7 @@ Singleton {
 				id = `${id}-${n}`;
 			}
 			ids.push(id);
-			const color = /^#[0-9a-fA-F]{6}$/.test(String(raw.color)) ? String(raw.color).toLowerCase() : root.envPalette[out.length % root.envPalette.length];
+			const color = root.envSlot(raw.color) || root.envPalette[out.length % root.envPalette.length];
 			out.push({ id: id, name: name, color: color, patterns: root.patterns(raw.patterns, []), cycle: raw.cycle !== false });
 		}
 		return out;

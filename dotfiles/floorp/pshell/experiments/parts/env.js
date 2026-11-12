@@ -24,10 +24,12 @@
 "use strict";
 
 (function () {
-	// Firefox's group colours, for the group itself (the sheet paints ours)
+	// an entry's colour is one of the terminal's colours 1–6 (the shell's
+	// palette); Firefox's group colour of that name wears it (pshell.css)
+	const SLOTS = { 1: "red", 2: "green", 3: "yellow", 4: "blue", 5: "purple", 6: "cyan" };
+	// (older lists kept a colour of their own: the nearest slot)
 	const FIREFOX = {
-		red: [229, 83, 75], orange: [224, 130, 61], yellow: [198, 144, 38], green: [87, 171, 90],
-		cyan: [57, 197, 207], blue: [77, 158, 240], purple: [163, 113, 247], pink: [226, 117, 173], gray: [139, 148, 158]
+		1: [229, 83, 75], 2: [87, 171, 90], 3: [198, 144, 38], 4: [77, 158, 240], 5: [163, 113, 247], 6: [57, 197, 207]
 	};
 	const KEY = "pshell-env-groups";
 
@@ -162,19 +164,23 @@
 		return !!envOfGroup(group);
 	}
 
-	function nearestColour(hex) {
-		const rgb = [1, 3, 5].map(i => parseInt(String(hex).slice(i, i + 2), 16) || 0);
-		let best = "gray";
+	function slotOf(color) {
+		const n = Number(color);
+		if (SLOTS[n]) return n;
+		const rgb = [1, 3, 5].map(i => parseInt(String(color).slice(i, i + 2), 16) || 0);
+		let best = 4;
 		let distance = Infinity;
-		for (const [name, c] of Object.entries(FIREFOX)) {
+		for (const [slot, c] of Object.entries(FIREFOX)) {
 			const d = (c[0] - rgb[0]) ** 2 + (c[1] - rgb[1]) ** 2 + (c[2] - rgb[2]) ** 2;
 			if (d < distance) {
 				distance = d;
-				best = name;
+				best = Number(slot);
 			}
 		}
 		return best;
 	}
+
+	const colourOf = entry => SLOTS[slotOf(entry.color)];
 
 	// where a new group goes: before the groups of the entries after it, else
 	// before the first tab that is in no earlier entry's group
@@ -205,7 +211,7 @@
 				W.gBrowser.moveTabToExistingGroup(tab, target);
 			} else {
 				const entry = entryOf(env);
-				const created = W.gBrowser.addTabGroup([tab], { label: entry.name, color: nearestColour(entry.color), insertBefore: anchorFor(W, env, tab) });
+				const created = W.gBrowser.addTabGroup([tab], { label: entry.name, color: colourOf(entry), insertBefore: anchorFor(W, env, tab) });
 				if (created) {
 					created.setAttribute("pshell-env", env);
 					const map = stored();
@@ -237,8 +243,9 @@
 				continue;
 			}
 			group.setAttribute("pshell-env", env);
-			const name = entryOf(env).name;
-			if (group.label !== name) group.label = name;
+			const entry = entryOf(env);
+			if (group.label !== entry.name) group.label = entry.name;
+			if (group.color !== colourOf(entry)) group.color = colourOf(entry);
 		}
 		for (const id of Object.keys(map)) {
 			if (!W.gBrowser.tabGroups.some(group => group.id === id) && !browserWindows().some(win => win.gBrowser.tabGroups.some(group => group.id === id))) {
@@ -281,8 +288,7 @@
 	function colours(W) {
 		const css = list.map(entry => {
 			const id = String(entry.id).replace(/[^a-z0-9-]/g, "");
-			const color = /^#[0-9a-f]{6}$/i.test(entry.color) ? entry.color : "#8b949e";
-			return `.tabbrowser-tab[pshell-env="${id}"], tab-group[pshell-env="${id}"], .pshell-rt[pshell-env="${id}"], :root[pshell-env="${id}"] body { --pshell-env: ${color}; }`;
+			return `.tabbrowser-tab[pshell-env="${id}"], tab-group[pshell-env="${id}"], .pshell-rt[pshell-env="${id}"], :root[pshell-env="${id}"] body { --pshell-env: var(--tab-group-${colourOf(entry)}); }`;
 		}).join("\n");
 		const utils = W.win.windowUtils;
 		if (W.envSheet) {

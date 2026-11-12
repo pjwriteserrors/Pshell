@@ -188,7 +188,7 @@ Singleton {
 		case "ready":
 			root.links = Object.assign({}, root.links, { [source]: { link: link, browser: String(message.browser || ""), version: String(message.version || "") } });
 			root.write(source, { type: "config", config: root.config() });
-			root.write(source, { type: "theme", theme: root.theme() });
+			root.write(source, { type: "theme", theme: root.theme(), ansi: root.ansi() });
 			if (WebPage.newtabData) root.write(source, { type: "newtab", data: WebPage.newtabData });
 			return;
 		case "tabs": {
@@ -264,7 +264,15 @@ Singleton {
 			newtab: WebPage.newtab,
 			blocked: WebPage.blocked,
 			rail: WebPage.rail,
-			tabs: WebPage.tabs
+			tabs: WebPage.tabs,
+			// for page styles (background/styles.js: --pshell-radius, --pshell-gap, …)
+			measures: {
+				radius: Theme.windowRadius,
+				radiusSmall: Theme.radius.small,
+				radiusMedium: Theme.radius.medium,
+				radiusLarge: Theme.radius.large,
+				gap: Theme.gap.sm
+			}
 		};
 	}
 
@@ -325,6 +333,17 @@ Singleton {
 		};
 	}
 
+	// the palette's terminal colours 0–15 (the tab groups wear them)
+	function ansi() {
+		const colors = (Theme.wal && Theme.wal.colors) || {};
+		const out = [];
+		for (let i = 0; i < 16; i++) {
+			const value = String(colors[`color${i}`] || "");
+			out.push(/^#[0-9a-fA-F]{6}$/.test(value) ? value.toLowerCase() : "");
+		}
+		return out;
+	}
+
 	// the shell's measures as CSS custom properties for pshell.css
 	function bezier(points) {
 		return `cubic-bezier(${points[0]}, ${points[1]}, ${points[2]}, ${points[3]})`;
@@ -363,7 +382,7 @@ Singleton {
 		""
 	].join("\n")
 
-	readonly property string themeText: root.enabled ? JSON.stringify(root.theme()) : ""
+	readonly property string themeText: root.enabled ? JSON.stringify([root.theme(), root.ansi()]) : ""
 	onThemeTextChanged: themeDue.restart()
 	onVarsTextChanged: if (root.enabled) varsDue.restart()
 	onEnabledChanged: if (root.enabled) varsDue.restart()
@@ -384,7 +403,7 @@ Singleton {
 		id: themeDue
 
 		interval: 120
-		onTriggered: if (root.connected) root.broadcast({ type: "theme", theme: root.theme() })
+		onTriggered: if (root.connected) root.broadcast({ type: "theme", theme: root.theme(), ansi: root.ansi() })
 	}
 
 	Timer {

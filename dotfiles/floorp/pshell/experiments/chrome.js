@@ -9,8 +9,8 @@
  *   rail     the rail's style and width, closing when the pointer leaves
  *   env      Live, Stage, Dev: colour, groups, the frame, Alt+E
  *   marks    states on the icon: a count from the title, a draft
- *   recent   "Recent": the tabs of the last minutes at the top of the rail
- *   dock     "Pinned": the pinned tabs at the foot of the rail, Alt+1…6
+ *   recent   "Recent": the tabs of the last minutes at the top of the rail, Alt+1…9
+ *   dock     "Pinned": the pinned tabs at the foot of the rail
  *   filter   typing over the rail filters it
  *   domains  tabs of one site in a group of their own
  *   keys     Ctrl+K, Ctrl+Tab by use
@@ -22,7 +22,7 @@
 
 /* global ExtensionAPI, ExtensionCommon, Services */
 
-const PART_FILES = ["base", "rail", "env", "marks", "recent", "dock", "filter", "domains", "keys", "peek", "spur", "frame"];
+const PART_FILES = ["base", "palette", "rail", "env", "marks", "recent", "dock", "filter", "domains", "keys", "peek", "spur", "frame"];
 
 let shared = null;
 

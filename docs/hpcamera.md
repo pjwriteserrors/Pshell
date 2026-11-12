@@ -114,17 +114,23 @@ after).
 *Add face* streams the IR camera (the IR preview shows it with the face
 outlined) until 12 different samples are taken: a face YuNet finds with a
 score of 0.85 at least, at least 16 % of the picture high, that the
-emitter lights clearly (≥ 8 grey levels lit − dark on the face and 1.6
-times the frame's average). Each sample is SFace's 128 numbers
+emitter lights clearly (≥ 8 grey levels lit − dark on the face and 1.05
+times the frame's average: a photo held up close is lit as evenly as its
+frame, a face sitting before a chair or wall the emitter reaches measured
+1.09–1.54, so the 1.6 this began with turned every check into "not live"). Each sample is SFace's 128 numbers
 (`face_recognition_sface_2021dec.onnx`, opencv_zoo commit f12e127, sha256
 checked, in `~/.cache/pshell/webcam/` beside the C310's YuNet); only those
 numbers are kept, in `~/.local/state/pshell/hpcamera/faces.json` (0600),
 never a picture. *Test* runs the check for 6 s and shows the best score.
 
 The lock screen (*Lock screen* on, a face added, the plugin on) checks for
-4 s when it locks, again a second after each failed check while tries are
-left (*Tries on the lock screen*, 1–10), and anew when the screens wake;
-"Look at the camera" shows meanwhile. A check matches when two lit frames
+4 s, again a second after each failed check while tries are left (*Tries on
+the lock screen*, 1–10); "Look at the camera" shows meanwhile. When it
+starts is set per occasion – *When locked*, *After standby* (a lock for a
+suspend waits for the wake-up), *Screens back on* – each *Auto* (at once),
+a modifier (*Ctrl*, *Shift*, *Alt*, *Super*: pressed and let go alone on the
+lock screen, it starts a check with fresh tries) or *Off*
+(`options.faceStart` in hpcamera.json). A check matches when two lit frames
 with a live face come within a cosine of 0.5 of any sample (SFace's own
 same-person line is 0.363). Then it unlocks like the phone does, with the
 fingerprint's unlock animation if that is on. The password always works;

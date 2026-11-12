@@ -56,6 +56,12 @@ Scope {
 	readonly property bool enableFace: HpCamera.faceReady
 	property bool faceActive: false
 	property int faceTries: 0
+	// what brought the lock screen up last (lock, sleep, wake) and whether that starts the check
+	// by itself, on a modifier tapped alone (Control, Shift, Alt, Meta) or not at all
+	property string faceOccasion: "lock"
+	readonly property string faceMode: HpCamera.faceStart[root.faceOccasion] ?? "auto"
+	property bool faceAfterSleep: false
+	property string faceKeyHeld: ""
 	property bool screensDimmed: false
 	property bool screensPoweredOff: false
 
@@ -100,6 +106,16 @@ Scope {
 		function onLockRequested() {
 			root.lock();
 		}
+		function onSleepingChanged() {
+			if (!root.locked) return;
+			if (Session.sleeping) {
+				root.stopFace();
+				return;
+			}
+			root.faceOccasion = "sleep";
+			root.faceAfterSleep = root.screensPoweredOff;
+			if (!root.screensPoweredOff) root.beginFace();
+		}
 	}
 
 	Connections {
@@ -118,11 +134,43 @@ Scope {
 	}
 
 	function startFace() {
-		if (!root.locked || !root.enableFace || root.faceActive || root.screensPoweredOff || root.faceTries >= HpCamera.faceTries) return;
+		if (!root.locked || !root.enableFace || root.faceMode === "off" || root.faceActive || root.screensPoweredOff || root.faceTries >= HpCamera.faceTries) return;
 		if (HpCamera.checkFace(4)) {
 			root.faceActive = true;
 			root.faceTries++;
 		}
+	}
+
+	// a new occasion: tries anew, the check now if it starts by itself
+	function beginFace() {
+		root.stopFace();
+		root.faceTries = 0;
+		if (root.faceMode === "auto") faceRetry.restart();
+	}
+
+	function faceModifier(key) {
+		switch (key) {
+		case Qt.Key_Control: return "Control";
+		case Qt.Key_Shift: return "Shift";
+		case Qt.Key_Alt: case Qt.Key_AltGr: return "Alt";
+		case Qt.Key_Meta: case Qt.Key_Super_L: case Qt.Key_Super_R: return "Meta";
+		}
+		return "";
+	}
+
+	// the occasion's modifier pressed and let go with nothing else in between
+	function faceKeyPressed(key) {
+		root.faceKeyHeld = root.faceModifier(key);
+	}
+
+	function faceKeyReleased(key) {
+		const name = root.faceModifier(key);
+		const held = root.faceKeyHeld;
+		root.faceKeyHeld = "";
+		if (!name || name !== held || name !== root.faceMode || root.faceActive) return;
+		faceRetry.stop();
+		root.faceTries = 0;
+		root.startFace();
 	}
 
 	function stopFace() {
@@ -188,8 +236,9 @@ Scope {
 			Quickshell.execDetached(["niri", "msg", "action", "power-on-monitors"]);
 			if (root.locked && root.enableFingerprint) fingerprintWakeRetry.restart();
 			if (root.locked) {
-				root.faceTries = 0;
-				faceRetry.restart();
+				root.faceOccasion = root.faceAfterSleep ? "sleep" : "wake";
+				root.faceAfterSleep = false;
+				root.beginFace();
 			}
 		}
 	}
@@ -210,7 +259,10 @@ Scope {
 		root.primeForLock();
 		root.locked = true;
 		root.startFingerprintCheck();
-		faceRetry.restart();
+		// locked for a suspend: the check waits for the wake-up
+		root.faceOccasion = Session.sleeping ? "sleep" : "lock";
+		root.faceAfterSleep = false;
+		if (!Session.sleeping) root.beginFace();
 		return true;
 	}
 
@@ -551,7 +603,11 @@ Scope {
 							root.authState = "";
 							root.authMessage = "";
 						}
-						Keys.onPressed: root.resetScreenSleepTimer()
+						Keys.onPressed: event => {
+							root.resetScreenSleepTimer();
+							root.faceKeyPressed(event.key);
+						}
+						Keys.onReleased: event => root.faceKeyReleased(event.key)
 
 						Connections {
 							target: root

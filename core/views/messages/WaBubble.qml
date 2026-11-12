@@ -16,6 +16,8 @@ import qs.style.widgets
 Item {
 	id: root
 
+	onImplicitHeightChanged: if (root.implicitHeight > 1500) console.warn("DBG-MSG tall", root.message.id, "h", root.implicitHeight, "inner", inner.width, "words", words.width, words.height, words.contentHeight)
+
 	required property var message
 	property var previous: null
 	// a group: who wrote stands above what they wrote
@@ -752,7 +754,10 @@ Item {
 							id: heard
 
 							visible: (root.kind === "voice" || root.kind === "audio") && !root.hidden && (root.message.transcript ?? "") !== ""
+							width: inner.width
 							Layout.fillWidth: true
+							Layout.preferredWidth: inner.width
+							Layout.preferredHeight: heard.contentHeight
 							text: root.message.transcript ?? ""
 							tone: Theme.textMuted
 							wrapMode: Text.Wrap
@@ -976,9 +981,19 @@ Item {
 						}
 
 						// the words: a text, a caption, the question of a poll
+						// Laid out at its width, and as tall as the text is there: the layout kept the height of the
+						// first, narrower pass – a long text stayed thousands of pixels tall, and the list threw the
+						// bubble away and made it again without end
 						TextEdit {
+							id: words
+
+							readonly property real room: inner.width - (root.pictured ? 16 : 0)
+
 							visible: root.message.text !== "" && !root.hidden
+							width: room
 							Layout.fillWidth: true
+							Layout.preferredWidth: room
+							Layout.preferredHeight: contentHeight
 							Layout.leftMargin: root.pictured ? 8 : 0
 							Layout.rightMargin: root.pictured ? 8 : 0
 							readOnly: true

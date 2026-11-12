@@ -73,6 +73,7 @@ Item {
 			root.shownId = WhatsApp.openId;
 			root.forwarding = null;
 			list.stick = true;
+			list.chased = 0;
 			if (WhatsApp.openId !== "") {
 				arrive.restart();
 				if (WhatsApp.openChat?.group) WhatsApp.askInfo(WhatsApp.openId);
@@ -196,10 +197,40 @@ Item {
 				model: ScriptModel {
 					values: WhatsApp.messages.map(message => message.id)
 				}
-				onContentHeightChanged: if (list.stick) Qt.callLater(list.positionViewAtEnd)
-				onCountChanged: if (list.stick) Qt.callLater(list.positionViewAtEnd)
+				onContentHeightChanged: list.follow()
+				onCountChanged: list.follow()
 				onMovingChanged: if (!list.moving) list.stick = list.atYEnd
-				onHeightChanged: if (list.stick) Qt.callLater(list.positionViewAtEnd)
+				onHeightChanged: list.follow()
+
+				// Once a frame at most, and only a few rounds in a row: going to the end lays out the
+				// bubbles there, which changes the estimated height, which asks to go to the end again –
+				// with bubbles of different heights that went back and forth for good and froze the shell.
+				property int chased: 0
+
+				function follow() {
+					if (list.stick && !follower.running && list.chased < 12) follower.start();
+				}
+
+				Timer {
+					id: follower
+
+					interval: 16
+					onTriggered: {
+						if (!list.stick) return;
+						list.chased += 1;
+						if (list.chased === 12) console.warn("messages: the chat kept changing its height, its end is not followed for a moment");
+						calm.restart();
+						list.positionViewAtEnd();
+					}
+				}
+
+				// a while without being asked: the next change is followed again
+				Timer {
+					id: calm
+
+					interval: 400
+					onTriggered: list.chased = 0
+				}
 
 				transform: Translate {
 					id: shift
@@ -250,7 +281,7 @@ Item {
 					// the one that just arrived or was sent comes up out of its corner
 					ListView.onAdd: if (!arrive.running && bubble.at === WhatsApp.messages.length - 1) bubble.appear()
 
-					width: ListView.view.width - 10
+					width: list.width - 10
 					message: WhatsApp.messages[bubble.at] ?? { id: "", sender: "", name: "", mine: false, date: 0, kind: "system", text: "", html: "", status: 0 }
 					previous: bubble.at > 0 ? WhatsApp.messages[bubble.at - 1] : null
 					group: root.chat?.group ?? false

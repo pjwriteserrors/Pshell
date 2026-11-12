@@ -3,8 +3,10 @@
  * when it is looked at and keeps its place while it is in; each tile fades
  * with the time since it was last looked at, a line under it shows what is
  * left, and when that runs out it slips away. A full row lets the oldest go.
- * A tile is only a way to its tab: nothing is closed. Pinned tabs live in the
- * dock instead, a private window has none. */
+ * A tile is a way to its tab; nothing is closed on its own, a middle click
+ * takes a tile out (its tab stays open) until the tab is picked again. Pinned tabs live in the
+ * dock instead, a private window has none. Alt+1…9 picks a tile by its place
+ * (the number in its corner), Alt+0 the last one (keys.js). */
 "use strict";
 
 (function () {
@@ -19,7 +21,7 @@
 	}
 
 	function touch(W, tab) {
-		if (!usable(W, tab)) return;
+		if (!usable(W, tab) || W.recentOut.has(tab)) return;
 		const entry = W.recent.find(item => item.tab === tab);
 		const now = Date.now();
 		if (entry) {
@@ -102,9 +104,27 @@
 			tile.setAttribute("leaving", "");
 			W.win.setTimeout(() => tile.remove(), 280);
 		}
+		// their numbers, for Alt+1…9
+		tiles(W).forEach((tile, index) => {
+			if (index < 9) tile.setAttribute("pshell-n", String(index + 1));
+			else tile.removeAttribute("pshell-n");
+		});
 		const latest = new Set([...W.recent].sort((a, b) => b.at - a.at).slice(0, 3).map(item => item.tab));
 		for (const tile of box.children) tile.toggleAttribute("recent3", latest.has(tile.pshellTab) || tile.pshellTab === selected);
 		box.toggleAttribute("empty", W.recent.length === 0);
+	}
+
+	function tiles(W) {
+		return W.recentBox ? [...W.recentBox.children].filter(tile => tile.pshellTab && !tile.hasAttribute("leaving")) : [];
+	}
+
+	// Alt+N: the Nth tile, 0 the last
+	function pick(W, n) {
+		const list = tiles(W);
+		const tile = n === 0 ? list[list.length - 1] : list[n - 1];
+		if (!tile || !tile.pshellTab.isConnected) return false;
+		W.gBrowser.selectedTab = tile.pshellTab;
+		return true;
 	}
 
 	function soon(W) {
@@ -118,8 +138,10 @@
 
 	PARTS.push({
 		name: "recent",
+		pick,
 		attach(W) {
 			W.recent = [];
+			W.recentOut = new WeakSet();
 			const tabsBox = W.doc.getElementById("tabbrowser-tabs");
 			const holder = W.doc.getElementById("vertical-tabs");
 			if (!holder || !tabsBox) return;
@@ -138,7 +160,21 @@
 				const tile = event.target.closest(".pshell-rt");
 				if (tile && tile.pshellTab && tile.pshellTab.isConnected) W.gBrowser.selectedTab = tile.pshellTab;
 			});
+			// a middle click takes the tile out; its tab stays open
+			on(W, W.recentBox, "mousedown", event => {
+				if (event.button === 1 && event.target.closest(".pshell-rt")) event.preventDefault();
+			});
+			on(W, W.recentBox, "auxclick", event => {
+				const tile = event.target.closest(".pshell-rt");
+				if (event.button !== 1 || !tile || !tile.pshellTab?.isConnected) return;
+				event.preventDefault();
+				W.recentOut.add(tile.pshellTab);
+				W.recent = W.recent.filter(item => item.tab !== tile.pshellTab);
+				draw(W);
+			});
 			on(W, W.gBrowser.tabContainer, "TabSelect", () => {
+				// picked again: it may come back
+				W.recentOut.delete(W.gBrowser.selectedTab);
 				if (!W.private) touch(W, W.gBrowser.selectedTab);
 				soon(W);
 			});

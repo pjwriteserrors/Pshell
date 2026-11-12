@@ -246,7 +246,8 @@ Item {
 		composer.clear();
 		root.reset();
 		list.stick = true;
-		Qt.callLater(list.positionViewAtEnd);
+		list.chased = 0;
+		list.follow();
 	}
 
 	Connections {
@@ -264,6 +265,7 @@ Item {
 			preview.close();
 			composer.restore(Mail.drafts[Mail.openId] ?? null);
 			list.stick = true;
+			list.chased = 0;
 			arrive.restart();
 		}
 		// a mail of this chat was taken back
@@ -589,10 +591,40 @@ Item {
 				model: ScriptModel {
 					values: Mail.messages.map(message => message.id)
 				}
-				onContentHeightChanged: if (list.stick) Qt.callLater(list.positionViewAtEnd)
-				onCountChanged: if (list.stick) Qt.callLater(list.positionViewAtEnd)
+				onContentHeightChanged: list.follow()
+				onCountChanged: list.follow()
 				onMovingChanged: if (!list.moving) list.stick = list.atYEnd
-				onHeightChanged: if (list.stick) Qt.callLater(list.positionViewAtEnd)
+				onHeightChanged: list.follow()
+
+				// Once a frame at most, and only a few rounds in a row: going to the end lays out the
+				// bubbles there, which changes the estimated height, which asks to go to the end again –
+				// with bubbles of different heights that went back and forth for good and froze the shell.
+				property int chased: 0
+
+				function follow() {
+					if (list.stick && !follower.running && list.chased < 12) follower.start();
+				}
+
+				Timer {
+					id: follower
+
+					interval: 16
+					onTriggered: {
+						if (!list.stick) return;
+						list.chased += 1;
+						if (list.chased === 12) console.warn("messages: the chat kept changing its height, its end is not followed for a moment");
+						calm.restart();
+						list.positionViewAtEnd();
+					}
+				}
+
+				// a while without being asked: the next change is followed again
+				Timer {
+					id: calm
+
+					interval: 400
+					onTriggered: list.chased = 0
+				}
 
 				// another chat comes up from a little below
 				transform: Translate {
@@ -628,7 +660,7 @@ Item {
 					// short when the view jumped to the newest mail, and left the first mails unseen.)
 					ListView.onAdd: if (!arrive.running) entry.appear()
 
-					width: ListView.view.width - 12
+					width: list.width - 12
 					message: Mail.messages[root.byId[modelData]] ?? root.blank
 					previous: index > 0 ? (Mail.messages[index - 1] ?? null) : null
 					group: root.chat?.group ?? false

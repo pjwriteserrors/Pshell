@@ -26,7 +26,7 @@
 		"<all_urls>"
 	],
 	"background": {
-		"scripts": ["background/link.js", "background/downloads.js", "background/bridge.js"],
+		"scripts": ["background/link.js", "background/downloads.js", "background/styles.js", "background/bridge.js"],
 		"persistent": true
 	},
 	"content_scripts": [
@@ -37,6 +37,12 @@
 			"all_frames": false
 		}
 	],
+	"browser_action": {
+		"default_title": "Pshell",
+		"default_icon": "icon.svg",
+		"default_popup": "popup/popup.html",
+		"default_area": "navbar"
+	},
 	"chrome_url_overrides": { "newtab": "newtab/newtab.html" },
 	"experiment_apis": {
 		"pshellChrome": {

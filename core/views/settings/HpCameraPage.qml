@@ -600,6 +600,47 @@ SettingsPage {
 			value: HpCamera.faceTries
 			onMoved: v => HpCamera.setOption("faceTries", Math.round(v))
 		}
+
+		Repeater {
+			model: HpCamera.faceUnlock ? [["lock", "lock_outline", "When locked"], ["sleep", "power_sleep", "After standby"], ["wake", "monitor", "Screens back on"]] : []
+
+			delegate: RowLayout {
+				id: startRow
+
+				required property var modelData
+
+				Layout.fillWidth: true
+				Layout.leftMargin: 12
+				Layout.rightMargin: 12
+				spacing: 14
+
+				Glyph {
+					icon: startRow.modelData[1]
+					size: 18
+					color: Theme.textMuted
+				}
+
+				StyledText {
+					Layout.fillWidth: true
+					text: startRow.modelData[2]
+					font.weight: Font.Medium
+				}
+
+				Segmented {
+					Layout.preferredWidth: 380
+					options: [
+						{ value: "auto", label: "Auto" },
+						{ value: "Control", label: "Ctrl" },
+						{ value: "Shift", label: "Shift" },
+						{ value: "Alt", label: "Alt" },
+						{ value: "Meta", label: "Super" },
+						{ value: "off", label: "Off" }
+					]
+					current: HpCamera.faceStart[startRow.modelData[0]] ?? "auto"
+					onSelected: value => HpCamera.setFaceStart(startRow.modelData[0], value)
+				}
+			}
+		}
 	}
 
 	// ── the virtual camera ─────────────────────────────────────────────────
