@@ -149,10 +149,18 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
     play with mouse and keyboard – with the haptics their makers designed:
     this weapon's reload, that one's recoil, a hit taken, an explosion
     nearby. Every effect the game uploads (`FF_RUMBLE`, `FF_PERIODIC`,
-    `FF_CONSTANT`) and plays becomes a row of pulses by its strength
-    (whisper, subtle, damp, sharp collision) for as long as it runs (denser
-    the harder; at most 3 s on its own – SDL games stop and re-upload
-    theirs). The pad is only there while no real controller (a non-virtual
+    `FF_CONSTANT`) and plays is felt by its strength (whisper, subtle,
+    damp, sharp collision): a rumble that starts or gets clearly harder
+    (+0.08) is a pulse at once, one that keeps its strength is a row of
+    pulses (denser the harder; at most 5 s unchanged), one that fades gives
+    none more – Overwatch's shot is one frame at 0.36–0.6 fading over
+    ~150 ms, one pulse. The strength is read on the pad's thread the moment
+    the game sends it and played by a thread of its own (`Pulser`), never
+    through the daemon's loop or the 50 ms guard against sound and picture
+    saying the same thing: a one-frame rumble read later was often 0
+    already, and pulses that came while a haptic call ran (10–20 ms, the
+    first after the mouse dozed off up to a second) were lost; now the
+    newest of them plays right after. The pad is only there while no real controller (a non-virtual
     device with `BTN_SOUTH`) is plugged in, since a game would take ours as
     player one; it gives way within 5 s of a real one appearing and comes
     back when it is gone. `games.py pads` and `games_pad.py` leave it out.
@@ -160,11 +168,18 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
     the active input, and one that never moves gets nothing: with the
     *nudge* (`rumblePadNudge`, off by default; `ipc mouse padNudge on|off`)
     every press while the game has the focus tips the pad's left stick by
-    `rumblePadNudgeAmount` (0..1, 0.3) for `rumblePadNudgeHold` ms (40),
-    alternately left and right, at most every 50 ms. It is written on the
-    press thread straight from evdev, so it reaches the game before the
-    press does through the compositor. The hero may twitch a hair; turn the
-    amount down until it stops rumbling, then one step up.
+    `rumblePadNudgeAmount` (0..1, 0.26 – just past XInput's dead zone of
+    7849/32767; 0.21 was too little for Overwatch, 0.25 enough) for
+    `rumblePadNudgeHold` ms (20), alternately left and right, at most every
+    50 ms. It is written on the press thread straight from evdev, so it
+    reaches the game before the press does through the compositor; the
+    camera does not move, the hero at most a hair. Only while the game
+    hides its cursor (`GameCursor`: XFixes on the game's X display – the
+    one inside gamescope when the game's environment has
+    `GAMESCOPE_WAYLAND_DISPLAY` – told of every change): in a menu the
+    stick moved the menu's focus, the game took the pad for the input, hid
+    the cursor and lost the click. When the display cannot be watched the
+    nudge goes out everywhere, as before (logged).
   - *The game's sound* (`rumbleSound`): only the game's own PipeWire stream
     – found by its processes (`games_guard.py` sends the pids with each game
     window; a stream whose `application.process.id` is one of them or a

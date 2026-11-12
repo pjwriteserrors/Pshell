@@ -243,15 +243,19 @@ class Pad:
         self.daemon = daemon
         self.ui = None
         self.stop = None
-        self.effects = {}     # id -> {"strength", "length"}
-        self.runs = {}        # id -> generation of the pulses that run
+        self.effects = {}     # id -> {"strength", "length"}, kept by the pad's thread
+        self.playing = {}     # id -> when it ends, the effects the game plays now
         self.gain = 1.0
-        self.last_rumble = 0.0
-        self.pulses = 0
+        self.pulser = Pulser(daemon)
+        self.cursor = GameCursor(daemon)
         self.blocked = ""     # the real controller that keeps the pad away
         self.nudged = 0.0     # when the last nudge went out
         self.nudge_sign = 1
         self.nudge_lock = threading.Lock()
+
+    @property
+    def last_rumble(self):
+        return self.pulser.last
 
     def wanted(self):
         options = self.daemon.config["options"]
@@ -295,6 +299,11 @@ class Pad:
         if real != self.blocked:
             self.blocked = real
             self.daemon.tell_pad()
+        # the game's cursor tells aiming from menus, for the nudge
+        if self.ui is not None and self.nudge_on() and self.daemon.gaming:
+            self.cursor.watch(self.daemon.game_pids)
+        else:
+            self.cursor.stop()
 
     def create(self):
         A = evdev.AbsInfo
@@ -316,8 +325,9 @@ class Pad:
             self.ui = None
             return
         self.effects.clear()
-        self.runs.clear()
+        self.playing.clear()
         self.stop = threading.Event()
+        self.pulser.start()
         threading.Thread(target=self.serve, args=(self.ui, self.stop), daemon=True).start()
         self.daemon.tell_pad()
 
@@ -325,7 +335,8 @@ class Pad:
         if self.stop:
             self.stop.set()
         ui, self.ui, self.stop = self.ui, None, None
-        self.runs.clear()
+        self.pulser.set(0.0)
+        self.cursor.stop()
         try:
             ui.close()
         except OSError:
@@ -349,7 +360,12 @@ class Pad:
                     self.event(ui, ev)
                 except (OSError, ValueError) as error:
                     self.daemon.log(f"pad: {error}")
+            self.changed()
 
+    # All of it on the pad's own thread, at once: a game's rumble can be a
+    # single frame long (Overwatch: a shot sets the motors, the next frame
+    # or two clears them), so the strength has to be read the moment it
+    # comes – read later, on the daemon's loop, it was often 0 already.
     def event(self, ui, ev):
         if ev.type == E.EV_UINPUT:
             if ev.code == E.UI_FF_UPLOAD:
@@ -368,56 +384,36 @@ class Pad:
                 upload.retval = 0
                 ui.end_upload(upload)
                 # a game changes a running rumble by uploading it again
-                if effect.id in self.runs:
-                    self.daemon.loop.post(lambda i=effect.id: self.start(i))
+                if effect.id in self.playing:
+                    self.playing[effect.id] = self.ends(effect.id)
             elif ev.code == E.UI_FF_ERASE:
                 erase = ui.begin_erase(ev.value)
                 self.effects.pop(erase.effect_id, None)
-                self.daemon.loop.post(lambda i=erase.effect_id: self.runs.pop(i, None))
+                self.playing.pop(erase.effect_id, None)
                 erase.retval = 0
                 ui.end_erase(erase)
         elif ev.type == E.EV_FF:
             if ev.code == E.FF_GAIN:
                 self.gain = max(0.0, min(1.0, ev.value / 65535))
             elif ev.value:
-                self.daemon.loop.post(lambda i=ev.code: self.start(i))
+                self.playing[ev.code] = self.ends(ev.code)
             else:
-                self.daemon.loop.post(lambda i=ev.code: self.runs.pop(i, None))
+                self.playing.pop(ev.code, None)
 
-    # on the daemon's loop
-    def start(self, effect_id):
-        effect = self.effects.get(effect_id)
-        if not effect:
-            return
-        generation = self.runs.get(effect_id, 0) + 1
-        self.runs[effect_id] = generation
-        length = effect["length"]
-        # SDL games stop a rumble themselves (and upload it again to change
-        # it); one that is forgotten ends on its own
-        until = time.monotonic() + (min(length, 3000) / 1000 if length > 0 else 3.0)
-        self.tick(effect_id, generation, until, True)
+    def ends(self, effect_id):
+        # SDL games (Proton) play an endless effect and change or stop it
+        # themselves; one that is forgotten ends after a few seconds
+        length = self.effects.get(effect_id, {}).get("length", 0)
+        return time.monotonic() + (length / 1000 if 0 < length < 3000 else 3.0)
 
-    def tick(self, effect_id, generation, until, first):
-        if self.runs.get(effect_id) != generation or self.ui is None:
-            return
-        effect = self.effects.get(effect_id)
+    def changed(self):
         now = time.monotonic()
-        if not effect or now > until:
-            self.runs.pop(effect_id, None)
-            return
-        strength = effect["strength"] * self.gain
-        if strength <= 0.02:
-            self.runs.pop(effect_id, None)
-            return
-        self.last_rumble = now
-        self.pulses += 1
-        self.daemon.felt("pad", "rumble", strength, wave_for("rumble", strength), "Controller")
-        # a running rumble is a row of pulses, denser the harder it shakes
-        interval = 0.09 + (1 - strength) * 0.1
-        if until - now > interval * 0.5:
-            self.daemon.loop.schedule(interval, lambda: self.tick(effect_id, generation, until, False))
-        else:
-            self.runs.pop(effect_id, None)
+        level = 0.0
+        for effect_id, until in list(self.playing.items()):
+            effect = self.effects.get(effect_id)
+            if effect and until > now:
+                level = max(level, effect["strength"])
+        self.pulser.set(level * self.gain)
 
     def recent(self, seconds=3.0):
         return self.last_rumble > 0 and time.monotonic() - self.last_rumble < seconds
@@ -425,17 +421,22 @@ class Pad:
     # ── the nudge (rumblePadNudge) ──────────────────────────────────────
     # Many games (Overwatch among them) rumble only the controller that is
     # the active input: one that never moves gets nothing. With the nudge,
-    # every press of yours tips the left stick a little for a few frames
-    # (alternately left and right, so nothing drifts), and the pad is the
-    # last input when the game decides whom to rumble. Called on the press
-    # thread, straight away: the raw evdev press is here before the game
-    # has it through the compositor.
+    # every press of yours tips the left stick just past the usual dead
+    # zone (XInput's 7849) for a frame or so – alternately left and right,
+    # so nothing drifts – and the pad is the last input when the game
+    # decides whom to rumble. Only while the game hides its cursor (aiming):
+    # in a menu the stick would move the menu's focus and the game would
+    # take the pad for the input, hide the cursor and lose the click.
+    # Called on the press thread, straight away: the raw evdev press is here
+    # before the game has it through the compositor.
+    def nudge_on(self):
+        return self.daemon.config["options"].get("rumblePadNudge", False) is True
+
     def nudging(self):
-        options = self.daemon.config["options"]
-        return self.ui is not None and options.get("rumblePadNudge", False) is True and self.daemon.game_focused
+        return self.ui is not None and self.nudge_on() and self.daemon.game_focused
 
     def press(self, code, down):
-        if not down or not self.nudging():
+        if not down or not self.nudging() or self.cursor.shown():
             return
         now = time.monotonic()
         with self.nudge_lock:
@@ -446,10 +447,10 @@ class Pad:
             sign = self.nudge_sign
         options = self.daemon.config["options"]
         try:
-            amount = float(options.get("rumblePadNudgeAmount", 0.3))
-            hold = int(options.get("rumblePadNudgeHold", 40))
+            amount = float(options.get("rumblePadNudgeAmount", 0.26))
+            hold = int(options.get("rumblePadNudgeHold", 20))
         except (TypeError, ValueError):
-            amount, hold = 0.3, 40
+            amount, hold = 0.26, 20
         amount = max(0.0, min(1.0, amount))
         hold = max(10, min(500, hold))
         ui = self.ui
@@ -458,7 +459,7 @@ class Pad:
             ui.syn()
         except (OSError, AttributeError):
             return
-        # held for a few frames, else a game that polls once a frame never sees it
+        # held for a frame or two, else a game that polls once a frame never sees it
         timer = threading.Timer(hold / 1000, self.release, args=(ui,))
         timer.daemon = True
         timer.start()
@@ -471,6 +472,158 @@ class Pad:
             ui.syn()
         except OSError:
             pass
+
+
+class Pulser:
+    """Plays the pad's rumble on the mouse, from a thread of its own: the
+    daemon's loop can be busy (a haptic call takes 10–20 ms, the first one
+    after the mouse dozed off up to a second), and nothing the game sends
+    may be lost meanwhile. Every rumble that starts or gets clearly harder
+    is a pulse at once; one that keeps going is a row of pulses, denser
+    the harder it shakes; one that fades (a shot's envelope) gives none
+    more. What comes while a pulse is being sent is played right after."""
+
+    FLOOR = 0.03   # softer is no rumble
+    RISE = 0.08    # this much harder is a new one
+
+    def __init__(self, daemon):
+        self.daemon = daemon
+        self.cond = threading.Condition()
+        self.level = 0.0
+        self.since = 0.0       # when the level last changed
+        self.falling = False
+        self.kick = 0.0        # a pulse to play, its strength
+        self.thread = None
+        self.last = 0.0        # when the last pulse went out
+
+    def start(self):
+        if self.thread is None or not self.thread.is_alive():
+            self.thread = threading.Thread(target=self.run, daemon=True)
+            self.thread.start()
+
+    def set(self, level):
+        with self.cond:
+            if abs(level - self.level) < 0.005:
+                return
+            if level >= self.FLOOR and (self.level < self.FLOOR or level - self.level >= self.RISE):
+                self.kick = max(self.kick, level)
+            self.falling = level < self.level
+            self.level = level
+            self.since = time.monotonic()
+            self.cond.notify()
+
+    @staticmethod
+    def interval(strength):
+        return 0.09 + (1 - strength) * 0.1
+
+    def run(self):
+        again = None   # when a rumble that keeps going pulses again
+        while True:
+            with self.cond:
+                while True:
+                    now = time.monotonic()
+                    if self.kick:
+                        strength, self.kick = self.kick, 0.0
+                        break
+                    going = self.level >= self.FLOOR and not self.falling and now - self.since < 5.0
+                    if going and again is not None and now >= again:
+                        strength = self.level
+                        break
+                    if not going:
+                        again = None
+                    self.cond.wait(max(0.001, again - now) if going and again is not None else None)
+            self.last = time.monotonic()
+            self.daemon.felt("pad", "rumble", strength, wave_for("rumble", strength), "Controller", now=True)
+            again = time.monotonic() + self.interval(strength)
+
+
+class GameCursor:
+    """Whether the game shows its cursor (a menu) or hides it (aiming),
+    from the X server the game draws on – Proton games run on XWayland,
+    in gamescope on gamescope's own one, which the game's environment
+    names. Told by XFixes whenever the cursor changes; no polling."""
+
+    def __init__(self, daemon):
+        self.daemon = daemon
+        self.display = None    # the X display watched
+        self.visible = None    # True/False, None while unknown
+        self.thread = None
+        self.halt = None
+
+    def shown(self):
+        return self.visible is True
+
+    @staticmethod
+    def game_display(pids):
+        """The DISPLAY of the game's processes – the one inside gamescope
+        when there is one (gamescope itself sits on the desktop's)."""
+        inner, outer = "", ""
+        for pid in pids:
+            try:
+                raw = Path(f"/proc/{pid}/environ").read_bytes()
+            except OSError:
+                continue
+            env = dict(part.split(b"=", 1) for part in raw.split(b"\0") if b"=" in part)
+            value = env.get(b"DISPLAY", b"").decode(errors="replace")
+            if not value:
+                continue
+            if b"GAMESCOPE_WAYLAND_DISPLAY" in env:
+                inner = inner or value
+            else:
+                outer = outer or value
+        return inner or outer
+
+    def watch(self, pids):
+        name = self.game_display(pids)
+        if name == self.display and self.thread is not None and self.thread.is_alive():
+            return
+        self.stop()
+        if not name:
+            return
+        self.display = name
+        self.halt = threading.Event()
+        self.thread = threading.Thread(target=self.run, args=(name, self.halt), daemon=True)
+        self.thread.start()
+
+    def stop(self):
+        if self.halt:
+            self.halt.set()
+        self.halt, self.thread, self.display, self.visible = None, None, None, None
+
+    def run(self, name, halt):
+        try:
+            from Xlib import display  # noqa: WPS433
+            from Xlib.ext import xfixes  # noqa: WPS433
+            disp = display.Display(name)
+            disp.xfixes_query_version()
+            root = disp.screen().root
+            disp.xfixes_select_cursor_input(root, xfixes.XFixesDisplayCursorNotifyMask)
+        except Exception as error:  # noqa: BLE001 – Xlib raises its own kinds
+            self.daemon.log(f"pad: cannot watch the game's cursor on {name} ({error}) – the nudge goes out in menus too")
+            return
+        self.daemon.log(f"pad: watching the game's cursor on {name}")
+        try:
+            while not halt.is_set():
+                image = disp.xfixes_get_cursor_image(root)
+                visible = any(pixel >> 24 for pixel in image.cursor_image)
+                if not halt.is_set():
+                    self.visible = visible
+                # wait for the next change
+                while not halt.is_set():
+                    if disp.pending_events():
+                        while disp.pending_events():
+                            disp.next_event()
+                        break
+                    select.select([disp.fileno()], [], [], 0.5)
+        except Exception as error:  # noqa: BLE001
+            self.daemon.log(f"pad: the game's cursor is gone ({error})")
+        finally:
+            if not halt.is_set():
+                self.visible = None
+            try:
+                disp.close()
+            except Exception:  # noqa: BLE001
+                pass
 
 
 class Memory:

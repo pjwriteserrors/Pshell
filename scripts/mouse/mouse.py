@@ -990,19 +990,27 @@ class Daemon:
     def log(self, text):
         log(text)
 
-    def felt(self, source, kind, strength, waveform, label, stream="", cluster=-1):
+    def felt(self, source, kind, strength, waveform, label, stream="", cluster=-1, now=False):
         """A game event to feel (the pad, the sound, a bound press): plays
         it and, while the page watches, says what it was (`cluster`: the
-        learned sound, for the page to mute)."""
+        learned sound, for the page to mute). `now`: played at once on the
+        caller's thread (the pad's pulser), every one of them – the rest
+        is told on the loop."""
+        if now:
+            self.last_felt = time.monotonic()
+            self.play(waveform)
+
         def go():
-            now = time.monotonic()
-            # the sound and the picture often say the same thing at once
-            if now - self.last_felt < 0.05:
-                return
-            self.last_felt = now
+            if not now:
+                at = time.monotonic()
+                # the sound and the picture often say the same thing at once
+                if at - self.last_felt < 0.05:
+                    return
+                self.last_felt = at
             self.felt_count[source] = self.felt_count.get(source, 0) + 1
             gamefeel.felt_log(f"felt {source} {kind} {waveform} {label}")
-            self.play(waveform)
+            if not now:
+                self.play(waveform)
             if self.watching:
                 emit("felt", source=source, kind=kind, strength=round(float(strength), 2), wave=waveform,
                      label=label, stream=stream, cluster=cluster)
