@@ -809,7 +809,9 @@ class Daemon:
         if waveform:
             self.play(waveform)
 
-    def play(self, waveform, mouse=None):
+    def play(self, waveform, mouse=None, wait=True):
+        """`wait` False: sent without waiting for the answer (the pad's
+        pulses – the next one may come before a dozing mouse answers)."""
         mouse = mouse or self.current()
         if not mouse or "haptic" not in mouse.state:
             return
@@ -820,8 +822,8 @@ class Daemon:
             log(f"DRY play {waveform}")
             return
         try:
-            mouse.device.play(code)
-        except (HidppError, TimeoutError) as error:
+            mouse.device.play(code, wait=wait)
+        except (HidppError, TimeoutError, OSError) as error:
             log(f"haptic: {error}")
 
     def fire(self, rule, control, trigger, phase):
@@ -998,7 +1000,7 @@ class Daemon:
         is told on the loop."""
         if now:
             self.last_felt = time.monotonic()
-            self.play(waveform)
+            self.play(waveform, wait=False)
 
         def go():
             if not now:

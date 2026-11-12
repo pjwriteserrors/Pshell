@@ -252,6 +252,8 @@ class Pad:
         self.nudged = 0.0     # when the last nudge went out
         self.nudge_sign = 1
         self.nudge_lock = threading.Lock()
+        self.held = {}        # key or button held now -> since when (the press thread)
+        self.wake = threading.Event()
 
     @property
     def last_rumble(self):
@@ -329,11 +331,13 @@ class Pad:
         self.stop = threading.Event()
         self.pulser.start()
         threading.Thread(target=self.serve, args=(self.ui, self.stop), daemon=True).start()
+        threading.Thread(target=self.keep, args=(self.stop,), daemon=True).start()
         self.daemon.tell_pad()
 
     def destroy(self):
         if self.stop:
             self.stop.set()
+            self.wake.set()
         ui, self.ui, self.stop = self.ui, None, None
         self.pulser.set(0.0)
         self.cursor.stop()
@@ -421,14 +425,21 @@ class Pad:
     # ── the nudge (rumblePadNudge) ──────────────────────────────────────
     # Many games (Overwatch among them) rumble only the controller that is
     # the active input: one that never moves gets nothing. With the nudge,
-    # every press of yours tips the left stick just past the usual dead
-    # zone (XInput's 7849) for a frame or so – alternately left and right,
-    # so nothing drifts – and the pad is the last input when the game
-    # decides whom to rumble. Only while the game hides its cursor (aiming):
-    # in a menu the stick would move the menu's focus and the game would
-    # take the pad for the input, hide the cursor and lose the click.
-    # Called on the press thread, straight away: the raw evdev press is here
-    # before the game has it through the compositor.
+    # the pad tips its left stick just past the usual dead zone (XInput's
+    # 7849) for a frame or so – alternately left and right, so nothing
+    # drifts – and is the last input when the game decides whom to rumble:
+    #   - on every press, before the game has it through the compositor;
+    #   - every 400 ms while anything is held: Overwatch takes a held mouse
+    #     button for mouse-and-keyboard input after about a second and the
+    #     rumble stopped mid-burst (automatic fire, a charge);
+    #   - on every release: the release is mouse input too, and what it sets
+    #     off (a charged shot let go) rumbled nothing.
+    # Only while the game hides its cursor (aiming): in a menu the stick
+    # moved the menu's focus and the game took the pad for the input, hid
+    # the cursor and lost the click. Called on the press thread.
+    KEEP = 0.4     # s between nudges while something is held
+    GAP = 0.03     # s at least between two nudges
+
     def nudge_on(self):
         return self.daemon.config["options"].get("rumblePadNudge", False) is True
 
@@ -436,11 +447,35 @@ class Pad:
         return self.ui is not None and self.nudge_on() and self.daemon.game_focused
 
     def press(self, code, down):
-        if not down or not self.nudging() or self.cursor.shown():
-            return
+        if down:
+            self.held[code] = time.monotonic()
+            self.wake.set()
+        else:
+            self.held.pop(code, None)
+        if self.nudging() and not self.cursor.shown():
+            self.nudge()
+
+    def holding(self):
+        # a release missed (a device gone) must not keep it up for ever
+        now = time.monotonic()
+        return any(now - since < 20 for since in list(self.held.values()))
+
+    def keep(self, stop):
+        """The keep-alive: a nudge every KEEP seconds while something is held."""
+        while not stop.is_set():
+            if not self.holding():
+                self.wake.wait(1.0)
+                self.wake.clear()
+                continue
+            time.sleep(max(0.02, self.nudged + self.KEEP - time.monotonic()))
+            if self.holding() and self.nudging() and not self.cursor.shown() \
+                    and time.monotonic() - self.nudged >= self.KEEP - 0.01:
+                self.nudge()
+
+    def nudge(self):
         now = time.monotonic()
         with self.nudge_lock:
-            if now - self.nudged < 0.05:
+            if now - self.nudged < self.GAP:
                 return
             self.nudged = now
             self.nudge_sign = -self.nudge_sign

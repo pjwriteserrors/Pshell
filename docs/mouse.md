@@ -157,21 +157,27 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
     ~150 ms, one pulse. The strength is read on the pad's thread the moment
     the game sends it and played by a thread of its own (`Pulser`), never
     through the daemon's loop or the 50 ms guard against sound and picture
-    saying the same thing: a one-frame rumble read later was often 0
-    already, and pulses that came while a haptic call ran (10–20 ms, the
-    first after the mouse dozed off up to a second) were lost; now the
-    newest of them plays right after. The pad is only there while no real controller (a non-virtual
+    saying the same thing, and sent without waiting for the mouse's answer
+    (`Channel.send`, software id 0x0D, whose answers the reader passes by):
+    a one-frame rumble read later was often 0 already, and pulses that
+    came while a haptic call waited (10–20 ms, the first after the mouse
+    dozed off up to a second) were lost. The pad is only there while no real controller (a non-virtual
     device with `BTN_SOUTH`) is plugged in, since a game would take ours as
     player one; it gives way within 5 s of a real one appearing and comes
     back when it is gone. `games.py pads` and `games_pad.py` leave it out.
     Many games (Overwatch among them) rumble only the controller that is
     the active input, and one that never moves gets nothing: with the
     *nudge* (`rumblePadNudge`, off by default; `ipc mouse padNudge on|off`)
-    every press while the game has the focus tips the pad's left stick by
+    every press and every release while the game has the focus, and every
+    400 ms while a key or button is held, tips the pad's left stick by
     `rumblePadNudgeAmount` (0..1, 0.26 – just past XInput's dead zone of
     7849/32767; 0.21 was too little for Overwatch, 0.25 enough) for
     `rumblePadNudgeHold` ms (20), alternately left and right, at most every
-    50 ms. It is written on the press thread straight from evdev, so it
+    30 ms. Overwatch takes a held mouse button for mouse-and-keyboard input
+    after about a second (900 ms between nudges still held, 400 is the
+    margin): without the keep-alive the rumble of automatic fire stopped
+    mid-magazine, and without the release nudge a charged shot let go
+    rumbled nothing. It is written on the press thread straight from evdev, so it
     reaches the game before the press does through the compositor; the
     camera does not move, the hero at most a hair. Only while the game
     hides its cursor (`GameCursor`: XFixes on the game's X display – the

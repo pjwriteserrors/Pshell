@@ -30,6 +30,7 @@ LOGITECH = 0x046D
 # requests use this software id: Solaar takes 2–15 in turn, so a reply of
 # ours is never mistaken for one of its own while both run
 SW_ID = 0x0E
+SW_ID_NOWAIT = 0x0D   # requests whose answer nobody waits for
 
 # HID++ 2.0 feature ids
 ROOT = 0x0000
@@ -252,6 +253,25 @@ class Channel:
             raise Offline(f"device {devnum} is not connected (code {value})")
         raise HidppError(value)
 
+    def send(self, devnum, feature_index, function, params=b"", long=False):
+        """Sends one request without waiting for its answer, under a
+        software id of its own (SW_ID_NOWAIT), so the answer matches no
+        waiting request and the reader passes it by. Not under the lock:
+        a request that waits for a dozing device must not hold it up, and
+        a write of one report is whole on hidraw."""
+        params = bytes(params)
+        address = ((function & 0x0F) << 4) | SW_ID_NOWAIT
+        long = long or len(params) > 3
+        report = LONG if long else SHORT
+        size = SIZES[report]
+        message = bytes([report, devnum, feature_index, address]) + params
+        try:
+            os.write(self.fd, message[:size].ljust(size, b"\x00"))
+        except OSError as error:
+            if error.errno == errno.EPIPE and not long:
+                return self.send(devnum, feature_index, function, params, True)
+            raise
+
     def register(self, devnum, sub_id, address, params=b"", timeout=2.0):
         """HID++ 1.0 register access (the receiver's own settings)."""
         params = bytes(params)
@@ -381,8 +401,13 @@ class Device:
         level = max(0, min(100, int(level)))
         return self.call(HAPTIC, 2, bytes([1 if enabled else 0, level if enabled else max(level, 1)]))
 
-    def play(self, waveform):
-        return self.call(HAPTIC, 4, bytes([waveform & 0xFF]))
+    def play(self, waveform, wait=True):
+        if wait:
+            return self.call(HAPTIC, 4, bytes([waveform & 0xFF]))
+        index = self.feature(HAPTIC)
+        if index is None:
+            raise HidppError(6, f"no feature {HAPTIC:#06x}")
+        return self.channel.send(self.devnum, index, 4, bytes([waveform & 0xFF]))
 
     # ── force sensing button ────────────────────────────────────────────
     def force_buttons(self):
