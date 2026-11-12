@@ -305,7 +305,7 @@ class Daemon:
             pass
         self.engine.configure(self.config["rules"], self.config["options"])
         self.output = actions.Output()
-        self.pad = gamefeel.Pad(self)
+        self.pad = gamefeel.Pad(self, STATE / "mouse-padecho.json")
         self.ears = gamefeel.Ears(self, gamefeel.Memory(STATE / "mouse-gamefeel.json"))
         self.eyes = gamefeel.Eyes(self, self.ears.memory, self.ears.gate)
         self.triggers = Triggers(self)
@@ -1411,6 +1411,10 @@ class Triggers:
                         scanned = 0.0
                         continue
                     for event in events:
+                        if gating and event.type == actions.E.EV_REL:
+                            # looking around: the game may withhold its rumble (the pad's echo)
+                            self.daemon.pad.moved()
+                            continue
                         # 2 is the keyboard's own repeat
                         if event.type != actions.E.EV_KEY or event.value not in (0, 1):
                             continue

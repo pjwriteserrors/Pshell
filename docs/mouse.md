@@ -186,6 +186,27 @@ Settings*), a button (*Next mouse profile*, *Switch to …*),
     stick moved the menu's focus, the game took the pad for the input, hid
     the cursor and lost the click. When the display cannot be watched the
     nudge goes out everywhere, as before (logged).
+    *Echo*: mouse motion after the nudge – looking around while
+    shooting – takes the pad away for as long as the mouse moves, and
+    nothing the pad does wins against it (a nudge every 20 ms, the stick
+    held over: still no rumble). So what each key sets off is learned
+    while the mouse rests (`mouse-padecho.json`, per game: per press and
+    per release the burst of rumbles that follows within 150 ms of a quiet
+    start – when, how strong – and the beat while it is held, from two
+    rumbles in a row with the mouse at rest), and where the game stays
+    silent at that moment (+35 ms) after recent motion, the learned rumble
+    is played ("Controller (echo)" on the page). "Recent" is generous on
+    purpose – measured on Overwatch, "moved after the last nudge" was right
+    74 times in 80 (a nudge 100 ms ahead restored the pad once and not the
+    next time, and a held key's beat wanders by 50 ms): motion within the
+    last beat, or up to 150 ms before the last nudge, counts; once a held
+    key's beat is echoed it stays echoed until the game's own beat is back
+    or the mouse rested 0.6 s. A pulse too many is caught by the pulser:
+    a rumble of the game's within 150 ms after an echo is not played
+    again. A press that rumbled less than half the time is never echoed
+    (a step; a charged shot on its cooldown rumbles every other try, so it
+    is echoed – on its cooldown too). A quick release (under 250 ms) or one
+    inside a held key's beat teaches nothing: what follows is the press's.
   - *The game's sound* (`rumbleSound`): only the game's own PipeWire stream
     – found by its processes (`games_guard.py` sends the pids with each game
     window; a stream whose `application.process.id` is one of them or a
