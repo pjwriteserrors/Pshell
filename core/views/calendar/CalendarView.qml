@@ -34,8 +34,14 @@ ColumnLayout {
 		root.selected = new Date();
 	}
 
-	onShownChanged: MsCalendar.ensure(root.shown)
-	Component.onCompleted: MsCalendar.ensure(root.shown)
+	onShownChanged: {
+		MsCalendar.ensure(root.shown);
+		NasCalendar.ensure(root.shown);
+	}
+	Component.onCompleted: {
+		MsCalendar.ensure(root.shown);
+		NasCalendar.ensure(root.shown);
+	}
 
 	Connections {
 		target: MsCalendar

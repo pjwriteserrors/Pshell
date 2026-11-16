@@ -10,6 +10,7 @@ import qs.style.theme
 import qs.style.widgets
 import qs.core.services
 import qs.core.views.settings
+import qs.core.views.nas
 
 // >settings, the Pshell settings: every setting niri has, but the ones Studio
 // looks after (cursor theme, animations), and those of the shell's own
@@ -94,6 +95,7 @@ FloatingWindow {
 		{ id: "colours", label: "Colours", icon: "palette", hint: "Wallpaper colours: engine, style, tuning" },
 		{ id: "lighting", label: "Lighting", icon: "led_strip_variant", hint: "Keyboard and LEDs: wallpaper or screen", shown: Lighting.enabled },
 		{ id: "phone", label: "Notifications", icon: "bell_outline", hint: "Which programs notify, here and on the phone", plugin: "notifications" },
+		{ id: "nas", label: "NAS", icon: "server_network", hint: "netcore: mount, sync, backups, server", plugin: "nas" },
 		{ id: "debug", label: "Debug", icon: "bug_outline", hint: "Rendering and driver switches" }
 	].filter(page => (!page.plugin || Plugins.on(page.plugin)) && page.shown !== false)
 
@@ -221,6 +223,15 @@ FloatingWindow {
 		{ page: "amazfit", anchor: "amazfit-connection", title: "Watch connection", words: "amazfit zepp watch active 2 auto connect time sync battery warning", plugin: "amazfit" },
 		{ page: "amazfit", anchor: "amazfit-info", title: "This watch", words: "amazfit zepp watch active 2 serial firmware hardware services gatt", plugin: "amazfit" },
 		{ page: "headset", anchor: "headset-profile", title: "Headset profile", words: "sennheiser headset audio profile duplex output input pro audio off", plugin: "headset" },
+		{ page: "nas", anchor: "nas-connection", title: "NAS connection", words: "nas netcore raspberry pi mount rclone vpn home address web admin password", plugin: "nas" },
+		{ page: "nas", anchor: "nas-worker", title: "Computing for the NAS", words: "nas worker compute thumbnails tasks pause games", plugin: "nas" },
+		{ page: "nas", anchor: "nas-server", title: "NAS server settings", words: "nas public shares links trash snapshots pi compute ai ollama policy virustotal faces photos wake totp disk filebrowser", plugin: "nas" },
+		{ page: "nas", anchor: "nas-sync", title: "Folder sync with the NAS", words: "nas sync pairs mirror two way conflicts", plugin: "nas-sync" },
+		{ page: "nas", anchor: "nas-backup", title: "Backups to the NAS", words: "nas backup restic restore versions schedule", plugin: "nas-backup" },
+		{ page: "nas", anchor: "nas-saves", title: "Game saves on the NAS", words: "nas game saves ludusavi", plugin: "nas-saves" },
+		{ page: "nas", anchor: "nas-devices", title: "NAS devices", words: "nas devices laptop phone token wake", plugin: "nas" },
+		{ page: "nas", anchor: "nas-more", title: "Downloads, shelves, streams, phone photos to the NAS", words: "nas downloads torrents shelf streams progress phone photos upload", plugin: "nas" },
+		{ page: "nas", anchor: "nas-calendar", title: "Baikal calendar", words: "nas baikal caldav calendar", plugin: "nas-calendar" },
 		{ page: "ultimate", anchor: "ultimate-pad", title: "8BitDo controller", words: "8bitdo ultimate 2 wireless controller gamepad pad profile battery", plugin: "ultimate" },
 		{ page: "ultimate", anchor: "ultimate-buttons", title: "Controller buttons", words: "8bitdo gamepad remap buttons paddles pl pr l4 r4 back buttons turbo", plugin: "ultimate" },
 		{ page: "ultimate", anchor: "ultimate-sticks", title: "Controller sticks", words: "8bitdo gamepad stick dead zone invert swap d-pad", plugin: "ultimate" },
@@ -299,7 +310,7 @@ FloatingWindow {
 	]
 
 	// a page of the shell's own: no niri file behind it, nothing to undo
-	readonly property bool shellPage: ["bar", "tray", "multicursor", "sounds", "colours", "lighting", "phone", "mouse", "hud", "apps", "browser"].includes(root.current)
+	readonly property bool shellPage: ["bar", "tray", "multicursor", "sounds", "colours", "lighting", "phone", "nas", "mouse", "hud", "apps", "browser"].includes(root.current)
 
 	readonly property var results: {
 		if (root.query === "") return [];
@@ -825,6 +836,7 @@ FloatingWindow {
 							case "colours": return coloursPage;
 							case "lighting": return lightingPage;
 							case "phone": return phonePage;
+							case "nas": return nasPage;
 							default: return debugPage;
 							}
 						}
@@ -1231,6 +1243,12 @@ FloatingWindow {
 		id: phonePage
 
 		PhonePage {}
+	}
+
+	Component {
+		id: nasPage
+
+		NasPage {}
 	}
 
 	Component {

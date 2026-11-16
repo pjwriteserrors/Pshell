@@ -1113,6 +1113,13 @@ Singleton {
 			});
 			return;
 		}
+		// on the NAS's mount: into the NAS's own trash (docs/nas.md)
+		if (Plugins.on("nas") && Nas.online && paths.every(path => Nas.isUnderMount(path))) {
+			Nas.trash(paths, (data, error) => {
+				if (!error) root.say(paths.length === 1 ? `${root.nameOf(paths[0])} is in the NAS's trash` : `${paths.length} items are in the NAS's trash`, "trash_can_outline");
+			});
+			return;
+		}
 		root.startJob("trash", { paths: paths }, job => {
 			if (job.state !== "failed" || job.code !== "no-trash") return;
 			const refused = job.failedPaths || [];
@@ -1826,11 +1833,29 @@ Singleton {
 
 	// ── earlier versions ───────────────────────────────────────────────────
 	function versionsOf(path, done) {
-		root.request("versions", { path: path }, data => done(data?.versions ?? [], data?.providers ?? []));
+		root.request("versions", { path: path }, data => {
+			const own = data?.versions ?? [];
+			const providers = data?.providers ?? [];
+			// backups, snapshots and the trash of the NAS (docs/nas.md)
+			if (!Plugins.on("nas") || !Nas.connected) return done(own, providers);
+			Nas.versions(path, (list, error) => {
+				// ids come as "nas:…" (snapshots, trash) or "restic:…" (backups); restoreVersion hands those back
+				const known = own.map(version => String(version.id));
+				const theirs = (error ? [] : list).filter(version => !known.includes(String(version.id))).map(version => ({
+					id: String(version.id),
+					source: String(version.source) === "nas-trash" ? "trash" : String(version.source || "nas"),
+					title: String(version.title || "On the NAS"),
+					when: Nas.seconds(version.when),
+					size: version.size
+				}));
+				done(own.concat(theirs).sort((a, b) => (Number(b.when) || 0) - (Number(a.when) || 0)), theirs.length > 0 ? providers.concat(["nas"]) : providers);
+			});
+		});
 	}
 
 	// mode: "beside" (a copy next to it) or "replace" (the current one goes to the trash)
 	function restoreVersion(path, version, mode) {
+		if (Plugins.on("nas") && /^(nas|restic):/.test(String(version))) return Nas.restore(path, String(version), mode || "beside");
 		root.startJob("restoreversion", { path: path, version: version, mode: mode || "beside" }, job => {
 			if (job.state === "done") root.say(mode === "replace" ? "The earlier version is back" : "The earlier version is beside it", "history");
 		});

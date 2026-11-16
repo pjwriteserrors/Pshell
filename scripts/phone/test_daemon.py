@@ -887,5 +887,97 @@ class MouseAcross(OtherPCs):
         await pc.until(lambda: pc.state["kvm"]["mode"] == "local")
 
 
+class Nas(DaemonTest):
+    """features/nas.py against a fake NAS: tokens minted once per device, for a
+    phone and for a paired laptop."""
+
+    plugins = {"phone": True, "pc-link": True, "nas": True}
+
+    async def asyncSetUp(self):
+        from aiohttp import web
+        self.minted = []
+
+        async def hello(_request):
+            return web.json_response({"server_id": "srv-1", "name": "netcore", "version": "test", "auth": False})
+
+        async def devices(request):
+            if request.headers.get("Authorization") != "Bearer admin-token":
+                return web.json_response({"error": "no", "code": "auth"}, status=401)
+            body = await request.json()
+            self.minted.append(body)
+            return web.json_response({"id": f"d{len(self.minted)}", "token": f"tok-{len(self.minted)}", "name": body["name"], "kind": body["kind"]})
+
+        app = web.Application()
+        app.router.add_get("/api/hello", hello)
+        app.router.add_post("/api/devices", devices)
+        self.runner = web.AppRunner(app)
+        await self.runner.setup()
+        nas_port = free_port()
+        await web.TCPSite(self.runner, "127.0.0.1", nas_port).start()
+        self.nas_url = f"http://127.0.0.1:{nas_port}"
+        # minting over HTTP (no scripts/nas/nas.py), "open" through a fake quickshell
+        saved = os.environ.get("PSHELL_NAS_PY")
+        os.environ["PSHELL_NAS_PY"] = ""
+        try:
+            self.tmp = Path(tempfile.mkdtemp(prefix="pshell-phone-test-"))
+            self.closers, self.daemons = [], []
+            for folder in (self.tmp, self.tmp / "laptop"):
+                (folder / "bin").mkdir(parents=True)
+                (folder / "home").mkdir()
+                tool = folder / "bin" / "quickshell"
+                tool.write_text(f"#!/bin/sh\necho \"$@\" >> {folder / 'quickshell.log'}\n")
+                tool.chmod(0o755)
+            self.port, self.env, self.socket_path = await self.start_daemon(self.tmp, self.plugins)
+            self.laptop_port, _env, self.laptop_socket = await self.start_daemon(self.tmp / "laptop", self.plugins)
+        finally:
+            if saved is None:
+                os.environ.pop("PSHELL_NAS_PY", None)
+            else:
+                os.environ["PSHELL_NAS_PY"] = saved
+        (self.tmp / "state" / "pshell" / "nas.json").write_text(json.dumps({
+            "token": "admin-token", "server_id": "srv-1", "addresses": {"home": self.nas_url, "vpn": "http://127.0.0.1:1"},
+        }))
+
+    async def asyncTearDown(self):
+        await super().asyncTearDown()
+        await self.runner.cleanup()
+
+    pair = OtherPCs.pair
+
+    async def test_phone_gets_its_token_once(self):
+        phone = await self.paired_phone("A55")
+        event = await asyncio.wait_for(phone.events.get(), 10)
+        self.assertEqual((event["topic"], event["name"]), ("nas", "token"))
+        data = event["data"]
+        self.assertEqual(data["token"], "tok-1")
+        self.assertEqual(data["server_id"], "srv-1")
+        self.assertEqual(data["addresses"]["home"], self.nas_url)
+        self.assertEqual(data["device"], "d1")
+        self.assertEqual(self.minted, [{"name": "A55", "kind": "phone", "caps": ["files"]}])
+        # asked again (a reconnect): the same token, nothing minted
+        self.assertEqual((await phone.call("nas", "token"))["data"]["token"], "tok-1")
+        self.assertEqual(len(self.minted), 1)
+        # the NAS refused it: a fresh one
+        self.assertEqual((await phone.call("nas", "token", {"fresh": True}))["data"]["token"], "tok-2")
+        cache = self.tmp / "state" / "pshell" / "phone" / "nas.json"
+        self.assertEqual(cache.stat().st_mode & 0o777, 0o600)
+
+    async def test_open_on_the_pc(self):
+        phone = await self.paired_phone()
+        self.assertTrue((await phone.call("nas", "open", {"path": "/Songs/a b.mp3"}))["ok"])
+        self.assertIn("nas open /Songs/a b.mp3", (self.tmp / "quickshell.log").read_text())
+        self.assertFalse((await phone.call("nas", "open", {"path": "../etc"}))["ok"])
+
+    async def test_laptop_asks_the_pc(self):
+        _pc, laptop = await self.pair()
+        answer = await laptop.call("pcs", "nas-token", {}, timeout=30)
+        self.assertTrue(answer["ok"], answer)
+        self.assertEqual(answer["data"]["token"], "tok-1")
+        self.assertEqual(self.minted[0]["kind"], "laptop")
+        # a phone may not ask for the laptop's way
+        phone = await self.paired_phone()
+        self.assertFalse((await phone.call("pc", "nas-token"))["ok"])
+
+
 if __name__ == "__main__":
     unittest.main()

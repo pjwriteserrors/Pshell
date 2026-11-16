@@ -241,6 +241,8 @@ private fun TabBar() {
 	}
 	val groups = Group.entries.filter { group -> group.tab && tabs.any { it.group == group } }
 	val entries = listOf(Triple("home", "home_variant", "Home")) + groups.map { Triple("hub/${it.id}", it.icon, it.title) }
+	// six tabs (the NAS one) still fit a narrow phone
+	val crowded = entries.size > 5
 	Row(
 		Modifier
 			.navigationBarsPadding()
@@ -249,7 +251,7 @@ private fun TabBar() {
 			.clip(CircleShape)
 			.background(Theme.colors.layer2)
 			.padding(6.dp),
-		horizontalArrangement = Arrangement.spacedBy(4.dp),
+		horizontalArrangement = Arrangement.spacedBy(if (crowded) 2.dp else 4.dp),
 	) {
 		for ((route, icon, title) in entries) {
 			val active = nav.current == route
@@ -260,7 +262,7 @@ private fun TabBar() {
 					.height(52.dp)
 					.pressable(shape = CircleShape, pressedScale = 0.92f, haptic = true) { nav.switchTo(route) }
 					.background(background)
-					.padding(horizontal = if (active) 20.dp else 16.dp),
+					.padding(horizontal = if (active) (if (crowded) 16.dp else 20.dp) else if (crowded) 12.dp else 16.dp),
 				verticalAlignment = Alignment.CenterVertically,
 			) {
 				Glyph(icon, size = 24.dp, color = tint)

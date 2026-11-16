@@ -281,6 +281,8 @@ QtObject {
 			Pcs.sendFiles(pc.id, root.paths(rows));
 			Files.say(rows.length === 1 ? `Sending ${rows[0].name} to ${pc.name}` : `Sending ${rows.length} items to ${pc.name}`, "laptop");
 		} });
+		// the NAS takes folders as well (docs/nas.md)
+		if (Plugins.on("nas") && Nas.online && !rows.every(row => Nas.isUnderMount(row.path))) out.push({ label: "NAS", icon: "server_network", run: () => Nas.send(root.paths(rows)) });
 		if (Plugins.on("ssh")) out.push({ label: "A server…", icon: "server_network", run: () => view.sendToServer(rows) });
 		if (out.length > 0) out.push({ separator: true });
 		out.push({ label: "Share a link…", icon: "link_variant", run: () => view.shareDialog(rows) });

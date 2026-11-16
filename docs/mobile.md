@@ -480,3 +480,55 @@ trace down and hands it to the PC at the next connection
 (`~/.local/state/pshell/phone/crashes.log`).
 
 `python3 scripts/setup.py doctor` checks what the daemon needs.
+
+## NAS
+
+The app talks to pshell-nas on the home server (`docs/nas.md`) by itself,
+with or without a PC: tab **NAS** (plugin `nas`; app 1.7), `mobile/app/…/nas/`.
+
+- **The token** comes from the PC once. When a paired phone connects and the
+  PC has a NAS token of its own (`~/.local/state/pshell/nas.json`), the
+  daemon (`features/nas.py`) mints one for the phone – `scripts/nas/nas.py
+  call mint {"name", "kind": "phone"}`, or `POST /api/devices` with the PC's
+  token where nas.py is missing – keeps it per phone in
+  `~/.local/state/pshell/phone/nas.json` (mode 600) and sends it as the event
+  `nas.token` `{server_id, addresses: {home, vpn}, device, token, name}` to
+  that phone only. The app keeps it and asks with `nas token` when it has
+  none, `{fresh: true}` when the NAS answered 401 (once per ten minutes).
+  The laptop asks its paired PC the same way: `phonectl call pcs nas-token`
+  (`pc.nas-token`, minted with kind `laptop`, only for a paired PC).
+- **Where.** Every request goes to `http://nas.pshell/…`; the client puts in
+  the home address while a network of the phone (not the VPN) has its
+  default gateway in the home net and `/api/hello` names the paired
+  server, else the VPN address, and looks again whenever the networks
+  change or a connection fails. The chip at the top says which. Plain HTTP
+  is allowed for 192.168.178.22, 10.8.0.1 and 10.0.2.2 only
+  (`res/xml/network_security.xml`).
+- **Files**: folders with thumbnails (list or grid), search, pictures in a
+  viewer (swipe through the folder, pinch or double tap to zoom), videos
+  streamed with the token (Media3), songs to the music player, anything else
+  fetched and handed to another app. A file's sheet: download (to
+  `Download/NAS`), share, *Keep on the phone* (an offline copy in the app's
+  storage, fetched again on opening when size or mtime changed on the NAS;
+  *Offline* lists them, also without a connection), *Open on PC* (`nas
+  open`, which runs `scripts/ipc.sh nas open <path>` there), to the trash.
+  Upload from the phone into the folder shown (resumable), a new folder,
+  the trash with restore, *Wake PC* (`GET /api/devices` → `POST /api/wake`).
+- **Photo upload**: pictures and videos to `/Phone photos/<yyyy>/<mm>/`,
+  WorkManager every hour and when MediaStore changes (a content URI trigger,
+  armed again after each run); Wi-Fi only (on), while charging only (off);
+  *only new ones* or *all* when switched on. An upload resumes where the NAS
+  has it (same path and size); a photo already there with the same size is
+  not sent again; done is kept by MediaStore id with the size the NAS
+  confirmed. *Offer to delete from the phone* (off, with a warning): after
+  a run a notification, then *Free up space* offers only the confirmed ones
+  in Android's own delete request. With `ACCESS_MEDIA_LOCATION` the originals
+  go up with their place.
+- **Music**: `/Songs` (or every audio file the index knows), search, a media
+  session of its own (`MusicService`), so it plays on in the background with
+  the shade's controls.
+
+Testing against the dev server: run `python3 -m pshell_nas --dev …` on
+port 8097, a phone daemon of its own whose `PSHELL_NAS_PY` points to a mint
+script answering `addresses: {home: "http://10.0.2.2:8097"}`, and pair the
+emulator with that daemon.

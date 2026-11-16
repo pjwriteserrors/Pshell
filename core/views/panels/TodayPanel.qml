@@ -199,7 +199,7 @@ Drawer {
 
 			Agenda {
 				Layout.fillWidth: true
-				visible: Plugins.on("microsoft-calendar")
+				visible: Plugins.on("microsoft-calendar") || NasCalendar.active
 				day: calendar.selected
 			}
 

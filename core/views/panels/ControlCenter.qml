@@ -432,6 +432,25 @@ Drawer {
 						}
 					}
 				}
+
+				// the NAS: how full, how reached, what goes over (core/views/nas/NasCard.qml)
+				Loader {
+					id: nasCard
+
+					Layout.fillWidth: true
+					active: Plugins.on("nas")
+					visible: active
+					source: Qt.resolvedUrl("../nas/NasCard.qml")
+
+					Connections {
+						target: nasCard.item
+						ignoreUnknownSignals: true
+
+						function onDone() {
+							Popups.close();
+						}
+					}
+				}
 			}
 		}
 

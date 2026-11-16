@@ -23,6 +23,8 @@ Singleton {
 		})) });
 		if (Phone.available) out.push({ label: Phone.name, icon: "cellphone_arrow_down", enabled: Phone.reachable, run: withFiles(files => files.forEach(path => Phone.shareFile(path))) });
 		for (const pc of Pcs.reachable) out.push({ label: pc.name, icon: "laptop", run: withFiles(files => Pcs.sendFiles(pc.id, files)) });
+		// the NAS (docs/nas.md): files already on its mount are there
+		if (Plugins.on("nas") && Nas.online && !paths.every(path => Nas.isUnderMount(path))) out.push({ label: "NAS", icon: "server_network", run: withFiles(files => Nas.send(files)) });
 		if (out.length > 0) out.push({ separator: true });
 		out.push({ label: "Copy the file", icon: "content_copy", run: withFiles(files => {
 			Quickshell.execDetached(["sh", "-c", 'printf "%s\\n" "$@" | sed "s|^|file://|" | wl-copy --type text/uri-list', "sh"].concat(files));

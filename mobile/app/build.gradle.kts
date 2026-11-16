@@ -58,8 +58,8 @@ android {
 		applicationId = "dev.pshell.app"
 		minSdk = 30
 		targetSdk = 36
-		versionCode = 6
-		versionName = "1.5"
+		versionCode = 8
+		versionName = "1.7"
 	}
 
 	buildTypes {
@@ -105,6 +105,9 @@ dependencies {
 	implementation("androidx.media3:media3-exoplayer:1.8.0")
 	implementation("androidx.media3:media3-datasource-okhttp:1.8.0")
 	implementation("androidx.media3:media3-ui:1.8.0")
+	implementation("androidx.media3:media3-session:1.8.0")
+	// the NAS: photo auto upload in the background
+	implementation("androidx.work:work-runtime-ktx:2.11.2")
 
 	testImplementation("junit:junit:4.13.2")
 	testImplementation("org.json:json:20240303")

@@ -15,6 +15,8 @@ ColumnLayout {
 	property date day: new Date()
 	readonly property var events: MsCalendar.eventsOn(root.day)
 	readonly property int rowHeight: 48
+	// Microsoft signed in, or the Baikal calendar of the NAS
+	readonly property bool listing: MsCalendar.signedIn || NasCalendar.active
 
 	SystemClock {
 		id: clock
@@ -40,12 +42,12 @@ ColumnLayout {
 		return `${from} – ${to}`;
 	}
 
-	visible: MsCalendar.enabled && MsCalendar.checked
+	visible: (MsCalendar.enabled && MsCalendar.checked) || NasCalendar.active
 	spacing: 6
 
 	// ── signed out ───────────────────────────────────────────────────────
 	TextButton {
-		visible: !MsCalendar.signedIn && !MsCalendar.signingIn
+		visible: MsCalendar.enabled && !MsCalendar.signedIn && !MsCalendar.signingIn
 		Layout.fillWidth: true
 		text: "Sign in to Microsoft"
 		icon: "microsoft"
@@ -102,7 +104,7 @@ ColumnLayout {
 
 	// ── signed in ────────────────────────────────────────────────────────
 	RowLayout {
-		visible: MsCalendar.signedIn
+		visible: root.listing
 		Layout.fillWidth: true
 		spacing: 6
 
@@ -115,7 +117,7 @@ ColumnLayout {
 		}
 
 		Spinner {
-			visible: MsCalendar.loading
+			visible: MsCalendar.loading || NasCalendar.loading
 			Layout.preferredWidth: 12
 			Layout.preferredHeight: 12
 		}
@@ -124,7 +126,10 @@ ColumnLayout {
 			implicitWidth: 26
 			implicitHeight: 26
 			icon: "refresh"
-			onClicked: MsCalendar.refresh()
+			onClicked: {
+				if (MsCalendar.signedIn) MsCalendar.refresh();
+				NasCalendar.refresh();
+			}
 		}
 
 		// two clicks, it sits next to refresh
@@ -133,6 +138,7 @@ ColumnLayout {
 
 			property bool armed: false
 
+			visible: MsCalendar.signedIn
 			implicitWidth: 26
 			implicitHeight: 26
 			icon: signOut.armed ? "alert" : "logout"
@@ -153,7 +159,7 @@ ColumnLayout {
 	}
 
 	StyledText {
-		visible: MsCalendar.signedIn && root.events.length === 0
+		visible: root.listing && root.events.length === 0
 		Layout.fillWidth: true
 		text: "No events"
 		tone: Theme.textSubtle
@@ -163,7 +169,7 @@ ColumnLayout {
 	ListView {
 		id: list
 
-		visible: MsCalendar.signedIn && root.events.length > 0
+		visible: root.listing && root.events.length > 0
 		Layout.fillWidth: true
 		Layout.preferredHeight: Math.min(4, root.events.length) * (root.rowHeight + spacing) - spacing
 		clip: true
@@ -193,7 +199,7 @@ ColumnLayout {
 				width: 3
 				height: parent.height - 16
 				radius: 2
-				color: row.modelData.showAs === "tentative" ? Qt.alpha(Theme.primary, 0.45) : (row.faded ? Theme.textFaint : Theme.primary)
+				color: row.modelData.showAs === "tentative" ? Qt.alpha(Theme.primary, 0.45) : (row.faded ? Theme.textFaint : (row.modelData.source === "baikal" ? Theme.secondary : Theme.primary))
 			}
 
 			ColumnLayout {

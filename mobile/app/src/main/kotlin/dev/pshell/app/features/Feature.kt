@@ -13,6 +13,7 @@ enum class Group(val id: String, val title: String, val icon: String, val blurb:
 	Media("media", "Media", "music", "What plays on the PC, sound, lyrics"),
 	Work("work", "Work", "briefcase_outline", "Mail, time, agents, notes, downloads, reading"),
 	Pc("pc", "PC", "monitor", "System, updates, settings, capture, Studio"),
+	Nas("nas", "NAS", "nas", "Your files at home: folders, offline files, photo upload, music"),
 	Link("link", "Phone & PC", "cellphone_link", "How the phone and the PC talk: notifications, clipboard, files, calls", tab = false),
 }
 
@@ -100,6 +101,10 @@ val Features: List<Feature> = listOf(
 	PcFilesFeature,
 	RpgFeature,
 	SessionFeature,
+	// nas (works without the PC, straight to the NAS)
+	dev.pshell.app.nas.NasFeature,
+	dev.pshell.app.nas.NasPhotosFeature,
+	dev.pshell.app.nas.NasMusicFeature,
 	// phone & pc
 	NotificationsFeature,
 	ClipboardFeature,

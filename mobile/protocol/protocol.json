@@ -477,6 +477,12 @@
 				"filemanager",
 				"phone-files"
 			]
+		},
+		"nas": {
+			"owner": "daemon",
+			"plugins": [
+				"nas"
+			]
 		}
 	},
 	"features": [

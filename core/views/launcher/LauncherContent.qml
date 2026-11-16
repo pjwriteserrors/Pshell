@@ -107,6 +107,7 @@ Item {
 		{ id: "updates", plugin: "updates", group: "panels", command: "updates", name: "Updates", aliases: ["update"], keywords: "arch packages", status: Updates.count > 0 ? String(Updates.count) : "" },
 		{ id: "screentime", plugin: "screentime", group: "panels", command: "screentime", name: "Screen Time", aliases: ["time", "usage"], keywords: "statistics", status: Screentime.clock(Screentime.total(Screentime.today)) },
 		{ id: "watch", plugin: "watch", group: "panels", command: "watch", name: "Watch", aliases: ["uhr", "sleep", "schlaf", "amazfit", "health"], keywords: "sleep night heart steps stress blood oxygen amazfit wrist", status: Watch.lastNight ? Watch.span(Watch.lastNight.total) : "" },
+		{ id: "nas", plugin: "nas", command: "nas", name: "NAS", aliases: ["netcore", "server"], keywords: "search files network storage backup sync share", status: Nas.summary },
 		{ id: "printer", plugin: "printer", group: "panels", command: "printer", name: "3D Printer", aliases: ["print", "kobra", "ace"], keywords: "gcode filament orca slicer", status: Printer.printing ? `${Math.round(Printer.progress * 100)} %` : "" },
 		{ id: "lyrics", plugin: "lyrics", group: "panels", command: "lyrics", name: "Lyrics", keywords: "song words" },
 		{ id: "song", plugin: "song-detection", group: "panels", command: "song", name: "Song Detection", aliases: ["detect"], keywords: "name music" },
@@ -339,8 +340,9 @@ Item {
 	readonly property bool inMusicMode: Plugins.on("music") && ["music", "songs"].some(c => root.commandQuery === c || root.commandQuery.startsWith(c + " "))
 	readonly property bool inVideoMode: Plugins.on("video") && ["video", "videos", "film"].some(c => root.commandQuery === c || root.commandQuery.startsWith(c + " "))
 	readonly property bool inPdfMode: Plugins.on("pdf") && ["pdf", "pdfs", "docs"].some(c => root.commandQuery === c || root.commandQuery.startsWith(c + " "))
+	readonly property bool inNasMode: Plugins.on("nas") && (root.commandQuery === "nas" || root.commandQuery.startsWith("nas "))
 	readonly property bool inEditMode: Plugins.on("editor") && (root.commandQuery === "edit" || root.commandQuery.startsWith("edit "))
-	readonly property bool inViewMode: root.inEditMode || root.inTranslateMode || root.inDictionaryMode || root.inConvertMode || root.inTodoMode || root.inWebMode || root.inTabsMode || root.inBrowserWsMode || root.inAiActionsMode || root.inPhoneMode || root.inShotsMode || root.inPicturesMode || root.inMusicMode || root.inVideoMode || root.inPdfMode || root.inFinderMode
+	readonly property bool inViewMode: root.inEditMode || root.inTranslateMode || root.inDictionaryMode || root.inConvertMode || root.inTodoMode || root.inWebMode || root.inTabsMode || root.inBrowserWsMode || root.inAiActionsMode || root.inPhoneMode || root.inShotsMode || root.inPicturesMode || root.inMusicMode || root.inVideoMode || root.inPdfMode || root.inNasMode || root.inFinderMode
 	// what follows the command token, as typed (">t fr hello" → "fr hello")
 	readonly property string modeArgument: {
 		const match = /^>\S+\s([\s\S]*)$/.exec(root.searchText);
@@ -1134,6 +1136,9 @@ Item {
 		case "pdf":
 			root.setLauncherSearch(">pdf");
 			break;
+		case "nas":
+			root.setLauncherSearch(">nas ");
+			break;
 		case "unpin":
 			Screenshot.unpinAll();
 			root.closeRequested();
@@ -1535,6 +1540,7 @@ Item {
 		if (root.inMusicMode) return "music";
 		if (root.inVideoMode) return "video";
 		if (root.inPdfMode) return "pdf";
+		if (root.inNasMode) return "nas";
 		if (root.inFinderMode) return "finder";
 		if (root.inChatMode) return "chat";
 		if (root.inAiMode) return "chats";
@@ -1564,6 +1570,7 @@ Item {
 		case "music": return "music_note";
 		case "video": return "movie_open_outline";
 		case "pdf": return "file_pdf_box";
+		case "nas": return "server_network";
 		case "finder": return "folder_search_outline";
 		case "chat": return "chat";
 		case "chats": return "forum";
@@ -1619,6 +1626,7 @@ Item {
 		case "music": return "music_note";
 		case "video": return "movie_open_outline";
 		case "pdf": return "file_pdf_box";
+		case "nas": return "server_network";
 		case "unpin": return "pin_off_outline";
 		case "song": return "waveform";
 		case "lyrics": return "microphone_variant";
@@ -1668,6 +1676,7 @@ Item {
 		case "music": return musicView.item;
 		case "video": return videoView.item;
 		case "pdf": return pdfView.item;
+		case "nas": return nasView.item;
 		case "finder": return finderView.item;
 		case "apps": return appsView;
 		default: return null;
@@ -1689,6 +1698,7 @@ Item {
 		case "music": return "Song, artist or album";
 		case "video": return "Film or episode";
 		case "pdf": return "Name, words in it, or a page";
+		case "nas": return "Search the NAS";
 		case "apps": return "Search apps  ·  > for commands";
 		default: return "";
 		}
@@ -1712,6 +1722,7 @@ Item {
 		case "music": return "Music";
 		case "video": return "Video";
 		case "pdf": return "PDF";
+		case "nas": return "NAS";
 		case "finder": return "Files";
 		default: return "";
 		}
@@ -1735,6 +1746,7 @@ Item {
 		case "music": return "play";
 		case "video": return "play";
 		case "pdf": return "open";
+		case "nas": return "open";
 		case "apps": return appsView.zone === "actions" ? "run" : (appsView.current === null && appsView.searching && Plugins.on("web-search") ? "search the web" : "open");
 		default: return "open";
 		}
@@ -2816,6 +2828,31 @@ Item {
 
 					Connections {
 						target: pdfView.item
+						ignoreUnknownSignals: true
+
+						function onCloseRequested() {
+							root.closeRequested();
+						}
+					}
+				}
+			}
+
+			// what is on the NAS (Nas.search)
+			ModeLayer {
+				current: root.mode === "nas"
+
+				ModeView {
+					id: nasView
+
+					file: "NasModeView.qml"
+					current: root.mode === "nas"
+					values: ({
+						active: root.mode === "nas",
+						argument: root.modeArgument
+					})
+
+					Connections {
+						target: nasView.item
 						ignoreUnknownSignals: true
 
 						function onCloseRequested() {

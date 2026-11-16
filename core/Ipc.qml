@@ -753,6 +753,39 @@ Scope {
 		}
 	}
 
+	// the NAS (docs/nas.md): `nas status`, `nas open </path>` (through the
+	// mount, the phone's "Open on PC"), `nas send <path>`, `nas search <q>`,
+	// `nas syncnow`, `nas backupnow`, `nas wake <device>`, `nas settings`
+	IpcHandler {
+		target: "nas"
+		enabled: Plugins.on("nas")
+
+		function status(): string {
+			return JSON.stringify({ daemon: Nas.connected, configured: Nas.configured, online: Nas.online, via: Nas.via, address: Nas.address, mounted: Nas.mounted, mount: Nas.mountPath, free: Nas.free, total: Nas.total, transfers: Nas.activeJobs.length, uploads: Nas.uploads, computing: Nas.current.length, queued: Nas.queued, backup: { last: Nas.backupLast, ok: Nas.backupOk, running: !!Nas.backup.running }, conflicts: Nas.conflicts, warnings: Nas.warnings });
+		}
+		function open(path: string): void {
+			Nas.open(path || "/");
+		}
+		function send(path: string): void {
+			if (path) Nas.send([path]);
+		}
+		function search(query: string): void {
+			Popups.withFocusedScreen(screen => Popups.open("launcher", screen, "", `>nas ${query || ""}`));
+		}
+		function syncnow(): void {
+			Nas.syncNow("");
+		}
+		function backupnow(): void {
+			Nas.backupNow("");
+		}
+		function wake(device: string): void {
+			if (device) Nas.wake(device);
+		}
+		function settings(): void {
+			Nas.openSettings();
+		}
+	}
+
 	// every HID device and who looks after it
 	IpcHandler {
 		target: "devices"

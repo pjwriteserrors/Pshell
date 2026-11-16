@@ -207,5 +207,12 @@
 	{ "id": "browser-media", "name": "Browser tabs in media and breaks", "category": "Desktop", "requires": ["browser-link"], "icon": "volume_high", "default": false },
 	{ "id": "browser-privacy", "name": "Which tab uses camera or microphone", "category": "Desktop", "requires": ["browser-link"], "icon": "microphone", "default": false },
 	{ "id": "browser-capture", "name": "Whole-page screenshots", "category": "Capture", "requires": ["browser-link"], "icon": "camera", "default": false },
-	{ "id": "browser-qtrack", "name": "qtrack timer from the browser", "category": "Automation", "requires": ["browser-link"], "icon": "timer", "default": false }
+	{ "id": "browser-qtrack", "name": "qtrack timer from the browser", "category": "Automation", "requires": ["browser-link"], "icon": "timer", "default": false },
+
+	{ "id": "nas", "name": "NAS", "category": "NAS", "default": false, "icon": "server_network", "preview": {"on": ["niri-settings"], "ipc": ["nas settings"], "base": "none"} },
+	{ "id": "nas-bar", "name": "NAS in the bar", "category": "NAS", "requires": ["nas"], "icon": "harddisk" },
+	{ "id": "nas-sync", "name": "Folder sync", "category": "NAS", "requires": ["nas"], "icon": "folder_sync_outline" },
+	{ "id": "nas-backup", "name": "Backups", "category": "NAS", "requires": ["nas"], "icon": "backup_restore" },
+	{ "id": "nas-saves", "name": "Game saves", "category": "NAS", "default": false, "requires": ["nas"], "icon": "content_save_cog_outline" },
+	{ "id": "nas-calendar", "name": "Baikal calendar", "category": "NAS", "default": false, "requires": ["nas"], "icon": "calendar_month" }
 ]

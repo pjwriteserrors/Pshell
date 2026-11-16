@@ -1,0 +1,23 @@
+Third-party files in nas/web (all usable offline, no CDN):
+
+fonts/AdwaitaSans.woff2, fonts/AdwaitaMono.woff2
+  Adwaita Sans / Adwaita Mono (GNOME), subset to Latin by make-fonts.py.
+  SIL Open Font License 1.1 – https://openfontlicense.org
+
+fonts/pshell-icons.woff2
+  The Material Design Icons glyphs of "Symbols Nerd Font" that
+  style/theme/Icons.qml names, subset by make-fonts.py.
+  Nerd Fonts: MIT License. Material Design Icons: Apache License 2.0
+  (Pictogrammers).
+
+qrcode.js
+  QRCode for JavaScript, Copyright (c) 2009 Kazuhiko Arase, MIT License,
+  as ported to node by qrcode-terminal (Apache License 2.0), bundled into one
+  ES module.
+
+../js/world.js
+  Land outlines from Natural Earth 1:110m (public domain), simplified.
+
+pdfjs/pdf.min.mjs, pdfjs/pdf.worker.min.mjs
+  PDF.js (pdfjs-dist 4.10.38, legacy build), Mozilla Foundation and
+  contributors, Apache License 2.0 – https://github.com/mozilla/pdf.js

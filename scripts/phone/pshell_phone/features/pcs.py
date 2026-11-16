@@ -789,6 +789,26 @@ class Feature:
             self.hub.spawn(self.forget(peer.device_id, tell=False))
             return {}
 
+        @hub.action("pc", "nas-token", kinds=("pc",))
+        async def nas_token(peer, args):
+            """A NAS token for the paired PC asking (a laptop), minted here once
+            with kind "laptop" (features/nas.py): {server_id, addresses, device, token, name}."""
+            nas = getattr(self.daemon, "nas", None)
+            if nas is None:
+                raise Refused("no-nas", "No NAS here")
+            return await nas.token_for(peer.device_id, "laptop", fresh=bool(args.get("fresh")))
+
+        @hub.action("pcs", "nas-token", kinds=("shell", "cli"))
+        async def ask_nas_token(_peer, args):
+            """This PC (the laptop) asks a paired PC for a NAS token of its own."""
+            wanted = args.get("id")
+            if not wanted:
+                # without an id: the one linked PC, if there is just one
+                linked = [key for key, remote in self.remotes.items() if remote.connected]
+                wanted = linked[0] if len(linked) == 1 else ""
+            remote = self.remote(wanted)
+            return await remote.call("pc", "nas-token", {"fresh": bool(args.get("fresh"))}, timeout=40)
+
         # ── the shared folder, for paired PCs (pc-fs) ──────────────────────
         @hub.action("pcfs", "list", kinds=("pc",))
         async def pc_list(_peer, args):

@@ -47,8 +47,13 @@ Singleton {
 		return Qt.formatDate(date, "yyyy-MM-dd");
 	}
 
+	// with the Baikal calendar of the NAS (NasCalendar) its events too
 	function eventsOn(date) {
-		return root.byDay[root.dayKey(date)] ?? [];
+		const key = root.dayKey(date);
+		const own = root.byDay[key] ?? [];
+		const baikal = NasCalendar.active ? NasCalendar.eventsOn(key) : [];
+		if (baikal.length === 0) return own;
+		return own.concat(baikal).sort((a, b) => (b.allDay - a.allDay) || (Date.parse(a.start) - Date.parse(b.start)));
 	}
 
 	function active(event) {

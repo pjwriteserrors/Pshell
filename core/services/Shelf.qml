@@ -201,6 +201,8 @@ Singleton {
 		if (fresh.length === 0) return;
 		root.update(id, { items: shelf.items.concat(fresh), docked: false });
 		if (files.length > 0) root.describe(id, files);
+		// shelf sync of the NAS: what lands here goes to its /Shelf too
+		if (files.length > 0 && Plugins.on("nas")) Nas.shelfAdded(files);
 		root.previewLinks(id, fresh.filter(item => item.kind === "link"));
 		// what lies in /tmp or the runtime dir is gone after a reboot: a copy goes into the stash
 		const volatile = files.filter(path => root.isVolatile(path));

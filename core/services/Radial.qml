@@ -166,6 +166,17 @@ Singleton {
 				{ id: "pdf-night", label: Pdf.night ? "Pages as they are" : "Pages at night", icon: Pdf.night ? "white_balance_sunny" : "weather_night", run: () => Pdf.night = !Pdf.night },
 				{ id: "pdf-save", label: "Save", icon: "content_save_outline", enabled: Pdf.dirty, run: () => Pdf.save() }
 			] });
+		// the NAS (docs/nas.md): open it, send what was just made, sync, back up
+		if (Plugins.on("nas") && Nas.configured) {
+			const shelfFiles = Plugins.on("shelves") ? (Shelf.shelves[Shelf.shelves.length - 1]?.items ?? []).filter(item => item.kind === "file").map(item => item.path) : [];
+			entries.push({ id: "nas", label: Words.of("radial.nas", "NAS"), icon: "server_network", active: Nas.transferring, enabled: Nas.online, children: [
+				{ id: "nas-open", label: "Open", icon: "folder_open", enabled: Nas.mounted, run: () => Files.open(Nas.mountPath) },
+				{ id: "nas-shot", label: "Last screenshot", icon: "cloud_upload", shown: Plugins.on("screenshot") && Screenshot.shots.length > 0, run: () => Nas.send([Screenshot.shots[0].path]) },
+				{ id: "nas-shelf", label: "The shelf", icon: "tray_full", shown: shelfFiles.length > 0, run: () => Nas.send(shelfFiles) },
+				{ id: "nas-sync", label: "Sync now", icon: "folder_sync_outline", shown: Plugins.on("nas-sync"), run: () => Nas.syncNow("") },
+				{ id: "nas-backup", label: "Back up now", icon: "backup_restore", shown: Plugins.on("nas-backup"), run: () => Nas.backupNow("") }
+			].filter(entry => entry.shown !== false) });
+		}
 		if (root.browserTabEntries.length > 0)
 			entries.push({ id: "browser-tabs", label: Words.of("radial.tabs", "Tabs"), icon: "tab", children: root.browserTabEntries });
 		entries.push({ id: "power", label: Words.of("radial.power", "Power"), icon: "power", children: root.powerEntries });

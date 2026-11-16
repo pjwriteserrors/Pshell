@@ -79,4 +79,14 @@ class Prefs(context: Context) {
 	val watchMusic = Setting("watchMusic", true)
 	val watchWeather = Setting("watchWeather", true)
 	val watchFind = Setting("watchFind", true)
+
+	// the NAS (nas/): photo auto upload and how the files are shown
+	val nasAutoUpload = Setting("nasAutoUpload", false)
+	val nasWifiOnly = Setting("nasWifiOnly", true)
+	val nasChargingOnly = Setting("nasChargingOnly", false)
+	/** offer to delete photos from the phone once the NAS confirmed them (off) */
+	val nasDeleteAfter = Setting("nasDeleteAfter", false)
+	/** photos added before this moment (epoch seconds) stay out; "0" takes them all */
+	val nasUploadSince = Setting("nasUploadSince", "0")
+	val nasGrid = Setting("nasGrid", false)
 }

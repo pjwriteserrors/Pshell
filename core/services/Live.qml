@@ -48,6 +48,8 @@ Singleton {
 		property string hint: ""
 		property var act: null
 		property var wheel: null
+		// files dropped on its chip: drop(urls) → how many it took
+		property var drop: null
 	}
 
 	readonly property var groups: [
@@ -69,7 +71,7 @@ Singleton {
 	readonly property var sources: [cpu, memory, gpuSource, tempSource, topSource, network, battery, volume, mic, brightness, power, bluetooth,
 		notifications, messages, updates, downloads, torrents, filejobs, editorSource, recording, sharing, browserSharing, gamemode, agents, keepawake, clipboard, shelf,
 		timer, worked, screentime, water, eyes, meeting, todos, weather,
-		phone, watch, mouse, printer, vm, pcs, game, media]
+		phone, watch, mouse, printer, nas, vm, pcs, game, media]
 	readonly property var byId: {
 		const out = {};
 		for (const each of root.sources) out[each.key] = each;
@@ -1004,6 +1006,56 @@ Singleton {
 		busy: printer.on ? (Printer.printing) : false
 		quiet: true
 		panel: "printer"
+	}
+
+	// the NAS (docs/nas.md): free space, what goes over, what the PC computes for it, the last backup
+	Source {
+		id: nas
+
+		readonly property bool problem: nas.on && Nas.online && (Nas.warnings.length > 0 || !Nas.backupOk || Nas.conflicts > 0)
+
+		key: "nas"
+		prefers: "ring"
+		widest: "999 GB"
+		name: "NAS"
+		glyph: nas.on ? (Nas.transferring ? "cloud_upload" : (Nas.computing ? "chip" : "server_network")) : "server_network"
+		group: "devices"
+		plugin: "nas-bar"
+		about: "Free space, transfers, what the PC computes for it, the last backup; drop files on it to send them"
+		ready: Plugins.on("nas")
+		text: nas.on ? (!Nas.online ? (Nas.configured ? "Off" : "Set up") : (Nas.transferring && Nas.jobProgress >= 0 ? root.percent(Nas.jobProgress * 100) : (Nas.total > 0 ? Format.bytes(Nas.free) : "On"))) : ""
+		detail: {
+			if (!nas.on) return "";
+			if (!Nas.connected) return "The NAS daemon is starting";
+			if (!Nas.configured) return "Not set up yet · Pshell settings › NAS";
+			if (!Nas.online) return "Not reachable, neither at home nor over the VPN";
+			const lines = [];
+			lines.push(`${Nas.viaText}${Nas.mounted ? " · mounted at " + Nas.mountPath.replace(Paths.home, "~") : " · not mounted"}`);
+			if (Nas.total > 0) lines.push(`${Format.bytes(Nas.free)} free of ${Format.bytes(Nas.total)}`);
+			if (Nas.activeJobs.length > 0) lines.push(Nas.activeJobs.length === 1 ? String(Nas.activeJobs[0].text || "1 transfer") : `${Nas.activeJobs.length} transfers`);
+			if (Nas.uploads > 0) lines.push(`${Nas.uploads} ${Nas.uploads === 1 ? "upload" : "uploads"} on the NAS`);
+			if (Nas.computing) lines.push(`Computing: ${Nas.current.map(task => task.label || task.type).slice(0, 3).join(", ")}`);
+			else if (Nas.queued > 0) lines.push(`${Nas.queued} tasks wait`);
+			if (Plugins.on("nas-backup")) lines.push(Nas.backup.running ? "Backing up now" : `Last backup ${Nas.backupLast > 0 ? Format.ago(Nas.backupLast * 1000) + " ago" : "never"}${Nas.backupOk ? "" : " · failed"}`);
+			if (Nas.conflicts > 0) lines.push(`${Nas.conflicts} sync ${Nas.conflicts === 1 ? "conflict" : "conflicts"}`);
+			for (const warning of Nas.warnings.slice(0, 2)) lines.push(String(warning));
+			return lines.join("\n");
+		}
+		level: nas.on && Nas.online ? (Nas.transferring && Nas.jobProgress >= 0 ? Nas.jobProgress : Nas.fill) : -1
+		tone: nas.on ? (!Nas.online ? "muted" : (nas.problem ? "warn" : (Nas.transferring || Nas.computing ? "accent" : (Nas.fill > 0.9 ? "warn" : "normal")))) : "normal"
+		pulse: nas.on ? (Nas.online && !Nas.backupOk) : false
+		busy: nas.on ? (Nas.online) : false
+		quiet: false
+		hint: "Click for the NAS in Files · drop files to send them"
+		act: screen => {
+			if (Nas.mounted && Plugins.on("filemanager")) Files.open(Nas.mountPath);
+			else Nas.openSettings();
+		}
+		drop: urls => {
+			const paths = urls.map(url => String(url)).filter(url => url.startsWith("file://"));
+			if (paths.length > 0) Nas.send(paths);
+			return paths.length;
+		}
 	}
 
 	Source {

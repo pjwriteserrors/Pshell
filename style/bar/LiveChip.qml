@@ -65,6 +65,32 @@ BarButton {
 		}
 	}
 
+	// a source that takes files (the NAS): dropped on the chip they go there
+	DropArea {
+		id: drop
+
+		anchors.fill: parent
+		enabled: !!root.src?.drop && root.wanted
+		keys: ["text/uri-list"]
+		onDropped: event => {
+			if (root.src.drop(event.urls ?? []) > 0) event.accept(Qt.CopyAction);
+		}
+
+		Rectangle {
+			anchors.fill: parent
+			radius: height / 2
+			color: Qt.alpha(Theme.primary, 0.18)
+			border.width: 1.5
+			border.color: Theme.primary
+			opacity: drop.containsDrag ? 1 : 0
+			visible: opacity > 0.01
+
+			Behavior on opacity {
+				Anim {}
+			}
+		}
+	}
+
 	LiveCard {
 		id: card
 

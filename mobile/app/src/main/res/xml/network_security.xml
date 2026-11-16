@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Everything is TLS (the PC link is pinned), except pshell-nas: plain HTTP at
+     home and through the VPN (docs/nas.md, "Addresses"); 10.0.2.2 is the PC
+     as the emulator sees it, for the dev server. -->
+<network-security-config>
+	<base-config cleartextTrafficPermitted="false" />
+	<domain-config cleartextTrafficPermitted="true">
+		<domain includeSubdomains="false">192.168.178.22</domain>
+		<domain includeSubdomains="false">10.8.0.1</domain>
+		<domain includeSubdomains="false">10.0.2.2</domain>
+	</domain-config>
+</network-security-config>

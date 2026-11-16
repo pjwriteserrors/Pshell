@@ -109,6 +109,7 @@ class App : Application(), SingletonImageLoader.Factory {
 		dev.pshell.app.service.Unlocks.install(this)
 		dev.pshell.app.widget.Widgets.install(this)
 		dev.pshell.app.features.Chat.install(this)
+		dev.pshell.app.nas.Nas.install(this)
 		link.start()
 	}
 

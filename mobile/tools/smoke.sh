@@ -6,7 +6,7 @@
 set -euo pipefail
 here="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 adb=("$here/adb.sh" "$@")
-features="$(grep -oE 'id = "[a-z]+"' "$here"/../app/src/main/kotlin/dev/pshell/app/features/*.kt | sed -E 's/.*"(.*)"/\1/' | sort -u)"
+features="$(grep -oE 'id = "[a-z-]+"' "$here"/../app/src/main/kotlin/dev/pshell/app/features/*.kt "$here"/../app/src/main/kotlin/dev/pshell/app/nas/*.kt | sed -E 's/.*"(.*)"/\1/' | sort -u)"
 failed=0
 "${adb[@]}" logcat -c
 groups="$(grep -oE '^\s+[A-Z][a-z]+\("[a-z]+"' "$here"/../app/src/main/kotlin/dev/pshell/app/features/Feature.kt | sed -E 's/.*"(.*)"/\1/')"

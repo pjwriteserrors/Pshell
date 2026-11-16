@@ -186,6 +186,14 @@ def tree_size(paths, cancelled):
 
 
 def trash_one(path):
+    bridge = versions.nas_bridge()
+    if bridge and bridge.nas_path(path) is not None:
+        # under the NAS mount: into the NAS's own trash
+        try:
+            bridge.trash([path])
+        except RuntimeError as error:
+            raise GLib.Error(str(error))
+        return
     Gio.File.new_for_path(path).trash(None)
 
 
@@ -1693,6 +1701,9 @@ class Manager:
                         else:
                             os.unlink(destination)
                     job.created.append(origin)
+                elif kind == "restore" and versions.nas_bridge() and versions.nas_bridge().nas_path(op[1]) is not None:
+                    versions.nas_bridge().untrash([op[1]], op[2])
+                    job.created.append(op[1])
                 elif kind == "restore":
                     item = find_in_trash(op[1], op[2])
                     if item is not None:

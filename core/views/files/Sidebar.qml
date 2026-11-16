@@ -525,6 +525,42 @@ Rectangle {
 				}
 			}
 
+			// the NAS (docs/nas.md): its mount, how full it is; a drop uploads there
+			SideSection {
+				width: parent.width
+				title: "NAS"
+				visible: Plugins.on("nas") && Nas.configured
+
+				SideItem {
+					id: nasItem
+
+					width: parent.width
+					icon: Nas.online ? "server_network" : "lan"
+					label: Nas.online ? `netcore · ${Nas.viaText}` : "netcore"
+					detail: Nas.online && Nas.total > 0 ? Format.bytes(Nas.free) : ""
+					fill: Nas.online ? Nas.fill : -1
+					active: Nas.mounted && root.isAt("dir", Nas.mountPath)
+					opacity: Nas.online ? 1 : 0.55
+					busy: Nas.transferring
+					dropEnabled: Nas.online
+					onClicked: {
+						if (Nas.mounted) root.go({ kind: "dir", path: Nas.mountPath });
+						else if (Nas.online) Nas.mount(true);
+						else Nas.openSettings();
+					}
+					onDropped: drop => Nas.sendDrop(drop, "/")
+					onMenu: (x, y) => root.menuAt(nasItem, x, y, [
+						{ label: "Open in a new tab", icon: "tab_plus", enabled: Nas.mounted, run: () => root.view.newTab({ kind: "dir", path: Nas.mountPath }, true) },
+						{ label: "Web interface", icon: "web", run: () => Nas.openWeb() },
+						{ label: "Sync now", icon: "folder_sync_outline", enabled: Nas.online, run: () => Nas.syncNow("") },
+						{ label: "Back up now", icon: "backup_restore", enabled: Nas.online, run: () => Nas.backupNow("") },
+						{ separator: true },
+						{ label: Nas.mounted ? "Unmount" : "Mount", icon: Nas.mounted ? "eject" : "folder_network_outline", enabled: Nas.online, run: () => Nas.mount(!Nas.mounted) },
+						{ label: "NAS settings", icon: "cog_outline", run: () => Nas.openSettings() }
+					])
+				}
+			}
+
 			SideSection {
 				width: parent.width
 				title: "Drives"

@@ -19,6 +19,28 @@ from gi.repository import Gio, GLib  # noqa: E402
 
 import gitinfo  # noqa: E402
 
+_bridge = []
+
+
+def nas_bridge():
+    """scripts/nas/bridge.py, loaded by file (its neighbours' names would
+    clash here); None when it is missing."""
+    if not _bridge:
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("pshell_nas_bridge", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "nas", "bridge.py"))
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            _bridge.append(module)
+        except (OSError, ImportError, AttributeError):
+            _bridge.append(None)
+    return _bridge[0]
+
+
+def nas_versions(path):
+    bridge = nas_bridge()
+    return bridge.versions(path) if bridge else []
+
 SNAPSHOT_GLOBS = [
     # snapper: /.snapshots/<n>/snapshot, and the same per subvolume (/home/.snapshots)
     ("snapper", "{mount}/.snapshots/*/snapshot"),
@@ -88,7 +110,7 @@ def trash_versions(path):
 
 def versions(path):
     found = []
-    for provider in (snapshot_versions, gitinfo.file_versions, trash_versions):
+    for provider in (snapshot_versions, gitinfo.file_versions, trash_versions, nas_versions):
         try:
             found += provider(path)
         except Exception:
@@ -117,6 +139,9 @@ def providers():
         have.append("snapper")
     if shutil.which("timeshift"):
         have.append("timeshift")
+    bridge = nas_bridge()
+    if bridge and bridge.configured():
+        have.append("nas")
     return have
 
 
@@ -126,7 +151,12 @@ def restore(path, version_id, mode, unique, trash_one):
     beside = unique(os.path.join(os.path.dirname(path), f"{stem} (earlier version){ext}"))
     target = beside if mode != "replace" else path
     temp = beside + ".restoring"
-    if version_id.startswith("file:"):
+    if version_id.startswith("nas:"):
+        # NAS snapshots and trash: the NAS restores them itself
+        return nas_bridge().call("restore", {"path": path, "version": version_id, "mode": mode}, timeout=300).get("path") or path
+    if version_id.startswith("restic:"):
+        nas_bridge().call("getversion", {"version": version_id, "to": temp}, timeout=3600)
+    elif version_id.startswith("file:"):
         shutil.copy2(version_id[5:], temp)
     elif version_id.startswith("git:"):
         _, commit_hash, rel = version_id.split(":", 2)

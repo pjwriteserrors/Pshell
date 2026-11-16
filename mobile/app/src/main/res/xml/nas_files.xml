@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- what the NAS screens hand to other apps: offline copies and fetched files -->
+<paths>
+	<files-path name="pins" path="nas-pins/" />
+	<cache-path name="nas" path="nas/" />
+</paths>
