@@ -2,7 +2,7 @@
 // navigation on phones, the jobs tray, and the router between the pages.
 import { h, icon, clear, nameOf, debounce, isMobile, plural, size as fmtSize } from "./util.js";
 import * as api from "./api.js";
-import { state, on as onStore, refreshStatus, refreshSettings, refreshTypes, loadLibrary, setView, isAdmin } from "./store.js";
+import { state, on as onStore, refreshStatus, refreshSettings, refreshTypes, loadLibrary, setView, isAdmin, coreInfo, portalUrl, signOutUrl } from "./store.js";
 import { viewTransition, ring, rollText, animate, EASE, DUR } from "./motion.js";
 import { showMenu, toast, popover, closeAll } from "./ui.js";
 import { closeQuickLook } from "./quicklook.js";
@@ -169,6 +169,8 @@ export function startShell() {
 	refreshTypes();
 	loadLibrary();
 	setInterval(() => document.visibilityState === "visible" && refreshStatus(), 30000);
+	// pshell-core's memory guard paused (or resumed) the Pi's background work
+	api.on("pressure", () => refreshStatus());
 
 	render();
 
@@ -448,7 +450,9 @@ function buildTopBar() {
 		showMenu([
 			{ header: state.me?.name || state.me?.user || "" },
 			{ label: "Settings", icon: "cog_outline", run: () => go("#/settings") },
-			{ label: "Password and two-step login", icon: "shield_key_outline", run: () => go("#/settings?section=account") },
+			coreInfo()
+				? { label: "Password and two-step login", icon: "shield_key_outline", run: () => window.open(portalUrl("/"), "_blank", "noopener") }
+				: { label: "Password and two-step login", icon: "shield_key_outline", run: () => go("#/settings?section=account") },
 			{ label: "Command palette", icon: "console_line", shortcut: "Ctrl+K", run: openPalette },
 			{ label: "Keyboard shortcuts", icon: "keyboard_outline", shortcut: "?", run: showShortcuts },
 			{ separator: true },
@@ -508,11 +512,17 @@ function buildTopBar() {
 }
 
 async function logout() {
+	let answer = null;
 	try {
-		await api.post("/api/logout");
+		answer = await api.post("/api/logout");
 	} catch (error) {}
 	api.disconnectEvents();
 	location.hash = "";
+	// signed in at the portal: the session ends there (and for every other service too)
+	if (answer?.logout && state.hello?.core?.reachable) {
+		location.assign(signOutUrl());
+		return;
+	}
 	location.reload();
 }
 

@@ -3,9 +3,9 @@
 // old filebrowser container.
 import { h, icon, clear, when, plural, fullDate, copyText } from "../util.js";
 import * as api from "../api.js";
-import { state, refreshSettings, isAdmin, on as onStore } from "../store.js";
+import { state, refreshSettings, isAdmin, on as onStore, coreInfo, portalUrl } from "../store.js";
 import { stagger, animate, EASE } from "../motion.js";
-import { toggle, segmented, confirm, toast, errorToast, openDialog, formDialog, prompt, shake } from "../ui.js";
+import { toggle, segmented, confirm, toast, errorToast, openDialog, formDialog, prompt, shake, portalCard } from "../ui.js";
 import { typeIcon } from "../actions.js";
 import * as jobs from "../jobs.js";
 
@@ -14,6 +14,7 @@ const HEAVY = new Set(["upscale", "describe", "embed", "faces", "transcode", "co
 
 export default function settings(route, app) {
 	const admin = isAdmin();
+	const core = coreInfo();     // users, passwords and devices are kept by pshell-core then
 	const sections = [
 		{ id: "account", label: "You", icon: "account_circle" },
 		...(admin ? [
@@ -124,6 +125,11 @@ export default function settings(route, app) {
 	function accountGroup() {
 		const me = state.me || {};
 		const name = me.name || me.user;
+		if (core) {
+			return group("account", "You", "account_circle", "",
+				h("div.set-card", h("div.set-row", h("div.row-icon", { style: { background: "linear-gradient(135deg, var(--primary), var(--secondary))", color: "var(--on-primary)", fontWeight: 800 } }, (name || "?").slice(0, 1).toUpperCase()), h("div.set-text", h("div.set-title", name || "?"), h("div.set-hint", `${me.role || (me.caps || []).join(", ")}${me.device ? " · a device" : ""}`)))),
+				portalCard({ title: "Password, two-step login and sessions", text: "One sign-in for every pshell service – kept by the sign-in server, changed in its portal.", url: portalUrl("/"), iconName: "shield_key_outline" }));
+		}
 		const isUser = (me.kind || "user") === "user" && name;
 		const totpOn = !!me.totp;
 		const card = h("div.set-card");
@@ -217,6 +223,10 @@ export default function settings(route, app) {
 
 	// ── users ────────────────────────────────────────────────────────────
 	function usersGroup() {
+		if (core) {
+			return group("users", "Users", "account_multiple_outline", "Who signs in – for the NAS and every other pshell service.",
+				portalCard({ title: "Users, devices and sessions are in the portal", text: "Adding people, roles, device tokens and ending sessions happen at the sign-in server now.", url: portalUrl("/"), iconName: "account_multiple_outline" }));
+		}
 		const listEl = h("div.set-card");
 		const add = h("button.btn.small.soft", icon("account_plus"), "Add a user");
 		const load = async () => {
@@ -419,11 +429,11 @@ export default function settings(route, app) {
 	function safetyGroup() {
 		return group("safety", "Safety", "shield_check_outline", "",
 			h("div.set-card",
-				boolRow("totp_required", "Two-step login for everyone", "Users without it are asked to set it up at their next login", {
+				core ? null : boolRow("totp_required", "Two-step login for everyone", "Users without it are asked to set it up at their next login", {
 					critical: true,
 					ask: value => value && !state.me?.totp ? confirm({ title: "Require two-step login?", body: "You have not set it up yourself yet – do that first under You, or you will be asked at the next login.", confirmLabel: "Require it", danger: true, icon: "shield_key_outline" }) : Promise.resolve(true)
 				}),
-				numberRow("session_days", "Stay logged in", "A session that is used stays alive this long", { min: 1, max: 365, suffix: "days" }),
+				core ? null : numberRow("session_days", "Stay logged in", "A session that is used stays alive this long", { min: 1, max: 365, suffix: "days" }),
 				boolRow("vt_upload", "Upload unknown files to VirusTotal", "Without it only the checksum is looked up – the file never leaves the NAS", {
 					critical: true,
 					ask: warnConfirm("Upload files to VirusTotal?", "Files VirusTotal does not know yet would be uploaded to it – and anything uploaded there can be downloaded by its paying users. Never for private documents.", "Allow uploads", "upload")

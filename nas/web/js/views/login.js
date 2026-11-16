@@ -1,10 +1,12 @@
 // The login: a glass card over the palette's blobs; name and password, then
-// the authenticator code in six boxes when the account has TOTP.
+// the authenticator code in six boxes when the account has TOTP. With
+// pshell-core (hello.core) the card holds one "Sign in" that goes to the
+// portal and comes back; the old form only while the portal is away.
 import { h, icon, clear } from "../util.js";
 import * as api from "../api.js";
 import { animate, EASE, DUR } from "../motion.js";
 import { shake } from "../ui.js";
-import { set } from "../store.js";
+import { set, signInUrl } from "../store.js";
 
 export function showLogin(hello, onDone, { expired = false } = {}) {
 	const app = document.getElementById("app");
@@ -41,18 +43,35 @@ export function showLogin(hello, onDone, { expired = false } = {}) {
 	const logo = h("div.login-logo",
 		h("div.logo-disk", h("i"), h("i"), h("i")),
 		h("div.logo-glow"));
+	const core = hello?.core;
+	const portal = core?.reachable && !hello?.offline;
+	const signIn = h("button.btn.primary.large.login-go", { type: "submit" }, h("span", "Sign in"), icon("arrow_right"));
+	const stepPortal = h("form.login-step.portal", signIn);
+	stepPortal.addEventListener("submit", event => {
+		event.preventDefault();
+		signIn.classList.add("busy");
+		card.classList.add("done");
+		animate(card, [{ opacity: 1, transform: "none", filter: "blur(0)" }, { opacity: 0, transform: "scale(1.06)", filter: "blur(6px)" }], { duration: 380, easing: EASE.accel }).finished.then(() => location.assign(signInUrl()));
+	});
+	const sub = hello?.offline
+		? "The NAS does not answer right now"
+		: core && !portal
+			? "The sign-in server is not reachable – the NAS's own login works meanwhile"
+			: expired
+				? portal ? "Your session ended – sign in again" : "Your session ended – log in again"
+				: portal ? "One sign-in for every pshell service" : "pshell NAS";
 	const card = h("div.login-card",
 		logo,
 		h("h1.login-name", hello?.name || "NAS"),
-		h("div.login-sub", hello?.offline ? "The NAS does not answer right now" : expired ? "Your session ended – log in again" : "pshell NAS"),
-		h("div.login-steps", stepOne, stepTwo),
+		h("div.login-sub", sub),
+		h("div.login-steps", portal ? stepPortal : stepOne, portal ? null : stepTwo),
 		error);
 	const page = h("div.login-page", card, h("div.login-foot", hello?.version ? `pshell-nas ${hello.version}` : ""));
 	app.appendChild(page);
 
 	animate(card, [{ opacity: 0, transform: "translateY(26px) scale(0.94)" }, { opacity: 1, transform: "none" }], { duration: 700, easing: EASE.spring, fill: "none" });
 	[...card.children].forEach((child, i) => animate(child, [{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "none" }], { duration: 500, delay: 120 + i * 60, easing: EASE.spatial, fill: "backwards" }));
-	setTimeout(() => (name.value ? password : name).focus(), 60);
+	setTimeout(() => (portal ? signIn : name.value ? password : name).focus(), 60);
 
 	const showError = text => {
 		error.textContent = text;

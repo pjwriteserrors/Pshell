@@ -41,6 +41,12 @@ export function set(key, value) {
 
 export const isAdmin = () => state.me?.role === "admin" || (state.me?.caps || []).includes("admin");
 
+// pshell-core (docs/core.md): when /api/hello names it, sign-in, users and devices live there
+export const coreInfo = () => state.hello?.core || null;
+export const portalUrl = (path = "/") => (coreInfo() ? `${coreInfo().url}${path}` : "");
+export const signInUrl = () => portalUrl(`/login?next=${encodeURIComponent(location.href)}`);
+export const signOutUrl = () => portalUrl(`/logout?next=${encodeURIComponent(`${location.origin}/`)}`);
+
 // ── view options (per browser) ─────────────────────────────────────────────
 function loadView() {
 	const fallback = { mode: "grid", card: 156, sort: "name", desc: false, foldersFirst: true, hidden: false, details: false, sidebar: true, group: "none" };

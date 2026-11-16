@@ -1,0 +1,4 @@
+#!/bin/sh
+# Admin CLI of pshell-core (users, devices, keys, the NAS import); see pshell_core/ctl.py.
+cd /app 2>/dev/null || cd "$(dirname "$0")"
+exec python3 -m pshell_core.ctl "$@"

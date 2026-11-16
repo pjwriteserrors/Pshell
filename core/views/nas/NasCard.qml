@@ -105,6 +105,27 @@ Clickable {
 			}
 		}
 
+		// pshell-core's memory guard, while it is not fine
+		RowLayout {
+			Layout.fillWidth: true
+			visible: Netcore.online && !Netcore.guardOk
+			spacing: 6
+
+			Glyph {
+				icon: "memory"
+				size: 14
+				color: Netcore.levelColor(Netcore.level)
+			}
+
+			StyledText {
+				Layout.fillWidth: true
+				text: `Pi memory ${Netcore.levelText(Netcore.level).toLowerCase()}${Netcore.memTotal > 0 ? ` · ${Format.bytes(Netcore.memAvailable)} free` : ""}${Netcore.guard?.since ? ` · since ${Netcore.ago(Netcore.guard.since)}` : ""}`
+				tone: Netcore.levelColor(Netcore.level)
+				font.pixelSize: Theme.size.small
+				elide: Text.ElideRight
+			}
+		}
+
 		Repeater {
 			model: Nas.warnings.slice(0, 2)
 

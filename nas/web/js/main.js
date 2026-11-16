@@ -51,6 +51,12 @@ async function startApp() {
 api.setUnauthorizedHandler(async () => {
 	if (document.body.dataset.page === "login") return;
 	api.disconnectEvents();
+	if (state.hello?.core) {
+		// is the portal there to sign in again, or only the NAS's own login?
+		try {
+			set("hello", await api.get("/api/hello", null, { quiet: true }));
+		} catch (error) {}
+	}
 	const { showLogin } = await import("./views/login.js");
 	showLogin(state.hello, () => location.reload(), { expired: true });
 });

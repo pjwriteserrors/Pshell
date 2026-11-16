@@ -1,0 +1,30 @@
+# docker compose -p pshell-core -f server/docker-compose.yml up -d --build   (from ~/pshell-core; deploy.sh does it)
+name: pshell-core
+
+services:
+  pshell-core:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    image: pshell-core:latest
+    container_name: pshell-core
+    network_mode: host          # probes 127.0.0.1:<port> of every service; 8097 for the LAN and the VPN
+    restart: unless-stopped
+    # the guard must outlive what it guards: small, capped, and the kernel's last choice
+    mem_limit: 256m
+    memswap_limit: 256m
+    oom_score_adj: -200
+    ulimits:
+      data: 268435456
+    environment:
+      MALLOC_ARENA_MAX: "2"
+      TZ: Europe/Berlin
+    volumes:
+      - /mnt/storage/pshell-core:/state
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /mnt/storage:/storage:ro            # disk usage only
+      - /etc/localtime:/etc/localtime:ro
+      - ../server/pshell_core:/app/pshell_core:ro
+      - ../web:/app/web:ro

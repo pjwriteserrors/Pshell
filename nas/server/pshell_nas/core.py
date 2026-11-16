@@ -1,6 +1,7 @@
 """The one object every handler and thread reaches the NAS through."""
 import os
 import secrets
+import threading
 import time
 
 from .areas import Areas, clean, parent_of
@@ -39,6 +40,12 @@ class Nas:
             self.db.set_meta("server_id", self.server_id)
         self.tasks = None
         self.started = time.time()
+        self.core = None              # corelink.CoreLink in core mode
+        # pshell-core's memory guard: tight/critical pause what the Pi does in the background
+        self.pressure = "ok"
+        self.pressure_since = None
+        self.calm = threading.Event()
+        self.calm.set()
 
     def first_start(self):
         """Folders of the tree and the admin user, once."""
@@ -59,6 +66,27 @@ class Nas:
             password = "dev" if self.config.dev else random_password()
             self.auth.add_user("lu", password, "admin")
             print(f"user lu created (password {'dev' if self.config.dev else 'see nasctl user reset lu'})", flush=True)
+
+    def paused(self):
+        """The Pi's memory is tight (core said so): no background work here."""
+        return self.pressure != "ok"
+
+    def set_pressure(self, level):
+        if level == self.pressure:
+            return
+        was, self.pressure = self.pressure, level
+        self.pressure_since = time.time() if level != "ok" else None
+        print(f"pressure: {was} → {level}" + (" (Pi background work paused)" if level != "ok" else " (resumed)"), flush=True)
+        if level == "ok":
+            self.calm.set()
+        else:
+            self.calm.clear()
+        if self.tasks:
+            self.tasks.pressure_changed(level)
+        self.hub.emit("pressure", level=level, was=was, since=self.pressure_since)
+
+    def pressure_json(self):
+        return {"pressure": self.pressure, "pressure_since": self.pressure_since}
 
     def changed(self, folders, removed=()):
         """Something was written below these folders: index and tell the clients."""

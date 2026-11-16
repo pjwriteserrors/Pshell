@@ -61,12 +61,21 @@ def ok(data=None):
 # ── session and server ────────────────────────────────────────────────────
 async def hello(request):
     nas = nas_of(request)
-    return ok({"server_id": nas.server_id, "name": nas.config.name, "version": VERSION,
-               "auth": request.get("who") is not None})
+    out = {"server_id": nas.server_id, "name": nas.config.name, "version": VERSION,
+           "auth": request.get("who") is not None}
+    if nas.core:
+        # core mode: the web signs in at the portal; while core is away the old login answers
+        from .corelink import portal_url
+        out["core"] = {"url": portal_url(request), "reachable": not await nas.core.is_down()}
+    return ok(out)
 
 
 async def login(request):
     nas = nas_of(request)
+    if nas.core and not await nas.core.is_down():
+        from .corelink import portal_url
+        return web.json_response({"error": "Sign in at the sign-in server", "code": "core", "url": portal_url(request)},
+                                 status=409)
     data = await read_json(request)
     name = str(data.get("user", "")).strip()
     password = str(data.get("password", ""))
@@ -102,6 +111,12 @@ async def logout(request):
     if COOKIE in request.cookies:
         nas.auth.end_session(request.cookies[COOKIE])
     response = ok()
+    if nas.core:
+        # the portal's session ends at the portal (<core>/logout); here only its cached answer goes
+        from .corelink import COOKIE as CORE_COOKIE, portal_url
+        if CORE_COOKIE in request.cookies:
+            nas.core.forget_cookie(request.cookies[CORE_COOKIE])
+        response = ok({"ok": True, "logout": portal_url(request) + "/logout"})
     response.del_cookie(COOKIE, path="/")
     return response
 
@@ -155,6 +170,7 @@ async def status(request):
         "health": {"temp": health.get("temp"), "throttled": health.get("throttled"), "ok": health.get("ok", True),
                    "warnings": health.get("warnings", [])},
         "uploads": request.app["uploads"].count(), "version": VERSION, "server_id": nas.server_id,
+        **(nas.pressure_json() if nas.core else {}),
     })
 
 
@@ -654,6 +670,8 @@ async def activity(request):
 def routes(app):
     r = app.router
     r.add_get("/api/hello", hello)
+    if app["nas"].core:
+        r.add_get("/api/session", hello)
     r.add_post("/api/login", login)
     r.add_post("/api/logout", logout)
     r.add_get("/api/me", me)

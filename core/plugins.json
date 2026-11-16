@@ -214,5 +214,6 @@
 	{ "id": "nas-sync", "name": "Folder sync", "category": "NAS", "requires": ["nas"], "icon": "folder_sync_outline" },
 	{ "id": "nas-backup", "name": "Backups", "category": "NAS", "requires": ["nas"], "icon": "backup_restore" },
 	{ "id": "nas-saves", "name": "Game saves", "category": "NAS", "default": false, "requires": ["nas"], "icon": "content_save_cog_outline" },
-	{ "id": "nas-calendar", "name": "Baikal calendar", "category": "NAS", "default": false, "requires": ["nas"], "icon": "calendar_month" }
+	{ "id": "nas-calendar", "name": "Baikal calendar", "category": "NAS", "default": false, "requires": ["nas"], "icon": "calendar_month" },
+	{ "id": "netcore", "name": "Server (pshell-core)", "category": "NAS", "requires": ["nas"], "icon": "server" }
 ]

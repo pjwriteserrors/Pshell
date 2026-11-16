@@ -123,7 +123,7 @@ async def scheduler(app):
     while True:
         await asyncio.sleep(60)
         try:
-            if due(nas):
+            if due(nas) and not nas.paused():     # a snapshot waits out memory pressure
                 job = nas.jobs.start("snapshot", "Snapshot", "schedule", lambda job: {"id": take(nas, job)})
                 while not job.done:
                     await asyncio.sleep(10)

@@ -11,6 +11,7 @@ import qs.core.views.identity
 import qs.core.views.launcher
 import qs.core.views.media
 import qs.core.views.music
+import qs.core.views.netcore
 import qs.core.views.video
 import qs.core.views.appimages
 import qs.core.views.pdf

@@ -774,3 +774,12 @@ export function tooltip(el, text) {
 }
 
 export { glyph, reduced };
+
+// a card that sends to the portal of pshell-core instead of editing here
+export function portalCard({ title, text, url, iconName = "shield_account_outline", label = "Open the portal" }) {
+	return h("div.set-card",
+		h("div.set-row",
+			h("div.row-icon", icon(iconName)),
+			h("div.set-text", h("div.set-title", title), text ? h("div.set-hint", text) : null),
+			url ? h("div.set-control", h("a.btn.small.soft", { href: url, target: "_blank", rel: "noopener" }, icon("open_in_new"), label)) : null));
+}

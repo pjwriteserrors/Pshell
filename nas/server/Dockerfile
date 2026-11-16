@@ -1,4 +1,5 @@
-# pshell-nas for the Pi (arm64). Build context: ~/pshell-nas (deploy.sh puts server/, web/, files/ and host.py there).
+# pshell-nas for the Pi (arm64). Build context: ~/pshell-nas (deploy.sh puts server/, web/, files/, host.py and
+# core-client/ there).
 # The code is bind-mounted read-only by the compose file, so a deploy of code needs no rebuild;
 # the image holds only the tools, the Python packages and the data files of the tasks.
 FROM python:3.12-slim-bookworm

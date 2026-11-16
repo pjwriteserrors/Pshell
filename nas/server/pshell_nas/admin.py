@@ -18,8 +18,10 @@ import time
 import aiohttp
 from aiohttp import web
 
+from . import VERSION
 from .api import body_error, nas_of, ok, read_json
-from .auth import CAPS, KINDS, need, qr_svg, totp_ok, totp_secret, totp_uri
+from .auth import CAPS, KINDS, client_ip, need, qr_svg, totp_ok, totp_secret, totp_uri
+from .corelink import CoreError, portal_url
 
 DOCKER = "/var/run/docker.sock"
 FILEBROWSER = "filebrowser"
@@ -52,6 +54,18 @@ async def settings_patch(request):
     return ok(nas.settings.all())
 
 
+# ── core mode: users, devices and sessions live in pshell-core ─────────────
+def in_portal(request, what):
+    """409 pointing to the portal when core keeps these, else None."""
+    if not nas_of(request).core:
+        return None
+    return web.json_response({"error": f"{what} are kept by the sign-in server now – change them in its portal",
+                              "code": "core", "url": portal_url(request)}, status=409)
+
+
+ADDRESSES = {"home": "http://192.168.178.22:8096", "vpn": "http://10.8.0.1:8096"}
+
+
 # ── devices ───────────────────────────────────────────────────────────────
 def device_json(row):
     return {"id": row["id"], "name": row["name"], "kind": row["kind"], "caps": json.loads(row["caps"] or "[]"),
@@ -62,6 +76,11 @@ def device_json(row):
 async def devices_list(request):
     nas = nas_of(request)
     need(request, "files")
+    if nas.core:
+        # core's list as the caller may see it (read only here); the own table when core cannot tell
+        found = await nas.core.devices(request)
+        if found is not None:
+            return ok(found)
     return ok([device_json(row) for row in nas.db.all("SELECT * FROM devices ORDER BY created")])
 
 
@@ -72,12 +91,39 @@ async def devices_add(request):
     caps = data.get("caps") or ["files"]
     if isinstance(caps, str):
         caps = caps.split(",")
+    if nas.core:
+        return await devices_add_core(request, nas, who, data, caps)
     ident, token = nas.auth.add_device(str(data["name"]), data.get("kind", "phone"), caps, who.label,
                                        data.get("mac", ""))
     nas.activity.log(who, "setting", f"device {ident}", detail="added")
     return ok({"id": ident, "token": token, "server_id": nas.server_id,
-               "addresses": {"home": "http://192.168.178.22:8096", "vpn": "http://10.8.0.1:8096"},
+               "addresses": ADDRESSES,
                **device_json(nas.db.one("SELECT * FROM devices WHERE id=?", ident))})
+
+
+async def devices_add_core(request, nas, who, data, caps):
+    """Minting in core mode: core makes the device (scopes nas + core read) on
+    behalf of the admin the NAS verified; the answer keeps the NAS's shape."""
+    from .corelink import core_device_json
+    caps = [cap for cap in caps if cap]
+    for cap in caps:
+        if cap not in CAPS:
+            raise ValueError(f"unknown cap {cap}")
+    kind = data.get("kind", "phone")
+    if kind not in KINDS:
+        raise ValueError(f"kind is one of {', '.join(KINDS)}")
+    try:
+        device, token = await nas.core.create_device(request, client_ip(request), str(data["name"]), kind, caps,
+                                                     data.get("mac", ""))
+    except CoreError as error:
+        return body_error(error.text, error.status, error.code)
+    if not token:
+        return body_error("Core made no token", 502, "core")
+    shaped = core_device_json(device)
+    shaped["caps"] = shaped["caps"] or caps
+    nas.activity.log(who, "setting", f"device {shaped['id']}", detail="added (core)")
+    return ok({**shaped, "id": shaped["id"], "token": token, "server_id": nas.server_id, "addresses": ADDRESSES,
+               "device": shaped})
 
 
 async def devices_patch(request):
@@ -86,11 +132,30 @@ async def devices_patch(request):
     ident = request.match_info["id"]
     # a device may set its own mac (for wake); everything else is admin
     data = await read_json(request)
-    if not (who and (who.can("admin") or (who.kind == "device" and who.name == ident and set(data) <= {"mac", "name"}))):
+    own = bool(who and who.kind == "device" and who.name == ident and set(data) <= {"mac", "name"})
+    if not (who and (who.can("admin") or own)):
         return body_error("This needs admin", 403, "forbidden")
+    if nas.core:
+        if not own:
+            return in_portal(request, "Devices")
+        # a device's own mac (for wake) or name: core with its own token, the old row too
+        status, answer = await nas.core.patch_device(request, ident, data)
+        if nas.db.one("SELECT id FROM devices WHERE id=?", ident):
+            patch_row(nas, ident, data)
+        if status >= 400:
+            return web.json_response(answer if isinstance(answer, dict) else {"error": str(answer), "code": "core"},
+                                     status=status)
+        from .corelink import core_device_json
+        device = answer.get("device") if isinstance(answer, dict) and isinstance(answer.get("device"), dict) else answer
+        return ok(core_device_json(device) if isinstance(device, dict) else {"id": ident})
     row = nas.db.one("SELECT * FROM devices WHERE id=?", ident)
     if not row:
         return body_error("No such device", 404, "missing")
+    patch_row(nas, ident, data)
+    return ok(device_json(nas.db.one("SELECT * FROM devices WHERE id=?", ident)))
+
+
+def patch_row(nas, ident, data):
     if "name" in data:
         nas.db.run("UPDATE devices SET name=? WHERE id=?", str(data["name"]), ident)
     if "mac" in data:
@@ -105,12 +170,14 @@ async def devices_patch(request):
     if "caps" in data:
         caps = [cap for cap in data["caps"] if cap in CAPS]
         nas.db.run("UPDATE devices SET caps=? WHERE id=?", json.dumps(caps), ident)
-    return ok(device_json(nas.db.one("SELECT * FROM devices WHERE id=?", ident)))
 
 
 async def devices_delete(request):
     nas = nas_of(request)
     who = need(request, "admin")
+    refused = in_portal(request, "Devices")
+    if refused is not None:
+        return refused
     ident = request.match_info["id"]
     nas.db.run("DELETE FROM devices WHERE id=?", ident)
     nas.activity.log(who, "setting", f"device {ident}", detail="removed")
@@ -125,12 +192,18 @@ def user_json(row):
 async def users_list(request):
     nas = nas_of(request)
     need(request, "admin")
+    refused = in_portal(request, "Users")
+    if refused is not None:
+        return refused
     return ok([user_json(row) for row in nas.db.all("SELECT * FROM users ORDER BY name")])
 
 
 async def users_add(request):
     nas = nas_of(request)
     who = need(request, "admin")
+    refused = in_portal(request, "Users")
+    if refused is not None:
+        return refused
     data = await read_json(request)
     name = str(data["name"]).strip()
     if not re.fullmatch(r"[A-Za-z0-9._-]{1,32}", name):
@@ -157,6 +230,9 @@ async def users_patch(request):
     name = request.match_info["name"]
     if not may_edit_user(who, name):
         return body_error("Not allowed", 403, "forbidden")
+    refused = in_portal(request, "Users and passwords")
+    if refused is not None:
+        return refused
     user = nas.auth.user(name)
     if not user:
         return body_error("No such user", 404, "missing")
@@ -190,6 +266,9 @@ async def totp_start(request):
     nas = nas_of(request)
     who = request.get("who")
     name = request.match_info["name"]
+    refused = in_portal(request, "Two-step logins")
+    if refused is not None:
+        return refused
     if not may_edit_user(who, name) or not nas.auth.user(name):
         return body_error("Not allowed", 403, "forbidden")
     secret = totp_secret()
@@ -204,6 +283,9 @@ async def totp_confirm(request):
     name = request.match_info["name"]
     if not may_edit_user(who, name):
         return body_error("Not allowed", 403, "forbidden")
+    refused = in_portal(request, "Two-step logins")
+    if refused is not None:
+        return refused
     data = await read_json(request)
     user = nas.auth.user(name)
     if not user or not user["totp_pending"]:
@@ -481,11 +563,17 @@ def backup_overdue(nas):
 
 
 async def health(request):
+    nas = nas_of(request)
+    if nas.core and request.get("who") is None:
+        # core's probe (and anyone without a login): alive, nothing more
+        return ok({"ok": True, "version": VERSION, **nas.pressure_json()})
     need(request, "files")
     cached = request.app.get("health_cache")
     if not cached or time.time() - cached.get("at", 0) > 60 or request.query.get("fresh"):
         cached = await collect_health(request.app)
         request.app["health_cache"] = cached
+    if nas.core:
+        return ok({**cached, **nas.pressure_json()})
     return ok(cached)
 
 
@@ -505,6 +593,9 @@ async def wake(request):
     data = await read_json(request)
     row = nas.db.one("SELECT * FROM devices WHERE id=? OR name=?", data["device"], data["device"])
     mac = (row or {}).get("mac") or data.get("mac")
+    if not mac and nas.core:
+        found = await nas.core.devices(request) or []
+        mac = next((item["mac"] for item in found if data["device"] in (item["id"], item["name"]) and item["mac"]), "")
     if not mac:
         return body_error("That device has no mac address", 404, "no_mac")
     packet = magic_packet(mac)
@@ -556,6 +647,11 @@ async def ollama_switch(on):
         pass
 
 
+def nas_paused(app):
+    nas = app.get("nas")
+    return bool(nas and nas.paused())
+
+
 async def clamav_loop(app):
     """Keeps ClamAV's signatures (in the state folder) fresh, once a day."""
     folder = os.environ.get("CLAMAV_DB")
@@ -564,6 +660,8 @@ async def clamav_loop(app):
     os.makedirs(folder, exist_ok=True)
     config = "/etc/clamav/pshell-freshclam.conf"
     while True:
+        while nas_paused(app):
+            await asyncio.sleep(30)   # freshclam takes hundreds of MB: not while the Pi's memory is tight
         command = ["nice", "-n", "19", "freshclam", f"--datadir={folder}", "--stdout"]
         if os.path.exists(config):
             command.append(f"--config-file={config}")

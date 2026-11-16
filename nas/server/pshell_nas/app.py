@@ -10,6 +10,7 @@ from aiohttp import web
 
 from . import admin, api, auth, photos, restic, shares, snapshots, taskqueue, webdav
 from .core import Nas
+from .corelink import CoreLink
 from .uploads import Uploads
 
 NO_WEB = """<!doctype html><meta charset="utf-8"><title>pshell-nas</title>
@@ -77,6 +78,9 @@ def build(config):
     nas.uploads = app["uploads"]
     nas.tasks = taskqueue.Tasks(nas)
     app.on_response_prepare.append(security_headers)
+    nas.core = app["core"] = CoreLink.maybe(nas)
+    if nas.core:
+        nas.core.routes(app, nas.set_pressure)
     api.routes(app)
     admin.routes(app)
     taskqueue.routes(app)
@@ -90,6 +94,8 @@ def build(config):
 
     async def startup(app):
         nas.hub.bind(asyncio.get_running_loop())
+        if nas.core:
+            await nas.core.start()
         nas.index.start()
         nas.tasks.start()
         app["background"] = [asyncio.ensure_future(job) for job in (
@@ -98,6 +104,8 @@ def build(config):
     async def cleanup(app):
         for job in app.get("background", []):
             job.cancel()
+        if nas.core:
+            await nas.core.stop()
 
     app.on_startup.append(startup)
     app.on_cleanup.append(cleanup)

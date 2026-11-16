@@ -55,6 +55,7 @@ class LocalCtx(registry.Ctx):
         self.models = nas.config.models
         self.settings = {key: nas.settings.get(key) for key in ("vt_key", "vt_upload")}
         self.cancelled = False
+        self.requeue = False       # stopped for the Pi's memory, not by a person: back to the queue
         self.outputs = []
         self.last = 0
         self.count = 0
@@ -162,6 +163,15 @@ class Tasks:
         if self.loop and self.wake:
             self.loop.call_soon_threadsafe(self.wake.set)
 
+    def pressure_changed(self, level):
+        """Core's memory guard: at `tight` the Pi starts nothing new, at `critical`
+        what runs here stops too and waits in the queue; the PC goes on."""
+        if level == "critical":
+            for ctx in list(self.local.values()):
+                ctx.requeue = True
+                ctx.cancelled = True
+        self.poke()
+
     # ── the queue ────────────────────────────────────────────────────────
     def add(self, kind, paths, options=None, who="", auto=False):
         if kind not in registry.TYPES:
@@ -256,6 +266,8 @@ class Tasks:
 
     def dispatch(self):
         pi_slots = max(0, int(self.nas.settings.get("pi_jobs") or 1)) - len(self.local)
+        if self.nas.paused():
+            pi_slots = 0           # the Pi's memory is tight: only the PC takes work
         for row in self.pending():
             kind = row["type"]
             worker = next((w for w in self.workers if kind in w.types and len(w.running) < w.slots), None)
@@ -350,7 +362,12 @@ class Tasks:
                 result = self.apply(row["type"], result, [], options, local=True)
                 self.loop.call_soon_threadsafe(self.finish, ident, "done", result)
             except registry.Cancelled:
-                self.loop.call_soon_threadsafe(self.finish, ident, "cancelled", None, "Stopped")
+                if ctx.requeue:
+                    self.db.run("UPDATE tasks SET state='queued', where_='', progress=0, text='Paused: Pi memory tight' "
+                                "WHERE id=? AND state='running'", ident)
+                    self.loop.call_soon_threadsafe(self.emit, ident)
+                else:
+                    self.loop.call_soon_threadsafe(self.finish, ident, "cancelled", None, "Stopped")
             except Exception as error:  # noqa: BLE001 – the task's own words go to the user
                 self.loop.call_soon_threadsafe(self.finish, ident, "failed", None, f"{error}" or type(error).__name__)
             finally:
@@ -493,6 +510,8 @@ class Tasks:
     def feed(self):
         if not self.can_compute() or self.nas.index.scanning:
             return
+        if self.nas.paused() and not self.workers:
+            return                 # nothing new for the Pi while its memory is tight
         where, args = self.photo_where()
         if self.busy("exif") < 2:
             rows = self.db.all("SELECT f.path FROM files f LEFT JOIN photos p ON p.path=f.path WHERE f.kind='image' "

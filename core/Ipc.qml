@@ -786,6 +786,26 @@ Scope {
 		}
 	}
 
+	// pshell-core on netcore (docs/core.md): `netcore status`, `netcore open`
+	// (Pshell settings › Server), `netcore portal`, `netcore refresh`
+	IpcHandler {
+		target: "netcore"
+		enabled: Netcore.enabled
+
+		function status(): string {
+			return JSON.stringify({ active: Netcore.active, reachable: Netcore.reachable, linked: Netcore.linked, url: Netcore.url, guard: Netcore.level, memFree: Netcore.memAvailable, temp: Netcore.temp, services: Netcore.services.map(s => `${s.name}:${s.state}`), error: Netcore.error });
+		}
+		function open(): void {
+			Netcore.openSettings();
+		}
+		function portal(): void {
+			Netcore.openPortal("/");
+		}
+		function refresh(): void {
+			Netcore.loadAll();
+		}
+	}
+
 	// every HID device and who looks after it
 	IpcHandler {
 		target: "devices"

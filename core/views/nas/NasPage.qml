@@ -804,8 +804,22 @@ SettingsPage {
 				onToggled: on => Nas.set("wake", on)
 			}
 
+			// with pshell-core the sign-in settings are core's (Pshell settings › Server)
+			Line {
+				visible: Netcore.online
+				text: "Sign-ins are kept by pshell-core"
+				hint: "Two-factor, how long a sign-in lasts, users and sessions: Pshell settings › Server"
+
+				TextButton {
+					text: "Server page"
+					icon: "server"
+					onActivated: Netcore.openSettings()
+				}
+			}
+
 			FlagRow {
 				Layout.fillWidth: true
+				visible: !Netcore.online
 				title: "Two-factor login for everyone"
 				subtitle: "Web logins need a TOTP code"
 				icon: "lock_outline"
@@ -814,6 +828,7 @@ SettingsPage {
 			}
 
 			Amount {
+				visible: !Netcore.online
 				key: "session_days"
 				fallback: 30
 				label: "Stay logged in"
@@ -1348,8 +1363,20 @@ SettingsPage {
 	SettingCard {
 		anchor: "nas-devices"
 		title: "Devices"
-		subtitle: "Who may use the NAS; wake one from here"
+		subtitle: Netcore.online ? "Wake one from here; what each may do is kept by pshell-core" : "Who may use the NAS; wake one from here"
 		icon: "devices"
+
+		Line {
+			visible: Netcore.online
+			text: "Devices are kept by pshell-core"
+			hint: "Renaming, what each may do, new tokens and revoking – for the NAS and every other service – are on the Server page"
+
+			TextButton {
+				text: "Server page"
+				icon: "server"
+				onActivated: Netcore.openSettings()
+			}
+		}
 
 		Repeater {
 			model: Nas.devices

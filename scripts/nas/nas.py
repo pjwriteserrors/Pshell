@@ -30,6 +30,14 @@ check), `wol`, `wolsetup`, `quit {force?}`. `saves` also takes `host`
 (restore another machine's set), `games` and `preview`.
 Events beyond docs/nas.md: `changed {paths}`, `thumb`, `kv`, `nasjob`
 (the server's jobs), `error` (the relay could not start the service).
+
+pshell-core (docs/core.md "PC"): ops `core {method, path, body?,
+confirmed?}` → `{status, data}` (status 0: core did not answer) and
+`corestate {fresh?}` → `{reachable, linked, url, me, guard, health,
+services, error, at}` (cached 15 s; the event stream keeps it fresher).
+While the NAS is connected core's WebSocket `/api/events` is relayed: every
+event as `core:<type>` (`{event: "core:service", type: "service", …}`),
+plus `core:link {reachable, url}` when the stream comes or goes.
 """
 import asyncio
 import fcntl
@@ -47,6 +55,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import config  # noqa: E402
 import client  # noqa: E402
+import core  # noqa: E402
 
 IDLE = 120
 STATUS_EVERY = 60
@@ -54,6 +63,8 @@ PROBE_EVERY = 20
 SYNC_EVERY = 15 * 60
 SCHEDULE_EVERY = 10 * 60
 HEARTBEAT_EVERY = 5 * 60
+CORE_CACHE = 15
+CORE_BACKOFF = (2, 60)
 LOG = config.CACHE / "nas-daemon.log"
 
 
@@ -170,6 +181,12 @@ class Daemon:
         self.worker = worker.Worker(self.changed)
         self.stopping = False
         self.oneshot = False         # `nas.py call` with no service running
+        # pshell-core: the cached corestate, the relay of its events
+        self.core_task = None
+        self.core_state = {}
+        self.core_at = 0.0
+        self.core_linked = False
+        self.core_logged = ""
 
     # events and state
     def emit(self, message):
@@ -322,6 +339,7 @@ class Daemon:
             if self.oneshot:
                 return
             self.events_task = asyncio.ensure_future(self.events_loop(nas))
+            self.core_task = asyncio.ensure_future(self.core_loop(nas))
             asyncio.ensure_future(self.after_connect(nas))
 
     async def after_connect(self, nas):
@@ -348,6 +366,10 @@ class Daemon:
         if self.events_task:
             self.events_task.cancel()
             self.events_task = None
+        if self.core_task:
+            self.core_task.cancel()
+            self.core_task = None
+        self.core_link(False, self.core_state.get("url", ""))
         await self.worker.stop()
         if self.mount.process is not None or self.mount.active:
             await asyncio.to_thread(self.mount.stop)
@@ -434,6 +456,112 @@ class Daemon:
             self.emit({"event": "nasjob", **(event.get("job") or {})})
         elif kind == "thumb":
             self.emit(event)
+
+    # ── pshell-core ──────────────────────────────────────────────────────
+    def core_base(self):
+        """core's URL: nas.json `core_url`, else the host of the NAS address in use."""
+        data = config.load()
+        base = core.url_for(self.nas.address if self.nas else "", data)
+        if not base:
+            raise Failure("The NAS is not connected, so core's address is not known")
+        if not data.get("token"):
+            raise Failure("The NAS is not set up")
+        return base
+
+    def core_client(self):
+        return core.Core(self.core_base(), config.load()["token"])
+
+    def core_link(self, on, url):
+        """The event stream came or went: tell the shell once."""
+        if on == self.core_linked:
+            return
+        self.core_linked = on
+        self.core_state["linked"] = on
+        if on:
+            self.core_state["reachable"] = True
+        self.emit({"event": "core:link", "type": "link", "reachable": bool(self.core_state.get("reachable")) if not on else True,
+                   "linked": on, "url": url})
+
+    def core_event(self, event):
+        core.merge_event(self.core_state, event)
+        self.core_state["reachable"] = True
+        self.emit({**event, "event": f"core:{event['type']}"})
+
+    async def core_loop(self, nas):
+        """core's /api/events relayed while the NAS is connected, with backoff."""
+        import aiohttp
+        backoff = CORE_BACKOFF[0]
+        while self.nas is nas and not self.stopping:
+            try:
+                base = self.core_base()
+            except Failure:
+                return
+            try:
+                async with self.session.ws_connect(core.ws_url(base), headers={"Authorization": f"Bearer {nas.token}", "User-Agent": core.UA},
+                                                   heartbeat=30, timeout=15) as ws:
+                    backoff = CORE_BACKOFF[0]
+                    self.core_logged = ""
+                    self.core_state["url"] = base
+                    self.core_link(True, base)
+                    asyncio.ensure_future(self.refresh_core())
+                    async for message in ws:
+                        if message.type != aiohttp.WSMsgType.TEXT:
+                            continue
+                        try:
+                            event = json.loads(message.data)
+                        except ValueError:
+                            continue
+                        if isinstance(event, dict) and isinstance(event.get("type"), str) and event["type"]:
+                            self.core_event(event)
+            except asyncio.CancelledError:
+                return
+            except Exception as error:
+                text = f"{error.__class__.__name__}: {error}"
+                if text != self.core_logged:
+                    self.core_logged = text
+                    log("core events:", text)
+            self.core_link(False, base)
+            if self.nas is not nas or self.stopping:
+                return
+            await asyncio.sleep(backoff)
+            backoff = min(CORE_BACKOFF[1], backoff * 2)
+
+    async def refresh_core(self):
+        """me, guard, health and services asked over HTTP into the cache."""
+        try:
+            api = self.core_client()
+        except Failure as error:
+            self.core_state = {"reachable": False, "linked": False, "url": "", "error": str(error)}
+            self.core_at = time.monotonic()
+            return self.core_state
+        paths = {"me": "/api/auth/me", "guard": "/api/guard", "health": "/api/health/now", "services": "/api/services"}
+        answers = await asyncio.gather(*(asyncio.to_thread(api.call, "GET", path, None, False, 6) for path in paths.values()))
+        found = dict(zip(paths, answers))
+        status, me = found["me"]
+        state = dict(self.core_state)
+        state.update(url=api.base, linked=self.core_linked, at=time.time())
+        if status == 0 and not self.core_linked:
+            state.update(reachable=False, error=me.get("error", "Core did not answer"), me=None)
+        else:
+            state["reachable"] = True
+            state["error"] = "" if status == 200 else (me.get("error") or f"HTTP {status}")
+            state["me"] = me if status == 200 else None
+            for key in ("guard", "health", "services"):
+                code, data = found[key]
+                if code == 200:
+                    # core wraps some answers: {services: [...]}, {sample: {...}}
+                    inner = {"services": "services", "health": "sample", "guard": "guard"}[key]
+                    state[key] = data[inner] if isinstance(data, dict) and inner in data else data
+        self.core_state = state
+        self.core_at = time.monotonic()
+        return state
+
+    def core_snapshot(self):
+        state = self.core_state
+        return {"reachable": bool(state.get("reachable")), "linked": self.core_linked, "url": state.get("url", ""),
+                "me": state.get("me"), "guard": state.get("guard") or {}, "health": state.get("health") or {},
+                "services": state.get("services") if state.get("services") is not None else [],
+                "error": state.get("error", ""), "at": state.get("at", 0)}
 
     def schedule_status(self):
         if getattr(self, "_status_handle", None) is None:
@@ -1108,6 +1236,25 @@ class Daemon:
         nas = (await self.need())
         method = request.get("method", "GET").upper()
         return await asyncio.to_thread(nas.call, method, request["path"], request.get("params"), request.get("body"))
+
+    async def op_core(self, request):
+        """One call of core's API as this device: {method, path, body?, confirmed?} → {status, data}."""
+        path = str(request.get("path") or "")
+        if not path.startswith("/api/"):
+            raise Failure("core paths start with /api/")
+        api = self.core_client()
+        method = str(request.get("method") or "GET").upper()
+        status, data = await asyncio.to_thread(api.call, method, path, request.get("body"), bool(request.get("confirmed")))
+        if status == 0:
+            self.core_state["reachable"] = self.core_linked
+        elif method != "GET" and status < 300:
+            self.core_at = 0.0
+        return {"status": status, "data": data}
+
+    async def op_corestate(self, request):
+        if request.get("fresh") or not self.core_state or time.monotonic() - self.core_at > CORE_CACHE:
+            await self.refresh_core()
+        return self.core_snapshot()
 
     async def op_reconnect(self, request):
         await self.disconnect("", quiet=True)

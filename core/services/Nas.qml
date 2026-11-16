@@ -104,6 +104,8 @@ Singleton {
 	readonly property string downloadsFolder: String(root.localOf("downloads_folder", "/Downloads"))
 
 	signal stateArrived
+	// pshell-core's events relayed by the daemon (`core:<type>`, docs/core.md), for Netcore
+	signal coreEvent(var message)
 
 	// ── helpers ────────────────────────────────────────────────────────────
 	function expand(path) {
@@ -194,6 +196,10 @@ Singleton {
 	}
 
 	function event(message) {
+		if (String(message.event ?? "").startsWith("core:")) {
+			root.coreEvent(message);
+			return;
+		}
 		switch (message.event) {
 		case "state":
 			root.takeState(message.state ?? message.data ?? message);

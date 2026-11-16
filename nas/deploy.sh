@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Puts pshell-nas on the Pi and (re)starts it. Safe to run again any time.
 #
-#   nas/deploy.sh              copy nas/server, nas/web, scripts/files, scripts/host.py; build; up
+#   nas/deploy.sh              copy nas/server, nas/web, scripts/files, scripts/host.py and
+#                              pcore/client/pshell_core_client.py; build; up
 #   nas/deploy.sh public on    Caddy on 443 for the public share links (only /s/, /u/ and their assets)
 #   nas/deploy.sh public off
 #   nas/deploy.sh status
@@ -16,7 +17,7 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 COMPOSE="docker compose -p pshell-nas -f server/docker-compose.yml"
 
 copy() {
-    ssh "$PI" "mkdir -p ~/$DIR/server ~/$DIR/web ~/$DIR/files && sudo mkdir -p /mnt/storage/pshell-nas/ollama"
+    ssh "$PI" "mkdir -p ~/$DIR/server ~/$DIR/web ~/$DIR/files ~/$DIR/core-client && sudo mkdir -p /mnt/storage/pshell-nas/ollama"
     local out
     out=$(
         rsync -rlptzi --delete --exclude __pycache__ --exclude tests --exclude '*.pyc' \
@@ -26,6 +27,10 @@ copy() {
         fi
         rsync -rlptzi --delete --exclude __pycache__ --exclude '*.pyc' "$REPO/scripts/files/" "$PI:$DIR/files/"
         rsync -rlptzi "$REPO/scripts/host.py" "$PI:$DIR/host.py"
+        # the client of pshell-core (docs/core.md); without it the NAS keeps its own tables
+        if [ -f "$REPO/pcore/client/pshell_core_client.py" ]; then
+            rsync -rlptzi "$REPO/pcore/client/pshell_core_client.py" "$PI:$DIR/core-client/pshell_core_client.py"
+        fi
     )
     [ -n "$out" ] && echo "$out" | sed 's/^/  /'
     CHANGED_CODE=$(echo "$out" | grep -Ec '^([<>]f|\*deleting).*\.py$' || true)

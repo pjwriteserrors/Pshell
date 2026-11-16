@@ -26,6 +26,11 @@ services:
       NAS_AREAS: "/=/storage/filerise/uploads;/Obsidian=/storage/obsidian-vault"
       NAS_PORT: "8096"
       TZ: Europe/Berlin
+      # pshell-core (docs/core.md): who is calling is asked there once its key for the NAS
+      # exists; without the key (or without core) the NAS keeps its own tables. The key is
+      # read at start: restart the NAS after core made it.
+      CORE_URL: "http://127.0.0.1:8097"
+      CORE_KEY: /run/core-keys/nas.key
     volumes:
       - /mnt/storage:/storage
       - /var/run/docker.sock:/var/run/docker.sock
@@ -34,6 +39,9 @@ services:
       - ../files:/app/files:ro
       - ../host.py:/app/host.py:ro
       - ../web:/app/web:ro
+      - ../core-client:/app/core-client:ro
+      # the folder, not the file: a missing file would make docker create a directory in its place
+      - /mnt/storage/pshell-core/keys:/run/core-keys:ro
 
   ollama:
     image: ollama/ollama:0.40.15

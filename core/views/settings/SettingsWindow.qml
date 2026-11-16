@@ -11,6 +11,7 @@ import qs.style.widgets
 import qs.core.services
 import qs.core.views.settings
 import qs.core.views.nas
+import qs.core.views.netcore
 
 // >settings, the Pshell settings: every setting niri has, but the ones Studio
 // looks after (cursor theme, animations), and those of the shell's own
@@ -96,6 +97,7 @@ FloatingWindow {
 		{ id: "lighting", label: "Lighting", icon: "led_strip_variant", hint: "Keyboard and LEDs: wallpaper or screen", shown: Lighting.enabled },
 		{ id: "phone", label: "Notifications", icon: "bell_outline", hint: "Which programs notify, here and on the phone", plugin: "notifications" },
 		{ id: "nas", label: "NAS", icon: "server_network", hint: "netcore: mount, sync, backups, server", plugin: "nas" },
+		{ id: "server", label: "Server", icon: "server", hint: "netcore: services, the Pi, devices, sign-ins", plugin: "netcore", shown: Plugins.on("nas") },
 		{ id: "debug", label: "Debug", icon: "bug_outline", hint: "Rendering and driver switches" }
 	].filter(page => (!page.plugin || Plugins.on(page.plugin)) && page.shown !== false)
 
@@ -232,6 +234,14 @@ FloatingWindow {
 		{ page: "nas", anchor: "nas-devices", title: "NAS devices", words: "nas devices laptop phone token wake", plugin: "nas" },
 		{ page: "nas", anchor: "nas-more", title: "Downloads, shelves, streams, phone photos to the NAS", words: "nas downloads torrents shelf streams progress phone photos upload", plugin: "nas" },
 		{ page: "nas", anchor: "nas-calendar", title: "Baikal calendar", words: "nas baikal caldav calendar", plugin: "nas-calendar" },
+		{ page: "server", anchor: "server-core", title: "pshell-core on netcore", words: "server netcore core portal reachable login", plugin: "netcore" },
+		{ page: "server", anchor: "server-services", title: "Services on netcore", words: "server services containers docker pihole home assistant baikal wireguard restart stop start", plugin: "netcore" },
+		{ page: "server", anchor: "server-health", title: "The Pi's health and memory guard", words: "server pi health memory temperature load disk guard pressure history", plugin: "netcore" },
+		{ page: "server", anchor: "server-devices", title: "Devices of every service", words: "server devices tokens scopes caps rotate revoke rename", plugin: "netcore" },
+		{ page: "server", anchor: "server-sessions", title: "Sessions", words: "server sessions sign in browser end logout", plugin: "netcore" },
+		{ page: "server", anchor: "server-log", title: "Security log", words: "server security log logins failed locked", plugin: "netcore" },
+		{ page: "server", anchor: "server-users", title: "Users", words: "server users accounts admin password", plugin: "netcore" },
+		{ page: "server", anchor: "server-settings", title: "Core settings", words: "server settings session days totp two factor guard limits alerts history", plugin: "netcore" },
 		{ page: "ultimate", anchor: "ultimate-pad", title: "8BitDo controller", words: "8bitdo ultimate 2 wireless controller gamepad pad profile battery", plugin: "ultimate" },
 		{ page: "ultimate", anchor: "ultimate-buttons", title: "Controller buttons", words: "8bitdo gamepad remap buttons paddles pl pr l4 r4 back buttons turbo", plugin: "ultimate" },
 		{ page: "ultimate", anchor: "ultimate-sticks", title: "Controller sticks", words: "8bitdo gamepad stick dead zone invert swap d-pad", plugin: "ultimate" },
@@ -310,7 +320,7 @@ FloatingWindow {
 	]
 
 	// a page of the shell's own: no niri file behind it, nothing to undo
-	readonly property bool shellPage: ["bar", "tray", "multicursor", "sounds", "colours", "lighting", "phone", "nas", "mouse", "hud", "apps", "browser"].includes(root.current)
+	readonly property bool shellPage: ["bar", "tray", "multicursor", "sounds", "colours", "lighting", "phone", "nas", "server", "mouse", "hud", "apps", "browser"].includes(root.current)
 
 	readonly property var results: {
 		if (root.query === "") return [];
@@ -837,6 +847,7 @@ FloatingWindow {
 							case "lighting": return lightingPage;
 							case "phone": return phonePage;
 							case "nas": return nasPage;
+							case "server": return serverPage;
 							default: return debugPage;
 							}
 						}
@@ -1249,6 +1260,12 @@ FloatingWindow {
 		id: nasPage
 
 		NasPage {}
+	}
+
+	Component {
+		id: serverPage
+
+		ServerPage {}
 	}
 
 	Component {

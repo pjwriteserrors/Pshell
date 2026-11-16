@@ -79,6 +79,7 @@ class Index:
             self.inotify = None
         while True:
             if self.full_requested.is_set():
+                self.nas.calm.wait()      # no walk of the whole tree while the Pi's memory is tight
                 self.full_requested.clear()
                 try:
                     self.full_scan()
@@ -123,6 +124,8 @@ class Index:
         areas = self.nas.areas
         stack = [folder]
         while stack:
+            if mark and not self.nas.calm.is_set():
+                self.nas.calm.wait()      # a full walk waits out memory pressure (docs/core.md)
             current = stack.pop()
             try:
                 real = areas.real(current)

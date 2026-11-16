@@ -2,9 +2,9 @@
 // last seen, a new one with its token shown once, wake-on-LAN.
 import { h, icon, clear, when, copyText, plural } from "../util.js";
 import * as api from "../api.js";
-import { state, setting, on as onStore } from "../store.js";
+import { state, setting, on as onStore, coreInfo, portalUrl } from "../store.js";
 import { stagger, animate, EASE } from "../motion.js";
-import { openDialog, formDialog, confirm, toast, errorToast, prompt, showMenu } from "../ui.js";
+import { openDialog, formDialog, confirm, toast, errorToast, prompt, showMenu, portalCard } from "../ui.js";
 
 const KIND_ICON = { pc: "monitor", laptop: "laptop", phone: "cellphone" };
 const CAP_LABEL = { files: "Files", worker: "Computes", admin: "Admin" };
@@ -13,9 +13,14 @@ export default function devices(route, app) {
 	let list = [];
 	let awake = {};
 	const grid = h("div.device-grid");
-	const addBtn = h("button.btn.primary.small", icon("plus"), "Add a device");
+	// with pshell-core the devices are kept there: this page only shows them (and wakes them)
+	const core = coreInfo();
+	const addBtn = core
+		? h("a.btn.primary.small", { href: portalUrl("/"), target: "_blank", rel: "noopener" }, icon("open_in_new"), "Open the portal")
+		: h("button.btn.primary.small", icon("plus"), "Add a device");
 	const page = h("div.page",
-		h("div.page-head", h("div", h("h1", "Devices"), h("div.subtle", "What may talk to the NAS with a token: files, computing, admin.")), h("div.page-tools", addBtn)),
+		h("div.page-head", h("div", h("h1", "Devices"), h("div.subtle", core ? "What may talk to the NAS with a token – kept by the sign-in server." : "What may talk to the NAS with a token: files, computing, admin.")), h("div.page-tools", addBtn)),
+		core ? h("div", { style: { marginBottom: "14px" } }, portalCard({ title: "Devices are managed in the portal", text: "New tokens, what each device may do, renaming and removing happen at the sign-in server, for every pshell service at once.", url: portalUrl("/"), iconName: "devices" })) : null,
 		grid);
 	const root = h("div.page-scroll", page);
 
@@ -52,7 +57,7 @@ export default function devices(route, app) {
 				h("div.device-top",
 					h("div.device-icon", icon(KIND_ICON[d.kind] || "devices"), h(`span.live-dot.${on ? "open" : "closed"}`)),
 					h("div.row-main", h("div.row-title", h("span.ellipsis", d.name)), h("div.row-sub", `${d.kind} · ${d.id}`)),
-					h("button.icon-btn.small", { title: "More", onclick: event => menu(d, event) }, icon("dots_vertical"))),
+					core ? null : h("button.icon-btn.small", { title: "More", onclick: event => menu(d, event) }, icon("dots_vertical"))),
 				h("div.device-caps", (d.caps || []).map(c => h(`span.chip${c === "admin" ? ".warn" : c === "worker" ? ".pc" : ""}`, icon(c === "admin" ? "shield_account_outline" : c === "worker" ? "chip" : "folder_outline"), CAP_LABEL[c] || c)), computing ? h("span.chip.good", icon("cog_transfer_outline"), "Computing now") : null),
 				h("div.device-foot",
 					h("span", d.last_seen ? `Seen ${when(d.last_seen)}${d.last_address ? ` from ${d.last_address}` : ""}` : "Never seen yet"),
@@ -127,7 +132,7 @@ export default function devices(route, app) {
 		}
 	}
 
-	addBtn.addEventListener("click", async () => {
+	if (!core) addBtn.addEventListener("click", async () => {
 		const values = await formDialog({
 			title: "Add a device",
 			icon: "devices",

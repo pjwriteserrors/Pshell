@@ -95,6 +95,7 @@ class Who:
     role: str = "user"
     caps: list = field(default_factory=list)
     via: str = ""                  # cookie | bearer | basic
+    core: bool = False             # pshell-core answered for it (docs/core.md)
 
     @property
     def label(self):
@@ -248,6 +249,9 @@ def is_public(request):
 
 @web.middleware
 async def middleware(request, handler):
+    link = request.app.get("core")
+    if link is not None:
+        return await core_middleware(request, handler, link)
     auth = request.app["auth"]
     who = None
     header = request.headers.get("Authorization", "")
@@ -276,6 +280,57 @@ async def middleware(request, handler):
     if who is None and not is_public(request):
         if request.path.startswith(("/dav", "/restic")):
             return web.Response(status=401, headers={"WWW-Authenticate": 'Basic realm="pshell-nas"'})
+        return error(401, "Log in first", "auth")
+    return await handler(request)
+
+
+CORE_PUBLIC = ("/api/core/pressure", "/api/session")
+
+
+async def core_middleware(request, handler, link):
+    """Core mode: pshell-core says who it is; the own tables only while core is away."""
+    from .corelink import COOKIE as CORE_COOKIE
+    auth = request.app["auth"]
+    who = None
+    header = request.headers.get("Authorization", "")
+    ip = client_ip(request)
+    agent = request.headers.get("User-Agent", "")
+    cookie_based = False
+    down = False
+    if header.startswith("Bearer ") or header.startswith("Basic ") or (
+            request.path.startswith("/api/") and request.query.get("token")):
+        if header.startswith("Basic "):
+            kind, secret = "basic", header[6:].strip()
+        else:
+            kind, secret = "bearer", header[7:].strip() if header.startswith("Bearer ") else request.query["token"]
+        answer, who = await link.check(kind, secret, ip, agent)
+        if answer == "down":
+            down = True
+            who = link.local_basic(auth, header, ip) if kind == "basic" else link.local_bearer(auth, secret, ip)
+        if who:
+            who.via = kind
+    if who is None and CORE_COOKIE in request.cookies:
+        answer, who = await link.check("cookie", request.cookies[CORE_COOKIE], ip, agent)
+        down = down or answer == "down"
+        cookie_based = who is not None
+    if who is None and COOKIE in request.cookies and (down or await link.is_down()):
+        # the NAS's own sessions only while core is away
+        down = True
+        who = auth.session(request.cookies[COOKIE])
+        cookie_based = who is not None
+    if who is not None and cookie_based:
+        who.via = "cookie"
+        if (request.method not in ("GET", "HEAD", "OPTIONS") and request.headers.get("X-Pshell") != "1"
+                and request.path != "/api/login" and not request.path.startswith(PUBLIC[2:])):
+            return error(403, "This needs the X-Pshell header", "csrf")
+    request["who"] = who
+    request["core_down"] = down
+    if who is None and not (is_public(request) or request.path in CORE_PUBLIC or
+                            (request.path == "/api/health" and request.method == "GET")):
+        if request.path.startswith(("/dav", "/restic")):
+            return web.Response(status=401, headers={"WWW-Authenticate": 'Basic realm="pshell-nas"'})
+        if down and (CORE_COOKIE in request.cookies or COOKIE in request.cookies):
+            return error(401, "The sign-in server is not reachable", "core_down")
         return error(401, "Log in first", "auth")
     return await handler(request)
 

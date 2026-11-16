@@ -1,0 +1,16 @@
+Third-party files in pcore/web (all usable offline, no CDN; copied from nas/web/vendor):
+
+fonts/AdwaitaSans.woff2, fonts/AdwaitaMono.woff2
+  Adwaita Sans / Adwaita Mono (GNOME), subset to Latin.
+  SIL Open Font License 1.1 – https://openfontlicense.org
+
+fonts/pshell-icons.woff2
+  The Material Design Icons glyphs of "Symbols Nerd Font" that
+  style/theme/Icons.qml names (js/icons.js maps the names).
+  Nerd Fonts: MIT License. Material Design Icons: Apache License 2.0
+  (Pictogrammers).
+
+qrcode.js
+  QRCode for JavaScript, Copyright (c) 2009 Kazuhiko Arase, MIT License,
+  as ported to node by qrcode-terminal (Apache License 2.0), bundled into one
+  ES module.

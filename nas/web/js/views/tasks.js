@@ -28,9 +28,13 @@ export default function tasks(route, app) {
 		pcTile.querySelector(".stat-big").textContent = pc ? `${s.worker.device || "PC"} computes` : "Not connected";
 		pcTile.querySelector(".stat-sub").textContent = pc ? "Every task goes to it" : "Tasks marked “PC” wait for it";
 		const piOn = setting("pi_compute", true) !== false;
-		piTile.classList.toggle("off", !!pc || !piOn);
-		piTile.querySelector(".stat-big").textContent = pc ? "Resting" : piOn ? "Computes" : "Off";
-		piTile.querySelector(".stat-sub").textContent = piOn ? `At most ${setting("pi_jobs", 1)} at a time, gently (nice 15)` : "Pi computing is off in the settings";
+		// pshell-core's memory guard: the Pi takes nothing new while its memory is tight
+		const paused = s.pressure && s.pressure !== "ok";
+		piTile.classList.toggle("off", !!pc || !piOn || paused);
+		piTile.querySelector(".stat-big").textContent = paused ? "Paused" : pc ? "Resting" : piOn ? "Computes" : "Off";
+		piTile.querySelector(".stat-sub").textContent = paused
+			? `Pi memory ${s.pressure === "critical" ? "critical" : "tight"} – its work waits${pc ? ", the PC goes on" : ""}`
+			: piOn ? `At most ${setting("pi_jobs", 1)} at a time, gently (nice 15)` : "Pi computing is off in the settings";
 	};
 
 	const seg = segmented([

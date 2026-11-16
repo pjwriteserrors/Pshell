@@ -269,6 +269,25 @@ Drawer {
 						onClicked: root.page = "phone"
 						onDetailsRequested: root.page = "phone"
 					}
+
+					// netcore (pshell-core): the guard's level, the Pi's memory and heat
+					QuickTile {
+						Layout.fillWidth: true
+						// only once core answered: before it is deployed it stays away
+						visible: Netcore.online
+						icon: "server"
+						title: "netcore"
+						subtitle: Netcore.online && Netcore.memTotal > 0 ? (Netcore.guardOk ? [`${Math.round(Netcore.memFill * 100)} % mem`, Netcore.temp > 0 ? `${Math.round(Netcore.temp)} °C` : ""].filter(s => s).join(" · ") : `${Netcore.levelText(Netcore.level)} · ${Format.bytes(Netcore.memAvailable)}`) : Netcore.summary
+						active: Netcore.online && Netcore.guardOk
+						onClicked: {
+							Popups.close();
+							Netcore.openSettings();
+						}
+						onDetailsRequested: {
+							Popups.close();
+							Netcore.openSettings();
+						}
+					}
 				}
 
 				ColumnLayout {

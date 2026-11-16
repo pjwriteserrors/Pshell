@@ -91,6 +91,24 @@ tries the VPN address. It switches when the network changes.
 - Login rate limit: 5 failures per 10 min per IP+name, then 15 min lock;
   logged in activity.
 
+### On pshell-core (docs/core.md)
+
+With `CORE_URL` and the key `/run/core-keys/nas.key` (compose mounts
+`/mnt/storage/pshell-core/keys` read-only) the NAS asks core who is calling:
+the portal's cookie `pshell_session`, Bearer tokens and Basic headers go to
+core's `/api/verify` (answers kept 30 s, revocations polled). The tokens
+above were imported into core and keep working unchanged (PC mount, phone,
+Windows drive, restic). Users, devices and sessions are kept by core:
+the NAS's `/api/users…` answer 409 `{code: "core", url}`, devices are listed
+from core and minted through it (same answer shape), and the web signs in
+and out at the portal (`http://<host>:8097`). When core does not answer, the
+NAS's own tables decide as before (`nas_session` and the old login only
+then). Core's memory guard calls `POST /api/core/pressure {level}`:
+`tight`/`critical` pause the Pi's own tasks, the index walk, snapshots and
+freshclam; the PC worker goes on; `/api/status` shows `pressure`. Without
+the key or `CORE_URL` the NAS is exactly as described above. Details:
+docs/core.md › Additions made while building › nas.
+
 ## HTTP API (server)
 
 JSON unless noted; errors are `{ "error": "text", "code": "slug" }` with a
