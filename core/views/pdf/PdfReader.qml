@@ -77,7 +77,10 @@ Item {
 			property real renderMs: -1
 			property bool drawnOnce: false
 
-			source: doc.blank || !Pdf.sourcePath(doc.modelData) ? "" : Pdf.fileUrl(Pdf.sourcePath(doc.modelData))
+			// the generation in the query (a file path ignores it): page pictures are kept and
+			// shared by url, page and size, so a picture still being drawn when the file was
+			// read anew would hold every later one of that size blank until the shell restarts
+			source: doc.blank || !Pdf.sourcePath(doc.modelData) ? "" : `${Pdf.fileUrl(Pdf.sourcePath(doc.modelData))}?g=${Pdf.generation}`
 			password: Pdf.recipe.sources?.[doc.modelData]?.password ?? ""
 		}
 
@@ -916,6 +919,8 @@ Item {
 
 			// the scale: the widest spread fits the window
 			readonly property real bk: {
+				// no pages yet: not a 1-point page blown up to the window (a leaf texture far over the limit)
+				if (Pdf.pages.length === 0) return 1;
 				let w = 1, h = 1;
 				for (const p of Pdf.pages) {
 					const s = Pdf.sizeOf(p);
