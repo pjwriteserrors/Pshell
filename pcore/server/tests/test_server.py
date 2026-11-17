@@ -269,6 +269,14 @@ async def devices_and_verify(core, lu):
     assert data["ok"]
     assert any(row["detail"] == "basic" for row in core.app["log"].list("login_failed", 50))
 
+    # a device keeps its own name and mac, nothing else, and only its own
+    status, data = await phone_client.call("PATCH", f"/api/devices/{phone['id']}", {"mac": "3C-7C-3F-12-34-56"})
+    assert status == 200 and data["device"]["mac"] == "3c:7c:3f:12:34:56", (status, data)
+    assert (await phone_client.call("PATCH", f"/api/devices/{phone['id']}", {"mac": "not a mac"}))[0] == 400
+    assert (await phone_client.call("PATCH", f"/api/devices/{phone['id']}", {"scopes": {"nas": ["admin"]}}))[0] == 403
+    assert (await phone_client.call("PATCH", f"/api/devices/{phone['id']}", {"mac": "", "kind": "pc"}))[0] == 403
+    assert (await phone_client.call("PATCH", f"/api/devices/{pc['id']}", {"mac": ""}))[0] == 403
+
     # revocations
     since = time.time() - 0.01
     status, data = await lu.call("PATCH", f"/api/devices/{phone['id']}", {"name": "Pixel", "scopes": {"nas": ["files", "worker"]}})

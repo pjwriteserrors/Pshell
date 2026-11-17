@@ -155,6 +155,8 @@ export function normSample(s) {
 		swap_used: bytes(s.swap_used),
 		psi_some10: s.psi_some10 ?? null,
 		psi_full10: s.psi_full10 ?? null,
+		faults: s.faults ?? null,
+		swapin: s.swapin ?? null,
 		load1: load[0] ?? null,
 		load5: load[1] ?? null,
 		load15: load[2] ?? null,

@@ -19,6 +19,14 @@ const GUARD_WORD = { ok: "Calm", tight: "Tight", critical: "Critical" };
 export default function health(route, app) {
 	let hours = Number(route.query.hours) === 168 ? 168 : 24;
 	let samples = [];
+	// the Pi's kernel has no PSI: then the guard (and these views) go by major page faults
+	const noPsi = () => {
+		const s = samples.length ? samples[samples.length - 1] : state.health;
+		return !s || s.psi_some10 === null || s.psi_some10 === undefined;
+	};
+	const pressurePts = () => (noPsi()
+		? samples.map(s => ({ t: toMs(s.at), v: { f: s.faults ?? null, w: s.swapin ?? null } }))
+		: samples.map(s => ({ t: toMs(s.at), v: { some: s.psi_some10, full: s.psi_full10 } })));
 	const range = segmented([{ value: 24, label: "24 hours" }, { value: 168, label: "7 days" }], hours, v => {
 		hours = Number(v);
 		history.replaceState(null, "", hours === 168 ? "/health?hours=168" : "/health");
@@ -45,8 +53,8 @@ export default function health(route, app) {
 					h("div.guard-level", GUARD_WORD[level] || level),
 					h("div.subtle", g?.since ? `since ${when(g.since)}` : "no change recorded"))),
 			h("div.guard-limits",
-				h("span.chip.small.warn", `tight < ${setting("tight_mb", 900)} MB or some > ${setting("tight_psi", 20)} %`),
-				h("span.chip.small.bad", `critical < ${setting("critical_mb", 450)} MB or full > ${setting("critical_psi", 10)} %`)),
+				h("span.chip.small.warn", `tight < ${setting("tight_mb", 900)} MB, ${noPsi() ? `faults > ${setting("tight_faults", 50)}/s` : `some > ${setting("tight_psi", 20)} %`}`),
+				h("span.chip.small.bad", `critical < ${setting("critical_mb", 450)} MB, ${noPsi() ? `faults > ${setting("critical_faults", 250)}/s` : `full > ${setting("critical_psi", 10)} %`}`)),
 			g?.stopped?.length ? h("div.warn-box.danger-box", icon("stop_circle_outline"), h("div", h("strong", "Stopped by the guard: "), g.stopped.map(n => h("a", { href: `/services/${encodeURIComponent(serviceOf(n)?.name || n)}`, style: { marginRight: "8px" } }, serviceOf(n)?.title || n)), h("div.subtle", "They stay stopped – start them by hand when memory is calm."))) : null,
 			h("div.section-label", { style: { marginTop: "4px" } }, "What it did"),
 			actions.length
@@ -81,7 +89,11 @@ export default function health(route, app) {
 		};
 		const tightB = setting("tight_mb", 900) * 1048576;
 		set("mem", mem(s.mem_available, 2), s.mem_total ? `of ${mem(s.mem_total, 1)}${s.swap_used ? ` · swap ${mem(s.swap_used)}` : ""}` : "", s.mem_available < setting("critical_mb", 450) * 1048576 ? "bad" : s.mem_available < tightB ? "warn" : "");
-		set("psi", s.psi_some10 === null ? "–" : `${Number(s.psi_some10).toFixed(1)} %`, s.psi_full10 === null ? "some, avg 10 s" : `some · full ${Number(s.psi_full10).toFixed(1)} %`, s.psi_full10 > setting("critical_psi", 10) ? "bad" : s.psi_some10 > setting("tight_psi", 20) ? "warn" : "");
+		if (s.psi_some10 === null || s.psi_some10 === undefined)
+			// no PSI in the Pi's kernel: major page faults per second are its sign of memory running out
+			set("psi", s.faults === null || s.faults === undefined ? "–" : `${Number(s.faults).toFixed(s.faults < 10 ? 1 : 0)} /s`, "page faults, avg 15 s", s.faults > setting("critical_faults", 250) ? "bad" : s.faults > setting("tight_faults", 50) ? "warn" : "");
+		else
+			set("psi", `${Number(s.psi_some10).toFixed(1)} %`, s.psi_full10 === null ? "some, avg 10 s" : `some · full ${Number(s.psi_full10).toFixed(1)} %`, s.psi_full10 > setting("critical_psi", 10) ? "bad" : s.psi_some10 > setting("tight_psi", 20) ? "warn" : "");
 		set("temp", s.temp === null ? "–" : `${s.temp.toFixed(1)} °C`, throttledText(s.throttled) ? `throttled ${throttledText(s.throttled)}` : "not throttled", s.temp >= 75 ? "bad" : s.temp >= 62 ? "warn" : "");
 		set("load", s.load1 === null ? "–" : Number(s.load1).toFixed(2), `${[s.load5, s.load15].map(v => (v === null ? "–" : Number(v).toFixed(2))).join(" · ")}${s.cpu !== null ? ` · CPU ${Math.round(s.cpu)} %` : ""}`, s.load1 > 4 ? "bad" : s.load1 > 3 ? "warn" : "");
 		const du = s.disk?.total ? s.disk.used / s.disk.total : null;
@@ -116,14 +128,24 @@ export default function health(route, app) {
 			min: 0,
 			thresholds: [{ value: setting("tight_mb", 900), label: "tight", tone: "var(--warning)" }, { value: setting("critical_mb", 450), label: "critical", tone: "var(--danger)" }]
 		}));
-		card("Memory pressure", "PSI, avg 10 s", timeChart({
-			series: [{ key: "some", label: "some", tone: "var(--warning)" }, { key: "full", label: "full", tone: "var(--danger)" }],
-			points: pts(s => ({ some: s.psi_some10, full: s.psi_full10 })),
-			format: v => `${v.toFixed(1)} %`,
-			axisFormat: v => `${Math.round(v)} %`,
-			min: 0,
-			thresholds: [{ value: setting("tight_psi", 20), label: "tight (some)", tone: "var(--warning)" }, { value: setting("critical_psi", 10), label: "critical (full)", tone: "var(--danger)" }]
-		}));
+		if (noPsi())
+			card("Memory pressure", "major page faults per second, avg 15 s", timeChart({
+				series: [{ key: "f", label: "faults", tone: "var(--warning)" }, { key: "w", label: "swap in", tone: "var(--danger)" }],
+				points: pressurePts(),
+				format: v => `${v.toFixed(v < 10 ? 1 : 0)} /s`,
+				axisFormat: v => `${Math.round(v)}`,
+				min: 0,
+				thresholds: [{ value: setting("tight_faults", 50), label: "tight", tone: "var(--warning)" }, { value: setting("critical_faults", 250), label: "critical", tone: "var(--danger)" }]
+			}));
+		else
+			card("Memory pressure", "PSI, avg 10 s", timeChart({
+				series: [{ key: "some", label: "some", tone: "var(--warning)" }, { key: "full", label: "full", tone: "var(--danger)" }],
+				points: pressurePts(),
+				format: v => `${v.toFixed(1)} %`,
+				axisFormat: v => `${Math.round(v)} %`,
+				min: 0,
+				thresholds: [{ value: setting("tight_psi", 20), label: "tight (some)", tone: "var(--warning)" }, { value: setting("critical_psi", 10), label: "critical (full)", tone: "var(--danger)" }]
+			}));
 		card("Temperature", "SoC", timeChart({
 			series: [{ key: "t", label: "Temperature", tone: "var(--secondary)" }],
 			points: pts(s => ({ t: s.temp })),
@@ -199,7 +221,7 @@ export default function health(route, app) {
 	function rebuildPoints(i) {
 		return [
 			() => pts(s => ({ a: s.mem_available === null ? null : s.mem_available / MB })),
-			() => pts(s => ({ some: s.psi_some10, full: s.psi_full10 })),
+			() => pressurePts(),
 			() => pts(s => ({ t: s.temp })),
 			() => pts(s => ({ l1: s.load1, l5: s.load5, l15: s.load15 })),
 			() => pts(s => ({ c: s.cpu }))

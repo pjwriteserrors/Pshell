@@ -1,8 +1,10 @@
 """Backups of this machine with restic into the NAS (docs/nas.md "PC side").
 
-One repository per host at `<nas>/restic/<host>/` (the server's REST
-backend, Basic auth device/token through RESTIC_REST_USERNAME/PASSWORD,
-never on a command line). The repository password is made once and kept
+One repository per device at `<nas>/restic/<device id>/`: the server's REST
+backend lets a device without admin reach only its own (the PC's id is its
+host name, a laptop paired through pshell-core has a `dev_…` id); restic's
+`--host` stays the host name. Basic auth device/token through
+RESTIC_REST_USERNAME/PASSWORD, never on a command line. The repository password is made once and kept
 in the keyring (`secret-tool`, service pshell-nas, key restic) or, without
 one, in `~/.local/state/pshell/nas-restic.key` (mode 600). Lose it and the
 backups cannot be read: the settings page shows where it is.
@@ -108,7 +110,7 @@ class Repo:
     def __init__(self, nas, host=None, repo=None):
         self.nas = nas
         self.host = host or config.hostname()
-        self.repo = repo or f"rest:{nas.address}/restic/{self.host}/"
+        self.repo = repo or f"rest:{nas.address}/restic/{nas.device or self.host}/"
         self._snapshots = (0, [])
 
     def env(self):

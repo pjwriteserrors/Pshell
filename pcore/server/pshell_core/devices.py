@@ -62,8 +62,12 @@ async def add_device(request):
 
 
 async def patch_device(request):
-    who = need(request, "admin")
     data = await body(request)
+    who = request.get("who")
+    # a device keeps its own name and mac (wake-on-LAN) up to date; scopes and kind stay an admin's
+    own = who is not None and who.kind == "device" and who.id == request.match_info["id"]
+    if not (own and set(data) <= {"name", "mac"}):
+        who = need(request, "admin")
     a = request.app["auth"]
     row = a.update_device(request.match_info["id"], name=data.get("name"), scopes=data.get("scopes"),
                           mac=data.get("mac"), kind=data.get("kind"))

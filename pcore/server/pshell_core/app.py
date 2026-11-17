@@ -133,6 +133,17 @@ async def tick(app):
         print("health:", repr(error), flush=True)
 
 
+async def watcher(app):
+    """The guard between samples: memory can run out well within 30 s."""
+    sampler, guard = app["sampler"], app["guard"]
+    while True:
+        await asyncio.sleep(app["config"].guard_tick)
+        try:
+            await guard.check(await asyncio.to_thread(sampler.quick))
+        except Exception as error:  # noqa: BLE001 – the loop must go on
+            print("guard:", repr(error), flush=True)
+
+
 async def ticker(app):
     wake = app["wake"]
     while True:
@@ -199,7 +210,7 @@ def build(config):
     app.router.add_get("/{tail:.*}", static_handler(config.web))
 
     async def startup(app):
-        app["background"] = [asyncio.ensure_future(job) for job in (ticker(app), housekeeping(app))]
+        app["background"] = [asyncio.ensure_future(job) for job in (ticker(app), watcher(app), housekeeping(app))]
 
     async def cleanup(app):
         for job in app.get("background", []):

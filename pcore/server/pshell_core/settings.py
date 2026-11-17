@@ -19,6 +19,10 @@ DEFAULTS = {
     "critical_mb": 450,
     "tight_psi": 20,
     "critical_psi": 10,
+    # major page faults per second over 15 s: without swap (and without PSI, as on the Pi's
+    # kernel) running out of memory shows as program pages read back again and again
+    "tight_faults": 50,
+    "critical_faults": 250,
     "guard_stop": True,
     "alerts.login_new_ip": True,
     "alerts.failed": 3,
@@ -28,7 +32,7 @@ DEFAULTS = {
 CRITICAL = {"totp_required", "guard_stop"}
 
 LIMITS = {"session_days": (1, 365), "tight_mb": (50, 16384), "critical_mb": (20, 16384),
-          "tight_psi": (0, 100), "critical_psi": (0, 100), "alerts.failed": (1, 100), "history_days": (1, 30)}
+          "tight_psi": (0, 100), "critical_psi": (0, 100), "tight_faults": (1, 100000), "critical_faults": (1, 100000), "alerts.failed": (1, 100), "history_days": (1, 30)}
 
 
 @dataclass
@@ -44,6 +48,7 @@ class Config:
     own_container: str = "pshell-core"
     tick: float = 30.0                # health sample and service probe interval
     guard_hold: float = 120.0         # how long below the limits before the guard steps down
+    guard_tick: float = 5.0           # the guard's own quick look at memory between samples
     probe_host: str = "127.0.0.1"
     dev: bool = False
 
@@ -62,6 +67,7 @@ def from_env(**overrides):
         own_container=env.get("CORE_CONTAINER", "pshell-core"),
         tick=float(env.get("CORE_TICK", "30")),
         guard_hold=float(env.get("CORE_GUARD_HOLD", "120")),
+        guard_tick=float(env.get("CORE_GUARD_TICK", "5")),
         probe_host=env.get("CORE_PROBE_HOST", "127.0.0.1"),
     )
     values.update({key: value for key, value in overrides.items() if value is not None})

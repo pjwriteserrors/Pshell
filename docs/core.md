@@ -132,6 +132,7 @@ user or a device with core `read`; changes need `admin` unless said.
   when readable, else null), `disk` for `/storage` (`used, total`), `uptime`, `containers` mem by name
 - `GET /api/health` (public, no details: `{ok, version}`), `GET /api/health/now` → the last sample,
   `GET /api/health/history?hours=24` → samples (kept 7 days, minute averages after 1 day)
+- the guard also looks every 5 s on its own (`CORE_GUARD_TICK`): memory, PSI and the fault rate
 - **guard** levels from the newest sample: `ok`, `tight` (`mem_available < tight_mb` or
   `psi_some10 > tight_psi`), `critical` (`mem_available < critical_mb` or `psi_full10 > critical_psi`).
   On entering `tight`: `POST http://127.0.0.1:<port>/api/core/pressure {level}` with `X-Service-Key`
@@ -156,6 +157,8 @@ First message after connecting: `{type: "hello", services, guard, health}`.
 | `critical_mb` | 450 | |
 | `tight_psi` | 20 | `some avg10` % |
 | `critical_psi` | 10 | `full avg10` % |
+| `tight_faults` | 50 | major page faults per second, avg 15 s (`/proc/vmstat`): the sign a kernel without PSI (the Pi's) still gives |
+| `critical_faults` | 250 | |
 | `guard_stop` | true | critical: stop `shed: stop` containers at `critical` |
 | `alerts.login_new_ip` | true | event + log when a user signs in from an address not seen before |
 | `alerts.failed` | 3 | failures within 10 min that raise an alert event |

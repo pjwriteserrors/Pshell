@@ -23,11 +23,14 @@ def level_of(sample, settings):
     available = sample.get("mem_available")
     some = sample.get("psi_some10")
     full = sample.get("psi_full10")
+    faults = sample.get("faults")
     if (available is not None and available < settings.get("critical_mb")
-            or full is not None and full > settings.get("critical_psi")):
+            or full is not None and full > settings.get("critical_psi")
+            or faults is not None and faults > settings.get("critical_faults")):
         return "critical"
     if (available is not None and available < settings.get("tight_mb")
-            or some is not None and some > settings.get("tight_psi")):
+            or some is not None and some > settings.get("tight_psi")
+            or faults is not None and faults > settings.get("tight_faults")):
         return "tight"
     return "ok"
 
@@ -81,12 +84,13 @@ class Guard:
         was, self.level, self.since = self.level, level, time.time()
         available = sample.get("mem_available")
         self.note(f"{was} → {level} ({available} MB available, psi some {sample.get('psi_some10')}"
-                  f" full {sample.get('psi_full10')})")
+                  f" full {sample.get('psi_full10')}, {sample.get('faults')} faults/s)")
         told = await self.tell(level)
         stopped = []
         if level == "critical" and self.settings.get("guard_stop"):
             stopped = await self.stop_sheddable()
         self.log.add("pressure", "guard", "", {"level": level, "was": was, "available_mb": available,
+                                               "faults": sample.get("faults"),
                                                "told": told, "stopped": stopped})
         self.hub.emit("pressure", level=level, was=was, available_mb=available, told=told, stopped=stopped)
 

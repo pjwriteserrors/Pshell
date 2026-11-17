@@ -72,11 +72,15 @@ SettingsPage {
 
 	// ── the history ──────────────────────────────────────────────────────
 	property string metric: "memory"
+	// the Pi's kernel has no PSI: the guard then goes by major page faults per second
+	readonly property bool noPsi: Netcore.health?.psi_some10 === null || Netcore.health?.psi_some10 === undefined
 	readonly property var metrics: ({
 		memory: { label: "Memory used", unit: "", of: s => Math.max(0, Number(s.mem_total) - Number(s.mem_available)), text: v => Format.bytes(v) },
 		temp: { label: "Temperature", unit: " °C", of: s => Number(s.temp) || 0, text: v => `${v.toFixed(1)} °C` },
 		load: { label: "Load", unit: "", of: s => Number(s.load1) || 0, text: v => v.toFixed(2) },
-		pressure: { label: "Memory pressure", unit: " %", of: s => Number(s.psi_some10) || 0, text: v => `${v.toFixed(1)} %` }
+		pressure: root.noPsi
+			? { label: "Page faults", unit: " /s", of: s => Number(s.faults) || 0, text: v => `${v.toFixed(v < 10 ? 1 : 0)} /s` }
+			: { label: "Memory pressure", unit: " %", of: s => Number(s.psi_some10) || 0, text: v => `${v.toFixed(1)} %` }
 	})
 	readonly property var series: {
 		const of = root.metrics[root.metric].of;
@@ -539,7 +543,9 @@ SettingsPage {
 
 				StyledText {
 					Layout.fillWidth: true
-					text: `Tight below ${Netcore.setting("tight_mb", 900)} MB free or ${Netcore.setting("tight_psi", 20)} % pressure: the NAS pauses its Pi work. Critical below ${Netcore.setting("critical_mb", 450)} MB or ${Netcore.setting("critical_psi", 10)} % full pressure${Netcore.setting("guard_stop", true) ? ": containers that may be stopped are stopped" : ""}.`
+					text: root.noPsi
+						? `Tight below ${Netcore.setting("tight_mb", 900)} MB free or above ${Netcore.setting("tight_faults", 50)} page faults/s: the NAS pauses its Pi work. Critical below ${Netcore.setting("critical_mb", 450)} MB or above ${Netcore.setting("critical_faults", 250)}/s${Netcore.setting("guard_stop", true) ? ": containers that may be stopped are stopped" : ""}.`
+						: `Tight below ${Netcore.setting("tight_mb", 900)} MB free or ${Netcore.setting("tight_psi", 20)} % pressure: the NAS pauses its Pi work. Critical below ${Netcore.setting("critical_mb", 450)} MB or ${Netcore.setting("critical_psi", 10)} % full pressure${Netcore.setting("guard_stop", true) ? ": containers that may be stopped are stopped" : ""}.`
 					tone: Theme.textMuted
 					font.pixelSize: Theme.size.small
 					wrapMode: Text.Wrap
@@ -1028,7 +1034,32 @@ SettingsPage {
 		}
 
 		Amount {
+			key: "tight_faults"
+			visible: root.noPsi
+			fallback: 50
+			label: "Tight above"
+			icon: "gauge"
+			from: 10
+			to: 500
+			step: 10
+			unit: " page faults/s"
+		}
+
+		Amount {
+			key: "critical_faults"
+			visible: root.noPsi
+			fallback: 250
+			label: "Critical above"
+			icon: "gauge"
+			from: 50
+			to: 2000
+			step: 50
+			unit: " page faults/s"
+		}
+
+		Amount {
 			key: "tight_psi"
+			visible: !root.noPsi
 			fallback: 20
 			label: "Tight above"
 			icon: "gauge"
@@ -1040,6 +1071,7 @@ SettingsPage {
 
 		Amount {
 			key: "critical_psi"
+			visible: !root.noPsi
 			fallback: 10
 			label: "Critical above"
 			icon: "gauge"

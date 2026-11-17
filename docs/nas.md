@@ -276,7 +276,8 @@ phone upload batch finished, SSD gone, undervoltage, temperature, task failed.
   `saves`, `devices` (which PC is awake)
 - `GET /api/snapshots`; `POST /api/snapshots` (now)
 - Restic REST backend at `/restic/{host}/…` (rest-server protocol v2,
-  Basic auth as WebDAV) for `scripts/nas/backup.py`
+  Basic auth as WebDAV) for `scripts/nas/backup.py`; `{host}` is the device id
+  (a device without admin reaches only its own repository)
 
 ### WebDAV
 `/dav/` – PROPFIND (depth 0/1), GET (Range), HEAD, PUT (atomic), DELETE

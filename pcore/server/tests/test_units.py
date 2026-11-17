@@ -102,8 +102,28 @@ def health():
     assert first["disk"]["total"] > 0 and first["containers"] == {"pshell-nas": 300}
     write_proc(tmp / "proc", available_mb=1234, idle=1300, busy=200)   # +100 busy, +300 idle → 25 %
     assert sampler.sample()["cpu"] == 25.0
+    # major faults per second over the window (the kernel without PSI): one reading says nothing
+    from unittest import mock
+    import pshell_core.health as health_mod
+    clock = [1000.0]
+    vmstat = tmp / "proc" / "vmstat"
+    with mock.patch.object(health_mod.time, "monotonic", lambda: clock[0]):
+        vm = Sampler(tmp / "proc", tmp / "sys", tmp)
+        vmstat.write_text("nr_free_pages 1\npswpin 10\npswpout 0\npgmajfault 5000\n")
+        assert vm.thrash() == {"faults": None, "swapin": None}
+        clock[0] += 5
+        vmstat.write_text("pswpin 10\npgmajfault 5010\n")
+        assert vm.thrash() == {"faults": 2.0, "swapin": 0.0}
+        for step in range(4):                 # 300 faults/s for 20 s: the window holds the last 15 s
+            clock[0] += 5
+            vmstat.write_text(f"pswpin {10 + 50 * (step + 1)}\npgmajfault {5010 + 1500 * (step + 1)}\n")
+            rate = vm.thrash()
+        assert rate["faults"] == 300.0 and rate["swapin"] == 10.0, rate
+        quick = vm.quick()
+        assert quick["mem_available"] == 1234 and "faults" in quick and "load1" not in quick
     # nothing readable: nulls, no exceptions
     empty = Sampler(tmp / "none", tmp / "none", tmp / "none").sample()
+    assert empty["faults"] is None and empty["swapin"] is None
     assert empty["mem_available"] is None and empty["temp"] is None and empty["throttled"] is None
     assert empty["disk"] is None and empty["cpu"] is None
 
@@ -135,6 +155,10 @@ def guard_levels():
     assert level_of({"mem_available": 400, "psi_some10": 0, "psi_full10": 0}, store) == "critical"
     assert level_of({"mem_available": 4000, "psi_some10": 0, "psi_full10": 11}, store) == "critical"
     assert level_of({"mem_available": None, "psi_some10": None, "psi_full10": None}, store) == "ok"
+    # no PSI (the Pi): the fault rate
+    assert level_of({"mem_available": 4000, "psi_some10": None, "faults": 3}, store) == "ok"
+    assert level_of({"mem_available": 4000, "psi_some10": None, "faults": 80}, store) == "tight"
+    assert level_of({"mem_available": 4000, "psi_some10": None, "faults": 400}, store) == "critical"
 
 
 def nas_import():

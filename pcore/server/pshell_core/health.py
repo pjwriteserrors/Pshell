@@ -7,11 +7,13 @@ stays a few MB on the SD card.
 """
 import json
 import os
+import threading
 import time
 from pathlib import Path
 
-NUMERIC = ("mem_total", "mem_available", "swap_used", "psi_some10", "psi_full10", "load1", "load5", "load15",
-           "cpu", "temp")
+NUMERIC = ("mem_total", "mem_available", "swap_used", "psi_some10", "psi_full10", "faults", "swapin", "load1",
+           "load5", "load15", "cpu", "temp")
+WINDOW = 15.0       # seconds the fault rate is averaged over
 
 
 def read(path):
@@ -27,6 +29,8 @@ class Sampler:
         self.sys = Path(sys)
         self.storage = storage
         self.last_cpu = None
+        self.vm = []         # (monotonic, pgmajfault, pswpin) of the last WINDOW seconds
+        self.vm_lock = threading.Lock()     # the sample and the guard's quick look run in threads
 
     def meminfo(self):
         values = {}
@@ -57,6 +61,39 @@ class Sampler:
                         out[f"psi_{parts[0]}10"] = float(value)
                     except ValueError:
                         pass
+        return out
+
+    def thrash(self):
+        """Major page faults and pages swapped in per second, averaged over WINDOW: the sign of
+        memory running out that a kernel without PSI still gives."""
+        values = {}
+        for line in (read(self.proc / "vmstat") or "").splitlines():
+            key, _, value = line.partition(" ")
+            if key in ("pgmajfault", "pswpin"):
+                try:
+                    values[key] = int(value)
+                except ValueError:
+                    pass
+        if "pgmajfault" not in values:
+            return {"faults": None, "swapin": None}
+        with self.vm_lock:
+            now = time.monotonic()
+            self.vm.append((now, values["pgmajfault"], values.get("pswpin", 0)))
+            while len(self.vm) > 2 and now - self.vm[1][0] >= WINDOW:
+                self.vm.pop(0)
+            first = self.vm[0]
+        span = now - first[0]
+        if span < 1:
+            return {"faults": None, "swapin": None}
+        return {"faults": round(max(0, values["pgmajfault"] - first[1]) / span, 1),
+                "swapin": round(max(0, values.get("pswpin", 0) - first[2]) / span, 1)}
+
+    def quick(self):
+        """What the guard looks at between samples (cheap: two small files)."""
+        out = {"at": time.time()}
+        out.update(self.meminfo())
+        out.update(self.pressure())
+        out.update(self.thrash())
         return out
 
     def load(self):
@@ -114,6 +151,7 @@ class Sampler:
         out = {"at": time.time()}
         out.update(self.meminfo())
         out.update(self.pressure())
+        out.update(self.thrash())
         out.update(self.load())
         out["cpu"] = self.cpu()
         out["temp"] = self.temperature()

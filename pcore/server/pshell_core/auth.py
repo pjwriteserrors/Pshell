@@ -32,6 +32,7 @@ LOCK = 900
 CONFIRM_SECONDS = 300
 ONLINE = 120
 NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}$")
+MAC = re.compile(r"^[0-9a-f]{2}(:[0-9a-f]{2}){5}$")
 ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789"
 
 
@@ -386,7 +387,10 @@ class Auth:
                 raise ValueError(f"kind is one of {', '.join(KINDS)}")
             self.db.run("UPDATE devices SET kind=? WHERE id=?", kind, ident)
         if mac is not None:
-            self.db.run("UPDATE devices SET mac=? WHERE id=?", str(mac)[:64], ident)
+            mac = str(mac).strip().lower().replace("-", ":")
+            if mac and not MAC.match(mac):
+                raise ValueError("A mac address looks like 3c:7c:3f:12:34:56")
+            self.db.run("UPDATE devices SET mac=? WHERE id=?", mac, ident)
         if scopes is not None:
             self.db.run("UPDATE devices SET scopes=? WHERE id=?", json.dumps(self.check_scopes(scopes)), ident)
         self.basic_cache.clear()
