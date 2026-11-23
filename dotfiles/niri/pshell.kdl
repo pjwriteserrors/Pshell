@@ -24,6 +24,20 @@ window-rule {
     open-fullscreen true
 }
 
+// a party's players (scripts/party.py, a gamescope each) share the screens:
+// party.py places them, plain and never see-through (the inactive ones are
+// every player but one)
+window-rule {
+    match app-id=r#"^pshell-party-\d+$"#
+    open-floating true
+    opacity 1.0
+    border { off; }
+    focus-ring { off; }
+    shadow { off; }
+    geometry-corner-radius 0
+    clip-to-geometry true
+}
+
 // every app's file chooser (Pshell Files, core/views/files/ChooserWindow.qml)
 // floats over the app like a dialog
 window-rule {
@@ -44,6 +58,13 @@ window-rule {
 // small (M) it is a strip that can sit in a corner
 window-rule {
     match app-id=r#"quickshell"# title=r#" – Music$|^Music$"#
+    open-floating true
+    open-focused true
+}
+
+// the shell's lyrics (core/views/rhymes/RhymesWindow.qml) float as well
+window-rule {
+    match app-id=r#"quickshell"# title=r#" – Rhymes$|^Rhymes$"#
     open-floating true
     open-focused true
 }

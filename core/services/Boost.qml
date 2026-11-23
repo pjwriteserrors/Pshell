@@ -21,14 +21,17 @@ Singleton {
 	readonly property bool enabled: Plugins.on("download-boost")
 	readonly property string daemon: `${Paths.scripts}/downloads/boost.py`
 	readonly property string socketPath: `${Paths.runtime}/boost.sock`
+	readonly property var youtube: /^https?:\/\/([\w-]+\.)?(youtube\.com|youtube-nocookie\.com|youtu\.be)\//i
 
 	property bool connected: false
 	// as the daemon last told: { id, name, path, url, host, mime, state, mode, error, note, received, total, speed, peak, eta,
-	//   connections, limit, wanted, most, speeds, parts, segments, started, finished, activeTime, average, bestSingle, browser }
-	// state: "running" | "paused" | "done" | "failed"; mode: "boost" | "single"
+	//   connections, limit, wanted, most, speeds, roles, parts, segments, started, finished, activeTime, average, bestSingle, browser, pick }
+	// pick: picking the fastest connections { on, phase: "measure" | "scout" | "duel" | "result" | "steal" | "fewer" | "more" | "enough" | "idle",
+	//   duels, won, steals, fights, last, lines, addrs, step, count }; encoding "gzip" with ratio: one compressed stream
+	// state: "running" | "paused" | "done" | "failed"; mode: "boost" | "single" | "media" (yt-dlp, with kind "video" | "audio")
 	property var jobs: []
-	// { connections, minSize }
-	property var settings: ({ connections: 8, minSize: 4194304 })
+	// { connections, minSize, pick, dnsMore }
+	property var settings: ({ connections: 8, minSize: 4194304, pick: true, dnsMore: true })
 	// offers being looked at, by browser key: the card says "Checking the server…"
 	property var checking: ({})
 	// links being added: their first request is under way
@@ -63,12 +66,13 @@ Singleton {
 		});
 	}
 
-	// a link typed or pasted: into the download folder, as fast as the server lets it
-	function add(url) {
+	// a link typed or pasted: into the download folder, as fast as the server lets it;
+	// a YouTube link with `media` ("video" | "audio") goes through yt-dlp
+	function add(url, media) {
 		const text = String(url || "").trim();
 		if (text === "") return;
 		root.adding += 1;
-		root.request("add", { url: text }, (data, error) => {
+		root.request("add", media ? { url: text, media: media } : { url: text }, (data, error) => {
 			root.adding = Math.max(0, root.adding - 1);
 			if (error || !data?.job) {
 				root.failedToAdd(text, error || "failed");
@@ -124,9 +128,10 @@ Singleton {
 			eta: job.eta,
 			started: job.started * 1000,
 			extra: {
-				url: job.url, mime: job.mime, error: job.error, host: job.host, mode: job.mode, note: job.note,
+				url: job.url, mime: job.mime, error: job.error, host: job.host, mode: job.mode, kind: job.kind ?? "", note: job.note,
 				connections: job.connections, limit: job.limit, wanted: job.wanted, most: job.most, speeds: job.speeds, parts: job.parts, segments: job.segments,
-				peak: job.peak, average: job.average, bestSingle: job.bestSingle, activeTime: job.activeTime, canResume: true
+				peak: job.peak, average: job.average, bestSingle: job.bestSingle, activeTime: job.activeTime, canResume: true,
+				roles: job.roles ?? [], pick: job.pick ?? null, encoding: job.encoding ?? "", ratio: job.ratio ?? 0
 			}
 		})));
 		// what is through is only kept here, among the downloads
@@ -268,15 +273,17 @@ Singleton {
 	Timer {
 		id: retry
 
-		interval: root.attempts < 12 ? 150 : 2000
+		interval: root.attempts < 20 ? 60 : 2000
 		repeat: true
+		triggeredOnStart: true
 		onTriggered: {
 			if (!root.enabled || root.connected) {
 				retry.stop();
 				return;
 			}
 			if (Date.now() - root.helloAt < 900) return;
-			if (root.attempts % 15 === 1) Quickshell.execDetached(["python3", "-u", root.daemon]);
+			// at once: a browser download waits for its answer (a daemon that runs already lets the new one go)
+			if (root.attempts % 15 === 0) Quickshell.execDetached(["python3", "-u", root.daemon]);
 			root.attempts += 1;
 			// a daemon that cannot start: what waits for it is told
 			if (root.attempts > 40) {
@@ -294,10 +301,12 @@ Singleton {
 	}
 
 	// The daemon is only kept while there is something for it: downloads, a
-	// request waiting. Without, the shell lets go and it leaves a minute later.
+	// request waiting, a browser that offers its downloads (so the offer needs
+	// no daemon to start first). Without, the shell lets go and it leaves a
+	// minute later.
 	property bool wanting: false
 	property bool stored: false
-	readonly property bool needed: root.enabled && (root.wanting || root.stored || root.jobs.some(job => job.state !== "done"))
+	readonly property bool needed: root.enabled && (root.wanting || root.stored || (Downloads.boost && Downloads.connected) || root.jobs.some(job => job.state !== "done"))
 
 	FileView {
 		path: `${Paths.state}/boost/jobs.json`

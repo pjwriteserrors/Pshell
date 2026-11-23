@@ -9,7 +9,8 @@ import Quickshell.Io
 // link without tracking parameters, a Teamwork link as its task ID, a colour
 // in the other notation. Only offers: the clipboard itself is never changed
 // until one of the toast's buttons is clicked. Copies from password
-// managers are not looked at.
+// managers are not looked at. A YouTube video's link is offered for download
+// instead, as video or only its sound (the downloader, Boost).
 Singleton {
 	id: root
 
@@ -19,7 +20,10 @@ Singleton {
 	property real lastAt: 0
 	// wl-paste reports the clipboard it finds at start, which nobody just copied
 	readonly property real startedAt: Date.now()
-	readonly property bool wanted: Plugins.on("clipboard-hints")
+	readonly property bool hints: Plugins.on("clipboard-hints")
+	readonly property bool wanted: root.hints || Boost.enabled
+	// one video, not a channel or a playlist
+	readonly property var youtubeVideo: /^https?:\/\/([\w-]+\.)?(youtube\.com\/(watch\?(.*&)?v=|shorts\/|live\/)|youtu\.be\/)[\w-]{6,}/i
 
 	onWantedChanged: watcher.running = root.wanted
 	Component.onCompleted: watcher.running = root.wanted
@@ -181,6 +185,11 @@ Singleton {
 		root.lastText = text;
 		root.lastAt = now;
 		if (again) return;
+		if (Boost.enabled && root.youtubeVideo.test(text.trim()) && !/\s/.test(text.trim())) {
+			if (!Notifs.dnd) root.offerDownload(text.trim());
+			return;
+		}
+		if (!root.hints) return;
 		const options = root.options(text);
 		if (options.length === 0 || Notifs.dnd) return;
 		Notifs.pushInternal("done", options[0].label, root.preview(options[0].value), {
@@ -188,6 +197,47 @@ Singleton {
 			duration: 7000,
 			actions: options.slice(0, 3).map(option => ({ label: option.label, icon: option.run ? "play_circle" : "content_copy", run: option.run ?? (() => root.copy(option.value)) }))
 		});
+	}
+
+	// the video's title from YouTube (oEmbed) when it comes quickly, else the link
+	function offerDownload(link) {
+		let shown = false;
+		const show = title => {
+			if (shown) return;
+			shown = true;
+			Notifs.pushInternal("done", title || root.preview(link), title ? root.preview(link) : "", {
+				icon: "youtube",
+				app: "Downloads",
+				duration: 10000,
+				actions: [
+					{ label: "Video", icon: "movie_outline", run: () => Boost.add(link, "video") },
+					{ label: "Audio", icon: "music_note", run: () => Boost.add(link, "audio") }
+				]
+			});
+		};
+		const request = new XMLHttpRequest();
+		request.timeout = 1500;
+		request.onreadystatechange = () => {
+			if (request.readyState !== XMLHttpRequest.DONE) return;
+			let title = "";
+			try {
+				title = String(JSON.parse(request.responseText).title || "");
+			} catch (error) {}
+			show(title);
+		};
+		request.open("GET", `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(link)}`);
+		request.send();
+		titleWait.show = show;
+		titleWait.restart();
+	}
+
+	Timer {
+		id: titleWait
+
+		property var show: null
+
+		interval: 1800
+		onTriggered: if (titleWait.show) titleWait.show("")
 	}
 
 	Process {

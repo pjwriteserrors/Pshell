@@ -39,6 +39,16 @@ OrcaSlicer ──export──▶ ~/Prints/inbox/
   stopping a print are hold buttons (`HoldButton`): a fill runs while held
   and they fire when it is through – a click alone only wiggles. The slider
   scrubs the layers. A print that finished throws confetti on the panel.
+- **Carry on** a print that was stopped or failed: the job shows where it
+  stopped and *Hold to carry on from layer N*, with the layer (± buttons),
+  the ACE slot for the rest (another spool is fine; nothing is sliced again)
+  and how Z is known. `scripts/printer/resume.py` copies the G-code that was
+  printed (`printed.gcode` in the job folder, kept at every start) from that
+  layer on; its `G9111` start (Z homing and levelling on the bed) is left out:
+  heat, `G28 X Y`, Z either still known from before the stop (a printer that
+  let Z go refuses the first Z move) or the gap nozzle–bed measured by hand
+  (`SET_KINEMATIC_POSITION`), then `T<tool>` loads the picked slot and purges.
+  Started without levelling or calibration. Untested on the printer so far.
 - **ACE** page: the spools side by side on a shelf (`AceShelf`) – the one
   feeding turns and glows, its filament runs up as a flowing line – humidity
   and temperature in the box, drying with presets per material.

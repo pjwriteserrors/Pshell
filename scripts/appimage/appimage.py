@@ -1008,8 +1008,10 @@ def github_latest(origin):
         fitting.sort(key=lambda asset: (arch not in asset["name"] and not (arch == "x86_64" and "amd64" in asset["name"])))
         if fitting:
             asset = fitting[0]
+            # its .zsync beside it: an update needs only what changed
+            delta = next((other["browser_download_url"] for other in release.get("assets", []) if other.get("name") == asset["name"] + ".zsync"), "")
             return {"version": str(release.get("tag_name") or "").lstrip("v") or version_of(asset["name"], None),
-                    "url": asset["browser_download_url"], "name": asset["name"], "size": asset.get("size", 0),
+                    "url": asset["browser_download_url"], "name": asset["name"], "size": asset.get("size", 0), "zsync": delta,
                     "notes": str(release.get("body") or "")[:2000], "page": release.get("html_url", ""),
                     "date": release.get("published_at", "")}
     return None
@@ -1025,7 +1027,7 @@ def zsync_latest(origin):
     url = urllib.parse.urljoin(origin["url"], fields.get("URL", ""))
     name = fields.get("Filename", Path(urllib.parse.urlparse(url).path).name)
     return {"version": version_of(name, None), "url": url, "name": name, "size": int(fields.get("Length", 0) or 0),
-            "sha1": fields.get("SHA-1", "").lower()}
+            "sha1": fields.get("SHA-1", "").lower(), "zsync": origin["url"]}
 
 
 def url_latest(origin):
@@ -1110,9 +1112,11 @@ def check(target=""):
     return {"checked": out, "updates": [entry for entry in out if entry.get("update")]}
 
 
-def download(url, step="download"):
+def download(url, step="download", cancel=None, state=None):
     """The file behind `url` into the cache, with progress; its path and the
-    server's word on it (etag, modified, size)."""
+    server's word on it (etag, modified, size). With `cancel` (an Event) it
+    stops when that is set and returns (None, seen); `state` then knows the
+    part file and how much of it came."""
     import urllib.error
     folder = CACHE / "downloads" / hashlib.sha1(url.encode()).hexdigest()[:12]
     folder.mkdir(parents=True, exist_ok=True)
@@ -1131,13 +1135,23 @@ def download(url, step="download"):
         target = folder / name
         temp = folder / f".{name}.part"
         done, last, started = 0, 0.0, time.monotonic()
+        if state is not None:
+            state.update(temp=temp, total=total, target=target)
         with open(temp, "wb") as file:
             while True:
+                if cancel is not None and cancel.is_set():
+                    file.flush()
+                    return None, seen
                 chunk = answer.read(1 << 18)
                 if not chunk:
                     break
                 file.write(chunk)
                 done += len(chunk)
+                if state is not None:
+                    state["done"] = done
+                if cancel is not None and cancel.is_set():
+                    file.flush()
+                    return None, seen
                 now = time.monotonic()
                 if now - last > 0.1:
                     speed = done / max(0.001, now - started)
@@ -1147,6 +1161,75 @@ def download(url, step="download"):
     target.chmod(0o755)
     emit({"step": step, "progress": 1, "done": done, "total": done})
     return target, seen
+
+
+def download_delta(found, old):
+    """The update downloaded whole, and beside it worked out what the installed
+    file already has (the .zsync). When the blocks still missing are clearly
+    fewer than what the download has yet to bring, the download stops and
+    only those are fetched – what it brought counts too. Anything amiss: the
+    whole file as always."""
+    import threading
+    import zsync
+    cancel = threading.Event()
+    either = threading.Event()
+    state = {"done": 0}
+    result = {}
+    plans = {}
+
+    def whole():
+        try:
+            result["path"], result["seen"] = download(found["url"], cancel=cancel, state=state)
+        except Exception as error:  # noqa: BLE001
+            result["error"] = error
+        either.set()
+
+    def work_out():
+        try:
+            plans["planned"] = zsync.plan(found["zsync"], str(old))
+        except Exception:  # noqa: BLE001 – no delta: the download goes on
+            plans["planned"] = None
+        either.set()
+
+    runner = threading.Thread(target=whole, daemon=True)
+    runner.start()
+    threading.Thread(target=work_out, daemon=True).start()
+    # whichever is first: the download through, or the plan to decide by
+    either.wait()
+    planned = plans.get("planned")
+    if planned is not None and runner.is_alive():
+        fields = planned[0]
+        have = state.get("done", 0)
+        _ranges, need = zsync.still_needed(fields, planned[2], have)
+        if need < 0.7 * (fields["size"] - have):
+            cancel.set()
+            runner.join()
+            if "path" in result and result["path"] is not None:
+                # it was through meanwhile
+                return result["path"], result.get("seen", {})
+            have = min(state.get("done", 0), fields["size"])
+            target = state.get("target") or (CACHE / "downloads" / f"{found.get('name') or 'update'}.AppImage")
+            size = fields["size"]
+            started = time.monotonic()
+
+            def progress(done, need_now):
+                elapsed = max(0.001, time.monotonic() - started)
+                emit({"step": "download", "progress": (size - need_now + done) / size, "done": size - need_now + done, "total": size,
+                      "speed": int(done / elapsed), "delta": True})
+
+            try:
+                figures = zsync.build(planned, found["url"], str(old), str(target), have_path=str(state.get("temp", "")), have=have, progress=progress)
+                emit({"step": "download", "progress": 1, "done": size, "total": size, "delta": figures})
+                if state.get("temp"):
+                    Path(state["temp"]).unlink(missing_ok=True)
+                Path(target).chmod(0o755)
+                return Path(target), {}
+            except Exception:  # noqa: BLE001 – the whole file after all
+                return download(found["url"])
+    runner.join()
+    if "error" in result:
+        raise result["error"]
+    return result["path"], result.get("seen", {})
 
 
 def fetch(url):
@@ -1185,7 +1268,11 @@ def update(app_id):
     mode = app.get("mode", "file")
     if mode == "unpacked" and running(app.get("file", "")):
         raise RuntimeError("It is running")
-    path, seen = download(found["url"])
+    old = Path(app.get("file", ""))
+    if found.get("zsync") and mode == "file" and old.is_file():
+        path, seen = download_delta(found, old)
+    else:
+        path, seen = download(found["url"])
     if not kind_of(path):
         raise RuntimeError("The update is not an AppImage")
     if origin.get("kind") == "url":

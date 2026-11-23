@@ -72,6 +72,101 @@ Singleton {
 
 	readonly property var shown: root.games.filter(game => !game.hidden)
 
+	// ── shelves ────────────────────────────────────────────────────────────
+	// the user's own: [{ id, name, games: [id …] }], in their order; the
+	// genres' come from the games (Steam's store, games.py genres)
+	property var shelves: []
+
+	function setShelves(list) {
+		root.shelves = list;
+		root.shelvesDirty = true;
+		if (!shelfWriter.running) root.writeShelves();
+	}
+
+	// one write at a time, the latest last
+	property bool shelvesDirty: false
+
+	function writeShelves() {
+		root.shelvesDirty = false;
+		shelfWriter.command = ["python3", root.script, "shelves", JSON.stringify(root.shelves)];
+		shelfWriter.running = true;
+	}
+
+	function shelf(id) {
+		return root.shelves.find(each => each.id === id) ?? null;
+	}
+
+	function changeShelf(id, change) {
+		root.setShelves(root.shelves.map(each => each.id === id ? Object.assign({}, each, change) : each));
+	}
+
+	// a new shelf (after `after`, else at the end); its id
+	function newShelf(name, gameIds, after) {
+		const id = Math.random().toString(16).slice(2, 10);
+		const list = root.shelves.slice();
+		const at = list.findIndex(each => each.id === after);
+		list.splice(at >= 0 ? at + 1 : list.length, 0, { id: id, name: String(name || "").trim() || "New shelf", games: (gameIds ?? []).slice() });
+		root.setShelves(list);
+		return id;
+	}
+
+	function renameShelf(id, name) {
+		const text = String(name || "").trim();
+		if (text !== "") root.changeShelf(id, { name: text });
+	}
+
+	function deleteShelf(id) {
+		root.setShelves(root.shelves.filter(each => each.id !== id));
+	}
+
+	function moveShelf(id, delta) {
+		const list = root.shelves.slice();
+		const at = list.findIndex(each => each.id === id);
+		const to = at + delta;
+		if (at < 0 || to < 0 || to >= list.length) return;
+		list.splice(to, 0, list.splice(at, 1)[0]);
+		root.setShelves(list);
+	}
+
+	// puts a game on a shelf at `at` (the end when negative); one that is
+	// on it already moves there
+	function shelve(id, gameId, at) {
+		const shelf = root.shelf(id);
+		if (!shelf) return;
+		const games = shelf.games.slice();
+		const was = games.indexOf(gameId);
+		let to = at === undefined || at < 0 ? games.length : at;
+		if (was >= 0) {
+			games.splice(was, 1);
+			if (was < to) to--;
+		}
+		games.splice(Math.max(0, Math.min(games.length, to)), 0, gameId);
+		root.changeShelf(id, { games: games });
+	}
+
+	function unshelve(id, gameId) {
+		const shelf = root.shelf(id);
+		if (shelf) root.changeShelf(id, { games: shelf.games.filter(each => each !== gameId) });
+	}
+
+	// from one shelf to another in one write
+	function moveBetween(from, to, gameId, at) {
+		const list = root.shelves.map(each => {
+			if (each.id === from && from !== to) return Object.assign({}, each, { games: each.games.filter(game => game !== gameId) });
+			if (each.id !== to) return each;
+			const games = each.games.slice();
+			const was = games.indexOf(gameId);
+			let index = at === undefined || at < 0 ? games.length : at;
+			if (was >= 0) {
+				games.splice(was, 1);
+				if (was < index) index--;
+			}
+			games.splice(Math.max(0, Math.min(games.length, index)), 0, gameId);
+			return Object.assign({}, each, { games: games });
+		});
+		root.setShelves(list);
+	}
+
 	function game(id) {
 		return root.games.find(each => each.id === id) ?? null;
 	}
@@ -187,6 +282,17 @@ Singleton {
 		});
 	}
 
+	// by id: ProtonDB's rating (games.py tiers), the kept ones first, the
+	// ones asked anew a moment later
+	property var tiers: ({})
+	property bool tiersAsked: false
+
+	function loadTiers() {
+		root.call(["tiers"], null, answer => {
+			if (answer.tiers) root.tiers = answer.tiers;
+		});
+	}
+
 	// the full stats when they were asked, else the brief
 	function statsOf(id) {
 		return root.stats[id] ?? root.briefs[id] ?? null;
@@ -295,6 +401,7 @@ Singleton {
 
 	function remove(id) {
 		root.games = root.games.filter(each => each.id !== id);
+		if (root.shelves.some(each => each.games.indexOf(id) >= 0)) root.shelves = root.shelves.map(each => Object.assign({}, each, { games: each.games.filter(game => game !== id) }));
 		root.call(["remove", id]);
 	}
 
@@ -308,6 +415,34 @@ Singleton {
 				Sounds.play("error");
 			}
 			if (done) done(answer.game ?? null, answer.error ?? "");
+		});
+	}
+
+	// what ProtonDB's reports favour for a store app ("steam:<appid>") or a
+	// name: done({appid, tier, runner, tool, label, reports})
+	function protonDb(what, steam, done) {
+		root.call(["protondb", what].concat(steam ? ["steam"] : []), done);
+	}
+
+	// ProtonDB's reports, fetched once a month in the background
+	property bool protonDbChecked: false
+
+	// the Proton Steam runs a game with ("" for Steam's own choice); Steam restarts for it
+	property string toolSetting: ""
+
+	function setTool(id, tool) {
+		const game = root.game(id);
+		if (!game || root.toolSetting !== "") return;
+		root.toolSetting = id;
+		root.call(["tool", id, tool], answer => {
+			root.toolSetting = "";
+			if (answer.error) {
+				Notifs.pushInternal("error", "Proton not changed", answer.error, { icon: "steam" });
+				return;
+			}
+			root.patch(id, { tool: tool });
+			const name = root.runners.find(each => each.tool === tool)?.name ?? (tool || "Steam's choice");
+			Notifs.pushInternal("done", `${game.name}: ${name}`, answer.restarted ? "Steam was restarted for it" : "", { icon: "steam", sound: "taskDone" });
 		});
 	}
 
@@ -399,9 +534,19 @@ Singleton {
 				root.runners = data.runners || [];
 				root.gridKey = !!data.gridKey;
 				if (JSON.stringify(data.games) !== JSON.stringify(root.games)) root.games = data.games;
+				if (!root.shelvesDirty && !shelfWriter.running && JSON.stringify(data.shelves || []) !== JSON.stringify(root.shelves)) root.shelves = data.shelves || [];
 				root.loaded = true;
 				root.loadBriefs();
+				if (!root.tiersAsked) {
+					root.tiersAsked = true;
+					root.loadTiers();
+				}
 				if (data.games.some(game => game.needsArt || !game.art?.hero)) root.fetchArt();
+				if (!root.protonDbChecked && data.runners?.length > 0) {
+					root.protonDbChecked = true;
+					root.call(["protondb-update"]);
+				}
+				if (data.games.some(game => !(game.genres?.length > 0) || game.coop === null) && !genreFetcher.running) genreFetcher.running = true;
 			}
 		}
 	}
@@ -418,6 +563,29 @@ Singleton {
 					return;
 				}
 				if (data.id) root.patch(data.id, { art: data.art, artChoice: data.artChoice, needsArt: !data.art?.cover });
+			}
+		}
+	}
+
+	Process {
+		id: shelfWriter
+
+		onExited: if (root.shelvesDirty) root.writeShelves()
+	}
+
+	Process {
+		id: genreFetcher
+
+		command: ["python3", "-u", root.script, "genres"]
+		stdout: SplitParser {
+			onRead: line => {
+				let data = {};
+				try {
+					data = JSON.parse(line);
+				} catch (error) {
+					return;
+				}
+				if (data.id && Array.isArray(data.genres)) root.patch(data.id, { genres: data.genres, coop: data.coop ?? null });
 			}
 		}
 	}

@@ -50,6 +50,9 @@ class Config:
     guard_hold: float = 120.0         # how long below the limits before the guard steps down
     guard_tick: float = 5.0           # the guard's own quick look at memory between samples
     probe_host: str = "127.0.0.1"
+    baikal_db: Path = Path("/baikal/db.sqlite")
+    baikal_config: Path = Path("/storage/baikal/config/baikal.yaml")
+    baikal_url: str = "http://127.0.0.1:8082/dav.php"
     dev: bool = False
 
 
@@ -69,6 +72,9 @@ def from_env(**overrides):
         guard_hold=float(env.get("CORE_GUARD_HOLD", "120")),
         guard_tick=float(env.get("CORE_GUARD_TICK", "5")),
         probe_host=env.get("CORE_PROBE_HOST", "127.0.0.1"),
+        baikal_db=Path(env.get("CORE_BAIKAL_DB", "/baikal/db.sqlite")),
+        baikal_config=Path(env.get("CORE_BAIKAL_CONFIG", "/storage/baikal/config/baikal.yaml")),
+        baikal_url=env.get("CORE_BAIKAL_URL", "http://127.0.0.1:8082/dav.php"),
     )
     values.update({key: value for key, value in overrides.items() if value is not None})
     return Config(**values)

@@ -48,7 +48,9 @@ MPVPAPER_LAYER="background"
 MPVPAPER_UNIT_PREFIX="quickshell-mpvpaper-"
 MPVPAPER_UNIT="${MPVPAPER_UNIT_PREFIX}all.service"
 MPVPAPER_SOCKET="$THEME_RUNTIME_DIR/mpvpaper-all.sock"
-# the video the player plays, to tell a player that is up from the right one
+# the video the player plays (its path, then its signature), to tell a player
+# that is up from the right one: a picture of the day keeps its file name when
+# a new video replaces it, and the player still has the old one open
 MPVPAPER_VIDEO_FILE="$THEME_RUNTIME_DIR/mpvpaper-all.video"
 THEME_LEAVING_FRAME="$THEME_CURRENT_DIR/leaving.jpg"
 # One player for every screen: the GPU's video decoder (VCN) handles about
@@ -436,11 +438,15 @@ mpvpaper_active() {
 	[[ "$(systemctl --user show --property=ActiveState --value "$MPVPAPER_UNIT" 2>/dev/null)" == "active" ]]
 }
 
+player_video_record() {
+	printf '%s\n%s\n' "$1" "$(media_signature "$1" 2>/dev/null)"
+}
+
 # the outputs without the video: all of them while the player is down or
 # plays another one, none while it runs (it puts up a screen that comes
 # later itself)
 mpvpaper_outputs_missing() {
-	if mpvpaper_active && [[ "$(cat "$MPVPAPER_VIDEO_FILE" 2>/dev/null)" == "$MEDIA_PATH" ]]; then
+	if mpvpaper_active && [[ "$(cat "$MPVPAPER_VIDEO_FILE" 2>/dev/null)" == "$(player_video_record "$MEDIA_PATH")" ]]; then
 		return 0
 	fi
 	list_outputs
@@ -476,8 +482,10 @@ keep_leaving_frame() {
 
 	rm -f "$THEME_LEAVING_FRAME"
 	mpvpaper_active && [[ -S "$MPVPAPER_SOCKET" ]] || return 0
-	video="$(cat "$MPVPAPER_VIDEO_FILE" 2>/dev/null || true)"
+	video="$(head -n1 "$MPVPAPER_VIDEO_FILE" 2>/dev/null || true)"
 	[[ -f "$video" ]] || return 0
+	# replaced under the same name: the frame would be the new video's
+	[[ "$(cat "$MPVPAPER_VIDEO_FILE")" == "$(player_video_record "$video")" ]] || { log "leaving frame: the file was replaced"; return 0; }
 	mpvpaper_command set pause yes >/dev/null 2>&1 || { log "leaving frame: the player does not answer"; return 0; }
 	position="$(mpvpaper_command get_property time-pos 2>/dev/null || true)"
 	[[ "$position" =~ ^[0-9.]+$ ]] || { log "leaving frame: no position ($position)"; return 0; }
@@ -555,7 +563,7 @@ apply_mpvpaper() {
 			ALL "$video_path"; then
 			sleep 0.3
 			if mpvpaper_active; then
-				printf '%s\n' "$video_path" >"$MPVPAPER_VIDEO_FILE"
+				player_video_record "$video_path" >"$MPVPAPER_VIDEO_FILE"
 				log "mpvpaper started outputs=ALL video=$video_path"
 				return 0
 			fi

@@ -24,7 +24,8 @@ services:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /var/run/docker.sock:/var/run/docker.sock
-      - /mnt/storage:/storage:ro            # disk usage only
+      - /mnt/storage:/storage:ro            # disk usage, baikal.yaml
+      - /mnt/storage/baikal/data/db:/baikal # Baikal's sqlite: accounts for members, nightly copies
       - /etc/localtime:/etc/localtime:ro
       - ../server/pshell_core:/app/pshell_core:ro
       - ../web:/app/web:ro

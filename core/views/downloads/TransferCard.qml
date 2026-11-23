@@ -26,7 +26,8 @@ Clickable {
 	readonly property bool running: root.state_ === "running"
 	readonly property bool checking: Boost.checking[root.key] === true
 	readonly property bool boosted: root.item?.source === "boost" && root.item?.mode === "boost"
-	readonly property string mode: root.checking ? "checking" : (root.boosted ? "boost" : (root.item?.source === "torrent" ? "torrent" : "normal"))
+	readonly property bool media: root.item?.source === "boost" && root.item?.mode === "media"
+	readonly property string mode: root.checking ? "checking" : (root.boosted ? "boost" : (root.media ? "media" : (root.item?.source === "torrent" ? "torrent" : "normal")))
 	readonly property real ratio: root.item && root.item.total > 0 ? Math.min(1, root.item.received / root.item.total) : (root.state_ === "done" ? 1 : 0)
 	readonly property color accent: root.state_ === "failed" ? Theme.danger : (root.state_ === "done" ? Theme.success : (root.state_ === "paused" ? Theme.textSubtle : Theme.primary))
 	readonly property var curve: Downloads.curve(root.key)
@@ -165,8 +166,10 @@ Clickable {
 				live: root.running
 				text: {
 					if (root.mode === "checking") return "Checking server";
+					if (root.mode === "boost" && root.item.encoding === "gzip") return root.item.ratio > 1 ? `Compressed ×${root.item.ratio.toFixed(1)}` : "Compressed";
 					if (root.mode === "boost") return root.running ? `${root.item.connections} connections` : "Accelerated";
 					if (root.mode === "torrent") return "Torrent";
+					if (root.mode === "media") return root.item.kind === "audio" ? "Audio" : "Video";
 					return "Normal";
 				}
 			}
@@ -229,6 +232,11 @@ Clickable {
 			}
 		}
 
+		PickView {
+			Layout.fillWidth: true
+			pick: root.boosted && root.running && !root.justDone ? (root.item?.pick ?? {}) : ({})
+		}
+
 		RowLayout {
 			Layout.fillWidth: true
 			spacing: 8
@@ -243,6 +251,7 @@ Clickable {
 						return `Done in ${Format.duration(seconds, true)}  ·  Ø ${Format.rate(Math.max(item.total, item.received) / Math.max(0.5, seconds))}`;
 					}
 					if (root.state_ === "failed") return item.error || "Failed";
+					if (root.media && item.note && root.running) return `${item.note}…`;
 					const how = item.total > 0 ? `${Math.floor(root.ratio * 100)} %  ·  ${Format.bytes(item.received)} of ${Format.bytes(item.total)}` : Format.bytes(item.received);
 					return root.state_ === "paused" ? `Paused  ·  ${how}` : how;
 				}
@@ -356,6 +365,7 @@ Clickable {
 								{ label: "Running", value: Format.duration(seconds, true), icon: "timer_outline" }
 							];
 							if (root.boosted) out.push({ label: "Faster", value: root.speedup > 1 ? `×${root.speedup.toFixed(1)}` : "–", icon: "lightning_bolt", accent: true });
+							else if (root.media) out.push({ label: "Format", value: item.kind === "audio" ? "mp3" : "mp4", icon: "youtube" });
 							else out.push({ label: "Connections", value: "1", icon: "lan_connect" });
 							return out;
 						}
@@ -444,6 +454,8 @@ Clickable {
 
 						readonly property var speeds: root.item?.speeds ?? []
 						readonly property real highest: Math.max(1, ...lanes.speeds)
+						// one compressed stream: one lane
+						readonly property int count: root.item?.encoding === "gzip" ? 1 : Math.max(1, root.item?.wanted ?? 8, lanes.speeds.length)
 
 						Layout.fillWidth: true
 						Layout.preferredHeight: 34
@@ -453,22 +465,26 @@ Clickable {
 							spacing: 4
 
 							Repeater {
-								model: Math.max(1, root.item?.wanted ?? 8)
+								model: lanes.count
 
 								delegate: Item {
 									id: lane
 
 									required property int index
 									readonly property real speed: lane.index < lanes.speeds.length ? lanes.speeds[lane.index] : -1
+									// "new" | "old" while a new connection is measured against the slowest
+									readonly property string role: root.item?.roles?.[lane.index] ?? ""
 
-									width: (lanes.width - 4 * (Math.max(1, root.item?.wanted ?? 8) - 1)) / Math.max(1, root.item?.wanted ?? 8)
+									width: (lanes.width - 4 * (lanes.count - 1)) / lanes.count
 									height: lanes.height
 
 									Rectangle {
 										anchors.fill: parent
 										radius: 4
 										color: Theme.layer2
-										opacity: lane.speed < 0 ? 0.45 : 1
+										opacity: lane.speed < 0 || lane.role === "retired" ? 0.45 : 1
+										border.width: lane.role === "new" || lane.role === "old" ? 1 : 0
+										border.color: lane.role === "new" ? Theme.primary : Theme.textMuted
 									}
 
 									Rectangle {
@@ -476,7 +492,7 @@ Clickable {
 										width: parent.width
 										height: lane.speed > 0 ? Math.max(3, parent.height * lane.speed / lanes.highest) : 0
 										radius: 4
-										color: Theme.primary
+										color: lane.role === "old" ? Theme.textMuted : Theme.primary
 										opacity: 0.55 + 0.45 * (lane.speed > 0 ? lane.speed / lanes.highest : 0)
 
 										Behavior on height {
@@ -495,7 +511,7 @@ Clickable {
 				// why it goes the normal way
 				RowLayout {
 					Layout.fillWidth: true
-					visible: !root.boosted && root.item?.source !== "torrent"
+					visible: !root.boosted && !root.media && root.item?.source !== "torrent"
 					spacing: 8
 
 					Glyph {

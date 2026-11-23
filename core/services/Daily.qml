@@ -4,10 +4,10 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// The pictures of the day of Bing, NASA (APOD), Wallhaven and MoeWalls, for
-// the theme picker (plugin `studio-wallpaper`). scripts/wallpaper_of_day.py
-// fetches what is new every two hours and whenever the picker opens, and
-// keeps each picture in ~/.local/state/quickshell-theme/daily with its
+// The pictures of the day of Bing, NASA (APOD), Wallhaven, MoeWalls and
+// MotionBGs, for the theme picker (plugin `studio-wallpaper`).
+// scripts/wallpaper_of_day.py fetches what is new every two hours and
+// whenever the picker opens, and keeps each picture in ~/.local/state/quickshell-theme/daily with its
 // preview and its wallust colours: the picker shows them without waiting.
 Singleton {
 	id: root
@@ -20,7 +20,8 @@ Singleton {
 		{ id: "bing", label: "Bing" },
 		{ id: "apod", label: "NASA" },
 		{ id: "wallhaven", label: "Wallhaven" },
-		{ id: "moewalls", label: "MoeWalls" }
+		{ id: "moewalls", label: "MoeWalls" },
+		{ id: "motionbgs", label: "MotionBGs" }
 	]
 
 	// by source: what wallpaper_of_day.py keeps (title, credit, theme_path,

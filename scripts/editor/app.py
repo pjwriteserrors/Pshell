@@ -25,6 +25,14 @@ import sys
 import threading
 import urllib.parse
 
+# Drawn on the CPU: a GL context of this process took the GPU down
+# (page fault, ring timeout, full reset, a running game gone). GTK alone is not
+# enough, WebKit opens EGL here too: Mesa is told to stay in software (llvmpipe),
+# which the web process inherits.
+os.environ.setdefault("GSK_RENDERER", "cairo")
+os.environ.setdefault("GDK_DISABLE", "gl,vulkan")
+os.environ.setdefault("LIBGL_ALWAYS_SOFTWARE", "1")
+
 import gi
 
 gi.require_version("Gtk", "4.0")

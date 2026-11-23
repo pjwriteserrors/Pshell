@@ -8,7 +8,7 @@ import time
 KINDS = ("login", "login_failed", "locked", "logout", "device_added", "device_revoked", "token_rotated",
          "device_changed", "password_changed", "totp_on", "totp_off", "user_added", "user_removed",
          "user_changed", "confirm", "container_action", "pressure", "service_down", "service_up",
-         "settings_changed", "service_changed")
+         "settings_changed", "service_changed", "smarthome_changed")
 KEEP_DAYS = 90
 
 

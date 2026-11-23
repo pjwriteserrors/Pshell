@@ -13,8 +13,9 @@ function kindIcon(game) {
 // "steam" | "proton:<dir>" | "proton" | "wine" | "native" → words
 function runnerLabel(game, runners) {
 	if (!game) return "";
-	if (game.kind === "steam") return "Steam";
-	if (game.kind === "shortcut") return "Steam · non-Steam game";
+	const tool = game.tool ? ((runners || []).find(each => each.tool === game.tool)?.name ?? game.tool) : "";
+	if (game.kind === "steam") return tool ? `Steam · ${tool}` : "Steam";
+	if (game.kind === "shortcut") return tool ? `Steam · ${tool}` : "Steam · non-Steam game";
 	const runner = String(game.runner || "");
 	if (runner === "steam") return "Steam · non-Steam game";
 	if (runner === "native") return "Linux";
@@ -85,6 +86,17 @@ function onColor(color) {
 }
 
 // hours as a short number with its unit: "45 min", "8.2 h", "131 h"
+// ProtonDB's ratings in its own colours
+const TIER_TONES = { platinum: "#b4c7dc", gold: "#cfb53b", silver: "#a6a6a6", bronze: "#cd7f32", borked: "#ff4d4d", native: "#7fd88f" };
+
+function tierTone(tier) {
+	return TIER_TONES[tier] ?? "";
+}
+
+function tierLabel(tier) {
+	return tier ? tier.charAt(0).toUpperCase() + tier.slice(1) : "";
+}
+
 function short(minutes) {
 	const value = Number(minutes || 0);
 	if (value <= 0) return "–";

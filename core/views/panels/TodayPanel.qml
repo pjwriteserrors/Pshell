@@ -42,17 +42,29 @@ Drawer {
 	onPanelSettled: MsCalendar.refresh()
 	onPanelClosed: {
 		MsCalendar.selected = null;
+		NasCalendar.draft = null;
 		sky.radar = false;
 	}
 
-	belowOpen: MsCalendar.selected !== null
-	belowContentHeight: details.implicitHeight
-	below: EventDetails {
-		id: details
+	// an event, or a Baikal one in the editor
+	belowOpen: MsCalendar.selected !== null || NasCalendar.draft !== null
+	belowContentHeight: NasCalendar.draft !== null ? editor.implicitHeight : details.implicitHeight
+	below: [
+		EventDetails {
+			id: details
 
-		anchors.fill: parent
-		event: MsCalendar.selected
-	}
+			anchors.fill: parent
+			visible: NasCalendar.draft === null
+			event: MsCalendar.selected
+		},
+		EventEditor {
+			id: editor
+
+			anchors.fill: parent
+			visible: NasCalendar.draft !== null
+			draft: NasCalendar.draft
+		}
+	]
 
 	RowLayout {
 		anchors.fill: parent

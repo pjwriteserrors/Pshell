@@ -1222,6 +1222,15 @@ Drawer {
 					}
 				}
 
+				// away from home: who is in the VPN, what is linked to what
+				ListItem {
+					Layout.fillWidth: true
+					icon: "vpn"
+					title: "VPN"
+					subtitle: "Who is in it, what is linked to what, what is wrong"
+					onClicked: Popups.open("vpn", root.targetScreen)
+				}
+
 				Loader {
 					Layout.fillWidth: true
 					active: Phone.enabled

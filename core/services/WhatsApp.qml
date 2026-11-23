@@ -238,7 +238,7 @@ Singleton {
 			if (root.state === "online") root.command("active", { value: Messages.shown });
 			break;
 		case "chats":
-			root.chats = data.chats ?? [];
+			root.chats = (data.chats ?? []).map(chat => Contacts.named(chat));
 			root.unread = data.unread ?? 0;
 			break;
 		case "chat":

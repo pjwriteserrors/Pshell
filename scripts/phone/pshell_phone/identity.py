@@ -108,6 +108,17 @@ class Devices:
             device.update(fields, seen=int(time.time()))
             self.save()
 
+    def learn_addresses(self, device_id, theirs):
+        """What another PC says its addresses are now (a VPN that came up
+        after pairing) goes before what was known."""
+        device = self.get(device_id)
+        theirs = [str(a)[:64] for a in theirs if isinstance(a, str)][:8] if isinstance(theirs, list) else []
+        if device and theirs:
+            known = list(device.get("addresses", []))
+            merged = (theirs + [a for a in known if a not in theirs])[:8]
+            if merged != known:
+                self.touch(device_id, addresses=merged)
+
 
 def server_context(devices):
     """TLS for the listening port. A client certificate is optional so that an

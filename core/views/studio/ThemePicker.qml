@@ -180,7 +180,7 @@ ModalWindow {
 	// smaller in both directions. The library is always painted as it is.
 	function resolutionOptions(theme) {
 		const size = root.mediaSize(theme);
-		if (!size || theme.daily?.provider !== "moewalls") return [];
+		if (!size || !["moewalls", "motionbgs"].includes(theme.daily?.provider)) return [];
 		const options = [{ value: "original", label: "Original" }];
 		for (const level of root.resolutionLevels) {
 			if (level.w < size.w && level.h < size.h) options.push({ value: level.value, label: level.label });
@@ -1784,13 +1784,13 @@ ModalWindow {
 						}
 					}
 
-					// a picture smaller than the screen: made bigger by AI on
-					// the Radeon, or taken back to the downloaded one
+					// made bigger (or, when big enough, sharper) by AI on the
+					// Radeon, or taken back to the downloaded one
 					RowLayout {
 						Layout.topMargin: 6
 						Layout.bottomMargin: 2
 						spacing: 10
-						visible: !!caption.daily && (caption.daily.small === true || !!caption.daily.upscaled)
+						visible: !!caption.daily && caption.daily.width > 0 && root.currentTheme?.mediaType !== "video"
 
 						Rectangle {
 							implicitHeight: 32
@@ -1806,8 +1806,11 @@ ModalWindow {
 									const daily = caption.daily;
 									if (!daily) return "";
 									const from = daily.upscaled;
+									if (from && from.width === daily.width && from.height === daily.height)
+										return `AI  ·  ${daily.width} × ${daily.height}`;
 									return from ? `AI  ·  ${from.width} × ${from.height} → ${daily.width} × ${daily.height}`
-										: `${daily.width} × ${daily.height}  ·  smaller than the screen`;
+										: daily.small ? `${daily.width} × ${daily.height}  ·  smaller than the screen`
+										: `${daily.width} × ${daily.height}`;
 								}
 								tone: "white"
 								surface: "transparent"

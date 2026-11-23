@@ -42,6 +42,8 @@ def protons():
     places = []
     if root:
         places += [os.path.join(root, "compatibilitytools.d"), os.path.join(root, "steamapps/common")]
+        # Valve's Protons may sit in any library
+        places += [os.path.join(folder, "steamapps/common") for folder in _libraries(root) if folder != root]
     places += ["/usr/share/steam/compatibilitytools.d", os.path.join(HOME, ".steam/root/compatibilitytools.d")]
     for place in places:
         try:
@@ -55,7 +57,7 @@ def protons():
             real = os.path.realpath(path)
             if real in found:
                 continue
-            found[real] = {"id": tool_name(path, name), "name": name.replace("-x86_64", ""), "path": real}
+            found[real] = {"id": tool_name(path, name), "name": proton_label(path, name), "path": real}
 
     def rank(tool):
         name = tool["name"].lower()
@@ -68,6 +70,33 @@ def protons():
         return (2, [-n for n in _version_key(name)])
 
     return sorted(found.values(), key=rank)
+
+
+def _libraries(root):
+    try:
+        text = open(os.path.join(root, "steamapps/libraryfolders.vdf"), encoding="utf-8", errors="replace").read()
+    except OSError:
+        return []
+    return [path.replace("\\\\", "\\") for path in re.findall(r'"path"\s+"([^"]+)"', text)]
+
+
+def proton_label(path, folder):
+    """What a Proton is called in the menus: Valve's by the version they
+    are ("Proton 9.0-4", from their version file), others by their folder."""
+    name = folder.replace("-x86_64", "")
+    if os.path.isfile(os.path.join(path, "compatibilitytool.vdf")):
+        return name
+    try:
+        version = open(os.path.join(path, "version"), encoding="utf-8", errors="replace").read().split()[-1]
+    except (OSError, IndexError):
+        return name
+    lower = folder.lower()
+    if "experimental" in lower:
+        return "Proton Experimental"
+    if "hotfix" in lower:
+        return "Proton Hotfix"
+    match = re.match(r"proton-(\d+(?:\.\d+)*-\d+)", version)
+    return f"Proton {match.group(1)}" if match else name
 
 
 def tool_name(path, folder):
@@ -94,7 +123,7 @@ def tool_name(path, folder):
 
 def runners():
     """What can run Windows programs here, for the menus."""
-    out = [{"id": f"proton:{tool['path']}", "name": tool["name"], "kind": "proton"} for tool in protons()]
+    out = [{"id": f"proton:{tool['path']}", "name": tool["name"], "kind": "proton", "tool": tool["id"]} for tool in protons()]
     if shutil.which("wine"):
         out.append({"id": "wine", "name": "Wine", "kind": "wine"})
     return {"runners": out, "steam": bool(steam_root()) and bool(shutil.which("steam"))}
@@ -364,10 +393,41 @@ def _map_tool(root, appid, tool_id):
         open_at = brace + 1 + old.end() - 1
         close_at = _block_end(text, open_at)
         text = text[:brace + 1 + old.start()] + text[close_at + 1:]
-    entry = (f'\n{indent}"{appid}"\n{indent}{{\n{indent}\t"name"\t\t"{tool_id}"\n'
-             f'{indent}\t"config"\t\t""\n{indent}\t"priority"\t\t"250"\n{indent}}}')
-    text = text[:brace + 1] + entry + text[brace + 1:]
+    if tool_id:
+        entry = (f'\n{indent}"{appid}"\n{indent}{{\n{indent}\t"name"\t\t"{tool_id}"\n'
+                 f'{indent}\t"config"\t\t""\n{indent}\t"priority"\t\t"250"\n{indent}}}')
+        text = text[:brace + 1] + entry + text[brace + 1:]
     shutil.copy2(config_path, config_path + ".pshell-backup")
     with open(config_path + ".tmp", "w", encoding="utf-8", errors="surrogateescape") as file:
         file.write(text)
     os.replace(config_path + ".tmp", config_path)
+
+
+def tool_mapping(root):
+    """{appid: compatibility tool} as Steam keeps them (config.vdf)."""
+    try:
+        text = open(os.path.join(root, "config/config.vdf"), encoding="utf-8", errors="replace").read()
+    except OSError:
+        return {}
+    at = text.find('"CompatToolMapping"')
+    brace = text.find("{", at) if at >= 0 else -1
+    end = _block_end(text, brace) if brace >= 0 else -1
+    if end < 0:
+        return {}
+    return {appid: name for appid, name in re.findall(r'"(\d+)"\s*\{[^{}]*?"name"\s+"([^"]*)"', text[brace + 1:end])}
+
+
+def set_tool(appid, tool_id, wait=lambda: None, report=lambda text: None):
+    """Lets Steam run an app with a compatibility tool ("" for Steam's own
+    choice). Steam is closed for it (it rewrites config.vdf when it quits)
+    and started again. Returns { restarted }."""
+    root = steam_root()
+    if not root:
+        raise RuntimeError("Steam is not installed")
+    was_running = _close_steam(wait, report)
+    report("Setting the Proton")
+    _map_tool(root, appid, tool_id)
+    if was_running:
+        report("Starting Steam again")
+        subprocess.Popen(["steam", "-silent"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    return {"restarted": was_running}

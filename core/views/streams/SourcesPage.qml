@@ -384,6 +384,28 @@ Flickable {
 					onToggled: checked => Streams.setSetting("sponsorBlock", checked)
 				}
 			}
+			RowLayout {
+				Layout.fillWidth: true
+				ColumnLayout {
+					Layout.fillWidth: true
+					spacing: 0
+					StyledText {
+						Layout.fillWidth: true
+						text: "Use Floorp's YouTube sign-in when YouTube asks"
+					}
+					StyledText {
+						Layout.fillWidth: true
+						wrapMode: Text.Wrap
+						text: "At times YouTube takes the player for a bot and shows nothing without a sign-in. Then the one in Floorp is used, for an hour."
+						font.pixelSize: Theme.size.small
+						tone: Theme.textMuted
+					}
+				}
+				Toggle {
+					checked: Streams.settings.youtubeSignIn ?? true
+					onToggled: checked => Streams.setSetting("youtubeSignIn", checked)
+				}
+			}
 		}
 	}
 }

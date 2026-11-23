@@ -1916,7 +1916,7 @@ Rectangle {
 						Chip {
 							required property int modelData
 
-							text: `${modelData}p`
+							text: modelData >= 2160 ? "4K" : `${modelData}p`
 							selected: root.height_ === modelData
 							onClicked: {
 								Streams.setSetting("quality", modelData);

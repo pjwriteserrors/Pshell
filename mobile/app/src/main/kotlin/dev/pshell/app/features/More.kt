@@ -225,9 +225,9 @@ val CalendarFeature = Feature(
 	id = "calendar",
 	group = Group.Work,
 	keywords = listOf("kalender", "meetings", "termine", "events"),
-	title = "Calendar",
+	title = "Outlook",
 	icon = "calendar_month_outline",
-	plugins = listOf("calendar"),
+	plugins = listOf("calendar", "microsoft-calendar"),
 	screen = { CalendarScreen() },
 )
 

@@ -1487,6 +1487,8 @@ Singleton {
 			return root.toNote(text, number);
 		case "todo":
 			return root.toTodo(text, number);
+		case "event":
+			return NasCalendar.draftFrom(text, "");
 		case "search":
 			return Qt.openUrlExternally(`https://duckduckgo.com/?q=${encodeURIComponent(text.slice(0, 300))}`);
 		}

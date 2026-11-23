@@ -36,6 +36,10 @@ class Db:
         self.local = threading.local()
         self.write_lock = threading.RLock()
         self.conn().executescript(SCHEMA)
+        # devices got an owner (the member whose calendar and the like they get); '' = the only admin
+        columns = [row[1] for row in self.conn().execute("PRAGMA table_info(devices)")]
+        if "owner" not in columns:
+            self.conn().execute("ALTER TABLE devices ADD COLUMN owner TEXT DEFAULT ''")
 
     def conn(self):
         conn = getattr(self.local, "conn", None)

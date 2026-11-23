@@ -81,6 +81,7 @@ Singleton {
 		reader: "fast-reader",
 		screentime: "screentime",
 		watch: "watch",
+		vpn: "phone",
 		printer: "printer",
 		identity: "identities",
 		niri: "niri-settings",

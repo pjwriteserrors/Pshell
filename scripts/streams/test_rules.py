@@ -266,6 +266,82 @@ Art Direction - @someone"""
         self.assertEqual(net.shift_sound(piece, 5000), head + bytes(8) + b"\xff\xf1sound")
         self.assertEqual(net.shift_sound(b"other", 100), b"other")
 
+    def test_dash_mp4_index(self):
+        def box(kind, body):
+            return (8 + len(body)).to_bytes(4, "big") + kind + body
+        init = box(b"ftyp", b"dash") + box(b"moov", b"x" * 20)
+        refs = b"".join(size.to_bytes(4, "big") + duration.to_bytes(4, "big") + bytes(4) for size, duration in ((100, 2000), (50, 1000)))
+        sidx = box(b"sidx", bytes(4) + (1).to_bytes(4, "big") + (1000).to_bytes(4, "big") + bytes(4) + (7).to_bytes(4, "big") + bytes(2) + (2).to_bytes(2, "big") + refs)
+        found = net._mp4_index(init + sidx + b"rest", 0)
+        self.assertEqual(found["init"], init)
+        start = len(init) + len(sidx) + 7
+        self.assertEqual(found["pieces"], [(start, start + 99, 2.0), (start + 100, start + 149, 1.0)])
+        # an index that runs past what was read asks for more
+        self.assertIsNone(net._mp4_index((init + sidx)[:-5], 0))
+
+    def test_dash_webm_index(self):
+        def element(ident, body):
+            return ident + bytes((0x80 | len(body),)) + body
+        info = element(b"\x15\x49\xa9\x66", element(b"\x2a\xd7\xb1", (1000000).to_bytes(3, "big")) + element(b"\x44\x89", __import__("struct").pack(">f", 9000.0)))
+        cue = lambda when, place: element(b"\xbb", element(b"\xb3", when.to_bytes(2, "big")) + element(b"\xb7", element(b"\xf7", b"\x01") + element(b"\xf1", place.to_bytes(2, "big"))))
+        cues = element(b"\x1c\x53\xbb\x6b", cue(0, 100) + cue(5000, 300))
+        head = element(b"\x1a\x45\xdf\xa3", b"webm")
+        segment_body = info + cues
+        data = head + b"\x18\x53\x80\x67\x01\xff\xff\xff\xff\xff\xff\xff" + segment_body + b"\x1f\x43\xb6\x75\x80"
+        found = net._webm_index(data, 2000)
+        segment = len(head) + 12
+        self.assertEqual(found["kind"], "mkv")
+        self.assertEqual(found["init"], data[:segment + len(segment_body)])
+        self.assertEqual(found["pieces"], [(segment + 100, segment + 299, 5.0), (segment + 300, 1999, 4.0)])
+
+    def test_shift_fmp4(self):
+        def box(kind, body):
+            return (8 + len(body)).to_bytes(4, "big") + kind + body
+        piece = lambda stamp: box(b"moof", box(b"mfhd", bytes(8)) + box(b"traf", box(b"tfdt", b"\x01\0\0\0" + stamp.to_bytes(8, "big")))) + box(b"mdat", b"sound")
+        self.assertEqual(net.shift_fmp4(piece(44100), 100, 44100), piece(39690))
+        self.assertEqual(net.shift_fmp4(piece(100), 1000, 44100), piece(0))
+        self.assertEqual(net.shift_fmp4(piece(5), 0, 44100), piece(5))
+
+    def test_player_streams_dash(self):
+        hls = [{"format_id": f"9{n}", "protocol": "m3u8_native", "vcodec": "avc1", "acodec": "none", "height": h, "url": f"hls{h}"} for n, h in enumerate((720, 1080))]
+        hls_sound = [{"format_id": "233", "protocol": "m3u8_native", "vcodec": "none", "acodec": "mp4a", "url": "hlsa"}]
+        dash = [{"format_id": "315", "protocol": "https", "vcodec": "vp9", "acodec": "none", "height": 2160, "url": "vp9"},
+                {"format_id": "701", "protocol": "https", "vcodec": "av01.0.13M.08", "acodec": "none", "height": 2160, "url": "av1"},
+                {"format_id": "337", "protocol": "https", "vcodec": "vp9.2", "acodec": "none", "height": 2160, "url": "hdr", "dynamic_range": "HDR10"},
+                {"format_id": "299", "protocol": "https", "vcodec": "avc1.64002A", "acodec": "none", "height": 1080, "url": "avc"},
+                {"format_id": "140", "protocol": "https", "vcodec": "none", "acodec": "mp4a.40.2", "url": "m4a"}]
+        index = {"init": b"", "pieces": [(0, 9, 5.0)], "kind": "mkv", "timescale": 1000}
+        with mock.patch.object(net, "ytdlp_json", return_value={"formats": [*hls, *hls_sound, *dash], "duration": 9}), \
+             mock.patch.object(net, "dash_index", return_value=index) as indexed, mock.patch.object(net, "_answers", return_value=True):
+            found = net.player_streams("u", 2160)
+            self.assertEqual((found["height"], found["dash"]["video"]["url"], found["dash"]["audio"]["url"]), (2160, "vp9", "m4a"))
+            self.assertEqual(found["qualities"], [2160, 1080, 720])
+            # where YouTube has HLS at that height, HLS as before
+            self.assertIn("master", net.player_streams("u", 1080))
+            # a 4K picture whose index cannot be read: AV1 and HDR are no way out,
+            # the best HLS is
+            indexed.side_effect = lambda url, size: (_ for _ in ()).throw(net.Failure("x")) if url == "vp9" else index
+            found = net.player_streams("u", 2160)
+            self.assertEqual((found["height"], "dash" in found), (1080, False))
+        # signed in YouTube gives no HLS at all: DASH at every height
+        with mock.patch.object(net, "ytdlp_json", return_value={"formats": dash, "duration": 9}), mock.patch.object(net, "dash_index", return_value=index):
+            self.assertEqual(net.player_streams("u", 1080)["dash"]["video"]["url"], "avc")
+
+    def test_ytdlp_signs_in_when_asked(self):
+        blocked = subprocess.CompletedProcess([], 0, '{"formats": []}', "WARNING: [youtube] x: Sign in to confirm you’re not a bot.")
+        fine = subprocess.CompletedProcess([], 0, '{"formats": [1]}', "")
+        with mock.patch.object(net, "TEST", ""), mock.patch.object(net, "_signed_until", 0), mock.patch.object(net, "browser_profile", return_value="firefox:/p"), \
+             mock.patch.object(net.subprocess, "run", side_effect=[blocked, fine, fine]) as run:
+            self.assertEqual(net.ytdlp_json(["x"]), {"formats": [1]})
+            self.assertIn("--cookies-from-browser", run.call_args_list[1].args[0])
+            # and for an hour after, at once
+            net.ytdlp_json(["y"])
+            self.assertIn("--cookies-from-browser", run.call_args_list[2].args[0])
+        with mock.patch.object(net, "TEST", ""), mock.patch.object(net, "_signed_until", 0), mock.patch.object(net, "USE_BROWSER_SIGN_IN", False), \
+             mock.patch.object(net.subprocess, "run", return_value=blocked) as run:
+            self.assertEqual(net.ytdlp_json(["x"]), {"formats": []})
+            self.assertEqual(run.call_count, 1)
+
     def test_discover_footer_given(self):
         videos = [{"id": f"v{n}", "title": f"Long Quest Story {n}" if n < 5 else f"Other thing {n * 7}", "description": "", "kind": "video"} for n in range(12)]
         self.assertTrue(rules.discover(videos, (), "Someone", 12, set()))

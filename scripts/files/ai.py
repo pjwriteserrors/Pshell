@@ -8,7 +8,7 @@ import os
 import urllib.error
 import urllib.request
 import sys
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import host  # noqa: E402
 
 HOST = os.environ.get("OLLAMA_HOST") or "http://127.0.0.1:11434"

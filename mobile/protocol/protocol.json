@@ -27,6 +27,11 @@
 			"plugins": [],
 			"local": true
 		},
+		"vpn": {
+			"owner": "daemon",
+			"plugins": [],
+			"local": true
+		},
 		"pcs": {
 			"owner": "daemon",
 			"plugins": [

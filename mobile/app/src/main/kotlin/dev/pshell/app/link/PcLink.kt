@@ -243,8 +243,17 @@ class PcLink(private val link: Link, val id: String) {
 		}
 
 		override fun onMessage(webSocket: WebSocket, text: String) {
-			if (session !== this) return
 			val message = runCatching { Json.parseToJsonElement(text) }.getOrNull() ?: return
+			// where the PC is now, a VPN that came after the pairing too; sent at once, before this attempt has won
+			if (message["type"].string == "hello") {
+				val theirs = message["addresses"].list.map { it.string }.filter { it.isNotBlank() }.take(8)
+				if (theirs.isNotEmpty()) link.pcs.update(id) { pc ->
+					val merged = (theirs + pc.addresses).distinct().take(8)
+					if (merged == pc.addresses) pc else pc.copy(addresses = merged)
+				}
+				return
+			}
+			if (session !== this) return
 			when (message["type"].string) {
 				"state" -> flow(message["topic"].string).value = message["data"]
 				"result" -> pending.remove(message["id"].string)?.let { answer ->

@@ -108,7 +108,25 @@ Qt's player takes one address, and YouTube keeps picture and sound apart: the
 daemon writes a small HLS playlist naming both and serves it on 127.0.0.1
 (`net.player_streams`), which FFmpeg opens as one. The sound is always the
 original track, never one of YouTube's AI dubs (`net.original_audio`); yt-dlp's
-own `ba` for mpv and offline copies prefers it the same way. Where a video stopped is saved
+own `ba` for mpv and offline copies prefers it the same way.
+
+YouTube's HLS ends at 1080p, and once yt-dlp is signed in there is no HLS at
+all. Everything else comes as DASH files: `net.dash_index` reads where their
+pieces lie (sidx in MP4, Cues in WebM) and the daemon serves those as HLS
+under `/dash/<token>/`, each piece fetched by byte range in 4 MB parts side by
+side, two ahead for the picture. VP9 pieces stay WebM and end in `.mkv`, which
+FFmpeg's HLS reader accepts. The pick (`net._dash_rank`) is what the Radeon
+(Navi 10) decodes: H.264, then VP9; AV1 only up to 1080p and only when nothing
+else is there; no HDR. A freshly given address is refused for about a second
+(HTTP 403), so the index is asked again until it answers. The Bluetooth sound
+lead moves `tfdt` in the MP4 sound pieces (`net.shift_fmp4`).
+
+When YouTube asks whether yt-dlp is a bot ("Sign in to confirm"), every yt-dlp
+call is made again with Floorp's cookies (`--cookies-from-browser`, profile
+from `profiles.ini`) and keeps them for an hour (`net.ytdlp_json`,
+`net.ytdlp_run`, mpv's ytdl options). Setting `youtubeSignIn` switches it off.
+
+Where a video stopped is saved
 every five seconds and on leaving; playing it again starts there. Such a report
 sends only what plays (event `playing`); the whole state, which the shell redraws
 in the thread that paints the picture, at most once a minute.

@@ -62,6 +62,23 @@ Scope {
 		onTriggered: Quickshell.reload(true)
 	}
 
+	// agents edit this checkout while the user watches something in the shell:
+	// a saved file must not tear it down. Quickshell turns watching back on
+	// with every load, so it is turned off here each time; new code comes in
+	// with `shell reload` (PSHELL_AUTORELOAD=1 keeps the old behaviour)
+	Component.onCompleted: Quickshell.watchFiles = Quickshell.env("PSHELL_AUTORELOAD") === "1"
+
+	IpcHandler {
+		target: "shell"
+
+		function reload(): void {
+			styleReload.restart();
+		}
+		function autoReload(on: bool): void {
+			Quickshell.watchFiles = on;
+		}
+	}
+
 	function drawerOnFocused(id, page) {
 		if (Popups.current === id && (page === undefined || page === "" || Popups.page === page)) {
 			Popups.close();
@@ -285,6 +302,15 @@ Scope {
 		}
 		function add(url: string): void {
 			Boost.add(url);
+			Downloads.openPanel();
+		}
+		// a YouTube link: the video (mp4) or only its sound (mp3)
+		function video(url: string): void {
+			Boost.add(url, "video");
+			Downloads.openPanel();
+		}
+		function audio(url: string): void {
+			Boost.add(url, "audio");
 			Downloads.openPanel();
 		}
 		function list(): string {
@@ -663,6 +689,38 @@ Scope {
 		function state(): string {
 			Headset.send({ op: "state" });
 			return JSON.stringify({ online: Headset.online, serial: Headset.serial, sidetone: Headset.sidetone, sidetoneOn: Headset.sidetoneOn, cable: Headset.cable, profile: Headset.profile, watching: Headset.watching, recording: Headset.recording, rules: Headset.rules.length, daemon: Headset.daemonState });
+		}
+	}
+
+	// the Audient EVO4: `evo4 open`, `evo4 phantom 1|2 on|off|toggle`, `evo4 mute 1|2 on|off|toggle`,
+	// `evo4 output mute|unmute|toggle`, `evo4 read`, `evo4 state`
+	IpcHandler {
+		target: "evo4"
+		enabled: Plugins.on("evo4")
+
+		function open(): void {
+			NiriSettings.page = "evo4";
+			Popups.withFocusedScreen(screen => Popups.openModal("niri", screen));
+		}
+		function phantom(input: string, how: string): void {
+			const i = Number(input) - 1;
+			if (i !== 0 && i !== 1) return;
+			Evo4.set("phantom", how === "toggle" ? Evo4.value("phantom", i) !== true : how === "on", i);
+		}
+		function mute(input: string, how: string): void {
+			const i = Number(input) - 1;
+			if (i !== 0 && i !== 1) return;
+			Evo4.set("mute", how === "toggle" ? Evo4.value("mute", i) !== true : how === "on", i);
+		}
+		function output(how: string): void {
+			Evo4.setOutMute(how === "toggle" ? Evo4.knobs.outMute !== true : how === "mute");
+		}
+		function read(): void {
+			Evo4.read();
+		}
+		function state(): string {
+			Evo4.send({ op: "state" });
+			return JSON.stringify({ online: Evo4.online, stuck: Evo4.stuck, busy: Evo4.busy, knobs: Evo4.knobs, hw: Evo4.hw, wanted: Evo4.wanted });
 		}
 	}
 
@@ -1672,6 +1730,52 @@ Scope {
 	}
 
 	IpcHandler {
+		target: "rhymes"
+		enabled: Plugins.on("rhymes")
+
+		function open(): void {
+			Rhymes.open();
+		}
+		function close(): void {
+			Rhymes.close();
+		}
+		function toggle(): void {
+			Rhymes.toggle();
+		}
+		// a new song, with a title or none
+		function create(title: string): void {
+			Rhymes.open();
+			Rhymes.create(title);
+		}
+		// a song of the library by its folder's name, at a line (-1 none)
+		function song(id: string, line: int): void {
+			Rhymes.open();
+			Rhymes.load(id, line);
+		}
+		// a line into the ideas (the phone, the watch, a key)
+		function idea(text: string): void {
+			Rhymes.addIdea(text, "shortcut");
+		}
+		// a sound file as the song's beat
+		function beat(path: string): void {
+			Rhymes.setBeat(path);
+		}
+		// a panel: rhymes, words, takes, versions or none
+		function panel(name: string): void {
+			Rhymes.setSetting("panel", name === "none" ? "" : name);
+		}
+		function play(): void {
+			Rhymes.playFromRow(Rhymes.row);
+		}
+		function stop(): void {
+			Rhymes.stop();
+		}
+		function state(): string {
+			return JSON.stringify({ open: Rhymes.windowOpen, ready: Rhymes.ready, song: Rhymes.song?.id ?? "", title: Rhymes.song?.title ?? "", row: Rhymes.row, column: Rhymes.column, lines: Rhymes.lines.count, text: Rhymes.textNow(), around: Rhymes.around?.words ?? [], groups: Rhymes.analysis.groups ?? 0, playing: Rhymes.beatPlaying, position: Rhymes.position, cue: Rhymes.cue, panel: Rhymes.setting("panel", ""), dirty: Rhymes.dirty, autocorrect: Autocorrect.writing, quiet: Rhymes.quiet });
+		}
+	}
+
+	IpcHandler {
 		target: "music"
 		enabled: Plugins.on("music")
 
@@ -2100,6 +2204,19 @@ Scope {
 		}
 		function open(): void {
 			Popups.withFocusedScreen(screen => Popups.open("watch", screen));
+		}
+	}
+
+	// the phone's VPN: who is in it, what is linked to what (docs/mobile.md, "Away from home")
+	IpcHandler {
+		target: "vpn"
+		enabled: Plugins.on("phone")
+
+		function toggle(): void {
+			root.drawerOnFocused("vpn");
+		}
+		function open(): void {
+			Popups.withFocusedScreen(screen => Popups.open("vpn", screen));
 		}
 	}
 

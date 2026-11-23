@@ -79,6 +79,49 @@ What a paired phone may do is a lot, by design: run the commands of
 host profile stops the editing), type, read the clipboard. Pair only your own
 phone.
 
+## Away from home
+
+The phone reaches the PCs from anywhere through the WireGuard VPN of the
+home server (wg-easy on `netcore`, 192.168.178.22; the net 10.8.0.0/24:
+server .1, phone .2, PC `iseeu` .3, laptop `cogi` .4). Everything still goes
+over the paired TLS link; the VPN only carries it.
+
+```
+ phone 10.8.0.2 ══ WireGuard ══ server 10.8.0.1 ══ WireGuard ══ PC 10.8.0.3 / laptop 10.8.0.4
+```
+
+- **The server** hands every client `AllowedIPs = 192.168.178.0/24,
+  10.8.0.0/24` (`WG_ALLOWED_IPS` in `~/wireguard/docker-compose.yml`) and
+  forwards wg0 to wg0, so the clients reach each other. A client is made in
+  its web page (http://192.168.178.22:51821, home LAN only).
+- **A PC or laptop** joins with `scripts/phone/vpn-join <client.conf>`: a
+  NetworkManager connection `pshell-vpn` that comes up by itself and routes
+  only 10.8.0.0/24 – no DNS, no home LAN, no internet – so a laptop keeps
+  the network it is in. `vpn-join --remove` takes it out. At home the
+  Pi-hole answers the server's name with its LAN address and WireGuard keeps
+  the address it resolved, so the daemon brings `pshell-vpn` up again
+  whenever the default route changes (`features/vpn.py`).
+- **The phone** needs the WireGuard app with a config that has 10.8.0.0/24
+  in `AllowedIPs` (the server hands it out since 2026-11-15; an older one is
+  edited by hand).
+- **Addresses.** `pairing.addresses()` includes the VPN's, so a new pairing
+  carries it. The daemon's `hello` sends them too, and the app (1.6) and
+  other PCs add them to what they know: a phone paired at home learns the
+  VPN address on its next connection there, without pairing again. The app
+  knocks on all addresses at once; the first that opens wins. Wake on LAN
+  does not cross the VPN.
+- **The overview**: `>vpn` in the launcher, control centre → phone → *VPN*, or `qs ipc call vpn
+  toggle`. A map – the server in the middle, its clients around it, green
+  while one is in the VPN and answers, amber while it is in but silent,
+  dashed while out, a dot running along the lines that carry a Pshell link –
+  then what is wrong with what to do (copyable), the Pshell links and the
+  way each takes (VPN, VPN into the home LAN, LAN), and the server's clients
+  with endpoint, last handshake and traffic. It asks `vpn status`
+  (`features/vpn.py`, also `phonectl call vpn status`) every four seconds
+  while open; the server's client list comes over SSH
+  (`"phone": { "vpn": { "server": "lu@192.168.178.22" } }` in the host
+  profile), so away from home the map shows this machine and its links only.
+
 ## Protocol
 
 JSON text frames on one WebSocket (`/link`); binary frames for touch.
@@ -532,3 +575,29 @@ Testing against the dev server: run `python3 -m pshell_nas --dev …` on
 port 8097, a phone daemon of its own whose `PSHELL_NAS_PY` points to a mint
 script answering `addresses: {home: "http://10.0.2.2:8097"}`, and pair the
 emulator with that daemon.
+
+## Calendar (1.8)
+
+Feature `baikal` ("Calendar", group Work, needs the plugin `nas`): the Baikal
+calendar straight from the phone, without the PC (`app/…/calendar/`). The
+account comes from pshell-core with the NAS token (`GET :8097/api/calendar/account`,
+docs/core.md "Calendar"; the phone's device belongs to its `owner`, else the
+only admin); when core has none for an account made before it, the screen asks
+for the Baikal password once and gives it to core. Then CalDAV with Digest
+(`Dav.kt`): the month (dots in the calendars' colours), the day, a line of text
+as an event (`When.kt`, the rules of the shell's `>cal`), the editor (title,
+calendar, all day, from/to with the Material pickers, repeat, reminder, place,
+notes; an event that exists is edited in place, `Ics.kt` keeps alarms and what
+DAVx5 wrote), details with Join / Edit / Delete (a repeating one: its series).
+Page `feature/baikal/calendars`: new calendars with a colour, rename, colour,
+delete or leave, and per calendar the members of core with No / Read / Read &
+write (CalDAV sharing). `feature/baikal/new:<yyyy-mm-dd>` opens the editor.
+Unit tests: `app/src/test/…/calendar/CalendarTest.kt`.
+
+Widget "Calendar" (`widget/CalendarWidget.kt`): today and the next two weeks
+by day with the calendars' colours, + for a new event; it reads
+`Calendars.upcoming`, kept in the prefs (`calendar`/`upcoming`) and refreshed
+by WorkManager every 30 minutes and after every change, so it shows without a
+connection too. Its background's strength is its own setting
+(`CalendarWidgetConfig`, reconfigurable: the launcher's widget settings, on
+Samsung long press › Settings).

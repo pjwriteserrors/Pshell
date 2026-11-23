@@ -77,6 +77,9 @@ Item {
 		{ id: "scroll", plugin: "scroll-screenshot", parent: "shot", command: "scroll", name: "Scroll Screenshot", keywords: "long page" },
 		{ id: "shots", plugin: "screenshot-history", parent: "shot", command: "shots", name: "Screenshot History", aliases: ["history"], status: Screenshot.shots.length > 0 ? String(Screenshot.shots.length) : "" },
 		{ id: "pictures", plugin: "viewer", command: "pictures", name: "Pictures", aliases: ["img", "images", "photos", "bilder"], status: Viewer.recent.length > 0 ? String(Viewer.recent.length) : "" },
+		{ id: "rhymes", plugin: "rhymes", group: "tools", command: "rhymes", name: "Lyrics editor", aliases: ["songwriting", "texten", "lyricseditor"], keywords: "lyrics rap rhymes beat songs window" },
+		{ id: "rhyme", plugin: "rhymes", group: "tools", command: "rhyme", name: "Rhymes", aliases: ["rh", "reim", "reime"], keywords: "lyrics rap multi syllables" },
+		{ id: "verses", plugin: "rhymes", command: "verses", name: "My lyrics", aliases: ["texte", "songtexte"], keywords: "lyrics songs written rhymes library search" },
 		{ id: "music", plugin: "music", command: "music", name: "Music", aliases: ["songs", "musik", "player"], status: Music.current ? Music.titleOf(Music.path) : "" },
 		{ id: "video", plugin: "video", command: "video", name: "Video", aliases: ["videos", "film", "movie", "player", "filme"], status: Video.current ? Video.title : "" },
 		{ id: "pdf", plugin: "pdf", command: "pdf", name: "PDF", aliases: ["pdfs", "docs", "dokument", "document", "lesen", "read"], status: Pdf.current ? Pdf.title : "" },
@@ -86,6 +89,7 @@ Item {
 		{ id: "translate", plugin: "translate", group: "tools", command: "t", name: "Translate", aliases: ["translate", "tr"], keywords: "language" },
 		{ id: "dictionary", plugin: "dictionary", group: "tools", command: "d", name: "Dictionary", aliases: ["dict", "define", "wb", "wörterbuch", "duden"], keywords: "word meaning explain pictures wiktionary bedeutung" },
 		{ id: "web-search", plugin: "web-search", group: "tools", command: "w", name: "Web Search", aliases: ["web", "search"], keywords: "browser" },
+		{ id: "places", plugin: "places", group: "tools", command: "wp", name: "Places", aliases: ["places", "orte", "ort"], keywords: "map restaurant cafe shop open hours near reviews route karte" },
 		{ id: "browser-workspaces", plugin: "browser-workspaces", group: "tools", command: "ws", name: "Browser Workspaces", aliases: ["workspaces"], keywords: "browser floorp workspace" },
 		{ id: "browser-tabs", plugin: "browser-launcher", group: "tools", command: "tab", name: "Browser Tabs", aliases: ["tabs"], keywords: "browser floorp firefox bookmarks history" },
 		// with the file manager on, >file opens it (and searches for what follows)
@@ -107,6 +111,8 @@ Item {
 		{ id: "updates", plugin: "updates", group: "panels", command: "updates", name: "Updates", aliases: ["update"], keywords: "arch packages", status: Updates.count > 0 ? String(Updates.count) : "" },
 		{ id: "screentime", plugin: "screentime", group: "panels", command: "screentime", name: "Screen Time", aliases: ["time", "usage"], keywords: "statistics", status: Screentime.clock(Screentime.total(Screentime.today)) },
 		{ id: "watch", plugin: "watch", group: "panels", command: "watch", name: "Watch", aliases: ["uhr", "sleep", "schlaf", "amazfit", "health"], keywords: "sleep night heart steps stress blood oxygen amazfit wrist", status: Watch.lastNight ? Watch.span(Watch.lastNight.total) : "" },
+		{ id: "vpn", plugin: Phone.plugin, group: "panels", command: "vpn", name: "VPN", aliases: ["wireguard", "wg", "unterwegs", "away"], keywords: "phone laptop server connections links tunnel remote" },
+		{ id: "cal", plugin: "nas-calendar", command: "cal", name: "Calendar", aliases: ["kalender", "termin", "event"], keywords: "baikal appointment add new date tomorrow morgen" },
 		{ id: "nas", plugin: "nas", command: "nas", name: "NAS", aliases: ["netcore"], keywords: "search files network storage backup sync share", status: Nas.summary },
 		{ id: "server", plugin: "netcore", command: "server", name: "Server", aliases: ["core", "pi", "services"], keywords: "netcore pshell-core services containers health memory guard devices logins portal", status: Netcore.active ? Netcore.summary : "" },
 		{ id: "printer", plugin: "printer", group: "panels", command: "printer", name: "3D Printer", aliases: ["print", "kobra", "ace"], keywords: "gcode filament orca slicer", status: Printer.printing ? `${Math.round(Printer.progress * 100)} %` : "" },
@@ -332,19 +338,23 @@ Item {
 	readonly property bool inConvertMode: Plugins.on("converter") && (root.commandQuery === "conv" || root.commandQuery.startsWith("conv "))
 	readonly property bool inTodoMode: Plugins.on("todos") && (root.commandQuery === "todo" || root.commandQuery.startsWith("todo "))
 	readonly property bool inWebMode: Plugins.on("web-search") && (root.commandQuery === "w" || root.commandQuery.startsWith("w "))
+	readonly property bool inPlacesMode: Plugins.on("places") && ["wp", "places", "orte", "ort"].some(c => root.commandQuery === c || root.commandQuery.startsWith(c + " "))
 	readonly property bool inTabsMode: Plugins.on("browser-launcher") && /^tabs?(\s|$)/.test(root.commandQuery)
 	readonly property bool inBrowserWsMode: Plugins.on("browser-workspaces") && /^ws(\s|$)/.test(root.commandQuery)
 	readonly property bool inAiActionsMode: Plugins.on("ai-actions") && (root.commandQuery === "ai" || root.commandQuery.startsWith("ai "))
 	readonly property bool inPhoneMode: Phone.offered && (root.commandQuery === "phone" || root.commandQuery.startsWith("phone "))
 	readonly property bool inShotsMode: Plugins.on("screenshot-history") && (root.commandQuery === "shots" || root.commandQuery.startsWith("shots "))
 	readonly property bool inPicturesMode: Plugins.on("viewer") && ["pictures", "img"].some(c => root.commandQuery === c || root.commandQuery.startsWith(c + " "))
+	readonly property bool inRhymeMode: Plugins.on("rhymes") && ["rhyme", "rh", "reim", "reime"].some(c => root.commandQuery === c || root.commandQuery.startsWith(c + " "))
+	readonly property bool inLyricsMode: Plugins.on("rhymes") && ["verses", "texte", "songtexte"].some(c => root.commandQuery === c || root.commandQuery.startsWith(c + " "))
 	readonly property bool inMusicMode: Plugins.on("music") && ["music", "songs"].some(c => root.commandQuery === c || root.commandQuery.startsWith(c + " "))
 	readonly property bool inVideoMode: Plugins.on("video") && ["video", "videos", "film"].some(c => root.commandQuery === c || root.commandQuery.startsWith(c + " "))
 	readonly property bool inPdfMode: Plugins.on("pdf") && ["pdf", "pdfs", "docs"].some(c => root.commandQuery === c || root.commandQuery.startsWith(c + " "))
 	readonly property bool inNasMode: Plugins.on("nas") && (root.commandQuery === "nas" || root.commandQuery.startsWith("nas "))
+	readonly property bool inCalMode: NasCalendar.enabled && (root.commandQuery === "cal" || root.commandQuery.startsWith("cal "))
 	readonly property bool inServerMode: Netcore.enabled && (root.commandQuery === "server" || root.commandQuery.startsWith("server "))
 	readonly property bool inEditMode: Plugins.on("editor") && (root.commandQuery === "edit" || root.commandQuery.startsWith("edit "))
-	readonly property bool inViewMode: root.inEditMode || root.inTranslateMode || root.inDictionaryMode || root.inConvertMode || root.inTodoMode || root.inWebMode || root.inTabsMode || root.inBrowserWsMode || root.inAiActionsMode || root.inPhoneMode || root.inShotsMode || root.inPicturesMode || root.inMusicMode || root.inVideoMode || root.inPdfMode || root.inNasMode || root.inServerMode || root.inFinderMode
+	readonly property bool inViewMode: root.inEditMode || root.inTranslateMode || root.inDictionaryMode || root.inConvertMode || root.inTodoMode || root.inWebMode || root.inPlacesMode || root.inTabsMode || root.inBrowserWsMode || root.inAiActionsMode || root.inPhoneMode || root.inShotsMode || root.inPicturesMode || root.inMusicMode || root.inRhymeMode || root.inLyricsMode || root.inVideoMode || root.inPdfMode || root.inNasMode || root.inCalMode || root.inServerMode || root.inFinderMode
 	// what follows the command token, as typed (">t fr hello" → "fr hello")
 	readonly property string modeArgument: {
 		const match = /^>\S+\s([\s\S]*)$/.exec(root.searchText);
@@ -1075,6 +1085,9 @@ Item {
 		case "web-search":
 			root.setLauncherSearch(">w ");
 			break;
+		case "places":
+			root.setLauncherSearch(">wp ");
+			break;
 		case "browser-tabs":
 			root.setLauncherSearch(">tab ");
 			break;
@@ -1132,6 +1145,16 @@ Item {
 		case "music":
 			root.setLauncherSearch(">music");
 			break;
+		case "rhyme":
+			root.setLauncherSearch(">rhyme ");
+			break;
+		case "verses":
+			root.setLauncherSearch(">verses ");
+			break;
+		case "rhymes":
+			root.closeRequested();
+			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "rhymes", "open"]);
+			break;
 		case "video":
 			root.setLauncherSearch(">video");
 			break;
@@ -1140,6 +1163,9 @@ Item {
 			break;
 		case "nas":
 			root.setLauncherSearch(">nas ");
+			break;
+		case "cal":
+			root.setLauncherSearch(">cal ");
 			break;
 		case "server":
 			root.setLauncherSearch(">server ");
@@ -1186,6 +1212,10 @@ Item {
 		case "watch":
 			root.closeRequested();
 			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "watch", "open"]);
+			break;
+		case "vpn":
+			root.closeRequested();
+			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "vpn", "open"]);
 			break;
 		case "downloads":
 			root.closeRequested();
@@ -1536,6 +1566,7 @@ Item {
 		if (root.inConvertMode) return "convert";
 		if (root.inTodoMode) return "todo";
 		if (root.inWebMode) return "web";
+		if (root.inPlacesMode) return "places";
 		if (root.inTabsMode) return "tabs";
 		if (root.inBrowserWsMode) return "browser-ws";
 		if (root.inAiActionsMode) return "ai";
@@ -1543,9 +1574,12 @@ Item {
 		if (root.inShotsMode) return "shots";
 		if (root.inPicturesMode) return "pictures";
 		if (root.inMusicMode) return "music";
+		if (root.inRhymeMode) return "rhyme";
+		if (root.inLyricsMode) return "verses";
 		if (root.inVideoMode) return "video";
 		if (root.inPdfMode) return "pdf";
 		if (root.inNasMode) return "nas";
+		if (root.inCalMode) return "cal";
 		if (root.inServerMode) return "server";
 		if (root.inFinderMode) return "finder";
 		if (root.inChatMode) return "chat";
@@ -1567,6 +1601,7 @@ Item {
 		case "convert": return "swap_horizontal";
 		case "todo": return "format_list_checks";
 		case "web": return "web";
+		case "places": return "map_marker";
 		case "tabs": return "tab";
 		case "browser-ws": return "monitor_dashboard";
 		case "ai": return "creation";
@@ -1574,9 +1609,12 @@ Item {
 		case "shots": return "image_multiple";
 		case "pictures": return "image_edit_outline";
 		case "music": return "music_note";
+		case "rhyme": return "format_quote_open";
+		case "verses": return "text_box_outline";
 		case "video": return "movie_open_outline";
 		case "pdf": return "file_pdf_box";
 		case "nas": return "server_network";
+		case "cal": return "calendar_plus";
 		case "server": return "server";
 		case "finder": return "folder_search_outline";
 		case "chat": return "chat";
@@ -1615,6 +1653,7 @@ Item {
 		case "converter": return "swap_horizontal";
 		case "todo": return "format_list_checks";
 		case "web-search": return "web";
+		case "places": return "map_marker";
 		case "browser-tabs": return "tab";
 		case "browser-workspaces": return "monitor_dashboard";
 		case "ai-actions": return "creation";
@@ -1631,9 +1670,13 @@ Item {
 		case "shots": return "image_multiple";
 		case "pictures": return "image_edit_outline";
 		case "music": return "music_note";
+		case "rhyme": return "format_quote_open";
+		case "rhymes": return "format_quote_open";
+		case "verses": return "text_box_outline";
 		case "video": return "movie_open_outline";
 		case "pdf": return "file_pdf_box";
 		case "nas": return "server_network";
+		case "cal": return "calendar_plus";
 		case "server": return "server";
 		case "unpin": return "pin_off_outline";
 		case "song": return "waveform";
@@ -1659,6 +1702,7 @@ Item {
 		case "streams-series": return command.glyph ?? "play_circle";
 		case "printer": return "printer_3d";
 		case "watch": return "watch";
+		case "vpn": return "vpn";
 		}
 		return "console";
 	}
@@ -1675,6 +1719,7 @@ Item {
 		case "convert": return convertView.item;
 		case "todo": return todoView.item;
 		case "web": return webSearchView.item;
+		case "places": return placesView.item;
 		case "tabs": return tabsView.item;
 		case "browser-ws": return browserWsView.item;
 		case "ai": return aiActionsView.item;
@@ -1682,9 +1727,12 @@ Item {
 		case "shots": return shotsView.item;
 		case "pictures": return picturesView.item;
 		case "music": return musicView.item;
+		case "rhyme": return rhymeView.item;
+		case "verses": return lyricsView.item;
 		case "video": return videoView.item;
 		case "pdf": return pdfView.item;
 		case "nas": return nasView.item;
+		case "cal": return calView.item;
 		case "server": return serverView.item;
 		case "finder": return finderView.item;
 		case "apps": return appsView;
@@ -1699,15 +1747,19 @@ Item {
 		case "convert": return "5 kg in lb";
 		case "todo": return todoView.item?.placeholder ?? "";
 		case "web": return "Search the web";
+		case "places": return "Place, street or kind";
 		case "tabs": return "Search tabs, bookmarks, history";
 		case "browser-ws": return "Floorp workspace";
 		case "ai": return "Ask, find, translate…";
 		case "phone": return "Text to send";
 		case "finder": return "Search your files";
 		case "music": return "Song, artist or album";
+		case "rhyme": return "A word or three";
+		case "verses": return "A title or words in a song";
 		case "video": return "Film or episode";
 		case "pdf": return "Name, words in it, or a page";
 		case "nas": return "Search the NAS";
+		case "cal": return "morgen 15 Uhr Zahnarzt @Praxis";
 		case "server": return "A service of netcore";
 		case "apps": return "Search apps  ·  > for commands";
 		default: return "";
@@ -1723,6 +1775,7 @@ Item {
 		case "convert": return "Convert";
 		case "todo": return "Todo";
 		case "web": return "Web Search";
+		case "places": return "Places";
 		case "tabs": return "Browser Tabs";
 		case "browser-ws": return "Browser Workspaces";
 		case "ai": return "AI";
@@ -1730,9 +1783,12 @@ Item {
 		case "shots": return "Screenshots";
 		case "pictures": return "Pictures";
 		case "music": return "Music";
+		case "rhyme": return "Rhymes";
+		case "verses": return "My lyrics";
 		case "video": return "Video";
 		case "pdf": return "PDF";
 		case "nas": return "NAS";
+		case "cal": return "Calendar";
 		case "server": return "Server";
 		case "finder": return "Files";
 		default: return "";
@@ -1748,6 +1804,7 @@ Item {
 		case "translate": return "copy";
 		case "todo": return todoView.item?.enterHint ?? "";
 		case "web": return webSearchView.item?.showingResults ? "open" : "search";
+		case "places": return placesView.item?.enterHint ?? "show";
 		case "tabs": return tabsView.item?.selected?.tab ? "switch" : "open";
 		case "browser-ws": return "switch";
 		case "ai": return "run";
@@ -1755,9 +1812,12 @@ Item {
 		case "shots": return "copy";
 		case "pictures": return "open";
 		case "music": return "play";
+		case "rhyme": return "copy";
+		case "verses": return "open";
 		case "video": return "play";
 		case "pdf": return "open";
 		case "nas": return "open";
+		case "cal": return calView.item?.argument?.trim() ? "add" : "show";
 		case "server": return "open";
 		case "apps": return appsView.zone === "actions" ? "run" : (appsView.current === null && appsView.searching && Plugins.on("web-search") ? "search the web" : "open");
 		default: return "open";
@@ -2626,6 +2686,35 @@ Item {
 				}
 			}
 
+			// places near the weather's city
+			ModeLayer {
+				current: root.mode === "places"
+
+				ModeView {
+					id: placesView
+
+					file: "PlacesView.qml"
+					current: root.mode === "places"
+					values: ({
+						active: root.mode === "places",
+						argument: root.modeArgument
+					})
+
+					Connections {
+						target: placesView.item
+						ignoreUnknownSignals: true
+
+						function onCloseRequested() {
+							root.closeRequested();
+						}
+
+						function onArgumentRequested(text) {
+							root.setLauncherSearch(`>wp ${text}`);
+						}
+					}
+				}
+			}
+
 			// ollama actions on the clipboard
 			ModeLayer {
 				current: root.mode === "ai"
@@ -2774,6 +2863,58 @@ Item {
 				}
 			}
 
+			// rhymes for what is typed (the rhymes window's helper)
+			ModeLayer {
+				current: root.mode === "rhyme"
+
+				ModeView {
+					id: rhymeView
+
+					file: "LyricsModeView.qml"
+					current: root.mode === "rhyme"
+					values: ({
+						kind: "rhyme",
+						active: root.mode === "rhyme",
+						argument: root.modeArgument
+					})
+
+					Connections {
+						target: rhymeView.item
+						ignoreUnknownSignals: true
+
+						function onCloseRequested() {
+							root.closeRequested();
+						}
+					}
+				}
+			}
+
+			// the songs written, by title or by a line
+			ModeLayer {
+				current: root.mode === "verses"
+
+				ModeView {
+					id: lyricsView
+
+					file: "LyricsModeView.qml"
+					current: root.mode === "verses"
+					values: ({
+						kind: "lyrics",
+						active: root.mode === "verses",
+						argument: root.modeArgument
+					})
+
+					Connections {
+						target: lyricsView.item
+						ignoreUnknownSignals: true
+
+						function onCloseRequested() {
+							root.closeRequested();
+						}
+					}
+				}
+			}
+
 			// what plays, comes and played (the music player)
 			ModeLayer {
 				current: root.mode === "music"
@@ -2865,6 +3006,31 @@ Item {
 
 					Connections {
 						target: nasView.item
+						ignoreUnknownSignals: true
+
+						function onCloseRequested() {
+							root.closeRequested();
+						}
+					}
+				}
+			}
+
+			// a new event from a line of text (NasCalendar.parseText)
+			ModeLayer {
+				current: root.mode === "cal"
+
+				ModeView {
+					id: calView
+
+					file: "CalendarModeView.qml"
+					current: root.mode === "cal"
+					values: ({
+						active: root.mode === "cal",
+						argument: root.modeArgument
+					})
+
+					Connections {
+						target: calView.item
 						ignoreUnknownSignals: true
 
 						function onCloseRequested() {

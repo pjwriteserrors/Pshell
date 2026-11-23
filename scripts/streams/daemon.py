@@ -89,6 +89,7 @@ DEFAULTS = {
     # pairs of channels said not to be one maker ("id|id"), so they are not offered again
     "notSameMaker": [],
     "sponsorBlock": True,
+    "youtubeSignIn": True,   # borrow Floorp's YouTube sign-in while YouTube asks for one
     "aiProvider": "ollama",  # ollama | claude | codex
     "aiModel": "",
     "subtitles": "",         # a language, "" for none
@@ -107,6 +108,10 @@ BLUETOOTH_DELAY = 190
 # pieces of sound fetched before the player asks: the sound is the player's
 # clock, one piece that comes late stops the picture as well
 SOUND_AHEAD = 3
+# DASH pieces fetched before the player asks: a 4K one is about 20 MB, fetched
+# in parts side by side, YouTube gives one request only so much speed
+DASH_AHEAD = {"v": 5, "a": 4}
+DASH_PART = 4 << 20
 # a progress report sends the whole state at most this often; in between only
 # what plays (the shell redraws every list it is sent)
 PROGRESS_STATE = 60
@@ -170,6 +175,7 @@ class Daemon(extras.Extras):
         self.left_at = time.time()
         self.dirty = threading.Event()
         self.settings = {**DEFAULTS, **(self.store.get_meta("settings", {}) or {})}
+        net.USE_BROWSER_SIGN_IN = bool(self.settings["youtubeSignIn"])
         self.live = {}            # source id -> stream
         self.gone = {}            # source id -> (when it went, the stream)
         self.raids = {}           # source id -> { to, name, at }
@@ -196,6 +202,10 @@ class Daemon(extras.Extras):
         self.sound_cache = {}
         self.sound_wait = {}
         self.sound_lock = threading.Lock()
+        self.dash = {}            # token -> {video, audio, page} with their indexes (net.dash_index)
+        self.dash_cache = {}      # (token, v|a, number) -> bytes
+        self.dash_wait = {}
+        self.dash_refresh_lock = threading.Lock()
         self.progress_told = 0
         self.history_at = 0
         self.sink_seen = (0, "")
@@ -215,11 +225,15 @@ class Daemon(extras.Extras):
         self.offline_busy = {}
         self.footer_cache = {}
         self.discover_soon = True
+        self.discover_gate = threading.Lock()
+        self.discovering = False
+        self.discover_again = False
         self.review_cache = {}
         self.browser_port = None
         self.loading = {}          # source id -> what it is doing now
         self.stop = False
         self.last_state = ""
+        self.last_discoveries = ""
         # watching happens in the app now
         if not self.store.get_meta("player-in-app"):
             self.settings["player"] = "app"
@@ -227,7 +241,7 @@ class Daemon(extras.Extras):
             self.store.set_meta("player-in-app", True)
         # the player's picture-and-sound playlists, only for this machine
         self.served = {}
-        self.resolved = {}        # (video, quality) -> (when, the answer)
+        self.resolved = {}        # (video, quality) -> (when, the answer, when its addresses end)
         self.prefetching = queue.Queue()
         self.listening = queue.Queue()
         self.listen_known = set()
@@ -286,6 +300,12 @@ class Daemon(extras.Extras):
                 if text != self.last_state:
                     self.last_state = text
                     self.tell("state", state=state)
+                # the suggestions are big and change seldom: sent on their own when they do
+                items = self.discovery_view()
+                text = json.dumps(items, sort_keys=True)
+                if text != self.last_discoveries:
+                    self.last_discoveries = text
+                    self.tell("discoveries", items=items)
             except Exception as error:  # noqa: BLE001 – one bad row must not silence the rest
                 print("state:", repr(error), file=sys.stderr, flush=True)
             time.sleep(0.15)
@@ -300,7 +320,6 @@ class Daemon(extras.Extras):
             "live": self.live_view(),
             "inbox": self.inbox(),
             "plan": self.plan(),
-            "discoveries": self.discovery_view(),
             "scan": self.scan_status(),
             "together": self.together.status(),
             "sheetsJob": self.sheet_job,
@@ -515,6 +534,27 @@ class Daemon(extras.Extras):
 
     # ── series nobody made yet ─────────────────────────────────────────────
     def discover(self):
+        """One looking-through at a time: asked again while it runs, it runs once
+        more afterwards instead of side by side (they starved the video server)."""
+        with self.discover_gate:
+            if self.discovering:
+                self.discover_again = True
+                return
+            self.discovering = True
+        try:
+            while True:
+                self.discover_now()
+                with self.discover_gate:
+                    if not self.discover_again:
+                        self.discovering = False
+                        return
+                    self.discover_again = False
+        except BaseException:
+            with self.discover_gate:
+                self.discovering = False
+            raise
+
+    def discover_now(self):
         """Every channel looked through again; newest videos first."""
         dismissed = set(self.store.get_meta("dismissed-suggestions", []) or [])
         all_series = self.store.all("SELECT * FROM series")
@@ -529,15 +569,16 @@ class Daemon(extras.Extras):
             source = {**group[0], "name": " ".join(one["name"] for one in group)}
             shown_name = " & ".join(one["name"] for one in group)
             footer = self.footer_of(ids_) if len(group) > 1 else None
-            source["footer"] = footer
             videos = self.store.videos_of(ids_)
             by_id = {video["id"]: video for video in videos}
+            # the same for every suggestion of the channel: read once, not once each
+            source["footer"] = footer if footer is not None else rules.footer_lines([video.get("description") for video in by_id.values()])
             playlists = [{"id": row["id"], "title": rules.clean_playlist_name(row["title"], member["name"]), "ids": loads(row["ids"], [])} for member in group for row in self.store.all("SELECT * FROM playlist_scan WHERE channel = ?", member["id"])]
             own_series = [row for row in all_series if set(ids_) & set(loads(row["sources"], []))]
             taken = [{row["video"] for row in self.store.all("SELECT video FROM member WHERE series = ? AND state = 'sure'", series["id"])} for series in own_series]
             followed = {series["playlist"].split(":", 1)[-1] for series in own_series if series["playlist"]}
             colors = loads(source["colors"], None)
-            for found in rules.discover(videos, playlists, source["name"], 12 * len(group), footer):
+            for found in rules.discover(videos, playlists, source["name"], footer=footer):
                 key = f"{source['id']}:{found['word']}"
                 ids = set(found["ids"])
                 if key in dismissed or found.get("playlist") in followed:
@@ -590,7 +631,7 @@ class Daemon(extras.Extras):
         return [{**part, "pictures": [self.thumb_of(picture) or picture["thumb"] for picture in part["pictures"]]} for part in parts]
 
     def discovery_view(self):
-        return [{**item, "parts": self.view_parts(item["parts"]), "pictures": [self.thumb_of(picture) or picture["thumb"] for picture in item["pictures"]]} for item in self.discovered[:90]]
+        return [{**item, "parts": self.view_parts(item["parts"]), "pictures": [self.thumb_of(picture) or picture["thumb"] for picture in item["pictures"]]} for item in self.discovered]
 
     def series_parts(self, args):
         """What a followed series holds, for making series of its parts."""
@@ -1266,9 +1307,16 @@ class Daemon(extras.Extras):
                 self.offline_busy[episode["id"]] = True
                 self.work.put(("offline", episode["id"]))
 
+    def mpv_ready(self):
+        self.mpv.ytdl_format = net.ytdlp_format(int(self.settings.get("quality") or 1080))
+        signed = net.sign_in_args()
+        self.mpv.ytdl_options = [f"--ytdl-raw-options-append=cookies-from-browser={signed[1]}"] if signed else []
+
     def fetch_offline(self, video_id):
         try:
-            subprocess.run([net.YTDLP, "-f", "bv*[height<=1080]+ba/b", "--no-playlist", "-o", os.path.join(OFFLINE, "%(id)s.%(ext)s"), f"https://www.youtube.com/watch?v={video_id}"], capture_output=True, timeout=3600, check=False)
+            net.ytdlp_run(["-f", net.ytdlp_format(int(self.settings.get("quality") or 1080)), "--no-playlist", "-o", os.path.join(OFFLINE, "%(id)s.%(ext)s"), f"https://www.youtube.com/watch?v={video_id}"], 3600)
+        except net.Failure:
+            pass
         finally:
             self.offline_busy.pop(video_id, None)
             self.changed()
@@ -1317,6 +1365,7 @@ class Daemon(extras.Extras):
         elif how == "mpv" and shutil.which("mpv") and video["kind"] != "article":
             local = self.offline_path(video_id)
             segments = net.sponsor_segments(video_id) if self.settings.get("sponsorBlock", True) and not video_id.startswith("rss-") else []
+            self.mpv_ready()
             self.mpv.play(local or url, video_id, start=start, segments=segments, title=video["title"])
             self.set_playing(video_id, start, video["duration"], "mpv")
         elif video["kind"] != "article" and self.browser_port:
@@ -1348,6 +1397,8 @@ class Daemon(extras.Extras):
             def do_GET(self):
                 if self.path.startswith("/sound/"):
                     return self.sound()
+                if self.path.startswith("/dash/"):
+                    return self.dash()
                 if self.path.startswith("/sync/"):
                     return self.sync()
                 body = daemon.served.get(self.path.strip("/").removesuffix(".m3u8"))
@@ -1370,6 +1421,23 @@ class Daemon(extras.Extras):
                 self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
                 self.wfile.write(data)
+
+            def dash(self):
+                try:
+                    data, kind = daemon.dash_piece(self.path.removeprefix("/dash/"))
+                except (net.Failure, KeyError, IndexError, ValueError) as error:
+                    print("dash:", error, file=sys.stderr, flush=True)
+                    self.send_response(502)
+                    self.end_headers()
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", kind)
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                try:
+                    self.wfile.write(data)
+                except OSError:
+                    pass  # the player went on to another piece (a seek)
 
             def sync(self):
                 path = os.path.join(extras.sync_dir(), os.path.basename(self.path))
@@ -1462,20 +1530,166 @@ class Daemon(extras.Extras):
             if event:
                 event.set()
 
-    def sound_fetch_bytes(self, url, what):
-        """Quickly asked again: a request YouTube lets hang is no use after
-        seconds, the player runs dry long before twenty."""
-        started = time.time()
-        error = None
-        for attempt, timeout in enumerate((6, 8, 12)):
+    def dash_piece(self, path):
+        """The HLS that net.player_streams made of YouTube's DASH files:
+        <token>/v.m3u8, <token>/v/init.mkv, <token>/v/7.mkv (a for the sound)."""
+        token, _, rest = path.partition("/")
+        track = rest[:1]
+        index = self.dash[token]["video" if track == "v" else "audio"]["index"]
+        kind = "video/x-matroska" if index["kind"] == "mkv" else "video/mp4"
+        if rest == f"{track}.m3u8":
+            return net.dash_playlist(index, lambda number: f"/dash/{token}/{track}/{number}.{index['kind']}").encode(), "application/vnd.apple.mpegurl"
+        name = rest.split("/", 1)[1].split(".")[0]
+        if name == "init":
+            return index["init"], kind
+        number = int(name)
+        data = self.dash_get(token, track, number)
+        for ahead in range(number + 1, min(number + 1 + DASH_AHEAD[track], len(index["pieces"]))):
+            threading.Thread(target=self.dash_get, args=(token, track, ahead, True), daemon=True).start()
+        if track == "a" and index["kind"] == "mp4":
+            data = net.shift_fmp4(data, self.sound_lead()["ms"], index["timescale"])
+        return data, kind
+
+    def dash_get(self, token, track, number, ahead=False):
+        """One DASH piece, from what was fetched ahead or fetched now; asked
+        twice at once, it is fetched once."""
+        key = (token, track, number)
+        with self.sound_lock:
+            if key in self.dash_cache:
+                return self.dash_cache[key]
+            waiting = self.dash_wait.get(key)
+            if waiting is None:
+                self.dash_wait[key] = threading.Event()
+        if waiting is not None:
+            if ahead:
+                return None
+            waiting.wait(60)
+            with self.sound_lock:
+                if key in self.dash_cache:
+                    return self.dash_cache[key]
+        source = self.dash[token]["video" if track == "v" else "audio"]
+        start, end, _ = source["index"]["pieces"][number]
+        what = f"{'picture' if track == 'v' else 'sound'} {number}{' ahead' if ahead else ''}"
+        try:
             try:
-                data = net.fetch(url, timeout=timeout)
-                took = time.time() - started
-                if took > 1.5 or attempt:
-                    self.player_log(f"{what}: {took:.1f} s, {attempt + 1} tries")
-                return data
+                data = self.dash_fetch(source["url"], start, end, what)
             except net.Failure as failure:
-                error = failure
+                # the addresses ended (about six hours): new ones for the same files
+                if "403" not in str(failure) or not self.dash_refresh(token):
+                    raise
+                data = self.dash_fetch(self.dash[token]["video" if track == "v" else "audio"]["url"], start, end, what)
+            with self.sound_lock:
+                self.dash_cache[key] = data
+                # what was played goes, and what lay ahead before a seek
+                for other in [other for other in self.dash_cache if other[:2] == key[:2] and not number - 2 <= other[2] <= number + 6]:
+                    self.dash_cache.pop(other)
+                while len(self.dash_cache) > 24:
+                    self.dash_cache.pop(next(iter(self.dash_cache)))
+            return data
+        except net.Failure:
+            if ahead:
+                return None
+            raise
+        finally:
+            if waiting is None:
+                with self.sound_lock:
+                    event = self.dash_wait.pop(key, None)
+                if event:
+                    event.set()
+
+    def dash_refresh(self, token):
+        """New addresses for the files a DASH token plays, once for all pieces
+        that ran into the end at the same time. Same format, same bytes: the
+        index stays."""
+        with self.dash_refresh_lock:
+            entry = self.dash[token]
+            if time.time() - entry.get("refreshed", 0) < 60:
+                return True
+            try:
+                formats = net.ytdlp_json(["--skip-download", "--no-playlist", entry["page"]], timeout=90).get("formats") or []
+            except net.Failure as failure:
+                self.player_log(f"new addresses: {failure}")
+                return False
+            by_itag = {re.search(r"[?&/]itag[=/](\d+)", f.get("url") or "")[1]: f["url"] for f in formats if f.get("url") and re.search(r"[?&/]itag[=/](\d+)", f["url"])}
+            fresh = {}
+            for name in ("video", "audio"):
+                itag = re.search(r"[?&/]itag[=/](\d+)", entry[name]["url"])
+                if not itag or itag[1] not in by_itag:
+                    self.player_log(f"new addresses: the {name} format is gone")
+                    return False
+                fresh[name] = {**entry[name], "url": by_itag[itag[1]]}
+            self.dash[token] = {**entry, **fresh, "refreshed": time.time()}
+            self.player_log("new addresses for a video that played on")
+            # a new address is refused for about a second
+            time.sleep(1.5)
+            return True
+
+    def dash_fetch(self, url, start, end, what):
+        """Bytes start..end of a DASH file, in parts asked side by side."""
+        if end == "":
+            return self.sound_fetch_bytes(url, what, {"Range": f"bytes={start}-"})
+        parts = [(at, min(at + DASH_PART, end + 1) - 1) for at in range(start, end + 1, DASH_PART)]
+        got = [None] * len(parts)
+
+        def one(number):
+            try:
+                got[number] = self.sound_fetch_bytes(url, what if len(parts) == 1 else f"{what}.{number}", {"Range": "bytes=%d-%d" % parts[number]})
+            except net.Failure as failure:
+                got[number] = failure
+        threads = [threading.Thread(target=one, args=(number,), daemon=True) for number in range(1, len(parts))]
+        for thread in threads:
+            thread.start()
+        one(0)
+        for thread in threads:
+            thread.join()
+        for part in got:
+            if isinstance(part, net.Failure):
+                raise part
+        return b"".join(got)
+
+    def sound_fetch_bytes(self, url, what, headers=None):
+        """Asked once more beside the first when it takes too long: googlevideo
+        lets every fourth or fifth answer trickle (a 2 MB piece in 15 s) while
+        the same piece asked again comes in a third of a second. The first
+        answer wins, the others are given up."""
+        started = time.time()
+        found = re.match(r"bytes=(\d+)-(\d+)", (headers or {}).get("Range", ""))
+        size = int(found[2]) - int(found[1]) + 1 if found else 0
+        patience = 0.8 + size / 4e6 if size else 2
+        stop = threading.Event()
+        done = queue.Queue()
+
+        def one(attempt):
+            try:
+                done.put((attempt, net.fetch_stoppable(url, headers, timeout=8, stop=stop)))
+            except net.Failure as failure:
+                done.put((attempt, failure))
+        tries, running, error = 0, 0, None
+        try:
+            while True:
+                if running == 0 or (tries < 4 and time.time() - started >= patience * tries):
+                    tries += 1
+                    running += 1
+                    threading.Thread(target=one, args=(tries,), daemon=True).start()
+                left = started + 45 - time.time()
+                if left <= 0:
+                    error = error or net.Failure("No answer in time")
+                    break
+                try:
+                    attempt, got = done.get(timeout=min(left, max(0.05, started + patience * tries - time.time()) if tries < 4 else left))
+                except queue.Empty:
+                    continue
+                running -= 1
+                if not isinstance(got, net.Failure):
+                    took = time.time() - started
+                    if took > 1.5 or tries > 1:
+                        self.player_log(f"{what}: {took:.1f} s, {tries} tries, try {attempt} won")
+                    return got
+                error = got
+                if running == 0 and tries >= 4:
+                    break
+        finally:
+            stop.set()
         self.player_log(f"{what}: failed after {time.time() - started:.1f} s ({error})")
         raise error
 
@@ -1538,8 +1752,9 @@ class Daemon(extras.Extras):
         video_id = args.get("video") or ""
         key = (video_id or args.get("url") or "", quality)
         cached = self.resolved.get(key)
-        # YouTube's addresses hold for hours; streams change
-        if video_id and cached and time.time() - cached[0] < 3 * 3600 and not args.get("fresh"):
+        # YouTube's addresses hold about six hours: an answer from before does
+        # while they hold for the whole video and half an hour more
+        if video_id and cached and time.time() + (cached[1].get("duration") or 3600) + 1800 < cached[2] and not args.get("fresh"):
             self.want_listen(video_id)
             return {**cached[1], "cached": True, "marks": self.marks_of(video_id)}
         return self.resolve_new(args, video_id, quality, key, quiet=False)
@@ -1567,12 +1782,19 @@ class Daemon(extras.Extras):
             token = uuid.uuid4().hex
             self.sound_lists[token] = found["audio"]
             self.served[token] = found["master"].replace(found["audio"], f"http://127.0.0.1:{self.server_port}/sound/{token}.m3u8")
-            # as many as `resolved` remembers, or a remembered address leads nowhere
-            for old in list(self.served)[:-90]:
-                self.served.pop(old, None)
-                self.sound_lists.pop(old, None)
-                self.sound_pieces.pop(old, None)
-                self.sound_texts.pop(old, None)
+            self.forget_served()
+            address = f"http://127.0.0.1:{self.server_port}/{token}.m3u8"
+        elif found.get("dash"):
+            token = uuid.uuid4().hex
+            self.dash[token] = {**found["dash"], "page": url}
+            video = found["dash"]["video"]
+            base = f"http://127.0.0.1:{self.server_port}/dash/{token}"
+            self.served[token] = (
+                "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-INDEPENDENT-SEGMENTS\n"
+                f'#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="a",NAME="audio",DEFAULT=YES,AUTOSELECT=YES,URI="{base}/a.m3u8"\n'
+                f'#EXT-X-STREAM-INF:BANDWIDTH={int((video["tbr"] or 5000) * 1000)},RESOLUTION={video["width"] or 1920}x{video["height"]},AUDIO="a"\n{base}/v.m3u8\n'
+            )
+            self.forget_served()
             address = f"http://127.0.0.1:{self.server_port}/{token}.m3u8"
         step("extras")
         segments = []
@@ -1580,13 +1802,23 @@ class Daemon(extras.Extras):
             segments = net.sponsor_segments(video_id)
         answer = {"url": address, "qualities": found["qualities"], "height": found.get("height", 0), "segments": segments, "duration": found["duration"], "chapters": found.get("chapters") or (self.store.get_meta(f"chapters:{video_id}", []) or []) if video_id else found.get("chapters") or [], "storyboard": found.get("storyboard"), "captions": found.get("captions") or []}
         if video_id:
-            self.resolved[key] = (time.time(), answer)
+            held = [int(stamp) for stamp in re.findall(r"expire[=/](\d+)", " ".join(str(found.get(name) or "") for name in ("video", "audio", "direct", "master")))]
+            self.resolved[key] = (time.time(), answer, min(held) if held else time.time() + 3 * 3600)
             if len(self.resolved) > 60:
                 self.resolved.pop(next(iter(self.resolved)))
             if found.get("listen"):
                 self.listen_urls[video_id] = found["listen"]
             self.want_listen(video_id)
         return {**answer, "marks": self.marks_of(video_id) if video_id else {}}
+
+    def forget_served(self):
+        # as many as `resolved` remembers, or a remembered address leads nowhere
+        for old in list(self.served)[:-90]:
+            self.served.pop(old, None)
+            self.sound_lists.pop(old, None)
+            self.sound_pieces.pop(old, None)
+            self.sound_texts.pop(old, None)
+            self.dash.pop(old, None)
 
     # ── asking ahead, so that a click finds it ready ───────────────────────
     def prefetch_loop(self):
@@ -1995,6 +2227,7 @@ class Daemon(extras.Extras):
         """The running video in a small window of its own, where it is."""
         video = self.store.one("SELECT * FROM video WHERE id = ?", args.get("video") or "")
         url = (video or {}).get("url") or args.get("url") or ""
+        self.mpv_ready()
         self.mpv.play(url, video["id"] if video else "", start=float(args.get("position") or 0), live=not video, pip=True)
         return {}
 
@@ -2048,6 +2281,7 @@ class Daemon(extras.Extras):
                       series="", seriesName="", channel=source["name"], avatar=source["avatar"], chapters=[], url=url)
             return {}
         if args.get("player") == "mpv" or args.get("pip"):
+            self.mpv_ready()
             self.mpv.play(url, "", live=True, pip=bool(args.get("pip")))
         else:
             self.tell("open", url=url)
@@ -2728,6 +2962,7 @@ class Daemon(extras.Extras):
 
     def set_settings(self, args):
         self.settings.update({key: value for key, value in args.items() if key in DEFAULTS})
+        net.USE_BROWSER_SIGN_IN = bool(self.settings["youtubeSignIn"])
         self.store.set_meta("settings", self.settings)
         self.changed()
         return self.settings
@@ -2755,10 +2990,11 @@ class Daemon(extras.Extras):
         }
         if op == "hello":
             self.last_state = ""
+            self.last_discoveries = ""
             self.changed()
             return {"pid": os.getpid()}
         if op == "state":
-            return self.state()
+            return {**self.state(), "discoveries": self.discovery_view()}
         if op == "playerState":
             return self.player_state(client, args)
         if op == "refresh":

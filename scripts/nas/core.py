@@ -9,6 +9,7 @@ status 0 when core did not answer at all (data then `{error, code:
 "unreachable"}`), so the shell sees 401/403/409 … as they came.
 """
 import json
+import os
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -65,6 +66,27 @@ class Core:
             return error.code, parse(error.read(65536))
         except (urllib.error.URLError, OSError, ValueError) as error:
             return 0, {"error": f"Core did not answer ({getattr(error, 'reason', error)})", "code": "unreachable"}
+
+    def download(self, path, target, timeout=120):
+        """A file of core's API to `target` (written beside it, then moved); → status."""
+        request = urllib.request.Request(self.base + path, headers=self.headers())
+        part = f"{target}.part"
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as answer, open(part, "wb") as out:
+                while True:
+                    chunk = answer.read(1 << 16)
+                    if not chunk:
+                        break
+                    out.write(chunk)
+            os.replace(part, target)
+            return 200
+        except urllib.error.HTTPError as error:
+            return error.code
+        except (urllib.error.URLError, OSError) as error:
+            return 0
+        finally:
+            if os.path.exists(part):
+                os.unlink(part)
 
 
 def parse(raw):

@@ -17,7 +17,8 @@ import qs.core.views
 // screen; over it its logo, how long it was played and how it starts, and
 // the covers on a shelf along the bottom – the one picked grows at the
 // front, those passed slide out to the left. G turns the shelf into a grid
-// of every cover. Typing searches, Tab walks the filters, Enter plays.
+// of every cover, again into shelves (the user's own and the genres',
+// ShelvesView). Typing searches, Tab walks the filters, Enter plays.
 //
 // Steam's games start through Steam; the others with Proton, Wine or as
 // they are, or through Steam once they were added to it. A program dropped
@@ -30,8 +31,14 @@ ModalWindow {
 	// recent | name | playtime
 	property string sort: "recent"
 	property string query: ""
-	property bool grid: false
-	property real gridness: root.grid ? 1 : 0
+	// cover | grid | shelves
+	property string view: "shelves"
+	readonly property bool grid: root.view === "grid"
+	readonly property bool shelving: root.view === "shelves"
+	// how far the picked game has given way to the grid or the shelves
+	property real gridness: root.view !== "cover" ? 1 : 0
+	property real gridShown: root.grid ? 1 : 0
+	property real shelvesShown: root.shelving ? 1 : 0
 	property string selectedId: ""
 	// the first moments after opening: covers come in one after another
 	property bool intro: false
@@ -78,7 +85,7 @@ ModalWindow {
 	readonly property var selected: root.list.length > 0 ? root.list[root.index] : null
 	readonly property bool running: !!root.selected && Games.isRunning(root.selected.id)
 	readonly property int totalMinutes: Games.games.filter(game => !game.hidden).reduce((sum, game) => sum + (game.playtime || 0), 0)
-	readonly property bool busy: curtain.up || sheet.open || menu.open
+	readonly property bool busy: curtain.up || sheet.open || menu.open || lobby.open
 	// the picked game's own colour: the play button, the rings, the lines take it
 	property color accent: GameText.accent(root.selected, Theme.primary)
 	readonly property color onAccent: GameText.onColor(root.accent)
@@ -99,6 +106,8 @@ ModalWindow {
 	readonly property real cardW: Math.round(root.cardH * 2 / 3)
 	readonly property real bigW: Math.round(root.cardW * 1.32)
 	readonly property real side: Math.max(48, Math.round(root.areaWidth * 0.045))
+	// the details above the shelves: logo, facts, stats, buttons
+	readonly property real spotlightH: 104 + 30 + 84 + 64 + 12 * 3
 
 	function select(i, quiet) {
 		if (root.list.length === 0) return;
@@ -129,13 +138,20 @@ ModalWindow {
 		root.setFilter(next.id);
 	}
 
-	function toggleGrid() {
-		root.grid = !root.grid;
+	function setView(view) {
+		if (root.view === view) return;
+		root.view = view;
 		Sounds.play("select");
 		Qt.callLater(() => {
 			if (root.grid) gridView.positionViewAtIndex(root.index, GridView.Contain);
+			else if (root.shelving) shelves.reveal();
 			else shelf.positionViewAtIndex(root.index, ListView.Beginning);
 		});
+	}
+
+	function toggleGrid() {
+		const order = ["cover", "grid", "shelves"];
+		root.setView(order[(order.indexOf(root.view) + 1) % order.length]);
 	}
 
 	function cycleSort() {
@@ -167,7 +183,7 @@ ModalWindow {
 			}
 			return;
 		}
-		const card = root.grid ? gridView.currentItem : shelf.currentItem;
+		const card = root.grid ? gridView.currentItem : (root.shelving ? shelves.currentCard() : shelf.currentItem);
 		let from = Qt.rect(root.areaWidth / 2 - 100, root.areaHeight - 300, 200, 300);
 		if (card) {
 			const point = card.mapToItem(curtain, 0, card.height - card.width * 1.5);
@@ -182,6 +198,15 @@ ModalWindow {
 
 	function startWith(game) {
 		const out = [];
+		// Steam's games: the Proton Steam runs them with, kept in Steam
+		if (game.kind === "steam" || game.kind === "shortcut") {
+			// the one ProtonDB's reports favour says so
+			const best = game.protonDb ? game.protonDb.tool : null;
+			out.push({ icon: "steam", label: "Steam's choice", detail: best === "" ? "ProtonDB" : "", checked: !game.tool, run: () => Games.setTool(game.id, "") });
+			for (const tool of Games.runners.filter(each => each.kind === "proton"))
+				out.push({ icon: "microsoft_windows", label: tool.name, detail: best === tool.tool ? "ProtonDB" : "", checked: game.tool === tool.tool, run: () => Games.setTool(game.id, tool.tool) });
+			return out;
+		}
 		if (game.gameid && (game.kind === "shortcut" || game.inSteam)) out.push({ icon: "steam", label: "Steam", detail: "As Steam starts it", run: () => root.play(game, "steam") });
 		if (game.kind === "custom") {
 			if (game.windows) {
@@ -195,16 +220,46 @@ ModalWindow {
 		return out;
 	}
 
-	function menuFor(game) {
+	// the user's shelves for a game: on or off each, or a new one
+	function shelvesFor(game) {
+		const out = Games.shelves.map(each => {
+			const on = each.games.indexOf(game.id) >= 0;
+			return { icon: on ? "bookmark_remove_outline" : "bookmark_plus_outline", label: each.name, checked: on, run: () => on ? Games.unshelve(each.id, game.id) : Games.shelve(each.id, game.id, -1) };
+		});
+		out.push({ icon: "plus", label: "New shelf", run: () => {
+			const id = Games.newShelf("New shelf", [game.id], Games.shelves.length > 0 ? Games.shelves[Games.shelves.length - 1].id : "");
+			root.setView("shelves");
+			Qt.callLater(() => shelves.startRename(id));
+		} });
+		return out;
+	}
+
+	function shelfMenu(shelfId) {
+		const at = Games.shelves.findIndex(each => each.id === shelfId);
+		if (at < 0) return [];
+		return [
+			{ icon: "pencil_outline", label: "Rename", run: () => shelves.startRename(shelfId) },
+			{ icon: "arrow_up", label: "Move up", shown: at > 0, run: () => Games.moveShelf(shelfId, -1) },
+			{ icon: "arrow_down", label: "Move down", shown: at < Games.shelves.length - 1, run: () => Games.moveShelf(shelfId, 1) },
+			{ icon: "delete_outline", label: "Delete shelf", danger: true, confirm: "Click again to delete", run: () => Games.deleteShelf(shelfId) }
+		];
+	}
+
+	function menuFor(game, shelfId) {
 		if (!game) return [];
 		const running = Games.isRunning(game.id);
 		const storeApp = game.kind === "steam" ? game.appid : (String(game.artChoice || "").startsWith("steam:") ? game.artChoice.slice(6) : "");
 		const others = root.startWith(game);
+		const onShelf = shelfId ? Games.shelf(shelfId) : null;
 		return [
 			{ icon: running ? "open_in_new" : "play", label: running ? "Show the game" : "Play", detail: GameText.runnerLabel(game, Games.runners), run: () => root.play(game) },
-			{ icon: "tune_variant", label: "Start with", children: others, shown: others.length > 1 || (game.kind === "custom" && others.length > 0) },
+			{ icon: "account_multiple", label: "Party", detail: "PartyDeck", shown: Party.offered(game) && !Party.runs(game.id), run: () => lobby.begin(game) },
+			{ icon: "stop", label: "End the party", shown: Party.runs(game.id), run: () => Party.stop() },
+			{ icon: "tune_variant", label: game.kind === "custom" ? "Start with" : "Proton", detail: game.kind !== "custom" && Games.steamRunning ? "Steam restarts for it" : "", enabled: Games.toolSetting === "", children: others, shown: others.length > 1 || (game.kind === "custom" && others.length > 0) },
 			{ icon: "steam", label: "Add to Steam", detail: Games.steamRunning ? "As a non-Steam game; Steam restarts" : "As a non-Steam game", shown: game.kind === "custom" && !game.inSteam && Games.steam, enabled: Games.steamAdding === "", run: () => Games.addToSteam(game.id) },
 			{ icon: game.favorite ? "heart_outline" : "heart", label: game.favorite ? "No longer a favourite" : "Favourite", run: () => Games.toggleFavorite(game.id) },
+			{ icon: "bookmark_multiple_outline", label: "Shelves", children: root.shelvesFor(game) },
+			{ icon: "bookmark_remove_outline", label: `Off “${onShelf?.name ?? ""}”`, shown: !!onShelf, run: () => Games.unshelve(shelfId, game.id) },
 			{ icon: "image_outline", label: "Change cover", run: () => sheet.begin("cover", game) },
 			{ icon: "pencil_outline", label: game.kind === "custom" ? "Edit" : "Rename", detail: game.kind === "custom" ? "Name, program, how it starts" : "", run: () => sheet.begin("edit", game) },
 			{ icon: "folder_open_outline", label: "Open its folder", shown: !!game.dir, run: () => {
@@ -217,13 +272,14 @@ ModalWindow {
 				Qt.openUrlExternally(`steam://store/${storeApp}`);
 			} },
 			{ icon: game.hidden ? "eye_outline" : "eye_off_outline", label: game.hidden ? "Show again" : "Hide", detail: game.hidden ? "" : "The Hidden filter brings it back", run: () => Games.setHidden(game.id, !game.hidden) },
-			{ icon: "delete_outline", label: "Remove from the library", detail: "The game itself stays", danger: true, confirm: "Click again to remove", shown: game.kind === "custom", run: () => Games.remove(game.id) }
+			{ icon: "delete_outline", label: "Remove from the library", detail: game.kind === "shortcut" ? "It stays in Steam" : "The game itself stays", danger: true, confirm: "Click again to remove", shown: game.kind === "custom" || game.kind === "shortcut", run: () => Games.remove(game.id) }
 		];
 	}
 
-	function openMenu(x, y) {
+	function openMenu(x, y, shelfId) {
 		if (!root.selected) return;
-		menu.show(root.menuFor(root.selected), x, y);
+		const row = shelfId ?? (root.shelving && shelves.currentRow.startsWith("own:") ? shelves.currentRow.slice(4) : "");
+		menu.show(root.menuFor(root.selected, row), x, y);
 	}
 
 	modalId: "games"
@@ -234,6 +290,7 @@ ModalWindow {
 		if (!root.shown) {
 			curtain.reset();
 			sheet.close();
+			lobby.close();
 			menu.close();
 		}
 	}
@@ -246,6 +303,7 @@ ModalWindow {
 		root.intro = true;
 		introEnd.restart();
 		root.selectedId = "";
+		root.view = "shelves";
 		const focus = Games.focusId;
 		const withMenu = Games.focusMenu;
 		const withStats = Games.focusStats;
@@ -255,6 +313,7 @@ ModalWindow {
 		Qt.callLater(() => {
 			root.select(0, true);
 			shelf.positionViewAtBeginning();
+			shelves.goTop();
 			keys.forceActiveFocus();
 			// opened from the bar's panel on a game
 			if (focus !== "" && root.list.some(game => game.id === focus)) {
@@ -274,7 +333,11 @@ ModalWindow {
 
 	onListChanged: {
 		// the picked game stays picked when it is still there
-		if (root.list.length > 0 && !root.list.some(game => game.id === root.selectedId)) root.selectedId = root.list[0].id;
+		if (root.list.length > 0 && !root.list.some(game => game.id === root.selectedId)) {
+			// the first list after opening: the shelves start at the top
+			if (root.selectedId === "" && root.shelving) Qt.callLater(shelves.goTop);
+			root.selectedId = root.list[0].id;
+		}
 		games.sync(root.list.map(game => Object.assign({ key: game.id }, game)));
 		if (shelf.currentIndex !== root.index) shelf.currentIndex = root.index;
 		if (gridView.currentIndex !== root.index) gridView.currentIndex = root.index;
@@ -290,6 +353,20 @@ ModalWindow {
 	Behavior on gridness {
 		NumberAnimation {
 			duration: Motion.extraLong
+			easing.type: Easing.BezierSpline
+			easing.bezierCurve: Motion.emphasized
+		}
+	}
+	Behavior on gridShown {
+		NumberAnimation {
+			duration: Motion.long
+			easing.type: Easing.BezierSpline
+			easing.bezierCurve: Motion.emphasized
+		}
+	}
+	Behavior on shelvesShown {
+		NumberAnimation {
+			duration: Motion.long
 			easing.type: Easing.BezierSpline
 			easing.bezierCurve: Motion.emphasized
 		}
@@ -371,7 +448,7 @@ ModalWindow {
 
 		// a gamepad walks the library like the keys do
 		function onPad(button) {
-			if (!root.shown) return;
+			if (!root.shown || lobby.open) return;
 			if (curtain.up) {
 				if (curtain.phase === "failed" && button === "a") curtain.retry();
 				else if (curtain.phase === "failed" && button === "b") curtain.back();
@@ -393,16 +470,20 @@ ModalWindow {
 			const columns = Math.max(1, Math.floor(gridView.width / gridView.cellWidth));
 			switch (button) {
 			case "left":
-				root.step(-1);
+				if (root.shelving) shelves.step(-1);
+				else root.step(-1);
 				break;
 			case "right":
-				root.step(1);
+				if (root.shelving) shelves.step(1);
+				else root.step(1);
 				break;
 			case "up":
-				if (root.grid) root.step(-columns);
+				if (root.shelving) shelves.stepRow(-1);
+				else if (root.grid) root.step(-columns);
 				break;
 			case "down":
-				if (root.grid) root.step(columns);
+				if (root.shelving) shelves.stepRow(1);
+				else if (root.grid) root.step(columns);
 				break;
 			case "a":
 				root.play(root.selected);
@@ -450,7 +531,7 @@ ModalWindow {
 	Backdrop {
 		anchors.fill: parent
 		game: root.selected
-		recede: root.gridness
+		recede: root.gridness * (1 - 0.65 * root.shelvesShown)
 		active: root.shown
 	}
 
@@ -472,6 +553,10 @@ ModalWindow {
 			if (root.busy) return;
 			const ctrl = event.modifiers & Qt.ControlModifier;
 			const columns = Math.max(1, Math.floor(gridView.width / gridView.cellWidth));
+			if (root.shelving && root.shelfKey(event)) {
+				event.accepted = true;
+				return;
+			}
 			switch (event.key) {
 			case Qt.Key_Left:
 				root.step(-1);
@@ -534,6 +619,38 @@ ModalWindow {
 			}
 			event.accepted = true;
 		}
+	}
+
+	// the arrows walk the shelves: along one, and from one to the next
+	function shelfKey(event) {
+		switch (event.key) {
+		case Qt.Key_Left:
+			shelves.step(-1);
+			return true;
+		case Qt.Key_Right:
+			shelves.step(1);
+			return true;
+		case Qt.Key_Up:
+			if (shelves.atFirst) search.input.forceActiveFocus();
+			else shelves.stepRow(-1);
+			return true;
+		case Qt.Key_Home:
+			shelves.edge(false);
+			return true;
+		case Qt.Key_End:
+			shelves.edge(true);
+			return true;
+		case Qt.Key_Down:
+			shelves.stepRow(1);
+			return true;
+		case Qt.Key_PageUp:
+			shelves.stepRow(-3);
+			return true;
+		case Qt.Key_PageDown:
+			shelves.stepRow(3);
+			return true;
+		}
+		return false;
 	}
 
 	// letters go to the search; a few of them, alone, are shortcuts while it is empty
@@ -757,12 +874,19 @@ ModalWindow {
 				onClicked: root.cycleSort()
 			}
 
-			IconButton {
-				implicitWidth: 40
-				implicitHeight: 40
-				icon: root.grid ? "view_column_outline" : "view_grid_outline"
-				iconColor: "white"
-				onClicked: root.toggleGrid()
+			Repeater {
+				model: [{ view: "cover", icon: "view_column_outline" }, { view: "grid", icon: "view_grid_outline" }, { view: "shelves", icon: "view_agenda_outline" }]
+
+				delegate: IconButton {
+					required property var modelData
+
+					implicitWidth: 40
+					implicitHeight: 40
+					icon: modelData.icon
+					checked: root.view === modelData.view
+					iconColor: root.view === modelData.view ? root.accent : Qt.rgba(1, 1, 1, 0.6)
+					onClicked: root.setView(modelData.view)
+				}
 			}
 
 			IconButton {
@@ -827,17 +951,16 @@ ModalWindow {
 	ColumnLayout {
 		id: info
 
-		anchors.left: parent.left
-		anchors.leftMargin: root.side
-		anchors.bottom: shelf.top
-		anchors.bottomMargin: 34
+		x: root.side
+		// above the shelf of covers; on the shelves view under the header
+		y: root.shelving ? header.y + header.height + 26 : shelf.y - 34 - info.height
 		width: Math.min(parent.width * 0.56, 900)
-		spacing: 16
-		visible: root.selected !== null && root.gridness < 0.99
-		opacity: root.riseInfo * (1 - root.gridness)
+		spacing: root.shelving ? 12 : 16
+		visible: root.selected !== null && root.gridShown < 0.99 && (root.shelving || root.gridness < 0.99)
+		opacity: root.riseInfo * (root.shelving ? root.shelvesShown : 1 - root.gridness)
 		transform: Translate {
 			x: -40 * (1 - root.riseInfo) + 18 * (1 - root.infoIn)
-			y: 60 * root.gridness
+			y: root.shelving ? -30 * (1 - root.shelvesShown) : 60 * root.gridness
 		}
 
 		// the logo, or the name where there is none
@@ -846,15 +969,15 @@ ModalWindow {
 			scale: 0.94 + 0.06 * root.stagger(0)
 			transformOrigin: Item.BottomLeft
 			Layout.preferredWidth: Math.min(info.width, 560)
-			Layout.preferredHeight: logo.status === Image.Ready && logo.source != "" ? Math.min(160, logo.paintedHeight) : title.implicitHeight
+			Layout.preferredHeight: logo.status === Image.Ready && logo.source != "" ? Math.min(logo.height, logo.paintedHeight) : title.implicitHeight
 
 			Image {
 				id: logo
 
 				anchors.left: parent.left
 				anchors.bottom: parent.bottom
-				width: Math.min(info.width, 560)
-				height: 160
+				width: Math.min(info.width, root.shelving ? 440 : 560)
+				height: root.shelving ? 104 : 160
 				source: root.selected?.art?.logo ? `file://${root.selected.art.logo}` : ""
 				fillMode: Image.PreserveAspectFit
 				horizontalAlignment: Image.AlignLeft
@@ -885,9 +1008,9 @@ ModalWindow {
 				tone: "white"
 				surface: "transparent"
 				wrapMode: Text.WordWrap
-				maximumLineCount: 2
+				maximumLineCount: root.shelving ? 1 : 2
 				elide: Text.ElideRight
-				font.pixelSize: 56
+				font.pixelSize: root.shelving ? 44 : 56
 				font.weight: Font.Black
 				lineHeight: 0.95
 				style: Text.Normal
@@ -1194,6 +1317,18 @@ ModalWindow {
 				}
 			}
 
+			// a co-op game: a party with PartyDeck, split over the screens
+			TextButton {
+				implicitHeight: 52
+				implicitWidth: implicitHeight + 64
+				variant: "tonal"
+				color: Qt.rgba(1, 1, 1, 0.12)
+				visible: Party.offered(root.selected) || Party.runs(root.selected?.id)
+				icon: Party.runs(root.selected?.id) ? "stop" : "account_multiple"
+				text: Party.runs(root.selected?.id) ? "End party" : "Party"
+				onClicked: Party.runs(root.selected?.id) ? Party.stop() : lobby.begin(root.selected)
+			}
+
 			IconButton {
 				implicitWidth: 52
 				implicitHeight: 52
@@ -1348,9 +1483,9 @@ ModalWindow {
 		cellHeight: gridView.cell * 1.5 + 70
 		model: games
 		clip: true
-		visible: root.gridness > 0.01
-		opacity: root.gridness
-		scale: 0.96 + 0.04 * root.gridness
+		visible: root.gridness * root.gridShown > 0.01
+		opacity: root.gridness * root.gridShown
+		scale: 0.96 + 0.04 * root.gridness * root.gridShown
 		interactive: root.grid
 		highlightFollowsCurrentItem: false
 		boundsBehavior: Flickable.StopAtBounds
@@ -1424,6 +1559,33 @@ ModalWindow {
 				onMenuAsked: (x, y) => root.openMenu(x, y)
 			}
 		}
+	}
+
+	// ── the shelves ────────────────────────────────────────────────────────
+	ShelvesView {
+		id: shelves
+
+		anchors.fill: parent
+		// the picked game's details stand above (`info`, the logo at most 104 high)
+		anchors.topMargin: header.y + header.height + 26 + root.spotlightH + 24
+		anchors.bottomMargin: 56
+		list: root.list
+		selectedId: root.selectedId
+		accent: root.accent
+		side: root.side
+		cell: Math.max(130, Math.min(180, root.cardW * 0.78))
+		active: root.shelving
+		visible: root.gridness * root.shelvesShown > 0.01
+		opacity: root.gridness * root.shelvesShown
+		enabled: root.shelving
+		transform: Translate {
+			y: 40 * (1 - root.gridness * root.shelvesShown)
+		}
+		onPicked: id => root.selectedId = id
+		onActivated: game => root.play(game)
+		onMenuAsked: (game, shelfId, x, y) => root.openMenu(x, y, shelfId)
+		onShelfMenuAsked: (shelfId, x, y) => menu.show(root.shelfMenu(shelfId), x, y)
+		onRenamingChanged: if (shelves.renaming === "") keys.forceActiveFocus()
 	}
 
 	// ── nothing to show ────────────────────────────────────────────────────
@@ -1518,13 +1680,13 @@ ModalWindow {
 				{ key: "LB RB", what: "Filter" },
 				{ key: "X", what: "Favourite" },
 				{ key: "Y", what: "More" },
-				{ key: "Select", what: root.grid ? "Shelf" : "Grid" },
+				{ key: "Select", what: root.view === "cover" ? "Grid" : (root.grid ? "Shelves" : "Covers") },
 				{ key: "B", what: root.query !== "" ? "Clear" : "Close" }
 			] : [
 				{ key: "↵", what: root.running ? "Show" : "Play" },
-				{ key: root.grid ? "←↑→↓" : "← →", what: "Browse" },
+				{ key: root.view !== "cover" ? "←↑→↓" : "← →", what: root.shelving ? "Games · Shelves" : "Browse" },
 				{ key: "Tab", what: "Filter" },
-				{ key: "G", what: root.grid ? "Shelf" : "Grid" },
+				{ key: "G", what: root.view === "cover" ? "Grid" : (root.grid ? "Shelves" : "Covers") },
 				{ key: "*", what: "Favourite" },
 				{ key: "I", what: "Stats" },
 				{ key: "☰", what: "More" },
@@ -1626,6 +1788,12 @@ ModalWindow {
 			});
 		}
 		onOpenChanged: if (!sheet.open) keys.forceActiveFocus()
+	}
+
+	PartyLobby {
+		id: lobby
+
+		onOpenChanged: if (!lobby.open) keys.forceActiveFocus()
 	}
 
 	GameStats {

@@ -63,6 +63,9 @@ ShellRoot {
 	// the Avantree AS50's daemon: its codec and latency back on each
 	// connect, its buttons, the battery warning (core/services/As50.qml)
 	readonly property bool as50: As50.enabled
+	// the Audient EVO4's daemon: 48V, mutes, links and the loopback mix back
+	// each time it comes (core/services/Evo4.qml)
+	readonly property bool evo4: Evo4.enabled
 	// the Amazfit watch's daemon: Zepp OS session, its keys, notifications
 	// and music to it, the battery warning (core/services/Amazfit.qml)
 	readonly property bool amazfit: Amazfit.enabled
@@ -80,4 +83,10 @@ ShellRoot {
 	readonly property bool cursorTheme: CursorTheme.enabled
 	// its theme file kept up to date, its window loaded ahead
 	readonly property bool editor: Editor.enabled
+	// Baikal: its reminders, the tasks of Tasks.md, the address book, the
+	// next days on the watch (core/services/NasCalendar.qml and the others)
+	readonly property bool baikal: NasCalendar.active
+	readonly property bool baikalTodos: BaikalTodos.on
+	readonly property bool contacts: Contacts.on
+	readonly property bool watchCalendar: WatchCalendar.on
 }

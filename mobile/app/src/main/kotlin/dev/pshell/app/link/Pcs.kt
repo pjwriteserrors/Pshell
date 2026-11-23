@@ -11,7 +11,7 @@ data class Pc(
 	val id: String,
 	val name: String,
 	val port: Int,
-	/** where it was when it was paired */
+	/** where it was when it was paired, and what it said since (its VPN address) */
 	val addresses: List<String>,
 	/** entered by hand: a VPN name, a fixed address */
 	val manual: List<String> = emptyList(),

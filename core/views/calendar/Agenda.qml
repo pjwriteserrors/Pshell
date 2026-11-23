@@ -8,7 +8,8 @@ import qs.style.theme
 import qs.style.widgets
 import qs.core.services
 
-// The Microsoft events of one day under the month grid, or the sign-in.
+// The events of one day under the month grid (Microsoft and Baikal, + adds
+// one to Baikal), or the Microsoft sign-in.
 ColumnLayout {
 	id: root
 
@@ -132,6 +133,17 @@ ColumnLayout {
 			}
 		}
 
+		IconButton {
+			visible: NasCalendar.active && NasCalendar.writable.length > 0
+			implicitWidth: 26
+			implicitHeight: 26
+			icon: "plus"
+			onClicked: {
+				MsCalendar.selected = null;
+				NasCalendar.newEvent(root.day);
+			}
+		}
+
 		// two clicks, it sits next to refresh
 		IconButton {
 			id: signOut
@@ -191,7 +203,10 @@ ColumnLayout {
 			radius: Theme.radius.medium
 			pressedScale: 0.98
 			color: row.picked ? Theme.primarySoft : (row.hovered ? Theme.layer1 : (row.running ? Qt.alpha(Theme.primary, 0.07) : "transparent"))
-			onClicked: MsCalendar.select(modelData)
+			onClicked: {
+				NasCalendar.draft = null;
+				MsCalendar.select(modelData);
+			}
 
 			Rectangle {
 				x: 6
@@ -199,7 +214,7 @@ ColumnLayout {
 				width: 3
 				height: parent.height - 16
 				radius: 2
-				color: row.modelData.showAs === "tentative" ? Qt.alpha(Theme.primary, 0.45) : (row.faded ? Theme.textFaint : (row.modelData.source === "baikal" ? Theme.secondary : Theme.primary))
+				color: row.modelData.showAs === "tentative" ? Qt.alpha(Theme.primary, 0.45) : (row.faded ? Theme.textFaint : (row.modelData.source === "baikal" ? (row.modelData.color || Theme.secondary) : Theme.primary))
 			}
 
 			ColumnLayout {

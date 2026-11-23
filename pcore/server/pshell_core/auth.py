@@ -443,6 +443,7 @@ class Auth:
         last = row.get("last_seen") or 0
         return {"id": row["id"], "name": row["name"], "kind": row["kind"], "scopes": json.loads(row["scopes"] or "{}"),
                 "mac": row.get("mac") or "", "created": row.get("created"), "by": row.get("by") or "",
+                "owner": row.get("owner") or "",
                 "last_seen": last or None, "last_ip": row.get("last_ip") or "",
                 "last_service": row.get("last_service") or "", "online": time.time() - last < ONLINE,
                 "imported": not str(row["id"]).startswith("dev_")}

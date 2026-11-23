@@ -16,9 +16,11 @@ xwayland-satellite's) or its title being the game's name.
 Every window is decided once when it opens (again when it changes in its
 first HOLD seconds); whenever the set of game windows changes a line
 {"gaming": [{id, app, title, pids}]} tells the shell (game mode; the pids
-are the game's processes, for the mouse daemon to find its sound).
+are the game's processes, for the mouse daemon to find its sound). The
+game's processes are registered with Feral GameMode as well (feral.py).
 
-A game's window is made fullscreen when it opens and again whenever it
+A game's window (not a party's, app id pshell-party-<n>: party.py places those)
+is made fullscreen when it opens and again whenever it
 leaves fullscreen within its first HOLD seconds (games that size their
 window while they start); after that Mod+Shift+F is the user's. niri only
 toggles, so a window is asked once and asked again only after it was seen
@@ -31,7 +33,10 @@ import re
 import select
 import subprocess
 import sys
+import threading
 import time
+
+import feral
 
 HOLD = 30
 # toggles of one window are this far apart at least
@@ -136,6 +141,8 @@ class Guard:
         self.outputs_at = -10.0
         self.workspaces = {}
         self.told = None
+        # processes registered with Feral GameMode
+        self.registered = set()
 
     def tell(self):
         """The game windows, when they are not what was said last."""
@@ -143,6 +150,15 @@ class Guard:
         if now == self.told:
             return
         self.told = now
+        fresh = set()
+        for wid in now:
+            fresh.update((self.state.get(wid) or {}).get("pids") or [])
+        # not a window's own pid: an X11 game's is xwayland-satellite's
+        self.registered = {pid for pid in self.registered if os.path.exists(f"/proc/{pid}")}
+        fresh -= self.registered
+        if fresh:
+            self.registered |= fresh
+            threading.Thread(target=feral.register, args=(sorted(fresh),), daemon=True).start()
         print(json.dumps({"gaming": [{"id": wid, "app": self.windows[wid].get("app_id") or "",
                                       "title": self.windows[wid].get("title") or "",
                                       "pids": self.pids_of(wid)} for wid in now]}), flush=True)
@@ -224,6 +240,9 @@ class Guard:
                 state["changed"] = False
                 if not state["game"] or not fresh:
                     continue
+            # a party's players share the screens: party.py places their windows
+            if str(window.get("app_id") or "").startswith("pshell-party-"):
+                continue
             if self.fullscreen(window):
                 state["asked"] = False
             elif not state.get("asked") and now - state["last"] >= SETTLE:

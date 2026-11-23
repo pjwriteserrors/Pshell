@@ -1237,6 +1237,155 @@ Item {
 					width: options.width
 					spacing: 10
 
+					// its last print was stopped: on from a layer, with another spool if wanted
+					Card {
+						id: carry
+
+						readonly property var stopped: Printer.stoppedAt(root.job)
+						readonly property int total: root.job?.meta?.layers || carry.stopped?.layers || 0
+						property int from: 0
+						property var slots: []
+						property string zMode: "homed"
+						readonly property real gap: Number(String(gapField.text).replace(",", "."))
+						readonly property real atZ: {
+							const zs = root.job?.shape?.zs ?? [];
+							return carry.from > 0 && carry.from <= zs.length ? zs[carry.from - 1] : carry.from * (root.job?.meta?.layerHeight ?? 0.2);
+						}
+						readonly property bool ready: carry.from >= 1 && carry.from <= carry.total
+							&& carry.slots.length > 0 && carry.slots.every(pick => pick.slot >= 0)
+							&& (carry.zMode === "homed" || carry.gap > carry.atZ)
+
+						// the job and where it stopped: picks are kept until one of them changes
+						// (stoppedAt is a new object with every status the printer sends)
+						readonly property string key: `${root.job?.id ?? ""}|${carry.stopped?.layer ?? 0}`
+
+						function reset() {
+							carry.from = carry.stopped?.layer ?? 0;
+							carry.slots = Printer.mappingFor(root.job).map(pick => ({ tool: pick.tool, slot: pick.slot }));
+						}
+
+						Layout.fillWidth: true
+						Layout.preferredHeight: carryColumn.implicitHeight + 24
+						visible: carry.stopped !== null
+						order: 0
+						radius: Theme.radius.large
+						onKeyChanged: carry.reset()
+						Component.onCompleted: carry.reset()
+
+						ColumnLayout {
+							id: carryColumn
+
+							anchors.fill: parent
+							anchors.margins: 12
+							spacing: 10
+
+							SectionLabel {
+								Layout.fillWidth: true
+								text: `Stopped at layer ${carry.stopped?.layer ?? 0} of ${carry.total} · carry on`
+							}
+
+							RowLayout {
+								Layout.fillWidth: true
+								spacing: 8
+
+								IconButton {
+									Layout.preferredWidth: 32
+									Layout.preferredHeight: 32
+									icon: "minus"
+									variant: "tonal"
+									enabled: carry.from > 1
+									onClicked: carry.from -= 1
+								}
+
+								StyledText {
+									Layout.fillWidth: true
+									horizontalAlignment: Text.AlignHCenter
+									text: `From layer ${carry.from} · ${carry.atZ.toFixed(2)} mm`
+									font.pixelSize: Theme.size.body
+									font.weight: Font.DemiBold
+								}
+
+								IconButton {
+									Layout.preferredWidth: 32
+									Layout.preferredHeight: 32
+									icon: "plus"
+									variant: "tonal"
+									enabled: carry.from < carry.total
+									onClicked: carry.from += 1
+								}
+							}
+
+							StyledText {
+								Layout.fillWidth: true
+								text: "The layer it stopped in is printed again whole; one higher when it was nearly done. Look at the part."
+								tone: Theme.textMuted
+								font.pixelSize: Theme.size.small
+								wrapMode: Text.Wrap
+							}
+
+							// the slots for the rest: nothing is sliced again, the G-code is the one printed
+							Repeater {
+								model: root.job?.meta?.filaments ?? []
+
+								delegate: FilamentRow {
+									required property var modelData
+
+									Layout.fillWidth: true
+									filament: modelData
+									picked: carry.slots.find(entry => entry.tool === modelData.tool)?.slot ?? -1
+									onPick: slot => carry.slots = carry.slots.some(entry => entry.tool === modelData.tool)
+										? carry.slots.map(entry => entry.tool === modelData.tool ? { tool: entry.tool, slot } : entry)
+										: carry.slots.concat([{ tool: modelData.tool, slot }])
+								}
+							}
+
+							Segmented {
+								Layout.fillWidth: true
+								Layout.preferredHeight: 34
+								options: [{ value: "homed", label: "Z still known" }, { value: "measured", label: "Z measured" }]
+								current: carry.zMode
+								onSelected: value => carry.zMode = value
+							}
+
+							StyledText {
+								Layout.fillWidth: true
+								text: carry.zMode === "homed"
+									? "The bed has not moved since the stop and the motors still hold. If the printer has let Z go, it refuses the first Z move and nothing goes down."
+									: "Measure the gap between the nozzle tip and the bed (beside the part) in mm. The printer takes it as Z; better a little more than less."
+								tone: Theme.textMuted
+								font.pixelSize: Theme.size.small
+								wrapMode: Text.Wrap
+							}
+
+							Field {
+								id: gapField
+
+								Layout.fillWidth: true
+								visible: carry.zMode === "measured"
+								placeholder: `Gap nozzle – bed in mm (more than ${carry.atZ.toFixed(1)})`
+								icon: "ruler"
+							}
+
+							HoldButton {
+								Layout.fillWidth: true
+								Layout.preferredHeight: 46
+								text: {
+									if (root.sending) return "Sending…";
+									if (Printer.printing) return "The printer is busy";
+									if (!Printer.online) return "The printer is offline";
+									if (carry.zMode === "measured" && !(carry.gap > carry.atZ)) return "Enter the measured gap";
+									if (!carry.slots.some(pick => pick.slot >= 0)) return "Pick a slot";
+									return `Hold to carry on from layer ${carry.from}`;
+								}
+								icon: "play_circle_outline"
+								busy: root.sending
+								hold: 1200
+								enabled: Printer.online && !Printer.printing && !root.sending && carry.ready
+								onActivated: Printer.carry(root.job.id, carry.from, carry.slots, carry.zMode, carry.zMode === "measured" ? carry.gap : 0)
+							}
+						}
+					}
+
 					SliceControls {
 						Layout.fillWidth: true
 						visible: root.isModel

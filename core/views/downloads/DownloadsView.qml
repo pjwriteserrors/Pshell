@@ -9,7 +9,8 @@ import qs.core.services
 
 // The downloads panel: along the top everything's speed, large, with how
 // many run and when the last is through, and the last two minutes as a
-// graph; a link can be added (+, or Ctrl+V on the panel). Below *Active*
+// graph; a link can be added (+, or Ctrl+V on the panel), a YouTube link as
+// its video or only its sound. Below *Active*
 // (every download as a card that fills), *Finished* and *Statistics*.
 ColumnLayout {
 	id: root
@@ -18,6 +19,8 @@ ColumnLayout {
 	property string page: "active"
 	property bool adding: false
 	property bool settings: false
+	// what of a YouTube link: "video" | "audio"
+	property string media: "video"
 	// the cards of downloads that just finished, shown green a moment: { key: until }
 	property var justDone: ({})
 	property real now: Date.now()
@@ -42,7 +45,7 @@ ColumnLayout {
 	function addLink(text) {
 		const link = String(text || "").trim();
 		if (!/^https?:\/\//i.test(link)) return false;
-		Boost.add(link);
+		Boost.add(link, Boost.youtube.test(link) ? root.media : "");
 		root.adding = false;
 		root.page = "active";
 		return true;
@@ -119,8 +122,11 @@ ColumnLayout {
 		command: ["wl-paste", "--no-newline", "--type", "text"]
 		stdout: StdioCollector {
 			onStreamFinished: {
-				if (!root.addLink(text)) {
+				// a YouTube link waits for video or sound to be chosen
+				const youtube = Boost.youtube.test(String(text || "").trim());
+				if (youtube || !root.addLink(text)) {
 					root.adding = true;
+					root.settings = false;
 					field.text = String(text || "").trim().slice(0, 2000);
 					field.input.forceActiveFocus();
 				}
@@ -393,6 +399,15 @@ ColumnLayout {
 					}
 				}
 
+				Segmented {
+					Layout.preferredWidth: 180
+					Layout.preferredHeight: 34
+					visible: Boost.youtube.test(field.text.trim())
+					options: [{ value: "video", label: "Video", icon: "movie_outline" }, { value: "audio", label: "Audio", icon: "music_note" }]
+					current: root.media
+					onSelected: value => root.media = value
+				}
+
 				TextButton {
 					text: "Download"
 					icon: "download"
@@ -407,7 +422,11 @@ ColumnLayout {
 			StyledText {
 				Layout.fillWidth: true
 				Layout.leftMargin: 4
-				text: `Into ${(Boost.settings.folder || `${Paths.home}/Downloads`).replace(Paths.home, "~")} – over ${Boost.settings.connections} connections where the server allows it.`
+				text: {
+					const folder = (Boost.settings.folder || `${Paths.home}/Downloads`).replace(Paths.home, "~");
+					if (Boost.youtube.test(field.text.trim())) return `Into ${folder} as ${root.media === "audio" ? "mp3" : "mp4"}`;
+					return `Into ${folder} – over ${Boost.settings.connections} connections where the server allows it.`;
+				}
 				font.pixelSize: Theme.size.tiny
 				tone: Theme.textSubtle
 				elide: Text.ElideMiddle

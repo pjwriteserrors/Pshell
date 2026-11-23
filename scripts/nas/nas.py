@@ -1251,6 +1251,30 @@ class Daemon:
             self.core_at = 0.0
         return {"status": status, "data": data}
 
+    async def op_corebaikal(self, request):
+        """The newest nightly copy of Baikal's database from core into
+        ~/.local/share/pshell/baikal-backups (7 kept): off the Pi's disk."""
+        api = self.core_client()
+        status, data = await asyncio.to_thread(api.call, "GET", "/api/calendar/backups")
+        if status != 200:
+            return {"status": status, "error": (data or {}).get("error", "")}
+        found = (data or {}).get("backups") or []
+        if not found:
+            return {"status": 200, "kept": None}
+        name = str(found[0]["name"])
+        folder = os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "pshell", "baikal-backups")
+        os.makedirs(folder, exist_ok=True)
+        target = os.path.join(folder, os.path.basename(name))
+        if not os.path.exists(target):
+            got = await asyncio.to_thread(api.download, f"/api/calendar/backups/{name}", target)
+            if got != 200:
+                return {"status": got, "error": "download failed"}
+            os.chmod(target, 0o600)
+        kept = sorted(f for f in os.listdir(folder) if f.startswith("db-") and f.endswith(".sqlite"))
+        for old in kept[:-7]:
+            os.unlink(os.path.join(folder, old))
+        return {"status": 200, "kept": name, "folder": folder, "count": min(len(kept), 7)}
+
     async def op_corestate(self, request):
         if request.get("fresh") or not self.core_state or time.monotonic() - self.core_at > CORE_CACHE:
             await self.refresh_core()

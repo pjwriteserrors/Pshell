@@ -4,7 +4,7 @@
 import { h, icon, clear, isMobile, mem } from "./util.js";
 import * as api from "./api.js";
 import { state, set, on as onStore, isAdmin, myName, refreshServices, refreshGuard, refreshHealth, refreshSettings, refreshMe, normServices, normSample, patchService, setting } from "./store.js";
-import { viewTransition, animate, EASE, DUR } from "./motion.js";
+import { viewTransition, animate, stagger, EASE, DUR } from "./motion.js";
 import { showMenu, toast, closeAll, openDialog } from "./ui.js";
 import * as theme from "./theme.js";
 
@@ -13,6 +13,8 @@ const VIEWS = {
 	services: () => import("./views/services.js"),
 	devices: () => import("./views/devices.js"),
 	sessions: () => import("./views/sessions.js"),
+	calendar: () => import("./views/calendar.js"),
+	smarthome: () => import("./views/smarthome.js"),
 	security: () => import("./views/security.js"),
 	health: () => import("./views/health.js"),
 	settings: () => import("./views/settings.js")
@@ -23,6 +25,8 @@ export const NAV = [
 	{ name: "services", label: "Services", icon: "server_network", href: "/services" },
 	{ name: "devices", label: "Devices", icon: "devices", href: "/devices" },
 	{ name: "sessions", label: "Sessions", icon: "account_switch_outline", href: "/sessions" },
+	{ name: "calendar", label: "Calendar", icon: "calendar_month", href: "/calendar" },
+	{ name: "smarthome", label: "Smart home", icon: "power_plug", href: "/smarthome" },
 	{ name: "security", label: "Security", icon: "shield_lock_outline", href: "/security" },
 	{ name: "health", label: "Health", icon: "heart_pulse", href: "/health" },
 	{ name: "settings", label: "Settings", icon: "tune_variant", href: "/settings", admin: true }
@@ -98,7 +102,8 @@ async function render() {
 function markNav(route) {
 	for (const item of document.querySelectorAll("[data-route]")) {
 		const part = item.dataset.part;
-		const on = item.dataset.route === route.name && (!part || part === route.parts[0]);
+		// a smart home device's own page lights its item under Smart home, not Smart home itself
+		const on = item.dataset.route === route.name && (part ? part === route.parts[0] : !(route.name === "smarthome" && route.parts[0]));
 		item.classList.toggle("active", on);
 		if (on) item.setAttribute("aria-current", "page");
 		else item.removeAttribute("aria-current");
@@ -285,12 +290,33 @@ function buildSidebar() {
 		fold);
 
 	const guardBadge = h("span.side-badge.warn", { hidden: true }, "!");
+	// devices with a page of their own (a robot vacuum, a washing machine) hang under Smart home
+	const smartSub = h("div.side-sub");
+	const showSmart = nodes => {
+		const list = (nodes || []).filter(n => n.view?.ui);
+		const sig = list.map(n => `${n.id}:${n.view.name}:${n.view.busy}`).join("|");
+		if (smartSub.dataset.sig === sig) return;
+		const first = !smartSub.childElementCount;
+		smartSub.dataset.sig = sig;
+		clear(smartSub);
+		for (const n of list) {
+			smartSub.appendChild(sideItem({ label: n.view.name, iconName: n.view.ui === "washer" ? "washing_machine" : "robot_vacuum", route: "smarthome", part: n.id,
+				href: `/smarthome/${encodeURIComponent(n.id)}`, badge: n.view.busy ? h("span.side-busy") : null }));
+		}
+		if (first) stagger(smartSub.children, { step: 40, distance: 6 });
+		if (app.route) markNav(app.route);
+	};
+	api.get("/api/smarthome", undefined, { quiet: true }).then(data => showSmart(data.nodes)).catch(() => {});
+	api.on("smarthome", data => data.nodes && showSmart(data.nodes));
 	const downBadge = h("span.side-badge.bad", { hidden: true });
 	const top = h("div.side-list.top",
 		sideItem({ label: "Home", iconName: "home_outline", route: "home", href: "/" }),
 		sideItem({ label: "Services", iconName: "server_network", route: "services", href: "/services", badge: downBadge }),
 		sideItem({ label: "Devices", iconName: "devices", route: "devices", href: "/devices" }),
-		sideItem({ label: "Sessions", iconName: "account_switch_outline", route: "sessions", href: "/sessions" }));
+		sideItem({ label: "Sessions", iconName: "account_switch_outline", route: "sessions", href: "/sessions" }),
+		sideItem({ label: "Calendar", iconName: "calendar_month", route: "calendar", href: "/calendar" }),
+		sideItem({ label: "Smart home", iconName: "power_plug", route: "smarthome", href: "/smarthome" }),
+		smartSub);
 	const system = sideSection("System", [
 		sideItem({ label: "Health", iconName: "heart_pulse", route: "health", href: "/health", badge: guardBadge }),
 		sideItem({ label: "Security", iconName: "shield_lock_outline", route: "security", href: "/security" }),
@@ -475,7 +501,7 @@ function buildBottomNav() {
 }
 
 // ── keys ───────────────────────────────────────────────────────────────────
-const JUMPS = { h: "/", s: "/services", d: "/devices", e: "/sessions", y: "/security", l: "/health", t: "/settings" };
+const JUMPS = { h: "/", s: "/services", d: "/devices", e: "/sessions", c: "/calendar", m: "/smarthome", y: "/security", l: "/health", t: "/settings" };
 
 function installKeys() {
 	let pendingG = 0;

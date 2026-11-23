@@ -71,7 +71,19 @@ Singleton {
 		id: warmTimer
 
 		interval: 8000
-		onTriggered: if (root.enabled) Quickshell.execDetached(["python3", root.program, "--warm"])
+		onTriggered: if (root.enabled && !GameMode.playing) Quickshell.execDetached(["python3", root.program, "--warm"])
+	}
+
+	// while a game runs no window is kept ready on the GPU (one that is open
+	// stays, until it is closed); after the game it is warmed again
+	readonly property bool resting: root.enabled && GameMode.playing && !root.running
+	onRestingChanged: {
+		if (root.resting) {
+			warmTimer.stop();
+			Quickshell.execDetached(["python3", root.program, "--quit"]);
+		} else if (root.enabled && !GameMode.playing) {
+			warmTimer.restart();
+		}
 	}
 
 	Timer {

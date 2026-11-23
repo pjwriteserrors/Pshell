@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Puts this machine into the phone's VPN (wg-easy on the home server), so the
+# phone reaches the phone daemon here from anywhere: docs/mobile.md, "Away from home".
+#
+#   vpn-join <client.conf> [endpoint host:port]   import as NetworkManager connection "pshell-vpn"
+#   vpn-join --remove                              take it out again
+#
+# Only the VPN's own /24 goes through the tunnel: no DNS, no home LAN, no
+# internet, so a laptop at work keeps its network as it is.
+set -euo pipefail
+NAME=pshell-vpn
+
+if [[ ${1:-} == --remove ]]; then
+	nmcli connection delete "$NAME"
+	exit
+fi
+[[ -r ${1:-} ]] || { sed -n '2,8p' "$0" | sed 's/^# \?//'; exit 1; }
+
+address=$(sed -n 's/^Address *= *\([0-9.]*\).*/\1/p' "$1" | head -1)
+[[ -n $address ]] || { echo "no Address in $1" >&2; exit 1; }
+subnet="${address%.*}.0/24"
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+# the file name becomes the interface name
+sed -e '/^DNS *=/d' \
+	-e "s|^AllowedIPs *=.*|AllowedIPs = $subnet|" \
+	${2:+-e "s|^Endpoint *=.*|Endpoint = $2|"} \
+	"$1" >"$work/$NAME.conf"
+
+nmcli connection delete "$NAME" >/dev/null 2>&1 || true
+nmcli connection import type wireguard file "$work/$NAME.conf" >/dev/null
+nmcli connection modify "$NAME" connection.autoconnect yes ipv4.never-default yes ipv6.method disabled
+nmcli connection up "$NAME" >/dev/null
+echo "$NAME: $address, routes $subnet through the server"

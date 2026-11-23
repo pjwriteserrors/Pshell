@@ -792,7 +792,10 @@ Singleton {
 				Notifs.pushInternal("", title, detail, {
 					icon: "calendar_plus",
 					duration: 15000,
-					actions: [{ label: "Add to calendar", icon: "calendar_plus", run: () => importProc.running = true }]
+					actions: NasCalendar.active ? [{ label: "Add to calendar", icon: "calendar_plus", run: () => NasCalendar.importIcs(job.path, "", reply => {
+						if (!reply.error) Notifs.pushInternal("done", reply.count > 0 ? (reply.count === 1 ? "The event is in the calendar" : `${reply.count} events are in the calendar`) : "Already in the calendar", "", { icon: "calendar_check" });
+						job.done();
+					}) }] : [{ label: "Add to calendar", icon: "calendar_plus", run: () => importProc.running = true }]
 				});
 				// the file goes once the offer is gone
 				dropLater.start();

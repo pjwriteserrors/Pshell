@@ -382,9 +382,9 @@ FocusScope {
 				else AppImages.install(row.path);
 			} else if (Kinds.isWindows(row)) {
 				Files.runWindows(row.path, "auto");
-			} else if (/\.ics$/i.test(row.name) && MsCalendar.enabled && MsCalendar.signedIn) {
+			} else if (/\.ics$/i.test(row.name) && (NasCalendar.active || (MsCalendar.enabled && MsCalendar.signedIn))) {
 				// an invitation or a calendar file: into the calendar, once agreed
-				Files.confirmRequested({ title: `Add ${row.name} to the calendar?`, detail: "Its events go into your Microsoft 365 calendar.", confirm: "Add", danger: false, run: () => Files.importCalendar(row.path) });
+				Files.confirmRequested({ title: `Add ${row.name} to the calendar?`, detail: NasCalendar.active ? "Its events go into the Baikal calendar." : "Its events go into your Microsoft 365 calendar.", confirm: "Add", danger: false, run: () => Files.importCalendar(row.path) });
 			} else {
 				rest.push(row);
 			}

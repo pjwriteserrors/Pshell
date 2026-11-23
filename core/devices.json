@@ -7,6 +7,7 @@
 	{ "id": "logitech-hidpp-keyboard", "name": "Logitech keyboard (HID++)", "match": { "hidpp": { "kind": ["keyboard", "numpad"] } }, "page": "keyboard", "plugin": "keyboard", "partial": true },
 	{ "id": "8bitdo-ultimate-2-wireless", "name": "8BitDo Ultimate 2 Wireless", "match": { "usb": ["2dc8:310b", "2dc8:6012", "2dc8:6013"], "name": "Ultimate 2 Wireless" }, "page": "ultimate", "plugin": "ultimate" },
 	{ "id": "apex-pro-tkl-gen3", "name": "Apex Pro TKL Gen 3", "match": { "usb": ["1038:1642"] }, "page": "apex", "plugin": "apex" },
+	{ "id": "audient-evo4", "name": "Audient EVO4", "match": { "usb": ["2708:0006"] }, "page": "evo4", "plugin": "evo4" },
 	{ "id": "sennheiser-pc-8-2-usb", "name": "Sennheiser PC 8.2 USB", "match": { "usb": ["1395:0099"] }, "page": "headset", "plugin": "headset" },
 	{ "id": "avantree-as50", "name": "Avantree AS50", "match": { "mac": ["02:8C:7D:00:32:5F"] }, "page": "as50", "plugin": "as50" },
 	{ "id": "amazfit-active-2-nfc-square", "name": "Amazfit Active 2 NFC Square", "match": { "hid": ["0157:009c"] }, "page": "amazfit", "plugin": "amazfit" },

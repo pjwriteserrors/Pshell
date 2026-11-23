@@ -651,6 +651,27 @@ with the others. Enter copies the meanings, ↑/↓ change the picture, Ctrl+O
 opens Wiktionary. Looked-up words are offered again (`dictionary.json`).
 Tests: `scripts/tests/test_dictionary.py`.
 
+`places` finds places near the weather's city in the launcher (`>wp`, also
+`>places`, `>orte`; `core/views/launcher/PlacesView.qml`,
+`core/services/Places.qml`). `scripts/places.py` uses open sources only, no
+keys: Photon suggests places while typing (name, street, postcode, town),
+and a word like "pizza" or "apotheke" also lists all of that kind around,
+from Nominatim at once and from Overpass when it answers in time. A place
+is read from Nominatim with its tags (opening hours read into a week,
+features, facts), then in parallel: Wikipedia/Wikidata or its own website
+for what it is and its icon or logo, Commons and Panoramax for photos,
+routing.openstreetmap.de and Transitous for walk/bike/car/bus times from
+the weather's city (or `places.home` "lat,lon" in the host profile),
+Nominatim for others of its kind, stops and car parks around, Open-Meteo
+for its weather and OSM tiles for a map (turned dark with a dark theme).
+What does not change is kept a week in `~/.cache/pshell/places`. Reviews
+are not read anywhere: the Reviews button opens the place in Google Maps.
+Kept in `places.json`: places to go to and been to with own stars and a
+note, the ones looked at lately, up to three to compare side by side.
+Enter opens the selected place, on a place the reviews; Ctrl+S/B/K mark it
+to go to, been there, to compare; Ctrl+R/O reviews and website; Esc back.
+Tests: `scripts/tests/test_places.py`.
+
 `screentime` counts where the time at the screen goes (`>screentime`,
 `scripts/ipc.sh screentime toggle`): every few seconds the time since the
 last look goes to the focused window, its app, its workspace and, in a
@@ -1061,7 +1082,8 @@ failures raise a notification; the log is
 `~/.local/state/quickshell-theme/apply-*.log`.
 
 The picker's second tab holds the pictures of the day of Bing, NASA (APOD,
-from the feed of science.nasa.gov; no key needed), Wallhaven and MoeWalls.
+from the feed of science.nasa.gov; no key needed), Wallhaven, MoeWalls and
+MotionBGs (its newest neutral 4K upload not shown lately).
 `core/services/Daily.qml` has `scripts/wallpaper_of_day.py --fetch-all` ask
 for them twenty seconds after the shell started, every two hours and when the
 picker opens; each is kept in `~/.local/state/quickshell-theme/daily/<source>`

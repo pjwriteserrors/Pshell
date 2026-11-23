@@ -344,6 +344,54 @@ NAS place in the file manager sidebar (the mount; trash and versions
 through the API), VPN panel row, notifications, theme push, shelf sync,
 downloads/torrents target, streams progress, Baikal calendar, IPC `nas`.
 
+Baikal calendar (plugin `nas-calendar`, `core/services/NasCalendar.qml`):
+the events of every calendar of the user beside the Microsoft ones in the
+Today panel; + under the month adds one, an event of Baikal has Edit /
+Delete (a repeating one: its series). The editor (EventEditor.qml, below the
+Today panel) has title, calendar, all day, from/to, repeat (once, daily,
+weekly, monthly, yearly; "As set" keeps a rule it cannot show), reminder
+and place/notes. Calendars are added, renamed, coloured and deleted on the
+NAS page. Every request goes through `scripts/nas/baikal.py` (Digest; curl
+sends a REPORT body only after a probe and Baikal answers that with 500):
+an event that exists is edited in place, alarms, attendees and what DAVx5
+wrote stay, the PUT carries If-Match. Times go out with the TZID of the PC
+(a VTIMEZONE for central Europe). nas.json `calendar {url, user,
+lastCalendar}`; the password in the keyring (service `pshell-baikal`).
+Tests: `scripts/nas/tests/test_baikal.py` (offline; with
+`PSHELL_BAIKAL_TEST="url user password"` also against a throwaway Baikal).
+The phone syncs Baikal itself with DAVx5 into its calendar app.
+
+With pshell-core the account comes from core (docs/core.md "Calendar"): the
+shell asks `GET /api/calendar/account`, keeps the password in the keyring; for
+an account made before core, the NAS page asks for it once and gives it to
+core. Around it:
+- Sharing: on the NAS page every own calendar has the members of core with
+  No / Read / Read & write (`baikal.py share`, `sharees`); calendars shared
+  with you show "Shared with you" and Leave; read-only ones are not offered
+  for new events and have no Edit/Delete.
+- Reminders: Baikal events notify like the Microsoft ones (MsCalendar.remind)
+  at their own alarm, else 5 minutes before; the bar's meeting chip (Live
+  `meeting`, plugin `calendar`) counts them too.
+- Launcher `>cal` (CalendarModeView.qml): a line of text becomes an event
+  (`NasCalendar.parseText`: heute/morgen/übermorgen, weekdays, dd.mm.(yyyy),
+  yyyy-mm-dd, 15 Uhr, 15:30, 3pm, 15-16, 8:15 bis 9, in 2 Stunden, 30min,
+  ganztägig, jeden Montag / täglich / monatlich / jährlich, @place); Enter
+  adds, Shift+Enter opens the editor, Tab changes the calendar; empty: the
+  next seven days.
+- Tasks: `BaikalTodos.qml` keeps Tasks.md and the VTODOs of one calendar the
+  same both ways (`calendar.todos {on, calendar}`, state baikal-todos.json;
+  group = category, marks = STATUS, ⏫🔼🔽 = PRIORITY, description).
+- Watch: `WatchCalendar.qml` puts the next seven days on the Amazfit (option
+  `calendarSync`, ids from 0x40000000, only its own ones removed again).
+- Contacts: `Contacts.qml` reads the address books (`baikal.py contacts`):
+  names for WhatsApp chats known only by number, birthdays as whole-day
+  events.
+- Into the calendar: .ics in Files, from the browser and attached to mails
+  go to Baikal when it is connected (`baikal.py import`, one object per UID,
+  imported twice is no double); a PDF selection ("An event") and a mail
+  (calendar button in its tools) open the editor with the date found in
+  the text.
+
 ## Phone (phone)
 
 App: NAS tab (browse, thumbnails, open, offline pins, share), photo auto

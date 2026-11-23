@@ -106,7 +106,7 @@ Singleton {
 	readonly property int layer: root.printing ? Number(root.project.curr_layer ?? 0) : 0
 	readonly property int layers: root.printing ? Number(root.project.total_layers ?? 0) : 0
 	readonly property real secondsLeft: root.printing ? Number(root.project.remain_time ?? 0) * 60 : 0
-	readonly property var printingJob: root.printing ? (root.jobs.find(job => job.remote && job.remote === root.project.filename) ?? null) : null
+	readonly property var printingJob: root.printing ? (root.jobs.find(job => root.isFile(job, root.project.filename)) ?? null) : null
 
 	readonly property var stateWords: ({
 		preheating: "Heating up",
@@ -186,6 +186,23 @@ Singleton {
 	}
 
 	// a job's name without what the slicer adds: "Hanger+(Tape)_PLA_0.2_43m37s.gcode" → "Hanger (Tape)"
+	// the printer's file is this job's: as printed, or carried on from a layer
+	function isFile(job, filename) {
+		return !!filename && (job?.remote === filename || job?.carried?.remote === filename);
+	}
+
+	// where this job's last print stopped (failed, stopped – not finished): { layer, layers }, else null
+	function stoppedAt(job) {
+		const last = root.lastProject;
+		if (!last || root.printing || !root.isFile(job, last.filename)) return null;
+		if (String(last.state) === "finished" || Number(last.progress ?? 0) >= 100) return null;
+		const carried = job.carried?.remote === last.filename ? job.carried : null;
+		// a print carried on counts its layers from where it began
+		const offset = carried ? carried.layer - 1 : 0;
+		const layer = Number(last.curr_layer ?? 0);
+		return layer > 0 ? { layer: layer + offset, layers: carried ? carried.layers : Number(last.total_layers ?? 0) } : null;
+	}
+
 	function title(job) {
 		return root.nameOf(job?.name ?? "");
 	}
@@ -247,6 +264,13 @@ Singleton {
 	// mapping: [{ tool, slot }] – one ACE slot for each filament of the file
 	function start(id, mapping) {
 		root.send({ op: "print", id, mapping, settings: root.options });
+	}
+
+	// carries a stopped print on from a layer (1-based): the G-code from there,
+	// started without homing Z or levelling; zMode "homed" (the printer still
+	// knows Z) or "measured" (zNow: the gap between nozzle and bed in mm)
+	function carry(id, layer, mapping, zMode, zNow) {
+		root.send({ op: "carry", id, layer, mapping, zMode, zNow });
 	}
 
 	// ── slicing ───────────────────────────────────────────────────────────

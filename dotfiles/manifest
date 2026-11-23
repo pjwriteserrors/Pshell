@@ -25,4 +25,5 @@ link    systemd/keyring-unlock.service ~/.config/systemd/user/keyring-unlock.ser
 link    systemd/openrgb-theme.service ~/.config/systemd/user/openrgb-theme.service    hook:openrgb
 link    systemd/quickshell-lighting.service ~/.config/systemd/user/quickshell-lighting.service hook:openrgb
 seed    oomox/wal                     ~/.config/oomox/colors/wal                      hook:oomox
+link    gamemode/gamemode.ini         ~/.config/gamemode.ini                          plugin:games
 link    systemd/pshell-phone.service  ~/.config/systemd/user/pshell-phone.service     plugin:phone

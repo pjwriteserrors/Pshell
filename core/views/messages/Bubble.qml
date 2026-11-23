@@ -661,6 +661,7 @@ Item {
 								// a PDF opens in the shell's viewer knowing its mail, to go back as the answer
 								onClicked: {
 									if (Pdf.isDefault && /\.pdf$/i.test(String(file.modelData.name ?? ""))) Pdf.openMailAttachment(Mail.openId, root.message, file.modelData);
+									else if (NasCalendar.active && /\.ics$/i.test(String(file.modelData.name ?? ""))) NasCalendar.importMailAttachment(Mail.openId, root.message.id, file.modelData.id);
 									else Mail.openAttachment(root.message.id, file.modelData.id);
 								}
 
@@ -883,6 +884,15 @@ Item {
 							implicitHeight: 28
 							icon: "share"
 							onClicked: root.forward()
+						}
+
+						// the date in it as an event, the subject as its title
+						IconButton {
+							visible: NasCalendar.active && String(root.message.subject ?? "") !== ""
+							implicitWidth: 28
+							implicitHeight: 28
+							icon: "calendar_plus"
+							onClicked: NasCalendar.draftFrom(`${root.message.subject}\n${root.message.text ?? ""}`, String(root.message.subject))
 						}
 
 						// as chat text, or the way the sender laid it out

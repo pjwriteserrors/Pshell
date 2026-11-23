@@ -14,13 +14,20 @@ QtObject {
 
 	property bool windowed: false
 	property bool windowOpen: false
+	// the window has the compositor's focus (PopoutWindow keeps it)
+	property bool focused: false
 	readonly property bool panelled: root.panel && !root.windowed
 	readonly property bool shown: root.panelled ? Popups.current === root.popup : root.windowOpen
 
+	// an open window asked for again: brought to the front, wherever it is
+	signal raised
+
 	// the panel opens on the focused screen; `page` is handed to it
 	function open(page) {
-		if (!root.panelled) root.windowOpen = true;
-		else if (Popups.current !== root.popup || page !== undefined) Popups.withFocusedScreen(screen => Popups.open(root.popup, screen, page));
+		if (!root.panelled) {
+			if (root.windowOpen) root.raised();
+			root.windowOpen = true;
+		} else if (Popups.current !== root.popup || page !== undefined) Popups.withFocusedScreen(screen => Popups.open(root.popup, screen, page));
 	}
 
 	function close() {

@@ -1,6 +1,7 @@
 """What the outside world is asked: YouTube's feeds and pages, the YouTube
 Data API when there is a key, yt-dlp, Twitch's Helix API, SponsorBlock, plain
 RSS. No state in here. STREAMS_TEST_BASE points all of it at a local server."""
+import configparser
 import datetime
 import hashlib
 import html
@@ -9,6 +10,7 @@ import os
 import re
 import subprocess
 import socket
+import struct
 import time
 import urllib.error
 import urllib.parse
@@ -63,6 +65,30 @@ def fetch(url, headers=None, data=None, timeout=20):
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             return response.read()
+    except urllib.error.HTTPError as error:
+        raise Failure(f"HTTP {error.code}") from error
+    except OSError as error:
+        raise Failure(f"Not reachable ({getattr(error, 'reason', error)})") from error
+
+
+class Stopped(Failure):
+    pass
+
+
+def fetch_stoppable(url, headers=None, timeout=20, stop=None):
+    """fetch, given up as soon as `stop` (a threading.Event) is set: googlevideo
+    lets some answers trickle at 1 Mbit/s, which no socket timeout catches."""
+    request = urllib.request.Request(url, headers={"User-Agent": AGENT, "Accept-Language": "en", "Cookie": "CONSENT=YES+1; SOCS=CAI", **(headers or {})})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            parts = []
+            while True:
+                if stop is not None and stop.is_set():
+                    raise Stopped("Given up")
+                part = response.read(1 << 16)
+                if not part:
+                    return b"".join(parts)
+                parts.append(part)
     except urllib.error.HTTPError as error:
         raise Failure(f"HTTP {error.code}") from error
     except OSError as error:
@@ -242,19 +268,94 @@ def offline(error):
     return any(word in text for word in ("not reachable", "name resolution", "failed to resolve", "did not answer", "timed out"))
 
 
+# ── YouTube's sign-in, borrowed from the browser ──────────────────────────
+# YouTube takes yt-dlp for a bot at times and then answers nothing without a
+# sign-in. The one in Floorp is borrowed then, and for an hour after, so the
+# account is asked as little as can be. The daemon sets this from its settings.
+USE_BROWSER_SIGN_IN = True
+SIGNED_FOR = 3600
+_signed_until = 0
+BOT_CHECK = re.compile(r"not a bot|sign in to confirm", re.I)
+
+
+def browser_profile():
+    """yt-dlp's name for the browser profile to borrow from: Floorp's default
+    (Floorp keeps Firefox's cookie store), else Firefox's; "" without either."""
+    for folder in ("~/.config/floorp", "~/.floorp"):
+        folder = os.path.expanduser(folder)
+        ini = configparser.ConfigParser()
+        if not ini.read(os.path.join(folder, "profiles.ini")):
+            continue
+        # the profile Floorp starts with is the [Install…] default; [Profile…]
+        # Default=1 is often an old one
+        paths = [ini[name]["Default"] for name in ini.sections() if name.startswith("Install") and ini[name].get("Default")]
+        paths += [ini[name]["Path"] for name in ini.sections() if name.startswith("Profile") and ini[name].get("Default") == "1"]
+        paths += [ini[name]["Path"] for name in ini.sections() if name.startswith("Profile") and ini[name].get("Path")]
+        for path in paths:
+            path = path if os.path.isabs(path) else os.path.join(folder, path)
+            if os.path.exists(os.path.join(path, "cookies.sqlite")):
+                return f"firefox:{path}"
+    return "firefox" if os.path.isdir(os.path.expanduser("~/.mozilla/firefox")) else ""
+
+
+def sign_in_args(now=False):
+    """What yt-dlp is given to be signed in: while YouTube asks for it, or `now`."""
+    if TEST or not USE_BROWSER_SIGN_IN or not (now or time.time() < _signed_until):
+        return []
+    profile = browser_profile()
+    return ["--cookies-from-browser", profile] if profile else []
+
+
 def ytdlp_json(args, timeout=120):
-    try:
-        done = subprocess.run([YTDLP, "-J", "--no-warnings", "--ignore-no-formats-error", *args], capture_output=True, text=True, timeout=timeout, check=False)
-    except (OSError, subprocess.TimeoutExpired) as error:
-        raise Failure(f"yt-dlp did not answer ({error})") from error
-    try:
-        data = json.loads(done.stdout)
-    except ValueError:
-        data = None
+    global _signed_until
+    # without --no-warnings: with --ignore-no-formats-error YouTube's bot check
+    # is only a warning, and the answer comes all the same, without formats
+    signed = sign_in_args()
+    done = _ytdlp(["-J", "--ignore-no-formats-error", *signed, *args], timeout)
+    if not signed and BOT_CHECK.search(done.stderr or ""):
+        again = sign_in_args(now=True)
+        if again:
+            _signed_until = time.time() + SIGNED_FOR
+            done = _ytdlp(["-J", "--ignore-no-formats-error", *again, *args], timeout)
+    data = _json_of(done)
     # when it fails, -J can still print a plain "null"
     if data is None:
-        raise Failure((done.stderr.strip().splitlines() or ["yt-dlp failed"])[-1][:200])
+        lines = (done.stderr or "").strip().splitlines()
+        raise Failure(([line for line in lines if line.startswith("ERROR")] or lines or ["yt-dlp failed"])[-1][:200])
     return data
+
+
+def ytdlp_run(args, timeout):
+    """yt-dlp for anything but -J (subtitles, downloads), signed in the same way."""
+    global _signed_until
+    signed = sign_in_args()
+    done = _ytdlp([*signed, *args], timeout)
+    if done.returncode and not signed and BOT_CHECK.search(done.stderr or ""):
+        again = sign_in_args(now=True)
+        if again:
+            _signed_until = time.time() + SIGNED_FOR
+            done = _ytdlp([*again, *args], timeout)
+    return done
+
+
+def ytdlp_format(quality):
+    """yt-dlp's -f for a download or mpv: the graphics card plays VP9 and H.264,
+    not AV1, and HDR looks washed out."""
+    return "/".join([f"bv*[height<={quality}][vcodec=vp9]+ba", f"bv*[height<={quality}][vcodec^=avc1]+ba", f"bv*[height<={quality}]+ba", "b"])
+
+
+def _ytdlp(args, timeout):
+    try:
+        return subprocess.run([YTDLP, *args], capture_output=True, text=True, timeout=timeout, check=False)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise Failure(f"yt-dlp did not answer ({error})") from error
+
+
+def _json_of(done):
+    try:
+        return json.loads(done.stdout)
+    except ValueError:
+        return None
 
 
 def ytdlp_channel(url, limit=1000, dates=True):
@@ -415,10 +516,227 @@ def local_playlist(text, base, address_of):
     return "\n".join(line if not line.strip() or line.startswith("#") else address_of(urllib.parse.urljoin(base, line.strip())) for line in text.splitlines()) + "\n"
 
 
+# ── YouTube's DASH files as HLS ────────────────────────────────────────────
+# Above 1080p, and for everything once yt-dlp is signed in, YouTube offers
+# picture and sound only as whole files (DASH), which the player cannot join.
+# Their index says where each piece of a few seconds lies; the daemon then
+# serves an HLS playlist of those pieces, fetched by byte range. VP9 comes in
+# WebM, which HLS does not know but FFmpeg plays when the pieces end in .mkv.
+WEBM = b"\x1aE\xdf\xa3"
+
+
+def fetch_range(url, start, end, timeout=20):
+    """Bytes start..end (both included; end "" for the rest) of a file."""
+    return fetch(url, {"Range": f"bytes={start}-{end}"}, timeout=timeout)
+
+
+def dash_index(url, size=0):
+    """{init, pieces: [(start, end, seconds)], kind: mp4|mkv, timescale} of a
+    DASH file from its head, read longer while the index runs past it."""
+    length = 1 << 16
+    while True:
+        head = _fresh_range(url, length)
+        try:
+            found = (_webm_index if head.startswith(WEBM) else _mp4_index)(head, size)
+        except (IndexError, struct.error):
+            found = None
+        if found:
+            return found
+        if len(head) < length or length >= 1 << 23:
+            raise Failure("No index in the file")
+        length *= 4
+
+
+def _fresh_range(url, length):
+    """The head of a file: an address yt-dlp has just been given is refused
+    (HTTP 403) for about a second, then it holds for hours."""
+    for attempt in range(10):
+        try:
+            return fetch_range(url, 0, length - 1, timeout=10)
+        except Failure as failure:
+            if "403" not in str(failure) or attempt == 9:
+                raise
+            time.sleep(0.5)
+    return b""
+
+
+def _mp4_boxes(data, start=0, end=None):
+    at, end = start, len(data) if end is None else end
+    while at + 8 <= end:
+        size, kind = struct.unpack(">I4s", data[at:at + 8])
+        head = 8
+        if size == 1:
+            size, head = struct.unpack(">Q", data[at + 8:at + 16])[0], 16
+        if size < head:
+            return
+        yield kind, at, size, head
+        at += size
+
+
+def _mp4_index(head, _size):
+    init = None
+    for kind, at, size, box_head in _mp4_boxes(head):
+        if at + size > len(head):
+            return None
+        if kind == b"moov":
+            init = head[:at + size]
+        if kind == b"sidx" and init:
+            body = head[at + box_head:at + size]
+            timescale = struct.unpack(">I", body[8:12])[0]
+            if body[0] == 0:
+                first, place = struct.unpack(">I", body[16:20])[0], 20
+            else:
+                first, place = struct.unpack(">Q", body[20:28])[0], 28
+            count = struct.unpack(">H", body[place + 2:place + 4])[0]
+            place += 4
+            offset, pieces = at + size + first, []
+            for _ in range(count):
+                reference, duration, _sap = struct.unpack(">III", body[place:place + 12])
+                place += 12
+                length = reference & 0x7fffffff
+                pieces.append((offset, offset + length - 1, duration / timescale))
+                offset += length
+            return {"init": init, "pieces": pieces, "kind": "mp4", "timescale": timescale}
+    return None
+
+
+def _ebml_number(data, at, marker=False):
+    first = data[at]
+    length = 1
+    while length < 8 and not first & (0x80 >> (length - 1)):
+        length += 1
+    value = first if marker else first & (0xff >> length)
+    for byte in data[at + 1:at + length]:
+        value = value << 8 | byte
+    if at + length > len(data):
+        raise IndexError(at)
+    return value, at + length
+
+
+def _ebml(data, at, end):
+    """(id, body start, body end) of the elements from `at` to `end`."""
+    while at < end:
+        ident, here = _ebml_number(data, at, marker=True)
+        size, here = _ebml_number(data, here)
+        yield ident, here, min(here + size, end)
+        at = here + size
+
+
+def _webm_index(head, size):
+    _, at = _ebml_number(head, 0, marker=True)
+    length, at = _ebml_number(head, at)
+    at += length
+    _, at = _ebml_number(head, at, marker=True)
+    _, at = _ebml_number(head, at)
+    segment = at
+    scale, duration, cues = 1000000, 0.0, []
+    while True:
+        ident, here = _ebml_number(head, at, marker=True)
+        length, here = _ebml_number(head, here)
+        if ident == 0x1F43B675:  # the first cluster: what came before is the head
+            break
+        if here + length > len(head):
+            return None
+        if ident == 0x1549A966:  # Info
+            for item, start, end in _ebml(head, here, here + length):
+                if item == 0x2AD7B1:
+                    scale = int.from_bytes(head[start:end], "big")
+                elif item == 0x4489:
+                    duration = struct.unpack(">f" if end - start == 4 else ">d", head[start:end])[0]
+        elif ident == 0x1C53BB6B:  # Cues
+            for point, start, end in _ebml(head, here, here + length):
+                if point != 0xBB:
+                    continue
+                when = place = None
+                for item, a, b in _ebml(head, start, end):
+                    if item == 0xB3:
+                        when = int.from_bytes(head[a:b], "big")
+                    elif item == 0xB7:
+                        for sub, c, d in _ebml(head, a, b):
+                            if sub == 0xF1:
+                                place = int.from_bytes(head[c:d], "big")
+                if when is not None and place is not None:
+                    cues.append((when * scale / 1e9, segment + place))
+        at = here + length
+    if not cues:
+        return None
+    pieces = []
+    for number, (when, place) in enumerate(cues):
+        later = cues[number + 1] if number + 1 < len(cues) else None
+        end = later[1] - 1 if later else (size - 1 if size else "")
+        pieces.append((place, end, (later[0] if later else duration * scale / 1e9) - when))
+    return {"init": head[:at], "pieces": pieces, "kind": "mkv", "timescale": 1000}
+
+
+def dash_playlist(index, address_of):
+    """The HLS playlist of one DASH file; address_of(piece number or "init")."""
+    lines = ["#EXTM3U", "#EXT-X-VERSION:7", f"#EXT-X-TARGETDURATION:{int(max(piece[2] for piece in index['pieces'])) + 1}",
+             "#EXT-X-PLAYLIST-TYPE:VOD", "#EXT-X-MEDIA-SEQUENCE:0", f'#EXT-X-MAP:URI="{address_of("init")}"']
+    for number, piece in enumerate(index["pieces"]):
+        lines += [f"#EXTINF:{max(piece[2], 0.001):.3f},", address_of(number)]
+    return "\n".join([*lines, "#EXT-X-ENDLIST"]) + "\n"
+
+
+def shift_fmp4(data, ms, timescale):
+    """A piece of an MP4 DASH file, `ms` earlier: the decode time in each
+    fragment's tfdt. As with HLS sound, the very start cannot go before zero."""
+    if not ms or not timescale:
+        return data
+    out = bytearray(data)
+    by = ms * timescale // 1000
+    for kind, at, size, head in _mp4_boxes(data):
+        if kind != b"moof":
+            continue
+        for kind2, at2, size2, head2 in _mp4_boxes(data, at + head, at + size):
+            if kind2 != b"traf":
+                continue
+            for kind3, at3, _size3, head3 in _mp4_boxes(data, at2 + head2, at2 + size2):
+                if kind3 != b"tfdt":
+                    continue
+                place = at3 + head3 + 4
+                wide = data[at3 + head3] == 1
+                form = ">Q" if wide else ">I"
+                stamp_ = struct.unpack_from(form, data, place)[0]
+                struct.pack_into(form, out, place, max(0, stamp_ - by))
+    return bytes(out)
+
+
+def _dash_rank(item):
+    """Which DASH picture plays best here: H.264 and VP9 the graphics card
+    decodes, AV1 it cannot (Navi 10) – that only where nothing else is, and
+    not above 1080p. HDR (vp9.2, AV1 10 bit) looks washed out on SDR."""
+    codec = str(item.get("vcodec") or "")
+    if item.get("dynamic_range") not in (None, "SDR"):
+        return 0
+    if codec.startswith("avc"):
+        return 3
+    if codec == "vp9" or codec.startswith("vp09.00"):
+        return 2
+    if codec.startswith("av01") and (item.get("height") or 0) <= 1080:
+        return 1
+    return 0
+
+
+def _dash_pair(pictures, sounds):
+    """{video, audio} with their indexes: the best picture and sound whose
+    index can be read; None when none of either."""
+    def first(items):
+        for item in items:
+            try:
+                return {"url": item["url"], "index": dash_index(item["url"], item.get("filesize") or 0), "width": item.get("width") or 0,
+                        "height": item.get("height") or 0, "tbr": item.get("tbr") or 0, "codec": item.get("vcodec") if item.get("vcodec") not in (None, "none") else item.get("acodec")}
+            except Failure:
+                continue
+        return None
+    video = first(sorted(pictures, key=lambda f: (_dash_rank(f), f.get("fps") or 0, f.get("tbr") or 0), reverse=True))
+    audio = first(sounds) if video else None
+    return {"video": video, "audio": audio} if video and audio else None
+
+
 def player_streams(url, quality=1080, step=None):
     """What the built-in player can play. YouTube keeps picture and sound apart;
     a little HLS playlist puts them together again.
-    {master | direct, duration, qualities, title}"""
+    {master | dash | direct, duration, qualities, title}"""
     data = ytdlp_json(["--skip-download", "--no-playlist", url], timeout=90)
     formats = data.get("formats") or []
     hls_video = [f for f in formats if f.get("protocol") == "m3u8_native" and f.get("vcodec") not in (None, "none") and f.get("height")]
@@ -427,13 +745,31 @@ def player_streams(url, quality=1080, step=None):
     many_languages = len({f.get("language") for f in all_audio if f.get("language")}) > 1
     original = original_audio(hls_audio, data.get("language"))
     together = [f for f in hls_video if f.get("acodec") not in (None, "none")]
-    qualities = sorted({f["height"] for f in hls_video}, reverse=True)
-    out = {"duration": data.get("duration") or 0, "qualities": [height for height in qualities if height >= 360], "title": data.get("title") or ""}
+    dash_video = [f for f in formats if f.get("protocol") == "https" and f.get("url") and f.get("height") and f.get("vcodec") not in (None, "none") and f.get("acodec") in (None, "none") and _dash_rank(f)]
+    dash_audio = original_audio([f for f in all_audio if f.get("protocol") == "https" and f.get("url") and str(f.get("acodec")).startswith("mp4a")], data.get("language"))
+    heights = {f["height"] for f in hls_video} | ({f["height"] for f in dash_video} if dash_audio else set())
+    qualities = [height for height in sorted(heights, reverse=True) if height >= 360]
+    out = {"duration": data.get("duration") or 0, "qualities": qualities, "title": data.get("title") or ""}
     out["chapters"] = [{"at": item.get("start_time", 0), "title": item.get("title", "")} for item in (data.get("chapters") or [])]
     out["storyboard"] = storyboard_of(formats)
     out["captions"] = captions_of(data)
     if step:
         step("sound")
+    # HLS where YouTube has it at the height wanted, the DASH files otherwise
+    target = max((height for height in heights if height <= quality), default=min(heights, default=0))
+    hls_there = bool(original) and any(f["height"] == target for f in hls_video)
+    if dash_video and dash_audio and not hls_there:
+        found = _dash_pair([f for f in dash_video if f["height"] == target], dash_audio)
+        if step:
+            step("check")
+        if found:
+            out["dash"] = found
+            # whole files ffmpeg can cut from as well (clips, recaps)
+            out["video"] = found["video"]["url"]
+            out["audio"] = found["audio"]["url"]
+            out["height"] = target
+            out["listen"] = dash_audio[-1]["url"]
+            return out
     fitting = [f for f in hls_video if f["height"] <= quality] or hls_video
     if hls_video and original:
         # at the same height H.264 goes easiest on the machine. Not every stream
@@ -529,7 +865,10 @@ def subtitles(video_id, directory):
     """The text of a video's subtitles (its own or automatic, English or German)."""
     os.makedirs(directory, exist_ok=True)
     target = os.path.join(directory, video_id)
-    subprocess.run([YTDLP, "--skip-download", "--write-subs", "--write-auto-subs", "--sub-langs", "en.*,de.*", "--sub-format", "vtt", "--no-warnings", "-o", target, f"https://www.youtube.com/watch?v={video_id}"], capture_output=True, timeout=120, check=False)
+    try:
+        ytdlp_run(["--skip-download", "--write-subs", "--write-auto-subs", "--sub-langs", "en.*,de.*", "--sub-format", "vtt", "--no-warnings", "-o", target, f"https://www.youtube.com/watch?v={video_id}"], 120)
+    except Failure:
+        return ""
     files = [name for name in os.listdir(directory) if name.startswith(video_id) and name.endswith(".vtt")]
     if not files:
         return ""

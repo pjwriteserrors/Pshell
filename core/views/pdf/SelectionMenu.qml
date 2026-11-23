@@ -197,6 +197,12 @@ Item {
 				onClicked: root.run("todo")
 			}
 			MenuKey {
+				visible: root.shellActions && NasCalendar.active
+				icon: "calendar_plus"
+				tip: "An event"
+				onClicked: root.run("event")
+			}
+			MenuKey {
 				visible: root.shellActions
 				icon: "web"
 				tip: "Search the web"

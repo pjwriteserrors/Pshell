@@ -29,6 +29,8 @@ Singleton {
 	property var plan: []
 	// series a channel seems to run, newest videos first: { key, source, sourceName, avatar, colors, name, kind, rule, playlist, numbered, why, count, seconds, newest, oldest, pictures, latest }
 	property var discoveries: []
+	// the same by key, for the cards
+	property var discoveryByKey: ({})
 	// what Explore and the home page show: with "detected", no suggestion that is
 	// only a playlist. One that titles, tags or descriptions point at as well stays.
 	readonly property var shownDiscoveries: root.settings.exploreKinds === "detected" ? root.discoveries.filter(item => root.isDetected(item)) : root.discoveries
@@ -124,7 +126,8 @@ Singleton {
 	}
 
 	function toggle() {
-		if (root.shown) root.close();
+		// a window left on another workspace comes back instead of closing
+		if (root.shown && (root.panelled || popout.focused)) root.close();
 		else root.open();
 	}
 
@@ -202,7 +205,8 @@ Singleton {
 			root.raids = state.live.raids;
 			root.inbox = state.inbox;
 			root.plan = state.plan;
-			root.discoveries = state.discoveries;
+			// a daemon from before they came on their own
+			if (state.discoveries) root.takeDiscoveries(state.discoveries);
 			root.scan = state.scan;
 			root.playing = state.playing;
 			root.settings = state.settings;
@@ -215,6 +219,9 @@ Singleton {
 			root.storyJob = state.storyJob;
 			break;
 		}
+		case "discoveries":
+			root.takeDiscoveries(message.items);
+			break;
 		// a progress report between two states: only what plays
 		case "playing":
 			root.playing = message.playing;
@@ -412,6 +419,13 @@ Singleton {
 
 	// behind the pages: docked, the panel's own fading background shows through
 	readonly property color pageColor: root.panelled ? "transparent" : Theme.base
+
+	function takeDiscoveries(items) {
+		const byKey = {};
+		for (const item of items) byKey[item.key] = item;
+		root.discoveryByKey = byKey;
+		root.discoveries = items;
+	}
 
 	function isDetected(item) {
 		return item.kind !== "playlist" || item.detected || item.parts.length > 0;

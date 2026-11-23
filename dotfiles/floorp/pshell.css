@@ -351,6 +351,12 @@ panel {
 	}
 }
 
+/* the window buttons once: with the tabs in the rail Firefox shows its own in
+   the bar, and Floorp moves the tab strip's copy beside the app menu */
+#navigator-toolbox[tabs-hidden] #floorp-tabbar-window-manage-container {
+	display: none !important;
+}
+
 /* the address: a pill in the middle of the bar */
 #urlbar-container {
 	width: clamp(320px, 42vw, 640px) !important;
@@ -792,6 +798,17 @@ toolbarbutton[open] > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
 	border-radius: 4px;
 }
 
+/* the icon at the start, the title beside it: Floorp's Lepton design and its
+   "centred tabs" squeeze the title to nothing and centre the icon */
+.tabbrowser-tab .tab-icon-stack {
+	margin-inline-start: 0 !important;
+}
+
+.tabbrowser-tab .tab-label-container {
+	max-width: none !important;
+	margin-inline-end: 0 !important;
+}
+
 /* the hairlines between tabs: the shell separates by spacing, not lines */
 .tabbrowser-tab > .tab-stack::before {
 	background-color: transparent !important;
@@ -818,6 +835,12 @@ toolbarbutton[open] > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
 #vertical-pinned-tabs-container-separator {
 	background: var(--ps-outline) !important;
 	border: none !important;
+}
+
+/* Firefox's card asking to drag tabs up to pin them: not the shell's way of
+   teaching (pinning stays in the tab's menu and by dragging) */
+#drag-to-pin-promo-card {
+	display: none !important;
 }
 
 /* open, the pinned tabs are icons side by side, wrapping – in every rail

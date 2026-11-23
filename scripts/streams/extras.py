@@ -480,8 +480,10 @@ class Extras:
         was known when this first ran stays silent, and so does anything old."""
         known = self.store.get_meta("suggestions-known", None)
         keys = [item["key"] for item in found]
-        if known is None:
-            self.store.set_meta("suggestions-known", keys)
+        # what only showed up because the cap per channel went away is not new
+        if known is None or not self.store.get_meta("suggestions-uncapped"):
+            self.store.set_meta("suggestions-uncapped", True)
+            self.store.set_meta("suggestions-known", sorted(set(known or []) | set(keys)))
             return
         known = set(known)
         for item in found:

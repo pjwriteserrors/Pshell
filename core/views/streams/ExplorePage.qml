@@ -11,37 +11,57 @@ import qs.core.views
 // Series found on the channels the user added, those with the newest videos
 // first: from playlists, titles, descriptions, hashtags and tags, read slowly in
 // the background. One click follows one; the picture opens it to change it first.
-Flickable {
+// The page is the grid itself, so only the cards in sight are made.
+GridView {
 	id: root
 
 	// a channel's source id; "" for all
 	property string channel: ""
+	property string query: ""
+	readonly property var words: root.query.toLowerCase().split(/\s+/).filter(word => word !== "")
+	readonly property var found: root.words.length === 0 ? Streams.shownDiscoveries : Streams.shownDiscoveries.filter(item => {
+		const text = [item.name, item.sourceName, ...(item.parts ?? []).map(part => part.name)].join(" ").toLowerCase();
+		return root.words.every(word => text.includes(word));
+	})
 	readonly property var channels: {
 		const count = {};
-		for (const item of Streams.shownDiscoveries) count[item.source] = (count[item.source] ?? 0) + 1;
+		for (const item of root.found) count[item.source] = (count[item.source] ?? 0) + 1;
 		const name = id => Streams.makerName(Streams.groupOf(id)).toLowerCase();
 		return Object.keys(count).map(id => ({ id: id, count: count[id] })).sort((a, b) => name(a.id).localeCompare(name(b.id)));
 	}
-	readonly property var shown: Streams.shownDiscoveries.filter(item => root.channel === "" || item.source === root.channel)
+	readonly property var shown: root.found.filter(item => root.channel === "" || item.source === root.channel)
 	readonly property real progress: (Streams.scan.total ?? 0) > 0 ? Streams.scan.done / Streams.scan.total : 0
 	readonly property bool reading: (Streams.scan.now ?? "") !== "" || (root.progress > 0 && root.progress < 1)
+	readonly property int columns: Math.max(1, Math.min(Math.floor((root.width - 88 + 16) / 320), Math.max(3, cards.count)))
 
-	contentHeight: column.implicitHeight + 40
+	leftMargin: 44
+	rightMargin: 44
+	bottomMargin: 40
+	cellWidth: Math.floor((root.width - 88) / root.columns)
+	cellHeight: Math.round((root.cellWidth - 16) * 9 / 16) + 76
+	cacheBuffer: root.cellHeight * 2
+	currentIndex: -1
+	highlightFollowsCurrentItem: false
+	keyNavigationEnabled: false
 	boundsBehavior: Flickable.StopAtBounds
 	clip: true
 	ScrollBar.vertical: ThinScrollBar {}
+	model: cards
 
-	onShownChanged: model.sync(root.shown.map(item => ({ key: item.key })))
-	Component.onCompleted: model.sync(root.shown.map(item => ({ key: item.key })))
+	// a header that grows keeps the first card where it was and so slides
+	// itself away; at the top the page stays at the top
+	property bool atTop: true
+	onContentYChanged: root.atTop = root.contentY <= root.originY + 1
+	onOriginYChanged: if (root.atTop) Qt.callLater(root.positionViewAtBeginning)
+	onShownChanged: cards.sync(root.shown.map(item => ({ key: item.key })))
+	onChannelsChanged: if (root.channel !== "" && !root.channels.some(entry => entry.id === root.channel)) root.channel = ""
+	Component.onCompleted: cards.sync(root.shown.map(item => ({ key: item.key })))
 
 	SyncedModel {
-		id: model
+		id: cards
 	}
 
-	ColumnLayout {
-		id: column
-
-		x: 44
+	header: ColumnLayout {
 		width: root.width - 88
 		spacing: 16
 
@@ -127,114 +147,62 @@ Flickable {
 			}
 		}
 
-		Segmented {
-			Layout.preferredWidth: 330
-			Layout.preferredHeight: 34
-			options: [
-				{ value: "all", label: `All ${Streams.discoveries.length}` },
-				{ value: "detected", label: `Without playlists ${Streams.discoveries.filter(item => Streams.isDetected(item)).length}` }
-			]
-			current: Streams.settings.exploreKinds ?? "all"
-			onSelected: value => {
-				root.channel = "";
-				Streams.setSetting("exploreKinds", value);
+		RowLayout {
+			Layout.fillWidth: true
+			spacing: 16
+
+			Segmented {
+				Layout.preferredWidth: 330
+				Layout.preferredHeight: 34
+				options: [
+					{ value: "all", label: `All ${Streams.discoveries.length}` },
+					{ value: "detected", label: `Without playlists ${Streams.discoveries.filter(item => Streams.isDetected(item)).length}` }
+				]
+				current: Streams.settings.exploreKinds ?? "all"
+				onSelected: value => {
+					root.channel = "";
+					Streams.setSetting("exploreKinds", value);
+				}
+			}
+
+			Item {
+				Layout.fillWidth: true
+			}
+
+			Field {
+				Layout.preferredWidth: 360
+				Layout.preferredHeight: 38
+				icon: "magnify"
+				placeholder: "Search"
+				onTextChanged: root.query = text
+				onEscapePressed: text = ""
 			}
 		}
 
 		ExploreChannels {
 			Layout.fillWidth: true
+			Layout.bottomMargin: 16
 			visible: root.channels.length > 1
 			channels: root.channels
-			total: Streams.shownDiscoveries.length
+			total: root.found.length
 			current: root.channel
 			onPicked: id => root.channel = id
 		}
+	}
 
-		GridView {
-			id: grid
-
-			readonly property int columns: Math.max(1, Math.min(Math.floor((width + 16) / 320), Math.max(3, model.count)))
-
-			Layout.fillWidth: true
-			Layout.preferredHeight: Math.ceil(model.count / grid.columns) * grid.cellHeight
-			interactive: false
-			cellWidth: Math.floor(width / grid.columns)
-			cellHeight: Math.round((grid.cellWidth - 16) * 9 / 16) + 76
-			model: model
-
-			add: Transition {
-				ParallelAnimation {
-					SpatialAnim {
-						property: "scale"
-						from: 0.82
-						to: 1
-						duration: Motion.extraLong
-					}
-					Anim {
-						property: "opacity"
-						from: 0
-						to: 1
-						duration: Motion.long
-					}
-				}
-			}
-			// followed or waved away: it flies up and is gone
-			remove: Transition {
-				ParallelAnimation {
-					Anim {
-						property: "opacity"
-						to: 0
-						duration: Motion.long
-					}
-					SpatialAnim {
-						property: "scale"
-						to: 0.8
-						duration: Motion.long
-					}
-				}
-			}
-			displaced: Transition {
-				SpatialAnim {
-					properties: "x,y"
-					duration: Motion.long
-				}
-			}
-			move: Transition {
-				SpatialAnim {
-					properties: "x,y"
-					duration: Motion.long
-				}
-			}
-
-			delegate: Item {
-				id: cell
-
-				required property string key
-
-				width: grid.cellWidth
-				height: grid.cellHeight
-				z: card.lifted ? 10 : 0
-
-				ExploreCard {
-					id: card
-
-					anchors.fill: parent
-					anchors.rightMargin: 16
-					anchors.bottomMargin: 20
-					itemKey: cell.key
-				}
-			}
-		}
+	footer: ColumnLayout {
+		width: root.width - 88
+		spacing: 16
 
 		ColumnLayout {
 			Layout.alignment: Qt.AlignHCenter
 			Layout.topMargin: 80
-			visible: model.count === 0
+			visible: cards.count === 0
 			spacing: 10
 
 			Text {
 				Layout.alignment: Qt.AlignHCenter
-				text: Streams.ownSources.length === 0 ? "No channels yet" : (root.reading ? "Reading your channels" : "Nothing new to suggest")
+				text: root.words.length > 0 ? "Nothing found" : (Streams.ownSources.length === 0 ? "No channels yet" : (root.reading ? "Reading your channels" : "Nothing new to suggest"))
 				color: Theme.text
 				font.family: Theme.fontFamily
 				font.pixelSize: 30
@@ -242,6 +210,7 @@ Flickable {
 			}
 			StyledText {
 				Layout.alignment: Qt.AlignHCenter
+				visible: root.words.length === 0
 				text: Streams.ownSources.length === 0 ? "Series appear here once you follow a channel." : (root.reading ? "Series appear here as they are found." : (Streams.discoveries.length > 0 ? "The rest are only playlists." : "Everything found is followed or waved away."))
 				tone: Theme.textMuted
 				font.pixelSize: Theme.size.title
@@ -250,6 +219,69 @@ Flickable {
 
 		ExploreExtras {
 			Layout.fillWidth: true
+		}
+	}
+
+	add: Transition {
+		ParallelAnimation {
+			SpatialAnim {
+				property: "scale"
+				from: 0.82
+				to: 1
+				duration: Motion.extraLong
+			}
+			Anim {
+				property: "opacity"
+				from: 0
+				to: 1
+				duration: Motion.long
+			}
+		}
+	}
+	// followed or waved away: it flies up and is gone
+	remove: Transition {
+		ParallelAnimation {
+			Anim {
+				property: "opacity"
+				to: 0
+				duration: Motion.long
+			}
+			SpatialAnim {
+				property: "scale"
+				to: 0.8
+				duration: Motion.long
+			}
+		}
+	}
+	displaced: Transition {
+		SpatialAnim {
+			properties: "x,y"
+			duration: Motion.long
+		}
+	}
+	move: Transition {
+		SpatialAnim {
+			properties: "x,y"
+			duration: Motion.long
+		}
+	}
+
+	delegate: Item {
+		id: cell
+
+		required property string key
+
+		width: root.cellWidth
+		height: root.cellHeight
+		z: card.lifted ? 10 : 0
+
+		ExploreCard {
+			id: card
+
+			anchors.fill: parent
+			anchors.rightMargin: 16
+			anchors.bottomMargin: 20
+			itemKey: cell.key
 		}
 	}
 }

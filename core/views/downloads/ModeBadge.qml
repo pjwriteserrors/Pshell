@@ -9,12 +9,12 @@ import qs.style.widgets
 Rectangle {
 	id: root
 
-	// "boost" | "checking" | "normal" | "torrent"
+	// "boost" | "checking" | "normal" | "torrent" | "media"
 	property string mode: "normal"
 	property string text: ""
 	property bool live: false
 
-	readonly property color accent: root.mode === "boost" ? Theme.primary : (root.mode === "torrent" ? Theme.tertiary : (root.mode === "checking" ? Theme.secondary : Theme.textMuted))
+	readonly property color accent: root.mode === "boost" ? Theme.primary : (root.mode === "torrent" || root.mode === "media" ? Theme.tertiary : (root.mode === "checking" ? Theme.secondary : Theme.textMuted))
 
 	implicitWidth: row.implicitWidth + 16
 	implicitHeight: 22
@@ -49,7 +49,7 @@ Rectangle {
 			id: bolt
 
 			visible: root.mode !== "checking"
-			icon: ({ boost: "lightning_bolt", torrent: "magnet", normal: "download" })[root.mode] ?? "download"
+			icon: ({ boost: "lightning_bolt", torrent: "magnet", normal: "download", media: "youtube" })[root.mode] ?? "download"
 			size: 12
 			color: root.accent
 

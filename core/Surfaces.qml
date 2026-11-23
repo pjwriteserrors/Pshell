@@ -19,6 +19,7 @@ import qs.core.views.messages
 import qs.core.views.overlays
 import qs.core.views.panels
 import qs.core.views.printer
+import qs.core.views.rhymes
 import qs.core.views.rpg
 import qs.core.views.screenshot
 import qs.core.views.screentime
@@ -315,6 +316,12 @@ Scope {
 	}
 
 	View {
+		view: "vpn/VpnPanel"
+		available: Plugins.on("phone")
+		when: Popups.wanted("vpn")
+	}
+
+	View {
 		view: "printer/PrinterPanel"
 		available: Plugins.on("printer")
 		when: Popups.wanted("printer")
@@ -479,6 +486,12 @@ Scope {
 	View {
 		view: "music/MusicWindow"
 		available: Plugins.on("music")
+	}
+
+	// lyrics: rhymes, the scheme, a beat to write to, a window of its own
+	View {
+		view: "rhymes/RhymesWindow"
+		available: Plugins.on("rhymes")
 	}
 
 	// videos: played by Qt Multimedia in the shell, also the editor

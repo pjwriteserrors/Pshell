@@ -71,6 +71,7 @@ val Features: List<Feature> = listOf(
 	AgentsFeature,
 	TodosFeature,
 	NotesFeature,
+	dev.pshell.app.calendar.BaikalFeature,
 	CalendarFeature,
 	ShelvesFeature,
 	DownloadsFeature,

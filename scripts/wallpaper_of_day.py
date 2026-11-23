@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
-"""The pictures of the day of Bing, NASA (APOD), Wallhaven and MoeWalls.
+"""The pictures of the day of Bing, NASA (APOD), Wallhaven, MoeWalls and
+MotionBGs.
 
 Every source's picture is kept in ~/.local/state/quickshell-theme/daily with
 its preview and its wallust colours, so the theme picker shows them at once:
@@ -11,7 +12,9 @@ its preview and its wallust colours, so the theme picker shows them at once:
                      (--cached: the one that is kept, without asking)
   --upscale NAME     make NAME's kept picture as big as the largest screen
                      with Real-ESRGAN on the Radeon ("progress <0-1> <text>"
-                     lines, then the entry); --original NAME takes it back
+                     lines, then the entry); one that is big enough already is
+                     shrunk first and redrawn sharper; --original NAME takes
+                     it back
 
 A picture smaller than the largest screen is "small" in the list. With the
 plugin studio-wallpaper-upscale on, a new small one is made bigger as soon as
@@ -43,7 +46,7 @@ from pathlib import Path
 
 USER_AGENT = "quickshell-wallpaper-of-the-day/1.0"
 SELECTION_VERSION = 9
-PROVIDERS = ("bing", "apod", "wallhaven", "moewalls")
+PROVIDERS = ("bing", "apod", "wallhaven", "moewalls", "motionbgs")
 # Providers whose pick can change during the day and is rechecked on every run.
 CHANGING_PROVIDERS = ("bing", "apod")
 APOD_FEED = "https://science.nasa.gov/feed/apod-basic/"
@@ -107,6 +110,21 @@ MOEWALLS_BLOCKED_PREFERENCES = (
     "swimsuit",
     "video game",
 )
+MOTIONBGS = "https://motionbgs.com"
+# its newest uploads are almost all anime and games, so the first page of
+# each of these motif tags is read; it counts no views, so the newest 4K one
+# not shown lately is the one of the day
+MOTIONBGS_TAGS = (
+    "nature", "landscape", "space", "rain", "sunset", "sunrise", "ocean",
+    "beach", "forest", "mountain", "snow", "winter", "waterfall", "city",
+    "night", "abstract", "minimalistic", "technology", "autumn-leaves",
+)
+# its tags (slugs) that mean a figure, a game or a franchise, beside the words
+# MoeWalls is kept from
+MOTIONBGS_BLOCKED_TAGS = {
+    "anime", "anime-nature", "games", "girl", "boy", "tv", "cartoon",
+    "superhero", "manga", "hentai", "waifu", "vtuber", "hololive", "celebrity",
+}
 HOME = Path.home()
 SCRIPT_DIR = Path(__file__).resolve().parent
 def library_dir():
@@ -143,6 +161,10 @@ UPSCALE_MODEL_SHA256 = {
 UPSCALE_MAX = 120_000_000
 # smaller than the screen by less than this is left as it is
 UPSCALE_SLACK = 1.05
+# what the model is given is at most half the size the picture ends at, so
+# its four times bigger result is brought down to it: blur goes, and a picture
+# big enough already keeps its size
+SHARPEN_SHRINK = 2
 
 
 def request(url: str, *, timeout: int = 30) -> urllib.response.addinfourl:
@@ -535,6 +557,75 @@ def moewalls_candidate() -> dict[str, object]:
     raise RuntimeError("MoeWalls candidates had no working download link: " + "; ".join(errors[:3]))
 
 
+def motionbgs_candidate() -> dict[str, object]:
+    def listing(tag: str) -> list[dict[str, object]]:
+        try:
+            text = get_text(f"{MOTIONBGS}/tag:{tag}/")
+        except Exception:
+            return []
+        return [
+            {
+                "id": media_id,
+                "link": MOTIONBGS + path,
+                "title": re.sub(r"\s+(live|animated) wallpaper$", "", html.unescape(title), flags=re.I),
+                "number": int(media_id),
+            }
+            for title, path, media_id in re.findall(
+                r'<a title="([^"]*)" href=(/[^ >]+)>\s*<figure>(?:(?!</a>).)*?/media/(\d+)/[^ >]*?3840x2160\.jpg',
+                text,
+            )
+        ]
+
+    with ThreadPoolExecutor(8) as pool:
+        listed = [item for found in pool.map(listing, MOTIONBGS_TAGS) for item in found]
+    if not listed:
+        raise RuntimeError("MotionBGs listed no 4K wallpapers")
+
+    def blocked(text: str) -> bool:
+        return any(word in text for word in MOEWALLS_BLOCKED_PREFERENCES)
+
+    ranked = [
+        item for item in rotating_candidates(listed, "motionbgs", "number")
+        if not blocked(str(item["title"]).lower())
+    ]
+
+    def tags(item: dict[str, object]) -> list[str] | None:
+        try:
+            page = get_text(str(item["link"]))
+        except Exception:
+            return None
+        block = re.search(r'<ul class="subtags[^>]*>(.*?)</ul>', page, re.S)
+        return re.findall(r"href=/tag:([a-z0-9-]+)/", block.group(1)) if block else []
+
+    # a motif tag says little about the rest (an anime figure in the rain),
+    # so its own page is read, a few at a time, newest first
+    best: dict[str, object] | None = None
+    with ThreadPoolExecutor(8) as pool:
+        for start in range(0, len(ranked), 8):
+            batch = ranked[start:start + 8]
+            for item, found in zip(batch, pool.map(tags, batch)):
+                if found is None:
+                    continue
+                text = " ".join([str(item["title"]).lower(), *(tag.replace("-", " ") for tag in found)])
+                if not MOTIONBGS_BLOCKED_TAGS.intersection(found) and not blocked(text):
+                    best = {**item, "tags": found}
+                    break
+            if best:
+                break
+    if not best:
+        raise RuntimeError("MotionBGs listed no neutral non-anime, non-game wallpaper")
+
+    screen = screen_size()
+    quality = "4k" if screen[0] > 1920 or screen[1] > 1080 else "hd"
+    return {
+        "provider": "motionbgs",
+        "title": str(best["title"]) or "MotionBGs live wallpaper",
+        "source_url": str(best["link"]),
+        "download_url": f"{MOTIONBGS}/dl/{quality}/{best['id']}/",
+        "candidate_id": str(best["id"]),
+        "tags": best["tags"],
+    }
+
 def resolve(provider: str) -> dict[str, object]:
     if provider == "bing":
         return bing_candidate()
@@ -542,6 +633,8 @@ def resolve(provider: str) -> dict[str, object]:
         return apod_candidate()
     if provider == "wallhaven":
         return wallhaven_candidate()
+    if provider == "motionbgs":
+        return motionbgs_candidate()
     return moewalls_candidate()
 
 
@@ -951,7 +1044,8 @@ def replace_kept(provider: str, entry: dict[str, object], directory: Path, extra
 
 
 def upscale(provider: str, progress=say) -> dict[str, object]:
-    """The kept picture of a source, made as big as the largest screen."""
+    """The kept picture of a source, made as big as the largest screen; one
+    that is big enough is made sharper at the size that covers the screen."""
     from PIL import Image
 
     with (CACHE_DIR / f"{provider}.lock").open("w") as lock, (CACHE_DIR / "upscale.lock").open("w") as gpu:
@@ -961,11 +1055,13 @@ def upscale(provider: str, progress=say) -> dict[str, object]:
             raise RuntimeError("no picture is kept for " + provider)
         if entry.get("upscaled"):
             return entry
+        if entry.get("media_type", "image") != "image":
+            raise RuntimeError("only pictures can be upscaled")
         scale = needed_scale(entry, screen_size())
-        if scale <= UPSCALE_SLACK:
-            raise RuntimeError("the picture is as big as the screen already")
         width, height = int(entry["width"]), int(entry["height"])
-        if width * height * 16 > UPSCALE_MAX:
+        factor = min(4.0, scale) if scale > UPSCALE_SLACK else min(1.0, scale)
+        shrink = max(1.0, SHARPEN_SHRINK / factor)
+        if width * height * 16 / (shrink * shrink) > UPSCALE_MAX:
             raise RuntimeError(f"{width} × {height} px is too big to be made four times bigger")
         fcntl.flock(gpu, fcntl.LOCK_EX)
         program = esrgan() or install_esrgan(progress)
@@ -980,7 +1076,14 @@ def upscale(provider: str, progress=say) -> dict[str, object]:
         try:
             link_or_copy(source, directory / f".original{source.suffix}")
             raw = directory / ".esrgan.png"
-            args = [program, "-i", str(source), "-o", str(raw), "-n", UPSCALE_MODEL, "-s", "4", "-m", str(models)]
+            given = source
+            if shrink > 1:
+                progress(0.26, "Shrinking")
+                given = directory / ".shrunk.png"
+                with Image.open(source) as image:
+                    small = (max(1, round(width / shrink)), max(1, round(height / shrink)))
+                    image.convert("RGB").resize(small, Image.Resampling.LANCZOS).save(given)
+            args = [program, "-i", str(given), "-o", str(raw), "-n", UPSCALE_MODEL, "-s", "4", "-m", str(models)]
             if index:
                 args += ["-g", index]
             progress(0.27, f"Upscaling on the {card}" if card else "Upscaling")
@@ -1000,7 +1103,6 @@ def upscale(provider: str, progress=say) -> dict[str, object]:
             if process.wait() != 0 or not raw.is_file():
                 raise RuntimeError("Real-ESRGAN did not work: " + (tail[-1] if tail else "it stopped"))
             progress(0.9, "Saving")
-            factor = min(4.0, scale)
             with Image.open(raw) as image:
                 image = image.convert("RGB")
                 size = (round(width * factor), round(height * factor))
@@ -1008,6 +1110,8 @@ def upscale(provider: str, progress=say) -> dict[str, object]:
                     image = image.resize(size, Image.Resampling.LANCZOS)
                 image.save(directory / "media.jpg", "JPEG", quality=95, subsampling=0)
             raw.unlink()
+            if given != source:
+                given.unlink()
         except BaseException:
             shutil.rmtree(directory, ignore_errors=True)
             raise

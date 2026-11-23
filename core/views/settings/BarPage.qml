@@ -38,6 +38,7 @@ SettingsPage {
 
 			StyledText {
 				Layout.fillWidth: true
+				visible: line.detail !== ""
 				text: line.detail
 				tone: Theme.textSubtle
 				font.pixelSize: Theme.size.small
@@ -179,6 +180,15 @@ SettingsPage {
 			detail: "Do not disturb while a game runs"
 			checked: GameMode.quietNotifications
 			onToggled: on => GameMode.setOption("quietNotifications", on)
+		}
+
+		Switch {
+			text: "Feral GameMode"
+			detail: GameMode.feralState === "missing" ? "gamemode is not installed" : (GameMode.feralState === "group" ? "Needs the gamemode group: sudo usermod -aG gamemode $USER, then sign in again" : "")
+			enabled: GameMode.feralState === "on" || GameMode.feralState === "off"
+			checked: GameMode.feral && GameMode.feralState !== "missing" && GameMode.feralState !== "group"
+			onToggled: on => GameMode.setOption("feral", on)
+			Component.onCompleted: GameMode.checkFeral()
 		}
 	}
 }

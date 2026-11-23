@@ -16,4 +16,6 @@
 	<string name="widget_media_description">What plays on the PC, with play, skip and volume</string>
 	<string name="widget_status">PC</string>
 	<string name="widget_status_description">Whether the PC is reachable, the timer, and lock</string>
+	<string name="widget_calendar">Calendar</string>
+	<string name="widget_calendar_description">The next days of the Baikal calendar</string>
 </resources>

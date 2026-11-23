@@ -1689,7 +1689,16 @@ Singleton {
 
 	// ── the calendar ───────────────────────────────────────────────────────
 	// the events of an .ics file go into the Microsoft 365 calendar
+	// into Baikal when it is there, else Microsoft 365
 	function importCalendar(path) {
+		if (NasCalendar.active) {
+			NasCalendar.importIcs(path, "", answer => {
+				if (answer.error) return;
+				Sounds.play("taskDone");
+				root.say(answer.count === 0 ? "Already in the calendar" : (answer.count === 1 ? "The event is in the calendar" : `${answer.count} events are in the calendar`), "calendar_check");
+			});
+			return;
+		}
 		calendarProc.command = ["python3", `${Paths.scripts}/ms_calendar.py`, "import", String(path)];
 		calendarProc.running = true;
 	}

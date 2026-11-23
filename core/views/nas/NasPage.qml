@@ -38,6 +38,8 @@ SettingsPage {
 	property bool adminShown: false
 	property var minted: null
 	property var games: []
+	// the Baikal calendar whose members show (sharing)
+	property string sharingCalendar: ""
 	// the versions of a picked file: { path, list }
 	property var versionsOf: null
 
@@ -1611,6 +1613,232 @@ SettingsPage {
 						if (error) Notifs.pushInternal("error", "Baikal", error, { app: "NAS" });
 					}));
 				}
+			}
+		}
+
+		Head {
+			visible: NasCalendar.active
+			text: "Calendars"
+		}
+
+		Line {
+			visible: NasCalendar.coreNeedsPassword
+			text: "For pshell-core"
+
+			Field {
+				id: corePassword
+
+				implicitWidth: 340
+				password: true
+				placeholder: "Baikal password, Enter"
+				onAccepted: {
+					const password = corePassword.text;
+					corePassword.text = "";
+					NasCalendar.giveCorePassword(password, error => {
+						if (error) Notifs.pushInternal("error", "Baikal", error, { app: "NAS" });
+					});
+				}
+			}
+		}
+
+		Repeater {
+			model: NasCalendar.active ? NasCalendar.calendars : []
+
+			delegate: ColumnLayout {
+				id: calRow
+
+				required property var modelData
+				readonly property bool mine: calRow.modelData.access === "" || calRow.modelData.access === "owner"
+				readonly property var share: NasCalendar.shares[calRow.modelData.href] ?? null
+				// on the page: the list is made anew after every change
+				readonly property bool sharing: root.sharingCalendar === calRow.modelData.href
+
+				Layout.fillWidth: true
+				spacing: 6
+
+				RowLayout {
+					Layout.fillWidth: true
+					spacing: 8
+
+					ColorWell {
+						value: calRow.modelData.color !== "" ? calRow.modelData.color : Theme.secondary
+						alpha: false
+						showHex: false
+						size: 22
+						onPicked: css => NasCalendar.changeCalendar(calRow.modelData.href, { color: css })
+					}
+
+					Field {
+						Layout.fillWidth: true
+						text: calRow.modelData.name
+						clearable: false
+						onAccepted: if (text.trim() !== "" && text.trim() !== calRow.modelData.name) NasCalendar.changeCalendar(calRow.modelData.href, { name: text.trim() })
+					}
+
+					StyledText {
+						visible: !calRow.mine
+						text: calRow.modelData.access === "read" ? "Shared with you · read" : "Shared with you"
+						tone: Theme.textMuted
+						font.pixelSize: Theme.size.small
+					}
+
+					StyledText {
+						visible: calRow.mine && (calRow.share?.sharees.length ?? 0) > 0
+						text: `Shared · ${calRow.share?.sharees.length ?? 0}`
+						tone: Theme.primary
+						font.pixelSize: Theme.size.small
+					}
+
+					IconButton {
+						visible: calRow.mine && Netcore.active
+						implicitWidth: 30
+						implicitHeight: 30
+						icon: "account_multiple_plus"
+						onClicked: {
+							root.sharingCalendar = calRow.sharing ? "" : calRow.modelData.href;
+							if (calRow.sharing) {
+								NasCalendar.loadMembers();
+								NasCalendar.loadShares(calRow.modelData.href);
+							}
+						}
+					}
+
+					TextButton {
+						text: calRow.mine ? "Delete" : "Leave"
+						icon: calRow.mine ? "delete_outline" : "logout"
+						variant: "ghost"
+						confirm: true
+						confirmText: calRow.mine ? "With all events?" : "Sure?"
+						onActivated: NasCalendar.deleteCalendar(calRow.modelData.href)
+					}
+				}
+
+				// who of core's members has it
+				Repeater {
+					model: calRow.sharing ? NasCalendar.members : []
+
+					delegate: RowLayout {
+						id: memberRow
+
+						required property var modelData
+						readonly property var entry: (calRow.share?.sharees ?? []).find(s => s.email.toLowerCase() === String(memberRow.modelData.email).toLowerCase()) ?? null
+
+						Layout.fillWidth: true
+						Layout.leftMargin: 34
+						spacing: 8
+
+						Glyph {
+							icon: "account_outline"
+							size: 16
+							color: Theme.textMuted
+						}
+
+						StyledText {
+							Layout.fillWidth: true
+							text: memberRow.modelData.display || memberRow.modelData.name
+						}
+
+						Segmented {
+							implicitWidth: 240
+							implicitHeight: 30
+							options: [{ value: "", label: "No" }, { value: "read", label: "Read" }, { value: "write", label: "Read & write" }]
+							current: memberRow.entry ? (memberRow.entry.write ? "write" : "read") : ""
+							onSelected: value => NasCalendar.share(calRow.modelData.href, memberRow.modelData, value)
+						}
+					}
+				}
+
+				StyledText {
+					visible: calRow.sharing && NasCalendar.members.length === 0
+					Layout.leftMargin: 34
+					text: "No other members in pshell-core"
+					tone: Theme.textSubtle
+					font.pixelSize: Theme.size.small
+				}
+			}
+		}
+
+		RowLayout {
+			visible: NasCalendar.active
+			Layout.fillWidth: true
+			spacing: 8
+
+			ColorWell {
+				id: newCalColor
+
+				value: "#4f8ef7"
+				alpha: false
+				showHex: false
+				size: 22
+				onPicked: css => newCalColor.value = css
+			}
+
+			Field {
+				id: newCalName
+
+				Layout.fillWidth: true
+				placeholder: "New calendar"
+				onAccepted: newCalAdd.activated()
+			}
+
+			TextButton {
+				id: newCalAdd
+
+				text: "Add"
+				icon: "plus"
+				enabled: newCalName.text.trim() !== ""
+				onActivated: {
+					if (newCalName.text.trim() === "") return;
+					NasCalendar.createCalendar(newCalName.text.trim(), newCalColor.value, reply => {
+						if (!reply.error) newCalName.text = "";
+					});
+				}
+			}
+		}
+
+		Head {
+			visible: NasCalendar.active
+			text: "Tasks"
+		}
+
+		FlagRow {
+			visible: NasCalendar.active
+			title: "Tasks.md with Baikal"
+			subtitle: BaikalTodos.error !== "" ? BaikalTodos.error : (BaikalTodos.syncedAt > 0 ? `Synced ${Qt.formatTime(new Date(BaikalTodos.syncedAt), "HH:mm")}` : "")
+			icon: "checkbox_marked_circle_outline"
+			checked: !!BaikalTodos.settings.on
+			onToggled: on => BaikalTodos.setTodos({ on: on })
+		}
+
+		Flow {
+			visible: NasCalendar.active && !!BaikalTodos.settings.on && NasCalendar.writable.length > 1
+			Layout.fillWidth: true
+			Layout.leftMargin: 34
+			spacing: 6
+
+			Repeater {
+				model: NasCalendar.writable
+
+				delegate: Chip {
+					required property var modelData
+
+					text: modelData.name
+					icon: "circle"
+					accent: modelData.color !== "" ? modelData.color : Theme.secondary
+					selected: BaikalTodos.calendar === modelData.href
+					onClicked: BaikalTodos.setTodos({ calendar: modelData.href })
+				}
+			}
+		}
+
+		Line {
+			visible: NasCalendar.active && Netcore.active
+			text: "Copies"
+
+			StyledText {
+				text: NasCalendar.copy.error ? NasCalendar.copy.error : (NasCalendar.copy.kept ? `${String(NasCalendar.copy.kept).slice(3, 11).replace(/(\d{4})(\d{2})(\d{2})/, "$3.$2.$1")} · ${NasCalendar.copy.count} on this PC` : "–")
+				tone: NasCalendar.copy.error ? Theme.danger : Theme.textMuted
+				font.pixelSize: Theme.size.small
 			}
 		}
 

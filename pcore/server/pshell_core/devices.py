@@ -71,8 +71,14 @@ async def patch_device(request):
     a = request.app["auth"]
     row = a.update_device(request.match_info["id"], name=data.get("name"), scopes=data.get("scopes"),
                           mac=data.get("mac"), kind=data.get("kind"))
+    if "owner" in data:
+        owner = str(data["owner"] or "")
+        if owner and not a.user(owner):
+            raise Refused(400, "No such user", "invalid")
+        a.db.run("UPDATE devices SET owner=? WHERE id=?", owner, row["id"])
+        row = a.device(row["id"])
     request.app["log"].add("device_changed", who.label, auth.client_ip(request),
-                           {"id": row["id"], "fields": sorted(key for key in data if key in ("name", "scopes", "mac", "kind"))})
+                           {"id": row["id"], "fields": sorted(key for key in data if key in ("name", "scopes", "mac", "kind", "owner"))})
     device_event(request.app, "changed", row)
     return {"device": a.device_json(row)}
 

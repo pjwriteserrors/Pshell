@@ -33,7 +33,6 @@ DEFAULTS = {
     "baikal": {"title": "Baikal", "icon": "calendar", "port": 8082, "container": "baikal-baikal-1", "auth": "own"},
     "wg-easy": {"title": "WireGuard", "icon": "vpn", "port": 51821, "container": "wg-easy", "auth": "own",
                 "critical": True, "home_only": True, "probe_host": "192.168.178.22"},
-    "filebrowser": {"title": "filebrowser", "icon": "folder", "port": 8095, "container": "filebrowser", "auth": "own"},
     "webserver": {"title": "Webserver", "icon": "globe", "port": 8083, "container": "webserver", "auth": "own"},
     "thedatabase": {"title": "thedatabase", "icon": "database", "port": 8090, "container": "thedatabase",
                     "auth": "own"},

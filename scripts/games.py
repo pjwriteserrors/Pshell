@@ -15,6 +15,14 @@
     scripts/games.py launch <id> [runner] starts it: through Steam, Proton, Wine or as it is
     scripts/games.py steam-add <id> [tool] adds a game of here to Steam as a non-Steam game
                                           (Steam is restarted for it), progress as JSON lines
+    scripts/games.py protondb <steam:appid|name> [steam]  the Proton ProtonDB's reports favour
+                                          among the installed ones (protondb.py), its tier
+    scripts/games.py tiers                ProtonDB's rating of every game with a store app: a
+                                          line of the kept ones, then one with the asked ones
+    scripts/games.py protondb-update      fetches ProtonDB's newest dump when the index is a month old
+    scripts/games.py tool <id> [<tool>]   the Proton Steam runs a game of Steam's with (Steam's name
+                                          for it, nothing for Steam's own choice); Steam is
+                                          restarted for it, progress as JSON lines
     scripts/games.py steam-pads           turns Steam's desktop layout off for every non-Steam
                                           game, so the controller reaches the game (Steam is
                                           restarted for it when it runs)
@@ -26,6 +34,9 @@
     scripts/games.py brief                how far along every game is, from what is cached
     scripts/games.py session <id> <from> <to>  keeps one session of play (seconds since epoch)
     scripts/games.py goal <id> <main|plus|full|done|''>  what "beaten" means for this game
+    scripts/games.py genres               fetches the genres a game lacks and how it is played
+                                          together (Steam's store); a JSON line per game that got them
+    scripts/games.py shelves '<json>'     keeps the user's shelves: [{ id, name, games: [id …] }]
 
 Games added here live in ~/.local/state/pshell/games.json with what the user
 set for any game (name, cover, favourite, hidden). Pictures come from
@@ -51,6 +62,8 @@ from pathlib import Path
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "files"))
 import windows  # noqa: E402
 import host  # noqa: E402
+import feral  # noqa: E402
+import protondb  # noqa: E402
 
 HOME = Path.home()
 STATE = host.state_dir()
@@ -515,6 +528,135 @@ def auto_art(name):
     return f"steam:{best['appid']}" if best and score >= 0.72 else ""
 
 
+# ── genres ─────────────────────────────────────────────────────────────────
+GENRES = CACHE / "genres.json"
+# what Steam's store calls a genre but says nothing about the game
+NO_GENRE = {"indie", "free to play", "free-to-play", "early access", "massively multiplayer", "utilities", "education",
+            "software training", "design & illustration", "animation & modeling", "audio production", "video production",
+            "photo editing", "web publishing", "game development", "accounting", "movie", "documentary", "episodic",
+            "short", "tutorial", "360 video", "violent", "gore", "nudity", "sexual content"}
+# a store answer that had nothing is asked again after this
+GENRES_RETRY = 7 * 86400
+
+
+def store_appid(game, kept=None):
+    """The store's app of a game: its own, the one its pictures came from, or
+    the one its name found (kept as `store`)."""
+    if game["kind"] == "steam":
+        return game["appid"]
+    choice = game.get("artChoice") or ""
+    if choice.startswith("steam:"):
+        return choice[6:]
+    own = (kept if kept is not None else load()["games"]).get(game["id"], {})
+    return own.get("store") or ""
+
+
+def genres_cache():
+    try:
+        return json.loads(GENRES.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def genres_of(appid, cache):
+    entry = cache.get(str(appid)) if appid else None
+    return list(entry.get("genres") or []) if isinstance(entry, dict) else []
+
+
+# Steam's store categories that say how a game is played together
+COOP = {38: "online", 48: "lan", 9: "coop", 39: "local", 24: "local"}
+
+
+def coop_of(appid, cache):
+    """How the game is played together ["online", "lan", "coop", "local"], None
+    while the store was not asked for it."""
+    entry = cache.get(str(appid)) if appid else None
+    if not isinstance(entry, dict) or "cats" not in entry:
+        return None
+    return sorted({COOP[cat] for cat in entry["cats"] if cat in COOP})
+
+
+def store_genres(appid):
+    """([genre, …], [category id, …]) from Steam's store, None when it did not answer."""
+    query = urllib.parse.urlencode({"appids": appid, "l": "english", "filters": "genres,categories"})
+    try:
+        answer = get_json(f"https://store.steampowered.com/api/appdetails?{query}").get(str(appid)) or {}
+    except Exception:
+        return None
+    if not answer.get("success"):
+        return [], []
+    found = []
+    data = answer.get("data") or {}
+    for genre in data.get("genres") or []:
+        name = str(genre.get("description") or "").strip()
+        if name and name.lower() not in NO_GENRE and name not in found:
+            found.append(name)
+    cats = sorted({int(cat["id"]) for cat in data.get("categories") or [] if str(cat.get("id", "")).isdigit()})
+    return found, cats
+
+
+def cmd_genres(_args):
+    library = collect()["games"]
+    cache = genres_cache()
+    kept = load()["games"]
+    now = int(time.time())
+    todo = []
+    for game in library:
+        appid = store_appid(game, kept)
+        if not appid:
+            own = kept.get(game["id"], {})
+            if now - int(own.get("storeTried") or 0) < GENRES_RETRY:
+                continue
+            match = auto_art(game["name"])
+            with Store() as data:
+                own = data["games"].setdefault(game["id"], {})
+                if match:
+                    own["store"] = appid = match[6:]
+                    own.pop("storeTried", None)
+                else:
+                    own["storeTried"] = now
+            if not appid:
+                continue
+        entry = cache.get(appid)
+        if isinstance(entry, dict) and "cats" in entry and (entry.get("genres") or now - int(entry.get("at") or 0) < GENRES_RETRY):
+            continue
+        todo.append((game["id"], appid))
+
+    def work(item):
+        game_id, appid = item
+        return game_id, appid, store_genres(appid)
+
+    with concurrent.futures.ThreadPoolExecutor(4) as pool:
+        for game_id, appid, answer in pool.map(work, todo):
+            if answer is None:
+                continue
+            cache[appid] = {"genres": answer[0], "cats": answer[1], "at": now}
+            out({"id": game_id, "genres": answer[0], "coop": coop_of(appid, cache)})
+    if todo:
+        CACHE.mkdir(parents=True, exist_ok=True)
+        temporary = GENRES.with_suffix(".tmp")
+        temporary.write_text(json.dumps(cache, indent="\t", ensure_ascii=False) + "\n")
+        os.replace(temporary, GENRES)
+    out({"done": True})
+
+
+# ── the user's shelves ─────────────────────────────────────────────────────
+def cmd_shelves(args):
+    wanted = json.loads(args[0]) if args else []
+    shelves = []
+    for shelf in wanted if isinstance(wanted, list) else []:
+        if not isinstance(shelf, dict) or not str(shelf.get("name") or "").strip():
+            continue
+        games = []
+        for game_id in shelf.get("games") or []:
+            if isinstance(game_id, str) and game_id not in games:
+                games.append(game_id)
+        shelves.append({"id": str(shelf.get("id") or uuid.uuid4().hex[:8]), "name": str(shelf["name"]).strip(), "games": games})
+    with Store() as data:
+        data["shelves"] = shelves
+    out({"shelves": shelves})
+
+
 # ── a game's colours ───────────────────────────────────────────────────────
 COLORS = CACHE / "colors.json"
 
@@ -588,8 +730,54 @@ def colors_for(games):
 
 
 # ── the library ────────────────────────────────────────────────────────────
+def _mounts():
+    try:
+        with open("/proc/self/mounts") as file:
+            return [line.split()[1].replace("\\040", " ") for line in file]
+    except OSError:
+        return ["/"]
+
+
+def gone(path):
+    """The program is no longer there, and the drive it was on is: a drive
+    unmounted, asleep or freed for the VM says nothing about it."""
+    if not path or os.path.exists(path):
+        return False
+    path = os.path.abspath(path)
+    mount = max((each for each in _mounts() if path == each or path.startswith(each.rstrip("/") + "/")), key=len, default="/")
+    if mount == "/" and path.startswith(("/mnt/", "/media/", "/run/media/")):
+        return False
+    try:
+        with os.scandir(mount) as entries:
+            if not any(True for _ in entries):
+                return False
+    except OSError:
+        return False
+    return True
+
+
+def forget(data, game_ids):
+    """A game out of the library: its own entry, its settings, its shelves;
+    one of Steam's non-Steam games stays in Steam."""
+    for game_id in game_ids:
+        data["custom"] = [entry for entry in data["custom"] if entry["id"] != game_id]
+        data["games"].pop(game_id, None)
+        if game_id.startswith("shortcut:") and game_id not in data.setdefault("dropped", []):
+            data["dropped"].append(game_id)
+        for shelf in data.get("shelves") or []:
+            shelf["games"] = [each for each in shelf.get("games") or [] if each != game_id]
+        drop_art(game_id)
+
+
 def collect():
     data = load()
+    # programs that are gone leave the library by themselves
+    vanished = [entry["id"] for entry in data["custom"] if gone(entry.get("exe", ""))]
+    if vanished:
+        with Store() as stored:
+            forget(stored, vanished)
+        data = load()
+    dropped = set(data.get("dropped") or [])
     kept = data["games"]
     root = windows.steam_root()
     account = windows.steam_account(root) if root else ""
@@ -647,6 +835,8 @@ def collect():
             if WINDOWS.search(name) or name.lower() == Path(shortcut["exe"]).name.lower():
                 name = guess_name(shortcut["exe"]) or pretty(name)
             game_id = f"shortcut:{shortcut['appid']}"
+            if game_id in dropped or gone(shortcut["exe"]):
+                continue
             minutes, last = shortcut_time(times, shortcut["appid"])
             art = {**cached_art(game_id), **grid_art(root, account, shortcut["appid"])}
             games.append(merged({
@@ -672,13 +862,26 @@ def collect():
             "art": art, "missing": not os.path.exists(entry.get("exe", "")), "windows": bool(WINDOWS.search(entry.get("exe", ""))),
         }))
 
-    colors_for(games)
+    # the Proton Steam runs each with, when one is set for it
+    tools = windows.tool_mapping(root) if root else {}
+    runner_list = windows.runners()["runners"]
     for game in games:
+        appid = game.get("steamAppid") or (game.get("appid") if game["kind"] in ("steam", "shortcut") else "")
+        game["tool"] = tools.get(str(appid), "") if appid else ""
+        # what ProtonDB's reports favour, for the Proton menu
+        best = protondb.recommend(store_appid(game, kept), runner_list, steam=True) if game["kind"] in ("steam", "shortcut") else None
+        game["protonDb"] = {"tool": best["tool"], "label": best["label"]} if best else None
+    colors_for(games)
+    genres = genres_cache()
+    for game in games:
+        game["genres"] = genres_of(store_appid(game, kept), genres)
+        game["coop"] = coop_of(store_appid(game, kept), genres)
         game.setdefault("art", {})
         game["needsArt"] = not game["art"].get("cover") and game.get("artChoice") != "none"
     return {
         "steam": bool(root) and bool(shutil.which("steam")), "steamRunning": windows.steam_running() if root else False,
         "games": games, "runners": windows.runners()["runners"], "gridKey": bool(data.get("gridKey")),
+        "shelves": data.get("shelves") or [],
     }
 
 
@@ -835,10 +1038,16 @@ def cmd_update(args):
 
 def cmd_remove(args):
     game_id = args[0]
+    gone_too = []
+    # one of the shell's that is in Steam as well would come back as Steam's
+    entry = next((each for each in load()["custom"] if each["id"] == game_id), None)
+    root = windows.steam_root() if entry else None
+    if root:
+        exe = os.path.realpath(entry.get("exe", ""))
+        account = windows.steam_account(root)
+        gone_too = [f"shortcut:{each['appid']}" for each in shortcuts(root, account) if each["exe"] and os.path.realpath(each["exe"]) == exe]
     with Store() as data:
-        data["custom"] = [entry for entry in data["custom"] if entry["id"] != game_id]
-        data["games"].pop(game_id, None)
-    drop_art(game_id)
+        forget(data, [game_id] + gone_too)
     out({"removed": game_id})
 
 
@@ -918,6 +1127,7 @@ def cmd_play(args):
         if game.get("args"):
             import shlex
             command += shlex.split(game["args"])
+        command = feral.wrap(command)
         LOG.parent.mkdir(parents=True, exist_ok=True)
         log = open(LOG, "ab")
         log.write(f"\n=== {time.strftime('%F %T')} {game['name']}: {' '.join(command)}\n".encode())
@@ -1239,6 +1449,67 @@ def cmd_steam_add(args):
     out({"done": True, "gameid": result["gameid"], "restarted": result.get("restarted", False)})
 
 
+def cmd_tool(args):
+    game = find(args[0])
+    tool = args[1] if len(args) > 1 else ""
+    appid = game.get("steamAppid") or (game.get("appid") if game["kind"] in ("steam", "shortcut") else "")
+    if not appid:
+        fail("The game is not in Steam")
+    # closing Steam would end a game it runs
+    if subprocess.run(["pgrep", "-f", "SteamLaunch"], capture_output=True).returncode == 0:
+        fail("A game runs in Steam – close it first")
+    try:
+        result = windows.set_tool(appid, tool, report=lambda text: out({"progress": text}))
+    except Exception as error:  # noqa: BLE001
+        fail(error)
+    out({"done": True, "tool": tool, **result})
+
+
+def cmd_protondb(args):
+    """{runner, tool, label, tier, reports} for a store app or a name; the
+    index is fetched in the background when it is old or missing."""
+    what = args[0] if args else ""
+    steam = len(args) > 1 and args[1] == "steam"
+    appid = what[6:] if what.startswith("steam:") else (auto_art(what)[6:] if what else "")
+    if protondb.stale():
+        subprocess.Popen([sys.executable, os.path.abspath(__file__), "protondb-update"], stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    if not appid.isdigit():
+        out({"appid": ""})
+        return
+    best = protondb.recommend(appid, windows.runners()["runners"], steam=steam) or {}
+    out({"appid": appid, "tier": protondb.tier(appid), **best})
+
+
+def cmd_tiers(_args):
+    library = collect()["games"]
+    kept = load()["games"]
+    appids = {}
+    for game in library:
+        # a program that runs as it is on Linux has no rating worth showing
+        if game["kind"] == "custom" and not game.get("windows"):
+            continue
+        appid = str(store_appid(game, kept) or "")
+        if appid.isdigit():
+            appids[game["id"]] = appid
+    by_id = lambda known: {game_id: known[appid] for game_id, appid in appids.items() if known.get(appid)}  # noqa: E731
+    out({"tiers": by_id(protondb.cached_tiers(list(appids.values())))})
+    out({"tiers": by_id(protondb.tiers(list(appids.values())))})
+
+
+def cmd_protondb_update(_args):
+    # one fetch at a time
+    CACHE.mkdir(parents=True, exist_ok=True)
+    with open(CACHE / ".protondb.lock", "w") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            out({"busy": True})
+            return
+        index = protondb.update()
+    out({"source": index.get("source", ""), "apps": len(index.get("apps") or {})})
+
+
 def cmd_steam_pads(_args):
     report = lambda text: out({"progress": text})  # noqa: E731
     try:
@@ -1275,6 +1546,8 @@ COMMANDS = {
     "list": cmd_list, "art": cmd_art, "search": cmd_search, "guess": cmd_guess, "add": cmd_add, "update": cmd_update,
     "remove": cmd_remove, "launch": cmd_launch, "_play": cmd_play, "running": cmd_running, "steam-add": cmd_steam_add,
     "steam-pads": cmd_steam_pads, "key": cmd_key, "stats": cmd_stats, "brief": cmd_brief, "session": cmd_session, "goal": cmd_goal,
+    "genres": cmd_genres, "shelves": cmd_shelves, "tool": cmd_tool, "protondb": cmd_protondb,
+    "tiers": cmd_tiers, "protondb-update": cmd_protondb_update,
 }
 
 

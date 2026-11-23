@@ -29,6 +29,10 @@ Item {
 	// the cover picked: a result's id, "none", or "" for what it has
 	property string art: ""
 	property bool artPicked: false
+	// what ProtonDB's reports favour ({runner, label, tier, reports}); a
+	// runner picked by hand is not changed by it
+	property var protonDb: null
+	property bool runnerPicked: false
 	property string error: ""
 	property bool saving: false
 	property bool keyOpen: false
@@ -62,6 +66,8 @@ Item {
 		root.toSteam = false;
 		root.art = "";
 		root.artPicked = false;
+		root.protonDb = null;
+		root.runnerPicked = false;
 		root.error = "";
 		root.saving = false;
 		root.keyOpen = false;
@@ -90,7 +96,7 @@ Item {
 				nameField.text = answer.name;
 				Games.search(answer.name);
 			}
-			if (answer.runner && root.mode === "add") root.runner = answer.runner;
+			if (answer.runner && root.mode === "add" && !root.runnerPicked && !root.protonDb?.runner) root.runner = answer.runner;
 			nameField.input.forceActiveFocus();
 		});
 	}
@@ -149,7 +155,29 @@ Item {
 	}
 
 	// the name looks for covers while it is typed
-	onNameChanged: if (root.open && root.name.trim().length >= 2) Games.search(root.name)
+	onNameChanged: {
+		if (root.open && root.name.trim().length >= 2) Games.search(root.name);
+		protonDbDelay.restart();
+	}
+	onArtChanged: protonDbDelay.restart()
+
+	// ProtonDB is asked for the store's game of the cover, else of the name
+	Timer {
+		id: protonDbDelay
+
+		interval: 700
+		onTriggered: {
+			if (!root.open || root.mode !== "add" || !root.windowsProgram) return;
+			const what = root.art.startsWith("steam:") ? root.art : root.name.trim();
+			if (what === "") return;
+			Games.protonDb(what, false, answer => {
+				const now = root.art.startsWith("steam:") ? root.art : root.name.trim();
+				if (now !== what || !root.open) return;
+				root.protonDb = answer.appid ? answer : null;
+				if (answer.runner && !root.runnerPicked) root.runner = answer.runner;
+			});
+		}
+	}
 
 	// the first result that comes is taken until one is picked
 	Connections {
@@ -445,8 +473,41 @@ Item {
 						visible: root.custom && root.mode !== "cover" && root.exe !== ""
 						spacing: 8
 
-						SectionLabel {
-							text: "Starts with"
+						RowLayout {
+							Layout.fillWidth: true
+							spacing: 10
+
+							SectionLabel {
+								text: "Starts with"
+							}
+
+							Item {
+								Layout.fillWidth: true
+							}
+
+							// ProtonDB's rating of the game
+							Rectangle {
+								readonly property string tier: String(root.protonDb?.tier ?? "")
+								readonly property color tone: GameText.tierTone(tier) || Theme.textSubtle
+
+								visible: tier !== "" && root.windowsProgram
+								implicitWidth: tierText.implicitWidth + 20
+								implicitHeight: 24
+								radius: 12
+								color: Qt.alpha(tone, 0.18)
+								border.width: 1
+								border.color: Qt.alpha(tone, 0.5)
+
+								StyledText {
+									id: tierText
+
+									anchors.centerIn: parent
+									text: `ProtonDB · ${GameText.tierLabel(parent.tier)}`
+									tone: parent.tone
+									font.pixelSize: Theme.size.small
+									font.weight: Font.Bold
+								}
+							}
 						}
 
 						Segmented {
@@ -457,7 +518,10 @@ Item {
 								{ value: "native", label: "Linux", icon: "linux" }
 							].concat(root.game?.inSteam ? [{ value: "steam", label: "Steam", icon: "steam" }] : [])
 							current: root.runnerKind
-							onSelected: value => root.runner = value
+							onSelected: value => {
+								root.runner = value;
+								root.runnerPicked = true;
+							}
 						}
 
 						// which Proton
@@ -467,14 +531,19 @@ Item {
 							spacing: 6
 
 							Repeater {
-								model: [{ id: "proton", name: "Newest" }].concat(root.protons.slice(0, 6))
+								model: [{ id: "proton", name: "Newest" }].concat(root.protons)
 
 								delegate: Chip {
 									required property var modelData
 
 									text: modelData.name
+									// the one ProtonDB's reports favour
+									icon: root.protonDb?.runner === modelData.id ? "star" : ""
 									selected: root.runner === modelData.id
-									onClicked: root.runner = modelData.id
+									onClicked: {
+										root.runner = modelData.id;
+										root.runnerPicked = true;
+									}
 								}
 							}
 						}

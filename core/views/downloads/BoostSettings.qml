@@ -150,6 +150,20 @@ Rectangle {
 			}
 		}
 
+		Line {
+			title: "Pick the fastest connections"
+			available: Boost.enabled
+			checked: Boost.settings.pick !== false
+			onToggled: checked => Boost.setSetting("pick", checked)
+		}
+
+		Line {
+			title: "Ask public DNS servers for more servers"
+			available: Boost.enabled && Boost.settings.pick !== false
+			checked: Boost.settings.dnsMore !== false
+			onToggled: checked => Boost.setSetting("dnsMore", checked)
+		}
+
 		Rectangle {
 			Layout.fillWidth: true
 			implicitHeight: 1

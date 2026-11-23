@@ -1070,6 +1070,14 @@ SettingsPage {
 		subtitle: `${(root.zs.calendar ?? []).length} events`
 		icon: "calendar"
 
+		FlagRow {
+			visible: Plugins.on("calendar")
+			title: "The next 7 days from the calendar"
+			icon: "calendar_clock"
+			checked: Amazfit.option("calendarSync", false) === true
+			onToggled: on => Amazfit.setOption("calendarSync", on)
+		}
+
 		Repeater {
 			model: root.zs.calendar ?? []
 

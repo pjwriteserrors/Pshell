@@ -488,7 +488,7 @@ def title_starts(videos, channel=""):
     return out
 
 
-def discover(videos, playlists=(), channel="", limit=12, footer=None):
+def discover(videos, playlists=(), channel="", limit=None, footer=None):
     """What on a channel looks like a series. Its playlists first, then what the
     titles say: a name in a part of the title (stronger with an episode number),
     parts counted "Pt. 1, 2, 3", a way titles begin. Hashtags, tags and names in
@@ -594,11 +594,9 @@ def discover(videos, playlists=(), channel="", limit=12, footer=None):
         if entry.get("support"):
             continue
         chosen.append(entry)
-        if len(chosen) >= limit * 3:
-            break
     for entry in chosen:
         entry.pop("support", None)
-    return chosen[:limit]
+    return chosen[:limit] if limit else chosen
 
 
 def playlist_order(videos):

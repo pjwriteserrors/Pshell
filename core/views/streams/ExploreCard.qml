@@ -11,7 +11,7 @@ CardFrame {
 	id: root
 
 	property string itemKey: ""
-	readonly property var item: Streams.discoveries.find(entry => entry.key === root.itemKey) ?? null
+	readonly property var item: Streams.discoveryByKey[root.itemKey] ?? null
 	readonly property var pictures: root.item?.pictures ?? []
 	property int shown: 0
 	property bool following: false

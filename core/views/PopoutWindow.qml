@@ -15,5 +15,22 @@ FloatingWindow {
 	visible: true
 	color: Theme.base
 
+	// this window as niri knows it
+	readonly property var niriWindow: Niri.windows.find(window => String(window.title) === root.title && /quickshell/i.test(String(window.app_id))) ?? null
+
 	onVisibleChanged: if (!root.visible && root.surface.windowOpen) root.surface.windowOpen = false
+
+	Binding {
+		target: root.surface
+		property: "focused"
+		value: !!root.niriWindow?.is_focused
+	}
+
+	Connections {
+		target: root.surface
+
+		function onRaised() {
+			if (root.niriWindow && !root.niriWindow.is_focused) Niri.focusWindow(root.niriWindow.id);
+		}
+	}
 }

@@ -852,8 +852,7 @@ Singleton {
 
 		readonly property var today: {
 			if (!meeting.on) return [];
-			const key = MsCalendar.dayKey(new Date(root.now));
-			return (MsCalendar.byDay[key] ?? []).filter(event => !event.allDay && MsCalendar.active(event) && event.showAs !== "free");
+			return MsCalendar.eventsOn(new Date(root.now)).filter(event => !event.allDay && MsCalendar.active(event) && event.showAs !== "free");
 		}
 		readonly property var current: meeting.on ? (meeting.today.find(event => Date.parse(event.start) <= root.now && root.now < Date.parse(event.end)) ?? null) : null
 		readonly property var next: meeting.on ? (meeting.today.filter(event => Date.parse(event.start) > root.now).sort((a, b) => Date.parse(a.start) - Date.parse(b.start))[0] ?? null) : null
@@ -863,9 +862,9 @@ Singleton {
 		name: "Meetings"
 		glyph: meeting.on ? (meeting.current ? "account_group" : "calendar_clock") : "calendar_clock"
 		group: "day"
-		plugin: "microsoft-calendar"
+		plugin: "calendar"
 		about: "The meeting now, or how long until the next"
-		ready: meeting.on ? (MsCalendar.signedIn) : false
+		ready: meeting.on ? (MsCalendar.signedIn || NasCalendar.active) : false
 		text: meeting.on ? (meeting.current ? "Now" : (meeting.next ? `in ${root.minutes(meeting.until)}` : "Free")) : ""
 		detail: meeting.on ? (meeting.current ? `${meeting.current.subject} · until ${Qt.formatTime(new Date(meeting.current.end), "HH:mm")}` : (meeting.next ? `${meeting.next.subject} · ${Qt.formatTime(new Date(meeting.next.start), "HH:mm")}` : "Nothing more today")) : ""
 		level: meeting.on ? (meeting.current ? (root.now - Date.parse(meeting.current.start)) / Math.max(1, Date.parse(meeting.current.end) - Date.parse(meeting.current.start)) : -1) : -1

@@ -54,14 +54,43 @@ and the menu. A cover shows how far along its game is as a line along its
 foot (`games.py brief`: goals, cached HowLongToBeat answers and Steam's
 achievement counts for every game, nothing asked of the net) and a flame
 when it was played an hour or more this week. Along the bottom the covers on a shelf – the one picked grows at
-the front, those passed slide out to the left; G turns it into a grid.
+the front, those passed slide out to the left; G turns it into a grid and
+again into shelves (the three buttons beside the search pick one too).
 Typing searches everything, Tab walks the filters (All, Recent, Favourites,
 Steam, Non-Steam, Hidden), the sort button orders by last played, name or
 play time, a right click or the menu key shows what a game can do (start
 with another Proton or Wine, change its cover, rename, open its folder,
-the store page, hide, remove). Playing flies the cover to the middle while
+the store page, its shelves, hide, remove). A game in Steam (its own or a
+non-Steam game) has *Proton* there instead: Steam's choice or any Proton
+installed (Valve's by their version, "Proton 9.0-4", found in every Steam
+library; GE-Proton by name). It is kept in Steam's `CompatToolMapping`
+(`games.py tool`, `windows.set_tool`), Steam is closed for it and started
+again, never while a game runs in it; the chip under the logo says which. Playing flies the cover to the middle while
 it starts and the library gives way; a game that runs gets *Show* instead
 (its window: `steam_app_<id>`, or its name in the title).
+
+Removing takes a game out of the library only: the shell's own entry goes
+(with the Steam shortcut of the same program), one of Steam's non-Steam
+games stays in Steam and is kept out (`games.json` → `dropped`). A program
+that is gone leaves by itself (`games.py` `gone()`): the shell's entry is
+removed, a Steam shortcut is left out; never while its drive is not
+mounted (unmounted, asleep, freed for the VM).
+
+ProtonDB (`scripts/protondb.py`): once a month the newest dump of every
+report (github.com/bdefore/protondb-data, ~70 MB, not kept) is boiled down
+to `~/.cache/pshell/games/protondb.json`: per game how the reports of the
+last two years went with Steam's default Proton, Experimental, a numbered
+Valve Proton or a GE-Proton by its major version (a report scores by
+whether it ran and how many faults it had). The best way among what is
+installed wins; another than Steam's default only with three reports or
+more and clearly better. Adding a Windows game picks that Proton by itself
+(asked for the store's game of the cover, else of the name; a Proton
+picked by hand stays), marked with a star, ProtonDB's tier beside "Starts
+with". The *Proton* menu of a game in Steam says which one ProtonDB favours.
+The library's stat strip shows the tier of every game with a store app
+(`games.py tiers`: the kept ones at once, then those not asked this week,
+six at a time, kept in `protondb-tiers.json`); Linux programs added here
+show none.
 
 Adding: `+`, Ctrl+N, a program dropped on the library, *Add to Games* in
 the file manager's Windows menu, or `ipc games add <path>`. The sheet guesses
@@ -126,6 +155,51 @@ keeps its own, merged). HowLongToBeat answers are cached for 30 days
 (`~/.cache/pshell/games/hltb.json`), a game it does not know is asked again
 after a day.
 
+## Shelves
+
+The third view (`ShelvesView.qml`): the user's own shelves first, in
+their order (`games.json` → `shelves`: `[{id, name, games}]`, written
+through `games.py shelves`), then one per genre with the most games first,
+the games without one last (*Other*). Genres are Steam's store's
+(`appdetails`, cached in `~/.cache/pshell/games/genres.json`, nothing
+found is asked again after a week) without the ones that say nothing
+(Indie, Free to Play, Early Access, …); a game that is not Steam's takes
+the store app its pictures came from, else the one its name finds.
+Filters, search and sort hold here too. The library always opens on this view, on the
+top shelf's first cover. A cover takes its clicks from the layer that
+drags it (`clicks: false` on `GameCard`): under it the card's own
+MouseArea never got the press.
+
+A cover is dragged onto a shelf of the user's: from another of them it
+moves there (Ctrl keeps it on both), within one it changes place, from a
+genre it is put there as well. Dragged off a shelf of the user's (onto a
+genre or nothing) it leaves it. A new shelf's name is typed right away. A shelf's name: double click or its menu
+(rename, move up and down, delete); a game's menu has *Shelves* as well.
+Above the shelves the picked game's details as on the cover view (logo,
+facts, stats, Play). The shelf walked stays at the top and is big, its
+picked cover grown; the shelves after it wait small, each on the cover it
+was left on. A shelf moves along only as far as the picked cover and its
+neighbours need, every cover stays to be clicked. ← → walk a shelf, ↑ ↓
+the shelves, Home/End its ends; the wheel walks the shelves, sideways
+(tilt wheel, touchpad) the covers of the shelf walked. A rail at the
+right names every shelf: a click goes there, a cover dropped on a name goes
+onto that shelf (at its end), on *New shelf* starts one.
+
+## Feral GameMode
+
+Every game runs with Feral GameMode (`scripts/feral.py`): what starts here
+under `gamemoderun`, every other game – Steam's, also one started in Steam –
+is registered with gamemoded by its processes once `games_guard.py` finds
+its window (`RegisterGameByPID`; not the window's own pid, an X11 game's is
+xwayland-satellite's). `dotfiles/gamemode/gamemode.ini` (linked to
+`~/.config`) has the settings: performance governor, nice -10, best I/O
+priority, screensaver held, split lock detection off; the GPU part
+(`amd_performance_level=high` for the RX 5700) gamemoded only takes from
+`/etc`: `gamemode-system.ini`. It needs the user in the `gamemode` group
+(else polkit asks for a password at every start and end); without it the
+switch in Settings → Desktop → Game mode says so and nothing is done.
+`feral: false` in `gamemode.json` turns it off.
+
 ## Game mode
 
 While a game's window is open (`games_guard.py` decides every window once
@@ -136,3 +210,80 @@ mouse no longer looks for it, notifications go quiet if wanted
 focus (the game's processes go along, `pids`, so the mouse daemon finds
 the game's sound; `docs/mouse.md`).
 
+
+## Party (PartyDeck)
+
+A game Steam's store calls online or LAN co-op (`appdetails` categories
+38 and 48, cached with the genres: `game.coop`) gets *Party* beside Play
+and in its menu once PartyDeck is installed (`partydeck` on the PATH). The
+lobby (`PartyLobby.qml`, service `Party.qml`, `scripts/party.py`) shows the
+controllers that are on, live: `party.py watch` follows udev, so one
+switched on or plugged in while the lobby is up shows at once, and reads
+every press (never grabbed). A controller joins with A (or a click on its
+card) and leaves with B; left/right swaps its window with the neighbour,
+LB/RB moves it to the next screen, Y turns the screen's layout, Start
+starts. The vibrate button (or joining) rumbles it, to tell two alike
+apart. Each player has a name, which is PartyDeck's profile (its saves,
+its Goldberg account name); the name per controller and the layout per
+screen and player count are kept (`~/.local/state/pshell/party.json`).
+
+The screens are drawn as they stand; every player is a tile of one. A tile
+dragged onto another swaps the two, onto another screen moves it there.
+A screen splits its players by its layout: 2 side by side or stacked, 3
+one big and two, three columns or one wide over two, 4 a grid or four
+columns, more a grid.
+
+`party.py launch` starts a session of its own that does what PartyDeck's
+launch does (0.8.6, with what 0.8.7 fixed), with PartyDeck's folders
+(`~/.local/share/partydeck`: handlers, profiles, prefixes, `settings.json`),
+so a handler made here shows in PartyDeck and the other way round (the lobby
+makes one when there is none: the game's program, Goldberg for a game with a
+Steam API, both can be changed in the lobby; *PartyDeck* opens PartyDeck
+itself).
+
+Each player's game runs in a gamescope of its own (`--backend sdl`: the
+Wayland backend hangs under niri) whose window is an X11 one through
+xwayland-satellite (`SDL_VIDEODRIVER=x11`: SDL's Wayland window now and then
+dies of a protocol error, a buffer before its first configure was answered),
+class `pshell-party-<n>`; it is made at the size its window will have (the
+screen's free area is remembered), else gamescope builds its swapchain anew
+on every frame. The players start one after the other, each once the last
+one's window stands. Inside bubblewrap `/dev/input` is a tmpfs with only the
+player's own controller (event and js node), so a controller that comes or
+goes in between breaks nothing and one switched on later is no one's; SDL's
+HIDAPI and Proton's hidraw are off. A player's controller that went (off, or
+asleep) and woke with a new node is brought back into its sandbox: the
+session follows the kernel's uevents, and a helper per sandbox (inside its
+user and mount namespaces, joined once its window stands) binds the node
+from the host's `/dev/input`, kept at `/tmp/.pshell-input` in the sandbox (a
+bind across mount namespaces is not allowed), after taking off the dead one
+that often has the same name. The id is the controller's MAC or port.
+
+Every player has the game folder for itself, as PartyDeck's fuse-overlayfs
+mounts give it, but from bubblewrap (`--overlay`, kernel overlayfs, also on
+the NTFS drive): writes go to the profile's gamesave, where Goldberg's
+`steam_appid.txt` lies; nothing is mounted outside the sandboxes. Windows
+games run with umu-run, one prefix per player, `PROTONPATH` PartyDeck's
+setting, else Valve's newest numbered Proton: with Proton 11 (GE,
+Experimental) and with `PROTON_USE_WOW64=1` (PartyDeck's default, here only
+when its `settings.json` says so) the game never maps its window on
+gamescope's X server. With Goldberg `SteamOverlayGameId` and `UMU_USE_STEAM`
+as in 0.8.7. Tested with WE'RE ALL IN!: two players side by side, Steam
+(Goldberg) up in both, each controller moving only its own menu.
+
+The gamescope windows float without border, ring, shadow, rounding or
+transparency (`pshell.kdl`, which comes after the user's rules: their
+inactive windows are see-through), and `games_guard.py` leaves them out of
+its fullscreen. The session finds each by its class, moves it to its screen
+and sizes it to its part of the screen's free area: what the bar and the
+frame leave, measured with the first window there (maximized to the edges
+it fills it). The party counts as the game running (a marker in `running/`,
+a session of play when it ends) and ends when the last player's game is
+closed, or with *End party* (`party.py stop`). Log:
+`~/.cache/pshell/games/party.log`. A keyboard and mouse go to whichever
+window has the focus (PartyDeck's keyboard/mouse players need its
+gamescope-kbm, which grabs the devices from the whole desktop, so the lobby
+has none).
+
+Testing: `PSHELL_PARTY_TEST_PADS=1` lets uinput pads named "Pshell test pad …"
+count, `PSHELL_PARTY_ONLY_TEST_PADS=1` hides every real controller.

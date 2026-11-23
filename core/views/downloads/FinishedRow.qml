@@ -83,8 +83,10 @@ Clickable {
 
 		ModeBadge {
 			visible: !root.failed && !root.hovered
-			mode: root.boosted ? "boost" : (root.item?.source === "torrent" ? "torrent" : "normal")
-			text: root.boosted ? (root.speedup > 1.05 ? `×${root.speedup.toFixed(1)}` : "Accelerated") : (root.item?.source === "torrent" ? "Torrent" : "Normal")
+			readonly property bool media: root.item?.source === "boost" && root.item?.mode === "media"
+
+			mode: root.boosted ? "boost" : (media ? "media" : (root.item?.source === "torrent" ? "torrent" : "normal"))
+			text: root.boosted ? (root.speedup > 1.05 ? `×${root.speedup.toFixed(1)}` : "Accelerated") : (media ? (root.item.kind === "audio" ? "Audio" : "Video") : (root.item?.source === "torrent" ? "Torrent" : "Normal"))
 		}
 
 		StyledText {

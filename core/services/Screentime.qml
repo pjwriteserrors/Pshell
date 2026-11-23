@@ -64,7 +64,7 @@ Singleton {
 		{ value: "windows", label: "Windows" },
 		{ value: "spaces", label: "Workspaces" },
 		{ value: "links", label: "Links" }
-	].concat(Music.enabled ? [{ value: "music", label: "Music" }] : []).concat(Video.enabled ? [{ value: "video", label: "Video" }] : []).concat(Pdf.enabled ? [{ value: "reading", label: "Reading" }] : [])
+	].concat(Music.enabled ? [{ value: "music", label: "Music" }] : []).concat(Video.enabled ? [{ value: "video", label: "Video" }] : []).concat(Pdf.enabled ? [{ value: "reading", label: "Reading" }] : []).concat(Rhymes.enabled ? [{ value: "writing", label: "Writing" }] : [])
 
 	function dayKey(date) {
 		return Qt.formatDate(date, "yyyy-MM-dd");
@@ -151,6 +151,9 @@ Singleton {
 			} else if (kind === "reading") {
 				// the PDF read in the shell's viewer
 				row.icon = "file_pdf_box";
+			} else if (kind === "writing") {
+				// the song written in the rhymes window
+				row.icon = "format_quote_open";
 			} else if (kind === "spaces") {
 				row.label = /^\d+$/.test(parts[1]) ? `Workspace ${parts[1]}` : parts[1];
 				row.detail = Object.keys(outputs).length > 1 ? parts[0] : "";
@@ -229,6 +232,14 @@ Singleton {
 			if (!root.days[key]) root.days[key] = root.emptyDay();
 			const watched = root.days[key].video || (root.days[key].video = {});
 			watched[Video.title] = (watched[Video.title] || 0) + seconds;
+			root.dirty = true;
+		}
+		// a song counts while its window has the keyboard and someone is there
+		if (seconds > 0 && seconds <= root.sampleSeconds * 4 && Rhymes.song && Rhymes.focused && !Session.locked && !idle.isIdle) {
+			if (!root.days[key]) root.days[key] = root.emptyDay();
+			const written = root.days[key].writing || (root.days[key].writing = {});
+			const name = Rhymes.song.title || "Untitled";
+			written[name] = (written[name] || 0) + seconds;
 			root.dirty = true;
 		}
 		// a PDF counts while its window is the one looked at and someone is there

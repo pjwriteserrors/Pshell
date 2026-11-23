@@ -10,7 +10,8 @@ import "../../lib/GameText.js" as GameText
 
 // What is known about the picked game at a glance, on glass: the hours it
 // was played, when last, how far along (a ring against HowLongToBeat or the
-// achievements), the achievements, and the last four weeks a bar a day.
+// achievements), the achievements, ProtonDB's rating, and the last four
+// weeks a bar a day.
 // Numbers roll from the last game's to this one's, the ring turns, the bars
 // rise one after another. The stats are asked once the game stays picked.
 Rectangle {
@@ -29,6 +30,7 @@ Rectangle {
 		const all = root.stats?.days ?? [];
 		return root.compact ? all.slice(-14) : all;
 	}
+	readonly property string tier: root.game ? (Games.tiers[root.game.id] ?? "") : ""
 	readonly property real recent: root.days.reduce((sum, value) => sum + value, 0)
 	readonly property real dayMax: Math.max(45, ...root.days)
 
@@ -210,6 +212,18 @@ Rectangle {
 				value: root.trophies ? `${root.trophies.got} / ${root.trophies.total}` : ""
 				label: "achievements"
 			}
+		}
+
+		// ── ProtonDB ───────────────────────────────────────────────────────
+		Divider {
+			visible: root.tier !== ""
+		}
+
+		Cell {
+			visible: root.tier !== ""
+			value: GameText.tierLabel(root.tier)
+			label: "ProtonDB"
+			valueTone: GameText.tierTone(root.tier) || Qt.rgba(1, 1, 1, 0.6)
 		}
 
 		// ── the last weeks ─────────────────────────────────────────────────

@@ -23,7 +23,8 @@ stdin and writes one JSON event per line on stdout.
   (.json, or an Orca or Bambu bundle) in the inbox is imported into Orca's.
 
 Commands: config {address, inbox, jobs, cache, history} (first, once) ·
-refresh · print {id, mapping: [{tool, slot}], settings} · pause · resume ·
+refresh · print {id, mapping: [{tool, slot}], settings} · carry {id, layer, mapping,
+zMode, zNow} · pause · resume ·
 stop · light {on} · camera {on} · speed {mode} · dry {on, temp, minutes} ·
 ace · recolor {id, mapping, colours} · forget {id} · rerender {id} · slice {id, settings} · plate {id, plate} ·
 lay {id, face} · unlay {id} · profiles · import {path} · add {paths}
@@ -51,6 +52,7 @@ import gcode  # noqa: E402
 import kobra  # noqa: E402
 import mesh  # noqa: E402
 import placement  # noqa: E402
+import resume  # noqa: E402
 import slicer  # noqa: E402
 
 IN_CLOSE_WRITE = 0x08
@@ -148,7 +150,8 @@ class Jobs:
 
     def by_remote(self, filename):
         with self.lock:
-            matches = [job for job in self.items.values() if job.get("remote") == filename]
+            matches = [job for job in self.items.values()
+                       if filename and filename in (job.get("remote"), (job.get("carried") or {}).get("remote"))]
         return max(matches, key=lambda job: job.get("printed", 0)) if matches else None
 
     def take(self, path, defaults=None):
@@ -637,18 +640,31 @@ class Printer:
             emit("ace", boxes=boxes)
 
 
-def print_job(printer, jobs, job, mapping, settings):
+def printed_file(job):
+    """The G-code the printer got last time (a model sliced again since keeps it)."""
+    kept = os.path.join(job["dir"], "printed.gcode")
+    return kept if os.path.exists(kept) else job["file"]
+
+
+def print_job(printer, jobs, job, mapping, settings, carry=None):
+    """Uploads and starts a job; with `carry` ({file, remote, layer, …}) the
+    G-code resume.py made to carry on a stopped print of it."""
     ident = job["id"]
-    remote = job.get("remote") or remote_name(job["name"])
+    remote = carry["remote"] if carry else job.get("remote") or remote_name(job["name"])
+    path = carry["file"] if carry else job["file"]
     try:
-        size = os.path.getsize(job["file"])
+        size = os.path.getsize(path)
         jobs.update(ident, status="uploading")
         emit("upload", id=ident, sent=0, size=size)
         md5 = hashlib.md5()
-        with open(job["file"], "rb") as source:
+        with open(path, "rb") as source:
             while chunk := source.read(1 << 20):
                 md5.update(chunk)
-        kobra.upload(printer.address, job["file"], remote)
+        if not carry:
+            # kept for carrying on from a layer, should this print be stopped
+            shutil.copyfile(path, os.path.join(job["dir"], ".printed.gcode"))
+            os.replace(os.path.join(job["dir"], ".printed.gcode"), os.path.join(job["dir"], "printed.gcode"))
+        kobra.upload(printer.address, path, remote)
         emit("upload", id=ident, sent=size, size=size)
         filaments = {f["tool"]: f for f in (job.get("meta") or {}).get("filaments", [])}
         slots = {}
@@ -675,10 +691,11 @@ def print_job(printer, jobs, job, mapping, settings):
             "project_type": 1,
             "filesize": size,
             "md5": md5.hexdigest(),
+            # carrying on: no levelling or calibration – the part is on the bed
             "task_settings": {
-                "auto_leveling": int(bool(settings.get("leveling", True))),
-                "vibration_compensation": int(bool(settings.get("vibration", False))),
-                "flow_calibration": int(bool(settings.get("flow", False))),
+                "auto_leveling": 0 if carry else int(bool(settings.get("leveling", True))),
+                "vibration_compensation": 0 if carry else int(bool(settings.get("vibration", False))),
+                "flow_calibration": 0 if carry else int(bool(settings.get("flow", False))),
             },
         }
         if boxes:
@@ -686,7 +703,10 @@ def print_job(printer, jobs, job, mapping, settings):
         # the printer indexes the file a moment after the upload
         time.sleep(1.5)
         printer.send("print", "start", data, slicer=True)
-        jobs.update(ident, status="sent", remote=remote, printed=now_ms(), mapping=mapping)
+        if carry:
+            jobs.update(ident, status="sent", printed=now_ms(), carried={k: v for k, v in carry.items() if k != "file"})
+        else:
+            jobs.update(ident, status="sent", remote=remote, printed=now_ms(), mapping=mapping, carried=None)
         emit("started", id=ident, remote=remote)
     except Exception as error:
         jobs.update(ident, status="failed")
@@ -754,6 +774,14 @@ def main():
                 job = jobs.items.get(command.get("id"))
                 if job:
                     threading.Thread(target=print_job, args=(printer, jobs, job, command.get("mapping") or [], command.get("settings") or {}), daemon=True).start()
+            elif op == "carry":
+                job = jobs.items.get(command.get("id"))
+                if job:
+                    layer = int(command.get("layer") or 0)
+                    target = os.path.join(job["dir"], f"from-{layer}.gcode")
+                    made = resume.make(printed_file(job), target, layer, command.get("zMode") or "homed", float(command.get("zNow") or 0))
+                    carry = dict(made, file=target, remote=remote_name(f"{stem_of(job['name'])}_from{layer}.gcode"))
+                    threading.Thread(target=print_job, args=(printer, jobs, job, command.get("mapping") or [], {}, carry), daemon=True).start()
             elif op in ("pause", "resume", "stop"):
                 printer.send("print", op, {"taskid": "-1"}, slicer=True)
             elif op == "recolor":

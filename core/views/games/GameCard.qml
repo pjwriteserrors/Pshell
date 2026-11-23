@@ -21,6 +21,8 @@ Item {
 	property bool showName: false
 	// the one picked floats a little, as if held up (the shelf)
 	property bool floats: false
+	// false: clicks are taken by what lies over the card (the shelves)
+	property bool clicks: true
 	property real hover: 0
 
 	SequentialAnimation on hover {
@@ -432,7 +434,7 @@ Item {
 
 		anchors.fill: body
 		hoverEnabled: true
-		acceptedButtons: Qt.LeftButton | Qt.RightButton
+		acceptedButtons: root.clicks ? Qt.LeftButton | Qt.RightButton : Qt.NoButton
 		cursorShape: Qt.PointingHandCursor
 		z: -1
 		onPositionChanged: event => {

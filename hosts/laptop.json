@@ -6,6 +6,11 @@
 		"city": "Paderborn"
 	},
 	"wallpapers": "~/Pictures/Wallpapers",
+	"phone": {
+		"vpn": {
+			"server": "lu@192.168.178.22"
+		}
+	},
 	"plugins": {
 		"polkit": true,
 		"backlight": true,

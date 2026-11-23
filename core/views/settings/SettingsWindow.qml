@@ -81,6 +81,7 @@ FloatingWindow {
 		{ id: "btadapter", label: "Bluetooth adapter", icon: "bluetooth_settings", hint: "Radio, channels, modes, timing, bluetoothd", plugin: "bt-adapter" },
 		{ id: "webcam", label: "Webcam", icon: "video", hint: "Picture, Enhance, virtual camera, light, microphone", plugin: "webcam" },
 		{ id: "hpcamera", label: "HP camera", icon: "video", hint: "Picture, exposure spot, IR, face unlock, virtual camera", plugin: "hp-camera" },
+		{ id: "evo4", label: "Audient EVO4", icon: "tune_vertical", hint: "Gain, 48V, output, loopback", plugin: "evo4" },
 		{ id: "as50", label: "Avantree AS50", icon: "headphones", hint: "Codec, microphone, buttons, battery", plugin: "as50" },
 		{ id: "amazfit", label: "Amazfit watch", icon: "watch", hint: "Zepp OS settings, alarms, keys, notifications", plugin: "amazfit" },
 		{ id: "multicursor", label: "Multicursor", icon: "cursor_text", hint: "Lines and cursors in every text field", plugin: "multicursor" },
@@ -195,6 +196,11 @@ FloatingWindow {
 		{ page: "hpcamera", anchor: "hpcamera-virtual", title: "HP virtual camera", words: "hp camera virtual camera v4l2loopback zoom pan digital follow face tracking frame mirror output resolution", plugin: "hp-camera" },
 		{ page: "hpcamera", anchor: "hpcamera-about", title: "About the HP camera", words: "hp camera chip firmware formats usb power nodes reset defaults", plugin: "hp-camera" },
 		{ page: "webcam", anchor: "webcam-about", title: "About the webcam", words: "webcam firmware sensor lens field of view formats usb power reset defaults", plugin: "webcam" },
+		{ page: "evo4", anchor: "evo4-device", title: "Audient EVO4", words: "audient evo4 evo 4 audio interface usb sound card sample rate clock", plugin: "evo4" },
+		{ page: "evo4", anchor: "evo4-inputs", title: "EVO4 inputs", words: "audient evo4 input gain preamp 48v phantom power mute microphone instrument line stereo pair link", plugin: "evo4" },
+		{ page: "evo4", anchor: "evo4-output", title: "EVO4 output", words: "audient evo4 output volume headphones speakers mute stereo link", plugin: "evo4" },
+		{ page: "evo4", anchor: "evo4-loopback", title: "EVO4 loopback", words: "audient evo4 loopback mix record playback stream inputs 3 4", plugin: "evo4" },
+		{ page: "evo4", anchor: "evo4-about", title: "This EVO4", words: "audient evo4 firmware usb port alsa card", plugin: "evo4" },
 		{ page: "as50", anchor: "as50-device", title: "Avantree AS50", words: "avantree as50 ensemble bluetooth headphones headset battery connect disconnect", plugin: "as50" },
 		{ page: "as50", anchor: "as50-sound", title: "AS50 sound", words: "avantree as50 bluetooth headphones volume absolute avrcp mute", plugin: "as50" },
 		{ page: "as50", anchor: "as50-codec", title: "AS50 codec", words: "avantree as50 bluetooth codec aac sbc sbc-xq faststream latency lip sync delay a2dp", plugin: "as50" },
@@ -233,7 +239,7 @@ FloatingWindow {
 		{ page: "nas", anchor: "nas-saves", title: "Game saves on the NAS", words: "nas game saves ludusavi", plugin: "nas-saves" },
 		{ page: "nas", anchor: "nas-devices", title: "NAS devices", words: "nas devices laptop phone token wake", plugin: "nas" },
 		{ page: "nas", anchor: "nas-more", title: "Downloads, shelves, streams, phone photos to the NAS", words: "nas downloads torrents shelf streams progress phone photos upload", plugin: "nas" },
-		{ page: "nas", anchor: "nas-calendar", title: "Baikal calendar", words: "nas baikal caldav calendar", plugin: "nas-calendar" },
+		{ page: "nas", anchor: "nas-calendar", title: "Baikal calendar", words: "nas baikal caldav calendar kalender new add color colour delete davx5", plugin: "nas-calendar" },
 		{ page: "server", anchor: "server-core", title: "pshell-core on netcore", words: "server netcore core portal reachable login", plugin: "netcore" },
 		{ page: "server", anchor: "server-services", title: "Services on netcore", words: "server services containers docker pihole home assistant baikal wireguard restart stop start", plugin: "netcore" },
 		{ page: "server", anchor: "server-health", title: "The Pi's health and memory guard", words: "server pi health memory temperature load disk guard pressure history", plugin: "netcore" },
@@ -831,6 +837,7 @@ FloatingWindow {
 						case "btadapter": return btAdapterPage;
 						case "webcam": return webcamPage;
 						case "hpcamera": return hpCameraPage;
+						case "evo4": return evo4Page;
 						case "as50": return as50Page;
 						case "amazfit": return amazfitPage;
 							case "multicursor": return multicursorPage;
@@ -1166,6 +1173,12 @@ FloatingWindow {
 		AmazfitPage {
 			onOpen: page => root.go(page, "")
 		}
+	}
+
+	Component {
+		id: evo4Page
+
+		Evo4Page {}
 	}
 
 	Component {

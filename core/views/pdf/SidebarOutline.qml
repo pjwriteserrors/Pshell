@@ -21,9 +21,14 @@ Item {
 		id: bookmarks
 
 		// read while PDFium is idle (it would hold the whole shell until a page is drawn)
-		document: root.readFor === Pdf.docKey ? (root.reader?.docs?.a ?? null) : null
+		// never null: Qt 6.12's PdfBookmarkModel crashes the shell when its document goes back to null
+		document: (root.readFor === Pdf.docKey ? root.reader?.docs?.a : null) ?? noDocument
 		onModelReset: root.tick += 1
 		onRowsInserted: root.tick += 1
+	}
+
+	PdfDocument {
+		id: noDocument
 	}
 
 	property string readFor: ""

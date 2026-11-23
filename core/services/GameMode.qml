@@ -25,6 +25,10 @@ Singleton {
 	// what it does, each its own switch (gamemode.json)
 	property bool quietNotifications: false
 	property bool pauseFindMouse: true
+	// Feral GameMode for every game (scripts/feral.py)
+	property bool feral: true
+	// missing | group | off | on
+	property string feralState: ""
 
 	function setForce(value) {
 		if (["auto", "on", "off"].indexOf(value) >= 0) root.force = value;
@@ -33,8 +37,27 @@ Singleton {
 	function setOption(key, on) {
 		if (key === "quietNotifications") root.quietNotifications = !!on;
 		else if (key === "pauseFindMouse") root.pauseFindMouse = !!on;
+		else if (key === "feral") root.feral = !!on;
 		else return;
-		settings.setText(JSON.stringify({ quietNotifications: root.quietNotifications, pauseFindMouse: root.pauseFindMouse }, null, 2));
+		settings.setText(JSON.stringify({ quietNotifications: root.quietNotifications, pauseFindMouse: root.pauseFindMouse, feral: root.feral }, null, 2));
+		if (key === "feral") feralCheck.running = true;
+	}
+
+	function checkFeral() {
+		feralCheck.running = true;
+	}
+
+	Process {
+		id: feralCheck
+
+		command: ["python3", `${Paths.scripts}/feral.py`]
+		stdout: StdioCollector {
+			onStreamFinished: {
+				try {
+					root.feralState = String(JSON.parse(text).feral || "");
+				} catch (error) {}
+			}
+		}
 	}
 
 	FileView {
@@ -48,6 +71,7 @@ Singleton {
 				const data = JSON.parse(String(settings.text() || "{}"));
 				root.quietNotifications = data.quietNotifications === true;
 				root.pauseFindMouse = data.pauseFindMouse !== false;
+				root.feral = data.feral !== false;
 			} catch (error) {}
 		}
 	}

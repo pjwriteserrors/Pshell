@@ -69,6 +69,17 @@ The shell looks every 1, 6, 24 or 168 hours (switch at the bottom of the
 window, first 90 s after the start, `~/.local/state/pshell/appimages-settings.json`)
 and posts a notification once per new version, with *Update*. An update
 downloads the new file and installs it with the same name, command and mode.
+
+Where the release has a `.zsync` beside the AppImage (or the origin is a
+`.zsync`) and the installed app is a file, the download starts as always
+and meanwhile `scripts/appimage/zsync.py` works out which blocks of the new
+file the installed one already has (rolling sums for every place in it,
+numpy, MD4 from OpenSSL's legacy provider). When what is still missing is
+clearly less than the download has yet to bring, the download stops and
+only those ranges are fetched – what it brought counts too – and the result
+is checked against the SHA-1 in the `.zsync`. Anything amiss: the whole file
+as always. Neovim 0.12.5 → 0.12.6 reuses 53 %: half the time on a slow line,
+the same on a fast one (the download is through before the reckoning).
 Refresh (Ctrl+R) looks now.
 
 ## Removing

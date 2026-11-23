@@ -65,6 +65,8 @@ Singleton {
 	// Notifications still land in the list, only toasts and haptics pause.
 	// Critical ones always come through.
 	property bool dndManual: false
+	// the rhymes window has the keyboard and asks for quiet (Rhymes.qml sets it)
+	property bool writingQuiet: false
 	property bool dndWhileTracking: true
 	property bool dndFullscreen: true
 	property bool dndSharing: true
@@ -72,7 +74,7 @@ Singleton {
 	readonly property bool trackingNow: QtrackTimer.tracking && !QtrackTimer.paused
 	// a screencast of someone else than the shell's own live pins
 	readonly property bool sharing: Niri.casts.some(cast => cast.is_active && !Screenshot.liveNodes.includes(Number(cast.pw_node_id)))
-	readonly property bool dndAuto: (root.dndWhileTracking && root.trackingNow) || (root.dndFullscreen && Niri.focusedFullscreen) || (root.dndSharing && root.sharing) || (root.dndMeetings && MsCalendar.inMeeting) || (GameMode.active && GameMode.quietNotifications)
+	readonly property bool dndAuto: (root.dndWhileTracking && root.trackingNow) || (root.dndFullscreen && Niri.focusedFullscreen) || (root.dndSharing && root.sharing) || (root.dndMeetings && MsCalendar.inMeeting) || (GameMode.active && GameMode.quietNotifications) || root.writingQuiet
 	// switched off by hand while a rule applied: stays off until the rule ends
 	property bool dndAutoSuppressed: false
 	readonly property bool dnd: Plugins.on("dnd") && (root.dndManual || (root.dndAuto && !root.dndAutoSuppressed))

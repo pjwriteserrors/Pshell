@@ -109,7 +109,11 @@ class Server:
         socket = web.WebSocketResponse(heartbeat=45, max_msg_size=4 * 1024 * 1024)
         await socket.prepare(request)
         peer = PhonePeer(socket, device, request.remote)
-        await socket.send_str(encode({"type": "hello", "version": config.VERSION, "name": config.hostname(), "id": self.pairing.fingerprint}))
+        # the addresses: a phone paired at home learns the VPN's (docs/mobile.md, "Away from home")
+        await socket.send_str(encode({
+            "type": "hello", "version": config.VERSION, "name": config.hostname(), "id": self.pairing.fingerprint,
+            "addresses": pairing.addresses(),
+        }))
         await self.hub.attach(peer)
         try:
             async for message in socket:
@@ -125,6 +129,8 @@ class Server:
                         self.hub.devices.touch(device["id"], name=name, model=str(data.get("model") or device.get("model", ""))[:64])
                         peer.name = name
                         peer.info = {key: data.get(key) for key in ("model", "app", "android")}
+                        if device.get("kind") == "pc":
+                            self.hub.devices.learn_addresses(device["id"], data.get("addresses"))
                         for function in self.hub.hooks["devices"]:
                             await function()
                     elif self.hub.devices.get(device["id"]) is None:

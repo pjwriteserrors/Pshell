@@ -129,7 +129,10 @@ class Remote:
             self.session, self.socket, self.address = session, ws, address
             self.connected = True
             self.last_error = ""
-            await ws.send_str(encode({"type": "hello", "name": config.hostname(), "model": "PC", "app": "pshell", "version": config.VERSION}))
+            await ws.send_str(encode({
+                "type": "hello", "name": config.hostname(), "model": "PC", "app": "pshell", "version": config.VERSION,
+                "addresses": pairing.addresses(),
+            }))
             await ws.send_str(encode({"type": "sub", "topics": ["link", "plugins"]}))
             if address not in device.get("addresses", []):
                 self.hub.devices.touch(self.id, addresses=([address] + list(device.get("addresses", [])))[:8])
@@ -166,6 +169,7 @@ class Remote:
             if kind == "hello":
                 if data.get("name") and self.device and data["name"] != self.device["name"]:
                     self.hub.devices.touch(self.id, name=str(data["name"])[:64])
+                self.hub.devices.learn_addresses(self.id, data.get("addresses"))
             elif kind == "state":
                 if data.get("topic") == "plugins" and isinstance(data.get("data"), dict):
                     self.plugins = data["data"]

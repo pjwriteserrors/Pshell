@@ -355,6 +355,24 @@ Item {
 				Item {
 					Layout.fillWidth: true
 				}
+
+				TextButton {
+					visible: card.event.source === "baikal" && !card.event.readOnly
+					text: card.event.recurring ? "Delete series" : "Delete"
+					icon: "delete_outline"
+					variant: "ghost"
+					confirm: true
+					busy: NasCalendar.saving
+					onActivated: NasCalendar.deleteEvent(card.event)
+				}
+
+				TextButton {
+					visible: card.event.source === "baikal" && !card.event.readOnly
+					text: card.event.recurring ? "Edit series" : "Edit"
+					icon: "pencil"
+					busy: NasCalendar.saving
+					onActivated: NasCalendar.editEvent(card.event)
+				}
 			}
 		}
 	}

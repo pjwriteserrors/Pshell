@@ -18,6 +18,9 @@ class Mpv:
         self.pip = False
         self.lock = threading.Lock()
         self.ended_natural = False
+        # set by the daemon before each start: the quality and YouTube's sign-in
+        self.ytdl_format = "bestvideo[height<=1080]+bestaudio/best"
+        self.ytdl_options = []
 
     def running(self):
         return self.process is not None and self.process.poll() is None
@@ -36,7 +39,7 @@ class Mpv:
             os.unlink(self.path)
         except OSError:
             pass
-        command = ["mpv", "--force-window=immediate", "--idle=yes", "--keep-open=no", f"--input-ipc-server={self.path}", "--ytdl-format=bestvideo[height<=1080]+bestaudio/best", f"--title=${{media-title}}"]
+        command = ["mpv", "--force-window=immediate", "--idle=yes", "--keep-open=no", f"--input-ipc-server={self.path}", f"--ytdl-format={self.ytdl_format}", f"--title=${{media-title}}", *self.ytdl_options]
         if start:
             command.append(f"--start={int(start)}")
         if pip:
