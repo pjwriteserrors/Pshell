@@ -15,6 +15,9 @@ presets of one's own.
 - `PUT /api/smarthome/nodes/{id}/washer/presets` `{presets}`: the presets,
   kept on the node in smarthome.json; event `washer` tells the other pages.
 
+When the washer's mode leaves running, the reminders waiting for the wash
+(`trigger: washer_done`) fire (`watch`, called by hass.py).
+
 Runs come from Home Assistant's history of the program phase (hOn's
 prPhase: 1, 2, 14–16, 25–27 wash, 4–6, 17, 18 rinse, 3, 11 spin), kept until
 the phase moves on.
@@ -54,6 +57,28 @@ def is_washer(hass, device_id):
     return any(e.endswith("_program_phase") for e in hass.by_device.get(device_id, ())) and \
         any(e.startswith("select.") and len((hass.states.get(e) or {}).get("attributes", {}).get("options") or []) > 20
             for e in hass.by_device.get(device_id, ()))
+
+
+RUNNING = ("2", "3")              # hOn's mode: running, paused (4 waits for a delayed start)
+QUIET = ("2", "3", "4", "unknown", "unavailable", None)
+
+
+def finished(hass, entity_id, old, new):
+    """Whether this change of state is a washer ending a run: its mode leaves running."""
+    if not entity_id or not entity_id.startswith("sensor.") or not entity_id.endswith("_mode"):
+        return False
+    if (old or {}).get("state") not in RUNNING or (new or {}).get("state") in QUIET:
+        return False
+    device = (hass.entities.get(entity_id) or {}).get("device_id")
+    return bool(device) and is_washer(hass, device)
+
+
+def watch(hass, entity_id, old, new):
+    """hass.py's state_changed: a finished wash fires the reminders waiting for it (reminders.py)."""
+    if finished(hass, entity_id, old, new):
+        hook = getattr(hass.home, "on_washer_done", None)
+        if hook:
+            hook(entity_id)
 
 
 def slug_of(hass, device_id):

@@ -344,6 +344,16 @@ NAS place in the file manager sidebar (the mount; trash and versions
 through the API), VPN panel row, notifications, theme push, shelf sync,
 downloads/torrents target, streams progress, Baikal calendar, IPC `nas`.
 
+From the browser: the Pshell menu's *Save to NAS* on a picture, a video
+(or a link to one) and *Save pictures to NAS* on a page send them into a
+NAS folder without Downloads: fetched into `$XDG_RUNTIME_DIR/pshell/
+browser-nas` by `scripts/web_pictures.py`, then `Nas.send`; the copy in
+memory goes when the job is done (an hour at most). A page's pictures go
+as a folder named after the page. The folder is asked once per kind
+(pictures, videos, galleries) with the file chooser on the mount and kept
+in `~/.local/state/pshell/browser-nas.json`; *Save to NAS in…* asks again.
+Unmounted, `/Pictures/Browser` and `/Videos/Browser` until one is chosen.
+
 Baikal calendar (plugin `nas-calendar`, `core/services/NasCalendar.qml`):
 the events of every calendar of the user beside the Microsoft ones in the
 Today panel; + under the month adds one, an event of Baikal has Edit /

@@ -6,7 +6,7 @@
 // data: { palette: { bg, fg, primary, dark }, radius, font, wallpaper (data: url),
 //         weather: { temp, text, place, high, low } | null,
 //         todos: [{ id, text, due }], events: [{ id, title, when, where }],
-//         notes: [{ id, title, text }] }
+//         notes: [{ id, title, text }], phone: { title, url, host, device } | null }
 
 const $ = id => document.getElementById(id);
 const LOCALE = "de-DE";
@@ -121,6 +121,15 @@ function show(data) {
 		text.style.whiteSpace = "pre-line";
 		box.append(temp, text);
 		cards.push(card(weather.place || "Wetter", [box]));
+	}
+	// the page last open on the phone: it opens here, the shell notes it was taken
+	if (data.phone && data.phone.url) {
+		const phone = data.phone;
+		cards.push(card("From phone", [row(phone.title || phone.host, phone.host, () => {
+			browser.runtime.sendMessage({ pshell: "newtabOpen", what: "phone", id: phone.url }).catch(() => {}).finally(() => {
+				location.href = phone.url;
+			});
+		})]));
 	}
 	if (data.events && data.events.length) {
 		cards.push(card("Termine", data.events.slice(0, 5).map(event => row(event.title, event.when, opener("event", event.id)))));

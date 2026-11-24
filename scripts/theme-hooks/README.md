@@ -40,11 +40,11 @@ The layout: tabs in a rail on the left (Firefox's own vertical tabs) that
 opens over the page while the pointer rests on it and closes again, both
 animated; tab groups as tinted chips with a line along their tabs, a collapsed
 group as its initial with the number of its tabs; a preview card for the tab
-under the pointer; workspaces, the sidebar button and back/forward/reload on
-the left of the bar, the address in the middle; bookmarks centred under it;
+under the pointer; workspaces, the sidebar button and back/forward/reload (with a second
+reload button that skips the cache, like Ctrl+F5) on the left of the bar, the address in the middle; bookmarks centred under it;
 the page as a rounded panel; Floorp's panel sidebar on the left, its buttons
-at the foot of the rail and its panel between the rail and the page. Nothing is
-hidden, only moved.
+at the foot of the rail and its panel between the rail and the page, without
+its row of addons, passwords and settings. Nothing else is hidden, only moved.
 
 That needs a few settings, which `install` writes into a marked block of
 `<profile>/user.js` after keeping the profile's own values in

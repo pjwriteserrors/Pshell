@@ -141,11 +141,16 @@ user or a device with core `read`; changes need `admin` unless said.
   stopped containers stay stopped (logged, shown, started by hand).
 - `GET /api/guard` → `{level, since, actions: [{at, what}]}`
 
-### Events (WebSocket `GET /api/events`, user or device with `read`)
+### Events (WebSocket `GET /api/events`, any user or device)
 `{type, at, …}`: `login {who, ip, address}`, `login_failed {name, ip}`, `locked {name, ip}`,
 `device {action: added|revoked|rotated|changed, device}`, `service {name, state, was}`,
 `pressure {level, was, available_mb}`, `health {sample}` (every 30 s), `confirm_needed` is not an event.
 First message after connecting: `{type: "hello", services, guard, health}`.
+An event may go `to` some members only (`Hub.emit(kind, to={…})`, which returns the members it
+reached): the member of a socket is the user, for a device its owner as for the calendar
+(`calendar.member_of`). The expenses' and the reminders' events go that way.
+A device without `read` (the phone's NAS token) gets an empty hello and only the events `to` its
+member.
 
 ### Settings (`settings.json`, `GET /api/settings`, `PATCH /api/settings` admin)
 | key | default | what |
@@ -417,6 +422,191 @@ all the way into a stream.
   `core/views/remote/RemoteLauncher.qml` (`>pc`, ipc `remote open|wake <name>|list`).
 - tests: `tests/test_power.py` (a fake ARP table, knock ports on 127.0.0.1, wake,
   boot, report, relays).
+
+### Expenses (`pshell_core/expenses.py`)
+Monthly costs in groups ("Flat", "Subscriptions"), each member their own, shareable. Any
+signed-in member (a device counts as its owner). State `<state>/expenses.json` (0600):
+`{groups: [{id: "eg_…", name, icon, color, owner, members: {user: read|write}, split: {user: %},
+items: [{id: "ei_…", name, note, source, due, remind, term_end, notice_days, renew_months, paused,
+split, prices: [{from, amount, interval}], created}]}], incomes: {user: €}, sent: {key: day}}`.
+- access: the owner does everything; `write` members add, change and delete entries; `read`
+  members look. A group nobody may see is a 404. Not in the security log (it is private).
+- split: `{user: %}` of members; the owner carries the rest (100 − the sum, never below 0).
+  An entry's own `split` replaces the group's (`{}`: the owner carries all; `null`: the group's)
+- intervals `weekly` (× 52 / 12), `monthly`, `quarterly`, `halfyearly`, `yearly`, shown per month
+- prices: a change of amount or interval starts a price from `since` (default today; the same
+  day replaces it; before the entry began: from its start). The twelve months use the price of
+  each month's 15th (this month: today)
+- `source`: `power_monthly` / `power_forecast` takes the smart home provider's `monthly` /
+  `forecast_cost` (when there is one; else the kept amount)
+- `paused` (a day): counts 0 from then. `term_end` with `renew_months` (0: it ends, then
+  counts 0) and `notice_days`: `cancel_by` = term − notice; `notice` is `soon` within 14 days
+  before, `late` after it
+- `due`: the first due day; the next ones every interval (a short month takes its last day)
+- `GET /api/expenses` → `{me, groups: [group], part, total, yearly, income, left, months:
+  [{month, total, part}] × 12, upcoming: [due] (35 days), notices: [{group, group_name, item,
+  name, notice, cancel_by, term, color}], power: {monthly, forecast}|null, users}`; group:
+  `{id, name, icon, color, owner, access: owner|write|read, members: [{user, access}], split,
+  owner_share, items, total, part, yearly, active, months}`; item: `{id, name, note, amount,
+  interval, monthly, part, share, source, due, next, remind, paused, ended, term_end, term,
+  notice_days, renew_months, cancel_by, notice, split, prices, created}`
+- `GET /api/expenses/due?from=&to=` (at most 400 days) → `{due: [{group, group_name, color,
+  icon, item, name, date, amount, part}]}` (the calendar page shows them)
+- `POST /api/expenses/groups {name, icon?, color?}`, `GET|PATCH|DELETE /api/expenses/groups/<id>`
+  (PATCH and DELETE: the owner), `PUT …/<id>/members {members, split}` (the owner; names must
+  be core users, split only of members, sum ≤ 100), `POST …/<id>/leave` (not the owner)
+- `POST …/<id>/items {name, amount, interval?, since?, source?, due?, remind?, term_end?,
+  notice_days?, renew_months?, split?, note?}`, `PATCH|DELETE …/<id>/items/<item>` (write;
+  PATCH also `paused: true|null|day`)
+- `PUT /api/expenses/income {amount|null}`: your net income a month
+- events: `expenses {group}` to the group's members after every change (pages load again);
+  every 15 min `expense_due {group, group_name, item, name, date, amount, part, days}` for an
+  entry with `remind` (1, 3, 7 or 14 days) and `expense_notice {… cancel_by, term, days}`
+  14 days before the last day to give notice, each once per member who carries a part and
+  only marked as told when it reached them (`sent`, kept 90 days). The portal shows them as
+  toasts, the shell as notifications (Netcore.qml, "Open" goes to the portal's page)
+- the portal's page `/expenses` (`web/js/views/expenses.js`, `web/css/expenses.css`): your
+  part, the income and what is left, notice periods, where it goes, twelve months, the
+  groups, what is due soon; `/expenses/<group>` its entries (edit, pause, price history,
+  delete), its people and their shares, sharing (No / Read / Edit and %), name, colour, icon
+- tests: `tests/test_expenses.py`
+
+### Reminders (`pshell_core/reminders.py`)
+One list for the shell, the phone and the portal. Any signed-in member or device (a device counts
+as its owner; the phone's NAS token needs no core caps, as for the calendar). Kept in core.db:
+`reminders (id, owner, state, data, updated)` (data: the reminder as JSON plus `due`, `snoozed`,
+`fired`, `escalated`, `was_trigger`), `reminder_levels (user, source, level)`.
+- reminder: `{id: "rm_<10 hex>", owner, title, note, at, all_day, repeat: null|{every: day|week|month|year,
+  n, days?: [1..7], until?}, level: quiet|normal|important|fullscreen, escalate_min (10; 0 never),
+  trigger: time|unlock|leave_home|arrive_home|washer_done|qtrack_stop|game_end, state: open|done,
+  snoozed_until, next, pending: [occurrence], created, updated}`; times are epoch seconds, the clock is
+  the core's zone (Europe/Berlin). An occurrence is the scheduled time (by a trigger: when it fired).
+- series: the wall clock of `at` (a daily 8:00 stays 8:00 over a change of the clocks); a month or
+  year counts from the first day (31st → the last day of a shorter month → the 31st again). `days`:
+  those weekdays of every n-th week from the week of `at`. `all_day`: `at` is the day's 00:00, it
+  fires at 9:00 (`next` says when). `next`: the sooner of `snoozed_until` and the next occurrence
+  (null for a trigger, done, or snoozed to the PC) – what the phone schedules its alarm at
+- with a trigger `at` is optional: armed from then. A trigger reminder fires once until it is
+  acknowledged (repeating: armed again after the ack)
+- firing: a loop every ≤ 15 s (sooner when something is due or changed). After core was down a
+  series fires once, with the newest occurrence it missed; a one-off in the past fires at once.
+  `important` not acknowledged after `escalate_min` → told again with `escalated: true` (clients
+  treat it as fullscreen), once
+- `GET /api/reminders` → `{reminders, levels, sources}`: open ones and those done in the last 30
+  days (deleted after 90), now first, then by `next`. `sources`: `{source, key, title, at, level,
+  url?, …}` of the next 7 days that core knows: Baikal alarms (`calendar`, with the member's kept
+  DAV password, cached 60 s; `start`) and expenses with `remind` that the member carries a part of
+  (`expenses`, at 9:00 of due − remind days; `body` the group, `due`); undelivered parcels (`parcels`, `url` the carrier's page, `state`) and
+  birthdays of people with gift ideas (`gifts`) from the watches. `url` (http/https) opens with a
+  reminder; `source` names whose it is (default `own`), `ref` the thing it came from
+- `GET /api/reminders/active` → `{active: [{reminder, occurrence, escalated}]}` (fired, not acknowledged)
+- `POST /api/reminders {title, note?, at?, all_day?, repeat?, level?, escalate_min?, trigger?, url?, source?, ref?}` →
+  reminder (level: the member's `own` level when missing). `PATCH /api/reminders/<id>` the same
+  fields and `state: done|open` (open again: from the next time); a change of the time starts
+  over from there. `DELETE …/<id>`. Another member's id is a 404; at most 2000 each
+- `POST …/<id>/ack {occurrence?}` (default all pending and snoozed): a one-off is done, a repeating
+  one goes on; with nothing fired yet a one-off is done and a repeating one skips its next
+- `POST …/<id>/snooze {minutes?|until?|pc?}` (default 10 min): the pending ones (none fired: the
+  next one) come back at `until` with the same occurrence; `pc: true` sets `trigger: unlock` until
+  the PC fires it, then the old trigger again (the clock goes on meanwhile, its occurrences wait too)
+- `POST …/<id>/fire` → `{reminder, fired: [occurrence]}`: a device saw its trigger (409 for a time
+  reminder, before `at`, or done). `POST /api/reminders/trigger {trigger}` → `{fired: [{id,
+  occurrence}]}`: every armed one of the member with that trigger (the shell on unlock, qtrack, game
+  end; the phone on home Wi-Fi). Core fires `washer_done` itself for everyone: washer.py's `watch`
+  (from hass.py's `state_changed`) when the washer's `…_mode` sensor leaves 2/3 (running, paused)
+  for anything but 4, unknown or unavailable
+- `POST /api/reminders/parse {text}` → `{title, at, all_day, repeat, level, trigger}` or 400 (no
+  time and no trigger: "When?", no title). German and English: `20m …`, `in 2h …`, `in einer halben
+  Stunde`, `1h30`, `morgen 9 …`, `tomorrow 9:30`, `übermorgen`, `heute abend`, `fr 14 …` (short weekday
+  names only before a time or after am/on), `Montag`, `24.12. 18 Uhr` (passed: next year), `24.12.2027`,
+  `dec 24`, `am 15.`, `um 9` (passed today: tomorrow), `5pm`, `jeden Montag 8`, `every day 7`,
+  `alle 2 Wochen Freitag`, `werktags`, `montags`, `jeden 31.`, `… bis 31.12.`, the time first or
+  last; `remind me …`/`erinnere mich …`; triggers `wenn ich zurück bin` / `when I'm back` (unlock),
+  `wenn die Wäsche fertig ist` (washer_done), `wenn ich nach Hause komme`, `wenn ich das Haus
+  verlasse`, `nach dem Spiel`, `nach dem Tracking`; `!` important, `!!` fullscreen, `?` quiet at the
+  start or end (`level` null without one). No date but a time: today (passed: tomorrow); a day but
+  no time: all day
+- `GET|PUT /api/reminders/levels` → `{levels: {source: level}}` (PUT `{source: level|null}` or
+  `{levels: …}`, merged, null forgets). Sources `own`, `calendar`, `ms-calendar`, `expenses`,
+  `washer`, `breaks`, `updates`, `invoice`, `watch`, `server`, `pages`, `prices`, `parcels`, `gifts`
+  (and any `[a-z0-9_-]`); missing = `normal`
+- events to the owner: `reminder {reminder, occurrence, escalated}`, `reminder_ack {id, occurrence
+  (null: all), by}`, `reminder_snooze {id, until (null: to the PC)}`, `reminders {}` after any change.
+  The portal shows `reminder` as a toast (not quiet ones; important ones stay; gone on ack)
+- the portal's page `/reminders` (`web/js/views/reminders.js`, `web/css/reminders.css`): the
+  quick-add line (live through `/parse`, Enter adds, the pencil opens the full form), Now (done,
+  snooze 10 min/1 h/3 h/tomorrow/at the PC), Coming, Calendar and expenses, Done; a reminder in full
+  (when or which trigger, day, time, all day, repeat every n, weekdays, until, level, fullscreen
+  after, note); Levels per source
+- tests: `tests/test_reminders.py`
+
+### Reading (`pshell_core/browse.py`)
+Where a long page was left and text kept of pages, for every browser of a member (the Pshell
+extension through the shell's `WebMemory`, docs/browser.md "Page memory"). Any signed-in member
+or device (a device counts as its owner). core.db `browse (owner, kind, id, page, data, updated)`.
+- a page's key: the address without fragment, scheme, `www.`, trailing slash and tracking
+  parameters (`utm_*`, `fbclid`, `gclid`, …); the extension builds the same
+- `GET /api/browse/reading?url=` → `{reading: {url, key, title, progress, anchor, done, device,
+  mode, at} | null}`; without `url` the unfinished ones of 180 days (100, newest first)
+- `PUT /api/browse/reading {url, title?, progress 0..1, anchor?, mode?: private|work}`: the newest
+  wins; `device` is the caller's device name; progress ≥ 0.95 is `done`. 2000 a member.
+  `DELETE /api/browse/reading?url=`
+- `GET /api/browse/highlights?url=` → `{highlights: [{id: "hl_<12 hex>", url, key, title, text,
+  note, device, mode, at}]}` (without `url` the newest 500); `POST /api/browse/highlights {url,
+  text, title?, note?, mode?, id?}` (the same id replaces), `DELETE …/<id>`. 5000 a member
+- events to the owner: `browse {what: reading|highlight, key}`
+- tests: `tests/test_browse.py`
+
+### Games (gamedeals.py)
+
+- `GET /api/games/free` → `{free: [game], soon: [game], checked}`, a game `{id, store, title, url,
+  image, from, until, now}`; Epic's `freeGamesPromotions` and Steam's search (100 %, price 0)
+  every 3 hours (first 90 s after the start)
+- `POST /api/games/check` → a check now (at most every 5 minutes)
+- `GET /api/games/wishes` → `{wishes: [{id, store, key, title, url, image, added, price: {discount, final, initial, currency, text} | null}]}`
+  of the member; `POST /api/games/wishes {store, key, title, url}`, `DELETE /api/games/wishes/<id>`.
+  Prices: Steam `appdetails` (50 a call), GOG's catalog, Epic when it turns free
+- events: `free_game {game}` to every member once per game and offer, `free_games {free}` after a
+  check, `game_sale {wish}` to the member when a wish's discount grows (again after it was 0),
+  `game_wishes {wishes}` after a change
+- state `games.json` (0600): free, seen, wishes per member, checked
+- tests: `tests/test_gamedeals.py` (fixture `tests/epic_free.json`)
+
+### Watches (`pshell_core/watches.py`, `parcels.py`, `htmlsel.py`)
+What core looks at for a member while the PC is off: a part of a page, a wish's price, a parcel.
+`<state>/watches.json` (0600): `{watches, keys: {user: {track17}}, sent}`. A change is told as a
+one-off reminder (at once, `url` the page, `ref` the watch) with the source `pages`, `prices`,
+`parcels` or `gifts`, so it reaches the shell, the phone and the portal like any reminder.
+- watch: `{id: "wa_<10 hex>", owner, kind: element|product|parcel, title, note, url, paused, every
+  (min), created, updated, checked, due, status: new|ok|missing|blocked|error|manual, error, fails}`
+  - element: `selector, attr` (empty: the text), `when: change|drop|rise|contains, match, value,
+    history`; told on a change of the value (contains: once it holds `match`)
+  - product: `selector?, attr?, price, currency, low, high, image, how: schema|microdata|meta|element,
+    target?, prices: [{at, price}], for: null|{name, birthday}`; told when the price falls (and is
+    ≤ `target` when one is set). Gift ideas: told 14 and 3 days before the person's birthday
+  - parcel: `number, carrier: dhl|dpd|hermes|gls|ups|other, label, state:
+    unknown|info|transit|pickup|out|delivered|problem|manual, stage: 0–5|null (announced, handed
+    over, in transit, depot, out for delivery/pickup, delivered; a problem keeps its stage), text,
+    events: [{at, text, place}] (newest first), last, expected, delivered, page, registered`; told on
+    out, pickup, delivered and problem; checked until delivered
+- fetching: plain HTTP GET (no JavaScript), redirects followed by hand, each hop checked: no
+  loopback, link-local, multicast or reserved addresses, private ones only for admins; ≥ 8 s between
+  two requests to one host, ≤ 3 MB, parsed off the loop. Pages that build the part with JavaScript
+  read `missing` ("Not in the page's HTML"); 401/403/429/503 and bot walls `blocked`. Fails back off
+- prices: the selected element when it reads as a price, else schema.org Product/Offer (JSON-LD,
+  `@graph`, ProductGroup, priceSpecification, lowPrice), microdata `itemprop=price`, then
+  `product:price:amount`/`og:price:amount`
+- carriers: DHL from its public JSON (`int-verfolgen/data/search`), DPD from its tracking page's
+  text; UPS, GLS, Hermes and others through 17TRACK with the member's key (`PUT
+  /api/watches/keys`), else `manual` (only the carrier's page). Checked every 60 min, 20 min while
+  out for delivery, 17TRACK ones at most every 4 h
+- `GET /api/watches` → `{watches, keys: {track17: bool}}`. `POST /api/watches {kind, url?, selector?,
+  attr?, when?, match?, title?, every?, number?, carrier?, label?, page?, target?, price?, currency?,
+  image?, for?}` → the watch after its first check. `PATCH|DELETE /api/watches/<id>`, `POST
+  …/<id>/check` (once per 30 s), `POST /api/watches/detect {number, hint?}` → `{carrier, name,
+  page}`, `PUT /api/watches/keys {track17}` (empty forgets). Another member's id is a 404
+- events to the owner: `watches {}` after any change
+- tests: `tests/test_watches.py` (a local shop, DHL faked)
 
 ## Import from the NAS (once, `python -m pshell_core.ctl import-nas /storage/pshell-nas/nas.db`)
 Copies users (name, hash, role, totp) and devices (id, name, kind, token hash, mac, created, by,

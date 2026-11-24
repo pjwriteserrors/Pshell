@@ -454,7 +454,7 @@ Singleton {
 				const reminded = Object.assign({}, root.reminded);
 				reminded[key] = true;
 				root.reminded = reminded;
-				MsCalendar.remind(event, lead);
+				MsCalendar.remind(event, lead, "calendar");
 			}
 		}
 	}

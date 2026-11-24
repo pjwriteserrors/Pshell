@@ -1,5 +1,6 @@
 """One sqlite file for what core remembers: users, sessions, devices, the
-security log, revocations and the health samples.
+security log, revocations, the health samples, the reminders and reading
+(browse).
 
 Everything runs on the loop except password hashing, so one connection
 would do; the per-thread connections are kept (as in the NAS) because ctl
@@ -27,6 +28,13 @@ CREATE INDEX IF NOT EXISTS revoked_at ON revoked(at);
 CREATE TABLE IF NOT EXISTS log (id INTEGER PRIMARY KEY, at REAL, kind TEXT, who TEXT, ip TEXT, detail TEXT);
 CREATE INDEX IF NOT EXISTS log_at ON log(at);
 CREATE TABLE IF NOT EXISTS samples (at REAL PRIMARY KEY, data TEXT, thinned INTEGER DEFAULT 0);
+CREATE TABLE IF NOT EXISTS reminders (id TEXT PRIMARY KEY, owner TEXT, state TEXT, data TEXT, updated REAL);
+CREATE INDEX IF NOT EXISTS reminders_owner ON reminders(owner, state);
+CREATE INDEX IF NOT EXISTS reminders_state ON reminders(state);
+CREATE TABLE IF NOT EXISTS reminder_levels (user TEXT, source TEXT, level TEXT, PRIMARY KEY (user, source));
+CREATE TABLE IF NOT EXISTS browse (owner TEXT, kind TEXT, id TEXT, page TEXT, data TEXT, updated REAL,
+    PRIMARY KEY (owner, kind, id));
+CREATE INDEX IF NOT EXISTS browse_page ON browse(owner, kind, page);
 """
 
 

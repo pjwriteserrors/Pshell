@@ -72,6 +72,7 @@ val Features: List<Feature> = listOf(
 	TodosFeature,
 	NotesFeature,
 	dev.pshell.app.calendar.BaikalFeature,
+	dev.pshell.app.reminders.RemindersFeature,
 	CalendarFeature,
 	ShelvesFeature,
 	DownloadsFeature,

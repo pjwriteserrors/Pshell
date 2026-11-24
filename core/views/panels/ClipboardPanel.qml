@@ -12,7 +12,8 @@ import qs.style.widgets
 
 // Clipboard history. Type to filter, arrows to move, Enter to copy back,
 // Delete to drop an entry. Images show as thumbnails. With the phone
-// reachable every entry can be sent to it.
+// reachable every entry can be sent to it. Text copied in the browser shows
+// its page (WebMemory.sourceOf); a click goes back to the spot.
 Drawer {
 	id: root
 
@@ -153,9 +154,10 @@ Drawer {
 					required property var modelData
 					required property int index
 					readonly property bool current: entry.index === root.selected
+					readonly property var source: WebMemory.sourceOf(entry.modelData)
 
 					width: ListView.view.width
-					implicitHeight: entry.modelData.isImage ? 92 : Math.min(72, textPreview.implicitHeight + 24)
+					implicitHeight: entry.modelData.isImage ? 92 : Math.min(72, textPreview.implicitHeight + 24) + (entry.source ? 24 : 0)
 					radius: Theme.radius.medium
 					pressedScale: 0.98
 					color: entry.current ? Theme.primaryContainer : (entry.hovered ? Theme.layer1 : "transparent")
@@ -215,6 +217,39 @@ Drawer {
 								wrapMode: Text.WrapAnywhere
 								maximumLineCount: 2
 								font.pixelSize: Theme.size.label
+							}
+
+							// the page it was copied from: back to the spot
+							Clickable {
+								Layout.fillWidth: true
+								Layout.preferredHeight: 22
+								visible: !!entry.source
+								radius: Theme.radius.small
+								pressedScale: 0.98
+								onClicked: {
+									WebMemory.openSource(entry.source);
+									Popups.close();
+								}
+
+								RowLayout {
+									anchors.fill: parent
+									anchors.leftMargin: 2
+									anchors.rightMargin: 4
+									spacing: 6
+
+									Glyph {
+										icon: "link_variant"
+										size: 13
+										color: Theme.primary
+									}
+
+									StyledText {
+										Layout.fillWidth: true
+										text: entry.source ? [WebMemory.hostOf(entry.source.url), entry.source.title].filter(part => part !== "").join(" · ") : ""
+										tone: Theme.textMuted
+										font.pixelSize: Theme.size.small
+									}
+								}
 							}
 
 							StyledText {

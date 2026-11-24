@@ -14,6 +14,8 @@ const VIEWS = {
 	devices: () => import("./views/devices.js"),
 	sessions: () => import("./views/sessions.js"),
 	calendar: () => import("./views/calendar.js"),
+	expenses: () => import("./views/expenses.js"),
+	reminders: () => import("./views/reminders.js"),
 	smarthome: () => import("./views/smarthome.js"),
 	security: () => import("./views/security.js"),
 	health: () => import("./views/health.js"),
@@ -26,6 +28,8 @@ export const NAV = [
 	{ name: "devices", label: "Devices", icon: "devices", href: "/devices" },
 	{ name: "sessions", label: "Sessions", icon: "account_switch_outline", href: "/sessions" },
 	{ name: "calendar", label: "Calendar", icon: "calendar_month", href: "/calendar" },
+	{ name: "expenses", label: "Expenses", icon: "currency_eur", href: "/expenses" },
+	{ name: "reminders", label: "Reminders", icon: "bell_outline", href: "/reminders" },
 	{ name: "smarthome", label: "Smart home", icon: "power_plug", href: "/smarthome" },
 	{ name: "security", label: "Security", icon: "shield_lock_outline", href: "/security" },
 	{ name: "health", label: "Health", icon: "heart_pulse", href: "/health" },
@@ -236,6 +240,42 @@ function installEvents() {
 			toast(`${d.name || "A device"} ${data.action === "added" ? "was added" : "was revoked"}`, { icon: data.action === "added" ? "devices" : "link_variant_off", tone: data.action === "revoked" ? "warn" : undefined, timeout: 4200 });
 		}
 	});
+	// reminders of expenses (only the members who carry a part get them)
+	const eur = new Intl.NumberFormat(undefined, { style: "currency", currency: "EUR" });
+	const inDays = n => (n <= 0 ? "today" : n === 1 ? "tomorrow" : `in ${n} days`);
+	api.on("expense_due", data => toast(`${data.name} is due ${inDays(data.days)}`, {
+		icon: "currency_eur", body: `${data.group_name} · ${eur.format(data.part)}${data.part !== data.amount ? ` of ${eur.format(data.amount)}` : ""}`, timeout: 9000,
+		action: { label: "Open", run: () => go(`/expenses/${encodeURIComponent(data.group)}`) }
+	}));
+	api.on("expense_notice", data => toast(`Notice for ${data.name} ${inDays(data.days)}`, {
+		icon: "alert_outline", tone: "warn", body: `${data.group_name} · otherwise it renews`, timeout: 12000,
+		action: { label: "Open", run: () => go(`/expenses/${encodeURIComponent(data.group)}`) }
+	}));
+	// reminders: quiet ones only in their list, important ones stay until acknowledged anywhere
+	const told = new Map();
+	api.on("reminder", data => {
+		const r = data.reminder || {};
+		const level = data.escalated ? "fullscreen" : r.level;
+		if (level === "quiet") return;
+		const loud = level === "important" || level === "fullscreen";
+		const key = `${r.id}|${data.occurrence}`;
+		told.get(key)?.dismiss();
+		told.set(key, toast(r.title || "Reminder", {
+			icon: loud ? "bell_ring_outline" : "bell_outline", tone: level === "fullscreen" ? "bad" : loud ? "warn" : undefined,
+			body: r.note ? r.note.split("\n")[0] : undefined, timeout: loud ? 0 : 12000,
+			action: { label: "Done", run: () => api.post(`/api/reminders/${encodeURIComponent(r.id)}/ack`, { occurrence: data.occurrence }).catch(() => {}) }
+		}));
+	});
+	const untell = (id, occurrence) => {
+		for (const [key, t] of told) {
+			if (key.startsWith(`${id}|`) && (occurrence === null || occurrence === undefined || key === `${id}|${occurrence}`)) {
+				t.dismiss();
+				told.delete(key);
+			}
+		}
+	};
+	api.on("reminder_ack", data => untell(data.id, data.occurrence));
+	api.on("reminder_snooze", data => untell(data.id, null));
 	api.on("socket", data => {
 		if (data.open) {
 			refreshServices();
@@ -315,6 +355,8 @@ function buildSidebar() {
 		sideItem({ label: "Devices", iconName: "devices", route: "devices", href: "/devices" }),
 		sideItem({ label: "Sessions", iconName: "account_switch_outline", route: "sessions", href: "/sessions" }),
 		sideItem({ label: "Calendar", iconName: "calendar_month", route: "calendar", href: "/calendar" }),
+		sideItem({ label: "Expenses", iconName: "currency_eur", route: "expenses", href: "/expenses" }),
+		sideItem({ label: "Reminders", iconName: "bell_outline", route: "reminders", href: "/reminders" }),
 		sideItem({ label: "Smart home", iconName: "power_plug", route: "smarthome", href: "/smarthome" }),
 		smartSub);
 	const system = sideSection("System", [
@@ -501,7 +543,7 @@ function buildBottomNav() {
 }
 
 // ── keys ───────────────────────────────────────────────────────────────────
-const JUMPS = { h: "/", s: "/services", d: "/devices", e: "/sessions", c: "/calendar", m: "/smarthome", y: "/security", l: "/health", t: "/settings" };
+const JUMPS = { h: "/", s: "/services", d: "/devices", e: "/sessions", c: "/calendar", x: "/expenses", r: "/reminders", m: "/smarthome", y: "/security", l: "/health", t: "/settings" };
 
 function installKeys() {
 	let pendingG = 0;
@@ -554,6 +596,10 @@ function showShortcuts() {
 		["g s", "Services"],
 		["g d", "Devices"],
 		["g e", "Sessions"],
+		["g c", "Calendar"],
+		["g x", "Expenses"],
+		["g r", "Reminders"],
+		["g m", "Smart home"],
 		["g y", "Security"],
 		["g l", "Health"],
 		["g t", "Settings"],

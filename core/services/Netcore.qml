@@ -14,7 +14,9 @@ import qs.style.theme
 // Plugin `netcore`; it only does something while the NAS plugin is on and
 // its daemon answers. Notifications: a sign-in from a new address, failed
 // sign-ins and locked names, services going down and coming back, memory
-// pressure (with what the guard stopped), devices added and revoked.
+// pressure (with what the guard stopped), devices added and revoked,
+// expenses due and notice periods running out (core sends those only to the
+// members who carry a part).
 Singleton {
 	id: root
 
@@ -491,6 +493,10 @@ Singleton {
 		case "device":
 			root.deviceChanged(message);
 			break;
+		case "expense_due":
+		case "expense_notice":
+			root.expense(type, message);
+			break;
 		}
 	}
 
@@ -595,22 +601,34 @@ Singleton {
 		root.logLater();
 	}
 
+	function expense(type, message) {
+		const days = Number(message.days ?? 0);
+		const when = days <= 0 ? "today" : days === 1 ? "tomorrow" : `in ${days} days`;
+		const money = value => `${Number(value ?? 0).toFixed(2).replace(".", ",")} €`;
+		const open = () => root.openPortal(`/expenses/${encodeURIComponent(String(message.group ?? ""))}`);
+		const key = type === "expense_due" ? `expense-${message.item}-${message.date}` : `expense-notice-${message.item}-${message.term}`;
+		const title = type === "expense_due" ? `${message.name} is due ${when}` : `Notice for ${message.name} ${when}`;
+		const body = type === "expense_due" ? `${message.group_name} · ${money(message.part)}${message.part !== message.amount ? ` of ${money(message.amount)}` : ""}` : `${message.group_name} · otherwise it renews`;
+		// its level is the one of the source `expenses` (Reminders)
+		Reminders.fire("expenses", { key: key, title: title, body: body, icon: "currency_eur", actions: [{ label: "Open", icon: "open_in_new", run: open }], post: () => root.notify(key, title, body, "currency_eur", 1, open) });
+	}
+
 	// once per key while the text stays the same
 	property var told: ({})
 
-	function notify(key, title, body, icon, urgency) {
+	function notify(key, title, body, icon, urgency, open) {
 		const text = `${title}|${body}`;
 		if (root.told[key] === text && key !== "pressure") return;
 		root.told[key] = text;
 		// toasts take icon-theme names, not the shell's glyphs
-		const themed = ({ memory: "dialog-warning", shield_alert_outline: "dialog-password", login: "system-users", cellphone: "phone", laptop: "computer-laptop", monitor: "computer" })[icon] ?? "network-server";
+		const themed = ({ memory: "dialog-warning", shield_alert_outline: "dialog-password", login: "system-users", cellphone: "phone", laptop: "computer-laptop", monitor: "computer", currency_eur: "accessories-calculator" })[icon] ?? "network-server";
 		Notifs.post({
 			app: "netcore",
 			icon: themed,
 			summary: title,
 			body: body,
 			urgency: urgency ?? 1,
-			actions: [{ text: "Open", identifier: "default", invoke: () => root.openSettings() }]
+			actions: [{ text: "Open", identifier: "default", invoke: () => (open ? open() : root.openSettings()) }]
 		});
 	}
 

@@ -266,6 +266,13 @@ PaneFrame {
 				}
 
 				TextButton {
+					visible: !!Pdf.invoice?.due && Reminders.online
+					text: "Remind on the due date"
+					icon: "bell_ring_outline"
+					onActivated: Pdf.remindInvoiceDue()
+				}
+
+				TextButton {
 					text: Pdf.invoiceCustomer ? `File under ${Pdf.invoiceCustomer.name}` : "File it"
 					icon: "folder_move_outline"
 					onActivated: Pdf.fileInvoice()

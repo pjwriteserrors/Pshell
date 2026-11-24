@@ -17,7 +17,8 @@
  *     middle below it.
  *   - the page is a panel of the shell: inset, every corner rounded like the
  *     windows (niri's corner radius).
- * Nothing is hidden: every button and toolbar is where the browser keeps it,
+ * Nothing is hidden but the panel sidebar's row of addons, passwords and
+ * settings: every other button and toolbar is where the browser keeps it,
  * only put in another order (flex `order`) and drawn differently.
  *
  * Colours: the Pshell extension (dotfiles/floorp/pshell) sets them live through
@@ -1206,12 +1207,11 @@ tab-group:has(> tab:nth-of-type(10)) .tab-group-label-hover-highlight::after { c
 	/* its row must not widen the rail's column: it wraps within it */
 	contain: inline-size;
 	min-width: 0 !important;
+}
 
-	> #panel-sidebar-bottomButtonBox {
-		flex-direction: row !important;
-		align-items: center !important;
-		margin-inline-start: auto !important;
-	}
+/* the panel sidebar's row of addons, passwords and settings: not used */
+#panel-sidebar-bottomButtonBox {
+	display: none !important;
 }
 
 :root:has(#tabbrowser-tabs[orient="vertical"]) #panel-sidebar-box {

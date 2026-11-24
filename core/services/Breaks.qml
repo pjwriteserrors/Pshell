@@ -332,18 +332,19 @@ Singleton {
 			root.sinceMove = 0;
 			root.sinceEyes = 0;
 			root.stretchDue = true;
-			Notifs.pushInternal("running", "Time to stretch", "5 min · stand up, stretch, walk", {
+			const actions = [
+				{ label: "Start", icon: "play", run: () => root.startStretch() },
+				{ label: "Later", icon: "timer_outline", run: () => {
+					root.stretchDue = false;
+					root.sinceMove = root.moveSeconds - root.snoozeSeconds;
+				} }
+			];
+			Reminders.fire("breaks", { key: "move", title: "Time to stretch", body: "5 min · stand up, stretch, walk", icon: "human_handsup", actions: actions, post: () => Notifs.pushInternal("running", "Time to stretch", "5 min · stand up, stretch, walk", {
 				icon: "human_handsup",
 				sound: "reminder",
 				duration: 60000,
-				actions: [
-					{ label: "Start", icon: "play", run: () => root.startStretch() },
-					{ label: "Later", icon: "timer_outline", run: () => {
-						root.stretchDue = false;
-						root.sinceMove = root.moveSeconds - root.snoozeSeconds;
-					} }
-				]
-			});
+				actions: actions
+			}) });
 		} else if (!Plugins.on("water")) {
 			root.sinceWater = 0;
 			root.remindEyes();
@@ -352,16 +353,18 @@ Singleton {
 			root.sinceWater = 0;
 		} else if (root.sinceWater >= root.waterSeconds) {
 			root.sinceWater = 0;
-			Notifs.pushInternal("running", "Drink something", root.workKnown ? `${root.formatLitres(root.waterMl)} of ${root.formatLitres(root.paceMl)} by now` : `${root.formatLitres(root.waterMl)} / ${root.formatLitres(root.goalMl)} today`, {
+			const detail = root.workKnown ? `${root.formatLitres(root.waterMl)} of ${root.formatLitres(root.paceMl)} by now` : `${root.formatLitres(root.waterMl)} / ${root.formatLitres(root.goalMl)} today`;
+			const actions = [
+				{ label: "Bottle", icon: "cup_water", run: () => root.openPanel() },
+				{ label: "Glass", icon: "plus", run: () => root.drinkGlass() },
+				{ label: "Later", icon: "timer_outline", run: () => root.sinceWater = root.waterSeconds - root.snoozeSeconds }
+			];
+			Reminders.fire("breaks", { key: "water", title: "Drink something", body: detail, icon: "cup_water", actions: actions, post: () => Notifs.pushInternal("running", "Drink something", detail, {
 				icon: "cup_water",
 				sound: "reminder",
 				duration: 30000,
-				actions: [
-					{ label: "Bottle", icon: "cup_water", run: () => root.openPanel() },
-					{ label: "Glass", icon: "plus", run: () => root.drinkGlass() },
-					{ label: "Later", icon: "timer_outline", run: () => root.sinceWater = root.waterSeconds - root.snoozeSeconds }
-				]
-			});
+				actions: actions
+			}) });
 		} else {
 			root.remindEyes();
 		}
@@ -369,6 +372,11 @@ Singleton {
 
 	function remindEyes() {
 		if (!Plugins.on("eye-rest") || root.sinceEyes < root.eyesSeconds || root.eyesDueAt !== 0) return;
+		// level quiet (Reminders): no eye rest at all
+		if (Reminders.enabled && Reminders.levelOf("breaks") === "quiet") {
+			root.sinceEyes = 0;
+			return;
+		}
 		root.eyesDueAt = Date.now();
 		root.tryEyeRest();
 	}
@@ -396,12 +404,13 @@ Singleton {
 		if (Date.now() - root.eyesDueAt > 90 * 1000 || Popups.modal !== "") {
 			root.eyesDueAt = 0;
 			root.sinceEyes = 0;
-			Notifs.pushInternal("running", "Rest your eyes", `${root.eyeRestSeconds} seconds at something 6 m away`, {
+			const actions = [{ label: "Start", icon: "play", run: () => root.startEyeRest() }];
+			Reminders.fire("breaks", { key: "eyes", title: "Rest your eyes", body: `${root.eyeRestSeconds} seconds at something 6 m away`, icon: "eye_outline", actions: actions, post: () => Notifs.pushInternal("running", "Rest your eyes", `${root.eyeRestSeconds} seconds at something 6 m away`, {
 				icon: "eye_outline",
 				sound: "reminder",
 				duration: 20000,
-				actions: [{ label: "Start", icon: "play", run: () => root.startEyeRest() }]
-			});
+				actions: actions
+			}) });
 		} else if (typingPause.isIdle && !root.quiet && !Session.locked) {
 			Sounds.play("reminder");
 			root.startEyeRest();

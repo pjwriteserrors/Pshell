@@ -8,11 +8,13 @@ import android.widget.Toast
 import dev.pshell.app.link.LinkState
 import dev.pshell.app.link.json
 import dev.pshell.app.service.ClipboardSync
+import dev.pshell.app.service.ContinueOnPc
 import dev.pshell.app.service.Transfers
 
 /**
  * "Share → pshell" from any app: a link opens on the PC, a text lands in
- * its clipboard, files go to its downloads folder. Also the target of the
+ * its clipboard, files go to its downloads folder; "Continue on PC" lets a
+ * link wait there (ContinueOnPc). Also the target of the
  * "Send clipboard" tile, since only an activity in front may read the
  * clipboard. It has no window of its own and closes at once.
  */
@@ -21,6 +23,15 @@ class ShareActivity : Activity() {
 		super.onCreate(savedInstanceState)
 		val app = application as App
 		if (intent.action == ACTION_CLIPBOARD) return  // read in onWindowFocusChanged
+		// "Continue on PC": the page waits there instead of opening
+		if (intent.component?.className?.endsWith(".ContinueOnPc") == true) {
+			val page = ContinueOnPc.page(intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty(), intent.getStringExtra(Intent.EXTRA_SUBJECT))
+			if (page == null) toast("No link") else {
+				ContinueOnPc.park(app, page)
+				toast("Waits on the PC")
+			}
+			return finish()
+		}
 		if (app.link.state.value !is LinkState.Connected) {
 			toast("The PC is not connected")
 			return finish()

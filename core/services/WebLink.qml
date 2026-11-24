@@ -265,6 +265,12 @@ Singleton {
 			blocked: WebPage.blocked,
 			rail: WebPage.rail,
 			tabs: WebPage.tabs,
+			// a qtrack timer runs: the browser shows what is work only then
+			work: WebPage.work,
+			// what the extension remembers of pages (WebMemory)
+			memory: WebMemory.browserConfig,
+			// order pages are read for tracking numbers (Watches.qml offers them)
+			parcels: Plugins.on("watches") && Plugins.on("parcel-scan"),
 			// for page styles (background/styles.js: --pshell-radius, --pshell-gap, …)
 			measures: {
 				radius: Theme.windowRadius,

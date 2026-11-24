@@ -55,6 +55,12 @@ settings › Bar & wallpaper); `style/bar/BarZone.qml` maps an item id to
 what the style draws for it. Game mode (`GameMode`, plugin `game-mode`)
 follows the game windows `games_guard.py` reports.
 
+Reminders (`Reminders`, plugins `reminders`, `reminder-alert`;
+docs/reminders.md) are kept in pshell-core; every reminder of the shell
+(breaks, updates, calendar alarms, expenses …) goes through
+`Reminders.fire(source, …)` and takes its source's level (quiet, normal,
+important, fullscreen).
+
 The task manager (`TaskManager`, plugins `task-manager`, `-bar`,
 `-alerts`, `-hints`; docs/taskmanager.md) is a daemon
 (`scripts/taskmgr/daemon.py`) that looks only as often as something shows

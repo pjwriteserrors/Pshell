@@ -39,7 +39,7 @@ const bridge = new ShellLink("pshell_browser", {
 	}
 });
 
-let config = { menu: [], intercept: { mailto: false, calendar: false }, forms: false, newtab: true, blocked: [] };
+let config = { menu: [], intercept: { mailto: false, calendar: false }, forms: false, newtab: true, blocked: [], work: undefined };
 let newtabData = null;
 const asks = new Map();
 let nextAsk = 1;
@@ -259,10 +259,11 @@ function applyRail(rail) {
 
 // tabs and pages (Settings › Browser: Tabs, Environments, Navigation,
 // Archive) go to the chrome part as they are, with whether the shell is there
+// and whether a qtrack timer runs (work: the last the shell said, kept)
 let tabsApplied = "";
 function applyTabs(tabs, force) {
 	if (!browser.pshellChrome) return;
-	const next = Object.assign({}, tabs || {}, { connected: bridge.connected });
+	const next = Object.assign({}, tabs || {}, { connected: bridge.connected, work: !!config.work });
 	const key = JSON.stringify(next);
 	if (key === tabsApplied && !force) return;
 	tabsApplied = key;
@@ -302,7 +303,8 @@ async function offerStale() {
 }
 setInterval(offerStale, 10 * 60 * 1000);
 
-browser.storage.local.get(["theme", "ansi", "config", "rail", "tabs"]).then(kept => {
+browser.storage.local.get(["theme", "ansi", "config", "rail", "tabs", "work"]).then(kept => {
+	if (config.work === undefined) config.work = !!kept.work;
 	if (kept.theme) browser.theme.update(kept.theme).catch(() => {});
 	applyAnsi(kept.ansi);
 	if (kept.config) config = Object.assign(config, kept.config);
@@ -324,6 +326,11 @@ async function buildMenu() {
 	let lastGroup = entries.length ? "pshell-styles" : null;
 	let separators = 0;
 	for (const entry of entries) {
+		// an entry of a submenu (`parent`: the id of an entry above it)
+		if (entry.parent) {
+			browser.menus.create({ id: `pshell:${entry.id}`, parentId: `pshell:${entry.parent}`, title: entry.title, contexts: entry.contexts && entry.contexts.length ? entry.contexts : ["page"] });
+			continue;
+		}
 		if (lastGroup !== null && entry.group !== lastGroup) {
 			browser.menus.create({ id: `pshell-sep-${separators++}`, parentId: "pshell", type: "separator", contexts: ["all", "tab"] });
 		}
@@ -333,6 +340,8 @@ async function buildMenu() {
 			parentId: "pshell",
 			title: entry.title,
 			contexts: entry.contexts && entry.contexts.length ? entry.contexts : ["page"],
+			// `needs`: shown only where the page has it (background/finds.js)
+			...(entry.needs ? { visible: false } : {}),
 			...(entry.targets && entry.targets.length ? { targetUrlPatterns: entry.targets } : {}),
 			...(entry.documents && entry.documents.length ? { documentUrlPatterns: entry.documents } : {})
 		});
@@ -369,16 +378,18 @@ browser.menus.onClicked.addListener(async (info, tab) => {
 	const kind = info.mediaType || (info.linkUrl ? "link" : info.selectionText ? "selection" : onTab ? "tab" : "page");
 	let src = info.srcUrl || "";
 	if (src.startsWith("blob:") && tab) src = (await blobData(src, tab.id, info.frameId)) || src;
+	// links handed on leave their tracking behind (experiments/parts/clean.js)
+	const clean = url => (!config.tabs || config.tabs.cleanLinks !== false ? cleanLink(url) : url);
 	toShell({
 		type: "menu",
 		action: id.slice("pshell:".length),
 		info: {
 			kind,
 			text: info.selectionText || "",
-			link: info.linkUrl || "",
+			link: clean(info.linkUrl || ""),
 			linkText: info.linkText || "",
 			src,
-			page: (tab && tab.url) || info.pageUrl || "",
+			page: clean((tab && tab.url) || info.pageUrl || ""),
 			title: (tab && tab.title) || "",
 			tabId: tab ? tab.id : -1,
 			private: !!(tab && tab.incognito)
@@ -546,7 +557,8 @@ const COMMANDS = {
 		return await browser.tabs.saveAsPDF({});
 	},
 	// the chrome part's: peek {url, source}, hints {mode}, spur {tabId},
-	// pin {tabId, slot}, env {tabId}, slot {slot}
+	// pin {tabId, slot}, env {tabId}, slot {slot}, breakpoints {tabId},
+	// clearSite {tabId}
 	async peek(message) {
 		return await chromeCommand("peek", { url: message.url, source: message.source || "" });
 	},
@@ -564,6 +576,12 @@ const COMMANDS = {
 	},
 	async slot(message) {
 		return await chromeCommand("slot", { slot: message.slot || 1 });
+	},
+	async breakpoints(message) {
+		return await chromeCommand("breakpoints", { tabId: message.tabId ?? -1 });
+	},
+	async clearSite(message) {
+		return await chromeCommand("clearSite", { tabId: message.tabId ?? -1 });
 	}
 };
 
@@ -601,7 +619,8 @@ function fromShell(message) {
 		browser.storage.local.set({
 			config: { intercept: config.intercept, forms: config.forms, newtab: config.newtab },
 			pageConfig: { intercept: config.intercept, forms: config.forms },
-			...(config.measures ? { measures: config.measures } : {})
+			...(config.measures ? { measures: config.measures } : {}),
+			work: !!config.work
 		});
 		applyRail(config.rail);
 		applyTabs(config.tabs);

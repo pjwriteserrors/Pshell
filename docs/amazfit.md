@@ -80,7 +80,8 @@ watch which it has (endpoint 0x0000) and only uses those:
   calls, not wired yet.
 - **Music** (0x001B): while the watch's music app is open it gets title,
   artist, album, position, length and the volume; its buttons arrive as
-  keys (play, pause, next, previous, volume) and go through the same rules.
+  keys (play, pause, next, previous, volume) and go through the same rules. While a browser tab plays (plugin `browser-media`), play, next and
+  previous go to that tab: play/pause, +10 s, −10 s (docs/browser.md).
 - **Find** (0x001A): *Find* makes the watch vibrate; the watch's *find my
   phone* rings the PC and shows a notification (*Found* stops it).
 - **Silent mode** (0x003B): *Do not disturb, both ways* links the watch's

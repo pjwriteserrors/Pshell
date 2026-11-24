@@ -945,6 +945,13 @@ FocusScope {
 				}
 				BarButton {
 					small: true
+					visible: !!Pdf.invoice?.due && Reminders.online
+					icon: "bell_ring_outline"
+					tip: "Remind on the due date"
+					onClicked: Pdf.remindInvoiceDue()
+				}
+				BarButton {
+					small: true
 					icon: "folder_account_outline"
 					tip: Pdf.invoiceCustomer ? `File it under ${Pdf.invoiceCustomer.name}` : "File it with the invoices"
 					onClicked: Pdf.fileInvoice()

@@ -68,6 +68,7 @@ Singleton {
 	readonly property var providers: ({
 		control: "quick-settings",
 		breaks: "breaks",
+		reminders: "reminders",
 		media: "media",
 		clipboard: "clipboard",
 		tray: "tray",
@@ -81,6 +82,7 @@ Singleton {
 		reader: "fast-reader",
 		screentime: "screentime",
 		watch: "watch",
+		watches: "watches",
 		vpn: "phone",
 		printer: "printer",
 		identity: "identities",

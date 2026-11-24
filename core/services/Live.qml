@@ -70,7 +70,7 @@ Singleton {
 
 	readonly property var sources: [cpu, memory, gpuSource, tempSource, topSource, network, battery, volume, mic, brightness, power, bluetooth,
 		notifications, messages, updates, downloads, torrents, filejobs, editorSource, recording, sharing, browserSharing, gamemode, agents, keepawake, clipboard, shelf,
-		timer, worked, screentime, water, eyes, meeting, todos, weather,
+		timer, worked, screentime, water, eyes, meeting, reminders, todos, parcels, weather,
 		phone, watch, mouse, printer, nas, vm, pcs, game, media]
 	readonly property var byId: {
 		const out = {};
@@ -173,7 +173,7 @@ Singleton {
 	property real now: Date.now()
 
 	Timer {
-		running: root.held("meeting") || root.held("eyes") || root.held("worked")
+		running: root.held("meeting") || root.held("eyes") || root.held("worked") || root.held("reminders")
 		interval: 15000
 		repeat: true
 		triggeredOnStart: true
@@ -872,6 +872,46 @@ Singleton {
 		pulse: meeting.on ? (!!meeting.next && meeting.until < 300 && !meeting.current) : false
 		busy: meeting.on ? (!!meeting.current || (!!meeting.next && meeting.until < 3600)) : false
 		panel: "today"
+	}
+
+	Source {
+		id: reminders
+
+		readonly property int count: reminders.on ? Reminders.pendingCount : 0
+		readonly property var next: reminders.on ? Reminders.next : null
+		readonly property real until: reminders.next ? reminders.next.at - root.now / 1000 : -1
+
+		key: "reminders"
+		name: "Reminders"
+		glyph: reminders.count > 0 ? "bell_ring_outline" : "bell_outline"
+		group: "day"
+		plugin: "reminders"
+		about: "What is due, or the next reminder"
+		text: reminders.on ? (reminders.count > 0 ? String(reminders.count) : (reminders.next ? root.minutes(reminders.until) : "")) : ""
+		detail: reminders.on ? (reminders.count > 0 ? Reminders.alerts.map(alert => alert.title).join(" · ") : (reminders.next ? `${reminders.next.title} · ${Reminders.whenText(reminders.next.at)}` : "Nothing ahead")) : ""
+		tone: reminders.count > 0 ? "warn" : (reminders.next && reminders.until < 600 ? "accent" : "normal")
+		pulse: reminders.count > 0
+		busy: reminders.count > 0 || (!!reminders.next && reminders.until < 3600)
+		panel: "reminders"
+	}
+
+	Source {
+		id: parcels
+
+		readonly property var open: parcels.on ? Watches.openParcels : []
+		readonly property var near: parcels.on ? Watches.outForDelivery : []
+
+		key: "parcels"
+		name: "Parcels"
+		glyph: parcels.near.length > 0 ? "truck_fast_outline" : "package_variant_closed"
+		group: "day"
+		plugin: "watches"
+		about: "Parcels until they are delivered"
+		text: parcels.open.length > 0 ? String(parcels.open.length) : ""
+		detail: parcels.open.map(w => `${Watches.title(w)} · ${Watches.stateNames[w.state] ?? w.state}`).join("\n")
+		tone: parcels.open.some(w => w.state === "problem") ? "warn" : (parcels.near.length > 0 ? "accent" : "normal")
+		busy: parcels.open.length > 0
+		panel: "watches"
 	}
 
 	Source {

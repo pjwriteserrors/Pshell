@@ -41,3 +41,16 @@ Quality comes from testing the real thing, just not in the user's session:
 
 `$HOME` may point elsewhere in agent sessions: `export HOME=/home/lu` before
 `quickshell`, `git` and the repo scripts.
+
+## Every feature is part of the whole
+
+The shell is meant to be one ecosystem, not a pile of separate features. With
+every feature, look for where it connects to the rest:
+
+- other shell features (search/launcher, notifications, calendar, tasks,
+  files, music, devices, …): what it can offer them and use from them;
+- pshell-core (`pcore/`, `docs/core.md`): whether its data or actions belong
+  on the server so the phone, the web UI and other devices reach them too.
+
+Reuse existing services and data instead of building a parallel island, and
+wire up the obvious links as part of the feature, not as a later extra.

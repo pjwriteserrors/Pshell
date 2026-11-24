@@ -276,6 +276,31 @@ ModalWindow {
 		];
 	}
 
+	// what is free now, soon, and the wish list (its sales first)
+	function dealsMenu() {
+		const out = [];
+		const store = game => GameDeals.storeName(game.store);
+		for (const game of GameDeals.free) {
+			const owned = !GameDeals.freeNew.includes(game);
+			out.push({ icon: owned ? "check" : "tag_outline", label: game.title, detail: [store(game), owned ? "Owned" : GameDeals.untilText(game.until)].filter(text => text).join(" · "), run: () => GameDeals.open(game.url) });
+		}
+		for (const game of GameDeals.soon)
+			out.push({ icon: "clock_outline", label: game.title, detail: `${store(game)} · from ${Qt.formatDate(new Date((game.from || 0) * 1000), "d MMM")}`, run: () => GameDeals.open(game.url) });
+		const wishes = GameDeals.wishes.slice().sort((a, b) => (b.price?.discount ?? 0) - (a.price?.discount ?? 0));
+		if (wishes.length > 0) {
+			out.push({ icon: "heart_outline", label: "Wish list", detail: GameDeals.onSale.length > 0 ? `${GameDeals.onSale.length} on sale` : `${wishes.length}`, children: wishes.map(wish => ({
+				icon: (wish.price?.discount ?? 0) > 0 ? "tag_outline" : "heart_outline",
+				label: wish.title,
+				detail: [store(wish), wish.price ? ((wish.price.discount > 0 ? `−${wish.price.discount} % · ` : "") + wish.price.text) : ""].filter(text => text).join(" · "),
+				children: [
+					{ icon: "open_in_new", label: "Open", run: () => GameDeals.open(wish.url) },
+					{ icon: "close", label: "Remove", danger: true, run: () => GameDeals.unwish(wish.id) }
+				]
+			})) });
+		}
+		return out;
+	}
+
 	function openMenu(x, y, shelfId) {
 		if (!root.selected) return;
 		const row = shelfId ?? (root.shelving && shelves.currentRow.startsWith("own:") ? shelves.currentRow.slice(4) : "");
@@ -864,6 +889,21 @@ ModalWindow {
 
 		Row {
 			spacing: 6
+
+			// free for a while and the wish list on sale (GameDeals, pshell-core)
+			IconButton {
+				id: dealsButton
+
+				implicitWidth: 40
+				implicitHeight: 40
+				visible: GameDeals.online && GameDeals.free.length + GameDeals.soon.length + GameDeals.wishes.length > 0
+				icon: "tag_outline"
+				iconColor: GameDeals.count > 0 ? root.accent : Qt.rgba(1, 1, 1, 0.6)
+				onClicked: {
+					const at = dealsButton.mapToItem(null, dealsButton.width - 320, dealsButton.height + 8);
+					menu.show(root.dealsMenu(), at.x, at.y);
+				}
+			}
 
 			IconButton {
 				implicitWidth: 40

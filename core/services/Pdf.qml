@@ -1679,6 +1679,24 @@ Singleton {
 		root.say("Added to the tasks", "checkbox_marked_circle_plus_outline");
 	}
 
+	// a reminder (Reminders, source `invoice`) on the due date at nine
+	function remindInvoiceDue() {
+		const i = root.invoice;
+		if (!i?.due) return;
+		const due = new Date(i.due);
+		due.setHours(9, 0, 0, 0);
+		Reminders.create({
+			title: `Rechnung bezahlen: ${root.invoiceText()}${i.number ? ` (Nr. ${i.number})` : ""}`,
+			note: root.nameOf(root.path),
+			at: Math.floor(due.getTime() / 1000),
+			level: Reminders.levelOf("invoice")
+		}, (data, error) => {
+			if (error) return;
+			Sounds.play("listDone");
+			root.say(`Reminder on ${Qt.formatDate(due, "d. MMMM")}`, "bell_plus_outline");
+		});
+	}
+
 	// the customer whose name or address the invoice names (Customers), if one does
 	readonly property var invoiceCustomer: {
 		const i = root.invoice;

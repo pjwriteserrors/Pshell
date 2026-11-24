@@ -1,0 +1,52 @@
+/* Reminders (js/views/reminders.js): the quick-add line, the lists, the
+   levels as colours, the edit form. */
+
+.rem-body { display: grid; gap: 26px; }
+.rem-section { display: grid; gap: 12px; min-width: 0; align-content: start; }
+
+/* quick add */
+.rem-quick { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 10px; align-items: center; margin-bottom: 26px; }
+.rem-quick-field { height: 46px; }
+.rem-quick-field input { font-size: var(--fs-title); }
+.rem-quick-field .icon-btn { margin-right: -6px; }
+.rem-quick > .btn { height: 46px; }
+.rem-preview { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 22px; padding: 0 4px; }
+.rem-preview:empty { display: none; }
+.rem-preview b { max-width: 40ch; margin-right: 4px; font-weight: 650; }
+
+/* levels */
+.rem-icon { --l: var(--primary); background: color-mix(in srgb, var(--l) 18%, transparent); color: var(--l); }
+.rem-level-quiet { --l: var(--text-subtle); }
+.rem-level-normal { --l: var(--primary); }
+.rem-level-important { --l: var(--warning); }
+.rem-level-fullscreen { --l: var(--danger); }
+.chip.rem-level-quiet, .chip.rem-level-important, .chip.rem-level-fullscreen { background: color-mix(in srgb, var(--l) 16%, transparent); color: var(--l); }
+
+/* rows */
+.rem-row { cursor: pointer; }
+.rem-row .row-side .btn.small { height: 30px; }
+.rem-row.pending .row-title { font-weight: 700; }
+.rem-now { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--warning) 45%, transparent); }
+.rem-row.done .row-title { color: var(--text-subtle); text-decoration: line-through; text-decoration-thickness: 1px; }
+.rem-row.done .rem-icon { filter: grayscale(1); opacity: 0.6; }
+a.rem-row { color: var(--text); }
+
+/* the form */
+.form.rem-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 12px; }
+.form.rem-form > .wide { grid-column: 1 / -1; }
+.form.rem-form > [hidden] { display: none; }
+.rem-form .segmented { max-width: 100%; overflow-x: auto; }
+.rem-days { display: flex; flex-wrap: wrap; gap: 6px; }
+.rem-days .chip { cursor: pointer; border: 0; font: inherit; font-size: var(--fs-small); }
+.rem-unit { white-space: nowrap; }
+
+/* levels per source */
+.rem-levels { display: grid; gap: 2px; min-width: min(420px, 80vw); }
+.rem-level-row { min-height: 48px; }
+.rem-level-row .row-icon { width: 34px; height: 34px; border-radius: 10px; }
+.rem-level-row .field { width: 150px; flex: none; }
+
+@media (max-width: 720px) {
+	.form.rem-form { grid-template-columns: minmax(0, 1fr); }
+	.rem-level-row .field { width: 130px; }
+}

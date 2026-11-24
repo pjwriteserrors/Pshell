@@ -35,7 +35,7 @@ Singleton {
 		? root.focusSites.filter(host => !root.lifted.includes(host)).map(host => ({ host: host, until: 0 }))
 		: []
 	// newtab.js: { palette: { bg, fg, primary, dark }, radius, font, wallpaper,
-	//              weather, todos, events, notes }
+	//              weather, todos, events, notes, phone }
 	property var newtabData: null
 
 	// ── focus time ───────────────────────────────────────────────────────
@@ -150,6 +150,8 @@ Singleton {
 		envs: {
 			on: true,
 			group: true,
+			// each group its own container: separate logins (while working)
+			containers: true,
 			// in this order before every other tab; Alt+E goes round those with
 			// cycle, the first of them being where a site lives
 			list: [
@@ -163,9 +165,15 @@ Singleton {
 		spur: { on: true, columns: 3 },
 		archive: { on: true, after: 24, keep: 30 },
 		launcherKey: true,
-		urlbarLauncher: false
+		urlbarLauncher: false,
+		// tracking parameters off copied links
+		cleanLinks: true
 	})
 	property var tabs: root.tabsDefaults
+
+	// working: a qtrack timer runs. Without it nothing of work shows in the
+	// browser (environments, their containers, breakpoints); sent with the config
+	readonly property bool work: Plugins.on("qtrack") && QtrackTimer.tracking
 
 	function clampNumber(value, low, high, fallback) {
 		const number = Number(value);
@@ -323,6 +331,7 @@ Singleton {
 			envs: {
 				on: flag(envs.on, true),
 				group: flag(envs.group, true),
+				containers: flag(envs.containers, true),
 				list: root.cleanEnvList((t.envs && typeof t.envs === "object") ? t.envs : {})
 			},
 			hints: { on: flag(hints.on, true), chars: chars },
@@ -334,7 +343,8 @@ Singleton {
 				keep: root.clampNumber(archive.keep, 1, 365, 30)
 			},
 			launcherKey: flag(t.launcherKey, d.launcherKey),
-			urlbarLauncher: flag(t.urlbarLauncher, d.urlbarLauncher)
+			urlbarLauncher: flag(t.urlbarLauncher, d.urlbarLauncher),
+			cleanLinks: flag(t.cleanLinks, d.cleanLinks)
 		};
 	}
 
@@ -537,7 +547,7 @@ Singleton {
 		if (!MsCalendar.enabled || !MsCalendar.signedIn) return [];
 		const now = new Date(root.now);
 		return MsCalendar.eventsOn(now)
-			.filter(event => MsCalendar.active(event) && (event.allDay || new Date(event.end).getTime() > root.now))
+			.filter(event => MsCalendar.active(event) && Meetings.shows(event) && (event.allDay || new Date(event.end).getTime() > root.now))
 			.map(event => ({
 				id: String(event.id),
 				title: String(event.subject || ""),
@@ -570,6 +580,8 @@ Singleton {
 					overdue: (task.priority || 0) >= 3
 				})) : [],
 			events: root.todaysEvents(),
+			// the page last open on the phone (PhoneTab)
+			phone: PhoneTab.offer ? { title: PhoneTab.offer.title, url: PhoneTab.offer.url, host: PhoneTab.offer.host, device: PhoneTab.offer.device } : null,
 			notes: Plugins.on("notes") ? Notes.pinned.slice(0, 2).map(note => ({
 				id: String(note.id),
 				title: Notes.titleOf(note),
@@ -634,7 +646,15 @@ Singleton {
 		case "identities":
 			if (!root.forms) return reply(true, []);
 			return reply(true, Identities.saved.map(identity => root.identityFor(identity)));
+		// a store's page (content/games.js): in the library, on the wish list (GameDeals)
+		case "game":
+			return GameDeals.answer(args, reply);
+		case "gameWish":
+			return GameDeals.wish(args, reply);
+		case "gameUnwish":
+			return GameDeals.unwish(String(args?.id ?? ""), reply);
 		default:
+			if (what.startsWith("memory:")) return WebMemory.ask(what, args, reply);
 			return reply(false, `nothing answers ${what}`);
 		}
 	}
@@ -716,6 +736,10 @@ Singleton {
 			return;
 		case "note":
 			if (Plugins.on("notes")) Popups.withFocusedScreen(screen => Popups.open("notes", screen, id));
+			return;
+		// the page itself goes there; the shell only notes it was taken
+		case "phone":
+			PhoneTab.took(id);
 			return;
 		}
 	}

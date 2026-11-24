@@ -339,11 +339,12 @@ Singleton {
 		if (root.busy || Date.now() - root.lastReminder < 86400000) return;
 		root.lastReminder = Date.now();
 		root.persist();
-		Notifs.pushInternal("info", `${root.repoCount} system updates pending`, "Update soon so the next one stays quick", {
+		const actions = [{ label: "Show", icon: "package_up", run: () => root.openPanel() }];
+		Reminders.fire("updates", { key: "updates", title: `${root.repoCount} system updates pending`, body: "Update soon so the next one stays quick", icon: "package_up", actions: actions, post: () => Notifs.pushInternal("info", `${root.repoCount} system updates pending`, "Update soon so the next one stays quick", {
 			icon: "package_up",
 			duration: 10000,
-			actions: [{ label: "Show", icon: "package_up", run: () => root.openPanel() }]
-		});
+			actions: actions
+		}) });
 	}
 
 	function dueIn() {

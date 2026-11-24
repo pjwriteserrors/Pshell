@@ -38,6 +38,8 @@ var DEFAULT_TABS = {
 	envs: {
 		on: true,
 		group: true,
+		// each group its own container (parts/containers.js)
+		containers: true,
 		list: [
 			{ id: "live", name: "Live", color: 1, patterns: [], cycle: true },
 			{ id: "stage", name: "Stage", color: 4, patterns: ["staging.*", "stage.*", "*.staging.*"], cycle: true },
@@ -50,8 +52,13 @@ var DEFAULT_TABS = {
 	archive: { on: true, after: 24, keep: 30 },
 	launcherKey: true,
 	urlbarLauncher: false,
+	// tracking parameters off copied links (parts/clean.js)
+	cleanLinks: true,
 	// set by the extension: whether the shell is there to take Ctrl+K
-	connected: false
+	connected: false,
+	// set by the extension from the shell: a qtrack timer runs; without it
+	// nothing of work shows (environments, their containers, breakpoints)
+	work: false
 };
 
 function merged(base, over) {
@@ -64,8 +71,14 @@ function merged(base, over) {
 	return out;
 }
 
+// without work (no qtrack timer) the environments are off, whatever is set
+function gated(tabs) {
+	return tabs.work ? tabs : Object.assign({}, tabs, { envs: Object.assign({}, tabs.envs, { on: false }) });
+}
+
+var DEFAULT_GATED = null;
 function tabsConfig() {
-	return config.tabs || DEFAULT_TABS;
+	return config.tabs || (DEFAULT_GATED = DEFAULT_GATED || gated(DEFAULT_TABS));
 }
 
 function emit(name, data) {
@@ -266,7 +279,7 @@ function setRail(rail) {
 }
 
 function setTabs(tabs) {
-	config.tabs = merged(DEFAULT_TABS, tabs || {});
+	config.tabs = gated(merged(DEFAULT_TABS, tabs || {}));
 	for (const part of PARTS) part.configured?.(config.tabs);
 	for (const W of attached) configureWindow(W);
 }

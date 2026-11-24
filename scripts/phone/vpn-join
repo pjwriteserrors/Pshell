@@ -30,6 +30,6 @@ sed -e '/^DNS *=/d' \
 
 nmcli connection delete "$NAME" >/dev/null 2>&1 || true
 nmcli connection import type wireguard file "$work/$NAME.conf" >/dev/null
-nmcli connection modify "$NAME" connection.autoconnect yes ipv4.never-default yes ipv6.method disabled
+nmcli connection modify "$NAME" connection.autoconnect yes connection.autoconnect-retries 0 ipv4.never-default yes ipv6.method disabled
 nmcli connection up "$NAME" >/dev/null
 echo "$NAME: $address, routes $subnet through the server"

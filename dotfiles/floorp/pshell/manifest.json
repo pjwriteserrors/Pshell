@@ -26,13 +26,25 @@
 		"<all_urls>"
 	],
 	"background": {
-		"scripts": ["background/link.js", "background/downloads.js", "background/styles.js", "background/bridge.js"],
+		"scripts": ["background/link.js", "background/downloads.js", "background/styles.js", "experiments/parts/clean.js", "background/bridge.js", "background/memory.js", "background/finds.js", "background/attention.js", "background/games.js", "background/pictures.js", "background/watches.js"],
 		"persistent": true
 	},
 	"content_scripts": [
 		{
 			"matches": ["http://*/*", "https://*/*"],
-			"js": ["content/page.js"],
+			"js": ["content/page.js", "content/memory.js"],
+			"run_at": "document_idle",
+			"all_frames": false
+		},
+		{
+			"matches": ["http://*/*", "https://*/*"],
+			"js": ["content/attention.js"],
+			"run_at": "document_idle",
+			"all_frames": true
+		},
+		{
+			"matches": ["https://store.steampowered.com/app/*", "https://www.gog.com/*", "https://store.epicgames.com/*", "https://isthereanydeal.com/game/*"],
+			"js": ["content/games.js"],
 			"run_at": "document_idle",
 			"all_frames": false
 		}

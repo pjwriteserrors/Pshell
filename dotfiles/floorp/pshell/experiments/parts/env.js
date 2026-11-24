@@ -353,6 +353,7 @@
 	}
 
 	function switchEnv(W, tab) {
+		if (!tabsConfig().envs.on) return false;
 		tab = tab || W.gBrowser.selectedTab;
 		const url = urlOf(tab);
 		const info = envOf(url);

@@ -203,7 +203,8 @@
 				if (!enabled(W)) return;
 				// (the event is the group's, the tab in its detail)
 				const tab = event.detail;
-				if (!busy && tab?.localName === "tab" && !tab.closing) {
+				// (an environment's group let go: not by hand)
+				if (!busy && !event.target?.hasAttribute?.("pshell-env") && tab?.localName === "tab" && !tab.closing) {
 					const site = siteOf(urlOf(tab));
 					if (site) setLeft(tab, site);
 				}

@@ -330,6 +330,12 @@ Drawer {
 				}
 			}
 
+			// the browser's sleep timer (WebPlayback)
+			SleepTimer {
+				Layout.fillWidth: true
+				visible: WebPlayback.enabled && (root.playingTabs.length > 0 || WebPlayback.sleepMode !== "")
+			}
+
 			// seek
 			Item {
 				id: seek

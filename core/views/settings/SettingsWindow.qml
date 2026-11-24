@@ -316,8 +316,9 @@ FloatingWindow {
 		{ page: "browser", anchor: "browser-link", title: "Browser extension", words: "browser floorp firefox extension pshell xpi native host link install status" },
 		{ page: "browser", anchor: "browser-look", title: "Browser look", words: "browser floorp theme css userchrome look layout install remove settle" },
 		{ page: "browser", anchor: "browser-tabs", title: "Browser tabs", words: "browser floorp tabs rail sidebar vertical hover open icons top width recent pinned dock ctrl tab filter states leiste seitenleiste gerade fest" },
-		{ page: "browser", anchor: "browser-envs", title: "Browser environments", words: "browser floorp live stage staging dev development environment groups colours colors umgebung gruppen" },
-		{ page: "browser", anchor: "browser-navigation", title: "Browser navigation", words: "browser floorp hints keyboard peek spur columns links from outside" },
+		{ page: "browser", anchor: "browser-envs", title: "Browser environments", words: "browser floorp live stage staging dev development environment groups colours colors umgebung gruppen containers logins accounts separate" },
+		{ page: "browser", anchor: "browser-navigation", title: "Browser navigation", words: "browser floorp hints keyboard peek spur columns links from outside clean links tracking utm copy" },
+		{ page: "browser", anchor: "browser-memory", title: "Browser page memory", words: "browser floorp pages text search index forget history reading highlights seiten volltext vergessen" },
 		{ page: "browser", anchor: "browser-cleanup", title: "Browser archive", words: "browser floorp archive old tabs cleanup untouched aufräumen archiv" },
 		{ page: "browser", anchor: "browser-plugins", title: "Browser plugins", words: "browser floorp tabs launcher alt-tab workspaces menu newtab forms mail focus media privacy capture qtrack" },
 		{ page: "browser", anchor: "browser-breaks", title: "Browser media in breaks", words: "browser media pause break stretch eye rest video music tabs" },
@@ -1300,7 +1301,7 @@ FloatingWindow {
 				const sources = Object.keys(WebLink.links);
 				return sources.length > 0 ? WebLink.links[sources[sources.length - 1]] : null;
 			}
-			readonly property var plugins: ["browser-link", "browser-launcher", "browser-switcher", "browser-workspaces", "browser-menu", "browser-newtab", "browser-forms", "browser-mail", "browser-focus", "browser-media", "browser-privacy", "browser-capture", "browser-qtrack"]
+			readonly property var plugins: ["browser-link", "browser-launcher", "browser-switcher", "browser-workspaces", "browser-menu", "browser-newtab", "browser-forms", "browser-mail", "browser-focus", "browser-media", "browser-privacy", "browser-capture", "browser-qtrack", "browser-memory", "browser-reading", "browser-highlights", "browser-clipsource", "browser-review", "browser-codes", "browser-timers", "browser-brake"]
 			// [{ ok, text }] from browser_host.py status and floorp_theme.py status
 			property var hostLines: []
 			property var themeLines: []
@@ -1616,6 +1617,14 @@ FloatingWindow {
 					onToggled: on => WebPage.setTabs({ envs: { group: on } })
 				}
 
+				FlagRow {
+					visible: WebPage.tabs.envs.on
+					title: "Separate logins"
+					icon: "account_multiple_outline"
+					checked: WebPage.tabs.envs.containers
+					onToggled: on => WebPage.setTabs({ envs: { containers: on } })
+				}
+
 				Repeater {
 					model: WebPage.tabs.envs.on ? WebPage.tabs.envs.list : []
 
@@ -1763,6 +1772,13 @@ FloatingWindow {
 				visible: Plugins.on("browser-link")
 
 				FlagRow {
+					title: "Clean links"
+					icon: "link_variant_off"
+					checked: WebPage.tabs.cleanLinks
+					onToggled: on => WebPage.setTabs({ cleanLinks: on })
+				}
+
+				FlagRow {
 					title: "Hints"
 					icon: "keyboard_outline"
 					checked: WebPage.tabs.hints.on
@@ -1882,6 +1898,21 @@ FloatingWindow {
 			}
 
 			SettingCard {
+				anchor: "browser-memory"
+				title: "Page memory"
+				icon: "text_search"
+				visible: WebMemory.indexOn && WebLink.connected
+
+				TextButton {
+					variant: "danger"
+					icon: "delete_outline"
+					text: "Forget pages"
+					confirm: true
+					onActivated: WebMemory.forget()
+				}
+			}
+
+			SettingCard {
 				anchor: "browser-plugins"
 				title: "In the shell"
 				icon: "puzzle"
@@ -1913,6 +1944,13 @@ FloatingWindow {
 					checked: Breaks.pauseBrowser
 					onToggled: on => Breaks.setPauseBrowser(on)
 				}
+			}
+
+			// sleep timer, calls, the watch, the scroll brake (WebPlayback, WebAssist)
+			Loader {
+				Layout.fillWidth: true
+				active: Plugins.on("browser-media") || Plugins.on("browser-brake")
+				source: Qt.resolvedUrl("browser/Attention.qml")
 			}
 
 			SettingCard {

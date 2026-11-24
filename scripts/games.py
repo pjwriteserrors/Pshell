@@ -37,6 +37,9 @@
     scripts/games.py genres               fetches the genres a game lacks and how it is played
                                           together (Steam's store); a JSON line per game that got them
     scripts/games.py shelves '<json>'     keeps the user's shelves: [{ id, name, games: [id …] }]
+    scripts/games.py owned                what the user has, for the store pages (GameDeals.qml):
+                                          Steam's apps the account ever played or has installed,
+                                          every game of the library by its normal name
 
 Games added here live in ~/.local/state/pshell/games.json with what the user
 set for any game (name, cover, favourite, hidden). Pictures come from
@@ -1519,6 +1522,23 @@ def cmd_steam_pads(_args):
     out({"done": True, **result})
 
 
+def cmd_owned(_args):
+    games = collect()["games"]
+    root = windows.steam_root()
+    account = windows.steam_account(root) if root else ""
+    steam = {appid for appid, (minutes, last) in (playtimes(root, account) if root else {}).items()
+             if appid.isdigit() and int(appid) < 1 << 31 and (minutes or last)}
+    steam |= {game["appid"] for game in games if game["kind"] == "steam"}
+    steam |= {str(game.get("steamAppid")) for game in games if str(game.get("steamAppid") or "").isdigit()}
+    kept = load()["games"]
+    library = []
+    for game in games:
+        store = str(store_appid(game, kept) or "")
+        library.append({"id": game["id"], "name": game["name"], "normal": normal(game["name"]), "kind": game["kind"],
+                        "store": store if store.isdigit() else ""})
+    out({"steam": sorted(steam, key=int), "games": library})
+
+
 def cmd_key(args):
     if not args:
         out({"key": bool(load().get("gridKey"))})
@@ -1547,7 +1567,7 @@ COMMANDS = {
     "remove": cmd_remove, "launch": cmd_launch, "_play": cmd_play, "running": cmd_running, "steam-add": cmd_steam_add,
     "steam-pads": cmd_steam_pads, "key": cmd_key, "stats": cmd_stats, "brief": cmd_brief, "session": cmd_session, "goal": cmd_goal,
     "genres": cmd_genres, "shelves": cmd_shelves, "tool": cmd_tool, "protondb": cmd_protondb,
-    "tiers": cmd_tiers, "protondb-update": cmd_protondb_update,
+    "tiers": cmd_tiers, "protondb-update": cmd_protondb_update, "owned": cmd_owned,
 }
 
 

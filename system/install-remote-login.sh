@@ -54,5 +54,12 @@ if command -v nmcli >/dev/null; then
 			nmcli connection modify "$name" 802-3-ethernet.wake-on-lan magic && echo "wake-on-LAN on: $name"
 		fi
 	done
+	# the saved setting reaches the card only on activation: reapply the live ones now
+	nmcli -t -f DEVICE,TYPE,STATE device status | while IFS=: read -r dev type state; do
+		if [[ "$type" == "ethernet" && "$state" == connected ]]; then
+			nmcli device reapply "$dev" >/dev/null 2>&1 || true
+			command -v ethtool >/dev/null && echo "$dev: $(ethtool "$dev" 2>/dev/null | grep -m1 -E '^\s*Wake-on:' | xargs)"
+		fi
+	done
 fi
 echo "installed for $user ($session)"

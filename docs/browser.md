@@ -51,6 +51,16 @@ private window comes with `private: true`; the shell keeps nothing of it
 | `browser-privacy` | which tab uses the camera, the microphone or the screen |
 | `browser-capture` | screenshots of a whole page |
 | `browser-qtrack` | qtrack's timer from the task page in front |
+| `browser-memory` | pages found by their text in `>tab` (Page memory below) |
+| `browser-reading` | where a long page was left, offered again on any device |
+| `browser-highlights` | text kept as a note marked on its page again |
+| `browser-clipsource` | copied text keeps its page in the clipboard history |
+| `browser-review` | the day's articles and videos in the evening (Today panel) |
+| `browser-codes` | one-time codes offered at a code field |
+| `browser-timers` | timers from the times in a recipe's steps |
+| `browser-brake` | a quiet hint after long scrolling on listed sites |
+| `watches` | parts of pages, wishes and parcels that pshell-core watches (needs `netcore`) |
+| `parcel-scan` | order pages offer their tracking numbers (needs `watches`) |
 
 ### What the shell does with it
 
@@ -59,6 +69,46 @@ private window comes with `private: true`; the shell keeps nothing of it
   it; the bar's tooltip names the site. Settings › Browser › Breaks pauses
   what plays when a stretch or eye rest starts and plays the same tabs again
   when it ends (off by default).
+- **Sleep timer** (`browser-media`, `WebPlayback`): under the tabs in the
+  media card 15 / 30 / 60 min or "End of this" (the medium that played
+  last ends); the last 20 s fade the volume down, then everything that
+  plays in the browser pauses. Settings › Browser › What plays: screen off
+  afterwards (niri `power-off-monitors`).
+- **Calls** (`browser-media`): the phone ringing or in a call
+  (`phone.telephony`) pauses every medium that plays in any tab, muted or
+  not; when it is over the same ones play again, nothing else. Switch:
+  "Pause for calls". Incoming.qml still pauses MPRIS players as before.
+- **Watch** (`browser-media` + `amazfit`): the watch's play, next and
+  previous (HID keys and its music app, also a rule's shell action of that
+  id) go to the tab that played last while the browser is the player in
+  front: play/pause, +10 s, −10 s. Switch: "Watch steers the tab".
+- **Lyrics** (`browser-media` + `lyrics`): on YouTube the page names the
+  song (the player's `videoDetails`, `musicVideoType`, category Music, the
+  "Music" row under the description, "Artist - Title"; YouTube Music's
+  media session); for a music video Lyrics takes that, its length and its
+  position (sent on play, pause, seek and every 15 s, counted on between)
+  instead of the browser's media session.
+- **Codes** (`browser-codes`, `WebAssist`): codes in the phone's SMS and
+  notifications, new mail and the identities' inboxes stay in memory for
+  10 minutes. A focused code field (`autocomplete="one-time-code"`, names
+  like otp/2fa/verification/tan, six one-digit boxes, also in frames) gets
+  a card under it with the fresh ones – also when the code comes up to 5
+  minutes after the focus; a click puts it in (split boxes digit by digit).
+- **Timers** (`browser-timers`): on a recipe page (JSON-LD or microdata
+  Recipe, or `rezept`/`recipe` in the path) times in the steps ("25–30
+  Minuten", "1 hour"; a range takes the shorter) get a small button; it
+  starts a timer in the shell (toast with Cancel, listed in Reminders as
+  source `timer`, counting down in the page, again cancels). At the end a
+  reminder (`Reminders.fire("timer")`) and a notification on the Amazfit
+  watch, which vibrates (`Reminders.buzz`). Kept in memory only.
+- **Scroll brake** (`browser-brake`, needs `screentime`): after N minutes
+  (5–60, default 15) in a stretch on a listed site (a host with its
+  subdomains, or host/path: `reddit.com`, `youtube.com/shorts`,
+  `instagram.com`, `tiktok.com`, `x.com`, `facebook.com`, `9gag.com`;
+  three minutes away start a new stretch) the page shows "Reddit · 47 min
+  today" in its corner for a few seconds, again every N minutes; a toast
+  where the page cannot. Nothing is blocked
+  (`~/.local/state/pshell/browser-assist.json`).
 - **Privacy** (`browser-privacy`): the live source "Browser tab sharing"
   names the tab that uses the camera, the microphone or the screen; a click
   goes there. Screen sharing names the site that sees the screen.
@@ -80,10 +130,10 @@ focus.
 **Tabs, Environments, Navigation, Archive** (WebPage.tabs, all switches
 travel in the config's `tabs`): Recent and its window, Pinned at the foot,
 Group by site, Ctrl+Tab by use, Typing filters the rail, States on icons, Ctrl+K opens the
-launcher; the environments: colours on or off, grouping, and the list of
+launcher; the environments: colours on or off, grouping, separate logins, and the list of
 groups – Live, Stage and Dev to begin with, any of the user's own added (name,
 colour, patterns comma separated, whether Alt+E goes through it; moved up and
-down, removed); Hints and their keys, Peek and where links from the shell
+down, removed); Clean links, Hints and their keys, Peek and where links from the shell
 go (Peek or Tab), Spur and its columns; the archive offer, after how many
 hours untouched and how long archived tabs are kept.
 
@@ -96,6 +146,19 @@ rail's state live; it needs `extensions.experiments.enabled` (floorp_theme.py
 install sets it, Floorp's build allows it as signatures are not required). It
 also closes the rail when the pointer leaves the window: Firefox keeps the
 last position it saw, inside the rail when the pointer leaves across it.
+
+## Work and private
+
+Work is a qtrack timer running (`WebPage.work`: the `qtrack` plugin on and
+`QtrackTimer.tracking`; a paused timer is no timer). The config carries it as
+`work`; the extension keeps the last value, so the browser starts in the mode
+it had. Without it nothing of work shows or acts: the environments are off
+whatever is set (no colours, chips, groups, Alt+E, their containers; their
+tab groups are let go and come back with the timer), the breakpoints button
+is hidden and a breakpoints Spur ends, and the launcher offers neither
+"Other environment" nor "Breakpoints". Settings › Browser keeps showing all
+of it. Clean links, reload without cache and clearing site data are not
+work and stay.
 
 ## In the browser window
 
@@ -116,7 +179,12 @@ scope (as `resource://pshell-chrome/…`, never from the startup cache) and
 | `filter` | with the pointer over the rail and no text field focused, typing filters it (title or host, letters in order); Enter takes the best match, Escape or leaving the rail ends it |
 | `keys` | Ctrl+K → `launcher` event (while the shell is linked), Alt+E (taken before the menu bar's Edit), Alt+Shift+S → `restyle` event (before History), Alt+1…9 and Alt+0 the recent tiles (Firefox's Alt+1…8 and Alt+9 step aside while Recent is on), Ctrl+Tab by use (`browser.ctrlTab.sortByRecentlyUsed`) |
 | `peek` | a page in a card over the tab: Alt+click, `F` in the hints, `peek` from the shell (an open tab with that address is chosen instead); Esc closes, Shift+Enter keeps it as a tab next to its own, Alt+Enter as a Spur column |
-| `spur` | columns side by side in one tab: Ctrl+Alt+click, `v` in the hints, a peek's "Spur"; a plain click in a column opens right of it, cutting what was there; the last `columns` show, the older live in the crumbs; Alt+←/→ move; a middle click on a crumb closes its column (the first one's place in the tab takes the next column's address, one left ends the Spur); "Beenden" or Alt+Esc keeps the newest as the tab's page (its address loads in the tab: Firefox 159 keeps moving a page between browsers to itself) |
+| `spur` | columns side by side in one tab: Ctrl+Alt+click, `v` in the hints, a peek's "Spur"; a plain click in a column opens right of it, cutting what was there; the last `columns` show, the older live in the crumbs; Alt+←/→ move; a middle click on a crumb closes its column (the first one's place in the tab takes the next column's address, one left ends the Spur); "Beenden" or Alt+Esc keeps the newest as the tab's page (its address loads in the tab: Firefox 159 keeps moving a page between browsers to itself). Breakpoints (button, launcher, `breakpoints` from the shell; work only): the tab's page as Mobile 390, Tablet 820 and Desktop 1440 side by side (the tab's own page is Desktop), each column as wide as its breakpoint for the page and all zoomed alike to fit the window; they scroll together, a link clicked in one opens in all, an address loaded in the tab follows in the others; the crumbs name them, a click focuses one; again, "Beenden" or Alt+Esc ends it |
+| `sitedata` | a third button beside reload and reload without cache: clears the cookies, storage and caches of the site in front (its registrable domain, in the tab's container only) and reloads, every Spur column of the tab with it; `clearSite` from the shell |
+| `clean` | tracking parameters (`utm_*`, `fbclid`, `gclid`, `mc_eid`, … – `TRACKING` in the file) off a copied link: the address bar's copy, cut and primary selection, the page menu's "Copy Link"; the background loads the same file for the links of Pshell menu clicks; `tabs.cleanLinks` |
+| `containers` | while working, each environment its own container (`envs.containers`), so Live, Stage and Dev keep their own logins: Firefox's internal (not public) containers `pshell-env:<id>` – no menu, no container settings, not in the extension API (a tab reports `container: null`), never cleared or removed; a GET of a page of a group in a tab of another container is cancelled before it leaves (`http-on-modify-request`) and opens in the group's container: in place of a new tab, one not loaded yet or one showing that page, else beside it; private windows, Peek and Spur columns (they take their tab's container) are left alone |
+| `breakpoints` | the breakpoints button (while working, checked on such a tab) and the scrolling: a page script asleep unless its page state says breakpoint column, reporting how far down it is as a share of the page; the other columns follow |
+| `synced` | `syncedTabs`: the tabs of other devices from Firefox Sync (nothing while Sync is not signed in) |
 | `frame` | the script in every page (a frame script, loaded for all browsers of the window): hints (`f` open, `F` peek, `v` Spur; labels from `hints.chars`, the links followed most on a host get the single letters, pref `pshell.tabs.hintFrequency`), the link clicks above, the rail's letters, drafts (text typed into a form and not sent; closing such a page asks first) |
 
 ## The protocol (browser.sock)
@@ -130,8 +198,9 @@ From the extension (`background/bridge.js`):
 | `{ type: "tabs", windows, tabs }` | everything open |
 | `{ type: "tab", tab }`, `{ type: "tabGone", id }` | one tab |
 | `{ type: "menu", action, info }` | a Pshell menu entry was clicked |
-| `{ type: "event", name, … }` | `mailto {url}`, `calendar {url, page}`, `identityUsed {id, host}`, `blockedVisit {host}`, `unblock {host}`, `newtabOpen {what, id}`, `launcher {}` (Ctrl+K: the launcher on `>tab`), `stale {tabs: [{id, title, url, host, lastAccessed}]}` (tabs untouched for `tabs.archive.after` hours, at most every 10 minutes) |
-| `{ type: "ask", rid, what, args }` | `newtab`, `identities {host}` → answered with `{ type: "answer", rid, ok, data }` |
+| `{ type: "event", name, tabId, … }` | from `background/attention.js`: `played`, `track {title, artist, music, duration, position, playing}`, `sleepDone`, `codeField {frameId, host}`, `codeUsed`, `timer {id, label, seconds, page, title}`, `timerCancel {id}` |
+| `{ type: "event", name, … }` | `mailto {url}`, `calendar {url, page}`, `identityUsed {id, host}`, `blockedVisit {host}`, `unblock {host}`, `newtabOpen {what, id}`, `launcher {}` (Ctrl+K: the launcher on `>tab`), `stale {tabs: [{id, title, url, host, lastAccessed}]}` (tabs untouched for `tabs.archive.after` hours, at most every 10 minutes), `reading {key, url, title, progress, anchor, mode, at}`, `copied {text, url, title, fragment, mode}` |
+| `{ type: "ask", rid, what, args }` | `newtab`, `identities {host}`, `memory:page {url, key}`, `game {store, key, title}` (a store page: `{ owned, name, wish, free, core }`), `gameWish {store, key, title, url}`, `gameUnwish {id}` → answered with `{ type: "answer", rid, ok, data }` |
 | `{ type: "answer", rid, ok, data \| error }` | to a command |
 
 A tab: `{ id, windowId, index, title, url, host, favicon, active, audible,
@@ -145,19 +214,21 @@ From the shell (`core/services/WebLink.qml`):
 | Message | |
 | --- | --- |
 | `{ type: "sync" }` | from the host each time it reaches the shell; the extension answers with `ready` and `tabs` |
-| `{ type: "config", config }` | `{ menu: [entry], intercept: { mailto, calendar }, forms, newtab, blocked: [{ host, until }], rail: { style, width }, tabs, measures: { radius, radiusSmall, radiusMedium, radiusLarge, gap } }` (`tabs`: see below; `measures` for page styles) |
+| `{ type: "config", config }` | `{ menu: [entry], intercept: { mailto, calendar }, forms, parcels, newtab, blocked: [{ host, until }], rail: { style, width }, tabs, work, memory: { index, reading, highlights, clips, work }, measures: { radius, radiusSmall, radiusMedium, radiusLarge, gap } }` (`tabs`: see below; `work`: a qtrack timer runs; `measures` for page styles) |
 | `{ type: "theme", theme }` | for `browser.theme.update` |
 | `{ type: "newtab", data }` | what the new tab page shows |
-| `{ type: "cmd", rid, cmd, … }` | `activate {tabId}`, `close {tabId}`, `mute {tabId, muted}`, `open {url, window}`, `search {query, limit}`, `capture {tabId, full}`, `text {tabId}`, `pauseMedia`, `resumeMedia {tabs}`, `media {tabId}`, `fill {tabId, identity}`, `archive {tabIds}` → `[{ title, url, host, favicon, closedAt }]` (the tabs are closed), `peek {url, source}`, `hints {mode: open\|peek\|spur\|bg}`, `spur {tabId}`, `pdf {tabId}`, `pin {tabId, slot 1–6}`, `env {tabId}` |
+| `{ type: "cmd", rid, cmd, … }` | `finds {tabId, link?, linkText?}` → `{ places: [{ name, kind, address: { street, postcode, city, country, text }, lat, lon, phone, website, from }], events: [{ title, start, end, allDay, where, place, url, description }], selection, title, url, link: place \| null }`, `syncedTabs` → `[{ device, deviceType, title, url, lastUsed }]`, `activate {tabId}`, `close {tabId}`, `mute {tabId, muted}`, `open {url, window}`, `search {query, limit}`, `capture {tabId, full}`, `text {tabId}`, `pauseMedia`, `resumeMedia {tabs}`, `media {tabId}`, `fill {tabId, identity}`, `archive {tabIds}` → `[{ title, url, host, favicon, closedAt }]` (the tabs are closed), `peek {url, source}`, `hints {mode: open\|peek\|spur\|bg}`, `spur {tabId}`, `pdf {tabId}`, `pin {tabId, slot 1–6}`, `env {tabId}`, `breakpoints {tabId}` (again ends it), `clearSite {tabId}`, `memoryToday` → today's visits, `memoryForget`, `memoryPage {url}` (a test's look at what is kept) |
+| `{ type: "cmd", rid, cmd, … }` | `background/attention.js`: `attention {codes, timers}` (what pages offer), `hold {tag, fade ms}` → `{ tabs }` (every playing medium fades and pauses, marked with the tag), `release {tag, tabs?}`, `sleepAfter {tabId, fade, off}` → `{ duration, position }`, `mediaKey {tabId, op: toggle\|seek, by}`, `codes {tabId, frameId, codes: [{code, from, ago}]}`, `brake {tabId, text}`, `timerGone {tabId, id}` |
+| `{ type: "cmd", rid, cmd, … }` | `background/watches.js`: `watchPick {tabId, mode: element\|price}` (`content/watch.js`: hover, ↑ the parent, Enter or the button sends, Esc ends), `product {tabId}` → `{url, title, price, currency, image}` (schema.org, microdata, metas), `parcels {tabId}` → `{numbers}` (`background/watches.js`) |
 
 `tabs` (WebPage.tabs, `~/.local/state/pshell/browser-tabs.json`, every key
 always present):
 
 ```
 { recent: { on, minutes 5–15, count 3–9 }, dock, bySite, ctrlTab, states, filter,
-  envs: { on, group, list: [{ id, name, color 1–6, patterns: [pattern], cycle }] (up to 12) },
+  envs: { on, group, containers, list: [{ id, name, color 1–6, patterns: [pattern], cycle }] (up to 12) },
   hints: { on, chars }, peek: { on, external: "peek" | "tab" }, spur: { on, columns 2–4 },
-  archive: { on, after (hours 6–168), keep (days 1–365) }, launcherKey, urlbarLauncher }
+  archive: { on, after (hours 6–168), keep (days 1–365) }, launcherKey, urlbarLauncher, cleanLinks }
 ```
 
 A pattern is a host, `*` standing for any part (`staging.*`, `*.ddev.site`,
@@ -176,7 +247,8 @@ under its plain host. A settings file from before the list (`colors`, `live`,
 A menu entry: `{ id, title, contexts: ["selection" | "link" | "image" |
 "video" | "audio" | "page" | "tab"], group }`; entries of one group sit
 between separators. `info` of a click: `{ kind, text, link, linkText, src,
-page, title, tabId, private, source }`.
+page, title, tabId, private, source }`; `link` and `page` come without
+tracking parameters while Clean links is on.
 An entry may carry `targets` (URL patterns the link or media must match,
 menus' targetUrlPatterns, `magnet:*` included) and `documents` (of the page,
 documentUrlPatterns). A `blob:` picture or video is read in its page and
@@ -201,17 +273,57 @@ country, gender } }`. Nothing is filled before the user picks one.
 | Set as wallpaper | a picture | worn like an online wallpaper (`wallpaper_search.py wear`, source `web`), forgotten once another is worn |
 | Colours from picture | a picture | its palette on the wallpaper worn (`apply_theme_selection.sh --colours-from`); the picture and its palette are forgotten right after |
 | Follow channel | a YouTube or Twitch link or page | Streams' sources with the channel filled in |
+| Send to … › a person | a selection, link, picture, page or tab | a toast shows what would go; WhatsApp: "Send" or "Edit" (a draft in the chat); mail: a draft in Messages |
+| Save to Places, Route on phone | a page or tab with a place, a link to a map, an address selected | the place looked up on the map and kept in Places' "want" list; a route to it opens on the phone |
+| Add to calendar | a page or tab with an event, a date selected | the event in the calendar's editor (Baikal) to look at and save; with only the Microsoft calendar a toast with "Add to calendar" |
+| Open pictures in viewer | a picture, page or tab | every picture of the page (`pictures`), walked over the whole screen in the viewer from the one clicked; see docs/viewer.md |
+| Save to NAS; Save pictures to NAS; Save to NAS in… | a picture, video or link to one; a page or tab | straight into a NAS folder, see docs/nas.md "From the browser" |
+| Watch part of page | a page | the picker; pshell-core checks the part and tells a change (Watches panel) |
+| Add to wish list | a page, tab or link | the product with its price (schema.org, else the picker for the price) |
+| Track parcel | a selection or page | the tracking numbers in it, as parcels |
+| Remind tonight, tomorrow, at the weekend | a page, tab or link | a reminder with the page (19:00, 9:00, Saturday 10:00); "Close tab" in its toast |
 
 An entry is there only while its plugin is on; other PCs appear while they
-are connected.
+are connected. An entry with `parent` sits in the submenu of that entry; one
+with `needs: "place" | "event"` shows only where the page has one
+(`background/finds.js`, see below).
+
+**Send to …** (`SendTo`): the six people written to most – the picks of
+this menu first (`~/.local/state/pshell/browser-send.json`, key →
+`{ count, last }`, the 40 used last, nothing of a private window), then
+pinned WhatsApp chats and the ones written to lately, then mail people with
+three or more conversations. Nothing is sent before "Send".
+
+**Places and events from pages** (`WebFinds`): `background/finds.js` reads
+the page when its menu opens (cached per tab and address): JSON-LD and
+microdata of schema.org – a Place, LocalBusiness, Organization… with an
+address or a position, a PostalAddress, an Event (and its location as a
+place) – and, only when the page says nothing itself, its links to Google
+Maps, OpenStreetMap, Apple Maps, Bing Maps and `geo:`. A selection counts as
+an address with a postcode or a street word and number, as a date with a
+day, a month or a time. After a click the shell asks again (`finds`).
+Saving looks the place up with `places.py suggest`: by its name near its
+own point (or with its city), 60 % of the name's words (the city's left
+out) within 1.5 km; else by its address, kept there under the page's name.
+Not found: a toast with "Search" (`>wp`). Several on a page: a toast with
+the first three to pick from. An event without an end lasts two hours; a
+date alone is a whole day. Nothing of a private window (the entries do not
+show there).
+
+Store pages (Steam, GOG, Epic, IsThereAnyDeal) get a small pill from
+`content/games.js` (closed shadow root, bottom right): Owned, the sale of a
+wished game, Wish / Wished (while pshell-core is reached). See docs/games.md
+"Deals".
 
 ## The pages
 
 `WebPage` answers what the extension's pages need. The new tab page
 (`browser-newtab`) shows the wallpaper worn (a 1280 px JPEG made from the
 theme's frame, kept in memory only), the time, today's weather, the open
-tasks with the highest priority, today's remaining events and two pinned
-notes; a click opens that thing in the shell. Identities (`browser-forms`) go
+tasks with the highest priority, today's remaining events (work events only
+in a working context, see Meetings), the page last open on the phone (From
+phone) and two pinned notes; a click opens that thing in the shell, the
+phone's page in the tab itself. Identities (`browser-forms`) go
 to a page only after one is picked in its form. `browser-mail` hands mailto:
 links to Mail as a draft (from a private window only the address, nothing is
 saved) and fetches calendar links: their events are offered in a toast and
@@ -366,12 +478,57 @@ an editor still holds it is not saved back.
 Every edit is live and kept right away. Styles stay in the browser's storage
 (Export for a copy).
 
+## Page memory
+
+`background/memory.js` and `content/memory.js`, each part only while its
+plugin is on (`config.memory`, kept in storage `memory` for a start without
+the shell); nothing of a private window, nothing of a page with a password
+field, a card or IBAN field, a form page with little text, or an address
+that reads like a bank, sign-in, account or checkout.
+
+- **Index** (`browser-memory`): a page ten seconds in front is kept with its
+  text (article/main/body, at most 40 000 characters) in the extension's
+  IndexedDB `pshell-memory` (`pages`: key, url, title, text, terms, visits,
+  modes; `days`: per day and page the seconds in front, played, how far
+  read). 4000 pages, 120 days, days 14 days. `search` answers `pages:
+  [{title, url, host, last, snippet}]` (every word typed, the last as a
+  beginning); `>tab` lists them under "In pages" with the snippet, an open
+  tab is taken to. Settings › Browser › Page memory forgets everything.
+- **Reading** (`browser-reading`): on a long page (5000 characters, 2.5
+  screens) where it was left (progress, the first words of the paragraph at
+  the top) goes to storage `reading` and, through `WebMemory`, to
+  pshell-core (`/api/browse/reading`, at most every 10 s a page, kept while
+  core is away). Opening the page near its top, a bar offers "Continue" at
+  the place (`42% · <device>` when another device was further); nothing
+  scrolls without the click.
+- **Highlights** (`browser-highlights`): "Keep as note" on a selection also
+  keeps the text (`WebMemory.highlight`, pshell-core
+  `/api/browse/highlights`); the page marks it with a CSS highlight
+  (`::highlight(pshell-kept)`, the shell's primary colour), the DOM stays.
+  Deleting the note takes it away. The note itself reaches the phone as
+  every note does.
+- **Copied text** (`browser-clipsource`): a copy (not in fields) sends
+  `copied`; the clipboard history shows the page under the entry (matched
+  by the history's preview), a click opens it at the text fragment
+  (`#:~:text=start,end`).
+- **Day review** (`browser-review`): from 17:00 the Today panel shows
+  "Read today": articles (90 s in front, or half read) and videos (2 min
+  played) of the day, with Shelf (a link on the shelf) and Later (a
+  reminder tomorrow at 18:00 whose note is the address; the reminder's
+  toast offers Open).
+
+Mode: every page, visit, place, highlight and copy is marked `work` while a
+qtrack timer runs, else `private`; without a timer nothing only seen at
+work is found, offered, marked or reviewed. `WebMemory` keeps
+`~/.local/state/pshell/browser-memory.json` (`{ highlights, clips,
+reviewed: { day, keys } }`).
+
 ## Tabs and workspaces in the shell
 
 The launcher's `>tab` lists open tabs, bookmarks and history (Ctrl+W closes,
 Ctrl+M mutes); `>ws` lists Floorp's workspaces. While typing it also offers
 commands for the tab in front (Spur, Hints, Close tab, Mute, Save as PDF,
-Pin to N, Other environment) and archived tabs (opening one takes it out of
+Pin to N, Clear site data; while working Other environment, Breakpoints) and archived tabs (opening one takes it out of
 the archive). With a query, hosts usually opened from the launcher around
 this hour come first: each pick is counted per host and hour in
 `~/.local/state/pshell/browser-habits.json` (at most 300 hosts). An open tab
@@ -385,6 +542,28 @@ a day the shell offers them in a toast, and only "Archive" closes them
 url, host, favicon, closedAt }] }`, newest first, dropped after `keep`
 days); Settings › Browser › Archive shows the count. Nothing of a private
 window is offered or kept.
+
+**Continue from the phone** (`PhoneTab`): the page last open on the phone
+comes first in `>tab` and as "From phone" on the new tab page. Two sources,
+the newer wins: the app's *Continue on PC* share (topic `phone.handoff`,
+`{ page: { url, title, at } }`, docs/mobile.md) and, when the browser is
+signed in to Firefox Sync, the newest tab of a phone or tablet (`synced`
+part, `syncedTabs`, asked every two minutes and when `>tab` opens). Offered
+for 12 hours, not while open in a tab, not again once opened
+(`~/.local/state/pshell/phone-tab.json`, the last 20 taken).
+
+**Meetings** (`Meetings`): a minute before an event with a Teams, Meet,
+Zoom, Jitsi (meet.jit.si, 8x8.vc, `jitsi.*`), Webex or Whereby link – its
+`joinUrl`, else the first in its place or text – a toast with "Join" (also
+up to five minutes late); "Join" opens the link in the browser (WebLink, else
+`Browser.open`), also in the reminders and the event's details. It goes
+through `Reminders.fire` with the calendar's source. Work stays out of
+private time: an event of the Microsoft calendar is work and shows only in a
+working context – a qtrack timer runs or is paused, or time was tracked today
+(a meeting before the day's first timer stays quiet). This holds for
+MsCalendar's reminders, its "Switch timer" offer and the new tab page too.
+Baikal's events and birthdays always show; without the `qtrack` plugin
+everything does.
 
 **Radial menu**: the ring "Tabs" holds the pinned tabs of the browser window
 in front (at most six, in their order, so each keeps its direction); one
@@ -462,9 +641,20 @@ niri), `close`, `mute`, `open(url)`, `search(query, limit, callback)`,
 and runs them; `WebPage` has the switches the pages read, the new tab page's
 data, and answers what the extension asks; also `tabs` / `setTabs(patch)`
 (one level deep), `archive` / `reopenArchived(entry)`, `noteHabit(url)` /
-`habit(url)` and `openLink(url, source)`.
+`habit(url)` and `openLink(url, source)`. `WebMemory` has the page memory's switches
+(`browserConfig`), answers `memory:` asks, keeps highlights and copy sources
+(`sourceOf(entry)`, `openSource`) and the day review (`review`, `shelve`, `later`).
 
 ## What it cannot do
+
+The watch: the Amazfit firmware gives only its media keys and music app
+buttons (play/pause, next, previous, volume) and, from the PC,
+notifications, *find* (vibrates until stopped) and the music app's
+display; a "start timer" button or the timer app of the watch cannot be
+reached (no endpoint known), and the shell's own watch app (docs/watch.md)
+is only the mouse. So a recipe timer runs on the PC and ends as a
+notification there. Firefox reports a tab as playing only while its sound
+is audible; the media commands therefore look into every tab.
 
 Floorp loads CSS into its window, but no scripts; what the window needs
 beyond CSS goes through `experiments/chrome.js` (above). Window actors cannot

@@ -525,8 +525,11 @@ Singleton {
 		root.lastBattery = root.battery;
 		const low = root.option("lowBattery", 15);
 		if (root.battery === null || was === null || low <= 0) return;
-		if (root.battery <= low && was > low)
-			Notifs.post({ app: root.name, summary: `${root.name}: battery ${root.battery} %`, body: "About " + Math.max(1, Math.round(root.battery / 100 * 10)) + " days left with the usual use.", icon: "watch" });
+		if (root.battery <= low && was > low) {
+			const summary = `${root.name}: battery ${root.battery} %`;
+			const body = "About " + Math.max(1, Math.round(root.battery / 100 * 10)) + " days left with the usual use.";
+			Reminders.fire("watch", { key: "battery", title: summary, body: body, icon: "watch", post: () => Notifs.post({ app: root.name, summary: summary, body: body, icon: "watch" }) });
+		}
 	}
 
 	// ── the daemon ────────────────────────────────────────────────────────
@@ -634,7 +637,8 @@ Singleton {
 			root.fired(data.rule ?? "", data.control ?? "", data.trigger ?? "");
 			break;
 		case "action":
-			Mouse.runShell(data.id, data.value);
+			// play, next and previous steer the browser's tab when it plays (WebPlayback)
+			if (!WebPlayback.steer(String(data.id ?? ""))) Mouse.runShell(data.id, data.value);
 			break;
 		case "amazfit":
 			root.ownOp(data.op ?? "");

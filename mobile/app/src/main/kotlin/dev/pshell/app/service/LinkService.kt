@@ -48,6 +48,7 @@ class LinkService : Service() {
 		}
 		media = MediaControls(this, app, scope).also { it.start() }
 		status = PhoneStatus(this, app).also { it.start() }
+		dev.pshell.app.reminders.Reminders.listen(true)
 		// the watch, kept connected here when the phone stands in for Gadgetbridge
 		scope.launch {
 			app.prefs.watchKeep.flow.collect { on ->
@@ -71,6 +72,7 @@ class LinkService : Service() {
 	override fun onDestroy() {
 		media.stop()
 		status.stop()
+		dev.pshell.app.reminders.Reminders.listen(false)
 		scope.cancel()
 		super.onDestroy()
 	}

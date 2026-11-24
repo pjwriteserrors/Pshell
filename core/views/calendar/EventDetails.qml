@@ -338,11 +338,11 @@ Item {
 				spacing: 8
 
 				TextButton {
-					visible: (card.event.joinUrl ?? "") !== ""
+					visible: Meetings.linkOf(card.event) !== ""
 					text: "Join"
 					icon: "video"
 					variant: "filled"
-					onActivated: MsCalendar.open(card.event.joinUrl)
+					onActivated: Meetings.join(card.event)
 				}
 
 				TextButton {

@@ -13,7 +13,8 @@ import qs.core.views.asteroids
 // Hangs from the clock: notification center on the left, date, calendar,
 // the day's Microsoft events and weather on the right. A picked event opens
 // a panel that grows out of this one's bottom edge. The weather card turns
-// into the asteroid radar and back.
+// into the asteroid radar and back. In the evening the day's reading
+// (DayReview).
 Drawer {
 	id: root
 
@@ -30,6 +31,7 @@ Drawer {
 	}
 
 	onPanelOpened: {
+		if (WebMemory.reviewOn && WebMemory.evening) WebMemory.refreshToday();
 		// opened from a reminder: show that event's day
 		const event = MsCalendar.selected;
 		calendar.reset();
@@ -213,6 +215,10 @@ Drawer {
 				Layout.fillWidth: true
 				visible: Plugins.on("microsoft-calendar") || NasCalendar.active
 				day: calendar.selected
+			}
+
+			DayReview {
+				Layout.fillWidth: true
 			}
 
 			Rectangle {

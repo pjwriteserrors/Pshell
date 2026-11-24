@@ -314,6 +314,7 @@ Singleton {
 	//   actions  – [{ label, icon, run: function }], clicking one closes the toast
 	//   duration – ms
 	//   sound    – a moment of Sounds to play (an error plays one anyway)
+	//   sticky   – stays until it is closed or removed (removeToast)
 	// Internal toasts are feedback for something the user just did, so they
 	// show during do-not-disturb as well.
 	function pushInternal(status, title, detail, options) {
@@ -340,7 +341,7 @@ Singleton {
 			source: String(extra.app || source),
 			reply: extra.reply && typeof extra.reply.send === "function" ? extra.reply : null,
 			actions: Array.isArray(extra.actions) ? extra.actions : [],
-			duration: Number(extra.duration) > 0 ? Number(extra.duration) : (String(status) === "running" ? 8000 : 5000)
+			duration: extra.sticky === true ? 2147483647 : (Number(extra.duration) > 0 ? Number(extra.duration) : (String(status) === "running" ? 8000 : 5000))
 		});
 		return root.nextToastId;
 	}

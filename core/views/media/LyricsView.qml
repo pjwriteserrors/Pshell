@@ -15,11 +15,11 @@ Rectangle {
 
 	readonly property bool found: Lyrics.state === "found"
 	// how far an untimed text has drifted
-	readonly property bool drifting: root.found && !Lyrics.synced && Media.hasProgress
-	property real drift: root.drifting ? Media.position / Media.length : 0
+	readonly property bool drifting: root.found && !Lyrics.synced && Lyrics.length > 0
+	property real drift: root.drifting ? Lyrics.position / Lyrics.length : 0
 
 	Behavior on drift {
-		enabled: root.drifting && Media.playing
+		enabled: root.drifting && Lyrics.playing
 		NumberAnimation {
 			duration: 1000
 		}

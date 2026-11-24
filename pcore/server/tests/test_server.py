@@ -398,6 +398,17 @@ async def events(core, lu):
             message = await until("health")
             assert message["sample"]["mem_available"] == 4000
             await fresh.close()
+    # a phone (no core caps) listens, but hears only what is addressed to its member
+    status, data = await lu.post("/api/devices", {"name": "listener", "kind": "phone", "scopes": {"nas": ["files"]}})
+    async with aiohttp.ClientSession() as session:
+        async with session.ws_connect(f"{core.base.replace('http', 'ws')}/api/events?token={data['token']}") as ws:
+            hello = await ws.receive_json(timeout=5)
+            assert hello["type"] == "hello" and "services" not in hello and "health" not in hello
+            await lu.post("/api/devices", {"name": "unheard", "kind": "other", "scopes": {}})
+            core.app["hub"].emit("mine", to={"lu"})
+            core.app["hub"].emit("theirs", to={"anna"})
+            message = await ws.receive_json(timeout=5)
+            assert message["type"] == "mine", message
     # without read: no socket
     async with aiohttp.ClientSession() as session:
         async with session.get(f"{core.base}/api/events") as response:

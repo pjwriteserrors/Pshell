@@ -195,7 +195,8 @@ Singleton {
 		if (!root.signedIn) return;
 		const today = root.byDay[root.dayKey(new Date(root.now))] ?? [];
 		for (const event of today) {
-			if (event.allDay || !root.active(event)) continue;
+			// work stays out of private time (Meetings.shows)
+			if (event.allDay || !root.active(event) || !Meetings.shows(event)) continue;
 			const key = `${event.id}@${event.start}`;
 			const lead = Date.parse(event.start) - root.now;
 			if (lead > 0 && lead <= 5 * 60 * 1000 && !root.reminded[key]) {
@@ -214,17 +215,19 @@ Singleton {
 		else root.meetingEnded();
 	}
 
-	function remind(event, lead) {
+	// source: "ms-calendar", or "calendar" for Baikal's (NasCalendar)
+	function remind(event, lead, source) {
 		const minutes = Math.max(1, Math.round(lead / 60000));
 		const actions = [];
-		if (event.joinUrl) actions.push({ label: "Join", icon: "video", run: () => root.open(event.joinUrl) });
+		if (Meetings.linkOf(event) !== "") actions.push({ label: "Join", icon: "video", run: () => Meetings.join(event) });
 		actions.push({ label: "Details", icon: "calendar_clock", run: () => root.show(event) });
 		const place = event.location || (event.online ? "Online" : "");
-		Notifs.pushInternal("running", event.subject, `in ${minutes} min · ${Qt.formatTime(new Date(event.start), "HH:mm")}${place ? " · " + place : ""}`, {
+		const detail = `in ${minutes} min · ${Qt.formatTime(new Date(event.start), "HH:mm")}${place ? " · " + place : ""}`;
+		Reminders.fire(source || "ms-calendar", { key: `${event.id}@${event.start}`, title: event.subject, body: detail, icon: "calendar_clock", actions: actions, post: () => Notifs.pushInternal("running", event.subject, detail, {
 			icon: "calendar_clock",
 			actions: actions,
 			duration: Math.max(20000, lead)
-		});
+		}) });
 	}
 
 	function show(event) {
@@ -233,7 +236,7 @@ Singleton {
 	}
 
 	function meetingStarted(event, fromAnother) {
-		if (!Plugins.on("qtrack")) return;
+		if (!Plugins.on("qtrack") || !Meetings.shows(event)) return;
 		if (!fromAnother) root.trackedBefore = QtrackTimer.tracking && !QtrackTimer.paused ? { project: QtrackTimer.project, description: QtrackTimer.description } : null;
 		if (QtrackTimer.tracking && !QtrackTimer.paused && QtrackTimer.description === event.subject) return;
 		Notifs.pushInternal("running", event.subject, QtrackTimer.tracking && !QtrackTimer.paused ? `Timer: ${QtrackTimer.description || QtrackTimer.project}` : "No timer running", {

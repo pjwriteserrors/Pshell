@@ -513,7 +513,7 @@ export function prompt({ title, label, value = "", placeholder = "", confirmLabe
 	});
 }
 
-// fields: [{ key, label, type: choice|text|number|bool|password|textarea|info, choices, default, hint, min, max, placeholder, shown(values) }]
+// fields: [{ key, label, type: choice|text|number|date|bool|password|textarea|info, choices, default, hint, min, max, placeholder, shown(values) }]
 export function buildForm(fields, values = {}) {
 	const state = {};
 	const rows = [];
@@ -567,7 +567,7 @@ export function buildForm(fields, values = {}) {
 			break;
 		default: {
 			const input = h("input", {
-				type: field.type === "number" ? "number" : field.type === "password" ? "password" : "text",
+				type: field.type === "number" ? "number" : field.type === "password" ? "password" : field.type === "date" ? "date" : "text",
 				placeholder: field.placeholder || "",
 				min: field.min,
 				max: field.max,

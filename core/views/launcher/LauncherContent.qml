@@ -113,6 +113,7 @@ Item {
 		{ id: "watch", plugin: "watch", group: "panels", command: "watch", name: "Watch", aliases: ["uhr", "sleep", "schlaf", "amazfit", "health"], keywords: "sleep night heart steps stress blood oxygen amazfit wrist", status: Watch.lastNight ? Watch.span(Watch.lastNight.total) : "" },
 		{ id: "vpn", plugin: Phone.plugin, group: "panels", command: "vpn", name: "VPN", aliases: ["wireguard", "wg", "unterwegs", "away"], keywords: "phone laptop server connections links tunnel remote" },
 		{ id: "cal", plugin: "nas-calendar", command: "cal", name: "Calendar", aliases: ["kalender", "termin", "event"], keywords: "baikal appointment add new date tomorrow morgen" },
+		{ id: "remind", plugin: "reminders", command: "remind", name: "Reminders", aliases: ["erinnerung", "erinnern", "reminder"], keywords: "remind alarm wecker later" },
 		{ id: "nas", plugin: "nas", command: "nas", name: "NAS", aliases: ["netcore"], keywords: "search files network storage backup sync share", status: Nas.summary },
 		{ id: "server", plugin: "netcore", command: "server", name: "Server", aliases: ["core", "pi", "services"], keywords: "netcore pshell-core services containers health memory guard devices logins portal", status: Netcore.active ? Netcore.summary : "" },
 		{ id: "printer", plugin: "printer", group: "panels", command: "printer", name: "3D Printer", aliases: ["print", "kobra", "ace"], keywords: "gcode filament orca slicer", status: Printer.printing ? `${Math.round(Printer.progress * 100)} %` : "" },
@@ -354,8 +355,9 @@ Item {
 	readonly property bool inNasMode: Plugins.on("nas") && (root.commandQuery === "nas" || root.commandQuery.startsWith("nas "))
 	readonly property bool inCalMode: NasCalendar.enabled && (root.commandQuery === "cal" || root.commandQuery.startsWith("cal "))
 	readonly property bool inServerMode: Netcore.enabled && (root.commandQuery === "server" || root.commandQuery.startsWith("server "))
+	readonly property bool inRemindMode: Reminders.enabled && (root.commandQuery === "remind" || root.commandQuery.startsWith("remind "))
 	readonly property bool inEditMode: Plugins.on("editor") && (root.commandQuery === "edit" || root.commandQuery.startsWith("edit "))
-	readonly property bool inViewMode: root.inEditMode || root.inTranslateMode || root.inDictionaryMode || root.inConvertMode || root.inTodoMode || root.inWebMode || root.inPlacesMode || root.inTabsMode || root.inBrowserWsMode || root.inAiActionsMode || root.inPhoneMode || root.inShotsMode || root.inPicturesMode || root.inMusicMode || root.inRhymeMode || root.inLyricsMode || root.inVideoMode || root.inPdfMode || root.inNasMode || root.inCalMode || root.inServerMode || root.inFinderMode
+	readonly property bool inViewMode: root.inEditMode || root.inTranslateMode || root.inDictionaryMode || root.inConvertMode || root.inTodoMode || root.inWebMode || root.inPlacesMode || root.inTabsMode || root.inBrowserWsMode || root.inAiActionsMode || root.inPhoneMode || root.inShotsMode || root.inPicturesMode || root.inMusicMode || root.inRhymeMode || root.inLyricsMode || root.inVideoMode || root.inPdfMode || root.inNasMode || root.inCalMode || root.inServerMode || root.inRemindMode || root.inFinderMode
 	// what follows the command token, as typed (">t fr hello" → "fr hello")
 	readonly property string modeArgument: {
 		const match = /^>\S+\s([\s\S]*)$/.exec(root.searchText);
@@ -1171,6 +1173,9 @@ Item {
 		case "server":
 			root.setLauncherSearch(">server ");
 			break;
+		case "remind":
+			root.setLauncherSearch(">remind ");
+			break;
 		case "unpin":
 			Screenshot.unpinAll();
 			root.closeRequested();
@@ -1586,6 +1591,7 @@ Item {
 		if (root.inNasMode) return "nas";
 		if (root.inCalMode) return "cal";
 		if (root.inServerMode) return "server";
+		if (root.inRemindMode) return "remind";
 		if (root.inFinderMode) return "finder";
 		if (root.inChatMode) return "chat";
 		if (root.inAiMode) return "chats";
@@ -1621,6 +1627,7 @@ Item {
 		case "nas": return "server_network";
 		case "cal": return "calendar_plus";
 		case "server": return "server";
+		case "remind": return "bell_plus_outline";
 		case "finder": return "folder_search_outline";
 		case "chat": return "chat";
 		case "chats": return "forum";
@@ -1683,6 +1690,7 @@ Item {
 		case "nas": return "server_network";
 		case "cal": return "calendar_plus";
 		case "server": return "server";
+		case "remind": return "bell_plus_outline";
 		case "unpin": return "pin_off_outline";
 		case "song": return "waveform";
 		case "lyrics": return "microphone_variant";
@@ -1740,6 +1748,7 @@ Item {
 		case "nas": return nasView.item;
 		case "cal": return calView.item;
 		case "server": return serverView.item;
+		case "remind": return remindView.item;
 		case "finder": return finderView.item;
 		case "apps": return appsView;
 		default: return null;
@@ -1767,6 +1776,7 @@ Item {
 		case "nas": return "Search the NAS";
 		case "cal": return "morgen 15 Uhr Zahnarzt @Praxis";
 		case "server": return "A service of netcore";
+		case "remind": return "morgen 9 Arzt";
 		case "apps": return "Search apps  ·  > for commands";
 		default: return "";
 		}
@@ -1796,6 +1806,7 @@ Item {
 		case "nas": return "NAS";
 		case "cal": return "Calendar";
 		case "server": return "Server";
+		case "remind": return "Reminders";
 		case "finder": return "Files";
 		default: return "";
 		}
@@ -1825,6 +1836,7 @@ Item {
 		case "nas": return "open";
 		case "cal": return calView.item?.argument?.trim() ? "add" : "show";
 		case "server": return "open";
+		case "remind": return remindView.item?.enterHint ?? "add";
 		case "apps": return appsView.zone === "actions" ? "run" : (appsView.current === null && appsView.searching && Plugins.on("web-search") ? "search the web" : "open");
 		default: return "open";
 		}
@@ -3062,6 +3074,31 @@ Item {
 
 					Connections {
 						target: serverView.item
+						ignoreUnknownSignals: true
+
+						function onCloseRequested() {
+							root.closeRequested();
+						}
+					}
+				}
+			}
+
+			// reminders (Reminders, pshell-core)
+			ModeLayer {
+				current: root.mode === "remind"
+
+				ModeView {
+					id: remindView
+
+					file: "RemindModeView.qml"
+					current: root.mode === "remind"
+					values: ({
+						active: root.mode === "remind",
+						argument: root.modeArgument
+					})
+
+					Connections {
+						target: remindView.item
 						ignoreUnknownSignals: true
 
 						function onCloseRequested() {

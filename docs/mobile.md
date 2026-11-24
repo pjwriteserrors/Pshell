@@ -99,8 +99,15 @@ over the paired TLS link; the VPN only carries it.
   only 10.8.0.0/24 – no DNS, no home LAN, no internet – so a laptop keeps
   the network it is in. `vpn-join --remove` takes it out. At home the
   Pi-hole answers the server's name with its LAN address and WireGuard keeps
-  the address it resolved, so the daemon brings `pshell-vpn` up again
-  whenever the default route changes (`features/vpn.py`).
+  the address it resolved, so the daemon (`features/vpn.py`, `keep`) brings
+  `pshell-vpn` up again when the default route changes, when the tunnel is
+  down, and when the server (10.8.0.1) misses two pings in a row (checked
+  every 30 s) – a foreign network with the home net's addresses looks like
+  no change at all. A try that does not get through (right after login or
+  wake DNS is often not there yet) is repeated after 15 s, doubling up to
+  5 min. `connection.autoconnect no` leaves the tunnel down; NetworkManager
+  itself retries without end (`autoconnect-retries 0`, set by `vpn-join`).
+  `scripts/phone/test_vpn.py` plays these cases through.
 - **The phone** needs the WireGuard app with a config that has 10.8.0.0/24
   in `AllowedIPs` (the server hands it out since 2026-11-15; an older one is
   edited by hand).
@@ -299,7 +306,10 @@ reconnect by themselves or by hand). A YouTube
 link opens as `https://youtu.be/<id>?t=<s>` in the app chosen on the phone
 (a patched one, say). Android lets an app in the background open something
 only with "display over other apps"; without it the link waits in a
-notification. Phone → PC: share to *Send to PC*.
+notification. Phone → PC: share to *Send to PC*; share to *Continue on PC*
+and the link does not open but waits as the phone's page (`phone.handoff`
+state `{ page: { url, title, at } }`, kept while the app runs) on the
+browser's new tab page and first in `>tab` (docs/browser.md).
 
 **Clipboard.** PC → phone at once (`wl-paste --watch`; entries a password
 manager marks as secret are skipped). Android lets only the app in front read
@@ -601,3 +611,50 @@ by WorkManager every 30 minutes and after every change, so it shows without a
 connection too. Its background's strength is its own setting
 (`CalendarWidgetConfig`, reconfigurable: the launcher's widget settings, on
 Samsung long press › Settings).
+
+## Reminders
+
+Feature `reminders` ("Reminders", group Work, needs the plugin `nas`): the
+reminders of pshell-core (docs/core.md "Reminders") on the phone, with the
+NAS token like the calendar (`app/…/reminders/`).
+
+- **Screen**: what fires now (Done, 5 min / 1 h / Tomorrow / At PC), the
+  upcoming ones, what core knows besides (Baikal alarms, expenses; read only),
+  the done ones. A line of text becomes a reminder (`POST
+  /api/reminders/parse`, the preview below the field while typing); the editor
+  has title, note, trigger, time, repeat (every n days, weeks on weekdays,
+  months, years), level, and for *important* when it turns into an alarm.
+  Chips at the top lead to what Android has not allowed yet (notifications,
+  exact alarms, full screen on Android 14).
+- **Offline**: the list is kept (`reminders` prefs) and every open one gets an
+  exact alarm for its next occurrence (`Schedule.kt`, the same series rules as
+  core: wall clock over DST, the 31st clamped, all-day at 9). Set again after
+  every sync and change, on boot, update, time zone or clock change and when
+  the exact alarm permission comes; one that passed while the phone was off is
+  shown up to 6 h late.
+- **Levels**: quiet shows nothing; normal a notification (channel
+  *Reminders*); important a high one that stays until Done (*Important
+  reminders*); fullscreen (*Reminder alarms*, alarm sound, through Do not
+  disturb) `ReminderAlertActivity` over the lock screen through a full-screen
+  intent, Done or Snooze close it. An important one not acknowledged after
+  `escalate_min` becomes fullscreen, by the phone's own alarm or core's
+  `escalated` event, whichever comes first.
+- **One ring per occurrence**: one notification per reminder; the phone's
+  alarm, core's `reminder` event and `/active` are deduplicated by id and
+  occurrence (`Dedupe`); two fires of one reminder within 5 min are one, core's
+  occurrence wins (a snooze, a trigger seen by both).
+- **Done / Snooze** (notification, alert, screen) take the notification away at
+  once and go to core in a queue that survives restarts (WorkManager retries
+  while offline). Done before core fired the occurrence is sent again when
+  core reports it.
+- **Elsewhere**: while the link service runs, core's WebSocket `/api/events`
+  (`reminder`, `reminder_ack`, `reminder_snooze`, `reminders`; without core
+  `read` only the events of its member, retried every 5 min when lost); else
+  `/active` every 3 min while something is
+  shown, and a sync every 15 min (WorkManager). What `/active` no longer lists
+  is taken away.
+- **Home**: when `Nas.atHome()` changes (the network callback, 8 s settled),
+  armed `arrive_home` / `leave_home` reminders are shown at once and core is
+  told (`POST /api/reminders/trigger`, queued while offline).
+
+Unit tests: `app/src/test/…/reminders/RemindersTest.kt`.

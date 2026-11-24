@@ -504,6 +504,14 @@ Scope {
 		function list(): string {
 			return JSON.stringify(Games.games.map(game => ({ id: game.id, name: game.name, kind: game.kind, running: Games.isRunning(game.id) })));
 		}
+		// the guides of the game that runs, over it (GameGuides; again closes them)
+		function guides(): void {
+			GameGuides.toggle();
+		}
+		// what is free now and the wish list on sale (GameDeals)
+		function deals(): string {
+			return JSON.stringify({ online: GameDeals.online, free: GameDeals.free, soon: GameDeals.soon, wishes: GameDeals.wishes });
+		}
 	}
 
 	// Remote PCs: `remote wake <name>` wakes one with the wishes as they are
@@ -2294,6 +2302,55 @@ Scope {
 		}
 		function resume(): void {
 			Printer.resume();
+		}
+	}
+
+	// Reminders (docs/reminders.md): `reminders list`, `add <text>` (parsed by
+	// core), `ack <id>`, `snooze <id> <minutes|back>`, `level <source> <level>`
+	IpcHandler {
+		target: "reminders"
+		enabled: Plugins.on("reminders")
+
+		function toggle(): void {
+			root.drawerOnFocused("reminders");
+		}
+		function list(): string {
+			return JSON.stringify({ online: Reminders.online, pending: Reminders.alerts.map(alert => ({ uid: alert.uid, id: alert.id, source: alert.source, title: alert.title, level: alert.level, occurrence: alert.occurrence })), items: Reminders.items.map(item => ({ uid: item.uid, id: item.id ?? "", source: item.source, title: item.title, at: item.at, level: item.level, trigger: item.trigger, pending: item.pending })), levels: Reminders.levels });
+		}
+		function add(text: string): void {
+			Reminders.add(text);
+		}
+		function ack(id: string): void {
+			Reminders.done(id.includes(":") ? id : `rm:${id}`);
+		}
+		function snooze(id: string, how: string): void {
+			Reminders.snooze(id.includes(":") ? id : `rm:${id}`, how === "back" ? "back" : (Number(how) || 5));
+		}
+		function level(source: string, level: string): void {
+			Reminders.setLevel(source, level);
+		}
+	}
+
+	// Watches (docs/core.md "Watches"): `watches toggle`, `list`, `check <id>`,
+	// `track <number>`, `remove <id>`
+	IpcHandler {
+		target: "watches"
+		enabled: Plugins.on("watches")
+
+		function toggle(): void {
+			root.drawerOnFocused("watches");
+		}
+		function list(): string {
+			return JSON.stringify({ online: Watches.online, error: Watches.error, watches: Watches.list.map(w => ({ id: w.id, kind: w.kind, title: Watches.title(w), line: Watches.line(w), status: w.status, state: w.state ?? "" })) });
+		}
+		function check(id: string): void {
+			Watches.check(id);
+		}
+		function track(number: string): void {
+			Watches.track({ number: number });
+		}
+		function remove(id: string): void {
+			Watches.remove(id);
 		}
 	}
 

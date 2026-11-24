@@ -3,7 +3,8 @@
 // of text as an event (the rules of the shell's >cal), the editor and the
 // details of an event (a repeating one: its series). "Calendars": add one with
 // a colour, rename, recolour, delete (or leave one shared with you), and share
-// each with the other members: no, read, or read and write.
+// each with the other members: no, read, or read and write. The due days of
+// your expenses show as whole-day entries of their group's colour.
 import { h, icon, clear, plural } from "../util.js";
 import * as api from "../api.js";
 import { stagger } from "../motion.js";
@@ -41,6 +42,12 @@ function daysOf(e) {
 	return out;
 }
 
+const eur = new Intl.NumberFormat(undefined, { style: "currency", currency: "EUR" });
+function expenseEvent(d) {
+	return { title: `${d.name} · ${eur.format(d.part)}`, start: d.date, end: dayKey(addDays(fromKey(d.date), 1)), allDay: true,
+		color: d.color || "var(--secondary)", calendarName: d.group_name, readOnly: true, expense: d };
+}
+
 export default function calendar(route, app) {
 	let mode = route.parts[0] === "calendars" ? "calendars" : "month";
 	let data = { calendars: [], members: [], user: "" };
@@ -68,10 +75,11 @@ export default function calendar(route, app) {
 	async function load() {
 		const start = gridStart(month);
 		try {
-			const got = await api.get("/api/calendar/events", { from: dayKey(start), to: dayKey(addDays(start, 42)) });
+			const range = { from: dayKey(start), to: dayKey(addDays(start, 42)) };
+			const [got, due] = await Promise.all([api.get("/api/calendar/events", range), api.get("/api/expenses/due", range).catch(() => ({ due: [] }))]);
 			if (got.need === "password") return askPassword(got.user);
 			passwordBox.hidden = true;
-			events = got.events || [];
+			events = (got.events || []).concat((due.due || []).map(expenseEvent));
 			data.calendars = got.calendars || [];
 			data.user = got.user;
 			if (mode === "calendars" || !data.members.length) {
@@ -227,6 +235,7 @@ export default function calendar(route, app) {
 
 	// ── one event ──
 	function details(e) {
+		if (e.expense) return app.go(`/expenses/${encodeURIComponent(e.expense.group)}`);
 		const calendar = data.calendars.find(c => c.href === e.calendar);
 		const rows = [
 			h("div.cal-detail", icon("clock_outline"), h("div", h("div", fmtDay(fromKey(e.start))), h("div.subtle", span(e)))),

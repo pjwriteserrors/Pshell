@@ -9,7 +9,7 @@ from pathlib import Path
 
 from aiohttp import web
 
-from . import VERSION, account, auth, calendar, devices, power, services as services_mod, smarthome, verify
+from . import VERSION, account, auth, browse, calendar, devices, expenses, gamedeals, power, reminders, services as services_mod, smarthome, verify, watches
 from .auth import Auth, Refused, need
 from .db import Db
 from .docker import Docker
@@ -195,6 +195,13 @@ def build(config):
     app["baikal"] = calendar.Baikal(config.baikal_db, config.baikal_config, state, db)
     app["smarthome"] = smarthome.SmartHome(state, hub)
     app["power"] = power.Power(a, hub)
+    app["expenses"] = expenses.Expenses(state, hub, app["smarthome"])
+    app["reminders"] = reminders.Reminders(db, hub)
+    app["reminders"].app = app
+    app["browse"] = browse.Browse(db, hub)
+    app["games"] = gamedeals.GameDeals(state, hub, lambda: {user["name"] for user in a.users()})
+    app["watches"] = watches.Watches(state, hub, app["reminders"], a)
+    app["smarthome"].on_washer_done = app["reminders"].washer_done
     app["index"] = index_handler(config.web)
     app["wake"] = asyncio.Event()
     app["kick"] = app["wake"].set
@@ -208,6 +215,11 @@ def build(config):
     calendar.routes(app)
     smarthome.routes(app)
     power.routes(app)
+    expenses.routes(app)
+    reminders.routes(app)
+    browse.routes(app)
+    gamedeals.routes(app)
+    watches.routes(app)
     app.router.add_get("/api/health", health_public)
     app.router.add_get("/api/health/now", health_now)
     app.router.add_get("/api/health/history", health_history)
@@ -218,7 +230,8 @@ def build(config):
     async def startup(app):
         app["background"] = [asyncio.ensure_future(job) for job in (ticker(app), watcher(app), housekeeping(app), calendar.nightly(app),
                                                                     smarthome.poller(app), app["power"].run(), app["smarthome"].hass.run(),
-                                                                    app["smarthome"].hass.flusher())]
+                                                                    app["smarthome"].hass.flusher(), expenses.reminder(app),
+                                                                    reminders.scheduler(app), gamedeals.poller(app), watches.scheduler(app))]
 
     async def cleanup(app):
         for job in app.get("background", []):
@@ -226,7 +239,9 @@ def build(config):
         await asyncio.gather(*app.get("background", []), return_exceptions=True)
         await services.close()
         await app["smarthome"].close()
+        await app["games"].close()
         await app["guard"].close()
+        await app["watches"].close()
         await docker.close()
 
     app.on_startup.append(startup)

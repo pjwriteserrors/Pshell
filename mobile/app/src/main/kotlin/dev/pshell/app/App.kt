@@ -111,6 +111,7 @@ class App : Application(), SingletonImageLoader.Factory {
 		dev.pshell.app.features.Chat.install(this)
 		dev.pshell.app.nas.Nas.install(this)
 		dev.pshell.app.calendar.Calendars.install(this)
+		dev.pshell.app.reminders.Reminders.install(this)
 		link.start()
 	}
 

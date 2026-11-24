@@ -751,3 +751,33 @@ tab-group > .tab-group-label-container {
 		transition-duration: 1ms !important;
 	}
 }
+
+/* parts/reload.js: the reload button without the cache */
+#pshell-hard-reload-button {
+	list-style-image: url("resource://pshell-chrome/hard-reload.svg");
+}
+
+/* parts/sitedata.js: clear the site's data and reload */
+#pshell-clear-site-button {
+	list-style-image: url("resource://pshell-chrome/clear-site.svg");
+
+	&[busy] {
+		opacity: 0.5;
+	}
+}
+
+/* parts/breakpoints.js: the page as Mobile, Tablet, Desktop (while working) */
+#pshell-breakpoints-button {
+	list-style-image: url("resource://pshell-chrome/breakpoints.svg");
+}
+
+.browserStack[pshell-breakpoints] {
+	justify-content: center;
+
+	.pshell-spur-arrow {
+		display: none;
+	}
+	> browser {
+		transition: opacity var(--pshell-medium) var(--pshell-standard), outline-color var(--pshell-short) !important;
+	}
+}

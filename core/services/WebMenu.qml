@@ -13,6 +13,8 @@ import Quickshell.Io
 //             "audio" | "page" | "tab"], group, targets?, documents? }
 //           targets: URL patterns the link or media must match
 //           (menus targetUrlPatterns), documents: of the page (documentUrlPatterns)
+//           parent: the id of the entry whose submenu it is in;
+//           needs: "place" | "event" – shown only where the page has one
 // info:     { kind, text, link, linkText, src, page, title, tabId, private, source }
 //           `private`: it came from a private window – keep nothing of it.
 //
@@ -53,11 +55,19 @@ Singleton {
 		add(root.phoneOn, "phone", "Send to phone", sendable, "send");
 		for (const pc of Pcs.reachable)
 			add(true, `pc:${pc.id}`, `Send to ${pc.name || "other PC"}`, sendable, "send");
+		// the people written to most (SendTo), places and events of the page (WebFinds)
+		for (const entry of SendTo.entries(sendable)) all.push(entry);
+		for (const entry of WebFinds.entries(root.phoneOn)) all.push(entry);
 
 		add(Plugins.on("video"), "video", "Open in player", ["video", "link"], "open", { targets: root.videoTargets });
 		add(Plugins.on("pdf"), "pdf", "Open in PDF viewer", ["link"], "open", { targets: root.pdfTargets });
 		add(Plugins.on("pdf"), "pdf-page", "Open in PDF viewer", ["page"], "open", { documents: root.pdfTargets });
 		add(Plugins.on("viewer"), "picture", "Open in viewer", ["image"], "open");
+		add(Plugins.on("viewer"), "gallery", "Open pictures in viewer", ["image", "page", "tab"], "open");
+		add(WebPictures.nasOn, "nas", "Save to NAS", ["image", "video"], "nas");
+		add(WebPictures.nasOn, "nas-link", "Save to NAS", ["link"], "nas", { targets: root.videoTargets });
+		add(WebPictures.nasOn, "nas-gallery", "Save pictures to NAS", ["page", "tab"], "nas");
+		add(WebPictures.nasOn, "nas-where", "Save to NAS in…", ["image", "video", "page", "tab"], "nas");
 		add(Plugins.on("torrents"), "torrent", "Add torrent", ["link"], "open", { targets: ["magnet:*"] });
 
 		add(Plugins.on("studio-wallpaper") && Plugins.on("studio-wallpaper-online"), "wallpaper", "Set as wallpaper", ["image"], "picture");
@@ -65,6 +75,15 @@ Singleton {
 
 		add(Plugins.on("streams"), "follow", "Follow channel", ["link"], "follow", { targets: root.channelTargets });
 		add(Plugins.on("streams"), "follow-page", "Follow channel", ["page", "tab"], "follow", { documents: root.channelTargets });
+
+		// watches in pshell-core (Watches.qml), reminders of a page
+		add(Plugins.on("watches"), "watch-part", "Watch part of page", ["page"], "watch");
+		add(Plugins.on("watches"), "wish", "Add to wish list", ["page", "tab", "link"], "watch");
+		add(Plugins.on("watches"), "parcel", "Track parcel", ["selection"], "watch");
+		add(Plugins.on("watches"), "parcel-page", "Track parcel", ["page"], "watch");
+		add(Plugins.on("reminders"), "remind-tonight", "Remind tonight", ["page", "tab", "link"], "remind");
+		add(Plugins.on("reminders"), "remind-tomorrow", "Remind tomorrow", ["page", "tab", "link"], "remind");
+		add(Plugins.on("reminders"), "remind-weekend", "Remind at the weekend", ["page", "tab", "link"], "remind");
 
 		add(root.aiOn, "page-summary", "Summarize page", ["page", "tab"], "page");
 		add(Plugins.on("fast-reader") && Plugins.on("drop-commands"), "page-read", "Read page fast", ["page", "tab"], "page");
@@ -106,6 +125,14 @@ Singleton {
 			return root.fetchAndOpen(action === "pdf" ? String(i.link || "") : String(i.page || ""), i.page, 300, path => Pdf.open(path));
 		case "picture":
 			return root.fetchAndOpen(String(i.src || ""), i.page, 200, path => Viewer.open(path), `${Viewer.workDir}/browser`);
+		case "gallery":
+			return WebPictures.gallery(i);
+		case "nas":
+		case "nas-link":
+		case "nas-gallery":
+			return WebPictures.save(i, false);
+		case "nas-where":
+			return WebPictures.save(i, true);
 		case "torrent":
 			return Torrents.add(String(i.link || ""));
 		case "wallpaper":
@@ -120,6 +147,18 @@ Singleton {
 			return root.withPage(i, page => root.askAi("summarize", page.text));
 		case "page-read":
 			return root.withPage(i, page => Reader.read(page.text));
+		case "watch-part":
+			return Watches.pickPart(i);
+		case "wish":
+			return Watches.wish(i);
+		case "parcel":
+			return Watches.trackText(i);
+		case "parcel-page":
+			return Watches.trackPage(i);
+		case "remind-tonight":
+		case "remind-tomorrow":
+		case "remind-weekend":
+			return Watches.remindPage(i, action.slice(7));
 		}
 		if (action.startsWith("pc:")) Pcs.sendText(action.slice(3), i.kind === "selection" ? text : url);
 	}
@@ -167,7 +206,9 @@ Singleton {
 		const isText = info.kind === "selection";
 		const body = isText ? `${text}\n\n${source}` : root.markdownLink(title || url, url);
 		root.whenReady(() => Notes.loaded, () => {
-			Notes.upsert("", isText ? String(info.title || "").trim() : "", body.trim());
+			const id = Notes.upsert("", isText ? String(info.title || "").trim() : "", body.trim());
+			// marked on the page again (WebMemory, plugin browser-highlights)
+			if (isText && !info.private) WebMemory.highlight(page, info.title, text, id);
 			root.say("Note kept", "note");
 		});
 	}

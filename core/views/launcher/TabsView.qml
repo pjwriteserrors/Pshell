@@ -10,12 +10,14 @@ import qs.core.services
 import qs.style.widgets
 
 // Launcher >tab (plugin browser-launcher, docs/browser.md): the browser's open
-// tabs, most recent first, then its bookmarks and history for what is typed.
+// tabs, most recent first, then its bookmarks and history for what is typed,
+// then pages found by their text with a snippet (WebMemory).
 // Enter brings a tab to the front (and its window in niri) or opens a page;
 // Ctrl+W closes the selected tab, Ctrl+M mutes it. Typing also finds tabs
 // from the archive and commands for the tab in front (Spur, Hints, Pin …);
 // with a query, hosts usually opened around this hour come first
-// (WebPage.habit). As >ws (kind
+// (WebPage.habit). The page last open on the phone comes first (PhoneTab).
+// As >ws (kind
 // "workspaces", plugin browser-workspaces) it lists Floorp's workspaces.
 ColumnLayout {
 	id: root
@@ -71,7 +73,9 @@ ColumnLayout {
 			const pinned = WebLink.tabs.filter(other => other.source === tab.source && other.windowId === tab.windowId && other.pinned).length;
 			if (pinned < 6) list.push({ id: "pin", title: `Pin to ${pinned + 1}`, icon: "pin_outline", slot: pinned + 1 });
 		}
-		if (tabsSet.envs.on) list.push({ id: "env", title: "Other environment", icon: "swap_horizontal" });
+		if (tabsSet.envs.on && WebPage.work) list.push({ id: "env", title: "Other environment", icon: "swap_horizontal" });
+		if (WebPage.work) list.push({ id: "breakpoints", title: "Breakpoints", icon: "devices" });
+		if (/^https?:/.test(tab.url || "")) list.push({ id: "clearSite", title: "Clear site data", icon: "cookie_remove_outline" });
 		return list
 			.filter(command => root.words.every(word => `${command.title} ${command.id}`.toLowerCase().includes(word)))
 			.map(command => ({ kind: "command", section: "Commands", title: command.title, url: "", host: tab.title || tab.host, favicon: "", tab: null, command: command, target: tab }));
@@ -103,10 +107,25 @@ ColumnLayout {
 				rows.push({ kind: kind, section: section, title: page.title || page.url, url: page.url, host: page.host || "", favicon: "", tab: null });
 			}
 		}
-		return root.byHabit(rows);
+		// found by their text (WebMemory, background/memory.js): an open tab is taken to
+		const pages = [];
+		for (const page of root.found.pages || []) {
+			if (!page.url || seen.has(page.url)) continue;
+			seen.add(page.url);
+			const tab = WebLink.tabs.find(each => each.url === page.url) ?? null;
+			pages.push({ kind: "text", section: "In pages", title: page.title || page.url, url: page.url, host: page.host || "", snippet: String(page.snippet || ""), favicon: tab ? tab.favicon || "" : "", tab: tab });
+		}
+		return root.byHabit(rows).concat(pages);
 	}
 
-	readonly property var rows: root.kind === "workspaces" ? root.workspaceRows : root.commandRows.concat(root.tabRows, root.archiveRows, root.pageRows)
+	// the page last open on the phone (PhoneTab), first
+	readonly property var phoneRows: {
+		const page = root.kind === "tabs" ? PhoneTab.offer : null;
+		if (!page || !root.words.every(word => `${page.title} ${page.url} phone`.toLowerCase().includes(word))) return [];
+		return [{ kind: "phone", section: "From phone", title: page.title || page.url, url: page.url, host: [page.host, page.device].filter(Boolean).join(" · "), favicon: "", tab: null, phone: true }];
+	}
+
+	readonly property var rows: root.kind === "workspaces" ? root.workspaceRows : root.phoneRows.concat(root.commandRows, root.tabRows, root.archiveRows, root.pageRows)
 	readonly property var selected: list.currentIndex >= 0 && list.currentIndex < root.rows.length ? root.rows[list.currentIndex] : null
 
 	signal closeRequested
@@ -126,6 +145,7 @@ ColumnLayout {
 		if (!root.active) return;
 		list.currentIndex = 0;
 		if (root.kind === "workspaces") FloorpWorkspaces.refresh();
+		else PhoneTab.refresh();
 	}
 	onRowsChanged: if (list.currentIndex >= root.rows.length || list.currentIndex < 0) list.currentIndex = root.rows.length > 0 ? 0 : -1
 
@@ -175,6 +195,7 @@ ColumnLayout {
 		root.closeRequested();
 		if (row.workspace) return FloorpWorkspaces.switchTo(row.workspace.id);
 		if (row.command) return root.run(row.command, row.target);
+		if (row.phone) return PhoneTab.open();
 		if (row.url) WebPage.noteHabit(row.url);
 		if (row.entry) WebPage.reopenArchived(row.entry);
 		else if (row.tab) WebLink.activate(row.tab);
@@ -273,7 +294,7 @@ ColumnLayout {
 						Glyph {
 							anchors.centerIn: parent
 							visible: favicon.status !== Image.Ready
-							icon: row.modelData.command ? row.modelData.command.icon : row.modelData.kind === "workspace" ? "monitor_dashboard" : row.modelData.kind === "bookmark" ? "bookmark_outline" : row.modelData.kind === "history" ? "history" : row.modelData.kind === "archive" ? "archive_outline" : "tab"
+							icon: row.modelData.command ? row.modelData.command.icon : row.modelData.kind === "workspace" ? "monitor_dashboard" : row.modelData.kind === "bookmark" ? "bookmark_outline" : row.modelData.kind === "history" ? "history" : row.modelData.kind === "archive" ? "archive_outline" : row.modelData.kind === "text" ? "text_search" : row.modelData.kind === "phone" ? "cellphone" : "tab"
 							size: 16
 							color: Theme.textMuted
 						}
@@ -304,7 +325,7 @@ ColumnLayout {
 
 						StyledText {
 							Layout.fillWidth: true
-							text: row.modelData.host || row.modelData.url
+							text: row.modelData.snippet ? `${row.modelData.host} · ${row.modelData.snippet}` : (row.modelData.host || row.modelData.url)
 							tone: Theme.textMuted
 							font.pixelSize: Theme.size.small
 						}

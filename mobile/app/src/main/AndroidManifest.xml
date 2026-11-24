@@ -24,6 +24,9 @@
 	<uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
 	<uses-permission android:name="android.permission.USE_BIOMETRIC" />
 	<uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+	<!-- reminders ring on time without the server -->
+	<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+	<uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 	<!-- headphones that follow the music from the PC -->
 	<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 	<!-- the watch: rejecting a call from it, weather for its place -->
@@ -108,6 +111,15 @@
 				<data android:mimeType="*/*" />
 			</intent-filter>
 		</activity>
+
+		<!-- "Share → Continue on PC": a page waits on the PC instead of opening -->
+		<activity-alias android:name=".ContinueOnPc" android:exported="true" android:label="@string/continue_on_pc" android:targetActivity=".ShareActivity">
+			<intent-filter>
+				<action android:name="android.intent.action.SEND" />
+				<category android:name="android.intent.category.DEFAULT" />
+				<data android:mimeType="text/plain" />
+			</intent-filter>
+		</activity-alias>
 
 		<!-- in the menu that appears over marked text, next to Copy -->
 		<activity-alias android:name=".ProcessSend" android:exported="true" android:label="@string/process_send" android:targetActivity=".ShareActivity">
@@ -229,6 +241,26 @@
 				<action android:name="android.intent.action.PHONE_STATE" />
 			</intent-filter>
 		</receiver>
+
+		<!-- reminders: alarms, Done and Snooze, and what sets the alarms again -->
+		<receiver android:name=".reminders.ReminderReceiver" android:exported="false">
+			<intent-filter>
+				<action android:name="android.intent.action.BOOT_COMPLETED" />
+				<action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+				<action android:name="android.intent.action.TIMEZONE_CHANGED" />
+				<action android:name="android.intent.action.TIME_SET" />
+				<action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+			</intent-filter>
+		</receiver>
+		<activity
+			android:name=".reminders.ReminderAlertActivity"
+			android:exported="false"
+			android:excludeFromRecents="true"
+			android:launchMode="singleTop"
+			android:showWhenLocked="true"
+			android:turnScreenOn="true"
+			android:taskAffinity=":reminder"
+			android:theme="@style/Theme.Pshell" />
 
 		<receiver android:name=".service.BootReceiver" android:exported="false">
 			<intent-filter>

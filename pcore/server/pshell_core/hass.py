@@ -213,6 +213,7 @@ class Hass:
         data = event.get("data") or {}
         if kind == "state_changed":
             entity = data.get("entity_id")
+            washer.watch(self, entity, self.states.get(entity), data.get("new_state"))
             if data.get("new_state") is None:
                 self.states.pop(entity, None)
             else:

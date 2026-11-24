@@ -23,6 +23,10 @@ from .. import config
 
 NAME = "pshell-vpn"
 STALE = 180  # WireGuard handshakes every two minutes while there is traffic or keepalive
+KEEP_TICK = 10  # s between looks at the network
+KEEP_CHECK = 30  # s between pings of the server through the tunnel
+KEEP_SILENT = 2  # pings in a row without an answer before the tunnel is brought up again
+KEEP_RETRY, KEEP_RETRY_MAX = 15, 300  # s before a failed try is repeated, doubling up to the max
 
 # runs on the server: the clients by name, without their keys
 SERVER_SCRIPT = r"""
@@ -76,6 +80,15 @@ def settings():
     return value if isinstance(value, dict) else {}
 
 
+def default_network():
+    return str(settings().get("network") or "10.8.0.0/24")
+
+
+def server_of(network):
+    """The server's address in the VPN: the net's first one."""
+    return str(ipaddress.ip_network(network or default_network(), strict=False).network_address + 1)
+
+
 def setup(hub, daemon):
     Feature(hub, daemon)
 
@@ -101,17 +114,44 @@ class Feature:
             return []
 
     async def keep(self):
+        """Keeps the tunnel up while its connection has autoconnect on (off is
+        the way to leave it down). Brought up again when the network changes,
+        when it is down, and when the server stops answering through it: a
+        foreign network with the home net's addresses looks unchanged, and an
+        endpoint resolved at home keeps pointing into the LAN. A failed try
+        (right after login or wake DNS is often not there yet) is repeated,
+        waiting longer each time."""
         known = await self.uplink()
+        pending, next_try, wait, next_check, silent = "", 0.0, KEEP_RETRY, 0.0, 0
         while True:
-            await asyncio.sleep(10)
+            await asyncio.sleep(KEEP_TICK)
             now = await self.uplink()
-            if now == known:
+            changed, known = now != known, now
+            if changed:
+                pending, next_try, wait, next_check, silent = "network changed", 0.0, KEEP_RETRY, 0.0, 0
+            if not now:
+                continue  # no network: nothing to reach the server with
+            tunnel = await self.tunnel()
+            if not tunnel["configured"] or not tunnel.get("autoconnect"):
+                pending = ""
                 continue
-            known = now
-            code, _, _ = await run("nmcli", "-g", "connection.id", "connection", "show", NAME)
-            if code == 0 and now:
-                code, _, _ = await run("nmcli", "connection", "up", NAME, timeout=30)
-                print(f"phone: network changed, {NAME} {'up again' if code == 0 else 'failed to come up'}", flush=True)
+            server = server_of(tunnel["network"])
+            if not pending and not tunnel["active"]:
+                pending = "down"
+            if not pending and time.monotonic() >= next_check:
+                next_check = time.monotonic() + KEEP_CHECK
+                silent = silent + 1 if await ping(server) < 0 else 0
+                pending = "server silent" if silent >= KEEP_SILENT else ""
+            if not pending or time.monotonic() < next_try:
+                continue
+            code, _, _ = await run("nmcli", "connection", "up", NAME, timeout=30)
+            if code == 0 and await ping(server) >= 0:
+                print(f"phone: {pending}, {NAME} up again", flush=True)
+                pending, next_try, wait, silent = "", 0.0, KEEP_RETRY, 0
+                next_check = time.monotonic() + KEEP_CHECK
+            else:
+                print(f"phone: {pending}, {NAME} not through yet, again in {wait} s", flush=True)
+                next_try, wait = time.monotonic() + wait, min(wait * 2, KEEP_RETRY_MAX)
 
     # ── status ─────────────────────────────────────────────────────────────
     async def tunnel(self):
@@ -200,8 +240,8 @@ class Feature:
 
     async def status(self, fresh=False):
         tunnel = await self.tunnel()
-        network = tunnel["network"] or str(settings().get("network") or "10.8.0.0/24")
-        server_address = str(ipaddress.ip_network(network).network_address + 1)
+        network = tunnel["network"] or default_network()
+        server_address = server_of(network)
         table, server_error = await self.server_table(fresh)
         clients = (table or {}).get("clients", [])
         now = int(time.time())

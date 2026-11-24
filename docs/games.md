@@ -1,7 +1,7 @@
 # Games
 
 `games` is a library of every game on the machine (`>games`,
-`scripts/ipc.sh games toggle|open|add <path>|launch <id>|list`;
+`scripts/ipc.sh games toggle|open|add <path>|launch <id>|list|guides|deals`;
 `core/views/games/GameLibrary.qml` and `games/` beside it,
 `core/services/Games.qml`, `scripts/games.py`).
 
@@ -184,6 +184,33 @@ the shelves, Home/End its ends; the wheel walks the shelves, sideways
 (tilt wheel, touchpad) the covers of the shelf walked. A rail at the
 right names every shelf: a click goes there, a cover dropped on a name goes
 onto that shelf (at its end), on *New shelf* starts one.
+
+## Deals
+
+pshell-core keeps them (`pcore/server/pshell_core/gamedeals.py`, docs/core.md
+"Games"), so the phone and the portal see the same: every 3 hours Epic's
+free games (`freeGamesPromotions`: now and coming) and Steam's 100 % ones
+(the store's search, specials at price 0), and the prices of everyone's
+wish list (Steam `appdetails`, GOG's catalog). A game free for the first
+time comes as a notification with *Claim* (not when it is owned already),
+a wished one whose discount grows as *<name> −N %* with *Open*.
+`core/services/GameDeals.qml` takes the events and the lists; the tag in
+the library's header lists free and coming games and the wish list (Open,
+Remove). On a store page in the browser the pill says Owned (Steam: played
+or installed, `games.py owned`; GOG, Epic and the rest by name), the sale,
+and Wish / Wished. `ipc games deals` gives it all as JSON.
+
+## Guides
+
+While a game runs the browser's tabs about it are noted (every word of its
+name in the title, or the name run together in the address), nothing of a
+private window. When it ends at most eight are kept for it
+(`game-guides.json`). The next start offers them: *Open* puts them behind
+the tab in front, *Show* (or Mod+Shift+G, `ipc games guides`) opens them in
+a browser window of their own, floating over the game on the right
+(`Guide · ` titles, rule in `dotfiles/niri/pshell.kdl`); again closes it and
+the game has the focus back. With a game running and nothing kept, the
+tabs open now are shown.
 
 ## Feral GameMode
 

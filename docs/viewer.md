@@ -109,6 +109,15 @@ MPRIS `pshell_pictures`), so the phone, the watch and media keys steer it.
 *Similar pictures here* walks the ones of the folder that look alike
 (perceptual hashes, cached).
 
+From the browser, *Open pictures in viewer* (Pshell menu on a picture or a
+page) takes every picture of the page at its largest (srcset, the link
+around it, Reddit's and Imgur's originals, open shadow roots; under 200 px
+and icons left out), downloads them into `$XDG_RUNTIME_DIR/pshell/viewer/
+gallery` (`scripts/web_pictures.py`, `core/services/WebPictures.qml`) and
+walks them over the whole screen with the arrow keys, from the one clicked
+on; the others join as they land. The folder goes when the window closes
+or the next page comes; nothing is kept.
+
 ## Saving
 
 Ctrl+S (or *Save copy*) writes the result beside the picture as

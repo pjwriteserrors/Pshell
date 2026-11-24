@@ -23,8 +23,15 @@ Singleton {
 	property var lines: []
 	property bool synced: false
 
-	readonly property string title: Media.player?.trackTitle || ""
-	readonly property string key: root.title === "" ? "" : [root.title, Media.artist, Media.player?.trackAlbum || "", Math.round(Media.length)].join("\n")
+	// a music video in the browser: the song as its page names it (WebPlayback)
+	readonly property var page: WebPlayback.lyricsTrack
+	readonly property string title: root.page ? root.page.title : (Media.player?.trackTitle || "")
+	readonly property string artist: root.page ? root.page.artist : Media.artist
+	readonly property string album: root.page ? "" : (Media.player?.trackAlbum || "")
+	readonly property real length: root.page ? root.page.duration : Media.length
+	readonly property real position: root.page ? WebPlayback.position : Media.position
+	readonly property bool playing: root.page ? root.page.playing : Media.playing
+	readonly property string key: root.title === "" ? "" : [root.title, root.artist, root.album, Math.round(root.length)].join("\n")
 	// the song the state and the lines belong to
 	property string loaded: ""
 	readonly property bool active: Plugins.on("lyrics") && ((root.open && root.watching) || root.remote > 0) && root.key !== ""
@@ -33,7 +40,7 @@ Singleton {
 	// the line that is sung, -1 before the first
 	readonly property int current: {
 		if (!root.following) return -1;
-		const at = Media.position + 0.2;
+		const at = root.position + 0.2;
 		let low = 0;
 		let high = root.lines.length - 1;
 		let found = -1;
@@ -77,9 +84,9 @@ Singleton {
 		// a lookup still under way starts the next one when it ends
 		if (!root.active || root.key === root.loaded || fetcher.running) return;
 		root.loaded = root.key;
-		const command = ["python3", `${Paths.scripts}/lyrics.py`, "--title", root.title, "--duration", String(Media.length)];
-		if (Media.artist !== "") command.push("--artist", Media.artist);
-		if (Media.player?.trackAlbum) command.push("--album", Media.player.trackAlbum);
+		const command = ["python3", `${Paths.scripts}/lyrics.py`, "--title", root.title, "--duration", String(root.length)];
+		if (root.artist !== "") command.push("--artist", root.artist);
+		if (root.album !== "") command.push("--album", root.album);
 		fetcher.command = command;
 		fetcher.running = true;
 	}
@@ -110,10 +117,10 @@ Singleton {
 
 	// the player's position, often enough for a line to come on time
 	Timer {
-		running: root.following && Media.playing
+		running: root.following && root.playing
 		repeat: true
 		interval: 250
-		onTriggered: Media.player?.positionChanged()
+		onTriggered: root.page ? WebPlayback.tick() : Media.player?.positionChanged()
 	}
 
 	Process {

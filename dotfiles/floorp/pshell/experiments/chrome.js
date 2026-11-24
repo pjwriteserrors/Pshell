@@ -7,7 +7,11 @@
  *
  *   base     windows, the settings, events to the extension, the page script
  *   rail     the rail's style and width, closing when the pointer leaves
+ *   reload   a second reload button, without the cache (Ctrl+F5)
+ *   sitedata a third: clears the site's cookies, storage and caches, reloads
+ *   clean    links copied without tracking parameters
  *   env      Live, Stage, Dev: colour, groups, the frame, Alt+E
+ *   containers  each environment its own container (logins), while working
  *   marks    states on the icon: a count from the title, a draft
  *   recent   "Recent": the tabs of the last minutes at the top of the rail, Alt+1…9
  *   dock     "Pinned": the pinned tabs at the foot of the rail
@@ -15,14 +19,16 @@
  *   domains  tabs of one site in a group of their own
  *   keys     Ctrl+K, Ctrl+Tab by use
  *   peek     a link in a card over the page
- *   spur     pages as columns side by side in one tab
+ *   spur     pages as columns side by side in one tab (also as breakpoints)
+ *   breakpoints  their toolbar button (while working), scrolling together
  *   frame    the script inside every page (hints, clicks, keys, drafts)
+ *   synced   the tabs of other devices (Firefox Sync)
  */
 "use strict";
 
 /* global ExtensionAPI, ExtensionCommon, Services */
 
-const PART_FILES = ["base", "palette", "rail", "env", "marks", "recent", "dock", "filter", "domains", "keys", "peek", "spur", "frame"];
+const PART_FILES = ["base", "palette", "rail", "reload", "sitedata", "clean", "env", "containers", "marks", "recent", "dock", "filter", "domains", "keys", "peek", "spur", "breakpoints", "frame", "synced"];
 
 let shared = null;
 

@@ -19,6 +19,7 @@ import qs.core.views.messages
 import qs.core.views.overlays
 import qs.core.views.panels
 import qs.core.views.printer
+import qs.core.views.remote
 import qs.core.views.rhymes
 import qs.core.views.rpg
 import qs.core.views.screenshot
@@ -38,6 +39,7 @@ import qs.core.views.viewer
 import qs.core.views.world
 import qs.core.views.vm
 import qs.core.views.watch
+import qs.core.views.watches
 // last, so a view of the same name in style/views wins
 import qs.style.views
 
@@ -46,7 +48,7 @@ import qs.style.views
 // here and by the plugin switches, never by the style.
 Scope {
 	// services that act on their own, without a surface to pull them in
-	readonly property var background: [Polkit, Agents, TimerGuard, Clipboard, ClipboardHints, Phone, Mail, WhatsApp, Autocorrect, Screentime, Multicursor, Sounds, FindMouse, WebLink, WebMenu, WebPage, FloorpWorkspaces]
+	readonly property var background: [Polkit, Agents, TimerGuard, Clipboard, ClipboardHints, Phone, Mail, WhatsApp, Autocorrect, Screentime, Multicursor, Sounds, FindMouse, WebLink, WebMenu, WebPage, FloorpWorkspaces, Reminders, WebPlayback, WebAssist, GameDeals, GameGuides, WebPictures]
 
 	// the wallpaper, under everything (a video's players cover it)
 	Variants {
@@ -304,9 +306,28 @@ Scope {
 	}
 
 	View {
+		view: "reminders/RemindersPanel"
+		available: Plugins.on("reminders")
+		when: Popups.wanted("reminders")
+	}
+
+	// a fullscreen reminder, on every screen
+	ScreenView {
+		view: "reminders/ReminderAlert"
+		available: Plugins.on("reminder-alert")
+		when: Reminders.overlayOpen
+	}
+
+	View {
 		view: "screentime/ScreentimePanel"
 		available: Plugins.on("screentime")
 		when: Popups.wanted("screentime")
+	}
+
+	View {
+		view: "watches/WatchesPanel"
+		available: Plugins.on("watches")
+		when: Popups.wanted("watches")
 	}
 
 	View {

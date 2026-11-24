@@ -8,11 +8,24 @@
  * crumbs above; a crumb shows its column again. Alt+←/→ moves between
  * columns, a middle click on a crumb closes its column. The whole Spur is one tab, titled after its newest column; ending
  * it ("Beenden" on the crumbs, Alt+Esc) keeps the newest column as the tab's
- * page. */
+ * page.
+ *
+ * Breakpoints (work only, the toolbar button of parts/breakpoints.js, the
+ * launcher's command): the tab's page as Mobile, Tablet and Desktop side by
+ * side, each column as wide as its breakpoint for the page (zoomed out to
+ * fit), scrolling together; a link clicked in one opens in all, an address
+ * loaded in the tab too. A column keeps the tab's container. */
 "use strict";
 
 (function () {
 	const WEIGHTS = [1.55, 1, 0.78, 0.64];
+	// the tab's own page is the last, the widest
+	const BREAKPOINTS = [
+		{ name: "Mobile", width: 390 },
+		{ name: "Tablet", width: 820 },
+		{ name: "Desktop", width: 1440 }
+	];
+	const GAP = 6;
 
 	function spurOf(W, browser) {
 		for (const spur of W.spurs.values()) if (spur.cols.some(col => col.browser === browser)) return spur;
@@ -40,7 +53,9 @@
 		W.spurs.set(tab, spur);
 		crumbs.addEventListener("click", event => {
 			const crumb = event.target.closest(".pshell-spur-crumb");
-			if (crumb) cut(W, spur, Number(crumb.dataset.index));
+			if (!crumb) return;
+			if (spur.breakpoints) focusColumn(W, spur, Number(crumb.dataset.index));
+			else cut(W, spur, Number(crumb.dataset.index));
 		});
 		// a middle click closes a crumb's column, like a tab
 		crumbs.addEventListener("mousedown", event => {
@@ -48,7 +63,7 @@
 		});
 		crumbs.addEventListener("auxclick", event => {
 			const crumb = event.target.closest(".pshell-spur-crumb");
-			if (event.button !== 1 || !crumb) return;
+			if (event.button !== 1 || !crumb || spur.breakpoints) return;
 			event.preventDefault();
 			close(W, spur, Number(crumb.dataset.index));
 		});
@@ -60,8 +75,11 @@
 		return spur;
 	}
 
-	function makeBrowser(W) {
+	function makeBrowser(W, tab) {
 		const browser = W.doc.createXULElement("browser");
+		// the tab's container (parts/containers.js)
+		const userContextId = tab?.getAttribute("usercontextid");
+		if (userContextId) browser.setAttribute("usercontextid", userContextId);
 		for (const [key, value] of Object.entries({
 			type: "content",
 			remote: "true",
@@ -73,12 +91,15 @@
 	}
 
 	function addColumn(W, tab, url, options = {}) {
-		if (!tabsConfig().spur.on || W.private || !/^(https?|file):/i.test(url)) return false;
+		if (!/^(https?|file):/i.test(url)) return false;
+		const open = W.spurs.get(tab);
+		if (open?.breakpoints) return navigateAll(W, open, url, options.principal);
+		if (!tabsConfig().spur.on || W.private) return false;
 		const spur = start(W, tab);
 		// a click in an older column cuts off what was right of it
 		const after = options.after ? spur.cols.findIndex(col => col.browser === options.after) : spur.cols.length - 1;
 		if (after >= 0 && after < spur.cols.length - 1) drop(W, spur, after + 1);
-		const browser = makeBrowser(W);
+		const browser = makeBrowser(W, tab);
 		spur.stack.appendChild(browser);
 		const col = { browser, own: false };
 		spur.cols.push(col);
@@ -168,6 +189,14 @@
 	}
 
 	function move(W, spur, step) {
+		if (spur.breakpoints) {
+			// in the order they show
+			const shown = spur.cols.map((col, index) => index).sort((a, b) => BREAKPOINTS.indexOf(spur.cols[a].bp) - BREAKPOINTS.indexOf(spur.cols[b].bp));
+			const at = shown.indexOf(spur.active);
+			const to = shown[Math.max(0, Math.min(shown.length - 1, at + step))];
+			if (to !== spur.active) focusColumn(W, spur, to);
+			return;
+		}
 		const next = Math.max(0, Math.min(spur.cols.length - 1, spur.active + step));
 		if (next === spur.active) return;
 		spur.active = next;
@@ -179,6 +208,7 @@
 	}
 
 	function layout(W, spur, entering) {
+		if (spur.breakpoints) return layoutBreakpoints(W, spur);
 		const shown = tabsConfig().spur.columns;
 		const end = Math.min(spur.cols.length, spur.start + shown);
 		spur.cols.forEach((col, index) => {
@@ -216,8 +246,10 @@
 				crumb.pshellBrowser = col.browser;
 			}
 			const { title, host } = titleOf(col.browser);
-			if (crumb.textContent !== title) crumb.textContent = title;
-			crumb.title = host;
+			const label = col.bp ? `${col.bp.name} ${col.bp.width}` : title;
+			if (crumb.textContent !== label) crumb.textContent = label;
+			if (col.bp) crumb.style.order = String(BREAKPOINTS.indexOf(col.bp));
+			crumb.title = col.bp ? title : host;
 			crumb.toggleAttribute("active", index === spur.active);
 			crumb.toggleAttribute("older", index < spur.start || index >= spur.start + shown);
 		});
@@ -241,6 +273,12 @@
 	function finish(W, tab) {
 		const spur = W.spurs.get(tab);
 		if (!spur) return;
+		if (spur.breakpoints) {
+			// the tab keeps its own page, the desktop one
+			teardown(W, spur);
+			tab.linkedBrowser.focus();
+			return;
+		}
 		const newest = spur.cols[spur.cols.length - 1];
 		if (!newest.own) {
 			let moved = false;
@@ -269,6 +307,19 @@
 	}
 
 	function teardown(W, spur) {
+		if (spur.breakpoints) {
+			for (const col of spur.cols) PARTS.find(part => part.name === "breakpoints")?.unwatch(W, col.browser);
+			const own = spur.cols[0].browser;
+			try {
+				own.webProgress?.removeProgressListener(spur.ownProgress);
+			} catch (error) {}
+			for (const property of ["flex", "width", "order"]) own.style.removeProperty(property);
+			own.removeAttribute("pshell-bp");
+			try {
+				own.fullZoom = spur.ownZoom || 1;
+			} catch (error) {}
+			spur.stack.removeAttribute("pshell-breakpoints");
+		}
 		drop(W, spur, 1);
 		spur.stack.removeAttribute("pshell-spur");
 		spur.tab.removeAttribute("pshell-spur");
@@ -283,6 +334,133 @@
 		updatePage(W, spur.tab.linkedBrowser);
 	}
 
+	// ── breakpoints ──────────────────────────────────────────────────────────
+	function focusColumn(W, spur, index) {
+		const col = spur.cols[index];
+		if (!col) return;
+		spur.active = index;
+		layout(W, spur);
+		col.browser.focus();
+	}
+
+	function loadIn(browser, url, principal) {
+		try {
+			browser.fixupAndLoadURIString(url, { triggeringPrincipal: principal || SYSTEM() });
+		} catch (error) {
+			browser.fixupAndLoadURIString(url, { triggeringPrincipal: SYSTEM() });
+		}
+	}
+
+	// a link from one column: every column shows it
+	function navigateAll(W, spur, url, principal) {
+		spur.synced = url;
+		for (const col of spur.cols) loadIn(col.browser, url, principal);
+		return true;
+	}
+
+	function layoutBreakpoints(W, spur) {
+		const box = spur.stack.getBoundingClientRect();
+		const room = Math.max(200, box.width - GAP * (spur.cols.length - 1) - 8);
+		const total = spur.cols.reduce((sum, col) => sum + col.bp.width, 0);
+		const scale = Math.min(1, room / total);
+		spur.scale = scale;
+		spur.cols.forEach((col, index) => {
+			const browser = col.browser;
+			browser.removeAttribute("pshell-hidden");
+			browser.toggleAttribute("pshell-active", index === spur.active);
+			browser.setAttribute("pshell-bp", col.bp.name.toLowerCase());
+			browser.style.setProperty("flex", "none", "important");
+			browser.style.setProperty("width", `${Math.floor(col.bp.width * scale)}px`, "important");
+			browser.style.setProperty("order", String(BREAKPOINTS.indexOf(col.bp)));
+			try {
+				if (Math.abs((browser.fullZoom || 1) - scale) > 0.001) browser.fullZoom = scale;
+			} catch (error) {}
+		});
+		spur.tab.setAttribute("pshell-spur", String(spur.cols.length));
+		PARTS.find(part => part.name === "marks").badges(spur.tab);
+		drawCrumbs(W, spur);
+	}
+
+	// the tab's page as Mobile, Tablet and Desktop; again ends it
+	function breakpoints(W, tab) {
+		tab = tab || W.gBrowser.selectedTab;
+		const open = W.spurs.get(tab);
+		if (open) {
+			const was = !!open.breakpoints;
+			finish(W, tab);
+			if (was) return false;
+		}
+		if (!tabsConfig().work || W.private) return false;
+		const own = tab.linkedBrowser;
+		const url = own.currentURI?.spec || "";
+		if (!/^(https?|file):/i.test(url)) return false;
+		const spur = start(W, tab);
+		spur.breakpoints = true;
+		spur.ownZoom = own.fullZoom || 1;
+		spur.synced = url;
+		spur.stack.setAttribute("pshell-breakpoints", "");
+		// the tab's own page is the desktop; the others come before it
+		spur.cols[0].bp = BREAKPOINTS[BREAKPOINTS.length - 1];
+		const watcher = PARTS.find(part => part.name === "breakpoints");
+		for (const bp of BREAKPOINTS.slice(0, -1).reverse()) {
+			const browser = makeBrowser(W, tab);
+			spur.stack.appendChild(browser);
+			const col = { browser, own: false, bp };
+			spur.cols.push(col);
+			browser.addEventListener("pagetitlechanged", () => drawCrumbs(W, spur));
+			col.progress = {
+				QueryInterface: ChromeUtils.generateQI(["nsIWebProgressListener", "nsISupportsWeakReference"]),
+				onLocationChange: () => drawCrumbs(W, spur),
+				onStateChange() {},
+				onProgressChange() {},
+				onStatusChange() {},
+				onSecurityChange() {},
+				onContentBlockingEvent() {}
+			};
+			browser.webProgress?.addProgressListener(col.progress, Ci.nsIWebProgress.NOTIFY_LOCATION);
+			loadIn(browser, url, own.contentPrincipal);
+			watcher?.watch(W, browser);
+		}
+		watcher?.watch(W, own);
+		// an address loaded in the tab itself (the address bar, back, a
+		// bookmark): the other columns follow
+		spur.ownProgress = {
+			QueryInterface: ChromeUtils.generateQI(["nsIWebProgressListener", "nsISupportsWeakReference"]),
+			onLocationChange(webProgress, request, location, flags) {
+				if (!webProgress?.isTopLevel || flags & Ci.nsIWebProgressListener.LOCATION_CHANGE_SAME_DOCUMENT) return;
+				// (Firefox's zoom per site comes back with a new page)
+				for (const ms of [50, 400]) W.win.setTimeout(() => W.spurs.get(spur.tab) === spur && layout(W, spur), ms);
+				if (flags & Ci.nsIWebProgressListener.LOCATION_CHANGE_ERROR_PAGE) return;
+				const next = location?.spec || "";
+				if (!/^(https?|file):/i.test(next) || next === spur.synced) return;
+				spur.synced = next;
+				for (const col of spur.cols) if (!col.own) loadIn(col.browser, next, own.contentPrincipal);
+			},
+			onStateChange() {},
+			onProgressChange() {},
+			onStatusChange() {},
+			onSecurityChange() {},
+			onContentBlockingEvent() {}
+		};
+		own.webProgress?.addProgressListener(spur.ownProgress, Ci.nsIWebProgress.NOTIFY_LOCATION);
+		spur.active = 0;
+		layout(W, spur);
+		for (const col of spur.cols) updatePage(W, col.browser);
+		return true;
+	}
+
+	// the other columns of a breakpoints Spur (they scroll with this one)
+	function columnsBeside(W, browser) {
+		const spur = spurOf(W, browser);
+		return spur?.breakpoints ? spur.cols.map(col => col.browser).filter(other => other !== browser) : [];
+	}
+
+	COMMANDS.breakpoints = async args => {
+		const tab = args.tabId >= 0 ? nativeTab(args.tabId) : frontWindow()?.gBrowser.selectedTab;
+		if (!tab) throw new Error("no such tab");
+		return breakpoints(windowOf(tab), tab);
+	};
+
 	COMMANDS.spur = async args => {
 		const tab = args.tabId >= 0 ? nativeTab(args.tabId) : frontWindow()?.gBrowser.selectedTab;
 		if (!tab) throw new Error("no such tab");
@@ -295,6 +473,9 @@
 	PARTS.push({
 		name: "spur",
 		addColumn,
+		breakpoints,
+		columnsBeside,
+		isBreakpoints: (W, tab) => !!W.spurs?.get(tab)?.breakpoints,
 		pageState(W, browser, state) {
 			state.spur = !!spurOf(W, browser);
 		},
@@ -308,6 +489,14 @@
 				drawCrumbs(W, spur);
 				retitle(W, spur);
 			});
+			// the breakpoints' widths follow the window's; Firefox's zoom per
+			// site comes back on the tab's page when it is selected
+			const relayout = () => {
+				const spur = W.spurs.get(W.gBrowser.selectedTab);
+				if (spur?.breakpoints) layout(W, spur);
+			};
+			on(W, W.win, "resize", () => W.win.requestAnimationFrame(relayout));
+			on(W, W.gBrowser.tabContainer, "TabSelect", () => W.win.setTimeout(relayout, 60));
 			on(W, W.gBrowser.tabContainer, "TabClose", event => {
 				const spur = W.spurs.get(event.target);
 				if (spur) teardown(W, spur);
@@ -336,8 +525,12 @@
 				move(W, spur, event.key === "ArrowLeft" ? -1 : 1);
 			}, true);
 		},
-		configure(W) {
-			for (const spur of W.spurs.values()) {
+		configure(W, tabs) {
+			for (const spur of [...W.spurs.values()]) {
+				if (spur.breakpoints && !tabs.work) {
+					finish(W, spur.tab);
+					continue;
+				}
 				spur.start = Math.max(0, spur.cols.length - tabsConfig().spur.columns);
 				layout(W, spur);
 			}

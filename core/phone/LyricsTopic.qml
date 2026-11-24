@@ -24,7 +24,7 @@ Topic {
 		state: Lyrics.state,
 		synced: Lyrics.synced,
 		title: Lyrics.title,
-		artist: Media.artist,
+		artist: Lyrics.artist,
 		key: Lyrics.key,
 		lines: Lyrics.lines.map(line => ({ t: Number(line.t), text: String(line.text || "") }))
 	}) : null
