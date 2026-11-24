@@ -522,8 +522,11 @@ class Manager:
             fresh = not os.path.exists(target)
             if fresh:
                 os.mkdir(target)
-                shutil.copymode(source, target)
                 ops.append(("trash", target))
+                try:
+                    shutil.copymode(source, target)
+                except OSError:  # phones (MTP) and some mounts have no modes
+                    pass
             job.files_done += 1
             with os.scandir(source) as items:
                 children = sorted(items, key=lambda item: item.name)
