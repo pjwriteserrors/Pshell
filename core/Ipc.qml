@@ -506,6 +506,29 @@ Scope {
 		}
 	}
 
+	// Remote PCs: `remote wake <name>` wakes one with the wishes as they are
+	IpcHandler {
+		target: "remote"
+		enabled: Plugins.on("remote-pcs")
+
+		function open(): void {
+			Popups.withFocusedScreen(screen => Popups.openModal("remote", screen));
+		}
+		function close(): void {
+			if (Popups.modal === "remote") Popups.closeModal();
+		}
+		function toggle(): void {
+			root.modalOnFocused("remote");
+		}
+		function wake(name: string): void {
+			const pc = Remote.others.find(each => each.name.toLowerCase() === name.toLowerCase() || each.id === name);
+			if (pc) Remote.wake(pc.id);
+		}
+		function list(): string {
+			return JSON.stringify(Remote.devices.map(pc => ({ id: pc.id, name: pc.name, online: pc.online, session: pc.session, stream: pc.stream })));
+		}
+	}
+
 	// the VM launcher: `vm launch win11` starts a machine without the popup
 	IpcHandler {
 		target: "vm"

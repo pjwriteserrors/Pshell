@@ -156,6 +156,7 @@ Item {
 				.concat(TaskManager.top.slice(0, 6).map(item => ({ id: "taskmgr-app", key: item.key, command: `top ${String(item.name).toLowerCase()}`, name: item.name, glyph: item.kind === "app" ? "application_outline" : "cog_outline", keywords: "end kill", status: `${Math.round(item.c * 100)} %` })))
 		},
 		{ id: "games", plugin: "games", group: "tools", command: "games", name: "Games", aliases: ["game", "play", "steam", "library"], keywords: "steam proton wine library play launch covers", status: Games.running.length > 0 ? "Playing" : "" },
+		{ id: "remote", plugin: "remote-pcs", group: "system", command: "pc", name: "Remote PCs", aliases: ["remote", "wake", "wol", "moonlight", "sunshine"], keywords: "wake on lan stream sign in", status: Remote.others.some(pc => pc.online) ? `${Remote.others.filter(pc => pc.online).length} on` : "" },
 		{ id: "vm", plugin: "vm-launcher", group: "system", command: "vm", name: "Virtual Machines", aliases: ["vms", "windows", "win", "virt"], keywords: "looking glass qemu libvirt start boot", status: Machines.vms.some(vm => vm.running) ? "On" : "" },
 		{ id: "dnd", plugin: "dnd", group: "system", command: "dnd", name: "Do Not Disturb", aliases: ["quiet", "silent"], keywords: "notifications", status: Notifs.dnd ? "On" : "" },
 		{ id: "rpg", plugin: "rpg", group: "system", command: "rpg", prefix: "/", name: "Productivity RPG", keywords: "game" },
@@ -1265,6 +1266,10 @@ Item {
 			root.closeRequested();
 			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "games", "open"]);
 			break;
+		case "remote":
+			root.closeRequested();
+			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "remote", "open"]);
+			break;
 		case "vm":
 			root.closeRequested();
 			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "vm", "open"]);
@@ -1689,6 +1694,7 @@ Item {
 		case "identities": return "account_multiple";
 		case "dnd": return "minus_circle";
 		case "vm": return "microsoft_windows";
+		case "remote": return "remote_desktop";
 		case "games": return "gamepad_variant";
 		case "downloads": return "download";
 		case "torrents": return "magnet";

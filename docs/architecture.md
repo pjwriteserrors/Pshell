@@ -406,6 +406,16 @@ lamps the screen's colour weighted by chroma. The OpenRGB Effects plugin's
 only shares DMA-BUFs (and prefers compressed ones, which is why the cast asks
 for a plain tiled or linear modifier).
 
+`remote-pcs` wakes another PC of pshell-core into a stream (`>pc`, ipc `remote
+open|wake <name>`; `core/services/Remote.qml`, `scripts/remote/remote.py`,
+docs/core.md "Remote power"). The popup is a sky over the PC: night while it
+sleeps, the magic packet a shooting star from the moon (this PC, Moonlight)
+over netcore, the screen boots and signs in, the sun (Sunshine) rises behind
+it, a beam back to the moon is Moonlight connecting. Its power key is held to
+wake it; chips 1–3 say how far (sign in, Sunshine, Moonlight); the steps are a
+constellation under the sky. Every PC also plays the other part: it reports
+its session to core, starts Sunshine when a wake asked, takes a pairing PIN.
+
 `vm-launcher` starts a virtual machine of libvirt (`>vm`, `scripts/ipc.sh vm
 toggle`, `vm launch <name>` without the popup; `core/services/Machines.qml`,
 `scripts/vm.py`). The popup draws the machine as a monitor, with what it has

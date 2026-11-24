@@ -451,6 +451,12 @@ Scope {
 	}
 
 	View {
+		view: "remote/RemoteLauncher"
+		available: Plugins.on("remote-pcs")
+		when: Popups.wanted("remote")
+	}
+
+	View {
 		view: "games/GameLibrary"
 		available: Plugins.on("games")
 		when: Popups.wanted("games")

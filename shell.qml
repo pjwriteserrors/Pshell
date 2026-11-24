@@ -89,4 +89,7 @@ ShellRoot {
 	readonly property bool baikalTodos: BaikalTodos.on
 	readonly property bool contacts: Contacts.on
 	readonly property bool watchCalendar: WatchCalendar.on
+	// Remote PCs: this PC reports its session to core, starts Sunshine when a
+	// wake asked for it, takes a pairing PIN (core/services/Remote.qml)
+	readonly property bool remote: Remote.enabled
 }

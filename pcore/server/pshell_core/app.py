@@ -9,7 +9,7 @@ from pathlib import Path
 
 from aiohttp import web
 
-from . import VERSION, account, auth, calendar, devices, services as services_mod, smarthome, verify
+from . import VERSION, account, auth, calendar, devices, power, services as services_mod, smarthome, verify
 from .auth import Auth, Refused, need
 from .db import Db
 from .docker import Docker
@@ -194,6 +194,7 @@ def build(config):
     app["guard"] = Guard(config, settings, services, hub, log)
     app["baikal"] = calendar.Baikal(config.baikal_db, config.baikal_config, state, db)
     app["smarthome"] = smarthome.SmartHome(state, hub)
+    app["power"] = power.Power(a, hub)
     app["index"] = index_handler(config.web)
     app["wake"] = asyncio.Event()
     app["kick"] = app["wake"].set
@@ -206,6 +207,7 @@ def build(config):
     services_mod.routes(app)
     calendar.routes(app)
     smarthome.routes(app)
+    power.routes(app)
     app.router.add_get("/api/health", health_public)
     app.router.add_get("/api/health/now", health_now)
     app.router.add_get("/api/health/history", health_history)
@@ -215,7 +217,7 @@ def build(config):
 
     async def startup(app):
         app["background"] = [asyncio.ensure_future(job) for job in (ticker(app), watcher(app), housekeeping(app), calendar.nightly(app),
-                                                                    smarthome.poller(app), app["smarthome"].hass.run(),
+                                                                    smarthome.poller(app), app["power"].run(), app["smarthome"].hass.run(),
                                                                     app["smarthome"].hass.flusher())]
 
     async def cleanup(app):

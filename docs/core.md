@@ -384,6 +384,40 @@ plug passwords and the token never leave core.
   `hass`), `tests/test_washer.py` (roles, runs out of a history, start options, stop,
   settings, presets, busy and the helper live)
 
+### Remote power (`pshell_core/power.py`)
+
+The PCs and laptops among the devices (`kind` pc/laptop), on or off, and waking one
+all the way into a stream.
+
+- looking: every 10 s (2 s while a wake runs) each device with a mac or a `last_ip`:
+  address from the ARP table by mac (core runs in the host network), else `last_ip`;
+  a TCP knock on 22, 9, 445, 3389 – an answer *or a refusal* means up, only silence
+  is off – and on Sunshine's 47989 (`stream`). A fresh session report counts as on.
+- `GET /api/power` (read) → `{devices: [{id, name, kind, mac, ip, online, since,
+  last_seen, session, user, stream, host, waking, ticket}]}`; event `power {devices}`
+  on every change.
+- `POST /api/power/{id}/wake {login, stream}` (read) → magic packet to
+  255.255.255.255 and the device's /24 broadcast (ports 9, 7) plus a ticket in memory
+  (15 min) with what the woken PC should do; `DELETE` forgets wake and ticket.
+- the woken PC, as its own device: `GET /api/power/ticket` peeks, `POST
+  /api/power/boot` takes it (signing in is used up, a stream wish stays for the
+  session). Its root helper `scripts/remote/remote.py greeter`
+  (`system/install-remote-login.sh`, unit `pshell-remote.service`) asks while nobody
+  is signed in, writes `/etc/sddm.conf.d/zz-pshell-remote.conf` (Autologin, no
+  relogin) and restarts the display manager; the drop-in goes as soon as the session
+  is up, and at every start of the helper. The token is the PC's own from `nas.json`.
+- `PUT /api/power/self {user, host, stream, stream_taken?, session?}` – the shell's
+  report (every minute); its answer `{stream}` says a wake wants Sunshine started.
+- relays to one device's shell: `POST /api/power/{id}/pair {pin, name}` → event
+  `power_pair` (the shell hands the PIN to its Sunshine with the login it keeps in
+  `~/.local/state/pshell/sunshine.json`), `POST /api/power/{id}/command {action:
+  shutdown|reboot|lock|sunshine}` → event `power_command`.
+- log kinds `device_woken`, `device_boot`, `device_command`.
+- shell: plugin `remote-pcs`, `core/services/Remote.qml`, popup
+  `core/views/remote/RemoteLauncher.qml` (`>pc`, ipc `remote open|wake <name>|list`).
+- tests: `tests/test_power.py` (a fake ARP table, knock ports on 127.0.0.1, wake,
+  boot, report, relays).
+
 ## Import from the NAS (once, `python -m pshell_core.ctl import-nas /storage/pshell-nas/nas.db`)
 Copies users (name, hash, role, totp) and devices (id, name, kind, token hash, mac, created, by,
 last_seen) from `nas.db`. Device scopes: `{"nas": <its caps>, "core": ["read"] + (["admin"] if "admin" in caps)}`.
