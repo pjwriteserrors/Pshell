@@ -35,6 +35,15 @@ Nothing else of the profile is touched.
 The colours come from the Pshell extension (dotfiles/floorp/pshell), which
 sets them through the browser's theme as the wallpaper changes.
 Without --profile the profile Floorp starts with is used.
+
+  floorp_theme.py api
+
+Floorp's local API (floorp.os.enabled, used by the browser-workspaces plugin)
+writes its token to ~/.floorp/os-server-token, a path it does not let change.
+Once ~/.floorp exists, Floorp takes it for its profile folder instead of
+~/.config/floorp and starts with a new, empty profile. `api` (and install)
+makes ~/.floorp a link to ~/.config/floorp, so both are the same folder; a
+~/.floorp that is a real folder is left alone and reported.
 """
 
 from __future__ import annotations
@@ -63,7 +72,9 @@ COMPANIONS = {
     "pshell-roles.css": CACHE / "wal" / "pshell-roles.css",
 }
 BACKUP = STATE / "floorp-prefs-backup.json"
-FLOORP_DIRS = [Path.home() / ".config" / "floorp", Path.home() / ".floorp"]
+CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "floorp"
+LEGACY_DIR = Path.home() / ".floorp"
+FLOORP_DIRS = [CONFIG_DIR, LEGACY_DIR]
 
 # what the layout needs
 PREFS: dict[str, object] = {
@@ -114,7 +125,8 @@ END = "// ── pshell: end"
 def profiles(all_profiles: bool) -> list[Path]:
     """The profile Floorp starts with, or every profile."""
     found: list[Path] = []
-    for base in FLOORP_DIRS:
+    # ~/.floorp may be a link to ~/.config/floorp (api_link): the same folder once
+    for base in dict.fromkeys(path.resolve() for path in FLOORP_DIRS):
         ini_path = base / "profiles.ini"
         if not ini_path.exists():
             continue
@@ -311,6 +323,8 @@ def install(profile: Path) -> bool:
         print(f"already in {profile}")
     link_companions(profile)
     link_extension(profile)
+    if profile.resolve().parent == CONFIG_DIR.resolve():
+        api_link()
     keep_previous(profile)
     values = layout_values(profile)
     saved = read_prefs(profile)
@@ -365,6 +379,33 @@ def unlink_extension(profile: Path) -> None:
         print(f"removed {proxy}")
 
 
+# ── Floorp's local API ───────────────────────────────────────────────────────
+def api_state() -> str:
+    """linked | absent | folder | elsewhere | no-config"""
+    if LEGACY_DIR.is_symlink():
+        return "linked" if LEGACY_DIR.resolve() == CONFIG_DIR.resolve() else "elsewhere"
+    if LEGACY_DIR.exists():
+        return "folder"
+    return "absent" if CONFIG_DIR.is_dir() else "no-config"
+
+
+def api_link() -> bool:
+    """~/.floorp → ~/.config/floorp, so the token's folder is the profile folder."""
+    state = api_state()
+    if state == "linked":
+        return True
+    if state == "absent":
+        LEGACY_DIR.symlink_to(CONFIG_DIR)
+        print(f"linked {LEGACY_DIR} → {CONFIG_DIR} (for Floorp's local API)")
+        return True
+    if state == "folder":
+        print(f"{LEGACY_DIR} is a folder: Floorp starts with the profiles in it, not those in {CONFIG_DIR}. "
+              f"Close Floorp, move it away and run `floorp_theme.py api` again", file=sys.stderr)
+    elif state == "elsewhere":
+        print(f"{LEGACY_DIR} links to {LEGACY_DIR.resolve()}; leaving it", file=sys.stderr)
+    return False
+
+
 def disabled_in(profile: Path) -> bool:
     """Floorp keeps the CSS files unticked in its menu in a pref."""
     value = read_prefs(profile).get("UserCSSLoader.disabled_list")
@@ -389,6 +430,7 @@ def status() -> int:
             state += ", settings waiting in user.js"
         mark = " (starts with Floorp)" if profile in default else ""
         print(f"{profile}{mark}: {state}")
+    print(f"{LEGACY_DIR}: {api_state()}")
     return 0
 
 
@@ -400,10 +442,13 @@ def main() -> int:
         command.add_argument("--profile", type=Path, help="a Floorp profile directory")
         command.add_argument("--all", action="store_true", help="every Floorp profile")
     sub.add_parser("status")
+    sub.add_parser("api")
     args = parser.parse_args()
 
     if args.command == "status":
         return status()
+    if args.command == "api":
+        return 0 if api_link() else 1
     chosen = [args.profile.expanduser().resolve()] if args.profile else profiles(args.all)
     if not chosen:
         print("no Floorp profile found (--profile DIR)", file=sys.stderr)

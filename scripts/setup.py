@@ -287,8 +287,20 @@ def doctor():
         webp = any(os.path.isfile(f"{folder}/imageformats/libqwebp.so") for folder in ("/usr/lib/qt6/plugins", "/usr/lib/qt/plugins", "/usr/lib64/qt6/plugins"))
         (report.ok if webp else report.warn)("WebP in Qt – stickers as they are, animated ones smoothly (qt6-imageformats)")
 
+    if "browser-workspaces" in plugins:
+        report.section("Floorp workspaces")
+        # Floorp's API writes ~/.floorp/os-server-token; a real ~/.floorp becomes Floorp's profile folder
+        legacy = Path.home() / ".floorp"
+        config = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "floorp"
+        if legacy.is_symlink() and legacy.resolve() == config.resolve():
+            report.ok("~/.floorp links to Floorp's profile folder (workspaces)")
+        elif legacy.exists():
+            report.fail("~/.floorp is a folder: Floorp starts with the profiles in it (close Floorp, move it away, scripts/floorp_theme.py api)")
+        else:
+            report.warn("~/.floorp is missing: floorp.os.enabled would make Floorp start with a new profile (scripts/floorp_theme.py api)")
+
     report.section("Theme")
-    library = Path(os.path.expanduser(profile.get("wallpapers", "~/Pictures/Wallpapers")))
+    library =Path(os.path.expanduser(profile.get("wallpapers", "~/Pictures/Wallpapers")))
     if library.is_dir() and any(library.iterdir()):
         report.ok(f"wallpapers in {library}")
     else:

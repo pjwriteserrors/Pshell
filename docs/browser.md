@@ -576,9 +576,15 @@ Browser › Navigation says Peek, else as before. Links from other apps are
 not touched. In Alt+Tab, on a browser
 window, `,` and `.` choose a tab, which comes to the front on release.
 
-Floorp's workspaces (`browser-workspaces`): set `floorp.os.enabled` to true in
+Floorp's workspaces (`browser-workspaces`): run `scripts/floorp_theme.py api`
+first (install does it too), then set `floorp.os.enabled` to true in
 about:config (port `floorp.os.server.port`, default 58261). Floorp then
-listens on 127.0.0.1 only and writes its token to `~/.floorp/os-server-token`.
+listens on 127.0.0.1 only and writes its token to `~/.floorp/os-server-token`,
+a path it does not let change. Floorp also takes an existing `~/.floorp` for
+its profile folder instead of `~/.config/floorp`: a real folder there means a
+new, empty profile at the next start (no tabs, extensions or look). `api`
+makes `~/.floorp` a link to `~/.config/floorp`, so it is the same profile; a
+real `~/.floorp` is left alone and `setup.py doctor` reports it.
 Settings › Browser lets each niri workspace choose a Floorp workspace; with
 "Follow niri" on, Floorp switches whenever niri does
 (`~/.local/state/pshell/browser-workspaces.json`). Floorp's API acts on its

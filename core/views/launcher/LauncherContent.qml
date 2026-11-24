@@ -111,6 +111,7 @@ Item {
 		{ id: "updates", plugin: "updates", group: "panels", command: "updates", name: "Updates", aliases: ["update"], keywords: "arch packages", status: Updates.count > 0 ? String(Updates.count) : "" },
 		{ id: "screentime", plugin: "screentime", group: "panels", command: "screentime", name: "Screen Time", aliases: ["time", "usage"], keywords: "statistics", status: Screentime.clock(Screentime.total(Screentime.today)) },
 		{ id: "watch", plugin: "watch", group: "panels", command: "watch", name: "Watch", aliases: ["uhr", "sleep", "schlaf", "amazfit", "health"], keywords: "sleep night heart steps stress blood oxygen amazfit wrist", status: Watch.lastNight ? Watch.span(Watch.lastNight.total) : "" },
+		{ id: "watches", plugin: "watches", group: "panels", command: "watches", name: "Watches", aliases: ["wishlist", "wunschliste", "wishes", "wünsche", "parcels", "pakete", "paket", "sendungen"], keywords: "wish list parcel tracking prices page changes", status: Watches.openParcels.length > 0 ? String(Watches.openParcels.length) : "" },
 		{ id: "vpn", plugin: Phone.plugin, group: "panels", command: "vpn", name: "VPN", aliases: ["wireguard", "wg", "unterwegs", "away"], keywords: "phone laptop server connections links tunnel remote" },
 		{ id: "cal", plugin: "nas-calendar", command: "cal", name: "Calendar", aliases: ["kalender", "termin", "event"], keywords: "baikal appointment add new date tomorrow morgen" },
 		{ id: "remind", plugin: "reminders", command: "remind", name: "Reminders", aliases: ["erinnerung", "erinnern", "reminder"], keywords: "remind alarm wecker later" },
@@ -1207,6 +1208,10 @@ Item {
 			root.closeRequested();
 			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "identity", "list"]);
 			break;
+		case "watches":
+			root.closeRequested();
+			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "watches", "toggle"]);
+			break;
 		case "screentime":
 			root.closeRequested();
 			root.runAfterClose(["qs", "ipc", "-p", Quickshell.shellDir, "call", "screentime", "open"]);
@@ -1697,6 +1702,7 @@ Item {
 		case "messages": return "forum_outline";
 		case "mail": return "email_plus_outline";
 		case "updates": return "package_up";
+		case "watches": return "eye_outline";
 		case "screentime": return "progress_clock";
 		case "identity": return "account_circle";
 		case "identities": return "account_multiple";
