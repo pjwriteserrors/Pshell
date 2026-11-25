@@ -358,6 +358,33 @@ Singleton {
 		root.inOrder(steps);
 	}
 
+	function focusedWindow() {
+		return Object.values(root.windowMap).find(w => w.is_focused) ?? null;
+	}
+
+	// Mod+F with a width ("50%", "720"): a tiled window that fills its screen
+	// leaves the maximized state at that width instead of its old one
+	function toggleMaximize(width) {
+		const window = root.focusedWindow();
+		const screen = window ? Quickshell.screens.find(s => String(s.name) === String(root.workspaceMap[window.workspace_id]?.output)) : null;
+		const size = window?.layout?.tile_size;
+		if (!width || !window || window.is_floating || !screen || !size || size[0] < screen.width * 0.9) {
+			Quickshell.execDetached(["niri", "msg", "action", "maximize-column"]);
+			return;
+		}
+		// also ends maximize-window-to-edges
+		Quickshell.execDetached(["niri", "msg", "action", "set-column-width", String(width)]);
+	}
+
+	// Mod+V with a width: a floating window lands in the tiling at that width
+	function toggleFloating(width) {
+		const window = root.focusedWindow();
+		if (width && window?.is_floating)
+			Quickshell.execDetached(["sh", "-c", 'niri msg action toggle-window-floating && niri msg action set-column-width "$1"', "sh", String(width)]);
+		else
+			Quickshell.execDetached(["niri", "msg", "action", "toggle-window-floating"]);
+	}
+
 	function focusWorkspaceRelative(direction) {
 		Quickshell.execDetached(["niri", "msg", "action", direction > 0 ? "focus-workspace-down" : "focus-workspace-up"]);
 	}

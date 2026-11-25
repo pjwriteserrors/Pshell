@@ -294,6 +294,8 @@ def doctor():
         config = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "floorp"
         if legacy.is_symlink() and legacy.resolve() == config.resolve():
             report.ok("~/.floorp links to Floorp's profile folder (workspaces)")
+        elif legacy.is_dir() and not config.exists():
+            report.ok("~/.floorp is Floorp's profile folder (workspaces)")
         elif legacy.exists():
             report.fail("~/.floorp is a folder: Floorp starts with the profiles in it (close Floorp, move it away, scripts/floorp_theme.py api)")
         else:

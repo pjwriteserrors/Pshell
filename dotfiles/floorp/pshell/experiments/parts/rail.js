@@ -77,6 +77,30 @@
 		panel.style.setProperty("--ps-ws-y", `${Math.round(page.top + GAP - anchor.bottom)}px`);
 	}
 
+	// Firefox's "Customize sidebar" gear under the tabs: in sidebar-main's
+	// shadow root, out of reach of pshell.css and chrome.css; the row of
+	// tools goes too while it holds no tool but the gear and "more tools"
+	// (the rail's menu still has "Customize sidebar")
+	const NO_GEAR = `
+		moz-button[view="viewCustomizeSidebar"],
+		.buttons-wrapper:not(:has(moz-button:not([view="viewCustomizeSidebar"]):not(.more-tools-button))) {
+			display: none !important;
+		}`;
+
+	function hideGear(W, tries = 20) {
+		const root = W.doc.querySelector("sidebar-main")?.shadowRoot;
+		if (!root) {
+			if (tries > 0) W.win.setTimeout(() => attached.has(W) && hideGear(W, tries - 1), 500);
+			return;
+		}
+		const sheet = new W.win.CSSStyleSheet();
+		sheet.replaceSync(NO_GEAR);
+		root.adoptedStyleSheets = [...root.adoptedStyleSheets, sheet];
+		W.cleanup.push(() => {
+			root.adoptedStyleSheets = root.adoptedStyleSheets.filter(s => s !== sheet);
+		});
+	}
+
 	PARTS.push({
 		name: "rail",
 		attach(W) {
@@ -85,6 +109,7 @@
 				if (isWorkspaces(event.target)) placeWorkspaces(W, event.target);
 			}, true);
 			applyWindow(W);
+			hideGear(W);
 		},
 		detach(W) {
 			W.doc.documentElement.removeAttribute("pshell-rail");

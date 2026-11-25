@@ -82,6 +82,8 @@ Singleton {
 	signal checked(var result)
 	// a group was made or joined
 	signal made(string chat)
+	// text that is to be written on in a chat (compose)
+	signal drafted(string chat, string text)
 
 	function command(name, fields) {
 		if (!bridge.running) return;
@@ -157,6 +159,14 @@ Singleton {
 		else if (next[id] === undefined) return;
 		else delete next[id];
 		root.drafts = next;
+	}
+
+	// text from elsewhere (Send to … › Edit) to be written on in the chat: after
+	// what is already written there; the open chat's field takes it at once
+	function compose(id, text) {
+		const before = String(root.drafts[id]?.text ?? "").trim();
+		root.keep(id, { text: before === "" ? text : `${before}\n\n${text}`, reply: root.drafts[id]?.reply ?? null });
+		root.drafted(id, text);
 	}
 
 	// a chat with a number, once WhatsApp said whose it is

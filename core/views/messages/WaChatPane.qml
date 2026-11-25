@@ -66,8 +66,18 @@ Item {
 		onTriggered: root.flashId = ""
 	}
 
+	// a chat that was open before the pane was made gets its draft too
+	Component.onCompleted: {
+		if (WhatsApp.openId === "" || root.shownId !== "") return;
+		composer.swap("", WhatsApp.openId);
+		root.shownId = WhatsApp.openId;
+	}
+
 	Connections {
 		target: WhatsApp
+		function onDrafted(chat, text) {
+			if (chat === root.shownId) composer.take(text);
+		}
 		function onOpenIdChanged() {
 			composer.swap(root.shownId, WhatsApp.openId);
 			root.shownId = WhatsApp.openId;

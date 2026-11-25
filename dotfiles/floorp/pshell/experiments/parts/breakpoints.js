@@ -2,7 +2,8 @@
  * reload buttons, shown only while working, and the scrolling that keeps the
  * columns together – a small script in every page (asleep unless the page
  * state says it is a breakpoint column) reports how far down it is (a share
- * of the page), the others follow. */
+ * of the page), the others follow; the window or, on pages that keep it
+ * still, the largest element that scrolls. */
 "use strict";
 
 (function () {
@@ -13,15 +14,60 @@
 	function pshellBreakpointsFrame() {
 		/* global content, addEventListener, removeEventListener, sendAsyncMessage, addMessageListener, removeMessageListener */
 		let on = false;
-		let quietUntil = 0;
 		let due = false;
+		// where a follow put the page: its own scroll events there are no news
+		let placed = null;
+		let placedUntil = 0;
+		let inner = null;
+
+		// what scrolls the page: the window, or – on pages that keep it still
+		// (html/body at 100 %, a wrapper) – the largest element that scrolls
+		const big = element => {
+			const view = content.innerWidth * content.innerHeight;
+			return element.clientWidth * element.clientHeight >= view * 0.4;
+		};
+		const scrolls = element => {
+			if (!element || element.scrollHeight - element.clientHeight < 2) return false;
+			const overflow = content.getComputedStyle(element).overflowY;
+			return overflow === "auto" || overflow === "scroll" || overflow === "overlay";
+		};
+		const scroller = () => {
+			if ((content.scrollMaxY || 0) > 0) return null;
+			if (inner?.isConnected && scrolls(inner)) return inner;
+			inner = null;
+			let best = 0;
+			const doc = content.document;
+			for (const element of doc.body ? [doc.documentElement, doc.body, ...doc.body.querySelectorAll("*")] : []) {
+				if (!scrolls(element) || !big(element)) continue;
+				const area = element.clientWidth * element.clientHeight;
+				if (area > best) {
+					best = area;
+					inner = element;
+				}
+			}
+			return inner;
+		};
+		const position = element => element
+			? { top: element.scrollTop, max: element.scrollHeight - element.clientHeight }
+			: { top: content.scrollY, max: content.scrollMaxY || 0 };
+
 		const onScroll = event => {
-			if (!on || event.target !== content.document || Date.now() < quietUntil || due) return;
+			if (!on || due) return;
+			const doc = content.document;
+			const target = event.target;
+			let element = null;
+			if (target !== doc) {
+				if (!target || target.nodeType !== 1 || !scrolls(target) || !big(target)) return;
+				if (target !== doc.documentElement) element = target;
+				inner = element;
+			}
 			due = true;
 			content.requestAnimationFrame(() => {
 				due = false;
-				const max = content.scrollMaxY || 0;
-				sendAsyncMessage("pshell:bp", { ratio: max > 0 ? content.scrollY / max : 0 });
+				const { top, max } = position(element);
+				if (placed !== null && Date.now() < placedUntil && Math.abs(top - placed) <= 2) return;
+				placed = null;
+				sendAsyncMessage("pshell:bp", { ratio: max > 0 ? top / max : 0 });
 			});
 		};
 		const onMessage = message => {
@@ -30,9 +76,13 @@
 				on = !!data.state?.breakpoints;
 			} else if (data.what === "bpScroll") {
 				if (!on) return;
-				quietUntil = Date.now() + 200;
-				const max = content.scrollMaxY || 0;
-				content.scrollTo({ top: Math.round(max * data.ratio), behavior: "instant" });
+				const element = scroller();
+				const { max } = position(element);
+				const top = Math.round(max * Math.min(1, Math.max(0, data.ratio)));
+				placed = top;
+				placedUntil = Date.now() + 1000;
+				if (element) element.scrollTo({ top, behavior: "instant" });
+				else content.scrollTo({ top, behavior: "instant" });
 			} else if (data.what === "unload") {
 				on = false;
 				removeEventListener("scroll", onScroll, true);

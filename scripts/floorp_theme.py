@@ -381,18 +381,19 @@ def unlink_extension(profile: Path) -> None:
 
 # ── Floorp's local API ───────────────────────────────────────────────────────
 def api_state() -> str:
-    """linked | absent | folder | elsewhere | no-config"""
+    """linked | own | absent | folder | elsewhere | no-config"""
     if LEGACY_DIR.is_symlink():
         return "linked" if LEGACY_DIR.resolve() == CONFIG_DIR.resolve() else "elsewhere"
     if LEGACY_DIR.exists():
-        return "folder"
+        # the only profile folder there is: Floorp's API writes into the profile in use
+        return "folder" if CONFIG_DIR.exists() else "own"
     return "absent" if CONFIG_DIR.is_dir() else "no-config"
 
 
 def api_link() -> bool:
     """~/.floorp → ~/.config/floorp, so the token's folder is the profile folder."""
     state = api_state()
-    if state == "linked":
+    if state in ("linked", "own"):
         return True
     if state == "absent":
         LEGACY_DIR.symlink_to(CONFIG_DIR)

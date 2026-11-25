@@ -13,6 +13,8 @@ types it right through a keyboard of its own (uinput):
   capitals                 the start of a sentence, German nouns, I, HAllo
   punctuation              two spaces end the sentence, no space before , . ! ?,
                            the comma in front of dass, weil, ob, wenn …
+  pairs                    ( [ { " get their closing one behind the cursor at once;
+                           typing it steps over it, Backspace takes both
 
 Backspace right after a correction brings back what was typed, and a word
 whose spelling was brought back is left alone from then on (autocorrect.json
@@ -28,7 +30,8 @@ It cannot see the text field, only the keys. So it only touches the word that
 was just typed, forgets everything on a click, a shortcut or a cursor key, and
 never changes a word that is not followed by a space (a password, a command).
 The shell tells it on stdin where typing may be corrected and how:
-{"active": bool, "animations": [name, …]} (one of several is picked each time).
+{"active": bool, "pairs": bool, "animations": [name, …]} (one of several is
+picked each time).
 """
 
 from __future__ import annotations
@@ -132,6 +135,10 @@ e.g i.e vs dr mr mrs ms prof st no approx
 
 OPENING = "([{\"'„“«‚‘"
 CLOSING = ".,!?;:)]}\"'“”»’…"
+# what typing the first of them puts behind the cursor
+PAIRS = {"(": ")", "[": "]", "{": "}", '"': '"'}
+# a bracket after these is a smiley: :( ;( =(
+SMILEY = ":;="
 WORD = re.compile(r"[^\W\d_]+(?:['’][^\W\d_]+)*")
 TOKEN = re.compile(rf"([{re.escape(OPENING)}]*)(.*?)([{re.escape(CLOSING)}]*)")
 
@@ -532,6 +539,18 @@ class Edit:
         self.kept = kept
         self.gone = gone
 
+
+class Ahead:
+    """Behind the cursor: take away `remove` characters, then put `insert`
+    there and leave the cursor in front of it."""
+
+    def __init__(self, remove: int = 0, insert: str = ""):
+        self.remove = remove
+        self.insert = insert
+
+    def __repr__(self):
+        return f"Ahead({self.remove}, {self.insert!r})"
+
     def __repr__(self):
         return f"Edit({self.delete}, {self.text!r})"
 
@@ -627,6 +646,13 @@ class Typist:
     def __init__(self, corrector: Corrector, learn=None):
         self.corrector = corrector
         self.learn = learn
+        # closing brackets and quotes are put behind the cursor
+        self.pairing = True
+        # those put there, the innermost last: [closing, characters typed
+        # since the opening one]. They stand right behind the cursor
+        self.pairs: list[list] = []
+        # what to do behind the cursor for the last key
+        self.ahead: Ahead | None = None
         self.text = ""
         # the text starts in the middle of a word nobody saw
         self.partial = False
@@ -637,26 +663,47 @@ class Typist:
         # the word before the cursor as it was typed and as it stands there
         self.last: tuple[str, str] | None = None
 
-    def reset(self, partial: bool = False, opening: bool | None = None):
+    def reset(self, partial: bool = False, opening: bool | None = None, moved: bool = True):
+        """Forgets the text; `moved` when the cursor may have gone elsewhere."""
         self.text = ""
         self.partial = partial
         self.opening = opening
         self.undo = None
         self.last = None
+        if moved:
+            self.pairs = []
+
+    def shift(self, before: int):
+        """The text in front of the cursor went from `before` characters to as many as now."""
+        delta = len(self.text) - before
+        for pair in self.pairs:
+            pair[1] += delta
+        while self.pairs and self.pairs[-1][1] < 0:
+            self.pairs.pop()
 
     def enter(self):
         self.reset(opening=True)
 
     def backspace(self) -> Edit | None:
+        self.ahead = None
+        before = len(self.text)
         if self.undo:
             typed, shown, word = self.undo
             self.undo = None
             # the Backspace itself took the last character
             edit = replace(shown[:-1], typed)
             self.text = self.text[:len(self.text) - len(shown)] + typed
+            self.shift(before)
             if word and self.learn:
                 self.learn(word)
             return edit
+        if self.pairs and self.pairs[-1][1] == 0:
+            # the opening one goes, and with it the closing one behind
+            self.pairs.pop()
+            self.ahead = Ahead(1)
+        else:
+            for pair in self.pairs:
+                pair[1] -= 1
         if self.text:
             self.text = self.text[:-1]
         else:
@@ -664,13 +711,40 @@ class Typist:
             self.opening = None
         return None
 
+    def pair(self, char: str):
+        """Puts the closing bracket or quote behind the cursor, or steps over it."""
+        if self.pairs and self.pairs[-1][0] == char:
+            # typed over the one that stands there
+            self.pairs.pop()
+            self.ahead = Ahead(1)
+            return
+        if not self.pairing or char not in PAIRS:
+            return
+        front = self.text[-1:]
+        if front and front in SMILEY:
+            return
+        # a quote after a word or a number closes one that was typed by hand
+        if char == '"' and front and not front.isspace() and front not in PAIRS:
+            return
+        self.pairs.append([PAIRS[char], 0])
+        self.ahead = Ahead(0, PAIRS[char])
+
     def key(self, char: str) -> Edit | None:
         self.undo = None
+        self.ahead = None
         if char != " ":
+            self.pair(char)
+            for pair in self.pairs:
+                pair[1] += 1
+            # one that was just put there stands behind the character
+            if self.ahead and self.ahead.insert:
+                self.pairs[-1][1] = 0
             self.text += char
             return None
         last, self.last = self.last, None
+        before = len(self.text)
         edit = self.space(last)
+        self.shift(before)
         if len(self.text) > MEMORY:
             self.text = self.text[-MEMORY:]
             self.partial = True
@@ -907,6 +981,7 @@ MODIFIERS = {29, 42, 54, 56, 58, 69, 70, 97, 100, 125, 126}
 # keys that neither type nor move the cursor: sound, music, brightness, print
 SILENT = {99, 113, 114, 115, 163, 164, 165, 166, 224, 225, 248} | set(range(183, 195))
 BACKSPACE, TAB, ENTER, KEYPAD_ENTER, SPACE = 14, 15, 28, 96, 57
+LEFT, DELETE = 105, 111
 BUTTONS = range(0x110, 0x120)
 ESCAPE, F6 = 1, 64
 # what puts the cursor into a browser's address, search or find field:
@@ -953,7 +1028,7 @@ class Daemon:
             emit(type="error", reason="layout")
             raise SystemExit(2)
         try:
-            codes = sorted({14, Keymap.SHIFT, Keymap.ALTGR} | {code for code, _, _ in self.keymap.keys.values()})
+            codes = sorted({BACKSPACE, LEFT, DELETE, Keymap.SHIFT, Keymap.ALTGR} | {code for code, _, _ in self.keymap.keys.values()})
             # axes nothing is ever sent on: the kernel sizes the buffer of a
             # reader (see BURST) by what a device can report, 63 events for
             # keys alone and 255 with these
@@ -975,6 +1050,8 @@ class Daemon:
         self.said = b""
         # an edit waiting for Shift to be let go
         self.waiting: Edit | None = None
+        # and what is to be done behind the cursor
+        self.behind: list[Ahead] = []
         # when the last keys were typed
         self.struck = 0.0
         self.queue: deque = deque()
@@ -1039,12 +1116,13 @@ class Daemon:
             if isinstance(message, dict):
                 self.active = message.get("active") is True
                 self.browser = message.get("browser") is True
+                self.typist.pairing = message.get("pairs") is not False
                 # a new window of the browser (Ctrl+N) opens in its address field
                 self.address = self.address and self.browser and time.monotonic() - self.address_at < 1.5
                 if isinstance(message.get("animations"), list):
                     self.animations = [name for name in message["animations"] if name in ANIMATIONS]
                 # another window, another text
-                self.typist.reset(opening=True)
+                self.forget(opening=True)
                 self.waiting = None
         return True
 
@@ -1062,6 +1140,27 @@ class Daemon:
             except OSError:
                 self.drop(key.data)
         return pressed
+
+    def forget(self, **reset):
+        """The cursor may stand anywhere now."""
+        self.typist.reset(**reset)
+        self.behind = []
+
+    def behold(self):
+        """Does behind the cursor what was asked for there."""
+        events: list[tuple[int, int]] = []
+        for ahead in self.behind:
+            strokes = self.keymap.strokes(Edit(0, ahead.insert))
+            if strokes is None:
+                self.typist.pairs = []
+                continue
+            events += [(DELETE, 1), (DELETE, 0)] * ahead.remove + strokes + [(LEFT, 1), (LEFT, 0)] * len(ahead.insert)
+        self.behind = []
+        for code, value in events:
+            self.keyboard.write(self.evdev.ecodes.EV_KEY, code, value)
+            self.keyboard.syn()
+        if events:
+            self.struck = time.monotonic()
 
     def strike(self, edit: Edit) -> bool:
         """Types an edit; False when a character of it has no key."""
@@ -1122,7 +1221,7 @@ class Daemon:
         the edit is followed (landed), what it typed is put behind the word
         again, and what stands there is compared with what should."""
         if self.keymap.strokes(edit) is None or self.keymap.caps():
-            self.typist.reset(partial=True)
+            self.typist.reset(partial=True, moved=False)
             return
         # the text in front, as far as it was followed: Backspace reaches into it
         shown = edit.kept + edit.text
@@ -1178,14 +1277,14 @@ class Daemon:
                 shot += 1
                 if self.wait(ANIMATIONS[name]) == "control":
                     break
-        self.typist.reset(partial=True)
+        self.typist.reset(partial=True, moved=False)
 
     def handle(self, event):
         code, value = event.code, event.value
         if code >= 0x100:
             # a click puts the cursor somewhere else
             if value == 1 and (code in BUTTONS or code == TOUCH):
-                self.typist.reset(opening=True)
+                self.forget(opening=True)
                 self.waiting = None
                 self.address = False
             return
@@ -1193,9 +1292,11 @@ class Daemon:
             if value == 2:
                 return
             self.keymap.press(code, value != 0)
-            if self.waiting and value == 0 and not self.keymap.held(b"Shift", b"Mod5"):
-                edit, self.waiting = self.waiting, None
-                self.type(edit)
+            if value == 0 and not self.keymap.held(b"Shift", b"Mod5"):
+                self.behold()
+                if self.waiting:
+                    edit, self.waiting = self.waiting, None
+                    self.type(edit)
             return
         if value == 0:
             self.keymap.press(code, False)
@@ -1206,9 +1307,9 @@ class Daemon:
         if self.waiting:
             # typed on before Shift was let go
             self.waiting = None
-            self.typist.reset(partial=True)
+            self.typist.reset(partial=True, moved=False)
         if self.keymap.held(b"Control", b"Mod1", b"Mod4"):
-            self.typist.reset(partial=True)
+            self.forget(partial=True)
             letter = self.letters.get(code, "")
             if self.browser and value == 1 and letter and not self.keymap.held(b"Mod4") \
                     and letter in ADDRESS_KEYS[0 if self.keymap.held(b"Control") else 1]:
@@ -1222,7 +1323,7 @@ class Daemon:
             # an address or a search is typed as it is
             if code in (ENTER, KEYPAD_ENTER, ESCAPE, TAB):
                 self.address = False
-            self.typist.reset(opening=True)
+            self.forget(opening=True)
             return
         edit = None
         # what Backspace brings back is not animated
@@ -1230,16 +1331,21 @@ class Daemon:
         if code == BACKSPACE:
             edit = self.typist.backspace()
         elif code in (ENTER, KEYPAD_ENTER):
-            self.typist.enter()
+            self.forget(opening=True)
         elif code == TAB:
-            self.typist.reset(opening=True)
+            self.forget(opening=True)
         elif len(char) != 1 or not char.isprintable() or (value == 2 and code != SPACE):
             # a cursor key, a dead key, a key held down
-            self.typist.reset(partial=True)
+            self.forget(partial=True)
         elif value == 2:
-            self.typist.reset()
+            self.forget()
         else:
             edit = self.typist.key(char)
+        if self.typist.ahead:
+            self.behind.append(self.typist.ahead)
+            self.typist.ahead = None
+            if not self.keymap.held(b"Shift", b"Mod5"):
+                self.behold()
         if not edit:
             return
         if self.keymap.held(b"Shift", b"Mod5"):
@@ -1278,7 +1384,7 @@ def attempt(text: str) -> str:
     load_usage(corrector.usage)
     typist = Typist(corrector)
     typist.enter()
-    screen = ""
+    screen = after = ""
     for char in text.replace("\\n", "\n").replace("\\b", "\b"):
         if char == "\b":
             screen = screen[:-1]
@@ -1292,7 +1398,9 @@ def attempt(text: str) -> str:
             edit = typist.key(char)
         if edit:
             screen = screen[:len(screen) - edit.delete] + edit.text
-    return screen
+        if typist.ahead:
+            after = typist.ahead.insert + after[typist.ahead.remove:]
+    return screen + after
 
 
 def main() -> int:

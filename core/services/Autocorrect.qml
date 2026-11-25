@@ -40,6 +40,11 @@ Singleton {
 		".*(firefox|floorp|librewolf|waterfox|zen|chromium|chrome|brave|vivaldi|opera|edge|epiphany|qutebrowser|thorium|helium).*"
 	].concat(Host.profile.autocorrect?.browsers ?? [])
 	readonly property bool browser: root.window !== null && root.matches(root.browsers, root.window.app_id)
+	// apps that close brackets and quotes themselves; the host profile's autocorrect.paired adds its own
+	readonly property var paired: [
+		"de\\.pshell\\.Editor", "obsidian", "md\\.obsidian", "typora", "logseq", "com\\.logseq\\.Logseq"
+	].concat(Host.profile.autocorrect?.paired ?? [])
+	readonly property bool pairs: Plugins.on("autocorrect-pairs") && !(root.window !== null && !root.writing && root.matches(root.paired, root.window.app_id))
 
 	readonly property var window: Niri.windows.find(w => w.is_focused) ?? null
 	readonly property int windowId: root.window ? Number(root.window.id) : -1
@@ -102,7 +107,7 @@ Singleton {
 
 	// every change of window as well: the text in front of the cursor is another one
 	function tell() {
-		if (daemon.running) daemon.write(JSON.stringify({ active: root.active, browser: root.browser, animations: root.animations }) + "\n");
+		if (daemon.running) daemon.write(JSON.stringify({ active: root.active, browser: root.browser, pairs: root.pairs, animations: root.animations }) + "\n");
 	}
 
 	function handle(line) {
@@ -126,6 +131,7 @@ Singleton {
 	onWritingChanged: root.tell()
 	onBrowserChanged: root.tell()
 	onAnimationsChanged: root.tell()
+	onPairsChanged: root.tell()
 	onEnabledChanged: root.failed = false
 
 	FileView {

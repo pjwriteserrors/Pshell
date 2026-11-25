@@ -103,7 +103,7 @@ Singleton {
 					Notifs.pushInternal("done", `Sent to ${person.name}`, "", { icon: "whatsapp" });
 				} },
 				{ label: "Edit", icon: "pencil", run: () => {
-					WhatsApp.keep(person.id, { text: what.text, reply: null });
+					WhatsApp.compose(person.id, what.text);
 					root.picked(person, info.private);
 					WhatsApp.show(person.id);
 				} }

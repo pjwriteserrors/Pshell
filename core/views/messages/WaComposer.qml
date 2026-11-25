@@ -57,6 +57,13 @@ ColumnLayout {
 		field.area.cursorPosition = field.area.length;
 	}
 
+	// text from elsewhere, after what is written
+	function take(text) {
+		field.text = field.text.trim() === "" ? text : `${field.text.trimEnd()}\n\n${text}`;
+		field.area.cursorPosition = field.area.length;
+		field.focusInput();
+	}
+
 	function answer(message) {
 		root.editing = null;
 		root.reply = message;

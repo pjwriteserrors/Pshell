@@ -128,6 +128,7 @@
 	{ "id": "autocorrect", "name": "Autocorrect", "category": "Automation", "default": false, "icon": "keyboard" },
 	{ "id": "autocorrect-scramble", "name": "Scramble correction", "category": "Automation", "default": false, "requires": ["autocorrect"], "icon": "keyboard" },
 	{ "id": "autocorrect-decode", "name": "Decode correction", "category": "Automation", "default": false, "requires": ["autocorrect"], "icon": "keyboard" },
+	{ "id": "autocorrect-pairs", "name": "Closing brackets", "category": "Automation", "requires": ["autocorrect"], "icon": "keyboard" },
 	{ "id": "autocorrect-typewriter", "name": "Typewriter correction", "category": "Automation", "default": false, "requires": ["autocorrect"], "icon": "keyboard" },
 	{ "id": "multicursor", "name": "Multicursor", "category": "Automation", "default": false, "icon": "cursor_text" },
 

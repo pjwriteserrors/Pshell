@@ -194,6 +194,7 @@ or when a plugin has neither picture, scene nor icon.
 | `themeHooks` | the theme hooks a fresh setup of this machine starts with; each hook is a plugin `hook-<name>` in the Studio tab of `>plugins`, switched on and off there like any other |
 | `hookConfig.<hook>` | settings of a hook |
 | `autocorrect.exclude` | app ids typing is not corrected in, as regular expressions, besides terminals, code editors, file managers, password managers and games |
+| `autocorrect.paired` | app ids that close brackets and quotes themselves, besides the shell's editor, Obsidian, Typora and Logseq: autocorrect does not add a second one there |
 | `autocorrect.browsers` | app ids of browsers besides the known ones: in a browser the address field is left alone, which is where Ctrl+L, T, N, K, E, F, Alt+D or F6 lead, until Enter, Escape, Tab or a click |
 | `identities.nat` | where the people of `identities` are from, a nationality of randomuser.me (default `de`) |
 | `shelf.watch` | folders whose new files land on a shelf (default: Downloads, Pictures/Screenshots, Videos/Recordings) |
@@ -805,6 +806,12 @@ itself only in fields that ask for it with `autocorrect: true` (`Field`,
 and `scripts/ipc.sh autocorrect toggle` switch it off and on. The session reads the
 keyboards with `scripts/setup-input-access.sh`.
 `scripts/autocorrect.py try "text"` shows what typing a text leaves.
+With `autocorrect-pairs` (on by default) `(`, `[`, `{` and an opening `"`
+get their closing one behind the cursor at once (a `(` right after
+`:`/`;`/`=` stays a smiley, a `"` after a word closes one typed by hand);
+typing the closing one steps over it and Backspace right after the opening one
+takes both. Apps that pair on their own are left to it: the shell's editor,
+Obsidian, Typora, Logseq and the host profile's `autocorrect.paired`.
 Typing does not wait for a correction: every key pressed since the one that
 called for it is followed, what it typed is put behind the word again, and
 what stands there is compared with what should before the next key is

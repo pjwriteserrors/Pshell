@@ -1425,6 +1425,13 @@ Scope {
 		function switchDown(): void {
 			Niri.swapWindow("down");
 		}
+		// maximize-column / toggle-window-floating that leave at `width` ("50%", "720")
+		function maximize(width: string): void {
+			Niri.toggleMaximize(width);
+		}
+		function toggleFloating(width: string): void {
+			Niri.toggleFloating(width);
+		}
 	}
 
 	// parked windows: the focused one onto its screen's right edge, the last one back

@@ -53,6 +53,31 @@ SettingsPage {
 		return radius;
 	}
 
+	// Mod+F / Mod+V: leave maximized / floating at a width (shell binds) or
+	// at the column's own width (niri's actions)
+	function leaveKind(bind) {
+		const call = Keybinds.isShell(bind) ? Keybinds.shellCall(bind) : null;
+		if (bind.action === "maximize-column" || (call?.target === "window" && call.fn === "maximize")) return "maximize";
+		if (bind.action === "toggle-window-floating" || (call?.target === "window" && call.fn === "toggleFloating")) return "toggleFloating";
+		return "";
+	}
+	readonly property string leaveWidth: {
+		const bind = Keybinds.binds.find(b => !b.disabled && root.leaveKind(b) && Keybinds.isShell(b));
+		return bind ? String(Keybinds.shellCall(bind).params[0] ?? "") : "";
+	}
+	function widthArg(size) {
+		return size.kind === "fixed" ? String(size.value) : `${Math.round(size.value * 10000) / 100}%`;
+	}
+	function setLeaveWidth(width, label) {
+		const changed = Keybinds.binds.filter(b => root.leaveKind(b)).map(b => {
+			const kind = root.leaveKind(b);
+			return Object.assign({}, b, width
+				? { action: "spawn", args: ["qs", "-c", "shell", "ipc", "call", "window", kind, width], aprops: {} }
+				: { action: kind === "maximize" ? "maximize-column" : "toggle-window-floating", args: [], aprops: {} });
+		});
+		if (changed.length > 0) Keybinds.commitMany(changed, `Mod+F / Mod+V: ${label}`);
+	}
+
 	function sizes(node) {
 		return (node.children || []).filter(c => (c.name === "proportion" || c.name === "fixed") && !c.disabled).map(c => ({ kind: c.name, value: Number(c.args[0]) }));
 	}
@@ -406,6 +431,37 @@ SettingsPage {
 				icon: "application_outline"
 				visible: !root.windowsDecide
 				onClicked: NiriSettings.setChildren(["layout", "default-column-width"], [], "New windows decide their width", "")
+			}
+		}
+
+		RowLayout {
+			spacing: 8
+			visible: Keybinds.loaded && Keybinds.binds.some(b => root.leaveKind(b))
+
+			StyledText {
+				text: "Mod+F / Mod+V back to tiling:"
+				tone: Theme.textMuted
+				font.pixelSize: Theme.size.label
+			}
+
+			Chip {
+				text: "Previous width"
+				selected: root.leaveWidth === ""
+				onClicked: root.setLeaveWidth("", "previous width")
+			}
+
+			Repeater {
+				model: root.widths.filter(size => size.kind === "fixed" || size.value < 0.99)
+
+				Chip {
+					required property var modelData
+					readonly property string arg: root.widthArg(modelData)
+					readonly property string label: modelData.kind === "fixed" ? `${modelData.value} px` : Nodes.fraction(modelData.value)
+
+					text: label
+					selected: root.leaveWidth === arg
+					onClicked: root.setLeaveWidth(arg, label)
+				}
 			}
 		}
 	}
